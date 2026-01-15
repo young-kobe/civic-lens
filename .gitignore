@@ -1,41 +1,143 @@
-# Prerequisites
-*.d
+# ============================================
+# Environment Variables
+# ============================================
+.env
+.env.local
+.env.*.local
+*.env
 
-# Compiled Object files
-*.slo
-*.lo
-*.o
-*.obj
+# ============================================
+# Database Files
+# ============================================
+# SQLite databases (all locations)
+*.db
+*.db-journal
+*.db-wal
+*.sqlite
+*.sqlite3
 
-# Precompiled Headers
-*.gch
-*.pch
+# Keep gitkeep files
+!data/raw/.gitkeep
 
-# Linker files
-*.ilk
-
-# Debugger Files
-*.pdb
-
-# Compiled Dynamic libraries
+# ============================================
+# Executables & Build Artifacts
+# ============================================
+# Executables (all locations)
+*.exe
+*.dll
 *.so
 *.dylib
-*.dll
 
-# Fortran module files
-*.mod
-*.smod
+# C++ / CMake
+ingestion-cpp/build/
+ingestion-cpp/out/
+*.o
+*.obj
+compile_commands.json
 
-# Compiled Static libraries
-*.lai
-*.la
-*.a
-*.lib
+# ============================================
+# Python
+# ============================================
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
 
-# Executables
-*.exe
-*.out
-*.app
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+analysis-python/.venv/
+analysis-python/venv/
 
-# debug information files
-*.dwo
+# Testing & Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.hypothesis/
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+.eggs/
+
+# ============================================
+# Go
+# ============================================
+ingest/vendor/
+
+# ============================================
+# TypeScript / Node.js / UI
+# ============================================
+# Dependencies
+node_modules/
+ui/node_modules/
+
+# Build output
+ui/dist/
+ui/build/
+dist/
+build/
+
+# TypeScript cache
+*.tsbuildinfo
+
+# Vite
+.vite/
+ui/.vite/
+
+# Test coverage
+coverage/
+ui/coverage/
+.nyc_output/
+
+# ============================================
+# Logs
+# ============================================
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ============================================
+# OS-Specific Files
+# ============================================
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+.directory
+
+# ============================================
+# IDEs & Editors
+# ============================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*.swn
+.project
+.classpath
+.settings/
+
+# ============================================
+# Raw Data
+# ============================================
+data/raw/*
+!data/raw/.gitkeep

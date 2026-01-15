@@ -1,0 +1,49 @@
+# Civic Lens seed configuration
+
+database:
+  path: data/news.db
+  raw_dir: data/raw
+
+crawl:
+  max_concurrency: 10
+  max_concurrent_domain: 2
+  request_timeout: 30s
+  max_retries: 3
+  rate_limit_per_sec: 1.0
+  max_redirects: 5
+  user_agent: "CivicLens/1.0 (+https://github.com/young-kobe/civic-lens)"
+  stale_inflight_age: 10m
+
+reddit:
+  # Get credentials from https://www.reddit.com/prefs/apps (optional - public API works without)
+  client_id: ""
+  client_secret: ""
+  user_agent: "CivicLens/1.0 by u/your_username"
+  subreddits:
+    - politics
+    - news
+    - worldnews
+    - PoliticalDiscussion
+    - NeutralPolitics
+    - geopolitics
+    - Conservative
+    - Liberal
+    - moderatepolitics
+
+seeds:
+  # Major news RSS feeds
+  - url: https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml
+    type: rss
+    priority: 10
+  - url: https://feeds.washingtonpost.com/rss/politics
+    type: rss
+    priority: 10
+  - url: https://feeds.npr.org/1001/rss.xml
+    type: rss
+    priority: 10
+  - url: https://www.reuters.com/rssFeed/topNews
+    type: rss
+    priority: 10
+  - url: https://feeds.bbci.co.uk/news/rss.xml
+    type: rss
+    priority: 8
