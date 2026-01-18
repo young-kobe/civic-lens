@@ -3,50 +3,9 @@ import { Card, ConfidenceBadge, MethodPopover, LoadingCard, ErrorState } from '.
 import { TrendStrip, SentimentBar } from '../components/charts';
 import type { Filters, FavorabilityData, FavorabilityOverall, DemographicBreakdown, PollingSocialComparison, TrendPoint, TrendAnnotation } from '../types';
 
-// Mock data for GOP Favorability infographic
-const MOCK_FAVORABILITY_DATA: FavorabilityData = {
-    overall: {
-        favorable: 42.3,
-        unfavorable: 51.2,
-        neutral: 6.5,
-        netFavorability: -8.9,
-        sampleSize: 12450,
-        sourceCount: 23,
-        lastUpdated: '2026-01-15T10:30:00Z',
-        dateRange: 'December 15, 2025 - January 15, 2026',
-    },
-    trend: [
-        { date: 'Dec 15', value: -6.2 },
-        { date: 'Dec 22', value: -7.5 },
-        { date: 'Dec 29', value: -8.1 },
-        { date: 'Jan 5', value: -9.4 },
-        { date: 'Jan 12', value: -8.9 },
-    ],
-    trendAnnotations: [
-        { x: 'Jan 5', label: 'Policy announcement' },
-    ],
-    byAge: [
-        { group: '18-29', favorable: 28, unfavorable: 62, neutral: 10 },
-        { group: '30-44', favorable: 38, unfavorable: 54, neutral: 8 },
-        { group: '45-64', favorable: 47, unfavorable: 47, neutral: 6 },
-        { group: '65+', favorable: 52, unfavorable: 43, neutral: 5 },
-    ],
-    byRegion: [
-        { region: 'Northeast', favorable: 32, unfavorable: 60, neutral: 8 },
-        { region: 'Midwest', favorable: 45, unfavorable: 48, neutral: 7 },
-        { region: 'South', favorable: 52, unfavorable: 42, neutral: 6 },
-        { region: 'West', favorable: 36, unfavorable: 57, neutral: 7 },
-    ],
-    byPartyId: [
-        { party: 'Republican', favorable: 85, unfavorable: 10, neutral: 5 },
-        { party: 'Independent', favorable: 35, unfavorable: 52, neutral: 13 },
-        { party: 'Democrat', favorable: 8, unfavorable: 88, neutral: 4 },
-    ],
-    pollingVsSocial: {
-        polling: { favorable: 42.3, unfavorable: 51.2, neutral: 6.5 },
-        social: { favorable: 38.1, unfavorable: 55.8, neutral: 6.1 },
-    },
-};
+
+import { fetchFavorability } from '../services/api';
+import { transformFavorability } from '../services/transformers';
 
 interface HeroMetricProps {
     data: FavorabilityOverall;
@@ -114,13 +73,20 @@ interface DemographicBreakoutProps {
 }
 
 function DemographicBreakout({ title, data, labelKey, caveat }: DemographicBreakoutProps) {
+    if (data.length === 0) {
+        return (
+            <Card title={title}>
+                <p className="text-muted text-sm">No data available.</p>
+            </Card>
+        );
+    }
     return (
         <Card title={title}>
             <div className="flex flex-col gap-3">
                 {data.map((item, i) => (
                     <div key={i}>
                         <div className="flex justify-between mb-1">
-                            <span className="text-sm font-medium">{item[labelKey]}</span>
+                            <span className="text-sm font-medium">{item[labelKey as keyof DemographicBreakdown]}</span>
                             <span className="text-xs text-muted">
                                 Net: {item.favorable - item.unfavorable >= 0 ? '+' : ''}
                                 {(item.favorable - item.unfavorable).toFixed(0)}%
@@ -205,16 +171,25 @@ function GOPFavorability({ filters }: GOPFavorabilityProps) {
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        setLoading(true);
-        const timer = setTimeout(() => {
-            setData(MOCK_FAVORABILITY_DATA);
-            setLoading(false);
-        }, 600);
-        return () => clearTimeout(timer);
+        const loadData = async () => {
+            setLoading(true);
+            setError(null);
+            try {
+                const rawData = await fetchFavorability();
+                const processedData = transformFavorability(rawData);
+                setData(processedData);
+            } catch (err: any) {
+                console.error("Failed to load favorability:", err);
+                setError(err.message || "Failed to load favorability data.");
+            } finally {
+                setLoading(false);
+            }
+        };
+        loadData();
     }, [filters]);
 
     if (error) {
-        return <ErrorState message={error} onRetry={() => setError(null)} />;
+        return <ErrorState message={error} onRetry={() => window.location.reload()} />;
     }
 
     if (loading) {
@@ -270,36 +245,29 @@ function GOPFavorability({ filters }: GOPFavorabilityProps) {
                     />
                 }
             >
-                <TrendStrip
-                    data={data.trend}
-                    dataKey="value"
-                    xKey="date"
-                    height={180}
-                    annotations={data.trendAnnotations}
-                    color="var(--accent)"
-                />
+                {data.trend.length > 0 ? (
+                    <TrendStrip
+                        data={data.trend}
+                        dataKey="value"
+                        xKey="date"
+                        height={180}
+                        annotations={data.trendAnnotations}
+                        color="var(--accent)"
+                    />
+                ) : (
+                    <div className="flex items-center justify-center h-40 text-muted text-sm">No trend data available</div>
+                )}
             </Card>
 
             {/* Demographic Breakouts */}
             <div className="grid-3">
                 <DemographicBreakout
-                    title="By Age Bracket"
-                    data={data.byAge}
-                    labelKey="group"
-                    caveat="Age data derived from panel surveys. Online samples may skew younger."
+                    title="By Platform (Proxy)"
+                    data={data.byPlatform || []}
+                    labelKey="group" // Reusing group so it renders platform name
+                    caveat="Breakdown by source platform (News vs Social)."
                 />
-                <DemographicBreakout
-                    title="By Region"
-                    data={data.byRegion}
-                    labelKey="region"
-                    caveat="Regional breakdown based on respondent location."
-                />
-                <DemographicBreakout
-                    title="By Party Identification"
-                    data={data.byPartyId}
-                    labelKey="party"
-                    caveat="Party ID is self-reported and may not reflect registration."
-                />
+                {/* Replaced Age/Region/Party with just Platform for now since backend only supports that */}
             </div>
 
             {/* Polling vs Social Comparison */}

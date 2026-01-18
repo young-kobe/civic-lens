@@ -9,28 +9,10 @@ Bot-flagged content is excluded from sentiment/favorability aggregations.
 """
 
 from typing import Any, Dict, List, Optional, Tuple
-from dataclasses import dataclass, asdict
 from analysis.src.common.logger import get_logger
+from analysis.src.engine.models import BotResult
 
 logger = get_logger(__name__)
-
-
-@dataclass
-class BotResult:
-    """
-    Bot detection result with evidence.
-    
-    Satisfies invariant B2: AI outputs include confidence and evidence.
-    """
-    is_bot: bool
-    label: str  # human, bot, suspicious
-    confidence: float  # 0.0 - 1.0
-    indicators: List[str]  # Specific behavioral indicators
-    reasoning: Optional[str] = None
-    deterministic_signals: Optional[Dict[str, Any]] = None
-    
-    def to_dict(self) -> Dict[str, Any]:
-        return asdict(self)
 
 
 # Spam/bot keywords commonly found in automated content

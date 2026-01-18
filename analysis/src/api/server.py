@@ -4,14 +4,16 @@ Civic Lens Analysis API Server.
 Provides endpoints for:
 - ETL operations (loading raw content)
 - Analysis triggers (bot detection, sentiment, favorability)
-- Aggregated data retrieval with bot filtering
+- Aggregated data retrieval (served from pre-computed cache)
+- Cache status and metadata
 """
 
-from fastapi import FastAPI, BackgroundTasks
+from fastapi import FastAPI, BackgroundTasks, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from analysis.src.common.logger import get_logger
 from analysis.src.common.settings import get_settings
+from analysis.src.common.cache import SnapshotCache
 from analysis.src.etl.loader import ContentLoader
 from analysis.src.engine.bot import HybridBotDetector
 from analysis.src.engine.sentiment import HybridSentimentAnalyzer
@@ -32,9 +34,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Services - initialize with LLM when enabled
+# Services
 loader = ContentLoader(settings.db_path)
 aggregator = Aggregator(settings.db_path)
+cache = SnapshotCache(settings.cache_dir)
+
+# Analyzers - only needed for on-demand analysis triggers
 bot_detector = HybridBotDetector(llm_enabled=settings.llm_enabled)
 sentiment_analyzer = HybridSentimentAnalyzer(
     model_name=settings.model_sentiment,
@@ -58,8 +63,21 @@ def health():
     }
 
 
+@app.get("/api/cache-status")
+def get_cache_status():
+    """
+    Returns metadata for all cached snapshots.
+    
+    Useful for displaying when data was last updated.
+    """
+    return {
+        "snapshots": cache.get_all_metadata(),
+        "cache_dir": settings.cache_dir
+    }
+
+
 # =============================================================================
-# Pipeline Triggers
+# Pipeline Triggers (Manual)
 # =============================================================================
 
 @app.post("/api/run/etl")
@@ -85,16 +103,63 @@ def run_clustering():
     return {"clusters_created": len(clusters)}
 
 
+@app.post("/api/run/full-pipeline")
+def run_full_pipeline(background_tasks: BackgroundTasks):
+    """
+    Triggers the complete analysis pipeline in background.
+    
+    Use .\run.ps1 analyze for synchronous execution instead.
+    """
+    from analysis.src.scheduler.job_runner import AnalysisJobRunner
+    
+    def run_pipeline():
+        runner = AnalysisJobRunner()
+        runner.run_full_pipeline()
+    
+    background_tasks.add_task(run_pipeline)
+    return {"status": "Full pipeline queued"}
+
+
 # =============================================================================
-# Data Retrieval - Bot-Filtered
+# Data Retrieval - Cached (Primary)
 # =============================================================================
+
+def _get_cached_or_fallback(cache_key: str, fallback_fn, transform_fn=None):
+    """
+    Get data from cache, falling back to live computation if cache is empty.
+    
+    Args:
+        cache_key: Key to look up in cache
+        fallback_fn: Function to call if cache miss
+        transform_fn: Optional transform to apply to fallback result
+    
+    Returns:
+        Cached data or fallback result
+    """
+    cached = cache.load(cache_key)
+    if cached is not None:
+        return cached
+    
+    # Cache miss - compute live (slower, but ensures data is available)
+    logger.warning(f"Cache miss for '{cache_key}', computing live")
+    result = fallback_fn()
+    if transform_fn:
+        return transform_fn(result)
+    return result
+
 
 @app.get("/api/stories")
 def get_stories():
     """
     Returns story clusters EXCLUDING bot-flagged content.
+    
+    Data is served from pre-computed cache when available.
     """
-    return aggregator.get_stories_filtered()
+    return _get_cached_or_fallback(
+        "stories",
+        aggregator.get_stories,
+        lambda stories: [s.to_dict() for s in stories]
+    )
 
 
 @app.get("/api/sentiment")
@@ -103,8 +168,13 @@ def get_public_sentiment():
     Returns aggregated public sentiment EXCLUDING bot-flagged content.
     
     Note: Results represent sampled platform discourse, not verified population sentiment.
+    Data is served from pre-computed cache when available.
     """
-    return aggregator.get_public_sentiment()
+    return _get_cached_or_fallback(
+        "sentiment",
+        aggregator.get_public_sentiment,
+        lambda s: s.to_dict()
+    )
 
 
 @app.get("/api/favorability")
@@ -113,8 +183,13 @@ def get_gop_favorability():
     Returns GOP favorability metrics EXCLUDING bot-flagged content.
     
     Note: Proxy metric based on sampled media/social discourse, not polling data.
+    Data is served from pre-computed cache when available.
     """
-    return aggregator.get_gop_favorability()
+    return _get_cached_or_fallback(
+        "favorability",
+        aggregator.get_gop_favorability,
+        lambda f: f.to_dict()
+    )
 
 
 @app.get("/api/profiles")
@@ -123,12 +198,33 @@ def get_profiles():
     Returns outlet profiles with sentiment and bot rate metrics.
     
     Note: This endpoint includes ALL content for transparency in outlet analysis.
+    Data is served from pre-computed cache when available.
     """
-    return aggregator.get_outlet_profiles()
+    return _get_cached_or_fallback(
+        "profiles",
+        aggregator.get_outlet_profiles,
+        lambda profiles: [p.to_dict() for p in profiles]
+    )
+
+
+@app.get("/api/bot-activity")
+def get_bot_activity():
+    """
+    Returns bot activity metrics including suspected automation rate,
+    coordination patterns, and behavioral signals.
+    
+    Note: Classification is heuristic-based and may include false positives.
+    Data is served from pre-computed cache when available.
+    """
+    return _get_cached_or_fallback(
+        "bot_activity",
+        aggregator.get_bot_activity,
+        lambda b: b.to_dict()
+    )
 
 
 # =============================================================================
-# Background Processing
+# Background Processing (Legacy - prefer job_runner.py)
 # =============================================================================
 
 def process_analysis_queue():
@@ -137,6 +233,8 @@ def process_analysis_queue():
     
     Order: Bot Detection -> Sentiment -> Favorability
     Bot detection runs first so subsequent analyses can reference bot status.
+    
+    Note: For full pipeline including caching, use job_runner.py instead.
     """
     logger.info("Starting background analysis...")
     

@@ -23,7 +23,7 @@ func main() {
 	}
 
 	rootCmd.PersistentFlags().StringVar(&cfgPath, "config", "data/seeds.yaml", "Path to config file")
-	rootCmd.PersistentFlags().StringVar(&dbPath, "db", "data/news.db", "Path to SQLite database")
+	rootCmd.PersistentFlags().StringVar(&dbPath, "db", "data/civic_lens.db", "Path to SQLite database")
 
 	rootCmd.AddCommand(migrateCmd())
 	rootCmd.AddCommand(ingestCmd())

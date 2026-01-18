@@ -17,8 +17,8 @@ type Config struct {
 
 // DatabaseConfig holds database paths.
 type DatabaseConfig struct {
-	Path    string `yaml:"path"`    // e.g., data/news.db
-	RawDir  string `yaml:"raw_dir"` // e.g., data/raw
+	Path   string `yaml:"path"`    // e.g., data/civic_lens.db
+	RawDir string `yaml:"raw_dir"` // e.g., data/raw
 }
 
 // CrawlConfig holds crawl behavior settings.
@@ -68,7 +68,7 @@ func Load(path string) (*Config, error) {
 			StaleInflightAge:    10 * time.Minute,
 		},
 		Database: DatabaseConfig{
-			Path:   "data/news.db",
+			Path:   "data/civic_lens.db",
 			RawDir: "data/raw",
 		},
 	}

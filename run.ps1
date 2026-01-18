@@ -1,6 +1,6 @@
 param (
     [Parameter(Mandatory = $false)]
-    [ValidateSet("ingest", "crawl", "api", "ui", "dev", "all", "migrate", "reddit", "build", "help")]
+    [ValidateSet("ingest", "crawl", "api", "ui", "dev", "all", "migrate", "reddit", "build", "analyze", "help")]
     [string]$Command = "help"
 )
 
@@ -64,7 +64,7 @@ function Run-Migrate {
     }
     
     Write-Status "Running database migrations..."
-    & $ExePath migrate --db "$ScriptRoot\data\news.db"
+    & $ExePath migrate --db "$ScriptRoot\data\civic_lens.db"
 }
 
 function Run-Ingest {
@@ -74,7 +74,7 @@ function Run-Ingest {
     }
     
     Write-Status "Running seed ingestion..."
-    & $ExePath ingest --config "$ScriptRoot\data\seeds.yaml" --db "$ScriptRoot\data\news.db"
+    & $ExePath ingest --config "$ScriptRoot\data\seeds.yaml" --db "$ScriptRoot\data\civic_lens.db"
 }
 
 function Run-Crawl {
@@ -86,7 +86,7 @@ function Run-Crawl {
     }
     
     Write-Status "Running crawl for $Duration..."
-    & $ExePath crawl --config "$ScriptRoot\data\seeds.yaml" --db "$ScriptRoot\data\news.db" --duration $Duration
+    & $ExePath crawl --config "$ScriptRoot\data\seeds.yaml" --db "$ScriptRoot\data\civic_lens.db" --duration $Duration
 }
 
 function Run-Reddit {
@@ -96,7 +96,7 @@ function Run-Reddit {
     }
     
     Write-Status "Fetching Reddit data..."
-    & $ExePath reddit --config "$ScriptRoot\data\seeds.yaml" --db "$ScriptRoot\data\news.db"
+    & $ExePath reddit --config "$ScriptRoot\data\seeds.yaml" --db "$ScriptRoot\data\civic_lens.db"
 }
 
 function Initialize-Venv {
@@ -146,6 +146,26 @@ function Run-Ui {
     }
 }
 
+function Run-Analyze {
+    Write-Status "Running analysis pipeline..."
+    $PythonExe = Initialize-Venv
+    
+    $ReqFile = "$ScriptRoot\analysis\requirements.txt"
+    if (Test-Path $ReqFile) {
+        & $PythonExe -m pip install -r $ReqFile --quiet
+    }
+    
+    $Env:PYTHONPATH = $ScriptRoot
+    & $PythonExe -m analysis.src.scheduler.job_runner
+    
+    if ($LASTEXITCODE -eq 0) {
+        Write-Status "Analysis pipeline complete. Cached snapshots saved to data/cache/"
+    }
+    else {
+        throw "Analysis pipeline failed"
+    }
+}
+
 function Run-Dev {
     Write-Status "Launching Dev Environment (API + UI)..."
     # Launch in separate processes
@@ -176,6 +196,9 @@ switch ($Command) {
     "api" { 
         Run-Api 
     }
+    "analyze" {
+        Run-Analyze
+    }
     "ui" { 
         Run-Ui 
     }
@@ -196,10 +219,16 @@ switch ($Command) {
         Write-Host "  migrate  - Apply database migrations"
         Write-Host "  ingest   - Discover URLs from seed feeds"
         Write-Host "  crawl    - Run the web crawler"
-        Write-Host "  api      - Start Python FastAPI server"
+        Write-Host "  analyze  - Run analysis pipeline (ETL + AI + caching)"
+        Write-Host "  api      - Start Python FastAPI server (serves cached data)"
         Write-Host "  ui       - Start React Frontend"
         Write-Host "  dev      - Start both API and UI"
         Write-Host "  all      - Run ingest, crawl, then dev"
+        Write-Host ""
+        Write-Host "Typical workflow:"
+        Write-Host "  1. .\run.ps1 crawl     # Fetch news articles"
+        Write-Host "  2. .\run.ps1 analyze   # Run AI analysis pipeline"
+        Write-Host "  3. .\run.ps1 dev       # Start API + UI"
         Write-Host ""
         Write-Host "To bypass execution policy:"
         Write-Host "  powershell -ExecutionPolicy Bypass -File .\run.ps1 ingest"

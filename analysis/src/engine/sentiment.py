@@ -7,27 +7,10 @@ Uses a two-layer approach:
 """
 
 from typing import Any, Dict, List, Optional, Tuple
-from dataclasses import dataclass, asdict
 from analysis.src.common.logger import get_logger
+from analysis.src.engine.models import SentimentResult
 
 logger = get_logger(__name__)
-
-
-@dataclass
-class SentimentResult:
-    """
-    Sentiment analysis result with evidence.
-    
-    Satisfies invariant B2: AI outputs include confidence and evidence.
-    """
-    label: str  # POSITIVE, NEGATIVE, NEUTRAL, MIXED
-    confidence: float  # 0.0 - 1.0
-    evidence_spans: List[str]  # Specific phrases supporting classification
-    reasoning: Optional[str] = None  # Explanation (LLM only)
-    deterministic_signals: Optional[Dict[str, Any]] = None  # Raw computed signals
-    
-    def to_dict(self) -> Dict[str, Any]:
-        return asdict(self)
 
 
 # Sentiment word lists for deterministic analysis

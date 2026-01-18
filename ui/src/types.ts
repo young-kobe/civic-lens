@@ -39,7 +39,7 @@ export interface SourceMixItem {
     type: 'news' | 'reddit' | 'social' | 'other';
 }
 
-export interface TimelinePoint {
+export interface TimelinePoint extends ChartDataPoint {
     date: string;
     value: number;
 }
@@ -53,7 +53,7 @@ export interface Article {
 }
 
 // Sentiment types
-export interface SentimentData {
+export interface PublicSentimentData {
     overview: SentimentOverview;
     byTopic: SentimentBreakdown[];
     byPlatform: SentimentBreakdown[];
@@ -94,6 +94,7 @@ export interface FavorabilityData {
     byAge: DemographicBreakdown[];
     byRegion: DemographicBreakdown[];
     byPartyId: DemographicBreakdown[];
+    byPlatform: DemographicBreakdown[]; // Added field
     pollingVsSocial: PollingSocialComparison;
 }
 
@@ -108,7 +109,7 @@ export interface FavorabilityOverall {
     dateRange: string;
 }
 
-export interface TrendPoint {
+export interface TrendPoint extends ChartDataPoint {
     date: string;
     value: number;
 }

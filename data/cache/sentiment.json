@@ -1,0 +1,33 @@
+{
+  "_meta": {
+    "generated_at": "2026-01-17T22:51:43.753252+00:00",
+    "doc_count": 100,
+    "version": "1.0"
+  },
+  "data": {
+    "overview": {
+      "netScore": 37.0,
+      "volume": 100,
+      "coverage": "medium",
+      "confidence": "medium"
+    },
+    "distribution": {
+      "strongPositive": 49,
+      "mildPositive": 0,
+      "neutral": 33,
+      "mildNegative": 0,
+      "strongNegative": 12
+    },
+    "byPlatform": [
+      {
+        "platform": "news",
+        "positive": 49,
+        "negative": 12,
+        "neutral": 33,
+        "volume": 100
+      }
+    ],
+    "disclaimer": "Represents sampled platform discourse, not verified population sentiment",
+    "excluded_bot_content": 0
+  }
+}

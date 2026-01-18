@@ -19,6 +19,8 @@ export default defineConfig({
             '/api': {
                 target: 'http://localhost:8000',
                 changeOrigin: true,
+                // No rewrite needed - Python API server defines routes with /api/ prefix
+                // e.g., @app.get("/api/stories")
             },
         },
     },

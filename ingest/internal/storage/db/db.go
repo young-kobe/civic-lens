@@ -3,7 +3,6 @@ package db
 import (
 	"context"
 	"database/sql"
-	_ "embed"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,12 +10,10 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-//go:embed migrations/001_initial.sql
-var migration001 string
-
 // DB wraps the SQLite database connection.
 type DB struct {
-	conn *sql.DB
+	conn   *sql.DB
+	dbPath string
 }
 
 // Open opens (or creates) the SQLite database at the given path.
@@ -38,11 +35,22 @@ func Open(dbPath string) (*DB, error) {
 	conn.SetMaxOpenConns(1) // SQLite handles one writer at a time
 	conn.SetMaxIdleConns(1)
 
-	return &DB{conn: conn}, nil
+	return &DB{conn: conn, dbPath: dbPath}, nil
 }
 
-// Migrate applies all pending migrations.
+// Migrate applies all pending migrations from the central migrations directory.
 func (d *DB) Migrate(ctx context.Context) error {
+	// Find migrations directory relative to database (data/migrations/)
+	dbDir := filepath.Dir(d.dbPath)
+	migrationsDir := filepath.Join(dbDir, "migrations")
+
+	// Read migration file
+	migrationPath := filepath.Join(migrationsDir, "001_initial.sql")
+	migrationSQL, err := os.ReadFile(migrationPath)
+	if err != nil {
+		return fmt.Errorf("read migration file %s: %w", migrationPath, err)
+	}
+
 	// Check current version
 	var version int
 	row := d.conn.QueryRowContext(ctx, "SELECT COALESCE(MAX(version), 0) FROM schema_version")
@@ -52,7 +60,7 @@ func (d *DB) Migrate(ctx context.Context) error {
 	}
 
 	if version < 1 {
-		if _, err := d.conn.ExecContext(ctx, migration001); err != nil {
+		if _, err := d.conn.ExecContext(ctx, string(migrationSQL)); err != nil {
 			return fmt.Errorf("apply migration 001: %w", err)
 		}
 	}

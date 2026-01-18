@@ -1,7 +1,7 @@
 # Civic Lens seed configuration
 
 database:
-  path: data/news.db
+  path: data/civic_lens.db
   raw_dir: data/raw
 
 crawl:

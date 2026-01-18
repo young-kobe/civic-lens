@@ -6,40 +6,12 @@ Computes favorability toward Republican/GOP political entities using:
 2. LLM layer: Nuanced stance classification per entity (when enabled)
 """
 
+import re
 from typing import Any, Dict, List, Optional, Tuple
-from dataclasses import dataclass, asdict, field
 from analysis.src.common.logger import get_logger
+from analysis.src.engine.models import EntityStance, FavorabilityResult
 
 logger = get_logger(__name__)
-
-
-@dataclass
-class EntityStance:
-    """Stance toward a single entity."""
-    entity: str
-    stance: str  # favorable, unfavorable, neutral, mixed
-    confidence: float
-    evidence_spans: List[str] = field(default_factory=list)
-
-
-@dataclass
-class FavorabilityResult:
-    """
-    Full favorability analysis result.
-    
-    Satisfies invariant B2: AI outputs include confidence and evidence.
-    """
-    entity_stances: List[EntityStance]
-    overall_gop_stance: str  # favorable, unfavorable, neutral, mixed
-    overall_confidence: float
-    gop_entities_found: List[str]
-    reasoning: Optional[str] = None
-    deterministic_signals: Optional[Dict[str, Any]] = None
-    
-    def to_dict(self) -> Dict[str, Any]:
-        result = asdict(self)
-        result["entity_stances"] = [asdict(es) for es in self.entity_stances]
-        return result
 
 
 # GOP-related entities and keywords for detection
@@ -169,7 +141,6 @@ Pre-computed signals:
         # Normalize text
         text_lower = text.lower()
         # Tokenize into words (strip punctuation)
-        import re
         words = set(re.findall(r'\b[a-z]+\b', text_lower))
         
         # Find stance indicators using dual matching:

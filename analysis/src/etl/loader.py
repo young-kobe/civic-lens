@@ -1,6 +1,8 @@
 from typing import List, Dict, Any, Optional
 import sqlite3
 import json
+from pathlib import Path
+import trafilatura
 from analysis.src.common.logger import get_logger
 
 logger = get_logger(__name__)
@@ -20,9 +22,16 @@ class ContentLoader:
         conn = self._get_conn()
         cursor = conn.cursor()
         
+        # Cleanup empty text docs to allow reprocessing
+        cursor.execute("DELETE FROM docs WHERE source_type='news' AND text IS NULL")
+        
+        # Calculate raw directory path relative to DB
+        # db_path: data/civic_lens.db -> raw_root: data/raw/sha256
+        raw_root = Path(self.db_path).parent / "raw" / "sha256"
+        
         # 1. Load News
         cursor.execute("""
-            SELECT article_id, url_canon, domain, source, raw_hash, title, published_at 
+            SELECT url_canon, domain, raw_hash, title, published_at 
             FROM articles_raw
         """)
         articles = cursor.fetchall()
@@ -30,36 +39,54 @@ class ContentLoader:
         new_docs = 0
         for row in articles:
             # Check if exists
-            cursor.execute("SELECT doc_id FROM docs WHERE ident = ?", (row[1],))
+            cursor.execute("SELECT doc_id FROM docs WHERE ident = ?", (row[0],))
             if cursor.fetchone():
+                continue
+            
+            raw_hash = row[2]
+            text = None
+            
+            # Extract text from raw HTML file
+            if raw_hash and len(raw_hash) > 2:
+                prefix = raw_hash[:2]
+                path = raw_root / prefix / f"{raw_hash}.html"
+                if path.exists():
+                    try:
+                        with open(path, 'r', encoding='utf-8', errors='ignore') as f:
+                            html = f.read()
+                        text = trafilatura.extract(html)
+                    except Exception as e:
+                        logger.warning(f"Failed to extract text for {raw_hash}: {e}")
+            
+            if not text:
                 continue
                 
             # Insert
             cursor.execute("""
-                INSERT INTO docs (source_type, ident, domain_or_subreddit, published_at, title, raw_hash)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, ("news", row[1], row[2], row[6], row[5], row[4]))
+                INSERT INTO docs (source_type, ident, domain_or_subreddit, published_at, title, raw_hash, text)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, ("news", row[0], row[1], row[4], row[3], row[2], text))
             new_docs += 1
             
         # 2. Load Reddit Posts
         cursor.execute("""
-            SELECT post_id, fullname, subreddit, created_utc, title, body, raw_hash
+            SELECT fullname, subreddit, created_utc, title, body, raw_hash
             FROM reddit_posts_raw
         """)
         posts = cursor.fetchall()
         for row in posts:
-            if not row[1]: continue # Skip if no fullname
-            cursor.execute("SELECT doc_id FROM docs WHERE ident = ?", (row[1],))
+            if not row[0]: continue # Skip if no fullname
+            cursor.execute("SELECT doc_id FROM docs WHERE ident = ?", (row[0],))
             if cursor.fetchone():
                 continue
             
             # Combine title + body for text
-            text = f"{row[4] or ''}\n\n{row[5] or ''}".strip()
+            text = f"{row[3] or ''}\n\n{row[4] or ''}".strip()
             
             cursor.execute("""
                 INSERT INTO docs (source_type, ident, domain_or_subreddit, published_at, title, text, raw_hash)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, ("reddit_post", row[1], row[2], row[3], row[4], text, row[6]))
+            """, ("reddit_post", row[0], row[1], row[2], row[3], text, row[5]))
             new_docs += 1
             
         conn.commit()

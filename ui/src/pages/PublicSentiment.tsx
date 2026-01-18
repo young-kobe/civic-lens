@@ -1,41 +1,14 @@
 import { useState, useEffect } from 'react';
 import { Card, MetricCard, ConfidenceBadge, MethodPopover, LoadingCard, EmptyState, ErrorState } from '../components/common';
 import { SentimentBar } from '../components/charts';
-import type { Filters, SentimentData, SentimentOverview, SentimentBreakdown, SentimentDistribution, CoverageLevel, ConfidenceLevel } from '../types';
+import type { Filters, PublicSentimentData, SentimentOverview, SentimentBreakdown, SentimentDistribution, CoverageLevel, ConfidenceLevel } from '../types';
 
-// Mock data for demonstration
-const MOCK_SENTIMENT_DATA: SentimentData = {
-    overview: {
-        netScore: 0.12,
-        volume: 24589,
-        coverage: 'high',
-        confidence: 'medium',
-    },
-    byTopic: [
-        { topic: 'Economy', positive: 2340, negative: 1890, neutral: 1456, volume: 5686 },
-        { topic: 'Healthcare', positive: 1234, negative: 2345, neutral: 890, volume: 4469 },
-        { topic: 'Immigration', positive: 890, negative: 3456, neutral: 567, volume: 4913 },
-        { topic: 'Climate', positive: 2100, negative: 1200, neutral: 700, volume: 4000 },
-        { topic: 'Education', positive: 1800, negative: 900, neutral: 1100, volume: 3800 },
-    ],
-    byPlatform: [
-        { platform: 'News Media', positive: 4500, negative: 3200, neutral: 2100, volume: 9800 },
-        { platform: 'Reddit (sampled)', positive: 2800, negative: 4100, neutral: 1200, volume: 8100 },
-        { platform: 'Social (sampled)', positive: 1800, negative: 2500, neutral: 2389, volume: 6689 },
-    ],
-    byTimeWindow: [
-        { window: 'Last 24 hours', positive: 1200, negative: 980, neutral: 567, volume: 2747 },
-        { window: 'Last 7 days', positive: 4500, negative: 3800, neutral: 2100, volume: 10400 },
-        { window: 'Last 30 days', positive: 9100, negative: 8000, neutral: 7489, volume: 24589 },
-    ],
-    distribution: {
-        strongPositive: 2345,
-        mildPositive: 4567,
-        neutral: 5678,
-        mildNegative: 3456,
-        strongNegative: 2345,
-    },
-};
+import { fetchSentiment } from '../services/api';
+import { transformPublicSentiment } from '../services/transformers';
+
+// ... (keep existing imports and components)
+
+// Remove MOCK_SENTIMENT_DATA
 
 interface SentimentOverviewHeaderProps {
     data: SentimentOverview;
@@ -235,22 +208,32 @@ interface PublicSentimentProps {
 }
 
 function PublicSentiment({ filters }: PublicSentimentProps) {
-    const [data, setData] = useState<SentimentData | null>(null);
+    const [data, setData] = useState<PublicSentimentData | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        setLoading(true);
-        const timer = setTimeout(() => {
-            setData(MOCK_SENTIMENT_DATA);
-            setLoading(false);
-        }, 600);
-        return () => clearTimeout(timer);
+        const loadData = async () => {
+            setLoading(true);
+            setError(null);
+            try {
+                const rawData = await fetchSentiment();
+                const processedData = transformPublicSentiment(rawData);
+                setData(processedData);
+            } catch (err: any) {
+                console.error("Failed to load sentiment:", err);
+                setError(err.message || "Failed to load sentiment data.");
+            } finally {
+                setLoading(false);
+            }
+        };
+        loadData();
     }, [filters]);
 
     if (error) {
-        return <ErrorState message={error} onRetry={() => setError(null)} />;
+        return <ErrorState message={error} onRetry={() => window.location.reload()} />;
     }
+
 
     if (loading) {
         return (
@@ -295,7 +278,7 @@ function PublicSentiment({ filters }: PublicSentimentProps) {
             {/* Time Window Breakdown */}
             <Card title="Sentiment by Time Window">
                 <div className="grid-3">
-                    {data.byTimeWindow.map((item, i) => (
+                    {data.byTimeWindow.map((item: any, i: number) => (
                         <div key={i} className="card" style={{ background: 'var(--neutral-50)', border: 'none' }}>
                             <div className="text-sm font-medium mb-2">{item.window}</div>
                             <SentimentBar

@@ -9,7 +9,7 @@ import (
 )
 
 func main() {
-	dbPath := "../data/news.db"
+	dbPath := "../data/civic_lens.db"
 	if len(os.Args) > 1 {
 		dbPath = os.Args[1]
 	}

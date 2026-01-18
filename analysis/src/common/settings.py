@@ -10,6 +10,9 @@ class Settings(BaseSettings):
     # Database
     db_path: str = "data/civic_lens.db"
     
+    # Cache for pre-computed analysis snapshots
+    cache_dir: str = "data/cache"
+    
     # API Server
     api_host: str = "0.0.0.0"
     api_port: int = 8000
@@ -28,7 +31,8 @@ class Settings(BaseSettings):
         env_prefix="CIVIC_",
         env_file=".env",
         env_file_encoding="utf-8",
-        extra="ignore"
+        extra="ignore",
+        protected_namespaces=()  # Disable protected namespace check for 'model_' prefix
     )
 
 def get_settings() -> Settings:

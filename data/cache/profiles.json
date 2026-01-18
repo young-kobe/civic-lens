@@ -1,0 +1,30 @@
+{
+  "_meta": {
+    "generated_at": "2026-01-17T22:51:43.767266+00:00",
+    "doc_count": 3,
+    "version": "1.0"
+  },
+  "data": [
+    {
+      "outlet": "www.bbc.co.uk",
+      "avg_sentiment": 0.0,
+      "bot_rate": 0.333,
+      "volume": 3,
+      "total_scanned": 3
+    },
+    {
+      "outlet": "www.npr.org",
+      "avg_sentiment": 0.403,
+      "bot_rate": 0.164,
+      "volume": 67,
+      "total_scanned": 67
+    },
+    {
+      "outlet": "www.bbc.com",
+      "avg_sentiment": 0.333,
+      "bot_rate": 0.033,
+      "volume": 30,
+      "total_scanned": 30
+    }
+  ]
+}

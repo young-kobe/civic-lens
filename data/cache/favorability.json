@@ -1,0 +1,154 @@
+{
+  "_meta": {
+    "generated_at": "2026-01-17T22:51:43.761694+00:00",
+    "doc_count": 100,
+    "version": "1.0"
+  },
+  "data": {
+    "overall": {
+      "favorable": 12.0,
+      "unfavorable": 15.0,
+      "neutral": 70.0,
+      "netFavorability": -3.0,
+      "sampleSize": 100,
+      "sourceCount": 1,
+      "lastUpdated": "2026-01-17T16:51:43.760689",
+      "dateRange": "All time"
+    },
+    "trend": [
+      {
+        "date": "2007-10-27",
+        "value": 0.0
+      },
+      {
+        "date": "2009-07-21",
+        "value": 0.0
+      },
+      {
+        "date": "2013-06-03",
+        "value": 0.0
+      },
+      {
+        "date": "2013-06-19",
+        "value": 0.0
+      },
+      {
+        "date": "2015-03-26",
+        "value": 0.0
+      },
+      {
+        "date": "2018-05-22",
+        "value": 0.0
+      },
+      {
+        "date": "2019-02-10",
+        "value": 0.0
+      },
+      {
+        "date": "2019-02-11",
+        "value": 0.0
+      },
+      {
+        "date": "2021-02-23",
+        "value": 0.0
+      },
+      {
+        "date": "2022-11-15",
+        "value": 0.0
+      },
+      {
+        "date": "2023-04-28",
+        "value": 0.0
+      },
+      {
+        "date": "2024-05-19",
+        "value": 100.0
+      },
+      {
+        "date": "2024-05-21",
+        "value": -100.0
+      },
+      {
+        "date": "2025-04-30",
+        "value": 0.0
+      },
+      {
+        "date": "2025-06-28",
+        "value": 100.0
+      },
+      {
+        "date": "2025-07-29",
+        "value": 100.0
+      },
+      {
+        "date": "2025-11-05",
+        "value": 0.0
+      },
+      {
+        "date": "2025-11-20",
+        "value": 100.0
+      },
+      {
+        "date": "2025-12-09",
+        "value": 0.0
+      },
+      {
+        "date": "2025-12-22",
+        "value": 0.0
+      },
+      {
+        "date": "2026-01-06",
+        "value": 0.0
+      },
+      {
+        "date": "2026-01-07",
+        "value": 0.0
+      },
+      {
+        "date": "2026-01-09",
+        "value": -50.0
+      },
+      {
+        "date": "2026-01-10",
+        "value": 0.0
+      },
+      {
+        "date": "2026-01-12",
+        "value": 0.0
+      },
+      {
+        "date": "2026-01-13",
+        "value": 50.0
+      },
+      {
+        "date": "2026-01-14",
+        "value": -5.9
+      },
+      {
+        "date": "2026-01-15",
+        "value": -16.7
+      }
+    ],
+    "trendAnnotations": [],
+    "byPlatform": [
+      {
+        "group": "News",
+        "favorable": 12,
+        "unfavorable": 15,
+        "neutral": 70
+      }
+    ],
+    "pollingVsSocial": {
+      "polling": {
+        "favorable": 42,
+        "unfavorable": 53,
+        "neutral": 5
+      },
+      "social": {
+        "favorable": 12.0,
+        "unfavorable": 15.0,
+        "neutral": 70.0
+      }
+    }
+  }
+}
