@@ -205,5 +205,63 @@ class TestFavorabilityAnalyzer(unittest.TestCase):
         self.assertLessEqual(result.overall_confidence, 1.0)
 
 
+class TestJsonParsing(unittest.TestCase):
+    """Tests for robust JSON parsing in BaseLLMClient."""
+    
+    def test_valid_json(self):
+        """Verify valid JSON parses correctly."""
+        from analysis.src.llm.base import BaseLLMClient
+        
+        result = BaseLLMClient.parse_json_response('{"key": "value", "num": 42}')
+        self.assertEqual(result["key"], "value")
+        self.assertEqual(result["num"], 42)
+    
+    def test_json_with_markdown_fences(self):
+        """Verify JSON with markdown code fences parses correctly."""
+        from analysis.src.llm.base import BaseLLMClient
+        
+        result = BaseLLMClient.parse_json_response('```json\n{"key": "value"}\n```')
+        self.assertEqual(result["key"], "value")
+    
+    def test_json_with_trailing_comma(self):
+        """Verify JSON with trailing comma is repaired."""
+        from analysis.src.llm.base import BaseLLMClient
+        
+        result = BaseLLMClient.parse_json_response('{"key": "value", "num": 42,}')
+        self.assertEqual(result["key"], "value")
+    
+    def test_json_with_missing_comma(self):
+        """Verify JSON with missing comma between fields is repaired."""
+        from analysis.src.llm.base import BaseLLMClient
+        
+        # Missing comma after "value"
+        result = BaseLLMClient.parse_json_response('{"key": "value" "key2": "value2"}')
+        self.assertEqual(result["key"], "value")
+        self.assertEqual(result["key2"], "value2")
+    
+    def test_json_with_surrounding_text(self):
+        """Verify JSON is extracted from surrounding explanation text."""
+        from analysis.src.llm.base import BaseLLMClient
+        
+        text = 'Here is the analysis:\n{"is_bot": false, "label": "human"}\nEnd of response.'
+        result = BaseLLMClient.parse_json_response(text)
+        self.assertEqual(result["is_bot"], False)
+        self.assertEqual(result["label"], "human")
+    
+    def test_json_array_trailing_comma(self):
+        """Verify JSON array with trailing comma is repaired."""
+        from analysis.src.llm.base import BaseLLMClient
+        
+        result = BaseLLMClient.parse_json_response('["a", "b", "c",]')
+        self.assertEqual(result, ["a", "b", "c"])
+    
+    def test_invalid_json_raises_error(self):
+        """Verify completely invalid JSON raises ValueError."""
+        from analysis.src.llm.base import BaseLLMClient
+        
+        with self.assertRaises(ValueError):
+            BaseLLMClient.parse_json_response('not json at all')
+
+
 if __name__ == '__main__':
     unittest.main()

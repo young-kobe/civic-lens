@@ -83,7 +83,7 @@ Pre-computed signals for context:
     ):
         self.model_name = model_name
         self.llm_enabled = llm_enabled
-        self._gemini_client = None
+        self._llm_client = None
         
         logger.info(f"Initialized HybridSentimentAnalyzer (llm_enabled={llm_enabled})")
         
@@ -93,10 +93,10 @@ Pre-computed signals for context:
     def _init_llm_client(self):
         """Initialize the LLM client if enabled."""
         try:
-            from analysis.src.common.llm_client import get_gemini_client
-            self._gemini_client = get_gemini_client()
-            if not self._gemini_client.is_available:
-                logger.warning("Gemini client not available. Falling back to heuristics.")
+            from analysis.src.llm import get_llm_client
+            self._llm_client = get_llm_client()
+            if not self._llm_client.is_available:
+                logger.warning("LLM client not available. Falling back to heuristics.")
                 self.llm_enabled = False
         except Exception as e:
             logger.error(f"Failed to initialize LLM client: {e}")
@@ -201,7 +201,7 @@ Pre-computed signals for context:
         )
         
         try:
-            response = self._gemini_client.complete(
+            response = self._llm_client.complete(
                 system_prompt=self.SYSTEM_PROMPT,
                 user_prompt=user_prompt,
             )
@@ -248,7 +248,7 @@ Pre-computed signals for context:
         signals = self._compute_signals(text)
         
         # 2. LLM classification if enabled and client available
-        if self.llm_enabled and self._gemini_client and self._gemini_client.is_available:
+        if self.llm_enabled and self._llm_client and self._llm_client.is_available:
             return self._llm_classify(text, signals)
         
         # 3. Fallback to heuristic

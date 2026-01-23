@@ -73,7 +73,7 @@ BEHAVIORAL SIGNALS:
 
     def __init__(self, llm_enabled: bool = False):
         self.llm_enabled = llm_enabled
-        self._gemini_client = None
+        self._llm_client = None
         
         logger.info(f"Initialized HybridBotDetector (llm_enabled={llm_enabled})")
         
@@ -83,10 +83,10 @@ BEHAVIORAL SIGNALS:
     def _init_llm_client(self):
         """Initialize the LLM client if enabled."""
         try:
-            from analysis.src.common.llm_client import get_gemini_client
-            self._gemini_client = get_gemini_client()
-            if not self._gemini_client.is_available:
-                logger.warning("Gemini client not available. Falling back to heuristics.")
+            from analysis.src.llm import get_llm_client
+            self._llm_client = get_llm_client()
+            if not self._llm_client.is_available:
+                logger.warning("LLM client not available. Falling back to heuristics.")
                 self.llm_enabled = False
         except Exception as e:
             logger.error(f"Failed to initialize LLM client: {e}")
@@ -244,7 +244,7 @@ BEHAVIORAL SIGNALS:
         )
         
         try:
-            response = self._gemini_client.complete(
+            response = self._llm_client.complete(
                 system_prompt=self.SYSTEM_PROMPT,
                 user_prompt=user_prompt,
             )
@@ -296,7 +296,7 @@ BEHAVIORAL SIGNALS:
         signals = self._compute_signals(text, metadata)
         
         # 2. Only use LLM for edge cases (score > 0.3) to save costs
-        if self.llm_enabled and self._gemini_client and self._gemini_client.is_available:
+        if self.llm_enabled and self._llm_client and self._llm_client.is_available:
             if signals["aggregated_score"] > 0.3:
                 return self._llm_classify(text, signals)
         

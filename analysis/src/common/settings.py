@@ -27,6 +27,14 @@ class Settings(BaseSettings):
     gemini_temperature: float = 0.0
     llm_enabled: bool = False  # Feature flag for gradual rollout
     
+    # LLM Backend Selection: "gemini" or "ollama"
+    llm_backend: str = "gemini"
+    
+    # Ollama Config (for local LLM on Orin Nano or other local inference)
+    ollama_host: str = "http://localhost:11434"
+    ollama_model: str = "llama3.2:3b"
+    ollama_timeout: int = 120  # seconds (local inference is slower)
+    
     model_config = SettingsConfigDict(
         env_prefix="CIVIC_",
         env_file=".env",
