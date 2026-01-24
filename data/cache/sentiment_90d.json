@@ -1,0 +1,158 @@
+{
+  "_meta": {
+    "generated_at": "2026-01-24T20:06:50.276039+00:00",
+    "doc_count": 771,
+    "version": "1.0"
+  },
+  "data": {
+    "overview": {
+      "netScore": 6.2,
+      "volume": 771,
+      "coverage": "medium",
+      "confidence": "medium"
+    },
+    "distribution": {
+      "strongPositive": 190,
+      "mildPositive": 0,
+      "neutral": 429,
+      "mildNegative": 0,
+      "strongNegative": 142
+    },
+    "byPlatform": [
+      {
+        "platform": "News Outlets",
+        "positive": 164,
+        "negative": 50,
+        "neutral": 417,
+        "volume": 639
+      },
+      {
+        "platform": "Social Media",
+        "positive": 26,
+        "negative": 92,
+        "neutral": 14,
+        "volume": 132
+      }
+    ],
+    "byTopic": [
+      {
+        "topic": "General",
+        "positive": 157,
+        "negative": 94,
+        "neutral": 362,
+        "volume": 621
+      },
+      {
+        "topic": "Foreign Policy",
+        "positive": 17,
+        "negative": 10,
+        "neutral": 20,
+        "volume": 47
+      },
+      {
+        "topic": "Economy",
+        "positive": 2,
+        "negative": 14,
+        "neutral": 6,
+        "volume": 22
+      },
+      {
+        "topic": "Climate",
+        "positive": 3,
+        "negative": 5,
+        "neutral": 11,
+        "volume": 19
+      },
+      {
+        "topic": "Justice",
+        "positive": 3,
+        "negative": 7,
+        "neutral": 8,
+        "volume": 18
+      },
+      {
+        "topic": "Immigration",
+        "positive": 2,
+        "negative": 7,
+        "neutral": 7,
+        "volume": 16
+      },
+      {
+        "topic": "Healthcare",
+        "positive": 3,
+        "negative": 2,
+        "neutral": 7,
+        "volume": 12
+      },
+      {
+        "topic": "Gun Policy",
+        "positive": 3,
+        "negative": 2,
+        "neutral": 5,
+        "volume": 10
+      },
+      {
+        "topic": "Abortion",
+        "positive": 0,
+        "negative": 1,
+        "neutral": 3,
+        "volume": 4
+      },
+      {
+        "topic": "Education",
+        "positive": 0,
+        "negative": 0,
+        "neutral": 2,
+        "volume": 2
+      }
+    ],
+    "byTimeWindow": [
+      {
+        "window": "24 hours",
+        "positive": 31,
+        "negative": 3,
+        "neutral": 13,
+        "volume": 48
+      },
+      {
+        "window": "7 days",
+        "positive": 2,
+        "negative": 39,
+        "neutral": 46,
+        "volume": 87
+      },
+      {
+        "window": "30 days",
+        "positive": 125,
+        "negative": 93,
+        "neutral": 302,
+        "volume": 526
+      },
+      {
+        "window": "90+ days",
+        "positive": 32,
+        "negative": 7,
+        "neutral": 70,
+        "volume": 110
+      }
+    ],
+    "disclaimer": "Represents sampled platform discourse, not verified population sentiment",
+    "excluded_bot_content": 8,
+    "socialVsNews": {
+      "social": {
+        "positive": 26,
+        "negative": 92,
+        "neutral": 14,
+        "netScore": -50.0,
+        "volume": 132
+      },
+      "news": {
+        "positive": 164,
+        "negative": 50,
+        "neutral": 417,
+        "netScore": 17.8,
+        "volume": 639
+      }
+    }
+  }
+}

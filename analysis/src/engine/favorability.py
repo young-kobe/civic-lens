@@ -10,6 +10,8 @@ import re
 from typing import Any, Dict, List, Optional, Tuple
 from analysis.src.common.logger import get_logger
 from analysis.src.engine.models import EntityStance, FavorabilityResult
+from analysis.src.engine.prompts import FAVORABILITY_SYSTEM_PROMPT, FAVORABILITY_USER_PROMPT_TEMPLATE
+from analysis.src.llm.schemas import FAVORABILITY_SCHEMA
 
 logger = get_logger(__name__)
 
@@ -50,43 +52,6 @@ class FavorabilityAnalyzer:
     Analyzes favorability toward GOP/Republican entities in text.
     """
     
-    SYSTEM_PROMPT = """You are a political stance analyzer. Classify the favorability expressed
-toward Republican/GOP entities mentioned in the text.
-
-RULES:
-1. Return ONLY valid JSON matching the schema below
-2. Analyze ONLY entities actually mentioned in the text
-3. Cite specific phrases as evidence for each stance judgment
-4. If stance is unclear, use "neutral" with low confidence
-5. Do not infer intent - classify only explicit expressions
-6. Consider context: quotes, attribution, and framing matter
-
-OUTPUT SCHEMA:
-{
-  "entity_stances": [
-    {
-      "entity": "entity name",
-      "stance": "favorable" | "unfavorable" | "neutral" | "mixed",
-      "confidence": 0.0-1.0,
-      "evidence_spans": ["quoted phrase from text"]
-    }
-  ],
-  "overall_gop_stance": "favorable" | "unfavorable" | "neutral" | "mixed",
-  "overall_confidence": 0.0-1.0,
-  "reasoning": "Brief explanation of classification"
-}"""
-
-    USER_PROMPT_TEMPLATE = """Analyze favorability toward GOP entities in this text:
-
-\"\"\"{text}\"\"\"
-
-Detected GOP entities: {gop_mentions}
-Pre-computed signals:
-- Favorable indicators: {favorable_count} found
-- Unfavorable indicators: {unfavorable_count} found
-- Favorable keywords: {favorable_keywords}
-- Unfavorable keywords: {unfavorable_keywords}"""
-
     def __init__(self, llm_enabled: bool = False):
         self.llm_enabled = llm_enabled
         self._llm_client = None
@@ -247,7 +212,7 @@ Pre-computed signals:
         """
         Classify favorability using LLM with deterministic signals as context.
         """
-        user_prompt = self.USER_PROMPT_TEMPLATE.format(
+        user_prompt = FAVORABILITY_USER_PROMPT_TEMPLATE.format(
             text=text[:2000],
             gop_mentions=", ".join(gop_entities[:10]),
             favorable_count=signals["favorable_count"],
@@ -258,13 +223,16 @@ Pre-computed signals:
         
         try:
             response = self._llm_client.complete(
-                system_prompt=self.SYSTEM_PROMPT,
+                system_prompt=FAVORABILITY_SYSTEM_PROMPT,
                 user_prompt=user_prompt,
+                response_schema=FAVORABILITY_SCHEMA,
             )
             
             # Parse entity stances
             entity_stances = []
             for es in response.get("entity_stances", []):
+                if not isinstance(es, dict):
+                    continue
                 entity_stances.append(EntityStance(
                     entity=es.get("entity", "unknown"),
                     stance=es.get("stance", "neutral"),

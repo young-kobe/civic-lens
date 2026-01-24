@@ -206,7 +206,7 @@ function StoryClusters({ filters }: StoryClustersProps) {
             setLoading(true);
             setError(null);
             try {
-                const rawData = await fetchStories();
+                const rawData = await fetchStories(filters.timeRange);
                 const processedData = transformStories(rawData);
                 setClusters(processedData);
                 if (processedData.length > 0) {

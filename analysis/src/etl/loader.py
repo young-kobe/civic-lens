@@ -234,11 +234,36 @@ class ContentLoader:
         """, (doc_id, task, json.dumps(result), confidence))
         conn.commit()
 
-    def get_all_docs_for_clustering(self) -> List[Dict[str, Any]]:
+    def get_all_docs_for_clustering(self, max_age_days: int = 90) -> List[Dict[str, Any]]:
+        """
+        Get docs for clustering with time and content filtering.
+        
+        Args:
+            max_age_days: Only include docs published within this many days (default 90)
+        
+        Filters:
+            - Excludes sports/entertainment URLs via pattern matching
+            - Only includes docs within time window
+        """
+        cutoff = int(time.time()) - (max_age_days * 86400)
+        
         conn = self._get_conn()
         cursor = conn.cursor()
-        cursor.execute("SELECT doc_id, title, text FROM docs WHERE text IS NOT NULL AND text != ''")
+        cursor.execute("""
+            SELECT doc_id, title, text FROM docs 
+            WHERE text IS NOT NULL AND text != ''
+            AND (published_at IS NULL OR published_at >= ?)
+            AND ident NOT LIKE '%/sport%'
+            AND ident NOT LIKE '%/football%'
+            AND ident NOT LIKE '%/basketball%'
+            AND ident NOT LIKE '%/baseball%'
+            AND ident NOT LIKE '%/soccer%'
+            AND ident NOT LIKE '%/entertainment%'
+            AND ident NOT LIKE '%/music%'
+            AND ident NOT LIKE '%/celebrity%'
+        """, (cutoff,))
         rows = cursor.fetchall()
+        logger.info(f"Clustering: {len(rows)} docs after filtering (max_age={max_age_days}d)")
         return [{"doc_id": r[0], "title": r[1], "text": r[2]} for r in rows]
 
     def save_clusters(self, clusters: List[Dict[str, Any]]):

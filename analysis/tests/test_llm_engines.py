@@ -206,7 +206,11 @@ class TestFavorabilityAnalyzer(unittest.TestCase):
 
 
 class TestJsonParsing(unittest.TestCase):
-    """Tests for robust JSON parsing in BaseLLMClient."""
+    """Tests for JSON parsing in BaseLLMClient.
+    
+    Note: With JSON schema mode, LLMs are constrained to return valid JSON,
+    so we only need basic parsing - no complex repair logic.
+    """
     
     def test_valid_json(self):
         """Verify valid JSON parses correctly."""
@@ -223,44 +227,26 @@ class TestJsonParsing(unittest.TestCase):
         result = BaseLLMClient.parse_json_response('```json\n{"key": "value"}\n```')
         self.assertEqual(result["key"], "value")
     
-    def test_json_with_trailing_comma(self):
-        """Verify JSON with trailing comma is repaired."""
+    def test_json_array_returns_first_dict(self):
+        """Verify JSON array of dicts returns the first dict."""
         from analysis.src.llm.base import BaseLLMClient
         
-        result = BaseLLMClient.parse_json_response('{"key": "value", "num": 42,}')
+        result = BaseLLMClient.parse_json_response('[{"key": "value"}, {"key2": "value2"}]')
         self.assertEqual(result["key"], "value")
-    
-    def test_json_with_missing_comma(self):
-        """Verify JSON with missing comma between fields is repaired."""
-        from analysis.src.llm.base import BaseLLMClient
-        
-        # Missing comma after "value"
-        result = BaseLLMClient.parse_json_response('{"key": "value" "key2": "value2"}')
-        self.assertEqual(result["key"], "value")
-        self.assertEqual(result["key2"], "value2")
-    
-    def test_json_with_surrounding_text(self):
-        """Verify JSON is extracted from surrounding explanation text."""
-        from analysis.src.llm.base import BaseLLMClient
-        
-        text = 'Here is the analysis:\n{"is_bot": false, "label": "human"}\nEnd of response.'
-        result = BaseLLMClient.parse_json_response(text)
-        self.assertEqual(result["is_bot"], False)
-        self.assertEqual(result["label"], "human")
-    
-    def test_json_array_trailing_comma(self):
-        """Verify JSON array with trailing comma is repaired."""
-        from analysis.src.llm.base import BaseLLMClient
-        
-        result = BaseLLMClient.parse_json_response('["a", "b", "c",]')
-        self.assertEqual(result, ["a", "b", "c"])
     
     def test_invalid_json_raises_error(self):
-        """Verify completely invalid JSON raises ValueError."""
+        """Verify invalid JSON raises ValueError."""
         from analysis.src.llm.base import BaseLLMClient
         
         with self.assertRaises(ValueError):
             BaseLLMClient.parse_json_response('not json at all')
+    
+    def test_non_dict_json_raises_error(self):
+        """Verify non-dict JSON (like plain string) raises ValueError."""
+        from analysis.src.llm.base import BaseLLMClient
+        
+        with self.assertRaises(ValueError):
+            BaseLLMClient.parse_json_response('"just a string"')
 
 
 if __name__ == '__main__':

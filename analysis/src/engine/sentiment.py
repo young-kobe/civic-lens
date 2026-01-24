@@ -9,6 +9,8 @@ Uses a two-layer approach:
 from typing import Any, Dict, List, Optional, Tuple
 from analysis.src.common.logger import get_logger
 from analysis.src.engine.models import SentimentResult
+from analysis.src.engine.prompts import SENTIMENT_SYSTEM_PROMPT, SENTIMENT_USER_PROMPT_TEMPLATE
+from analysis.src.llm.schemas import SENTIMENT_SCHEMA
 
 logger = get_logger(__name__)
 
@@ -47,35 +49,6 @@ class HybridSentimentAnalyzer:
     Hybrid sentiment analyzer combining deterministic signals with LLM interpretation.
     """
     
-    # LLM prompt templates
-    SYSTEM_PROMPT = """You are a sentiment classifier for political news and social media content.
-Your task is to classify the sentiment expressed toward the main subject of the text.
-
-RULES:
-1. Return ONLY valid JSON matching the schema below
-2. Cite specific phrases from the text as evidence (use exact quotes)
-3. If uncertain, set confidence < 0.7
-4. Do not infer sentiment not explicitly present in the text
-5. Consider context and nuance - sarcasm, irony, or mixed feelings affect classification
-
-OUTPUT SCHEMA:
-{
-  "label": "POSITIVE" | "NEGATIVE" | "NEUTRAL" | "MIXED",
-  "confidence": 0.0-1.0,
-  "evidence_spans": ["quoted phrase 1", "quoted phrase 2"],
-  "reasoning": "Brief explanation of classification"
-}"""
-
-    USER_PROMPT_TEMPLATE = """Classify the sentiment of the following text:
-
-\"\"\"{text}\"\"\"
-
-Pre-computed signals for context:
-- Positive indicators found: {positive_count}
-- Negative indicators found: {negative_count}
-- Intensifiers present: {has_intensifiers}
-- Negators present: {has_negators}"""
-
     def __init__(
         self,
         model_name: str = "distilbert-base-uncased-finetuned-sst-2-english",
@@ -192,7 +165,7 @@ Pre-computed signals for context:
         """
         Classify sentiment using LLM with deterministic signals as context.
         """
-        user_prompt = self.USER_PROMPT_TEMPLATE.format(
+        user_prompt = SENTIMENT_USER_PROMPT_TEMPLATE.format(
             text=text[:2000],  # Truncate for token limits
             positive_count=signals["positive_count"],
             negative_count=signals["negative_count"],
@@ -202,10 +175,10 @@ Pre-computed signals for context:
         
         try:
             response = self._llm_client.complete(
-                system_prompt=self.SYSTEM_PROMPT,
+                system_prompt=SENTIMENT_SYSTEM_PROMPT,
                 user_prompt=user_prompt,
+                response_schema=SENTIMENT_SCHEMA,
             )
-            
             return SentimentResult(
                 label=response.get("label", "NEUTRAL"),
                 confidence=float(response.get("confidence", 0.5)),
@@ -253,7 +226,3 @@ Pre-computed signals for context:
         
         # 3. Fallback to heuristic
         return self._heuristic_classify(signals)
-
-
-# Backwards-compatible alias
-SentimentAnalyzer = HybridSentimentAnalyzer

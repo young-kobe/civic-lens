@@ -1,0 +1,969 @@
+{
+  "_meta": {
+    "generated_at": "2026-01-24T20:06:49.979704+00:00",
+    "doc_count": 20,
+    "version": "1.0"
+  },
+  "data": [
+    {
+      "id": 2895,
+      "title": "Trump administration's defense strategy tells allies to handle their own security : NPR",
+      "articleCount": 3,
+      "momentum": {
+        "delta24h": 100.0,
+        "delta7d": 0.0
+      },
+      "primarySources": [
+        "news"
+      ],
+      "summary": [
+        "Pentagon to offer 'more limited' support to US allies",
+        "Pentagon to shift North Korea deterrence responsibility primarily to South Korea | Fox News",
+        "Trump administration's defense strategy tells allies to handle their own security : NPR"
+      ],
+      "keyClaims": [],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "locations": []
+      },
+      "sourceMix": [
+        {
+          "name": "News",
+          "value": 3,
+          "type": "other"
+        }
+      ],
+      "timeline": [
+        {
+          "date": "Fri",
+          "value": 2
+        },
+        {
+          "date": "Sat",
+          "value": 1
+        }
+      ],
+      "articles": [
+        {
+          "id": 1932,
+          "title": "Pentagon to offer 'more limited' support to US allies",
+          "source": "https://www.bbc.com/news/articles/cj9r8ezym3ro",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 1897,
+          "title": "Pentagon to shift North Korea deterrence responsibility primarily to South Korea | Fox News",
+          "source": "https://www.foxnews.com/politics/pentagon-plans-give-south-korea-primary-role-deterring-north-korea-threats-new-strategy",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 1898,
+          "title": "Trump administration's defense strategy tells allies to handle their own security : NPR",
+          "source": "https://www.npr.org/2026/01/24/nx-s1-5687168/trump-administration-defense-strategy",
+          "snippet": "",
+          "reason": "Recent coverage"
+        }
+      ]
+    },
+    {
+      "id": 1790,
+      "title": "'Insulting': Starmer reacts to Trump's comments on Nato troops in Afghanistan",
+      "articleCount": 2,
+      "momentum": {
+        "delta24h": 100.0,
+        "delta7d": 0.0
+      },
+      "primarySources": [
+        "news"
+      ],
+      "summary": [
+        "Prince Harry says sacrifices by Nato troops in Afghanistan deserve 'respect'",
+        "'Insulting': Starmer reacts to Trump's comments on Nato troops in Afghanistan"
+      ],
+      "keyClaims": [],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "locations": []
+      },
+      "sourceMix": [
+        {
+          "name": "News",
+          "value": 2,
+          "type": "other"
+        }
+      ],
+      "timeline": [
+        {
+          "date": "Fri",
+          "value": 2
+        }
+      ],
+      "articles": [
+        {
+          "id": 1862,
+          "title": "Prince Harry says sacrifices by Nato troops in Afghanistan deserve 'respect'",
+          "source": "https://www.bbc.com/news/articles/clym2l7d75eo",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 1870,
+          "title": "'Insulting': Starmer reacts to Trump's comments on Nato troops in Afghanistan",
+          "source": "https://www.bbc.com/news/videos/c5y3jvrz3zko",
+          "snippet": "",
+          "reason": "Recent coverage"
+        }
+      ]
+    },
+    {
+      "id": 2323,
+      "title": "'Insulting': Starmer reacts to Trump's comments on Nato troops in Afghanistan",
+      "articleCount": 2,
+      "momentum": {
+        "delta24h": 100.0,
+        "delta7d": 0.0
+      },
+      "primarySources": [
+        "news"
+      ],
+      "summary": [
+        "Prince Harry says sacrifices by Nato troops in Afghanistan deserve 'respect'",
+        "'Insulting': Starmer reacts to Trump's comments on Nato troops in Afghanistan"
+      ],
+      "keyClaims": [],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "locations": []
+      },
+      "sourceMix": [
+        {
+          "name": "News",
+          "value": 2,
+          "type": "other"
+        }
+      ],
+      "timeline": [
+        {
+          "date": "Fri",
+          "value": 2
+        }
+      ],
+      "articles": [
+        {
+          "id": 1862,
+          "title": "Prince Harry says sacrifices by Nato troops in Afghanistan deserve 'respect'",
+          "source": "https://www.bbc.com/news/articles/clym2l7d75eo",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 1870,
+          "title": "'Insulting': Starmer reacts to Trump's comments on Nato troops in Afghanistan",
+          "source": "https://www.bbc.com/news/videos/c5y3jvrz3zko",
+          "snippet": "",
+          "reason": "Recent coverage"
+        }
+      ]
+    },
+    {
+      "id": 2879,
+      "title": "'Insulting': Starmer reacts to Trump's comments on Nato troops in Afghanistan",
+      "articleCount": 2,
+      "momentum": {
+        "delta24h": 100.0,
+        "delta7d": 0.0
+      },
+      "primarySources": [
+        "news"
+      ],
+      "summary": [
+        "Prince Harry says sacrifices by Nato troops in Afghanistan deserve 'respect'",
+        "'Insulting': Starmer reacts to Trump's comments on Nato troops in Afghanistan"
+      ],
+      "keyClaims": [],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "locations": []
+      },
+      "sourceMix": [
+        {
+          "name": "News",
+          "value": 2,
+          "type": "other"
+        }
+      ],
+      "timeline": [
+        {
+          "date": "Fri",
+          "value": 2
+        }
+      ],
+      "articles": [
+        {
+          "id": 1862,
+          "title": "Prince Harry says sacrifices by Nato troops in Afghanistan deserve 'respect'",
+          "source": "https://www.bbc.com/news/articles/clym2l7d75eo",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 1870,
+          "title": "'Insulting': Starmer reacts to Trump's comments on Nato troops in Afghanistan",
+          "source": "https://www.bbc.com/news/videos/c5y3jvrz3zko",
+          "snippet": "",
+          "reason": "Recent coverage"
+        }
+      ]
+    },
+    {
+      "id": 2885,
+      "title": "Ukraine war: High stakes but low expectations for Ukraine talks with Russia and US",
+      "articleCount": 2,
+      "momentum": {
+        "delta24h": 100.0,
+        "delta7d": 0.0
+      },
+      "primarySources": [
+        "news"
+      ],
+      "summary": [
+        "Two days of peace talks end as Russia continues Ukraine attacks",
+        "Ukraine war: High stakes but low expectations for Ukraine talks with Russia and US"
+      ],
+      "keyClaims": [],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "locations": []
+      },
+      "sourceMix": [
+        {
+          "name": "News",
+          "value": 2,
+          "type": "other"
+        }
+      ],
+      "timeline": [
+        {
+          "date": "Fri",
+          "value": 1
+        },
+        {
+          "date": "Sat",
+          "value": 1
+        }
+      ],
+      "articles": [
+        {
+          "id": 1914,
+          "title": "Two days of peace talks end as Russia continues Ukraine attacks",
+          "source": "https://www.bbc.com/news/articles/cwyr6p30054o",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 1873,
+          "title": "Ukraine war: High stakes but low expectations for Ukraine talks with Russia and US",
+          "source": "https://www.bbc.com/news/articles/c3edde1pwx8o",
+          "snippet": "",
+          "reason": "Recent coverage"
+        }
+      ]
+    },
+    {
+      "id": 2888,
+      "title": "'He should apologise': Anger of veterans and relatives at Trump Nato remarks",
+      "articleCount": 2,
+      "momentum": {
+        "delta24h": 100.0,
+        "delta7d": 0.0
+      },
+      "primarySources": [
+        "news"
+      ],
+      "summary": [
+        "Trump says UK soldiers in Afghanistan 'among greatest of all warriors'",
+        "'He should apologise': Anger of veterans and relatives at Trump Nato remarks"
+      ],
+      "keyClaims": [],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "locations": []
+      },
+      "sourceMix": [
+        {
+          "name": "News",
+          "value": 2,
+          "type": "other"
+        }
+      ],
+      "timeline": [
+        {
+          "date": "Fri",
+          "value": 1
+        },
+        {
+          "date": "Sat",
+          "value": 1
+        }
+      ],
+      "articles": [
+        {
+          "id": 1911,
+          "title": "Trump says UK soldiers in Afghanistan 'among greatest of all warriors'",
+          "source": "https://www.bbc.com/news/articles/c3edwx37pd9o",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 1863,
+          "title": "'He should apologise': Anger of veterans and relatives at Trump Nato remarks",
+          "source": "https://www.bbc.com/news/articles/c20gzjnv9l5o",
+          "snippet": "",
+          "reason": "Recent coverage"
+        }
+      ]
+    },
+    {
+      "id": 2893,
+      "title": "China's top general under investigation in latest military purge : NPR",
+      "articleCount": 2,
+      "momentum": {
+        "delta24h": 100.0,
+        "delta7d": 0.0
+      },
+      "primarySources": [
+        "news"
+      ],
+      "summary": [
+        "China places highest-ranking general under investigation",
+        "China's top general under investigation in latest military purge : NPR"
+      ],
+      "keyClaims": [],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "locations": []
+      },
+      "sourceMix": [
+        {
+          "name": "News",
+          "value": 2,
+          "type": "other"
+        }
+      ],
+      "timeline": [
+        {
+          "date": "Fri",
+          "value": 1
+        },
+        {
+          "date": "Sat",
+          "value": 1
+        }
+      ],
+      "articles": [
+        {
+          "id": 1922,
+          "title": "China places highest-ranking general under investigation",
+          "source": "https://www.bbc.com/news/articles/c701kr5zqdqo",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 1892,
+          "title": "China's top general under investigation in latest military purge : NPR",
+          "source": "https://www.npr.org/2026/01/24/g-s1-107210/chinas-top-general-under-investigation-in-latest-military-purge",
+          "snippet": "",
+          "reason": "Recent coverage"
+        }
+      ]
+    },
+    {
+      "id": 2896,
+      "title": "Trump threatens Canada with 100% tariffs over China trade deal : NPR",
+      "articleCount": 2,
+      "momentum": {
+        "delta24h": 100.0,
+        "delta7d": 0.0
+      },
+      "primarySources": [
+        "news"
+      ],
+      "summary": [
+        "Trump threatens Canada with 100% tariff over China trade talks",
+        "Trump threatens Canada with 100% tariffs over China trade deal : NPR"
+      ],
+      "keyClaims": [],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "locations": []
+      },
+      "sourceMix": [
+        {
+          "name": "News",
+          "value": 2,
+          "type": "other"
+        }
+      ],
+      "timeline": [
+        {
+          "date": "Fri",
+          "value": 1
+        },
+        {
+          "date": "Sat",
+          "value": 1
+        }
+      ],
+      "articles": [
+        {
+          "id": 1924,
+          "title": "Trump threatens Canada with 100% tariff over China trade talks",
+          "source": "https://www.bbc.com/news/articles/cy4qww3w72lo",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 1902,
+          "title": "Trump threatens Canada with 100% tariffs over China trade deal : NPR",
+          "source": "https://www.npr.org/2026/01/24/nx-s1-5687236/canada-china-tariffs-trump",
+          "snippet": "",
+          "reason": "Recent coverage"
+        }
+      ]
+    },
+    {
+      "id": 2910,
+      "title": "Laura Kuenssberg: Shabana Mahmood wants to shake up the police, but there could be a fight ahead",
+      "articleCount": 2,
+      "momentum": {
+        "delta24h": 100.0,
+        "delta7d": 0.0
+      },
+      "primarySources": [
+        "news"
+      ],
+      "summary": [
+        "Police officers to be told they must get work licence or face dismissal",
+        "Laura Kuenssberg: Shabana Mahmood wants to shake up the police, but there could be a fight ahead"
+      ],
+      "keyClaims": [],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "locations": []
+      },
+      "sourceMix": [
+        {
+          "name": "News",
+          "value": 2,
+          "type": "other"
+        }
+      ],
+      "timeline": [
+        {
+          "date": "Sat",
+          "value": 2
+        }
+      ],
+      "articles": [
+        {
+          "id": 1934,
+          "title": "Police officers to be told they must get work licence or face dismissal",
+          "source": "https://www.bbc.com/news/articles/cn0kelpx734o",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 1913,
+          "title": "Laura Kuenssberg: Shabana Mahmood wants to shake up the police, but there could be a fight ahead",
+          "source": "https://www.bbc.com/news/articles/c2k98jw3xnxo",
+          "snippet": "",
+          "reason": "Recent coverage"
+        }
+      ]
+    },
+    {
+      "id": 1758,
+      "title": "Canadian Olympic snowboarder turned alleged drug kingpin arrested in Mexico : NPR",
+      "articleCount": 1,
+      "momentum": {
+        "delta24h": 100.0,
+        "delta7d": 0.0
+      },
+      "primarySources": [
+        "news"
+      ],
+      "summary": [
+        "Alleged drug kingpin and ex-Olympian Ryan Wedding arrested"
+      ],
+      "keyClaims": [],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "locations": []
+      },
+      "sourceMix": [
+        {
+          "name": "News",
+          "value": 1,
+          "type": "other"
+        }
+      ],
+      "timeline": [
+        {
+          "date": "Fri",
+          "value": 1
+        }
+      ],
+      "articles": [
+        {
+          "id": 1877,
+          "title": "Alleged drug kingpin and ex-Olympian Ryan Wedding arrested",
+          "source": "https://www.bbc.com/news/articles/cj0nd8z1z59o",
+          "snippet": "",
+          "reason": "Recent coverage"
+        }
+      ]
+    },
+    {
+      "id": 1772,
+      "title": "President Donald Trump promises 'a lot' of campaign travel for GOP midterms | Fox News",
+      "articleCount": 1,
+      "momentum": {
+        "delta24h": 100.0,
+        "delta7d": 0.0
+      },
+      "primarySources": [
+        "news"
+      ],
+      "summary": [
+        "RNC approves rule change to enable midterm convention | Fox News"
+      ],
+      "keyClaims": [],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "locations": []
+      },
+      "sourceMix": [
+        {
+          "name": "News",
+          "value": 1,
+          "type": "other"
+        }
+      ],
+      "timeline": [
+        {
+          "date": "Fri",
+          "value": 1
+        }
+      ],
+      "articles": [
+        {
+          "id": 1785,
+          "title": "RNC approves rule change to enable midterm convention | Fox News",
+          "source": "https://www.foxnews.com/politics/trump-pushes-trump-a-palooza-midterm-convention-gop-braces-tough-elections",
+          "snippet": "",
+          "reason": "Recent coverage"
+        }
+      ]
+    },
+    {
+      "id": 1791,
+      "title": "House Oversight Chair Comer expands probe into alleged Minnesota fraud | Fox News",
+      "articleCount": 1,
+      "momentum": {
+        "delta24h": 100.0,
+        "delta7d": 0.0
+      },
+      "primarySources": [
+        "news"
+      ],
+      "summary": [
+        "House Oversight Chair Comer expands probe into alleged Minnesota fraud | Fox News"
+      ],
+      "keyClaims": [],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "locations": []
+      },
+      "sourceMix": [
+        {
+          "name": "News",
+          "value": 1,
+          "type": "other"
+        }
+      ],
+      "timeline": [
+        {
+          "date": "Fri",
+          "value": 1
+        }
+      ],
+      "articles": [
+        {
+          "id": 1790,
+          "title": "House Oversight Chair Comer expands probe into alleged Minnesota fraud | Fox News",
+          "source": "https://www.foxnews.com/politics/house-oversight-committee-widens-investigation-alleged-minnesota-fraud",
+          "snippet": "",
+          "reason": "Recent coverage"
+        }
+      ]
+    },
+    {
+      "id": 1792,
+      "title": "Reagan-appointed judge blocks Trump from deporting certain pro-Palestinian activists | Fox News",
+      "articleCount": 1,
+      "momentum": {
+        "delta24h": 100.0,
+        "delta7d": 0.0
+      },
+      "primarySources": [
+        "news"
+      ],
+      "summary": [
+        "Reagan-appointed judge blocks Trump from deporting certain pro-Palestinian activists | Fox News"
+      ],
+      "keyClaims": [],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "locations": []
+      },
+      "sourceMix": [
+        {
+          "name": "News",
+          "value": 1,
+          "type": "other"
+        }
+      ],
+      "timeline": [
+        {
+          "date": "Fri",
+          "value": 1
+        }
+      ],
+      "articles": [
+        {
+          "id": 1789,
+          "title": "Reagan-appointed judge blocks Trump from deporting certain pro-Palestinian activists | Fox News",
+          "source": "https://www.foxnews.com/politics/judge-who-blasted-trump-authoritarian-blocks-trump-from-deporting-non-citizes-pro-palestinian-activit",
+          "snippet": "",
+          "reason": "Recent coverage"
+        }
+      ]
+    },
+    {
+      "id": 1793,
+      "title": "States continue abortion legislation post-Dobbs as March for Life returns | Fox News",
+      "articleCount": 1,
+      "momentum": {
+        "delta24h": 100.0,
+        "delta7d": 0.0
+      },
+      "primarySources": [
+        "news"
+      ],
+      "summary": [
+        "States continue abortion legislation post-Dobbs as March for Life returns | Fox News"
+      ],
+      "keyClaims": [],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "locations": []
+      },
+      "sourceMix": [
+        {
+          "name": "News",
+          "value": 1,
+          "type": "other"
+        }
+      ],
+      "timeline": [
+        {
+          "date": "Fri",
+          "value": 1
+        }
+      ],
+      "articles": [
+        {
+          "id": 1788,
+          "title": "States continue abortion legislation post-Dobbs as March for Life returns | Fox News",
+          "source": "https://www.foxnews.com/politics/post-roe-battle-over-abortion-pills-reaches-kentucky-gas-stations-ag-opens-investigation",
+          "snippet": "",
+          "reason": "Recent coverage"
+        }
+      ]
+    },
+    {
+      "id": 1794,
+      "title": "Reporter's Notebook: Clintons face contempt vote in bipartisan House Epstein probe | Fox News",
+      "articleCount": 1,
+      "momentum": {
+        "delta24h": 100.0,
+        "delta7d": 0.0
+      },
+      "primarySources": [
+        "news"
+      ],
+      "summary": [
+        "Reporter's Notebook: Clintons face contempt vote in bipartisan House Epstein probe | Fox News"
+      ],
+      "keyClaims": [],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "locations": []
+      },
+      "sourceMix": [
+        {
+          "name": "News",
+          "value": 1,
+          "type": "other"
+        }
+      ],
+      "timeline": [
+        {
+          "date": "Fri",
+          "value": 1
+        }
+      ],
+      "articles": [
+        {
+          "id": 1787,
+          "title": "Reporter's Notebook: Clintons face contempt vote in bipartisan House Epstein probe | Fox News",
+          "source": "https://www.foxnews.com/politics/reporters-notebook-clinton-contempt-vote-gains-steam-democrats-join-gop-epstein-probe-standoff",
+          "snippet": "",
+          "reason": "Recent coverage"
+        }
+      ]
+    },
+    {
+      "id": 1795,
+      "title": "Gonzales video shows conditions inside Texas ICE family facility | Fox News",
+      "articleCount": 1,
+      "momentum": {
+        "delta24h": 100.0,
+        "delta7d": 0.0
+      },
+      "primarySources": [
+        "news"
+      ],
+      "summary": [
+        "Gonzales video shows conditions inside Texas ICE family facility | Fox News"
+      ],
+      "keyClaims": [],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "locations": []
+      },
+      "sourceMix": [
+        {
+          "name": "News",
+          "value": 1,
+          "type": "other"
+        }
+      ],
+      "timeline": [
+        {
+          "date": "Fri",
+          "value": 1
+        }
+      ],
+      "articles": [
+        {
+          "id": 1786,
+          "title": "Gonzales video shows conditions inside Texas ICE family facility | Fox News",
+          "source": "https://www.foxnews.com/politics/gop-rep-gonzales-says-video-kids-exposes-dem-grandstanding-over-conditions-texas-ice-facility",
+          "snippet": "",
+          "reason": "Recent coverage"
+        }
+      ]
+    },
+    {
+      "id": 1796,
+      "title": "Ukraine war: High stakes but low expectations for Ukraine talks with Russia and US",
+      "articleCount": 1,
+      "momentum": {
+        "delta24h": 100.0,
+        "delta7d": 0.0
+      },
+      "primarySources": [
+        "news"
+      ],
+      "summary": [
+        "Ukraine war: High stakes but low expectations for Ukraine talks with Russia and US"
+      ],
+      "keyClaims": [],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "locations": []
+      },
+      "sourceMix": [
+        {
+          "name": "News",
+          "value": 1,
+          "type": "other"
+        }
+      ],
+      "timeline": [
+        {
+          "date": "Fri",
+          "value": 1
+        }
+      ],
+      "articles": [
+        {
+          "id": 1873,
+          "title": "Ukraine war: High stakes but low expectations for Ukraine talks with Russia and US",
+          "source": "https://www.bbc.com/news/articles/c3edde1pwx8o",
+          "snippet": "",
+          "reason": "Recent coverage"
+        }
+      ]
+    },
+    {
+      "id": 1797,
+      "title": "US military rushes ISIS detainees out of Syria amid growing chaos | Fox News",
+      "articleCount": 1,
+      "momentum": {
+        "delta24h": 100.0,
+        "delta7d": 0.0
+      },
+      "primarySources": [
+        "news"
+      ],
+      "summary": [
+        "US military rushes ISIS detainees out of Syria amid growing chaos | Fox News"
+      ],
+      "keyClaims": [],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "locations": []
+      },
+      "sourceMix": [
+        {
+          "name": "News",
+          "value": 1,
+          "type": "other"
+        }
+      ],
+      "timeline": [
+        {
+          "date": "Fri",
+          "value": 1
+        }
+      ],
+      "articles": [
+        {
+          "id": 1784,
+          "title": "US military rushes ISIS detainees out of Syria amid growing chaos | Fox News",
+          "source": "https://www.foxnews.com/politics/chaos-syria-sparks-fears-isis-prison-breaks-us-rushes-detainees-iraq",
+          "snippet": "",
+          "reason": "Recent coverage"
+        }
+      ]
+    },
+    {
+      "id": 1798,
+      "title": "West Midlands Police admits overstating evidence in Maccabi Tel Aviv fan ban",
+      "articleCount": 1,
+      "momentum": {
+        "delta24h": 100.0,
+        "delta7d": 0.0
+      },
+      "primarySources": [
+        "news"
+      ],
+      "summary": [
+        "West Midlands Police admits overstating evidence in Maccabi Tel Aviv fan ban"
+      ],
+      "keyClaims": [],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "locations": []
+      },
+      "sourceMix": [
+        {
+          "name": "News",
+          "value": 1,
+          "type": "other"
+        }
+      ],
+      "timeline": [
+        {
+          "date": "Fri",
+          "value": 1
+        }
+      ],
+      "articles": [
+        {
+          "id": 1879,
+          "title": "West Midlands Police admits overstating evidence in Maccabi Tel Aviv fan ban",
+          "source": "https://www.bbc.com/news/articles/c3r1zxgq0j7o",
+          "snippet": "",
+          "reason": "Recent coverage"
+        }
+      ]
+    },
+    {
+      "id": 1799,
+      "title": "Chris Mason: Keir Starmer's strongest rebuke yet for Donald Trump",
+      "articleCount": 1,
+      "momentum": {
+        "delta24h": 100.0,
+        "delta7d": 0.0
+      },
+      "primarySources": [
+        "news"
+      ],
+      "summary": [
+        "Chris Mason: Keir Starmer's strongest rebuke yet for Donald Trump"
+      ],
+      "keyClaims": [],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "locations": []
+      },
+      "sourceMix": [
+        {
+          "name": "News",
+          "value": 1,
+          "type": "other"
+        }
+      ],
+      "timeline": [
+        {
+          "date": "Fri",
+          "value": 1
+        }
+      ],
+      "articles": [
+        {
+          "id": 1869,
+          "title": "Chris Mason: Keir Starmer's strongest rebuke yet for Donald Trump",
+          "source": "https://www.bbc.com/news/articles/c9dvnlvzjw7o",
+          "snippet": "",
+          "reason": "Recent coverage"
+        }
+      ]
+    }
+  ]
+}

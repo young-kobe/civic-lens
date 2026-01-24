@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Card, MetricCard, ConfidenceBadge, MethodPopover, LoadingCard, EmptyState, ErrorState } from '../components/common';
 import { SentimentBar } from '../components/charts';
-import type { Filters, PublicSentimentData, SentimentOverview, SentimentBreakdown, SentimentDistribution, CoverageLevel, ConfidenceLevel } from '../types';
+import type { Filters, PublicSentimentData, SentimentOverview, SentimentBreakdown, SentimentDistribution, SocialVsNewsSentiment, CoverageLevel, ConfidenceLevel } from '../types';
 
 import { fetchSentiment } from '../services/api';
 import { transformPublicSentiment } from '../services/transformers';
@@ -102,11 +102,11 @@ function SentimentDistributionCard({ data }: SentimentDistributionCardProps) {
     const total = Object.values(data).reduce((a, b) => a + b, 0) || 1;
 
     const segments = [
-        { label: 'Strong unfavorable (R)', value: data.strongNegative, color: '#991b1b' },
-        { label: 'Mild unfavorable (R)', value: data.mildNegative, color: '#dc2626' },
+        { label: 'Strong unfavorable', value: data.strongNegative, color: '#991b1b' },
+        { label: 'Mild unfavorable', value: data.mildNegative, color: '#dc2626' },
         { label: 'Neutral', value: data.neutral, color: '#9ca3af' },
-        { label: 'Mild favorable (D)', value: data.mildPositive, color: '#3b82f6' },
-        { label: 'Strong favorable (D)', value: data.strongPositive, color: '#1d4ed8' },
+        { label: 'Mild favorable', value: data.mildPositive, color: '#22c55e' },
+        { label: 'Strong favorable', value: data.strongPositive, color: '#16a34a' },
     ];
 
     return (
@@ -166,6 +166,99 @@ function SentimentDistributionCard({ data }: SentimentDistributionCardProps) {
     );
 }
 
+interface SocialVsNewsCardProps {
+    data: SocialVsNewsSentiment | null | undefined;
+}
+
+function SocialVsNewsCard({ data }: SocialVsNewsCardProps) {
+    if (!data) {
+        return (
+            <Card title="Social Media vs News Outlets">
+                <p className="text-muted text-sm">No comparison data available.</p>
+            </Card>
+        );
+    }
+
+    const formatNetScore = (score: number) => {
+        const sign = score >= 0 ? '+' : '';
+        return `${sign}${score.toFixed(1)}%`;
+    };
+
+    const getScoreColor = (score: number) => {
+        if (score > 10) return '#16a34a';
+        if (score < -10) return '#dc2626';
+        return '#9ca3af';
+    };
+
+    return (
+        <Card
+            title="Social Media vs News Outlets"
+            subtitle="Compare sentiment between social platforms and news coverage"
+            headerActions={
+                <MethodPopover
+                    description="Shows sentiment breakdown from social media (Reddit, Twitter) versus news outlets. Useful for detecting narrative divergence."
+                    limitations={['Social media sample may over-represent engaged users', 'News outlet sentiment may reflect editorial framing']}
+                />
+            }
+        >
+            <div className="grid-2 gap-6">
+                {/* Social Media */}
+                <div className="card" style={{ background: 'var(--neutral-50)', border: 'none', padding: 'var(--space-4)' }}>
+                    <div className="flex justify-between items-center mb-3">
+                        <span className="badge badge-accent">Social Media</span>
+                        <span className="text-xs text-muted">{data.social.volume.toLocaleString()} items</span>
+                    </div>
+                    <div className="text-center mb-3">
+                        <div className="text-2xl font-bold" style={{ color: getScoreColor(data.social.netScore) }}>
+                            {formatNetScore(data.social.netScore)}
+                        </div>
+                        <div className="text-xs text-muted">Net Score</div>
+                    </div>
+                    <SentimentBar
+                        positive={data.social.positive}
+                        negative={data.social.negative}
+                        neutral={data.social.neutral}
+                        height={24}
+                        showLabels={false}
+                    />
+                </div>
+
+                {/* News Outlets */}
+                <div className="card" style={{ background: 'var(--neutral-50)', border: 'none', padding: 'var(--space-4)' }}>
+                    <div className="flex justify-between items-center mb-3">
+                        <span className="badge badge-neutral">News Outlets</span>
+                        <span className="text-xs text-muted">{data.news.volume.toLocaleString()} items</span>
+                    </div>
+                    <div className="text-center mb-3">
+                        <div className="text-2xl font-bold" style={{ color: getScoreColor(data.news.netScore) }}>
+                            {formatNetScore(data.news.netScore)}
+                        </div>
+                        <div className="text-xs text-muted">Net Score</div>
+                    </div>
+                    <SentimentBar
+                        positive={data.news.positive}
+                        negative={data.news.negative}
+                        neutral={data.news.neutral}
+                        height={24}
+                        showLabels={false}
+                    />
+                </div>
+            </div>
+
+            {/* Disparity indicator */}
+            {data.social.volume > 0 && data.news.volume > 0 && (
+                <div className="card-note mt-4">
+                    {Math.abs(data.social.netScore - data.news.netScore) > 20 ? (
+                        <strong>Significant disparity detected:</strong>
+                    ) : null}
+                    {' '}Social media sentiment is {data.social.netScore > data.news.netScore ? 'more favorable' : 'less favorable'} than news coverage
+                    by {Math.abs(data.social.netScore - data.news.netScore).toFixed(1)} percentage points.
+                </div>
+            )}
+        </Card>
+    );
+}
+
 function MethodTransparencyPanel() {
     return (
         <Card
@@ -217,7 +310,7 @@ function PublicSentiment({ filters }: PublicSentimentProps) {
             setLoading(true);
             setError(null);
             try {
-                const rawData = await fetchSentiment();
+                const rawData = await fetchSentiment(filters.timeRange);
                 const processedData = transformPublicSentiment(rawData);
                 setData(processedData);
             } catch (err: any) {
@@ -256,21 +349,16 @@ function PublicSentiment({ filters }: PublicSentimentProps) {
             {/* Overview Header */}
             <SentimentOverviewHeader data={data.overview} />
 
-            {/* Breakdown Cards - Primary Row */}
-            <div className="grid-2">
-                <SentimentBreakdownCard
-                    title="Sentiment by Topic"
-                    data={data.byTopic}
-                    labelKey="topic"
-                    methodDescription="Topics are automatically clustered from article content using unsupervised learning."
-                />
-                <SentimentBreakdownCard
-                    title="Sentiment by Platform"
-                    data={data.byPlatform}
-                    labelKey="platform"
-                    methodDescription="Platform-specific sentiment. Reddit and social samples may not be representative of full platform discourse."
-                />
-            </div>
+            {/* Social vs News Comparison */}
+            <SocialVsNewsCard data={data.socialVsNews} />
+
+            {/* Breakdown Cards */}
+            <SentimentBreakdownCard
+                title="Sentiment by Topic"
+                data={data.byTopic}
+                labelKey="topic"
+                methodDescription="Topics are automatically clustered from article content using unsupervised learning."
+            />
 
             {/* Distribution */}
             <SentimentDistributionCard data={data.distribution} />

@@ -121,26 +121,15 @@ def run_full_pipeline(background_tasks: BackgroundTasks):
 
 
 # =============================================================================
-# Data Retrieval - Cached (Primary)
+# Data Retrieval - Individual endpoints (for direct access if needed)
 # =============================================================================
 
 def _get_cached_or_fallback(cache_key: str, fallback_fn, transform_fn=None):
-    """
-    Get data from cache, falling back to live computation if cache is empty.
-    
-    Args:
-        cache_key: Key to look up in cache
-        fallback_fn: Function to call if cache miss
-        transform_fn: Optional transform to apply to fallback result
-    
-    Returns:
-        Cached data or fallback result
-    """
+    """Get data from cache, falling back to live computation if cache is empty."""
     cached = cache.load(cache_key)
     if cached is not None:
         return cached
     
-    # Cache miss - compute live (slower, but ensures data is available)
     logger.warning(f"Cache miss for '{cache_key}', computing live")
     result = fallback_fn()
     if transform_fn:
@@ -149,45 +138,31 @@ def _get_cached_or_fallback(cache_key: str, fallback_fn, transform_fn=None):
 
 
 @app.get("/api/stories")
-def get_stories():
-    """
-    Returns story clusters EXCLUDING bot-flagged content.
-    
-    Data is served from pre-computed cache when available.
-    """
+def get_stories(window: str = "24h"):
+    """Returns story clusters filtered by time window. Query param: ?window=24h|7d|30d"""
     return _get_cached_or_fallback(
-        "stories",
-        aggregator.get_stories,
+        f"stories_{window}",
+        lambda: aggregator.get_stories(time_window=window),
         lambda stories: [s.to_dict() for s in stories]
     )
 
 
 @app.get("/api/sentiment")
-def get_public_sentiment():
-    """
-    Returns aggregated public sentiment EXCLUDING bot-flagged content.
-    
-    Note: Results represent sampled platform discourse, not verified population sentiment.
-    Data is served from pre-computed cache when available.
-    """
+def get_public_sentiment(window: str = "24h"):
+    """Returns sentiment filtered by time window. Query param: ?window=24h|7d|30d"""
     return _get_cached_or_fallback(
-        "sentiment",
-        aggregator.get_public_sentiment,
+        f"sentiment_{window}",
+        lambda: aggregator.get_public_sentiment(time_window=window),
         lambda s: s.to_dict()
     )
 
 
 @app.get("/api/favorability")
-def get_gop_favorability():
-    """
-    Returns GOP favorability metrics EXCLUDING bot-flagged content.
-    
-    Note: Proxy metric based on sampled media/social discourse, not polling data.
-    Data is served from pre-computed cache when available.
-    """
+def get_gop_favorability(window: str = "24h"):
+    """Returns favorability filtered by time window. Query param: ?window=24h|7d|30d"""
     return _get_cached_or_fallback(
-        "favorability",
-        aggregator.get_gop_favorability,
+        f"favorability_{window}",
+        lambda: aggregator.get_gop_favorability(time_window=window),
         lambda f: f.to_dict()
     )
 

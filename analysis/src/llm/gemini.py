@@ -2,6 +2,7 @@
 Google Gemini LLM Client for Civic Lens Analysis.
 
 Provides a wrapper around the Google Generative AI SDK.
+Supports structured output via response_schema.
 """
 
 import time
@@ -18,6 +19,8 @@ class GeminiClient(BaseLLMClient):
     
     Handles prompt construction, API calls, and response parsing
     using the Google Generative AI SDK.
+    
+    Supports structured output via response_schema in generation_config.
     """
     
     def __init__(
@@ -32,7 +35,7 @@ class GeminiClient(BaseLLMClient):
         self.model = model
         self.temperature = temperature
         self.max_retries = max_retries
-        self._model_instance = None
+        self._genai = None
         
         if api_key:
             self._initialize_client()
@@ -42,30 +45,25 @@ class GeminiClient(BaseLLMClient):
         try:
             import google.generativeai as genai
             genai.configure(api_key=self.api_key)
-            self._model_instance = genai.GenerativeModel(
-                model_name=self.model,
-                generation_config={
-                    "temperature": self.temperature,
-                    "response_mime_type": "application/json",
-                }
-            )
+            self._genai = genai
             logger.info(f"Initialized Gemini client with model={self.model}")
         except ImportError:
             logger.warning("google-generativeai package not installed. LLM features disabled.")
-            self._model_instance = None
+            self._genai = None
         except Exception as e:
             logger.error(f"Failed to initialize Gemini client: {e}")
-            self._model_instance = None
+            self._genai = None
     
     @property
     def is_available(self) -> bool:
         """Check if the LLM client is properly initialized."""
-        return self._model_instance is not None
+        return self._genai is not None
     
     def complete(
         self,
         system_prompt: str,
         user_prompt: str,
+        response_schema: Optional[Dict[str, Any]] = None,
         temperature: Optional[float] = None,
     ) -> Dict[str, Any]:
         """
@@ -74,6 +72,7 @@ class GeminiClient(BaseLLMClient):
         Args:
             system_prompt: System instructions for the model
             user_prompt: User message/query
+            response_schema: JSON schema for structured output (optional)
             temperature: Override default temperature (optional)
             
         Returns:
@@ -88,10 +87,24 @@ class GeminiClient(BaseLLMClient):
         
         full_prompt = f"{system_prompt}\n\n---\n\n{user_prompt}"
         
+        # Build generation config with optional schema
+        generation_config = {
+            "temperature": temperature if temperature is not None else self.temperature,
+            "response_mime_type": "application/json",
+        }
+        if response_schema:
+            generation_config["response_schema"] = response_schema
+        
+        # Create model instance with config
+        model_instance = self._genai.GenerativeModel(
+            model_name=self.model,
+            generation_config=generation_config
+        )
+        
         last_error = None
         for attempt in range(self.max_retries):
             try:
-                response = self._model_instance.generate_content(full_prompt)
+                response = model_instance.generate_content(full_prompt)
                 
                 if hasattr(response, 'usage_metadata'):
                     self.total_tokens_used += getattr(

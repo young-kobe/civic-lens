@@ -1,148 +1,14 @@
 {
   "_meta": {
-    "generated_at": "2026-01-22T03:37:12.848752+00:00",
+    "generated_at": "2026-01-24T20:06:50.075208+00:00",
     "doc_count": 20,
     "version": "1.0"
   },
   "data": [
     {
-      "id": 116,
-      "title": "BBC Sport - Scores, Fixtures, News - Live Sport",
-      "articleCount": 47,
-      "momentum": {
-        "delta24h": -100.0,
-        "delta7d": 0.0
-      },
-      "primarySources": [
-        "news"
-      ],
-      "summary": [
-        "Scotland Sport \u2013 Latest Scottish Sports News - BBC Sport",
-        "Football - latest news today, results & video highlights - BBC Sport",
-        "2026 Mobo Awards: Nominations list in full"
-      ],
-      "keyClaims": [],
-      "entities": {
-        "people": [],
-        "organizations": [],
-        "locations": []
-      },
-      "sourceMix": [
-        {
-          "name": "News",
-          "value": 47,
-          "type": "news"
-        }
-      ],
-      "timeline": [
-        {
-          "date": "Tue",
-          "value": 1
-        },
-        {
-          "date": "Thu",
-          "value": 1
-        },
-        {
-          "date": "Fri",
-          "value": 1
-        }
-      ],
-      "articles": [
-        {
-          "id": 1354,
-          "title": "Scotland Sport \u2013 Latest Scottish Sports News - BBC Sport",
-          "source": "https://www.bbc.com/sport/scotland",
-          "snippet": "",
-          "reason": "Recent coverage"
-        },
-        {
-          "id": 1329,
-          "title": "Football - latest news today, results & video highlights - BBC Sport",
-          "source": "https://www.bbc.com/sport/football",
-          "snippet": "",
-          "reason": "Recent coverage"
-        },
-        {
-          "id": 1208,
-          "title": "2026 Mobo Awards: Nominations list in full",
-          "source": "https://www.bbc.com/news/articles/c87r3njqg0eo",
-          "snippet": "",
-          "reason": "Recent coverage"
-        }
-      ]
-    },
-    {
-      "id": 692,
-      "title": "BBC Sport - Scores, Fixtures, News - Live Sport",
-      "articleCount": 47,
-      "momentum": {
-        "delta24h": -100.0,
-        "delta7d": 0.0
-      },
-      "primarySources": [
-        "news"
-      ],
-      "summary": [
-        "Scotland Sport \u2013 Latest Scottish Sports News - BBC Sport",
-        "Football - latest news today, results & video highlights - BBC Sport",
-        "2026 Mobo Awards: Nominations list in full"
-      ],
-      "keyClaims": [],
-      "entities": {
-        "people": [],
-        "organizations": [],
-        "locations": []
-      },
-      "sourceMix": [
-        {
-          "name": "News",
-          "value": 47,
-          "type": "news"
-        }
-      ],
-      "timeline": [
-        {
-          "date": "Tue",
-          "value": 1
-        },
-        {
-          "date": "Thu",
-          "value": 1
-        },
-        {
-          "date": "Fri",
-          "value": 1
-        }
-      ],
-      "articles": [
-        {
-          "id": 1354,
-          "title": "Scotland Sport \u2013 Latest Scottish Sports News - BBC Sport",
-          "source": "https://www.bbc.com/sport/scotland",
-          "snippet": "",
-          "reason": "Recent coverage"
-        },
-        {
-          "id": 1329,
-          "title": "Football - latest news today, results & video highlights - BBC Sport",
-          "source": "https://www.bbc.com/sport/football",
-          "snippet": "",
-          "reason": "Recent coverage"
-        },
-        {
-          "id": 1208,
-          "title": "2026 Mobo Awards: Nominations list in full",
-          "source": "https://www.bbc.com/news/articles/c87r3njqg0eo",
-          "snippet": "",
-          "reason": "Recent coverage"
-        }
-      ]
-    },
-    {
       "id": 45,
       "title": "News: U.S. and World News Headlines : NPR",
-      "articleCount": 11,
+      "articleCount": 10,
       "momentum": {
         "delta24h": 0.0,
         "delta7d": 0.0
@@ -164,15 +30,11 @@
       "sourceMix": [
         {
           "name": "News",
-          "value": 11,
-          "type": "news"
+          "value": 10,
+          "type": "other"
         }
       ],
       "timeline": [
-        {
-          "date": "Tue",
-          "value": 1
-        },
         {
           "date": "Wed",
           "value": 10
@@ -205,7 +67,7 @@
     {
       "id": 622,
       "title": "News: U.S. and World News Headlines : NPR",
-      "articleCount": 11,
+      "articleCount": 10,
       "momentum": {
         "delta24h": 0.0,
         "delta7d": 0.0
@@ -227,15 +89,11 @@
       "sourceMix": [
         {
           "name": "News",
-          "value": 11,
-          "type": "news"
+          "value": 10,
+          "type": "other"
         }
       ],
       "timeline": [
-        {
-          "date": "Tue",
-          "value": 1
-        },
         {
           "date": "Wed",
           "value": 9
@@ -270,9 +128,9 @@
       ]
     },
     {
-      "id": 62,
-      "title": "Morning Edition : NPR",
-      "articleCount": 10,
+      "id": 7,
+      "title": "Robert Jenrick joins Reform UK after being sacked by Tories",
+      "articleCount": 8,
       "momentum": {
         "delta24h": 0.0,
         "delta7d": 0.0
@@ -281,9 +139,9 @@
         "news"
       ],
       "summary": [
-        "Morning Edition : NPR",
-        "NPR: Book Reviews : NPR",
-        "Folk : NPR"
+        "Nigel Farage gains another Tory in his 'biggest coup' so far",
+        "Newspaper headlines: 'Sacked Jenrick defects' and 'Traitories'",
+        "'We'd been on high alert' - How Jenrick's dramatic defection unfolded"
       ],
       "keyClaims": [],
       "entities": {
@@ -294,60 +152,44 @@
       "sourceMix": [
         {
           "name": "News",
-          "value": 10,
-          "type": "news"
+          "value": 8,
+          "type": "other"
         }
       ],
       "timeline": [
         {
-          "date": "Tue",
-          "value": 4
-        },
-        {
-          "date": "Wed",
-          "value": 2
-        },
-        {
           "date": "Thu",
-          "value": 1
-        },
-        {
-          "date": "Fri",
-          "value": 2
-        },
-        {
-          "date": "Sun",
-          "value": 1
+          "value": 8
         }
       ],
       "articles": [
         {
-          "id": 891,
-          "title": "Morning Edition : NPR",
-          "source": "https://www.npr.org/programs/morning-edition/nx-s1-5662788/morning-edition-for-january-15-2026",
+          "id": 1404,
+          "title": "Nigel Farage gains another Tory in his 'biggest coup' so far",
+          "source": "https://www.bbc.com/news/articles/c20d9dlypnzo",
           "snippet": "",
           "reason": "Recent coverage"
         },
         {
-          "id": 1056,
-          "title": "NPR: Book Reviews : NPR",
-          "source": "https://www.npr.org/sections/book-reviews/",
+          "id": 1406,
+          "title": "Newspaper headlines: 'Sacked Jenrick defects' and 'Traitories'",
+          "source": "https://www.bbc.com/news/articles/c99km7ym748o",
           "snippet": "",
           "reason": "Recent coverage"
         },
         {
-          "id": 1443,
-          "title": "Folk : NPR",
-          "source": "https://www.npr.org/music/genres/folk/",
+          "id": 829,
+          "title": "'We'd been on high alert' - How Jenrick's dramatic defection unfolded",
+          "source": "https://www.bbc.com/news/articles/ce3ejzz78gxo",
           "snippet": "",
           "reason": "Recent coverage"
         }
       ]
     },
     {
-      "id": 639,
+      "id": 62,
       "title": "Morning Edition : NPR",
-      "articleCount": 10,
+      "articleCount": 8,
       "momentum": {
         "delta24h": 0.0,
         "delta7d": 0.0
@@ -369,14 +211,14 @@
       "sourceMix": [
         {
           "name": "News",
-          "value": 10,
-          "type": "news"
+          "value": 8,
+          "type": "other"
         }
       ],
       "timeline": [
         {
           "date": "Tue",
-          "value": 4
+          "value": 2
         },
         {
           "date": "Wed",
@@ -422,132 +264,6 @@
     {
       "id": 70,
       "title": "NPR Search : NPR",
-      "articleCount": 9,
-      "momentum": {
-        "delta24h": 0.0,
-        "delta7d": 0.0
-      },
-      "primarySources": [
-        "news"
-      ],
-      "summary": [
-        "Podcasts : Business : NPR",
-        "Podcasts : Music : NPR",
-        "Podcasts : News : NPR"
-      ],
-      "keyClaims": [],
-      "entities": {
-        "people": [],
-        "organizations": [],
-        "locations": []
-      },
-      "sourceMix": [
-        {
-          "name": "News",
-          "value": 9,
-          "type": "news"
-        }
-      ],
-      "timeline": [
-        {
-          "date": "Tue",
-          "value": 2
-        },
-        {
-          "date": "Wed",
-          "value": 6
-        }
-      ],
-      "articles": [
-        {
-          "id": 1558,
-          "title": "Podcasts : Business : NPR",
-          "source": "https://www.npr.org/podcasts/2007/business",
-          "snippet": "",
-          "reason": "Recent coverage"
-        },
-        {
-          "id": 1599,
-          "title": "Podcasts : Music : NPR",
-          "source": "https://www.npr.org/podcasts/2037/music",
-          "snippet": "",
-          "reason": "Recent coverage"
-        },
-        {
-          "id": 1600,
-          "title": "Podcasts : News : NPR",
-          "source": "https://www.npr.org/podcasts/2038/news",
-          "snippet": "",
-          "reason": "Recent coverage"
-        }
-      ]
-    },
-    {
-      "id": 647,
-      "title": "NPR Search : NPR",
-      "articleCount": 9,
-      "momentum": {
-        "delta24h": 0.0,
-        "delta7d": 0.0
-      },
-      "primarySources": [
-        "news"
-      ],
-      "summary": [
-        "Podcasts : Business : NPR",
-        "Podcasts : Music : NPR",
-        "Podcasts : News : NPR"
-      ],
-      "keyClaims": [],
-      "entities": {
-        "people": [],
-        "organizations": [],
-        "locations": []
-      },
-      "sourceMix": [
-        {
-          "name": "News",
-          "value": 9,
-          "type": "news"
-        }
-      ],
-      "timeline": [
-        {
-          "date": "Tue",
-          "value": 2
-        },
-        {
-          "date": "Wed",
-          "value": 6
-        }
-      ],
-      "articles": [
-        {
-          "id": 1558,
-          "title": "Podcasts : Business : NPR",
-          "source": "https://www.npr.org/podcasts/2007/business",
-          "snippet": "",
-          "reason": "Recent coverage"
-        },
-        {
-          "id": 1599,
-          "title": "Podcasts : Music : NPR",
-          "source": "https://www.npr.org/podcasts/2037/music",
-          "snippet": "",
-          "reason": "Recent coverage"
-        },
-        {
-          "id": 1600,
-          "title": "Podcasts : News : NPR",
-          "source": "https://www.npr.org/podcasts/2038/news",
-          "snippet": "",
-          "reason": "Recent coverage"
-        }
-      ]
-    },
-    {
-      "id": 7,
-      "title": "Robert Jenrick joins Reform UK after being sacked by Tories",
       "articleCount": 8,
       "momentum": {
         "delta24h": 0.0,
@@ -557,9 +273,9 @@
         "news"
       ],
       "summary": [
-        "Nigel Farage gains another Tory in his 'biggest coup' so far",
-        "Newspaper headlines: 'Sacked Jenrick defects' and 'Traitories'",
-        "'We'd been on high alert' - How Jenrick's dramatic defection unfolded"
+        "Podcasts : Business : NPR",
+        "Podcasts : Music : NPR",
+        "Podcasts : News : NPR"
       ],
       "keyClaims": [],
       "entities": {
@@ -571,34 +287,38 @@
         {
           "name": "News",
           "value": 8,
-          "type": "news"
+          "type": "other"
         }
       ],
       "timeline": [
         {
-          "date": "Thu",
-          "value": 8
+          "date": "Tue",
+          "value": 2
+        },
+        {
+          "date": "Wed",
+          "value": 6
         }
       ],
       "articles": [
         {
-          "id": 1404,
-          "title": "Nigel Farage gains another Tory in his 'biggest coup' so far",
-          "source": "https://www.bbc.com/news/articles/c20d9dlypnzo",
+          "id": 1558,
+          "title": "Podcasts : Business : NPR",
+          "source": "https://www.npr.org/podcasts/2007/business",
           "snippet": "",
           "reason": "Recent coverage"
         },
         {
-          "id": 1406,
-          "title": "Newspaper headlines: 'Sacked Jenrick defects' and 'Traitories'",
-          "source": "https://www.bbc.com/news/articles/c99km7ym748o",
+          "id": 1599,
+          "title": "Podcasts : Music : NPR",
+          "source": "https://www.npr.org/podcasts/2037/music",
           "snippet": "",
           "reason": "Recent coverage"
         },
         {
-          "id": 829,
-          "title": "'We'd been on high alert' - How Jenrick's dramatic defection unfolded",
-          "source": "https://www.bbc.com/news/articles/ce3ejzz78gxo",
+          "id": 1600,
+          "title": "Podcasts : News : NPR",
+          "source": "https://www.npr.org/podcasts/2038/news",
           "snippet": "",
           "reason": "Recent coverage"
         }
@@ -630,7 +350,7 @@
         {
           "name": "News",
           "value": 8,
-          "type": "news"
+          "type": "other"
         }
       ],
       "timeline": [
@@ -664,8 +384,146 @@
       ]
     },
     {
-      "id": 112,
-      "title": "BBC News Channel | Watch Live Breaking News",
+      "id": 639,
+      "title": "Morning Edition : NPR",
+      "articleCount": 8,
+      "momentum": {
+        "delta24h": 0.0,
+        "delta7d": 0.0
+      },
+      "primarySources": [
+        "news"
+      ],
+      "summary": [
+        "Morning Edition : NPR",
+        "NPR: Book Reviews : NPR",
+        "Folk : NPR"
+      ],
+      "keyClaims": [],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "locations": []
+      },
+      "sourceMix": [
+        {
+          "name": "News",
+          "value": 8,
+          "type": "other"
+        }
+      ],
+      "timeline": [
+        {
+          "date": "Tue",
+          "value": 2
+        },
+        {
+          "date": "Wed",
+          "value": 2
+        },
+        {
+          "date": "Thu",
+          "value": 1
+        },
+        {
+          "date": "Fri",
+          "value": 2
+        },
+        {
+          "date": "Sun",
+          "value": 1
+        }
+      ],
+      "articles": [
+        {
+          "id": 891,
+          "title": "Morning Edition : NPR",
+          "source": "https://www.npr.org/programs/morning-edition/nx-s1-5662788/morning-edition-for-january-15-2026",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 1056,
+          "title": "NPR: Book Reviews : NPR",
+          "source": "https://www.npr.org/sections/book-reviews/",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 1443,
+          "title": "Folk : NPR",
+          "source": "https://www.npr.org/music/genres/folk/",
+          "snippet": "",
+          "reason": "Recent coverage"
+        }
+      ]
+    },
+    {
+      "id": 647,
+      "title": "NPR Search : NPR",
+      "articleCount": 8,
+      "momentum": {
+        "delta24h": 0.0,
+        "delta7d": 0.0
+      },
+      "primarySources": [
+        "news"
+      ],
+      "summary": [
+        "Podcasts : Business : NPR",
+        "Podcasts : Music : NPR",
+        "Podcasts : News : NPR"
+      ],
+      "keyClaims": [],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "locations": []
+      },
+      "sourceMix": [
+        {
+          "name": "News",
+          "value": 8,
+          "type": "other"
+        }
+      ],
+      "timeline": [
+        {
+          "date": "Tue",
+          "value": 2
+        },
+        {
+          "date": "Wed",
+          "value": 6
+        }
+      ],
+      "articles": [
+        {
+          "id": 1558,
+          "title": "Podcasts : Business : NPR",
+          "source": "https://www.npr.org/podcasts/2007/business",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 1599,
+          "title": "Podcasts : Music : NPR",
+          "source": "https://www.npr.org/podcasts/2037/music",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 1600,
+          "title": "Podcasts : News : NPR",
+          "source": "https://www.npr.org/podcasts/2038/news",
+          "snippet": "",
+          "reason": "Recent coverage"
+        }
+      ]
+    },
+    {
+      "id": 1483,
+      "title": "Podcasts : Comedy : NPR",
       "articleCount": 7,
       "momentum": {
         "delta24h": 0.0,
@@ -675,9 +533,9 @@
         "news"
       ],
       "summary": [
-        "BBC News Channel | Watch Live Breaking News",
-        "BBC News - Breaking news, video and the latest top stories from the U.S. and around the world",
-        "United States - BBC News"
+        "Podcasts : Business : NPR",
+        "Podcasts : News : NPR",
+        "Podcasts : Science : NPR"
       ],
       "keyClaims": [],
       "entities": {
@@ -689,29 +547,696 @@
         {
           "name": "News",
           "value": 7,
-          "type": "news"
+          "type": "other"
         }
       ],
-      "timeline": [],
+      "timeline": [
+        {
+          "date": "Tue",
+          "value": 2
+        },
+        {
+          "date": "Wed",
+          "value": 5
+        }
+      ],
       "articles": [
         {
-          "id": 958,
-          "title": "BBC News Channel | Watch Live Breaking News",
-          "source": "https://www.bbc.com/watch-live-news",
+          "id": 1558,
+          "title": "Podcasts : Business : NPR",
+          "source": "https://www.npr.org/podcasts/2007/business",
           "snippet": "",
           "reason": "Recent coverage"
         },
         {
-          "id": 962,
-          "title": "BBC News - Breaking news, video and the latest top stories from the U.S. and around the world",
-          "source": "https://www.bbc.com/news",
+          "id": 1600,
+          "title": "Podcasts : News : NPR",
+          "source": "https://www.npr.org/podcasts/2038/news",
           "snippet": "",
           "reason": "Recent coverage"
         },
         {
-          "id": 1068,
-          "title": "United States - BBC News",
-          "source": "https://www.bbc.com/news/topics/cx1m7zg01xyt",
+          "id": 1601,
+          "title": "Podcasts : Science : NPR",
+          "source": "https://www.npr.org/podcasts/2047/science",
+          "snippet": "",
+          "reason": "Recent coverage"
+        }
+      ]
+    },
+    {
+      "id": 2016,
+      "title": "Podcasts : Comedy : NPR",
+      "articleCount": 7,
+      "momentum": {
+        "delta24h": 0.0,
+        "delta7d": 0.0
+      },
+      "primarySources": [
+        "news"
+      ],
+      "summary": [
+        "Podcasts : Business : NPR",
+        "Podcasts : News : NPR",
+        "Podcasts : Science : NPR"
+      ],
+      "keyClaims": [],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "locations": []
+      },
+      "sourceMix": [
+        {
+          "name": "News",
+          "value": 7,
+          "type": "other"
+        }
+      ],
+      "timeline": [
+        {
+          "date": "Tue",
+          "value": 2
+        },
+        {
+          "date": "Wed",
+          "value": 5
+        }
+      ],
+      "articles": [
+        {
+          "id": 1558,
+          "title": "Podcasts : Business : NPR",
+          "source": "https://www.npr.org/podcasts/2007/business",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 1600,
+          "title": "Podcasts : News : NPR",
+          "source": "https://www.npr.org/podcasts/2038/news",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 1601,
+          "title": "Podcasts : Science : NPR",
+          "source": "https://www.npr.org/podcasts/2047/science",
+          "snippet": "",
+          "reason": "Recent coverage"
+        }
+      ]
+    },
+    {
+      "id": 2440,
+      "title": "Weekend Edition Saturday for January 3, 2026 : NPR",
+      "articleCount": 7,
+      "momentum": {
+        "delta24h": 100.0,
+        "delta7d": 0.0
+      },
+      "primarySources": [
+        "news"
+      ],
+      "summary": [
+        "A man is fatally shot by federal agents in Minneapolis : NPR",
+        "Morning Edition : NPR",
+        "NPR: Book Reviews : NPR"
+      ],
+      "keyClaims": [],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "locations": []
+      },
+      "sourceMix": [
+        {
+          "name": "News",
+          "value": 7,
+          "type": "other"
+        }
+      ],
+      "timeline": [
+        {
+          "date": "Tue",
+          "value": 1
+        },
+        {
+          "date": "Wed",
+          "value": 2
+        },
+        {
+          "date": "Thu",
+          "value": 1
+        },
+        {
+          "date": "Fri",
+          "value": 3
+        }
+      ],
+      "articles": [
+        {
+          "id": 1900,
+          "title": "A man is fatally shot by federal agents in Minneapolis : NPR",
+          "source": "https://www.npr.org/2026/01/24/nx-s1-5687262/a-man-is-fatally-shot-by-federal-agents-in-minneapolis",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 891,
+          "title": "Morning Edition : NPR",
+          "source": "https://www.npr.org/programs/morning-edition/nx-s1-5662788/morning-edition-for-january-15-2026",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 1056,
+          "title": "NPR: Book Reviews : NPR",
+          "source": "https://www.npr.org/sections/book-reviews/",
+          "snippet": "",
+          "reason": "Recent coverage"
+        }
+      ]
+    },
+    {
+      "id": 2565,
+      "title": "Podcasts : Comedy : NPR",
+      "articleCount": 7,
+      "momentum": {
+        "delta24h": 0.0,
+        "delta7d": 0.0
+      },
+      "primarySources": [
+        "news"
+      ],
+      "summary": [
+        "Podcasts : Business : NPR",
+        "Podcasts : News : NPR",
+        "Podcasts : Science : NPR"
+      ],
+      "keyClaims": [],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "locations": []
+      },
+      "sourceMix": [
+        {
+          "name": "News",
+          "value": 7,
+          "type": "other"
+        }
+      ],
+      "timeline": [
+        {
+          "date": "Tue",
+          "value": 2
+        },
+        {
+          "date": "Wed",
+          "value": 5
+        }
+      ],
+      "articles": [
+        {
+          "id": 1558,
+          "title": "Podcasts : Business : NPR",
+          "source": "https://www.npr.org/podcasts/2007/business",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 1600,
+          "title": "Podcasts : News : NPR",
+          "source": "https://www.npr.org/podcasts/2038/news",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 1601,
+          "title": "Podcasts : Science : NPR",
+          "source": "https://www.npr.org/podcasts/2047/science",
+          "snippet": "",
+          "reason": "Recent coverage"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Iran's protests seem smothered; U.S. puts new sanctions : NPR",
+      "articleCount": 6,
+      "momentum": {
+        "delta24h": 0.0,
+        "delta7d": 0.0
+      },
+      "primarySources": [
+        "news"
+      ],
+      "summary": [
+        "Erfan Soltani: Iran denies plan to execute detained protester",
+        "Trump says Iran has 'no plan' to execute protesters",
+        "Iran's protests seem smothered; U.S. puts new sanctions : NPR"
+      ],
+      "keyClaims": [],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "locations": []
+      },
+      "sourceMix": [
+        {
+          "name": "News",
+          "value": 6,
+          "type": "other"
+        }
+      ],
+      "timeline": [
+        {
+          "date": "Tue",
+          "value": 1
+        },
+        {
+          "date": "Wed",
+          "value": 3
+        },
+        {
+          "date": "Thu",
+          "value": 1
+        },
+        {
+          "date": "Sun",
+          "value": 1
+        }
+      ],
+      "articles": [
+        {
+          "id": 1081,
+          "title": "Erfan Soltani: Iran denies plan to execute detained protester",
+          "source": "https://www.bbc.com/news/articles/cp80zjx091yo",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 1083,
+          "title": "Trump says Iran has 'no plan' to execute protesters",
+          "source": "https://www.bbc.com/news/articles/c07xpndjdd8o",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 828,
+          "title": "Iran's protests seem smothered; U.S. puts new sanctions : NPR",
+          "source": "https://www.npr.org/2026/01/15/nx-s1-5678539/iran-protests-trump",
+          "snippet": "",
+          "reason": "Recent coverage"
+        }
+      ]
+    },
+    {
+      "id": 585,
+      "title": "Iran's protests seem smothered; U.S. puts new sanctions : NPR",
+      "articleCount": 6,
+      "momentum": {
+        "delta24h": 0.0,
+        "delta7d": 0.0
+      },
+      "primarySources": [
+        "news"
+      ],
+      "summary": [
+        "Erfan Soltani: Iran denies plan to execute detained protester",
+        "Trump says Iran has 'no plan' to execute protesters",
+        "Iran's protests seem smothered; U.S. puts new sanctions : NPR"
+      ],
+      "keyClaims": [],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "locations": []
+      },
+      "sourceMix": [
+        {
+          "name": "News",
+          "value": 6,
+          "type": "other"
+        }
+      ],
+      "timeline": [
+        {
+          "date": "Tue",
+          "value": 1
+        },
+        {
+          "date": "Wed",
+          "value": 3
+        },
+        {
+          "date": "Thu",
+          "value": 1
+        },
+        {
+          "date": "Sun",
+          "value": 1
+        }
+      ],
+      "articles": [
+        {
+          "id": 1081,
+          "title": "Erfan Soltani: Iran denies plan to execute detained protester",
+          "source": "https://www.bbc.com/news/articles/cp80zjx091yo",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 1083,
+          "title": "Trump says Iran has 'no plan' to execute protesters",
+          "source": "https://www.bbc.com/news/articles/c07xpndjdd8o",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 828,
+          "title": "Iran's protests seem smothered; U.S. puts new sanctions : NPR",
+          "source": "https://www.npr.org/2026/01/15/nx-s1-5678539/iran-protests-trump",
+          "snippet": "",
+          "reason": "Recent coverage"
+        }
+      ]
+    },
+    {
+      "id": 1368,
+      "title": "Weekend Edition Saturday for January 3, 2026 : NPR",
+      "articleCount": 6,
+      "momentum": {
+        "delta24h": 0.0,
+        "delta7d": 0.0
+      },
+      "primarySources": [
+        "news"
+      ],
+      "summary": [
+        "Morning Edition : NPR",
+        "NPR: Book Reviews : NPR",
+        "Weekend Edition Saturday : NPR"
+      ],
+      "keyClaims": [],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "locations": []
+      },
+      "sourceMix": [
+        {
+          "name": "News",
+          "value": 6,
+          "type": "other"
+        }
+      ],
+      "timeline": [
+        {
+          "date": "Tue",
+          "value": 1
+        },
+        {
+          "date": "Wed",
+          "value": 2
+        },
+        {
+          "date": "Thu",
+          "value": 1
+        },
+        {
+          "date": "Fri",
+          "value": 2
+        }
+      ],
+      "articles": [
+        {
+          "id": 891,
+          "title": "Morning Edition : NPR",
+          "source": "https://www.npr.org/programs/morning-edition/nx-s1-5662788/morning-edition-for-january-15-2026",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 1056,
+          "title": "NPR: Book Reviews : NPR",
+          "source": "https://www.npr.org/sections/book-reviews/",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 892,
+          "title": "Weekend Edition Saturday : NPR",
+          "source": "https://www.npr.org/programs/weekend-edition-saturday/nx-s1-5632872/weekend-edition-saturday-for-january-10-2026",
+          "snippet": "",
+          "reason": "Recent coverage"
+        }
+      ]
+    },
+    {
+      "id": 1622,
+      "title": "Henry Zeffman: Jenrick sacking is huge moment for future of British right",
+      "articleCount": 6,
+      "momentum": {
+        "delta24h": 0.0,
+        "delta7d": 0.0
+      },
+      "primarySources": [
+        "news"
+      ],
+      "summary": [
+        "Nigel Farage gains another Tory in his 'biggest coup' so far",
+        "'We'd been on high alert' - How Jenrick's dramatic defection unfolded",
+        "Robert Jenrick joins Reform UK after being sacked by Tories"
+      ],
+      "keyClaims": [],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "locations": []
+      },
+      "sourceMix": [
+        {
+          "name": "News",
+          "value": 6,
+          "type": "other"
+        }
+      ],
+      "timeline": [
+        {
+          "date": "Thu",
+          "value": 6
+        }
+      ],
+      "articles": [
+        {
+          "id": 1404,
+          "title": "Nigel Farage gains another Tory in his 'biggest coup' so far",
+          "source": "https://www.bbc.com/news/articles/c20d9dlypnzo",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 829,
+          "title": "'We'd been on high alert' - How Jenrick's dramatic defection unfolded",
+          "source": "https://www.bbc.com/news/articles/ce3ejzz78gxo",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 827,
+          "title": "Robert Jenrick joins Reform UK after being sacked by Tories",
+          "source": "https://www.bbc.com/news/articles/cwyrpdy42n1o",
+          "snippet": "",
+          "reason": "Recent coverage"
+        }
+      ]
+    },
+    {
+      "id": 1901,
+      "title": "Weekend Edition Saturday for January 3, 2026 : NPR",
+      "articleCount": 6,
+      "momentum": {
+        "delta24h": 0.0,
+        "delta7d": 0.0
+      },
+      "primarySources": [
+        "news"
+      ],
+      "summary": [
+        "Morning Edition : NPR",
+        "NPR: Book Reviews : NPR",
+        "Weekend Edition Saturday : NPR"
+      ],
+      "keyClaims": [],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "locations": []
+      },
+      "sourceMix": [
+        {
+          "name": "News",
+          "value": 6,
+          "type": "other"
+        }
+      ],
+      "timeline": [
+        {
+          "date": "Tue",
+          "value": 1
+        },
+        {
+          "date": "Wed",
+          "value": 2
+        },
+        {
+          "date": "Thu",
+          "value": 1
+        },
+        {
+          "date": "Fri",
+          "value": 2
+        }
+      ],
+      "articles": [
+        {
+          "id": 891,
+          "title": "Morning Edition : NPR",
+          "source": "https://www.npr.org/programs/morning-edition/nx-s1-5662788/morning-edition-for-january-15-2026",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 1056,
+          "title": "NPR: Book Reviews : NPR",
+          "source": "https://www.npr.org/sections/book-reviews/",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 892,
+          "title": "Weekend Edition Saturday : NPR",
+          "source": "https://www.npr.org/programs/weekend-edition-saturday/nx-s1-5632872/weekend-edition-saturday-for-january-10-2026",
+          "snippet": "",
+          "reason": "Recent coverage"
+        }
+      ]
+    },
+    {
+      "id": 2155,
+      "title": "Henry Zeffman: Jenrick sacking is huge moment for future of British right",
+      "articleCount": 6,
+      "momentum": {
+        "delta24h": 0.0,
+        "delta7d": 0.0
+      },
+      "primarySources": [
+        "news"
+      ],
+      "summary": [
+        "Nigel Farage gains another Tory in his 'biggest coup' so far",
+        "'We'd been on high alert' - How Jenrick's dramatic defection unfolded",
+        "Robert Jenrick joins Reform UK after being sacked by Tories"
+      ],
+      "keyClaims": [],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "locations": []
+      },
+      "sourceMix": [
+        {
+          "name": "News",
+          "value": 6,
+          "type": "other"
+        }
+      ],
+      "timeline": [
+        {
+          "date": "Thu",
+          "value": 6
+        }
+      ],
+      "articles": [
+        {
+          "id": 1404,
+          "title": "Nigel Farage gains another Tory in his 'biggest coup' so far",
+          "source": "https://www.bbc.com/news/articles/c20d9dlypnzo",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 829,
+          "title": "'We'd been on high alert' - How Jenrick's dramatic defection unfolded",
+          "source": "https://www.bbc.com/news/articles/ce3ejzz78gxo",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 827,
+          "title": "Robert Jenrick joins Reform UK after being sacked by Tories",
+          "source": "https://www.bbc.com/news/articles/cwyrpdy42n1o",
+          "snippet": "",
+          "reason": "Recent coverage"
+        }
+      ]
+    },
+    {
+      "id": 2709,
+      "title": "Henry Zeffman: Jenrick sacking is huge moment for future of British right",
+      "articleCount": 6,
+      "momentum": {
+        "delta24h": 0.0,
+        "delta7d": 0.0
+      },
+      "primarySources": [
+        "news"
+      ],
+      "summary": [
+        "Nigel Farage gains another Tory in his 'biggest coup' so far",
+        "'We'd been on high alert' - How Jenrick's dramatic defection unfolded",
+        "Robert Jenrick joins Reform UK after being sacked by Tories"
+      ],
+      "keyClaims": [],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "locations": []
+      },
+      "sourceMix": [
+        {
+          "name": "News",
+          "value": 6,
+          "type": "other"
+        }
+      ],
+      "timeline": [
+        {
+          "date": "Thu",
+          "value": 6
+        }
+      ],
+      "articles": [
+        {
+          "id": 1404,
+          "title": "Nigel Farage gains another Tory in his 'biggest coup' so far",
+          "source": "https://www.bbc.com/news/articles/c20d9dlypnzo",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 829,
+          "title": "'We'd been on high alert' - How Jenrick's dramatic defection unfolded",
+          "source": "https://www.bbc.com/news/articles/ce3ejzz78gxo",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 827,
+          "title": "Robert Jenrick joins Reform UK after being sacked by Tories",
+          "source": "https://www.bbc.com/news/articles/cwyrpdy42n1o",
           "snippet": "",
           "reason": "Recent coverage"
         }
@@ -720,7 +1245,7 @@
     {
       "id": 587,
       "title": "Machado presents Trump with her Nobel award at White House meeting",
-      "articleCount": 7,
+      "articleCount": 5,
       "momentum": {
         "delta24h": 0.0,
         "delta7d": 0.0
@@ -743,13 +1268,13 @@
       "sourceMix": [
         {
           "name": "News",
-          "value": 6,
-          "type": "news"
+          "value": 4,
+          "type": "other"
         },
         {
-          "name": "Reddit_post",
+          "name": "Reddit Post",
           "value": 1,
-          "type": "reddit_post"
+          "type": "reddit"
         }
       ],
       "timeline": [
@@ -785,537 +1310,6 @@
           "id": 1058,
           "title": "US forces seize a sixth Venezuela-linked oil tanker in Caribbean Sea",
           "source": "https://www.bbc.com/news/articles/cy4qdnj5vl9o",
-          "snippet": "",
-          "reason": "Recent coverage"
-        }
-      ]
-    },
-    {
-      "id": 688,
-      "title": "BBC News Channel | Watch Live Breaking News",
-      "articleCount": 7,
-      "momentum": {
-        "delta24h": 0.0,
-        "delta7d": 0.0
-      },
-      "primarySources": [
-        "news"
-      ],
-      "summary": [
-        "BBC News Channel | Watch Live Breaking News",
-        "BBC News - Breaking news, video and the latest top stories from the U.S. and around the world",
-        "United States - BBC News"
-      ],
-      "keyClaims": [],
-      "entities": {
-        "people": [],
-        "organizations": [],
-        "locations": []
-      },
-      "sourceMix": [
-        {
-          "name": "News",
-          "value": 7,
-          "type": "news"
-        }
-      ],
-      "timeline": [],
-      "articles": [
-        {
-          "id": 958,
-          "title": "BBC News Channel | Watch Live Breaking News",
-          "source": "https://www.bbc.com/watch-live-news",
-          "snippet": "",
-          "reason": "Recent coverage"
-        },
-        {
-          "id": 962,
-          "title": "BBC News - Breaking news, video and the latest top stories from the U.S. and around the world",
-          "source": "https://www.bbc.com/news",
-          "snippet": "",
-          "reason": "Recent coverage"
-        },
-        {
-          "id": 1068,
-          "title": "United States - BBC News",
-          "source": "https://www.bbc.com/news/topics/cx1m7zg01xyt",
-          "snippet": "",
-          "reason": "Recent coverage"
-        }
-      ]
-    },
-    {
-      "id": 8,
-      "title": "Iran's protests seem smothered; U.S. puts new sanctions : NPR",
-      "articleCount": 6,
-      "momentum": {
-        "delta24h": 0.0,
-        "delta7d": 0.0
-      },
-      "primarySources": [
-        "news"
-      ],
-      "summary": [
-        "Erfan Soltani: Iran denies plan to execute detained protester",
-        "Trump says Iran has 'no plan' to execute protesters",
-        "Iran's protests seem smothered; U.S. puts new sanctions : NPR"
-      ],
-      "keyClaims": [],
-      "entities": {
-        "people": [],
-        "organizations": [],
-        "locations": []
-      },
-      "sourceMix": [
-        {
-          "name": "News",
-          "value": 6,
-          "type": "news"
-        }
-      ],
-      "timeline": [
-        {
-          "date": "Tue",
-          "value": 1
-        },
-        {
-          "date": "Wed",
-          "value": 3
-        },
-        {
-          "date": "Thu",
-          "value": 1
-        },
-        {
-          "date": "Sun",
-          "value": 1
-        }
-      ],
-      "articles": [
-        {
-          "id": 1081,
-          "title": "Erfan Soltani: Iran denies plan to execute detained protester",
-          "source": "https://www.bbc.com/news/articles/cp80zjx091yo",
-          "snippet": "",
-          "reason": "Recent coverage"
-        },
-        {
-          "id": 1083,
-          "title": "Trump says Iran has 'no plan' to execute protesters",
-          "source": "https://www.bbc.com/news/articles/c07xpndjdd8o",
-          "snippet": "",
-          "reason": "Recent coverage"
-        },
-        {
-          "id": 828,
-          "title": "Iran's protests seem smothered; U.S. puts new sanctions : NPR",
-          "source": "https://www.npr.org/2026/01/15/nx-s1-5678539/iran-protests-trump",
-          "snippet": "",
-          "reason": "Recent coverage"
-        }
-      ]
-    },
-    {
-      "id": 10,
-      "title": "Machado presents Trump with her Nobel award at White House meeting",
-      "articleCount": 6,
-      "momentum": {
-        "delta24h": 0.0,
-        "delta7d": 0.0
-      },
-      "primarySources": [
-        "news"
-      ],
-      "summary": [
-        "Machado presents Trump with her Nobel award at White House meeting",
-        "US forces seize a sixth Venezuela-linked oil tanker in Caribbean Sea",
-        "She's offered to share her Nobel with Trump. But what might Machado ask for in return?"
-      ],
-      "keyClaims": [],
-      "entities": {
-        "people": [],
-        "organizations": [],
-        "locations": []
-      },
-      "sourceMix": [
-        {
-          "name": "News",
-          "value": 6,
-          "type": "news"
-        }
-      ],
-      "timeline": [
-        {
-          "date": "Mon",
-          "value": 1
-        },
-        {
-          "date": "Thu",
-          "value": 3
-        }
-      ],
-      "articles": [
-        {
-          "id": 831,
-          "title": "Machado presents Trump with her Nobel award at White House meeting",
-          "source": "https://www.bbc.com/news/articles/cx2w94wp4p1o",
-          "snippet": "",
-          "reason": "Recent coverage"
-        },
-        {
-          "id": 1058,
-          "title": "US forces seize a sixth Venezuela-linked oil tanker in Caribbean Sea",
-          "source": "https://www.bbc.com/news/articles/cy4qdnj5vl9o",
-          "snippet": "",
-          "reason": "Recent coverage"
-        },
-        {
-          "id": 1059,
-          "title": "She's offered to share her Nobel with Trump. But what might Machado ask for in return?",
-          "source": "https://www.bbc.com/news/articles/c801p8jppv5o",
-          "snippet": "",
-          "reason": "Recent coverage"
-        }
-      ]
-    },
-    {
-      "id": 37,
-      "title": "NPR - Breaking News, Analysis, Music, Arts & Podcasts : NPR",
-      "articleCount": 6,
-      "momentum": {
-        "delta24h": 0.0,
-        "delta7d": 0.0
-      },
-      "primarySources": [
-        "news"
-      ],
-      "summary": [
-        "Want to play a Tiny Desk concert? The 2026 Contest is now open for entries\n : NPR",
-        "Tiny Desk Contest : NPR",
-        "Tiny Desk Radio : NPR"
-      ],
-      "keyClaims": [],
-      "entities": {
-        "people": [],
-        "organizations": [],
-        "locations": []
-      },
-      "sourceMix": [
-        {
-          "name": "News",
-          "value": 6,
-          "type": "news"
-        }
-      ],
-      "timeline": [
-        {
-          "date": "Mon",
-          "value": 2
-        },
-        {
-          "date": "Tue",
-          "value": 2
-        },
-        {
-          "date": "Thu",
-          "value": 1
-        },
-        {
-          "date": "Sun",
-          "value": 1
-        }
-      ],
-      "articles": [
-        {
-          "id": 1420,
-          "title": "Want to play a Tiny Desk concert? The 2026 Contest is now open for entries\n : NPR",
-          "source": "https://www.npr.org/2026/01/13/g-s1-105862/2026-tiny-desk-concert-now-open",
-          "snippet": "",
-          "reason": "Recent coverage"
-        },
-        {
-          "id": 1421,
-          "title": "Tiny Desk Contest : NPR",
-          "source": "https://www.npr.org/series/1072544367/tiny-desk-contest",
-          "snippet": "",
-          "reason": "Recent coverage"
-        },
-        {
-          "id": 1514,
-          "title": "Tiny Desk Radio : NPR",
-          "source": "https://www.npr.org/series/g-s1-52030/tiny-desk-radio",
-          "snippet": "",
-          "reason": "Recent coverage"
-        }
-      ]
-    },
-    {
-      "id": 446,
-      "title": "Alt.Latino: NPR Music's Program For Latin Alternative And Rock In Spanish : NPR",
-      "articleCount": 6,
-      "momentum": {
-        "delta24h": 0.0,
-        "delta7d": 0.0
-      },
-      "primarySources": [
-        "news"
-      ],
-      "summary": [
-        "Alt.Latino: NPR Music's Program For Latin Alternative And Rock In Spanish : NPR",
-        "World Cafe : NPR",
-        "Our Show : All Songs Considered : NPR"
-      ],
-      "keyClaims": [],
-      "entities": {
-        "people": [],
-        "organizations": [],
-        "locations": []
-      },
-      "sourceMix": [
-        {
-          "name": "News",
-          "value": 6,
-          "type": "news"
-        }
-      ],
-      "timeline": [
-        {
-          "date": "Mon",
-          "value": 1
-        },
-        {
-          "date": "Tue",
-          "value": 3
-        },
-        {
-          "date": "Thu",
-          "value": 2
-        }
-      ],
-      "articles": [
-        {
-          "id": 1447,
-          "title": "Alt.Latino: NPR Music's Program For Latin Alternative And Rock In Spanish : NPR",
-          "source": "https://www.npr.org/sections/altlatino/",
-          "snippet": "",
-          "reason": "Recent coverage"
-        },
-        {
-          "id": 1454,
-          "title": "World Cafe : NPR",
-          "source": "https://www.npr.org/sections/world-cafe/",
-          "snippet": "",
-          "reason": "Recent coverage"
-        },
-        {
-          "id": 1476,
-          "title": "Our Show : All Songs Considered : NPR",
-          "source": "https://www.npr.org/sections/allsongs/163479981/our-show",
-          "snippet": "",
-          "reason": "Recent coverage"
-        }
-      ]
-    },
-    {
-      "id": 484,
-      "title": "Our no. 1 songs: 2024 : All Songs Considered : NPR",
-      "articleCount": 6,
-      "momentum": {
-        "delta24h": 0.0,
-        "delta7d": 0.0
-      },
-      "primarySources": [
-        "news"
-      ],
-      "summary": [
-        "Our no. 1 songs: 2024 : All Songs Considered : NPR",
-        "Our No. 1 songs: 2023 : All Songs Considered : NPR",
-        "Our No. 1 songs: 2022 : All Songs Considered : NPR"
-      ],
-      "keyClaims": [],
-      "entities": {
-        "people": [],
-        "organizations": [],
-        "locations": []
-      },
-      "sourceMix": [
-        {
-          "name": "News",
-          "value": 6,
-          "type": "news"
-        }
-      ],
-      "timeline": [
-        {
-          "date": "Sat",
-          "value": 1
-        },
-        {
-          "date": "Sun",
-          "value": 5
-        }
-      ],
-      "articles": [
-        {
-          "id": 1495,
-          "title": "Our no. 1 songs: 2024 : All Songs Considered : NPR",
-          "source": "https://www.npr.org/2025/12/29/nx-s1-5659779/our-no-1-songs-2024",
-          "snippet": "",
-          "reason": "Recent coverage"
-        },
-        {
-          "id": 1497,
-          "title": "Our No. 1 songs: 2023 : All Songs Considered : NPR",
-          "source": "https://www.npr.org/2025/12/22/nx-s1-5649517/our-no-1-songs-2023",
-          "snippet": "",
-          "reason": "Recent coverage"
-        },
-        {
-          "id": 1504,
-          "title": "Our No. 1 songs: 2022 : All Songs Considered : NPR",
-          "source": "https://www.npr.org/2025/12/14/nx-s1-5643577/our-no-1-songs-2022",
-          "snippet": "",
-          "reason": "Recent coverage"
-        }
-      ]
-    },
-    {
-      "id": 585,
-      "title": "Iran's protests seem smothered; U.S. puts new sanctions : NPR",
-      "articleCount": 6,
-      "momentum": {
-        "delta24h": 0.0,
-        "delta7d": 0.0
-      },
-      "primarySources": [
-        "news"
-      ],
-      "summary": [
-        "Erfan Soltani: Iran denies plan to execute detained protester",
-        "Trump says Iran has 'no plan' to execute protesters",
-        "Iran's protests seem smothered; U.S. puts new sanctions : NPR"
-      ],
-      "keyClaims": [],
-      "entities": {
-        "people": [],
-        "organizations": [],
-        "locations": []
-      },
-      "sourceMix": [
-        {
-          "name": "News",
-          "value": 6,
-          "type": "news"
-        }
-      ],
-      "timeline": [
-        {
-          "date": "Tue",
-          "value": 1
-        },
-        {
-          "date": "Wed",
-          "value": 3
-        },
-        {
-          "date": "Thu",
-          "value": 1
-        },
-        {
-          "date": "Sun",
-          "value": 1
-        }
-      ],
-      "articles": [
-        {
-          "id": 1081,
-          "title": "Erfan Soltani: Iran denies plan to execute detained protester",
-          "source": "https://www.bbc.com/news/articles/cp80zjx091yo",
-          "snippet": "",
-          "reason": "Recent coverage"
-        },
-        {
-          "id": 1083,
-          "title": "Trump says Iran has 'no plan' to execute protesters",
-          "source": "https://www.bbc.com/news/articles/c07xpndjdd8o",
-          "snippet": "",
-          "reason": "Recent coverage"
-        },
-        {
-          "id": 828,
-          "title": "Iran's protests seem smothered; U.S. puts new sanctions : NPR",
-          "source": "https://www.npr.org/2026/01/15/nx-s1-5678539/iran-protests-trump",
-          "snippet": "",
-          "reason": "Recent coverage"
-        }
-      ]
-    },
-    {
-      "id": 614,
-      "title": "NPR - Breaking News, Analysis, Music, Arts & Podcasts : NPR",
-      "articleCount": 6,
-      "momentum": {
-        "delta24h": 0.0,
-        "delta7d": 0.0
-      },
-      "primarySources": [
-        "news"
-      ],
-      "summary": [
-        "Want to play a Tiny Desk concert? The 2026 Contest is now open for entries\n : NPR",
-        "Tiny Desk Contest : NPR",
-        "Tiny Desk Radio : NPR"
-      ],
-      "keyClaims": [],
-      "entities": {
-        "people": [],
-        "organizations": [],
-        "locations": []
-      },
-      "sourceMix": [
-        {
-          "name": "News",
-          "value": 6,
-          "type": "news"
-        }
-      ],
-      "timeline": [
-        {
-          "date": "Mon",
-          "value": 2
-        },
-        {
-          "date": "Tue",
-          "value": 2
-        },
-        {
-          "date": "Thu",
-          "value": 1
-        },
-        {
-          "date": "Sun",
-          "value": 1
-        }
-      ],
-      "articles": [
-        {
-          "id": 1420,
-          "title": "Want to play a Tiny Desk concert? The 2026 Contest is now open for entries\n : NPR",
-          "source": "https://www.npr.org/2026/01/13/g-s1-105862/2026-tiny-desk-concert-now-open",
-          "snippet": "",
-          "reason": "Recent coverage"
-        },
-        {
-          "id": 1421,
-          "title": "Tiny Desk Contest : NPR",
-          "source": "https://www.npr.org/series/1072544367/tiny-desk-contest",
-          "snippet": "",
-          "reason": "Recent coverage"
-        },
-        {
-          "id": 1514,
-          "title": "Tiny Desk Radio : NPR",
-          "source": "https://www.npr.org/series/g-s1-52030/tiny-desk-radio",
           "snippet": "",
           "reason": "Recent coverage"
         }

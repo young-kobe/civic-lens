@@ -100,7 +100,7 @@ class TestRichAggregators(unittest.TestCase):
                 pass
 
     def test_get_stories_rich(self):
-        stories_dc = self.aggregator.get_stories()
+        stories_dc = self.aggregator.get_stories(time_window="all")
         stories = [s.to_dict() for s in stories_dc]
         self.assertEqual(len(stories), 1)
         s = stories[0]
@@ -109,13 +109,13 @@ class TestRichAggregators(unittest.TestCase):
         self.assertTrue('timeline' in s)
         self.assertTrue('momentum' in s)
         self.assertTrue('sourceMix' in s)
-        # Check source mix
+        # Check source mix (source types are normalized: news_article->news, reddit_post->reddit)
         sources = {x['type']: x['value'] for x in s['sourceMix']}
-        self.assertEqual(sources.get('news_article'), 2)
-        self.assertEqual(sources.get('reddit_post'), 1)
+        self.assertEqual(sources.get('news'), 2)
+        self.assertEqual(sources.get('reddit'), 1)
 
     def test_get_public_sentiment_rich(self):
-        sentiment = self.aggregator.get_public_sentiment().to_dict()
+        sentiment = self.aggregator.get_public_sentiment(time_window="all").to_dict()
         self.assertEqual(sentiment['overview']['volume'], 3) # 4 docs, 1 is bot
         self.assertEqual(sentiment['excluded_bot_content'], 1)
         self.assertTrue('byPlatform' in sentiment)
@@ -125,7 +125,7 @@ class TestRichAggregators(unittest.TestCase):
         self.assertEqual(platforms['news_article']['volume'], 2)
 
     def test_get_gop_favorability_rich(self):
-        fav = self.aggregator.get_gop_favorability().to_dict()
+        fav = self.aggregator.get_gop_favorability(time_window="all").to_dict()
         self.assertEqual(fav['overall']['sampleSize'], 2) # docs 1 and 2 have fav data (doc 3 no fav data, doc 4 bot)
         self.assertTrue('trend' in fav)
         self.assertTrue('byPlatform' in fav)

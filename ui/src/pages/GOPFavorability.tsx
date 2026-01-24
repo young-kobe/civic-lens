@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Card, ConfidenceBadge, MethodPopover, LoadingCard, ErrorState } from '../components/common';
 import { TrendStrip, SentimentBar } from '../components/charts';
-import type { Filters, FavorabilityData, FavorabilityOverall, DemographicBreakdown, PollingSocialComparison, TrendPoint, TrendAnnotation } from '../types';
+import type { Filters, FavorabilityData, FavorabilityOverall, PollingSocialComparison } from '../types';
 
 
 import { fetchFavorability } from '../services/api';
@@ -65,51 +65,7 @@ function HeroMetric({ data }: HeroMetricProps) {
     );
 }
 
-interface DemographicBreakoutProps {
-    title: string;
-    data: DemographicBreakdown[];
-    labelKey: 'group' | 'region' | 'party';
-    caveat?: string;
-}
 
-function DemographicBreakout({ title, data, labelKey, caveat }: DemographicBreakoutProps) {
-    if (data.length === 0) {
-        return (
-            <Card title={title}>
-                <p className="text-muted text-sm">No data available.</p>
-            </Card>
-        );
-    }
-    return (
-        <Card title={title}>
-            <div className="flex flex-col gap-3">
-                {data.map((item, i) => (
-                    <div key={i}>
-                        <div className="flex justify-between mb-1">
-                            <span className="text-sm font-medium">{item[labelKey as keyof DemographicBreakdown]}</span>
-                            <span className="text-xs text-muted">
-                                Net: {item.favorable - item.unfavorable >= 0 ? '+' : ''}
-                                {(item.favorable - item.unfavorable).toFixed(0)}%
-                            </span>
-                        </div>
-                        <SentimentBar
-                            positive={item.favorable}
-                            negative={item.unfavorable}
-                            neutral={item.neutral}
-                            height={20}
-                            showLabels={false}
-                        />
-                    </div>
-                ))}
-            </div>
-            {caveat && (
-                <div className="card-note mt-4">
-                    {caveat}
-                </div>
-            )}
-        </Card>
-    );
-}
 
 interface SourceComparisonProps {
     data: PollingSocialComparison;
@@ -175,7 +131,7 @@ function GOPFavorability({ filters }: GOPFavorabilityProps) {
             setLoading(true);
             setError(null);
             try {
-                const rawData = await fetchFavorability();
+                const rawData = await fetchFavorability(filters.timeRange);
                 const processedData = transformFavorability(rawData);
                 setData(processedData);
             } catch (err: any) {
@@ -238,10 +194,10 @@ function GOPFavorability({ filters }: GOPFavorabilityProps) {
 
             {/* Trend Strip */}
             <Card
-                title="30-Day Trend"
+                title={`${filters.timeRange === 'all' ? 'All-Time' : filters.timeRange === '24h' ? '24-Hour' : filters.timeRange === '7d' ? '7-Day' : filters.timeRange === '30d' ? '30-Day' : '90-Day'} Trend`}
                 headerActions={
                     <MethodPopover
-                        description="Daily net favorability calculated from aggregated polling and weighted sentiment data."
+                        description="Net favorability over the selected time period. Calculated from aggregated polling and weighted sentiment data."
                     />
                 }
             >
@@ -259,19 +215,40 @@ function GOPFavorability({ filters }: GOPFavorabilityProps) {
                 )}
             </Card>
 
-            {/* Demographic Breakouts */}
-            <div className="grid-3">
-                <DemographicBreakout
-                    title="By Platform (Proxy)"
-                    data={data.byPlatform || []}
-                    labelKey="group" // Reusing group so it renders platform name
-                    caveat="Breakdown by source platform (News vs Social)."
-                />
-                {/* Replaced Age/Region/Party with just Platform for now since backend only supports that */}
-            </div>
-
             {/* Polling vs Social Comparison */}
             <SourceComparison data={data.pollingVsSocial} />
+
+            {/* Platform Comparison */}
+            <Card title="Favorability by Platform">
+                <div className="flex flex-col gap-6">
+
+
+                    <div className="flex flex-col gap-8">
+                        {data.byPlatform && data.byPlatform.map((platform, i) => (
+                            <div key={i}>
+                                <div className="flex justify-between items-center mb-2">
+                                    <span className={`badge ${platform.group === 'Social Media' || platform.group === 'Reddit' ? 'badge-accent' : 'badge-neutral'}`}>
+                                        {platform.group === 'reddit_post' ? 'Reddit' : platform.group}
+                                    </span>
+                                    <span className="text-xs text-muted">
+                                        Net: {platform.favorable - platform.unfavorable > 0 ? '+' : ''}{(platform.favorable - platform.unfavorable).toFixed(0)}%
+                                    </span>
+                                </div>
+                                <SentimentBar
+                                    positive={platform.favorable}
+                                    negative={platform.unfavorable}
+                                    neutral={platform.neutral}
+                                    height={24}
+                                    showLabels={true}
+                                />
+                            </div>
+                        ))}
+                    </div>
+                    <div className="card-note">
+                        Compare how favorability metrics differ between traditional news coverage and social media discussions.
+                    </div>
+                </div>
+            </Card>
 
             {/* Data Footnote */}
             <Card className="bg-neutral-50" style={{ background: 'var(--neutral-50)' }}>

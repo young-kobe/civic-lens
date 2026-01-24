@@ -22,35 +22,50 @@ export function transformStories(apiData: any[]): Cluster[] {
 
 export function transformFavorability(apiData: any): FavorabilityData {
     // Map API byPlatform to DemographicBreakdown if possible
-    // API byPlatform: [{ platform: 'news_article', ... }, ...]
-    // DemographicBreakdown: { group/region/party?, favorable, unfavorable, neutral }
+    // API byPlatform: [{ group: 'News', favorable, unfavorable, neutral }, ...]
     const byPlatform = (apiData.byPlatform || []).map((p: any) => ({
-        group: p.platform, // use group field for platform name
-        favorable: p.positive || 0,
-        unfavorable: p.negative || 0,
+        group: p.group || p.platform,
+        favorable: p.favorable || 0,
+        unfavorable: p.unfavorable || 0,
         neutral: p.neutral || 0
     }));
+
+    // Map API pollingVsSocial (onlineSentiment/pollingData) to frontend (polling/social)
+    const pollingVsSocial = apiData.pollingVsSocial || {};
+
+    // Handle null/undefined pollingData - use safe defaults
+    const pollingData = pollingVsSocial.pollingData || {};
 
     return {
         overall: apiData.overall,
         trend: apiData.trend || [],
         trendAnnotations: apiData.trendAnnotations || [],
-        byAge: [], // Default empty
-        byRegion: [], // Default empty
-        byPartyId: [], // Default empty
+        byAge: [],
+        byRegion: [],
+        byPartyId: [],
         byPlatform: byPlatform,
-        pollingVsSocial: apiData.pollingVsSocial || {
-            polling: { favorable: 0, unfavorable: 0, neutral: 0 },
-            social: { favorable: 0, unfavorable: 0, neutral: 0 }
+        pollingVsSocial: {
+            polling: {
+                favorable: pollingData.favorable ?? 0,
+                unfavorable: pollingData.unfavorable ?? 0,
+                neutral: pollingData.neutral ?? 0,
+            },
+            social: pollingVsSocial.onlineSentiment || { favorable: 0, unfavorable: 0, neutral: 0 },
         },
-    } as FavorabilityData & { byPlatform: any[] };
+    };
 }
 
 export function transformPublicSentiment(apiData: any): PublicSentimentData {
     return {
         overview: apiData.overview,
         byTopic: apiData.byTopic || [],
-        byPlatform: apiData.byPlatform || [],
+        byPlatform: (apiData.byPlatform || []).map((p: any) => ({
+            platform: p.platform,
+            positive: p.positive || 0,
+            negative: p.negative || 0,
+            neutral: p.neutral || 0,
+            volume: p.volume || 0,
+        })),
         byTimeWindow: apiData.byTimeWindow || [],
         distribution: apiData.distribution || {
             strongPositive: 0,
@@ -58,7 +73,9 @@ export function transformPublicSentiment(apiData: any): PublicSentimentData {
             neutral: 0,
             mildNegative: 0,
             strongNegative: 0
-        }
+        },
+        // Add socialVsNews comparison data
+        socialVsNews: apiData.socialVsNews || null,
     };
 }
 

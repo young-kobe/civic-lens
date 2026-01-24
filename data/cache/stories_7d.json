@@ -1,0 +1,1085 @@
+{
+  "_meta": {
+    "generated_at": "2026-01-24T20:06:50.008443+00:00",
+    "doc_count": 20,
+    "version": "1.0"
+  },
+  "data": [
+    {
+      "id": 2850,
+      "title": "\u2018Brain the size of a walnut\u2019: Bessent goes off on Newsom - POLITICO",
+      "articleCount": 3,
+      "momentum": {
+        "delta24h": -50.0,
+        "delta7d": 0.0
+      },
+      "primarySources": [
+        "news"
+      ],
+      "summary": [
+        "Newsom targets Trump at Davos World Economic Forum with viral political stunts | Fox News",
+        "Treasury Secretary Bessent slams Newsom after Davos stunt and California policies | Fox News",
+        "\u2018Brain the size of a walnut\u2019: Bessent goes off on Newsom - POLITICO"
+      ],
+      "keyClaims": [],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "locations": []
+      },
+      "sourceMix": [
+        {
+          "name": "News",
+          "value": 3,
+          "type": "other"
+        }
+      ],
+      "timeline": [
+        {
+          "date": "Thu",
+          "value": 1
+        },
+        {
+          "date": "Fri",
+          "value": 1
+        },
+        {
+          "date": "Sat",
+          "value": 1
+        }
+      ],
+      "articles": [
+        {
+          "id": 1907,
+          "title": "Newsom targets Trump at Davos World Economic Forum with viral political stunts | Fox News",
+          "source": "https://www.foxnews.com/politics/newsoms-davos-detour-5-cringe-moments-overshadowed-high-profile-summit",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 1799,
+          "title": "Treasury Secretary Bessent slams Newsom after Davos stunt and California policies | Fox News",
+          "source": "https://www.foxnews.com/politics/bessent-unloads-nesoms-bizarre-davos-stunt-calls-out-kneepads-moment",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 1806,
+          "title": "\u2018Brain the size of a walnut\u2019: Bessent goes off on Newsom - POLITICO",
+          "source": "https://www.politico.com/news/2026/01/23/scott-bessent-gavin-newsom-the-conversation-00742777",
+          "snippet": "",
+          "reason": "Recent coverage"
+        }
+      ]
+    },
+    {
+      "id": 2895,
+      "title": "Trump administration's defense strategy tells allies to handle their own security : NPR",
+      "articleCount": 3,
+      "momentum": {
+        "delta24h": 100.0,
+        "delta7d": 0.0
+      },
+      "primarySources": [
+        "news"
+      ],
+      "summary": [
+        "Pentagon to offer 'more limited' support to US allies",
+        "Pentagon to shift North Korea deterrence responsibility primarily to South Korea | Fox News",
+        "Trump administration's defense strategy tells allies to handle their own security : NPR"
+      ],
+      "keyClaims": [],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "locations": []
+      },
+      "sourceMix": [
+        {
+          "name": "News",
+          "value": 3,
+          "type": "other"
+        }
+      ],
+      "timeline": [
+        {
+          "date": "Fri",
+          "value": 2
+        },
+        {
+          "date": "Sat",
+          "value": 1
+        }
+      ],
+      "articles": [
+        {
+          "id": 1932,
+          "title": "Pentagon to offer 'more limited' support to US allies",
+          "source": "https://www.bbc.com/news/articles/cj9r8ezym3ro",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 1897,
+          "title": "Pentagon to shift North Korea deterrence responsibility primarily to South Korea | Fox News",
+          "source": "https://www.foxnews.com/politics/pentagon-plans-give-south-korea-primary-role-deterring-north-korea-threats-new-strategy",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 1898,
+          "title": "Trump administration's defense strategy tells allies to handle their own security : NPR",
+          "source": "https://www.npr.org/2026/01/24/nx-s1-5687168/trump-administration-defense-strategy",
+          "snippet": "",
+          "reason": "Recent coverage"
+        }
+      ]
+    },
+    {
+      "id": 1186,
+      "title": "EU Set to Halt US Trade Deal Over Trump\u2019s Latest Tariff Threat",
+      "articleCount": 2,
+      "momentum": {
+        "delta24h": 0.0,
+        "delta7d": 0.0
+      },
+      "primarySources": [
+        "reddit_post"
+      ],
+      "summary": [
+        "EU Set to Halt US Trade Deal Over Trump\u2019s Latest Tariff Threat",
+        "EU Set to Halt US Trade Deal Over Trump\u2019s Latest Tariff Threat"
+      ],
+      "keyClaims": [],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "locations": []
+      },
+      "sourceMix": [
+        {
+          "name": "Reddit Post",
+          "value": 2,
+          "type": "reddit"
+        }
+      ],
+      "timeline": [
+        {
+          "date": "Sat",
+          "value": 2
+        }
+      ],
+      "articles": [
+        {
+          "id": 1677,
+          "title": "EU Set to Halt US Trade Deal Over Trump\u2019s Latest Tariff Threat",
+          "source": "t3_1qfpbia",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 1680,
+          "title": "EU Set to Halt US Trade Deal Over Trump\u2019s Latest Tariff Threat",
+          "source": "t3_1qfo9c2",
+          "snippet": "",
+          "reason": "Recent coverage"
+        }
+      ]
+    },
+    {
+      "id": 1711,
+      "title": "EU vows \u2018firm\u2019 response to new Trump tariffs over Greenland",
+      "articleCount": 2,
+      "momentum": {
+        "delta24h": 0.0,
+        "delta7d": 0.0
+      },
+      "primarySources": [
+        "reddit_post"
+      ],
+      "summary": [
+        "EU warns of downward spiral after Trump threatens tariffs over Greenland",
+        "EU calls emergency envoys meeting for Sunday after Trump vows tariffs linked to Greenland"
+      ],
+      "keyClaims": [],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "locations": []
+      },
+      "sourceMix": [
+        {
+          "name": "Reddit Post",
+          "value": 2,
+          "type": "reddit"
+        }
+      ],
+      "timeline": [
+        {
+          "date": "Sat",
+          "value": 2
+        }
+      ],
+      "articles": [
+        {
+          "id": 1673,
+          "title": "EU warns of downward spiral after Trump threatens tariffs over Greenland",
+          "source": "t3_1qfstb4",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 1678,
+          "title": "EU calls emergency envoys meeting for Sunday after Trump vows tariffs linked to Greenland",
+          "source": "t3_1qfp8xy",
+          "snippet": "",
+          "reason": "Recent coverage"
+        }
+      ]
+    },
+    {
+      "id": 1718,
+      "title": "EU Set to Halt US Trade Deal Over Trump\u2019s Latest Tariff Threat",
+      "articleCount": 2,
+      "momentum": {
+        "delta24h": 0.0,
+        "delta7d": 0.0
+      },
+      "primarySources": [
+        "reddit_post"
+      ],
+      "summary": [
+        "EU Set to Halt US Trade Deal Over Trump\u2019s Latest Tariff Threat",
+        "EU Set to Halt US Trade Deal Over Trump\u2019s Latest Tariff Threat"
+      ],
+      "keyClaims": [],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "locations": []
+      },
+      "sourceMix": [
+        {
+          "name": "Reddit Post",
+          "value": 2,
+          "type": "reddit"
+        }
+      ],
+      "timeline": [
+        {
+          "date": "Sat",
+          "value": 2
+        }
+      ],
+      "articles": [
+        {
+          "id": 1677,
+          "title": "EU Set to Halt US Trade Deal Over Trump\u2019s Latest Tariff Threat",
+          "source": "t3_1qfpbia",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 1680,
+          "title": "EU Set to Halt US Trade Deal Over Trump\u2019s Latest Tariff Threat",
+          "source": "t3_1qfo9c2",
+          "snippet": "",
+          "reason": "Recent coverage"
+        }
+      ]
+    },
+    {
+      "id": 1753,
+      "title": "Minnesota protests Trump administration's immigration crackdown : NPR",
+      "articleCount": 2,
+      "momentum": {
+        "delta24h": -100.0,
+        "delta7d": 0.0
+      },
+      "primarySources": [
+        "news"
+      ],
+      "summary": [
+        "Minnesota holds economic strike to protest ICE presence",
+        "Minnesota protests Trump administration's immigration crackdown : NPR"
+      ],
+      "keyClaims": [],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "locations": []
+      },
+      "sourceMix": [
+        {
+          "name": "News",
+          "value": 2,
+          "type": "other"
+        }
+      ],
+      "timeline": [
+        {
+          "date": "Thu",
+          "value": 1
+        },
+        {
+          "date": "Fri",
+          "value": 1
+        }
+      ],
+      "articles": [
+        {
+          "id": 1866,
+          "title": "Minnesota holds economic strike to protest ICE presence",
+          "source": "https://www.bbc.com/news/articles/c1dk67g4q91o",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 1771,
+          "title": "Minnesota protests Trump administration's immigration crackdown : NPR",
+          "source": "https://www.npr.org/2026/01/23/nx-s1-5686733/minnesotans-day-of-ice-protests",
+          "snippet": "",
+          "reason": "Recent coverage"
+        }
+      ]
+    },
+    {
+      "id": 1758,
+      "title": "Canadian Olympic snowboarder turned alleged drug kingpin arrested in Mexico : NPR",
+      "articleCount": 2,
+      "momentum": {
+        "delta24h": 0.0,
+        "delta7d": 0.0
+      },
+      "primarySources": [
+        "news"
+      ],
+      "summary": [
+        "Alleged drug kingpin and ex-Olympian Ryan Wedding arrested",
+        "Canadian Olympic snowboarder turned alleged drug kingpin arrested in Mexico : NPR"
+      ],
+      "keyClaims": [],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "locations": []
+      },
+      "sourceMix": [
+        {
+          "name": "News",
+          "value": 2,
+          "type": "other"
+        }
+      ],
+      "timeline": [
+        {
+          "date": "Thu",
+          "value": 1
+        },
+        {
+          "date": "Fri",
+          "value": 1
+        }
+      ],
+      "articles": [
+        {
+          "id": 1877,
+          "title": "Alleged drug kingpin and ex-Olympian Ryan Wedding arrested",
+          "source": "https://www.bbc.com/news/articles/cj0nd8z1z59o",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 1776,
+          "title": "Canadian Olympic snowboarder turned alleged drug kingpin arrested in Mexico : NPR",
+          "source": "https://www.npr.org/2026/01/23/g-s1-107051/ryan-wedding-arrest-canada-olympic-snowboarder-alleged-drug-kingpin",
+          "snippet": "",
+          "reason": "Recent coverage"
+        }
+      ]
+    },
+    {
+      "id": 1762,
+      "title": "\u2018Brain the size of a walnut\u2019: Bessent goes off on Newsom - POLITICO",
+      "articleCount": 2,
+      "momentum": {
+        "delta24h": -100.0,
+        "delta7d": 0.0
+      },
+      "primarySources": [
+        "news"
+      ],
+      "summary": [
+        "Treasury Secretary Bessent slams Newsom after Davos stunt and California policies | Fox News",
+        "\u2018Brain the size of a walnut\u2019: Bessent goes off on Newsom - POLITICO"
+      ],
+      "keyClaims": [],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "locations": []
+      },
+      "sourceMix": [
+        {
+          "name": "News",
+          "value": 2,
+          "type": "other"
+        }
+      ],
+      "timeline": [
+        {
+          "date": "Thu",
+          "value": 1
+        },
+        {
+          "date": "Fri",
+          "value": 1
+        }
+      ],
+      "articles": [
+        {
+          "id": 1799,
+          "title": "Treasury Secretary Bessent slams Newsom after Davos stunt and California policies | Fox News",
+          "source": "https://www.foxnews.com/politics/bessent-unloads-nesoms-bizarre-davos-stunt-calls-out-kneepads-moment",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 1806,
+          "title": "\u2018Brain the size of a walnut\u2019: Bessent goes off on Newsom - POLITICO",
+          "source": "https://www.politico.com/news/2026/01/23/scott-bessent-gavin-newsom-the-conversation-00742777",
+          "snippet": "",
+          "reason": "Recent coverage"
+        }
+      ]
+    },
+    {
+      "id": 1772,
+      "title": "President Donald Trump promises 'a lot' of campaign travel for GOP midterms | Fox News",
+      "articleCount": 2,
+      "momentum": {
+        "delta24h": 0.0,
+        "delta7d": 0.0
+      },
+      "primarySources": [
+        "news"
+      ],
+      "summary": [
+        "RNC approves rule change to enable midterm convention | Fox News",
+        "President Donald Trump promises 'a lot' of campaign travel for GOP midterms | Fox News"
+      ],
+      "keyClaims": [],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "locations": []
+      },
+      "sourceMix": [
+        {
+          "name": "News",
+          "value": 2,
+          "type": "other"
+        }
+      ],
+      "timeline": [
+        {
+          "date": "Fri",
+          "value": 2
+        }
+      ],
+      "articles": [
+        {
+          "id": 1785,
+          "title": "RNC approves rule change to enable midterm convention | Fox News",
+          "source": "https://www.foxnews.com/politics/trump-pushes-trump-a-palooza-midterm-convention-gop-braces-tough-elections",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 1808,
+          "title": "President Donald Trump promises 'a lot' of campaign travel for GOP midterms | Fox News",
+          "source": "https://www.foxnews.com/politics/trump-vows-heavy-campaign-push-gop-cites-midterm-curse-sitting-presidents",
+          "snippet": "",
+          "reason": "Recent coverage"
+        }
+      ]
+    },
+    {
+      "id": 1790,
+      "title": "'Insulting': Starmer reacts to Trump's comments on Nato troops in Afghanistan",
+      "articleCount": 2,
+      "momentum": {
+        "delta24h": 100.0,
+        "delta7d": 0.0
+      },
+      "primarySources": [
+        "news"
+      ],
+      "summary": [
+        "Prince Harry says sacrifices by Nato troops in Afghanistan deserve 'respect'",
+        "'Insulting': Starmer reacts to Trump's comments on Nato troops in Afghanistan"
+      ],
+      "keyClaims": [],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "locations": []
+      },
+      "sourceMix": [
+        {
+          "name": "News",
+          "value": 2,
+          "type": "other"
+        }
+      ],
+      "timeline": [
+        {
+          "date": "Fri",
+          "value": 2
+        }
+      ],
+      "articles": [
+        {
+          "id": 1862,
+          "title": "Prince Harry says sacrifices by Nato troops in Afghanistan deserve 'respect'",
+          "source": "https://www.bbc.com/news/articles/clym2l7d75eo",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 1870,
+          "title": "'Insulting': Starmer reacts to Trump's comments on Nato troops in Afghanistan",
+          "source": "https://www.bbc.com/news/videos/c5y3jvrz3zko",
+          "snippet": "",
+          "reason": "Recent coverage"
+        }
+      ]
+    },
+    {
+      "id": 2244,
+      "title": "EU vows \u2018firm\u2019 response to new Trump tariffs over Greenland",
+      "articleCount": 2,
+      "momentum": {
+        "delta24h": 0.0,
+        "delta7d": 0.0
+      },
+      "primarySources": [
+        "reddit_post"
+      ],
+      "summary": [
+        "EU warns of downward spiral after Trump threatens tariffs over Greenland",
+        "EU calls emergency envoys meeting for Sunday after Trump vows tariffs linked to Greenland"
+      ],
+      "keyClaims": [],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "locations": []
+      },
+      "sourceMix": [
+        {
+          "name": "Reddit Post",
+          "value": 2,
+          "type": "reddit"
+        }
+      ],
+      "timeline": [
+        {
+          "date": "Sat",
+          "value": 2
+        }
+      ],
+      "articles": [
+        {
+          "id": 1673,
+          "title": "EU warns of downward spiral after Trump threatens tariffs over Greenland",
+          "source": "t3_1qfstb4",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 1678,
+          "title": "EU calls emergency envoys meeting for Sunday after Trump vows tariffs linked to Greenland",
+          "source": "t3_1qfp8xy",
+          "snippet": "",
+          "reason": "Recent coverage"
+        }
+      ]
+    },
+    {
+      "id": 2251,
+      "title": "EU Set to Halt US Trade Deal Over Trump\u2019s Latest Tariff Threat",
+      "articleCount": 2,
+      "momentum": {
+        "delta24h": 0.0,
+        "delta7d": 0.0
+      },
+      "primarySources": [
+        "reddit_post"
+      ],
+      "summary": [
+        "EU Set to Halt US Trade Deal Over Trump\u2019s Latest Tariff Threat",
+        "EU Set to Halt US Trade Deal Over Trump\u2019s Latest Tariff Threat"
+      ],
+      "keyClaims": [],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "locations": []
+      },
+      "sourceMix": [
+        {
+          "name": "Reddit Post",
+          "value": 2,
+          "type": "reddit"
+        }
+      ],
+      "timeline": [
+        {
+          "date": "Sat",
+          "value": 2
+        }
+      ],
+      "articles": [
+        {
+          "id": 1677,
+          "title": "EU Set to Halt US Trade Deal Over Trump\u2019s Latest Tariff Threat",
+          "source": "t3_1qfpbia",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 1680,
+          "title": "EU Set to Halt US Trade Deal Over Trump\u2019s Latest Tariff Threat",
+          "source": "t3_1qfo9c2",
+          "snippet": "",
+          "reason": "Recent coverage"
+        }
+      ]
+    },
+    {
+      "id": 2286,
+      "title": "Minnesota protests Trump administration's immigration crackdown : NPR",
+      "articleCount": 2,
+      "momentum": {
+        "delta24h": -100.0,
+        "delta7d": 0.0
+      },
+      "primarySources": [
+        "news"
+      ],
+      "summary": [
+        "Minnesota holds economic strike to protest ICE presence",
+        "Minnesota protests Trump administration's immigration crackdown : NPR"
+      ],
+      "keyClaims": [],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "locations": []
+      },
+      "sourceMix": [
+        {
+          "name": "News",
+          "value": 2,
+          "type": "other"
+        }
+      ],
+      "timeline": [
+        {
+          "date": "Thu",
+          "value": 1
+        },
+        {
+          "date": "Fri",
+          "value": 1
+        }
+      ],
+      "articles": [
+        {
+          "id": 1866,
+          "title": "Minnesota holds economic strike to protest ICE presence",
+          "source": "https://www.bbc.com/news/articles/c1dk67g4q91o",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 1771,
+          "title": "Minnesota protests Trump administration's immigration crackdown : NPR",
+          "source": "https://www.npr.org/2026/01/23/nx-s1-5686733/minnesotans-day-of-ice-protests",
+          "snippet": "",
+          "reason": "Recent coverage"
+        }
+      ]
+    },
+    {
+      "id": 2291,
+      "title": "Canadian Olympic snowboarder turned alleged drug kingpin arrested in Mexico : NPR",
+      "articleCount": 2,
+      "momentum": {
+        "delta24h": 0.0,
+        "delta7d": 0.0
+      },
+      "primarySources": [
+        "news"
+      ],
+      "summary": [
+        "Alleged drug kingpin and ex-Olympian Ryan Wedding arrested",
+        "Canadian Olympic snowboarder turned alleged drug kingpin arrested in Mexico : NPR"
+      ],
+      "keyClaims": [],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "locations": []
+      },
+      "sourceMix": [
+        {
+          "name": "News",
+          "value": 2,
+          "type": "other"
+        }
+      ],
+      "timeline": [
+        {
+          "date": "Thu",
+          "value": 1
+        },
+        {
+          "date": "Fri",
+          "value": 1
+        }
+      ],
+      "articles": [
+        {
+          "id": 1877,
+          "title": "Alleged drug kingpin and ex-Olympian Ryan Wedding arrested",
+          "source": "https://www.bbc.com/news/articles/cj0nd8z1z59o",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 1776,
+          "title": "Canadian Olympic snowboarder turned alleged drug kingpin arrested in Mexico : NPR",
+          "source": "https://www.npr.org/2026/01/23/g-s1-107051/ryan-wedding-arrest-canada-olympic-snowboarder-alleged-drug-kingpin",
+          "snippet": "",
+          "reason": "Recent coverage"
+        }
+      ]
+    },
+    {
+      "id": 2295,
+      "title": "\u2018Brain the size of a walnut\u2019: Bessent goes off on Newsom - POLITICO",
+      "articleCount": 2,
+      "momentum": {
+        "delta24h": -100.0,
+        "delta7d": 0.0
+      },
+      "primarySources": [
+        "news"
+      ],
+      "summary": [
+        "Treasury Secretary Bessent slams Newsom after Davos stunt and California policies | Fox News",
+        "\u2018Brain the size of a walnut\u2019: Bessent goes off on Newsom - POLITICO"
+      ],
+      "keyClaims": [],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "locations": []
+      },
+      "sourceMix": [
+        {
+          "name": "News",
+          "value": 2,
+          "type": "other"
+        }
+      ],
+      "timeline": [
+        {
+          "date": "Thu",
+          "value": 1
+        },
+        {
+          "date": "Fri",
+          "value": 1
+        }
+      ],
+      "articles": [
+        {
+          "id": 1799,
+          "title": "Treasury Secretary Bessent slams Newsom after Davos stunt and California policies | Fox News",
+          "source": "https://www.foxnews.com/politics/bessent-unloads-nesoms-bizarre-davos-stunt-calls-out-kneepads-moment",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 1806,
+          "title": "\u2018Brain the size of a walnut\u2019: Bessent goes off on Newsom - POLITICO",
+          "source": "https://www.politico.com/news/2026/01/23/scott-bessent-gavin-newsom-the-conversation-00742777",
+          "snippet": "",
+          "reason": "Recent coverage"
+        }
+      ]
+    },
+    {
+      "id": 2305,
+      "title": "President Donald Trump promises 'a lot' of campaign travel for GOP midterms | Fox News",
+      "articleCount": 2,
+      "momentum": {
+        "delta24h": 0.0,
+        "delta7d": 0.0
+      },
+      "primarySources": [
+        "news"
+      ],
+      "summary": [
+        "RNC approves rule change to enable midterm convention | Fox News",
+        "President Donald Trump promises 'a lot' of campaign travel for GOP midterms | Fox News"
+      ],
+      "keyClaims": [],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "locations": []
+      },
+      "sourceMix": [
+        {
+          "name": "News",
+          "value": 2,
+          "type": "other"
+        }
+      ],
+      "timeline": [
+        {
+          "date": "Fri",
+          "value": 2
+        }
+      ],
+      "articles": [
+        {
+          "id": 1785,
+          "title": "RNC approves rule change to enable midterm convention | Fox News",
+          "source": "https://www.foxnews.com/politics/trump-pushes-trump-a-palooza-midterm-convention-gop-braces-tough-elections",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 1808,
+          "title": "President Donald Trump promises 'a lot' of campaign travel for GOP midterms | Fox News",
+          "source": "https://www.foxnews.com/politics/trump-vows-heavy-campaign-push-gop-cites-midterm-curse-sitting-presidents",
+          "snippet": "",
+          "reason": "Recent coverage"
+        }
+      ]
+    },
+    {
+      "id": 2323,
+      "title": "'Insulting': Starmer reacts to Trump's comments on Nato troops in Afghanistan",
+      "articleCount": 2,
+      "momentum": {
+        "delta24h": 100.0,
+        "delta7d": 0.0
+      },
+      "primarySources": [
+        "news"
+      ],
+      "summary": [
+        "Prince Harry says sacrifices by Nato troops in Afghanistan deserve 'respect'",
+        "'Insulting': Starmer reacts to Trump's comments on Nato troops in Afghanistan"
+      ],
+      "keyClaims": [],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "locations": []
+      },
+      "sourceMix": [
+        {
+          "name": "News",
+          "value": 2,
+          "type": "other"
+        }
+      ],
+      "timeline": [
+        {
+          "date": "Fri",
+          "value": 2
+        }
+      ],
+      "articles": [
+        {
+          "id": 1862,
+          "title": "Prince Harry says sacrifices by Nato troops in Afghanistan deserve 'respect'",
+          "source": "https://www.bbc.com/news/articles/clym2l7d75eo",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 1870,
+          "title": "'Insulting': Starmer reacts to Trump's comments on Nato troops in Afghanistan",
+          "source": "https://www.bbc.com/news/videos/c5y3jvrz3zko",
+          "snippet": "",
+          "reason": "Recent coverage"
+        }
+      ]
+    },
+    {
+      "id": 2798,
+      "title": "EU vows \u2018firm\u2019 response to new Trump tariffs over Greenland",
+      "articleCount": 2,
+      "momentum": {
+        "delta24h": 0.0,
+        "delta7d": 0.0
+      },
+      "primarySources": [
+        "reddit_post"
+      ],
+      "summary": [
+        "EU warns of downward spiral after Trump threatens tariffs over Greenland",
+        "EU calls emergency envoys meeting for Sunday after Trump vows tariffs linked to Greenland"
+      ],
+      "keyClaims": [],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "locations": []
+      },
+      "sourceMix": [
+        {
+          "name": "Reddit Post",
+          "value": 2,
+          "type": "reddit"
+        }
+      ],
+      "timeline": [
+        {
+          "date": "Sat",
+          "value": 2
+        }
+      ],
+      "articles": [
+        {
+          "id": 1673,
+          "title": "EU warns of downward spiral after Trump threatens tariffs over Greenland",
+          "source": "t3_1qfstb4",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 1678,
+          "title": "EU calls emergency envoys meeting for Sunday after Trump vows tariffs linked to Greenland",
+          "source": "t3_1qfp8xy",
+          "snippet": "",
+          "reason": "Recent coverage"
+        }
+      ]
+    },
+    {
+      "id": 2805,
+      "title": "EU Set to Halt US Trade Deal Over Trump\u2019s Latest Tariff Threat",
+      "articleCount": 2,
+      "momentum": {
+        "delta24h": 0.0,
+        "delta7d": 0.0
+      },
+      "primarySources": [
+        "reddit_post"
+      ],
+      "summary": [
+        "EU Set to Halt US Trade Deal Over Trump\u2019s Latest Tariff Threat",
+        "EU Set to Halt US Trade Deal Over Trump\u2019s Latest Tariff Threat"
+      ],
+      "keyClaims": [],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "locations": []
+      },
+      "sourceMix": [
+        {
+          "name": "Reddit Post",
+          "value": 2,
+          "type": "reddit"
+        }
+      ],
+      "timeline": [
+        {
+          "date": "Sat",
+          "value": 2
+        }
+      ],
+      "articles": [
+        {
+          "id": 1677,
+          "title": "EU Set to Halt US Trade Deal Over Trump\u2019s Latest Tariff Threat",
+          "source": "t3_1qfpbia",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 1680,
+          "title": "EU Set to Halt US Trade Deal Over Trump\u2019s Latest Tariff Threat",
+          "source": "t3_1qfo9c2",
+          "snippet": "",
+          "reason": "Recent coverage"
+        }
+      ]
+    },
+    {
+      "id": 2844,
+      "title": "200 million people in path of massive ice and snow storm : NPR",
+      "articleCount": 2,
+      "momentum": {
+        "delta24h": 0.0,
+        "delta7d": 0.0
+      },
+      "primarySources": [
+        "news"
+      ],
+      "summary": [
+        "As the winter storm rages, here\u2019s what to know in your state : NPR",
+        "200 million people in path of massive ice and snow storm : NPR"
+      ],
+      "keyClaims": [],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "locations": []
+      },
+      "sourceMix": [
+        {
+          "name": "News",
+          "value": 2,
+          "type": "other"
+        }
+      ],
+      "timeline": [
+        {
+          "date": "Thu",
+          "value": 1
+        },
+        {
+          "date": "Fri",
+          "value": 1
+        }
+      ],
+      "articles": [
+        {
+          "id": 1896,
+          "title": "As the winter storm rages, here\u2019s what to know in your state : NPR",
+          "source": "https://www.npr.org/2026/01/24/nx-s1-5687179/as-the-winter-storm-rages-heres-what-to-know-in-your-state",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 1774,
+          "title": "200 million people in path of massive ice and snow storm : NPR",
+          "source": "https://www.npr.org/2026/01/23/g-s1-107059/winter-storm-ice-snow-national-weather-service-u-s",
+          "snippet": "",
+          "reason": "Recent coverage"
+        }
+      ]
+    }
+  ]
+}

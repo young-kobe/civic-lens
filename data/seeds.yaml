@@ -5,8 +5,8 @@ database:
   raw_dir: data/raw
 
 crawl:
-  max_concurrency: 10
-  max_concurrent_domain: 2
+  max_concurrency: 50
+  max_concurrent_domain: 10
   request_timeout: 30s
   max_retries: 3
   rate_limit_per_sec: 1.0
@@ -47,3 +47,24 @@ seeds:
   - url: https://feeds.bbci.co.uk/news/rss.xml
     type: rss
     priority: 8
+  - url: http://rss.cnn.com/rss/cnn_allpolitics.rss
+    type: rss
+    priority: 10
+  - url: http://feeds.foxnews.com/foxnews/politics
+    type: rss
+    priority: 10
+  - url: https://rss.politico.com/politics-news.xml
+    type: rss
+    priority: 10
+  - url: https://thehill.com/homenews/politics/feed/
+    type: rss
+    priority: 10
+  - url: https://feeds.nbcnews.com/msnbc/public/politics
+    type: rss
+    priority: 10
+  - url: https://feeds.feedburner.com/breitbart
+    type: rss
+    priority: 9
+  - url: https://www.cbsnews.com/latest/rss/politics
+    type: rss
+    priority: 10

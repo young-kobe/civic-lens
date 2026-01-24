@@ -34,6 +34,7 @@ class BaseLLMClient(ABC):
         self,
         system_prompt: str,
         user_prompt: str,
+        response_schema: Optional[Dict[str, Any]] = None,
         temperature: Optional[float] = None,
     ) -> Dict[str, Any]:
         """
@@ -42,6 +43,7 @@ class BaseLLMClient(ABC):
         Args:
             system_prompt: System instructions for the model
             user_prompt: User message/query
+            response_schema: JSON schema to enforce structured output (optional)
             temperature: Override default temperature (optional)
             
         Returns:
@@ -60,13 +62,11 @@ class BaseLLMClient(ABC):
     @staticmethod
     def parse_json_response(response_text: str) -> Dict[str, Any]:
         """
-        Parse and validate JSON response from LLM.
+        Parse JSON response from LLM.
         
-        Applies multi-layered repair strategies for common LLM JSON errors:
-        1. Strip markdown code fences
-        2. Extract JSON object/array using regex (handles surrounding text)
-        3. Fix trailing commas
-        4. Fix missing commas between fields
+        When using structured output (JSON schema mode), the LLM is 
+        constrained to return valid JSON matching the schema. This 
+        method simply parses the response with minimal cleanup.
         
         Args:
             response_text: Raw text response from the model
@@ -75,13 +75,11 @@ class BaseLLMClient(ABC):
             Parsed dictionary
             
         Raises:
-            ValueError: If response is not valid JSON after repair attempts
+            ValueError: If response is not valid JSON
         """
-        import re
-        
         text = response_text.strip()
         
-        # Step 1: Strip markdown code fences
+        # Strip markdown code fences if present (some models add these)
         if text.startswith("```json"):
             text = text[7:]
         elif text.startswith("```"):
@@ -90,57 +88,16 @@ class BaseLLMClient(ABC):
             text = text[:-3]
         text = text.strip()
         
-        # Step 2: Try parsing as-is first (fast path)
         try:
-            return json.loads(text)
-        except json.JSONDecodeError:
-            pass  # Continue to repair strategies
-        
-        # Step 3: Extract JSON object/array from surrounding text
-        # This handles cases where LLM adds explanation before/after JSON
-        json_match = re.search(r'(\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}|\[[^\[\]]*(?:\[[^\[\]]*\][^\[\]]*)*\])', text, re.DOTALL)
-        if json_match:
-            extracted = json_match.group(1)
-            try:
-                return json.loads(extracted)
-            except json.JSONDecodeError:
-                text = extracted  # Use extracted for further repair
-        
-        # Step 4: Fix trailing commas (e.g., [1, 2, 3,] or {"a": 1,})
-        repaired = re.sub(r',(\s*[}\]])', r'\1', text)
-        if repaired != text:
-            try:
-                result = json.loads(repaired)
-                logger.debug("JSON repair: fixed trailing comma(s)")
-                return result
-            except json.JSONDecodeError:
-                text = repaired  # Keep the fix for next repair
-        
-        # Step 5: Fix missing commas between fields
-        # Pattern: "value" "key" or "value" {"key" or number "key"
-        repaired = re.sub(r'("|\d)(\s+)(")', r'\1,\2\3', text)
-        # Also handle: } "key" or ] "key"
-        repaired = re.sub(r'([}\]])(\s+)(")', r'\1,\2\3', repaired)
-        if repaired != text:
-            try:
-                result = json.loads(repaired)
-                logger.debug("JSON repair: fixed missing comma(s)")
-                return result
-            except json.JSONDecodeError:
-                text = repaired
-        
-        # Step 6: Fix unescaped newlines in string values
-        # This is a best-effort fix for strings containing literal newlines
-        repaired = re.sub(r'(?<!\\)\n(?=[^"]*"[,}\]])', r'\\n', text)
-        if repaired != text:
-            try:
-                result = json.loads(repaired)
-                logger.debug("JSON repair: fixed unescaped newlines")
-                return result
-            except json.JSONDecodeError:
-                pass
-        
-        # All repair attempts failed
-        logger.error(f"Failed to parse LLM response as JSON after repair attempts")
-        logger.debug(f"Raw response: {response_text[:500]}")
-        raise ValueError(f"Invalid JSON response from LLM after repair attempts")
+            parsed = json.loads(text)
+            if isinstance(parsed, dict):
+                return parsed
+            elif isinstance(parsed, list) and len(parsed) > 0 and isinstance(parsed[0], dict):
+                # Some models return array of objects - take first
+                return parsed[0]
+            else:
+                raise ValueError(f"Expected dict, got {type(parsed).__name__}")
+        except json.JSONDecodeError as e:
+            logger.error(f"JSON parse error: {e}")
+            logger.debug(f"Raw response: {response_text[:500]}")
+            raise ValueError(f"Invalid JSON response: {e}")

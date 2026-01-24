@@ -5,6 +5,7 @@ Provides a client for local LLM inference via the Ollama REST API.
 Designed for edge devices like Jetson Orin Nano.
 """
 
+import json
 import time
 from typing import Any, Dict, Optional
 import requests
@@ -20,14 +21,16 @@ class OllamaClient(BaseLLMClient):
     
     Designed for running on Jetson Orin Nano or similar edge hardware.
     Communicates with the Ollama server over HTTP.
+    
+    Supports structured output via JSON schema in the format parameter.
     """
     
     def __init__(
         self,
         host: str = "http://localhost:11434",
         model: str = "llama3.2:3b",
-        timeout: int = 120,
-        max_retries: int = 2,
+        timeout: int = 60,
+        max_retries: int = 1,
     ):
         super().__init__()
         self.host = host.rstrip("/")
@@ -57,6 +60,7 @@ class OllamaClient(BaseLLMClient):
         self,
         system_prompt: str,
         user_prompt: str,
+        response_schema: Optional[Dict[str, Any]] = None,
         temperature: Optional[float] = None,
     ) -> Dict[str, Any]:
         """
@@ -65,6 +69,7 @@ class OllamaClient(BaseLLMClient):
         Args:
             system_prompt: System instructions for the model
             user_prompt: User message/query
+            response_schema: JSON schema for structured output (optional)
             temperature: Override default temperature (optional)
             
         Returns:
@@ -79,6 +84,9 @@ class OllamaClient(BaseLLMClient):
         
         full_prompt = f"{system_prompt}\n\n---\n\n{user_prompt}"
         
+        # Use schema for structured output, fall back to basic JSON mode
+        format_param = response_schema if response_schema else "json"
+        
         last_error = None
         for attempt in range(self.max_retries):
             try:
@@ -87,7 +95,7 @@ class OllamaClient(BaseLLMClient):
                     json={
                         "model": self.model,
                         "prompt": full_prompt,
-                        "format": "json",
+                        "format": format_param,
                         "stream": False,
                         "options": {
                             "temperature": temperature if temperature is not None else 0.0,

@@ -35,6 +35,7 @@ from analysis.src.engine.sentiment import HybridSentimentAnalyzer
 from analysis.src.engine.favorability import FavorabilityAnalyzer
 from analysis.src.engine.clustering import ContentClusterer
 from analysis.src.reporting.aggregators import Aggregator
+from analysis.src.etl.polling import PollingDataScraper, PollingDataError
 
 logger = get_logger("job_runner")
 
@@ -62,6 +63,7 @@ class AnalysisJobRunner:
             llm_enabled=self.settings.llm_enabled
         )
         self.clusterer = ContentClusterer()
+        self.polling_scraper = PollingDataScraper() if self.settings.polling_enabled else None
     
     def run_etl(self) -> int:
         """Run ETL to load new raw content. Returns count of new docs."""
@@ -143,38 +145,55 @@ class AnalysisJobRunner:
         """
         Pre-compute all aggregations and save to cache.
         
+        Saves multiple time-windowed versions for stories, sentiment, and favorability.
         Returns dict with counts for each cached endpoint.
         """
         logger.info("Saving aggregation snapshots to cache...")
         results = {}
         
-        # Stories
-        stories = self.aggregator.get_stories()
-        stories_data = [s.to_dict() for s in stories]
-        self.cache.save("stories", stories_data, doc_count=len(stories_data))
-        results["stories"] = len(stories_data)
+        # Time windows to pre-compute for time-sensitive endpoints
+        time_windows = ["24h", "7d", "30d", "90d"]
         
-        # Public Sentiment
-        sentiment = self.aggregator.get_public_sentiment()
-        self.cache.save("sentiment", sentiment.to_dict(), doc_count=sentiment.overview.volume)
-        results["sentiment"] = 1
+        # Stories - cache all time windows
+        for window in time_windows:
+            stories = self.aggregator.get_stories(time_window=window)
+            stories_data = [s.to_dict() for s in stories]
+            self.cache.save(f"stories_{window}", stories_data, doc_count=len(stories_data))
+            results[f"stories_{window}"] = len(stories_data)
         
-        # GOP Favorability
-        favorability = self.aggregator.get_gop_favorability()
-        self.cache.save("favorability", favorability.to_dict(), doc_count=favorability.overall.sampleSize)
-        results["favorability"] = 1
+        # Public Sentiment - cache all time windows
+        for window in time_windows:
+            sentiment = self.aggregator.get_public_sentiment(time_window=window)
+            self.cache.save(f"sentiment_{window}", sentiment.to_dict(), doc_count=sentiment.overview.volume)
+            results[f"sentiment_{window}"] = sentiment.overview.volume
         
-        # Outlet Profiles
+        # GOP Favorability - cache all time windows
+        for window in time_windows:
+            favorability = self.aggregator.get_gop_favorability(time_window=window)
+            self.cache.save(f"favorability_{window}", favorability.to_dict(), doc_count=favorability.overall.sampleSize)
+            results[f"favorability_{window}"] = favorability.overall.sampleSize
+        
+        # Outlet Profiles (not time-windowed - shows all-time data)
         profiles = self.aggregator.get_outlet_profiles()
         profiles_data = [p.to_dict() for p in profiles]
         self.cache.save("profiles", profiles_data, doc_count=len(profiles_data))
         results["profiles"] = len(profiles_data)
         
-        # Bot Activity
+        # Bot Activity (not time-windowed)
         bot_activity = self.aggregator.get_bot_activity()
-        # BotActivityData doesn't expose total scanned directly in the dataclass
         self.cache.save("bot_activity", bot_activity.to_dict(), doc_count=bot_activity.overview.totalFlaggedAccounts)
         results["bot_activity"] = 1
+        
+        # Polling Data (fetched live from RealClearPolling)
+        if self.polling_scraper:
+            try:
+                polling_data = self.polling_scraper.fetch_gop_favorability()
+                self.cache.save("polling_gop", polling_data, doc_count=1)
+                results["polling_gop"] = 1
+                logger.info(f"Polling data cached: {polling_data}")
+            except PollingDataError as e:
+                logger.error(f"Failed to fetch polling data: {e}")
+                results["polling_gop"] = 0
         
         logger.info(f"Snapshots saved: {results}")
         return results

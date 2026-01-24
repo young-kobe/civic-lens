@@ -2,7 +2,7 @@
 
 // Filter types
 export interface Filters {
-    timeRange: '24h' | '7d' | '30d' | '90d';
+    timeRange: '24h' | '7d' | '30d' | '90d' | 'all';
     sourceType: 'all' | 'news' | 'reddit' | 'social';
     geography: string;
 }
@@ -53,12 +53,30 @@ export interface Article {
 }
 
 // Sentiment types
+export interface SocialVsNewsSentiment {
+    social: {
+        positive: number;
+        negative: number;
+        neutral: number;
+        netScore: number;
+        volume: number;
+    };
+    news: {
+        positive: number;
+        negative: number;
+        neutral: number;
+        netScore: number;
+        volume: number;
+    };
+}
+
 export interface PublicSentimentData {
     overview: SentimentOverview;
     byTopic: SentimentBreakdown[];
     byPlatform: SentimentBreakdown[];
     byTimeWindow: SentimentBreakdown[];
     distribution: SentimentDistribution;
+    socialVsNews?: SocialVsNewsSentiment | null;
 }
 
 export interface SentimentOverview {

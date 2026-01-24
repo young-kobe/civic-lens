@@ -35,6 +35,10 @@ class Settings(BaseSettings):
     ollama_model: str = "llama3.2:3b"
     ollama_timeout: int = 120  # seconds (local inference is slower)
     
+    # Polling Data Config
+    polling_enabled: bool = True  # Feature flag for live polling
+    polling_cache_ttl: int = 3600  # Cache TTL in seconds (1 hour)
+    
     model_config = SettingsConfigDict(
         env_prefix="CIVIC_",
         env_file=".env",

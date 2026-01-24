@@ -133,16 +133,39 @@ class PlatformSentiment:
 
 
 @dataclass
+class TopicSentiment:
+    """Topic-level sentiment breakdown."""
+    topic: str
+    positive: int
+    negative: int
+    neutral: int
+    volume: int
+
+
+@dataclass
+class TimeWindowSentiment:
+    """Time window sentiment breakdown."""
+    window: str
+    positive: int
+    negative: int
+    neutral: int
+    volume: int
+
+
+@dataclass
 class PublicSentimentResult:
-    """Complete public sentiment response."""
+    """Complete public sentiment response with social vs news comparison."""
     overview: SentimentOverview
     distribution: SentimentDistribution
     byPlatform: List[PlatformSentiment]
     disclaimer: str
     excluded_bot_content: int
+    byTopic: List[TopicSentiment] = field(default_factory=list)
+    byTimeWindow: List[TimeWindowSentiment] = field(default_factory=list)
+    socialVsNews: Optional[Dict[str, Any]] = None  # Social vs News comparison
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        result = {
             "overview": {
                 "netScore": self.overview.netScore,
                 "volume": self.overview.volume,
@@ -160,9 +183,20 @@ class PublicSentimentResult:
                 {"platform": p.platform, "positive": p.positive, "negative": p.negative, "neutral": p.neutral, "volume": p.volume}
                 for p in self.byPlatform
             ],
+            "byTopic": [
+                {"topic": t.topic, "positive": t.positive, "negative": t.negative, "neutral": t.neutral, "volume": t.volume}
+                for t in self.byTopic
+            ],
+            "byTimeWindow": [
+                {"window": w.window, "positive": w.positive, "negative": w.negative, "neutral": w.neutral, "volume": w.volume}
+                for w in self.byTimeWindow
+            ],
             "disclaimer": self.disclaimer,
             "excluded_bot_content": self.excluded_bot_content,
         }
+        if self.socialVsNews:
+            result["socialVsNews"] = self.socialVsNews
+        return result
 
 
 # =============================================================================
@@ -200,9 +234,16 @@ class PlatformFavorability:
 
 @dataclass
 class PollingSocialComparison:
-    """Comparison between polling and social data."""
-    polling: Dict[str, float]
-    social: Dict[str, float]
+    """
+    Comparison between polling and online sentiment data.
+    
+    Designed for side-by-side horizontal bar graph display in UI.
+    Each dataset is independent - no precomputed comparison metric.
+    """
+    # Online sentiment from our analysis
+    onlineSentiment: Dict[str, float]
+    # External polling reference data
+    pollingData: Dict[str, Any]  # Includes source, date, favorable/unfavorable/neutral
 
 
 @dataclass
@@ -233,8 +274,8 @@ class GOPFavorabilityResult:
                 for p in self.byPlatform
             ],
             "pollingVsSocial": {
-                "polling": self.pollingVsSocial.polling,
-                "social": self.pollingVsSocial.social,
+                "onlineSentiment": self.pollingVsSocial.onlineSentiment,
+                "pollingData": self.pollingVsSocial.pollingData,
             },
         }
 
