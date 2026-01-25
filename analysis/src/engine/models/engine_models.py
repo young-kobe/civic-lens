@@ -77,7 +77,6 @@ class FavorabilityResult:
     gop_entities_found: List[str]
     reasoning: Optional[str] = None
     deterministic_signals: Optional[Dict[str, Any]] = None
-    
     def to_dict(self) -> Dict[str, Any]:
         result = asdict(self)
         result["entity_stances"] = [asdict(es) for es in self.entity_stances]

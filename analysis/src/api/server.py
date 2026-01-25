@@ -20,6 +20,7 @@ from analysis.src.engine.sentiment import HybridSentimentAnalyzer
 from analysis.src.engine.favorability import FavorabilityAnalyzer
 from analysis.src.engine.clustering import ContentClusterer
 from analysis.src.reporting.aggregators import Aggregator
+from analysis.src.reporting.aggregators.geo import GeoAggregator
 
 app = FastAPI(title="Civic Lens API")
 settings = get_settings()
@@ -196,6 +197,19 @@ def get_bot_activity():
         aggregator.get_bot_activity,
         lambda b: b.to_dict()
     )
+
+
+@app.get("/api/geo-sentiment")
+def get_geo_sentiment(window: str = "7d"):
+    """
+    Returns X posts aggregated by country with sentiment scores.
+    
+    Uses explicit country_code from X API geo-tags (no heuristics).
+    Query param: ?window=24h|7d|30d|90d
+    """
+    geo_agg = GeoAggregator(settings.db_path)
+    return geo_agg.get_country_sentiment(time_window=window)
+
 
 
 # =============================================================================

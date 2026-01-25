@@ -30,6 +30,21 @@ reddit:
     - Liberal
     - moderatepolitics
 
+x:
+  # Get Bearer Token from https://developer.twitter.com/
+  # Set via environment variable X_BEARER_TOKEN or here
+  bearer_token: ""
+  user_agent: "CivicLens/1.0"
+  # Budget control: ~70 requests/hour = ~$50/month at $0.015/100 tweets
+  max_requests_hour: 70
+  max_tweets_per_query: 100
+  political_queries:
+    - "GOP OR Republican"
+    - "Trump OR MAGA"
+    - "Biden OR Democrat"
+    - "Congress OR Senate"
+    - "election 2024"
+
 seeds:
   # Major news RSS feeds
   - url: https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml

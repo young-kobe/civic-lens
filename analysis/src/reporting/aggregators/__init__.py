@@ -9,6 +9,7 @@ from analysis.src.reporting.aggregators.story import StoryAggregator
 from analysis.src.reporting.aggregators.sentiment import SentimentAggregator
 from analysis.src.reporting.aggregators.favorability import FavorabilityAggregator
 from analysis.src.reporting.aggregators.bot import BotAggregator
+from analysis.src.reporting.aggregators.geo import GeoAggregator
 
 __all__ = [
     "OutletAggregator",
@@ -16,6 +17,7 @@ __all__ = [
     "SentimentAggregator",
     "FavorabilityAggregator",
     "BotAggregator",
+    "GeoAggregator",
 ]
 
 

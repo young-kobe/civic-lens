@@ -10,3 +10,5 @@ trigger: always_on
 6. If data is insufficient, the system must explicitly say so.
 7. All outputs must be reproducible given the same inputs, model versions, and prompts.
 8. Never use emojis in codebase
+9. Maintain clear layer boundaries: ingest (Go) -> analysis (Python) -> api (FastAPI) -> ui (React)
+10. Follow DRY and SOLID principles (see code-style.md for details)

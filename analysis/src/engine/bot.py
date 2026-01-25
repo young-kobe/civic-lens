@@ -9,6 +9,7 @@ Bot-flagged content is excluded from sentiment/favorability aggregations.
 """
 
 from typing import Any, Dict, List, Optional, Tuple
+import time
 from analysis.src.common.logger import get_logger
 from analysis.src.engine.models import BotResult
 from analysis.src.engine.prompts import BOT_SYSTEM_PROMPT, BOT_USER_PROMPT_TEMPLATE
@@ -79,6 +80,11 @@ class HybridBotDetector:
                 "account_age_days": None,
                 "posting_frequency": None,
                 "aggregated_score": 0.0,
+                # X-specific
+                "x_new_account_flag": False,
+                "x_low_followers_flag": False,
+                "x_foreign_origin_flag": False,
+                "x_origin_confidence": None,
             }
         
         metadata = metadata or {}
@@ -106,6 +112,30 @@ class HybridBotDetector:
         account_age = metadata.get("account_age_days")
         posting_freq = metadata.get("posts_per_day")
         
+        # 6. X-specific signals
+        x_new_account_flag = False
+        x_low_followers_flag = False
+        x_foreign_origin_flag = False
+        x_origin_confidence = None
+        
+        if metadata.get("platform") == "x":
+            # Account age from user_created_at
+            user_created = metadata.get("user_created_at")
+            if user_created:
+                import time
+                account_age_days = (time.time() - user_created) / 86400
+                account_age = account_age_days
+                x_new_account_flag = account_age_days < 90
+            
+            # Low followers check
+            followers = metadata.get("user_followers", 0)
+            x_low_followers_flag = (followers or 0) < 50
+            
+            # Foreign origin - simple check using explicit country_code from API
+            country_code = metadata.get("place_country_code")
+            if country_code:
+                x_foreign_origin_flag = country_code.upper() != "US"
+        
         # Compute aggregated score
         score = 0.0
         
@@ -131,6 +161,14 @@ class HybridBotDetector:
         if posting_freq is not None and posting_freq > 50:
             score += 0.2  # Unusually high posting rate
         
+        # X-specific signals
+        if x_new_account_flag:
+            score += 0.1
+        if x_low_followers_flag:
+            score += 0.05
+        if x_foreign_origin_flag and x_origin_confidence in ("high", "medium"):
+            score += 0.15  # Foreign account posting US political content
+        
         return {
             "spam_keyword_hits": spam_hits,
             "spam_keywords_found": spam_found,
@@ -142,6 +180,11 @@ class HybridBotDetector:
             "account_age_days": account_age,
             "posting_frequency": posting_freq,
             "aggregated_score": min(score, 1.0),
+            # X-specific
+            "x_new_account_flag": x_new_account_flag,
+            "x_low_followers_flag": x_low_followers_flag,
+            "x_foreign_origin_flag": x_foreign_origin_flag,
+            "x_origin_confidence": x_origin_confidence,
         }
     
     def _heuristic_classify(self, signals: Dict[str, Any]) -> BotResult:
@@ -164,10 +207,20 @@ class HybridBotDetector:
             indicators.append(f"Excessive hashtags ({signals['hashtag_count']})")
         
         if signals.get("account_age_days") is not None and signals["account_age_days"] < 7:
-            indicators.append(f"New account ({signals['account_age_days']} days)")
+            indicators.append(f"New account ({signals['account_age_days']:.0f} days)")
         
         if signals.get("posting_frequency") is not None and signals["posting_frequency"] > 50:
             indicators.append(f"High posting rate ({signals['posting_frequency']}/day)")
+        
+        # X-specific indicators
+        if signals.get("x_new_account_flag"):
+            indicators.append("X account created within 90 days")
+        
+        if signals.get("x_low_followers_flag"):
+            indicators.append("X account has fewer than 50 followers")
+        
+        if signals.get("x_foreign_origin_flag"):
+            indicators.append("Non-US origin (explicit geo-tag)")
         
         # Determine label
         if score >= 0.7:

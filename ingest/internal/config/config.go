@@ -12,6 +12,7 @@ type Config struct {
 	Database DatabaseConfig `yaml:"database"`
 	Crawl    CrawlConfig    `yaml:"crawl"`
 	Reddit   RedditConfig   `yaml:"reddit"`
+	X        XConfig        `yaml:"x"`
 	Seeds    []SeedConfig   `yaml:"seeds"`
 }
 
@@ -39,6 +40,15 @@ type RedditConfig struct {
 	ClientSecret string   `yaml:"client_secret"`
 	UserAgent    string   `yaml:"user_agent"`
 	Subreddits   []string `yaml:"subreddits"`
+}
+
+// XConfig holds X (Twitter) API settings.
+type XConfig struct {
+	BearerToken       string   `yaml:"bearer_token"`
+	UserAgent         string   `yaml:"user_agent"`
+	MaxRequestsHour   int      `yaml:"max_requests_hour"`
+	PoliticalQueries  []string `yaml:"political_queries"`
+	MaxTweetsPerQuery int      `yaml:"max_tweets_per_query"`
 }
 
 // SeedConfig holds a seed URL or feed.

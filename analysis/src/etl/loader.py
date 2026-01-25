@@ -197,6 +197,58 @@ class ContentLoader:
                 VALUES (?, ?, ?, ?, ?, ?, ?)
             """, ("reddit_post", fullname, subreddit, created_utc, title, text, raw_hash))
             new_docs += 1
+        
+        # 3. Load X Posts
+        cursor.execute("""
+            SELECT p.tweet_id, p.author_id, p.created_at, p.text, p.lang,
+                   p.place_country_code, p.raw_hash,
+                   u.location, u.created_at as user_created_at,
+                   u.followers_count, u.verified, u.verified_type
+            FROM x_posts_raw p
+            LEFT JOIN x_users_raw u ON p.author_id = u.user_id
+        """)
+        x_posts = cursor.fetchall()
+        for row in x_posts:
+            (tweet_id, author_id, created_at, text, lang, 
+             place_country_code, raw_hash,
+             user_location, user_created_at, 
+             followers_count, verified, verified_type) = row
+            
+            if not tweet_id:
+                continue
+            
+            cursor.execute("SELECT doc_id FROM docs WHERE ident = ?", (tweet_id,))
+            if cursor.fetchone():
+                continue
+            
+            # Filter: 30-day recency check
+            if not is_recent(created_at):
+                skipped_old += 1
+                continue
+            
+            # Filter: US political content only
+            if not is_us_political_content(text, ""):
+                skipped_nonpolitical += 1
+                continue
+            
+            # Build metadata for bot/origin detection
+            metadata = {
+                "platform": "x",
+                "lang": lang,
+                "author_id": author_id,
+                "place_country_code": place_country_code,
+                "user_location": user_location,
+                "user_created_at": user_created_at,
+                "user_followers": followers_count,
+                "user_verified": bool(verified),
+                "user_verified_type": verified_type,
+            }
+            
+            cursor.execute("""
+                INSERT INTO docs (source_type, ident, domain_or_subreddit, published_at, text, raw_hash, metadata_json)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, ("x_post", tweet_id, "x.com", created_at, text, raw_hash, json.dumps(metadata)))
+            new_docs += 1
             
         conn.commit()
         logger.info(f"ETL Loaded {new_docs} new documents. Skipped: {skipped_old} old, {skipped_nonpolitical} non-political.")

@@ -6,9 +6,6 @@ import type { Filters, PublicSentimentData, SentimentOverview, SentimentBreakdow
 import { fetchSentiment } from '../services/api';
 import { transformPublicSentiment } from '../services/transformers';
 
-// ... (keep existing imports and components)
-
-// Remove MOCK_SENTIMENT_DATA
 
 interface SentimentOverviewHeaderProps {
     data: SentimentOverview;

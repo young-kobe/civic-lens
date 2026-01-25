@@ -43,3 +43,29 @@ export async function fetchBotActivity(): Promise<BotData> {
     }
     return response.json();
 }
+
+export interface GeoSentimentData {
+    countries: CountryStats[];
+    total_posts: number;
+    posts_with_geo: number;
+    geo_coverage_pct: number;
+    excluded_bots: number;
+    country_count: number;
+}
+
+export interface CountryStats {
+    country_code: string;
+    country_name: string;
+    post_count: number;
+    avg_sentiment: number;
+    avg_favorability: number;
+}
+
+export async function fetchGeoSentiment(window: TimeWindow = '7d'): Promise<GeoSentimentData> {
+    const response = await fetch(`${API_BASE}/geo-sentiment?window=${window}`);
+    if (!response.ok) {
+        throw new Error(`Failed to fetch geo sentiment: ${response.statusText}`);
+    }
+    return response.json();
+}
+
