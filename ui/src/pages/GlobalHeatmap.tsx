@@ -59,83 +59,21 @@ function getMarkerSize(postCount: number, maxPosts: number): number {
     return minSize + (maxSize - minSize) * Math.sqrt(ratio);
 }
 
-// Dummy data for visual testing
-const DUMMY_DATA: GeoSentimentData = {
-    countries: [
-        { country_code: 'US', country_name: 'United States', post_count: 15420, avg_sentiment: 0.12, avg_favorability: -0.08 },
-        { country_code: 'GB', country_name: 'United Kingdom', post_count: 2340, avg_sentiment: -0.25, avg_favorability: -0.35 },
-        { country_code: 'CA', country_name: 'Canada', post_count: 1890, avg_sentiment: 0.05, avg_favorability: -0.15 },
-        { country_code: 'DE', country_name: 'Germany', post_count: 1250, avg_sentiment: -0.18, avg_favorability: -0.22 },
-        { country_code: 'AU', country_name: 'Australia', post_count: 980, avg_sentiment: 0.08, avg_favorability: 0.12 },
-        { country_code: 'IN', country_name: 'India', post_count: 870, avg_sentiment: 0.35, avg_favorability: 0.28 },
-        { country_code: 'FR', country_name: 'France', post_count: 650, avg_sentiment: -0.32, avg_favorability: -0.40 },
-        { country_code: 'RU', country_name: 'Russia', post_count: 420, avg_sentiment: -0.55, avg_favorability: 0.45 },
-        { country_code: 'BR', country_name: 'Brazil', post_count: 380, avg_sentiment: 0.22, avg_favorability: 0.35 },
-        { country_code: 'JP', country_name: 'Japan', post_count: 290, avg_sentiment: 0.02, avg_favorability: 0.05 },
-        { country_code: 'MX', country_name: 'Mexico', post_count: 520, avg_sentiment: 0.15, avg_favorability: 0.08 },
-        { country_code: 'IT', country_name: 'Italy', post_count: 340, avg_sentiment: -0.12, avg_favorability: -0.18 },
-        { country_code: 'ES', country_name: 'Spain', post_count: 280, avg_sentiment: -0.08, avg_favorability: -0.22 },
-        { country_code: 'NL', country_name: 'Netherlands', post_count: 220, avg_sentiment: 0.18, avg_favorability: -0.05 },
-        { country_code: 'PL', country_name: 'Poland', post_count: 180, avg_sentiment: 0.25, avg_favorability: 0.32 },
-    ],
-    total_posts: 24500,
-    posts_with_geo: 18200,
-    geo_coverage_pct: 74.3,
-    excluded_bots: 1250,
-    country_count: 15,
-};
-
-function StatsOverview({ data }: { data: GeoSentimentData }) {
-    return (
-        <div className="stats-row">
-            <div className="stat"><span className="stat-value">{data.country_count}</span><span className="stat-label">Countries</span></div>
-            <div className="stat"><span className="stat-value">{data.posts_with_geo.toLocaleString()}</span><span className="stat-label">Geo-Tagged Posts</span></div>
-            <div className="stat"><span className="stat-value">{data.geo_coverage_pct}%</span><span className="stat-label">Coverage</span></div>
-            <div className="stat"><span className="stat-value">{data.excluded_bots}</span><span className="stat-label">Bots Excluded</span></div>
-        </div>
-    );
-}
-
-function SentimentLegend() {
-    return (
-        <div className="legend">
-            <span className="legend-label">Sentiment:</span>
-            <div className="legend-item"><span className="dot" style={{ background: '#ef4444' }} />Negative</div>
-            <div className="legend-item"><span className="dot" style={{ background: '#f97316' }} />Slightly Negative</div>
-            <div className="legend-item"><span className="dot" style={{ background: '#eab308' }} />Neutral</div>
-            <div className="legend-item"><span className="dot" style={{ background: '#84cc16' }} />Slightly Positive</div>
-            <div className="legend-item"><span className="dot" style={{ background: '#22c55e' }} />Positive</div>
-        </div>
-    );
-}
-
-interface TooltipData {
-    country: CountryStats;
-    x: number;
-    y: number;
-}
-
 function GlobalHeatmap({ filters }: GlobalHeatmapProps) {
     const [data, setData] = useState<GeoSentimentData | null>(null);
     const [loading, setLoading] = useState(true);
-    const [useDummy, setUseDummy] = useState(false);
     const [tooltip, setTooltip] = useState<TooltipData | null>(null);
+    const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
         async function loadData() {
             try {
                 setLoading(true);
+                setError(null);
                 const result = await fetchGeoSentiment(filters.timeRange as TimeWindow);
-                if (result.countries.length === 0) {
-                    setData(DUMMY_DATA);
-                    setUseDummy(true);
-                } else {
-                    setData(result);
-                    setUseDummy(false);
-                }
-            } catch {
-                setData(DUMMY_DATA);
-                setUseDummy(true);
+                setData(result);
+            } catch (err) {
+                setError(err instanceof Error ? err.message : 'Failed to load data');
             } finally {
                 setLoading(false);
             }
@@ -145,6 +83,15 @@ function GlobalHeatmap({ filters }: GlobalHeatmapProps) {
 
     if (loading) {
         return <LoadingCard />;
+    }
+
+    if (error) {
+        return (
+            <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                <p>Failed to load heatmap data. Please enable the X integration.</p>
+                <p style={{ fontSize: '0.8em', marginTop: '8px' }}>{error}</p>
+            </div>
+        );
     }
 
     if (!data || data.countries.length === 0) {
@@ -160,11 +107,7 @@ function GlobalHeatmap({ filters }: GlobalHeatmapProps) {
 
     return (
         <div className="global-heatmap">
-            {useDummy && (
-                <div className="demo-banner">
-                    Showing demo data - connect X API for live data
-                </div>
-            )}
+
 
             <Card title="Global Sentiment Distribution">
                 <p className="description">
