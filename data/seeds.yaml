@@ -32,8 +32,7 @@ reddit:
 
 x:
   # Get Bearer Token from https://developer.twitter.com/
-  # Set via environment variable X_BEARER_TOKEN or here
-  bearer_token: ""
+  # Set via environment variable X_BEARER_TOKEN 
   user_agent: "CivicLens/1.0"
   # Budget control: ~70 requests/hour = ~$50/month at $0.015/100 tweets
   max_requests_hour: 70
@@ -44,6 +43,37 @@ x:
     - "Biden OR Democrat"
     - "Congress OR Senate"
     - "election 2024"
+    - "Immigration"
+    - "ICE"
+    - "Border"
+    - "Immigrant"
+    - "Citizen"
+    - "Citizenship"
+    - "Immigration Reform"
+    - "Immigration Law"
+    - "Minnesota"
+    - "Minneapolis"
+    - "MAGA"
+    - "Leftists"
+    # - "Violence"
+    - "2nd Amendment"
+    # - "Gun rights"
+    # - "Gun control"
+    # - "Technology"
+    # - "Silicon Valley"
+    # - "Wall Street"
+    # - "AI"
+    # - "Healthcare"
+    # - "Senator"
+    # - "Mayor"
+    # - "President"
+    # - "Judge"
+    # - "Economy"
+    - "Dollar"
+    - "Stock"
+    - "Market"
+    # - "Earnings"
+    # - "Inflation"
 
 seeds:
   # Major news RSS feeds

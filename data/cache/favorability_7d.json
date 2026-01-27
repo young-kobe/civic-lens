@@ -1,25 +1,21 @@
 {
   "_meta": {
-    "generated_at": "2026-01-24T20:06:50.314449+00:00",
-    "doc_count": 152,
+    "generated_at": "2026-01-26T21:34:14.946586+00:00",
+    "doc_count": 1055,
     "version": "1.0"
   },
   "data": {
     "overall": {
-      "favorable": 5.3,
-      "unfavorable": 9.9,
-      "neutral": 84.9,
-      "netFavorability": -4.6,
-      "sampleSize": 152,
+      "favorable": 0.2,
+      "unfavorable": 1.5,
+      "neutral": 98.3,
+      "netFavorability": -1.3,
+      "sampleSize": 1055,
       "sourceCount": 2,
-      "lastUpdated": "2026-01-24T14:06:50.314449",
+      "lastUpdated": "2026-01-26T15:34:14.946586",
       "dateRange": "All time"
     },
     "trend": [
-      {
-        "date": "2026-01-17",
-        "value": 11.9
-      },
       {
         "date": "2026-01-20",
         "value": 0.0
@@ -39,6 +35,10 @@
       {
         "date": "2026-01-24",
         "value": -38.9
+      },
+      {
+        "date": "2026-01-26",
+        "value": -0.2
       }
     ],
     "trendAnnotations": [],
@@ -50,24 +50,24 @@
         "neutral": 94
       },
       {
-        "group": "Reddit",
-        "favorable": 6,
-        "unfavorable": 1,
-        "neutral": 35
+        "group": "X_post",
+        "favorable": 0,
+        "unfavorable": 2,
+        "neutral": 943
       }
     ],
     "pollingVsSocial": {
       "onlineSentiment": {
-        "favorable": 5.3,
-        "unfavorable": 9.9,
-        "neutral": 84.9
+        "favorable": 0.2,
+        "unfavorable": 1.5,
+        "neutral": 98.3
       },
       "pollingData": {
         "favorable": 50.0,
         "unfavorable": 50.0,
         "neutral": 0.0,
         "source": "RealClearPolling (Live)",
-        "date": "2026-01-24"
+        "date": "2026-01-26"
       }
     }
   }

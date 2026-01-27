@@ -21,15 +21,15 @@ type XResult struct {
 func RunX(ctx context.Context, a *app.App) (*XResult, error) {
 	cfg := a.Config
 
-	if cfg.X.BearerToken == "" {
-		return nil, fmt.Errorf("X bearer token not configured (set x.bearer_token in seeds.yaml or X_BEARER_TOKEN env var)")
-	}
-
 	client := x.NewFromEnv(x.Config{
 		BearerToken:     cfg.X.BearerToken,
 		UserAgent:       cfg.X.UserAgent,
 		MaxRequestsHour: cfg.X.MaxRequestsHour,
 	})
+
+	if client.BearerToken() == "" {
+		return nil, fmt.Errorf("X bearer token not configured (set x.bearer_token in seeds.yaml or X_BEARER_TOKEN env var)")
+	}
 
 	now := time.Now().Unix()
 	var queriesProcessed, postsIngested, usersIngested int
@@ -46,7 +46,7 @@ func RunX(ctx context.Context, a *app.App) (*XResult, error) {
 		// Store raw JSON
 		hash, _ := a.RawStore.Store(ctx, rawJSON, ".json")
 
-		posts, users := resp.ToModels()
+		posts, users := x.ToModels(resp)
 		fmt.Printf("  Got %d posts, %d users (raw: %s)\n", len(posts), len(users), hash[:8])
 
 		// Insert posts

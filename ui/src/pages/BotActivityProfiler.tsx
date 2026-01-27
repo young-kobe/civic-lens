@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Card, MetricCard, ConfidenceBadge, MethodPopover, LoadingCard, EmptyState, ErrorState } from '../components/common';
-import { Heatmap, SentimentBar } from '../components/charts';
+import { Card, MetricCard, MethodPopover, LoadingCard, EmptyState, ErrorState } from '../components/common';
+import { Heatmap } from '../components/charts';
 import { fetchBotActivity } from '../services/api';
 import type { Filters, BotData, BotOverview, NarrativeAmplification, CoordinationStats, BehavioralSignals, ConfidenceLevel } from '../types';
 

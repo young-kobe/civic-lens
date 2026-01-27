@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Card, MetricCard, ConfidenceBadge, MethodPopover, LoadingCard, EmptyState, ErrorState } from '../components/common';
+import { Card, ConfidenceBadge, MethodPopover, LoadingCard, EmptyState, ErrorState } from '../components/common';
 import { SentimentBar } from '../components/charts';
-import type { Filters, PublicSentimentData, SentimentOverview, SentimentBreakdown, SentimentDistribution, SocialVsNewsSentiment, CoverageLevel, ConfidenceLevel } from '../types';
+import type { Filters, PublicSentimentData, SentimentOverview, SentimentBreakdown, SentimentDistribution, SocialVsNewsSentiment } from '../types';
 
 import { fetchSentiment } from '../services/api';
 import { transformPublicSentiment } from '../services/transformers';

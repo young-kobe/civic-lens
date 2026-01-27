@@ -43,6 +43,12 @@ interface GlobalHeatmapProps {
     filters: Filters;
 }
 
+interface TooltipData {
+    country: CountryStats;
+    x: number;
+    y: number;
+}
+
 function getSentimentColor(sentiment: number): string {
     // Red (negative) -> Orange (slightly negative) -> Yellow (neutral) -> Green (positive)
     if (sentiment >= 0.3) return '#22c55e';  // Green
@@ -57,6 +63,49 @@ function getMarkerSize(postCount: number, maxPosts: number): number {
     const maxSize = 30;
     const ratio = postCount / maxPosts;
     return minSize + (maxSize - minSize) * Math.sqrt(ratio);
+}
+
+function StatsOverview({ data }: { data: GeoSentimentData }) {
+    return (
+        <div className="stats-row">
+            <div className="stat">
+                <span className="stat-value">{data.total_posts.toLocaleString()}</span>
+                <span className="stat-label">Total Posts</span>
+            </div>
+            <div className="stat">
+                <span className="stat-value">{data.posts_with_geo.toLocaleString()}</span>
+                <span className="stat-label">Mapped</span>
+            </div>
+            <div className="stat">
+                <span className="stat-value">{data.geo_coverage_pct.toFixed(1)}%</span>
+                <span className="stat-label">Coverage</span>
+            </div>
+            <div className="stat">
+                <span className="stat-value">{data.country_count}</span>
+                <span className="stat-label">Countries</span>
+            </div>
+        </div>
+    );
+}
+
+function SentimentLegend() {
+    return (
+        <div className="legend">
+            <span className="legend-label">Sentiment:</span>
+            <div className="legend-item">
+                <span className="dot" style={{ backgroundColor: '#22c55e' }}></span>
+                <span>Positive</span>
+            </div>
+            <div className="legend-item">
+                <span className="dot" style={{ backgroundColor: '#eab308' }}></span>
+                <span>Neutral</span>
+            </div>
+            <div className="legend-item">
+                <span className="dot" style={{ backgroundColor: '#ef4444' }}></span>
+                <span>Negative</span>
+            </div>
+        </div>
+    );
 }
 
 function GlobalHeatmap({ filters }: GlobalHeatmapProps) {

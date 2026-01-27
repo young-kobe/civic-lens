@@ -1,22 +1,22 @@
 {
   "_meta": {
-    "generated_at": "2026-01-24T20:06:50.276039+00:00",
-    "doc_count": 771,
+    "generated_at": "2026-01-26T21:34:14.883209+00:00",
+    "doc_count": 1716,
     "version": "1.0"
   },
   "data": {
     "overview": {
-      "netScore": 6.2,
-      "volume": 771,
+      "netScore": 22.0,
+      "volume": 1716,
       "coverage": "medium",
       "confidence": "medium"
     },
     "distribution": {
-      "strongPositive": 190,
+      "strongPositive": 827,
       "mildPositive": 0,
       "neutral": 429,
       "mildNegative": 0,
-      "strongNegative": 142
+      "strongNegative": 450
     },
     "byPlatform": [
       {
@@ -32,15 +32,22 @@
         "negative": 92,
         "neutral": 14,
         "volume": 132
+      },
+      {
+        "platform": "Other",
+        "positive": 637,
+        "negative": 308,
+        "neutral": 0,
+        "volume": 945
       }
     ],
     "byTopic": [
       {
         "topic": "General",
-        "positive": 157,
-        "negative": 94,
+        "positive": 794,
+        "negative": 402,
         "neutral": 362,
-        "volume": 621
+        "volume": 1566
       },
       {
         "topic": "Foreign Policy",
@@ -109,31 +116,31 @@
     "byTimeWindow": [
       {
         "window": "24 hours",
-        "positive": 31,
-        "negative": 3,
-        "neutral": 13,
-        "volume": 48
+        "positive": 637,
+        "negative": 308,
+        "neutral": 0,
+        "volume": 945
       },
       {
         "window": "7 days",
-        "positive": 2,
-        "negative": 39,
-        "neutral": 46,
-        "volume": 87
+        "positive": 31,
+        "negative": 3,
+        "neutral": 58,
+        "volume": 93
       },
       {
         "window": "30 days",
-        "positive": 125,
-        "negative": 93,
-        "neutral": 302,
-        "volume": 526
+        "positive": 127,
+        "negative": 132,
+        "neutral": 301,
+        "volume": 566
       },
       {
         "window": "90+ days",
         "positive": 32,
         "negative": 7,
-        "neutral": 70,
-        "volume": 110
+        "neutral": 72,
+        "volume": 112
       }
     ],
     "disclaimer": "Represents sampled platform discourse, not verified population sentiment",

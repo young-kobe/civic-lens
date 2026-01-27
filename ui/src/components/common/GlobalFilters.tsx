@@ -1,4 +1,4 @@
-import React from 'react';
+
 import type { Filters } from '../../types';
 
 interface TimeRange {

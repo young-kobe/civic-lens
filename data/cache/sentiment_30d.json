@@ -1,30 +1,30 @@
 {
   "_meta": {
-    "generated_at": "2026-01-24T20:06:50.246709+00:00",
-    "doc_count": 661,
+    "generated_at": "2026-01-26T21:34:14.841310+00:00",
+    "doc_count": 1604,
     "version": "1.0"
   },
   "data": {
     "overview": {
-      "netScore": 3.5,
-      "volume": 661,
+      "netScore": 22.0,
+      "volume": 1604,
       "coverage": "medium",
       "confidence": "medium"
     },
     "distribution": {
-      "strongPositive": 158,
+      "strongPositive": 795,
       "mildPositive": 0,
-      "neutral": 359,
+      "neutral": 357,
       "mildNegative": 0,
-      "strongNegative": 135
+      "strongNegative": 443
     },
     "byPlatform": [
       {
         "platform": "News Outlets",
         "positive": 132,
         "negative": 43,
-        "neutral": 347,
-        "volume": 529
+        "neutral": 345,
+        "volume": 527
       },
       {
         "platform": "Social Media",
@@ -32,15 +32,22 @@
         "negative": 92,
         "neutral": 14,
         "volume": 132
+      },
+      {
+        "platform": "Other",
+        "positive": 637,
+        "negative": 308,
+        "neutral": 0,
+        "volume": 945
       }
     ],
     "byTopic": [
       {
         "topic": "General",
-        "positive": 127,
-        "negative": 89,
-        "neutral": 300,
-        "volume": 523
+        "positive": 764,
+        "negative": 397,
+        "neutral": 298,
+        "volume": 1466
       },
       {
         "topic": "Foreign Policy",
@@ -109,24 +116,24 @@
     "byTimeWindow": [
       {
         "window": "24 hours",
-        "positive": 31,
-        "negative": 3,
-        "neutral": 13,
-        "volume": 48
+        "positive": 637,
+        "negative": 308,
+        "neutral": 0,
+        "volume": 945
       },
       {
         "window": "7 days",
-        "positive": 2,
-        "negative": 39,
-        "neutral": 46,
-        "volume": 87
+        "positive": 31,
+        "negative": 3,
+        "neutral": 58,
+        "volume": 93
       },
       {
         "window": "30 days",
-        "positive": 125,
-        "negative": 93,
-        "neutral": 302,
-        "volume": 526
+        "positive": 127,
+        "negative": 132,
+        "neutral": 301,
+        "volume": 566
       }
     ],
     "disclaimer": "Represents sampled platform discourse, not verified population sentiment",
@@ -142,9 +149,9 @@
       "news": {
         "positive": 132,
         "negative": 43,
-        "neutral": 347,
-        "netScore": 16.8,
-        "volume": 529
+        "neutral": 345,
+        "netScore": 16.9,
+        "volume": 527
       }
     }
   }

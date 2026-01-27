@@ -1,7 +1,7 @@
 {
   "_meta": {
-    "generated_at": "2026-01-24T20:06:50.392368+00:00",
-    "doc_count": 17,
+    "generated_at": "2026-01-26T21:34:15.082313+00:00",
+    "doc_count": 18,
     "version": "1.0"
   },
   "data": [
@@ -123,6 +123,13 @@
       "bot_rate": 0.0,
       "volume": 24,
       "total_scanned": 24
+    },
+    {
+      "outlet": "x.com",
+      "avg_sentiment": 0.348,
+      "bot_rate": 0.0,
+      "volume": 945,
+      "total_scanned": 945
     }
   ]
 }

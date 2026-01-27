@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Card, MetricCard, ConfidenceBadge, MethodPopover, LoadingCard, EmptyState, ErrorState } from '../components/common';
+import { Card, ConfidenceBadge, MethodPopover, LoadingCard, EmptyState, ErrorState } from '../components/common';
 import { Sparkline, StackedBar } from '../components/charts';
-import type { Filters, Cluster, SourceMixItem, TimelinePoint, Article } from '../types';
+import type { Filters, Cluster } from '../types';
 
 // Mock data for demonstration
 

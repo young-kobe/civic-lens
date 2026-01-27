@@ -44,24 +44,37 @@ func (d *DB) Migrate(ctx context.Context) error {
 	dbDir := filepath.Dir(d.dbPath)
 	migrationsDir := filepath.Join(dbDir, "migrations")
 
-	// Read migration file
-	migrationPath := filepath.Join(migrationsDir, "001_initial.sql")
-	migrationSQL, err := os.ReadFile(migrationPath)
-	if err != nil {
-		return fmt.Errorf("read migration file %s: %w", migrationPath, err)
-	}
-
 	// Check current version
-	var version int
+	var currentVersion int
 	row := d.conn.QueryRowContext(ctx, "SELECT COALESCE(MAX(version), 0) FROM schema_version")
-	if err := row.Scan(&version); err != nil {
-		// Table might not exist yet, run migration
-		version = 0
+	if err := row.Scan(&currentVersion); err != nil {
+		// Table might not exist yet, assume version 0
+		currentVersion = 0
 	}
 
-	if version < 1 {
-		if _, err := d.conn.ExecContext(ctx, string(migrationSQL)); err != nil {
-			return fmt.Errorf("apply migration 001: %w", err)
+	// Definition of ordered migrations
+	migrations := []struct {
+		Version  int
+		Filename string
+	}{
+		{1, "001_initial.sql"},
+		{2, "002_x_tables.sql"},
+		{3, "003_allow_x_post_source.sql"},
+	}
+
+	for _, m := range migrations {
+		if currentVersion < m.Version {
+			fmt.Printf("Applying migration %d: %s\n", m.Version, m.Filename)
+
+			migrationPath := filepath.Join(migrationsDir, m.Filename)
+			migrationSQL, err := os.ReadFile(migrationPath)
+			if err != nil {
+				return fmt.Errorf("read migration file %s: %w", migrationPath, err)
+			}
+
+			if _, err := d.conn.ExecContext(ctx, string(migrationSQL)); err != nil {
+				return fmt.Errorf("apply migration %s: %w", m.Filename, err)
+			}
 		}
 	}
 

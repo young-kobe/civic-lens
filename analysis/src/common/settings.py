@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     
     # Ollama Config (for local LLM on Orin Nano or other local inference)
     ollama_host: str = "http://localhost:11434"
-    ollama_model: str = "llama3.2:3b"
+    ollama_model: str = "qwen2.5:0.5b"
     ollama_timeout: int = 120  # seconds (local inference is slower)
     
     # Polling Data Config

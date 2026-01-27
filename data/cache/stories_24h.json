@@ -1,25 +1,25 @@
 {
   "_meta": {
-    "generated_at": "2026-01-24T20:06:49.979704+00:00",
+    "generated_at": "2026-01-26T21:34:14.358364+00:00",
     "doc_count": 20,
     "version": "1.0"
   },
   "data": [
     {
-      "id": 2895,
-      "title": "Trump administration's defense strategy tells allies to handle their own security : NPR",
-      "articleCount": 3,
+      "id": 4870,
+      "title": "Unnamed Cluster",
+      "articleCount": 30,
       "momentum": {
         "delta24h": 100.0,
         "delta7d": 0.0
       },
       "primarySources": [
-        "news"
+        "x_post"
       ],
       "summary": [
-        "Pentagon to offer 'more limited' support to US allies",
-        "Pentagon to shift North Korea deterrence responsibility primarily to South Korea | Fox News",
-        "Trump administration's defense strategy tells allies to handle their own security : NPR"
+        "Untitled",
+        "Untitled",
+        "Untitled"
       ],
       "keyClaims": [],
       "entities": {
@@ -29,59 +29,56 @@
       },
       "sourceMix": [
         {
-          "name": "News",
-          "value": 3,
+          "name": "X Post",
+          "value": 30,
           "type": "other"
         }
       ],
       "timeline": [
         {
-          "date": "Fri",
-          "value": 2
-        },
-        {
-          "date": "Sat",
-          "value": 1
+          "date": "Mon",
+          "value": 30
         }
       ],
       "articles": [
         {
-          "id": 1932,
-          "title": "Pentagon to offer 'more limited' support to US allies",
-          "source": "https://www.bbc.com/news/articles/cj9r8ezym3ro",
+          "id": 3232,
+          "title": "Untitled",
+          "source": "2015869546561704231",
           "snippet": "",
           "reason": "Recent coverage"
         },
         {
-          "id": 1897,
-          "title": "Pentagon to shift North Korea deterrence responsibility primarily to South Korea | Fox News",
-          "source": "https://www.foxnews.com/politics/pentagon-plans-give-south-korea-primary-role-deterring-north-korea-threats-new-strategy",
+          "id": 3246,
+          "title": "Untitled",
+          "source": "2015869542451577077",
           "snippet": "",
           "reason": "Recent coverage"
         },
         {
-          "id": 1898,
-          "title": "Trump administration's defense strategy tells allies to handle their own security : NPR",
-          "source": "https://www.npr.org/2026/01/24/nx-s1-5687168/trump-administration-defense-strategy",
+          "id": 3118,
+          "title": "Untitled",
+          "source": "2015869340059386050",
           "snippet": "",
           "reason": "Recent coverage"
         }
       ]
     },
     {
-      "id": 1790,
-      "title": "'Insulting': Starmer reacts to Trump's comments on Nato troops in Afghanistan",
-      "articleCount": 2,
+      "id": 4345,
+      "title": "Unnamed Cluster",
+      "articleCount": 27,
       "momentum": {
         "delta24h": 100.0,
         "delta7d": 0.0
       },
       "primarySources": [
-        "news"
+        "x_post"
       ],
       "summary": [
-        "Prince Harry says sacrifices by Nato troops in Afghanistan deserve 'respect'",
-        "'Insulting': Starmer reacts to Trump's comments on Nato troops in Afghanistan"
+        "Untitled",
+        "Untitled",
+        "Untitled"
       ],
       "keyClaims": [],
       "entities": {
@@ -91,99 +88,56 @@
       },
       "sourceMix": [
         {
-          "name": "News",
-          "value": 2,
+          "name": "X Post",
+          "value": 27,
           "type": "other"
         }
       ],
       "timeline": [
         {
-          "date": "Fri",
-          "value": 2
+          "date": "Mon",
+          "value": 27
         }
       ],
       "articles": [
         {
-          "id": 1862,
-          "title": "Prince Harry says sacrifices by Nato troops in Afghanistan deserve 'respect'",
-          "source": "https://www.bbc.com/news/articles/clym2l7d75eo",
+          "id": 2423,
+          "title": "Untitled",
+          "source": "2015866751594938795",
           "snippet": "",
           "reason": "Recent coverage"
         },
         {
-          "id": 1870,
-          "title": "'Insulting': Starmer reacts to Trump's comments on Nato troops in Afghanistan",
-          "source": "https://www.bbc.com/news/videos/c5y3jvrz3zko",
-          "snippet": "",
-          "reason": "Recent coverage"
-        }
-      ]
-    },
-    {
-      "id": 2323,
-      "title": "'Insulting': Starmer reacts to Trump's comments on Nato troops in Afghanistan",
-      "articleCount": 2,
-      "momentum": {
-        "delta24h": 100.0,
-        "delta7d": 0.0
-      },
-      "primarySources": [
-        "news"
-      ],
-      "summary": [
-        "Prince Harry says sacrifices by Nato troops in Afghanistan deserve 'respect'",
-        "'Insulting': Starmer reacts to Trump's comments on Nato troops in Afghanistan"
-      ],
-      "keyClaims": [],
-      "entities": {
-        "people": [],
-        "organizations": [],
-        "locations": []
-      },
-      "sourceMix": [
-        {
-          "name": "News",
-          "value": 2,
-          "type": "other"
-        }
-      ],
-      "timeline": [
-        {
-          "date": "Fri",
-          "value": 2
-        }
-      ],
-      "articles": [
-        {
-          "id": 1862,
-          "title": "Prince Harry says sacrifices by Nato troops in Afghanistan deserve 'respect'",
-          "source": "https://www.bbc.com/news/articles/clym2l7d75eo",
+          "id": 2432,
+          "title": "Untitled",
+          "source": "2015866743634190402",
           "snippet": "",
           "reason": "Recent coverage"
         },
         {
-          "id": 1870,
-          "title": "'Insulting': Starmer reacts to Trump's comments on Nato troops in Afghanistan",
-          "source": "https://www.bbc.com/news/videos/c5y3jvrz3zko",
+          "id": 2447,
+          "title": "Untitled",
+          "source": "2015866725561209230",
           "snippet": "",
           "reason": "Recent coverage"
         }
       ]
     },
     {
-      "id": 2879,
-      "title": "'Insulting': Starmer reacts to Trump's comments on Nato troops in Afghanistan",
-      "articleCount": 2,
+      "id": 4734,
+      "title": "Unnamed Cluster",
+      "articleCount": 25,
       "momentum": {
         "delta24h": 100.0,
         "delta7d": 0.0
       },
       "primarySources": [
-        "news"
+        "x_post"
       ],
       "summary": [
-        "Prince Harry says sacrifices by Nato troops in Afghanistan deserve 'respect'",
-        "'Insulting': Starmer reacts to Trump's comments on Nato troops in Afghanistan"
+        "Untitled",
+        "Untitled",
+        "Untitled"
       ],
       "keyClaims": [],
       "entities": {
@@ -193,103 +147,56 @@
       },
       "sourceMix": [
         {
-          "name": "News",
-          "value": 2,
+          "name": "X Post",
+          "value": 25,
           "type": "other"
         }
       ],
       "timeline": [
         {
-          "date": "Fri",
-          "value": 2
+          "date": "Mon",
+          "value": 25
         }
       ],
       "articles": [
         {
-          "id": 1862,
-          "title": "Prince Harry says sacrifices by Nato troops in Afghanistan deserve 'respect'",
-          "source": "https://www.bbc.com/news/articles/clym2l7d75eo",
+          "id": 3223,
+          "title": "Untitled",
+          "source": "2015869549707506057",
           "snippet": "",
           "reason": "Recent coverage"
         },
         {
-          "id": 1870,
-          "title": "'Insulting': Starmer reacts to Trump's comments on Nato troops in Afghanistan",
-          "source": "https://www.bbc.com/news/videos/c5y3jvrz3zko",
-          "snippet": "",
-          "reason": "Recent coverage"
-        }
-      ]
-    },
-    {
-      "id": 2885,
-      "title": "Ukraine war: High stakes but low expectations for Ukraine talks with Russia and US",
-      "articleCount": 2,
-      "momentum": {
-        "delta24h": 100.0,
-        "delta7d": 0.0
-      },
-      "primarySources": [
-        "news"
-      ],
-      "summary": [
-        "Two days of peace talks end as Russia continues Ukraine attacks",
-        "Ukraine war: High stakes but low expectations for Ukraine talks with Russia and US"
-      ],
-      "keyClaims": [],
-      "entities": {
-        "people": [],
-        "organizations": [],
-        "locations": []
-      },
-      "sourceMix": [
-        {
-          "name": "News",
-          "value": 2,
-          "type": "other"
-        }
-      ],
-      "timeline": [
-        {
-          "date": "Fri",
-          "value": 1
-        },
-        {
-          "date": "Sat",
-          "value": 1
-        }
-      ],
-      "articles": [
-        {
-          "id": 1914,
-          "title": "Two days of peace talks end as Russia continues Ukraine attacks",
-          "source": "https://www.bbc.com/news/articles/cwyr6p30054o",
+          "id": 2857,
+          "title": "Untitled",
+          "source": "2015868263364755483",
           "snippet": "",
           "reason": "Recent coverage"
         },
         {
-          "id": 1873,
-          "title": "Ukraine war: High stakes but low expectations for Ukraine talks with Russia and US",
-          "source": "https://www.bbc.com/news/articles/c3edde1pwx8o",
+          "id": 2866,
+          "title": "Untitled",
+          "source": "2015868259430482160",
           "snippet": "",
           "reason": "Recent coverage"
         }
       ]
     },
     {
-      "id": 2888,
-      "title": "'He should apologise': Anger of veterans and relatives at Trump Nato remarks",
-      "articleCount": 2,
+      "id": 3513,
+      "title": "Unnamed Cluster",
+      "articleCount": 17,
       "momentum": {
         "delta24h": 100.0,
         "delta7d": 0.0
       },
       "primarySources": [
-        "news"
+        "x_post"
       ],
       "summary": [
-        "Trump says UK soldiers in Afghanistan 'among greatest of all warriors'",
-        "'He should apologise': Anger of veterans and relatives at Trump Nato remarks"
+        "Untitled",
+        "Untitled",
+        "Untitled"
       ],
       "keyClaims": [],
       "entities": {
@@ -299,107 +206,56 @@
       },
       "sourceMix": [
         {
-          "name": "News",
-          "value": 2,
+          "name": "X Post",
+          "value": 17,
           "type": "other"
         }
       ],
       "timeline": [
         {
-          "date": "Fri",
-          "value": 1
-        },
-        {
-          "date": "Sat",
-          "value": 1
+          "date": "Mon",
+          "value": 17
         }
       ],
       "articles": [
         {
-          "id": 1911,
-          "title": "Trump says UK soldiers in Afghanistan 'among greatest of all warriors'",
-          "source": "https://www.bbc.com/news/articles/c3edwx37pd9o",
+          "id": 1987,
+          "title": "Untitled",
+          "source": "2015830194292953232",
           "snippet": "",
           "reason": "Recent coverage"
         },
         {
-          "id": 1863,
-          "title": "'He should apologise': Anger of veterans and relatives at Trump Nato remarks",
-          "source": "https://www.bbc.com/news/articles/c20gzjnv9l5o",
-          "snippet": "",
-          "reason": "Recent coverage"
-        }
-      ]
-    },
-    {
-      "id": 2893,
-      "title": "China's top general under investigation in latest military purge : NPR",
-      "articleCount": 2,
-      "momentum": {
-        "delta24h": 100.0,
-        "delta7d": 0.0
-      },
-      "primarySources": [
-        "news"
-      ],
-      "summary": [
-        "China places highest-ranking general under investigation",
-        "China's top general under investigation in latest military purge : NPR"
-      ],
-      "keyClaims": [],
-      "entities": {
-        "people": [],
-        "organizations": [],
-        "locations": []
-      },
-      "sourceMix": [
-        {
-          "name": "News",
-          "value": 2,
-          "type": "other"
-        }
-      ],
-      "timeline": [
-        {
-          "date": "Fri",
-          "value": 1
-        },
-        {
-          "date": "Sat",
-          "value": 1
-        }
-      ],
-      "articles": [
-        {
-          "id": 1922,
-          "title": "China places highest-ranking general under investigation",
-          "source": "https://www.bbc.com/news/articles/c701kr5zqdqo",
+          "id": 1990,
+          "title": "Untitled",
+          "source": "2015830191608893886",
           "snippet": "",
           "reason": "Recent coverage"
         },
         {
-          "id": 1892,
-          "title": "China's top general under investigation in latest military purge : NPR",
-          "source": "https://www.npr.org/2026/01/24/g-s1-107210/chinas-top-general-under-investigation-in-latest-military-purge",
+          "id": 1991,
+          "title": "Untitled",
+          "source": "2015830191004893343",
           "snippet": "",
           "reason": "Recent coverage"
         }
       ]
     },
     {
-      "id": 2896,
-      "title": "Trump threatens Canada with 100% tariffs over China trade deal : NPR",
-      "articleCount": 2,
+      "id": 5113,
+      "title": "Unnamed Cluster",
+      "articleCount": 17,
       "momentum": {
         "delta24h": 100.0,
         "delta7d": 0.0
       },
       "primarySources": [
-        "news"
+        "x_post"
       ],
       "summary": [
-        "Trump threatens Canada with 100% tariff over China trade talks",
-        "Trump threatens Canada with 100% tariffs over China trade deal : NPR"
+        "Untitled",
+        "Untitled",
+        "Untitled"
       ],
       "keyClaims": [],
       "entities": {
@@ -409,102 +265,56 @@
       },
       "sourceMix": [
         {
-          "name": "News",
-          "value": 2,
+          "name": "X Post",
+          "value": 17,
           "type": "other"
         }
       ],
       "timeline": [
         {
-          "date": "Fri",
-          "value": 1
-        },
-        {
-          "date": "Sat",
-          "value": 1
+          "date": "Mon",
+          "value": 17
         }
       ],
       "articles": [
         {
-          "id": 1924,
-          "title": "Trump threatens Canada with 100% tariff over China trade talks",
-          "source": "https://www.bbc.com/news/articles/cy4qww3w72lo",
+          "id": 3485,
+          "title": "Untitled",
+          "source": "2015870820686414218",
           "snippet": "",
           "reason": "Recent coverage"
         },
         {
-          "id": 1902,
-          "title": "Trump threatens Canada with 100% tariffs over China trade deal : NPR",
-          "source": "https://www.npr.org/2026/01/24/nx-s1-5687236/canada-china-tariffs-trump",
-          "snippet": "",
-          "reason": "Recent coverage"
-        }
-      ]
-    },
-    {
-      "id": 2910,
-      "title": "Laura Kuenssberg: Shabana Mahmood wants to shake up the police, but there could be a fight ahead",
-      "articleCount": 2,
-      "momentum": {
-        "delta24h": 100.0,
-        "delta7d": 0.0
-      },
-      "primarySources": [
-        "news"
-      ],
-      "summary": [
-        "Police officers to be told they must get work licence or face dismissal",
-        "Laura Kuenssberg: Shabana Mahmood wants to shake up the police, but there could be a fight ahead"
-      ],
-      "keyClaims": [],
-      "entities": {
-        "people": [],
-        "organizations": [],
-        "locations": []
-      },
-      "sourceMix": [
-        {
-          "name": "News",
-          "value": 2,
-          "type": "other"
-        }
-      ],
-      "timeline": [
-        {
-          "date": "Sat",
-          "value": 2
-        }
-      ],
-      "articles": [
-        {
-          "id": 1934,
-          "title": "Police officers to be told they must get work licence or face dismissal",
-          "source": "https://www.bbc.com/news/articles/cn0kelpx734o",
+          "id": 3486,
+          "title": "Untitled",
+          "source": "2015870814009061651",
           "snippet": "",
           "reason": "Recent coverage"
         },
         {
-          "id": 1913,
-          "title": "Laura Kuenssberg: Shabana Mahmood wants to shake up the police, but there could be a fight ahead",
-          "source": "https://www.bbc.com/news/articles/c2k98jw3xnxo",
+          "id": 3489,
+          "title": "Untitled",
+          "source": "2015870782010724587",
           "snippet": "",
           "reason": "Recent coverage"
         }
       ]
     },
     {
-      "id": 1758,
-      "title": "Canadian Olympic snowboarder turned alleged drug kingpin arrested in Mexico : NPR",
-      "articleCount": 1,
+      "id": 4305,
+      "title": "Unnamed Cluster",
+      "articleCount": 13,
       "momentum": {
         "delta24h": 100.0,
         "delta7d": 0.0
       },
       "primarySources": [
-        "news"
+        "x_post"
       ],
       "summary": [
-        "Alleged drug kingpin and ex-Olympian Ryan Wedding arrested"
+        "Untitled",
+        "Untitled",
+        "Untitled"
       ],
       "keyClaims": [],
       "entities": {
@@ -514,40 +324,56 @@
       },
       "sourceMix": [
         {
-          "name": "News",
-          "value": 1,
+          "name": "X Post",
+          "value": 13,
           "type": "other"
         }
       ],
       "timeline": [
         {
-          "date": "Fri",
-          "value": 1
+          "date": "Mon",
+          "value": 13
         }
       ],
       "articles": [
         {
-          "id": 1877,
-          "title": "Alleged drug kingpin and ex-Olympian Ryan Wedding arrested",
-          "source": "https://www.bbc.com/news/articles/cj0nd8z1z59o",
+          "id": 2688,
+          "title": "Untitled",
+          "source": "2015867080847806470",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 2690,
+          "title": "Untitled",
+          "source": "2015866980587229463",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 2696,
+          "title": "Untitled",
+          "source": "2015866680216318414",
           "snippet": "",
           "reason": "Recent coverage"
         }
       ]
     },
     {
-      "id": 1772,
-      "title": "President Donald Trump promises 'a lot' of campaign travel for GOP midterms | Fox News",
-      "articleCount": 1,
+      "id": 4309,
+      "title": "Unnamed Cluster",
+      "articleCount": 12,
       "momentum": {
         "delta24h": 100.0,
         "delta7d": 0.0
       },
       "primarySources": [
-        "news"
+        "x_post"
       ],
       "summary": [
-        "RNC approves rule change to enable midterm convention | Fox News"
+        "Untitled",
+        "Untitled",
+        "Untitled"
       ],
       "keyClaims": [],
       "entities": {
@@ -557,40 +383,56 @@
       },
       "sourceMix": [
         {
-          "name": "News",
-          "value": 1,
+          "name": "X Post",
+          "value": 12,
           "type": "other"
         }
       ],
       "timeline": [
         {
-          "date": "Fri",
-          "value": 1
+          "date": "Mon",
+          "value": 12
         }
       ],
       "articles": [
         {
-          "id": 1785,
-          "title": "RNC approves rule change to enable midterm convention | Fox News",
-          "source": "https://www.foxnews.com/politics/trump-pushes-trump-a-palooza-midterm-convention-gop-braces-tough-elections",
+          "id": 2729,
+          "title": "Untitled",
+          "source": "2015865207374152175",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 2742,
+          "title": "Untitled",
+          "source": "2015864102581645634",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 2755,
+          "title": "Untitled",
+          "source": "2015863327084212415",
           "snippet": "",
           "reason": "Recent coverage"
         }
       ]
     },
     {
-      "id": 1791,
-      "title": "House Oversight Chair Comer expands probe into alleged Minnesota fraud | Fox News",
-      "articleCount": 1,
+      "id": 4306,
+      "title": "Unnamed Cluster",
+      "articleCount": 11,
       "momentum": {
         "delta24h": 100.0,
         "delta7d": 0.0
       },
       "primarySources": [
-        "news"
+        "x_post"
       ],
       "summary": [
-        "House Oversight Chair Comer expands probe into alleged Minnesota fraud | Fox News"
+        "Untitled",
+        "Untitled",
+        "Untitled"
       ],
       "keyClaims": [],
       "entities": {
@@ -600,40 +442,56 @@
       },
       "sourceMix": [
         {
-          "name": "News",
-          "value": 1,
+          "name": "X Post",
+          "value": 11,
           "type": "other"
         }
       ],
       "timeline": [
         {
-          "date": "Fri",
-          "value": 1
+          "date": "Mon",
+          "value": 11
         }
       ],
       "articles": [
         {
-          "id": 1790,
-          "title": "House Oversight Chair Comer expands probe into alleged Minnesota fraud | Fox News",
-          "source": "https://www.foxnews.com/politics/house-oversight-committee-widens-investigation-alleged-minnesota-fraud",
+          "id": 2683,
+          "title": "Untitled",
+          "source": "2015867186963685505",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 2728,
+          "title": "Untitled",
+          "source": "2015865278458892301",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 2745,
+          "title": "Untitled",
+          "source": "2015863720090447983",
           "snippet": "",
           "reason": "Recent coverage"
         }
       ]
     },
     {
-      "id": 1792,
-      "title": "Reagan-appointed judge blocks Trump from deporting certain pro-Palestinian activists | Fox News",
-      "articleCount": 1,
+      "id": 4357,
+      "title": "Unnamed Cluster",
+      "articleCount": 11,
       "momentum": {
         "delta24h": 100.0,
         "delta7d": 0.0
       },
       "primarySources": [
-        "news"
+        "x_post"
       ],
       "summary": [
-        "Reagan-appointed judge blocks Trump from deporting certain pro-Palestinian activists | Fox News"
+        "Untitled",
+        "Untitled",
+        "Untitled"
       ],
       "keyClaims": [],
       "entities": {
@@ -643,40 +501,56 @@
       },
       "sourceMix": [
         {
-          "name": "News",
-          "value": 1,
+          "name": "X Post",
+          "value": 11,
           "type": "other"
         }
       ],
       "timeline": [
         {
-          "date": "Fri",
-          "value": 1
+          "date": "Mon",
+          "value": 11
         }
       ],
       "articles": [
         {
-          "id": 1789,
-          "title": "Reagan-appointed judge blocks Trump from deporting certain pro-Palestinian activists | Fox News",
-          "source": "https://www.foxnews.com/politics/judge-who-blasted-trump-authoritarian-blocks-trump-from-deporting-non-citizes-pro-palestinian-activit",
+          "id": 2433,
+          "title": "Untitled",
+          "source": "2015866742883406136",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 2439,
+          "title": "Untitled",
+          "source": "2015866734549315607",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 2442,
+          "title": "Untitled",
+          "source": "2015866730518598113",
           "snippet": "",
           "reason": "Recent coverage"
         }
       ]
     },
     {
-      "id": 1793,
-      "title": "States continue abortion legislation post-Dobbs as March for Life returns | Fox News",
-      "articleCount": 1,
+      "id": 3477,
+      "title": "Unnamed Cluster",
+      "articleCount": 9,
       "momentum": {
         "delta24h": 100.0,
         "delta7d": 0.0
       },
       "primarySources": [
-        "news"
+        "x_post"
       ],
       "summary": [
-        "States continue abortion legislation post-Dobbs as March for Life returns | Fox News"
+        "Untitled",
+        "Untitled",
+        "Untitled"
       ],
       "keyClaims": [],
       "entities": {
@@ -686,40 +560,56 @@
       },
       "sourceMix": [
         {
-          "name": "News",
-          "value": 1,
+          "name": "X Post",
+          "value": 9,
           "type": "other"
         }
       ],
       "timeline": [
         {
-          "date": "Fri",
-          "value": 1
+          "date": "Mon",
+          "value": 9
         }
       ],
       "articles": [
         {
-          "id": 1788,
-          "title": "States continue abortion legislation post-Dobbs as March for Life returns | Fox News",
-          "source": "https://www.foxnews.com/politics/post-roe-battle-over-abortion-pills-reaches-kentucky-gas-stations-ag-opens-investigation",
+          "id": 2337,
+          "title": "Untitled",
+          "source": "2015830884096626898",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 2350,
+          "title": "Untitled",
+          "source": "2015829812254797851",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 2355,
+          "title": "Untitled",
+          "source": "2015829654876123225",
           "snippet": "",
           "reason": "Recent coverage"
         }
       ]
     },
     {
-      "id": 1794,
-      "title": "Reporter's Notebook: Clintons face contempt vote in bipartisan House Epstein probe | Fox News",
-      "articleCount": 1,
+      "id": 4303,
+      "title": "Unnamed Cluster",
+      "articleCount": 9,
       "momentum": {
         "delta24h": 100.0,
         "delta7d": 0.0
       },
       "primarySources": [
-        "news"
+        "x_post"
       ],
       "summary": [
-        "Reporter's Notebook: Clintons face contempt vote in bipartisan House Epstein probe | Fox News"
+        "Untitled",
+        "Untitled",
+        "Untitled"
       ],
       "keyClaims": [],
       "entities": {
@@ -729,40 +619,56 @@
       },
       "sourceMix": [
         {
-          "name": "News",
-          "value": 1,
+          "name": "X Post",
+          "value": 9,
           "type": "other"
         }
       ],
       "timeline": [
         {
-          "date": "Fri",
-          "value": 1
+          "date": "Mon",
+          "value": 9
         }
       ],
       "articles": [
         {
-          "id": 1787,
-          "title": "Reporter's Notebook: Clintons face contempt vote in bipartisan House Epstein probe | Fox News",
-          "source": "https://www.foxnews.com/politics/reporters-notebook-clinton-contempt-vote-gains-steam-democrats-join-gop-epstein-probe-standoff",
+          "id": 2685,
+          "title": "Untitled",
+          "source": "2015867113563382040",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 2687,
+          "title": "Untitled",
+          "source": "2015867083498619369",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 2691,
+          "title": "Untitled",
+          "source": "2015866943023001821",
           "snippet": "",
           "reason": "Recent coverage"
         }
       ]
     },
     {
-      "id": 1795,
-      "title": "Gonzales video shows conditions inside Texas ICE family facility | Fox News",
-      "articleCount": 1,
+      "id": 4621,
+      "title": "Unnamed Cluster",
+      "articleCount": 9,
       "momentum": {
         "delta24h": 100.0,
         "delta7d": 0.0
       },
       "primarySources": [
-        "news"
+        "x_post"
       ],
       "summary": [
-        "Gonzales video shows conditions inside Texas ICE family facility | Fox News"
+        "Untitled",
+        "Untitled",
+        "Untitled"
       ],
       "keyClaims": [],
       "entities": {
@@ -772,40 +678,56 @@
       },
       "sourceMix": [
         {
-          "name": "News",
-          "value": 1,
+          "name": "X Post",
+          "value": 9,
           "type": "other"
         }
       ],
       "timeline": [
         {
-          "date": "Fri",
-          "value": 1
+          "date": "Mon",
+          "value": 9
         }
       ],
       "articles": [
         {
-          "id": 1786,
-          "title": "Gonzales video shows conditions inside Texas ICE family facility | Fox News",
-          "source": "https://www.foxnews.com/politics/gop-rep-gonzales-says-video-kids-exposes-dem-grandstanding-over-conditions-texas-ice-facility",
+          "id": 2706,
+          "title": "Untitled",
+          "source": "2015866415778300134",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 2708,
+          "title": "Untitled",
+          "source": "2015866253315850603",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 2709,
+          "title": "Untitled",
+          "source": "2015866252292444515",
           "snippet": "",
           "reason": "Recent coverage"
         }
       ]
     },
     {
-      "id": 1796,
-      "title": "Ukraine war: High stakes but low expectations for Ukraine talks with Russia and US",
-      "articleCount": 1,
+      "id": 5251,
+      "title": "Unnamed Cluster",
+      "articleCount": 9,
       "momentum": {
         "delta24h": 100.0,
         "delta7d": 0.0
       },
       "primarySources": [
-        "news"
+        "x_post"
       ],
       "summary": [
-        "Ukraine war: High stakes but low expectations for Ukraine talks with Russia and US"
+        "Untitled",
+        "Untitled",
+        "Untitled"
       ],
       "keyClaims": [],
       "entities": {
@@ -815,40 +737,56 @@
       },
       "sourceMix": [
         {
-          "name": "News",
-          "value": 1,
+          "name": "X Post",
+          "value": 9,
           "type": "other"
         }
       ],
       "timeline": [
         {
-          "date": "Fri",
-          "value": 1
+          "date": "Mon",
+          "value": 9
         }
       ],
       "articles": [
         {
-          "id": 1873,
-          "title": "Ukraine war: High stakes but low expectations for Ukraine talks with Russia and US",
-          "source": "https://www.bbc.com/news/articles/c3edde1pwx8o",
+          "id": 3450,
+          "title": "Untitled",
+          "source": "2015870570374521254",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 3455,
+          "title": "Untitled",
+          "source": "2015870514858705095",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 3456,
+          "title": "Untitled",
+          "source": "2015870468612350317",
           "snippet": "",
           "reason": "Recent coverage"
         }
       ]
     },
     {
-      "id": 1797,
-      "title": "US military rushes ISIS detainees out of Syria amid growing chaos | Fox News",
-      "articleCount": 1,
+      "id": 3715,
+      "title": "Unnamed Cluster",
+      "articleCount": 8,
       "momentum": {
         "delta24h": 100.0,
         "delta7d": 0.0
       },
       "primarySources": [
-        "news"
+        "x_post"
       ],
       "summary": [
-        "US military rushes ISIS detainees out of Syria amid growing chaos | Fox News"
+        "Untitled",
+        "Untitled",
+        "Untitled"
       ],
       "keyClaims": [],
       "entities": {
@@ -858,40 +796,56 @@
       },
       "sourceMix": [
         {
-          "name": "News",
-          "value": 1,
+          "name": "X Post",
+          "value": 8,
           "type": "other"
         }
       ],
       "timeline": [
         {
-          "date": "Fri",
-          "value": 1
+          "date": "Mon",
+          "value": 8
         }
       ],
       "articles": [
         {
-          "id": 1784,
-          "title": "US military rushes ISIS detainees out of Syria amid growing chaos | Fox News",
-          "source": "https://www.foxnews.com/politics/chaos-syria-sparks-fears-isis-prison-breaks-us-rushes-detainees-iraq",
+          "id": 2242,
+          "title": "Untitled",
+          "source": "2015830854136721846",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 2253,
+          "title": "Untitled",
+          "source": "2015830846989885755",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 2258,
+          "title": "Untitled",
+          "source": "2015830843122417924",
           "snippet": "",
           "reason": "Recent coverage"
         }
       ]
     },
     {
-      "id": 1798,
-      "title": "West Midlands Police admits overstating evidence in Maccabi Tel Aviv fan ban",
-      "articleCount": 1,
+      "id": 4503,
+      "title": "Unnamed Cluster",
+      "articleCount": 8,
       "momentum": {
         "delta24h": 100.0,
         "delta7d": 0.0
       },
       "primarySources": [
-        "news"
+        "x_post"
       ],
       "summary": [
-        "West Midlands Police admits overstating evidence in Maccabi Tel Aviv fan ban"
+        "Untitled",
+        "Untitled",
+        "Untitled"
       ],
       "keyClaims": [],
       "entities": {
@@ -901,40 +855,56 @@
       },
       "sourceMix": [
         {
-          "name": "News",
-          "value": 1,
+          "name": "X Post",
+          "value": 8,
           "type": "other"
         }
       ],
       "timeline": [
         {
-          "date": "Fri",
-          "value": 1
+          "date": "Mon",
+          "value": 8
         }
       ],
       "articles": [
         {
-          "id": 1879,
-          "title": "West Midlands Police admits overstating evidence in Maccabi Tel Aviv fan ban",
-          "source": "https://www.bbc.com/news/articles/c3r1zxgq0j7o",
+          "id": 3417,
+          "title": "Untitled",
+          "source": "2015870403080560954",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 3430,
+          "title": "Untitled",
+          "source": "2015870375012561355",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 2662,
+          "title": "Untitled",
+          "source": "2015867149596950594",
           "snippet": "",
           "reason": "Recent coverage"
         }
       ]
     },
     {
-      "id": 1799,
-      "title": "Chris Mason: Keir Starmer's strongest rebuke yet for Donald Trump",
-      "articleCount": 1,
+      "id": 4547,
+      "title": "Unnamed Cluster",
+      "articleCount": 8,
       "momentum": {
         "delta24h": 100.0,
         "delta7d": 0.0
       },
       "primarySources": [
-        "news"
+        "x_post"
       ],
       "summary": [
-        "Chris Mason: Keir Starmer's strongest rebuke yet for Donald Trump"
+        "Untitled",
+        "Untitled",
+        "Untitled"
       ],
       "keyClaims": [],
       "entities": {
@@ -944,22 +914,272 @@
       },
       "sourceMix": [
         {
-          "name": "News",
-          "value": 1,
+          "name": "X Post",
+          "value": 8,
           "type": "other"
         }
       ],
       "timeline": [
         {
-          "date": "Fri",
-          "value": 1
+          "date": "Mon",
+          "value": 8
         }
       ],
       "articles": [
         {
-          "id": 1869,
-          "title": "Chris Mason: Keir Starmer's strongest rebuke yet for Donald Trump",
-          "source": "https://www.bbc.com/news/articles/c9dvnlvzjw7o",
+          "id": 2242,
+          "title": "Untitled",
+          "source": "2015830854136721846",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 2253,
+          "title": "Untitled",
+          "source": "2015830846989885755",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 2258,
+          "title": "Untitled",
+          "source": "2015830843122417924",
+          "snippet": "",
+          "reason": "Recent coverage"
+        }
+      ]
+    },
+    {
+      "id": 4693,
+      "title": "Unnamed Cluster",
+      "articleCount": 8,
+      "momentum": {
+        "delta24h": 100.0,
+        "delta7d": 0.0
+      },
+      "primarySources": [
+        "x_post"
+      ],
+      "summary": [
+        "Untitled",
+        "Untitled",
+        "Untitled"
+      ],
+      "keyClaims": [],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "locations": []
+      },
+      "sourceMix": [
+        {
+          "name": "X Post",
+          "value": 8,
+          "type": "other"
+        }
+      ],
+      "timeline": [
+        {
+          "date": "Mon",
+          "value": 8
+        }
+      ],
+      "articles": [
+        {
+          "id": 3049,
+          "title": "Untitled",
+          "source": "2015868847593599063",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 3064,
+          "title": "Untitled",
+          "source": "2015868497373356277",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 3065,
+          "title": "Untitled",
+          "source": "2015868474220765355",
+          "snippet": "",
+          "reason": "Recent coverage"
+        }
+      ]
+    },
+    {
+      "id": 4778,
+      "title": "Unnamed Cluster",
+      "articleCount": 8,
+      "momentum": {
+        "delta24h": 100.0,
+        "delta7d": 0.0
+      },
+      "primarySources": [
+        "x_post"
+      ],
+      "summary": [
+        "Untitled",
+        "Untitled",
+        "Untitled"
+      ],
+      "keyClaims": [],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "locations": []
+      },
+      "sourceMix": [
+        {
+          "name": "X Post",
+          "value": 8,
+          "type": "other"
+        }
+      ],
+      "timeline": [
+        {
+          "date": "Mon",
+          "value": 8
+        }
+      ],
+      "articles": [
+        {
+          "id": 3054,
+          "title": "Untitled",
+          "source": "2015868777464750125",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 3066,
+          "title": "Untitled",
+          "source": "2015868459469468114",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 3077,
+          "title": "Untitled",
+          "source": "2015868215746797736",
+          "snippet": "",
+          "reason": "Recent coverage"
+        }
+      ]
+    },
+    {
+      "id": 5015,
+      "title": "Unnamed Cluster",
+      "articleCount": 8,
+      "momentum": {
+        "delta24h": 100.0,
+        "delta7d": 0.0
+      },
+      "primarySources": [
+        "x_post"
+      ],
+      "summary": [
+        "Untitled",
+        "Untitled",
+        "Untitled"
+      ],
+      "keyClaims": [],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "locations": []
+      },
+      "sourceMix": [
+        {
+          "name": "X Post",
+          "value": 8,
+          "type": "other"
+        }
+      ],
+      "timeline": [
+        {
+          "date": "Mon",
+          "value": 8
+        }
+      ],
+      "articles": [
+        {
+          "id": 3004,
+          "title": "Untitled",
+          "source": "2015868796704268780",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 3010,
+          "title": "Untitled",
+          "source": "2015868704756470246",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 3011,
+          "title": "Untitled",
+          "source": "2015868688381997342",
+          "snippet": "",
+          "reason": "Recent coverage"
+        }
+      ]
+    },
+    {
+      "id": 3474,
+      "title": "Unnamed Cluster",
+      "articleCount": 7,
+      "momentum": {
+        "delta24h": 100.0,
+        "delta7d": 0.0
+      },
+      "primarySources": [
+        "x_post"
+      ],
+      "summary": [
+        "Untitled",
+        "Untitled",
+        "Untitled"
+      ],
+      "keyClaims": [],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "locations": []
+      },
+      "sourceMix": [
+        {
+          "name": "X Post",
+          "value": 7,
+          "type": "other"
+        }
+      ],
+      "timeline": [
+        {
+          "date": "Mon",
+          "value": 7
+        }
+      ],
+      "articles": [
+        {
+          "id": 2338,
+          "title": "Untitled",
+          "source": "2015830833819513202",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 2341,
+          "title": "Untitled",
+          "source": "2015830680987430978",
+          "snippet": "",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 2371,
+          "title": "Untitled",
+          "source": "2015829377708105748",
           "snippet": "",
           "reason": "Recent coverage"
         }

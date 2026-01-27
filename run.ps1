@@ -1,6 +1,6 @@
 param (
     [Parameter(Mandatory = $false)]
-    [ValidateSet("ingest", "crawl", "api", "ui", "dev", "all", "migrate", "reddit", "build", "analyze", "help")]
+    [ValidateSet("ingest", "crawl", "api", "ui", "dev", "all", "migrate", "reddit", "x", "build", "analyze", "help")]
     [string]$Command = "help"
 )
 
@@ -26,6 +26,27 @@ function Write-Status {
     param([string]$Message)
     Write-Host "[CivicLens] $Message" -ForegroundColor Cyan
 }
+
+function Load-Env {
+    $EnvPath = "$ScriptRoot\.env"
+    if (Test-Path $EnvPath) {
+        Write-Status "Loading .env file..."
+        Get-Content $EnvPath | ForEach-Object {
+            $line = $_.Trim()
+            if ($line -and -not $line.StartsWith("#")) {
+                $parts = $line.Split("=", 2)
+                if ($parts.Length -eq 2) {
+                    $name = $parts[0].Trim()
+                    $value = $parts[1].Trim()
+                    [System.Environment]::SetEnvironmentVariable($name, $value, [System.EnvironmentVariableTarget]::Process)
+                }
+            }
+        }
+    }
+}
+
+# Load env vars at start
+Load-Env
 
 function Ensure-Go {
     if (Get-Command "go" -ErrorAction SilentlyContinue) {
@@ -97,6 +118,16 @@ function Run-Reddit {
     
     Write-Status "Fetching Reddit data..."
     & $ExePath reddit --config "$ScriptRoot\data\seeds.yaml" --db "$ScriptRoot\data\civic_lens.db"
+}
+
+function Run-X {
+    $ExePath = "$ScriptRoot\civic-ingest.exe"
+    if (-not (Test-Path $ExePath)) {
+        Build-Ingest
+    }
+    
+    Write-Status "Fetching X (Twitter) data..."
+    & $ExePath x --config "$ScriptRoot\data\seeds.yaml" --db "$ScriptRoot\data\civic_lens.db"
 }
 
 function Initialize-Venv {
@@ -193,6 +224,10 @@ switch ($Command) {
         Run-Migrate
         Run-Reddit 
     }
+    "x" {
+        Run-Migrate
+        Run-X
+    }
     "api" { 
         Run-Api 
     }
@@ -208,6 +243,7 @@ switch ($Command) {
     "all" {
         Run-Migrate
         Run-Ingest
+        Run-X
         Run-Crawl -Duration "5m"
         Run-Analyze
         Run-Dev

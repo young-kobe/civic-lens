@@ -1,12 +1,12 @@
 {
   "_meta": {
-    "generated_at": "2026-01-24T20:06:50.405825+00:00",
+    "generated_at": "2026-01-26T21:34:15.110799+00:00",
     "doc_count": 39,
     "version": "1.0"
   },
   "data": {
     "overview": {
-      "suspectedAutomationRate": 0.8,
+      "suspectedAutomationRate": 0.4,
       "coordinationIndex": 0.22,
       "topClusters": [
         "www.foxnews.com",

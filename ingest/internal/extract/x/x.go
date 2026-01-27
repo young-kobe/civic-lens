@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/young-kobe/civic-lens/ingest/internal/extract/x/models"
 	"github.com/young-kobe/civic-lens/ingest/internal/model"
 	"golang.org/x/time/rate"
 )
@@ -18,7 +19,7 @@ import (
 // Client interfaces with X API v2.
 type Client struct {
 	httpClient   *http.Client
-	bearerToken  string
+	bearerToken  string // unexported default
 	userAgent    string
 	rateLimiter  *rate.Limiter
 	requestCount int64 // Track for cost estimation
@@ -62,9 +63,14 @@ func (c *Client) RequestCount() int64 {
 	return atomic.LoadInt64(&c.requestCount)
 }
 
+// BearerToken returns the configured bearer token.
+func (c *Client) BearerToken() string {
+	return c.bearerToken
+}
+
 // SearchRecentPosts searches for recent posts matching the query.
 // Uses: GET /2/tweets/search/recent
-func (c *Client) SearchRecentPosts(ctx context.Context, query string, maxResults int) (*SearchResponse, []byte, error) {
+func (c *Client) SearchRecentPosts(ctx context.Context, query string, maxResults int) (*models.SearchResponse, []byte, error) {
 	if err := c.rateLimiter.Wait(ctx); err != nil {
 		return nil, nil, fmt.Errorf("rate limiter: %w", err)
 	}
@@ -105,7 +111,7 @@ func (c *Client) SearchRecentPosts(ctx context.Context, query string, maxResults
 		return nil, body, fmt.Errorf("API error %d: %s", resp.StatusCode, string(body))
 	}
 
-	var searchResp SearchResponse
+	var searchResp models.SearchResponse
 	if err := json.Unmarshal(body, &searchResp); err != nil {
 		return nil, body, fmt.Errorf("parse response: %w", err)
 	}
@@ -113,125 +119,15 @@ func (c *Client) SearchRecentPosts(ctx context.Context, query string, maxResults
 	return &searchResp, body, nil
 }
 
-// SearchResponse represents the X API v2 search response.
-type SearchResponse struct {
-	Data     []TweetData `json:"data"`
-	Includes *Includes   `json:"includes,omitempty"`
-	Meta     *Meta       `json:"meta,omitempty"`
-	Errors   []APIError  `json:"errors,omitempty"`
-}
-
-// TweetData represents a tweet from the API.
-type TweetData struct {
-	ID                 string              `json:"id"`
-	Text               string              `json:"text"`
-	AuthorID           string              `json:"author_id"`
-	CreatedAt          string              `json:"created_at"`
-	Lang               string              `json:"lang"`
-	ConversationID     string              `json:"conversation_id"`
-	InReplyToUserID    string              `json:"in_reply_to_user_id"`
-	PublicMetrics      *PublicMetrics      `json:"public_metrics"`
-	Geo                *Geo                `json:"geo"`
-	ContextAnnotations []ContextAnnotation `json:"context_annotations"`
-	ReferencedTweets   []ReferencedTweet   `json:"referenced_tweets"`
-}
-
-// PublicMetrics contains engagement counts.
-type PublicMetrics struct {
-	RetweetCount int `json:"retweet_count"`
-	ReplyCount   int `json:"reply_count"`
-	LikeCount    int `json:"like_count"`
-	QuoteCount   int `json:"quote_count"`
-}
-
-// Geo contains place information.
-type Geo struct {
-	PlaceID string `json:"place_id"`
-}
-
-// ContextAnnotation contains topic/entity annotations.
-type ContextAnnotation struct {
-	Domain struct {
-		ID          string `json:"id"`
-		Name        string `json:"name"`
-		Description string `json:"description"`
-	} `json:"domain"`
-	Entity struct {
-		ID          string `json:"id"`
-		Name        string `json:"name"`
-		Description string `json:"description"`
-	} `json:"entity"`
-}
-
-// ReferencedTweet indicates a reply, quote, or retweet.
-type ReferencedTweet struct {
-	Type string `json:"type"` // replied_to, quoted, retweeted
-	ID   string `json:"id"`
-}
-
-// Includes contains expanded objects.
-type Includes struct {
-	Users  []UserData  `json:"users"`
-	Places []PlaceData `json:"places"`
-	Tweets []TweetData `json:"tweets"`
-}
-
-// UserData represents a user from the API.
-type UserData struct {
-	ID              string       `json:"id"`
-	Username        string       `json:"username"`
-	Name            string       `json:"name"`
-	Location        string       `json:"location"`
-	Description     string       `json:"description"`
-	CreatedAt       string       `json:"created_at"`
-	Verified        bool         `json:"verified"`
-	VerifiedType    string       `json:"verified_type"`
-	Protected       bool         `json:"protected"`
-	PublicMetrics   *UserMetrics `json:"public_metrics"`
-	ProfileImageURL string       `json:"profile_image_url"`
-}
-
-// UserMetrics contains user engagement counts.
-type UserMetrics struct {
-	FollowersCount int `json:"followers_count"`
-	FollowingCount int `json:"following_count"`
-	TweetCount     int `json:"tweet_count"`
-	ListedCount    int `json:"listed_count"`
-}
-
-// PlaceData represents a place from the API.
-type PlaceData struct {
-	ID          string `json:"id"`
-	FullName    string `json:"full_name"`
-	Country     string `json:"country"`
-	CountryCode string `json:"country_code"`
-}
-
-// Meta contains pagination info.
-type Meta struct {
-	NewestID    string `json:"newest_id"`
-	OldestID    string `json:"oldest_id"`
-	ResultCount int    `json:"result_count"`
-	NextToken   string `json:"next_token"`
-}
-
-// APIError represents an API error.
-type APIError struct {
-	Title  string `json:"title"`
-	Type   string `json:"type"`
-	Detail string `json:"detail"`
-	Status int    `json:"status"`
-}
-
 // ToModels converts the search response to internal model types.
-func (r *SearchResponse) ToModels() ([]model.XPost, []model.XUser) {
+func ToModels(r *models.SearchResponse) ([]model.XPost, []model.XUser) {
 	if r == nil || len(r.Data) == 0 {
 		return nil, nil
 	}
 
 	// Build lookup maps for includes
-	userMap := make(map[string]*UserData)
-	placeMap := make(map[string]*PlaceData)
+	userMap := make(map[string]*models.UserData)
+	placeMap := make(map[string]*models.PlaceData)
 
 	if r.Includes != nil {
 		for i := range r.Includes.Users {
