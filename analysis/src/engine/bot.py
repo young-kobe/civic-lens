@@ -9,28 +9,13 @@ Bot-flagged content is excluded from sentiment/favorability aggregations.
 """
 
 from typing import Any, Dict, List, Optional, Tuple
-from dataclasses import dataclass, asdict
+import time
 from analysis.src.common.logger import get_logger
+from analysis.src.engine.models import BotResult
+from analysis.src.engine.prompts import BOT_SYSTEM_PROMPT, BOT_USER_PROMPT_TEMPLATE
+from analysis.src.llm.schemas import BOT_SCHEMA
 
 logger = get_logger(__name__)
-
-
-@dataclass
-class BotResult:
-    """
-    Bot detection result with evidence.
-    
-    Satisfies invariant B2: AI outputs include confidence and evidence.
-    """
-    is_bot: bool
-    label: str  # human, bot, suspicious
-    confidence: float  # 0.0 - 1.0
-    indicators: List[str]  # Specific behavioral indicators
-    reasoning: Optional[str] = None
-    deterministic_signals: Optional[Dict[str, Any]] = None
-    
-    def to_dict(self) -> Dict[str, Any]:
-        return asdict(self)
 
 
 # Spam/bot keywords commonly found in automated content
@@ -56,42 +41,9 @@ class HybridBotDetector:
     Hybrid bot detector combining deterministic signals with LLM interpretation.
     """
     
-    SYSTEM_PROMPT = """You are an analyst detecting automated/bot behavior in social media content.
-Analyze the text and behavioral signals to classify if this is likely automated content.
-
-RULES:
-1. Return ONLY valid JSON matching the schema below
-2. Base classification on provided signals, not assumptions
-3. If data is insufficient, set is_bot=false with low confidence
-4. Cite specific behavioral indicators as evidence
-5. Do not assume intent - classify only observable patterns
-
-OUTPUT SCHEMA:
-{
-  "is_bot": true | false,
-  "label": "human" | "bot" | "suspicious",
-  "confidence": 0.0-1.0,
-  "indicators": ["specific indicator 1", "specific indicator 2"],
-  "reasoning": "Brief explanation"
-}"""
-
-    USER_PROMPT_TEMPLATE = """Analyze this content for automated behavior:
-
-TEXT:
-\"\"\"{text}\"\"\"
-
-BEHAVIORAL SIGNALS:
-- Spam keyword matches: {spam_keyword_hits}
-- Text repetition score: {repetition_score:.2f} (0-1, higher = more repetitive)
-- Unique word ratio: {unique_ratio:.2f} (lower = more repetitive)
-- URL count: {url_count}
-- Hashtag count: {hashtag_count}
-- Account age: {account_age_days} days (if available)
-- Posting frequency: {posting_frequency} posts/day (if available)"""
-
     def __init__(self, llm_enabled: bool = False):
         self.llm_enabled = llm_enabled
-        self._gemini_client = None
+        self._llm_client = None
         
         logger.info(f"Initialized HybridBotDetector (llm_enabled={llm_enabled})")
         
@@ -101,10 +53,10 @@ BEHAVIORAL SIGNALS:
     def _init_llm_client(self):
         """Initialize the LLM client if enabled."""
         try:
-            from analysis.src.common.llm_client import get_gemini_client
-            self._gemini_client = get_gemini_client()
-            if not self._gemini_client.is_available:
-                logger.warning("Gemini client not available. Falling back to heuristics.")
+            from analysis.src.llm import get_llm_client
+            self._llm_client = get_llm_client()
+            if not self._llm_client.is_available:
+                logger.warning("LLM client not available. Falling back to heuristics.")
                 self.llm_enabled = False
         except Exception as e:
             logger.error(f"Failed to initialize LLM client: {e}")
@@ -128,6 +80,11 @@ BEHAVIORAL SIGNALS:
                 "account_age_days": None,
                 "posting_frequency": None,
                 "aggregated_score": 0.0,
+                # X-specific
+                "x_new_account_flag": False,
+                "x_low_followers_flag": False,
+                "x_foreign_origin_flag": False,
+                "x_origin_confidence": None,
             }
         
         metadata = metadata or {}
@@ -155,6 +112,30 @@ BEHAVIORAL SIGNALS:
         account_age = metadata.get("account_age_days")
         posting_freq = metadata.get("posts_per_day")
         
+        # 6. X-specific signals
+        x_new_account_flag = False
+        x_low_followers_flag = False
+        x_foreign_origin_flag = False
+        x_origin_confidence = None
+        
+        if metadata.get("platform") == "x":
+            # Account age from user_created_at
+            user_created = metadata.get("user_created_at")
+            if user_created:
+                import time
+                account_age_days = (time.time() - user_created) / 86400
+                account_age = account_age_days
+                x_new_account_flag = account_age_days < 90
+            
+            # Low followers check
+            followers = metadata.get("user_followers", 0)
+            x_low_followers_flag = (followers or 0) < 50
+            
+            # Foreign origin - simple check using explicit country_code from API
+            country_code = metadata.get("place_country_code")
+            if country_code:
+                x_foreign_origin_flag = country_code.upper() != "US"
+        
         # Compute aggregated score
         score = 0.0
         
@@ -180,6 +161,14 @@ BEHAVIORAL SIGNALS:
         if posting_freq is not None and posting_freq > 50:
             score += 0.2  # Unusually high posting rate
         
+        # X-specific signals
+        if x_new_account_flag:
+            score += 0.1
+        if x_low_followers_flag:
+            score += 0.05
+        if x_foreign_origin_flag and x_origin_confidence in ("high", "medium"):
+            score += 0.15  # Foreign account posting US political content
+        
         return {
             "spam_keyword_hits": spam_hits,
             "spam_keywords_found": spam_found,
@@ -191,6 +180,11 @@ BEHAVIORAL SIGNALS:
             "account_age_days": account_age,
             "posting_frequency": posting_freq,
             "aggregated_score": min(score, 1.0),
+            # X-specific
+            "x_new_account_flag": x_new_account_flag,
+            "x_low_followers_flag": x_low_followers_flag,
+            "x_foreign_origin_flag": x_foreign_origin_flag,
+            "x_origin_confidence": x_origin_confidence,
         }
     
     def _heuristic_classify(self, signals: Dict[str, Any]) -> BotResult:
@@ -213,10 +207,20 @@ BEHAVIORAL SIGNALS:
             indicators.append(f"Excessive hashtags ({signals['hashtag_count']})")
         
         if signals.get("account_age_days") is not None and signals["account_age_days"] < 7:
-            indicators.append(f"New account ({signals['account_age_days']} days)")
+            indicators.append(f"New account ({signals['account_age_days']:.0f} days)")
         
         if signals.get("posting_frequency") is not None and signals["posting_frequency"] > 50:
             indicators.append(f"High posting rate ({signals['posting_frequency']}/day)")
+        
+        # X-specific indicators
+        if signals.get("x_new_account_flag"):
+            indicators.append("X account created within 90 days")
+        
+        if signals.get("x_low_followers_flag"):
+            indicators.append("X account has fewer than 50 followers")
+        
+        if signals.get("x_foreign_origin_flag"):
+            indicators.append("Non-US origin (explicit geo-tag)")
         
         # Determine label
         if score >= 0.7:
@@ -250,7 +254,7 @@ BEHAVIORAL SIGNALS:
         """
         Classify bot likelihood using LLM with deterministic signals as context.
         """
-        user_prompt = self.USER_PROMPT_TEMPLATE.format(
+        user_prompt = BOT_USER_PROMPT_TEMPLATE.format(
             text=text[:1500],  # Truncate for token limits
             spam_keyword_hits=signals["spam_keyword_hits"],
             repetition_score=signals["repetition_score"],
@@ -262,11 +266,11 @@ BEHAVIORAL SIGNALS:
         )
         
         try:
-            response = self._gemini_client.complete(
-                system_prompt=self.SYSTEM_PROMPT,
+            response = self._llm_client.complete(
+                system_prompt=BOT_SYSTEM_PROMPT,
                 user_prompt=user_prompt,
+                response_schema=BOT_SCHEMA,
             )
-            
             return BotResult(
                 is_bot=response.get("is_bot", False),
                 label=response.get("label", "human"),
@@ -314,13 +318,10 @@ BEHAVIORAL SIGNALS:
         signals = self._compute_signals(text, metadata)
         
         # 2. Only use LLM for edge cases (score > 0.3) to save costs
-        if self.llm_enabled and self._gemini_client and self._gemini_client.is_available:
+        if self.llm_enabled and self._llm_client and self._llm_client.is_available:
             if signals["aggregated_score"] > 0.3:
                 return self._llm_classify(text, signals)
         
         # 3. Fallback to heuristic
         return self._heuristic_classify(signals)
 
-
-# Backwards-compatible alias
-BotDetector = HybridBotDetector

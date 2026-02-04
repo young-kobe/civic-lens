@@ -205,5 +205,49 @@ class TestFavorabilityAnalyzer(unittest.TestCase):
         self.assertLessEqual(result.overall_confidence, 1.0)
 
 
+class TestJsonParsing(unittest.TestCase):
+    """Tests for JSON parsing in BaseLLMClient.
+    
+    Note: With JSON schema mode, LLMs are constrained to return valid JSON,
+    so we only need basic parsing - no complex repair logic.
+    """
+    
+    def test_valid_json(self):
+        """Verify valid JSON parses correctly."""
+        from analysis.src.llm.base import BaseLLMClient
+        
+        result = BaseLLMClient.parse_json_response('{"key": "value", "num": 42}')
+        self.assertEqual(result["key"], "value")
+        self.assertEqual(result["num"], 42)
+    
+    def test_json_with_markdown_fences(self):
+        """Verify JSON with markdown code fences parses correctly."""
+        from analysis.src.llm.base import BaseLLMClient
+        
+        result = BaseLLMClient.parse_json_response('```json\n{"key": "value"}\n```')
+        self.assertEqual(result["key"], "value")
+    
+    def test_json_array_returns_first_dict(self):
+        """Verify JSON array of dicts returns the first dict."""
+        from analysis.src.llm.base import BaseLLMClient
+        
+        result = BaseLLMClient.parse_json_response('[{"key": "value"}, {"key2": "value2"}]')
+        self.assertEqual(result["key"], "value")
+    
+    def test_invalid_json_raises_error(self):
+        """Verify invalid JSON raises ValueError."""
+        from analysis.src.llm.base import BaseLLMClient
+        
+        with self.assertRaises(ValueError):
+            BaseLLMClient.parse_json_response('not json at all')
+    
+    def test_non_dict_json_raises_error(self):
+        """Verify non-dict JSON (like plain string) raises ValueError."""
+        from analysis.src.llm.base import BaseLLMClient
+        
+        with self.assertRaises(ValueError):
+            BaseLLMClient.parse_json_response('"just a string"')
+
+
 if __name__ == '__main__':
     unittest.main()

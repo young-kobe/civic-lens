@@ -1,0 +1,67 @@
+{
+  "_meta": {
+    "generated_at": "2026-01-26T21:34:14.767833+00:00",
+    "doc_count": 945,
+    "version": "1.0"
+  },
+  "data": {
+    "overview": {
+      "netScore": 34.8,
+      "volume": 945,
+      "coverage": "medium",
+      "confidence": "medium"
+    },
+    "distribution": {
+      "strongPositive": 637,
+      "mildPositive": 0,
+      "neutral": 0,
+      "mildNegative": 0,
+      "strongNegative": 308
+    },
+    "byPlatform": [
+      {
+        "platform": "Other",
+        "positive": 637,
+        "negative": 308,
+        "neutral": 0,
+        "volume": 945
+      }
+    ],
+    "byTopic": [
+      {
+        "topic": "General",
+        "positive": 637,
+        "negative": 308,
+        "neutral": 0,
+        "volume": 945
+      }
+    ],
+    "byTimeWindow": [
+      {
+        "window": "24 hours",
+        "positive": 637,
+        "negative": 308,
+        "neutral": 0,
+        "volume": 945
+      }
+    ],
+    "disclaimer": "Represents sampled platform discourse, not verified population sentiment",
+    "excluded_bot_content": 0,
+    "socialVsNews": {
+      "social": {
+        "positive": 0,
+        "negative": 0,
+        "neutral": 0,
+        "netScore": 0,
+        "volume": 0
+      },
+      "news": {
+        "positive": 0,
+        "negative": 0,
+        "neutral": 0,
+        "netScore": 0,
+        "volume": 0
+      }
+    }
+  }
+}

@@ -23,12 +23,13 @@ func main() {
 	}
 
 	rootCmd.PersistentFlags().StringVar(&cfgPath, "config", "data/seeds.yaml", "Path to config file")
-	rootCmd.PersistentFlags().StringVar(&dbPath, "db", "data/news.db", "Path to SQLite database")
+	rootCmd.PersistentFlags().StringVar(&dbPath, "db", "data/civic_lens.db", "Path to SQLite database")
 
 	rootCmd.AddCommand(migrateCmd())
 	rootCmd.AddCommand(ingestCmd())
 	rootCmd.AddCommand(crawlCmd())
 	rootCmd.AddCommand(redditCmd())
+	rootCmd.AddCommand(xCmd())
 	rootCmd.AddCommand(requeueStaleCmd())
 
 	if err := rootCmd.Execute(); err != nil {
@@ -154,6 +155,35 @@ func redditCmd() *cobra.Command {
 
 			fmt.Printf("Reddit ingestion complete: %d subreddits, %d posts\n",
 				result.SubredditsProcessed, result.PostsIngested)
+			return nil
+		},
+	}
+}
+
+func xCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "x",
+		Short: "FetchX posts and comments",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+
+			a, err := app.New(ctx, app.Options{
+				ConfigPath:      cfgPath,
+				DBPath:          dbPath,
+				RequireRawStore: true,
+			})
+			if err != nil {
+				return err
+			}
+			defer a.Close()
+
+			result, err := runner.RunX(ctx, a)
+			if err != nil {
+				return err
+			}
+
+			fmt.Printf("X ingestion complete: %d queries, %d posts, %d users\n",
+				result.QueriesProcessed, result.PostsIngested, result.UsersIngested)
 			return nil
 		},
 	}

@@ -1,6 +1,6 @@
 param (
     [Parameter(Mandatory = $false)]
-    [ValidateSet("ingest", "crawl", "api", "ui", "dev", "all", "migrate", "reddit", "build", "help")]
+    [ValidateSet("ingest", "crawl", "api", "ui", "dev", "all", "migrate", "reddit", "x", "build", "analyze", "help")]
     [string]$Command = "help"
 )
 
@@ -26,6 +26,27 @@ function Write-Status {
     param([string]$Message)
     Write-Host "[CivicLens] $Message" -ForegroundColor Cyan
 }
+
+function Load-Env {
+    $EnvPath = "$ScriptRoot\.env"
+    if (Test-Path $EnvPath) {
+        Write-Status "Loading .env file..."
+        Get-Content $EnvPath | ForEach-Object {
+            $line = $_.Trim()
+            if ($line -and -not $line.StartsWith("#")) {
+                $parts = $line.Split("=", 2)
+                if ($parts.Length -eq 2) {
+                    $name = $parts[0].Trim()
+                    $value = $parts[1].Trim()
+                    [System.Environment]::SetEnvironmentVariable($name, $value, [System.EnvironmentVariableTarget]::Process)
+                }
+            }
+        }
+    }
+}
+
+# Load env vars at start
+Load-Env
 
 function Ensure-Go {
     if (Get-Command "go" -ErrorAction SilentlyContinue) {
@@ -64,7 +85,7 @@ function Run-Migrate {
     }
     
     Write-Status "Running database migrations..."
-    & $ExePath migrate --db "$ScriptRoot\data\news.db"
+    & $ExePath migrate --db "$ScriptRoot\data\civic_lens.db"
 }
 
 function Run-Ingest {
@@ -74,7 +95,7 @@ function Run-Ingest {
     }
     
     Write-Status "Running seed ingestion..."
-    & $ExePath ingest --config "$ScriptRoot\data\seeds.yaml" --db "$ScriptRoot\data\news.db"
+    & $ExePath ingest --config "$ScriptRoot\data\seeds.yaml" --db "$ScriptRoot\data\civic_lens.db"
 }
 
 function Run-Crawl {
@@ -86,7 +107,7 @@ function Run-Crawl {
     }
     
     Write-Status "Running crawl for $Duration..."
-    & $ExePath crawl --config "$ScriptRoot\data\seeds.yaml" --db "$ScriptRoot\data\news.db" --duration $Duration
+    & $ExePath crawl --config "$ScriptRoot\data\seeds.yaml" --db "$ScriptRoot\data\civic_lens.db" --duration $Duration
 }
 
 function Run-Reddit {
@@ -96,7 +117,17 @@ function Run-Reddit {
     }
     
     Write-Status "Fetching Reddit data..."
-    & $ExePath reddit --config "$ScriptRoot\data\seeds.yaml" --db "$ScriptRoot\data\news.db"
+    & $ExePath reddit --config "$ScriptRoot\data\seeds.yaml" --db "$ScriptRoot\data\civic_lens.db"
+}
+
+function Run-X {
+    $ExePath = "$ScriptRoot\civic-ingest.exe"
+    if (-not (Test-Path $ExePath)) {
+        Build-Ingest
+    }
+    
+    Write-Status "Fetching X (Twitter) data..."
+    & $ExePath x --config "$ScriptRoot\data\seeds.yaml" --db "$ScriptRoot\data\civic_lens.db"
 }
 
 function Initialize-Venv {
@@ -146,6 +177,26 @@ function Run-Ui {
     }
 }
 
+function Run-Analyze {
+    Write-Status "Running analysis pipeline..."
+    $PythonExe = Initialize-Venv
+    
+    $ReqFile = "$ScriptRoot\analysis\requirements.txt"
+    if (Test-Path $ReqFile) {
+        & $PythonExe -m pip install -r $ReqFile --quiet
+    }
+    
+    $Env:PYTHONPATH = $ScriptRoot
+    & $PythonExe -m analysis.src.scheduler.job_runner
+    
+    if ($LASTEXITCODE -eq 0) {
+        Write-Status "Analysis pipeline complete. Cached snapshots saved to data/cache/"
+    }
+    else {
+        throw "Analysis pipeline failed"
+    }
+}
+
 function Run-Dev {
     Write-Status "Launching Dev Environment (API + UI)..."
     # Launch in separate processes
@@ -173,8 +224,15 @@ switch ($Command) {
         Run-Migrate
         Run-Reddit 
     }
+    "x" {
+        Run-Migrate
+        Run-X
+    }
     "api" { 
         Run-Api 
+    }
+    "analyze" {
+        Run-Analyze
     }
     "ui" { 
         Run-Ui 
@@ -185,7 +243,9 @@ switch ($Command) {
     "all" {
         Run-Migrate
         Run-Ingest
+        Run-X
         Run-Crawl -Duration "5m"
+        Run-Analyze
         Run-Dev
     }
     "help" {
@@ -196,10 +256,16 @@ switch ($Command) {
         Write-Host "  migrate  - Apply database migrations"
         Write-Host "  ingest   - Discover URLs from seed feeds"
         Write-Host "  crawl    - Run the web crawler"
-        Write-Host "  api      - Start Python FastAPI server"
+        Write-Host "  analyze  - Run analysis pipeline (ETL + AI + caching)"
+        Write-Host "  api      - Start Python FastAPI server (serves cached data)"
         Write-Host "  ui       - Start React Frontend"
         Write-Host "  dev      - Start both API and UI"
         Write-Host "  all      - Run ingest, crawl, then dev"
+        Write-Host ""
+        Write-Host "Typical workflow:"
+        Write-Host "  1. .\run.ps1 crawl     # Fetch news articles"
+        Write-Host "  2. .\run.ps1 analyze   # Run AI analysis pipeline"
+        Write-Host "  3. .\run.ps1 dev       # Start API + UI"
         Write-Host ""
         Write-Host "To bypass execution policy:"
         Write-Host "  powershell -ExecutionPolicy Bypass -File .\run.ps1 ingest"

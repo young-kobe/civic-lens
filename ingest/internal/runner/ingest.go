@@ -3,6 +3,7 @@ package runner
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/young-kobe/civic-lens/ingest/internal/app"
 	"github.com/young-kobe/civic-lens/ingest/internal/extract/rss"
@@ -12,12 +13,16 @@ import (
 // IngestResult holds ingestion statistics.
 type IngestResult struct {
 	TotalDiscovered int64
+	Skipped         int64 // Items skipped due to age filter
 }
 
 // RunIngest discovers URLs from seed feeds and adds them to the frontier.
 func RunIngest(ctx context.Context, a *app.App) (*IngestResult, error) {
 	cfg := a.Config
-	var totalDiscovered int64
+	var totalDiscovered, skipped int64
+
+	// Only ingest items from the last 30 days
+	cutoff := time.Now().Add(-30 * 24 * time.Hour)
 
 	for _, seed := range cfg.Seeds {
 		fmt.Printf("Processing seed: %s (%s)\n", seed.URL, seed.Type)
@@ -37,19 +42,28 @@ func RunIngest(ctx context.Context, a *app.App) (*IngestResult, error) {
 			}
 
 			var links []string
+			var seedSkipped int64
 			for _, item := range feed.Items {
-				if item.Link != "" {
-					links = append(links, item.Link)
+				if item.Link == "" {
+					continue
 				}
+				// Filter out items older than 30 days
+				if !item.Published.IsZero() && item.Published.Before(cutoff) {
+					seedSkipped++
+					continue
+				}
+				links = append(links, item.Link)
 			}
 
 			added, _ := a.Frontier.PushLinks(ctx, links, seed.Priority)
 			totalDiscovered += added
-			fmt.Printf("  Discovered %d links from RSS feed\n", added)
+			skipped += seedSkipped
+			fmt.Printf("  Discovered %d links from RSS feed (skipped %d old items)\n", added, seedSkipped)
 		}
 	}
 
 	return &IngestResult{
 		TotalDiscovered: totalDiscovered,
+		Skipped:         skipped,
 	}, nil
 }

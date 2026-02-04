@@ -7,27 +7,12 @@ Uses a two-layer approach:
 """
 
 from typing import Any, Dict, List, Optional, Tuple
-from dataclasses import dataclass, asdict
 from analysis.src.common.logger import get_logger
+from analysis.src.engine.models import SentimentResult
+from analysis.src.engine.prompts import SENTIMENT_SYSTEM_PROMPT, SENTIMENT_USER_PROMPT_TEMPLATE
+from analysis.src.llm.schemas import SENTIMENT_SCHEMA
 
 logger = get_logger(__name__)
-
-
-@dataclass
-class SentimentResult:
-    """
-    Sentiment analysis result with evidence.
-    
-    Satisfies invariant B2: AI outputs include confidence and evidence.
-    """
-    label: str  # POSITIVE, NEGATIVE, NEUTRAL, MIXED
-    confidence: float  # 0.0 - 1.0
-    evidence_spans: List[str]  # Specific phrases supporting classification
-    reasoning: Optional[str] = None  # Explanation (LLM only)
-    deterministic_signals: Optional[Dict[str, Any]] = None  # Raw computed signals
-    
-    def to_dict(self) -> Dict[str, Any]:
-        return asdict(self)
 
 
 # Sentiment word lists for deterministic analysis
@@ -64,35 +49,6 @@ class HybridSentimentAnalyzer:
     Hybrid sentiment analyzer combining deterministic signals with LLM interpretation.
     """
     
-    # LLM prompt templates
-    SYSTEM_PROMPT = """You are a sentiment classifier for political news and social media content.
-Your task is to classify the sentiment expressed toward the main subject of the text.
-
-RULES:
-1. Return ONLY valid JSON matching the schema below
-2. Cite specific phrases from the text as evidence (use exact quotes)
-3. If uncertain, set confidence < 0.7
-4. Do not infer sentiment not explicitly present in the text
-5. Consider context and nuance - sarcasm, irony, or mixed feelings affect classification
-
-OUTPUT SCHEMA:
-{
-  "label": "POSITIVE" | "NEGATIVE" | "NEUTRAL" | "MIXED",
-  "confidence": 0.0-1.0,
-  "evidence_spans": ["quoted phrase 1", "quoted phrase 2"],
-  "reasoning": "Brief explanation of classification"
-}"""
-
-    USER_PROMPT_TEMPLATE = """Classify the sentiment of the following text:
-
-\"\"\"{text}\"\"\"
-
-Pre-computed signals for context:
-- Positive indicators found: {positive_count}
-- Negative indicators found: {negative_count}
-- Intensifiers present: {has_intensifiers}
-- Negators present: {has_negators}"""
-
     def __init__(
         self,
         model_name: str = "distilbert-base-uncased-finetuned-sst-2-english",
@@ -100,7 +56,7 @@ Pre-computed signals for context:
     ):
         self.model_name = model_name
         self.llm_enabled = llm_enabled
-        self._gemini_client = None
+        self._llm_client = None
         
         logger.info(f"Initialized HybridSentimentAnalyzer (llm_enabled={llm_enabled})")
         
@@ -110,10 +66,10 @@ Pre-computed signals for context:
     def _init_llm_client(self):
         """Initialize the LLM client if enabled."""
         try:
-            from analysis.src.common.llm_client import get_gemini_client
-            self._gemini_client = get_gemini_client()
-            if not self._gemini_client.is_available:
-                logger.warning("Gemini client not available. Falling back to heuristics.")
+            from analysis.src.llm import get_llm_client
+            self._llm_client = get_llm_client()
+            if not self._llm_client.is_available:
+                logger.warning("LLM client not available. Falling back to heuristics.")
                 self.llm_enabled = False
         except Exception as e:
             logger.error(f"Failed to initialize LLM client: {e}")
@@ -209,7 +165,7 @@ Pre-computed signals for context:
         """
         Classify sentiment using LLM with deterministic signals as context.
         """
-        user_prompt = self.USER_PROMPT_TEMPLATE.format(
+        user_prompt = SENTIMENT_USER_PROMPT_TEMPLATE.format(
             text=text[:2000],  # Truncate for token limits
             positive_count=signals["positive_count"],
             negative_count=signals["negative_count"],
@@ -218,11 +174,11 @@ Pre-computed signals for context:
         )
         
         try:
-            response = self._gemini_client.complete(
-                system_prompt=self.SYSTEM_PROMPT,
+            response = self._llm_client.complete(
+                system_prompt=SENTIMENT_SYSTEM_PROMPT,
                 user_prompt=user_prompt,
+                response_schema=SENTIMENT_SCHEMA,
             )
-            
             return SentimentResult(
                 label=response.get("label", "NEUTRAL"),
                 confidence=float(response.get("confidence", 0.5)),
@@ -265,12 +221,8 @@ Pre-computed signals for context:
         signals = self._compute_signals(text)
         
         # 2. LLM classification if enabled and client available
-        if self.llm_enabled and self._gemini_client and self._gemini_client.is_available:
+        if self.llm_enabled and self._llm_client and self._llm_client.is_available:
             return self._llm_classify(text, signals)
         
         # 3. Fallback to heuristic
         return self._heuristic_classify(signals)
-
-
-# Backwards-compatible alias
-SentimentAnalyzer = HybridSentimentAnalyzer

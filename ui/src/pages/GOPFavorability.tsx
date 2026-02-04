@@ -1,52 +1,11 @@
 import { useState, useEffect } from 'react';
 import { Card, ConfidenceBadge, MethodPopover, LoadingCard, ErrorState } from '../components/common';
 import { TrendStrip, SentimentBar } from '../components/charts';
-import type { Filters, FavorabilityData, FavorabilityOverall, DemographicBreakdown, PollingSocialComparison, TrendPoint, TrendAnnotation } from '../types';
+import type { Filters, FavorabilityData, FavorabilityOverall, PollingSocialComparison } from '../types';
 
-// Mock data for GOP Favorability infographic
-const MOCK_FAVORABILITY_DATA: FavorabilityData = {
-    overall: {
-        favorable: 42.3,
-        unfavorable: 51.2,
-        neutral: 6.5,
-        netFavorability: -8.9,
-        sampleSize: 12450,
-        sourceCount: 23,
-        lastUpdated: '2026-01-15T10:30:00Z',
-        dateRange: 'December 15, 2025 - January 15, 2026',
-    },
-    trend: [
-        { date: 'Dec 15', value: -6.2 },
-        { date: 'Dec 22', value: -7.5 },
-        { date: 'Dec 29', value: -8.1 },
-        { date: 'Jan 5', value: -9.4 },
-        { date: 'Jan 12', value: -8.9 },
-    ],
-    trendAnnotations: [
-        { x: 'Jan 5', label: 'Policy announcement' },
-    ],
-    byAge: [
-        { group: '18-29', favorable: 28, unfavorable: 62, neutral: 10 },
-        { group: '30-44', favorable: 38, unfavorable: 54, neutral: 8 },
-        { group: '45-64', favorable: 47, unfavorable: 47, neutral: 6 },
-        { group: '65+', favorable: 52, unfavorable: 43, neutral: 5 },
-    ],
-    byRegion: [
-        { region: 'Northeast', favorable: 32, unfavorable: 60, neutral: 8 },
-        { region: 'Midwest', favorable: 45, unfavorable: 48, neutral: 7 },
-        { region: 'South', favorable: 52, unfavorable: 42, neutral: 6 },
-        { region: 'West', favorable: 36, unfavorable: 57, neutral: 7 },
-    ],
-    byPartyId: [
-        { party: 'Republican', favorable: 85, unfavorable: 10, neutral: 5 },
-        { party: 'Independent', favorable: 35, unfavorable: 52, neutral: 13 },
-        { party: 'Democrat', favorable: 8, unfavorable: 88, neutral: 4 },
-    ],
-    pollingVsSocial: {
-        polling: { favorable: 42.3, unfavorable: 51.2, neutral: 6.5 },
-        social: { favorable: 38.1, unfavorable: 55.8, neutral: 6.1 },
-    },
-};
+
+import { fetchFavorability } from '../services/api';
+import { transformFavorability } from '../services/transformers';
 
 interface HeroMetricProps {
     data: FavorabilityOverall;
@@ -106,44 +65,7 @@ function HeroMetric({ data }: HeroMetricProps) {
     );
 }
 
-interface DemographicBreakoutProps {
-    title: string;
-    data: DemographicBreakdown[];
-    labelKey: 'group' | 'region' | 'party';
-    caveat?: string;
-}
 
-function DemographicBreakout({ title, data, labelKey, caveat }: DemographicBreakoutProps) {
-    return (
-        <Card title={title}>
-            <div className="flex flex-col gap-3">
-                {data.map((item, i) => (
-                    <div key={i}>
-                        <div className="flex justify-between mb-1">
-                            <span className="text-sm font-medium">{item[labelKey]}</span>
-                            <span className="text-xs text-muted">
-                                Net: {item.favorable - item.unfavorable >= 0 ? '+' : ''}
-                                {(item.favorable - item.unfavorable).toFixed(0)}%
-                            </span>
-                        </div>
-                        <SentimentBar
-                            positive={item.favorable}
-                            negative={item.unfavorable}
-                            neutral={item.neutral}
-                            height={20}
-                            showLabels={false}
-                        />
-                    </div>
-                ))}
-            </div>
-            {caveat && (
-                <div className="card-note mt-4">
-                    {caveat}
-                </div>
-            )}
-        </Card>
-    );
-}
 
 interface SourceComparisonProps {
     data: PollingSocialComparison;
@@ -205,16 +127,25 @@ function GOPFavorability({ filters }: GOPFavorabilityProps) {
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        setLoading(true);
-        const timer = setTimeout(() => {
-            setData(MOCK_FAVORABILITY_DATA);
-            setLoading(false);
-        }, 600);
-        return () => clearTimeout(timer);
+        const loadData = async () => {
+            setLoading(true);
+            setError(null);
+            try {
+                const rawData = await fetchFavorability(filters.timeRange);
+                const processedData = transformFavorability(rawData);
+                setData(processedData);
+            } catch (err: any) {
+                console.error("Failed to load favorability:", err);
+                setError(err.message || "Failed to load favorability data.");
+            } finally {
+                setLoading(false);
+            }
+        };
+        loadData();
     }, [filters]);
 
     if (error) {
-        return <ErrorState message={error} onRetry={() => setError(null)} />;
+        return <ErrorState message={error} onRetry={() => window.location.reload()} />;
     }
 
     if (loading) {
@@ -263,47 +194,61 @@ function GOPFavorability({ filters }: GOPFavorabilityProps) {
 
             {/* Trend Strip */}
             <Card
-                title="30-Day Trend"
+                title={`${filters.timeRange === 'all' ? 'All-Time' : filters.timeRange === '24h' ? '24-Hour' : filters.timeRange === '7d' ? '7-Day' : filters.timeRange === '30d' ? '30-Day' : '90-Day'} Trend`}
                 headerActions={
                     <MethodPopover
-                        description="Daily net favorability calculated from aggregated polling and weighted sentiment data."
+                        description="Net favorability over the selected time period. Calculated from aggregated polling and weighted sentiment data."
                     />
                 }
             >
-                <TrendStrip
-                    data={data.trend}
-                    dataKey="value"
-                    xKey="date"
-                    height={180}
-                    annotations={data.trendAnnotations}
-                    color="var(--accent)"
-                />
+                {data.trend.length > 0 ? (
+                    <TrendStrip
+                        data={data.trend}
+                        dataKey="value"
+                        xKey="date"
+                        height={180}
+                        annotations={data.trendAnnotations}
+                        color="var(--accent)"
+                    />
+                ) : (
+                    <div className="flex items-center justify-center h-40 text-muted text-sm">No trend data available</div>
+                )}
             </Card>
-
-            {/* Demographic Breakouts */}
-            <div className="grid-3">
-                <DemographicBreakout
-                    title="By Age Bracket"
-                    data={data.byAge}
-                    labelKey="group"
-                    caveat="Age data derived from panel surveys. Online samples may skew younger."
-                />
-                <DemographicBreakout
-                    title="By Region"
-                    data={data.byRegion}
-                    labelKey="region"
-                    caveat="Regional breakdown based on respondent location."
-                />
-                <DemographicBreakout
-                    title="By Party Identification"
-                    data={data.byPartyId}
-                    labelKey="party"
-                    caveat="Party ID is self-reported and may not reflect registration."
-                />
-            </div>
 
             {/* Polling vs Social Comparison */}
             <SourceComparison data={data.pollingVsSocial} />
+
+            {/* Platform Comparison */}
+            <Card title="Favorability by Platform">
+                <div className="flex flex-col gap-6">
+
+
+                    <div className="flex flex-col gap-8">
+                        {data.byPlatform && data.byPlatform.map((platform, i) => (
+                            <div key={i}>
+                                <div className="flex justify-between items-center mb-2">
+                                    <span className={`badge ${platform.group === 'Social Media' || platform.group === 'Reddit' ? 'badge-accent' : 'badge-neutral'}`}>
+                                        {platform.group === 'reddit_post' ? 'Reddit' : platform.group}
+                                    </span>
+                                    <span className="text-xs text-muted">
+                                        Net: {platform.favorable - platform.unfavorable > 0 ? '+' : ''}{(platform.favorable - platform.unfavorable).toFixed(0)}%
+                                    </span>
+                                </div>
+                                <SentimentBar
+                                    positive={platform.favorable}
+                                    negative={platform.unfavorable}
+                                    neutral={platform.neutral}
+                                    height={24}
+                                    showLabels={true}
+                                />
+                            </div>
+                        ))}
+                    </div>
+                    <div className="card-note">
+                        Compare how favorability metrics differ between traditional news coverage and social media discussions.
+                    </div>
+                </div>
+            </Card>
 
             {/* Data Footnote */}
             <Card className="bg-neutral-50" style={{ background: 'var(--neutral-50)' }}>

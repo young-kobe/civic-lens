@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Tabs, GlobalFilters, ExportMenu } from './components/common';
-import { StoryClusters, PublicSentiment, GOPFavorability, BotActivityProfiler } from './pages';
+import { StoryClusters, PublicSentiment, GOPFavorability, BotActivityProfiler, GlobalHeatmap } from './pages';
 import type { Filters } from './types';
 
 const TABS = [
@@ -8,6 +8,7 @@ const TABS = [
     { id: 'sentiment', label: 'Public Sentiment' },
     { id: 'favorability', label: 'GOP Favorability' },
     { id: 'bots', label: 'Bot Activity Profiler' },
+    { id: 'heatmap', label: 'Global Heatmap' },
 ];
 
 function App() {
@@ -33,6 +34,8 @@ function App() {
                 return <GOPFavorability filters={filters} />;
             case 'bots':
                 return <BotActivityProfiler filters={filters} />;
+            case 'heatmap':
+                return <GlobalHeatmap filters={filters} />;
             default:
                 return <StoryClusters filters={filters} />;
         }

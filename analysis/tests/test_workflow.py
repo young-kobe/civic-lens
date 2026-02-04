@@ -24,7 +24,7 @@ from pathlib import Path
 # Resolve paths relative to this script
 SCRIPT_DIR = Path(__file__).parent.absolute()
 PROJECT_ROOT = SCRIPT_DIR.parent.parent # analysis/tests -> analysis -> root
-DB_PATH = PROJECT_ROOT / "data" / "news.db"
+DB_PATH = PROJECT_ROOT / "data" / "civic_lens.db"
 RAW_DIR = PROJECT_ROOT / "data" / "raw" / "sha256"
 
 def log(msg, level="INFO"):

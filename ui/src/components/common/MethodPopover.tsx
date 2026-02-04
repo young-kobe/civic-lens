@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, ReactNode } from 'react';
+import { useState, useRef, useEffect, ReactNode } from 'react';
 
 interface MethodPopoverProps {
     title?: string;

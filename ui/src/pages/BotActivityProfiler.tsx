@@ -1,115 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Card, MetricCard, ConfidenceBadge, MethodPopover, LoadingCard, EmptyState, ErrorState } from '../components/common';
-import { Heatmap, SentimentBar } from '../components/charts';
+import { Card, MetricCard, MethodPopover, LoadingCard, EmptyState, ErrorState } from '../components/common';
+import { Heatmap } from '../components/charts';
+import { fetchBotActivity } from '../services/api';
 import type { Filters, BotData, BotOverview, NarrativeAmplification, CoordinationStats, BehavioralSignals, ConfidenceLevel } from '../types';
-
-// Mock data for Bot Activity Profiler
-const MOCK_BOT_DATA: BotData = {
-    overview: {
-        suspectedAutomationRate: 8.7,
-        coordinationIndex: 0.42,
-        topClusters: ['Immigration Policy', 'Election Integrity', 'Climate Debate'],
-        totalFlaggedAccounts: 2345,
-        confidence: 'medium',
-    },
-    narrativeAmplification: [
-        {
-            id: 1,
-            narrative: 'Border security crisis narrative',
-            confidence: 'high',
-            examplePosts: [
-                'The border is wide open and no one is doing anything about it',
-                'Millions crossing illegally every day while politicians do nothing',
-            ],
-            topHashtags: ['#BorderCrisis', '#SecureTheBorder', '#IllegalImmigration'],
-            topPhrases: ['wide open border', 'invasion', 'failed policies'],
-            targets: ['DHS', 'Current Administration', 'Border Patrol'],
-            suspectedBotVolume: 12340,
-            whyFlagged: [
-                'Synchronized posting bursts within 5-minute windows',
-                'High text similarity (>85%) across accounts',
-                'Abnormal posting cadence (24/7 posting patterns)',
-            ],
-        },
-        {
-            id: 2,
-            narrative: 'Election fraud claims',
-            confidence: 'medium',
-            examplePosts: [
-                'The machines cannot be trusted',
-                'Why wont they allow audits if there is nothing to hide',
-            ],
-            topHashtags: ['#ElectionIntegrity', '#Audit', '#VoterFraud'],
-            topPhrases: ['stolen election', 'rigged machines', 'audit the votes'],
-            targets: ['Election Officials', 'Voting Machine Companies'],
-            suspectedBotVolume: 8920,
-            whyFlagged: [
-                'Account age distribution skews heavily toward accounts <30 days old',
-                'Identical text patterns across 200+ accounts',
-                'Posting times clustered at off-hours (2-5 AM local)',
-            ],
-        },
-        {
-            id: 3,
-            narrative: 'Climate change denial',
-            confidence: 'low',
-            examplePosts: [
-                'Climate change is a hoax pushed by elites',
-                'Follow the money - climate scientists are paid to lie',
-            ],
-            topHashtags: ['#ClimateHoax', '#FollowTheMoney'],
-            topPhrases: ['climate hoax', 'green agenda', 'follow the money'],
-            targets: ['Climate Scientists', 'Environmental Groups'],
-            suspectedBotVolume: 4560,
-            whyFlagged: [
-                'Moderate text similarity patterns',
-                'Some coordinated timing detected',
-            ],
-        },
-    ],
-    coordinationStats: {
-        burstTimingSimilarity: 0.78,
-        accountReuse: 342,
-        identicalTextPairs: 1245,
-        avgPostsPerSuspectedAccount: 47.3,
-    },
-    behavioralSignals: {
-        accountAgeDistribution: [
-            { range: '<7 days', count: 456, percentage: 19.4 },
-            { range: '7-30 days', count: 678, percentage: 28.9 },
-            { range: '30-90 days', count: 534, percentage: 22.8 },
-            { range: '90+ days', count: 677, percentage: 28.9 },
-        ],
-        postingCadence: [
-            { day: 0, hour: 2, value: 45 },
-            { day: 0, hour: 3, value: 52 },
-            { day: 0, hour: 4, value: 48 },
-            { day: 1, hour: 2, value: 67 },
-            { day: 1, hour: 3, value: 72 },
-            { day: 1, hour: 4, value: 58 },
-            { day: 2, hour: 2, value: 54 },
-            { day: 2, hour: 3, value: 61 },
-            { day: 3, hour: 14, value: 89 },
-            { day: 3, hour: 15, value: 92 },
-            { day: 4, hour: 2, value: 78 },
-            { day: 4, hour: 3, value: 85 },
-            { day: 5, hour: 12, value: 34 },
-            { day: 6, hour: 2, value: 56 },
-            { day: 6, hour: 3, value: 62 },
-        ],
-        copyPasteSimilarity: {
-            high: 34.2,
-            medium: 28.5,
-            low: 37.3,
-        },
-        linkDomainConcentration: [
-            { domain: 'suspicious-news.com', percentage: 23.4 },
-            { domain: 'alt-media-source.net', percentage: 18.7 },
-            { domain: 'patriot-daily.us', percentage: 12.3 },
-            { domain: 'other', percentage: 45.6 },
-        ],
-    },
-};
 
 interface BotOverviewMetricsProps {
     data: BotOverview;
@@ -447,12 +340,27 @@ function BotActivityProfiler({ filters }: BotActivityProfilerProps) {
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
+        let cancelled = false;
         setLoading(true);
-        const timer = setTimeout(() => {
-            setData(MOCK_BOT_DATA);
-            setLoading(false);
-        }, 700);
-        return () => clearTimeout(timer);
+        setError(null);
+
+        fetchBotActivity()
+            .then((result) => {
+                if (!cancelled) {
+                    setData(result);
+                    setLoading(false);
+                }
+            })
+            .catch((err) => {
+                if (!cancelled) {
+                    setError(err.message || 'Failed to fetch bot activity data');
+                    setLoading(false);
+                }
+            });
+
+        return () => {
+            cancelled = true;
+        };
     }, [filters]);
 
     if (error) {
@@ -473,8 +381,13 @@ function BotActivityProfiler({ filters }: BotActivityProfilerProps) {
         );
     }
 
-    if (!data) {
-        return null;
+    if (!data || data.overview.totalFlaggedAccounts === 0) {
+        return (
+            <EmptyState
+                title="No Bot Activity Data"
+                description="No bot detection analysis has been run yet. Run the analysis pipeline to generate data."
+            />
+        );
     }
 
     return (

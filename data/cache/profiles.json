@@ -1,0 +1,135 @@
+{
+  "_meta": {
+    "generated_at": "2026-01-26T21:34:15.082313+00:00",
+    "doc_count": 18,
+    "version": "1.0"
+  },
+  "data": [
+    {
+      "outlet": "www.foxnews.com",
+      "avg_sentiment": 0.308,
+      "bot_rate": 0.359,
+      "volume": 39,
+      "total_scanned": 39
+    },
+    {
+      "outlet": "www.npr.org",
+      "avg_sentiment": 0.284,
+      "bot_rate": 0.049,
+      "volume": 412,
+      "total_scanned": 412
+    },
+    {
+      "outlet": "www.cbsnews.com",
+      "avg_sentiment": 0.25,
+      "bot_rate": 0.025,
+      "volume": 40,
+      "total_scanned": 40
+    },
+    {
+      "outlet": "www.bbc.co.uk",
+      "avg_sentiment": 0.197,
+      "bot_rate": 0.016,
+      "volume": 61,
+      "total_scanned": 61
+    },
+    {
+      "outlet": "www.bbc.com",
+      "avg_sentiment": 0.13,
+      "bot_rate": 0.007,
+      "volume": 440,
+      "total_scanned": 440
+    },
+    {
+      "outlet": "politics",
+      "avg_sentiment": -0.842,
+      "bot_rate": 0.0,
+      "volume": 19,
+      "total_scanned": 19
+    },
+    {
+      "outlet": "news",
+      "avg_sentiment": -0.857,
+      "bot_rate": 0.0,
+      "volume": 14,
+      "total_scanned": 14
+    },
+    {
+      "outlet": "worldnews",
+      "avg_sentiment": -0.867,
+      "bot_rate": 0.0,
+      "volume": 15,
+      "total_scanned": 15
+    },
+    {
+      "outlet": "PoliticalDiscussion",
+      "avg_sentiment": 0.227,
+      "bot_rate": 0.0,
+      "volume": 22,
+      "total_scanned": 22
+    },
+    {
+      "outlet": "NeutralPolitics",
+      "avg_sentiment": 0.667,
+      "bot_rate": 0.0,
+      "volume": 3,
+      "total_scanned": 3
+    },
+    {
+      "outlet": "geopolitics",
+      "avg_sentiment": -1.0,
+      "bot_rate": 0.0,
+      "volume": 9,
+      "total_scanned": 9
+    },
+    {
+      "outlet": "Conservative",
+      "avg_sentiment": -0.818,
+      "bot_rate": 0.0,
+      "volume": 11,
+      "total_scanned": 11
+    },
+    {
+      "outlet": "Liberal",
+      "avg_sentiment": -0.263,
+      "bot_rate": 0.0,
+      "volume": 19,
+      "total_scanned": 19
+    },
+    {
+      "outlet": "moderatepolitics",
+      "avg_sentiment": -0.45,
+      "bot_rate": 0.0,
+      "volume": 20,
+      "total_scanned": 20
+    },
+    {
+      "outlet": "www.fool.com",
+      "avg_sentiment": 0.0,
+      "bot_rate": 0.0,
+      "volume": 3,
+      "total_scanned": 3
+    },
+    {
+      "outlet": "www.comparecards.com",
+      "avg_sentiment": 0.0,
+      "bot_rate": 0.0,
+      "volume": 1,
+      "total_scanned": 1
+    },
+    {
+      "outlet": "www.politico.com",
+      "avg_sentiment": 0.0,
+      "bot_rate": 0.0,
+      "volume": 24,
+      "total_scanned": 24
+    },
+    {
+      "outlet": "x.com",
+      "avg_sentiment": 0.348,
+      "bot_rate": 0.0,
+      "volume": 945,
+      "total_scanned": 945
+    }
+  ]
+}

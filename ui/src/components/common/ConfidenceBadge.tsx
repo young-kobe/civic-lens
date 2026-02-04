@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import type { ConfidenceLevel, CoverageLevel } from '../../types';
 
 interface ConfidenceBadgeProps {

@@ -6,40 +6,14 @@ Computes favorability toward Republican/GOP political entities using:
 2. LLM layer: Nuanced stance classification per entity (when enabled)
 """
 
+import re
 from typing import Any, Dict, List, Optional, Tuple
-from dataclasses import dataclass, asdict, field
 from analysis.src.common.logger import get_logger
+from analysis.src.engine.models import EntityStance, FavorabilityResult
+from analysis.src.engine.prompts import FAVORABILITY_SYSTEM_PROMPT, FAVORABILITY_USER_PROMPT_TEMPLATE
+from analysis.src.llm.schemas import FAVORABILITY_SCHEMA
 
 logger = get_logger(__name__)
-
-
-@dataclass
-class EntityStance:
-    """Stance toward a single entity."""
-    entity: str
-    stance: str  # favorable, unfavorable, neutral, mixed
-    confidence: float
-    evidence_spans: List[str] = field(default_factory=list)
-
-
-@dataclass
-class FavorabilityResult:
-    """
-    Full favorability analysis result.
-    
-    Satisfies invariant B2: AI outputs include confidence and evidence.
-    """
-    entity_stances: List[EntityStance]
-    overall_gop_stance: str  # favorable, unfavorable, neutral, mixed
-    overall_confidence: float
-    gop_entities_found: List[str]
-    reasoning: Optional[str] = None
-    deterministic_signals: Optional[Dict[str, Any]] = None
-    
-    def to_dict(self) -> Dict[str, Any]:
-        result = asdict(self)
-        result["entity_stances"] = [asdict(es) for es in self.entity_stances]
-        return result
 
 
 # GOP-related entities and keywords for detection
@@ -78,46 +52,9 @@ class FavorabilityAnalyzer:
     Analyzes favorability toward GOP/Republican entities in text.
     """
     
-    SYSTEM_PROMPT = """You are a political stance analyzer. Classify the favorability expressed
-toward Republican/GOP entities mentioned in the text.
-
-RULES:
-1. Return ONLY valid JSON matching the schema below
-2. Analyze ONLY entities actually mentioned in the text
-3. Cite specific phrases as evidence for each stance judgment
-4. If stance is unclear, use "neutral" with low confidence
-5. Do not infer intent - classify only explicit expressions
-6. Consider context: quotes, attribution, and framing matter
-
-OUTPUT SCHEMA:
-{
-  "entity_stances": [
-    {
-      "entity": "entity name",
-      "stance": "favorable" | "unfavorable" | "neutral" | "mixed",
-      "confidence": 0.0-1.0,
-      "evidence_spans": ["quoted phrase from text"]
-    }
-  ],
-  "overall_gop_stance": "favorable" | "unfavorable" | "neutral" | "mixed",
-  "overall_confidence": 0.0-1.0,
-  "reasoning": "Brief explanation of classification"
-}"""
-
-    USER_PROMPT_TEMPLATE = """Analyze favorability toward GOP entities in this text:
-
-\"\"\"{text}\"\"\"
-
-Detected GOP entities: {gop_mentions}
-Pre-computed signals:
-- Favorable indicators: {favorable_count} found
-- Unfavorable indicators: {unfavorable_count} found
-- Favorable keywords: {favorable_keywords}
-- Unfavorable keywords: {unfavorable_keywords}"""
-
     def __init__(self, llm_enabled: bool = False):
         self.llm_enabled = llm_enabled
-        self._gemini_client = None
+        self._llm_client = None
         
         logger.info(f"Initialized FavorabilityAnalyzer (llm_enabled={llm_enabled})")
         
@@ -127,10 +64,10 @@ Pre-computed signals:
     def _init_llm_client(self):
         """Initialize the LLM client if enabled."""
         try:
-            from analysis.src.common.llm_client import get_gemini_client
-            self._gemini_client = get_gemini_client()
-            if not self._gemini_client.is_available:
-                logger.warning("Gemini client not available. Falling back to heuristics.")
+            from analysis.src.llm import get_llm_client
+            self._llm_client = get_llm_client()
+            if not self._llm_client.is_available:
+                logger.warning("LLM client not available. Falling back to heuristics.")
                 self.llm_enabled = False
         except Exception as e:
             logger.error(f"Failed to initialize LLM client: {e}")
@@ -169,7 +106,6 @@ Pre-computed signals:
         # Normalize text
         text_lower = text.lower()
         # Tokenize into words (strip punctuation)
-        import re
         words = set(re.findall(r'\b[a-z]+\b', text_lower))
         
         # Find stance indicators using dual matching:
@@ -276,7 +212,7 @@ Pre-computed signals:
         """
         Classify favorability using LLM with deterministic signals as context.
         """
-        user_prompt = self.USER_PROMPT_TEMPLATE.format(
+        user_prompt = FAVORABILITY_USER_PROMPT_TEMPLATE.format(
             text=text[:2000],
             gop_mentions=", ".join(gop_entities[:10]),
             favorable_count=signals["favorable_count"],
@@ -286,14 +222,17 @@ Pre-computed signals:
         )
         
         try:
-            response = self._gemini_client.complete(
-                system_prompt=self.SYSTEM_PROMPT,
+            response = self._llm_client.complete(
+                system_prompt=FAVORABILITY_SYSTEM_PROMPT,
                 user_prompt=user_prompt,
+                response_schema=FAVORABILITY_SCHEMA,
             )
             
             # Parse entity stances
             entity_stances = []
             for es in response.get("entity_stances", []):
+                if not isinstance(es, dict):
+                    continue
                 entity_stances.append(EntityStance(
                     entity=es.get("entity", "unknown"),
                     stance=es.get("stance", "neutral"),
@@ -357,7 +296,7 @@ Pre-computed signals:
         signals = self._compute_signals(text, gop_entities)
         
         # 3. LLM classification if enabled
-        if self.llm_enabled and self._gemini_client and self._gemini_client.is_available:
+        if self.llm_enabled and self._llm_client and self._llm_client.is_available:
             return self._llm_classify(text, gop_entities, signals)
         
         # 4. Fallback to heuristic

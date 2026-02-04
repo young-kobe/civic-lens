@@ -2,7 +2,7 @@
 
 // Filter types
 export interface Filters {
-    timeRange: '24h' | '7d' | '30d' | '90d';
+    timeRange: '24h' | '7d' | '30d' | '90d' | 'all';
     sourceType: 'all' | 'news' | 'reddit' | 'social';
     geography: string;
 }
@@ -39,7 +39,7 @@ export interface SourceMixItem {
     type: 'news' | 'reddit' | 'social' | 'other';
 }
 
-export interface TimelinePoint {
+export interface TimelinePoint extends ChartDataPoint {
     date: string;
     value: number;
 }
@@ -53,12 +53,30 @@ export interface Article {
 }
 
 // Sentiment types
-export interface SentimentData {
+export interface SocialVsNewsSentiment {
+    social: {
+        positive: number;
+        negative: number;
+        neutral: number;
+        netScore: number;
+        volume: number;
+    };
+    news: {
+        positive: number;
+        negative: number;
+        neutral: number;
+        netScore: number;
+        volume: number;
+    };
+}
+
+export interface PublicSentimentData {
     overview: SentimentOverview;
     byTopic: SentimentBreakdown[];
     byPlatform: SentimentBreakdown[];
     byTimeWindow: SentimentBreakdown[];
     distribution: SentimentDistribution;
+    socialVsNews?: SocialVsNewsSentiment | null;
 }
 
 export interface SentimentOverview {
@@ -94,6 +112,7 @@ export interface FavorabilityData {
     byAge: DemographicBreakdown[];
     byRegion: DemographicBreakdown[];
     byPartyId: DemographicBreakdown[];
+    byPlatform: DemographicBreakdown[]; // Added field
     pollingVsSocial: PollingSocialComparison;
 }
 
@@ -108,7 +127,7 @@ export interface FavorabilityOverall {
     dateRange: string;
 }
 
-export interface TrendPoint {
+export interface TrendPoint extends ChartDataPoint {
     date: string;
     value: number;
 }

@@ -4,13 +4,13 @@ interface SentimentBarProps {
     neutral?: number;
     height?: number;
     showLabels?: boolean;
-    /** Use political color scheme: blue for favorable (left), red for unfavorable (right) */
-    politicalColors?: boolean;
+    /** Color scheme: 'sentiment' (green/grey/red) or 'political' (blue/grey/red) */
+    colorScheme?: 'sentiment' | 'political';
 }
 
 /**
  * SentimentBar - Horizontal bar showing sentiment/favorability distribution.
- * Uses red (Republican-leaning) and blue (Democrat-leaning) color scheme with grey for neutral.
+ * Default uses semantic colors: green (favorable), grey (neutral), red (unfavorable).
  */
 function SentimentBar({
     positive = 0,
@@ -18,21 +18,21 @@ function SentimentBar({
     neutral = 0,
     height = 40,
     showLabels = true,
-    politicalColors = true
+    colorScheme = 'sentiment'
 }: SentimentBarProps) {
     const total = positive + negative + neutral || 1;
 
-    // Political color scheme: Blue = Democrat/Favorable, Red = Republican/Unfavorable
-    const colors = politicalColors
+    // Color schemes: semantic (green/red) or political (blue/red)
+    const colors = colorScheme === 'political'
         ? {
-            positive: '#2563eb', // Blue (Democrat-leaning / Favorable)
+            positive: '#2563eb', // Blue
             neutral: '#9ca3af',  // Grey
-            negative: '#dc2626', // Red (Republican-leaning / Unfavorable)
+            negative: '#dc2626', // Red
         }
         : {
-            positive: 'var(--semantic-positive)',
-            neutral: 'var(--neutral-300)',
-            negative: 'var(--semantic-negative)',
+            positive: '#16a34a', // Green (favorable)
+            neutral: '#9ca3af',  // Grey (neutral)
+            negative: '#dc2626', // Red (unfavorable)
         };
 
     return (
@@ -74,14 +74,12 @@ function SentimentBar({
                 <div className="flex justify-between mt-2 text-xs">
                     <span style={{ color: colors.negative, fontWeight: 500 }}>
                         {((negative / total) * 100).toFixed(0)}% unfavorable
-                        <span className="text-muted" style={{ marginLeft: '4px', fontWeight: 400 }}>(R)</span>
                     </span>
                     <span style={{ color: colors.neutral }}>
                         {((neutral / total) * 100).toFixed(0)}% neutral
                     </span>
                     <span style={{ color: colors.positive, fontWeight: 500 }}>
                         {((positive / total) * 100).toFixed(0)}% favorable
-                        <span className="text-muted" style={{ marginLeft: '4px', fontWeight: 400 }}>(D)</span>
                     </span>
                 </div>
             )}

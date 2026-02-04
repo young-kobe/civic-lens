@@ -1,12 +1,12 @@
 # Civic Lens seed configuration
 
 database:
-  path: data/news.db
+  path: data/civic_lens.db
   raw_dir: data/raw
 
 crawl:
-  max_concurrency: 10
-  max_concurrent_domain: 2
+  max_concurrency: 50
+  max_concurrent_domain: 10
   request_timeout: 30s
   max_retries: 3
   rate_limit_per_sec: 1.0
@@ -30,6 +30,51 @@ reddit:
     - Liberal
     - moderatepolitics
 
+x:
+  # Get Bearer Token from https://developer.twitter.com/
+  # Set via environment variable X_BEARER_TOKEN 
+  user_agent: "CivicLens/1.0"
+  # Budget control: ~70 requests/hour = ~$50/month at $0.015/100 tweets
+  max_requests_hour: 70
+  max_tweets_per_query: 100
+  political_queries:
+    - "GOP OR Republican"
+    - "Trump OR MAGA"
+    - "Biden OR Democrat"
+    - "Congress OR Senate"
+    - "election 2024"
+    - "Immigration"
+    - "ICE"
+    - "Border"
+    - "Immigrant"
+    - "Citizen"
+    - "Citizenship"
+    - "Immigration Reform"
+    - "Immigration Law"
+    - "Minnesota"
+    - "Minneapolis"
+    - "MAGA"
+    - "Leftists"
+    # - "Violence"
+    - "2nd Amendment"
+    # - "Gun rights"
+    # - "Gun control"
+    # - "Technology"
+    # - "Silicon Valley"
+    # - "Wall Street"
+    # - "AI"
+    # - "Healthcare"
+    # - "Senator"
+    # - "Mayor"
+    # - "President"
+    # - "Judge"
+    # - "Economy"
+    - "Dollar"
+    - "Stock"
+    - "Market"
+    # - "Earnings"
+    # - "Inflation"
+
 seeds:
   # Major news RSS feeds
   - url: https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml
@@ -47,3 +92,24 @@ seeds:
   - url: https://feeds.bbci.co.uk/news/rss.xml
     type: rss
     priority: 8
+  - url: http://rss.cnn.com/rss/cnn_allpolitics.rss
+    type: rss
+    priority: 10
+  - url: http://feeds.foxnews.com/foxnews/politics
+    type: rss
+    priority: 10
+  - url: https://rss.politico.com/politics-news.xml
+    type: rss
+    priority: 10
+  - url: https://thehill.com/homenews/politics/feed/
+    type: rss
+    priority: 10
+  - url: https://feeds.nbcnews.com/msnbc/public/politics
+    type: rss
+    priority: 10
+  - url: https://feeds.feedburner.com/breitbart
+    type: rss
+    priority: 9
+  - url: https://www.cbsnews.com/latest/rss/politics
+    type: rss
+    priority: 10

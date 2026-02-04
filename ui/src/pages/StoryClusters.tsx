@@ -1,116 +1,12 @@
 import { useState, useEffect } from 'react';
-import { Card, MetricCard, ConfidenceBadge, MethodPopover, LoadingCard, EmptyState, ErrorState } from '../components/common';
+import { Card, ConfidenceBadge, MethodPopover, LoadingCard, EmptyState, ErrorState } from '../components/common';
 import { Sparkline, StackedBar } from '../components/charts';
-import type { Filters, Cluster, SourceMixItem, TimelinePoint, Article } from '../types';
+import type { Filters, Cluster } from '../types';
 
 // Mock data for demonstration
-const MOCK_CLUSTERS: Cluster[] = [
-    {
-        id: 1,
-        title: 'Federal Reserve Interest Rate Decision',
-        articleCount: 847,
-        momentum: { delta24h: 12.5, delta7d: 45.2 },
-        primarySources: ['reuters.com', 'wsj.com', 'bloomberg.com'],
-        summary: [
-            'Federal Reserve signals potential rate cuts in 2024',
-            'Markets react positively to dovish commentary',
-            'Inflation data showing signs of cooling',
-        ],
-        keyClaims: ['Rate cuts likely in Q2 2024', 'Inflation target within reach'],
-        entities: {
-            people: ['Jerome Powell', 'Janet Yellen'],
-            organizations: ['Federal Reserve', 'Treasury Department'],
-            locations: ['Washington D.C.'],
-        },
-        sourceMix: [
-            { name: 'News', value: 523, type: 'news' },
-            { name: 'Reddit', value: 234, type: 'reddit' },
-            { name: 'Social', value: 90, type: 'social' },
-        ],
-        timeline: [
-            { date: 'Mon', value: 45 },
-            { date: 'Tue', value: 78 },
-            { date: 'Wed', value: 156 },
-            { date: 'Thu', value: 234 },
-            { date: 'Fri', value: 189 },
-            { date: 'Sat', value: 98 },
-            { date: 'Sun', value: 47 },
-        ],
-        articles: [
-            { id: 1, title: 'Fed Signals Rate Cuts Ahead', source: 'Reuters', snippet: 'The Federal Reserve indicated it may begin cutting interest rates...', reason: 'High engagement, primary source' },
-            { id: 2, title: 'Markets Rally on Fed Commentary', source: 'WSJ', snippet: 'Stock markets surged following dovish comments from Fed officials...', reason: 'Major outlet coverage' },
-            { id: 3, title: 'What the Fed Decision Means for You', source: 'Bloomberg', snippet: 'Consumer borrowing costs could decline if the Fed follows through...', reason: 'Consumer impact angle' },
-        ],
-    },
-    {
-        id: 2,
-        title: 'Tech Layoffs and Industry Restructuring',
-        articleCount: 634,
-        momentum: { delta24h: -5.2, delta7d: 23.1 },
-        primarySources: ['techcrunch.com', 'theverge.com', 'wired.com'],
-        summary: [
-            'Major tech companies announce workforce reductions',
-            'AI investment cited as reason for restructuring',
-            'Remote work policies under review',
-        ],
-        keyClaims: ['Over 50,000 tech jobs cut in Q1', 'AI roles expanding'],
-        entities: {
-            people: ['Sundar Pichai', 'Satya Nadella'],
-            organizations: ['Google', 'Microsoft', 'Meta'],
-            locations: ['Silicon Valley', 'Seattle'],
-        },
-        sourceMix: [
-            { name: 'News', value: 312, type: 'news' },
-            { name: 'Reddit', value: 256, type: 'reddit' },
-            { name: 'Social', value: 66, type: 'social' },
-        ],
-        timeline: [
-            { date: 'Mon', value: 89 },
-            { date: 'Tue', value: 112 },
-            { date: 'Wed', value: 98 },
-            { date: 'Thu', value: 145 },
-            { date: 'Fri', value: 123 },
-            { date: 'Sat', value: 45 },
-            { date: 'Sun', value: 22 },
-        ],
-        articles: [
-            { id: 1, title: 'Google Announces 12,000 Layoffs', source: 'TechCrunch', snippet: 'Alphabet Inc announced it would cut approximately 12,000 jobs...', reason: 'Breaking news, high impact' },
-        ],
-    },
-    {
-        id: 3,
-        title: 'Climate Policy and COP Agreements',
-        articleCount: 423,
-        momentum: { delta24h: 8.3, delta7d: -12.4 },
-        primarySources: ['theguardian.com', 'nytimes.com', 'bbc.com'],
-        summary: [
-            'New climate commitments announced at international summit',
-            'Developing nations seek additional funding',
-            'Fossil fuel industry response mixed',
-        ],
-        keyClaims: ['2030 emissions targets reaffirmed'],
-        entities: {
-            people: ['John Kerry'],
-            organizations: ['United Nations', 'EPA'],
-            locations: ['Dubai', 'Brussels'],
-        },
-        sourceMix: [
-            { name: 'News', value: 298, type: 'news' },
-            { name: 'Reddit', value: 89, type: 'reddit' },
-            { name: 'Social', value: 36, type: 'social' },
-        ],
-        timeline: [
-            { date: 'Mon', value: 67 },
-            { date: 'Tue', value: 54 },
-            { date: 'Wed', value: 78 },
-            { date: 'Thu', value: 89 },
-            { date: 'Fri', value: 72 },
-            { date: 'Sat', value: 38 },
-            { date: 'Sun', value: 25 },
-        ],
-        articles: [],
-    },
-];
+
+import { fetchStories } from '../services/api';
+import { transformStories } from '../services/transformers';
 
 interface ClusterListItemProps {
     cluster: Cluster;
@@ -182,12 +78,17 @@ function ClusterDetail({ cluster }: ClusterDetailProps) {
                     />
                 }
             >
-                <ul style={{ margin: 0, paddingLeft: 'var(--space-5)' }}>
-                    {cluster.summary.map((point, i) => (
-                        <li key={i} className="mb-2">{point}</li>
-                    ))}
-                </ul>
-                {cluster.keyClaims.length > 0 && (
+                {cluster.summary.length > 0 ? (
+                    <ul style={{ margin: 0, paddingLeft: 'var(--space-5)' }}>
+                        {cluster.summary.map((point, i) => (
+                            <li key={i} className="mb-2">{point}</li>
+                        ))}
+                    </ul>
+                ) : (
+                    <p className="text-muted text-sm">No summary available.</p>
+                )}
+
+                {cluster.keyClaims && cluster.keyClaims.length > 0 && (
                     <div className="mt-4 pt-4" style={{ borderTop: '1px solid var(--neutral-100)' }}>
                         <div className="text-xs font-medium text-muted mb-2">Key Claims</div>
                         <div className="flex flex-wrap gap-2">
@@ -200,42 +101,58 @@ function ClusterDetail({ cluster }: ClusterDetailProps) {
             </Card>
 
             {/* Key Entities */}
-            <Card title="Key Entities">
-                <div className="grid-3">
-                    <div>
-                        <div className="text-xs font-medium text-muted mb-2">People</div>
-                        <div className="flex flex-wrap gap-1">
-                            {cluster.entities.people.map((p, i) => (
-                                <span key={i} className="badge badge-accent">{p}</span>
-                            ))}
-                        </div>
+            {(cluster.entities.people.length > 0 || cluster.entities.organizations.length > 0 || cluster.entities.locations.length > 0) && (
+                <Card title="Key Entities">
+                    <div className="grid-3">
+                        {cluster.entities.people.length > 0 && (
+                            <div>
+                                <div className="text-xs font-medium text-muted mb-2">People</div>
+                                <div className="flex flex-wrap gap-1">
+                                    {cluster.entities.people.map((p, i) => (
+                                        <span key={i} className="badge badge-accent">{p}</span>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                        {cluster.entities.organizations.length > 0 && (
+                            <div>
+                                <div className="text-xs font-medium text-muted mb-2">Organizations</div>
+                                <div className="flex flex-wrap gap-1">
+                                    {cluster.entities.organizations.map((o, i) => (
+                                        <span key={i} className="badge badge-neutral">{o}</span>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                        {cluster.entities.locations.length > 0 && (
+                            <div>
+                                <div className="text-xs font-medium text-muted mb-2">Locations</div>
+                                <div className="flex flex-wrap gap-1">
+                                    {cluster.entities.locations.map((l, i) => (
+                                        <span key={i} className="badge badge-neutral">{l}</span>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
                     </div>
-                    <div>
-                        <div className="text-xs font-medium text-muted mb-2">Organizations</div>
-                        <div className="flex flex-wrap gap-1">
-                            {cluster.entities.organizations.map((o, i) => (
-                                <span key={i} className="badge badge-neutral">{o}</span>
-                            ))}
-                        </div>
-                    </div>
-                    <div>
-                        <div className="text-xs font-medium text-muted mb-2">Locations</div>
-                        <div className="flex flex-wrap gap-1">
-                            {cluster.entities.locations.map((l, i) => (
-                                <span key={i} className="badge badge-neutral">{l}</span>
-                            ))}
-                        </div>
-                    </div>
-                </div>
-            </Card>
+                </Card>
+            )}
 
             {/* Source Mix & Timeline */}
             <div className="grid-2">
                 <Card title="Source Mix">
-                    <StackedBar data={cluster.sourceMix} height={160} layout="vertical" />
+                    {cluster.sourceMix.length > 0 ? (
+                        <StackedBar data={cluster.sourceMix} height={160} layout="vertical" />
+                    ) : (
+                        <div className="flex items-center justify-center h-40 text-muted text-sm">No source data</div>
+                    )}
                 </Card>
                 <Card title="Volume Over Time">
-                    <Sparkline data={cluster.timeline} dataKey="value" height={120} />
+                    {cluster.timeline.length > 0 ? (
+                        <Sparkline data={cluster.timeline} dataKey="value" height={120} />
+                    ) : (
+                        <div className="flex items-center justify-center h-40 text-muted text-sm">No timeline data</div>
+                    )}
                 </Card>
             </div>
 
@@ -285,14 +202,25 @@ function StoryClusters({ filters }: StoryClustersProps) {
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        // Simulate API fetch
-        setLoading(true);
-        const timer = setTimeout(() => {
-            setClusters(MOCK_CLUSTERS);
-            setSelectedCluster(MOCK_CLUSTERS[0]);
-            setLoading(false);
-        }, 800);
-        return () => clearTimeout(timer);
+        const loadData = async () => {
+            setLoading(true);
+            setError(null);
+            try {
+                const rawData = await fetchStories(filters.timeRange);
+                const processedData = transformStories(rawData);
+                setClusters(processedData);
+                if (processedData.length > 0) {
+                    setSelectedCluster(processedData[0]);
+                }
+            } catch (err: any) {
+                console.error("Failed to load stories:", err);
+                setError(err.message || "Failed to load story clusters.");
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        loadData();
     }, [filters]);
 
     const filteredClusters = clusters.filter(c =>
@@ -300,7 +228,7 @@ function StoryClusters({ filters }: StoryClustersProps) {
     );
 
     if (error) {
-        return <ErrorState message={error} onRetry={() => setError(null)} />;
+        return <ErrorState message={error} onRetry={() => window.location.reload()} />;
     }
 
     return (
