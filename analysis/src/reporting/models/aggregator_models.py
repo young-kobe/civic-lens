@@ -82,12 +82,14 @@ class StoryCluster:
     sourceMix: List[SourceMixItem]
     timeline: List[TimelinePoint]
     articles: List[ArticlePreview]
+    contentType: str = "mixed"  # 'articles', 'social', 'mixed'
 
     def to_dict(self) -> Dict[str, Any]:
         return {
             "id": self.id,
             "title": self.title,
             "articleCount": self.articleCount,
+            "contentType": self.contentType,
             "momentum": {"delta24h": self.momentum.delta24h, "delta7d": self.momentum.delta7d},
             "primarySources": self.primarySources,
             "summary": self.summary,
@@ -154,7 +156,7 @@ class TimeWindowSentiment:
 
 @dataclass
 class PublicSentimentResult:
-    """Complete public sentiment response with social vs news comparison."""
+    """Complete public sentiment response with merged GOP favorability data."""
     overview: SentimentOverview
     distribution: SentimentDistribution
     byPlatform: List[PlatformSentiment]
@@ -163,6 +165,11 @@ class PublicSentimentResult:
     byTopic: List[TopicSentiment] = field(default_factory=list)
     byTimeWindow: List[TimeWindowSentiment] = field(default_factory=list)
     socialVsNews: Optional[Dict[str, Any]] = None  # Social vs News comparison
+    # Merged GOP favorability data
+    gopFavorability: Optional[Dict[str, Any]] = None  # Stance breakdown (favorable/unfavorable/neutral %)
+    gopTrend: Optional[List[Dict[str, Any]]] = None  # Daily net favorability trend
+    gopByPlatform: Optional[List[Dict[str, Any]]] = None  # Platform-level stance breakdown
+    pollingVsSocial: Optional[Dict[str, Any]] = None  # Live polling comparison
 
     def to_dict(self) -> Dict[str, Any]:
         result = {
@@ -196,6 +203,14 @@ class PublicSentimentResult:
         }
         if self.socialVsNews:
             result["socialVsNews"] = self.socialVsNews
+        if self.gopFavorability:
+            result["gopFavorability"] = self.gopFavorability
+        if self.gopTrend is not None:
+            result["gopTrend"] = self.gopTrend
+        if self.gopByPlatform is not None:
+            result["gopByPlatform"] = self.gopByPlatform
+        if self.pollingVsSocial:
+            result["pollingVsSocial"] = self.pollingVsSocial
         return result
 
 

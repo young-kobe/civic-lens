@@ -1,12 +1,60 @@
 import { useState, useEffect } from 'react';
 import { Card, ConfidenceBadge, MethodPopover, LoadingCard, EmptyState, ErrorState } from '../components/common';
 import { Sparkline, StackedBar } from '../components/charts';
-import type { Filters, Cluster } from '../types';
+import type { Filters, Cluster, ContentType } from '../types';
 
-// Mock data for demonstration
-
-import { fetchStories } from '../services/api';
+import { fetchStories, ContentTypeFilter } from '../services/api';
 import { transformStories } from '../services/transformers';
+
+interface ContentTypeTabProps {
+    active: ContentTypeFilter;
+    onChange: (type: ContentTypeFilter) => void;
+}
+
+function ContentTypeTabs({ active, onChange }: ContentTypeTabProps) {
+    const tabs: { value: ContentTypeFilter; label: string }[] = [
+        { value: 'all', label: 'All' },
+        { value: 'articles', label: 'Articles' },
+        { value: 'social', label: 'Social Posts' },
+    ];
+
+    return (
+        <div className="flex gap-2 mb-4">
+            {tabs.map(tab => (
+                <button
+                    key={tab.value}
+                    onClick={() => onChange(tab.value)}
+                    className={`badge ${active === tab.value ? 'badge-accent' : 'badge-neutral'}`}
+                    style={{
+                        cursor: 'pointer',
+                        padding: 'var(--space-2) var(--space-4)',
+                        fontSize: 'var(--text-sm)',
+                        fontWeight: active === tab.value ? 600 : 400,
+                        transition: 'all 0.2s ease',
+                    }}
+                >
+                    {tab.label}
+                </button>
+            ))}
+        </div>
+    );
+}
+
+function getContentTypeLabel(contentType: ContentType): string {
+    switch (contentType) {
+        case 'articles': return 'Articles';
+        case 'social': return 'Social Posts';
+        case 'mixed': return 'Mixed';
+    }
+}
+
+function getContentTypeBadgeClass(contentType: ContentType): string {
+    switch (contentType) {
+        case 'articles': return 'badge-neutral';
+        case 'social': return 'badge-accent';
+        case 'mixed': return 'badge-neutral';
+    }
+}
 
 interface ClusterListItemProps {
     cluster: Cluster;
@@ -27,11 +75,16 @@ function ClusterListItem({ cluster, isSelected, onClick }: ClusterListItemProps)
                 border: isSelected ? '2px solid var(--accent)' : '1px solid var(--neutral-200)',
             }}
         >
-            <h4 className="font-semibold truncate" style={{ marginBottom: 'var(--space-1)' }}>
-                {cluster.title}
-            </h4>
+            <div className="flex items-center gap-2 mb-1">
+                <h4 className="font-semibold truncate" style={{ flex: 1 }}>
+                    {cluster.title}
+                </h4>
+                <span className={`badge ${getContentTypeBadgeClass(cluster.contentType)}`} style={{ fontSize: '0.65rem', flexShrink: 0 }}>
+                    {getContentTypeLabel(cluster.contentType)}
+                </span>
+            </div>
             <div className="flex items-center gap-3 text-sm text-muted">
-                <span>{cluster.articleCount} articles</span>
+                <span>{cluster.articleCount} {cluster.contentType === 'social' ? 'posts' : 'articles'}</span>
                 <span className={cluster.momentum.delta24h >= 0 ? 'metric-delta-positive' : 'metric-delta-negative'}>
                     {cluster.momentum.delta24h >= 0 ? '+' : ''}{cluster.momentum.delta24h}% 24h
                 </span>
@@ -57,13 +110,20 @@ function ClusterDetail({ cluster }: ClusterDetailProps) {
         );
     }
 
+    const itemLabel = cluster.contentType === 'social' ? 'posts' : 'articles/posts';
+
     return (
         <div className="flex flex-col gap-6">
             {/* Header */}
             <div>
-                <h2 className="text-xl font-semibold mb-2">{cluster.title}</h2>
+                <div className="flex items-center gap-3 mb-2">
+                    <h2 className="text-xl font-semibold">{cluster.title}</h2>
+                    <span className={`badge ${getContentTypeBadgeClass(cluster.contentType)}`}>
+                        {getContentTypeLabel(cluster.contentType)}
+                    </span>
+                </div>
                 <div className="flex items-center gap-4">
-                    <span className="text-muted">{cluster.articleCount} articles/posts</span>
+                    <span className="text-muted">{cluster.articleCount} {itemLabel}</span>
                     <ConfidenceBadge coverage="high" confidence="medium" sampleSize={cluster.articleCount} />
                 </div>
             </div>
@@ -156,10 +216,10 @@ function ClusterDetail({ cluster }: ClusterDetailProps) {
                 </Card>
             </div>
 
-            {/* Representative Articles */}
-            <Card title="Representative Articles">
+            {/* Representative Content */}
+            <Card title={cluster.contentType === 'social' ? 'Representative Posts' : 'Representative Articles'}>
                 {cluster.articles.length === 0 ? (
-                    <p className="text-muted">No representative articles available</p>
+                    <p className="text-muted">No representative content available</p>
                 ) : (
                     <div className="flex flex-col gap-3">
                         {cluster.articles.map((article) => (
@@ -198,6 +258,7 @@ function StoryClusters({ filters }: StoryClustersProps) {
     const [clusters, setClusters] = useState<Cluster[]>([]);
     const [selectedCluster, setSelectedCluster] = useState<Cluster | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
+    const [contentTypeFilter, setContentTypeFilter] = useState<ContentTypeFilter>('all');
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -206,22 +267,25 @@ function StoryClusters({ filters }: StoryClustersProps) {
             setLoading(true);
             setError(null);
             try {
-                const rawData = await fetchStories(filters.timeRange);
+                const rawData = await fetchStories(filters.timeRange, contentTypeFilter);
                 const processedData = transformStories(rawData);
                 setClusters(processedData);
                 if (processedData.length > 0) {
                     setSelectedCluster(processedData[0]);
+                } else {
+                    setSelectedCluster(null);
                 }
-            } catch (err: any) {
+            } catch (err: unknown) {
+                const message = err instanceof Error ? err.message : 'Failed to load story clusters.';
                 console.error("Failed to load stories:", err);
-                setError(err.message || "Failed to load story clusters.");
+                setError(message);
             } finally {
                 setLoading(false);
             }
         };
 
         loadData();
-    }, [filters]);
+    }, [filters, contentTypeFilter]);
 
     const filteredClusters = clusters.filter(c =>
         c.title.toLowerCase().includes(searchQuery.toLowerCase())
@@ -232,54 +296,59 @@ function StoryClusters({ filters }: StoryClustersProps) {
     }
 
     return (
-        <div className="flex gap-6" style={{ minHeight: '600px' }}>
-            {/* Left Panel - Cluster List */}
-            <div style={{ width: 'var(--sidebar-width)', flexShrink: 0 }}>
-                <div className="mb-4">
-                    <input
-                        type="text"
-                        className="input"
-                        placeholder="Search clusters..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                    />
+        <div>
+            {/* Content Type Tabs */}
+            <ContentTypeTabs active={contentTypeFilter} onChange={setContentTypeFilter} />
+
+            <div className="flex gap-6" style={{ minHeight: '600px' }}>
+                {/* Left Panel - Cluster List */}
+                <div style={{ width: 'var(--sidebar-width)', flexShrink: 0 }}>
+                    <div className="mb-4">
+                        <input
+                            type="text"
+                            className="input"
+                            placeholder="Search clusters..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                        />
+                    </div>
+
+                    <div style={{ maxHeight: 'calc(100vh - 300px)', overflowY: 'auto' }}>
+                        {loading ? (
+                            <>
+                                <LoadingCard />
+                                <LoadingCard />
+                                <LoadingCard />
+                            </>
+                        ) : filteredClusters.length === 0 ? (
+                            <EmptyState
+                                title="No clusters found"
+                                description="Try adjusting your search or filters"
+                            />
+                        ) : (
+                            filteredClusters.map(cluster => (
+                                <ClusterListItem
+                                    key={cluster.id}
+                                    cluster={cluster}
+                                    isSelected={selectedCluster?.id === cluster.id}
+                                    onClick={() => setSelectedCluster(cluster)}
+                                />
+                            ))
+                        )}
+                    </div>
                 </div>
 
-                <div style={{ maxHeight: 'calc(100vh - 300px)', overflowY: 'auto' }}>
+                {/* Main Panel - Cluster Detail */}
+                <div style={{ flex: 1, minWidth: 0 }}>
                     {loading ? (
-                        <>
+                        <div className="flex flex-col gap-4">
                             <LoadingCard />
                             <LoadingCard />
-                            <LoadingCard />
-                        </>
-                    ) : filteredClusters.length === 0 ? (
-                        <EmptyState
-                            title="No clusters found"
-                            description="Try adjusting your search or filters"
-                        />
+                        </div>
                     ) : (
-                        filteredClusters.map(cluster => (
-                            <ClusterListItem
-                                key={cluster.id}
-                                cluster={cluster}
-                                isSelected={selectedCluster?.id === cluster.id}
-                                onClick={() => setSelectedCluster(cluster)}
-                            />
-                        ))
+                        <ClusterDetail cluster={selectedCluster} />
                     )}
                 </div>
-            </div>
-
-            {/* Main Panel - Cluster Detail */}
-            <div style={{ flex: 1, minWidth: 0 }}>
-                {loading ? (
-                    <div className="flex flex-col gap-4">
-                        <LoadingCard />
-                        <LoadingCard />
-                    </div>
-                ) : (
-                    <ClusterDetail cluster={selectedCluster} />
-                )}
             </div>
         </div>
     );

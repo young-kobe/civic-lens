@@ -1,91 +1,105 @@
 {
   "_meta": {
-    "generated_at": "2026-01-26T21:34:14.883209+00:00",
-    "doc_count": 1716,
+    "generated_at": "2026-02-18T20:20:44.627509+00:00",
+    "doc_count": 2771,
     "version": "1.0"
   },
   "data": {
     "overview": {
-      "netScore": 22.0,
-      "volume": 1716,
+      "netScore": 34.9,
+      "volume": 2771,
       "coverage": "medium",
       "confidence": "medium"
     },
     "distribution": {
-      "strongPositive": 827,
-      "mildPositive": 0,
-      "neutral": 429,
-      "mildNegative": 0,
-      "strongNegative": 450
+      "strongPositive": 1649,
+      "mildPositive": 7,
+      "neutral": 427,
+      "mildNegative": 4,
+      "strongNegative": 684
     },
     "byPlatform": [
       {
         "platform": "News Outlets",
-        "positive": 164,
-        "negative": 50,
-        "neutral": 417,
-        "volume": 639
+        "positive": 290,
+        "negative": 55,
+        "neutral": 401,
+        "volume": 755
       },
       {
         "platform": "Social Media",
-        "positive": 26,
-        "negative": 92,
-        "neutral": 14,
-        "volume": 132
-      },
-      {
-        "platform": "Other",
-        "positive": 637,
-        "negative": 308,
-        "neutral": 0,
-        "volume": 945
+        "positive": 1366,
+        "negative": 633,
+        "neutral": 17,
+        "volume": 2016
       }
     ],
     "byTopic": [
       {
         "topic": "General",
-        "positive": 794,
-        "negative": 402,
-        "neutral": 362,
-        "volume": 1566
+        "positive": 1469,
+        "negative": 594,
+        "neutral": 247,
+        "volume": 2314
       },
       {
         "topic": "Foreign Policy",
-        "positive": 17,
-        "negative": 10,
-        "neutral": 20,
-        "volume": 47
-      },
-      {
-        "topic": "Economy",
-        "positive": 2,
-        "negative": 14,
-        "neutral": 6,
-        "volume": 22
+        "positive": 32,
+        "negative": 21,
+        "neutral": 35,
+        "volume": 89
       },
       {
         "topic": "Climate",
-        "positive": 3,
-        "negative": 5,
-        "neutral": 11,
-        "volume": 19
-      },
-      {
-        "topic": "Justice",
-        "positive": 3,
-        "negative": 7,
-        "neutral": 8,
-        "volume": 18
+        "positive": 38,
+        "negative": 17,
+        "neutral": 31,
+        "volume": 86
       },
       {
         "topic": "Immigration",
-        "positive": 2,
-        "negative": 7,
-        "neutral": 7,
-        "volume": 16
+        "positive": 33,
+        "negative": 22,
+        "neutral": 24,
+        "volume": 79
+      },
+      {
+        "topic": "Technology",
+        "positive": 38,
+        "negative": 5,
+        "neutral": 32,
+        "volume": 77
+      },
+      {
+        "topic": "Economy",
+        "positive": 11,
+        "negative": 19,
+        "neutral": 8,
+        "volume": 39
       },
       {
         "topic": "Healthcare",
+        "positive": 8,
+        "negative": 3,
+        "neutral": 11,
+        "volume": 22
+      },
+      {
+        "topic": "Democracy",
+        "positive": 8,
+        "negative": 2,
+        "neutral": 6,
+        "volume": 17
+      },
+      {
+        "topic": "National Security",
+        "positive": 6,
+        "negative": 1,
+        "neutral": 6,
+        "volume": 13
+      },
+      {
+        "topic": "Justice",
         "positive": 3,
         "negative": 2,
         "neutral": 7,
@@ -93,10 +107,10 @@
       },
       {
         "topic": "Gun Policy",
-        "positive": 3,
-        "negative": 2,
-        "neutral": 5,
-        "volume": 10
+        "positive": 7,
+        "negative": 1,
+        "neutral": 3,
+        "volume": 11
       },
       {
         "topic": "Abortion",
@@ -106,59 +120,240 @@
         "volume": 4
       },
       {
+        "topic": "Housing",
+        "positive": 1,
+        "negative": 0,
+        "neutral": 3,
+        "volume": 4
+      },
+      {
         "topic": "Education",
-        "positive": 0,
+        "positive": 1,
         "negative": 0,
         "neutral": 2,
-        "volume": 2
+        "volume": 3
+      },
+      {
+        "topic": "Social Issues",
+        "positive": 1,
+        "negative": 0,
+        "neutral": 0,
+        "volume": 1
       }
     ],
     "byTimeWindow": [
       {
         "window": "24 hours",
-        "positive": 637,
-        "negative": 308,
+        "positive": 268,
+        "negative": 97,
         "neutral": 0,
-        "volume": 945
+        "volume": 366
       },
       {
         "window": "7 days",
-        "positive": 31,
-        "negative": 3,
-        "neutral": 58,
-        "volume": 93
+        "positive": 8,
+        "negative": 1,
+        "neutral": 1,
+        "volume": 10
       },
       {
         "window": "30 days",
-        "positive": 127,
-        "negative": 132,
-        "neutral": 301,
-        "volume": 566
+        "positive": 1225,
+        "negative": 452,
+        "neutral": 61,
+        "volume": 1739
       },
       {
         "window": "90+ days",
-        "positive": 32,
-        "negative": 7,
-        "neutral": 72,
-        "volume": 112
+        "positive": 155,
+        "negative": 138,
+        "neutral": 356,
+        "volume": 656
       }
     ],
     "disclaimer": "Represents sampled platform discourse, not verified population sentiment",
-    "excluded_bot_content": 8,
+    "excluded_bot_content": 0,
     "socialVsNews": {
       "social": {
-        "positive": 26,
-        "negative": 92,
-        "neutral": 14,
-        "netScore": -50.0,
-        "volume": 132
+        "positive": 1366,
+        "negative": 633,
+        "neutral": 17,
+        "mixed": 0,
+        "netScore": 36.4,
+        "volume": 2016
       },
       "news": {
-        "positive": 164,
-        "negative": 50,
-        "neutral": 417,
-        "netScore": 17.8,
-        "volume": 639
+        "positive": 290,
+        "negative": 55,
+        "neutral": 401,
+        "mixed": 9,
+        "netScore": 31.1,
+        "volume": 755
+      }
+    },
+    "gopFavorability": {
+      "favorable": 1.1,
+      "unfavorable": 4.9,
+      "neutral": 93.9,
+      "netFavorability": -3.8,
+      "sampleSize": 2792,
+      "sourceCount": 3,
+      "lastUpdated": "2026-02-18T14:20:44.623317"
+    },
+    "gopTrend": [
+      {
+        "date": "2026-01-11",
+        "value": -5.3
+      },
+      {
+        "date": "2026-01-12",
+        "value": 0.0
+      },
+      {
+        "date": "2026-01-13",
+        "value": 4.4
+      },
+      {
+        "date": "2026-01-14",
+        "value": -3.3
+      },
+      {
+        "date": "2026-01-15",
+        "value": -4.9
+      },
+      {
+        "date": "2026-01-16",
+        "value": 0.0
+      },
+      {
+        "date": "2026-01-17",
+        "value": 8.2
+      },
+      {
+        "date": "2026-01-20",
+        "value": 0.0
+      },
+      {
+        "date": "2026-01-21",
+        "value": 0.0
+      },
+      {
+        "date": "2026-01-22",
+        "value": 0.0
+      },
+      {
+        "date": "2026-01-23",
+        "value": -7.5
+      },
+      {
+        "date": "2026-01-24",
+        "value": -42.3
+      },
+      {
+        "date": "2026-01-25",
+        "value": -78.1
+      },
+      {
+        "date": "2026-01-26",
+        "value": -1.1
+      },
+      {
+        "date": "2026-01-28",
+        "value": -100.0
+      },
+      {
+        "date": "2026-02-02",
+        "value": -100.0
+      },
+      {
+        "date": "2026-02-04",
+        "value": -100.0
+      },
+      {
+        "date": "2026-02-05",
+        "value": -100.0
+      },
+      {
+        "date": "2026-02-06",
+        "value": -100.0
+      },
+      {
+        "date": "2026-02-07",
+        "value": -100.0
+      },
+      {
+        "date": "2026-02-08",
+        "value": -100.0
+      },
+      {
+        "date": "2026-02-09",
+        "value": -100.0
+      },
+      {
+        "date": "2026-02-10",
+        "value": -25.0
+      },
+      {
+        "date": "2026-02-11",
+        "value": -100.0
+      },
+      {
+        "date": "2026-02-12",
+        "value": -33.3
+      },
+      {
+        "date": "2026-02-13",
+        "value": -100.0
+      },
+      {
+        "date": "2026-02-15",
+        "value": -100.0
+      },
+      {
+        "date": "2026-02-16",
+        "value": -100.0
+      },
+      {
+        "date": "2026-02-17",
+        "value": -47.4
+      },
+      {
+        "date": "2026-02-18",
+        "value": -4.9
+      }
+    ],
+    "gopByPlatform": [
+      {
+        "group": "News",
+        "favorable": 18,
+        "unfavorable": 122,
+        "neutral": 632
+      },
+      {
+        "group": "Reddit",
+        "favorable": 13,
+        "unfavorable": 6,
+        "neutral": 113
+      },
+      {
+        "group": "X_post",
+        "favorable": 0,
+        "unfavorable": 8,
+        "neutral": 1876
+      }
+    ],
+    "pollingVsSocial": {
+      "onlineSentiment": {
+        "favorable": 1.1,
+        "unfavorable": 4.9,
+        "neutral": 93.9
+      },
+      "pollingData": {
+        "favorable": 50.0,
+        "unfavorable": 50.0,
+        "neutral": 0.0,
+        "source": "RealClearPolling (Live)",
+        "date": "2026-02-18"
       }
     }
   }

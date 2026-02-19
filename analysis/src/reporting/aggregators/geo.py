@@ -15,52 +15,9 @@ from analysis.src.reporting.aggregators.base import (
     get_time_cutoff,
     get_bot_flagged_doc_ids,
 )
+from analysis.src.reporting.aggregators.constants import COUNTRY_NAMES
 
 logger = get_logger(__name__)
-
-
-# ISO 3166-1 alpha-2 to country name mapping (common countries)
-COUNTRY_NAMES = {
-    "US": "United States",
-    "GB": "United Kingdom",
-    "CA": "Canada",
-    "AU": "Australia",
-    "DE": "Germany",
-    "FR": "France",
-    "IN": "India",
-    "BR": "Brazil",
-    "MX": "Mexico",
-    "RU": "Russia",
-    "CN": "China",
-    "JP": "Japan",
-    "KR": "South Korea",
-    "IT": "Italy",
-    "ES": "Spain",
-    "NL": "Netherlands",
-    "SE": "Sweden",
-    "NO": "Norway",
-    "PL": "Poland",
-    "UA": "Ukraine",
-    "IL": "Israel",
-    "SA": "Saudi Arabia",
-    "AE": "United Arab Emirates",
-    "TR": "Turkey",
-    "ZA": "South Africa",
-    "NG": "Nigeria",
-    "EG": "Egypt",
-    "AR": "Argentina",
-    "CO": "Colombia",
-    "PH": "Philippines",
-    "ID": "Indonesia",
-    "MY": "Malaysia",
-    "SG": "Singapore",
-    "TH": "Thailand",
-    "VN": "Vietnam",
-    "PK": "Pakistan",
-    "BD": "Bangladesh",
-    "IR": "Iran",
-    "IQ": "Iraq",
-}
 
 
 class GeoAggregator:

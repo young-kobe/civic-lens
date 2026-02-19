@@ -9,42 +9,16 @@ Computes favorability toward Republican/GOP political entities using:
 import re
 from typing import Any, Dict, List, Optional, Tuple
 from analysis.src.common.logger import get_logger
+from analysis.src.engine.constants import (
+    GOP_ENTITIES, FAVORABLE_INDICATORS, UNFAVORABLE_INDICATORS,
+    PROXIMITY_WINDOW,
+)
 from analysis.src.engine.models import EntityStance, FavorabilityResult
 from analysis.src.engine.prompts import FAVORABILITY_SYSTEM_PROMPT, FAVORABILITY_USER_PROMPT_TEMPLATE
 from analysis.src.llm.schemas import FAVORABILITY_SCHEMA
 
 logger = get_logger(__name__)
 
-
-# GOP-related entities and keywords for detection
-GOP_ENTITIES = frozenset([
-    # Party names
-    "republican", "republicans", "gop", "republican party",
-    # Major figures (keep updated)
-    "trump", "donald trump", "desantis", "ron desantis",
-    "mccarthy", "kevin mccarthy", "mcconnell", "mitch mcconnell",
-    "pence", "mike pence", "haley", "nikki haley",
-    "cruz", "ted cruz", "rubio", "marco rubio",
-    "graham", "lindsey graham", "jordan", "jim jordan",
-    # Generic references
-    "conservatives", "conservative", "right-wing", "maga",
-])
-
-# Favorable stance indicators
-FAVORABLE_INDICATORS = frozenset([
-    "support", "supports", "backed", "backs", "endorses", "praised",
-    "commended", "applauded", "championed", "defended", "advocates",
-    "agree", "agrees", "approve", "approves", "celebrates", "credits",
-    "admires", "respects", "stands with", "aligned with", "pro-",
-])
-
-# Unfavorable stance indicators
-UNFAVORABLE_INDICATORS = frozenset([
-    "oppose", "opposes", "criticized", "criticizes", "condemned",
-    "attacked", "attacks", "slammed", "blasted", "denounced",
-    "rejected", "rejects", "blame", "blames", "accuses", "accused",
-    "against", "anti-", "failed", "scandal", "corrupt", "dangerous",
-])
 
 
 class FavorabilityAnalyzer:
@@ -85,60 +59,73 @@ class FavorabilityAnalyzer:
         # Deduplicate and return
         return list(set(found))
     
+    def _find_entity_positions(self, text_lower: str, entities: List[str]) -> List[int]:
+        """Find approximate word positions of all entity mentions in text."""
+        positions = []
+        for entity in entities:
+            start = 0
+            while True:
+                pos = text_lower.find(entity, start)
+                if pos == -1:
+                    break
+                word_pos = len(text_lower[:pos].split())
+                positions.append(word_pos)
+                start = pos + len(entity)
+        return positions
+
+    def _is_keyword_near_entity(
+        self, keyword: str, text_lower: str, entity_positions: List[int], word_count: int
+    ) -> bool:
+        """Check if keyword appears within proximity window of any entity."""
+        if not entity_positions:
+            return False
+        if word_count <= PROXIMITY_WINDOW:
+            return True
+        start = 0
+        while True:
+            pos = text_lower.find(keyword, start)
+            if pos == -1:
+                break
+            kw_word_pos = len(text_lower[:pos].split())
+            if any(abs(kw_word_pos - ep) <= PROXIMITY_WINDOW for ep in entity_positions):
+                return True
+            start = pos + len(keyword)
+        return False
+
     def _compute_signals(self, text: str, gop_entities: List[str]) -> Dict[str, Any]:
         """
-        Compute deterministic stance signals.
-        
-        Uses normalized matching:
-        - Text is lowercased and tokenized
-        - Single-word indicators match against tokens
-        - Multi-word indicators use substring matching
+        Compute deterministic stance signals with proximity matching.
+
+        Uses proximity-based matching: only counts stance keywords
+        that appear within PROXIMITY_WINDOW words of a detected GOP entity.
         """
+        empty_result = {
+            "favorable_count": 0, "unfavorable_count": 0,
+            "favorable_keywords": [], "unfavorable_keywords": [],
+            "net_score": 0.0,
+        }
         if not text or not gop_entities:
-            return {
-                "favorable_count": 0,
-                "unfavorable_count": 0,
-                "favorable_keywords": [],
-                "unfavorable_keywords": [],
-                "net_score": 0.0,
-            }
-        
-        # Normalize text
+            return empty_result
+
         text_lower = text.lower()
-        # Tokenize into words (strip punctuation)
-        words = set(re.findall(r'\b[a-z]+\b', text_lower))
-        
-        # Find stance indicators using dual matching:
-        # - Single words: exact token match
-        # - Multi-word phrases: substring match
-        favorable_found = []
-        for ind in FAVORABLE_INDICATORS:
-            if ' ' in ind or '-' in ind:
-                # Multi-word phrase: use substring matching
-                if ind in text_lower:
-                    favorable_found.append(ind)
-            else:
-                # Single word: check against tokens for exact match
-                if ind in words:
-                    favorable_found.append(ind)
-        
-        unfavorable_found = []
-        for ind in UNFAVORABLE_INDICATORS:
-            if ' ' in ind or '-' in ind:
-                if ind in text_lower:
-                    unfavorable_found.append(ind)
-            else:
-                if ind in words:
-                    unfavorable_found.append(ind)
-        
-        net_score = len(favorable_found) - len(unfavorable_found)
-        
+        word_count = len(text_lower.split())
+        entity_positions = self._find_entity_positions(text_lower, gop_entities)
+
+        favorable_found = [
+            ind for ind in FAVORABLE_INDICATORS
+            if ind in text_lower and self._is_keyword_near_entity(ind, text_lower, entity_positions, word_count)
+        ]
+        unfavorable_found = [
+            ind for ind in UNFAVORABLE_INDICATORS
+            if ind in text_lower and self._is_keyword_near_entity(ind, text_lower, entity_positions, word_count)
+        ]
+
         return {
             "favorable_count": len(favorable_found),
             "unfavorable_count": len(unfavorable_found),
             "favorable_keywords": favorable_found[:5],
             "unfavorable_keywords": unfavorable_found[:5],
-            "net_score": net_score,
+            "net_score": len(favorable_found) - len(unfavorable_found),
         }
     
     def _heuristic_classify(
@@ -268,6 +255,10 @@ class FavorabilityAnalyzer:
         """
         Analyze favorability with full results including per-entity breakdown.
         
+        LLM is the primary classifier. Heuristic signals are computed first
+        and fed as supplemental context to the LLM prompt. Heuristics are
+        only used as a fallback when the LLM is unavailable.
+        
         Returns:
             FavorabilityResult with entity stances, overall stance, and evidence.
         """
@@ -292,12 +283,13 @@ class FavorabilityAnalyzer:
                 reasoning="No GOP entities mentioned",
             )
         
-        # 2. Compute deterministic signals
+        # 2. Compute deterministic signals (always, used as LLM context)
         signals = self._compute_signals(text, gop_entities)
         
-        # 3. LLM classification if enabled
+        # 3. LLM is primary classifier
         if self.llm_enabled and self._llm_client and self._llm_client.is_available:
             return self._llm_classify(text, gop_entities, signals)
         
-        # 4. Fallback to heuristic
+        # 4. Heuristic fallback only when LLM unavailable
+        logger.warning("LLM unavailable, using heuristic fallback for favorability")
         return self._heuristic_classify(text, gop_entities, signals)

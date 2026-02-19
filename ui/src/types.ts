@@ -12,10 +12,13 @@ export type ConfidenceLevel = 'high' | 'medium' | 'low';
 export type CoverageLevel = 'high' | 'medium' | 'low';
 
 // Cluster types
+export type ContentType = 'articles' | 'social' | 'mixed';
+
 export interface Cluster {
     id: number;
     title: string;
     articleCount: number;
+    contentType: ContentType;
     momentum: {
         delta24h: number;
         delta7d: number;
@@ -77,6 +80,19 @@ export interface PublicSentimentData {
     byTimeWindow: SentimentBreakdown[];
     distribution: SentimentDistribution;
     socialVsNews?: SocialVsNewsSentiment | null;
+    // Merged GOP favorability data
+    gopFavorability?: {
+        favorable: number;
+        unfavorable: number;
+        neutral: number;
+        netFavorability: number;
+        sampleSize: number;
+        sourceCount: number;
+        lastUpdated: string;
+    } | null;
+    gopTrend?: TrendPoint[] | null;
+    gopByPlatform?: DemographicBreakdown[] | null;
+    pollingVsSocial?: PollingSocialComparison | null;
 }
 
 export interface SentimentOverview {
@@ -147,8 +163,8 @@ export interface DemographicBreakdown {
 }
 
 export interface PollingSocialComparison {
-    polling: { favorable: number; unfavorable: number; neutral: number };
-    social: { favorable: number; unfavorable: number; neutral: number };
+    onlineSentiment: { favorable: number; unfavorable: number; neutral: number };
+    pollingData: { favorable: number; unfavorable: number; neutral: number } | null;
 }
 
 // Bot Activity types

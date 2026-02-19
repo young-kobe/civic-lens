@@ -1,19 +1,19 @@
 {
   "_meta": {
-    "generated_at": "2026-01-26T21:34:15.110799+00:00",
-    "doc_count": 39,
+    "generated_at": "2026-02-18T20:20:44.892700+00:00",
+    "doc_count": 47,
     "version": "1.0"
   },
   "data": {
     "overview": {
-      "suspectedAutomationRate": 0.4,
+      "suspectedAutomationRate": 0.3,
       "coordinationIndex": 0.22,
       "topClusters": [
         "www.foxnews.com",
         "www.npr.org",
         "www.bbc.com"
       ],
-      "totalFlaggedAccounts": 39,
+      "totalFlaggedAccounts": 47,
       "confidence": "medium"
     },
     "narrativeAmplification": [

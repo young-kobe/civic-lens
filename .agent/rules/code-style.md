@@ -44,3 +44,4 @@ trigger: always_on
 2. No hardcoded credentials or secrets
 3. Prefer explicit over implicit behavior
 4. Write self-documenting code; add comments only for non-obvious logic
+5. Keep function and method lengths to ~60 lines MAXIMUM as general rule, unless unavoidable. Do not eclipse 100 lines.

@@ -73,12 +73,20 @@ class AnalysisJobRunner:
         return count
     
     def run_bot_detection(self) -> int:
-        """Run bot detection on unprocessed docs. Returns count processed."""
-        logger.info("Step 2/5: Running bot detection...")
+        """Run bot detection on unprocessed social media docs only. Returns count processed."""
+        logger.info("Step 2/5: Running bot detection (social media only)...")
         docs = self.loader.get_unprocessed_docs("bot_detection")
-        logger.info(f"Processing {len(docs)} docs for bot detection")
         
-        for doc in docs:
+        # Only run bot detection on social media content
+        # News articles are assumed human-authored
+        SOCIAL_SOURCE_TYPES = frozenset(["reddit_post", "reddit_comment", "x_post"])
+        social_docs = [
+            doc for doc in docs
+            if doc.get("source_type") in SOCIAL_SOURCE_TYPES
+        ]
+        logger.info(f"Processing {len(social_docs)} social media docs for bot detection (skipped {len(docs) - len(social_docs)} news docs)")
+        
+        for doc in social_docs:
             result = self.bot_detector.analyze_full(doc['text'], doc.get('metadata'))
             output = result.to_dict()
             self.loader.save_ai_output(
@@ -88,8 +96,8 @@ class AnalysisJobRunner:
                 result.confidence
             )
         
-        logger.info(f"Bot detection complete: {len(docs)} docs processed")
-        return len(docs)
+        logger.info(f"Bot detection complete: {len(social_docs)} docs processed")
+        return len(social_docs)
     
     def run_sentiment_analysis(self) -> int:
         """Run sentiment analysis on unprocessed docs. Returns count processed."""
@@ -145,7 +153,8 @@ class AnalysisJobRunner:
         """
         Pre-compute all aggregations and save to cache.
         
-        Saves multiple time-windowed versions for stories, sentiment, and favorability.
+        Saves multiple time-windowed versions for stories and sentiment.
+        Sentiment now includes merged GOP favorability data.
         Returns dict with counts for each cached endpoint.
         """
         logger.info("Saving aggregation snapshots to cache...")
@@ -161,17 +170,11 @@ class AnalysisJobRunner:
             self.cache.save(f"stories_{window}", stories_data, doc_count=len(stories_data))
             results[f"stories_{window}"] = len(stories_data)
         
-        # Public Sentiment - cache all time windows
+        # Public Sentiment (includes merged GOP favorability) - cache all time windows
         for window in time_windows:
             sentiment = self.aggregator.get_public_sentiment(time_window=window)
             self.cache.save(f"sentiment_{window}", sentiment.to_dict(), doc_count=sentiment.overview.volume)
             results[f"sentiment_{window}"] = sentiment.overview.volume
-        
-        # GOP Favorability - cache all time windows
-        for window in time_windows:
-            favorability = self.aggregator.get_gop_favorability(time_window=window)
-            self.cache.save(f"favorability_{window}", favorability.to_dict(), doc_count=favorability.overall.sampleSize)
-            results[f"favorability_{window}"] = favorability.overall.sampleSize
         
         # Outlet Profiles (not time-windowed - shows all-time data)
         profiles = self.aggregator.get_outlet_profiles()

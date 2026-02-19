@@ -1,14 +1,15 @@
 {
   "_meta": {
-    "generated_at": "2026-01-26T21:34:14.422648+00:00",
+    "generated_at": "2026-02-18T20:20:42.548669+00:00",
     "doc_count": 20,
     "version": "1.0"
   },
   "data": [
     {
-      "id": 4870,
-      "title": "Unnamed Cluster",
-      "articleCount": 30,
+      "id": 10040,
+      "title": "RT @RupertLowe10: Restore Britain is a patriotic politica...",
+      "articleCount": 38,
+      "contentType": "social",
       "momentum": {
         "delta24h": 100.0,
         "delta7d": 0.0
@@ -17,9 +18,9 @@
         "x_post"
       ],
       "summary": [
-        "Untitled",
-        "Untitled",
-        "Untitled"
+        "RT @RupertLowe10: Restore Britain is a patriotic political party that believes i...",
+        "RT @RupertLowe10: Restore Britain is a patriotic political party that believes i...",
+        "RT @RupertLowe10: Restore Britain is a patriotic political party that believes i..."
       ],
       "keyClaims": [],
       "entities": {
@@ -29,45 +30,166 @@
       },
       "sourceMix": [
         {
-          "name": "X Post",
-          "value": 30,
-          "type": "other"
+          "name": "X Posts",
+          "value": 38,
+          "type": "social"
         }
       ],
       "timeline": [
         {
-          "date": "Mon",
+          "date": "Wed",
+          "value": 38
+        }
+      ],
+      "articles": [
+        {
+          "id": 4453,
+          "title": "RT @RupertLowe10: Restore Britain is a patriotic political party that believes i...",
+          "source": "2024181502947328223",
+          "snippet": "RT @RupertLowe10: Restore Britain is a patriotic political party that believes in strong borders, de...",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 4456,
+          "title": "RT @RupertLowe10: Restore Britain is a patriotic political party that believes i...",
+          "source": "2024181449260163096",
+          "snippet": "RT @RupertLowe10: Restore Britain is a patriotic political party that believes in strong borders, de...",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 4457,
+          "title": "RT @RupertLowe10: Restore Britain is a patriotic political party that believes i...",
+          "source": "2024181410404176261",
+          "snippet": "RT @RupertLowe10: Restore Britain is a patriotic political party that believes in strong borders, de...",
+          "reason": "Recent coverage"
+        }
+      ]
+    },
+    {
+      "id": 10043,
+      "title": "RT @RestoreBritain_: Deporting illegal migrants is NOT ne...",
+      "articleCount": 32,
+      "contentType": "social",
+      "momentum": {
+        "delta24h": 100.0,
+        "delta7d": 0.0
+      },
+      "primarySources": [
+        "x_post"
+      ],
+      "summary": [
+        "RT @RestoreBritain_: Deporting illegal migrants is NOT neo-nazi.\nRestricting leg...",
+        "RT @RestoreBritain_: Deporting illegal migrants is NOT neo-nazi.\nRestricting leg...",
+        "RT @RestoreBritain_: Deporting illegal migrants is NOT neo-nazi.\nRestricting leg..."
+      ],
+      "keyClaims": [],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "locations": []
+      },
+      "sourceMix": [
+        {
+          "name": "X Posts",
+          "value": 32,
+          "type": "social"
+        }
+      ],
+      "timeline": [
+        {
+          "date": "Wed",
+          "value": 32
+        }
+      ],
+      "articles": [
+        {
+          "id": 4452,
+          "title": "RT @RestoreBritain_: Deporting illegal migrants is NOT neo-nazi.\nRestricting leg...",
+          "source": "2024181563525636143",
+          "snippet": "RT @RestoreBritain_: Deporting illegal migrants is NOT neo-nazi.\nRestricting legal immigration is NO...",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 4467,
+          "title": "RT @RestoreBritain_: Deporting illegal migrants is NOT neo-nazi.\nRestricting leg...",
+          "source": "2024181249867124917",
+          "snippet": "RT @RestoreBritain_: Deporting illegal migrants is NOT neo-nazi.\nRestricting legal immigration is NO...",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 4470,
+          "title": "RT @RestoreBritain_: Deporting illegal migrants is NOT neo-nazi.\nRestricting leg...",
+          "source": "2024181201255248139",
+          "snippet": "RT @RestoreBritain_: Deporting illegal migrants is NOT neo-nazi.\nRestricting legal immigration is NO...",
+          "reason": "Recent coverage"
+        }
+      ]
+    },
+    {
+      "id": 10064,
+      "title": "RT @libsoftiktok: HOLY CRAP\n\nRepublican candidate for Cou...",
+      "articleCount": 30,
+      "contentType": "social",
+      "momentum": {
+        "delta24h": 100.0,
+        "delta7d": 0.0
+      },
+      "primarySources": [
+        "x_post"
+      ],
+      "summary": [
+        "RT @libsoftiktok: HOLY CRAP\n\nRepublican candidate for County Commissioner in Nor...",
+        "RT @libsoftiktok: HOLY CRAP\n\nRepublican candidate for County Commissioner in Nor...",
+        "RT @libsoftiktok: HOLY CRAP\n\nRepublican candidate for County Commissioner in Nor..."
+      ],
+      "keyClaims": [],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "locations": []
+      },
+      "sourceMix": [
+        {
+          "name": "X Posts",
+          "value": 30,
+          "type": "social"
+        }
+      ],
+      "timeline": [
+        {
+          "date": "Wed",
           "value": 30
         }
       ],
       "articles": [
         {
-          "id": 3232,
-          "title": "Untitled",
-          "source": "2015869546561704231",
-          "snippet": "",
+          "id": 4805,
+          "title": "RT @libsoftiktok: HOLY CRAP\n\nRepublican candidate for County Commissioner in Nor...",
+          "source": "2024182616476336284",
+          "snippet": "RT @libsoftiktok: HOLY CRAP\n\nRepublican candidate for County Commissioner in North Carolina just had...",
           "reason": "Recent coverage"
         },
         {
-          "id": 3246,
-          "title": "Untitled",
-          "source": "2015869542451577077",
-          "snippet": "",
+          "id": 4806,
+          "title": "RT @libsoftiktok: HOLY CRAP\n\nRepublican candidate for County Commissioner in Nor...",
+          "source": "2024182595735417090",
+          "snippet": "RT @libsoftiktok: HOLY CRAP\n\nRepublican candidate for County Commissioner in North Carolina just had...",
           "reason": "Recent coverage"
         },
         {
-          "id": 3118,
-          "title": "Untitled",
-          "source": "2015869340059386050",
-          "snippet": "",
+          "id": 4807,
+          "title": "RT @libsoftiktok: HOLY CRAP\n\nRepublican candidate for County Commissioner in Nor...",
+          "source": "2024182594632634800",
+          "snippet": "RT @libsoftiktok: HOLY CRAP\n\nRepublican candidate for County Commissioner in North Carolina just had...",
           "reason": "Recent coverage"
         }
       ]
     },
     {
-      "id": 4345,
-      "title": "Unnamed Cluster",
-      "articleCount": 27,
+      "id": 10516,
+      "title": "RT @WhiteHouse: Democrats say America\u2019s elections are not...",
+      "articleCount": 15,
+      "contentType": "social",
       "momentum": {
         "delta24h": 100.0,
         "delta7d": 0.0
@@ -76,9 +198,9 @@
         "x_post"
       ],
       "summary": [
-        "Untitled",
-        "Untitled",
-        "Untitled"
+        "RT @WhiteHouse: Democrats say America\u2019s elections are not secure, yet oppose mak...",
+        "RT @WhiteHouse: Democrats say America\u2019s elections are not secure, yet oppose mak...",
+        "RT @WhiteHouse: Democrats say America\u2019s elections are not secure, yet oppose mak..."
       ],
       "keyClaims": [],
       "entities": {
@@ -88,222 +210,46 @@
       },
       "sourceMix": [
         {
-          "name": "X Post",
-          "value": 27,
-          "type": "other"
+          "name": "X Posts",
+          "value": 15,
+          "type": "social"
         }
       ],
       "timeline": [
         {
-          "date": "Mon",
-          "value": 27
+          "date": "Wed",
+          "value": 15
         }
       ],
       "articles": [
         {
-          "id": 2423,
-          "title": "Untitled",
-          "source": "2015866751594938795",
-          "snippet": "",
+          "id": 4384,
+          "title": "RT @WhiteHouse: Democrats say America\u2019s elections are not secure, yet oppose mak...",
+          "source": "2024181361905479716",
+          "snippet": "RT @WhiteHouse: Democrats say America\u2019s elections are not secure, yet oppose making voter ID &amp; U...",
           "reason": "Recent coverage"
         },
         {
-          "id": 2432,
-          "title": "Untitled",
-          "source": "2015866743634190402",
-          "snippet": "",
+          "id": 4385,
+          "title": "RT @WhiteHouse: Democrats say America\u2019s elections are not secure, yet oppose mak...",
+          "source": "2024181356872503585",
+          "snippet": "RT @WhiteHouse: Democrats say America\u2019s elections are not secure, yet oppose making voter ID &amp; U...",
           "reason": "Recent coverage"
         },
         {
-          "id": 2447,
-          "title": "Untitled",
-          "source": "2015866725561209230",
-          "snippet": "",
+          "id": 4392,
+          "title": "RT @WhiteHouse: Democrats say America\u2019s elections are not secure, yet oppose mak...",
+          "source": "2024181329508577313",
+          "snippet": "RT @WhiteHouse: Democrats say America\u2019s elections are not secure, yet oppose making voter ID &amp; U...",
           "reason": "Recent coverage"
         }
       ]
     },
     {
-      "id": 4734,
-      "title": "Unnamed Cluster",
-      "articleCount": 25,
-      "momentum": {
-        "delta24h": 100.0,
-        "delta7d": 0.0
-      },
-      "primarySources": [
-        "x_post"
-      ],
-      "summary": [
-        "Untitled",
-        "Untitled",
-        "Untitled"
-      ],
-      "keyClaims": [],
-      "entities": {
-        "people": [],
-        "organizations": [],
-        "locations": []
-      },
-      "sourceMix": [
-        {
-          "name": "X Post",
-          "value": 25,
-          "type": "other"
-        }
-      ],
-      "timeline": [
-        {
-          "date": "Mon",
-          "value": 25
-        }
-      ],
-      "articles": [
-        {
-          "id": 3223,
-          "title": "Untitled",
-          "source": "2015869549707506057",
-          "snippet": "",
-          "reason": "Recent coverage"
-        },
-        {
-          "id": 2857,
-          "title": "Untitled",
-          "source": "2015868263364755483",
-          "snippet": "",
-          "reason": "Recent coverage"
-        },
-        {
-          "id": 2866,
-          "title": "Untitled",
-          "source": "2015868259430482160",
-          "snippet": "",
-          "reason": "Recent coverage"
-        }
-      ]
-    },
-    {
-      "id": 3513,
-      "title": "Unnamed Cluster",
-      "articleCount": 17,
-      "momentum": {
-        "delta24h": 100.0,
-        "delta7d": 0.0
-      },
-      "primarySources": [
-        "x_post"
-      ],
-      "summary": [
-        "Untitled",
-        "Untitled",
-        "Untitled"
-      ],
-      "keyClaims": [],
-      "entities": {
-        "people": [],
-        "organizations": [],
-        "locations": []
-      },
-      "sourceMix": [
-        {
-          "name": "X Post",
-          "value": 17,
-          "type": "other"
-        }
-      ],
-      "timeline": [
-        {
-          "date": "Mon",
-          "value": 17
-        }
-      ],
-      "articles": [
-        {
-          "id": 1987,
-          "title": "Untitled",
-          "source": "2015830194292953232",
-          "snippet": "",
-          "reason": "Recent coverage"
-        },
-        {
-          "id": 1990,
-          "title": "Untitled",
-          "source": "2015830191608893886",
-          "snippet": "",
-          "reason": "Recent coverage"
-        },
-        {
-          "id": 1991,
-          "title": "Untitled",
-          "source": "2015830191004893343",
-          "snippet": "",
-          "reason": "Recent coverage"
-        }
-      ]
-    },
-    {
-      "id": 5113,
-      "title": "Unnamed Cluster",
-      "articleCount": 17,
-      "momentum": {
-        "delta24h": 100.0,
-        "delta7d": 0.0
-      },
-      "primarySources": [
-        "x_post"
-      ],
-      "summary": [
-        "Untitled",
-        "Untitled",
-        "Untitled"
-      ],
-      "keyClaims": [],
-      "entities": {
-        "people": [],
-        "organizations": [],
-        "locations": []
-      },
-      "sourceMix": [
-        {
-          "name": "X Post",
-          "value": 17,
-          "type": "other"
-        }
-      ],
-      "timeline": [
-        {
-          "date": "Mon",
-          "value": 17
-        }
-      ],
-      "articles": [
-        {
-          "id": 3485,
-          "title": "Untitled",
-          "source": "2015870820686414218",
-          "snippet": "",
-          "reason": "Recent coverage"
-        },
-        {
-          "id": 3486,
-          "title": "Untitled",
-          "source": "2015870814009061651",
-          "snippet": "",
-          "reason": "Recent coverage"
-        },
-        {
-          "id": 3489,
-          "title": "Untitled",
-          "source": "2015870782010724587",
-          "snippet": "",
-          "reason": "Recent coverage"
-        }
-      ]
-    },
-    {
-      "id": 4305,
-      "title": "Unnamed Cluster",
+      "id": 10005,
+      "title": "RT @queenie4rmnola: Immigration officers are doing exactl...",
       "articleCount": 13,
+      "contentType": "social",
       "momentum": {
         "delta24h": 100.0,
         "delta7d": 0.0
@@ -312,9 +258,9 @@
         "x_post"
       ],
       "summary": [
-        "Untitled",
-        "Untitled",
-        "Untitled"
+        "RT @queenie4rmnola: Immigration officers are doing exactly what police officers ...",
+        "RT @queenie4rmnola: Immigration officers are doing exactly what police officers ...",
+        "RT @queenie4rmnola: Immigration officers are doing exactly what police officers ..."
       ],
       "keyClaims": [],
       "entities": {
@@ -324,45 +270,46 @@
       },
       "sourceMix": [
         {
-          "name": "X Post",
+          "name": "X Posts",
           "value": 13,
-          "type": "other"
+          "type": "social"
         }
       ],
       "timeline": [
         {
-          "date": "Mon",
+          "date": "Wed",
           "value": 13
         }
       ],
       "articles": [
         {
-          "id": 2688,
-          "title": "Untitled",
-          "source": "2015867080847806470",
-          "snippet": "",
+          "id": 4554,
+          "title": "RT @queenie4rmnola: Immigration officers are doing exactly what police officers ...",
+          "source": "2024181407359111267",
+          "snippet": "RT @queenie4rmnola: Immigration officers are doing exactly what police officers have been doing for ...",
           "reason": "Recent coverage"
         },
         {
-          "id": 2690,
-          "title": "Untitled",
-          "source": "2015866980587229463",
-          "snippet": "",
+          "id": 4559,
+          "title": "RT @queenie4rmnola: Immigration officers are doing exactly what police officers ...",
+          "source": "2024181175661539334",
+          "snippet": "RT @queenie4rmnola: Immigration officers are doing exactly what police officers have been doing for ...",
           "reason": "Recent coverage"
         },
         {
-          "id": 2696,
-          "title": "Untitled",
-          "source": "2015866680216318414",
-          "snippet": "",
+          "id": 4563,
+          "title": "RT @queenie4rmnola: Immigration officers are doing exactly what police officers ...",
+          "source": "2024180810220179918",
+          "snippet": "RT @queenie4rmnola: Immigration officers are doing exactly what police officers have been doing for ...",
           "reason": "Recent coverage"
         }
       ]
     },
     {
-      "id": 4309,
-      "title": "Unnamed Cluster",
-      "articleCount": 12,
+      "id": 10011,
+      "title": "RT @SolJakey: In 2024, I voted as a Canadian citizen in C...",
+      "articleCount": 13,
+      "contentType": "social",
       "momentum": {
         "delta24h": 100.0,
         "delta7d": 0.0
@@ -371,9 +318,9 @@
         "x_post"
       ],
       "summary": [
-        "Untitled",
-        "Untitled",
-        "Untitled"
+        "RT @SolJakey: In 2024, I voted as a Canadian citizen in California.\n\nI voted for...",
+        "RT @SolJakey: In 2024, I voted as a Canadian citizen in California.\n\nI voted for...",
+        "RT @SolJakey: In 2024, I voted as a Canadian citizen in California.\n\nI voted for..."
       ],
       "keyClaims": [],
       "entities": {
@@ -383,45 +330,226 @@
       },
       "sourceMix": [
         {
-          "name": "X Post",
-          "value": 12,
-          "type": "other"
+          "name": "X Posts",
+          "value": 13,
+          "type": "social"
         }
       ],
       "timeline": [
         {
-          "date": "Mon",
+          "date": "Wed",
+          "value": 13
+        }
+      ],
+      "articles": [
+        {
+          "id": 4365,
+          "title": "RT @SolJakey: In 2024, I voted as a Canadian citizen in California.\n\nI voted for...",
+          "source": "2024181001044578605",
+          "snippet": "RT @SolJakey: In 2024, I voted as a Canadian citizen in California.\n\nI voted for Donald Trump to pro...",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 4366,
+          "title": "RT @SolJakey: In 2024, I voted as a Canadian citizen in California.\n\nI voted for...",
+          "source": "2024181000067059791",
+          "snippet": "RT @SolJakey: In 2024, I voted as a Canadian citizen in California.\n\nI voted for Donald Trump to pro...",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 4087,
+          "title": "RT @SolJakey: In 2024, I voted as a Canadian citizen in California.\n\nI voted for...",
+          "source": "2024179902346416253",
+          "snippet": "RT @SolJakey: In 2024, I voted as a Canadian citizen in California.\n\nI voted for Donald Trump to pro...",
+          "reason": "Recent coverage"
+        }
+      ]
+    },
+    {
+      "id": 10094,
+      "title": "RT @implausibleblog: Victoria Derbyshire, \"Robert Jenrick...",
+      "articleCount": 13,
+      "contentType": "social",
+      "momentum": {
+        "delta24h": 100.0,
+        "delta7d": 0.0
+      },
+      "primarySources": [
+        "x_post"
+      ],
+      "summary": [
+        "RT @implausibleblog: Victoria Derbyshire, \"Robert Jenrick was immigration minist...",
+        "RT @implausibleblog: Victoria Derbyshire, \"Robert Jenrick was immigration minist...",
+        "RT @implausibleblog: Victoria Derbyshire, \"Robert Jenrick was immigration minist..."
+      ],
+      "keyClaims": [],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "locations": []
+      },
+      "sourceMix": [
+        {
+          "name": "X Posts",
+          "value": 13,
+          "type": "social"
+        }
+      ],
+      "timeline": [
+        {
+          "date": "Wed",
+          "value": 13
+        }
+      ],
+      "articles": [
+        {
+          "id": 4455,
+          "title": "RT @implausibleblog: Victoria Derbyshire, \"Robert Jenrick was immigration minist...",
+          "source": "2024181468570824946",
+          "snippet": "RT @implausibleblog: Victoria Derbyshire, \"Robert Jenrick was immigration minister, Suella Braverman...",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 4459,
+          "title": "RT @implausibleblog: Victoria Derbyshire, \"Robert Jenrick was immigration minist...",
+          "source": "2024181403739464021",
+          "snippet": "RT @implausibleblog: Victoria Derbyshire, \"Robert Jenrick was immigration minister, Suella Braverman...",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 4461,
+          "title": "RT @implausibleblog: Victoria Derbyshire, \"Robert Jenrick was immigration minist...",
+          "source": "2024181350199165070",
+          "snippet": "RT @implausibleblog: Victoria Derbyshire, \"Robert Jenrick was immigration minister, Suella Braverman...",
+          "reason": "Recent coverage"
+        }
+      ]
+    },
+    {
+      "id": 10561,
+      "title": "RT @OccupyDemocrats: BREAKING: Music legend Bruce Springs...",
+      "articleCount": 13,
+      "contentType": "social",
+      "momentum": {
+        "delta24h": 100.0,
+        "delta7d": 0.0
+      },
+      "primarySources": [
+        "x_post"
+      ],
+      "summary": [
+        "RT @OccupyDemocrats: BREAKING: Music legend Bruce Springsteen drops a bomb on MA...",
+        "RT @OccupyDemocrats: BREAKING: Music legend Bruce Springsteen drops a bomb on MA...",
+        "RT @OccupyDemocrats: BREAKING: Music legend Bruce Springsteen drops a bomb on MA..."
+      ],
+      "keyClaims": [],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "locations": []
+      },
+      "sourceMix": [
+        {
+          "name": "X Posts",
+          "value": 13,
+          "type": "social"
+        }
+      ],
+      "timeline": [
+        {
+          "date": "Wed",
+          "value": 13
+        }
+      ],
+      "articles": [
+        {
+          "id": 4717,
+          "title": "RT @OccupyDemocrats: BREAKING: Music legend Bruce Springsteen drops a bomb on MA...",
+          "source": "2024182434380562582",
+          "snippet": "RT @OccupyDemocrats: BREAKING: Music legend Bruce Springsteen drops a bomb on MAGA world by announci...",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 4672,
+          "title": "RT @OccupyDemocrats: BREAKING: Music legend Bruce Springsteen drops a bomb on MA...",
+          "source": "2024182194034364623",
+          "snippet": "RT @OccupyDemocrats: BREAKING: Music legend Bruce Springsteen drops a bomb on MAGA world by announci...",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 4678,
+          "title": "RT @OccupyDemocrats: BREAKING: Music legend Bruce Springsteen drops a bomb on MA...",
+          "source": "2024182116662071425",
+          "snippet": "RT @OccupyDemocrats: BREAKING: Music legend Bruce Springsteen drops a bomb on MAGA world by announci...",
+          "reason": "Recent coverage"
+        }
+      ]
+    },
+    {
+      "id": 10015,
+      "title": "RT @OperHealAmerica: SHARIA LAW:\n\nBan it NOW.\n\nDeport it ...",
+      "articleCount": 12,
+      "contentType": "social",
+      "momentum": {
+        "delta24h": 100.0,
+        "delta7d": 0.0
+      },
+      "primarySources": [
+        "x_post"
+      ],
+      "summary": [
+        "RT @OperHealAmerica: SHARIA LAW:\n\nBan it NOW.\n\nDeport it NOW.\n\nCease all immigra...",
+        "RT @OperHealAmerica: SHARIA LAW:\n\nBan it NOW.\n\nDeport it NOW.\n\nCease all immigra...",
+        "RT @OperHealAmerica: SHARIA LAW:\n\nBan it NOW.\n\nDeport it NOW.\n\nCease all immigra..."
+      ],
+      "keyClaims": [],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "locations": []
+      },
+      "sourceMix": [
+        {
+          "name": "X Posts",
+          "value": 12,
+          "type": "social"
+        }
+      ],
+      "timeline": [
+        {
+          "date": "Wed",
           "value": 12
         }
       ],
       "articles": [
         {
-          "id": 2729,
-          "title": "Untitled",
-          "source": "2015865207374152175",
-          "snippet": "",
+          "id": 4551,
+          "title": "RT @OperHealAmerica: SHARIA LAW:\n\nBan it NOW.\n\nDeport it NOW.\n\nCease all immigra...",
+          "source": "2024181540020769219",
+          "snippet": "RT @OperHealAmerica: SHARIA LAW:\n\nBan it NOW.\n\nDeport it NOW.\n\nCease all immigration of it NOW.\n\nOr ...",
           "reason": "Recent coverage"
         },
         {
-          "id": 2742,
-          "title": "Untitled",
-          "source": "2015864102581645634",
-          "snippet": "",
+          "id": 4555,
+          "title": "RT @OperHealAmerica: SHARIA LAW:\n\nBan it NOW.\n\nDeport it NOW.\n\nCease all immigra...",
+          "source": "2024181285841703169",
+          "snippet": "RT @OperHealAmerica: SHARIA LAW:\n\nBan it NOW.\n\nDeport it NOW.\n\nCease all immigration of it NOW.\n\nOr ...",
           "reason": "Recent coverage"
         },
         {
-          "id": 2755,
-          "title": "Untitled",
-          "source": "2015863327084212415",
-          "snippet": "",
+          "id": 4557,
+          "title": "RT @OperHealAmerica: SHARIA LAW:\n\nBan it NOW.\n\nDeport it NOW.\n\nCease all immigra...",
+          "source": "2024181251440050259",
+          "snippet": "RT @OperHealAmerica: SHARIA LAW:\n\nBan it NOW.\n\nDeport it NOW.\n\nCease all immigration of it NOW.\n\nOr ...",
           "reason": "Recent coverage"
         }
       ]
     },
     {
-      "id": 4306,
-      "title": "Unnamed Cluster",
-      "articleCount": 11,
+      "id": 10279,
+      "title": "RT @AZMaGHaMaMa: The Senate gave themselves:\n\nNo term lim...",
+      "articleCount": 10,
+      "contentType": "social",
       "momentum": {
         "delta24h": 100.0,
         "delta7d": 0.0
@@ -430,9 +558,9 @@
         "x_post"
       ],
       "summary": [
-        "Untitled",
-        "Untitled",
-        "Untitled"
+        "RT @AZMaGHaMaMa: The Senate gave themselves:\n\nNo term limits\n\nNo age limit\n\nThe ...",
+        "RT @AZMaGHaMaMa: The Senate gave themselves:\n\nNo term limits\n\nNo age limit\n\nThe ...",
+        "RT @AZMaGHaMaMa: The Senate gave themselves:\n\nNo term limits\n\nNo age limit\n\nThe ..."
       ],
       "keyClaims": [],
       "entities": {
@@ -442,45 +570,46 @@
       },
       "sourceMix": [
         {
-          "name": "X Post",
-          "value": 11,
-          "type": "other"
+          "name": "X Posts",
+          "value": 10,
+          "type": "social"
         }
       ],
       "timeline": [
         {
-          "date": "Mon",
-          "value": 11
+          "date": "Wed",
+          "value": 10
         }
       ],
       "articles": [
         {
-          "id": 2683,
-          "title": "Untitled",
-          "source": "2015867186963685505",
-          "snippet": "",
+          "id": 4396,
+          "title": "RT @AZMaGHaMaMa: The Senate gave themselves:\n\nNo term limits\n\nNo age limit\n\nThe ...",
+          "source": "2024181306398298494",
+          "snippet": "RT @AZMaGHaMaMa: The Senate gave themselves:\n\nNo term limits\n\nNo age limit\n\nThe power of the popular...",
           "reason": "Recent coverage"
         },
         {
-          "id": 2728,
-          "title": "Untitled",
-          "source": "2015865278458892301",
-          "snippet": "",
+          "id": 4410,
+          "title": "RT @AZMaGHaMaMa: The Senate gave themselves:\n\nNo term limits\n\nNo age limit\n\nThe ...",
+          "source": "2024181273665659282",
+          "snippet": "RT @AZMaGHaMaMa: The Senate gave themselves:\n\nNo term limits\n\nNo age limit\n\nThe power of the popular...",
           "reason": "Recent coverage"
         },
         {
-          "id": 2745,
-          "title": "Untitled",
-          "source": "2015863720090447983",
-          "snippet": "",
+          "id": 4426,
+          "title": "RT @AZMaGHaMaMa: The Senate gave themselves:\n\nNo term limits\n\nNo age limit\n\nThe ...",
+          "source": "2024181182431191117",
+          "snippet": "RT @AZMaGHaMaMa: The Senate gave themselves:\n\nNo term limits\n\nNo age limit\n\nThe power of the popular...",
           "reason": "Recent coverage"
         }
       ]
     },
     {
-      "id": 4357,
-      "title": "Unnamed Cluster",
-      "articleCount": 11,
+      "id": 10559,
+      "title": "RT @TRUMP_ARMY_: \ud83d\udea8 ALERT: In a explosive revelation, a So...",
+      "articleCount": 10,
+      "contentType": "social",
       "momentum": {
         "delta24h": 100.0,
         "delta7d": 0.0
@@ -489,9 +618,9 @@
         "x_post"
       ],
       "summary": [
-        "Untitled",
-        "Untitled",
-        "Untitled"
+        "RT @TRUMP_ARMY_: \ud83d\udea8 ALERT: In a explosive revelation, a Somali restaurant in Minn...",
+        "RT @TRUMP_ARMY_: \ud83d\udea8 ALERT: In a explosive revelation, a Somali restaurant in Minn...",
+        "RT @TRUMP_ARMY_: \ud83d\udea8 ALERT: In a explosive revelation, a Somali restaurant in Minn..."
       ],
       "keyClaims": [],
       "entities": {
@@ -501,45 +630,106 @@
       },
       "sourceMix": [
         {
-          "name": "X Post",
-          "value": 11,
-          "type": "other"
+          "name": "X Posts",
+          "value": 10,
+          "type": "social"
         }
       ],
       "timeline": [
         {
-          "date": "Mon",
-          "value": 11
+          "date": "Wed",
+          "value": 10
         }
       ],
       "articles": [
         {
-          "id": 2433,
-          "title": "Untitled",
-          "source": "2015866742883406136",
-          "snippet": "",
+          "id": 4679,
+          "title": "RT @TRUMP_ARMY_: \ud83d\udea8 ALERT: In a explosive revelation, a Somali restaurant in Minn...",
+          "source": "2024182109753999399",
+          "snippet": "RT @TRUMP_ARMY_: \ud83d\udea8 ALERT: In a explosive revelation, a Somali restaurant in Minneapolis fraudulently...",
           "reason": "Recent coverage"
         },
         {
-          "id": 2439,
-          "title": "Untitled",
-          "source": "2015866734549315607",
-          "snippet": "",
+          "id": 4681,
+          "title": "RT @TRUMP_ARMY_: \ud83d\udea8 ALERT: In a explosive revelation, a Somali restaurant in Minn...",
+          "source": "2024182082767925752",
+          "snippet": "RT @TRUMP_ARMY_: \ud83d\udea8 ALERT: In a explosive revelation, a Somali restaurant in Minneapolis fraudulently...",
           "reason": "Recent coverage"
         },
         {
-          "id": 2442,
-          "title": "Untitled",
-          "source": "2015866730518598113",
-          "snippet": "",
+          "id": 4686,
+          "title": "RT @TRUMP_ARMY_: \ud83d\udea8 ALERT: In a explosive revelation, a Somali restaurant in Minn...",
+          "source": "2024182000848933287",
+          "snippet": "RT @TRUMP_ARMY_: \ud83d\udea8 ALERT: In a explosive revelation, a Somali restaurant in Minneapolis fraudulently...",
           "reason": "Recent coverage"
         }
       ]
     },
     {
-      "id": 3477,
-      "title": "Unnamed Cluster",
+      "id": 10562,
+      "title": "RT @ValentinaForUSA: If I don\u2019t get into Congress, Texas ...",
+      "articleCount": 10,
+      "contentType": "social",
+      "momentum": {
+        "delta24h": 100.0,
+        "delta7d": 0.0
+      },
+      "primarySources": [
+        "x_post"
+      ],
+      "summary": [
+        "RT @ValentinaForUSA: If I don\u2019t get into Congress, Texas will become worse than ...",
+        "RT @ValentinaForUSA: If I don\u2019t get into Congress, Texas will become worse than ...",
+        "RT @ValentinaForUSA: If I don\u2019t get into Congress, Texas will become worse than ..."
+      ],
+      "keyClaims": [],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "locations": []
+      },
+      "sourceMix": [
+        {
+          "name": "X Posts",
+          "value": 10,
+          "type": "social"
+        }
+      ],
+      "timeline": [
+        {
+          "date": "Wed",
+          "value": 10
+        }
+      ],
+      "articles": [
+        {
+          "id": 4635,
+          "title": "RT @ValentinaForUSA: If I don\u2019t get into Congress, Texas will become worse than ...",
+          "source": "2024181968624140301",
+          "snippet": "RT @ValentinaForUSA: If I don\u2019t get into Congress, Texas will become worse than Minnesota.\n\nRemoving...",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 4636,
+          "title": "RT @ValentinaForUSA: If I don\u2019t get into Congress, Texas will become worse than ...",
+          "source": "2024181967059632375",
+          "snippet": "RT @ValentinaForUSA: If I don\u2019t get into Congress, Texas will become worse than Minnesota.\n\nRemoving...",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 4641,
+          "title": "RT @ValentinaForUSA: If I don\u2019t get into Congress, Texas will become worse than ...",
+          "source": "2024181920138219626",
+          "snippet": "RT @ValentinaForUSA: If I don\u2019t get into Congress, Texas will become worse than Minnesota.\n\nRemoving...",
+          "reason": "Recent coverage"
+        }
+      ]
+    },
+    {
+      "id": 10016,
+      "title": "@IndiaToday #StopTorturingImranKhan\nhttps://t.co/6LAwPFQn...",
       "articleCount": 9,
+      "contentType": "social",
       "momentum": {
         "delta24h": 100.0,
         "delta7d": 0.0
@@ -548,9 +738,9 @@
         "x_post"
       ],
       "summary": [
-        "Untitled",
-        "Untitled",
-        "Untitled"
+        "@IndiaToday #StopTorturingImranKhan\nhttps://t.co/6LAwPFQnzK\nYour EU tour seems q...",
+        "@zeshmohmand #StopTorturingImranKhan\nhttps://t.co/6LAwPFQnzK\nYour EU tour seems ...",
+        "@Umair_Raj321 #StopTorturingImranKhan\nhttps://t.co/6LAwPFQnzK\nYour EU tour seems..."
       ],
       "keyClaims": [],
       "entities": {
@@ -560,45 +750,46 @@
       },
       "sourceMix": [
         {
-          "name": "X Post",
+          "name": "X Posts",
           "value": 9,
-          "type": "other"
+          "type": "social"
         }
       ],
       "timeline": [
         {
-          "date": "Mon",
+          "date": "Wed",
           "value": 9
         }
       ],
       "articles": [
         {
-          "id": 2337,
-          "title": "Untitled",
-          "source": "2015830884096626898",
-          "snippet": "",
+          "id": 4081,
+          "title": "@IndiaToday #StopTorturingImranKhan\nhttps://t.co/6LAwPFQnzK\nYour EU tour seems q...",
+          "source": "2024180053240615373",
+          "snippet": "@IndiaToday #StopTorturingImranKhan\nhttps://t.co/6LAwPFQnzK\nYour EU tour seems quite successful\u2014sell...",
           "reason": "Recent coverage"
         },
         {
-          "id": 2350,
-          "title": "Untitled",
-          "source": "2015829812254797851",
-          "snippet": "",
+          "id": 4088,
+          "title": "@zeshmohmand #StopTorturingImranKhan\nhttps://t.co/6LAwPFQnzK\nYour EU tour seems ...",
+          "source": "2024179897296474226",
+          "snippet": "@zeshmohmand #StopTorturingImranKhan\nhttps://t.co/6LAwPFQnzK\nYour EU tour seems quite successful\u2014sel...",
           "reason": "Recent coverage"
         },
         {
-          "id": 2355,
-          "title": "Untitled",
-          "source": "2015829654876123225",
-          "snippet": "",
+          "id": 4101,
+          "title": "@Umair_Raj321 #StopTorturingImranKhan\nhttps://t.co/6LAwPFQnzK\nYour EU tour seems...",
+          "source": "2024179463139815739",
+          "snippet": "@Umair_Raj321 #StopTorturingImranKhan\nhttps://t.co/6LAwPFQnzK\nYour EU tour seems quite successful\u2014se...",
           "reason": "Recent coverage"
         }
       ]
     },
     {
-      "id": 4303,
-      "title": "Unnamed Cluster",
+      "id": 10284,
+      "title": "RT @C_3C_3: Mitch McConnell is a no vote on the SAVE ACT....",
       "articleCount": 9,
+      "contentType": "social",
       "momentum": {
         "delta24h": 100.0,
         "delta7d": 0.0
@@ -607,9 +798,9 @@
         "x_post"
       ],
       "summary": [
-        "Untitled",
-        "Untitled",
-        "Untitled"
+        "RT @C_3C_3: Mitch McConnell is a no vote on the SAVE ACT.\n\nOver 90% of his const...",
+        "RT @C_3C_3: Mitch McConnell is a no vote on the SAVE ACT.\n\nOver 90% of his const...",
+        "RT @C_3C_3: Mitch McConnell is a no vote on the SAVE ACT.\n\nOver 90% of his const..."
       ],
       "keyClaims": [],
       "entities": {
@@ -619,163 +810,46 @@
       },
       "sourceMix": [
         {
-          "name": "X Post",
+          "name": "X Posts",
           "value": 9,
-          "type": "other"
+          "type": "social"
         }
       ],
       "timeline": [
         {
-          "date": "Mon",
+          "date": "Wed",
           "value": 9
         }
       ],
       "articles": [
         {
-          "id": 2685,
-          "title": "Untitled",
-          "source": "2015867113563382040",
-          "snippet": "",
+          "id": 4000,
+          "title": "RT @C_3C_3: Mitch McConnell is a no vote on the SAVE ACT.\n\nOver 90% of his const...",
+          "source": "2024179851138138383",
+          "snippet": "RT @C_3C_3: Mitch McConnell is a no vote on the SAVE ACT.\n\nOver 90% of his constituents would vote y...",
           "reason": "Recent coverage"
         },
         {
-          "id": 2687,
-          "title": "Untitled",
-          "source": "2015867083498619369",
-          "snippet": "",
+          "id": 4019,
+          "title": "RT @C_3C_3: Mitch McConnell is a no vote on the SAVE ACT.\n\nOver 90% of his const...",
+          "source": "2024179843320205527",
+          "snippet": "RT @C_3C_3: Mitch McConnell is a no vote on the SAVE ACT.\n\nOver 90% of his constituents would vote y...",
           "reason": "Recent coverage"
         },
         {
-          "id": 2691,
-          "title": "Untitled",
-          "source": "2015866943023001821",
-          "snippet": "",
+          "id": 4021,
+          "title": "RT @C_3C_3: Mitch McConnell is a no vote on the SAVE ACT.\n\nOver 90% of his const...",
+          "source": "2024179842523017381",
+          "snippet": "RT @C_3C_3: Mitch McConnell is a no vote on the SAVE ACT.\n\nOver 90% of his constituents would vote y...",
           "reason": "Recent coverage"
         }
       ]
     },
     {
-      "id": 4621,
-      "title": "Unnamed Cluster",
-      "articleCount": 9,
-      "momentum": {
-        "delta24h": 100.0,
-        "delta7d": 0.0
-      },
-      "primarySources": [
-        "x_post"
-      ],
-      "summary": [
-        "Untitled",
-        "Untitled",
-        "Untitled"
-      ],
-      "keyClaims": [],
-      "entities": {
-        "people": [],
-        "organizations": [],
-        "locations": []
-      },
-      "sourceMix": [
-        {
-          "name": "X Post",
-          "value": 9,
-          "type": "other"
-        }
-      ],
-      "timeline": [
-        {
-          "date": "Mon",
-          "value": 9
-        }
-      ],
-      "articles": [
-        {
-          "id": 2706,
-          "title": "Untitled",
-          "source": "2015866415778300134",
-          "snippet": "",
-          "reason": "Recent coverage"
-        },
-        {
-          "id": 2708,
-          "title": "Untitled",
-          "source": "2015866253315850603",
-          "snippet": "",
-          "reason": "Recent coverage"
-        },
-        {
-          "id": 2709,
-          "title": "Untitled",
-          "source": "2015866252292444515",
-          "snippet": "",
-          "reason": "Recent coverage"
-        }
-      ]
-    },
-    {
-      "id": 5251,
-      "title": "Unnamed Cluster",
-      "articleCount": 9,
-      "momentum": {
-        "delta24h": 100.0,
-        "delta7d": 0.0
-      },
-      "primarySources": [
-        "x_post"
-      ],
-      "summary": [
-        "Untitled",
-        "Untitled",
-        "Untitled"
-      ],
-      "keyClaims": [],
-      "entities": {
-        "people": [],
-        "organizations": [],
-        "locations": []
-      },
-      "sourceMix": [
-        {
-          "name": "X Post",
-          "value": 9,
-          "type": "other"
-        }
-      ],
-      "timeline": [
-        {
-          "date": "Mon",
-          "value": 9
-        }
-      ],
-      "articles": [
-        {
-          "id": 3450,
-          "title": "Untitled",
-          "source": "2015870570374521254",
-          "snippet": "",
-          "reason": "Recent coverage"
-        },
-        {
-          "id": 3455,
-          "title": "Untitled",
-          "source": "2015870514858705095",
-          "snippet": "",
-          "reason": "Recent coverage"
-        },
-        {
-          "id": 3456,
-          "title": "Untitled",
-          "source": "2015870468612350317",
-          "snippet": "",
-          "reason": "Recent coverage"
-        }
-      ]
-    },
-    {
-      "id": 3715,
-      "title": "Unnamed Cluster",
+      "id": 10029,
+      "title": "RT @Savsays: I hate it here. The Democrats can defy immig...",
       "articleCount": 8,
+      "contentType": "social",
       "momentum": {
         "delta24h": 100.0,
         "delta7d": 0.0
@@ -784,9 +858,9 @@
         "x_post"
       ],
       "summary": [
-        "Untitled",
-        "Untitled",
-        "Untitled"
+        "RT @Savsays: I hate it here. The Democrats can defy immigration law for 4 years ...",
+        "RT @Savsays: I hate it here. The Democrats can defy immigration law for 4 years ...",
+        "RT @Savsays: I hate it here. The Democrats can defy immigration law for 4 years ..."
       ],
       "keyClaims": [],
       "entities": {
@@ -796,45 +870,46 @@
       },
       "sourceMix": [
         {
-          "name": "X Post",
+          "name": "X Posts",
           "value": 8,
-          "type": "other"
+          "type": "social"
         }
       ],
       "timeline": [
         {
-          "date": "Mon",
+          "date": "Wed",
           "value": 8
         }
       ],
       "articles": [
         {
-          "id": 2242,
-          "title": "Untitled",
-          "source": "2015830854136721846",
-          "snippet": "",
+          "id": 4565,
+          "title": "RT @Savsays: I hate it here. The Democrats can defy immigration law for 4 years ...",
+          "source": "2024180720374013970",
+          "snippet": "RT @Savsays: I hate it here. The Democrats can defy immigration law for 4 years straight and throw p...",
           "reason": "Recent coverage"
         },
         {
-          "id": 2253,
-          "title": "Untitled",
-          "source": "2015830846989885755",
-          "snippet": "",
+          "id": 4569,
+          "title": "RT @Savsays: I hate it here. The Democrats can defy immigration law for 4 years ...",
+          "source": "2024180537733079355",
+          "snippet": "RT @Savsays: I hate it here. The Democrats can defy immigration law for 4 years straight and throw p...",
           "reason": "Recent coverage"
         },
         {
-          "id": 2258,
-          "title": "Untitled",
-          "source": "2015830843122417924",
-          "snippet": "",
+          "id": 4583,
+          "title": "RT @Savsays: I hate it here. The Democrats can defy immigration law for 4 years ...",
+          "source": "2024179748079825177",
+          "snippet": "RT @Savsays: I hate it here. The Democrats can defy immigration law for 4 years straight and throw p...",
           "reason": "Recent coverage"
         }
       ]
     },
     {
-      "id": 4503,
-      "title": "Unnamed Cluster",
+      "id": 10048,
+      "title": "RT @unseen1_unseen: But I have doomers telling me the gop...",
       "articleCount": 8,
+      "contentType": "social",
       "momentum": {
         "delta24h": 100.0,
         "delta7d": 0.0
@@ -843,9 +918,9 @@
         "x_post"
       ],
       "summary": [
-        "Untitled",
-        "Untitled",
-        "Untitled"
+        "RT @unseen1_unseen: But I have doomers telling me the gop lost every election si...",
+        "RT @unseen1_unseen: Every single gop House seat that was up for a special  elect...",
+        "RT @unseen1_unseen: But I have doomers telling me the gop lost every election si..."
       ],
       "keyClaims": [],
       "entities": {
@@ -855,281 +930,46 @@
       },
       "sourceMix": [
         {
-          "name": "X Post",
+          "name": "X Posts",
           "value": 8,
-          "type": "other"
+          "type": "social"
         }
       ],
       "timeline": [
         {
-          "date": "Mon",
+          "date": "Wed",
           "value": 8
         }
       ],
       "articles": [
         {
-          "id": 3417,
-          "title": "Untitled",
-          "source": "2015870403080560954",
-          "snippet": "",
+          "id": 4085,
+          "title": "RT @unseen1_unseen: But I have doomers telling me the gop lost every election si...",
+          "source": "2024179909468230115",
+          "snippet": "RT @unseen1_unseen: But I have doomers telling me the gop lost every election since 2024.....",
           "reason": "Recent coverage"
         },
         {
-          "id": 3430,
-          "title": "Untitled",
-          "source": "2015870375012561355",
-          "snippet": "",
+          "id": 4089,
+          "title": "RT @unseen1_unseen: Every single gop House seat that was up for a special  elect...",
+          "source": "2024179883660759326",
+          "snippet": "RT @unseen1_unseen: Every single gop House seat that was up for a special  election since 2024 has b...",
           "reason": "Recent coverage"
         },
         {
-          "id": 2662,
-          "title": "Untitled",
-          "source": "2015867149596950594",
-          "snippet": "",
+          "id": 4093,
+          "title": "RT @unseen1_unseen: But I have doomers telling me the gop lost every election si...",
+          "source": "2024179721097867331",
+          "snippet": "RT @unseen1_unseen: But I have doomers telling me the gop lost every election since 2024.....",
           "reason": "Recent coverage"
         }
       ]
     },
     {
-      "id": 4547,
-      "title": "Unnamed Cluster",
-      "articleCount": 8,
-      "momentum": {
-        "delta24h": 100.0,
-        "delta7d": 0.0
-      },
-      "primarySources": [
-        "x_post"
-      ],
-      "summary": [
-        "Untitled",
-        "Untitled",
-        "Untitled"
-      ],
-      "keyClaims": [],
-      "entities": {
-        "people": [],
-        "organizations": [],
-        "locations": []
-      },
-      "sourceMix": [
-        {
-          "name": "X Post",
-          "value": 8,
-          "type": "other"
-        }
-      ],
-      "timeline": [
-        {
-          "date": "Mon",
-          "value": 8
-        }
-      ],
-      "articles": [
-        {
-          "id": 2242,
-          "title": "Untitled",
-          "source": "2015830854136721846",
-          "snippet": "",
-          "reason": "Recent coverage"
-        },
-        {
-          "id": 2253,
-          "title": "Untitled",
-          "source": "2015830846989885755",
-          "snippet": "",
-          "reason": "Recent coverage"
-        },
-        {
-          "id": 2258,
-          "title": "Untitled",
-          "source": "2015830843122417924",
-          "snippet": "",
-          "reason": "Recent coverage"
-        }
-      ]
-    },
-    {
-      "id": 4693,
-      "title": "Unnamed Cluster",
-      "articleCount": 8,
-      "momentum": {
-        "delta24h": 100.0,
-        "delta7d": 0.0
-      },
-      "primarySources": [
-        "x_post"
-      ],
-      "summary": [
-        "Untitled",
-        "Untitled",
-        "Untitled"
-      ],
-      "keyClaims": [],
-      "entities": {
-        "people": [],
-        "organizations": [],
-        "locations": []
-      },
-      "sourceMix": [
-        {
-          "name": "X Post",
-          "value": 8,
-          "type": "other"
-        }
-      ],
-      "timeline": [
-        {
-          "date": "Mon",
-          "value": 8
-        }
-      ],
-      "articles": [
-        {
-          "id": 3049,
-          "title": "Untitled",
-          "source": "2015868847593599063",
-          "snippet": "",
-          "reason": "Recent coverage"
-        },
-        {
-          "id": 3064,
-          "title": "Untitled",
-          "source": "2015868497373356277",
-          "snippet": "",
-          "reason": "Recent coverage"
-        },
-        {
-          "id": 3065,
-          "title": "Untitled",
-          "source": "2015868474220765355",
-          "snippet": "",
-          "reason": "Recent coverage"
-        }
-      ]
-    },
-    {
-      "id": 4778,
-      "title": "Unnamed Cluster",
-      "articleCount": 8,
-      "momentum": {
-        "delta24h": 100.0,
-        "delta7d": 0.0
-      },
-      "primarySources": [
-        "x_post"
-      ],
-      "summary": [
-        "Untitled",
-        "Untitled",
-        "Untitled"
-      ],
-      "keyClaims": [],
-      "entities": {
-        "people": [],
-        "organizations": [],
-        "locations": []
-      },
-      "sourceMix": [
-        {
-          "name": "X Post",
-          "value": 8,
-          "type": "other"
-        }
-      ],
-      "timeline": [
-        {
-          "date": "Mon",
-          "value": 8
-        }
-      ],
-      "articles": [
-        {
-          "id": 3054,
-          "title": "Untitled",
-          "source": "2015868777464750125",
-          "snippet": "",
-          "reason": "Recent coverage"
-        },
-        {
-          "id": 3066,
-          "title": "Untitled",
-          "source": "2015868459469468114",
-          "snippet": "",
-          "reason": "Recent coverage"
-        },
-        {
-          "id": 3077,
-          "title": "Untitled",
-          "source": "2015868215746797736",
-          "snippet": "",
-          "reason": "Recent coverage"
-        }
-      ]
-    },
-    {
-      "id": 5015,
-      "title": "Unnamed Cluster",
-      "articleCount": 8,
-      "momentum": {
-        "delta24h": 100.0,
-        "delta7d": 0.0
-      },
-      "primarySources": [
-        "x_post"
-      ],
-      "summary": [
-        "Untitled",
-        "Untitled",
-        "Untitled"
-      ],
-      "keyClaims": [],
-      "entities": {
-        "people": [],
-        "organizations": [],
-        "locations": []
-      },
-      "sourceMix": [
-        {
-          "name": "X Post",
-          "value": 8,
-          "type": "other"
-        }
-      ],
-      "timeline": [
-        {
-          "date": "Mon",
-          "value": 8
-        }
-      ],
-      "articles": [
-        {
-          "id": 3004,
-          "title": "Untitled",
-          "source": "2015868796704268780",
-          "snippet": "",
-          "reason": "Recent coverage"
-        },
-        {
-          "id": 3010,
-          "title": "Untitled",
-          "source": "2015868704756470246",
-          "snippet": "",
-          "reason": "Recent coverage"
-        },
-        {
-          "id": 3011,
-          "title": "Untitled",
-          "source": "2015868688381997342",
-          "snippet": "",
-          "reason": "Recent coverage"
-        }
-      ]
-    },
-    {
-      "id": 3474,
-      "title": "Unnamed Cluster",
+      "id": 10019,
+      "title": "RT @AprilSpark1890: \ud83d\udc40This guy flew from Canada to Califor...",
       "articleCount": 7,
+      "contentType": "social",
       "momentum": {
         "delta24h": 100.0,
         "delta7d": 0.0
@@ -1138,9 +978,9 @@
         "x_post"
       ],
       "summary": [
-        "Untitled",
-        "Untitled",
-        "Untitled"
+        "RT @AprilSpark1890: \ud83d\udc40This guy flew from Canada to California to vote in the 2024...",
+        "RT @AprilSpark1890: \ud83d\udc40This guy flew from Canada to California to vote in the 2024...",
+        "RT @AprilSpark1890: \ud83d\udc40This guy flew from Canada to California to vote in the 2024..."
       ],
       "keyClaims": [],
       "entities": {
@@ -1150,37 +990,217 @@
       },
       "sourceMix": [
         {
-          "name": "X Post",
+          "name": "X Posts",
           "value": 7,
-          "type": "other"
+          "type": "social"
         }
       ],
       "timeline": [
         {
-          "date": "Mon",
+          "date": "Wed",
           "value": 7
         }
       ],
       "articles": [
         {
-          "id": 2338,
-          "title": "Untitled",
-          "source": "2015830833819513202",
-          "snippet": "",
+          "id": 4099,
+          "title": "RT @AprilSpark1890: \ud83d\udc40This guy flew from Canada to California to vote in the 2024...",
+          "source": "2024179514989768888",
+          "snippet": "RT @AprilSpark1890: \ud83d\udc40This guy flew from Canada to California to vote in the 2024 Presidential electi...",
           "reason": "Recent coverage"
         },
         {
-          "id": 2341,
-          "title": "Untitled",
-          "source": "2015830680987430978",
-          "snippet": "",
+          "id": 4126,
+          "title": "RT @AprilSpark1890: \ud83d\udc40This guy flew from Canada to California to vote in the 2024...",
+          "source": "2024178892181807546",
+          "snippet": "RT @AprilSpark1890: \ud83d\udc40This guy flew from Canada to California to vote in the 2024 Presidential electi...",
           "reason": "Recent coverage"
         },
         {
-          "id": 2371,
-          "title": "Untitled",
-          "source": "2015829377708105748",
-          "snippet": "",
+          "id": 4138,
+          "title": "RT @AprilSpark1890: \ud83d\udc40This guy flew from Canada to California to vote in the 2024...",
+          "source": "2024178571519152425",
+          "snippet": "RT @AprilSpark1890: \ud83d\udc40This guy flew from Canada to California to vote in the 2024 Presidential electi...",
+          "reason": "Recent coverage"
+        }
+      ]
+    },
+    {
+      "id": 9993,
+      "title": "RT @marcorandazza: Women got the right to drive, vote, ba...",
+      "articleCount": 6,
+      "contentType": "social",
+      "momentum": {
+        "delta24h": 100.0,
+        "delta7d": 0.0
+      },
+      "primarySources": [
+        "x_post"
+      ],
+      "summary": [
+        "RT @marcorandazza: Women got the right to drive, vote, bank accounts and loans i...",
+        "RT @marcorandazza: Women got the right to drive, vote, bank accounts and loans i...",
+        "RT @marcorandazza: Women got the right to drive, vote, bank accounts and loans i..."
+      ],
+      "keyClaims": [],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "locations": []
+      },
+      "sourceMix": [
+        {
+          "name": "X Posts",
+          "value": 6,
+          "type": "social"
+        }
+      ],
+      "timeline": [
+        {
+          "date": "Wed",
+          "value": 6
+        }
+      ],
+      "articles": [
+        {
+          "id": 4855,
+          "title": "RT @marcorandazza: Women got the right to drive, vote, bank accounts and loans i...",
+          "source": "2024179097245466669",
+          "snippet": "RT @marcorandazza: Women got the right to drive, vote, bank accounts and loans independent of their ...",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 4862,
+          "title": "RT @marcorandazza: Women got the right to drive, vote, bank accounts and loans i...",
+          "source": "2024175003793608720",
+          "snippet": "RT @marcorandazza: Women got the right to drive, vote, bank accounts and loans independent of their ...",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 4864,
+          "title": "RT @marcorandazza: Women got the right to drive, vote, bank accounts and loans i...",
+          "source": "2024174271573217694",
+          "snippet": "RT @marcorandazza: Women got the right to drive, vote, bank accounts and loans independent of their ...",
+          "reason": "Recent coverage"
+        }
+      ]
+    },
+    {
+      "id": 10227,
+      "title": "RT @C_3C_3: The Key Bridge has not been rebuilt.\n\nThere\u2019s...",
+      "articleCount": 6,
+      "contentType": "social",
+      "momentum": {
+        "delta24h": 100.0,
+        "delta7d": 0.0
+      },
+      "primarySources": [
+        "x_post"
+      ],
+      "summary": [
+        "RT @C_3C_3: The Key Bridge has not been rebuilt.\n\nThere\u2019s raw sewage flooding th...",
+        "RT @C_3C_3: The Key Bridge has not been rebuilt.\n\nThere\u2019s raw sewage flooding th...",
+        "RT @C_3C_3: The Key Bridge has not been rebuilt.\n\nThere\u2019s raw sewage flooding th..."
+      ],
+      "keyClaims": [],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "locations": []
+      },
+      "sourceMix": [
+        {
+          "name": "X Posts",
+          "value": 6,
+          "type": "social"
+        }
+      ],
+      "timeline": [
+        {
+          "date": "Wed",
+          "value": 6
+        }
+      ],
+      "articles": [
+        {
+          "id": 4237,
+          "title": "RT @C_3C_3: The Key Bridge has not been rebuilt.\n\nThere\u2019s raw sewage flooding th...",
+          "source": "2024180485799235801",
+          "snippet": "RT @C_3C_3: The Key Bridge has not been rebuilt.\n\nThere\u2019s raw sewage flooding the Potomac River.\n\nDe...",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 4250,
+          "title": "RT @C_3C_3: The Key Bridge has not been rebuilt.\n\nThere\u2019s raw sewage flooding th...",
+          "source": "2024180470523519212",
+          "snippet": "RT @C_3C_3: The Key Bridge has not been rebuilt.\n\nThere\u2019s raw sewage flooding the Potomac River.\n\nDe...",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 4255,
+          "title": "RT @C_3C_3: The Key Bridge has not been rebuilt.\n\nThere\u2019s raw sewage flooding th...",
+          "source": "2024180461355040969",
+          "snippet": "RT @C_3C_3: The Key Bridge has not been rebuilt.\n\nThere\u2019s raw sewage flooding the Potomac River.\n\nDe...",
+          "reason": "Recent coverage"
+        }
+      ]
+    },
+    {
+      "id": 10229,
+      "title": "RT @libsoftiktok: UNREAL. Matthew Braner, a Democrat-appo...",
+      "articleCount": 6,
+      "contentType": "social",
+      "momentum": {
+        "delta24h": 100.0,
+        "delta7d": 0.0
+      },
+      "primarySources": [
+        "x_post"
+      ],
+      "summary": [
+        "RT @libsoftiktok: UNREAL. Matthew Braner, a Democrat-appointed Superior Court Ju...",
+        "RT @libsoftiktok: UNREAL. Matthew Braner, a Democrat-appointed Superior Court Ju...",
+        "RT @libsoftiktok: UNREAL. Matthew Braner, a Democrat-appointed Superior Court Ju..."
+      ],
+      "keyClaims": [],
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "locations": []
+      },
+      "sourceMix": [
+        {
+          "name": "X Posts",
+          "value": 6,
+          "type": "social"
+        }
+      ],
+      "timeline": [
+        {
+          "date": "Wed",
+          "value": 6
+        }
+      ],
+      "articles": [
+        {
+          "id": 3913,
+          "title": "RT @libsoftiktok: UNREAL. Matthew Braner, a Democrat-appointed Superior Court Ju...",
+          "source": "2024179629297221796",
+          "snippet": "RT @libsoftiktok: UNREAL. Matthew Braner, a Democrat-appointed Superior Court Judge in CA, ruled tha...",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 3943,
+          "title": "RT @libsoftiktok: UNREAL. Matthew Braner, a Democrat-appointed Superior Court Ju...",
+          "source": "2024179607818166381",
+          "snippet": "RT @libsoftiktok: UNREAL. Matthew Braner, a Democrat-appointed Superior Court Judge in CA, ruled tha...",
+          "reason": "Recent coverage"
+        },
+        {
+          "id": 3954,
+          "title": "RT @libsoftiktok: UNREAL. Matthew Braner, a Democrat-appointed Superior Court Ju...",
+          "source": "2024179599924514895",
+          "snippet": "RT @libsoftiktok: UNREAL. Matthew Braner, a Democrat-appointed Superior Court Judge in CA, ruled tha...",
           "reason": "Recent coverage"
         }
       ]

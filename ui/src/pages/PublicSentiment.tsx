@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Card, ConfidenceBadge, MethodPopover, LoadingCard, EmptyState, ErrorState } from '../components/common';
-import { SentimentBar } from '../components/charts';
-import type { Filters, PublicSentimentData, SentimentOverview, SentimentBreakdown, SentimentDistribution, SocialVsNewsSentiment } from '../types';
+import { SentimentBar, TrendStrip } from '../components/charts';
+import type { Filters, PublicSentimentData, SentimentOverview, SentimentBreakdown, SentimentDistribution, SocialVsNewsSentiment, PollingSocialComparison, TrendPoint } from '../types';
 
 import { fetchSentiment } from '../services/api';
 import { transformPublicSentiment } from '../services/transformers';
@@ -379,8 +379,125 @@ function PublicSentiment({ filters }: PublicSentimentProps) {
                 </div>
             </Card>
 
+            {/* GOP Favorability (merged) */}
+            {data.gopFavorability && (
+                <GOPFavorabilityCard
+                    favorability={data.gopFavorability}
+                    trend={data.gopTrend}
+                    pollingVsSocial={data.pollingVsSocial}
+                />
+            )}
+
             {/* Method Transparency */}
             <MethodTransparencyPanel />
+        </div>
+    );
+}
+
+interface GOPFavorabilityCardProps {
+    favorability: NonNullable<PublicSentimentData['gopFavorability']>;
+    trend: TrendPoint[] | null | undefined;
+    pollingVsSocial: PollingSocialComparison | null | undefined;
+}
+
+function GOPFavorabilityCard({ favorability, trend, pollingVsSocial }: GOPFavorabilityCardProps) {
+    const netColor = favorability.netFavorability > 0
+        ? '#16a34a' : favorability.netFavorability < 0
+            ? '#dc2626' : '#9ca3af';
+
+    return (
+        <Card
+            title="GOP Favorability"
+            subtitle={`Based on ${favorability.sampleSize.toLocaleString()} analyzed documents across ${favorability.sourceCount} platforms`}
+            headerActions={
+                <MethodPopover
+                    description="GOP favorability is derived from stance indicators found in the same content analyzed for sentiment. Stance is determined via LLM classification with proximity matching to GOP entities."
+                    limitations={['Stance may not reflect personal opinion of the author', 'Neutral stance may simply indicate factual reporting']}
+                />
+            }
+        >
+            {/* Net favorability hero metric */}
+            <div className="text-center mb-4">
+                <div className="text-3xl font-bold" style={{ color: netColor }}>
+                    {favorability.netFavorability >= 0 ? '+' : ''}{favorability.netFavorability.toFixed(1)}%
+                </div>
+                <div className="text-xs text-muted">Net Favorability</div>
+            </div>
+
+            {/* Stance distribution using SentimentBar */}
+            <div className="mb-4">
+                <div className="flex justify-between items-center mb-2">
+                    <span className="font-medium text-sm">Stance Distribution</span>
+                    <span className="text-xs text-muted">{favorability.sampleSize.toLocaleString()} docs</span>
+                </div>
+                <SentimentBar
+                    positive={favorability.favorable}
+                    negative={favorability.unfavorable}
+                    neutral={favorability.neutral}
+                    height={32}
+                    showLabels={true}
+                />
+            </div>
+
+            {/* Trend chart */}
+            {trend && trend.length > 0 && (
+                <div className="mt-6 pt-4" style={{ borderTop: '1px solid var(--neutral-100)' }}>
+                    <h4 className="font-medium text-sm mb-3">Favorability Trend</h4>
+                    <TrendStrip
+                        data={trend}
+                        dataKey="value"
+                        xKey="date"
+                        height={160}
+                        color={netColor}
+                    />
+                </div>
+            )}
+
+            {/* Polling comparison */}
+            {pollingVsSocial && (
+                <GOPPollingComparison data={pollingVsSocial} />
+            )}
+        </Card>
+    );
+}
+
+function GOPPollingComparison({ data }: { data: PollingSocialComparison }) {
+    return (
+        <div className="mt-6 pt-4" style={{ borderTop: '1px solid var(--neutral-100)' }}>
+            <h4 className="font-medium text-sm mb-3">Polling vs Online Sentiment</h4>
+            <div className="grid-2 gap-4">
+                <div className="card" style={{ background: 'var(--neutral-50)', border: 'none', padding: 'var(--space-3)' }}>
+                    <div className="flex items-center gap-2 mb-2">
+                        <span className="badge badge-accent">Online Sentiment</span>
+                    </div>
+                    <SentimentBar
+                        positive={data.onlineSentiment?.favorable ?? 0}
+                        negative={data.onlineSentiment?.unfavorable ?? 0}
+                        neutral={data.onlineSentiment?.neutral ?? 0}
+                        height={24}
+                        showLabels={true}
+                    />
+                </div>
+                <div className="card" style={{ background: 'var(--neutral-50)', border: 'none', padding: 'var(--space-3)' }}>
+                    <div className="flex items-center gap-2 mb-2">
+                        <span className="badge badge-neutral">Live Polling</span>
+                    </div>
+                    {data.pollingData ? (
+                        <SentimentBar
+                            positive={data.pollingData.favorable}
+                            negative={data.pollingData.unfavorable}
+                            neutral={data.pollingData.neutral}
+                            height={24}
+                            showLabels={true}
+                        />
+                    ) : (
+                        <p className="text-muted text-xs">No polling data available</p>
+                    )}
+                </div>
+            </div>
+            <div className="card-note mt-3">
+                Online sentiment is derived from sampled social media discourse and should not be interpreted as equivalent to scientific polling data.
+            </div>
         </div>
     );
 }

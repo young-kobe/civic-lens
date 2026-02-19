@@ -11,29 +11,12 @@ Bot-flagged content is excluded from sentiment/favorability aggregations.
 from typing import Any, Dict, List, Optional, Tuple
 import time
 from analysis.src.common.logger import get_logger
+from analysis.src.engine.constants import SPAM_KEYWORDS, COORDINATION_PATTERNS
 from analysis.src.engine.models import BotResult
 from analysis.src.engine.prompts import BOT_SYSTEM_PROMPT, BOT_USER_PROMPT_TEMPLATE
 from analysis.src.llm.schemas import BOT_SCHEMA
 
 logger = get_logger(__name__)
-
-
-# Spam/bot keywords commonly found in automated content
-SPAM_KEYWORDS = frozenset([
-    "buy now", "click here", "subscribe", "limited time offer",
-    "crypto", "bitcoin", "make money", "viagra", "free gift",
-    "act now", "don't miss", "exclusive deal", "earn money",
-    "work from home", "100% free", "amazing offer", "urgent",
-])
-
-# Patterns suggesting coordinated behavior
-COORDINATION_PATTERNS = [
-    # Pattern name, detection function description
-    ("repetitive_text", "Text contains highly repetitive phrases"),
-    ("url_density", "Unusually high URL/link density"),
-    ("hashtag_spam", "Excessive hashtag usage"),
-    ("timing_burst", "Posted in coordination burst window"),
-]
 
 
 class HybridBotDetector:
@@ -135,6 +118,7 @@ class HybridBotDetector:
             country_code = metadata.get("place_country_code")
             if country_code:
                 x_foreign_origin_flag = country_code.upper() != "US"
+                x_origin_confidence = "high"  # Geotagged data is reliable
         
         # Compute aggregated score
         score = 0.0

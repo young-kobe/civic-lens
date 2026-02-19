@@ -139,11 +139,14 @@ def _get_cached_or_fallback(cache_key: str, fallback_fn, transform_fn=None):
 
 
 @app.get("/api/stories")
-def get_stories(window: str = "24h"):
-    """Returns story clusters filtered by time window. Query param: ?window=24h|7d|30d"""
+def get_stories(window: str = "24h", content_type: str = "all"):
+    """Returns story clusters filtered by time window and content type.
+    
+    Query params: ?window=24h|7d|30d&content_type=all|articles|social
+    """
     return _get_cached_or_fallback(
-        f"stories_{window}",
-        lambda: aggregator.get_stories(time_window=window),
+        f"stories_{window}_{content_type}",
+        lambda: aggregator.get_stories(time_window=window, content_type=content_type),
         lambda stories: [s.to_dict() for s in stories]
     )
 
@@ -158,14 +161,6 @@ def get_public_sentiment(window: str = "24h"):
     )
 
 
-@app.get("/api/favorability")
-def get_gop_favorability(window: str = "24h"):
-    """Returns favorability filtered by time window. Query param: ?window=24h|7d|30d"""
-    return _get_cached_or_fallback(
-        f"favorability_{window}",
-        lambda: aggregator.get_gop_favorability(time_window=window),
-        lambda f: f.to_dict()
-    )
 
 
 @app.get("/api/profiles")
@@ -227,10 +222,12 @@ def process_analysis_queue():
     """
     logger.info("Starting background analysis...")
     
-    # 1. Bot Detection - runs first
+    # 1. Bot Detection - runs first (social media only)
     docs = loader.get_unprocessed_docs("bot_detection")
-    logger.info(f"Processing {len(docs)} docs for bot detection")
-    for doc in docs:
+    SOCIAL_SOURCE_TYPES = frozenset(["reddit_post", "reddit_comment", "x_post"])
+    social_docs = [doc for doc in docs if doc.get("source_type") in SOCIAL_SOURCE_TYPES]
+    logger.info(f"Processing {len(social_docs)} social media docs for bot detection")
+    for doc in social_docs:
         result = bot_detector.analyze_full(doc['text'], doc.get('metadata'))
         output = result.to_dict()
         loader.save_ai_output(

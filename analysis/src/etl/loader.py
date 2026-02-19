@@ -264,9 +264,9 @@ class ContentLoader:
         
         # Increased from 100 to 500 for better coverage
         # Safe because heuristics are used when LLM is disabled (free).
-        # When LLM is enabled, Gemini Flash free tier has generous limits.
+        # When LLM is enabled, Ollama runs locally with no API costs.
         query = f"""
-            SELECT d.doc_id, d.text, d.metadata_json, d.title
+            SELECT d.doc_id, d.text, d.metadata_json, d.title, d.source_type
             FROM docs d
             LEFT JOIN ai_outputs a ON d.doc_id = a.doc_id AND a.task_type = ?
             WHERE a.output_id IS NULL AND d.text IS NOT NULL
@@ -275,7 +275,7 @@ class ContentLoader:
         cursor.execute(query, (task_type,))
         rows = cursor.fetchall()
         
-        return [{"doc_id": r[0], "text": r[1], "metadata": json.loads(r[2]) if r[2] else {}, "title": r[3]} for r in rows]
+        return [{"doc_id": r[0], "text": r[1], "metadata": json.loads(r[2]) if r[2] else {}, "title": r[3], "source_type": r[4]} for r in rows]
 
     def save_ai_output(self, doc_id: int, task: str, result: Dict[str, Any], confidence: float):
         conn = self._get_conn()

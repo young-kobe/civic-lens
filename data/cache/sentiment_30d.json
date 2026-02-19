@@ -1,157 +1,311 @@
 {
   "_meta": {
-    "generated_at": "2026-01-26T21:34:14.841310+00:00",
-    "doc_count": 1604,
+    "generated_at": "2026-02-18T20:20:44.467186+00:00",
+    "doc_count": 2115,
     "version": "1.0"
   },
   "data": {
     "overview": {
-      "netScore": 22.0,
-      "volume": 1604,
+      "netScore": 45.0,
+      "volume": 2115,
       "coverage": "medium",
       "confidence": "medium"
     },
     "distribution": {
-      "strongPositive": 795,
+      "strongPositive": 1501,
       "mildPositive": 0,
-      "neutral": 357,
+      "neutral": 64,
       "mildNegative": 0,
-      "strongNegative": 443
+      "strongNegative": 550
     },
     "byPlatform": [
       {
         "platform": "News Outlets",
-        "positive": 132,
-        "negative": 43,
-        "neutral": 345,
-        "volume": 527
+        "positive": 161,
+        "negative": 9,
+        "neutral": 59,
+        "volume": 231
       },
       {
         "platform": "Social Media",
-        "positive": 26,
-        "negative": 92,
-        "neutral": 14,
-        "volume": 132
-      },
-      {
-        "platform": "Other",
-        "positive": 637,
-        "negative": 308,
-        "neutral": 0,
-        "volume": 945
+        "positive": 1340,
+        "negative": 541,
+        "neutral": 3,
+        "volume": 1884
       }
     ],
     "byTopic": [
       {
         "topic": "General",
-        "positive": 764,
-        "negative": 397,
-        "neutral": 298,
-        "volume": 1466
-      },
-      {
-        "topic": "Foreign Policy",
-        "positive": 15,
-        "negative": 10,
-        "neutral": 18,
-        "volume": 43
-      },
-      {
-        "topic": "Economy",
-        "positive": 2,
-        "negative": 14,
-        "neutral": 6,
-        "volume": 22
-      },
-      {
-        "topic": "Climate",
-        "positive": 3,
-        "negative": 4,
-        "neutral": 11,
-        "volume": 18
+        "positive": 1386,
+        "negative": 546,
+        "neutral": 27,
+        "volume": 1960
       },
       {
         "topic": "Immigration",
-        "positive": 2,
-        "negative": 7,
-        "neutral": 7,
-        "volume": 16
+        "positive": 21,
+        "negative": 0,
+        "neutral": 13,
+        "volume": 34
+      },
+      {
+        "topic": "Foreign Policy",
+        "positive": 21,
+        "negative": 3,
+        "neutral": 5,
+        "volume": 29
+      },
+      {
+        "topic": "Technology",
+        "positive": 20,
+        "negative": 0,
+        "neutral": 6,
+        "volume": 26
+      },
+      {
+        "topic": "Climate",
+        "positive": 18,
+        "negative": 0,
+        "neutral": 5,
+        "volume": 23
+      },
+      {
+        "topic": "Economy",
+        "positive": 8,
+        "negative": 0,
+        "neutral": 0,
+        "volume": 9
+      },
+      {
+        "topic": "Democracy",
+        "positive": 7,
+        "negative": 0,
+        "neutral": 1,
+        "volume": 8
+      },
+      {
+        "topic": "National Security",
+        "positive": 5,
+        "negative": 0,
+        "neutral": 2,
+        "volume": 7
+      },
+      {
+        "topic": "Gun Policy",
+        "positive": 7,
+        "negative": 0,
+        "neutral": 0,
+        "volume": 7
       },
       {
         "topic": "Justice",
         "positive": 3,
-        "negative": 7,
-        "neutral": 5,
-        "volume": 15
-      },
-      {
-        "topic": "Gun Policy",
-        "positive": 3,
-        "negative": 2,
-        "neutral": 5,
-        "volume": 10
+        "negative": 1,
+        "neutral": 1,
+        "volume": 5
       },
       {
         "topic": "Healthcare",
         "positive": 3,
-        "negative": 1,
-        "neutral": 5,
-        "volume": 9
+        "negative": 0,
+        "neutral": 0,
+        "volume": 3
       },
       {
         "topic": "Abortion",
         "positive": 0,
-        "negative": 1,
-        "neutral": 2,
-        "volume": 3
-      },
-      {
-        "topic": "Education",
-        "positive": 0,
         "negative": 0,
         "neutral": 2,
         "volume": 2
+      },
+      {
+        "topic": "Social Issues",
+        "positive": 1,
+        "negative": 0,
+        "neutral": 0,
+        "volume": 1
+      },
+      {
+        "topic": "Education",
+        "positive": 1,
+        "negative": 0,
+        "neutral": 0,
+        "volume": 1
       }
     ],
     "byTimeWindow": [
       {
         "window": "24 hours",
-        "positive": 637,
-        "negative": 308,
+        "positive": 268,
+        "negative": 97,
         "neutral": 0,
-        "volume": 945
+        "volume": 366
       },
       {
         "window": "7 days",
-        "positive": 31,
-        "negative": 3,
-        "neutral": 58,
-        "volume": 93
+        "positive": 8,
+        "negative": 1,
+        "neutral": 1,
+        "volume": 10
       },
       {
         "window": "30 days",
-        "positive": 127,
-        "negative": 132,
-        "neutral": 301,
-        "volume": 566
+        "positive": 1225,
+        "negative": 452,
+        "neutral": 61,
+        "volume": 1739
       }
     ],
     "disclaimer": "Represents sampled platform discourse, not verified population sentiment",
-    "excluded_bot_content": 8,
+    "excluded_bot_content": 0,
     "socialVsNews": {
       "social": {
-        "positive": 26,
-        "negative": 92,
-        "neutral": 14,
-        "netScore": -50.0,
-        "volume": 132
+        "positive": 1340,
+        "negative": 541,
+        "neutral": 3,
+        "mixed": 0,
+        "netScore": 42.4,
+        "volume": 1884
       },
       "news": {
-        "positive": 132,
-        "negative": 43,
-        "neutral": 345,
-        "netScore": 16.9,
-        "volume": 527
+        "positive": 161,
+        "negative": 9,
+        "neutral": 59,
+        "mixed": 2,
+        "netScore": 65.8,
+        "volume": 231
+      }
+    },
+    "gopFavorability": {
+      "favorable": 0.4,
+      "unfavorable": 5.2,
+      "neutral": 94.5,
+      "netFavorability": -4.8,
+      "sampleSize": 2132,
+      "sourceCount": 2,
+      "lastUpdated": "2026-02-18T14:20:44.465602"
+    },
+    "gopTrend": [
+      {
+        "date": "2026-01-20",
+        "value": 0.0
+      },
+      {
+        "date": "2026-01-21",
+        "value": 0.0
+      },
+      {
+        "date": "2026-01-22",
+        "value": 0.0
+      },
+      {
+        "date": "2026-01-23",
+        "value": -7.5
+      },
+      {
+        "date": "2026-01-24",
+        "value": -42.3
+      },
+      {
+        "date": "2026-01-25",
+        "value": -78.1
+      },
+      {
+        "date": "2026-01-26",
+        "value": -1.1
+      },
+      {
+        "date": "2026-01-28",
+        "value": -100.0
+      },
+      {
+        "date": "2026-02-02",
+        "value": -100.0
+      },
+      {
+        "date": "2026-02-04",
+        "value": -100.0
+      },
+      {
+        "date": "2026-02-05",
+        "value": -100.0
+      },
+      {
+        "date": "2026-02-06",
+        "value": -100.0
+      },
+      {
+        "date": "2026-02-07",
+        "value": -100.0
+      },
+      {
+        "date": "2026-02-08",
+        "value": -100.0
+      },
+      {
+        "date": "2026-02-09",
+        "value": -100.0
+      },
+      {
+        "date": "2026-02-10",
+        "value": -25.0
+      },
+      {
+        "date": "2026-02-11",
+        "value": -100.0
+      },
+      {
+        "date": "2026-02-12",
+        "value": -33.3
+      },
+      {
+        "date": "2026-02-13",
+        "value": -100.0
+      },
+      {
+        "date": "2026-02-15",
+        "value": -100.0
+      },
+      {
+        "date": "2026-02-16",
+        "value": -100.0
+      },
+      {
+        "date": "2026-02-17",
+        "value": -47.4
+      },
+      {
+        "date": "2026-02-18",
+        "value": -4.9
+      }
+    ],
+    "gopByPlatform": [
+      {
+        "group": "News",
+        "favorable": 8,
+        "unfavorable": 102,
+        "neutral": 138
+      },
+      {
+        "group": "X_post",
+        "favorable": 0,
+        "unfavorable": 8,
+        "neutral": 1876
+      }
+    ],
+    "pollingVsSocial": {
+      "onlineSentiment": {
+        "favorable": 0.4,
+        "unfavorable": 5.2,
+        "neutral": 94.5
+      },
+      "pollingData": {
+        "favorable": 50.0,
+        "unfavorable": 50.0,
+        "neutral": 0.0,
+        "source": "RealClearPolling (Live)",
+        "date": "2026-02-18"
       }
     }
   }

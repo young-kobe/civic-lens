@@ -2,6 +2,7 @@
 Story cluster aggregator.
 
 Aggregates document clusters with momentum, timeline, and source mix data.
+Supports filtering by content type (articles vs social posts).
 """
 
 import datetime
@@ -13,6 +14,10 @@ from analysis.src.reporting.aggregators.base import (
     get_connection,
     get_time_cutoff,
     get_bot_flagged_doc_ids,
+)
+from analysis.src.reporting.aggregators.constants import (
+    SOCIAL_PLATFORMS, ARTICLE_SOURCE_TYPES,
+    SOURCE_DISPLAY_NAMES, SOURCE_TYPE_MAP,
 )
 from analysis.src.reporting.models import (
     MomentumData,
@@ -29,13 +34,18 @@ class StoryAggregator:
     def __init__(self, db_path: str):
         self.db_path = db_path
     
-    def get_stories(self, time_window: str = "24h") -> List[StoryCluster]:
+    def get_stories(
+        self,
+        time_window: str = "24h",
+        content_type: str = "all",
+    ) -> List[StoryCluster]:
         """
         Returns rich cluster data matching frontend expectations.
         Excludes bot-flagged content.
         
         Args:
             time_window: Filter by time window (24h, 7d, 30d, 90d, all)
+            content_type: Filter by content type ('all', 'articles', 'social')
         """
         bot_docs = get_bot_flagged_doc_ids(self.db_path)
         cutoff = get_time_cutoff(time_window)
@@ -44,7 +54,7 @@ class StoryAggregator:
             cursor = conn.cursor()
             raw_clusters = self._fetch_cluster_data(cursor, bot_docs, cutoff)
             
-        return self._format_story_clusters(raw_clusters)
+        return self._format_story_clusters(raw_clusters, content_type)
 
     def _fetch_cluster_data(
         self, 
@@ -64,7 +74,8 @@ class StoryAggregator:
                     d.source_type, 
                     d.ident, 
                     d.title,
-                    d.metadata_json
+                    d.metadata_json,
+                    d.text
                 FROM clusters c
                 JOIN cluster_assignments ca ON c.cluster_id = ca.cluster_id
                 JOIN docs d ON ca.doc_id = d.doc_id
@@ -81,7 +92,8 @@ class StoryAggregator:
                     d.source_type, 
                     d.ident, 
                     d.title,
-                    d.metadata_json
+                    d.metadata_json,
+                    d.text
                 FROM clusters c
                 JOIN cluster_assignments ca ON c.cluster_id = ca.cluster_id
                 JOIN docs d ON ca.doc_id = d.doc_id
@@ -91,7 +103,8 @@ class StoryAggregator:
         now = time.time()
         
         for row in cursor.fetchall():
-            c_id, c_name, c_summary, d_id, pub_at, src_type, ident, title, meta_json = row
+            (c_id, c_name, c_summary, d_id, pub_at,
+             src_type, ident, title, meta_json, text) = row
             
             if d_id in bot_docs:
                 continue
@@ -106,20 +119,28 @@ class StoryAggregator:
                     "sources": {},
                     "timeline": {},
                     "now": now,
+                    "source_types_seen": set(),
                 }
             
             cluster = clusters[c_id]
             cluster["doc_count"] += 1
+            cluster["source_types_seen"].add(src_type or "other")
             
-            # Parse snippet from metadata
-            snippet = self._extract_snippet(meta_json)
+            # For X posts without titles, use truncated text
+            display_title = title
+            if not display_title and src_type == "x_post" and text:
+                display_title = text[:80] + ("..." if len(text) > 80 else "")
+            
+            # Parse snippet from metadata or text
+            snippet = self._extract_snippet(meta_json, text)
             
             cluster["docs"].append({
                 "id": d_id,
-                "title": title or "Untitled",
+                "title": display_title or "Untitled",
                 "source": ident,
                 "snippet": snippet,
                 "published_at": pub_at,
+                "source_type": src_type,
             })
             
             # Track source mix
@@ -133,20 +154,63 @@ class StoryAggregator:
         
         return clusters
 
-    def _extract_snippet(self, meta_json: Optional[str]) -> str:
-        """Extract description snippet from metadata JSON."""
-        if not meta_json:
-            return ''
-        try:
-            return json.loads(meta_json).get('description', '')
-        except json.JSONDecodeError:
-            return ''
+    def _extract_snippet(self, meta_json: Optional[str], text: Optional[str] = None) -> str:
+        """Extract description snippet from metadata JSON or text."""
+        if meta_json:
+            try:
+                desc = json.loads(meta_json).get('description', '')
+                if desc:
+                    return desc
+            except json.JSONDecodeError:
+                pass
+        # Fall back to first 150 chars of text for social posts
+        if text:
+            return text[:150] + ("..." if len(text) > 150 else "")
+        return ''
 
-    def _format_story_clusters(self, clusters: Dict[int, Dict[str, Any]]) -> List[StoryCluster]:
+    def _classify_content_type(self, source_types: set) -> str:
+        """Determine content type based on source types in the cluster."""
+        has_articles = bool(source_types & ARTICLE_SOURCE_TYPES)
+        has_social = bool(source_types & SOCIAL_PLATFORMS)
+        
+        if has_articles and has_social:
+            return "mixed"
+        elif has_articles:
+            return "articles"
+        elif has_social:
+            return "social"
+        return "mixed"
+
+    def _generate_social_cluster_title(self, docs: List[Dict[str, Any]]) -> str:
+        """Generate a meaningful title for social-only clusters."""
+        # Use the most recent post's first meaningful words
+        sorted_docs = sorted(docs, key=lambda x: x["published_at"] or 0, reverse=True)
+        for doc in sorted_docs[:3]:
+            title = doc.get("title", "")
+            if title and title != "Untitled" and len(title) > 10:
+                # Truncate to a reasonable title length
+                if len(title) > 60:
+                    return title[:57] + "..."
+                return title
+        return "Social Discussion"
+
+    def _format_story_clusters(
+        self,
+        clusters: Dict[int, Dict[str, Any]],
+        content_type: str = "all",
+    ) -> List[StoryCluster]:
         """Format raw cluster data into StoryCluster response objects."""
         results = []
         
         for c_id, c in clusters.items():
+            cluster_content_type = self._classify_content_type(c["source_types_seen"])
+            
+            # Filter by content type if specified
+            if content_type == "articles" and cluster_content_type == "social":
+                continue
+            if content_type == "social" and cluster_content_type == "articles":
+                continue
+            
             momentum = self._compute_momentum(c["docs"], c["now"])
             source_mix = self._format_source_mix(c["sources"])
             timeline = self._format_timeline(c["timeline"])
@@ -157,9 +221,17 @@ class StoryAggregator:
                 )[:3]
             ]
             
+            # Generate meaningful title for social-only clusters
+            title = c["title"]
+            if not title or title == "Unnamed Cluster":
+                if cluster_content_type == "social":
+                    title = self._generate_social_cluster_title(c["docs"])
+                else:
+                    title = "Unnamed Cluster"
+            
             cluster = StoryCluster(
                 id=c_id,
-                title=c["title"] or "Unnamed Cluster",
+                title=title,
                 articleCount=c["doc_count"],
                 momentum=momentum,
                 primarySources=list(c["sources"].keys())[:3],
@@ -169,6 +241,7 @@ class StoryAggregator:
                 sourceMix=source_mix,
                 timeline=timeline,
                 articles=articles,
+                contentType=cluster_content_type,
             )
             results.append(cluster)
         
@@ -195,19 +268,11 @@ class StoryAggregator:
 
     def _format_source_mix(self, sources: Dict[str, int]) -> List[SourceMixItem]:
         """Format source distribution into SourceMixItem list."""
-        # Normalize source types to match frontend chart color keys
-        type_map = {
-            'news_article': 'news',
-            'reddit_post': 'reddit',
-            'reddit_comment': 'reddit',
-            'twitter': 'social',
-            'x': 'social',
-        }
         return [
             SourceMixItem(
-                name=k.replace('_', ' ').title(), 
-                value=v, 
-                type=type_map.get(k, 'other')
+                name=SOURCE_DISPLAY_NAMES.get(k, k.replace('_', ' ').title()),
+                value=v,
+                type=SOURCE_TYPE_MAP.get(k, 'other'),
             )
             for k, v in sources.items()
         ]
