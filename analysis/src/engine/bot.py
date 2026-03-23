@@ -11,29 +11,12 @@ Bot-flagged content is excluded from sentiment/favorability aggregations.
 from typing import Any, Dict, List, Optional, Tuple
 import time
 from analysis.src.common.logger import get_logger
+from analysis.src.engine.constants import SPAM_KEYWORDS, COORDINATION_PATTERNS
 from analysis.src.engine.models import BotResult
 from analysis.src.engine.prompts import BOT_SYSTEM_PROMPT, BOT_USER_PROMPT_TEMPLATE
 from analysis.src.llm.schemas import BOT_SCHEMA
 
 logger = get_logger(__name__)
-
-
-# Spam/bot keywords commonly found in automated content
-SPAM_KEYWORDS = frozenset([
-    "buy now", "click here", "subscribe", "limited time offer",
-    "crypto", "bitcoin", "make money", "viagra", "free gift",
-    "act now", "don't miss", "exclusive deal", "earn money",
-    "work from home", "100% free", "amazing offer", "urgent",
-])
-
-# Patterns suggesting coordinated behavior
-COORDINATION_PATTERNS = [
-    # Pattern name, detection function description
-    ("repetitive_text", "Text contains highly repetitive phrases"),
-    ("url_density", "Unusually high URL/link density"),
-    ("hashtag_spam", "Excessive hashtag usage"),
-    ("timing_burst", "Posted in coordination burst window"),
-]
 
 
 class HybridBotDetector:
@@ -51,16 +34,19 @@ class HybridBotDetector:
             self._init_llm_client()
     
     def _init_llm_client(self):
-        """Initialize the LLM client if enabled."""
+        """Initialize the LLM client. Raises if enabled but unavailable."""
         try:
             from analysis.src.llm import get_llm_client
             self._llm_client = get_llm_client()
             if not self._llm_client.is_available:
-                logger.warning("LLM client not available. Falling back to heuristics.")
-                self.llm_enabled = False
+                raise RuntimeError(
+                    "LLM client not available but llm_enabled=True. "
+                    "Start the Ollama server or set CIVIC_LLM_ENABLED=false."
+                )
+        except RuntimeError:
+            raise
         except Exception as e:
-            logger.error(f"Failed to initialize LLM client: {e}")
-            self.llm_enabled = False
+            raise RuntimeError(f"Failed to initialize LLM client: {e}") from e
     
     def _compute_signals(self, text: str, metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
@@ -135,6 +121,7 @@ class HybridBotDetector:
             country_code = metadata.get("place_country_code")
             if country_code:
                 x_foreign_origin_flag = country_code.upper() != "US"
+                x_origin_confidence = "high"  # Geotagged data is reliable
         
         # Compute aggregated score
         score = 0.0
@@ -314,14 +301,14 @@ class HybridBotDetector:
                 reasoning="Empty text",
             )
         
-        # 1. Compute deterministic signals
+        # 1. Compute deterministic signals (always, used as LLM context)
         signals = self._compute_signals(text, metadata)
         
-        # 2. Only use LLM for edge cases (score > 0.3) to save costs
+        # 2. LLM is primary classifier
         if self.llm_enabled and self._llm_client and self._llm_client.is_available:
-            if signals["aggregated_score"] > 0.3:
-                return self._llm_classify(text, signals)
+            return self._llm_classify(text, signals)
         
-        # 3. Fallback to heuristic
+        # 3. Heuristic fallback only when LLM unavailable
+        logger.warning("LLM unavailable, using heuristic fallback for bot detection")
         return self._heuristic_classify(signals)
 

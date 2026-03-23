@@ -92,9 +92,9 @@ function SourceComparison({ data }: SourceComparisonProps) {
                         <span className="badge badge-neutral">Polling-based</span>
                     </div>
                     <SentimentBar
-                        positive={data.polling.favorable}
-                        negative={data.polling.unfavorable}
-                        neutral={data.polling.neutral}
+                        positive={data.pollingData?.favorable ?? 0}
+                        negative={data.pollingData?.unfavorable ?? 0}
+                        neutral={data.pollingData?.neutral ?? 0}
                         height={32}
                     />
                 </div>
@@ -103,9 +103,9 @@ function SourceComparison({ data }: SourceComparisonProps) {
                         <span className="badge badge-accent">Online sentiment proxy</span>
                     </div>
                     <SentimentBar
-                        positive={data.social.favorable}
-                        negative={data.social.unfavorable}
-                        neutral={data.social.neutral}
+                        positive={data.onlineSentiment.favorable}
+                        negative={data.onlineSentiment.unfavorable}
+                        neutral={data.onlineSentiment.neutral}
                         height={32}
                     />
                 </div>

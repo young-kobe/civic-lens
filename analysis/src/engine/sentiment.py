@@ -8,40 +8,15 @@ Uses a two-layer approach:
 
 from typing import Any, Dict, List, Optional, Tuple
 from analysis.src.common.logger import get_logger
+from analysis.src.engine.constants import (
+    POSITIVE_WORDS, NEGATIVE_WORDS, INTENSIFIERS, NEGATORS,
+    STRONG_CONFIDENCE_THRESHOLD,
+)
 from analysis.src.engine.models import SentimentResult
 from analysis.src.engine.prompts import SENTIMENT_SYSTEM_PROMPT, SENTIMENT_USER_PROMPT_TEMPLATE
 from analysis.src.llm.schemas import SENTIMENT_SCHEMA
 
 logger = get_logger(__name__)
-
-
-# Sentiment word lists for deterministic analysis
-POSITIVE_WORDS = frozenset([
-    "good", "great", "excellent", "amazing", "love", "support", "agree",
-    "wonderful", "fantastic", "brilliant", "outstanding", "positive",
-    "beneficial", "successful", "effective", "impressive", "promising",
-    "strong", "robust", "healthy", "progress", "improve", "win", "victory",
-    "approve", "praise", "commend", "celebrate", "achieve", "accomplish"
-])
-
-NEGATIVE_WORDS = frozenset([
-    "bad", "terrible", "hate", "awful", "stupid", "wrong", "disagree",
-    "fake", "failure", "disaster", "corrupt", "scandal", "crisis",
-    "dangerous", "harmful", "threat", "attack", "destroy", "collapse",
-    "reject", "oppose", "condemn", "criticize", "blame", "accuse",
-    "incompetent", "unacceptable", "outrageous", "shocking", "disgrace"
-])
-
-INTENSIFIERS = frozenset([
-    "very", "extremely", "incredibly", "absolutely", "completely",
-    "totally", "utterly", "highly", "deeply", "strongly"
-])
-
-NEGATORS = frozenset([
-    "not", "no", "never", "neither", "nobody", "nothing", "nowhere",
-    "hardly", "barely", "scarcely", "without", "isn't", "aren't",
-    "wasn't", "weren't", "won't", "wouldn't", "couldn't", "shouldn't"
-])
 
 
 class HybridSentimentAnalyzer:
@@ -64,16 +39,19 @@ class HybridSentimentAnalyzer:
             self._init_llm_client()
     
     def _init_llm_client(self):
-        """Initialize the LLM client if enabled."""
+        """Initialize the LLM client. Raises if enabled but unavailable."""
         try:
             from analysis.src.llm import get_llm_client
             self._llm_client = get_llm_client()
             if not self._llm_client.is_available:
-                logger.warning("LLM client not available. Falling back to heuristics.")
-                self.llm_enabled = False
+                raise RuntimeError(
+                    "LLM client not available but llm_enabled=True. "
+                    "Start the Ollama server or set CIVIC_LLM_ENABLED=false."
+                )
+        except RuntimeError:
+            raise
         except Exception as e:
-            logger.error(f"Failed to initialize LLM client: {e}")
-            self.llm_enabled = False
+            raise RuntimeError(f"Failed to initialize LLM client: {e}") from e
     
     def _compute_signals(self, text: str) -> Dict[str, Any]:
         """
@@ -184,6 +162,7 @@ class HybridSentimentAnalyzer:
                 confidence=float(response.get("confidence", 0.5)),
                 evidence_spans=response.get("evidence_spans", []),
                 reasoning=response.get("reasoning"),
+                sarcasm_detected=bool(response.get("sarcasm_detected", False)),
                 deterministic_signals=signals,
             )
             
@@ -206,6 +185,10 @@ class HybridSentimentAnalyzer:
         """
         Analyze sentiment with full results including evidence.
         
+        LLM is the primary classifier. Heuristic signals are computed first
+        and fed as supplemental context to the LLM prompt. Heuristics are
+        only used as a fallback when the LLM is unavailable.
+        
         Returns:
             SentimentResult with label, confidence, evidence spans, and reasoning.
         """
@@ -217,12 +200,13 @@ class HybridSentimentAnalyzer:
                 reasoning="Empty text",
             )
         
-        # 1. Compute deterministic signals
+        # 1. Compute deterministic signals (always, used as LLM context)
         signals = self._compute_signals(text)
         
-        # 2. LLM classification if enabled and client available
+        # 2. LLM is primary classifier
         if self.llm_enabled and self._llm_client and self._llm_client.is_available:
             return self._llm_classify(text, signals)
         
-        # 3. Fallback to heuristic
+        # 3. Heuristic fallback only when LLM unavailable
+        logger.warning("LLM unavailable, using heuristic fallback for sentiment")
         return self._heuristic_classify(signals)

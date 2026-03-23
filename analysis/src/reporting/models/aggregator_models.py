@@ -82,12 +82,14 @@ class StoryCluster:
     sourceMix: List[SourceMixItem]
     timeline: List[TimelinePoint]
     articles: List[ArticlePreview]
+    contentType: str = "mixed"  # 'articles', 'social', 'mixed'
 
     def to_dict(self) -> Dict[str, Any]:
         return {
             "id": self.id,
             "title": self.title,
             "articleCount": self.articleCount,
+            "contentType": self.contentType,
             "momentum": {"delta24h": self.momentum.delta24h, "delta7d": self.momentum.delta7d},
             "primarySources": self.primarySources,
             "summary": self.summary,
@@ -133,13 +135,28 @@ class PlatformSentiment:
 
 
 @dataclass
+class ClassificationSample:
+    """Sample of an individual LLM classification with reasoning."""
+    doc_id: int
+    label: str
+    confidence: float
+    reasoning: str
+    evidence_spans: List[str]
+    sarcasm_detected: bool
+    title: str
+    source_type: str
+
+
+@dataclass
 class TopicSentiment:
-    """Topic-level sentiment breakdown."""
+    """Topic-level sentiment breakdown with classification samples."""
     topic: str
     positive: int
     negative: int
     neutral: int
     volume: int
+    sarcasm_rate: float = 0.0
+    classification_samples: List[ClassificationSample] = field(default_factory=list)
 
 
 @dataclass
@@ -154,7 +171,7 @@ class TimeWindowSentiment:
 
 @dataclass
 class PublicSentimentResult:
-    """Complete public sentiment response with social vs news comparison."""
+    """Complete public sentiment response with merged GOP favorability data."""
     overview: SentimentOverview
     distribution: SentimentDistribution
     byPlatform: List[PlatformSentiment]
@@ -163,6 +180,11 @@ class PublicSentimentResult:
     byTopic: List[TopicSentiment] = field(default_factory=list)
     byTimeWindow: List[TimeWindowSentiment] = field(default_factory=list)
     socialVsNews: Optional[Dict[str, Any]] = None  # Social vs News comparison
+    # Merged GOP favorability data
+    gopFavorability: Optional[Dict[str, Any]] = None  # Stance breakdown (favorable/unfavorable/neutral %)
+    gopTrend: Optional[List[Dict[str, Any]]] = None  # Daily net favorability trend
+    gopByPlatform: Optional[List[Dict[str, Any]]] = None  # Platform-level stance breakdown
+    pollingVsSocial: Optional[Dict[str, Any]] = None  # Live polling comparison
 
     def to_dict(self) -> Dict[str, Any]:
         result = {
@@ -184,7 +206,21 @@ class PublicSentimentResult:
                 for p in self.byPlatform
             ],
             "byTopic": [
-                {"topic": t.topic, "positive": t.positive, "negative": t.negative, "neutral": t.neutral, "volume": t.volume}
+                {
+                    "topic": t.topic, "positive": t.positive, "negative": t.negative,
+                    "neutral": t.neutral, "volume": t.volume,
+                    "sarcasm_rate": t.sarcasm_rate,
+                    "classificationSamples": [
+                        {
+                            "doc_id": s.doc_id, "label": s.label,
+                            "confidence": s.confidence, "reasoning": s.reasoning,
+                            "evidence_spans": s.evidence_spans,
+                            "sarcasm_detected": s.sarcasm_detected,
+                            "title": s.title or "", "source_type": s.source_type,
+                        }
+                        for s in t.classification_samples
+                    ],
+                }
                 for t in self.byTopic
             ],
             "byTimeWindow": [
@@ -196,6 +232,14 @@ class PublicSentimentResult:
         }
         if self.socialVsNews:
             result["socialVsNews"] = self.socialVsNews
+        if self.gopFavorability:
+            result["gopFavorability"] = self.gopFavorability
+        if self.gopTrend is not None:
+            result["gopTrend"] = self.gopTrend
+        if self.gopByPlatform is not None:
+            result["gopByPlatform"] = self.gopByPlatform
+        if self.pollingVsSocial:
+            result["pollingVsSocial"] = self.pollingVsSocial
         return result
 
 

@@ -12,10 +12,13 @@ export type ConfidenceLevel = 'high' | 'medium' | 'low';
 export type CoverageLevel = 'high' | 'medium' | 'low';
 
 // Cluster types
+export type ContentType = 'articles' | 'social' | 'mixed';
+
 export interface Cluster {
     id: number;
     title: string;
     articleCount: number;
+    contentType: ContentType;
     momentum: {
         delta24h: number;
         delta7d: number;
@@ -77,6 +80,19 @@ export interface PublicSentimentData {
     byTimeWindow: SentimentBreakdown[];
     distribution: SentimentDistribution;
     socialVsNews?: SocialVsNewsSentiment | null;
+    // Merged GOP favorability data
+    gopFavorability?: {
+        favorable: number;
+        unfavorable: number;
+        neutral: number;
+        netFavorability: number;
+        sampleSize: number;
+        sourceCount: number;
+        lastUpdated: string;
+    } | null;
+    gopTrend?: TrendPoint[] | null;
+    gopByPlatform?: DemographicBreakdown[] | null;
+    pollingVsSocial?: PollingSocialComparison | null;
 }
 
 export interface SentimentOverview {
@@ -84,6 +100,17 @@ export interface SentimentOverview {
     volume: number;
     coverage: CoverageLevel;
     confidence: ConfidenceLevel;
+}
+
+export interface ClassificationSample {
+    doc_id: number;
+    label: string;
+    confidence: number;
+    reasoning: string;
+    evidence_spans: string[];
+    sarcasm_detected: boolean;
+    title: string;
+    source_type: string;
 }
 
 export interface SentimentBreakdown {
@@ -94,6 +121,8 @@ export interface SentimentBreakdown {
     negative: number;
     neutral: number;
     volume: number;
+    sarcasm_rate?: number;
+    classificationSamples?: ClassificationSample[];
 }
 
 export interface SentimentDistribution {
@@ -147,8 +176,8 @@ export interface DemographicBreakdown {
 }
 
 export interface PollingSocialComparison {
-    polling: { favorable: number; unfavorable: number; neutral: number };
-    social: { favorable: number; unfavorable: number; neutral: number };
+    onlineSentiment: { favorable: number; unfavorable: number; neutral: number };
+    pollingData: { favorable: number; unfavorable: number; neutral: number } | null;
 }
 
 // Bot Activity types

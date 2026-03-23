@@ -6,6 +6,7 @@ export function transformStories(apiData: any[]): Cluster[] {
         id: item.id,
         title: item.title,
         articleCount: item.articleCount,
+        contentType: item.contentType || 'mixed',
         momentum: item.momentum || { delta24h: 0, delta7d: 0 },
         primarySources: item.primarySources || [],
         summary: item.summary || [],
@@ -45,12 +46,12 @@ export function transformFavorability(apiData: any): FavorabilityData {
         byPartyId: [],
         byPlatform: byPlatform,
         pollingVsSocial: {
-            polling: {
+            onlineSentiment: pollingVsSocial.onlineSentiment || { favorable: 0, unfavorable: 0, neutral: 0 },
+            pollingData: pollingData.favorable !== undefined ? {
                 favorable: pollingData.favorable ?? 0,
                 unfavorable: pollingData.unfavorable ?? 0,
                 neutral: pollingData.neutral ?? 0,
-            },
-            social: pollingVsSocial.onlineSentiment || { favorable: 0, unfavorable: 0, neutral: 0 },
+            } : null,
         },
     };
 }
@@ -58,7 +59,15 @@ export function transformFavorability(apiData: any): FavorabilityData {
 export function transformPublicSentiment(apiData: any): PublicSentimentData {
     return {
         overview: apiData.overview,
-        byTopic: apiData.byTopic || [],
+        byTopic: (apiData.byTopic || []).map((t: any) => ({
+            topic: t.topic,
+            positive: t.positive || 0,
+            negative: t.negative || 0,
+            neutral: t.neutral || 0,
+            volume: t.volume || 0,
+            sarcasm_rate: t.sarcasm_rate || 0,
+            classificationSamples: t.classificationSamples || [],
+        })),
         byPlatform: (apiData.byPlatform || []).map((p: any) => ({
             platform: p.platform,
             positive: p.positive || 0,
@@ -74,8 +83,13 @@ export function transformPublicSentiment(apiData: any): PublicSentimentData {
             mildNegative: 0,
             strongNegative: 0
         },
-        // Add socialVsNews comparison data
+        // Social vs News comparison data
         socialVsNews: apiData.socialVsNews || null,
+        // Merged GOP favorability data
+        gopFavorability: apiData.gopFavorability || null,
+        gopTrend: apiData.gopTrend || null,
+        gopByPlatform: apiData.gopByPlatform || null,
+        pollingVsSocial: apiData.pollingVsSocial || null,
     };
 }
 

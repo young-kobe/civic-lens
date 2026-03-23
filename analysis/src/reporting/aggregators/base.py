@@ -47,6 +47,9 @@ def get_bot_flagged_doc_ids(db_path: str) -> Set[int]:
     """
     Get all doc_ids that have been flagged as 'bot'.
     
+    Only returns social media docs (reddit, x_post). News articles are
+    assumed human-authored and are never excluded via bot filtering.
+    
     These documents are excluded from sentiment, favorability, and cluster aggregations.
     """
     with get_connection(db_path) as conn:
@@ -61,10 +64,13 @@ def get_bot_flagged_doc_ids(db_path: str) -> Set[int]:
             logger.warning("ai_outputs table does not exist - no bot filtering applied")
             return set()
         
+        # Only flag social media docs as bots, never news articles
         cursor.execute("""
-            SELECT doc_id, output_json
-            FROM ai_outputs
-            WHERE task_type = 'bot_detection'
+            SELECT a.doc_id, a.output_json
+            FROM ai_outputs a
+            JOIN docs d ON a.doc_id = d.doc_id
+            WHERE a.task_type = 'bot_detection'
+            AND d.source_type IN ('reddit_post', 'reddit_comment', 'x_post')
         """)
         
         bot_docs = set()
@@ -77,5 +83,5 @@ def get_bot_flagged_doc_ids(db_path: str) -> Set[int]:
             except json.JSONDecodeError:
                 continue
         
-        logger.info(f"Found {len(bot_docs)} bot-flagged documents to exclude")
+        logger.info(f"Found {len(bot_docs)} bot-flagged social media documents to exclude")
         return bot_docs

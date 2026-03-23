@@ -21,14 +21,18 @@ class Settings(BaseSettings):
     model_sentiment: str = "distilbert-base-uncased-finetuned-sst-2-english"
     clustering_threshold: float = 0.3
     
+    # Analysis Scope & Batching
+    run_analysis_on: str = "social_media"  # "all" or "social_media"
+    loader_batch_size: int = 500
+    
     # Gemini LLM Config
     gemini_api_key: str = ""
     gemini_model: str = "gemini-2.0-flash"
     gemini_temperature: float = 0.0
-    llm_enabled: bool = False  # Feature flag for gradual rollout
+    llm_enabled: bool = True  # LLM is primary classifier; heuristics are supplemental
     
     # LLM Backend Selection: "gemini" or "ollama"
-    llm_backend: str = "gemini"
+    llm_backend: str = "ollama"
     
     # Ollama Config (for local LLM on Orin Nano or other local inference)
     ollama_host: str = "http://localhost:11434"

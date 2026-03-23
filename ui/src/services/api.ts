@@ -4,8 +4,10 @@ const API_BASE = '/api';
 
 export type TimeWindow = '24h' | '7d' | '30d' | '90d' | 'all';
 
-export async function fetchStories(window: TimeWindow = '24h'): Promise<Cluster[]> {
-    const response = await fetch(`${API_BASE}/stories?window=${window}`);
+export type ContentTypeFilter = 'all' | 'articles' | 'social';
+
+export async function fetchStories(window: TimeWindow = '24h', contentType: ContentTypeFilter = 'all'): Promise<Cluster[]> {
+    const response = await fetch(`${API_BASE}/stories?window=${window}&content_type=${contentType}`);
     if (!response.ok) {
         throw new Error(`Failed to fetch stories: ${response.statusText}`);
     }

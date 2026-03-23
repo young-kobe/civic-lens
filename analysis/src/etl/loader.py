@@ -254,7 +254,7 @@ class ContentLoader:
         logger.info(f"ETL Loaded {new_docs} new documents. Skipped: {skipped_old} old, {skipped_nonpolitical} non-political.")
         return new_docs
 
-    def get_unprocessed_docs(self, task_type: str) -> List[Dict[str, Any]]:
+    def get_unprocessed_docs(self, task_type: str, source_types: Optional[List[str]] = None, batch_size: int = 500) -> List[Dict[str, Any]]:
         """
         Returns docs that do not have an entry in ai_outputs for the given task.
         Increased batch size for better throughput.
@@ -264,26 +264,43 @@ class ContentLoader:
         
         # Increased from 100 to 500 for better coverage
         # Safe because heuristics are used when LLM is disabled (free).
-        # When LLM is enabled, Gemini Flash free tier has generous limits.
+        # When LLM is enabled, Ollama runs locally with no API costs.
         query = f"""
-            SELECT d.doc_id, d.text, d.metadata_json, d.title
+            SELECT d.doc_id, d.text, d.metadata_json, d.title, d.source_type
             FROM docs d
             LEFT JOIN ai_outputs a ON d.doc_id = a.doc_id AND a.task_type = ?
             WHERE a.output_id IS NULL AND d.text IS NOT NULL
-            LIMIT 500
         """
-        cursor.execute(query, (task_type,))
+        params = [task_type]
+        if source_types:
+            placeholders = ','.join('?' for _ in source_types)
+            query += f" AND d.source_type IN ({placeholders})"
+            params.extend(source_types)
+            
+        query += " LIMIT ?"
+        params.append(batch_size)
+        
+        cursor.execute(query, tuple(params))
         rows = cursor.fetchall()
         
-        return [{"doc_id": r[0], "text": r[1], "metadata": json.loads(r[2]) if r[2] else {}, "title": r[3]} for r in rows]
+        return [{"doc_id": r[0], "text": r[1], "metadata": json.loads(r[2]) if r[2] else {}, "title": r[3], "source_type": r[4]} for r in rows]
 
-    def save_ai_output(self, doc_id: int, task: str, result: Dict[str, Any], confidence: float):
+    def save_ai_output(
+        self,
+        doc_id: int,
+        task: str,
+        result: Dict[str, Any],
+        confidence: float,
+        model_id: str = "",
+        prompt_version: str = "",
+    ):
+        """Save an AI analysis output to the database."""
         conn = self._get_conn()
         cursor = conn.cursor()
         cursor.execute("""
-            INSERT INTO ai_outputs (doc_id, task_type, output_json, confidence, created_at)
-            VALUES (?, ?, ?, ?, strftime('%s','now'))
-        """, (doc_id, task, json.dumps(result), confidence))
+            INSERT INTO ai_outputs (doc_id, task_type, output_json, confidence, model_id, prompt_version, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, strftime('%s','now'))
+        """, (doc_id, task, json.dumps(result), confidence, model_id, prompt_version))
         conn.commit()
 
     def get_all_docs_for_clustering(self, max_age_days: int = 90) -> List[Dict[str, Any]]:

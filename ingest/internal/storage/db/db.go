@@ -60,6 +60,7 @@ func (d *DB) Migrate(ctx context.Context) error {
 		{1, "001_initial.sql"},
 		{2, "002_x_tables.sql"},
 		{3, "003_allow_x_post_source.sql"},
+		{4, "004_hierarchy_tables.sql"},
 	}
 
 	for _, m := range migrations {

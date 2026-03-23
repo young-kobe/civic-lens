@@ -137,7 +137,13 @@ $RECYCLE.BIN/
 .settings/
 
 # ============================================
-# Raw Data
+# Raw Data and Cache
 # ============================================
 data/raw/*
 !data/raw/.gitkeep
+data/cache/*.json
+data/cache/*
+!data/cache/.gitkeep
+
+
+clear_ai_outputs.py

@@ -7,6 +7,14 @@ easier prompt engineering and A/B testing.
 """
 
 # =============================================================================
+# Prompt Version Constants (tracked in ai_outputs.prompt_version)
+# =============================================================================
+
+SENTIMENT_PROMPT_VERSION = "sentiment-v1"
+BOT_PROMPT_VERSION = "bot-v1"
+FAVORABILITY_PROMPT_VERSION = "favorability-v1"
+
+# =============================================================================
 # Sentiment Analysis Prompts
 # =============================================================================
 
@@ -15,28 +23,39 @@ Your task is to classify the sentiment expressed toward the main subject of the 
 
 RULES:
 1. Return ONLY valid JSON matching the schema below
-2. Cite specific phrases from the text as evidence (use exact quotes)
+2. Cite specific phrases from the <text> tags as evidence (use exact quotes). Never cite the background context.
 3. If uncertain, set confidence < 0.7
 4. Do not infer sentiment not explicitly present in the text
-5. Consider context and nuance - sarcasm, irony, or mixed feelings affect classification
+5. OBJECTIVE REPORTING IS NEUTRAL: Simply stating facts, statistics, reporting on events (even negative events), or quoting someone WITHOUT emotional language from the author should be classified as NEUTRAL.
+6. SARCASM AND IRONY DETECTION (critical):
+   - Actively look for sarcasm, irony, rhetorical questions, and sardonic tone
+   - Common signals: exaggerated praise, contradictory framing, quotation marks around praise words, absurd juxtaposition
+   - When sarcasm is detected, classify based on the INTENDED meaning, not the literal words
+   - Set sarcasm_detected=true and explain in reasoning why you believe it is sarcastic
+   - Example: "Oh great, another brilliant policy decision" is NEGATIVE despite positive words
+7. Always provide reasoning explaining your classification logic
+8. Consider context and nuance - mixed feelings, hedged language, and attribution matter
 
 OUTPUT SCHEMA:
 {
   "label": "POSITIVE" | "NEGATIVE" | "NEUTRAL" | "MIXED",
   "confidence": 0.0-1.0,
   "evidence_spans": ["quoted phrase 1", "quoted phrase 2"],
-  "reasoning": "Brief explanation of classification"
+  "reasoning": "Explanation of classification logic, including sarcasm if detected",
+  "sarcasm_detected": true | false
 }"""
 
-SENTIMENT_USER_PROMPT_TEMPLATE = """Classify the sentiment of the following text:
-
-\"\"\"{text}\"\"\"
-
-Pre-computed signals for context:
+SENTIMENT_USER_PROMPT_TEMPLATE = """Pre-computed signals for context:
 - Positive indicators found: {positive_count}
 - Negative indicators found: {negative_count}
 - Intensifiers present: {has_intensifiers}
-- Negators present: {has_negators}"""
+- Negators present: {has_negators}
+
+Classify the sentiment of the following text:
+
+<text>
+{text}
+</text>"""
 
 
 # =============================================================================
@@ -62,19 +81,20 @@ OUTPUT SCHEMA:
   "reasoning": "Brief explanation"
 }"""
 
-BOT_USER_PROMPT_TEMPLATE = """Analyze this content for automated behavior:
-
-TEXT:
-\"\"\"{text}\"\"\"
-
-BEHAVIORAL SIGNALS:
+BOT_USER_PROMPT_TEMPLATE = """BEHAVIORAL SIGNALS:
 - Spam keyword matches: {spam_keyword_hits}
 - Text repetition score: {repetition_score:.2f} (0-1, higher = more repetitive)
 - Unique word ratio: {unique_ratio:.2f} (lower = more repetitive)
 - URL count: {url_count}
 - Hashtag count: {hashtag_count}
 - Account age: {account_age_days} days (if available)
-- Posting frequency: {posting_frequency} posts/day (if available)"""
+- Posting frequency: {posting_frequency} posts/day (if available)
+
+Analyze this content for automated behavior:
+
+<text>
+{text}
+</text>"""
 
 
 # =============================================================================
@@ -87,7 +107,7 @@ toward Republican/GOP entities mentioned in the text.
 RULES:
 1. Return ONLY valid JSON matching the schema below
 2. Analyze ONLY entities actually mentioned in the text
-3. Cite specific phrases as evidence for each stance judgment
+3. Cite specific phrases from the <text> tags as evidence for each stance judgment. Never cite the background context.
 4. If stance is unclear, use "neutral" with low confidence
 5. Do not infer intent - classify only explicit expressions
 6. Consider context: quotes, attribution, and framing matter
@@ -107,13 +127,15 @@ OUTPUT SCHEMA:
   "reasoning": "Brief explanation of classification"
 }"""
 
-FAVORABILITY_USER_PROMPT_TEMPLATE = """Analyze favorability toward GOP entities in this text:
-
-\"\"\"{text}\"\"\"
-
-Detected GOP entities: {gop_mentions}
+FAVORABILITY_USER_PROMPT_TEMPLATE = """Detected GOP entities: {gop_mentions}
 Pre-computed signals:
 - Favorable indicators: {favorable_count} found
 - Unfavorable indicators: {unfavorable_count} found
 - Favorable keywords: {favorable_keywords}
-- Unfavorable keywords: {unfavorable_keywords}"""
+- Unfavorable keywords: {unfavorable_keywords}
+
+Analyze favorability toward GOP entities in this text:
+
+<text>
+{text}
+</text>"""

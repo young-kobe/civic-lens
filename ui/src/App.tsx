@@ -1,12 +1,11 @@
 import { useState } from 'react';
 import { Tabs, GlobalFilters, ExportMenu } from './components/common';
-import { StoryClusters, PublicSentiment, GOPFavorability, BotActivityProfiler, GlobalHeatmap } from './pages';
+import { StoryClusters, PublicSentiment, BotActivityProfiler, GlobalHeatmap } from './pages';
 import type { Filters } from './types';
 
 const TABS = [
     { id: 'clusters', label: 'Story Clusters' },
     { id: 'sentiment', label: 'Public Sentiment' },
-    { id: 'favorability', label: 'GOP Favorability' },
     { id: 'bots', label: 'Bot Activity Profiler' },
     { id: 'heatmap', label: 'Global Heatmap' },
 ];
@@ -30,8 +29,6 @@ function App() {
                 return <StoryClusters filters={filters} />;
             case 'sentiment':
                 return <PublicSentiment filters={filters} />;
-            case 'favorability':
-                return <GOPFavorability filters={filters} />;
             case 'bots':
                 return <BotActivityProfiler filters={filters} />;
             case 'heatmap':
@@ -61,7 +58,7 @@ function App() {
             <GlobalFilters
                 filters={filters}
                 onFilterChange={setFilters}
-                showGeography={activeTab === 'favorability'}
+                showGeography={false}
             />
 
             {/* Main Content */}

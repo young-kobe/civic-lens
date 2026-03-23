@@ -260,7 +260,7 @@ switch ($Command) {
         Write-Host "  api      - Start Python FastAPI server (serves cached data)"
         Write-Host "  ui       - Start React Frontend"
         Write-Host "  dev      - Start both API and UI"
-        Write-Host "  all      - Run ingest, crawl, then dev"
+        Write-Host "  all      - Run ingest, crawl, analyze, then dev"
         Write-Host ""
         Write-Host "Typical workflow:"
         Write-Host "  1. .\run.ps1 crawl     # Fetch news articles"
