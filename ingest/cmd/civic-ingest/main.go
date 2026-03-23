@@ -75,7 +75,7 @@ func ingestCmd() *cobra.Command {
 			}
 			defer a.Close()
 
-			result, err := runner.RunIngest(ctx, a)
+			result, err := runner.NewIngestRunner(a).Run(ctx)
 			if err != nil {
 				return err
 			}
@@ -108,9 +108,9 @@ func crawlCmd() *cobra.Command {
 			}
 			defer a.Close()
 
-			result, err := runner.RunCrawl(ctx, a, runner.CrawlOptions{
+			result, err := runner.NewCrawlRunner(a, runner.CrawlOptions{
 				Duration: duration,
-			})
+			}).Run(ctx)
 			if err != nil {
 				return err
 			}
@@ -148,7 +148,7 @@ func redditCmd() *cobra.Command {
 			}
 			defer a.Close()
 
-			result, err := runner.RunReddit(ctx, a)
+			result, err := runner.NewRedditRunner(a).Run(ctx)
 			if err != nil {
 				return err
 			}
@@ -177,7 +177,7 @@ func xCmd() *cobra.Command {
 			}
 			defer a.Close()
 
-			result, err := runner.RunX(ctx, a)
+			result, err := runner.NewXRunner(a).Run(ctx)
 			if err != nil {
 				return err
 			}

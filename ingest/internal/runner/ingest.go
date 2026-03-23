@@ -16,10 +16,21 @@ type IngestResult struct {
 	Skipped         int64 // Items skipped due to age filter
 }
 
-// RunIngest discovers URLs from seed feeds and adds them to the frontier.
-func RunIngest(ctx context.Context, a *app.App) (*IngestResult, error) {
-	cfg := a.Config
-	var totalDiscovered, skipped int64
+// IngestRunner orchestrates URL discovery from seed feeds.
+type IngestRunner struct {
+	app             *app.App
+	totalDiscovered int64
+	skipped         int64
+}
+
+// NewIngestRunner creates an IngestRunner with the given dependencies.
+func NewIngestRunner(a *app.App) *IngestRunner {
+	return &IngestRunner{app: a}
+}
+
+// Run discovers URLs from seed feeds and adds them to the frontier.
+func (ir *IngestRunner) Run(ctx context.Context) (*IngestResult, error) {
+	cfg := ir.app.Config
 
 	// Only ingest items from the last 30 days
 	cutoff := time.Now().Add(-30 * 24 * time.Hour)
@@ -28,7 +39,7 @@ func RunIngest(ctx context.Context, a *app.App) (*IngestResult, error) {
 		fmt.Printf("Processing seed: %s (%s)\n", seed.URL, seed.Type)
 
 		domain := util.ExtractDomain(seed.URL)
-		result := a.Fetcher.Fetch(ctx, seed.URL, domain)
+		result := ir.app.Fetcher.Fetch(ctx, seed.URL, domain)
 		if result.Error != nil {
 			fmt.Printf("  Error: %v\n", result.Error)
 			continue
@@ -55,15 +66,15 @@ func RunIngest(ctx context.Context, a *app.App) (*IngestResult, error) {
 				links = append(links, item.Link)
 			}
 
-			added, _ := a.Frontier.PushLinks(ctx, links, seed.Priority)
-			totalDiscovered += added
-			skipped += seedSkipped
+			added, _ := ir.app.Frontier.PushLinks(ctx, links, seed.Priority)
+			ir.totalDiscovered += added
+			ir.skipped += seedSkipped
 			fmt.Printf("  Discovered %d links from RSS feed (skipped %d old items)\n", added, seedSkipped)
 		}
 	}
 
 	return &IngestResult{
-		TotalDiscovered: totalDiscovered,
-		Skipped:         skipped,
+		TotalDiscovered: ir.totalDiscovered,
+		Skipped:         ir.skipped,
 	}, nil
 }

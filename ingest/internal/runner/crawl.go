@@ -28,27 +28,38 @@ type CrawlResult struct {
 	Errors  int64
 }
 
-// RunCrawl executes the main crawl loop.
-func RunCrawl(ctx context.Context, a *app.App, opts CrawlOptions) (*CrawlResult, error) {
-	cfg := a.Config
+// CrawlRunner orchestrates the main crawl loop.
+type CrawlRunner struct {
+	app     *app.App
+	opts    CrawlOptions
+	fetched int64
+	stored  int64
+	errors  int64
+}
+
+// NewCrawlRunner creates a CrawlRunner with the given dependencies.
+func NewCrawlRunner(a *app.App, opts CrawlOptions) *CrawlRunner {
+	return &CrawlRunner{app: a, opts: opts}
+}
+
+// Run executes the main crawl loop.
+func (cr *CrawlRunner) Run(ctx context.Context) (*CrawlResult, error) {
+	cfg := cr.app.Config
 
 	// Setup context with timeout
-	ctx, cancel := context.WithTimeout(ctx, opts.Duration)
+	ctx, cancel := context.WithTimeout(ctx, cr.opts.Duration)
 	defer cancel()
 
 	// Recover stale items
-	recovered, _ := a.Frontier.RecoverStale(ctx, cfg.Crawl.StaleInflightAge)
+	recovered, _ := cr.app.Frontier.RecoverStale(ctx, cfg.Crawl.StaleInflightAge)
 	if recovered > 0 {
 		fmt.Printf("Recovered %d stale items\n", recovered)
 	}
 
-	// Metrics
-	var fetched, errors, stored int64
-
 	// Worker pool
 	sem := semaphore.NewWeighted(int64(cfg.Crawl.MaxConcurrency))
 
-	fmt.Printf("Starting crawl for %v with %d workers\n", opts.Duration, cfg.Crawl.MaxConcurrency)
+	fmt.Printf("Starting crawl for %v with %d workers\n", cr.opts.Duration, cfg.Crawl.MaxConcurrency)
 
 	for {
 		select {
@@ -57,7 +68,7 @@ func RunCrawl(ctx context.Context, a *app.App, opts CrawlOptions) (*CrawlResult,
 		default:
 		}
 
-		items, err := a.Frontier.ClaimItems(ctx, 10)
+		items, err := cr.app.Frontier.ClaimItems(ctx, 10)
 		if err != nil {
 			log.Printf("Claim error: %v", err)
 			time.Sleep(1 * time.Second)
@@ -76,7 +87,7 @@ func RunCrawl(ctx context.Context, a *app.App, opts CrawlOptions) (*CrawlResult,
 
 			go func(page *model.Page) {
 				defer sem.Release(1)
-				processPage(ctx, a, page, &fetched, &errors, &stored)
+				cr.processPage(ctx, page)
 			}(item)
 		}
 	}
@@ -86,31 +97,26 @@ done:
 	sem.Acquire(context.Background(), int64(cfg.Crawl.MaxConcurrency))
 
 	return &CrawlResult{
-		Fetched: fetched,
-		Stored:  stored,
-		Errors:  errors,
+		Fetched: cr.fetched,
+		Stored:  cr.stored,
+		Errors:  cr.errors,
 	}, nil
 }
 
-func processPage(
-	ctx context.Context,
-	a *app.App,
-	page *model.Page,
-	fetched, errors, stored *int64,
-) {
+func (cr *CrawlRunner) processPage(ctx context.Context, page *model.Page) {
 	// Check robots.txt
-	if a.Robots != nil && !a.Robots.IsAllowed(ctx, page.URLRaw) {
-		a.Frontier.MarkFailed(ctx, page, "disallowed by robots.txt", true)
+	if cr.app.Robots != nil && !cr.app.Robots.IsAllowed(ctx, page.URLRaw) {
+		cr.app.Frontier.MarkFailed(ctx, page, "disallowed by robots.txt", true)
 		return
 	}
 
 	// Fetch
-	result := a.Fetcher.Fetch(ctx, page.URLRaw, page.Domain)
-	atomic.AddInt64(fetched, 1)
+	result := cr.app.Fetcher.Fetch(ctx, page.URLRaw, page.Domain)
+	atomic.AddInt64(&cr.fetched, 1)
 
 	if result.Error != nil {
-		atomic.AddInt64(errors, 1)
-		a.Frontier.MarkFailed(ctx, page, result.Error.Error(), false)
+		atomic.AddInt64(&cr.errors, 1)
+		cr.app.Frontier.MarkFailed(ctx, page, result.Error.Error(), false)
 		return
 	}
 
@@ -119,8 +125,8 @@ func processPage(
 	page.LastModified = result.LastModified
 
 	if result.StatusCode < 200 || result.StatusCode >= 300 {
-		atomic.AddInt64(errors, 1)
-		a.Frontier.MarkFailed(ctx, page, fmt.Sprintf("HTTP %d", result.StatusCode), result.StatusCode >= 400 && result.StatusCode < 500)
+		atomic.AddInt64(&cr.errors, 1)
+		cr.app.Frontier.MarkFailed(ctx, page, fmt.Sprintf("HTTP %d", result.StatusCode), result.StatusCode >= 400 && result.StatusCode < 500)
 		return
 	}
 
@@ -129,15 +135,15 @@ func processPage(
 	if strings.Contains(page.URLRaw, ".json") {
 		ext = ".json"
 	}
-	hash, err := a.RawStore.Store(ctx, result.Body, ext)
+	hash, err := cr.app.RawStore.Store(ctx, result.Body, ext)
 	if err != nil {
-		atomic.AddInt64(errors, 1)
-		a.Frontier.MarkFailed(ctx, page, err.Error(), false)
+		atomic.AddInt64(&cr.errors, 1)
+		cr.app.Frontier.MarkFailed(ctx, page, err.Error(), false)
 		return
 	}
 
 	page.ContentSHA256 = hash
-	atomic.AddInt64(stored, 1)
+	atomic.AddInt64(&cr.stored, 1)
 
 	// Extract metadata and links
 	meta, _ := html.Extract(result.Body, page.URLRaw)
@@ -149,7 +155,7 @@ func processPage(
 				sameDomainLinks = append(sameDomainLinks, link)
 			}
 		}
-		a.Frontier.PushLinks(ctx, sameDomainLinks, 0)
+		cr.app.Frontier.PushLinks(ctx, sameDomainLinks, 0)
 	}
 
 	// Update canonical if found
@@ -159,14 +165,14 @@ func processPage(
 
 	// Insert article metadata
 	if meta != nil {
-		insertArticle(ctx, a, page, meta, hash)
+		cr.insertArticle(ctx, page, meta, hash)
 	}
 
-	a.Frontier.MarkDone(ctx, page)
+	cr.app.Frontier.MarkDone(ctx, page)
 }
 
-func insertArticle(ctx context.Context, a *app.App, page *model.Page, meta *html.Metadata, hash string) {
-	conn := a.Database.Conn()
+func (cr *CrawlRunner) insertArticle(ctx context.Context, page *model.Page, meta *html.Metadata, hash string) {
+	conn := cr.app.Database.Conn()
 
 	// Determine canonical URL - prefer extracted, fallback to page URL
 	canonURL := page.URLCanon

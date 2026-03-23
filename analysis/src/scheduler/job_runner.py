@@ -34,6 +34,9 @@ from analysis.src.engine.bot import HybridBotDetector
 from analysis.src.engine.sentiment import HybridSentimentAnalyzer
 from analysis.src.engine.favorability import FavorabilityAnalyzer
 from analysis.src.engine.clustering import ContentClusterer
+from analysis.src.engine.prompts import (
+    SENTIMENT_PROMPT_VERSION, BOT_PROMPT_VERSION, FAVORABILITY_PROMPT_VERSION,
+)
 from analysis.src.reporting.aggregators import Aggregator
 from analysis.src.etl.polling import PollingDataScraper, PollingDataError
 
@@ -52,6 +55,12 @@ class AnalysisJobRunner:
         self.cache = SnapshotCache(self.settings.cache_dir)
         self.loader = ContentLoader(self.settings.db_path)
         self.aggregator = Aggregator(self.settings.db_path)
+        
+        # Resolve model_id for DB tracking
+        if self.settings.llm_backend.lower() == "ollama":
+            self.model_id = self.settings.ollama_model
+        else:
+            self.model_id = self.settings.gemini_model
         
         # Initialize analyzers
         self.bot_detector = HybridBotDetector(llm_enabled=self.settings.llm_enabled)
@@ -72,70 +81,113 @@ class AnalysisJobRunner:
         logger.info(f"ETL complete: {count} new documents loaded")
         return count
     
+    def _get_target_source_types(self) -> list[str] | None:
+        """Get the source_types filter based on configured analysis scope."""
+        if self.settings.run_analysis_on == "social_media":
+            return ["reddit_post", "reddit_comment", "x_post"]
+        elif self.settings.run_analysis_on == "x":
+            return ["x_post"]
+        return None  # "all" or any other value means no filter
+    
     def run_bot_detection(self) -> int:
-        """Run bot detection on unprocessed social media docs only. Returns count processed."""
-        logger.info("Step 2/5: Running bot detection (social media only)...")
-        docs = self.loader.get_unprocessed_docs("bot_detection")
+        """Run bot detection on unprocessed docs scoped by configuration. Returns count processed."""
+        logger.info(f"Step 2/5: Running bot detection (scope: {self.settings.run_analysis_on})...")
+        source_types = self._get_target_source_types()
+        docs = self.loader.get_unprocessed_docs(
+            "bot_detection", 
+            source_types=source_types, 
+            batch_size=self.settings.loader_batch_size
+        )
         
-        # Only run bot detection on social media content
-        # News articles are assumed human-authored
-        SOCIAL_SOURCE_TYPES = frozenset(["reddit_post", "reddit_comment", "x_post"])
-        social_docs = [
-            doc for doc in docs
-            if doc.get("source_type") in SOCIAL_SOURCE_TYPES
-        ]
-        logger.info(f"Processing {len(social_docs)} social media docs for bot detection (skipped {len(docs) - len(social_docs)} news docs)")
+        total = len(docs)
+        logger.info(f"Processing {total} docs for bot detection")
         
-        for doc in social_docs:
+        for i, doc in enumerate(docs, 1):
             result = self.bot_detector.analyze_full(doc['text'], doc.get('metadata'))
             output = result.to_dict()
             self.loader.save_ai_output(
                 doc['doc_id'], 
                 "bot_detection", 
                 output, 
-                result.confidence
+                result.confidence,
+                model_id=self.model_id,
+                prompt_version=BOT_PROMPT_VERSION,
+            )
+            logger.info(
+                f"[bot {i}/{total}] doc={doc['doc_id']} "
+                f"label={result.label} conf={result.confidence:.2f} "
+                f"reason={result.reasoning[:80] if result.reasoning else 'N/A'}"
             )
         
-        logger.info(f"Bot detection complete: {len(social_docs)} docs processed")
-        return len(social_docs)
+        logger.info(f"Bot detection complete: {total} docs processed")
+        return total
     
     def run_sentiment_analysis(self) -> int:
         """Run sentiment analysis on unprocessed docs. Returns count processed."""
-        logger.info("Step 3/5: Running sentiment analysis...")
-        docs = self.loader.get_unprocessed_docs("sentiment")
-        logger.info(f"Processing {len(docs)} docs for sentiment analysis")
+        logger.info(f"Step 3/5: Running sentiment analysis (scope: {self.settings.run_analysis_on})...")
+        source_types = self._get_target_source_types()
+        docs = self.loader.get_unprocessed_docs(
+            "sentiment", 
+            source_types=source_types, 
+            batch_size=self.settings.loader_batch_size
+        )
         
-        for doc in docs:
+        total = len(docs)
+        logger.info(f"Processing {total} docs for sentiment analysis")
+        
+        for i, doc in enumerate(docs, 1):
             result = self.sentiment_analyzer.analyze_full(doc['text'])
             output = result.to_dict()
             self.loader.save_ai_output(
                 doc['doc_id'], 
                 "sentiment", 
                 output, 
-                result.confidence
+                result.confidence,
+                model_id=self.model_id,
+                prompt_version=SENTIMENT_PROMPT_VERSION,
+            )
+            logger.info(
+                f"[sentiment {i}/{total}] doc={doc['doc_id']} type={doc.get('source_type', 'unknown')} "
+                f"label={result.label} conf={result.confidence:.2f} "
+                f"evidence={result.evidence_spans[:3]}"
             )
         
-        logger.info(f"Sentiment analysis complete: {len(docs)} docs processed")
-        return len(docs)
+        logger.info(f"Sentiment analysis complete: {total} docs processed")
+        return total
     
     def run_favorability_analysis(self) -> int:
         """Run favorability analysis on unprocessed docs. Returns count processed."""
-        logger.info("Step 4/5: Running favorability analysis...")
-        docs = self.loader.get_unprocessed_docs("favorability")
-        logger.info(f"Processing {len(docs)} docs for favorability analysis")
+        logger.info(f"Step 4/5: Running favorability analysis (scope: {self.settings.run_analysis_on})...")
+        source_types = self._get_target_source_types()
+        docs = self.loader.get_unprocessed_docs(
+            "favorability", 
+            source_types=source_types, 
+            batch_size=self.settings.loader_batch_size
+        )
         
-        for doc in docs:
+        total = len(docs)
+        logger.info(f"Processing {total} docs for favorability analysis")
+        
+        for i, doc in enumerate(docs, 1):
             result = self.favorability_analyzer.analyze_full(doc['text'])
             output = result.to_dict()
             self.loader.save_ai_output(
                 doc['doc_id'], 
                 "favorability", 
                 output,
-                result.overall_confidence
+                result.overall_confidence,
+                model_id=self.model_id,
+                prompt_version=FAVORABILITY_PROMPT_VERSION,
+            )
+            entities = result.gop_entities_found[:3]
+            logger.info(
+                f"[favorability {i}/{total}] doc={doc['doc_id']} type={doc.get('source_type', 'unknown')} "
+                f"stance={result.overall_gop_stance} conf={result.overall_confidence:.2f} "
+                f"entities={entities}"
             )
         
-        logger.info(f"Favorability analysis complete: {len(docs)} docs processed")
-        return len(docs)
+        logger.info(f"Favorability analysis complete: {total} docs processed")
+        return total
     
     def run_clustering(self) -> int:
         """Run document clustering. Returns count of clusters created."""

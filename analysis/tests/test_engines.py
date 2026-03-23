@@ -9,13 +9,13 @@ project_root = os.path.dirname(os.path.dirname(current_dir))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-from analysis.src.engine.bot import BotDetector
-from analysis.src.engine.sentiment import SentimentAnalyzer
+from analysis.src.engine.bot import HybridBotDetector
+from analysis.src.engine.sentiment import HybridSentimentAnalyzer
 from analysis.src.engine.clustering import ContentClusterer
 
 class TestEngines(unittest.TestCase):
     def test_bot_detector(self):
-        detector = BotDetector()
+        detector = HybridBotDetector()
         
         # Test bot case
         score, label = detector.analyze("buy now click here make money", {})
@@ -28,7 +28,7 @@ class TestEngines(unittest.TestCase):
         self.assertLess(score, 0.4)
 
     def test_sentiment_analyzer(self):
-        analyzer = SentimentAnalyzer()
+        analyzer = HybridSentimentAnalyzer()
         
         label, conf = analyzer.analyze("I love this amazing project")
         self.assertEqual(label, "POSITIVE")

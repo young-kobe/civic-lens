@@ -1,10 +1,23 @@
 import { useState, useEffect } from 'react';
 import { Card, ConfidenceBadge, MethodPopover, LoadingCard, EmptyState, ErrorState } from '../components/common';
 import { SentimentBar, TrendStrip } from '../components/charts';
-import type { Filters, PublicSentimentData, SentimentOverview, SentimentBreakdown, SentimentDistribution, SocialVsNewsSentiment, PollingSocialComparison, TrendPoint } from '../types';
+import type { Filters, PublicSentimentData, SentimentOverview, SentimentBreakdown, SentimentDistribution, SocialVsNewsSentiment, PollingSocialComparison, TrendPoint, ClassificationSample } from '../types';
 
 import { fetchSentiment } from '../services/api';
 import { transformPublicSentiment } from '../services/transformers';
+
+const SENTIMENT_COLORS = {
+    positive: '#16a34a',
+    negative: '#dc2626',
+    neutral: '#94a3b8',
+};
+
+const LABEL_BADGE_STYLES: Record<string, { bg: string; text: string }> = {
+    POSITIVE: { bg: 'rgba(22, 163, 74, 0.12)', text: '#16a34a' },
+    NEGATIVE: { bg: 'rgba(220, 38, 38, 0.12)', text: '#dc2626' },
+    NEUTRAL: { bg: 'rgba(148, 163, 184, 0.12)', text: '#64748b' },
+    MIXED: { bg: 'rgba(234, 179, 8, 0.12)', text: '#ca8a04' },
+};
 
 
 interface SentimentOverviewHeaderProps {
@@ -50,46 +63,262 @@ function SentimentOverviewHeader({ data }: SentimentOverviewHeaderProps) {
     );
 }
 
-interface SentimentBreakdownCardProps {
-    title: string;
-    data: SentimentBreakdown[];
-    labelKey: 'topic' | 'platform' | 'window';
-    methodDescription?: string;
+
+/* ------------------------------------------------------------------ */
+/*  Mini Donut Chart (CSS-only conic gradient)                        */
+/* ------------------------------------------------------------------ */
+
+interface MiniDonutProps {
+    positive: number;
+    negative: number;
+    neutral: number;
+    size?: number;
 }
 
-function SentimentBreakdownCard({ title, data, labelKey, methodDescription }: SentimentBreakdownCardProps) {
+function MiniDonut({ positive, negative, neutral, size = 56 }: MiniDonutProps) {
+    const total = positive + negative + neutral || 1;
+    const negPct = (negative / total) * 100;
+    const neuPct = (neutral / total) * 100;
+    const posPct = (positive / total) * 100;
+
+    const gradient = `conic-gradient(
+        ${SENTIMENT_COLORS.negative} 0% ${negPct}%,
+        ${SENTIMENT_COLORS.neutral} ${negPct}% ${negPct + neuPct}%,
+        ${SENTIMENT_COLORS.positive} ${negPct + neuPct}% 100%
+    )`;
+
+    return (
+        <div style={{
+            width: size, height: size, borderRadius: '50%',
+            background: gradient, position: 'relative', flexShrink: 0,
+        }}>
+            <div style={{
+                position: 'absolute', inset: size * 0.22,
+                borderRadius: '50%', background: 'var(--bg-card, #fff)',
+            }} />
+            <div style={{
+                position: 'absolute', inset: 0, display: 'flex',
+                alignItems: 'center', justifyContent: 'center',
+                fontSize: '11px', fontWeight: 600, color: 'var(--text-primary)',
+            }}>
+                {posPct.toFixed(0)}%
+            </div>
+        </div>
+    );
+}
+
+
+/* ------------------------------------------------------------------ */
+/*  Single Topic Row (expandable)                                     */
+/* ------------------------------------------------------------------ */
+
+interface TopicRowProps {
+    item: SentimentBreakdown;
+}
+
+function TopicRow({ item }: TopicRowProps) {
+    const [expanded, setExpanded] = useState(false);
+    const total = item.positive + item.negative + item.neutral || 1;
+    const netScore = ((item.positive - item.negative) / total * 100);
+    const netColor = netScore > 5 ? SENTIMENT_COLORS.positive
+        : netScore < -5 ? SENTIMENT_COLORS.negative
+        : SENTIMENT_COLORS.neutral;
+    const hasSamples = (item.classificationSamples?.length ?? 0) > 0;
+
+    return (
+        <div style={{
+            background: 'var(--neutral-50, #f8fafc)', borderRadius: 'var(--radius-md)',
+            transition: 'box-shadow 0.2s ease',
+            border: '1px solid var(--neutral-100, #f1f5f9)',
+        }}>
+            {/* Header row */}
+            <button
+                onClick={() => hasSamples && setExpanded(!expanded)}
+                style={{
+                    display: 'flex', alignItems: 'center', gap: '16px',
+                    width: '100%', padding: '14px 16px', border: 'none',
+                    background: 'transparent', cursor: hasSamples ? 'pointer' : 'default',
+                    textAlign: 'left',
+                }}
+                id={`topic-row-${item.topic?.replace(/\s/g, '-').toLowerCase()}`}
+            >
+                <MiniDonut positive={item.positive} negative={item.negative} neutral={item.neutral} />
+
+                <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                        <span style={{ fontWeight: 600, fontSize: '14px' }}>{item.topic}</span>
+                        <span style={{
+                            fontSize: '11px', fontWeight: 600, padding: '2px 8px',
+                            borderRadius: '9999px', color: netColor,
+                            background: netColor === SENTIMENT_COLORS.positive ? 'rgba(22,163,74,0.1)'
+                                : netColor === SENTIMENT_COLORS.negative ? 'rgba(220,38,38,0.1)'
+                                : 'rgba(148,163,184,0.1)',
+                        }}>
+                            {netScore >= 0 ? '+' : ''}{netScore.toFixed(1)}%
+                        </span>
+                        {(item.sarcasm_rate ?? 0) > 0 && (
+                            <span style={{
+                                fontSize: '10px', fontWeight: 500, padding: '2px 6px',
+                                borderRadius: '9999px', background: 'rgba(234,179,8,0.12)',
+                                color: '#ca8a04',
+                            }}>
+                                {item.sarcasm_rate?.toFixed(0)}% sarcasm
+                            </span>
+                        )}
+                    </div>
+                    <div style={{ display: 'flex', gap: '12px', fontSize: '12px', color: 'var(--text-muted)' }}>
+                        <span>{item.volume.toLocaleString()} items</span>
+                        <span style={{ color: SENTIMENT_COLORS.positive }}>
+                            {((item.positive / total) * 100).toFixed(0)}% pos
+                        </span>
+                        <span style={{ color: SENTIMENT_COLORS.negative }}>
+                            {((item.negative / total) * 100).toFixed(0)}% neg
+                        </span>
+                    </div>
+                </div>
+
+                {hasSamples && (
+                    <span style={{
+                        fontSize: '18px', color: 'var(--text-muted)',
+                        transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                        transition: 'transform 0.2s ease', lineHeight: 1,
+                    }}>
+                        v
+                    </span>
+                )}
+            </button>
+
+            {/* Expanded reasoning panel */}
+            {expanded && hasSamples && (
+                <div style={{
+                    padding: '0 16px 16px 16px',
+                    borderTop: '1px solid var(--neutral-100, #e2e8f0)',
+                }}>
+                    <div style={{
+                        fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)',
+                        textTransform: 'uppercase', letterSpacing: '0.05em',
+                        padding: '12px 0 8px',
+                    }}>
+                        Classification Reasoning (top {item.classificationSamples!.length})
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {item.classificationSamples!.map((sample: ClassificationSample) => (
+                            <ClassificationSampleCard key={sample.doc_id} sample={sample} />
+                        ))}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
+
+/* ------------------------------------------------------------------ */
+/*  Classification Sample Card                                        */
+/* ------------------------------------------------------------------ */
+
+interface ClassificationSampleCardProps {
+    sample: ClassificationSample;
+}
+
+function ClassificationSampleCard({ sample }: ClassificationSampleCardProps) {
+    const badgeStyle = LABEL_BADGE_STYLES[sample.label] || LABEL_BADGE_STYLES.NEUTRAL;
+
+    return (
+        <div style={{
+            background: 'var(--bg-card, #fff)', borderRadius: 'var(--radius-sm)',
+            padding: '10px 12px', border: '1px solid var(--neutral-100, #e2e8f0)',
+        }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px', flexWrap: 'wrap' }}>
+                {/* Label badge */}
+                <span style={{
+                    fontSize: '10px', fontWeight: 700, padding: '2px 7px',
+                    borderRadius: '4px', background: badgeStyle.bg, color: badgeStyle.text,
+                    textTransform: 'uppercase', letterSpacing: '0.04em',
+                }}>
+                    {sample.label}
+                </span>
+                {/* Confidence */}
+                <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                    {(sample.confidence * 100).toFixed(0)}% conf
+                </span>
+                {/* Sarcasm flag */}
+                {sample.sarcasm_detected && (
+                    <span style={{
+                        fontSize: '10px', fontWeight: 600, padding: '2px 6px',
+                        borderRadius: '4px', background: 'rgba(234,179,8,0.12)', color: '#ca8a04',
+                    }}>
+                        SARCASM
+                    </span>
+                )}
+                {/* Source type */}
+                <span style={{ fontSize: '10px', color: 'var(--text-muted)', marginLeft: 'auto' }}>
+                    {sample.source_type}
+                </span>
+            </div>
+            {/* Title */}
+            {sample.title && (
+                <div style={{ fontSize: '12px', fontWeight: 500, marginBottom: '4px', lineHeight: 1.3 }}>
+                    {sample.title.length > 80 ? sample.title.slice(0, 80) + '...' : sample.title}
+                </div>
+            )}
+            {/* Reasoning */}
+            <div style={{ fontSize: '12px', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                {sample.reasoning}
+            </div>
+            {/* Evidence spans */}
+            {sample.evidence_spans.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '6px' }}>
+                    {sample.evidence_spans.slice(0, 3).map((span, i) => (
+                        <span key={i} style={{
+                            fontSize: '10px', padding: '2px 6px', borderRadius: '4px',
+                            background: 'var(--neutral-100, #f1f5f9)',
+                            color: 'var(--text-secondary)', fontStyle: 'italic',
+                            maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                        }}>
+                            &quot;{span}&quot;
+                        </span>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
+
+
+/* ------------------------------------------------------------------ */
+/*  Topic Sentiment Card (replaces flat-bar breakdown for topics)     */
+/* ------------------------------------------------------------------ */
+
+interface TopicSentimentCardProps {
+    data: SentimentBreakdown[];
+}
+
+function TopicSentimentCard({ data }: TopicSentimentCardProps) {
     return (
         <Card
-            title={title}
+            title="Sentiment by Topic"
             headerActions={
-                methodDescription ? (
-                    <MethodPopover
-                        description={methodDescription}
-                        limitations={['Sentiment classification may miss sarcasm or irony', 'Sample may not be representative of all discourse']}
-                    />
-                ) : undefined
+                <MethodPopover
+                    description="Topics are extracted via keyword matching. Each topic shows a donut chart of sentiment proportions, a net sentiment badge, and expandable LLM reasoning samples."
+                    limitations={[
+                        'Sentiment classification may miss sarcasm or irony (flagged when detected)',
+                        'Sample may not be representative of all discourse',
+                    ]}
+                />
             }
         >
-            <div className="flex flex-col gap-4">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 {data.map((item, i) => (
-                    <div key={i}>
-                        <div className="flex justify-between items-center mb-2">
-                            <span className="font-medium text-sm">{item[labelKey]}</span>
-                            <span className="text-xs text-muted">{item.volume.toLocaleString()} items</span>
-                        </div>
-                        <SentimentBar
-                            positive={item.positive}
-                            negative={item.negative}
-                            neutral={item.neutral}
-                            height={24}
-                            showLabels={false}
-                        />
-                    </div>
+                    <TopicRow key={i} item={item} />
                 ))}
             </div>
         </Card>
     );
 }
+
+
 
 interface SentimentDistributionCardProps {
     data: SentimentDistribution;
@@ -349,13 +578,8 @@ function PublicSentiment({ filters }: PublicSentimentProps) {
             {/* Social vs News Comparison */}
             <SocialVsNewsCard data={data.socialVsNews} />
 
-            {/* Breakdown Cards */}
-            <SentimentBreakdownCard
-                title="Sentiment by Topic"
-                data={data.byTopic}
-                labelKey="topic"
-                methodDescription="Topics are automatically clustered from article content using unsupervised learning."
-            />
+            {/* Topic Sentiment (new design with reasoning) */}
+            <TopicSentimentCard data={data.byTopic} />
 
             {/* Distribution */}
             <SentimentDistributionCard data={data.distribution} />

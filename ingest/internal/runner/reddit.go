@@ -16,9 +16,21 @@ type RedditResult struct {
 	PostsIngested       int
 }
 
-// RunReddit fetches posts from configured subreddits.
-func RunReddit(ctx context.Context, a *app.App) (*RedditResult, error) {
-	cfg := a.Config
+// RedditRunner orchestrates Reddit post ingestion.
+type RedditRunner struct {
+	app                 *app.App
+	subredditsProcessed int
+	postsIngested       int
+}
+
+// NewRedditRunner creates a RedditRunner with the given dependencies.
+func NewRedditRunner(a *app.App) *RedditRunner {
+	return &RedditRunner{app: a}
+}
+
+// Run fetches posts from configured subreddits.
+func (rr *RedditRunner) Run(ctx context.Context) (*RedditResult, error) {
+	cfg := rr.app.Config
 
 	// Use public .json endpoints (no auth needed)
 	usePublicAPI := cfg.Reddit.ClientID == ""
@@ -33,7 +45,6 @@ func RunReddit(ctx context.Context, a *app.App) (*RedditResult, error) {
 	})
 
 	now := time.Now().Unix()
-	var subredditsProcessed, postsIngested int
 
 	for _, subreddit := range cfg.Reddit.Subreddits {
 		fmt.Printf("Fetching r/%s...\n", subreddit)
@@ -54,7 +65,7 @@ func RunReddit(ctx context.Context, a *app.App) (*RedditResult, error) {
 		}
 
 		// Store raw JSON
-		hash, _ := a.RawStore.Store(ctx, rawJSON, ".json")
+		hash, _ := rr.app.RawStore.Store(ctx, rawJSON, ".json")
 
 		fmt.Printf("  Got %d posts (raw: %s)\n", len(posts), hash[:8])
 
@@ -64,21 +75,14 @@ func RunReddit(ctx context.Context, a *app.App) (*RedditResult, error) {
 			post.RawHash = hash
 			post.ExtractionVersion = "1.0"
 
-			_, err := a.Database.Conn().ExecContext(ctx, `
-				INSERT OR REPLACE INTO reddit_posts_raw 
-				(fullname, subreddit, created_utc, fetched_at, title, body, score, num_comments, raw_hash, extraction_version)
-				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-			`, post.Fullname, post.Subreddit, post.CreatedUTC, post.FetchedAt,
-				post.Title, post.Body, post.Score, post.NumComments, post.RawHash, post.ExtractionVersion)
-
-			if err != nil {
+			if err := rr.insertPost(ctx, post); err != nil {
 				fmt.Printf("  Insert error: %v\n", err)
 			} else {
-				postsIngested++
+				rr.postsIngested++
 			}
 		}
 
-		subredditsProcessed++
+		rr.subredditsProcessed++
 
 		// Brief pause to be polite (public API has rate limits)
 		if usePublicAPI {
@@ -87,7 +91,18 @@ func RunReddit(ctx context.Context, a *app.App) (*RedditResult, error) {
 	}
 
 	return &RedditResult{
-		SubredditsProcessed: subredditsProcessed,
-		PostsIngested:       postsIngested,
+		SubredditsProcessed: rr.subredditsProcessed,
+		PostsIngested:       rr.postsIngested,
 	}, nil
+}
+
+func (rr *RedditRunner) insertPost(ctx context.Context, post model.RedditPost) error {
+	_, err := rr.app.Database.Conn().ExecContext(ctx, `
+		INSERT OR REPLACE INTO reddit_posts_raw 
+		(fullname, subreddit, created_utc, fetched_at, title, body, score, num_comments, raw_hash, extraction_version)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, post.Fullname, post.Subreddit, post.CreatedUTC, post.FetchedAt,
+		post.Title, post.Body, post.Score, post.NumComments, post.RawHash, post.ExtractionVersion)
+
+	return err
 }

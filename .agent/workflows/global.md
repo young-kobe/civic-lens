@@ -54,3 +54,14 @@ RSS/Reddit -> Go Crawler -> SQLite -> Python ETL -> AI Analysis -> Cache -> Fast
 - `data/seeds.yaml` - RSS feeds, Reddit subreddits, API config
 - `data/civic_lens.db` - SQLite database
 - `data/cache/*.json` - Pre-computed analysis snapshots
+- `docs/walkthroughs/` - Code audit walkthroughs (see below)
+
+## Walkthrough Archival (Required)
+
+Every completed task that involves code changes **must** produce a walkthrough:
+
+1. Save the walkthrough to `docs/walkthroughs/NNN-short-description.md`
+2. Use the next sequential number (check existing files for the current max)
+3. Update `docs/walkthroughs/README.md` index table with the new entry
+4. Walkthroughs document: what changed, why, and verification results
+5. This is a permanent code audit trail - never delete existing walkthroughs

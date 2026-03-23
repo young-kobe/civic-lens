@@ -24,9 +24,12 @@ SENTIMENT_SCHEMA = {
         },
         "reasoning": {
             "type": "string"
+        },
+        "sarcasm_detected": {
+            "type": "boolean"
         }
     },
-    "required": ["label", "confidence", "evidence_spans"]
+    "required": ["label", "confidence", "evidence_spans", "reasoning", "sarcasm_detected"]
 }
 
 # Bot Detection Schema

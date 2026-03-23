@@ -102,6 +102,17 @@ export interface SentimentOverview {
     confidence: ConfidenceLevel;
 }
 
+export interface ClassificationSample {
+    doc_id: number;
+    label: string;
+    confidence: number;
+    reasoning: string;
+    evidence_spans: string[];
+    sarcasm_detected: boolean;
+    title: string;
+    source_type: string;
+}
+
 export interface SentimentBreakdown {
     topic?: string;
     platform?: string;
@@ -110,6 +121,8 @@ export interface SentimentBreakdown {
     negative: number;
     neutral: number;
     volume: number;
+    sarcasm_rate?: number;
+    classificationSamples?: ClassificationSample[];
 }
 
 export interface SentimentDistribution {

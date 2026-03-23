@@ -59,7 +59,15 @@ export function transformFavorability(apiData: any): FavorabilityData {
 export function transformPublicSentiment(apiData: any): PublicSentimentData {
     return {
         overview: apiData.overview,
-        byTopic: apiData.byTopic || [],
+        byTopic: (apiData.byTopic || []).map((t: any) => ({
+            topic: t.topic,
+            positive: t.positive || 0,
+            negative: t.negative || 0,
+            neutral: t.neutral || 0,
+            volume: t.volume || 0,
+            sarcasm_rate: t.sarcasm_rate || 0,
+            classificationSamples: t.classificationSamples || [],
+        })),
         byPlatform: (apiData.byPlatform || []).map((p: any) => ({
             platform: p.platform,
             positive: p.positive || 0,

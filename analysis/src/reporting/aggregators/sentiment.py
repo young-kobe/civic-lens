@@ -29,6 +29,7 @@ from analysis.src.reporting.models import (
     PlatformSentiment,
     PublicSentimentResult,
     TopicSentiment,
+    ClassificationSample,
     TimeWindowSentiment,
 )
 
@@ -151,6 +152,7 @@ class SentimentAggregator:
             "social": {"positive": 0, "negative": 0, "neutral": 0, "mixed": 0},
             "news": {"positive": 0, "negative": 0, "neutral": 0, "mixed": 0},
             "by_platform": {}, "by_topic": {}, "by_time": {},
+            "topic_samples": {},
         }
         now = datetime.now()
         label_map = {"POSITIVE": "positive", "NEGATIVE": "negative", "NEUTRAL": "neutral", "MIXED": "mixed"}
@@ -178,8 +180,13 @@ class SentimentAggregator:
                 accum["news"][label_key] += 1
 
             self._increment_bucket(accum["by_platform"], category, label_key)
-            self._increment_bucket(accum["by_topic"], self._extract_topic(title), label_key)
+            topic = self._extract_topic(title)
+            self._increment_bucket(accum["by_topic"], topic, label_key)
             self._increment_bucket(accum["by_time"], self._get_time_bucket(published_at, now), label_key)
+            self._collect_topic_sample(
+                accum["topic_samples"], topic, doc_id, label, conf,
+                data, title, source_type,
+            )
             accum["count"] += 1
 
         return accum
@@ -203,6 +210,42 @@ class SentimentAggregator:
         if key not in bucket:
             bucket[key] = {"positive": 0, "negative": 0, "neutral": 0, "mixed": 0}
         bucket[key][label_key] += 1
+
+    @staticmethod
+    def _collect_topic_sample(
+        topic_samples: Dict[str, List[Dict[str, Any]]],
+        topic: str,
+        doc_id: int,
+        label: str,
+        confidence: float,
+        data: Dict[str, Any],
+        title: Optional[str],
+        source_type: Optional[str],
+    ) -> None:
+        """Collect a classification sample for a topic (capped at 5 per topic)."""
+        MAX_SAMPLES_PER_TOPIC = 5
+        if topic not in topic_samples:
+            topic_samples[topic] = []
+        samples = topic_samples[topic]
+        reasoning = data.get("reasoning", "")
+        if not reasoning:
+            return
+        sample = {
+            "doc_id": doc_id,
+            "label": label,
+            "confidence": confidence,
+            "reasoning": reasoning,
+            "evidence_spans": data.get("evidence_spans", []),
+            "sarcasm_detected": bool(data.get("sarcasm_detected", False)),
+            "title": title or "",
+            "source_type": source_type or "unknown",
+        }
+        if len(samples) < MAX_SAMPLES_PER_TOPIC:
+            samples.append(sample)
+            samples.sort(key=lambda s: s["confidence"], reverse=True)
+        elif confidence > samples[-1]["confidence"]:
+            samples[-1] = sample
+            samples.sort(key=lambda s: s["confidence"], reverse=True)
 
     def _build_sentiment_result(self, accum: Dict[str, Any]) -> PublicSentimentResult:
         """Construct PublicSentimentResult from pre-aggregated data."""
@@ -229,7 +272,7 @@ class SentimentAggregator:
                 mildNegative=accum["mild_neg"], strongNegative=accum["strong_neg"],
             ),
             byPlatform=self._format_platform_sentiment(accum["by_platform"]),
-            byTopic=self._format_topic_sentiment(accum["by_topic"]),
+            byTopic=self._format_topic_sentiment(accum["by_topic"], accum["topic_samples"]),
             byTimeWindow=self._format_time_window_sentiment(accum["by_time"]),
             disclaimer="Represents sampled platform discourse, not verified population sentiment",
             excluded_bot_content=accum["excluded_bots"],
@@ -361,19 +404,34 @@ class SentimentAggregator:
             for platform, counts in by_platform.items()
         ]
     
-    def _format_topic_sentiment(self, by_topic: Dict[str, Dict[str, int]]) -> List[TopicSentiment]:
-        """Format topic sentiment breakdown, sorted by volume."""
-        topics = [
-            TopicSentiment(
-                topic=topic,
-                positive=counts["positive"],
-                negative=counts["negative"],
-                neutral=counts["neutral"],
-                volume=sum(counts.values()),
-            )
-            for topic, counts in by_topic.items()
-        ]
-        # Sort by volume, descending
+    def _format_topic_sentiment(
+        self,
+        by_topic: Dict[str, Dict[str, int]],
+        topic_samples: Dict[str, List[Dict[str, Any]]],
+    ) -> List[TopicSentiment]:
+        """Format topic sentiment breakdown with classification samples."""
+        topics = []
+        for topic, counts in by_topic.items():
+            raw_samples = topic_samples.get(topic, [])
+            sarcasm_count = sum(1 for s in raw_samples if s.get("sarcasm_detected"))
+            volume = sum(counts.values())
+            sarcasm_rate = round(sarcasm_count / volume * 100, 1) if volume > 0 else 0.0
+            samples = [
+                ClassificationSample(
+                    doc_id=s["doc_id"], label=s["label"],
+                    confidence=s["confidence"], reasoning=s["reasoning"],
+                    evidence_spans=s["evidence_spans"],
+                    sarcasm_detected=s["sarcasm_detected"],
+                    title=s["title"], source_type=s["source_type"],
+                )
+                for s in raw_samples
+            ]
+            topics.append(TopicSentiment(
+                topic=topic, positive=counts["positive"],
+                negative=counts["negative"], neutral=counts["neutral"],
+                volume=volume, sarcasm_rate=sarcasm_rate,
+                classification_samples=samples,
+            ))
         return sorted(topics, key=lambda t: t.volume, reverse=True)
     
     def _format_time_window_sentiment(self, by_time_window: Dict[str, Dict[str, int]]) -> List[TimeWindowSentiment]:

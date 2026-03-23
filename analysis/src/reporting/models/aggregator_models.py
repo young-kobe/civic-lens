@@ -135,13 +135,28 @@ class PlatformSentiment:
 
 
 @dataclass
+class ClassificationSample:
+    """Sample of an individual LLM classification with reasoning."""
+    doc_id: int
+    label: str
+    confidence: float
+    reasoning: str
+    evidence_spans: List[str]
+    sarcasm_detected: bool
+    title: str
+    source_type: str
+
+
+@dataclass
 class TopicSentiment:
-    """Topic-level sentiment breakdown."""
+    """Topic-level sentiment breakdown with classification samples."""
     topic: str
     positive: int
     negative: int
     neutral: int
     volume: int
+    sarcasm_rate: float = 0.0
+    classification_samples: List[ClassificationSample] = field(default_factory=list)
 
 
 @dataclass
@@ -191,7 +206,21 @@ class PublicSentimentResult:
                 for p in self.byPlatform
             ],
             "byTopic": [
-                {"topic": t.topic, "positive": t.positive, "negative": t.negative, "neutral": t.neutral, "volume": t.volume}
+                {
+                    "topic": t.topic, "positive": t.positive, "negative": t.negative,
+                    "neutral": t.neutral, "volume": t.volume,
+                    "sarcasm_rate": t.sarcasm_rate,
+                    "classificationSamples": [
+                        {
+                            "doc_id": s.doc_id, "label": s.label,
+                            "confidence": s.confidence, "reasoning": s.reasoning,
+                            "evidence_spans": s.evidence_spans,
+                            "sarcasm_detected": s.sarcasm_detected,
+                            "title": s.title or "", "source_type": s.source_type,
+                        }
+                        for s in t.classification_samples
+                    ],
+                }
                 for t in self.byTopic
             ],
             "byTimeWindow": [

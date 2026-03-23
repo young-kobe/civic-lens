@@ -23,6 +23,7 @@ class SentimentResult:
     confidence: float  # 0.0 - 1.0
     evidence_spans: List[str]  # Specific phrases supporting classification
     reasoning: Optional[str] = None  # Explanation (LLM only)
+    sarcasm_detected: bool = False  # Whether sarcasm/irony was detected
     deterministic_signals: Optional[Dict[str, Any]] = None  # Raw computed signals
     
     def to_dict(self) -> Dict[str, Any]:

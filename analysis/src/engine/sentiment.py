@@ -39,16 +39,19 @@ class HybridSentimentAnalyzer:
             self._init_llm_client()
     
     def _init_llm_client(self):
-        """Initialize the LLM client if enabled."""
+        """Initialize the LLM client. Raises if enabled but unavailable."""
         try:
             from analysis.src.llm import get_llm_client
             self._llm_client = get_llm_client()
             if not self._llm_client.is_available:
-                logger.warning("LLM client not available. Falling back to heuristics.")
-                self.llm_enabled = False
+                raise RuntimeError(
+                    "LLM client not available but llm_enabled=True. "
+                    "Start the Ollama server or set CIVIC_LLM_ENABLED=false."
+                )
+        except RuntimeError:
+            raise
         except Exception as e:
-            logger.error(f"Failed to initialize LLM client: {e}")
-            self.llm_enabled = False
+            raise RuntimeError(f"Failed to initialize LLM client: {e}") from e
     
     def _compute_signals(self, text: str) -> Dict[str, Any]:
         """
@@ -159,6 +162,7 @@ class HybridSentimentAnalyzer:
                 confidence=float(response.get("confidence", 0.5)),
                 evidence_spans=response.get("evidence_spans", []),
                 reasoning=response.get("reasoning"),
+                sarcasm_detected=bool(response.get("sarcasm_detected", False)),
                 deterministic_signals=signals,
             )
             

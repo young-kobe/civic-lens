@@ -34,16 +34,19 @@ class HybridBotDetector:
             self._init_llm_client()
     
     def _init_llm_client(self):
-        """Initialize the LLM client if enabled."""
+        """Initialize the LLM client. Raises if enabled but unavailable."""
         try:
             from analysis.src.llm import get_llm_client
             self._llm_client = get_llm_client()
             if not self._llm_client.is_available:
-                logger.warning("LLM client not available. Falling back to heuristics.")
-                self.llm_enabled = False
+                raise RuntimeError(
+                    "LLM client not available but llm_enabled=True. "
+                    "Start the Ollama server or set CIVIC_LLM_ENABLED=false."
+                )
+        except RuntimeError:
+            raise
         except Exception as e:
-            logger.error(f"Failed to initialize LLM client: {e}")
-            self.llm_enabled = False
+            raise RuntimeError(f"Failed to initialize LLM client: {e}") from e
     
     def _compute_signals(self, text: str, metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
@@ -298,14 +301,14 @@ class HybridBotDetector:
                 reasoning="Empty text",
             )
         
-        # 1. Compute deterministic signals
+        # 1. Compute deterministic signals (always, used as LLM context)
         signals = self._compute_signals(text, metadata)
         
-        # 2. Only use LLM for edge cases (score > 0.3) to save costs
+        # 2. LLM is primary classifier
         if self.llm_enabled and self._llm_client and self._llm_client.is_available:
-            if signals["aggregated_score"] > 0.3:
-                return self._llm_classify(text, signals)
+            return self._llm_classify(text, signals)
         
-        # 3. Fallback to heuristic
+        # 3. Heuristic fallback only when LLM unavailable
+        logger.warning("LLM unavailable, using heuristic fallback for bot detection")
         return self._heuristic_classify(signals)
 
