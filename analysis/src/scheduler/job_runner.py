@@ -31,11 +31,10 @@ from analysis.src.common.settings import get_settings
 from analysis.src.common.cache import SnapshotCache
 from analysis.src.etl.loader import ContentLoader
 from analysis.src.engine.bot import HybridBotDetector
-from analysis.src.engine.sentiment import HybridSentimentAnalyzer
-from analysis.src.engine.favorability import FavorabilityAnalyzer
+from analysis.src.engine.analyzer import Analyzer
 from analysis.src.engine.clustering import ContentClusterer
 from analysis.src.engine.prompts import (
-    SENTIMENT_PROMPT_VERSION, BOT_PROMPT_VERSION, FAVORABILITY_PROMPT_VERSION,
+    BOT_PROMPT_VERSION, TEXT_ANALYSIS_PROMPT_VERSION,
 )
 from analysis.src.reporting.aggregators import Aggregator
 from analysis.src.etl.polling import PollingDataScraper, PollingDataError
@@ -64,11 +63,7 @@ class AnalysisJobRunner:
         
         # Initialize analyzers
         self.bot_detector = HybridBotDetector(llm_enabled=self.settings.llm_enabled)
-        self.sentiment_analyzer = HybridSentimentAnalyzer(
-            model_name=self.settings.model_sentiment,
-            llm_enabled=self.settings.llm_enabled
-        )
-        self.favorability_analyzer = FavorabilityAnalyzer(
+        self.analyzer = Analyzer(
             llm_enabled=self.settings.llm_enabled
         )
         self.clusterer = ContentClusterer()
@@ -122,10 +117,13 @@ class AnalysisJobRunner:
         logger.info(f"Bot detection complete: {total} docs processed")
         return total
     
-    def run_sentiment_analysis(self) -> int:
-        """Run sentiment analysis on unprocessed docs. Returns count processed."""
-        logger.info(f"Step 3/5: Running sentiment analysis (scope: {self.settings.run_analysis_on})...")
+    def run_text_analysis(self) -> int:
+        """Run combined sentiment and favorability analysis on unprocessed docs. Returns count processed."""
+        logger.info(f"Step 3/4: Running text analysis (sentiment + favorability) (scope: {self.settings.run_analysis_on})...")
         source_types = self._get_target_source_types()
+        
+        # We look for docs that haven't been processed for sentiment
+        # (Assuming sentiment and favorability process exactly the same docs in unified pipeline)
         docs = self.loader.get_unprocessed_docs(
             "sentiment", 
             source_types=source_types, 
@@ -133,65 +131,43 @@ class AnalysisJobRunner:
         )
         
         total = len(docs)
-        logger.info(f"Processing {total} docs for sentiment analysis")
+        logger.info(f"Processing {total} docs for unified text analysis")
         
         for i, doc in enumerate(docs, 1):
-            result = self.sentiment_analyzer.analyze_full(doc['text'])
-            output = result.to_dict()
+            sent_result, fav_result = self.analyzer.analyze_full(doc['text'])
+            
+            # Save Sentiment
             self.loader.save_ai_output(
                 doc['doc_id'], 
                 "sentiment", 
-                output, 
-                result.confidence,
+                sent_result.to_dict(), 
+                sent_result.confidence,
                 model_id=self.model_id,
-                prompt_version=SENTIMENT_PROMPT_VERSION,
+                prompt_version=TEXT_ANALYSIS_PROMPT_VERSION,
             )
-            logger.info(
-                f"[sentiment {i}/{total}] doc={doc['doc_id']} type={doc.get('source_type', 'unknown')} "
-                f"label={result.label} conf={result.confidence:.2f} "
-                f"evidence={result.evidence_spans[:3]}"
-            )
-        
-        logger.info(f"Sentiment analysis complete: {total} docs processed")
-        return total
-    
-    def run_favorability_analysis(self) -> int:
-        """Run favorability analysis on unprocessed docs. Returns count processed."""
-        logger.info(f"Step 4/5: Running favorability analysis (scope: {self.settings.run_analysis_on})...")
-        source_types = self._get_target_source_types()
-        docs = self.loader.get_unprocessed_docs(
-            "favorability", 
-            source_types=source_types, 
-            batch_size=self.settings.loader_batch_size
-        )
-        
-        total = len(docs)
-        logger.info(f"Processing {total} docs for favorability analysis")
-        
-        for i, doc in enumerate(docs, 1):
-            result = self.favorability_analyzer.analyze_full(doc['text'])
-            output = result.to_dict()
+            
+            # Save Favorability
             self.loader.save_ai_output(
                 doc['doc_id'], 
                 "favorability", 
-                output,
-                result.overall_confidence,
+                fav_result.to_dict(),
+                fav_result.overall_confidence,
                 model_id=self.model_id,
-                prompt_version=FAVORABILITY_PROMPT_VERSION,
+                prompt_version=TEXT_ANALYSIS_PROMPT_VERSION,
             )
-            entities = result.gop_entities_found[:3]
+            
             logger.info(
-                f"[favorability {i}/{total}] doc={doc['doc_id']} type={doc.get('source_type', 'unknown')} "
-                f"stance={result.overall_gop_stance} conf={result.overall_confidence:.2f} "
-                f"entities={entities}"
+                f"[text-analysis {i}/{total}] doc={doc['doc_id']} type={doc.get('source_type', 'unknown')} "
+                f"sent={sent_result.label}({sent_result.confidence:.2f}) "
+                f"fav={fav_result.overall_gop_stance}({fav_result.overall_confidence:.2f})"
             )
         
-        logger.info(f"Favorability analysis complete: {total} docs processed")
+        logger.info(f"Text analysis complete: {total} docs processed")
         return total
     
     def run_clustering(self) -> int:
         """Run document clustering. Returns count of clusters created."""
-        logger.info("Step 5/5: Running clustering...")
+        logger.info("Step 4/4: Running clustering...")
         docs = self.loader.get_all_docs_for_clustering()
         clusters = self.clusterer.cluster_documents(
             docs, 
@@ -215,12 +191,13 @@ class AnalysisJobRunner:
         # Time windows to pre-compute for time-sensitive endpoints
         time_windows = ["24h", "7d", "30d", "90d"]
         
-        # Stories - cache all time windows
+        # Stories - cache all time windows and content types
         for window in time_windows:
-            stories = self.aggregator.get_stories(time_window=window)
-            stories_data = [s.to_dict() for s in stories]
-            self.cache.save(f"stories_{window}", stories_data, doc_count=len(stories_data))
-            results[f"stories_{window}"] = len(stories_data)
+            for c_type in ["all", "articles", "social"]:
+                stories = self.aggregator.get_stories(time_window=window, content_type=c_type)
+                stories_data = [s.to_dict() for s in stories]
+                self.cache.save(f"stories_{window}_{c_type}", stories_data, doc_count=len(stories_data))
+                results[f"stories_{window}_{c_type}"] = len(stories_data)
         
         # Public Sentiment (includes merged GOP favorability) - cache all time windows
         for window in time_windows:
@@ -269,8 +246,7 @@ class AnalysisJobRunner:
             "started_at": datetime.now(timezone.utc).isoformat(),
             "etl_new_docs": 0,
             "bot_detection": 0,
-            "sentiment": 0,
-            "favorability": 0,
+            "text_analysis": 0,
             "clusters": 0,
             "snapshots": {},
             "duration_seconds": 0,
@@ -280,8 +256,7 @@ class AnalysisJobRunner:
         try:
             summary["etl_new_docs"] = self.run_etl()
             summary["bot_detection"] = self.run_bot_detection()
-            summary["sentiment"] = self.run_sentiment_analysis()
-            summary["favorability"] = self.run_favorability_analysis()
+            summary["text_analysis"] = self.run_text_analysis()
             summary["clusters"] = self.run_clustering()
             summary["snapshots"] = self.save_snapshots()
         except Exception as e:

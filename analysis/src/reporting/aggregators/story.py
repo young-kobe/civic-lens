@@ -205,10 +205,11 @@ class StoryAggregator:
         for c_id, c in clusters.items():
             cluster_content_type = self._classify_content_type(c["source_types_seen"])
             
-            # Filter by content type if specified
-            if content_type == "articles" and cluster_content_type == "social":
+            # Filter by content type if specified.
+            # For UI tabs (All / Articles / Social Posts), we want strict filtering:
+            if content_type == "articles" and cluster_content_type != "articles":
                 continue
-            if content_type == "social" and cluster_content_type == "articles":
+            if content_type == "social" and cluster_content_type != "social":
                 continue
             
             momentum = self._compute_momentum(c["docs"], c["now"])

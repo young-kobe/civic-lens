@@ -10,7 +10,6 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 from analysis.src.engine.bot import HybridBotDetector
-from analysis.src.engine.sentiment import HybridSentimentAnalyzer
 from analysis.src.engine.clustering import ContentClusterer
 
 class TestEngines(unittest.TestCase):
@@ -26,18 +25,6 @@ class TestEngines(unittest.TestCase):
         score, label = detector.analyze("This is a thoughtful comment about civic policy.", {})
         self.assertEqual(label, 'human')
         self.assertLess(score, 0.4)
-
-    def test_sentiment_analyzer(self):
-        analyzer = HybridSentimentAnalyzer()
-        
-        label, conf = analyzer.analyze("I love this amazing project")
-        self.assertEqual(label, "POSITIVE")
-        
-        label, conf = analyzer.analyze("This is terrible and bad")
-        self.assertEqual(label, "NEGATIVE")
-        
-        label, conf = analyzer.analyze("This is a neutral statement")
-        self.assertEqual(label, "NEUTRAL")
 
     def test_clustering(self):
         clusterer = ContentClusterer()

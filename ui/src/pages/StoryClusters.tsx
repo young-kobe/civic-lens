@@ -84,7 +84,7 @@ function ClusterListItem({ cluster, isSelected, onClick }: ClusterListItemProps)
                 </span>
             </div>
             <div className="flex items-center gap-3 text-sm text-muted">
-                <span>{cluster.articleCount} {cluster.contentType === 'social' ? 'posts' : 'articles'}</span>
+                <span>{cluster.articleCount} {cluster.contentType === 'social' ? 'posts' : cluster.contentType === 'articles' ? 'articles' : 'articles/posts'}</span>
                 <span className={cluster.momentum.delta24h >= 0 ? 'metric-delta-positive' : 'metric-delta-negative'}>
                     {cluster.momentum.delta24h >= 0 ? '+' : ''}{cluster.momentum.delta24h}% 24h
                 </span>
@@ -110,7 +110,7 @@ function ClusterDetail({ cluster }: ClusterDetailProps) {
         );
     }
 
-    const itemLabel = cluster.contentType === 'social' ? 'posts' : 'articles/posts';
+    const itemLabel = cluster.contentType === 'social' ? 'posts' : cluster.contentType === 'articles' ? 'articles' : 'articles/posts';
 
     return (
         <div className="flex flex-col gap-6">

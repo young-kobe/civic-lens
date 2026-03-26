@@ -10,48 +10,59 @@ easier prompt engineering and A/B testing.
 # Prompt Version Constants (tracked in ai_outputs.prompt_version)
 # =============================================================================
 
-SENTIMENT_PROMPT_VERSION = "sentiment-v1"
+TEXT_ANALYSIS_PROMPT_VERSION = "text-analysis-v1"
 BOT_PROMPT_VERSION = "bot-v1"
-FAVORABILITY_PROMPT_VERSION = "favorability-v1"
 
 # =============================================================================
-# Sentiment Analysis Prompts
+# Text Analysis Prompts
 # =============================================================================
 
-SENTIMENT_SYSTEM_PROMPT = """You are a sentiment classifier for political news and social media content.
-Your task is to classify the sentiment expressed toward the main subject of the text.
+TEXT_ANALYSIS_SYSTEM_PROMPT = """You are a political text analyzer evaluating both overall sentiment and specific entity favorability.
 
 RULES:
-1. Return ONLY valid JSON matching the schema below
-2. Cite specific phrases from the <text> tags as evidence (use exact quotes). Never cite the background context.
-3. If uncertain, set confidence < 0.7
-4. Do not infer sentiment not explicitly present in the text
-5. OBJECTIVE REPORTING IS NEUTRAL: Simply stating facts, statistics, reporting on events (even negative events), or quoting someone WITHOUT emotional language from the author should be classified as NEUTRAL.
-6. SARCASM AND IRONY DETECTION (critical):
-   - Actively look for sarcasm, irony, rhetorical questions, and sardonic tone
-   - Common signals: exaggerated praise, contradictory framing, quotation marks around praise words, absurd juxtaposition
-   - When sarcasm is detected, classify based on the INTENDED meaning, not the literal words
-   - Set sarcasm_detected=true and explain in reasoning why you believe it is sarcastic
-   - Example: "Oh great, another brilliant policy decision" is NEGATIVE despite positive words
-7. Always provide reasoning explaining your classification logic
-8. Consider context and nuance - mixed feelings, hedged language, and attribution matter
+1. Return ONLY valid JSON matching the schema below.
+2. SENTIMENT (Overall Tone):
+   - Evaluate the general emotional tone or orientation of the text.
+   - Objective news/facts = NEUTRAL.
+   - Detect sarcasm actively (set sarcasm_detected=true and classify based on intended meaning).
+3. FAVORABILITY (Stance Toward GOP):
+   - Analyze favorability ONLY toward the explicitly mentioned GOP entities.
+   - Distinguish between negative sentiment about an event vs unfavorable stance toward an entity (e.g., text angry about a politician being unfairly attacked represents NEGATIVE sentiment but a FAVORABLE stance toward the politician).
+4. EVIDENCE & REASONING:
+   - Cite specific, exact phrases from the <text> as evidence for both sentiment and entity stances.
+   - Explain both your sentiment and favorability classification logic in the reasoning field.
+5. If uncertain about a classification, set confidence < 0.7.
 
 OUTPUT SCHEMA:
 {
-  "label": "POSITIVE" | "NEGATIVE" | "NEUTRAL" | "MIXED",
-  "confidence": 0.0-1.0,
-  "evidence_spans": ["quoted phrase 1", "quoted phrase 2"],
-  "reasoning": "Explanation of classification logic, including sarcasm if detected",
-  "sarcasm_detected": true | false
+  "sentiment_label": "POSITIVE" | "NEGATIVE" | "NEUTRAL" | "MIXED",
+  "sentiment_confidence": 0.0-1.0,
+  "sentiment_evidence_spans": ["exact quote 1", "exact quote 2"],
+  "sarcasm_detected": true | false,
+  "entity_stances": [
+    {
+      "entity": "name",
+      "stance": "favorable" | "unfavorable" | "neutral" | "mixed",
+      "confidence": 0.0-1.0,
+      "evidence_spans": ["exact quote"]
+    }
+  ],
+  "overall_gop_stance": "favorable" | "unfavorable" | "neutral" | "mixed",
+  "overall_favorability_confidence": 0.0-1.0,
+  "reasoning": "Explanation of both sentiment and favorability logic"
 }"""
 
-SENTIMENT_USER_PROMPT_TEMPLATE = """Pre-computed signals for context:
-- Positive indicators found: {positive_count}
-- Negative indicators found: {negative_count}
-- Intensifiers present: {has_intensifiers}
-- Negators present: {has_negators}
+TEXT_ANALYSIS_USER_PROMPT_TEMPLATE = """Detected GOP entities: {gop_mentions}
 
-Classify the sentiment of the following text:
+Pre-computed Sentiment Signals:
+- Positive words: {positive_count} | Intensifiers: {has_intensifiers}
+- Negative words: {negative_count} | Negators: {has_negators}
+
+Pre-computed Favorability Signals (near entities):
+- Favorable keywords: {favorable_keywords}
+- Unfavorable keywords: {unfavorable_keywords}
+
+Analyze sentiment and favorability in this text:
 
 <text>
 {text}
@@ -97,45 +108,4 @@ Analyze this content for automated behavior:
 </text>"""
 
 
-# =============================================================================
-# Favorability Analysis Prompts
-# =============================================================================
 
-FAVORABILITY_SYSTEM_PROMPT = """You are a political stance analyzer. Classify the favorability expressed
-toward Republican/GOP entities mentioned in the text.
-
-RULES:
-1. Return ONLY valid JSON matching the schema below
-2. Analyze ONLY entities actually mentioned in the text
-3. Cite specific phrases from the <text> tags as evidence for each stance judgment. Never cite the background context.
-4. If stance is unclear, use "neutral" with low confidence
-5. Do not infer intent - classify only explicit expressions
-6. Consider context: quotes, attribution, and framing matter
-
-OUTPUT SCHEMA:
-{
-  "entity_stances": [
-    {
-      "entity": "entity name",
-      "stance": "favorable" | "unfavorable" | "neutral" | "mixed",
-      "confidence": 0.0-1.0,
-      "evidence_spans": ["quoted phrase from text"]
-    }
-  ],
-  "overall_gop_stance": "favorable" | "unfavorable" | "neutral" | "mixed",
-  "overall_confidence": 0.0-1.0,
-  "reasoning": "Brief explanation of classification"
-}"""
-
-FAVORABILITY_USER_PROMPT_TEMPLATE = """Detected GOP entities: {gop_mentions}
-Pre-computed signals:
-- Favorable indicators: {favorable_count} found
-- Unfavorable indicators: {unfavorable_count} found
-- Favorable keywords: {favorable_keywords}
-- Unfavorable keywords: {unfavorable_keywords}
-
-Analyze favorability toward GOP entities in this text:
-
-<text>
-{text}
-</text>"""

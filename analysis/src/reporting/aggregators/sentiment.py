@@ -155,7 +155,7 @@ class SentimentAggregator:
             "topic_samples": {},
         }
         now = datetime.now()
-        label_map = {"POSITIVE": "positive", "NEGATIVE": "negative", "NEUTRAL": "neutral", "MIXED": "mixed"}
+        label_map = {"POSITIVE": "positive", "NEGATIVE": "negative", "NEUTRAL": "neutral", "MIXED": "neutral"}
 
         for doc_id, output_json, confidence, source_type, published_at, title in rows:
             if doc_id in bot_docs:

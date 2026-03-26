@@ -27,3 +27,7 @@ Each document captures what was changed, why, and the verification results.
 | 020 | [X Integration & Global Heatmap](020-x-integration-global-heatmap.md) | X post extraction, models directory, heatmap |
 | 021 | [LLM Reasoning & Sentiment Refactor](021-llm-reasoning-sentiment-refactor.md) | Sarcasm detection, reasoning transparency, topic visualization redesign |
 | 022 | [Struct Receiver Refactor](022-struct-receiver-refactor.md) | Runner package struct-method pattern, encapsulated state |
+| 023 | [Configurable Analysis Scope](023-configurable-analysis-scope.md) | Select between reddit, x, or all for processing |
+| 024 | [Sentiment Caching & UI Fixes](024-sentiment-caching-ui-fixes.md) | Snapshot caching system, sentiment gauge fix |
+| 025 | [Unified Text Analyzer](025-unified-text-analyzer.md) | Combined sentiment and favorability LLM pass |
+| 026 | [Audit Remediation](026-audit-remediation.md) | Fix concurrency, DB bottlenecks, and dynamic migrations |

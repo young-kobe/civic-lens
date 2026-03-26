@@ -243,7 +243,7 @@ switch ($Command) {
     "all" {
         Run-Migrate
         Run-Ingest
-        Run-X
+        #Run-X
         Run-Crawl -Duration "5m"
         Run-Analyze
         Run-Dev

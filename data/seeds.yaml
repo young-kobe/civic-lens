@@ -15,9 +15,6 @@ crawl:
   stale_inflight_age: 10m
 
 reddit:
-  # Get credentials from https://www.reddit.com/prefs/apps (optional - public API works without)
-  client_id: ""
-  client_secret: ""
   user_agent: "CivicLens/1.0 by u/your_username"
   subreddits:
     - politics

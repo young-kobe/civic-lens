@@ -32,6 +32,7 @@ type CrawlResult struct {
 type CrawlRunner struct {
 	app     *app.App
 	opts    CrawlOptions
+	writer  *ArticleWriter
 	fetched int64
 	stored  int64
 	errors  int64
@@ -49,6 +50,11 @@ func (cr *CrawlRunner) Run(ctx context.Context) (*CrawlResult, error) {
 	// Setup context with timeout
 	ctx, cancel := context.WithTimeout(ctx, cr.opts.Duration)
 	defer cancel()
+
+	// Start batched article writer
+	cr.writer = NewArticleWriter(cr.app.Database)
+	go cr.writer.Start(ctx)
+	defer cr.writer.Close()
 
 	// Recover stale items
 	recovered, _ := cr.app.Frontier.RecoverStale(ctx, cfg.Crawl.StaleInflightAge)
@@ -163,50 +169,10 @@ func (cr *CrawlRunner) processPage(ctx context.Context, page *model.Page) {
 		page.URLCanon = meta.CanonicalURL
 	}
 
-	// Insert article metadata
+	// Enqueue article metadata for batched insertion
 	if meta != nil {
-		cr.insertArticle(ctx, page, meta, hash)
+		cr.writer.WriteFromMeta(page, meta, hash)
 	}
 
 	cr.app.Frontier.MarkDone(ctx, page)
-}
-
-func (cr *CrawlRunner) insertArticle(ctx context.Context, page *model.Page, meta *html.Metadata, hash string) {
-	conn := cr.app.Database.Conn()
-
-	// Determine canonical URL - prefer extracted, fallback to page URL
-	canonURL := page.URLCanon
-	if meta.CanonicalURL != "" {
-		canonURL = meta.CanonicalURL
-	}
-
-	// Convert published time to Unix timestamp
-	var publishedAt int64
-	if !meta.PublishedTime.IsZero() {
-		publishedAt = meta.PublishedTime.Unix()
-	}
-
-	// Insert or update article metadata
-	_, err := conn.ExecContext(ctx, `
-		INSERT INTO articles_raw (url_canon, domain, fetched_at, published_at, title, raw_hash, extraction_version)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT(url_canon) DO UPDATE SET
-			fetched_at = excluded.fetched_at,
-			published_at = excluded.published_at,
-			title = excluded.title,
-			raw_hash = excluded.raw_hash,
-			extraction_version = excluded.extraction_version
-	`,
-		canonURL,
-		page.Domain,
-		time.Now().Unix(),
-		publishedAt,
-		meta.Title,
-		hash,
-		"go-v1.0",
-	)
-
-	if err != nil {
-		log.Printf("Failed to insert article %s: %v", canonURL, err)
-	}
 }

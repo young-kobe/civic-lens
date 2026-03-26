@@ -16,8 +16,7 @@ from analysis.src.common.settings import get_settings
 from analysis.src.common.cache import SnapshotCache
 from analysis.src.etl.loader import ContentLoader
 from analysis.src.engine.bot import HybridBotDetector
-from analysis.src.engine.sentiment import HybridSentimentAnalyzer
-from analysis.src.engine.favorability import FavorabilityAnalyzer
+from analysis.src.engine.analyzer import Analyzer
 from analysis.src.engine.clustering import ContentClusterer
 from analysis.src.reporting.aggregators import Aggregator
 from analysis.src.reporting.aggregators.geo import GeoAggregator
@@ -42,11 +41,7 @@ cache = SnapshotCache(settings.cache_dir)
 
 # Analyzers - only needed for on-demand analysis triggers
 bot_detector = HybridBotDetector(llm_enabled=settings.llm_enabled)
-sentiment_analyzer = HybridSentimentAnalyzer(
-    model_name=settings.model_sentiment,
-    llm_enabled=settings.llm_enabled
-)
-favorability_analyzer = FavorabilityAnalyzer(llm_enabled=settings.llm_enabled)
+analyzer = Analyzer(llm_enabled=settings.llm_enabled)
 clusterer = ContentClusterer()
 
 
@@ -144,6 +139,9 @@ def get_stories(window: str = "24h", content_type: str = "all"):
     
     Query params: ?window=24h|7d|30d&content_type=all|articles|social
     """
+    if content_type not in ["all", "articles", "social"]:
+        raise HTTPException(status_code=400, detail="Invalid content_type. Must be 'all', 'articles', or 'social'")
+        
     return _get_cached_or_fallback(
         f"stories_{window}_{content_type}",
         lambda: aggregator.get_stories(time_window=window, content_type=content_type),
@@ -237,30 +235,22 @@ def process_analysis_queue():
             result.confidence
         )
     
-    # 2. Sentiment Analysis
+    # 2. Unified Sentiment + Favorability Analysis
     docs = loader.get_unprocessed_docs("sentiment")
-    logger.info(f"Processing {len(docs)} docs for sentiment analysis")
+    logger.info(f"Processing {len(docs)} docs for unified analysis")
     for doc in docs:
-        result = sentiment_analyzer.analyze_full(doc['text'])
-        output = result.to_dict()
+        sentiment_res, favorability_res = analyzer.analyze_full(doc['text'])
         loader.save_ai_output(
             doc['doc_id'], 
             "sentiment", 
-            output, 
-            result.confidence
+            sentiment_res.to_dict(), 
+            sentiment_res.confidence
         )
-    
-    # 3. Favorability Analysis
-    docs = loader.get_unprocessed_docs("favorability")
-    logger.info(f"Processing {len(docs)} docs for favorability analysis")
-    for doc in docs:
-        result = favorability_analyzer.analyze_full(doc['text'])
-        output = result.to_dict()
         loader.save_ai_output(
             doc['doc_id'], 
             "favorability", 
-            output,
-            result.overall_confidence
+            favorability_res.to_dict(),
+            favorability_res.overall_confidence
         )
     
     logger.info("Background analysis complete.")

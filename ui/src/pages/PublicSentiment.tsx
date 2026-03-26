@@ -40,7 +40,7 @@ function SentimentOverviewHeader({ data }: SentimentOverviewHeaderProps) {
                     <div className="text-xs font-medium text-muted mb-1">Net Sentiment Score</div>
                     <div className="flex items-baseline gap-3">
                         <span className="metric-value-lg">
-                            {data.netScore >= 0 ? '+' : ''}{data.netScore.toFixed(1)}
+                            {data.netScore >= 0 ? '+' : ''}{data.netScore.toFixed(1)}%
                         </span>
                         <span className={`text-lg font-medium ${scoreInfo.class}`}>
                             {scoreInfo.label}
