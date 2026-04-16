@@ -11,7 +11,7 @@ const TABS = [
 ];
 
 function App() {
-    const [activeTab, setActiveTab] = useState('clusters');
+    const [activeTab, setActiveTab] = useState('sentiment');
     const [filters, setFilters] = useState<Filters>({
         timeRange: '7d',
         sourceType: 'all',

@@ -145,6 +145,10 @@ class ClassificationSample:
     sarcasm_detected: bool
     title: str
     source_type: str
+    date: Optional[str] = None
+    source_name: Optional[str] = None
+    full_text: str = ""
+    url: Optional[str] = None
 
 
 @dataclass
@@ -217,6 +221,10 @@ class PublicSentimentResult:
                             "evidence_spans": s.evidence_spans,
                             "sarcasm_detected": s.sarcasm_detected,
                             "title": s.title or "", "source_type": s.source_type,
+                            "source_name": s.source_name,
+                            "date": s.date,
+                            "full_text": s.full_text,
+                            "url": s.url,
                         }
                         for s in t.classification_samples
                     ],

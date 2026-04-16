@@ -56,14 +56,17 @@ TEXT_ANALYSIS_SCHEMA = {
             "minimum": 0,
             "maximum": 1
         },
-        "reasoning": {
+        "sentiment_reasoning": {
+            "type": "string"
+        },
+        "favorability_reasoning": {
             "type": "string"
         }
     },
     "required": [
         "sentiment_label", "sentiment_confidence", "sentiment_evidence_spans", 
         "sarcasm_detected", "overall_gop_stance", "overall_favorability_confidence", 
-        "reasoning"
+        "sentiment_reasoning", "favorability_reasoning"
     ]
 }
 

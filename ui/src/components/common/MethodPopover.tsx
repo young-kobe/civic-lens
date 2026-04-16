@@ -35,6 +35,8 @@ function MethodPopover({
             <button
                 className="tooltip-trigger text-muted text-xs"
                 onClick={() => setIsOpen(!isOpen)}
+                onMouseEnter={() => setIsOpen(true)}
+                onMouseLeave={() => setIsOpen(false)}
                 aria-expanded={isOpen}
             >
                 <svg
@@ -57,6 +59,8 @@ function MethodPopover({
                         marginTop: '8px',
                         minWidth: '280px'
                     }}
+                    onMouseEnter={() => setIsOpen(true)}
+                    onMouseLeave={() => setIsOpen(false)}
                 >
                     <div className="popover-title">{title}</div>
 

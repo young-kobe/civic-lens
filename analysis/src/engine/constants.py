@@ -64,6 +64,11 @@ NEGATIVE_WORDS = frozenset([
     "rent free", "coping", "seething", "malding", "touch grass",
     "smooth brain", "bot", "astroturf", "psyop",
     "clown world", "honk", "dead", "get rekt",
+    # Derogatory / inflammatory
+    "satanist", "satanists", "pedophile", "pedophiles", "groomer", "groomers",
+    "evil", "demon", "demons", "traitor", "traitors", "scum", "filth",
+    "vermin", "thugs", "wicked", "degenerate", "degenerates", "sick",
+    "disgusting", "vile", "pathetic", "worthless", "moron", "idiot",
 ])
 
 INTENSIFIERS = frozenset([

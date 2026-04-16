@@ -19,6 +19,7 @@ Can be scheduled via:
 import sys
 import os
 import time
+import argparse
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -84,14 +85,15 @@ class AnalysisJobRunner:
             return ["x_post"]
         return None  # "all" or any other value means no filter
     
-    def run_bot_detection(self) -> int:
+    def run_bot_detection(self, limit: int | None = None) -> int:
         """Run bot detection on unprocessed docs scoped by configuration. Returns count processed."""
         logger.info(f"Step 2/5: Running bot detection (scope: {self.settings.run_analysis_on})...")
         source_types = self._get_target_source_types()
+        batch_size = limit if limit is not None else self.settings.loader_batch_size
         docs = self.loader.get_unprocessed_docs(
             "bot_detection", 
             source_types=source_types, 
-            batch_size=self.settings.loader_batch_size
+            batch_size=batch_size
         )
         
         total = len(docs)
@@ -117,17 +119,18 @@ class AnalysisJobRunner:
         logger.info(f"Bot detection complete: {total} docs processed")
         return total
     
-    def run_text_analysis(self) -> int:
+    def run_text_analysis(self, limit: int | None = None) -> int:
         """Run combined sentiment and favorability analysis on unprocessed docs. Returns count processed."""
         logger.info(f"Step 3/4: Running text analysis (sentiment + favorability) (scope: {self.settings.run_analysis_on})...")
         source_types = self._get_target_source_types()
         
         # We look for docs that haven't been processed for sentiment
         # (Assuming sentiment and favorability process exactly the same docs in unified pipeline)
+        batch_size = limit if limit is not None else self.settings.loader_batch_size
         docs = self.loader.get_unprocessed_docs(
             "sentiment", 
             source_types=source_types, 
-            batch_size=self.settings.loader_batch_size
+            batch_size=batch_size
         )
         
         total = len(docs)
@@ -230,9 +233,9 @@ class AnalysisJobRunner:
         logger.info(f"Snapshots saved: {results}")
         return results
     
-    def run_full_pipeline(self) -> dict:
+    def run_full_pipeline(self, tasks: list[str] | None = None, limit: int | None = None) -> dict:
         """
-        Run the complete analysis pipeline.
+        Run the specified analysis pipeline tasks.
         
         Returns summary of what was processed.
         """
@@ -254,11 +257,19 @@ class AnalysisJobRunner:
         }
         
         try:
-            summary["etl_new_docs"] = self.run_etl()
-            summary["bot_detection"] = self.run_bot_detection()
-            summary["text_analysis"] = self.run_text_analysis()
-            summary["clusters"] = self.run_clustering()
-            summary["snapshots"] = self.save_snapshots()
+            # If no tasks specified, run all
+            run_all = not tasks
+            
+            if run_all or "etl" in tasks:
+                summary["etl_new_docs"] = self.run_etl()
+            if run_all or "bot" in tasks:
+                summary["bot_detection"] = self.run_bot_detection(limit=limit)
+            if run_all or "text" in tasks:
+                summary["text_analysis"] = self.run_text_analysis(limit=limit)
+            if run_all or "clustering" in tasks:
+                summary["clusters"] = self.run_clustering() # Limit not applied to clustering as it works on all docs
+            if run_all or "snapshots" in tasks:
+                summary["snapshots"] = self.save_snapshots()
         except Exception as e:
             logger.error(f"Pipeline failed: {e}")
             summary["status"] = "failed"
@@ -277,10 +288,17 @@ class AnalysisJobRunner:
 
 def main():
     """Entry point for the job runner."""
-    logger.info("Civic Lens Analysis Job Runner starting...")
+    parser = argparse.ArgumentParser(description="Civic Lens Analysis Job Runner")
+    parser.add_argument("--tasks", type=str, help="Comma-separated tasks to run: etl, bot, text, clustering, snapshots. Defaults to all.")
+    parser.add_argument("--limit", type=int, help="Limit maximum documents processed per analysis stage (useful for dev/testing)")
+    args = parser.parse_args()
+
+    tasks_to_run = [t.strip().lower() for t in args.tasks.split(",")] if args.tasks else None
+
+    logger.info(f"Civic Lens Analysis Job Runner starting. Tasks: {args.tasks or 'all'}, Limit: {args.limit or 'default'}")
     
     runner = AnalysisJobRunner()
-    summary = runner.run_full_pipeline()
+    summary = runner.run_full_pipeline(tasks=tasks_to_run, limit=args.limit)
     
     # Return appropriate exit code
     return 0 if summary["status"] == "success" else 1

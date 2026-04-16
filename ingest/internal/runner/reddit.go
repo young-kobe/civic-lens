@@ -63,6 +63,21 @@ func (rr *RedditRunner) Run(ctx context.Context) (*RedditResult, error) {
 			post.RawHash = hash
 			post.ExtractionVersion = "1.0"
 
+			postID := post.Fullname
+			if len(postID) > 3 && postID[:3] == "t3_" {
+				postID = postID[3:]
+			}
+
+			comments, _, err := client.FetchPostCommentsPublic(ctx, post.Subreddit, postID, 5)
+			if err == nil && len(comments) > 0 {
+				for _, c := range comments {
+					if c.Body != "" && c.Body != "[deleted]" && c.Body != "[removed]" {
+						post.Body += fmt.Sprintf("\n\n--- Comment:\n%s", c.Body)
+					}
+				}
+			}
+			time.Sleep(500 * time.Millisecond)
+
 			if err := rr.insertPost(ctx, post); err != nil {
 				fmt.Printf("  Insert error: %v\n", err)
 			} else {

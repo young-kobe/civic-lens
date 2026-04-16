@@ -214,7 +214,7 @@ class Analyzer:
                     confidence=float(response.get("sentiment_confidence", 0.5)),
                     evidence_spans=response.get("sentiment_evidence_spans", []),
                     sarcasm_detected=bool(response.get("sarcasm_detected", False)),
-                    reasoning=response.get("reasoning"),
+                    reasoning=response.get("sentiment_reasoning"),
                     deterministic_signals=signals
                 )
                 
@@ -234,7 +234,7 @@ class Analyzer:
                     overall_gop_stance=response.get("overall_gop_stance", "neutral"),
                     overall_confidence=float(response.get("overall_favorability_confidence", 0.5)),
                     gop_entities_found=gop_entities,
-                    reasoning=response.get("reasoning"),
+                    reasoning=response.get("favorability_reasoning"),
                     deterministic_signals=signals
                 )
                 

@@ -104,14 +104,14 @@ class SentimentAggregator:
             # Fetch sentiment data
             if cutoff:
                 cursor.execute("""
-                    SELECT a.doc_id, a.output_json, a.confidence, d.source_type, d.published_at, d.title
+                    SELECT a.doc_id, a.output_json, a.confidence, d.source_type, d.published_at, d.title, d.domain_or_subreddit, d.ident, d.text
                     FROM ai_outputs a
                     JOIN docs d ON a.doc_id = d.doc_id
                     WHERE a.task_type = 'sentiment' AND d.published_at >= ?
                 """, (cutoff,))
             else:
                 cursor.execute("""
-                    SELECT a.doc_id, a.output_json, a.confidence, d.source_type, d.published_at, d.title
+                    SELECT a.doc_id, a.output_json, a.confidence, d.source_type, d.published_at, d.title, d.domain_or_subreddit, d.ident, d.text
                     FROM ai_outputs a
                     JOIN docs d ON a.doc_id = d.doc_id
                     WHERE a.task_type = 'sentiment'
@@ -157,7 +157,7 @@ class SentimentAggregator:
         now = datetime.now()
         label_map = {"POSITIVE": "positive", "NEGATIVE": "negative", "NEUTRAL": "neutral", "MIXED": "neutral"}
 
-        for doc_id, output_json, confidence, source_type, published_at, title in rows:
+        for doc_id, output_json, confidence, source_type, published_at, title, domain_or_subreddit, ident, text in rows:
             if doc_id in bot_docs:
                 accum["excluded_bots"] += 1
                 continue
@@ -185,7 +185,7 @@ class SentimentAggregator:
             self._increment_bucket(accum["by_time"], self._get_time_bucket(published_at, now), label_key)
             self._collect_topic_sample(
                 accum["topic_samples"], topic, doc_id, label, conf,
-                data, title, source_type,
+                data, title, source_type, published_at, domain_or_subreddit, ident, text,
             )
             accum["count"] += 1
 
@@ -221,24 +221,46 @@ class SentimentAggregator:
         data: Dict[str, Any],
         title: Optional[str],
         source_type: Optional[str],
+        published_at: Optional[float],
+        domain_or_subreddit: Optional[str],
+        ident: Optional[str],
+        text: Optional[str],
     ) -> None:
         """Collect a classification sample for a topic (capped at 5 per topic)."""
         MAX_SAMPLES_PER_TOPIC = 5
+        MAX_EVIDENCE_PER_SAMPLE = 5
         if topic not in topic_samples:
             topic_samples[topic] = []
         samples = topic_samples[topic]
         reasoning = data.get("reasoning", "")
         if not reasoning:
             return
+
+        raw_spans = data.get("evidence_spans", [])
+        clean_spans = SentimentAggregator._sanitize_evidence(raw_spans, MAX_EVIDENCE_PER_SAMPLE)
+
+        date_str = datetime.fromtimestamp(published_at).strftime('%b %d, %Y') if published_at else None
+        url = None
+        if ident:
+            if ident.startswith("http"):
+                url = ident
+            elif source_type and source_type.startswith("reddit"):
+                post_id = ident.replace("t3_", "").replace("t1_", "")
+                url = f"https://reddit.com/r/{domain_or_subreddit or 'all'}/comments/{post_id}"
+
         sample = {
             "doc_id": doc_id,
             "label": label,
             "confidence": confidence,
             "reasoning": reasoning,
-            "evidence_spans": data.get("evidence_spans", []),
+            "evidence_spans": clean_spans,
             "sarcasm_detected": bool(data.get("sarcasm_detected", False)),
             "title": title or "",
             "source_type": source_type or "unknown",
+            "source_name": domain_or_subreddit,
+            "date": date_str,
+            "full_text": text or "",
+            "url": url,
         }
         if len(samples) < MAX_SAMPLES_PER_TOPIC:
             samples.append(sample)
@@ -246,6 +268,41 @@ class SentimentAggregator:
         elif confidence > samples[-1]["confidence"]:
             samples[-1] = sample
             samples.sort(key=lambda s: s["confidence"], reverse=True)
+
+    @staticmethod
+    def _sanitize_evidence(spans: list, max_count: int = 5) -> list:
+        """
+        Clean evidence spans: deduplicate, remove placeholders, filter trivial.
+
+        Removes:
+        - Placeholder text (e.g. 'exact quote 1')
+        - @-mention-only spans
+        - Very short or single-word spans
+        - Duplicate spans (case-insensitive)
+        """
+        seen: set = set()
+        result: list = []
+        placeholder_pattern = re.compile(r"^exact quote", re.IGNORECASE)
+        mention_pattern = re.compile(r"^@\w+$")
+
+        for span in spans:
+            if not isinstance(span, str):
+                continue
+            trimmed = span.strip()
+            if not trimmed or len(trimmed) < 4:
+                continue
+            if placeholder_pattern.match(trimmed):
+                continue
+            # Filter placeholders, but do NOT filter by word count or mentions
+            # since a single word like 'Satanists' or a single mention '@x' is valid evidence if the LLM chose it.
+            key = trimmed.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            result.append(trimmed)
+            if len(result) >= max_count:
+                break
+        return result
 
     def _build_sentiment_result(self, accum: Dict[str, Any]) -> PublicSentimentResult:
         """Construct PublicSentimentResult from pre-aggregated data."""
@@ -422,7 +479,11 @@ class SentimentAggregator:
                     confidence=s["confidence"], reasoning=s["reasoning"],
                     evidence_spans=s["evidence_spans"],
                     sarcasm_detected=s["sarcasm_detected"],
-                    title=s["title"], source_type=s["source_type"],
+                    title=s.get("title"), source_type=s.get("source_type"),
+                    source_name=s.get("source_name"),
+                    date=s.get("date"),
+                    full_text=s.get("full_text", ""),
+                    url=s.get("url"),
                 )
                 for s in raw_samples
             ]

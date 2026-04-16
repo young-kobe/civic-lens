@@ -169,10 +169,10 @@ function TopicRow({ item }: TopicRowProps) {
                     <div style={{ display: 'flex', gap: '12px', fontSize: '12px', color: 'var(--text-muted)' }}>
                         <span>{item.volume.toLocaleString()} items</span>
                         <span style={{ color: SENTIMENT_COLORS.positive }}>
-                            {((item.positive / total) * 100).toFixed(0)}% pos
+                            {((item.positive / total) * 100).toFixed(0)}% positive tone
                         </span>
                         <span style={{ color: SENTIMENT_COLORS.negative }}>
-                            {((item.negative / total) * 100).toFixed(0)}% neg
+                            {((item.negative / total) * 100).toFixed(0)}% negative tone
                         </span>
                     </div>
                 </div>
@@ -222,25 +222,70 @@ interface ClassificationSampleCardProps {
 }
 
 function ClassificationSampleCard({ sample }: ClassificationSampleCardProps) {
+    const [showFull, setShowFull] = useState(false);
     const badgeStyle = LABEL_BADGE_STYLES[sample.label] || LABEL_BADGE_STYLES.NEUTRAL;
+
+    // Aggressively filter and deduplicate evidence spans
+    const MAX_EVIDENCE_DISPLAY = 5;
+    const seen = new Set<string>();
+    const meaningfulSpans = (sample.evidence_spans || []).filter((span: string) => {
+        const trimmed = span.trim();
+        if (!trimmed || trimmed.length < 4) return false;
+        // Filter placeholder text the LLM may return from schema examples
+        if (/^exact quote/i.test(trimmed)) return false;
+        if (/^<.*>$/.test(trimmed)) return false;
+        // Do not filter by word count or single mentions (they are valid if the LLM outputted them)
+        // Deduplicate (case-insensitive)
+        const key = trimmed.toLowerCase();
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    }).slice(0, MAX_EVIDENCE_DISPLAY);
+
+    // Confidence color coding
+    const confPct = sample.confidence * 100;
+    const confColor = confPct >= 80 ? '#16a34a' : confPct >= 50 ? '#ca8a04' : '#dc2626';
+    const confLabel = confPct >= 80 ? 'High' : confPct >= 50 ? 'Medium' : 'Low';
 
     return (
         <div style={{
             background: 'var(--bg-card, #fff)', borderRadius: 'var(--radius-sm)',
-            padding: '10px 12px', border: '1px solid var(--neutral-100, #e2e8f0)',
+            padding: '12px 14px', border: '1px solid var(--neutral-100, #e2e8f0)',
+            transition: 'box-shadow 0.15s ease',
         }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px', flexWrap: 'wrap' }}>
+            {/* Header row */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px', flexWrap: 'wrap' }}>
                 {/* Label badge */}
                 <span style={{
                     fontSize: '10px', fontWeight: 700, padding: '2px 7px',
                     borderRadius: '4px', background: badgeStyle.bg, color: badgeStyle.text,
                     textTransform: 'uppercase', letterSpacing: '0.04em',
                 }}>
-                    {sample.label}
+                    {sample.label} TONE
                 </span>
-                {/* Confidence */}
-                <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                    {(sample.confidence * 100).toFixed(0)}% conf
+                {/* Confidence indicator */}
+                <span
+                    title={`Model confidence: ${confPct.toFixed(1)}% (${confLabel})`}
+                    style={{
+                        display: 'inline-flex', alignItems: 'center', gap: '4px',
+                        fontSize: '11px', color: 'var(--text-muted)',
+                    }}
+                >
+                    <span style={{ fontSize: '10px', opacity: 0.6 }}>Confidence</span>
+                    <span style={{
+                        display: 'inline-block', width: '40px', height: '4px',
+                        borderRadius: '2px', background: 'var(--neutral-200, #e2e8f0)',
+                        overflow: 'hidden', position: 'relative',
+                    }}>
+                        <span style={{
+                            position: 'absolute', left: 0, top: 0, bottom: 0,
+                            width: `${confPct}%`, background: confColor,
+                            borderRadius: '2px', transition: 'width 0.3s ease',
+                        }} />
+                    </span>
+                    <span style={{ color: confColor, fontWeight: 600 }}>
+                        {confPct.toFixed(0)}%
+                    </span>
                 </span>
                 {/* Sarcasm flag */}
                 {sample.sarcasm_detected && (
@@ -251,37 +296,110 @@ function ClassificationSampleCard({ sample }: ClassificationSampleCardProps) {
                         SARCASM
                     </span>
                 )}
-                {/* Source type */}
-                <span style={{ fontSize: '10px', color: 'var(--text-muted)', marginLeft: 'auto' }}>
-                    {sample.source_type}
+                {/* Source info */}
+                <span style={{
+                    fontSize: '10px', color: 'var(--text-muted)', marginLeft: 'auto',
+                    display: 'flex', alignItems: 'center', gap: '6px'
+                }}>
+                    {(sample.source_name || sample.date) && (
+                        <span style={{ opacity: 0.8 }}>
+                            {[sample.source_name, sample.date].filter(Boolean).join(' • ')}
+                        </span>
+                    )}
+                    <span style={{
+                        padding: '2px 6px', borderRadius: '4px',
+                        background: 'var(--neutral-100, #f1f5f9)',
+                    }}>
+                        {sample.source_type}
+                    </span>
                 </span>
             </div>
+
             {/* Title */}
             {sample.title && (
                 <div style={{ fontSize: '12px', fontWeight: 500, marginBottom: '4px', lineHeight: 1.3 }}>
-                    {sample.title.length > 80 ? sample.title.slice(0, 80) + '...' : sample.title}
+                    {sample.title.length > 100 ? sample.title.slice(0, 100) + '...' : sample.title}
                 </div>
             )}
-            {/* Reasoning */}
+
+            {/* Reasoning (truncated with expand) */}
             <div style={{ fontSize: '12px', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-                {sample.reasoning}
+                {showFull || sample.reasoning.length <= 150
+                    ? sample.reasoning
+                    : sample.reasoning.slice(0, 150) + '...'}
+                {sample.reasoning.length > 150 && (
+                    <button
+                        onClick={() => setShowFull(!showFull)}
+                        style={{
+                            background: 'none', border: 'none', color: 'var(--accent-primary, #3b82f6)',
+                            cursor: 'pointer', fontSize: '11px', fontWeight: 500,
+                            marginLeft: '4px', padding: 0,
+                        }}
+                    >
+                        {showFull ? 'Show less' : 'Show more'}
+                    </button>
+                )}
             </div>
-            {/* Evidence spans */}
-            {sample.evidence_spans.length > 0 && (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '6px' }}>
-                    {sample.evidence_spans.slice(0, 3).map((span, i) => (
-                        <span key={i} style={{
-                            fontSize: '10px', padding: '2px 6px', borderRadius: '4px',
-                            background: 'var(--neutral-100, #f1f5f9)',
-                            color: 'var(--text-secondary)', fontStyle: 'italic',
-                            maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap',
-                        }}>
+
+            {/* Evidence spans - only meaningful, deduped, capped */}
+            {meaningfulSpans.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '8px' }}>
+                    {meaningfulSpans.map((span: string, i: number) => (
+                        <span
+                            key={i}
+                            title={span}
+                            style={{
+                                fontSize: '10px', padding: '3px 8px', borderRadius: '4px',
+                                background: 'var(--neutral-100, #f1f5f9)',
+                                color: 'var(--text-secondary)', fontStyle: 'italic',
+                                maxWidth: '280px', overflow: 'hidden', textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap', cursor: 'help',
+                                borderLeft: `2px solid ${badgeStyle.text}`,
+                            }}
+                        >
                             &quot;{span}&quot;
                         </span>
                     ))}
                 </div>
             )}
+
+            {/* Source Text */}
+            {sample.full_text && (
+                <div style={{ 
+                    marginTop: '12px', padding: '10px', background: 'var(--neutral-50, #f8fafc)', 
+                    borderRadius: '6px', border: '1px solid var(--neutral-100, #e2e8f0)', 
+                    fontSize: '11px', color: 'var(--text-secondary)' 
+                }}>
+                    <div style={{ 
+                        fontWeight: 600, color: 'var(--text-muted)', marginBottom: '6px', 
+                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                        textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '9px'
+                    }}>
+                        <span>Source Text</span>
+                        {sample.url && (
+                            <a href={sample.url} target="_blank" rel="noreferrer" style={{ 
+                                color: 'var(--accent-primary, #3b82f6)', textDecoration: 'none', 
+                                textTransform: 'none', fontSize: '11px', letterSpacing: 'normal' 
+                            }}>
+                                View Original ↗
+                            </a>
+                        )}
+                    </div>
+                    <div style={{ lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
+                        {showFull || sample.full_text.length <= 150 
+                            ? sample.full_text 
+                            : sample.full_text.slice(0, 150) + '...'}
+                    </div>
+                </div>
+            )}
+
+            {/* Doc reference */}
+            <div style={{
+                marginTop: '6px', fontSize: '10px', color: 'var(--text-muted)',
+                opacity: 0.6,
+            }}>
+                Doc #{sample.doc_id}
+            </div>
         </div>
     );
 }
@@ -705,17 +823,36 @@ function GOPPollingComparison({ data }: { data: PollingSocialComparison }) {
                 <div className="card" style={{ background: 'var(--neutral-50)', border: 'none', padding: 'var(--space-3)' }}>
                     <div className="flex items-center gap-2 mb-2">
                         <span className="badge badge-neutral">Live Polling</span>
+                        {data.pollingData?.source && (
+                            <span style={{ fontSize: '10px', color: 'var(--text-muted)', marginLeft: 'auto' }}>
+                                {data.pollingData.source}
+                            </span>
+                        )}
                     </div>
                     {data.pollingData ? (
-                        <SentimentBar
-                            positive={data.pollingData.favorable}
-                            negative={data.pollingData.unfavorable}
-                            neutral={data.pollingData.neutral}
-                            height={24}
-                            showLabels={true}
-                        />
+                        <>
+                            <SentimentBar
+                                positive={data.pollingData.favorable}
+                                negative={data.pollingData.unfavorable}
+                                neutral={data.pollingData.neutral}
+                                height={24}
+                                showLabels={true}
+                            />
+                            {data.pollingData.date && (
+                                <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '4px', textAlign: 'right' }}>
+                                    Last updated: {data.pollingData.date}
+                                </div>
+                            )}
+                        </>
                     ) : (
-                        <p className="text-muted text-xs">No polling data available</p>
+                        <div style={{
+                            padding: '8px 12px', borderRadius: 'var(--radius-sm)',
+                            background: 'rgba(234,179,8,0.08)', border: '1px solid rgba(234,179,8,0.2)',
+                        }}>
+                            <p className="text-muted text-xs" style={{ margin: 0 }}>
+                                Live polling data is currently unavailable. This may be due to a network issue or a change in the source page structure.
+                            </p>
+                        </div>
                     )}
                 </div>
             </div>

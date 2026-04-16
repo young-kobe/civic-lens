@@ -11,6 +11,7 @@ if project_root not in sys.path:
 
 from analysis.src.engine.bot import HybridBotDetector
 from analysis.src.engine.clustering import ContentClusterer
+from analysis.src.engine.analyzer import Analyzer
 
 class TestEngines(unittest.TestCase):
     def test_bot_detector(self):
@@ -39,6 +40,42 @@ class TestEngines(unittest.TestCase):
         self.assertEqual(len(clusters), 2)
         sizes = sorted([c['size'] for c in clusters])
         self.assertEqual(sizes, [2, 2])
+
+
+class TestAnalyzer(unittest.TestCase):
+    """Tests for heuristic-only Analyzer classification."""
+
+    def setUp(self):
+        self.analyzer = Analyzer(llm_enabled=False)
+
+    def test_derogatory_text_is_negative(self):
+        """Derogatory labels directed at a political group should classify as NEGATIVE."""
+        sent, _ = self.analyzer.analyze_full("Democrats are satanists and traitors")
+        self.assertEqual(sent.label, "NEGATIVE")
+        self.assertGreater(sent.confidence, 0.5)
+
+    def test_empty_text_is_neutral(self):
+        """Empty text should classify as NEUTRAL with zero confidence."""
+        sent, _ = self.analyzer.analyze_full("")
+        self.assertEqual(sent.label, "NEUTRAL")
+        self.assertEqual(sent.confidence, 0.0)
+
+    def test_clearly_positive_text(self):
+        """Clearly positive text should classify as POSITIVE."""
+        sent, _ = self.analyzer.analyze_full("This reform is excellent and beneficial for progress")
+        self.assertEqual(sent.label, "POSITIVE")
+        self.assertGreater(sent.confidence, 0.5)
+
+    def test_clearly_negative_text(self):
+        """Hostile language should classify as NEGATIVE."""
+        sent, _ = self.analyzer.analyze_full("This is a terrible disaster and a complete failure")
+        self.assertEqual(sent.label, "NEGATIVE")
+        self.assertGreater(sent.confidence, 0.5)
+
+    def test_neutral_text(self):
+        """Neutral factual text with no sentiment words should be NEUTRAL."""
+        sent, _ = self.analyzer.analyze_full("The committee met on Tuesday to discuss the schedule")
+        self.assertEqual(sent.label, "NEUTRAL")
 
 if __name__ == '__main__':
     unittest.main()

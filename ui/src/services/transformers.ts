@@ -51,6 +51,8 @@ export function transformFavorability(apiData: any): FavorabilityData {
                 favorable: pollingData.favorable ?? 0,
                 unfavorable: pollingData.unfavorable ?? 0,
                 neutral: pollingData.neutral ?? 0,
+                source: pollingData.source,
+                date: pollingData.date,
             } : null,
         },
     };

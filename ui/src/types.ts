@@ -111,6 +111,10 @@ export interface ClassificationSample {
     sarcasm_detected: boolean;
     title: string;
     source_type: string;
+    source_name?: string;
+    date?: string;
+    full_text?: string;
+    url?: string;
 }
 
 export interface SentimentBreakdown {
@@ -177,7 +181,7 @@ export interface DemographicBreakdown {
 
 export interface PollingSocialComparison {
     onlineSentiment: { favorable: number; unfavorable: number; neutral: number };
-    pollingData: { favorable: number; unfavorable: number; neutral: number } | null;
+    pollingData: { favorable: number; unfavorable: number; neutral: number; source?: string; date?: string } | null;
 }
 
 // Bot Activity types
