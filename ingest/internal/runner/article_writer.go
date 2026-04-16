@@ -77,7 +77,7 @@ func (w *ArticleWriter) WriteFromMeta(page *model.Page, meta *html.Metadata, has
 }
 
 // Start begins the background flush loop. Call this in a goroutine.
-func (w *ArticleWriter) Start(ctx context.Context) {
+func (w *ArticleWriter) Start() {
 	defer close(w.done)
 
 	buf := make([]articleEntry, 0, w.batchSize)
@@ -89,24 +89,20 @@ func (w *ArticleWriter) Start(ctx context.Context) {
 		case entry, ok := <-w.ch:
 			if !ok {
 				// Channel closed — flush remaining
-				w.flush(ctx, buf)
+				w.flush(context.Background(), buf)
 				return
 			}
 			buf = append(buf, entry)
 			if len(buf) >= w.batchSize {
-				w.flush(ctx, buf)
+				w.flush(context.Background(), buf)
 				buf = buf[:0]
 			}
 
 		case <-ticker.C:
 			if len(buf) > 0 {
-				w.flush(ctx, buf)
+				w.flush(context.Background(), buf)
 				buf = buf[:0]
 			}
-
-		case <-ctx.Done():
-			w.flush(ctx, buf)
-			return
 		}
 	}
 }

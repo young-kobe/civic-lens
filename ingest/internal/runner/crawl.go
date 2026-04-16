@@ -53,7 +53,7 @@ func (cr *CrawlRunner) Run(ctx context.Context) (*CrawlResult, error) {
 
 	// Start batched article writer
 	cr.writer = NewArticleWriter(cr.app.Database)
-	go cr.writer.Start(ctx)
+	go cr.writer.Start()
 	defer cr.writer.Close()
 
 	// Recover stale items
@@ -99,8 +99,10 @@ func (cr *CrawlRunner) Run(ctx context.Context) (*CrawlResult, error) {
 	}
 
 done:
-	// Wait for in-flight workers
-	sem.Acquire(context.Background(), int64(cfg.Crawl.MaxConcurrency))
+	// Wait for in-flight workers with a final 5s timeout
+	cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cleanupCancel()
+	sem.Acquire(cleanupCtx, int64(cfg.Crawl.MaxConcurrency))
 
 	return &CrawlResult{
 		Fetched: cr.fetched,
@@ -112,7 +114,7 @@ done:
 func (cr *CrawlRunner) processPage(ctx context.Context, page *model.Page) {
 	// Check robots.txt
 	if cr.app.Robots != nil && !cr.app.Robots.IsAllowed(ctx, page.URLRaw) {
-		cr.app.Frontier.MarkFailed(ctx, page, "disallowed by robots.txt", true)
+		cr.app.Frontier.MarkFailed(context.Background(), page, "disallowed by robots.txt", true)
 		return
 	}
 
@@ -122,7 +124,7 @@ func (cr *CrawlRunner) processPage(ctx context.Context, page *model.Page) {
 
 	if result.Error != nil {
 		atomic.AddInt64(&cr.errors, 1)
-		cr.app.Frontier.MarkFailed(ctx, page, result.Error.Error(), false)
+		cr.app.Frontier.MarkFailed(context.Background(), page, result.Error.Error(), false)
 		return
 	}
 
@@ -132,7 +134,7 @@ func (cr *CrawlRunner) processPage(ctx context.Context, page *model.Page) {
 
 	if result.StatusCode < 200 || result.StatusCode >= 300 {
 		atomic.AddInt64(&cr.errors, 1)
-		cr.app.Frontier.MarkFailed(ctx, page, fmt.Sprintf("HTTP %d", result.StatusCode), result.StatusCode >= 400 && result.StatusCode < 500)
+		cr.app.Frontier.MarkFailed(context.Background(), page, fmt.Sprintf("HTTP %d", result.StatusCode), result.StatusCode >= 400 && result.StatusCode < 500)
 		return
 	}
 
@@ -144,7 +146,7 @@ func (cr *CrawlRunner) processPage(ctx context.Context, page *model.Page) {
 	hash, err := cr.app.RawStore.Store(ctx, result.Body, ext)
 	if err != nil {
 		atomic.AddInt64(&cr.errors, 1)
-		cr.app.Frontier.MarkFailed(ctx, page, err.Error(), false)
+		cr.app.Frontier.MarkFailed(context.Background(), page, err.Error(), false)
 		return
 	}
 
@@ -161,7 +163,7 @@ func (cr *CrawlRunner) processPage(ctx context.Context, page *model.Page) {
 				sameDomainLinks = append(sameDomainLinks, link)
 			}
 		}
-		cr.app.Frontier.PushLinks(ctx, sameDomainLinks, 0)
+		cr.app.Frontier.PushLinks(context.Background(), sameDomainLinks, 0)
 	}
 
 	// Update canonical if found
@@ -174,5 +176,5 @@ func (cr *CrawlRunner) processPage(ctx context.Context, page *model.Page) {
 		cr.writer.WriteFromMeta(page, meta, hash)
 	}
 
-	cr.app.Frontier.MarkDone(ctx, page)
+	cr.app.Frontier.MarkDone(context.Background(), page)
 }

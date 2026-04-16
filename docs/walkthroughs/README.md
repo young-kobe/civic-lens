@@ -31,3 +31,4 @@ Each document captures what was changed, why, and the verification results.
 | 024 | [Sentiment Caching & UI Fixes](024-sentiment-caching-ui-fixes.md) | Snapshot caching system, sentiment gauge fix |
 | 025 | [Unified Text Analyzer](025-unified-text-analyzer.md) | Combined sentiment and favorability LLM pass |
 | 026 | [Audit Remediation](026-audit-remediation.md) | Fix concurrency, DB bottlenecks, and dynamic migrations |
+| 027 | [SQLite Optimization](027-sqlite-optimization.md) | Context graceful shutdown and SQLite write performance tuning |

@@ -4,7 +4,7 @@ import { StoryClusters, PublicSentiment, BotActivityProfiler, GlobalHeatmap } fr
 import type { Filters } from './types';
 
 const TABS = [
-    { id: 'clusters', label: 'Story Clusters' },
+    // { id: 'clusters', label: 'Story Clusters' },
     { id: 'sentiment', label: 'Public Sentiment' },
     { id: 'bots', label: 'Bot Activity Profiler' },
     { id: 'heatmap', label: 'Global Heatmap' },
