@@ -111,7 +111,7 @@ class OllamaClient(BaseLLMClient):
                     self.total_tokens_used += result.get("eval_count", 0)
                 
                 response_text = result.get("response", "")
-                return self.parse_json_response(response_text)
+                return self.parse_json_response(response_text, schema=response_schema)
                 
             except requests.exceptions.Timeout:
                 last_error = TimeoutError(f"Ollama request timed out after {self.timeout}s")

@@ -70,6 +70,28 @@ TEXT_ANALYSIS_SCHEMA = {
     ]
 }
 
+# Claim Extraction Schema
+CLAIM_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "claim": {"type": "string"},
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "evidence_span": {"type": "string"},
+    },
+    "required": ["claim", "confidence", "evidence_span"],
+}
+
+CLAIM_EXTRACTION_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "claims": {
+            "type": "array",
+            "items": CLAIM_SCHEMA,
+        },
+    },
+    "required": ["claims"],
+}
+
 # Bot Detection Schema
 BOT_SCHEMA = {
     "type": "object",

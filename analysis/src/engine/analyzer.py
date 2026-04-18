@@ -16,6 +16,35 @@ from analysis.src.llm.schemas import TEXT_ANALYSIS_SCHEMA
 
 logger = get_logger(__name__)
 
+# Minimum word count for a valid evidence span (matches prompt rule).
+MIN_EVIDENCE_SPAN_WORDS = 4
+# Confidence ceiling when the model returned evidence spans but none were verifiable.
+UNVERIFIED_EVIDENCE_CONFIDENCE_CAP = 0.3
+
+
+def _validate_evidence_spans(spans: List[str], source_text: str) -> Tuple[List[str], bool]:
+    """Filter spans to those that are verbatim substrings of source_text with at least
+    MIN_EVIDENCE_SPAN_WORDS words. Returns (valid_spans, had_invalid_spans).
+
+    Fabricated or paraphrased evidence violates invariant B2 (traceability), so we
+    drop it rather than store it. The caller uses had_invalid_spans to decide
+    whether to cap confidence.
+    """
+    if not spans:
+        return [], False
+    source_lower = source_text.lower()
+    valid: List[str] = []
+    for span in spans:
+        if not isinstance(span, str):
+            continue
+        cleaned = span.strip()
+        if len(cleaned.split()) < MIN_EVIDENCE_SPAN_WORDS:
+            continue
+        if cleaned.lower() not in source_lower:
+            continue
+        valid.append(cleaned)
+    return valid, len(valid) < len([s for s in spans if isinstance(s, str) and s.strip()])
+
 
 class Analyzer:
     """
@@ -208,36 +237,54 @@ class Analyzer:
                     response_schema=TEXT_ANALYSIS_SCHEMA
                 )
                 
-                # Parse sentiment
+                # Parse sentiment with evidence-span validation (invariant B2).
+                sent_conf = float(response.get("sentiment_confidence", 0.5))
+                sent_spans, sent_had_invalid = _validate_evidence_spans(
+                    response.get("sentiment_evidence_spans", []) or [], text
+                )
+                if sent_had_invalid and not sent_spans:
+                    sent_conf = min(sent_conf, UNVERIFIED_EVIDENCE_CONFIDENCE_CAP)
+
                 sentiment_res = SentimentResult(
                     label=response.get("sentiment_label", "NEUTRAL"),
-                    confidence=float(response.get("sentiment_confidence", 0.5)),
-                    evidence_spans=response.get("sentiment_evidence_spans", []),
+                    confidence=sent_conf,
+                    evidence_spans=sent_spans,
                     sarcasm_detected=bool(response.get("sarcasm_detected", False)),
                     reasoning=response.get("sentiment_reasoning"),
                     deterministic_signals=signals
                 )
-                
+
                 # Parse favorability
                 entity_stances = []
                 for es in response.get("entity_stances", []):
                     if not isinstance(es, dict): continue
+                    es_conf = float(es.get("confidence", 0.5))
+                    es_spans, es_had_invalid = _validate_evidence_spans(
+                        es.get("evidence_spans", []) or [], text
+                    )
+                    if es_had_invalid and not es_spans:
+                        es_conf = min(es_conf, UNVERIFIED_EVIDENCE_CONFIDENCE_CAP)
                     entity_stances.append(EntityStance(
                         entity=es.get("entity", "unknown"),
                         stance=es.get("stance", "neutral"),
-                        confidence=float(es.get("confidence", 0.5)),
-                        evidence_spans=es.get("evidence_spans", [])
+                        confidence=es_conf,
+                        evidence_spans=es_spans,
                     ))
-                    
+
+                fav_conf = float(response.get("overall_favorability_confidence", 0.5))
+                if entity_stances and all(not s.evidence_spans for s in entity_stances):
+                    # Whole favorability call had no verifiable evidence — cap overall too.
+                    fav_conf = min(fav_conf, UNVERIFIED_EVIDENCE_CONFIDENCE_CAP)
+
                 favorability_res = FavorabilityResult(
                     entity_stances=entity_stances,
                     overall_gop_stance=response.get("overall_gop_stance", "neutral"),
-                    overall_confidence=float(response.get("overall_favorability_confidence", 0.5)),
+                    overall_confidence=fav_conf,
                     gop_entities_found=gop_entities,
                     reasoning=response.get("favorability_reasoning"),
                     deterministic_signals=signals
                 )
-                
+
                 return sentiment_res, favorability_res
                 
             except Exception as e:

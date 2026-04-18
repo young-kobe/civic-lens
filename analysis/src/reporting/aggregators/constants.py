@@ -86,36 +86,6 @@ TOPIC_KEYWORDS = {
 
 
 # =============================================================================
-# Story Cluster Constants
-# =============================================================================
-
-# Source type categorization for content type classification
-# SOCIAL_PLATFORMS and NEWS_PLATFORMS (above) are the canonical sets.
-# These aliases exist for semantic clarity in story-specific code.
-ARTICLE_SOURCE_TYPES = NEWS_PLATFORMS
-
-# Display names for source types in UI
-SOURCE_DISPLAY_NAMES = {
-    'news': 'News Articles',
-    'rss': 'RSS Feeds',
-    'reddit_post': 'Reddit Posts',
-    'reddit_comment': 'Reddit Comments',
-    'x_post': 'X Posts',
-    'social': 'Social Media',
-}
-
-# Map source types to simplified type categories
-SOURCE_TYPE_MAP = {
-    'news': 'news',
-    'rss': 'news',
-    'reddit_post': 'reddit',
-    'reddit_comment': 'reddit',
-    'x_post': 'social',
-    'social': 'social',
-}
-
-
-# =============================================================================
 # Geographic Constants
 # =============================================================================
 

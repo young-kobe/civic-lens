@@ -99,10 +99,5 @@ class TestAPI(unittest.TestCase):
         self.assertIn('r/politics', outlets)
         self.assertGreater(outlets['r/politics']['bot_rate'], 0.0)
 
-    def test_clustering_flow(self):
-        resp = requests.post(f"{API_URL}/api/run/clustering")
-        self.assertEqual(resp.status_code, 200)
-        self.assertGreater(resp.json()['clusters_created'], 0)
-
 if __name__ == '__main__':
     unittest.main()

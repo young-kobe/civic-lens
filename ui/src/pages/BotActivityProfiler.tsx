@@ -10,7 +10,7 @@ interface BotOverviewMetricsProps {
 
 function BotOverviewMetrics({ data }: BotOverviewMetricsProps) {
     return (
-        <div className="grid-3 mb-6">
+        <div className="grid-3 mb-4">
             <MetricCard
                 label="Suspected Automation Rate"
                 value={`${data.suspectedAutomationRate}%`}
@@ -23,12 +23,12 @@ function BotOverviewMetrics({ data }: BotOverviewMetricsProps) {
                 subtitle="0 = none, 1 = highly coordinated"
             />
             <Card title="Top Amplified Clusters">
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-1">
                     {data.topClusters.map((cluster, i) => (
                         <span key={i} className="badge badge-warning">{cluster}</span>
                     ))}
                 </div>
-                <div className="text-xs text-muted mt-3">
+                <div className="eyebrow mt-3 num">
                     {data.totalFlaggedAccounts.toLocaleString()} accounts flagged
                 </div>
             </Card>
@@ -53,13 +53,13 @@ function NarrativeAmplificationCard({ narrative }: NarrativeAmplificationCardPro
     };
 
     return (
-        <Card className="mb-4">
+        <Card className="mb-3">
             <div className="flex items-start justify-between mb-3">
                 <div>
-                    <h4 className="font-semibold">{narrative.narrative}</h4>
+                    <h4 className="font-semibold uppercase" style={{ letterSpacing: '0.02em' }}>{narrative.narrative}</h4>
                     <div className="flex items-center gap-2 mt-1">
                         {getConfidenceBadge(narrative.confidence)}
-                        <span className="text-xs text-muted">
+                        <span className="eyebrow num">
                             {narrative.suspectedBotVolume.toLocaleString()} suspected bot posts
                         </span>
                     </div>
@@ -73,8 +73,8 @@ function NarrativeAmplificationCard({ narrative }: NarrativeAmplificationCardPro
             </div>
 
             {/* Always visible: Why flagged */}
-            <div className="mb-4">
-                <div className="text-xs font-medium text-muted mb-2">Why flagged (suspected coordination indicators)</div>
+            <div className="mb-3">
+                <div className="eyebrow mb-2">Why Flagged · Coordination Indicators</div>
                 <ul style={{ margin: 0, paddingLeft: 'var(--space-5)' }} className="text-sm">
                     {narrative.whyFlagged.map((reason, i) => (
                         <li key={i} className="mb-1">{reason}</li>
@@ -85,17 +85,18 @@ function NarrativeAmplificationCard({ narrative }: NarrativeAmplificationCardPro
             {expanded && (
                 <>
                     {/* Example Posts */}
-                    <div className="mb-4">
-                        <div className="text-xs font-medium text-muted mb-2">Example posts</div>
+                    <div className="mb-3">
+                        <div className="eyebrow mb-2">Example Posts</div>
                         <div className="flex flex-col gap-2">
                             {narrative.examplePosts.map((post, i) => (
                                 <div
                                     key={i}
                                     className="text-sm"
                                     style={{
-                                        padding: 'var(--space-3)',
-                                        background: 'var(--neutral-50)',
-                                        borderRadius: 'var(--radius-md)',
+                                        padding: 'var(--space-2) var(--space-3)',
+                                        background: 'var(--bg-inset)',
+                                        borderLeft: '2px solid var(--neutral-300)',
+                                        borderRadius: '2px',
                                         fontStyle: 'italic',
                                     }}
                                 >
@@ -106,9 +107,9 @@ function NarrativeAmplificationCard({ narrative }: NarrativeAmplificationCardPro
                     </div>
 
                     {/* Hashtags and Phrases */}
-                    <div className="grid-2 gap-4 mb-4">
+                    <div className="grid-2 gap-3 mb-3">
                         <div>
-                            <div className="text-xs font-medium text-muted mb-2">Top hashtags</div>
+                            <div className="eyebrow mb-2">Top Hashtags</div>
                             <div className="flex flex-wrap gap-1">
                                 {narrative.topHashtags.map((tag, i) => (
                                     <span key={i} className="badge badge-accent">{tag}</span>
@@ -116,7 +117,7 @@ function NarrativeAmplificationCard({ narrative }: NarrativeAmplificationCardPro
                             </div>
                         </div>
                         <div>
-                            <div className="text-xs font-medium text-muted mb-2">Key phrases</div>
+                            <div className="eyebrow mb-2">Key Phrases</div>
                             <div className="flex flex-wrap gap-1">
                                 {narrative.topPhrases.map((phrase, i) => (
                                     <span key={i} className="badge badge-neutral">{phrase}</span>
@@ -127,7 +128,7 @@ function NarrativeAmplificationCard({ narrative }: NarrativeAmplificationCardPro
 
                     {/* Targets */}
                     <div>
-                        <div className="text-xs font-medium text-muted mb-2">Primary targets</div>
+                        <div className="eyebrow mb-2">Primary Targets</div>
                         <div className="flex flex-wrap gap-1">
                             {narrative.targets.map((target, i) => (
                                 <span key={i} className="badge badge-negative">{target}</span>
@@ -159,25 +160,25 @@ function CoordinationSummary({ data }: CoordinationSummaryProps) {
                 />
             }
         >
-            <div className="grid-2 gap-4">
-                <div className="flex flex-col gap-3">
-                    <div className="flex justify-between items-center">
+            <div className="grid-2 gap-3">
+                <div className="flex flex-col gap-2">
+                    <div className="flex justify-between items-center" style={{ padding: '6px 0', borderBottom: '1px solid var(--neutral-150)' }}>
                         <span className="text-sm">Burst timing similarity</span>
-                        <span className="font-mono font-medium">{(data.burstTimingSimilarity * 100).toFixed(0)}%</span>
+                        <span className="num font-semibold">{(data.burstTimingSimilarity * 100).toFixed(0)}%</span>
                     </div>
-                    <div className="flex justify-between items-center">
+                    <div className="flex justify-between items-center" style={{ padding: '6px 0' }}>
                         <span className="text-sm">Accounts showing reuse patterns</span>
-                        <span className="font-mono font-medium">{data.accountReuse.toLocaleString()}</span>
+                        <span className="num font-semibold">{data.accountReuse.toLocaleString()}</span>
                     </div>
                 </div>
-                <div className="flex flex-col gap-3">
-                    <div className="flex justify-between items-center">
+                <div className="flex flex-col gap-2">
+                    <div className="flex justify-between items-center" style={{ padding: '6px 0', borderBottom: '1px solid var(--neutral-150)' }}>
                         <span className="text-sm">Identical text pairs detected</span>
-                        <span className="font-mono font-medium">{data.identicalTextPairs.toLocaleString()}</span>
+                        <span className="num font-semibold">{data.identicalTextPairs.toLocaleString()}</span>
                     </div>
-                    <div className="flex justify-between items-center">
+                    <div className="flex justify-between items-center" style={{ padding: '6px 0' }}>
                         <span className="text-sm">Avg posts per suspected account</span>
-                        <span className="font-mono font-medium">{data.avgPostsPerSuspectedAccount.toFixed(1)}</span>
+                        <span className="num font-semibold">{data.avgPostsPerSuspectedAccount.toFixed(1)}</span>
                     </div>
                 </div>
             </div>
@@ -194,7 +195,7 @@ interface BehavioralSignalsPanelProps {
 
 function BehavioralSignalsPanel({ data }: BehavioralSignalsPanelProps) {
     return (
-        <div className="grid-2 gap-6">
+        <div className="grid-2 gap-3">
             {/* Account Age Distribution */}
             <Card title="Account Age Distribution">
                 <div className="flex flex-col gap-2">
@@ -202,13 +203,13 @@ function BehavioralSignalsPanel({ data }: BehavioralSignalsPanelProps) {
                         <div key={i}>
                             <div className="flex justify-between text-sm mb-1">
                                 <span>{item.range}</span>
-                                <span className="text-muted">{item.percentage}%</span>
+                                <span className="num text-muted">{item.percentage}%</span>
                             </div>
                             <div
                                 style={{
-                                    height: '8px',
+                                    height: '6px',
                                     background: 'var(--neutral-100)',
-                                    borderRadius: 'var(--radius-sm)',
+                                    borderRadius: '1px',
                                     overflow: 'hidden'
                                 }}
                             >
@@ -230,14 +231,24 @@ function BehavioralSignalsPanel({ data }: BehavioralSignalsPanelProps) {
 
             {/* Posting Cadence Heatmap */}
             <Card title="Posting Cadence Heatmap">
+                <div className="text-xs text-muted mb-2">
+                    Rows are days of the week (0 = Sunday), columns are hours (0–23, UTC). Darker cells indicate heavier
+                    posting volume among suspected-bot accounts. Human baseline is 9am–11pm local time; clusters in
+                    off-hours (02:00–05:00 UTC) are a red flag for automation, not proof of it.
+                </div>
                 <Heatmap data={data.postingCadence} cellSize={12} gap={1} />
                 <div className="card-note mt-4">
-                    Unusual posting patterns detected: high activity during off-hours (2-5 AM).
+                    Unusual posting patterns detected: concentrated activity during off-hours (02:00–05:00 UTC).
                 </div>
             </Card>
 
             {/* Copy/Paste Similarity */}
             <Card title="Text Similarity Distribution">
+                <div className="text-xs text-muted mb-3">
+                    Pairwise text similarity across suspected-bot posts. Natural discourse typically sits in the 20–30%
+                    range (shared vocabulary on the same topic). Values above 80% indicate near-duplicate content, a
+                    strong indicator of copy-paste amplification.
+                </div>
                 <div className="flex flex-col gap-3">
                     <div>
                         <div className="flex justify-between text-sm mb-1">
@@ -248,9 +259,9 @@ function BehavioralSignalsPanel({ data }: BehavioralSignalsPanelProps) {
                         </div>
                         <div
                             style={{
-                                height: '12px',
+                                height: '8px',
                                 background: 'var(--neutral-100)',
-                                borderRadius: 'var(--radius-sm)',
+                                borderRadius: '1px',
                                 overflow: 'hidden'
                             }}
                         >
@@ -272,9 +283,9 @@ function BehavioralSignalsPanel({ data }: BehavioralSignalsPanelProps) {
                         </div>
                         <div
                             style={{
-                                height: '12px',
+                                height: '8px',
                                 background: 'var(--neutral-100)',
-                                borderRadius: 'var(--radius-sm)',
+                                borderRadius: '1px',
                                 overflow: 'hidden'
                             }}
                         >
@@ -294,9 +305,9 @@ function BehavioralSignalsPanel({ data }: BehavioralSignalsPanelProps) {
                         </div>
                         <div
                             style={{
-                                height: '12px',
+                                height: '8px',
                                 background: 'var(--neutral-100)',
-                                borderRadius: 'var(--radius-sm)',
+                                borderRadius: '1px',
                                 overflow: 'hidden'
                             }}
                         >
@@ -314,11 +325,11 @@ function BehavioralSignalsPanel({ data }: BehavioralSignalsPanelProps) {
 
             {/* Link Domain Concentration */}
             <Card title="Link Domain Concentration">
-                <div className="flex flex-col gap-2">
+                <div className="flex flex-col">
                     {data.linkDomainConcentration.map((item, i) => (
-                        <div key={i} className="flex justify-between items-center">
-                            <span className="text-sm font-mono">{item.domain}</span>
-                            <span className="text-sm text-muted">{item.percentage}%</span>
+                        <div key={i} className="flex justify-between items-center" style={{ padding: '6px 0', borderBottom: '1px solid var(--neutral-150)' }}>
+                            <span className="text-sm" style={{ fontFamily: 'var(--font-mono)' }}>{item.domain}</span>
+                            <span className="num text-sm text-muted">{item.percentage}%</span>
                         </div>
                     ))}
                 </div>
@@ -391,27 +402,28 @@ function BotActivityProfiler({ filters }: BotActivityProfilerProps) {
     }
 
     return (
-        <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-4">
             {/* Important Disclaimer */}
             <div
-                className="card"
                 style={{
                     background: 'var(--semantic-warning-light)',
-                    border: '1px solid rgba(217, 119, 6, 0.2)'
+                    borderLeft: '3px solid var(--semantic-warning)',
+                    padding: 'var(--space-3) var(--space-4)',
+                    borderRadius: '2px',
                 }}
             >
                 <div className="flex gap-3">
                     <svg
                         viewBox="0 0 20 20"
                         fill="currentColor"
-                        style={{ width: '20px', height: '20px', color: 'var(--semantic-warning)', flexShrink: 0 }}
+                        style={{ width: '18px', height: '18px', color: 'var(--semantic-warning)', flexShrink: 0, marginTop: '2px' }}
                     >
                         <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
                     </svg>
                     <div>
-                        <h4 className="font-medium" style={{ color: 'var(--semantic-warning)' }}>
+                        <div className="eyebrow" style={{ color: 'var(--semantic-warning)' }}>
                             Calibrated Language Notice
-                        </h4>
+                        </div>
                         <p className="text-sm mt-1">
                             All activity described on this page is <strong>suspected</strong> or <strong>likely</strong> coordinated behavior.
                             These indicators suggest automated or coordinated patterns but do not constitute definitive proof.
@@ -426,7 +438,7 @@ function BotActivityProfiler({ filters }: BotActivityProfilerProps) {
 
             {/* Narrative Amplification */}
             <div>
-                <h3 className="text-lg font-semibold mb-4">Narratives with Suspected Bot Amplification</h3>
+                <div className="eyebrow mb-3">Narratives with Suspected Bot Amplification</div>
                 {data.narrativeAmplification.map((narrative) => (
                     <NarrativeAmplificationCard key={narrative.id} narrative={narrative} />
                 ))}
@@ -437,7 +449,7 @@ function BotActivityProfiler({ filters }: BotActivityProfilerProps) {
 
             {/* Behavioral Signals */}
             <div>
-                <h3 className="text-lg font-semibold mb-4">Behavioral Signals</h3>
+                <div className="eyebrow mb-3">Behavioral Signals</div>
                 <BehavioralSignalsPanel data={data.behavioralSignals} />
             </div>
         </div>

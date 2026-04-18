@@ -1,0 +1,87 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Project
+
+Civic Lens measures how political narratives propagate across news media and online discourse. It is an audit-driven system: every output must be traceable, include a confidence score, and never fabricate data (see `docs/INVARIANTS.md` and `.agent/rules/`).
+
+## Four-Layer Architecture
+
+The codebase is strictly layered. Changes should respect these boundaries — do not let a lower layer depend on a higher one.
+
+1. **Ingestion — Go (`ingest/`)**: Crash-resumable crawler + Reddit/X fetchers. Writes raw HTML/JSON to content-addressed storage (`data/raw/sha256/<hash>`) and metadata to SQLite (`data/civic_lens.db`). Entry: `ingest/cmd/civic-ingest/main.go` (cobra CLI with `migrate|ingest|crawl|reddit|x|requeue-stale` subcommands). Frontier state machine: `QUEUED -> INFLIGHT -> DONE|FAILED`; `INFLIGHT` rows are reset on startup.
+2. **Analysis — Python (`analysis/src/`)**:
+   - `etl/loader.py` normalizes raw → `docs` table, filtered to ~30 days of US-politics content.
+   - `engine/` runs bot detection, unified sentiment+favorability (`analyzer.py`), and TF-IDF clustering. Writes to `ai_outputs` and `clusters`.
+   - `llm/` wraps Gemini and Ollama behind `factory.get_llm_client()`, selected by `CIVIC_LLM_BACKEND`.
+   - `reporting/aggregators/` pre-computes dashboard data into `SnapshotCache` (`data/cache/*.json`) at multiple time windows (`24h|7d|30d|90d`).
+   - `scheduler/job_runner.py` orchestrates the full pipeline (ETL → bot → text → clustering → snapshots).
+3. **API — FastAPI (`analysis/src/api/server.py`)**: Stateless; serves pre-computed JSON from `data/cache/`. Heavy aggregation does *not* happen at request time — it runs in `job_runner.save_snapshots()`.
+4. **UI — React + Vite + TypeScript (`ui/src/`)**: Dev server proxies `/api/*` to `http://localhost:8000`. Consumes API only; no direct DB access.
+
+**Data flow:** RSS/Reddit/X → Go crawler → SQLite + raw files → Python ETL → LLM analysis → JSON snapshot cache → FastAPI → React.
+
+The cache is the contract between analysis and API: to make new data appear in the UI, add it to an aggregator and have `job_runner.save_snapshots()` write it under a key the API reads.
+
+## Commands
+
+All orchestration goes through `run.ps1` (PowerShell, Windows). It auto-creates `analysis/.venv`, loads `.env`, and resolves Go/Node paths.
+
+```powershell
+.\run.ps1 build                     # Build civic-ingest.exe
+.\run.ps1 migrate                   # Apply DB migrations
+.\run.ps1 crawl                     # Run web crawler (default 10m)
+.\run.ps1 reddit                    # Fetch Reddit posts/comments
+.\run.ps1 x                         # Fetch X/Twitter posts
+.\run.ps1 analyze                   # Full pipeline: ETL + AI + caching
+.\run.ps1 analyze -Tasks bot,text   # Run specific stages only
+.\run.ps1 analyze -Limit 50         # Cap docs processed per stage (dev)
+.\run.ps1 api                       # FastAPI on :8000
+.\run.ps1 ui                        # Vite dev server on :5173
+.\run.ps1 dev                       # API + UI in separate windows
+```
+
+Valid `-Tasks` values: `etl, bot, text, clustering, snapshots`.
+
+### Tests and typecheck
+
+```powershell
+# Python tests — run from repo root with PYTHONPATH set so `analysis.src.*` imports resolve
+$Env:PYTHONPATH = $PWD
+.\analysis\.venv\Scripts\python.exe -m unittest analysis.tests.test_engines
+.\analysis\.venv\Scripts\python.exe -m unittest analysis.tests.test_engines.TestEngines.test_bot_detector  # single test
+.\analysis\.venv\Scripts\python.exe -m unittest discover analysis/tests                                    # all
+
+# Go tests
+cd ingest && go test ./...
+cd ingest && go test ./internal/runner -run TestReddit   # single package/test
+
+# TypeScript typecheck (no tests in UI currently)
+cd ui && npm run typecheck
+cd ui && npm run build   # tsc + vite build
+```
+
+## Configuration
+
+All Python settings use the `CIVIC_` env prefix and are defined in `analysis/src/common/settings.py` (pydantic-settings). `.env` is loaded automatically by `run.ps1` and by pydantic. Key switches:
+
+- `CIVIC_LLM_BACKEND` = `gemini` | `ollama`
+- `CIVIC_LLM_ENABLED` = `true` | `false`
+- `CIVIC_RUN_ANALYSIS_ON` = `all` | `social_media` | `x` (scopes which `source_type` docs are analyzed)
+- `CIVIC_LOADER_BATCH_SIZE`, `CIVIC_CLUSTERING_THRESHOLD`
+
+`data/seeds.yaml` drives the Go ingestor (RSS seeds, subreddits, Reddit API creds, rate limits).
+
+## Project Conventions
+
+- **Walkthroughs are required.** Every non-trivial code change gets a numbered walkthrough in `docs/walkthroughs/NNN-short-description.md`, with the index in `docs/walkthroughs/README.md` updated. Use the next sequential number. This is the permanent audit trail; never delete existing walkthroughs.
+- **Style and invariants live in `.agent/`** — `rules/code-style.md`, `rules/invariants.md`, `rules/media-analysis.md` are always-on and define DRY/SOLID expectations, per-language style, and labeling requirements. `workflows/global.md`, `go-ingestion.md`, `python-ai-reporting.md` have layer-specific details.
+- **No emojis anywhere in the codebase** (see `invariants.md` rule 8).
+- **Labeling discipline** (media-analysis rules): Reddit outputs are "sampled Reddit discourse"; "Reach" is a proxy unless backed by real traffic; never claim universal American sentiment. UI must display confidence scores next to AI predictions.
+- **AI output contract**: every `ai_outputs` row has `confidence`, `model_id`, and `prompt_version`. When adding new LLM tasks, bump the prompt-version constant in `engine/prompts.py` and pass it through `loader.save_ai_output()`.
+- **LLM schemas**: structured output is enforced via JSON schemas in `analysis/src/llm/schemas.py`. Both Gemini and Ollama clients go through the same `get_llm_client()` factory — add new tasks by extending the schema and prompts, not by special-casing either backend.
+
+## Platform Notes
+
+Primary dev environment is Windows with PowerShell. The `bash` shell available in this session is for tool invocation — use Unix paths (`/dev/null`, forward slashes) in bash, but the canonical entry point is `run.ps1`. Go produces `civic-ingest.exe` at repo root.

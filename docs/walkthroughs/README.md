@@ -32,3 +32,8 @@ Each document captures what was changed, why, and the verification results.
 | 025 | [Unified Text Analyzer](025-unified-text-analyzer.md) | Combined sentiment and favorability LLM pass |
 | 026 | [Audit Remediation](026-audit-remediation.md) | Fix concurrency, DB bottlenecks, and dynamic migrations |
 | 027 | [SQLite Optimization](027-sqlite-optimization.md) | Context graceful shutdown and SQLite write performance tuning |
+| 028 | [Sentiment Polling UI Enrichment](028-sentiment-polling-ui-enrichment.md) | Polling comparison and sentiment UI enrichment |
+| 029 | [Clustering Removal & LLM Hardening](029-clustering-cut-llm-hardening.md) | Cut TF-IDF clustering end-to-end; add evidence-span validation, schema validation, and prompt archival |
+| 030 | [Audit Remediation — Layers 2–4](030-audit-layer-2-4-remediation.md) | UI sampling disclaimers; drop dead tables; add narrative + audit schema; promote country_code; fix geo bug |
+| 031 | [UI Terminal-Density Refactor](031-ui-terminal-refactor.md) | Tokens-first Bloomberg-terminal aesthetic on white: mono numerics, eyebrow labels, sharper panels; hand-tuned all three pages |
+| 032 | [Narrative Propagation Pipeline](032-narrative-propagation-pipeline.md) | Wire citations + claim-based narrative clustering; populate `narrative_citations`, `narratives`, `narrative_docs` |

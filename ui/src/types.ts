@@ -11,50 +11,6 @@ export interface Filters {
 export type ConfidenceLevel = 'high' | 'medium' | 'low';
 export type CoverageLevel = 'high' | 'medium' | 'low';
 
-// Cluster types
-export type ContentType = 'articles' | 'social' | 'mixed';
-
-export interface Cluster {
-    id: number;
-    title: string;
-    articleCount: number;
-    contentType: ContentType;
-    momentum: {
-        delta24h: number;
-        delta7d: number;
-    };
-    primarySources: string[];
-    summary: string[];
-    keyClaims: string[];
-    entities: {
-        people: string[];
-        organizations: string[];
-        locations: string[];
-    };
-    sourceMix: SourceMixItem[];
-    timeline: TimelinePoint[];
-    articles: Article[];
-}
-
-export interface SourceMixItem {
-    name: string;
-    value: number;
-    type: 'news' | 'reddit' | 'social' | 'other';
-}
-
-export interface TimelinePoint extends ChartDataPoint {
-    date: string;
-    value: number;
-}
-
-export interface Article {
-    id: number;
-    title: string;
-    source: string;
-    snippet: string;
-    reason: string;
-}
-
 // Sentiment types
 export interface SocialVsNewsSentiment {
     social: {
@@ -138,17 +94,6 @@ export interface SentimentDistribution {
 }
 
 // Favorability types
-export interface FavorabilityData {
-    overall: FavorabilityOverall;
-    trend: TrendPoint[];
-    trendAnnotations: TrendAnnotation[];
-    byAge: DemographicBreakdown[];
-    byRegion: DemographicBreakdown[];
-    byPartyId: DemographicBreakdown[];
-    byPlatform: DemographicBreakdown[]; // Added field
-    pollingVsSocial: PollingSocialComparison;
-}
-
 export interface FavorabilityOverall {
     favorable: number;
     unfavorable: number;

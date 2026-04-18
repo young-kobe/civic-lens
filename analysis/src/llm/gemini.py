@@ -112,7 +112,7 @@ class GeminiClient(BaseLLMClient):
                     )
                 
                 text = response.text.strip()
-                return self.parse_json_response(text)
+                return self.parse_json_response(text, schema=response_schema)
                 
             except Exception as e:
                 last_error = e

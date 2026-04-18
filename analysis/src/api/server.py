@@ -17,9 +17,12 @@ from analysis.src.common.cache import SnapshotCache
 from analysis.src.etl.loader import ContentLoader
 from analysis.src.engine.bot import HybridBotDetector
 from analysis.src.engine.analyzer import Analyzer
-from analysis.src.engine.clustering import ContentClusterer
-from analysis.src.reporting.aggregators import Aggregator
-from analysis.src.reporting.aggregators.geo import GeoAggregator
+from analysis.src.reporting.aggregators import (
+    OutletAggregator,
+    SentimentAggregator,
+    BotAggregator,
+    GeoAggregator,
+)
 
 app = FastAPI(title="Civic Lens API")
 settings = get_settings()
@@ -36,13 +39,15 @@ app.add_middleware(
 
 # Services
 loader = ContentLoader(settings.db_path)
-aggregator = Aggregator(settings.db_path)
 cache = SnapshotCache(settings.cache_dir)
+outlet_agg = OutletAggregator(settings.db_path)
+sentiment_agg = SentimentAggregator(settings.db_path)
+bot_agg = BotAggregator(settings.db_path)
+geo_agg = GeoAggregator(settings.db_path)
 
 # Analyzers - only needed for on-demand analysis triggers
 bot_detector = HybridBotDetector(llm_enabled=settings.llm_enabled)
 analyzer = Analyzer(llm_enabled=settings.llm_enabled)
-clusterer = ContentClusterer()
 
 
 # =============================================================================
@@ -63,7 +68,7 @@ def health():
 def get_cache_status():
     """
     Returns metadata for all cached snapshots.
-    
+
     Useful for displaying when data was last updated.
     """
     return {
@@ -90,28 +95,19 @@ def run_analysis(background_tasks: BackgroundTasks):
     return {"status": "Analysis queued"}
 
 
-@app.post("/api/run/clustering")
-def run_clustering():
-    """Triggers document clustering."""
-    docs = loader.get_all_docs_for_clustering()
-    clusters = clusterer.cluster_documents(docs, threshold=settings.clustering_threshold)
-    loader.save_clusters(clusters)
-    return {"clusters_created": len(clusters)}
-
-
 @app.post("/api/run/full-pipeline")
 def run_full_pipeline(background_tasks: BackgroundTasks):
     """
     Triggers the complete analysis pipeline in background.
-    
-    Use .\run.ps1 analyze for synchronous execution instead.
+
+    Use .\\run.ps1 analyze for synchronous execution instead.
     """
     from analysis.src.scheduler.job_runner import AnalysisJobRunner
-    
+
     def run_pipeline():
         runner = AnalysisJobRunner()
         runner.run_full_pipeline()
-    
+
     background_tasks.add_task(run_pipeline)
     return {"status": "Full pipeline queued"}
 
@@ -120,12 +116,38 @@ def run_full_pipeline(background_tasks: BackgroundTasks):
 # Data Retrieval - Individual endpoints (for direct access if needed)
 # =============================================================================
 
+import time as _time
+from datetime import datetime as _datetime
+
+# Emit a warning — but still serve — when a cached snapshot is older than this.
+# The expected cadence of save_snapshots() is at least daily, so a day-old
+# cache means the pipeline has silently stopped running.
+STALE_CACHE_WARN_SECONDS = 24 * 60 * 60
+
+
 def _get_cached_or_fallback(cache_key: str, fallback_fn, transform_fn=None):
-    """Get data from cache, falling back to live computation if cache is empty."""
-    cached = cache.load(cache_key)
+    """Serve from cache when available, otherwise compute live.
+
+    When the cached snapshot is older than ``STALE_CACHE_WARN_SECONDS`` this
+    logs a warning so operators know the pipeline is lagging — it does not
+    regenerate on the fly because aggregations can take seconds and shouldn't
+    block a UI request.
+    """
+    cached, meta = cache.load_with_meta(cache_key)
     if cached is not None:
+        if meta and meta.generated_at:
+            try:
+                generated_at = _datetime.fromisoformat(meta.generated_at)
+                age_seconds = _time.time() - generated_at.timestamp()
+                if age_seconds > STALE_CACHE_WARN_SECONDS:
+                    logger.warning(
+                        f"Cache '{cache_key}' is stale: generated "
+                        f"{age_seconds / 3600:.1f}h ago — pipeline may be lagging"
+                    )
+            except ValueError:
+                logger.warning(f"Cache '{cache_key}' has unparseable generated_at: {meta.generated_at}")
         return cached
-    
+
     logger.warning(f"Cache miss for '{cache_key}', computing live")
     result = fallback_fn()
     if transform_fn:
@@ -133,45 +155,27 @@ def _get_cached_or_fallback(cache_key: str, fallback_fn, transform_fn=None):
     return result
 
 
-@app.get("/api/stories")
-def get_stories(window: str = "24h", content_type: str = "all"):
-    """Returns story clusters filtered by time window and content type.
-    
-    Query params: ?window=24h|7d|30d&content_type=all|articles|social
-    """
-    if content_type not in ["all", "articles", "social"]:
-        raise HTTPException(status_code=400, detail="Invalid content_type. Must be 'all', 'articles', or 'social'")
-        
-    return _get_cached_or_fallback(
-        f"stories_{window}_{content_type}",
-        lambda: aggregator.get_stories(time_window=window, content_type=content_type),
-        lambda stories: [s.to_dict() for s in stories]
-    )
-
-
 @app.get("/api/sentiment")
 def get_public_sentiment(window: str = "24h"):
     """Returns sentiment filtered by time window. Query param: ?window=24h|7d|30d"""
     return _get_cached_or_fallback(
         f"sentiment_{window}",
-        lambda: aggregator.get_public_sentiment(time_window=window),
+        lambda: sentiment_agg.get_public_sentiment(time_window=window),
         lambda s: s.to_dict()
     )
-
-
 
 
 @app.get("/api/profiles")
 def get_profiles():
     """
     Returns outlet profiles with sentiment and bot rate metrics.
-    
+
     Note: This endpoint includes ALL content for transparency in outlet analysis.
     Data is served from pre-computed cache when available.
     """
     return _get_cached_or_fallback(
         "profiles",
-        aggregator.get_outlet_profiles,
+        outlet_agg.get_outlet_profiles,
         lambda profiles: [p.to_dict() for p in profiles]
     )
 
@@ -181,13 +185,13 @@ def get_bot_activity():
     """
     Returns bot activity metrics including suspected automation rate,
     coordination patterns, and behavioral signals.
-    
+
     Note: Classification is heuristic-based and may include false positives.
     Data is served from pre-computed cache when available.
     """
     return _get_cached_or_fallback(
         "bot_activity",
-        aggregator.get_bot_activity,
+        bot_agg.get_bot_activity,
         lambda b: b.to_dict()
     )
 
@@ -196,11 +200,10 @@ def get_bot_activity():
 def get_geo_sentiment(window: str = "7d"):
     """
     Returns X posts aggregated by country with sentiment scores.
-    
+
     Uses explicit country_code from X API geo-tags (no heuristics).
     Query param: ?window=24h|7d|30d|90d
     """
-    geo_agg = GeoAggregator(settings.db_path)
     return geo_agg.get_country_sentiment(time_window=window)
 
 
@@ -212,14 +215,14 @@ def get_geo_sentiment(window: str = "7d"):
 def process_analysis_queue():
     """
     Process unanalyzed documents through all analysis engines.
-    
+
     Order: Bot Detection -> Sentiment -> Favorability
     Bot detection runs first so subsequent analyses can reference bot status.
-    
+
     Note: For full pipeline including caching, use job_runner.py instead.
     """
     logger.info("Starting background analysis...")
-    
+
     # 1. Bot Detection - runs first (social media only)
     docs = loader.get_unprocessed_docs("bot_detection")
     SOCIAL_SOURCE_TYPES = frozenset(["reddit_post", "reddit_comment", "x_post"])
@@ -229,28 +232,28 @@ def process_analysis_queue():
         result = bot_detector.analyze_full(doc['text'], doc.get('metadata'))
         output = result.to_dict()
         loader.save_ai_output(
-            doc['doc_id'], 
-            "bot_detection", 
-            output, 
+            doc['doc_id'],
+            "bot_detection",
+            output,
             result.confidence
         )
-    
+
     # 2. Unified Sentiment + Favorability Analysis
     docs = loader.get_unprocessed_docs("sentiment")
     logger.info(f"Processing {len(docs)} docs for unified analysis")
     for doc in docs:
         sentiment_res, favorability_res = analyzer.analyze_full(doc['text'])
         loader.save_ai_output(
-            doc['doc_id'], 
-            "sentiment", 
-            sentiment_res.to_dict(), 
+            doc['doc_id'],
+            "sentiment",
+            sentiment_res.to_dict(),
             sentiment_res.confidence
         )
         loader.save_ai_output(
-            doc['doc_id'], 
-            "favorability", 
+            doc['doc_id'],
+            "favorability",
             favorability_res.to_dict(),
             favorability_res.overall_confidence
         )
-    
+
     logger.info("Background analysis complete.")

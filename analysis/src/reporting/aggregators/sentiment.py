@@ -236,6 +236,11 @@ class SentimentAggregator:
         if not reasoning:
             return
 
+        # Skip if this doc_id is already represented in the topic's samples
+        # (ai_outputs can have multiple rows per doc across prompt versions / reruns)
+        if any(s["doc_id"] == doc_id for s in samples):
+            return
+
         raw_spans = data.get("evidence_spans", [])
         clean_spans = SentimentAggregator._sanitize_evidence(raw_spans, MAX_EVIDENCE_PER_SAMPLE)
 
@@ -493,7 +498,8 @@ class SentimentAggregator:
                 volume=volume, sarcasm_rate=sarcasm_rate,
                 classification_samples=samples,
             ))
-        return sorted(topics, key=lambda t: t.volume, reverse=True)
+        # Pin "General" to the top; sort the rest by volume descending.
+        return sorted(topics, key=lambda t: (t.topic != "General", -t.volume))
     
     def _format_time_window_sentiment(self, by_time_window: Dict[str, Dict[str, int]]) -> List[TimeWindowSentiment]:
         """Format time window sentiment breakdown in chronological order."""

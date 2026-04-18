@@ -12,6 +12,7 @@ easier prompt engineering and A/B testing.
 
 TEXT_ANALYSIS_PROMPT_VERSION = "text-analysis-v2"
 BOT_PROMPT_VERSION = "bot-v1"
+CLAIM_EXTRACTION_PROMPT_VERSION = "claim-extraction-v1"
 
 # =============================================================================
 # Text Analysis Prompts
@@ -104,6 +105,47 @@ BOT_USER_PROMPT_TEMPLATE = """BEHAVIORAL SIGNALS:
 - Posting frequency: {posting_frequency} posts/day (if available)
 
 Analyze this content for automated behavior:
+
+<text>
+{text}
+</text>"""
+
+
+# =============================================================================
+# Claim Extraction Prompts
+# =============================================================================
+
+CLAIM_EXTRACTION_SYSTEM_PROMPT = """You extract discrete claim statements from political text.
+
+A claim is a single factual or opinion-bearing assertion that could be tracked across multiple pieces of content — the thing you would want to know is being repeated.
+
+RULES:
+1. Return ONLY valid JSON matching the schema below.
+2. Extract at most 3 claims. If the text makes no substantive assertion, return an empty array.
+3. Each claim must be:
+   - A short declarative sentence (5-15 words).
+   - Self-contained: understandable without needing the source text.
+   - Paraphrased in a canonical form (e.g., "Trump won Pennsylvania" not "trump TOTALLY DOMINATED in PA!!!").
+   - About a real entity or event, not a generic platitude.
+4. Every claim must include an `evidence_span` — a phrase of 3+ words taken VERBATIM from the input text that supports the claim. If no verbatim evidence exists, omit the claim.
+5. Do NOT extract claims from:
+   - Questions.
+   - Rhetorical devices with no factual assertion ("what a mess!").
+   - Pure opinion with no referent ("this is great").
+6. If the text is non-political, trivial, or purely metadata (@-mentions + hashtags only), return `{"claims": []}`.
+
+OUTPUT SCHEMA:
+{
+  "claims": [
+    {
+      "claim": "<paraphrased claim in 5-15 words>",
+      "confidence": 0.0-1.0,
+      "evidence_span": "<verbatim phrase from the input text>"
+    }
+  ]
+}"""
+
+CLAIM_EXTRACTION_USER_PROMPT_TEMPLATE = """Extract discrete claims from this text:
 
 <text>
 {text}

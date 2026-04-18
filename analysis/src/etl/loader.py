@@ -278,37 +278,37 @@ class ContentLoader:
             LEFT JOIN x_users_raw u ON p.author_id = u.user_id
         """)
         x_posts = cursor.fetchall()
-        
+
         insert_query = """
-            INSERT INTO docs (source_type, ident, domain_or_subreddit, published_at, text, raw_hash, metadata_json)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO docs (source_type, ident, domain_or_subreddit, published_at, text, raw_hash, metadata_json, place_country_code)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """
         batch: List[tuple] = []
         new_docs = 0
         skipped_old = 0
         skipped_nonpolitical = 0
-        
+
         for row in x_posts:
-            (tweet_id, author_id, created_at, text, lang, 
+            (tweet_id, author_id, created_at, text, lang,
              place_country_code, raw_hash,
-             user_location, user_created_at, 
+             user_location, user_created_at,
              followers_count, verified, verified_type) = row
-            
+
             if not tweet_id:
                 continue
-            
+
             cursor.execute("SELECT doc_id FROM docs WHERE ident = ?", (tweet_id,))
             if cursor.fetchone():
                 continue
-            
+
             if not is_recent(created_at):
                 skipped_old += 1
                 continue
-            
+
             if not is_us_political_content(text, ""):
                 skipped_nonpolitical += 1
                 continue
-            
+
             metadata = {
                 "platform": "x",
                 "lang": lang,
@@ -320,23 +320,25 @@ class ContentLoader:
                 "user_verified": bool(verified),
                 "user_verified_type": verified_type,
             }
-            
-            batch.append(("x_post", tweet_id, "x.com", created_at, text, raw_hash, json.dumps(metadata)))
-            
+
+            batch.append((
+                "x_post", tweet_id, "x.com", created_at, text, raw_hash,
+                json.dumps(metadata), place_country_code,
+            ))
+
             if len(batch) >= BATCH_COMMIT_SIZE:
                 new_docs += self._flush_batch(cursor, insert_query, batch)
                 batch.clear()
-        
+
         new_docs += self._flush_batch(cursor, insert_query, batch)
         return new_docs, skipped_old, skipped_nonpolitical
 
     def get_unprocessed_docs(self, task_type: str, source_types: Optional[List[str]] = None, batch_size: int = 500) -> List[Dict[str, Any]]:
         """
         Returns docs that do not have an entry in ai_outputs for the given task.
-        Increased batch size for better throughput.
         """
         query = f"""
-            SELECT d.doc_id, d.text, d.metadata_json, d.title, d.source_type
+            SELECT d.doc_id, d.text, d.metadata_json, d.title, d.source_type, d.ident
             FROM docs d
             LEFT JOIN ai_outputs a ON d.doc_id = a.doc_id AND a.task_type = ?
             WHERE a.output_id IS NULL AND d.text IS NOT NULL
@@ -354,7 +356,17 @@ class ContentLoader:
             cursor.execute(query, tuple(params))
             rows = cursor.fetchall()
 
-        return [{"doc_id": r[0], "text": r[1], "metadata": json.loads(r[2]) if r[2] else {}, "title": r[3], "source_type": r[4]} for r in rows]
+        return [
+            {
+                "doc_id": r[0],
+                "text": r[1],
+                "metadata": json.loads(r[2]) if r[2] else {},
+                "title": r[3],
+                "source_type": r[4],
+                "ident": r[5],
+            }
+            for r in rows
+        ]
 
     def save_ai_output(
         self,
@@ -364,64 +376,32 @@ class ContentLoader:
         confidence: float,
         model_id: str = "",
         prompt_version: str = "",
+        system_prompt: Optional[str] = None,
     ):
-        """Save an AI analysis output to the database."""
-        with self._get_conn() as conn:
-            cursor = conn.cursor()
-            cursor.execute("""
-                INSERT INTO ai_outputs (doc_id, task_type, output_json, confidence, model_id, prompt_version, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, strftime('%s','now'))
-            """, (doc_id, task, json.dumps(result), confidence, model_id, prompt_version))
-            conn.commit()
+        """Save an AI analysis output to the database.
 
-    def get_all_docs_for_clustering(self, max_age_days: int = 90) -> List[Dict[str, Any]]:
+        When ``system_prompt`` is provided alongside ``prompt_version`` it is
+        upserted into ``prompt_versions`` so the full prompt text for any row
+        can be reconstructed by joining on ``ai_outputs.prompt_version``.
         """
-        Get docs for clustering with time and content filtering.
-
-        Args:
-            max_age_days: Only include docs published within this many days (default 90)
-
-        Filters:
-            - Excludes sports/entertainment URLs via pattern matching
-            - Only includes docs within time window
-        """
-        cutoff = int(time.time()) - (max_age_days * 86400)
-
         with self._get_conn() as conn:
             cursor = conn.cursor()
-            cursor.execute("""
-                SELECT doc_id, title, text FROM docs 
-                WHERE text IS NOT NULL AND text != ''
-                AND (published_at IS NULL OR published_at >= ?)
-                AND ident NOT LIKE '%/sport%'
-                AND ident NOT LIKE '%/football%'
-                AND ident NOT LIKE '%/basketball%'
-                AND ident NOT LIKE '%/baseball%'
-                AND ident NOT LIKE '%/soccer%'
-                AND ident NOT LIKE '%/entertainment%'
-                AND ident NOT LIKE '%/music%'
-                AND ident NOT LIKE '%/celebrity%'
-            """, (cutoff,))
-            rows = cursor.fetchall()
-
-        logger.info(f"Clustering: {len(rows)} docs after filtering (max_age={max_age_days}d)")
-        return [{"doc_id": r[0], "title": r[1], "text": r[2]} for r in rows]
-
-    def save_clusters(self, clusters: List[Dict[str, Any]]):
-        version = "v1-tfidf"
-        created_at = 0
-
-        with self._get_conn() as conn:
-            cursor = conn.cursor()
-            for c in clusters:
+            if system_prompt is not None and prompt_version:
                 cursor.execute(
-                    "INSERT INTO clusters (name, created_at, clustering_version) VALUES (?, ?, ?)",
-                    (c['name'], created_at, version),
+                    """
+                    INSERT OR IGNORE INTO prompt_versions
+                        (prompt_version, task_type, system_prompt, created_at)
+                    VALUES (?, ?, ?, strftime('%s','now'))
+                    """,
+                    (prompt_version, task, system_prompt),
                 )
-                cluster_id = cursor.lastrowid
-                for doc_id in c['doc_ids']:
-                    cursor.execute(
-                        "INSERT INTO cluster_assignments (cluster_id, doc_id, score) VALUES (?, ?, 1.0)",
-                        (cluster_id, doc_id),
-                    )
+            cursor.execute(
+                """
+                INSERT INTO ai_outputs
+                    (doc_id, task_type, output_json, confidence, model_id, prompt_version, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, strftime('%s','now'))
+                """,
+                (doc_id, task, json.dumps(result), confidence, model_id, prompt_version),
+            )
             conn.commit()
+

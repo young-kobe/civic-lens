@@ -1,10 +1,9 @@
 import { useState } from 'react';
 import { Tabs, GlobalFilters, ExportMenu } from './components/common';
-import { StoryClusters, PublicSentiment, BotActivityProfiler, GlobalHeatmap } from './pages';
+import { PublicSentiment, BotActivityProfiler, GlobalHeatmap } from './pages';
 import type { Filters } from './types';
 
 const TABS = [
-    // { id: 'clusters', label: 'Story Clusters' },
     { id: 'sentiment', label: 'Public Sentiment' },
     { id: 'bots', label: 'Bot Activity Profiler' },
     { id: 'heatmap', label: 'Global Heatmap' },
@@ -25,8 +24,6 @@ function App() {
 
     const renderPage = () => {
         switch (activeTab) {
-            case 'clusters':
-                return <StoryClusters filters={filters} />;
             case 'sentiment':
                 return <PublicSentiment filters={filters} />;
             case 'bots':
@@ -34,20 +31,37 @@ function App() {
             case 'heatmap':
                 return <GlobalHeatmap filters={filters} />;
             default:
-                return <StoryClusters filters={filters} />;
+                return <PublicSentiment filters={filters} />;
         }
     };
+
+    const now = new Date();
+    const timestamp = now.toISOString().slice(0, 19).replace('T', ' ') + ' UTC';
 
     return (
         <div className="app-container">
             {/* Header */}
             <header className="page-header">
-                <div className="flex items-center justify-between">
-                    <div>
-                        <h1 className="page-title">Civic Lens</h1>
-                        <p className="page-subtitle">Media Narrative & Sentiment Analytics</p>
+                <div className="flex items-center justify-between gap-4">
+                    <div className="flex items-baseline gap-3">
+                        <h1 className="page-title">CIVIC&nbsp;LENS</h1>
+                        <span style={{
+                            width: 1, height: 16, background: 'var(--neutral-300)',
+                            alignSelf: 'center',
+                        }} />
+                        <p className="page-subtitle" style={{ marginTop: 0 }}>
+                            Media Narrative &amp; Sentiment Analytics
+                        </p>
                     </div>
-                    <ExportMenu onExport={handleExport} />
+                    <div className="flex items-center gap-3">
+                        <span className="status-strip">
+                            <span className="tick-up">●</span>
+                            <span>LIVE</span>
+                            <span className="sep" />
+                            <span>{timestamp}</span>
+                        </span>
+                        <ExportMenu onExport={handleExport} />
+                    </div>
                 </div>
             </header>
 
@@ -62,7 +76,7 @@ function App() {
             />
 
             {/* Main Content */}
-            <main style={{ paddingTop: 'var(--space-6)', paddingBottom: 'var(--space-12)' }}>
+            <main style={{ paddingTop: 'var(--space-4)', paddingBottom: 'var(--space-10)' }}>
                 {renderPage()}
             </main>
 
@@ -70,15 +84,17 @@ function App() {
             <footer
                 style={{
                     borderTop: '1px solid var(--neutral-200)',
-                    padding: 'var(--space-6) 0',
-                    marginTop: 'var(--space-8)',
+                    padding: 'var(--space-3) 0',
+                    marginTop: 'var(--space-6)',
                     fontSize: 'var(--text-xs)',
-                    color: 'var(--neutral-500)'
+                    color: 'var(--neutral-500)',
+                    fontFamily: 'var(--font-mono)',
+                    letterSpacing: '0.04em',
                 }}
             >
-                <div className="flex justify-between">
-                    <span>Civic Lens - Open Source Media Analytics</span>
-                    <span>Data last refreshed: {new Date().toLocaleString()}</span>
+                <div className="flex justify-between uppercase">
+                    <span>Civic Lens · Open Source Media Analytics</span>
+                    <span>Refreshed: {timestamp}</span>
                 </div>
             </footer>
         </div>

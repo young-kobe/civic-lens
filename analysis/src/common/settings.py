@@ -17,10 +17,6 @@ class Settings(BaseSettings):
     api_host: str = "0.0.0.0"
     api_port: int = 8000
     
-    # Analysis Config
-    model_sentiment: str = "distilbert-base-uncased-finetuned-sst-2-english"
-    clustering_threshold: float = 0.3
-    
     # Analysis Scope & Batching
     run_analysis_on: Literal["all", "social_media", "x"] = "social_media"
     loader_batch_size: int = 100

@@ -5,8 +5,7 @@ Civic Lens Analysis Job Runner.
 Standalone script that runs the complete analysis pipeline:
 1. ETL: Load new raw content into docs table
 2. Analysis: Bot detection, Sentiment, Favorability
-3. Clustering: Group related documents
-4. Caching: Pre-compute and save aggregation snapshots
+3. Caching: Pre-compute and save aggregation snapshots
 
 Usage:
     python -m analysis.src.scheduler.job_runner
@@ -33,11 +32,18 @@ from analysis.src.common.cache import SnapshotCache
 from analysis.src.etl.loader import ContentLoader
 from analysis.src.engine.bot import HybridBotDetector
 from analysis.src.engine.analyzer import Analyzer
-from analysis.src.engine.clustering import ContentClusterer
+from analysis.src.engine.citation_extractor import CitationExtractor
+from analysis.src.engine.claim_extractor import ClaimExtractor
+from analysis.src.engine.narrative_clusterer import NarrativeClusterer
 from analysis.src.engine.prompts import (
-    BOT_PROMPT_VERSION, TEXT_ANALYSIS_PROMPT_VERSION,
+    BOT_PROMPT_VERSION, TEXT_ANALYSIS_PROMPT_VERSION, CLAIM_EXTRACTION_PROMPT_VERSION,
+    BOT_SYSTEM_PROMPT, TEXT_ANALYSIS_SYSTEM_PROMPT, CLAIM_EXTRACTION_SYSTEM_PROMPT,
 )
-from analysis.src.reporting.aggregators import Aggregator
+from analysis.src.reporting.aggregators import (
+    OutletAggregator,
+    SentimentAggregator,
+    BotAggregator,
+)
 from analysis.src.etl.polling import PollingDataScraper, PollingDataError
 
 logger = get_logger("job_runner")
@@ -54,25 +60,29 @@ class AnalysisJobRunner:
         self.settings = get_settings()
         self.cache = SnapshotCache(self.settings.cache_dir)
         self.loader = ContentLoader(self.settings.db_path)
-        self.aggregator = Aggregator(self.settings.db_path)
-        
+        self.outlet_agg = OutletAggregator(self.settings.db_path)
+        self.sentiment_agg = SentimentAggregator(self.settings.db_path)
+        self.bot_agg = BotAggregator(self.settings.db_path)
+
         # Resolve model_id for DB tracking
         if self.settings.llm_backend.lower() == "ollama":
             self.model_id = self.settings.ollama_model
         else:
             self.model_id = self.settings.gemini_model
-        
+
         # Initialize analyzers
         self.bot_detector = HybridBotDetector(llm_enabled=self.settings.llm_enabled)
         self.analyzer = Analyzer(
             llm_enabled=self.settings.llm_enabled
         )
-        self.clusterer = ContentClusterer()
+        self.citation_extractor = CitationExtractor(self.settings.db_path)
+        self.claim_extractor = ClaimExtractor(llm_enabled=self.settings.llm_enabled)
+        self.narrative_clusterer = NarrativeClusterer(self.settings.db_path)
         self.polling_scraper = PollingDataScraper() if self.settings.polling_enabled else None
     
     def run_etl(self) -> int:
         """Run ETL to load new raw content. Returns count of new docs."""
-        logger.info("Step 1/5: Running ETL...")
+        logger.info("Step 1/7: Running ETL...")
         count = self.loader.load_new_raw_content()
         logger.info(f"ETL complete: {count} new documents loaded")
         return count
@@ -87,7 +97,7 @@ class AnalysisJobRunner:
     
     def run_bot_detection(self, limit: int | None = None) -> int:
         """Run bot detection on unprocessed docs scoped by configuration. Returns count processed."""
-        logger.info(f"Step 2/5: Running bot detection (scope: {self.settings.run_analysis_on})...")
+        logger.info(f"Step 2/7: Running bot detection (scope: {self.settings.run_analysis_on})...")
         source_types = self._get_target_source_types()
         batch_size = limit if limit is not None else self.settings.loader_batch_size
         docs = self.loader.get_unprocessed_docs(
@@ -103,12 +113,13 @@ class AnalysisJobRunner:
             result = self.bot_detector.analyze_full(doc['text'], doc.get('metadata'))
             output = result.to_dict()
             self.loader.save_ai_output(
-                doc['doc_id'], 
-                "bot_detection", 
-                output, 
+                doc['doc_id'],
+                "bot_detection",
+                output,
                 result.confidence,
                 model_id=self.model_id,
                 prompt_version=BOT_PROMPT_VERSION,
+                system_prompt=BOT_SYSTEM_PROMPT,
             )
             logger.info(
                 f"[bot {i}/{total}] doc={doc['doc_id']} "
@@ -121,7 +132,7 @@ class AnalysisJobRunner:
     
     def run_text_analysis(self, limit: int | None = None) -> int:
         """Run combined sentiment and favorability analysis on unprocessed docs. Returns count processed."""
-        logger.info(f"Step 3/4: Running text analysis (sentiment + favorability) (scope: {self.settings.run_analysis_on})...")
+        logger.info(f"Step 3/7: Running text analysis (sentiment + favorability) (scope: {self.settings.run_analysis_on})...")
         source_types = self._get_target_source_types()
         
         # We look for docs that haven't been processed for sentiment
@@ -141,22 +152,24 @@ class AnalysisJobRunner:
             
             # Save Sentiment
             self.loader.save_ai_output(
-                doc['doc_id'], 
-                "sentiment", 
-                sent_result.to_dict(), 
+                doc['doc_id'],
+                "sentiment",
+                sent_result.to_dict(),
                 sent_result.confidence,
                 model_id=self.model_id,
                 prompt_version=TEXT_ANALYSIS_PROMPT_VERSION,
+                system_prompt=TEXT_ANALYSIS_SYSTEM_PROMPT,
             )
-            
+
             # Save Favorability
             self.loader.save_ai_output(
-                doc['doc_id'], 
-                "favorability", 
+                doc['doc_id'],
+                "favorability",
                 fav_result.to_dict(),
                 fav_result.overall_confidence,
                 model_id=self.model_id,
                 prompt_version=TEXT_ANALYSIS_PROMPT_VERSION,
+                system_prompt=TEXT_ANALYSIS_SYSTEM_PROMPT,
             )
             
             logger.info(
@@ -167,55 +180,92 @@ class AnalysisJobRunner:
         
         logger.info(f"Text analysis complete: {total} docs processed")
         return total
-    
-    def run_clustering(self) -> int:
-        """Run document clustering. Returns count of clusters created."""
-        logger.info("Step 4/4: Running clustering...")
-        docs = self.loader.get_all_docs_for_clustering()
-        clusters = self.clusterer.cluster_documents(
-            docs, 
-            threshold=self.settings.clustering_threshold
+
+    def run_citation_extraction(self, limit: int | None = None) -> int:
+        """Extract cross-source citation edges. Deterministic, no LLM. Returns count of edges written."""
+        logger.info(f"Step 4/7: Running citation extraction...")
+        batch_size = limit if limit is not None else self.settings.loader_batch_size
+        docs = self.loader.get_unprocessed_docs(
+            "citations",
+            source_types=None,  # citations apply to every source type
+            batch_size=batch_size,
         )
-        self.loader.save_clusters(clusters)
-        logger.info(f"Clustering complete: {len(clusters)} clusters created")
-        return len(clusters)
-    
+        if not docs:
+            logger.info("Citation extraction: no unprocessed docs")
+            return 0
+
+        processed, edges = self.citation_extractor.extract_batch(docs)
+        logger.info(f"Citation extraction complete: {processed} docs, {edges} edges written")
+        return edges
+
+    def run_claim_extraction(self, limit: int | None = None) -> int:
+        """Extract canonical claim statements from unprocessed docs. LLM-driven. Returns count of docs processed."""
+        logger.info(f"Step 5/7: Running claim extraction (scope: {self.settings.run_analysis_on})...")
+        if not self.settings.llm_enabled:
+            logger.warning("Claim extraction requires llm_enabled=true; skipping")
+            return 0
+
+        source_types = self._get_target_source_types()
+        batch_size = limit if limit is not None else self.settings.loader_batch_size
+        docs = self.loader.get_unprocessed_docs(
+            "claims", source_types=source_types, batch_size=batch_size
+        )
+        total = len(docs)
+        if total == 0:
+            logger.info("Claim extraction: no unprocessed docs")
+            return 0
+
+        logger.info(f"Processing {total} docs for claim extraction")
+        for i, doc in enumerate(docs, 1):
+            result = self.claim_extractor.extract(doc["text"])
+            self.loader.save_ai_output(
+                doc["doc_id"],
+                "claims",
+                result.to_dict(),
+                # Overall row confidence: best claim's confidence, or 0 if none extracted.
+                max((c.confidence for c in result.claims), default=0.0),
+                model_id=self.model_id,
+                prompt_version=CLAIM_EXTRACTION_PROMPT_VERSION,
+                system_prompt=CLAIM_EXTRACTION_SYSTEM_PROMPT,
+            )
+            logger.info(
+                f"[claims {i}/{total}] doc={doc['doc_id']} extracted={len(result.claims)}"
+            )
+        logger.info(f"Claim extraction complete: {total} docs processed")
+        return total
+
+    def run_narrative_clustering(self) -> dict:
+        """Cluster unassigned claims into narratives. Returns summary dict."""
+        logger.info("Step 6/7: Running narrative clustering...")
+        return self.narrative_clusterer.run()
+
     def save_snapshots(self) -> dict:
         """
         Pre-compute all aggregations and save to cache.
-        
-        Saves multiple time-windowed versions for stories and sentiment.
-        Sentiment now includes merged GOP favorability data.
+
+        Saves multiple time-windowed versions of sentiment (with merged GOP favorability).
         Returns dict with counts for each cached endpoint.
         """
-        logger.info("Saving aggregation snapshots to cache...")
+        logger.info("Step 7/7: Saving aggregation snapshots to cache...")
         results = {}
-        
+
         # Time windows to pre-compute for time-sensitive endpoints
         time_windows = ["24h", "7d", "30d", "90d"]
-        
-        # Stories - cache all time windows and content types
-        for window in time_windows:
-            for c_type in ["all", "articles", "social"]:
-                stories = self.aggregator.get_stories(time_window=window, content_type=c_type)
-                stories_data = [s.to_dict() for s in stories]
-                self.cache.save(f"stories_{window}_{c_type}", stories_data, doc_count=len(stories_data))
-                results[f"stories_{window}_{c_type}"] = len(stories_data)
-        
+
         # Public Sentiment (includes merged GOP favorability) - cache all time windows
         for window in time_windows:
-            sentiment = self.aggregator.get_public_sentiment(time_window=window)
+            sentiment = self.sentiment_agg.get_public_sentiment(time_window=window)
             self.cache.save(f"sentiment_{window}", sentiment.to_dict(), doc_count=sentiment.overview.volume)
             results[f"sentiment_{window}"] = sentiment.overview.volume
-        
+
         # Outlet Profiles (not time-windowed - shows all-time data)
-        profiles = self.aggregator.get_outlet_profiles()
+        profiles = self.outlet_agg.get_outlet_profiles()
         profiles_data = [p.to_dict() for p in profiles]
         self.cache.save("profiles", profiles_data, doc_count=len(profiles_data))
         results["profiles"] = len(profiles_data)
-        
+
         # Bot Activity (not time-windowed)
-        bot_activity = self.aggregator.get_bot_activity()
+        bot_activity = self.bot_agg.get_bot_activity()
         self.cache.save("bot_activity", bot_activity.to_dict(), doc_count=bot_activity.overview.totalFlaggedAccounts)
         results["bot_activity"] = 1
         
@@ -250,24 +300,30 @@ class AnalysisJobRunner:
             "etl_new_docs": 0,
             "bot_detection": 0,
             "text_analysis": 0,
-            "clusters": 0,
+            "citations": 0,
+            "claims": 0,
+            "narratives": {},
             "snapshots": {},
             "duration_seconds": 0,
             "status": "success"
         }
-        
+
         try:
             # If no tasks specified, run all
             run_all = not tasks
-            
+
             if run_all or "etl" in tasks:
                 summary["etl_new_docs"] = self.run_etl()
             if run_all or "bot" in tasks:
                 summary["bot_detection"] = self.run_bot_detection(limit=limit)
             if run_all or "text" in tasks:
                 summary["text_analysis"] = self.run_text_analysis(limit=limit)
-            if run_all or "clustering" in tasks:
-                summary["clusters"] = self.run_clustering() # Limit not applied to clustering as it works on all docs
+            if run_all or "citations" in tasks:
+                summary["citations"] = self.run_citation_extraction(limit=limit)
+            if run_all or "claims" in tasks:
+                summary["claims"] = self.run_claim_extraction(limit=limit)
+            if run_all or "narratives" in tasks:
+                summary["narratives"] = self.run_narrative_clustering()
             if run_all or "snapshots" in tasks:
                 summary["snapshots"] = self.save_snapshots()
         except Exception as e:
@@ -289,7 +345,7 @@ class AnalysisJobRunner:
 def main():
     """Entry point for the job runner."""
     parser = argparse.ArgumentParser(description="Civic Lens Analysis Job Runner")
-    parser.add_argument("--tasks", type=str, help="Comma-separated tasks to run: etl, bot, text, clustering, snapshots. Defaults to all.")
+    parser.add_argument("--tasks", type=str, help="Comma-separated tasks to run: etl, bot, text, citations, claims, narratives, snapshots. Defaults to all.")
     parser.add_argument("--limit", type=int, help="Limit maximum documents processed per analysis stage (useful for dev/testing)")
     args = parser.parse_args()
 
