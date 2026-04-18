@@ -32,16 +32,8 @@ func NewRedditRunner(a *app.App) *RedditRunner {
 func (rr *RedditRunner) Run(ctx context.Context) (*RedditResult, error) {
 	cfg := rr.app.Config
 
-	// Use public .json endpoints (no auth needed)
-	usePublicAPI := cfg.Reddit.ClientID == ""
-	if usePublicAPI {
-		fmt.Println("Using public Reddit .json endpoints (no API credentials)")
-	}
-
 	client := reddit.New(reddit.Config{
-		ClientID:     cfg.Reddit.ClientID,
-		ClientSecret: cfg.Reddit.ClientSecret,
-		UserAgent:    cfg.Reddit.UserAgent,
+		UserAgent: cfg.Reddit.UserAgent,
 	})
 
 	now := time.Now().Unix()
@@ -53,11 +45,7 @@ func (rr *RedditRunner) Run(ctx context.Context) (*RedditResult, error) {
 		var rawJSON []byte
 		var err error
 
-		if usePublicAPI {
-			posts, rawJSON, err = client.FetchSubredditPostsPublic(ctx, subreddit, 25)
-		} else {
-			posts, rawJSON, err = client.FetchSubredditPosts(ctx, subreddit, 25)
-		}
+		posts, rawJSON, err = client.FetchSubredditPostsPublic(ctx, subreddit, 25)
 
 		if err != nil {
 			fmt.Printf("  Error: %v\n", err)
@@ -75,6 +63,21 @@ func (rr *RedditRunner) Run(ctx context.Context) (*RedditResult, error) {
 			post.RawHash = hash
 			post.ExtractionVersion = "1.0"
 
+			postID := post.Fullname
+			if len(postID) > 3 && postID[:3] == "t3_" {
+				postID = postID[3:]
+			}
+
+			comments, _, err := client.FetchPostCommentsPublic(ctx, post.Subreddit, postID, 5)
+			if err == nil && len(comments) > 0 {
+				for _, c := range comments {
+					if c.Body != "" && c.Body != "[deleted]" && c.Body != "[removed]" {
+						post.Body += fmt.Sprintf("\n\n--- Comment:\n%s", c.Body)
+					}
+				}
+			}
+			time.Sleep(500 * time.Millisecond)
+
 			if err := rr.insertPost(ctx, post); err != nil {
 				fmt.Printf("  Insert error: %v\n", err)
 			} else {
@@ -83,11 +86,6 @@ func (rr *RedditRunner) Run(ctx context.Context) (*RedditResult, error) {
 		}
 
 		rr.subredditsProcessed++
-
-		// Brief pause to be polite (public API has rate limits)
-		if usePublicAPI {
-			time.Sleep(2 * time.Second)
-		}
 	}
 
 	return &RedditResult{

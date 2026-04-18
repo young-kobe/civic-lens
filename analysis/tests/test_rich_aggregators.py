@@ -2,7 +2,11 @@ import unittest
 import sqlite3
 import json
 import os
-from analysis.src.reporting.aggregators import Aggregator
+from analysis.src.reporting.aggregators import (
+    OutletAggregator,
+    SentimentAggregator,
+    BotAggregator,
+)
 
 
 class TestRichAggregators(unittest.TestCase):
@@ -15,8 +19,6 @@ class TestRichAggregators(unittest.TestCase):
         # Cleanup
         self.cursor.executescript("""
             DROP TABLE IF EXISTS docs;
-            DROP TABLE IF EXISTS clusters;
-            DROP TABLE IF EXISTS cluster_assignments;
             DROP TABLE IF EXISTS ai_outputs;
         """)
 
@@ -33,21 +35,6 @@ class TestRichAggregators(unittest.TestCase):
                 text TEXT,
                 raw_hash TEXT NOT NULL,
                 metadata_json TEXT DEFAULT '{}'
-            );
-
-            CREATE TABLE clusters (
-                cluster_id INTEGER PRIMARY KEY,
-                name TEXT,
-                summary TEXT,
-                created_at INTEGER,
-                clustering_version TEXT
-            );
-
-            CREATE TABLE cluster_assignments (
-                assignment_id INTEGER PRIMARY KEY,
-                cluster_id INTEGER,
-                doc_id INTEGER,
-                score REAL
             );
 
             CREATE TABLE ai_outputs (
@@ -76,15 +63,6 @@ class TestRichAggregators(unittest.TestCase):
                published_at, fetched_at, title, text, raw_hash, metadata_json)
                VALUES (?,?,?,?,?,?,?,?,?,?)""",
             docs,
-        )
-
-        # Clusters (Cluster 1 has docs 1, 2, 3)
-        self.cursor.execute(
-            "INSERT INTO clusters VALUES (1, 'Test Cluster', 'Summary of test cluster', 1700000000, 'v1-tfidf')"
-        )
-        self.cursor.executemany(
-            "INSERT INTO cluster_assignments (cluster_id, doc_id, score) VALUES (?,?,?)",
-            [(1, 1, 1.0), (1, 2, 1.0), (1, 3, 1.0)],
         )
 
         # AI Outputs (include reasoning for classification transparency)
@@ -126,7 +104,9 @@ class TestRichAggregators(unittest.TestCase):
 
         self.conn.commit()
         self.conn.close()
-        self.aggregator = Aggregator(self.db_path)
+        self.outlet_agg = OutletAggregator(self.db_path)
+        self.sentiment_agg = SentimentAggregator(self.db_path)
+        self.bot_agg = BotAggregator(self.db_path)
 
     def tearDown(self):
         if os.path.exists(self.db_path):
@@ -135,22 +115,8 @@ class TestRichAggregators(unittest.TestCase):
             except PermissionError:
                 pass
 
-    def test_get_stories_rich(self):
-        stories_dc = self.aggregator.get_stories(time_window="all")
-        stories = [s.to_dict() for s in stories_dc]
-        self.assertEqual(len(stories), 1)
-        s = stories[0]
-        self.assertEqual(s['title'], 'Test Cluster')
-        self.assertEqual(s['articleCount'], 3)
-        self.assertIn('timeline', s)
-        self.assertIn('momentum', s)
-        self.assertIn('sourceMix', s)
-        sources = {x['type']: x['value'] for x in s['sourceMix']}
-        self.assertEqual(sources.get('news'), 2)
-        self.assertEqual(sources.get('reddit'), 1)
-
     def test_get_public_sentiment_rich(self):
-        sentiment = self.aggregator.get_public_sentiment(time_window="all").to_dict()
+        sentiment = self.sentiment_agg.get_public_sentiment(time_window="all").to_dict()
         # 4 docs total, doc 4 is bot -> 3 non-bot sentiment results
         self.assertEqual(sentiment['overview']['volume'], 3)
         self.assertEqual(sentiment['excluded_bot_content'], 1)
@@ -161,7 +127,7 @@ class TestRichAggregators(unittest.TestCase):
 
     def test_sentiment_has_topic_classification_samples(self):
         """Verify byTopic entries include classificationSamples and sarcasm_rate."""
-        sentiment = self.aggregator.get_public_sentiment(time_window="all").to_dict()
+        sentiment = self.sentiment_agg.get_public_sentiment(time_window="all").to_dict()
         self.assertIn('byTopic', sentiment)
         for topic in sentiment['byTopic']:
             self.assertIn('classificationSamples', topic)
@@ -173,14 +139,14 @@ class TestRichAggregators(unittest.TestCase):
 
     def test_sentiment_favorability_merged(self):
         """Verify GOP favorability is merged into sentiment response."""
-        sentiment = self.aggregator.get_public_sentiment(time_window="all").to_dict()
+        sentiment = self.sentiment_agg.get_public_sentiment(time_window="all").to_dict()
         self.assertIn('gopFavorability', sentiment)
         fav = sentiment['gopFavorability']
         self.assertEqual(fav['sampleSize'], 2)
         self.assertIn('netFavorability', fav)
 
     def test_get_outlet_profiles_rich(self):
-        profiles_dc = self.aggregator.get_outlet_profiles()
+        profiles_dc = self.outlet_agg.get_outlet_profiles()
         profiles = [p.to_dict() for p in profiles_dc]
         outlets = {p['outlet']: p for p in profiles}
         self.assertIn('x.com', outlets)

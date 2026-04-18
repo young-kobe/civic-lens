@@ -1,7 +1,13 @@
 param (
-    [Parameter(Mandatory = $false)]
+    [Parameter(Mandatory = $false, Position=0)]
     [ValidateSet("ingest", "crawl", "api", "ui", "dev", "all", "migrate", "reddit", "x", "build", "analyze", "help")]
-    [string]$Command = "help"
+    [string]$Command = "help",
+
+    [Parameter(Mandatory = $false)]
+    [string]$Tasks,
+
+    [Parameter(Mandatory = $false)]
+    [int]$Limit
 )
 
 # --- Ensure Node/npm are available even if PATH is missing ---
@@ -187,7 +193,18 @@ function Run-Analyze {
     }
     
     $Env:PYTHONPATH = $ScriptRoot
-    & $PythonExe -m analysis.src.scheduler.job_runner
+    
+    $ArgsList = @("-m", "analysis.src.scheduler.job_runner")
+    if ($Tasks) {
+        $ArgsList += "--tasks"
+        $ArgsList += $Tasks
+    }
+    if ($Limit) {
+        $ArgsList += "--limit"
+        $ArgsList += $Limit
+    }
+
+    & $PythonExe @ArgsList
     
     if ($LASTEXITCODE -eq 0) {
         Write-Status "Analysis pipeline complete. Cached snapshots saved to data/cache/"
@@ -243,7 +260,7 @@ switch ($Command) {
     "all" {
         Run-Migrate
         Run-Ingest
-        Run-X
+        #Run-X
         Run-Crawl -Duration "5m"
         Run-Analyze
         Run-Dev
@@ -257,6 +274,7 @@ switch ($Command) {
         Write-Host "  ingest   - Discover URLs from seed feeds"
         Write-Host "  crawl    - Run the web crawler"
         Write-Host "  analyze  - Run analysis pipeline (ETL + AI + caching)"
+        Write-Host "             Options: -Tasks <list>, -Limit <num>"
         Write-Host "  api      - Start Python FastAPI server (serves cached data)"
         Write-Host "  ui       - Start React Frontend"
         Write-Host "  dev      - Start both API and UI"

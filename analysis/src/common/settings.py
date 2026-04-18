@@ -1,5 +1,5 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from typing import Optional
+from typing import Optional, Literal
 
 class Settings(BaseSettings):
     # App Config
@@ -17,13 +17,9 @@ class Settings(BaseSettings):
     api_host: str = "0.0.0.0"
     api_port: int = 8000
     
-    # Analysis Config
-    model_sentiment: str = "distilbert-base-uncased-finetuned-sst-2-english"
-    clustering_threshold: float = 0.3
-    
     # Analysis Scope & Batching
-    run_analysis_on: str = "social_media"  # "all" or "social_media"
-    loader_batch_size: int = 500
+    run_analysis_on: Literal["all", "social_media", "x"] = "social_media"
+    loader_batch_size: int = 100
     
     # Gemini LLM Config
     gemini_api_key: str = ""

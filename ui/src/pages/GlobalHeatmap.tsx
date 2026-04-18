@@ -50,12 +50,11 @@ interface TooltipData {
 }
 
 function getSentimentColor(sentiment: number): string {
-    // Red (negative) -> Orange (slightly negative) -> Yellow (neutral) -> Green (positive)
-    if (sentiment >= 0.3) return '#22c55e';  // Green
-    if (sentiment >= 0.1) return '#84cc16';  // Lime
-    if (sentiment >= -0.1) return '#eab308'; // Yellow
-    if (sentiment >= -0.3) return '#f97316'; // Orange
-    return '#ef4444';  // Red
+    if (sentiment >= 0.3) return '#008a4c';  // Strong positive
+    if (sentiment >= 0.1) return '#4b9e6d';  // Mild positive
+    if (sentiment >= -0.1) return '#8e8e96'; // Neutral
+    if (sentiment >= -0.3) return '#b26100'; // Mild negative
+    return '#d41e0e';  // Strong negative
 }
 
 function getMarkerSize(postCount: number, maxPosts: number): number {
@@ -91,17 +90,17 @@ function StatsOverview({ data }: { data: GeoSentimentData }) {
 function SentimentLegend() {
     return (
         <div className="legend">
-            <span className="legend-label">Sentiment:</span>
+            <span className="legend-label">Sentiment</span>
             <div className="legend-item">
-                <span className="dot" style={{ backgroundColor: '#22c55e' }}></span>
+                <span className="dot" style={{ backgroundColor: '#008a4c' }}></span>
                 <span>Positive</span>
             </div>
             <div className="legend-item">
-                <span className="dot" style={{ backgroundColor: '#eab308' }}></span>
+                <span className="dot" style={{ backgroundColor: '#8e8e96' }}></span>
                 <span>Neutral</span>
             </div>
             <div className="legend-item">
-                <span className="dot" style={{ backgroundColor: '#ef4444' }}></span>
+                <span className="dot" style={{ backgroundColor: '#d41e0e' }}></span>
                 <span>Negative</span>
             </div>
         </div>
@@ -178,12 +177,12 @@ function GlobalHeatmap({ filters }: GlobalHeatmapProps) {
                                         <Geography
                                             key={geo.rsmKey}
                                             geography={geo}
-                                            fill="#e5e7eb"
-                                            stroke="#d1d5db"
+                                            fill="#ececef"
+                                            stroke="#d9d9de"
                                             strokeWidth={0.5}
                                             style={{
                                                 default: { outline: 'none' },
-                                                hover: { outline: 'none', fill: '#d1d5db' },
+                                                hover: { outline: 'none', fill: '#d9d9de' },
                                                 pressed: { outline: 'none' },
                                             }}
                                         />
@@ -243,10 +242,6 @@ function GlobalHeatmap({ filters }: GlobalHeatmapProps) {
                             {tooltip.country.avg_sentiment >= 0 ? '+' : ''}{tooltip.country.avg_sentiment.toFixed(2)}
                         </span>
                     </div>
-                    <div className="tooltip-row">
-                        <span>GOP Favorability:</span>
-                        <span>{tooltip.country.avg_favorability >= 0 ? '+' : ''}{tooltip.country.avg_favorability.toFixed(2)}</span>
-                    </div>
                 </div>
             )}
 
@@ -254,106 +249,122 @@ function GlobalHeatmap({ filters }: GlobalHeatmapProps) {
                 .global-heatmap {
                     display: flex;
                     flex-direction: column;
-                    gap: var(--space-4);
+                    gap: var(--space-3);
                 }
-                
-                .demo-banner {
-                    padding: 12px 16px;
-                    background: #fef3c7;
-                    border: 1px solid #f59e0b;
-                    border-radius: 8px;
-                    color: #92400e;
-                    font-size: 0.875rem;
-                }
-                
+
                 .description {
-                    color: var(--text-secondary);
-                    margin-bottom: var(--space-4);
-                    font-size: 0.875rem;
+                    color: var(--neutral-500);
+                    margin-bottom: var(--space-3);
+                    font-size: var(--text-sm);
                 }
-                
+
                 .stats-row {
                     display: flex;
-                    gap: var(--space-8);
-                    margin-bottom: var(--space-4);
+                    gap: var(--space-6);
+                    margin-bottom: var(--space-3);
+                    padding: var(--space-2) var(--space-3);
+                    background: var(--bg-panel);
+                    border: 1px solid var(--neutral-200);
+                    border-radius: 2px;
                 }
-                
+
                 .stat {
                     display: flex;
                     flex-direction: column;
+                    gap: 2px;
                 }
-                
+
                 .stat-value {
-                    font-size: 1.25rem;
+                    font-family: var(--font-mono);
+                    font-variant-numeric: tabular-nums;
+                    font-size: var(--text-xl);
+                    font-weight: 600;
+                    color: var(--neutral-900);
+                    letter-spacing: -0.01em;
+                }
+
+                .stat-label {
+                    font-size: var(--text-xs);
+                    color: var(--neutral-500);
+                    text-transform: uppercase;
+                    letter-spacing: 0.08em;
                     font-weight: 600;
                 }
-                
-                .stat-label {
-                    font-size: 0.75rem;
-                    color: var(--text-secondary);
-                    text-transform: uppercase;
-                }
-                
+
                 .legend {
                     display: flex;
                     align-items: center;
-                    gap: var(--space-4);
-                    margin-bottom: var(--space-4);
-                    font-size: 0.75rem;
+                    gap: var(--space-3);
+                    margin-bottom: var(--space-3);
+                    font-size: var(--text-xs);
+                    text-transform: uppercase;
+                    letter-spacing: 0.06em;
+                    color: var(--neutral-600);
                 }
-                
+
                 .legend-label {
-                    font-weight: 500;
-                    color: var(--text-secondary);
+                    font-weight: 700;
+                    color: var(--neutral-500);
+                    letter-spacing: 0.08em;
                 }
-                
+
                 .legend-item {
                     display: flex;
                     align-items: center;
-                    gap: 4px;
+                    gap: 6px;
                 }
-                
+
                 .dot {
-                    width: 10px;
-                    height: 10px;
+                    width: 8px;
+                    height: 8px;
                     border-radius: 50%;
                 }
-                
+
                 .map-container {
                     height: 500px;
-                    background: #f9fafb;
-                    border-radius: 8px;
+                    background: var(--bg-panel);
+                    border: 1px solid var(--neutral-200);
+                    border-radius: 2px;
                     overflow: hidden;
                 }
-                
+
                 .map-tooltip {
                     position: fixed;
-                    background: white;
-                    border: 1px solid #e5e7eb;
-                    border-radius: 8px;
-                    padding: 12px;
-                    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                    background: var(--bg-card);
+                    border: 1px solid var(--neutral-300);
+                    border-radius: 2px;
+                    padding: var(--space-2) var(--space-3);
+                    box-shadow: var(--shadow-lg);
                     z-index: 1000;
                     pointer-events: none;
                     min-width: 180px;
+                    font-family: var(--font-mono);
+                    font-variant-numeric: tabular-nums;
                 }
-                
+
                 .tooltip-header {
-                    font-weight: 600;
-                    margin-bottom: 8px;
-                    padding-bottom: 8px;
-                    border-bottom: 1px solid #e5e7eb;
+                    font-family: var(--font-family);
+                    font-size: var(--text-xs);
+                    font-weight: 700;
+                    text-transform: uppercase;
+                    letter-spacing: 0.08em;
+                    color: var(--neutral-800);
+                    margin-bottom: 6px;
+                    padding-bottom: 6px;
+                    border-bottom: 1px solid var(--neutral-200);
                 }
-                
+
                 .tooltip-row {
                     display: flex;
                     justify-content: space-between;
-                    font-size: 0.875rem;
-                    margin-bottom: 4px;
+                    font-size: var(--text-xs);
+                    margin-bottom: 2px;
                 }
-                
+
                 .tooltip-row span:first-child {
-                    color: var(--text-secondary);
+                    color: var(--neutral-500);
+                    text-transform: uppercase;
+                    letter-spacing: 0.06em;
                 }
             `}</style>
         </div>

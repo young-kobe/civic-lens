@@ -36,10 +36,8 @@ type CrawlConfig struct {
 
 // RedditConfig holds Reddit API settings.
 type RedditConfig struct {
-	ClientID     string   `yaml:"client_id"`
-	ClientSecret string   `yaml:"client_secret"`
-	UserAgent    string   `yaml:"user_agent"`
-	Subreddits   []string `yaml:"subreddits"`
+	UserAgent  string   `yaml:"user_agent"`
+	Subreddits []string `yaml:"subreddits"`
 }
 
 // XConfig holds X (Twitter) API settings.

@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
+	"strconv"
+	"strings"
 
 	_ "modernc.org/sqlite"
 )
@@ -24,16 +27,23 @@ func Open(dbPath string) (*DB, error) {
 		return nil, fmt.Errorf("create db directory: %w", err)
 	}
 
-	// Open with WAL mode for better concurrency
-	dsn := fmt.Sprintf("file:%s?_journal=WAL&_busy_timeout=5000&_foreign_keys=on", dbPath)
+	// Open with WAL mode for better concurrency and a longer busy timeout
+	dsn := fmt.Sprintf("file:%s?_journal=WAL&_busy_timeout=20000&_foreign_keys=on", dbPath)
 	conn, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
 
-	// Set connection pool settings
-	conn.SetMaxOpenConns(1) // SQLite handles one writer at a time
-	conn.SetMaxIdleConns(1)
+	// PRAGMA synchronous = NORMAL is faster in WAL mode and still safe.
+	if _, err := conn.Exec("PRAGMA synchronous = NORMAL;"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("set synchronous mode: %w", err)
+	}
+
+	// WAL mode supports concurrent readers with a single writer.
+	// Allow multiple read connections while writes serialize via busy_timeout.
+	conn.SetMaxOpenConns(4)
+	conn.SetMaxIdleConns(2)
 
 	return &DB{conn: conn, dbPath: dbPath}, nil
 }
@@ -52,15 +62,10 @@ func (d *DB) Migrate(ctx context.Context) error {
 		currentVersion = 0
 	}
 
-	// Definition of ordered migrations
-	migrations := []struct {
-		Version  int
-		Filename string
-	}{
-		{1, "001_initial.sql"},
-		{2, "002_x_tables.sql"},
-		{3, "003_allow_x_post_source.sql"},
-		{4, "004_hierarchy_tables.sql"},
+	// Discover migrations dynamically from filesystem
+	migrations, err := discoverMigrations(migrationsDir)
+	if err != nil {
+		return fmt.Errorf("discover migrations: %w", err)
 	}
 
 	for _, m := range migrations {
@@ -100,4 +105,48 @@ func (d *DB) BeginImmediate(ctx context.Context) (*sql.Tx, error) {
 	}
 	// SQLite's BEGIN IMMEDIATE is handled via the busy_timeout pragma
 	return tx, nil
+}
+
+// migration represents a single versioned SQL migration file.
+type migration struct {
+	Version  int
+	Filename string
+}
+
+// discoverMigrations reads the migrations directory and returns all .sql files
+// sorted by their numeric version prefix (e.g. "001_initial.sql" -> version 1).
+func discoverMigrations(dir string) ([]migration, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, fmt.Errorf("read migrations directory %s: %w", dir, err)
+	}
+
+	var migrations []migration
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".sql") {
+			continue
+		}
+
+		// Parse version from filename prefix: "001_initial.sql" -> 1
+		parts := strings.SplitN(entry.Name(), "_", 2)
+		if len(parts) < 2 {
+			continue
+		}
+
+		version, err := strconv.Atoi(parts[0])
+		if err != nil {
+			continue // Skip files without a numeric prefix
+		}
+
+		migrations = append(migrations, migration{
+			Version:  version,
+			Filename: entry.Name(),
+		})
+	}
+
+	sort.Slice(migrations, func(i, j int) bool {
+		return migrations[i].Version < migrations[j].Version
+	})
+
+	return migrations, nil
 }

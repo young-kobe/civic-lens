@@ -1,39 +1,13 @@
-import { Cluster, FavorabilityData, PublicSentimentData, BotData } from '../types';
+import { PublicSentimentData, BotData } from '../types';
 
 const API_BASE = '/api';
 
 export type TimeWindow = '24h' | '7d' | '30d' | '90d' | 'all';
 
-export type ContentTypeFilter = 'all' | 'articles' | 'social';
-
-export async function fetchStories(window: TimeWindow = '24h', contentType: ContentTypeFilter = 'all'): Promise<Cluster[]> {
-    const response = await fetch(`${API_BASE}/stories?window=${window}&content_type=${contentType}`);
-    if (!response.ok) {
-        throw new Error(`Failed to fetch stories: ${response.statusText}`);
-    }
-    return response.json();
-}
-
 export async function fetchSentiment(window: TimeWindow = '24h'): Promise<PublicSentimentData> {
     const response = await fetch(`${API_BASE}/sentiment?window=${window}`);
     if (!response.ok) {
         throw new Error(`Failed to fetch sentiment: ${response.statusText}`);
-    }
-    return response.json();
-}
-
-export async function fetchFavorability(window: TimeWindow = '24h'): Promise<FavorabilityData> {
-    const response = await fetch(`${API_BASE}/favorability?window=${window}`);
-    if (!response.ok) {
-        throw new Error(`Failed to fetch favorability: ${response.statusText}`);
-    }
-    return response.json();
-}
-
-export async function fetchBotProfiles(): Promise<any[]> {
-    const response = await fetch(`${API_BASE}/profiles`);
-    if (!response.ok) {
-        throw new Error(`Failed to fetch profiles: ${response.statusText}`);
     }
     return response.json();
 }
@@ -60,7 +34,6 @@ export interface CountryStats {
     country_name: string;
     post_count: number;
     avg_sentiment: number;
-    avg_favorability: number;
 }
 
 export async function fetchGeoSentiment(window: TimeWindow = '7d'): Promise<GeoSentimentData> {
@@ -70,4 +43,3 @@ export async function fetchGeoSentiment(window: TimeWindow = '7d'): Promise<GeoS
     }
     return response.json();
 }
-

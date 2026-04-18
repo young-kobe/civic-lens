@@ -7,16 +7,16 @@ import { fetchSentiment } from '../services/api';
 import { transformPublicSentiment } from '../services/transformers';
 
 const SENTIMENT_COLORS = {
-    positive: '#16a34a',
-    negative: '#dc2626',
-    neutral: '#94a3b8',
+    positive: '#008a4c',
+    negative: '#d41e0e',
+    neutral: '#8e8e96',
 };
 
 const LABEL_BADGE_STYLES: Record<string, { bg: string; text: string }> = {
-    POSITIVE: { bg: 'rgba(22, 163, 74, 0.12)', text: '#16a34a' },
-    NEGATIVE: { bg: 'rgba(220, 38, 38, 0.12)', text: '#dc2626' },
-    NEUTRAL: { bg: 'rgba(148, 163, 184, 0.12)', text: '#64748b' },
-    MIXED: { bg: 'rgba(234, 179, 8, 0.12)', text: '#ca8a04' },
+    POSITIVE: { bg: '#e3f6eb', text: '#008a4c' },
+    NEGATIVE: { bg: '#fbe7e4', text: '#d41e0e' },
+    NEUTRAL: { bg: '#f4f4f5', text: '#45454d' },
+    MIXED: { bg: '#fdf0dd', text: '#b26100' },
 };
 
 
@@ -34,25 +34,27 @@ function SentimentOverviewHeader({ data }: SentimentOverviewHeaderProps) {
     const scoreInfo = getScoreDisplay(data.netScore);
 
     return (
-        <Card className="mb-6">
+        <Card className="mb-4">
             <div className="flex items-start justify-between">
                 <div>
-                    <div className="text-xs font-medium text-muted mb-1">Net Sentiment Score</div>
+                    <div className="eyebrow mb-2">Net Sentiment Score</div>
                     <div className="flex items-baseline gap-3">
-                        <span className="metric-value-lg">
-                            {data.netScore >= 0 ? '+' : ''}{data.netScore.toFixed(1)}
+                        <span className={`metric-value-lg ${scoreInfo.class}`}>
+                            {data.netScore >= 0 ? '+' : ''}{data.netScore.toFixed(1)}%
                         </span>
-                        <span className={`text-lg font-medium ${scoreInfo.class}`}>
+                        <span className={`text-sm font-bold uppercase ${scoreInfo.class}`}>
                             {scoreInfo.label}
                         </span>
                     </div>
                 </div>
                 <div className="text-right">
-                    <div className="text-2xl font-semibold">{data.volume.toLocaleString()}</div>
-                    <div className="text-sm text-muted">Total volume</div>
+                    <div className="eyebrow mb-2">Total Volume</div>
+                    <div className="num" style={{ fontSize: 'var(--text-2xl)', fontWeight: 600, letterSpacing: '-0.02em' }}>
+                        {data.volume.toLocaleString()}
+                    </div>
                 </div>
             </div>
-            <div className="mt-4 pt-4" style={{ borderTop: '1px solid var(--neutral-100)' }}>
+            <div className="mt-3 pt-3" style={{ borderTop: '1px solid var(--neutral-200)' }}>
                 <ConfidenceBadge
                     coverage={data.coverage}
                     confidence={data.confidence}
@@ -127,61 +129,57 @@ function TopicRow({ item }: TopicRowProps) {
 
     return (
         <div style={{
-            background: 'var(--neutral-50, #f8fafc)', borderRadius: 'var(--radius-md)',
-            transition: 'box-shadow 0.2s ease',
-            border: '1px solid var(--neutral-100, #f1f5f9)',
+            background: 'var(--bg-card)', borderRadius: 'var(--radius-sm)',
+            border: '1px solid var(--neutral-200)',
         }}>
             {/* Header row */}
             <button
                 onClick={() => hasSamples && setExpanded(!expanded)}
                 style={{
-                    display: 'flex', alignItems: 'center', gap: '16px',
-                    width: '100%', padding: '14px 16px', border: 'none',
+                    display: 'flex', alignItems: 'center', gap: '14px',
+                    width: '100%', padding: '10px 12px', border: 'none',
                     background: 'transparent', cursor: hasSamples ? 'pointer' : 'default',
                     textAlign: 'left',
                 }}
                 id={`topic-row-${item.topic?.replace(/\s/g, '-').toLowerCase()}`}
             >
-                <MiniDonut positive={item.positive} negative={item.negative} neutral={item.neutral} />
+                <MiniDonut positive={item.positive} negative={item.negative} neutral={item.neutral} size={44} />
 
                 <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                        <span style={{ fontWeight: 600, fontSize: '14px' }}>{item.topic}</span>
-                        <span style={{
-                            fontSize: '11px', fontWeight: 600, padding: '2px 8px',
-                            borderRadius: '9999px', color: netColor,
-                            background: netColor === SENTIMENT_COLORS.positive ? 'rgba(22,163,74,0.1)'
-                                : netColor === SENTIMENT_COLORS.negative ? 'rgba(220,38,38,0.1)'
-                                : 'rgba(148,163,184,0.1)',
+                        <span style={{ fontWeight: 700, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.03em' }}>{item.topic}</span>
+                        <span className="num" style={{
+                            fontSize: '11px', fontWeight: 700, padding: '1px 6px',
+                            borderRadius: '2px', color: netColor,
+                            background: netColor === SENTIMENT_COLORS.positive ? 'var(--semantic-positive-light)'
+                                : netColor === SENTIMENT_COLORS.negative ? 'var(--semantic-negative-light)'
+                                : 'var(--neutral-100)',
                         }}>
                             {netScore >= 0 ? '+' : ''}{netScore.toFixed(1)}%
                         </span>
                         {(item.sarcasm_rate ?? 0) > 0 && (
-                            <span style={{
-                                fontSize: '10px', fontWeight: 500, padding: '2px 6px',
-                                borderRadius: '9999px', background: 'rgba(234,179,8,0.12)',
-                                color: '#ca8a04',
-                            }}>
-                                {item.sarcasm_rate?.toFixed(0)}% sarcasm
+                            <span className="badge badge-warning num">
+                                {item.sarcasm_rate?.toFixed(0)}% SARC
                             </span>
                         )}
                     </div>
-                    <div style={{ display: 'flex', gap: '12px', fontSize: '12px', color: 'var(--text-muted)' }}>
-                        <span>{item.volume.toLocaleString()} items</span>
+                    <div style={{ display: 'flex', gap: '14px', fontSize: '11px', color: 'var(--neutral-500)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
+                        <span>{item.volume.toLocaleString()} docs</span>
                         <span style={{ color: SENTIMENT_COLORS.positive }}>
-                            {((item.positive / total) * 100).toFixed(0)}% pos
+                            +{((item.positive / total) * 100).toFixed(0)}% pos
                         </span>
                         <span style={{ color: SENTIMENT_COLORS.negative }}>
-                            {((item.negative / total) * 100).toFixed(0)}% neg
+                            -{((item.negative / total) * 100).toFixed(0)}% neg
                         </span>
                     </div>
                 </div>
 
                 {hasSamples && (
                     <span style={{
-                        fontSize: '18px', color: 'var(--text-muted)',
+                        fontSize: '14px', color: 'var(--neutral-500)',
                         transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)',
                         transition: 'transform 0.2s ease', lineHeight: 1,
+                        fontFamily: 'var(--font-mono)',
                     }}>
                         v
                     </span>
@@ -191,15 +189,11 @@ function TopicRow({ item }: TopicRowProps) {
             {/* Expanded reasoning panel */}
             {expanded && hasSamples && (
                 <div style={{
-                    padding: '0 16px 16px 16px',
-                    borderTop: '1px solid var(--neutral-100, #e2e8f0)',
+                    padding: '0 12px 12px 12px',
+                    borderTop: '1px solid var(--neutral-200)',
                 }}>
-                    <div style={{
-                        fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)',
-                        textTransform: 'uppercase', letterSpacing: '0.05em',
-                        padding: '12px 0 8px',
-                    }}>
-                        Classification Reasoning (top {item.classificationSamples!.length})
+                    <div className="eyebrow" style={{ padding: '10px 0 8px' }}>
+                        Classification Reasoning · Top {item.classificationSamples!.length}
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                         {item.classificationSamples!.map((sample: ClassificationSample) => (
@@ -222,66 +216,187 @@ interface ClassificationSampleCardProps {
 }
 
 function ClassificationSampleCard({ sample }: ClassificationSampleCardProps) {
+    const [showFull, setShowFull] = useState(false);
     const badgeStyle = LABEL_BADGE_STYLES[sample.label] || LABEL_BADGE_STYLES.NEUTRAL;
+
+    // Aggressively filter and deduplicate evidence spans
+    const MAX_EVIDENCE_DISPLAY = 5;
+    const seen = new Set<string>();
+    const meaningfulSpans = (sample.evidence_spans || []).filter((span: string) => {
+        const trimmed = span.trim();
+        if (!trimmed || trimmed.length < 4) return false;
+        // Filter placeholder text the LLM may return from schema examples
+        if (/^exact quote/i.test(trimmed)) return false;
+        if (/^<.*>$/.test(trimmed)) return false;
+        // Do not filter by word count or single mentions (they are valid if the LLM outputted them)
+        // Deduplicate (case-insensitive)
+        const key = trimmed.toLowerCase();
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    }).slice(0, MAX_EVIDENCE_DISPLAY);
+
+    // Confidence color coding
+    const confPct = sample.confidence * 100;
+    const confColor = confPct >= 80 ? '#16a34a' : confPct >= 50 ? '#ca8a04' : '#dc2626';
+    const confLabel = confPct >= 80 ? 'High' : confPct >= 50 ? 'Medium' : 'Low';
 
     return (
         <div style={{
-            background: 'var(--bg-card, #fff)', borderRadius: 'var(--radius-sm)',
-            padding: '10px 12px', border: '1px solid var(--neutral-100, #e2e8f0)',
+            background: 'var(--bg-card)', borderRadius: 'var(--radius-sm)',
+            padding: '10px 12px', border: '1px solid var(--neutral-200)',
         }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px', flexWrap: 'wrap' }}>
+            {/* Header row */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px', flexWrap: 'wrap' }}>
                 {/* Label badge */}
                 <span style={{
-                    fontSize: '10px', fontWeight: 700, padding: '2px 7px',
-                    borderRadius: '4px', background: badgeStyle.bg, color: badgeStyle.text,
-                    textTransform: 'uppercase', letterSpacing: '0.04em',
+                    fontSize: '10px', fontWeight: 700, padding: '2px 6px',
+                    borderRadius: '2px', background: badgeStyle.bg, color: badgeStyle.text,
+                    textTransform: 'uppercase', letterSpacing: '0.06em',
                 }}>
                     {sample.label}
                 </span>
-                {/* Confidence */}
-                <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                    {(sample.confidence * 100).toFixed(0)}% conf
+                {/* Confidence indicator */}
+                <span
+                    title={`Model confidence: ${confPct.toFixed(1)}% (${confLabel})`}
+                    style={{
+                        display: 'inline-flex', alignItems: 'center', gap: '4px',
+                        fontSize: '10px', color: 'var(--neutral-500)',
+                        fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums',
+                    }}
+                >
+                    <span style={{ fontSize: '9px', opacity: 0.7, textTransform: 'uppercase', letterSpacing: '0.08em' }}>CONF</span>
+                    <span style={{
+                        display: 'inline-block', width: '36px', height: '3px',
+                        borderRadius: '1px', background: 'var(--neutral-200)',
+                        overflow: 'hidden', position: 'relative',
+                    }}>
+                        <span style={{
+                            position: 'absolute', left: 0, top: 0, bottom: 0,
+                            width: `${confPct}%`, background: confColor,
+                            borderRadius: '1px', transition: 'width 0.3s ease',
+                        }} />
+                    </span>
+                    <span style={{ color: confColor, fontWeight: 700 }}>
+                        {confPct.toFixed(0)}%
+                    </span>
                 </span>
                 {/* Sarcasm flag */}
                 {sample.sarcasm_detected && (
                     <span style={{
-                        fontSize: '10px', fontWeight: 600, padding: '2px 6px',
-                        borderRadius: '4px', background: 'rgba(234,179,8,0.12)', color: '#ca8a04',
+                        fontSize: '9px', fontWeight: 700, padding: '2px 5px',
+                        borderRadius: '2px', background: 'var(--semantic-warning-light)',
+                        color: 'var(--semantic-warning)', letterSpacing: '0.08em',
                     }}>
                         SARCASM
                     </span>
                 )}
-                {/* Source type */}
-                <span style={{ fontSize: '10px', color: 'var(--text-muted)', marginLeft: 'auto' }}>
-                    {sample.source_type}
+                {/* Source info */}
+                <span style={{
+                    fontSize: '10px', color: 'var(--neutral-500)', marginLeft: 'auto',
+                    display: 'flex', alignItems: 'center', gap: '6px',
+                    fontFamily: 'var(--font-mono)',
+                }}>
+                    {(sample.source_name || sample.date) && (
+                        <span>
+                            {[sample.source_name, sample.date].filter(Boolean).join(' · ')}
+                        </span>
+                    )}
+                    <span style={{
+                        padding: '1px 5px', borderRadius: '2px',
+                        background: 'var(--neutral-100)', textTransform: 'uppercase', letterSpacing: '0.06em',
+                        fontWeight: 600,
+                    }}>
+                        {sample.source_type}
+                    </span>
                 </span>
             </div>
+
             {/* Title */}
             {sample.title && (
                 <div style={{ fontSize: '12px', fontWeight: 500, marginBottom: '4px', lineHeight: 1.3 }}>
-                    {sample.title.length > 80 ? sample.title.slice(0, 80) + '...' : sample.title}
+                    {sample.title.length > 100 ? sample.title.slice(0, 100) + '...' : sample.title}
                 </div>
             )}
-            {/* Reasoning */}
-            <div style={{ fontSize: '12px', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-                {sample.reasoning}
+
+            {/* Reasoning (truncated with expand) */}
+            <div style={{ fontSize: '12px', color: 'var(--neutral-700)', lineHeight: 1.5 }}>
+                {showFull || sample.reasoning.length <= 150
+                    ? sample.reasoning
+                    : sample.reasoning.slice(0, 150) + '...'}
+                {sample.reasoning.length > 150 && (
+                    <button
+                        onClick={() => setShowFull(!showFull)}
+                        style={{
+                            background: 'none', border: 'none', color: 'var(--accent)',
+                            cursor: 'pointer', fontSize: '11px', fontWeight: 600,
+                            marginLeft: '4px', padding: 0, textTransform: 'uppercase',
+                            letterSpacing: '0.06em',
+                        }}
+                    >
+                        {showFull ? 'Show less' : 'Show more'}
+                    </button>
+                )}
             </div>
-            {/* Evidence spans */}
-            {sample.evidence_spans.length > 0 && (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '6px' }}>
-                    {sample.evidence_spans.slice(0, 3).map((span, i) => (
-                        <span key={i} style={{
-                            fontSize: '10px', padding: '2px 6px', borderRadius: '4px',
-                            background: 'var(--neutral-100, #f1f5f9)',
-                            color: 'var(--text-secondary)', fontStyle: 'italic',
-                            maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap',
-                        }}>
+
+            {/* Evidence spans - only meaningful, deduped, capped */}
+            {meaningfulSpans.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '8px' }}>
+                    {meaningfulSpans.map((span: string, i: number) => (
+                        <span
+                            key={i}
+                            title={span}
+                            style={{
+                                fontSize: '10px', padding: '2px 6px', borderRadius: '2px',
+                                background: 'var(--neutral-100)',
+                                color: 'var(--neutral-700)', fontStyle: 'italic',
+                                maxWidth: '280px', overflow: 'hidden', textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap', cursor: 'help',
+                                borderLeft: `2px solid ${badgeStyle.text}`,
+                            }}
+                        >
                             &quot;{span}&quot;
                         </span>
                     ))}
                 </div>
             )}
+
+            {/* Source Text */}
+            {sample.full_text && (
+                <div style={{
+                    marginTop: '10px', padding: '8px 10px', background: 'var(--bg-inset)',
+                    borderRadius: '2px', borderLeft: '2px solid var(--neutral-300)',
+                    fontSize: '11px', color: 'var(--neutral-700)',
+                }}>
+                    <div className="eyebrow" style={{
+                        marginBottom: '6px',
+                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    }}>
+                        <span>Source Text</span>
+                        {sample.url && (
+                            <a href={sample.url} target="_blank" rel="noreferrer" style={{
+                                color: 'var(--accent)', textDecoration: 'none',
+                                textTransform: 'none', fontSize: '11px', letterSpacing: 'normal',
+                            }}>
+                                View Original ↗
+                            </a>
+                        )}
+                    </div>
+                    <div style={{ lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
+                        {showFull || sample.full_text.length <= 150
+                            ? sample.full_text
+                            : sample.full_text.slice(0, 150) + '...'}
+                    </div>
+                </div>
+            )}
+
+            {/* Doc reference */}
+            <div style={{
+                marginTop: '6px', fontSize: '10px', color: 'var(--neutral-400)',
+                fontFamily: 'var(--font-mono)', letterSpacing: '0.04em',
+            }}>
+                DOC #{sample.doc_id}
+            </div>
         </div>
     );
 }
@@ -418,20 +533,24 @@ function SocialVsNewsCard({ data }: SocialVsNewsCardProps) {
 
     return (
         <Card
-            title="Social Media vs News Outlets"
-            subtitle="Compare sentiment between social platforms and news coverage"
+            title="Sampled Social Media vs News Outlets"
+            subtitle="Comparing sentiment between sampled social posts (Reddit + X) and news coverage"
             headerActions={
                 <MethodPopover
-                    description="Shows sentiment breakdown from social media (Reddit, Twitter) versus news outlets. Useful for detecting narrative divergence."
-                    limitations={['Social media sample may over-represent engaged users', 'News outlet sentiment may reflect editorial framing']}
+                    description="The left column is drawn from sampled political discussions on Reddit and X — posts are not a statistical sample of the wider population, only of content we ingested through public APIs. The right column is news-article sentiment."
+                    limitations={[
+                        'Social sample over-represents engaged users and the specific subreddits / X queries we follow',
+                        'News outlet sentiment may reflect editorial framing',
+                        'Other platforms (TikTok, Facebook, private Discords, etc.) are not included',
+                    ]}
                 />
             }
         >
             <div className="grid-2 gap-6">
-                {/* Social Media */}
+                {/* Sampled Social (Reddit + X) */}
                 <div className="card" style={{ background: 'var(--neutral-50)', border: 'none', padding: 'var(--space-4)' }}>
                     <div className="flex justify-between items-center mb-3">
-                        <span className="badge badge-accent">Social Media</span>
+                        <span className="badge badge-accent">Sampled Social (Reddit + X)</span>
                         <span className="text-xs text-muted">{data.social.volume.toLocaleString()} items</span>
                     </div>
                     <div className="text-center mb-3">
@@ -477,7 +596,7 @@ function SocialVsNewsCard({ data }: SocialVsNewsCardProps) {
                     {Math.abs(data.social.netScore - data.news.netScore) > 20 ? (
                         <strong>Significant disparity detected:</strong>
                     ) : null}
-                    {' '}Social media sentiment is {data.social.netScore > data.news.netScore ? 'more favorable' : 'less favorable'} than news coverage
+                    {' '}Sampled social (Reddit + X) sentiment is {data.social.netScore > data.news.netScore ? 'more favorable' : 'less favorable'} than news coverage
                     by {Math.abs(data.social.netScore - data.news.netScore).toFixed(1)} percentage points.
                 </div>
             )}
@@ -495,16 +614,17 @@ function MethodTransparencyPanel() {
                 <div>
                     <h4 className="font-medium mb-1">Data Sources</h4>
                     <p className="text-muted">
-                        Sentiment is derived from news articles, sampled Reddit discussions, and sampled social media posts.
-                        Reddit and social data are explicitly labeled as "sampled" because they do not represent the full population of discourse.
+                        Sentiment is derived from news articles, sampled Reddit discussions, and sampled X (Twitter) posts.
+                        The social-media data is explicitly labeled as "sampled" because it only covers the specific subreddits
+                        and X queries we ingest through public APIs — it does not represent the full population of online discourse.
                     </p>
                 </div>
 
                 <div>
                     <h4 className="font-medium mb-1">Classification Method</h4>
                     <p className="text-muted">
-                        Text is classified using a transformer-based sentiment model fine-tuned on political and news content.
-                        Each classification includes a confidence score (not shown in aggregate views).
+                        Text is classified by an LLM (Gemini or local Ollama) with evidence-span validation and per-sample
+                        confidence scores. Classifications with unverifiable evidence are capped at low confidence.
                     </p>
                 </div>
 
@@ -572,10 +692,25 @@ function PublicSentiment({ filters }: PublicSentimentProps) {
 
     return (
         <div className="flex flex-col gap-6">
+            {/* Sampling disclaimer — invariant: never imply universal American sentiment */}
+            <div
+                style={{
+                    padding: 'var(--space-3) var(--space-4)',
+                    background: '#fffbeb',
+                    border: '1px solid #fbbf24',
+                    borderRadius: 'var(--radius-md)',
+                    fontSize: 'var(--text-xs)',
+                    color: '#92400e',
+                }}
+            >
+                <strong>Sampled data:</strong> sentiment reflects US-political news articles plus sampled Reddit and X
+                discussions from the last 30 days. It is not a scientific poll and does not represent the full population.
+            </div>
+
             {/* Overview Header */}
             <SentimentOverviewHeader data={data.overview} />
 
-            {/* Social vs News Comparison */}
+            {/* Social Media vs News Comparison */}
             <SocialVsNewsCard data={data.socialVsNews} />
 
             {/* Topic Sentiment (new design with reasoning) */}
@@ -705,17 +840,36 @@ function GOPPollingComparison({ data }: { data: PollingSocialComparison }) {
                 <div className="card" style={{ background: 'var(--neutral-50)', border: 'none', padding: 'var(--space-3)' }}>
                     <div className="flex items-center gap-2 mb-2">
                         <span className="badge badge-neutral">Live Polling</span>
+                        {data.pollingData?.source && (
+                            <span style={{ fontSize: '10px', color: 'var(--text-muted)', marginLeft: 'auto' }}>
+                                {data.pollingData.source}
+                            </span>
+                        )}
                     </div>
                     {data.pollingData ? (
-                        <SentimentBar
-                            positive={data.pollingData.favorable}
-                            negative={data.pollingData.unfavorable}
-                            neutral={data.pollingData.neutral}
-                            height={24}
-                            showLabels={true}
-                        />
+                        <>
+                            <SentimentBar
+                                positive={data.pollingData.favorable}
+                                negative={data.pollingData.unfavorable}
+                                neutral={data.pollingData.neutral}
+                                height={24}
+                                showLabels={true}
+                            />
+                            {data.pollingData.date && (
+                                <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '4px', textAlign: 'right' }}>
+                                    Last updated: {data.pollingData.date}
+                                </div>
+                            )}
+                        </>
                     ) : (
-                        <p className="text-muted text-xs">No polling data available</p>
+                        <div style={{
+                            padding: '8px 12px', borderRadius: 'var(--radius-sm)',
+                            background: 'rgba(234,179,8,0.08)', border: '1px solid rgba(234,179,8,0.2)',
+                        }}>
+                            <p className="text-muted text-xs" style={{ margin: 0 }}>
+                                Live polling data is currently unavailable. This may be due to a network issue or a change in the source page structure.
+                            </p>
+                        </div>
                     )}
                 </div>
             </div>

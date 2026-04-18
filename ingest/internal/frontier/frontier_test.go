@@ -3,6 +3,7 @@ package frontier
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -24,6 +25,22 @@ func TestFrontierBasicOperations(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer database.Close()
+
+	// Create test migrations dir and copy from project root
+	projectRoot, _ := filepath.Abs("../../..")
+	srcMigrationsDir := filepath.Join(projectRoot, "data", "migrations")
+	
+	migrationsDir := filepath.Join(filepath.Dir(tmpFile.Name()), "migrations")
+	os.MkdirAll(migrationsDir, 0755)
+	defer os.RemoveAll(migrationsDir)
+	
+	files, _ := os.ReadDir(srcMigrationsDir)
+	for _, f := range files {
+		if filepath.Ext(f.Name()) == ".sql" {
+			content, _ := os.ReadFile(filepath.Join(srcMigrationsDir, f.Name()))
+			os.WriteFile(filepath.Join(migrationsDir, f.Name()), content, 0644)
+		}
+	}
 
 	ctx := context.Background()
 	if err := database.Migrate(ctx); err != nil {
@@ -126,6 +143,22 @@ func TestFrontierRecoverStale(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer database.Close()
+
+	// Create test migrations dir and copy from project root
+	projectRoot, _ := filepath.Abs("../../..")
+	srcMigrationsDir := filepath.Join(projectRoot, "data", "migrations")
+	
+	migrationsDir := filepath.Join(filepath.Dir(tmpFile.Name()), "migrations")
+	os.MkdirAll(migrationsDir, 0755)
+	defer os.RemoveAll(migrationsDir)
+	
+	files, _ := os.ReadDir(srcMigrationsDir)
+	for _, f := range files {
+		if filepath.Ext(f.Name()) == ".sql" {
+			content, _ := os.ReadFile(filepath.Join(srcMigrationsDir, f.Name()))
+			os.WriteFile(filepath.Join(migrationsDir, f.Name()), content, 0644)
+		}
+	}
 
 	ctx := context.Background()
 	if err := database.Migrate(ctx); err != nil {

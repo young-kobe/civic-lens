@@ -5,31 +5,91 @@ These schemas are passed to Ollama (format parameter) and Gemini (response_schem
 to enforce deterministic JSON responses from the LLM.
 """
 
-# Sentiment Analysis Schema
-SENTIMENT_SCHEMA = {
+# Entity Stance Schema (nested in favorability)
+ENTITY_STANCE_SCHEMA = {
     "type": "object",
     "properties": {
-        "label": {
+        "entity": {"type": "string"},
+        "stance": {
+            "type": "string",
+            "enum": ["favorable", "unfavorable", "neutral", "mixed"]
+        },
+        "confidence": {"type": "number"},
+        "evidence_spans": {
+            "type": "array",
+            "items": {"type": "string"}
+        }
+    },
+    "required": ["entity", "stance", "confidence"]
+}
+
+# Text Analysis Schema (Sentiment and Favorability)
+TEXT_ANALYSIS_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "sentiment_label": {
             "type": "string",
             "enum": ["POSITIVE", "NEGATIVE", "NEUTRAL", "MIXED"]
         },
-        "confidence": {
+        "sentiment_confidence": {
             "type": "number",
             "minimum": 0,
             "maximum": 1
         },
-        "evidence_spans": {
+        "sentiment_evidence_spans": {
             "type": "array",
             "items": {"type": "string"}
         },
-        "reasoning": {
-            "type": "string"
-        },
         "sarcasm_detected": {
             "type": "boolean"
+        },
+        "entity_stances": {
+            "type": "array",
+            "items": ENTITY_STANCE_SCHEMA
+        },
+        "overall_gop_stance": {
+            "type": "string",
+            "enum": ["favorable", "unfavorable", "neutral", "mixed"]
+        },
+        "overall_favorability_confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+        },
+        "sentiment_reasoning": {
+            "type": "string"
+        },
+        "favorability_reasoning": {
+            "type": "string"
         }
     },
-    "required": ["label", "confidence", "evidence_spans", "reasoning", "sarcasm_detected"]
+    "required": [
+        "sentiment_label", "sentiment_confidence", "sentiment_evidence_spans", 
+        "sarcasm_detected", "overall_gop_stance", "overall_favorability_confidence", 
+        "sentiment_reasoning", "favorability_reasoning"
+    ]
+}
+
+# Claim Extraction Schema
+CLAIM_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "claim": {"type": "string"},
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "evidence_span": {"type": "string"},
+    },
+    "required": ["claim", "confidence", "evidence_span"],
+}
+
+CLAIM_EXTRACTION_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "claims": {
+            "type": "array",
+            "items": CLAIM_SCHEMA,
+        },
+    },
+    "required": ["claims"],
 }
 
 # Bot Detection Schema
@@ -57,46 +117,4 @@ BOT_SCHEMA = {
         }
     },
     "required": ["is_bot", "label", "confidence", "indicators"]
-}
-
-# Entity Stance Schema (nested in favorability)
-ENTITY_STANCE_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "entity": {"type": "string"},
-        "stance": {
-            "type": "string",
-            "enum": ["favorable", "unfavorable", "neutral", "mixed"]
-        },
-        "confidence": {"type": "number"},
-        "evidence_spans": {
-            "type": "array",
-            "items": {"type": "string"}
-        }
-    },
-    "required": ["entity", "stance", "confidence"]
-}
-
-# Favorability Analysis Schema
-FAVORABILITY_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "entity_stances": {
-            "type": "array",
-            "items": ENTITY_STANCE_SCHEMA
-        },
-        "overall_gop_stance": {
-            "type": "string",
-            "enum": ["favorable", "unfavorable", "neutral", "mixed"]
-        },
-        "overall_confidence": {
-            "type": "number",
-            "minimum": 0,
-            "maximum": 1
-        },
-        "reasoning": {
-            "type": "string"
-        }
-    },
-    "required": ["overall_gop_stance", "overall_confidence"]
 }

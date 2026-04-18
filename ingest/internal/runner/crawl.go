@@ -32,6 +32,7 @@ type CrawlResult struct {
 type CrawlRunner struct {
 	app     *app.App
 	opts    CrawlOptions
+	writer  *ArticleWriter
 	fetched int64
 	stored  int64
 	errors  int64
@@ -49,6 +50,11 @@ func (cr *CrawlRunner) Run(ctx context.Context) (*CrawlResult, error) {
 	// Setup context with timeout
 	ctx, cancel := context.WithTimeout(ctx, cr.opts.Duration)
 	defer cancel()
+
+	// Start batched article writer
+	cr.writer = NewArticleWriter(cr.app.Database)
+	go cr.writer.Start()
+	defer cr.writer.Close()
 
 	// Recover stale items
 	recovered, _ := cr.app.Frontier.RecoverStale(ctx, cfg.Crawl.StaleInflightAge)
@@ -93,8 +99,10 @@ func (cr *CrawlRunner) Run(ctx context.Context) (*CrawlResult, error) {
 	}
 
 done:
-	// Wait for in-flight workers
-	sem.Acquire(context.Background(), int64(cfg.Crawl.MaxConcurrency))
+	// Wait for in-flight workers with a final 5s timeout
+	cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cleanupCancel()
+	sem.Acquire(cleanupCtx, int64(cfg.Crawl.MaxConcurrency))
 
 	return &CrawlResult{
 		Fetched: cr.fetched,
@@ -106,7 +114,7 @@ done:
 func (cr *CrawlRunner) processPage(ctx context.Context, page *model.Page) {
 	// Check robots.txt
 	if cr.app.Robots != nil && !cr.app.Robots.IsAllowed(ctx, page.URLRaw) {
-		cr.app.Frontier.MarkFailed(ctx, page, "disallowed by robots.txt", true)
+		cr.app.Frontier.MarkFailed(context.Background(), page, "disallowed by robots.txt", true)
 		return
 	}
 
@@ -116,7 +124,7 @@ func (cr *CrawlRunner) processPage(ctx context.Context, page *model.Page) {
 
 	if result.Error != nil {
 		atomic.AddInt64(&cr.errors, 1)
-		cr.app.Frontier.MarkFailed(ctx, page, result.Error.Error(), false)
+		cr.app.Frontier.MarkFailed(context.Background(), page, result.Error.Error(), false)
 		return
 	}
 
@@ -126,7 +134,7 @@ func (cr *CrawlRunner) processPage(ctx context.Context, page *model.Page) {
 
 	if result.StatusCode < 200 || result.StatusCode >= 300 {
 		atomic.AddInt64(&cr.errors, 1)
-		cr.app.Frontier.MarkFailed(ctx, page, fmt.Sprintf("HTTP %d", result.StatusCode), result.StatusCode >= 400 && result.StatusCode < 500)
+		cr.app.Frontier.MarkFailed(context.Background(), page, fmt.Sprintf("HTTP %d", result.StatusCode), result.StatusCode >= 400 && result.StatusCode < 500)
 		return
 	}
 
@@ -138,7 +146,7 @@ func (cr *CrawlRunner) processPage(ctx context.Context, page *model.Page) {
 	hash, err := cr.app.RawStore.Store(ctx, result.Body, ext)
 	if err != nil {
 		atomic.AddInt64(&cr.errors, 1)
-		cr.app.Frontier.MarkFailed(ctx, page, err.Error(), false)
+		cr.app.Frontier.MarkFailed(context.Background(), page, err.Error(), false)
 		return
 	}
 
@@ -155,7 +163,7 @@ func (cr *CrawlRunner) processPage(ctx context.Context, page *model.Page) {
 				sameDomainLinks = append(sameDomainLinks, link)
 			}
 		}
-		cr.app.Frontier.PushLinks(ctx, sameDomainLinks, 0)
+		cr.app.Frontier.PushLinks(context.Background(), sameDomainLinks, 0)
 	}
 
 	// Update canonical if found
@@ -163,50 +171,10 @@ func (cr *CrawlRunner) processPage(ctx context.Context, page *model.Page) {
 		page.URLCanon = meta.CanonicalURL
 	}
 
-	// Insert article metadata
+	// Enqueue article metadata for batched insertion
 	if meta != nil {
-		cr.insertArticle(ctx, page, meta, hash)
+		cr.writer.WriteFromMeta(page, meta, hash)
 	}
 
-	cr.app.Frontier.MarkDone(ctx, page)
-}
-
-func (cr *CrawlRunner) insertArticle(ctx context.Context, page *model.Page, meta *html.Metadata, hash string) {
-	conn := cr.app.Database.Conn()
-
-	// Determine canonical URL - prefer extracted, fallback to page URL
-	canonURL := page.URLCanon
-	if meta.CanonicalURL != "" {
-		canonURL = meta.CanonicalURL
-	}
-
-	// Convert published time to Unix timestamp
-	var publishedAt int64
-	if !meta.PublishedTime.IsZero() {
-		publishedAt = meta.PublishedTime.Unix()
-	}
-
-	// Insert or update article metadata
-	_, err := conn.ExecContext(ctx, `
-		INSERT INTO articles_raw (url_canon, domain, fetched_at, published_at, title, raw_hash, extraction_version)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT(url_canon) DO UPDATE SET
-			fetched_at = excluded.fetched_at,
-			published_at = excluded.published_at,
-			title = excluded.title,
-			raw_hash = excluded.raw_hash,
-			extraction_version = excluded.extraction_version
-	`,
-		canonURL,
-		page.Domain,
-		time.Now().Unix(),
-		publishedAt,
-		meta.Title,
-		hash,
-		"go-v1.0",
-	)
-
-	if err != nil {
-		log.Printf("Failed to insert article %s: %v", canonURL, err)
-	}
+	cr.app.Frontier.MarkDone(context.Background(), page)
 }
