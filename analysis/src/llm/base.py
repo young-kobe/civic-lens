@@ -1,0 +1,148 @@
+"""
+Base LLM Client for Civic Lens Analysis.
+
+Defines the abstract interface that all LLM backends must implement.
+"""
+
+import json
+from abc import ABC, abstractmethod
+from typing import Any, Dict, Optional
+from analysis.src.common.logger import get_logger
+
+logger = get_logger(__name__)
+
+
+class SchemaValidationError(ValueError):
+    """Raised when an LLM response does not satisfy the provided JSON schema."""
+
+
+class BaseLLMClient(ABC):
+    """
+    Abstract base class for LLM clients.
+    
+    All LLM backends (Gemini, Ollama, etc.) must inherit from this class
+    and implement the required methods.
+    """
+    
+    def __init__(self):
+        self.total_tokens_used = 0
+    
+    @property
+    @abstractmethod
+    def is_available(self) -> bool:
+        """Check if the LLM client is properly initialized and ready."""
+        pass
+    
+    @abstractmethod
+    def complete(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        response_schema: Optional[Dict[str, Any]] = None,
+        temperature: Optional[float] = None,
+    ) -> Dict[str, Any]:
+        """
+        Send a completion request and return parsed JSON.
+        
+        Args:
+            system_prompt: System instructions for the model
+            user_prompt: User message/query
+            response_schema: JSON schema to enforce structured output (optional)
+            temperature: Override default temperature (optional)
+            
+        Returns:
+            Parsed JSON response as a dictionary
+            
+        Raises:
+            RuntimeError: If client is not available
+            ValueError: If response cannot be parsed as JSON
+        """
+        pass
+    
+    def get_token_usage(self) -> int:
+        """Get total tokens used across all calls."""
+        return self.total_tokens_used
+    
+    @staticmethod
+    def parse_json_response(
+        response_text: str,
+        schema: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Parse and validate a JSON response from the LLM.
+
+        If a schema is supplied, the parsed dict is validated against it —
+        missing required fields, out-of-range numbers, invalid enums, or
+        wrong types raise SchemaValidationError. Callers should treat that
+        the same as any other LLM failure (trigger heuristic fallback).
+        """
+        text = response_text.strip()
+
+        # Strip markdown code fences if present (some models add these)
+        if text.startswith("```json"):
+            text = text[7:]
+        elif text.startswith("```"):
+            text = text[3:]
+        if text.endswith("```"):
+            text = text[:-3]
+        text = text.strip()
+
+        try:
+            parsed = json.loads(text)
+        except json.JSONDecodeError as e:
+            logger.error(f"JSON parse error: {e}")
+            logger.debug(f"Raw response: {response_text[:500]}")
+            raise ValueError(f"Invalid JSON response: {e}")
+
+        if isinstance(parsed, list) and len(parsed) > 0 and isinstance(parsed[0], dict):
+            # Some models return array of objects - take first
+            parsed = parsed[0]
+        if not isinstance(parsed, dict):
+            raise ValueError(f"Expected dict, got {type(parsed).__name__}")
+
+        if schema is not None:
+            BaseLLMClient._validate_against_schema(parsed, schema, path="")
+
+        return parsed
+
+    @staticmethod
+    def _validate_against_schema(data: Any, schema: Dict[str, Any], path: str) -> None:
+        """Minimal JSON Schema validator covering the constraints we rely on.
+
+        Supports: required fields, type (object/array/string/number/integer/
+        boolean), enum, minimum/maximum, items, properties. Anything outside
+        this subset is ignored — the structured-output modes on Gemini/Ollama
+        already constrain the model, this guards against the cases they miss.
+        """
+        expected_type = schema.get("type")
+        if expected_type == "object":
+            if not isinstance(data, dict):
+                raise SchemaValidationError(f"{path or '<root>'}: expected object, got {type(data).__name__}")
+            for req in schema.get("required", []):
+                if req not in data:
+                    raise SchemaValidationError(f"{path or '<root>'}: missing required field '{req}'")
+            for key, subschema in schema.get("properties", {}).items():
+                if key in data:
+                    BaseLLMClient._validate_against_schema(data[key], subschema, f"{path}.{key}" if path else key)
+        elif expected_type == "array":
+            if not isinstance(data, list):
+                raise SchemaValidationError(f"{path}: expected array, got {type(data).__name__}")
+            item_schema = schema.get("items")
+            if item_schema:
+                for i, item in enumerate(data):
+                    BaseLLMClient._validate_against_schema(item, item_schema, f"{path}[{i}]")
+        elif expected_type == "string":
+            if not isinstance(data, str):
+                raise SchemaValidationError(f"{path}: expected string, got {type(data).__name__}")
+            if "enum" in schema and data not in schema["enum"]:
+                raise SchemaValidationError(f"{path}: value '{data}' not in enum {schema['enum']}")
+        elif expected_type in ("number", "integer"):
+            if not isinstance(data, (int, float)) or isinstance(data, bool):
+                raise SchemaValidationError(f"{path}: expected number, got {type(data).__name__}")
+            if "minimum" in schema and data < schema["minimum"]:
+                raise SchemaValidationError(f"{path}: value {data} below minimum {schema['minimum']}")
+            if "maximum" in schema and data > schema["maximum"]:
+                raise SchemaValidationError(f"{path}: value {data} above maximum {schema['maximum']}")
+        elif expected_type == "boolean":
+            if not isinstance(data, bool):
+                raise SchemaValidationError(f"{path}: expected boolean, got {type(data).__name__}")
