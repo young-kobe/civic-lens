@@ -7,28 +7,33 @@ description: Core python code instruction set
 ## Objective
 
 Build an analysis and reporting pipeline that:
-- Loads raw news + Reddit data produced by the Go ingestor
+- Loads raw news + Reddit + X data produced by the Go ingestor
 - Extracts clean text in Python
-- Uses AI to compute topic/stance/framing and bot-detection signals with explicit evidence spans
+- Uses AI to compute sentiment + favorability + bot signals + claim extraction, all with explicit evidence spans
+- Clusters repeat claims into narratives (lexical Jaccard by default; embedding-mode opt-in)
+- Extracts a partial citation overlay between owned docs (URL mentions; X reply/quote/retweet)
 - Pre-computes results into JSON cache files
 - Serves cached data via FastAPI
 - Displays in React dashboard
 - Maintains auditability: every output is traceable to raw sources and model/prompt versions
 
-The system must clearly label reach and sentiment as **proxies** and must avoid claiming to represent all Americans. Reddit outputs must be labeled as "sampled Reddit discourse."
+The system must clearly label reach and sentiment as **proxies** and must avoid claiming to represent all Americans. Reddit outputs must be labeled as "sampled Reddit discourse"; social aggregations covering both sources must be labeled as "Reddit + X".
 
 ## Architecture
 
 ```
 analysis/
 ├── src/
-│   ├── common/          # Shared utilities (logger, cache)
-│   ├── engine/          # AI analysis (sentiment, bot, clustering)
+│   ├── common/          # Shared utilities (logger, cache, settings)
+│   ├── engine/          # AI analysis: bot, sentiment+favorability (analyzer),
+│   │                    # citations, claims, narrative clustering
 │   │   └── models/      # Dataclasses for engine outputs
-│   ├── reporting/       # Aggregators for dashboard data
-│   │   ├── aggregators/ # Domain-specific aggregators
-│   │   └── models/      # Dataclasses for aggregator outputs
+│   ├── reporting/       # Aggregators + review service
+│   │   ├── aggregators/ # Sentiment / bot / geo / narrative / outlet
+│   │   ├── models/      # Dataclasses for aggregator outputs
+│   │   └── review.py    # Human-in-loop review queue (writes ai_output_evals)
 │   ├── etl/             # Data loading and transformation
+│   ├── scheduler/       # Pipeline orchestration (job_runner)
 │   └── api/             # FastAPI server
 └── requirements.txt
 
@@ -76,9 +81,18 @@ SQLite -> ETL (loader.py) -> Engine (AI analysis) -> Aggregators -> Cache (JSON)
 - `raw_hash`
 
 ### ai_outputs (traceable)
-- `doc_id`, `task_type` (sentiment|bot|favorability)
+- `doc_id`, `task_type` (sentiment|bot|favorability|claims|citations)
 - `output_json`, `confidence`
 - `model_id`, `prompt_version`, `created_at`
+- Joined via `prompt_version` → `prompt_versions` for full prompt text per inference
+
+### narrative overlay
+- `narratives` (identity, `first_seen_doc_id`, anchor embedding)
+- `narrative_docs` (membership)
+- `narrative_citations` (partial link graph — owned → owned or owned → external URL)
+
+### human-in-loop
+- `ai_output_evals` (per-row correctness markers + golden-set flags)
 
 ## Commands
 
@@ -102,11 +116,12 @@ SQLite -> ETL (loader.py) -> Engine (AI analysis) -> Aggregators -> Cache (JSON)
 |----------|-------------|
 | `GET /health` | Health check |
 | `GET /api/cache-status` | Cache freshness metadata |
-| `GET /api/stories` | Story clusters |
-| `GET /api/sentiment` | Public sentiment data |
-| `GET /api/favorability` | GOP favorability metrics |
+| `GET /api/sentiment?window=...` | Sentiment + GOP favorability snapshot |
 | `GET /api/profiles` | Outlet profiles |
-| `GET /api/bot-activity` | Bot detection metrics |
+| `GET /api/bot-activity` | Bot activity snapshot |
+| `GET /api/geo-sentiment?window=...` | Country-level sentiment for the global heatmap |
+| `GET /api/narratives?window=...&limit=...` | Top narratives (claim clusters) |
+| `GET /api/review/queue` / `POST /api/review/submit` / `GET /api/review/stats` | Human review flow |
 
 ## Proxy Labeling Requirements
 
@@ -131,6 +146,8 @@ Avoid universal language about national sentiment.
 ## Acceptance Criteria
 
 1. Can run end-to-end: `.\run.ps1 analyze` populates cache, `.\run.ps1 dev` serves data
-2. Dashboard shows clusters, sentiment, favorability, bot activity
+2. Dashboard shows sentiment, favorability, bot activity, narratives, and the global heatmap
 3. Every data point is traceable to raw sources
 4. Reach and sentiment are clearly labeled as proxies/samples
+5. Narrative "first seen" is honestly framed as first-ingested-by-us, not world-origin
+6. Citation counts are labeled as a partial link graph (owned-only)

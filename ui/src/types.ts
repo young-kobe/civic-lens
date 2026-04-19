@@ -196,3 +196,97 @@ export interface DomainItem {
 export interface ChartDataPoint {
     [key: string]: string | number;
 }
+
+// Narrative types
+export interface NarrativeSourceBreakdownItem {
+    source_type: string;
+    label: string;
+    count: number;
+}
+
+export interface NarrativeTimelinePoint {
+    date: string;
+    count: number;
+}
+
+// Account tier for X-origin narratives. See walkthrough 036.
+export type AccountTier = 'elected_official' | 'affiliated' | 'general_public';
+
+// Faction context for X-origin narratives. Populated from account_profiles
+// via curated known_political_x_accounts.yaml. Null for news/reddit source
+// types and for unclassified X accounts.
+export interface AccountProfile {
+    handle: string | null;
+    full_name: string | null;
+    party: string | null;                 // 'D' | 'R' | 'I' | 'L' | 'G' | null
+    branch: string | null;                // 'executive' | 'legislative' | 'judicial' | 'party_org' | 'pac' | 'think_tank' | ...
+    chamber: string | null;               // 'senate' | 'house' | null
+    state_or_district: string | null;     // 'NY', 'CA33', null
+    office_title: string | null;          // 'President', 'Senator', 'Representative', etc.
+    account_type: string | null;          // 'official' | 'personal' | 'institutional' | ...
+}
+
+export interface NarrativeSummary {
+    narrative_id: number;
+    name: string;
+    first_seen_at: number;
+    // Earliest doc WE ingested carrying this claim — not world-origin.
+    first_seen_doc_id: number | null;
+    first_seen_source_type: string | null;
+    first_seen_domain: string | null;
+    // Only set for x_post source types; null for news/reddit.
+    first_seen_tier: AccountTier | null;
+    // Faction context for x_post first-seen docs; null otherwise.
+    first_seen_author: AccountProfile | null;
+    supporting_doc_count: number;
+    source_breakdown: NarrativeSourceBreakdownItem[];
+    timeline: NarrativeTimelinePoint[];
+    net_sentiment: number;
+    inbound_citation_count: number;
+}
+
+// Review types
+export type ReviewTaskType = 'sentiment' | 'favorability' | 'bot_detection' | 'claims';
+
+export interface ReviewQueueItem {
+    ai_output_id: number;
+    doc_id: number;
+    task_type: ReviewTaskType;
+    model_id: string;
+    prompt_version: string;
+    model_confidence: number | null;
+    model_output: Record<string, any>;
+    created_at: number;
+    doc: {
+        source_type: string;
+        domain: string | null;
+        title: string | null;
+        ident: string;
+        text_preview: string;
+        text_truncated: boolean;
+    };
+}
+
+export interface ReviewSubmission {
+    ai_output_id: number;
+    is_correct: number | null;
+    human_label: string | null;
+    human_confidence: number | null;
+    is_golden: boolean;
+    reviewer_id: string | null;
+    notes: string | null;
+}
+
+export interface ReviewTaskStats {
+    task_type: string;
+    total_outputs: number;
+    reviewed: number;
+    correct: number;
+    incorrect: number;
+    golden: number;
+    accuracy_pct: number | null;
+}
+
+export interface ReviewStats {
+    per_task: ReviewTaskStats[];
+}

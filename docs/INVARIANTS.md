@@ -1,8 +1,10 @@
 # Civic Lens - System Invariants & Correctness Checklist
 
-This document defines the non-negotiable invariants for the system. All code changes must preserve these properties.
+Civic Lens measures **sampled political discourse** across news, Reddit, and X, with a **narrative overlay** that clusters recurring claims and a **partial citation overlay** between owned sources. This document defines the non-negotiable invariants for the system. All code changes must preserve these properties.
 
-## Part A: C++ Ingestion & Storage
+See `docs/walkthroughs/035-goal-narrowing-and-renames.md` for the rationale behind the current goal framing.
+
+## Part A: Ingestion & Storage (Go)
 
 ### A1. Seeds
 - [ ] **Reproducibility**: The seed list is versioned. The same seed list must always produce the same initial crawl frontier.
@@ -39,9 +41,11 @@ This document defines the non-negotiable invariants for the system. All code cha
 - [ ] **Uncertainty**: All AI outputs include a confidence score.
 - [ ] **No Hallucination**: The API must not invent data. If a field is missing, it returns null/error, not a guess.
 
-### B3. Propaganda Detection
+### B3. Propaganda Detection (planned — not yet implemented)
 - [ ] **Operational Definition**: "Propaganda" is defined as the presence of measurable techniques (loaded language, ad hominem), not a subjective label.
 - [ ] **Auditability**: Flagged techniques must point to the specific text span that triggered the flag.
+
+> **Status:** No code implements this today. The propaganda-detection pipeline is planned for walkthroughs 040 (backend) and 041 (UI). Starting taxonomy: loaded language, name calling, ad hominem, appeal to fear, whataboutism, doubt-casting. Each flagged technique will require a verbatim evidence span, validated the same way sentiment spans are today.
 
 ## Part C: Frontend / Presentation
 

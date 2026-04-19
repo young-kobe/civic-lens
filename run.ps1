@@ -1,13 +1,16 @@
 param (
     [Parameter(Mandatory = $false, Position=0)]
-    [ValidateSet("ingest", "crawl", "api", "ui", "dev", "all", "migrate", "reddit", "x", "build", "analyze", "help")]
+    [ValidateSet("ingest", "crawl", "api", "ui", "dev", "all", "migrate", "reddit", "x", "build", "analyze", "refresh-accounts", "help")]
     [string]$Command = "help",
 
     [Parameter(Mandatory = $false)]
-    [string]$Tasks,
+    [string[]]$Tasks,
 
     [Parameter(Mandatory = $false)]
-    [int]$Limit
+    [int]$Limit,
+
+    [Parameter(Mandatory = $false)]
+    [switch]$DryRun
 )
 
 # --- Ensure Node/npm are available even if PATH is missing ---
@@ -196,8 +199,9 @@ function Run-Analyze {
     
     $ArgsList = @("-m", "analysis.src.scheduler.job_runner")
     if ($Tasks) {
+        # Accept either -Tasks accounts,snapshots (array) or -Tasks "accounts,snapshots" (string).
         $ArgsList += "--tasks"
-        $ArgsList += $Tasks
+        $ArgsList += ($Tasks -join ",")
     }
     if ($Limit) {
         $ArgsList += "--limit"
@@ -219,6 +223,26 @@ function Run-Dev {
     # Launch in separate processes
     Start-Process powershell -ArgumentList "-NoExit", "-File", "`"$ScriptRoot\run.ps1`"", "api"
     Start-Process powershell -ArgumentList "-NoExit", "-File", "`"$ScriptRoot\run.ps1`"", "ui"
+}
+
+function Run-RefreshAccounts {
+    Write-Status "Refreshing known_political_x_accounts.yaml from UCSD libguide..."
+    Load-Env
+    $PythonExe = Setup-Python
+    $ReqFile = "$ScriptRoot\analysis\requirements.txt"
+    if (Test-Path $ReqFile) {
+        & $PythonExe -m pip install -r $ReqFile --quiet
+    }
+    $Env:PYTHONPATH = $ScriptRoot
+    $ArgsList = @("-m", "analysis.src.etl.refresh_accounts")
+    if ($DryRun) {
+        $ArgsList += "--dry-run"
+    }
+    & $PythonExe @ArgsList
+    if ($LASTEXITCODE -ne 0) {
+        throw "refresh-accounts failed (exit $LASTEXITCODE)"
+    }
+    Write-Status "Done. Review the diff summary above; commit the YAML if it looks right."
 }
 
 # Main Dispatch
@@ -251,6 +275,9 @@ switch ($Command) {
     "analyze" {
         Run-Analyze
     }
+    "refresh-accounts" {
+        Run-RefreshAccounts
+    }
     "ui" { 
         Run-Ui 
     }
@@ -275,6 +302,8 @@ switch ($Command) {
         Write-Host "  crawl    - Run the web crawler"
         Write-Host "  analyze  - Run analysis pipeline (ETL + AI + caching)"
         Write-Host "             Options: -Tasks <list>, -Limit <num>"
+        Write-Host "  refresh-accounts - Refresh known_political_x_accounts.yaml from UCSD libguide"
+        Write-Host "                     Options: -DryRun (show diff without writing)"
         Write-Host "  api      - Start Python FastAPI server (serves cached data)"
         Write-Host "  ui       - Start React Frontend"
         Write-Host "  dev      - Start both API and UI"

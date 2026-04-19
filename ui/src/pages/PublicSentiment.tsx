@@ -703,8 +703,10 @@ function PublicSentiment({ filters }: PublicSentimentProps) {
                     color: '#92400e',
                 }}
             >
-                <strong>Sampled data:</strong> sentiment reflects US-political news articles plus sampled Reddit and X
-                discussions from the last 30 days. It is not a scientific poll and does not represent the full population.
+                <strong>Sampled political discourse:</strong> sentiment reflects US political news articles plus
+                sampled political Reddit and X discussions from the last 30 days. This is a snapshot of what the
+                sources we ingest are saying about politics — not a scientific poll and not a representation of the
+                full population.
             </div>
 
             {/* Overview Header */}

@@ -8,8 +8,10 @@ Provides endpoints for:
 - Cache status and metadata
 """
 
+from typing import Optional
 from fastapi import FastAPI, BackgroundTasks, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 
 from analysis.src.common.logger import get_logger
 from analysis.src.common.settings import get_settings
@@ -22,7 +24,9 @@ from analysis.src.reporting.aggregators import (
     SentimentAggregator,
     BotAggregator,
     GeoAggregator,
+    NarrativeAggregator,
 )
+from analysis.src.reporting.review import ReviewService
 
 app = FastAPI(title="Civic Lens API")
 settings = get_settings()
@@ -44,6 +48,8 @@ outlet_agg = OutletAggregator(settings.db_path)
 sentiment_agg = SentimentAggregator(settings.db_path)
 bot_agg = BotAggregator(settings.db_path)
 geo_agg = GeoAggregator(settings.db_path)
+narrative_agg = NarrativeAggregator(settings.db_path)
+review_service = ReviewService(settings.db_path)
 
 # Analyzers - only needed for on-demand analysis triggers
 bot_detector = HybridBotDetector(llm_enabled=settings.llm_enabled)
@@ -196,15 +202,100 @@ def get_bot_activity():
     )
 
 
+@app.get("/api/narratives")
+def get_narratives(window: str = "7d", limit: int = 20):
+    """Returns top narratives in the time window with spread and sentiment metadata.
+
+    The cache stores a window-keyed top-100; this endpoint slices to the
+    caller's ``limit`` so any limit <= 100 is a cache hit (walkthrough 041).
+    Limits above 100 skip the cache and compute live.
+    Query params: ?window=24h|7d|30d|90d&limit=20
+    """
+    if limit <= 100:
+        cached = _get_cached_or_fallback(
+            f"narratives_{window}",
+            lambda: narrative_agg.get_top_narratives(time_window=window, limit=100),
+            lambda narratives: [n.to_dict() for n in narratives],
+        )
+        if isinstance(cached, list):
+            return cached[:limit]
+        return cached
+
+    narratives = narrative_agg.get_top_narratives(time_window=window, limit=limit)
+    return [n.to_dict() for n in narratives]
+
+
+# =============================================================================
+# Human review (ai_output_evals)
+# =============================================================================
+# Future: gate these endpoints behind admin auth. For now they are open and
+# rely on the reviewer_id field for attribution.
+
+class ReviewSubmission(BaseModel):
+    ai_output_id: int
+    is_correct: Optional[int] = None  # 1 correct, 0 incorrect, None unscored
+    human_label: Optional[str] = None
+    human_confidence: Optional[float] = None
+    is_golden: bool = False
+    reviewer_id: Optional[str] = None
+    notes: Optional[str] = None
+
+
+@app.get("/api/review/queue")
+def get_review_queue(
+    task: str,
+    source_type: Optional[str] = None,
+    confidence_max: Optional[float] = None,
+    limit: int = 20,
+    offset: int = 0,
+):
+    """Return up to ``limit`` unreviewed AI outputs ordered lowest-confidence first."""
+    return review_service.get_queue(
+        task_type=task,
+        source_type=source_type,
+        confidence_max=confidence_max,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.post("/api/review/submit")
+def submit_review(payload: ReviewSubmission):
+    """Persist a human review for an AI output. Replaces any existing review."""
+    try:
+        return review_service.submit(
+            ai_output_id=payload.ai_output_id,
+            is_correct=payload.is_correct,
+            human_label=payload.human_label,
+            human_confidence=payload.human_confidence,
+            is_golden=payload.is_golden,
+            reviewer_id=payload.reviewer_id,
+            notes=payload.notes,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@app.get("/api/review/stats")
+def get_review_stats(task: Optional[str] = None):
+    """Per-task counts of total outputs, reviewed, correct, incorrect, golden, accuracy %."""
+    return review_service.get_stats(task_type=task)
+
+
 @app.get("/api/geo-sentiment")
 def get_geo_sentiment(window: str = "7d"):
     """
     Returns X posts aggregated by country with sentiment scores.
 
-    Uses explicit country_code from X API geo-tags (no heuristics).
+    Uses explicit country_code from X API geo-tags (no heuristics). Served
+    from pre-computed cache when available (walkthrough 041); falls back to
+    live aggregation.
     Query param: ?window=24h|7d|30d|90d
     """
-    return geo_agg.get_country_sentiment(time_window=window)
+    return _get_cached_or_fallback(
+        f"geo_sentiment_{window}",
+        lambda: geo_agg.get_country_sentiment(time_window=window),
+    )
 
 
 

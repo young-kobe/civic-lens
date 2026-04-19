@@ -23,6 +23,7 @@ from analysis.src.reporting.models.aggregator_models import (
     CoordinationStats,
     BehavioralSignals,
     BotActivityData,
+    NarrativeSummary,
 )
 
 __all__ = [
@@ -44,4 +45,5 @@ __all__ = [
     "CoordinationStats",
     "BehavioralSignals",
     "BotActivityData",
+    "NarrativeSummary",
 ]

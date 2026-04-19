@@ -33,6 +33,14 @@ class BaseLLMClient(ABC):
         """Check if the LLM client is properly initialized and ready."""
         pass
     
+    def embed(self, text: str, model: Optional[str] = None) -> Optional[list]:
+        """Return an embedding vector for ``text``, or None if not supported.
+
+        The default returns None so backends that do not implement embeddings
+        (or where the embedding model isn't installed) fall back gracefully.
+        """
+        return None
+
     @abstractmethod
     def complete(
         self,

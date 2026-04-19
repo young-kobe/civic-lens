@@ -92,7 +92,21 @@ CLAIM_EXTRACTION_SCHEMA = {
     "required": ["claims"],
 }
 
-# Bot Detection Schema
+# Account Classifier Schema
+ACCOUNT_CLASSIFIER_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "tier": {
+            "type": "string",
+            "enum": ["elected_official", "affiliated", "general_public"],
+        },
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "reasoning": {"type": "string"},
+    },
+    "required": ["tier", "confidence"],
+}
+
+# Bot Detection Schema (walkthrough 040 — added llm_text_likelihood)
 BOT_SCHEMA = {
     "type": "object",
     "properties": {
@@ -107,6 +121,11 @@ BOT_SCHEMA = {
             "type": "number",
             "minimum": 0,
             "maximum": 1
+        },
+        "llm_text_likelihood": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
         },
         "indicators": {
             "type": "array",

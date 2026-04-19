@@ -6,7 +6,7 @@ description: Global rules
 
 ## Overview
 
-Civic Lens measures how political narratives propagate across news media and online discourse.
+Civic Lens measures **sampled political discourse** across news, Reddit, and X, with a **narrative overlay** that clusters recurring claims and a **partial citation overlay** between owned sources. The goal is scoped to what the data supports — it is not a causal propagation engine. See `docs/walkthroughs/035-goal-narrowing-and-renames.md`.
 
 ## Stack
 

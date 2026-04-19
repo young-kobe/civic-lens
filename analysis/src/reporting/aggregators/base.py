@@ -43,36 +43,41 @@ def get_time_cutoff(window: str) -> Optional[int]:
     return int(time.time()) - seconds
 
 
-def get_bot_flagged_doc_ids(db_path: str) -> Set[int]:
+def get_bot_flagged_doc_ids(db_path: str, min_confidence: float = 0.5) -> Set[int]:
     """
-    Get all doc_ids that have been flagged as 'bot'.
-    
+    Get all doc_ids that have been flagged as 'bot' with confidence >= min_confidence.
+
     Only returns social media docs (reddit, x_post). News articles are
     assumed human-authored and are never excluded via bot filtering.
-    
-    These documents are excluded from sentiment, favorability, and cluster aggregations.
+
+    These documents are excluded from sentiment, favorability, and cluster
+    aggregations. Low-confidence bot flags do NOT cause exclusion — the
+    audit's rationale is that a flaky bot flag shouldn't silently drop
+    content from public-facing aggregates (walkthrough 039).
     """
     with get_connection(db_path) as conn:
         cursor = conn.cursor()
-        
+
         # Check if ai_outputs table exists
         cursor.execute("""
-            SELECT name FROM sqlite_master 
+            SELECT name FROM sqlite_master
             WHERE type='table' AND name='ai_outputs'
         """)
         if not cursor.fetchone():
             logger.warning("ai_outputs table does not exist - no bot filtering applied")
             return set()
-        
-        # Only flag social media docs as bots, never news articles
+
+        # Only flag social media docs as bots, never news articles.
+        # Confidence filter avoids excluding content on a weak bot call.
         cursor.execute("""
             SELECT a.doc_id, a.output_json
             FROM ai_outputs a
             JOIN docs d ON a.doc_id = d.doc_id
             WHERE a.task_type = 'bot_detection'
-            AND d.source_type IN ('reddit_post', 'reddit_comment', 'x_post')
-        """)
-        
+              AND a.confidence >= ?
+              AND d.source_type IN ('reddit_post', 'reddit_comment', 'x_post')
+        """, (min_confidence,))
+
         bot_docs = set()
         for doc_id, output_json in cursor.fetchall():
             try:
@@ -82,6 +87,9 @@ def get_bot_flagged_doc_ids(db_path: str) -> Set[int]:
                     bot_docs.add(doc_id)
             except json.JSONDecodeError:
                 continue
-        
-        logger.info(f"Found {len(bot_docs)} bot-flagged social media documents to exclude")
+
+        logger.info(
+            f"Found {len(bot_docs)} bot-flagged social media documents "
+            f"(confidence >= {min_confidence}) to exclude"
+        )
         return bot_docs

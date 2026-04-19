@@ -131,3 +131,28 @@ class OllamaClient(BaseLLMClient):
                 time.sleep(1)
         
         raise RuntimeError(f"Ollama API call failed after {self.max_retries} retries: {last_error}")
+
+    def embed(self, text: str, model: Optional[str] = None) -> Optional[list]:
+        """Get an embedding vector via Ollama's /api/embeddings endpoint.
+
+        Returns None on any failure so the caller can fall back to a non-
+        embedding similarity strategy without crashing the pipeline.
+        """
+        if not self.is_available or not text:
+            return None
+        embed_model = model or self.model
+        try:
+            response = requests.post(
+                f"{self.host}/api/embeddings",
+                json={"model": embed_model, "prompt": text[:2000]},
+                timeout=self.timeout,
+            )
+            response.raise_for_status()
+            payload = response.json()
+            embedding = payload.get("embedding")
+            if isinstance(embedding, list) and embedding:
+                return embedding
+            return None
+        except Exception as e:
+            logger.warning(f"Ollama embedding call failed for model={embed_model}: {e}")
+            return None

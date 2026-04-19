@@ -22,8 +22,12 @@ import argparse
 from datetime import datetime, timezone
 from pathlib import Path
 
-# Ensure project root is in path
-project_root = Path(__file__).parent.parent.parent.parent.parent
+# Ensure project root is in path. job_runner lives at
+# <repo>/analysis/src/scheduler/job_runner.py, so four parents up is the repo.
+# (The previous five-parent value landed on C:\Users\kobey and only worked
+# because run.ps1 sets PYTHONPATH separately. Any code joining project_root to
+# a data-file path — like known_accounts.yaml — would miss the repo.)
+project_root = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 from analysis.src.common.logger import get_logger
@@ -35,14 +39,19 @@ from analysis.src.engine.analyzer import Analyzer
 from analysis.src.engine.citation_extractor import CitationExtractor
 from analysis.src.engine.claim_extractor import ClaimExtractor
 from analysis.src.engine.narrative_clusterer import NarrativeClusterer
+from analysis.src.engine.account_classifier import AccountClassifier
 from analysis.src.engine.prompts import (
     BOT_PROMPT_VERSION, TEXT_ANALYSIS_PROMPT_VERSION, CLAIM_EXTRACTION_PROMPT_VERSION,
     BOT_SYSTEM_PROMPT, TEXT_ANALYSIS_SYSTEM_PROMPT, CLAIM_EXTRACTION_SYSTEM_PROMPT,
+    BOT_USER_PROMPT_TEMPLATE, TEXT_ANALYSIS_USER_PROMPT_TEMPLATE,
+    CLAIM_EXTRACTION_USER_PROMPT_TEMPLATE,
 )
 from analysis.src.reporting.aggregators import (
     OutletAggregator,
     SentimentAggregator,
     BotAggregator,
+    NarrativeAggregator,
+    GeoAggregator,
 )
 from analysis.src.etl.polling import PollingDataScraper, PollingDataError
 
@@ -63,6 +72,8 @@ class AnalysisJobRunner:
         self.outlet_agg = OutletAggregator(self.settings.db_path)
         self.sentiment_agg = SentimentAggregator(self.settings.db_path)
         self.bot_agg = BotAggregator(self.settings.db_path)
+        self.narrative_agg = NarrativeAggregator(self.settings.db_path)
+        self.geo_agg = GeoAggregator(self.settings.db_path)
 
         # Resolve model_id for DB tracking
         if self.settings.llm_backend.lower() == "ollama":
@@ -77,12 +88,44 @@ class AnalysisJobRunner:
         )
         self.citation_extractor = CitationExtractor(self.settings.db_path)
         self.claim_extractor = ClaimExtractor(llm_enabled=self.settings.llm_enabled)
-        self.narrative_clusterer = NarrativeClusterer(self.settings.db_path)
+        self.narrative_clusterer = self._build_narrative_clusterer()
+        self.account_classifier = AccountClassifier(
+            db_path=self.settings.db_path,
+            llm_enabled=self.settings.llm_enabled and self.settings.account_classifier_llm_enabled,
+        )
         self.polling_scraper = PollingDataScraper() if self.settings.polling_enabled else None
+
+    def _build_narrative_clusterer(self) -> NarrativeClusterer:
+        """Construct the narrative clusterer with the configured similarity mode.
+
+        Embedding mode requires a working LLM client; if either the client init
+        or the configured embedding call fails, the clusterer transparently
+        falls back to Jaccard at runtime per claim.
+        """
+        mode = self.settings.narrative_similarity_mode
+        embedding_client = None
+        if mode == "embedding" and self.settings.llm_enabled:
+            try:
+                from analysis.src.llm import get_llm_client
+                client = get_llm_client()
+                if client.is_available:
+                    embedding_client = client
+                else:
+                    logger.warning("Embedding mode requested but LLM client unavailable; falling back to jaccard at runtime")
+            except Exception as e:
+                logger.warning(f"Failed to init embedding client for narratives: {e}; falling back to jaccard")
+        return NarrativeClusterer(
+            db_path=self.settings.db_path,
+            mode=mode,
+            embedding_client=embedding_client,
+            embedding_model=self.settings.narrative_embedding_model,
+            jaccard_threshold=self.settings.narrative_jaccard_threshold,
+            embedding_threshold=self.settings.narrative_embedding_threshold,
+        )
     
     def run_etl(self) -> int:
         """Run ETL to load new raw content. Returns count of new docs."""
-        logger.info("Step 1/7: Running ETL...")
+        logger.info("Step 1/9: Running ETL...")
         count = self.loader.load_new_raw_content()
         logger.info(f"ETL complete: {count} new documents loaded")
         return count
@@ -96,43 +139,160 @@ class AnalysisJobRunner:
         return None  # "all" or any other value means no filter
     
     def run_bot_detection(self, limit: int | None = None) -> int:
-        """Run bot detection on unprocessed docs scoped by configuration. Returns count processed."""
-        logger.info(f"Step 2/7: Running bot detection (scope: {self.settings.run_analysis_on})...")
+        """Run bot detection on unprocessed docs scoped by configuration.
+
+        For x_post docs:
+          - pre-exclude authors classified as elected_official / affiliated
+            (account_profiles) or whose X profile is verified_type='government'.
+            Those get a bot_detection row written with label='human',
+            inference_method='deterministic', indicators=['pre-excluded: ...']
+            so coverage is complete but they are never flagged as bots.
+          - non-excluded x_posts get their metadata enriched with the author's
+            x_users_raw fields (verified, followers/following/listed/tweet_count,
+            created_at) before classification.
+
+        Walkthrough 040.
+        """
+        import sqlite3 as _sqlite
+        logger.info(f"Step 2/9: Running bot detection (scope: {self.settings.run_analysis_on})...")
         source_types = self._get_target_source_types()
         batch_size = limit if limit is not None else self.settings.loader_batch_size
         docs = self.loader.get_unprocessed_docs(
-            "bot_detection", 
-            source_types=source_types, 
+            "bot_detection",
+            source_types=source_types,
             batch_size=batch_size
         )
-        
+
         total = len(docs)
         logger.info(f"Processing {total} docs for bot detection")
-        
-        for i, doc in enumerate(docs, 1):
-            result = self.bot_detector.analyze_full(doc['text'], doc.get('metadata'))
-            output = result.to_dict()
-            self.loader.save_ai_output(
-                doc['doc_id'],
-                "bot_detection",
-                output,
-                result.confidence,
-                model_id=self.model_id,
-                prompt_version=BOT_PROMPT_VERSION,
-                system_prompt=BOT_SYSTEM_PROMPT,
-            )
-            logger.info(
-                f"[bot {i}/{total}] doc={doc['doc_id']} "
-                f"label={result.label} conf={result.confidence:.2f} "
-                f"reason={result.reasoning[:80] if result.reasoning else 'N/A'}"
-            )
-        
-        logger.info(f"Bot detection complete: {total} docs processed")
+
+        # One-time helper connection for per-doc metadata lookups and pre-exclusion.
+        enrich_conn = _sqlite.connect(self.settings.db_path)
+        try:
+            enrich_conn.execute("PRAGMA busy_timeout = 5000")
+            excluded_count = 0
+            processed = 0
+
+            for i, doc in enumerate(docs, 1):
+                pre_exclude_reason = None
+                metadata = dict(doc.get("metadata") or {})
+
+                if doc.get("source_type") == "x_post" and doc.get("ident"):
+                    enriched, pre_exclude_reason = self._enrich_x_metadata(
+                        enrich_conn, doc["ident"], metadata
+                    )
+                    metadata = enriched
+
+                if pre_exclude_reason is not None:
+                    # Write a coverage row so we never re-process this doc, but
+                    # guarantee it isn't flagged as a bot.
+                    excluded_output = {
+                        "is_bot": False,
+                        "label": "human",
+                        "confidence": 1.0,
+                        "indicators": [f"pre-excluded: {pre_exclude_reason}"],
+                        "reasoning": "Pre-excluded from bot detection by policy.",
+                        "inference_method": "deterministic",
+                        "llm_text_likelihood": 0.0,
+                    }
+                    self.loader.save_ai_output(
+                        doc["doc_id"],
+                        "bot_detection",
+                        excluded_output,
+                        confidence=1.0,
+                        model_id="bot-pre-exclusion",
+                        prompt_version=BOT_PROMPT_VERSION,
+                        system_prompt=None,  # no LLM prompt used
+                        inference_method="deterministic",
+                    )
+                    excluded_count += 1
+                    logger.info(
+                        f"[bot {i}/{total}] doc={doc['doc_id']} PRE-EXCLUDED ({pre_exclude_reason})"
+                    )
+                    continue
+
+                result = self.bot_detector.analyze_full(doc["text"], metadata)
+                output = result.to_dict()
+                self.loader.save_ai_output(
+                    doc["doc_id"],
+                    "bot_detection",
+                    output,
+                    result.confidence,
+                    model_id=self.model_id,
+                    prompt_version=BOT_PROMPT_VERSION,
+                    system_prompt=BOT_SYSTEM_PROMPT,
+                    user_prompt_template=BOT_USER_PROMPT_TEMPLATE,
+                    inference_method=result.inference_method,
+                )
+                processed += 1
+                logger.info(
+                    f"[bot {i}/{total}] doc={doc['doc_id']} "
+                    f"label={result.label} conf={result.confidence:.2f} "
+                    f"llm_text={result.llm_text_likelihood:.2f}"
+                )
+        finally:
+            enrich_conn.close()
+
+        logger.info(
+            f"Bot detection complete: {total} docs processed "
+            f"({processed} scored, {excluded_count} pre-excluded)"
+        )
         return total
+
+    def _enrich_x_metadata(
+        self,
+        conn,
+        tweet_id: str,
+        metadata: dict,
+    ) -> tuple[dict, str | None]:
+        """Join x_users_raw + account_profiles for an x_post.
+
+        Returns (enriched_metadata, pre_exclude_reason). When a reason is
+        returned, the caller must skip LLM/heuristic bot detection for this
+        doc and write a pre-excluded marker row instead.
+        """
+        row = conn.execute(
+            """
+            SELECT p.author_id,
+                   u.verified, u.verified_type, u.followers_count, u.following_count,
+                   u.listed_count, u.tweet_count, u.created_at,
+                   ap.tier
+            FROM x_posts_raw p
+            LEFT JOIN x_users_raw u ON u.user_id = p.author_id
+            LEFT JOIN account_profiles ap
+              ON ap.platform = 'x' AND ap.author_id = p.author_id
+            WHERE p.tweet_id = ?
+            """,
+            (tweet_id,),
+        ).fetchone()
+        if row is None:
+            return metadata, None
+
+        (author_id, verified, verified_type, followers, following,
+         listed, tweet_count, user_created, tier) = row
+
+        # Pre-exclusion rules (walkthrough 040).
+        if tier in ("elected_official", "affiliated"):
+            return metadata, f"tier={tier}"
+        if (verified_type or "").lower() == "government":
+            return metadata, "verified_type=government"
+
+        enriched = dict(metadata)
+        enriched["platform"] = "x"
+        enriched["author_id"] = author_id
+        enriched["verified"] = bool(verified)
+        enriched["verified_type"] = verified_type or ""
+        enriched["user_followers"] = followers or 0
+        enriched["user_following"] = following or 0
+        enriched["user_listed"] = listed or 0
+        enriched["user_tweet_count"] = tweet_count or 0
+        if user_created:
+            enriched["user_created_at"] = user_created
+        return enriched, None
     
     def run_text_analysis(self, limit: int | None = None) -> int:
         """Run combined sentiment and favorability analysis on unprocessed docs. Returns count processed."""
-        logger.info(f"Step 3/7: Running text analysis (sentiment + favorability) (scope: {self.settings.run_analysis_on})...")
+        logger.info(f"Step 3/9: Running text analysis (sentiment + favorability) (scope: {self.settings.run_analysis_on})...")
         source_types = self._get_target_source_types()
         
         # We look for docs that haven't been processed for sentiment
@@ -149,7 +309,7 @@ class AnalysisJobRunner:
         
         for i, doc in enumerate(docs, 1):
             sent_result, fav_result = self.analyzer.analyze_full(doc['text'])
-            
+
             # Save Sentiment
             self.loader.save_ai_output(
                 doc['doc_id'],
@@ -159,6 +319,8 @@ class AnalysisJobRunner:
                 model_id=self.model_id,
                 prompt_version=TEXT_ANALYSIS_PROMPT_VERSION,
                 system_prompt=TEXT_ANALYSIS_SYSTEM_PROMPT,
+                user_prompt_template=TEXT_ANALYSIS_USER_PROMPT_TEMPLATE,
+                inference_method=sent_result.inference_method,
             )
 
             # Save Favorability
@@ -170,6 +332,8 @@ class AnalysisJobRunner:
                 model_id=self.model_id,
                 prompt_version=TEXT_ANALYSIS_PROMPT_VERSION,
                 system_prompt=TEXT_ANALYSIS_SYSTEM_PROMPT,
+                user_prompt_template=TEXT_ANALYSIS_USER_PROMPT_TEMPLATE,
+                inference_method=fav_result.inference_method,
             )
             
             logger.info(
@@ -183,7 +347,7 @@ class AnalysisJobRunner:
 
     def run_citation_extraction(self, limit: int | None = None) -> int:
         """Extract cross-source citation edges. Deterministic, no LLM. Returns count of edges written."""
-        logger.info(f"Step 4/7: Running citation extraction...")
+        logger.info(f"Step 4/9: Running citation extraction...")
         batch_size = limit if limit is not None else self.settings.loader_batch_size
         docs = self.loader.get_unprocessed_docs(
             "citations",
@@ -200,7 +364,7 @@ class AnalysisJobRunner:
 
     def run_claim_extraction(self, limit: int | None = None) -> int:
         """Extract canonical claim statements from unprocessed docs. LLM-driven. Returns count of docs processed."""
-        logger.info(f"Step 5/7: Running claim extraction (scope: {self.settings.run_analysis_on})...")
+        logger.info(f"Step 5/9: Running claim extraction (scope: {self.settings.run_analysis_on})...")
         if not self.settings.llm_enabled:
             logger.warning("Claim extraction requires llm_enabled=true; skipping")
             return 0
@@ -227,6 +391,8 @@ class AnalysisJobRunner:
                 model_id=self.model_id,
                 prompt_version=CLAIM_EXTRACTION_PROMPT_VERSION,
                 system_prompt=CLAIM_EXTRACTION_SYSTEM_PROMPT,
+                user_prompt_template=CLAIM_EXTRACTION_USER_PROMPT_TEMPLATE,
+                inference_method="llm",
             )
             logger.info(
                 f"[claims {i}/{total}] doc={doc['doc_id']} extracted={len(result.claims)}"
@@ -236,8 +402,131 @@ class AnalysisJobRunner:
 
     def run_narrative_clustering(self) -> dict:
         """Cluster unassigned claims into narratives. Returns summary dict."""
-        logger.info("Step 6/7: Running narrative clustering...")
+        logger.info("Step 6/9: Running narrative clustering...")
         return self.narrative_clusterer.run()
+
+    def run_account_classification(self) -> dict:
+        """Seed curated accounts then run the LLM classifier on unclassified
+        high-volume X authors. Returns a summary dict."""
+        logger.info("Step 7/9: Running account tier classification...")
+        yaml_path = project_root / self.settings.known_accounts_yaml
+        curated = self.account_classifier.load_curated(yaml_path)
+        llm_written = self.account_classifier.classify_with_llm()
+        summary = {
+            "curated_elected_official": curated.get("elected_official", 0),
+            "curated_affiliated": curated.get("affiliated", 0),
+            "llm_written": llm_written,
+        }
+        logger.info(f"Account classification complete: {summary}")
+        return summary
+
+    def run_account_bot_rollup(self) -> dict:
+        """Aggregate per-post bot_detection rows by (platform, author_id) into
+        author_bot_scores for X authors (walkthrough 040). Reddit stays at
+        per-post scoring because we do not surface a reddit author field.
+        Returns a summary dict."""
+        import sqlite3 as _sqlite
+        import json as _json
+        import statistics as _stats
+
+        logger.info("Step 8/9: Rolling up per-post bot scores to author level...")
+        conn = _sqlite.connect(self.settings.db_path)
+        try:
+            conn.execute("PRAGMA busy_timeout = 5000")
+            cursor = conn.cursor()
+
+            # Join ai_outputs bot_detection → docs → x_posts_raw to get author_id.
+            # Exclude pre-excluded rows (indicators mention 'pre-excluded') so
+            # gov/electeds aren't rolled up.
+            cursor.execute(
+                """
+                SELECT x.author_id,
+                       a.output_json,
+                       a.confidence,
+                       a.inference_method
+                FROM ai_outputs a
+                JOIN docs d ON d.doc_id = a.doc_id
+                JOIN x_posts_raw x ON x.tweet_id = d.ident
+                WHERE a.task_type = 'bot_detection'
+                  AND d.source_type = 'x_post'
+                  AND COALESCE(a.inference_method, '') != 'deterministic'
+                """
+            )
+            rows = cursor.fetchall()
+
+            per_author: dict[str, dict] = {}
+            for author_id, output_json, confidence, inf_method in rows:
+                if not author_id:
+                    continue
+                try:
+                    payload = _json.loads(output_json) if output_json else {}
+                except _json.JSONDecodeError:
+                    continue
+                label = payload.get("label", "human")
+                score_field = (payload.get("deterministic_signals") or {}).get(
+                    "aggregated_score"
+                )
+                llm_text_lik = payload.get("llm_text_likelihood")
+                bucket = per_author.setdefault(author_id, {
+                    "scores": [],
+                    "bot_posts": 0,
+                    "suspicious_posts": 0,
+                    "llm_text_liks": [],
+                })
+                if isinstance(score_field, (int, float)):
+                    bucket["scores"].append(float(score_field))
+                if isinstance(llm_text_lik, (int, float)):
+                    bucket["llm_text_liks"].append(float(llm_text_lik))
+                if label == "bot":
+                    bucket["bot_posts"] += 1
+                elif label == "suspicious":
+                    bucket["suspicious_posts"] += 1
+
+            now = int(time.time())
+            written = 0
+            for author_id, b in per_author.items():
+                if not b["scores"]:
+                    continue
+                mean_score = sum(b["scores"]) / len(b["scores"])
+                var = _stats.pvariance(b["scores"]) if len(b["scores"]) > 1 else 0.0
+                llm_mean = (
+                    sum(b["llm_text_liks"]) / len(b["llm_text_liks"])
+                    if b["llm_text_liks"] else None
+                )
+                cursor.execute(
+                    """
+                    INSERT INTO author_bot_scores
+                        (platform, author_id, score, variance, sample_count,
+                         bot_post_count, suspicious_post_count,
+                         llm_text_likelihood_mean, updated_at)
+                    VALUES ('x', ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(platform, author_id) DO UPDATE SET
+                        score = excluded.score,
+                        variance = excluded.variance,
+                        sample_count = excluded.sample_count,
+                        bot_post_count = excluded.bot_post_count,
+                        suspicious_post_count = excluded.suspicious_post_count,
+                        llm_text_likelihood_mean = excluded.llm_text_likelihood_mean,
+                        updated_at = excluded.updated_at
+                    """,
+                    (
+                        author_id,
+                        round(mean_score, 4),
+                        round(var, 4),
+                        len(b["scores"]),
+                        b["bot_posts"],
+                        b["suspicious_posts"],
+                        round(llm_mean, 4) if llm_mean is not None else None,
+                        now,
+                    ),
+                )
+                written += 1
+            conn.commit()
+            summary = {"authors_scored": written, "post_rows_considered": len(rows)}
+            logger.info(f"Bot rollup complete: {summary}")
+            return summary
+        finally:
+            conn.close()
 
     def save_snapshots(self) -> dict:
         """
@@ -246,7 +535,7 @@ class AnalysisJobRunner:
         Saves multiple time-windowed versions of sentiment (with merged GOP favorability).
         Returns dict with counts for each cached endpoint.
         """
-        logger.info("Step 7/7: Saving aggregation snapshots to cache...")
+        logger.info("Step 9/9: Saving aggregation snapshots to cache...")
         results = {}
 
         # Time windows to pre-compute for time-sensitive endpoints
@@ -268,7 +557,29 @@ class AnalysisJobRunner:
         bot_activity = self.bot_agg.get_bot_activity()
         self.cache.save("bot_activity", bot_activity.to_dict(), doc_count=bot_activity.overview.totalFlaggedAccounts)
         results["bot_activity"] = 1
-        
+
+        # Narratives — cache top 100 per time window; the API slices to the
+        # caller's requested limit (walkthrough 041). Previously the key was
+        # hardcoded to limit=20 so any other limit in the query param missed
+        # cache and triggered live aggregation.
+        NARRATIVE_CACHE_SIZE = 100
+        for window in time_windows:
+            narratives = self.narrative_agg.get_top_narratives(
+                time_window=window, limit=NARRATIVE_CACHE_SIZE,
+            )
+            data = [n.to_dict() for n in narratives]
+            self.cache.save(f"narratives_{window}", data, doc_count=len(data))
+            results[f"narratives_{window}"] = len(data)
+
+        # Geo sentiment — cache per time window (walkthrough 041). Previously
+        # the endpoint recomputed live on every UI request because no snapshot
+        # was ever written.
+        for window in time_windows:
+            geo = self.geo_agg.get_country_sentiment(time_window=window)
+            total_posts = int(geo.get("total_posts", 0)) if isinstance(geo, dict) else 0
+            self.cache.save(f"geo_sentiment_{window}", geo, doc_count=total_posts)
+            results[f"geo_sentiment_{window}"] = total_posts
+
         # Polling Data (fetched live from RealClearPolling)
         if self.polling_scraper:
             try:
@@ -303,6 +614,8 @@ class AnalysisJobRunner:
             "citations": 0,
             "claims": 0,
             "narratives": {},
+            "account_classification": {},
+            "bot_rollup": {},
             "snapshots": {},
             "duration_seconds": 0,
             "status": "success"
@@ -324,6 +637,10 @@ class AnalysisJobRunner:
                 summary["claims"] = self.run_claim_extraction(limit=limit)
             if run_all or "narratives" in tasks:
                 summary["narratives"] = self.run_narrative_clustering()
+            if run_all or "accounts" in tasks:
+                summary["account_classification"] = self.run_account_classification()
+            if run_all or "bot_rollup" in tasks:
+                summary["bot_rollup"] = self.run_account_bot_rollup()
             if run_all or "snapshots" in tasks:
                 summary["snapshots"] = self.save_snapshots()
         except Exception as e:
@@ -345,7 +662,7 @@ class AnalysisJobRunner:
 def main():
     """Entry point for the job runner."""
     parser = argparse.ArgumentParser(description="Civic Lens Analysis Job Runner")
-    parser.add_argument("--tasks", type=str, help="Comma-separated tasks to run: etl, bot, text, citations, claims, narratives, snapshots. Defaults to all.")
+    parser.add_argument("--tasks", type=str, help="Comma-separated tasks to run: etl, bot, text, citations, claims, narratives, accounts, bot_rollup, snapshots. Defaults to all.")
     parser.add_argument("--limit", type=int, help="Limit maximum documents processed per analysis stage (useful for dev/testing)")
     args = parser.parse_args()
 

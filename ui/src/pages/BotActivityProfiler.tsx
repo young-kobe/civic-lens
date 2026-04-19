@@ -422,12 +422,14 @@ function BotActivityProfiler({ filters }: BotActivityProfilerProps) {
                     </svg>
                     <div>
                         <div className="eyebrow" style={{ color: 'var(--semantic-warning)' }}>
-                            Calibrated Language Notice
+                            How to read this page
                         </div>
                         <p className="text-sm mt-1">
-                            All activity described on this page is <strong>suspected</strong> or <strong>likely</strong> coordinated behavior.
-                            These indicators suggest automated or coordinated patterns but do not constitute definitive proof.
-                            Human verification is recommended before drawing conclusions.
+                            This page flags accounts and posts <strong>in our political-content sample</strong> that
+                            look automated. The detector uses behavioral signals — posting rate, text repetition,
+                            account age, and coordinated timing — to score each account. Some real users post in
+                            bot-like ways, and some real bots post like humans. Treat flags as <strong>leads, not
+                            verdicts</strong>.
                         </p>
                     </div>
                 </div>
