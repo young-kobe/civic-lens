@@ -25,6 +25,7 @@ from analysis.src.reporting.aggregators import (
     BotAggregator,
     GeoAggregator,
     NarrativeAggregator,
+    PropagandaAggregator,
 )
 from analysis.src.reporting.review import ReviewService
 
@@ -49,6 +50,7 @@ sentiment_agg = SentimentAggregator(settings.db_path)
 bot_agg = BotAggregator(settings.db_path)
 geo_agg = GeoAggregator(settings.db_path)
 narrative_agg = NarrativeAggregator(settings.db_path)
+propaganda_agg = PropagandaAggregator(settings.db_path)
 review_service = ReviewService(settings.db_path)
 
 # Analyzers - only needed for on-demand analysis triggers
@@ -280,6 +282,21 @@ def submit_review(payload: ReviewSubmission):
 def get_review_stats(task: Optional[str] = None):
     """Per-task counts of total outputs, reviewed, correct, incorrect, golden, accuracy %."""
     return review_service.get_stats(task_type=task)
+
+
+@app.get("/api/propaganda")
+def get_propaganda(window: str = "7d"):
+    """Returns propaganda-technique overview for the window.
+
+    Served from pre-computed cache when available (walkthrough 043); falls
+    back to live aggregation.
+    Query param: ?window=24h|7d|30d|90d
+    """
+    return _get_cached_or_fallback(
+        f"propaganda_{window}",
+        lambda: propaganda_agg.get_propaganda_overview(time_window=window),
+        lambda overview: overview.to_dict(),
+    )
 
 
 @app.get("/api/geo-sentiment")

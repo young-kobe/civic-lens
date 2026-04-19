@@ -1,5 +1,6 @@
 import {
     PublicSentimentData, BotData, NarrativeSummary,
+    PropagandaOverview,
     ReviewQueueItem, ReviewSubmission, ReviewStats, ReviewTaskType,
 } from '../types';
 
@@ -51,6 +52,14 @@ export async function fetchNarratives(window: TimeWindow = '7d', limit: number =
     const response = await fetch(`${API_BASE}/narratives?window=${window}&limit=${limit}`);
     if (!response.ok) {
         throw new Error(`Failed to fetch narratives: ${response.statusText}`);
+    }
+    return response.json();
+}
+
+export async function fetchPropaganda(window: TimeWindow = '7d'): Promise<PropagandaOverview> {
+    const response = await fetch(`${API_BASE}/propaganda?window=${window}`);
+    if (!response.ok) {
+        throw new Error(`Failed to fetch propaganda: ${response.statusText}`);
     }
     return response.json();
 }

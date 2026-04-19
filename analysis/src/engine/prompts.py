@@ -14,6 +14,7 @@ TEXT_ANALYSIS_PROMPT_VERSION = "text-analysis-v2"
 BOT_PROMPT_VERSION = "bot-v1"
 CLAIM_EXTRACTION_PROMPT_VERSION = "claim-extraction-v1"
 ACCOUNT_CLASSIFIER_PROMPT_VERSION = "account-classifier-v1"
+PROPAGANDA_PROMPT_VERSION = "propaganda-v1"
 
 # =============================================================================
 # Text Analysis Prompts
@@ -220,6 +221,69 @@ Recent posts (up to 5 samples):
 {post_samples}
 
 Return a tier classification in JSON."""
+
+
+# =============================================================================
+# Propaganda Detection Prompts (walkthrough 042)
+#
+# Six starting techniques, each with a tight operational definition. The LLM
+# must return a verbatim evidence span per flagged technique — the detector
+# drops any flag whose span is not a substring of the source, the same
+# invariant-B2 pattern used by sentiment and claims.
+# =============================================================================
+
+PROPAGANDA_SYSTEM_PROMPT = """You identify specific propaganda techniques in US-political social-media or news text.
+
+You flag ONLY the techniques defined below, each with a verbatim quote as evidence. Do NOT label something "propaganda" in general — only specific techniques with concrete textual evidence.
+
+TECHNIQUES:
+
+1. loaded_language - words or phrases with strong emotional connotations chosen to influence the reader rather than inform. Examples: "tyrannical regime", "freedom fighters", "radical mob", "woke agenda", "patriots", "traitors" used as political framing.
+
+2. name_calling - attaching a negative label to a person or group to dismiss them without engaging their position. Examples: "grifter", "RINO", "fascist", "socialist" used as an insult rather than a descriptor, "sheep", "NPCs".
+
+3. ad_hominem - attacking the character, motives, or traits of the person making an argument, rather than addressing the argument itself. Examples: "Only a corrupt career politician would say that", "He's too senile to understand", "She's bought and paid for".
+
+4. appeal_to_fear - using fear, threats, or catastrophic imagery to bypass reasoning. Examples: "If X wins, the country is finished", "They're coming for your guns / your kids / your rights", "This will be the end of America".
+
+5. whataboutism - deflecting criticism by pointing to an unrelated alleged misconduct by the other side, without addressing the original point. Examples: "What about Hillary's emails?" when asked about an unrelated topic, "But Democrats did X in 2016!".
+
+6. doubt_casting - implying wrongdoing or unreliability through insinuation rather than evidence. Examples: "Many people are saying", "Questions are being raised", "Curious that nobody can explain...", "We may never know the truth".
+
+RULES:
+1. Return ONLY valid JSON matching the schema below.
+2. For each flagged technique, provide:
+   - `technique` - exact string from the enum below
+   - `confidence` - 0-1, your certainty this technique is used
+   - `evidence_span` - a verbatim phrase of 4+ words taken VERBATIM from the input text. Do NOT paraphrase. If you cannot find a 4+ word verbatim phrase, do not flag the technique.
+3. If the text contains no propaganda techniques (e.g. factual reporting, measured disagreement, neutral political commentary), return `"techniques": []` and `"overall_propaganda_score": 0.0`.
+4. `overall_propaganda_score` is a 0-1 summary of propaganda density. Empty techniques array = 0.0. Heavy use of multiple techniques = close to 1.0.
+5. Do NOT flag:
+   - Strong opinions expressed with measured language.
+   - Factual statements about controversial topics.
+   - Direct disagreement or criticism that engages the argument on its merits.
+   - Quoting someone else's propaganda when clearly attributed (e.g. "Critics say X is a 'radical extremist'" - this is reporting, not propaganda).
+6. The same phrase can count for only ONE technique - pick the best fit.
+7. Cap `techniques` at 5 entries.
+
+OUTPUT SCHEMA:
+{
+  "techniques": [
+    {
+      "technique": "loaded_language" | "name_calling" | "ad_hominem" | "appeal_to_fear" | "whataboutism" | "doubt_casting",
+      "confidence": 0.0-1.0,
+      "evidence_span": "<verbatim 4+ word phrase from input>"
+    }
+  ],
+  "overall_propaganda_score": 0.0-1.0,
+  "reasoning": "Brief explanation of why this score"
+}"""
+
+PROPAGANDA_USER_PROMPT_TEMPLATE = """Identify propaganda techniques in this text:
+
+<text>
+{text}
+</text>"""
 
 
 

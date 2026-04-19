@@ -324,6 +324,17 @@ class NarrativeSummary:
     first-seen docs: handle, full_name, party, branch, chamber,
     state_or_district, office_title, account_type. Lets the UI render
     "Rep Adams (D, NC-12)"-style labels. None for news/reddit.
+
+    ``propaganda_score`` (walkthrough 043) is the mean propaganda density
+    across supporting docs that have been through propaganda detection. None
+    when no supporting doc has a propaganda row yet.
+
+    ``bot_pushed_fraction`` (walkthrough 043) is the fraction of the
+    narrative's unique X supporting authors whose ``author_bot_scores.score
+    >= 0.5`` or who have any bot-labeled posts. None when no supporting doc
+    is an X post with a resolved author. Together with ``propaganda_score``
+    it lets the UI show "this narrative is heavily bot-pushed AND heavy on
+    propaganda techniques."
     """
     narrative_id: int
     name: str
@@ -338,6 +349,8 @@ class NarrativeSummary:
     timeline: List[Dict[str, Any]]
     net_sentiment: float
     inbound_citation_count: int
+    propaganda_score: Optional[float] = None
+    bot_pushed_fraction: Optional[float] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -354,6 +367,8 @@ class NarrativeSummary:
             "timeline": self.timeline,
             "net_sentiment": self.net_sentiment,
             "inbound_citation_count": self.inbound_citation_count,
+            "propaganda_score": self.propaganda_score,
+            "bot_pushed_fraction": self.bot_pushed_fraction,
         }
 
 

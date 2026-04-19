@@ -243,10 +243,67 @@ export interface NarrativeSummary {
     timeline: NarrativeTimelinePoint[];
     net_sentiment: number;
     inbound_citation_count: number;
+    // Walkthrough 043 overlays — null when no data.
+    propaganda_score: number | null;       // 0..1 mean across supporting docs
+    bot_pushed_fraction: number | null;    // 0..1 over unique X supporting authors
+}
+
+// =============================================================================
+// Propaganda Detection (walkthrough 043)
+// =============================================================================
+
+export type PropagandaTechniqueName =
+    | 'loaded_language'
+    | 'name_calling'
+    | 'ad_hominem'
+    | 'appeal_to_fear'
+    | 'whataboutism'
+    | 'doubt_casting';
+
+export interface PropagandaTechniqueSpan {
+    technique: PropagandaTechniqueName;
+    confidence: number;
+    evidence_span: string;
+}
+
+export interface PropagandaTechniqueCount {
+    technique: PropagandaTechniqueName;
+    count: number;
+    pct_of_flagged_docs: number;
+}
+
+export interface PropagandaSourceSplit {
+    label: 'News' | 'Social Media';
+    total_docs: number;
+    flagged_docs: number;
+    flagged_rate_pct: number;
+    mean_score: number;
+}
+
+export interface PropagandaExample {
+    doc_id: number;
+    source_type: string;
+    domain: string | null;
+    title: string | null;
+    overall_score: number;
+    techniques: PropagandaTechniqueSpan[];
+    text_preview: string;
+}
+
+export interface PropagandaOverview {
+    window: string;
+    total_eligible_docs: number;
+    flagged_docs: number;
+    propaganda_rate_pct: number;
+    mean_score: number;
+    by_technique: PropagandaTechniqueCount[];
+    by_source: PropagandaSourceSplit[];
+    examples: PropagandaExample[];
+    disclaimer: string;
 }
 
 // Review types
-export type ReviewTaskType = 'sentiment' | 'favorability' | 'bot_detection' | 'claims';
+export type ReviewTaskType = 'sentiment' | 'favorability' | 'bot_detection' | 'claims' | 'propaganda';
 
 export interface ReviewQueueItem {
     ai_output_id: number;

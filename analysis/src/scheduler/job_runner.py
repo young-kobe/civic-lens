@@ -40,11 +40,15 @@ from analysis.src.engine.citation_extractor import CitationExtractor
 from analysis.src.engine.claim_extractor import ClaimExtractor
 from analysis.src.engine.narrative_clusterer import NarrativeClusterer
 from analysis.src.engine.account_classifier import AccountClassifier
+from analysis.src.engine.propaganda_detector import PropagandaDetector
 from analysis.src.engine.prompts import (
     BOT_PROMPT_VERSION, TEXT_ANALYSIS_PROMPT_VERSION, CLAIM_EXTRACTION_PROMPT_VERSION,
+    PROPAGANDA_PROMPT_VERSION,
     BOT_SYSTEM_PROMPT, TEXT_ANALYSIS_SYSTEM_PROMPT, CLAIM_EXTRACTION_SYSTEM_PROMPT,
+    PROPAGANDA_SYSTEM_PROMPT,
     BOT_USER_PROMPT_TEMPLATE, TEXT_ANALYSIS_USER_PROMPT_TEMPLATE,
     CLAIM_EXTRACTION_USER_PROMPT_TEMPLATE,
+    PROPAGANDA_USER_PROMPT_TEMPLATE,
 )
 from analysis.src.reporting.aggregators import (
     OutletAggregator,
@@ -52,6 +56,7 @@ from analysis.src.reporting.aggregators import (
     BotAggregator,
     NarrativeAggregator,
     GeoAggregator,
+    PropagandaAggregator,
 )
 from analysis.src.etl.polling import PollingDataScraper, PollingDataError
 
@@ -74,6 +79,7 @@ class AnalysisJobRunner:
         self.bot_agg = BotAggregator(self.settings.db_path)
         self.narrative_agg = NarrativeAggregator(self.settings.db_path)
         self.geo_agg = GeoAggregator(self.settings.db_path)
+        self.propaganda_agg = PropagandaAggregator(self.settings.db_path)
 
         # Resolve model_id for DB tracking
         if self.settings.llm_backend.lower() == "ollama":
@@ -88,6 +94,10 @@ class AnalysisJobRunner:
         )
         self.citation_extractor = CitationExtractor(self.settings.db_path)
         self.claim_extractor = ClaimExtractor(llm_enabled=self.settings.llm_enabled)
+        self.propaganda_detector = (
+            PropagandaDetector(llm_enabled=True)
+            if self.settings.llm_enabled else PropagandaDetector(llm_enabled=False)
+        )
         self.narrative_clusterer = self._build_narrative_clusterer()
         self.account_classifier = AccountClassifier(
             db_path=self.settings.db_path,
@@ -125,7 +135,7 @@ class AnalysisJobRunner:
     
     def run_etl(self) -> int:
         """Run ETL to load new raw content. Returns count of new docs."""
-        logger.info("Step 1/9: Running ETL...")
+        logger.info("Step 1/10: Running ETL...")
         count = self.loader.load_new_raw_content()
         logger.info(f"ETL complete: {count} new documents loaded")
         return count
@@ -154,7 +164,7 @@ class AnalysisJobRunner:
         Walkthrough 040.
         """
         import sqlite3 as _sqlite
-        logger.info(f"Step 2/9: Running bot detection (scope: {self.settings.run_analysis_on})...")
+        logger.info(f"Step 2/10: Running bot detection (scope: {self.settings.run_analysis_on})...")
         source_types = self._get_target_source_types()
         batch_size = limit if limit is not None else self.settings.loader_batch_size
         docs = self.loader.get_unprocessed_docs(
@@ -292,7 +302,7 @@ class AnalysisJobRunner:
     
     def run_text_analysis(self, limit: int | None = None) -> int:
         """Run combined sentiment and favorability analysis on unprocessed docs. Returns count processed."""
-        logger.info(f"Step 3/9: Running text analysis (sentiment + favorability) (scope: {self.settings.run_analysis_on})...")
+        logger.info(f"Step 3/10: Running text analysis (sentiment + favorability) (scope: {self.settings.run_analysis_on})...")
         source_types = self._get_target_source_types()
         
         # We look for docs that haven't been processed for sentiment
@@ -345,9 +355,55 @@ class AnalysisJobRunner:
         logger.info(f"Text analysis complete: {total} docs processed")
         return total
 
+    def run_propaganda_detection(self, limit: int | None = None) -> int:
+        """Detect propaganda techniques on unprocessed political docs (LLM-driven).
+        Runs on every source type — propaganda techniques exist in news editorials
+        AND in social posts, and honest aggregation later needs both. Returns
+        count of docs processed (walkthrough 042).
+        """
+        logger.info(
+            f"Step 4/10: Running propaganda detection (scope: {self.settings.run_analysis_on})..."
+        )
+        if not self.settings.llm_enabled:
+            logger.warning("Propaganda detection requires llm_enabled=true; skipping")
+            return 0
+
+        source_types = self._get_target_source_types()
+        batch_size = limit if limit is not None else self.settings.loader_batch_size
+        docs = self.loader.get_unprocessed_docs(
+            "propaganda", source_types=source_types, batch_size=batch_size,
+        )
+        total = len(docs)
+        if total == 0:
+            logger.info("Propaganda detection: no unprocessed docs")
+            return 0
+
+        logger.info(f"Processing {total} docs for propaganda detection")
+        for i, doc in enumerate(docs, 1):
+            result = self.propaganda_detector.detect(doc["text"])
+            payload = result.to_dict()
+            self.loader.save_ai_output(
+                doc["doc_id"],
+                "propaganda",
+                payload,
+                result.overall_propaganda_score,
+                model_id=self.model_id,
+                prompt_version=PROPAGANDA_PROMPT_VERSION,
+                system_prompt=PROPAGANDA_SYSTEM_PROMPT,
+                user_prompt_template=PROPAGANDA_USER_PROMPT_TEMPLATE,
+                inference_method=result.inference_method,
+            )
+            logger.info(
+                f"[propaganda {i}/{total}] doc={doc['doc_id']} "
+                f"techniques={len(result.techniques)} "
+                f"score={result.overall_propaganda_score:.2f}"
+            )
+        logger.info(f"Propaganda detection complete: {total} docs processed")
+        return total
+
     def run_citation_extraction(self, limit: int | None = None) -> int:
         """Extract cross-source citation edges. Deterministic, no LLM. Returns count of edges written."""
-        logger.info(f"Step 4/9: Running citation extraction...")
+        logger.info(f"Step 5/10: Running citation extraction...")
         batch_size = limit if limit is not None else self.settings.loader_batch_size
         docs = self.loader.get_unprocessed_docs(
             "citations",
@@ -364,7 +420,7 @@ class AnalysisJobRunner:
 
     def run_claim_extraction(self, limit: int | None = None) -> int:
         """Extract canonical claim statements from unprocessed docs. LLM-driven. Returns count of docs processed."""
-        logger.info(f"Step 5/9: Running claim extraction (scope: {self.settings.run_analysis_on})...")
+        logger.info(f"Step 6/10: Running claim extraction (scope: {self.settings.run_analysis_on})...")
         if not self.settings.llm_enabled:
             logger.warning("Claim extraction requires llm_enabled=true; skipping")
             return 0
@@ -402,13 +458,13 @@ class AnalysisJobRunner:
 
     def run_narrative_clustering(self) -> dict:
         """Cluster unassigned claims into narratives. Returns summary dict."""
-        logger.info("Step 6/9: Running narrative clustering...")
+        logger.info("Step 7/10: Running narrative clustering...")
         return self.narrative_clusterer.run()
 
     def run_account_classification(self) -> dict:
         """Seed curated accounts then run the LLM classifier on unclassified
         high-volume X authors. Returns a summary dict."""
-        logger.info("Step 7/9: Running account tier classification...")
+        logger.info("Step 8/10: Running account tier classification...")
         yaml_path = project_root / self.settings.known_accounts_yaml
         curated = self.account_classifier.load_curated(yaml_path)
         llm_written = self.account_classifier.classify_with_llm()
@@ -429,7 +485,7 @@ class AnalysisJobRunner:
         import json as _json
         import statistics as _stats
 
-        logger.info("Step 8/9: Rolling up per-post bot scores to author level...")
+        logger.info("Step 9/10: Rolling up per-post bot scores to author level...")
         conn = _sqlite.connect(self.settings.db_path)
         try:
             conn.execute("PRAGMA busy_timeout = 5000")
@@ -535,7 +591,7 @@ class AnalysisJobRunner:
         Saves multiple time-windowed versions of sentiment (with merged GOP favorability).
         Returns dict with counts for each cached endpoint.
         """
-        logger.info("Step 9/9: Saving aggregation snapshots to cache...")
+        logger.info("Step 10/10: Saving aggregation snapshots to cache...")
         results = {}
 
         # Time windows to pre-compute for time-sensitive endpoints
@@ -580,6 +636,16 @@ class AnalysisJobRunner:
             self.cache.save(f"geo_sentiment_{window}", geo, doc_count=total_posts)
             results[f"geo_sentiment_{window}"] = total_posts
 
+        # Propaganda — cache per time window (walkthrough 043).
+        for window in time_windows:
+            propaganda = self.propaganda_agg.get_propaganda_overview(time_window=window)
+            self.cache.save(
+                f"propaganda_{window}",
+                propaganda.to_dict(),
+                doc_count=propaganda.total_eligible_docs,
+            )
+            results[f"propaganda_{window}"] = propaganda.flagged_docs
+
         # Polling Data (fetched live from RealClearPolling)
         if self.polling_scraper:
             try:
@@ -611,6 +677,7 @@ class AnalysisJobRunner:
             "etl_new_docs": 0,
             "bot_detection": 0,
             "text_analysis": 0,
+            "propaganda": 0,
             "citations": 0,
             "claims": 0,
             "narratives": {},
@@ -631,6 +698,8 @@ class AnalysisJobRunner:
                 summary["bot_detection"] = self.run_bot_detection(limit=limit)
             if run_all or "text" in tasks:
                 summary["text_analysis"] = self.run_text_analysis(limit=limit)
+            if run_all or "propaganda" in tasks:
+                summary["propaganda"] = self.run_propaganda_detection(limit=limit)
             if run_all or "citations" in tasks:
                 summary["citations"] = self.run_citation_extraction(limit=limit)
             if run_all or "claims" in tasks:
@@ -662,7 +731,7 @@ class AnalysisJobRunner:
 def main():
     """Entry point for the job runner."""
     parser = argparse.ArgumentParser(description="Civic Lens Analysis Job Runner")
-    parser.add_argument("--tasks", type=str, help="Comma-separated tasks to run: etl, bot, text, citations, claims, narratives, accounts, bot_rollup, snapshots. Defaults to all.")
+    parser.add_argument("--tasks", type=str, help="Comma-separated tasks to run: etl, bot, text, propaganda, citations, claims, narratives, accounts, bot_rollup, snapshots. Defaults to all.")
     parser.add_argument("--limit", type=int, help="Limit maximum documents processed per analysis stage (useful for dev/testing)")
     args = parser.parse_args()
 

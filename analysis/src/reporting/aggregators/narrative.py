@@ -96,6 +96,8 @@ class NarrativeAggregator:
         timeline = self._timeline(cursor, narrative_id, cutoff)
         net_sentiment = self._net_sentiment(cursor, narrative_id, cutoff)
         inbound = self._inbound_citations(cursor, narrative_id, cutoff)
+        propaganda_score = self._propaganda_score(cursor, narrative_id, cutoff)
+        bot_pushed_fraction = self._bot_pushed_fraction(cursor, narrative_id, cutoff)
 
         return NarrativeSummary(
             narrative_id=narrative_id,
@@ -111,7 +113,87 @@ class NarrativeAggregator:
             timeline=timeline,
             net_sentiment=net_sentiment,
             inbound_citation_count=inbound,
+            propaganda_score=propaganda_score,
+            bot_pushed_fraction=bot_pushed_fraction,
         )
+
+    def _propaganda_score(
+        self, cursor, narrative_id: int, cutoff: Optional[int],
+    ) -> Optional[float]:
+        """Mean overall_propaganda_score across supporting docs with a
+        propaganda row, in the window. None when no supporting doc has been
+        through propaganda detection (walkthrough 043)."""
+        sql = """
+            SELECT a.output_json, a.confidence
+            FROM narrative_docs nd
+            JOIN docs d ON d.doc_id = nd.doc_id
+            JOIN ai_outputs a
+                 ON a.doc_id = d.doc_id
+                AND a.task_type = 'propaganda'
+                AND COALESCE(a.inference_method, '') != 'deterministic'
+            WHERE nd.narrative_id = ?
+        """
+        params: List[Any] = [narrative_id]
+        if cutoff is not None:
+            sql += " AND d.published_at >= ?"
+            params.append(cutoff)
+        cursor.execute(sql, params)
+        scores: List[float] = []
+        for output_json, _conf in cursor.fetchall():
+            try:
+                payload = json.loads(output_json) if output_json else {}
+            except json.JSONDecodeError:
+                continue
+            score = payload.get("overall_propaganda_score")
+            if isinstance(score, (int, float)):
+                scores.append(float(score))
+        if not scores:
+            return None
+        return round(sum(scores) / len(scores), 3)
+
+    def _bot_pushed_fraction(
+        self, cursor, narrative_id: int, cutoff: Optional[int],
+    ) -> Optional[float]:
+        """Fraction of supporting X authors with a high bot score.
+
+        A supporting doc's X author counts as "bot-pushed" when
+        ``author_bot_scores.score >= 0.5`` or they have at least one
+        bot-labeled post (``bot_post_count > 0``). Returns None when no
+        supporting doc is an X post with a resolved author (walkthrough 043).
+        """
+        sql = """
+            SELECT x.author_id, ab.score, ab.bot_post_count
+            FROM narrative_docs nd
+            JOIN docs d ON d.doc_id = nd.doc_id
+            JOIN x_posts_raw x ON x.tweet_id = d.ident
+            LEFT JOIN author_bot_scores ab
+                 ON ab.platform = 'x' AND ab.author_id = x.author_id
+            WHERE nd.narrative_id = ?
+              AND d.source_type = 'x_post'
+        """
+        params: List[Any] = [narrative_id]
+        if cutoff is not None:
+            sql += " AND d.published_at >= ?"
+            params.append(cutoff)
+        cursor.execute(sql, params)
+        rows = cursor.fetchall()
+        if not rows:
+            return None
+        seen_authors: set[str] = set()
+        bot_authors = 0
+        for author_id, score, bot_post_count in rows:
+            if not author_id or author_id in seen_authors:
+                continue
+            seen_authors.add(author_id)
+            is_bot_pushed = (
+                (isinstance(score, (int, float)) and score >= 0.5)
+                or (isinstance(bot_post_count, int) and bot_post_count > 0)
+            )
+            if is_bot_pushed:
+                bot_authors += 1
+        if not seen_authors:
+            return None
+        return round(bot_authors / len(seen_authors), 3)
 
     def _first_seen_info(self, cursor, first_seen_doc_id: Optional[int]) -> tuple:
         """(source_type, domain, tier, author_profile) for the earliest doc

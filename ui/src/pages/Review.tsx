@@ -12,14 +12,16 @@ const TASK_OPTIONS: Array<{ id: ReviewTaskType; label: string }> = [
     { id: 'favorability', label: 'Favorability' },
     { id: 'bot_detection', label: 'Bot Detection' },
     { id: 'claims', label: 'Claim Extraction' },
+    { id: 'propaganda', label: 'Propaganda' },
 ];
 
 const LABEL_OPTIONS_BY_TASK: Record<ReviewTaskType, string[]> = {
     sentiment: ['POSITIVE', 'NEGATIVE', 'NEUTRAL', 'MIXED'],
     favorability: ['favorable', 'unfavorable', 'neutral', 'mixed'],
     bot_detection: ['human', 'suspicious', 'bot'],
-    // Claims aren't a single-label task; reviewer just judges correctness.
+    // Multi-technique tasks — reviewer judges correctness overall, no single label pick.
     claims: [],
+    propaganda: [],
 };
 
 const REVIEWER_KEY = 'civic_lens_reviewer_id';
@@ -35,6 +37,12 @@ function modelLabel(task: ReviewTaskType, output: Record<string, any>): string {
         case 'claims': {
             const n = Array.isArray(output.claims) ? output.claims.length : 0;
             return `${n} claim${n === 1 ? '' : 's'} extracted`;
+        }
+        case 'propaganda': {
+            const n = Array.isArray(output.techniques) ? output.techniques.length : 0;
+            const score = typeof output.overall_propaganda_score === 'number'
+                ? output.overall_propaganda_score.toFixed(2) : '—';
+            return `${n} technique${n === 1 ? '' : 's'} (score ${score})`;
         }
         default:
             return '—';

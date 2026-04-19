@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Tabs, GlobalFilters, ExportMenu } from './components/common';
-import { Home, PublicSentiment, BotActivityProfiler, GlobalHeatmap, Narratives, Review } from './pages';
+import { Home, PublicSentiment, BotActivityProfiler, GlobalHeatmap, Narratives, Propaganda, Review } from './pages';
 import type { Filters } from './types';
 
 // Admin flag — set once via ?admin=1, persisted to localStorage for subsequent visits.
@@ -26,6 +26,7 @@ const ADMIN_MODE: boolean = (() => {
 const BASE_TABS = [
     { id: 'sentiment', label: 'Public Sentiment' },
     { id: 'narratives', label: 'Narratives' },
+    { id: 'propaganda', label: 'Propaganda' },
     { id: 'bots', label: 'Bot Detector' },
 ];
 
@@ -56,6 +57,8 @@ function App() {
                 return <PublicSentiment filters={filters} />;
             case 'narratives':
                 return <Narratives filters={filters} />;
+            case 'propaganda':
+                return <Propaganda filters={filters} />;
             case 'bots':
                 return <BotActivityProfiler filters={filters} />;
             case 'heatmap':

@@ -76,6 +76,45 @@ class EntityStance:
     evidence_spans: List[str] = field(default_factory=list)
 
 
+# =============================================================================
+# Propaganda Detection Models (walkthrough 042)
+# =============================================================================
+
+@dataclass
+class PropagandaTechnique:
+    """One flagged propaganda technique with verbatim evidence."""
+    technique: str   # one of PROPAGANDA_TECHNIQUE_ENUM
+    confidence: float
+    evidence_span: str
+
+
+@dataclass
+class PropagandaResult:
+    """
+    Propaganda-detection output for a single doc.
+
+    ``techniques`` is 0..5 flagged entries, each validated to have a verbatim
+    evidence span from the source text (invariant B2). An empty list means
+    the text contained no detectable propaganda techniques.
+
+    ``overall_propaganda_score`` is the summary 0-1 density. When the LLM
+    returned techniques but none validated (fabricated evidence), the score
+    is capped at ``UNVERIFIED_EVIDENCE_CAP`` — same pattern as sentiment.
+    """
+    techniques: List[PropagandaTechnique] = field(default_factory=list)
+    overall_propaganda_score: float = 0.0
+    reasoning: Optional[str] = None
+    inference_method: str = "llm"
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "techniques": [asdict(t) for t in self.techniques],
+            "overall_propaganda_score": self.overall_propaganda_score,
+            "reasoning": self.reasoning,
+            "inference_method": self.inference_method,
+        }
+
+
 @dataclass
 class FavorabilityResult:
     """

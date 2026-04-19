@@ -143,6 +143,42 @@ function NarrativeRow({ narrative }: NarrativeRowProps) {
                 <div style={{ marginTop: 6 }}>
                     <SourceBar items={narrative.source_breakdown} total={narrative.supporting_doc_count} />
                 </div>
+                {/* Walkthrough 043: propaganda + bot-pushed overlay badges.
+                    Shown only when the narrative has a value for the signal. */}
+                {(narrative.propaganda_score !== null || narrative.bot_pushed_fraction !== null) && (
+                    <div style={{ marginTop: 6, display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+                        {narrative.propaganda_score !== null && (
+                            <span
+                                title="Mean propaganda score across supporting docs"
+                                style={{
+                                    padding: '1px 6px',
+                                    background: narrative.propaganda_score >= 0.4 ? '#fef2f2' : '#f4f4f5',
+                                    border: `1px solid ${narrative.propaganda_score >= 0.4 ? '#fecaca' : 'var(--neutral-200)'}`,
+                                    borderRadius: 3,
+                                    fontSize: 'var(--text-xs)',
+                                    color: narrative.propaganda_score >= 0.4 ? '#b91c1c' : 'var(--neutral-600)',
+                                }}
+                            >
+                                prop {narrative.propaganda_score.toFixed(2)}
+                            </span>
+                        )}
+                        {narrative.bot_pushed_fraction !== null && (
+                            <span
+                                title="Fraction of unique X supporting authors whose bot score is >= 0.5 or who have any bot-labeled post"
+                                style={{
+                                    padding: '1px 6px',
+                                    background: narrative.bot_pushed_fraction >= 0.3 ? '#fef3c7' : '#f4f4f5',
+                                    border: `1px solid ${narrative.bot_pushed_fraction >= 0.3 ? '#fde68a' : 'var(--neutral-200)'}`,
+                                    borderRadius: 3,
+                                    fontSize: 'var(--text-xs)',
+                                    color: narrative.bot_pushed_fraction >= 0.3 ? '#92400e' : 'var(--neutral-600)',
+                                }}
+                            >
+                                bot-pushed {Math.round(narrative.bot_pushed_fraction * 100)}%
+                            </span>
+                        )}
+                    </div>
+                )}
             </div>
 
             {/* Sparkline */}

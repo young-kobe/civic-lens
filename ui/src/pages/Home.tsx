@@ -172,6 +172,13 @@ function Home({ onNavigate, isAdmin = false }: HomeProps) {
                         onClick={onNavigate}
                     />
                     <TabCard
+                        tabId="propaganda"
+                        tagline="Tab · Propaganda"
+                        title="Propaganda techniques flagged in political content"
+                        body="An LLM scans each doc for six specific techniques (loaded language, name-calling, ad hominem, appeal-to-fear, whataboutism, doubt-casting) and must quote a verbatim phrase from the source as evidence. Shows technique breakdown, news-vs-social split, and examples with the quoted evidence."
+                        onClick={onNavigate}
+                    />
+                    <TabCard
                         tabId="bots"
                         tagline="Tab · Bot Detector"
                         title="Accounts in political discourse that look automated"

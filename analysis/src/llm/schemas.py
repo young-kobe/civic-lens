@@ -92,6 +92,45 @@ CLAIM_EXTRACTION_SCHEMA = {
     "required": ["claims"],
 }
 
+# Propaganda Detection Schema (walkthrough 042)
+PROPAGANDA_TECHNIQUE_ENUM = [
+    "loaded_language",
+    "name_calling",
+    "ad_hominem",
+    "appeal_to_fear",
+    "whataboutism",
+    "doubt_casting",
+]
+
+PROPAGANDA_TECHNIQUE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "technique": {
+            "type": "string",
+            "enum": PROPAGANDA_TECHNIQUE_ENUM,
+        },
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "evidence_span": {"type": "string"},
+    },
+    "required": ["technique", "confidence", "evidence_span"],
+}
+
+PROPAGANDA_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "techniques": {
+            "type": "array",
+            "items": PROPAGANDA_TECHNIQUE_SCHEMA,
+        },
+        "overall_propaganda_score": {
+            "type": "number", "minimum": 0, "maximum": 1,
+        },
+        "reasoning": {"type": "string"},
+    },
+    "required": ["techniques", "overall_propaganda_score"],
+}
+
+
 # Account Classifier Schema
 ACCOUNT_CLASSIFIER_SCHEMA = {
     "type": "object",
