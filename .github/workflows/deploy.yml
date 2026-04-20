@@ -1,0 +1,86 @@
+name: Deploy
+on:
+  push:
+    branches: [main]
+
+# Only one deploy at a time. A second push while the first is in-flight
+# waits rather than racing the SSH session.
+concurrency:
+  group: deploy-main
+  cancel-in-progress: false
+
+jobs:
+  # Mirror the CI gates so a direct merge to main can't ship broken code if
+  # somebody bypasses the PR check. Duplicates ci.yml but not worth factoring
+  # into a reusable workflow for just two call sites.
+  gate:
+    name: Pre-deploy gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: analysis/requirements.txt
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache: true
+          cache-dependency-path: ingest/go.sum
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: ui/package-lock.json
+      - name: Python deps + audit + tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m pip install --upgrade pip wheel
+          python -m pip install -r analysis/requirements.txt pip-audit
+          pip-audit --requirement analysis/requirements.txt --strict
+          python -m unittest discover analysis/tests
+      - name: Go tests + build
+        working-directory: ingest
+        run: |
+          go vet ./...
+          go test ./...
+          go build -trimpath -ldflags "-s -w" -o /tmp/civic-ingest ./cmd/civic-ingest
+      - name: UI audit + build
+        working-directory: ui
+        run: |
+          npm ci
+          npm audit --audit-level=high
+          npm run typecheck
+          npm run build
+
+  deploy:
+    name: Deploy to Hetzner
+    needs: gate
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://civic-lens.info
+    steps:
+      - name: SSH to VPS and run deploy.sh
+        env:
+          SSH_HOST: ${{ secrets.DEPLOY_HOST }}
+          SSH_USER: deployment
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          # Short-lived key. umask ensures 0600 on creation.
+          umask 0077
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          # Forced-command on the VPS side means this literally runs
+          # /opt/civic-lens/deploy/deploy.sh and exits — arguments we pass
+          # here would be ignored. Keeping the ssh invocation minimal so
+          # that's obvious to anyone reading the job log.
+          ssh -i ~/.ssh/deploy_key \
+              -o IdentitiesOnly=yes \
+              -o ServerAliveInterval=30 \
+              "$SSH_USER@$SSH_HOST" || exit $?

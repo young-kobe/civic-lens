@@ -114,6 +114,24 @@ class TestSnapshotCache:
         path = cache._get_path("path/to/key")
         assert "_" in str(path.name)
     
+    def test_rejects_dot_dot_traversal(self, cache):
+        """Traversal payloads raise ValueError (audit §1.4)."""
+        with pytest.raises(ValueError):
+            cache._get_path("../../../etc/passwd")
+        with pytest.raises(ValueError):
+            cache.save("../../escape", {"x": 1})
+
+    def test_rejects_null_byte(self, cache):
+        """NUL-byte payloads raise ValueError — prevents C-string truncation
+        tricks if the key ever flows into a lower-level filesystem call."""
+        with pytest.raises(ValueError):
+            cache._get_path("sentiment_24h\x00/etc/passwd")
+
+    def test_path_stays_under_cache_dir(self, cache, temp_cache_dir):
+        """The resolved path must always be inside ``cache_dir``."""
+        path = cache._get_path("sentiment_24h")
+        assert str(path).startswith(str(Path(temp_cache_dir).resolve()))
+
     def test_complex_data(self, cache):
         """Test caching complex nested data structures."""
         data = {

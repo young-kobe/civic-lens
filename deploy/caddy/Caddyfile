@@ -1,0 +1,88 @@
+# Civic Lens production Caddyfile (audit §1.15).
+#
+# TLS strategy: Cloudflare Authenticated Origin Pulls (see §1.19). The cert +
+# key here are issued by Cloudflare's Origin CA; Caddy additionally requires
+# that every request carry a client cert chaining back to Cloudflare's root
+# CA. Direct curl to the origin IP fails with tls: client certificate
+# required. Without this, anyone who discovers the VPS IP bypasses
+# Cloudflare Access.
+#
+# The security headers are deliberately split across layers: CSP +
+# Referrer-Policy come from the FastAPI middleware (so they apply to both
+# /api/* and a future static-fallback case identically). Caddy emits only
+# the headers that are server-concerns: strip the Server banner, set
+# X-Frame-Options defense-in-depth, and HSTS (Cloudflare also sets it at
+# the edge; duplicating is fine).
+
+civic-lens.info, www.civic-lens.info {
+    tls /etc/caddy/origin.crt /etc/caddy/origin.key {
+        client_auth {
+            mode require_and_verify
+            trust_pool file /etc/caddy/cloudflare-authenticated-origin-pull.pem
+        }
+    }
+
+    log {
+        output file /var/log/caddy/civic-lens.log {
+            roll_size 50mb
+            roll_keep 7
+            roll_keep_for 720h
+        }
+        format json
+    }
+
+    encode gzip zstd
+
+    request_body {
+        max_size 1MB
+    }
+
+    header {
+        -Server
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Frame-Options "DENY"
+        # Remaining security headers (CSP, X-Content-Type-Options, Referrer-Policy,
+        # Permissions-Policy) are emitted by the FastAPI security-headers middleware
+        # on /api/* responses and are defaulted here for static assets via
+        # X-Content-Type-Options anyway.
+        X-Content-Type-Options "nosniff"
+    }
+
+    handle /api/* {
+        reverse_proxy 127.0.0.1:8000 {
+            transport http {
+                dial_timeout 5s
+                response_header_timeout 30s
+                read_timeout 60s
+                write_timeout 30s
+            }
+            # Do NOT log X-Admin-Token or CF-Access-Jwt-Assertion in access
+            # logs — Caddy's default includes all forwarded headers. These
+            # directives tell reverse_proxy to omit them from traces.
+            header_up -X-Admin-Token
+            header_up -Cf-Access-Jwt-Assertion
+            # Preserve the client IP so slowapi's CF-Connecting-IP key_func
+            # works when Caddy receives CF-Connecting-IP from Cloudflare.
+            header_up X-Forwarded-For {http.request.header.Cf-Connecting-Ip}
+            header_up X-Real-Ip {http.request.header.Cf-Connecting-Ip}
+        }
+    }
+
+    handle {
+        root * /opt/civic-lens/ui/dist
+        try_files {path} /index.html
+        file_server
+
+        # Long cache for hashed assets, short for index.html.
+        @hashed path *.js *.css *.woff2 *.png *.svg *.ico
+        header @hashed Cache-Control "public, max-age=31536000, immutable"
+        header Cache-Control "public, max-age=300"
+    }
+}
+
+# Hetzner default interfaces also listen on :80 — Cloudflare handles the
+# redirect, but if a direct hit reaches :80 we return a hard close rather
+# than serving plaintext.
+:80 {
+    respond "" 403
+}

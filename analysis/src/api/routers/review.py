@@ -6,12 +6,14 @@ up to 1200 chars of raw scraped text per item, so the gate is required, not
 optional.
 """
 
-from typing import Optional
+from typing import Literal, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
+from starlette.requests import Request
 
 from analysis.src.api.dependencies import require_admin_token
+from analysis.src.api.rate_limits import limiter
 from analysis.src.common.settings import get_settings
 from analysis.src.reporting.review import ReviewService
 
@@ -23,24 +25,33 @@ router = APIRouter(
     dependencies=[Depends(require_admin_token)],
 )
 
+# Whitelisted task + source enums — mirror the values written by the pipeline
+# and exposed by the Review UI. Keeping these as Literals means a typo in the
+# query string returns 422 at FastAPI's validation layer, never reaches SQL.
+ReviewTask = Literal["sentiment", "favorability", "bot_detection", "claims", "propaganda"]
+ReviewSourceType = Literal["news", "reddit_post", "reddit_comment", "x_post"]
+
 
 class ReviewSubmission(BaseModel):
+    """Bounded fields only — unbounded strings / unconstrained floats would let a
+    reviewer bloat the DB or corrupt accuracy stats (audit §1.2)."""
+
     ai_output_id: int
-    is_correct: Optional[int] = None  # 1 correct, 0 incorrect, None unscored
-    human_label: Optional[str] = None
-    human_confidence: Optional[float] = None
+    is_correct: Optional[Literal[0, 1]] = None  # 1 correct, 0 incorrect, None unscored
+    human_label: Optional[str] = Field(default=None, max_length=2000)
+    human_confidence: Optional[float] = Field(default=None, ge=0.0, le=1.0)
     is_golden: bool = False
-    reviewer_id: Optional[str] = None
-    notes: Optional[str] = None
+    reviewer_id: Optional[str] = Field(default=None, max_length=255)
+    notes: Optional[str] = Field(default=None, max_length=2000)
 
 
 @router.get("/review/queue")
 def get_review_queue(
-    task: str,
-    source_type: Optional[str] = None,
-    confidence_max: Optional[float] = None,
-    limit: int = 20,
-    offset: int = 0,
+    task: ReviewTask,
+    source_type: Optional[ReviewSourceType] = None,
+    confidence_max: Optional[float] = Query(default=None, ge=0.0, le=1.0),
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
 ):
     """Return up to ``limit`` unreviewed AI outputs ordered lowest-confidence first."""
     return review_service.get_queue(
@@ -53,7 +64,8 @@ def get_review_queue(
 
 
 @router.post("/review/submit")
-def submit_review(payload: ReviewSubmission):
+@limiter.limit("30/hour")
+def submit_review(request: Request, payload: ReviewSubmission):
     """Persist a human review for an AI output. Replaces any existing review."""
     try:
         return review_service.submit(
@@ -70,6 +82,6 @@ def submit_review(payload: ReviewSubmission):
 
 
 @router.get("/review/stats")
-def get_review_stats(task: Optional[str] = None):
+def get_review_stats(task: Optional[ReviewTask] = None):
     """Per-task counts of total outputs, reviewed, correct, incorrect, golden, accuracy %."""
     return review_service.get_stats(task_type=task)
