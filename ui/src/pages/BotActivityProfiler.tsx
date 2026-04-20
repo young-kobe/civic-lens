@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Card, MetricCard, MethodPopover, LoadingCard, EmptyState, ErrorState } from '../components/common';
 import { Heatmap } from '../components/charts';
 import { fetchBotActivity } from '../services/api';
+import { useFetch } from '../services/useFetch';
 import type { Filters, BotData, BotOverview, NarrativeAmplification, CoordinationStats, BehavioralSignals, ConfidenceLevel } from '../types';
 
 interface BotOverviewMetricsProps {
@@ -345,37 +346,19 @@ interface BotActivityProfilerProps {
     filters: Filters;
 }
 
-function BotActivityProfiler({ filters }: BotActivityProfilerProps) {
-    const [data, setData] = useState<BotData | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-
-    useEffect(() => {
-        let cancelled = false;
-        setLoading(true);
-        setError(null);
-
-        fetchBotActivity()
-            .then((result) => {
-                if (!cancelled) {
-                    setData(result);
-                    setLoading(false);
-                }
-            })
-            .catch((err) => {
-                if (!cancelled) {
-                    setError(err.message || 'Failed to fetch bot activity data');
-                    setLoading(false);
-                }
-            });
-
-        return () => {
-            cancelled = true;
-        };
-    }, [filters]);
+function BotActivityProfiler({ filters: _filters }: BotActivityProfilerProps) {
+    // Bot activity is not time-window filtered at the API layer (it's a
+    // snapshot cache rebuilt on each pipeline run), so `filters` doesn't
+    // influence the key. If that changes, fold the relevant filter fields
+    // into the cache key.
+    const { data, loading, error, refetch } = useFetch<BotData>(
+        () => fetchBotActivity(),
+        [],
+        'bot-activity',
+    );
 
     if (error) {
-        return <ErrorState message={error} onRetry={() => setError(null)} />;
+        return <ErrorState message={error.message} onRetry={refetch} />;
     }
 
     if (loading) {

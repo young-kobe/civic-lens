@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
 import { Card, MetricCard, MethodPopover, LoadingCard, EmptyState, ErrorState } from '../components/common';
 import { fetchPropaganda } from '../services/api';
+import { useFetch } from '../services/useFetch';
 import type {
     Filters, PropagandaOverview, PropagandaTechniqueCount, PropagandaSourceSplit,
     PropagandaExample, PropagandaTechniqueName,
@@ -163,29 +163,13 @@ interface PropagandaProps {
 }
 
 function Propaganda({ filters }: PropagandaProps) {
-    const [data, setData] = useState<PropagandaOverview | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+    const { data, loading, error, refetch } = useFetch<PropagandaOverview>(
+        () => fetchPropaganda(filters.timeRange),
+        [filters.timeRange],
+        `propaganda:${filters.timeRange}`,
+    );
 
-    useEffect(() => {
-        let cancelled = false;
-        async function load() {
-            setLoading(true);
-            setError(null);
-            try {
-                const result = await fetchPropaganda(filters.timeRange);
-                if (!cancelled) setData(result);
-            } catch (err: any) {
-                if (!cancelled) setError(err?.message ?? 'Failed to load propaganda data.');
-            } finally {
-                if (!cancelled) setLoading(false);
-            }
-        }
-        load();
-        return () => { cancelled = true; };
-    }, [filters.timeRange]);
-
-    if (error) return <ErrorState message={error} onRetry={() => window.location.reload()} />;
+    if (error) return <ErrorState message={error.message} onRetry={refetch} />;
     if (loading) {
         return (
             <div className="flex flex-col gap-4">

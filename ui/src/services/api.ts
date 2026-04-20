@@ -17,20 +17,35 @@ function adminHeaders(): HeadersInit {
     }
 }
 
-export async function fetchSentiment(window: TimeWindow = '24h'): Promise<PublicSentimentData> {
-    const response = await fetch(`${API_BASE}/sentiment?window=${window}`);
-    if (!response.ok) {
-        throw new Error(`Failed to fetch sentiment: ${response.statusText}`);
+/**
+ * Minimal JSON fetch helper. Collapses the per-endpoint try/response-ok/json
+ * boilerplate and gives us one place to add auth headers, retry, or
+ * telemetry later. Endpoints that need admin auth pass `admin: true`; the
+ * helper merges the X-Admin-Token header on top of the caller's init.
+ */
+async function fetchJSON<T>(
+    path: string,
+    init: RequestInit & { admin?: boolean } = {},
+): Promise<T> {
+    const { admin, headers, ...rest } = init;
+    const mergedHeaders: HeadersInit = {
+        ...(rest.body ? { 'Content-Type': 'application/json' } : {}),
+        ...(admin ? adminHeaders() : {}),
+        ...(headers || {}),
+    };
+    const resp = await fetch(`${API_BASE}${path}`, { ...rest, headers: mergedHeaders });
+    if (!resp.ok) {
+        throw new Error(`API ${resp.status} ${resp.statusText} on ${path}`);
     }
-    return response.json();
+    return resp.json();
+}
+
+export async function fetchSentiment(window: TimeWindow = '24h'): Promise<PublicSentimentData> {
+    return fetchJSON<PublicSentimentData>(`/sentiment?window=${window}`);
 }
 
 export async function fetchBotActivity(): Promise<BotData> {
-    const response = await fetch(`${API_BASE}/bot-activity`);
-    if (!response.ok) {
-        throw new Error(`Failed to fetch bot activity: ${response.statusText}`);
-    }
-    return response.json();
+    return fetchJSON<BotData>('/bot-activity');
 }
 
 export interface GeoSentimentData {
@@ -50,27 +65,15 @@ export interface CountryStats {
 }
 
 export async function fetchGeoSentiment(window: TimeWindow = '7d'): Promise<GeoSentimentData> {
-    const response = await fetch(`${API_BASE}/geo-sentiment?window=${window}`);
-    if (!response.ok) {
-        throw new Error(`Failed to fetch geo sentiment: ${response.statusText}`);
-    }
-    return response.json();
+    return fetchJSON<GeoSentimentData>(`/geo-sentiment?window=${window}`);
 }
 
 export async function fetchNarratives(window: TimeWindow = '7d', limit: number = 20): Promise<NarrativeSummary[]> {
-    const response = await fetch(`${API_BASE}/narratives?window=${window}&limit=${limit}`);
-    if (!response.ok) {
-        throw new Error(`Failed to fetch narratives: ${response.statusText}`);
-    }
-    return response.json();
+    return fetchJSON<NarrativeSummary[]>(`/narratives?window=${window}&limit=${limit}`);
 }
 
 export async function fetchPropaganda(window: TimeWindow = '7d'): Promise<PropagandaOverview> {
-    const response = await fetch(`${API_BASE}/propaganda?window=${window}`);
-    if (!response.ok) {
-        throw new Error(`Failed to fetch propaganda: ${response.statusText}`);
-    }
-    return response.json();
+    return fetchJSON<PropagandaOverview>(`/propaganda?window=${window}`);
 }
 
 export interface ReviewQueueParams {
@@ -87,30 +90,18 @@ export async function fetchReviewQueue(params: ReviewQueueParams): Promise<Revie
     if (params.confidenceMax !== undefined) qs.set('confidence_max', String(params.confidenceMax));
     if (params.limit !== undefined) qs.set('limit', String(params.limit));
     if (params.offset !== undefined) qs.set('offset', String(params.offset));
-    const response = await fetch(`${API_BASE}/review/queue?${qs}`, { headers: adminHeaders() });
-    if (!response.ok) {
-        throw new Error(`Failed to fetch review queue: ${response.statusText}`);
-    }
-    return response.json();
+    return fetchJSON<ReviewQueueItem[]>(`/review/queue?${qs}`, { admin: true });
 }
 
 export async function submitReview(submission: ReviewSubmission): Promise<{ ai_output_id: number; reviewed_at: number }> {
-    const response = await fetch(`${API_BASE}/review/submit`, {
+    return fetchJSON(`/review/submit`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...adminHeaders() },
         body: JSON.stringify(submission),
+        admin: true,
     });
-    if (!response.ok) {
-        throw new Error(`Failed to submit review: ${response.statusText}`);
-    }
-    return response.json();
 }
 
 export async function fetchReviewStats(task?: ReviewTaskType): Promise<ReviewStats> {
-    const url = task ? `${API_BASE}/review/stats?task=${task}` : `${API_BASE}/review/stats`;
-    const response = await fetch(url, { headers: adminHeaders() });
-    if (!response.ok) {
-        throw new Error(`Failed to fetch review stats: ${response.statusText}`);
-    }
-    return response.json();
+    const path = task ? `/review/stats?task=${task}` : `/review/stats`;
+    return fetchJSON<ReviewStats>(path, { admin: true });
 }

@@ -1,7 +1,9 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useMemo } from 'react';
 import { Card, MethodPopover, LoadingCard, EmptyState, ErrorState } from '../components/common';
 import { Sparkline } from '../components/charts';
 import { fetchNarratives } from '../services/api';
+import { useFetch } from '../services/useFetch';
+import { SEMANTIC_COLORS } from '../theme';
 import type { Filters, NarrativeSummary, NarrativeSourceBreakdownItem, AccountProfile } from '../types';
 
 // Short human-readable label for the first-seen author.
@@ -47,9 +49,9 @@ const SOURCE_DOT_COLOR: Record<string, string> = {
 };
 
 function netSentimentColor(net: number): string {
-    if (net > 10) return '#008a4c';
-    if (net < -10) return '#d41e0e';
-    return '#8e8e96';
+    if (net > 10) return SEMANTIC_COLORS.positive;
+    if (net < -10) return SEMANTIC_COLORS.negative;
+    return SEMANTIC_COLORS.neutral;
 }
 
 function formatRelativeDate(unixSeconds: number): string {
@@ -210,31 +212,13 @@ interface NarrativesProps {
 }
 
 function Narratives({ filters }: NarrativesProps) {
-    const [data, setData] = useState<NarrativeSummary[] | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+    const { data, loading, error, refetch } = useFetch<NarrativeSummary[]>(
+        () => fetchNarratives(filters.timeRange),
+        [filters.timeRange],
+        `narratives:${filters.timeRange}`,
+    );
 
-    useEffect(() => {
-        let cancelled = false;
-        async function load() {
-            setLoading(true);
-            setError(null);
-            try {
-                const result = await fetchNarratives(filters.timeRange);
-                if (!cancelled) setData(result);
-            } catch (err: any) {
-                if (!cancelled) setError(err?.message ?? 'Failed to load narratives.');
-            } finally {
-                if (!cancelled) setLoading(false);
-            }
-        }
-        load();
-        return () => {
-            cancelled = true;
-        };
-    }, [filters.timeRange]);
-
-    if (error) return <ErrorState message={error} onRetry={() => window.location.reload()} />;
+    if (error) return <ErrorState message={error.message} onRetry={refetch} />;
     if (loading) {
         return (
             <div className="flex flex-col gap-4">

@@ -31,8 +31,13 @@ function ConfidenceBadge({
     };
 
     return (
-        <div className="confidence-indicator" style={{ position: 'relative' }}>
-            <span className={`confidence-dot confidence-${confidence}`} />
+        <div
+            className="confidence-indicator"
+            role="status"
+            aria-label={`Data quality: ${getLabel(coverage)} coverage, ${getLabel(confidence)} confidence`}
+            style={{ position: 'relative' }}
+        >
+            <span aria-hidden className={`confidence-dot confidence-${confidence}`} />
             <span>
                 {getLabel(coverage)} coverage / {getLabel(confidence)} confidence
             </span>

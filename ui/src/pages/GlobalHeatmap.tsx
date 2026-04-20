@@ -1,7 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { ComposableMap, Geographies, Geography, Marker, ZoomableGroup } from 'react-simple-maps';
-import { Card, LoadingCard, EmptyState } from '../components/common';
+import { Card, LoadingCard, EmptyState, ErrorState } from '../components/common';
 import { fetchGeoSentiment, GeoSentimentData, CountryStats, TimeWindow } from '../services/api';
+import { useFetch } from '../services/useFetch';
+import { SEMANTIC_COLORS } from '../theme';
 import { Filters } from '../types';
 
 // World map TopoJSON URL
@@ -49,12 +51,17 @@ interface TooltipData {
     y: number;
 }
 
+// Mild-positive hex is the only value not already in the semantic tokens —
+// it's the midpoint between positive and neutral. Keep it here rather than
+// adding a one-off token to the palette.
+const MILD_POSITIVE_HEX = '#4b9e6d';
+
 function getSentimentColor(sentiment: number): string {
-    if (sentiment >= 0.3) return '#008a4c';  // Strong positive
-    if (sentiment >= 0.1) return '#4b9e6d';  // Mild positive
-    if (sentiment >= -0.1) return '#8e8e96'; // Neutral
-    if (sentiment >= -0.3) return '#b26100'; // Mild negative
-    return '#d41e0e';  // Strong negative
+    if (sentiment >= 0.3) return SEMANTIC_COLORS.positive;
+    if (sentiment >= 0.1) return MILD_POSITIVE_HEX;
+    if (sentiment >= -0.1) return SEMANTIC_COLORS.neutral;
+    if (sentiment >= -0.3) return SEMANTIC_COLORS.warning;
+    return SEMANTIC_COLORS.negative;
 }
 
 function getMarkerSize(postCount: number, maxPosts: number): number {
@@ -92,15 +99,15 @@ function SentimentLegend() {
         <div className="legend">
             <span className="legend-label">Sentiment</span>
             <div className="legend-item">
-                <span className="dot" style={{ backgroundColor: '#008a4c' }}></span>
+                <span className="dot" style={{ backgroundColor: SEMANTIC_COLORS.positive }}></span>
                 <span>Positive</span>
             </div>
             <div className="legend-item">
-                <span className="dot" style={{ backgroundColor: '#8e8e96' }}></span>
+                <span className="dot" style={{ backgroundColor: SEMANTIC_COLORS.neutral }}></span>
                 <span>Neutral</span>
             </div>
             <div className="legend-item">
-                <span className="dot" style={{ backgroundColor: '#d41e0e' }}></span>
+                <span className="dot" style={{ backgroundColor: SEMANTIC_COLORS.negative }}></span>
                 <span>Negative</span>
             </div>
         </div>
@@ -108,38 +115,19 @@ function SentimentLegend() {
 }
 
 function GlobalHeatmap({ filters }: GlobalHeatmapProps) {
-    const [data, setData] = useState<GeoSentimentData | null>(null);
-    const [loading, setLoading] = useState(true);
     const [tooltip, setTooltip] = useState<TooltipData | null>(null);
-    const [error, setError] = useState<string | null>(null);
-
-    useEffect(() => {
-        async function loadData() {
-            try {
-                setLoading(true);
-                setError(null);
-                const result = await fetchGeoSentiment(filters.timeRange as TimeWindow);
-                setData(result);
-            } catch (err) {
-                setError(err instanceof Error ? err.message : 'Failed to load data');
-            } finally {
-                setLoading(false);
-            }
-        }
-        loadData();
-    }, [filters.timeRange]);
+    const { data, loading, error, refetch } = useFetch<GeoSentimentData>(
+        () => fetchGeoSentiment(filters.timeRange as TimeWindow),
+        [filters.timeRange],
+        `geo-sentiment:${filters.timeRange}`,
+    );
 
     if (loading) {
         return <LoadingCard />;
     }
 
     if (error) {
-        return (
-            <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-secondary)' }}>
-                <p>Failed to load heatmap data. Please enable the X integration.</p>
-                <p style={{ fontSize: '0.8em', marginTop: '8px' }}>{error}</p>
-            </div>
-        );
+        return <ErrorState message={error.message} onRetry={refetch} />;
     }
 
     if (!data || data.countries.length === 0) {
@@ -247,128 +235,6 @@ function GlobalHeatmap({ filters }: GlobalHeatmapProps) {
                 </div>
             )}
 
-            <style>{`
-                .global-heatmap {
-                    display: flex;
-                    flex-direction: column;
-                    gap: var(--space-3);
-                }
-
-                .description {
-                    color: var(--neutral-500);
-                    margin-bottom: var(--space-3);
-                    font-size: var(--text-sm);
-                }
-
-                .stats-row {
-                    display: flex;
-                    gap: var(--space-6);
-                    margin-bottom: var(--space-3);
-                    padding: var(--space-2) var(--space-3);
-                    background: var(--bg-panel);
-                    border: 1px solid var(--neutral-200);
-                    border-radius: 2px;
-                }
-
-                .stat {
-                    display: flex;
-                    flex-direction: column;
-                    gap: 2px;
-                }
-
-                .stat-value {
-                    font-family: var(--font-mono);
-                    font-variant-numeric: tabular-nums;
-                    font-size: var(--text-xl);
-                    font-weight: 600;
-                    color: var(--neutral-900);
-                    letter-spacing: -0.01em;
-                }
-
-                .stat-label {
-                    font-size: var(--text-xs);
-                    color: var(--neutral-500);
-                    text-transform: uppercase;
-                    letter-spacing: 0.08em;
-                    font-weight: 600;
-                }
-
-                .legend {
-                    display: flex;
-                    align-items: center;
-                    gap: var(--space-3);
-                    margin-bottom: var(--space-3);
-                    font-size: var(--text-xs);
-                    text-transform: uppercase;
-                    letter-spacing: 0.06em;
-                    color: var(--neutral-600);
-                }
-
-                .legend-label {
-                    font-weight: 700;
-                    color: var(--neutral-500);
-                    letter-spacing: 0.08em;
-                }
-
-                .legend-item {
-                    display: flex;
-                    align-items: center;
-                    gap: 6px;
-                }
-
-                .dot {
-                    width: 8px;
-                    height: 8px;
-                    border-radius: 50%;
-                }
-
-                .map-container {
-                    height: 500px;
-                    background: var(--bg-panel);
-                    border: 1px solid var(--neutral-200);
-                    border-radius: 2px;
-                    overflow: hidden;
-                }
-
-                .map-tooltip {
-                    position: fixed;
-                    background: var(--bg-card);
-                    border: 1px solid var(--neutral-300);
-                    border-radius: 2px;
-                    padding: var(--space-2) var(--space-3);
-                    box-shadow: var(--shadow-lg);
-                    z-index: 1000;
-                    pointer-events: none;
-                    min-width: 180px;
-                    font-family: var(--font-mono);
-                    font-variant-numeric: tabular-nums;
-                }
-
-                .tooltip-header {
-                    font-family: var(--font-family);
-                    font-size: var(--text-xs);
-                    font-weight: 700;
-                    text-transform: uppercase;
-                    letter-spacing: 0.08em;
-                    color: var(--neutral-800);
-                    margin-bottom: 6px;
-                    padding-bottom: 6px;
-                    border-bottom: 1px solid var(--neutral-200);
-                }
-
-                .tooltip-row {
-                    display: flex;
-                    justify-content: space-between;
-                    font-size: var(--text-xs);
-                    margin-bottom: 2px;
-                }
-
-                .tooltip-row span:first-child {
-                    color: var(--neutral-500);
-                    text-transform: uppercase;
-                    letter-spacing: 0.06em;
-                }
-            `}</style>
         </div>
     );
 }
