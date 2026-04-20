@@ -128,9 +128,12 @@ class TestPollingDataScraper(unittest.TestCase):
         call_url = mock_get.call_args[0][0]
         self.assertIn("democratic-party", call_url)
 
+    @patch('analysis.src.etl.polling.time.sleep')
     @patch('analysis.src.etl.polling.requests.get')
-    def test_fetch_retries_on_failure(self, mock_get):
-        """Test that network errors trigger retries."""
+    def test_fetch_retries_on_failure(self, mock_get, mock_sleep):
+        """Test that network errors trigger retries. ``time.sleep`` is
+        mocked so the test runs in milliseconds instead of waiting 9s of
+        real backoff between retries."""
         import requests as req
 
         scraper = PollingDataScraper()
@@ -141,6 +144,8 @@ class TestPollingDataScraper(unittest.TestCase):
 
         # Should have been called MAX_RETRIES + 1 times (initial + retries)
         self.assertEqual(mock_get.call_count, 3)
+        # Each failed attempt (except the last) sleeps before retrying.
+        self.assertEqual(mock_sleep.call_count, 2)
 
     def test_backward_compatibility_parse(self):
         """Test legacy _parse_gop_favorability still works."""

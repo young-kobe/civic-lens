@@ -117,16 +117,22 @@ class TestAnalyzer(unittest.TestCase):
         self.assertEqual(result.label, "NEUTRAL")
 
     def test_deterministic_fallback_favorability(self):
-        """Verify heuristic works for favorability."""
+        """Verify heuristic works for favorability.
+
+        ``_extract_gop_entities`` searches against lowercased text and returns
+        lowercased entity strings — the comparison is case-insensitive by
+        design so "Trump", "TRUMP" and "trump" all match the same canonical
+        entity. Assertions use lowercase accordingly.
+        """
         # Mentions GOP entity with favorable keyword
         _, fav = self.analyzer.analyze_full("Trump was praised for his speech today")
         self.assertEqual(fav.overall_gop_stance, "favorable")
-        self.assertIn("Trump", fav.gop_entities_found)
+        self.assertIn("trump", fav.gop_entities_found)
 
         # Mentions GOP entity with unfavorable keyword
         _, fav = self.analyzer.analyze_full("McConnell was criticized for his policy")
         self.assertEqual(fav.overall_gop_stance, "unfavorable")
-        self.assertIn("McConnell", fav.gop_entities_found)
+        self.assertIn("mcconnell", fav.gop_entities_found)
 
 
 
