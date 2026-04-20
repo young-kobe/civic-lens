@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/young-kobe/civic-lens/ingest/internal/app"
 	"github.com/young-kobe/civic-lens/ingest/internal/extract/html"
+	"github.com/young-kobe/civic-lens/ingest/internal/httpclient"
 	"github.com/young-kobe/civic-lens/ingest/internal/model"
 	"github.com/young-kobe/civic-lens/ingest/internal/util"
 	"golang.org/x/sync/semaphore"
@@ -56,53 +58,59 @@ func (cr *CrawlRunner) Run(ctx context.Context) (*CrawlResult, error) {
 	go cr.writer.Start()
 	defer cr.writer.Close()
 
-	// Recover stale items
-	recovered, _ := cr.app.Frontier.RecoverStale(ctx, cfg.Crawl.StaleInflightAge)
-	if recovered > 0 {
-		fmt.Printf("Recovered %d stale items\n", recovered)
-	}
+	cr.app.Frontier.EnsureRecovered(ctx, cfg.Crawl.StaleInflightAge)
 
-	// Worker pool
 	sem := semaphore.NewWeighted(int64(cfg.Crawl.MaxConcurrency))
+	var wg sync.WaitGroup
 
 	fmt.Printf("Starting crawl for %v with %d workers\n", cr.opts.Duration, cfg.Crawl.MaxConcurrency)
 
+loop:
 	for {
 		select {
 		case <-ctx.Done():
-			goto done
+			break loop
 		default:
 		}
 
 		items, err := cr.app.Frontier.ClaimItems(ctx, 10)
 		if err != nil {
+			if ctx.Err() != nil {
+				break loop
+			}
 			log.Printf("Claim error: %v", err)
 			time.Sleep(1 * time.Second)
 			continue
 		}
 
 		if len(items) == 0 {
-			time.Sleep(1 * time.Second)
+			select {
+			case <-ctx.Done():
+				break loop
+			case <-time.After(1 * time.Second):
+			}
 			continue
 		}
 
 		for _, item := range items {
 			if err := sem.Acquire(ctx, 1); err != nil {
-				break
+				break loop
 			}
 
+			wg.Add(1)
 			go func(page *model.Page) {
+				defer wg.Done()
 				defer sem.Release(1)
 				cr.processPage(ctx, page)
 			}(item)
 		}
 	}
 
-done:
-	// Wait for in-flight workers with a final 5s timeout
-	cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cleanupCancel()
-	sem.Acquire(cleanupCtx, int64(cfg.Crawl.MaxConcurrency))
+	// Wait for all in-flight workers to finish. We deliberately wait
+	// unbounded here: the outer ctx is already cancelled so workers will
+	// observe it and exit quickly. A timeout-based drain risks orphaning
+	// DB writes mid-transition.
+	wg.Wait()
 
 	return &CrawlResult{
 		Fetched: cr.fetched,
@@ -111,21 +119,58 @@ done:
 	}, nil
 }
 
+// processPage runs the full per-page pipeline. Each stage returns early
+// on failure after marking the page with the appropriate permanence.
 func (cr *CrawlRunner) processPage(ctx context.Context, page *model.Page) {
-	// Check robots.txt
-	if cr.app.Robots != nil && !cr.app.Robots.IsAllowed(ctx, page.URLRaw) {
-		cr.app.Frontier.MarkFailed(context.Background(), page, "disallowed by robots.txt", true)
+	if !cr.checkRobots(ctx, page) {
 		return
 	}
 
-	// Fetch
+	result, ok := cr.fetchPage(ctx, page)
+	if !ok {
+		return
+	}
+
+	hash, ok := cr.storeRaw(ctx, page, result)
+	if !ok {
+		return
+	}
+
+	cr.extractAndEnqueue(ctx, page, result.Body, hash)
+
+	if err := cr.app.Frontier.MarkDone(ctx, page); err != nil && ctx.Err() == nil {
+		log.Printf("mark done %s: %v", page.URLCanon, err)
+	}
+}
+
+// failPage is the single tagging point for MarkFailed. It records the
+// error, increments the counter, and delegates retry-vs-permanent to the
+// frontier's retry policy.
+func (cr *CrawlRunner) failPage(ctx context.Context, page *model.Page, category, reason string, permanent bool) {
+	atomic.AddInt64(&cr.errors, 1)
+	if err := cr.app.Frontier.MarkFailed(ctx, page, fmt.Sprintf("%s: %s", category, reason), permanent); err != nil && ctx.Err() == nil {
+		log.Printf("mark failed %s: %v", page.URLCanon, err)
+	}
+}
+
+func (cr *CrawlRunner) checkRobots(ctx context.Context, page *model.Page) bool {
+	if cr.app.Robots == nil {
+		return true
+	}
+	if cr.app.Robots.IsAllowed(ctx, page.URLRaw) {
+		return true
+	}
+	cr.failPage(ctx, page, "robots", "disallowed by robots.txt", true)
+	return false
+}
+
+func (cr *CrawlRunner) fetchPage(ctx context.Context, page *model.Page) (*httpclient.FetchResult, bool) {
 	result := cr.app.Fetcher.Fetch(ctx, page.URLRaw, page.Domain)
 	atomic.AddInt64(&cr.fetched, 1)
 
 	if result.Error != nil {
-		atomic.AddInt64(&cr.errors, 1)
-		cr.app.Frontier.MarkFailed(context.Background(), page, result.Error.Error(), false)
-		return
+		cr.failPage(ctx, page, "fetch", result.Error.Error(), false)
+		return nil, false
 	}
 
 	page.HTTPStatus = result.StatusCode
@@ -133,48 +178,54 @@ func (cr *CrawlRunner) processPage(ctx context.Context, page *model.Page) {
 	page.LastModified = result.LastModified
 
 	if result.StatusCode < 200 || result.StatusCode >= 300 {
-		atomic.AddInt64(&cr.errors, 1)
-		cr.app.Frontier.MarkFailed(context.Background(), page, fmt.Sprintf("HTTP %d", result.StatusCode), result.StatusCode >= 400 && result.StatusCode < 500)
-		return
+		permanent := result.StatusCode >= 400 && result.StatusCode < 500
+		cr.failPage(ctx, page, "http", fmt.Sprintf("status %d", result.StatusCode), permanent)
+		return nil, false
 	}
 
-	// Store raw content
+	return result, true
+}
+
+func (cr *CrawlRunner) storeRaw(ctx context.Context, page *model.Page, result *httpclient.FetchResult) (string, bool) {
 	ext := ".html"
 	if strings.Contains(page.URLRaw, ".json") {
 		ext = ".json"
 	}
 	hash, err := cr.app.RawStore.Store(ctx, result.Body, ext)
 	if err != nil {
-		atomic.AddInt64(&cr.errors, 1)
-		cr.app.Frontier.MarkFailed(context.Background(), page, err.Error(), false)
-		return
+		cr.failPage(ctx, page, "store", err.Error(), false)
+		return "", false
 	}
 
 	page.ContentSHA256 = hash
 	atomic.AddInt64(&cr.stored, 1)
+	return hash, true
+}
 
-	// Extract metadata and links
-	meta, _ := html.Extract(result.Body, page.URLRaw)
-	if meta != nil && len(meta.Outlinks) > 0 {
-		// Only add links from same domain to keep crawl focused
+func (cr *CrawlRunner) extractAndEnqueue(ctx context.Context, page *model.Page, body []byte, hash string) {
+	meta, _ := html.Extract(body, page.URLRaw)
+	if meta == nil {
+		return
+	}
+
+	// Only enqueue same-domain links to keep the crawl focused.
+	if len(meta.Outlinks) > 0 {
 		var sameDomainLinks []string
 		for _, link := range meta.Outlinks {
 			if util.ExtractDomain(link) == page.Domain {
 				sameDomainLinks = append(sameDomainLinks, link)
 			}
 		}
-		cr.app.Frontier.PushLinks(context.Background(), sameDomainLinks, 0)
+		if len(sameDomainLinks) > 0 {
+			if _, err := cr.app.Frontier.PushLinks(ctx, sameDomainLinks, 0); err != nil && ctx.Err() == nil {
+				log.Printf("push links for %s: %v", page.URLCanon, err)
+			}
+		}
 	}
 
-	// Update canonical if found
-	if meta != nil && meta.CanonicalURL != "" {
+	if meta.CanonicalURL != "" {
 		page.URLCanon = meta.CanonicalURL
 	}
 
-	// Enqueue article metadata for batched insertion
-	if meta != nil {
-		cr.writer.WriteFromMeta(page, meta, hash)
-	}
-
-	cr.app.Frontier.MarkDone(context.Background(), page)
+	cr.writer.WriteFromMeta(page, meta, hash)
 }

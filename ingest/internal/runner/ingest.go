@@ -66,10 +66,14 @@ func (ir *IngestRunner) Run(ctx context.Context) (*IngestResult, error) {
 				links = append(links, item.Link)
 			}
 
-			added, _ := ir.app.Frontier.PushLinks(ctx, links, seed.Priority)
-			ir.totalDiscovered += added
+			stats, err := ir.app.Frontier.PushLinks(ctx, links, seed.Priority)
+			if err != nil {
+				fmt.Printf("  PushLinks error: %v\n", err)
+			}
+			ir.totalDiscovered += stats.Added
 			ir.skipped += seedSkipped
-			fmt.Printf("  Discovered %d links from RSS feed (skipped %d old items)\n", added, seedSkipped)
+			fmt.Printf("  Discovered %d links from RSS feed (skipped %d old, malformed %d, db-errors %d)\n",
+				stats.Added, seedSkipped, stats.Malformed, stats.DBErrors)
 		}
 	}
 

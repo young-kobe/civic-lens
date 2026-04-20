@@ -35,16 +35,23 @@ type ArticleWriter struct {
 	batchSize     int
 	flushInterval time.Duration
 	done          chan struct{}
+	// ctx is the lifetime context for DB writes. Closed by Close() so
+	// pending transactions abort cleanly if the caller has cancelled.
+	ctx    context.Context
+	cancel context.CancelFunc
 }
 
 // NewArticleWriter creates a writer with a buffered channel.
 func NewArticleWriter(database *db.DB) *ArticleWriter {
+	ctx, cancel := context.WithCancel(context.Background())
 	return &ArticleWriter{
 		database:      database,
 		ch:            make(chan articleEntry, defaultBatchSize*2),
 		batchSize:     defaultBatchSize,
 		flushInterval: defaultFlushInterval,
 		done:          make(chan struct{}),
+		ctx:           ctx,
+		cancel:        cancel,
 	}
 }
 
@@ -88,19 +95,22 @@ func (w *ArticleWriter) Start() {
 		select {
 		case entry, ok := <-w.ch:
 			if !ok {
-				// Channel closed — flush remaining
-				w.flush(context.Background(), buf)
+				// Channel closed — flush remaining using a fresh, short-lived
+				// context so we don't lose the drain if w.ctx is cancelled.
+				drainCtx, drainCancel := context.WithTimeout(context.Background(), 10*time.Second)
+				w.flush(drainCtx, buf)
+				drainCancel()
 				return
 			}
 			buf = append(buf, entry)
 			if len(buf) >= w.batchSize {
-				w.flush(context.Background(), buf)
+				w.flush(w.ctx, buf)
 				buf = buf[:0]
 			}
 
 		case <-ticker.C:
 			if len(buf) > 0 {
-				w.flush(context.Background(), buf)
+				w.flush(w.ctx, buf)
 				buf = buf[:0]
 			}
 		}
@@ -111,6 +121,7 @@ func (w *ArticleWriter) Start() {
 func (w *ArticleWriter) Close() {
 	close(w.ch)
 	<-w.done
+	w.cancel()
 }
 
 // flush writes a batch of articles in a single transaction.
