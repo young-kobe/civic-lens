@@ -27,17 +27,17 @@ func Open(dbPath string) (*DB, error) {
 		return nil, fmt.Errorf("create db directory: %w", err)
 	}
 
-	// Open with WAL mode for better concurrency and a longer busy timeout
-	dsn := fmt.Sprintf("file:%s?_journal=WAL&_busy_timeout=20000&_foreign_keys=on", dbPath)
+	// Open with WAL mode and a long busy timeout. modernc.org/sqlite takes
+	// pragmas via repeated `_pragma=NAME(value)` params — the older
+	// `_busy_timeout=...` shorthand is silently ignored, which is how
+	// concurrent writers used to hit SQLITE_BUSY in the worker pool.
+	dsn := fmt.Sprintf(
+		"file:%s?_pragma=journal_mode(WAL)&_pragma=busy_timeout(20000)&_pragma=synchronous(NORMAL)&_pragma=foreign_keys(on)",
+		dbPath,
+	)
 	conn, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
-	}
-
-	// PRAGMA synchronous = NORMAL is faster in WAL mode and still safe.
-	if _, err := conn.Exec("PRAGMA synchronous = NORMAL;"); err != nil {
-		conn.Close()
-		return nil, fmt.Errorf("set synchronous mode: %w", err)
 	}
 
 	// WAL mode supports concurrent readers with a single writer.

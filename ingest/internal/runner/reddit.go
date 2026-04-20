@@ -32,6 +32,9 @@ func NewRedditRunner(a *app.App) *RedditRunner {
 func (rr *RedditRunner) Run(ctx context.Context) (*RedditResult, error) {
 	cfg := rr.app.Config
 
+	// Reset any INFLIGHT rows left behind by a crashed previous run.
+	rr.app.Frontier.EnsureRecovered(ctx, cfg.Crawl.StaleInflightAge)
+
 	client := reddit.New(reddit.Config{
 		UserAgent: cfg.Reddit.UserAgent,
 	})
@@ -41,12 +44,7 @@ func (rr *RedditRunner) Run(ctx context.Context) (*RedditResult, error) {
 	for _, subreddit := range cfg.Reddit.Subreddits {
 		fmt.Printf("Fetching r/%s...\n", subreddit)
 
-		var posts []model.RedditPost
-		var rawJSON []byte
-		var err error
-
-		posts, rawJSON, err = client.FetchSubredditPostsPublic(ctx, subreddit, 25)
-
+		posts, rawJSON, err := client.FetchSubredditPostsPublic(ctx, subreddit, 25)
 		if err != nil {
 			fmt.Printf("  Error: %v\n", err)
 			continue
@@ -68,11 +66,11 @@ func (rr *RedditRunner) Run(ctx context.Context) (*RedditResult, error) {
 				postID = postID[3:]
 			}
 
-			comments, _, err := client.FetchPostCommentsPublic(ctx, post.Subreddit, postID, 5)
-			if err == nil && len(comments) > 0 {
-				for _, c := range comments {
-					if c.Body != "" && c.Body != "[deleted]" && c.Body != "[removed]" {
-						post.Body += fmt.Sprintf("\n\n--- Comment:\n%s", c.Body)
+			bodies, _, err := client.FetchPostCommentBodiesPublic(ctx, post.Subreddit, postID, 5)
+			if err == nil {
+				for _, body := range bodies {
+					if body != "[deleted]" && body != "[removed]" {
+						post.Body += fmt.Sprintf("\n\n--- Comment:\n%s", body)
 					}
 				}
 			}
@@ -95,12 +93,14 @@ func (rr *RedditRunner) Run(ctx context.Context) (*RedditResult, error) {
 }
 
 func (rr *RedditRunner) insertPost(ctx context.Context, post model.RedditPost) error {
-	_, err := rr.app.Database.Conn().ExecContext(ctx, `
-		INSERT OR REPLACE INTO reddit_posts_raw 
-		(fullname, subreddit, created_utc, fetched_at, title, body, score, num_comments, raw_hash, extraction_version)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, post.Fullname, post.Subreddit, post.CreatedUTC, post.FetchedAt,
-		post.Title, post.Body, post.Score, post.NumComments, post.RawHash, post.ExtractionVersion)
-
-	return err
+	return upsertRow(ctx, rr.app.Database.Conn(), "reddit_posts_raw",
+		[]string{
+			"fullname", "subreddit", "created_utc", "fetched_at", "title",
+			"body", "score", "num_comments", "raw_hash", "extraction_version",
+		},
+		[]any{
+			post.Fullname, post.Subreddit, post.CreatedUTC, post.FetchedAt, post.Title,
+			post.Body, post.Score, post.NumComments, post.RawHash, post.ExtractionVersion,
+		},
+	)
 }

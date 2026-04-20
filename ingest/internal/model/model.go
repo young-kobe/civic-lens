@@ -27,17 +27,6 @@ type Page struct {
 	LastError     string
 }
 
-// ArticleRaw represents extracted article metadata.
-type ArticleRaw struct {
-	URLCanon          string
-	Domain            string
-	FetchedAt         int64
-	PublishedAt       int64
-	Title             string
-	RawHash           string
-	ExtractionVersion string
-}
-
 // RedditPost represents a Reddit post.
 type RedditPost struct {
 	Fullname          string
@@ -50,28 +39,6 @@ type RedditPost struct {
 	NumComments       int
 	RawHash           string
 	ExtractionVersion string
-}
-
-// RedditComment represents a Reddit comment.
-type RedditComment struct {
-	Fullname          string
-	PostFullname      string
-	Subreddit         string
-	CreatedUTC        int64
-	FetchedAt         int64
-	Body              string
-	Score             int
-	RawHash           string
-	ExtractionVersion string
-}
-
-// CrawlResult is the result of fetching one page.
-type CrawlResult struct {
-	Page       *Page
-	Body       []byte
-	StatusCode int
-	Error      error
-	Outlinks   []string
 }
 
 // XPost represents an X (Twitter) post.

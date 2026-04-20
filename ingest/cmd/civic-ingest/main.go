@@ -163,7 +163,7 @@ func redditCmd() *cobra.Command {
 func xCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "x",
-		Short: "FetchX posts and comments",
+		Short: "Fetch X posts and comments",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 

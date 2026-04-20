@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -11,29 +12,28 @@ import (
 	"github.com/young-kobe/civic-lens/ingest/internal/storage/db"
 )
 
-func TestFrontierBasicOperations(t *testing.T) {
-	// Create temp database
+// newTestFrontier spins up a temp SQLite DB, copies migrations from the
+// project root, and returns a migrated Frontier plus a cleanup func.
+func newTestFrontier(t *testing.T, maxRetries int) (*Frontier, *db.DB, func()) {
+	t.Helper()
+
 	tmpFile, err := os.CreateTemp("", "frontier_test_*.db")
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.Remove(tmpFile.Name())
 	tmpFile.Close()
 
 	database, err := db.Open(tmpFile.Name())
 	if err != nil {
+		os.Remove(tmpFile.Name())
 		t.Fatal(err)
 	}
-	defer database.Close()
 
-	// Create test migrations dir and copy from project root
 	projectRoot, _ := filepath.Abs("../../..")
 	srcMigrationsDir := filepath.Join(projectRoot, "data", "migrations")
-	
 	migrationsDir := filepath.Join(filepath.Dir(tmpFile.Name()), "migrations")
 	os.MkdirAll(migrationsDir, 0755)
-	defer os.RemoveAll(migrationsDir)
-	
+
 	files, _ := os.ReadDir(srcMigrationsDir)
 	for _, f := range files {
 		if filepath.Ext(f.Name()) == ".sql" {
@@ -44,33 +44,49 @@ func TestFrontierBasicOperations(t *testing.T) {
 
 	ctx := context.Background()
 	if err := database.Migrate(ctx); err != nil {
+		database.Close()
+		os.Remove(tmpFile.Name())
+		os.RemoveAll(migrationsDir)
 		t.Fatal(err)
 	}
 
-	f := New(database, 3)
+	cleanup := func() {
+		database.Close()
+		os.Remove(tmpFile.Name())
+		os.RemoveAll(migrationsDir)
+	}
+
+	return New(database, maxRetries), database, cleanup
+}
+
+func TestFrontierBasicOperations(t *testing.T) {
+	f, _, cleanup := newTestFrontier(t, 3)
+	defer cleanup()
+
+	ctx := context.Background()
 
 	// Test PushLinks - should add unique URLs
-	added1, err := f.PushLinks(ctx, []string{
+	stats1, err := f.PushLinks(ctx, []string{
 		"https://example.com/page1",
 		"https://example.com/page2",
 	}, 5)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if added1 != 2 {
-		t.Errorf("PushLinks added %d, want 2", added1)
+	if stats1.Added != 2 {
+		t.Errorf("PushLinks added %d, want 2", stats1.Added)
 	}
 
 	// Test duplicate rejection
-	added2, err := f.PushLinks(ctx, []string{
+	stats2, err := f.PushLinks(ctx, []string{
 		"https://example.com/page1", // duplicate
 		"https://example.com/page3",
 	}, 5)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if added2 != 1 {
-		t.Errorf("PushLinks added %d, want 1 (should reject duplicate)", added2)
+	if stats2.Added != 1 {
+		t.Errorf("PushLinks added %d, want 1 (should reject duplicate)", stats2.Added)
 	}
 
 	// Test ClaimItems
@@ -131,41 +147,10 @@ func TestFrontierBasicOperations(t *testing.T) {
 }
 
 func TestFrontierRecoverStale(t *testing.T) {
-	tmpFile, err := os.CreateTemp("", "frontier_stale_test_*.db")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.Remove(tmpFile.Name())
-	tmpFile.Close()
-
-	database, err := db.Open(tmpFile.Name())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer database.Close()
-
-	// Create test migrations dir and copy from project root
-	projectRoot, _ := filepath.Abs("../../..")
-	srcMigrationsDir := filepath.Join(projectRoot, "data", "migrations")
-	
-	migrationsDir := filepath.Join(filepath.Dir(tmpFile.Name()), "migrations")
-	os.MkdirAll(migrationsDir, 0755)
-	defer os.RemoveAll(migrationsDir)
-	
-	files, _ := os.ReadDir(srcMigrationsDir)
-	for _, f := range files {
-		if filepath.Ext(f.Name()) == ".sql" {
-			content, _ := os.ReadFile(filepath.Join(srcMigrationsDir, f.Name()))
-			os.WriteFile(filepath.Join(migrationsDir, f.Name()), content, 0644)
-		}
-	}
+	f, database, cleanup := newTestFrontier(t, 3)
+	defer cleanup()
 
 	ctx := context.Background()
-	if err := database.Migrate(ctx); err != nil {
-		t.Fatal(err)
-	}
-
-	f := New(database, 3)
 
 	// Add and claim items
 	f.PushLinks(ctx, []string{"https://example.com/stale"}, 0)
@@ -193,4 +178,193 @@ func TestFrontierRecoverStale(t *testing.T) {
 	if len(items2) != 1 {
 		t.Errorf("After recovery, ClaimItems got %d, want 1", len(items2))
 	}
+}
+
+// TestFrontierMarkFailedPermanent asserts that permanent=true moves the
+// page straight to StateFailed regardless of retries remaining.
+func TestFrontierMarkFailedPermanent(t *testing.T) {
+	f, database, cleanup := newTestFrontier(t, 5)
+	defer cleanup()
+
+	ctx := context.Background()
+	f.PushLinks(ctx, []string{"https://example.com/perm"}, 0)
+	items, _ := f.ClaimItems(ctx, 1)
+	if len(items) != 1 {
+		t.Fatal("expected 1 claimed item")
+	}
+
+	if err := f.MarkFailed(ctx, items[0], "403 forbidden", true); err != nil {
+		t.Fatal(err)
+	}
+
+	var state int
+	var errMsg string
+	row := database.Conn().QueryRowContext(ctx, `SELECT state, last_error FROM pages WHERE url_canon = ?`, items[0].URLCanon)
+	if err := row.Scan(&state, &errMsg); err != nil {
+		t.Fatal(err)
+	}
+	if model.PageState(state) != model.StateFailed {
+		t.Errorf("state = %d, want StateFailed", state)
+	}
+	if errMsg != "403 forbidden" {
+		t.Errorf("last_error = %q, want %q", errMsg, "403 forbidden")
+	}
+}
+
+// TestFrontierMarkFailedRetryBackoff asserts that a retryable failure
+// schedules next_fetch_at into the future with exponential backoff.
+func TestFrontierMarkFailedRetryBackoff(t *testing.T) {
+	f, database, cleanup := newTestFrontier(t, 5)
+	defer cleanup()
+
+	ctx := context.Background()
+	f.PushLinks(ctx, []string{"https://example.com/retry"}, 0)
+	items, _ := f.ClaimItems(ctx, 1)
+
+	// After 2 prior retries, next backoff should be 1<<2 = 4 minutes.
+	items[0].Retries = 2
+	before := time.Now().Unix()
+	if err := f.MarkFailed(ctx, items[0], "timeout", false); err != nil {
+		t.Fatal(err)
+	}
+
+	var state int
+	var retries int
+	var nextFetch int64
+	row := database.Conn().QueryRowContext(ctx, `SELECT state, retries, next_fetch_at FROM pages WHERE url_canon = ?`, items[0].URLCanon)
+	if err := row.Scan(&state, &retries, &nextFetch); err != nil {
+		t.Fatal(err)
+	}
+	if model.PageState(state) != model.StateQueued {
+		t.Errorf("state = %d, want StateQueued", state)
+	}
+	// The SQL expression `retries = retries + 1` increments the DB value
+	// (starting at 0 for a freshly-pushed row), not the in-memory struct,
+	// so we only assert it got bumped at least once.
+	if retries < 1 {
+		t.Errorf("retries = %d, want >= 1 (incremented)", retries)
+	}
+	// Backoff uses page.Retries=2 => 1<<2 = 4 minutes.
+	minExpected := before + int64((4 * time.Minute).Seconds()) - 2
+	if nextFetch < minExpected {
+		t.Errorf("next_fetch_at = %d, want >= %d (backoff respected)", nextFetch, minExpected)
+	}
+}
+
+// TestFrontierMarkFailedExhaustsRetries asserts that reaching the retry
+// ceiling promotes the failure to permanent without the caller asking.
+func TestFrontierMarkFailedExhaustsRetries(t *testing.T) {
+	f, database, cleanup := newTestFrontier(t, 3)
+	defer cleanup()
+
+	ctx := context.Background()
+	f.PushLinks(ctx, []string{"https://example.com/exhausted"}, 0)
+	items, _ := f.ClaimItems(ctx, 1)
+
+	items[0].Retries = 3 // already at ceiling
+	if err := f.MarkFailed(ctx, items[0], "still failing", false); err != nil {
+		t.Fatal(err)
+	}
+
+	var state int
+	row := database.Conn().QueryRowContext(ctx, `SELECT state FROM pages WHERE url_canon = ?`, items[0].URLCanon)
+	if err := row.Scan(&state); err != nil {
+		t.Fatal(err)
+	}
+	if model.PageState(state) != model.StateFailed {
+		t.Errorf("state = %d, want StateFailed (retries exhausted)", state)
+	}
+}
+
+// TestFrontierConcurrentMarkDone exercises parallel MarkDone calls to
+// confirm the state transition tolerates the worker-pool pattern used
+// by the crawler.
+func TestFrontierConcurrentMarkDone(t *testing.T) {
+	f, _, cleanup := newTestFrontier(t, 3)
+	defer cleanup()
+
+	ctx := context.Background()
+	var urls []string
+	for i := 0; i < 20; i++ {
+		urls = append(urls, "https://example.com/concurrent/"+itoa(i))
+	}
+	f.PushLinks(ctx, urls, 0)
+	items, err := f.ClaimItems(ctx, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 20 {
+		t.Fatalf("claimed %d, want 20", len(items))
+	}
+
+	var wg sync.WaitGroup
+	for _, it := range items {
+		wg.Add(1)
+		go func(p *model.Page) {
+			defer wg.Done()
+			p.HTTPStatus = 200
+			p.ContentSHA256 = "deadbeef"
+			if err := f.MarkDone(ctx, p); err != nil {
+				t.Errorf("MarkDone: %v", err)
+			}
+		}(it)
+	}
+	wg.Wait()
+
+	_, _, done, _, err := f.Stats(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if done != 20 {
+		t.Errorf("done = %d, want 20 after concurrent MarkDone", done)
+	}
+}
+
+// TestFrontierPushLinksMalformed asserts that bad URLs are counted
+// separately from DB errors instead of being silently swallowed.
+func TestFrontierPushLinksMalformed(t *testing.T) {
+	f, _, cleanup := newTestFrontier(t, 3)
+	defer cleanup()
+
+	ctx := context.Background()
+	stats, err := f.PushLinks(ctx, []string{
+		"https://example.com/good",
+		"http://[::1:bad",          // malformed — unclosed bracket in host
+		"http://%ZZ.example.com",   // malformed — invalid percent-escape
+	}, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.Added != 1 {
+		t.Errorf("Added = %d, want 1", stats.Added)
+	}
+	if stats.Malformed != 2 {
+		t.Errorf("Malformed = %d, want 2", stats.Malformed)
+	}
+	if stats.DBErrors != 0 {
+		t.Errorf("DBErrors = %d, want 0", stats.DBErrors)
+	}
+}
+
+// itoa is a tiny helper to avoid pulling in strconv at the test site.
+func itoa(n int) string {
+	if n == 0 {
+		return "0"
+	}
+	var buf [20]byte
+	i := len(buf)
+	neg := n < 0
+	if neg {
+		n = -n
+	}
+	for n > 0 {
+		i--
+		buf[i] = byte('0' + n%10)
+		n /= 10
+	}
+	if neg {
+		i--
+		buf[i] = '-'
+	}
+	return string(buf[i:])
 }

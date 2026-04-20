@@ -6,7 +6,6 @@ database:
 
 crawl:
   max_concurrency: 10
-  max_concurrent_domain: 10
   request_timeout: 30s
   max_retries: 3
   rate_limit_per_sec: 1.0
