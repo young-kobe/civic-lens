@@ -395,7 +395,7 @@ function Review() {
             >
                 <strong>Reviews populate <code>ai_output_evals</code></strong> — marking rows as <em>golden</em> builds the
                 benchmark set used to compute calibrated accuracy. Lowest-confidence model outputs are surfaced first because
-                those are where human review yields the most signal. This UI will be admin-gated once auth lands; for now,
+                those are where human review yields the most signal. Admin-gated via the <code>X-Admin-Token</code> header;
                 set a reviewer ID below for attribution.
             </div>
 

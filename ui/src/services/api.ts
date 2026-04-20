@@ -8,6 +8,15 @@ const API_BASE = '/api';
 
 export type TimeWindow = '24h' | '7d' | '30d' | '90d' | 'all';
 
+function adminHeaders(): HeadersInit {
+    try {
+        const token = localStorage.getItem('civic_admin_token');
+        return token ? { 'X-Admin-Token': token } : {};
+    } catch {
+        return {};
+    }
+}
+
 export async function fetchSentiment(window: TimeWindow = '24h'): Promise<PublicSentimentData> {
     const response = await fetch(`${API_BASE}/sentiment?window=${window}`);
     if (!response.ok) {
@@ -78,7 +87,7 @@ export async function fetchReviewQueue(params: ReviewQueueParams): Promise<Revie
     if (params.confidenceMax !== undefined) qs.set('confidence_max', String(params.confidenceMax));
     if (params.limit !== undefined) qs.set('limit', String(params.limit));
     if (params.offset !== undefined) qs.set('offset', String(params.offset));
-    const response = await fetch(`${API_BASE}/review/queue?${qs}`);
+    const response = await fetch(`${API_BASE}/review/queue?${qs}`, { headers: adminHeaders() });
     if (!response.ok) {
         throw new Error(`Failed to fetch review queue: ${response.statusText}`);
     }
@@ -88,7 +97,7 @@ export async function fetchReviewQueue(params: ReviewQueueParams): Promise<Revie
 export async function submitReview(submission: ReviewSubmission): Promise<{ ai_output_id: number; reviewed_at: number }> {
     const response = await fetch(`${API_BASE}/review/submit`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...adminHeaders() },
         body: JSON.stringify(submission),
     });
     if (!response.ok) {
@@ -99,7 +108,7 @@ export async function submitReview(submission: ReviewSubmission): Promise<{ ai_o
 
 export async function fetchReviewStats(task?: ReviewTaskType): Promise<ReviewStats> {
     const url = task ? `${API_BASE}/review/stats?task=${task}` : `${API_BASE}/review/stats`;
-    const response = await fetch(url);
+    const response = await fetch(url, { headers: adminHeaders() });
     if (!response.ok) {
         throw new Error(`Failed to fetch review stats: ${response.statusText}`);
     }

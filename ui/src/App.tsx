@@ -3,21 +3,22 @@ import { Tabs, GlobalFilters, ExportMenu } from './components/common';
 import { Home, PublicSentiment, BotActivityProfiler, GlobalHeatmap, Narratives, Propaganda, Review } from './pages';
 import type { Filters } from './types';
 
-// Admin flag — set once via ?admin=1, persisted to localStorage for subsequent visits.
-// Non-admin users never see the Review tab. Global Heatmap is hidden for everyone
-// for now (keep the page code; just unlink from nav).
+// Admin mode is now token-based. Visit once with ?admin=<CIVIC_ADMIN_TOKEN> to
+// persist it; ?admin=0 clears it. The token is sent as X-Admin-Token on every
+// admin-endpoint request (see services/api.ts). Non-admin users never see the
+// Review tab. Global Heatmap is hidden for everyone (page kept, unlinked from nav).
 const ADMIN_MODE: boolean = (() => {
     try {
         const params = new URLSearchParams(window.location.search);
-        if (params.get('admin') === '1') {
-            localStorage.setItem('civic_admin', '1');
-            return true;
-        }
-        if (params.get('admin') === '0') {
-            localStorage.removeItem('civic_admin');
+        const raw = params.get('admin');
+        if (raw === '0') {
+            localStorage.removeItem('civic_admin_token');
             return false;
         }
-        return localStorage.getItem('civic_admin') === '1';
+        if (raw && raw !== '1') {
+            localStorage.setItem('civic_admin_token', raw);
+        }
+        return !!localStorage.getItem('civic_admin_token');
     } catch {
         return false;
     }

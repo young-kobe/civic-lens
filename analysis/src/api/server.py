@@ -8,9 +8,9 @@ Provides endpoints for:
 - Cache status and metadata
 """
 
+import secrets
 from typing import Optional
-from fastapi import FastAPI, BackgroundTasks, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import FastAPI, BackgroundTasks, Depends, Header, HTTPException
 from pydantic import BaseModel
 
 from analysis.src.common.logger import get_logger
@@ -33,14 +33,27 @@ app = FastAPI(title="Civic Lens API")
 settings = get_settings()
 logger = get_logger("api")
 
-# CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # TODO: Lock down in prod
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# The UI is served same-origin (Vite proxy in dev, Caddy/Cloudflare in prod),
+# so CORS middleware is intentionally absent. If the UI ever lives on a
+# different origin, add CORSMiddleware back with an explicit origin allowlist
+# — never "*" combined with allow_credentials=True.
+
+
+def require_admin_token(x_admin_token: Optional[str] = Header(default=None)):
+    """Reject requests missing or with an incorrect X-Admin-Token header.
+
+    Returns 503 (not 401) when the server has no admin token configured, so a
+    misconfigured deploy fails loudly instead of silently allowing everyone in.
+    """
+    expected = settings.admin_token
+    if not expected:
+        raise HTTPException(
+            status_code=503,
+            detail="Admin endpoints disabled: CIVIC_ADMIN_TOKEN is not set on the server.",
+        )
+    if not x_admin_token or not secrets.compare_digest(x_admin_token, expected):
+        raise HTTPException(status_code=401, detail="Invalid or missing admin token.")
+
 
 # Services
 loader = ContentLoader(settings.db_path)
@@ -72,7 +85,7 @@ def health():
     }
 
 
-@app.get("/api/cache-status")
+@app.get("/api/cache-status", dependencies=[Depends(require_admin_token)])
 def get_cache_status():
     """
     Returns metadata for all cached snapshots.
@@ -89,21 +102,21 @@ def get_cache_status():
 # Pipeline Triggers (Manual)
 # =============================================================================
 
-@app.post("/api/run/etl")
+@app.post("/api/run/etl", dependencies=[Depends(require_admin_token)])
 def run_etl():
     """Triggers raw content loading into docs table."""
     count = loader.load_new_raw_content()
     return {"new_docs": count}
 
 
-@app.post("/api/run/analysis")
+@app.post("/api/run/analysis", dependencies=[Depends(require_admin_token)])
 def run_analysis(background_tasks: BackgroundTasks):
     """Triggers background analysis (Bot, Sentiment, Favorability)."""
     background_tasks.add_task(process_analysis_queue)
     return {"status": "Analysis queued"}
 
 
-@app.post("/api/run/full-pipeline")
+@app.post("/api/run/full-pipeline", dependencies=[Depends(require_admin_token)])
 def run_full_pipeline(background_tasks: BackgroundTasks):
     """
     Triggers the complete analysis pipeline in background.
@@ -230,8 +243,9 @@ def get_narratives(window: str = "7d", limit: int = 20):
 # =============================================================================
 # Human review (ai_output_evals)
 # =============================================================================
-# Future: gate these endpoints behind admin auth. For now they are open and
-# rely on the reviewer_id field for attribution.
+# All review endpoints are gated behind CIVIC_ADMIN_TOKEN (X-Admin-Token header).
+# /review/queue leaks up to 1200 chars of raw scraped text per item — the
+# gate is required, not optional.
 
 class ReviewSubmission(BaseModel):
     ai_output_id: int
@@ -243,7 +257,7 @@ class ReviewSubmission(BaseModel):
     notes: Optional[str] = None
 
 
-@app.get("/api/review/queue")
+@app.get("/api/review/queue", dependencies=[Depends(require_admin_token)])
 def get_review_queue(
     task: str,
     source_type: Optional[str] = None,
@@ -261,7 +275,7 @@ def get_review_queue(
     )
 
 
-@app.post("/api/review/submit")
+@app.post("/api/review/submit", dependencies=[Depends(require_admin_token)])
 def submit_review(payload: ReviewSubmission):
     """Persist a human review for an AI output. Replaces any existing review."""
     try:
@@ -278,7 +292,7 @@ def submit_review(payload: ReviewSubmission):
         raise HTTPException(status_code=404, detail=str(e))
 
 
-@app.get("/api/review/stats")
+@app.get("/api/review/stats", dependencies=[Depends(require_admin_token)])
 def get_review_stats(task: Optional[str] = None):
     """Per-task counts of total outputs, reviewed, correct, incorrect, golden, accuracy %."""
     return review_service.get_stats(task_type=task)

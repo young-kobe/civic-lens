@@ -16,10 +16,16 @@ class Settings(BaseSettings):
     # API Server
     api_host: str = "0.0.0.0"
     api_port: int = 8000
+
+    # Shared-secret that gates every admin endpoint (/api/run/*, /api/review/*,
+    # /api/cache-status). Clients must send it in the X-Admin-Token header. If
+    # this is empty the server returns 503 on all gated endpoints — the
+    # misconfiguration is intentional (loud over silently-permissive).
+    admin_token: str = ""
     
     # Analysis Scope & Batching
     run_analysis_on: Literal["all", "social_media", "x"] = "social_media"
-    loader_batch_size: int = 100
+    loader_batch_size: int = 500
     
     # Gemini LLM Config
     gemini_api_key: str = ""
