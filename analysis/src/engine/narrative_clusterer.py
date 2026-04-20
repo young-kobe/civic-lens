@@ -144,6 +144,12 @@ class NarrativeClusterer:
             embedding_fallbacks = 0
             now = int(time.time())
 
+            # In embedding mode, materialize missing anchor embeddings once up
+            # front so `_best_match` doesn't re-embed the same anchors per
+            # pending claim (audit 2026-04-19 §8).
+            if self.mode == "embedding" and self.embedding_client is not None:
+                self._warm_anchor_embeddings(anchors, cursor)
+
             for pc in pending:
                 if not pc.tokens:
                     continue
@@ -188,6 +194,7 @@ class NarrativeClusterer:
                 "narratives_created": narratives_created,
                 "assignments": assignments,
                 "mode": self.mode,
+                "embedding_fallbacks": embedding_fallbacks,
             }
         finally:
             conn.close()
@@ -224,6 +231,28 @@ class NarrativeClusterer:
                 best_sim = sim
                 best_id = anchor.narrative_id
         return best_id, best_sim
+
+    def _warm_anchor_embeddings(
+        self, anchors: Dict[int, "_NarrativeAnchor"], cursor: sqlite3.Cursor,
+    ) -> None:
+        """Populate anchor_embedding for every anchor missing one, once per run.
+
+        The old flow embedded each anchor lazily inside the per-claim inner
+        loop; with N pending claims and M anchors missing embeddings this
+        was up to N lookups each. Materializing once makes the inner loop
+        O(N·M) cosine only, not O(N·M) embedding calls.
+        """
+        for anchor in anchors.values():
+            if anchor.anchor_embedding is not None:
+                continue
+            embedding = self.embedding_client.embed(anchor.anchor_text, model=self.embedding_model)
+            if embedding is None:
+                continue
+            anchor.anchor_embedding = embedding
+            cursor.execute(
+                "UPDATE narratives SET anchor_embedding_json = ? WHERE narrative_id = ?",
+                (json.dumps(embedding), anchor.narrative_id),
+            )
 
     def _anchor_embedding(
         self, anchor: _NarrativeAnchor, cursor: sqlite3.Cursor,
@@ -315,11 +344,20 @@ class NarrativeClusterer:
         embedding: Optional[List[float]],
         now: int,
     ) -> int:
+        # Record the clustering mode + threshold + embedding model used to
+        # create this anchor so a later threshold change doesn't silently
+        # rewrite the semantics of old narratives (audit 2026-04-19 §8).
+        effective_mode = "embedding" if (self.mode == "embedding" and embedding is not None) else "jaccard"
+        threshold = (
+            self.embedding_threshold if effective_mode == "embedding"
+            else self.jaccard_threshold
+        )
         cursor.execute(
             """
             INSERT INTO narratives
-                (name, description, first_seen_at, first_seen_doc_id, created_at, updated_at, anchor_embedding_json)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+                (name, description, first_seen_at, first_seen_doc_id, created_at, updated_at,
+                 anchor_embedding_json, clustering_mode, clustering_threshold, embedding_model)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 pc.claim_text[:120],
@@ -329,6 +367,9 @@ class NarrativeClusterer:
                 now,
                 now,
                 json.dumps(embedding) if embedding is not None else None,
+                effective_mode,
+                threshold,
+                self.embedding_model if effective_mode == "embedding" else None,
             ),
         )
         return cursor.lastrowid

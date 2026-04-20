@@ -43,6 +43,36 @@ def get_time_cutoff(window: str) -> Optional[int]:
     return int(time.time()) - seconds
 
 
+def fetch_task_rows(
+    cursor,
+    select_clause: str,
+    task_type: str,
+    cutoff: Optional[int],
+    min_confidence: Optional[float] = None,
+    extra_joins: str = "",
+    extra_where: str = "",
+    params_prefix: tuple = (),
+) -> list:
+    """Run a canonical ai_outputs+docs query and return rows.
+
+    Consolidates the cutoff / min_confidence branching every aggregator was
+    repeating inline. `select_clause` is the projection only (starts with
+    ``SELECT ...``); the caller doesn't write the JOIN or WHERE chain.
+    """
+    sql = f"{select_clause} FROM ai_outputs a JOIN docs d ON a.doc_id = d.doc_id {extra_joins} WHERE a.task_type = ?"
+    params: list = list(params_prefix) + [task_type]
+    if min_confidence is not None:
+        sql += " AND a.confidence >= ?"
+        params.append(min_confidence)
+    if cutoff is not None:
+        sql += " AND d.published_at >= ?"
+        params.append(cutoff)
+    if extra_where:
+        sql += f" AND ({extra_where})"
+    cursor.execute(sql, tuple(params))
+    return cursor.fetchall()
+
+
 def get_bot_flagged_doc_ids(db_path: str, min_confidence: float = 0.5) -> Set[int]:
     """
     Get all doc_ids that have been flagged as 'bot' with confidence >= min_confidence.

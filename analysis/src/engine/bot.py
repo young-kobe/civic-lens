@@ -32,7 +32,7 @@ from analysis.src.engine.constants import (
     COORDINATION_PATTERNS,  # noqa: F401 — exported for aggregator
 )
 from analysis.src.engine.models import BotResult
-from analysis.src.engine.prompts import BOT_SYSTEM_PROMPT, BOT_USER_PROMPT_TEMPLATE
+from analysis.src.llm.prompts import BOT_SYSTEM_PROMPT, BOT_USER_PROMPT_TEMPLATE
 from analysis.src.llm.schemas import BOT_SCHEMA
 
 logger = get_logger(__name__)
@@ -355,9 +355,14 @@ class HybridBotDetector:
                 inference_method="llm",
                 llm_text_likelihood=max(0.0, min(1.0, llm_text_lik)),
             )
-        except Exception as e:
+        except (ValueError, RuntimeError, KeyError, TypeError) as e:
+            # See analyzer.py for exception-class rationale.
             logger.error(f"LLM bot detection failed: {e}. Falling back to heuristics.")
-            return self._heuristic_classify(signals)
+            fallback = self._heuristic_classify(signals)
+            # Preserve the reason so downstream ai_outputs has visibility into
+            # why this row went through the heuristic path (audit §9).
+            fallback.fallback_reason = f"{type(e).__name__}: {e}"
+            return fallback
 
     # ---------- Public entry points ----------
 

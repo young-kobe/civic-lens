@@ -41,7 +41,7 @@ from analysis.src.engine.claim_extractor import ClaimExtractor
 from analysis.src.engine.narrative_clusterer import NarrativeClusterer
 from analysis.src.engine.account_classifier import AccountClassifier
 from analysis.src.engine.propaganda_detector import PropagandaDetector
-from analysis.src.engine.prompts import (
+from analysis.src.llm.prompts import (
     BOT_PROMPT_VERSION, TEXT_ANALYSIS_PROMPT_VERSION, CLAIM_EXTRACTION_PROMPT_VERSION,
     PROPAGANDA_PROMPT_VERSION,
     BOT_SYSTEM_PROMPT, TEXT_ANALYSIS_SYSTEM_PROMPT, CLAIM_EXTRACTION_SYSTEM_PROMPT,
@@ -51,7 +51,6 @@ from analysis.src.engine.prompts import (
     PROPAGANDA_USER_PROMPT_TEMPLATE,
 )
 from analysis.src.reporting.aggregators import (
-    OutletAggregator,
     SentimentAggregator,
     BotAggregator,
     NarrativeAggregator,
@@ -74,7 +73,6 @@ class AnalysisJobRunner:
         self.settings = get_settings()
         self.cache = SnapshotCache(self.settings.cache_dir)
         self.loader = ContentLoader(self.settings.db_path)
-        self.outlet_agg = OutletAggregator(self.settings.db_path)
         self.sentiment_agg = SentimentAggregator(self.settings.db_path)
         self.bot_agg = BotAggregator(self.settings.db_path)
         self.narrative_agg = NarrativeAggregator(self.settings.db_path)
@@ -438,12 +436,19 @@ class AnalysisJobRunner:
         logger.info(f"Processing {total} docs for claim extraction")
         for i, doc in enumerate(docs, 1):
             result = self.claim_extractor.extract(doc["text"])
+            # Row-level confidence is the mean of per-claim confidences rather
+            # than the old max(). A doc with claims at (0.4, 0.4, 0.9) should
+            # not advertise 0.9 as the row confidence — downstream aggregators
+            # filtering by row confidence would overcount uncertain claims
+            # (audit 2026-04-19 §8). The per-claim array still lives in
+            # output_json as the source of truth.
+            confidences = [c.confidence for c in result.claims]
+            row_confidence = sum(confidences) / len(confidences) if confidences else 0.0
             self.loader.save_ai_output(
                 doc["doc_id"],
                 "claims",
                 result.to_dict(),
-                # Overall row confidence: best claim's confidence, or 0 if none extracted.
-                max((c.confidence for c in result.claims), default=0.0),
+                row_confidence,
                 model_id=self.model_id,
                 prompt_version=CLAIM_EXTRACTION_PROMPT_VERSION,
                 system_prompt=CLAIM_EXTRACTION_SYSTEM_PROMPT,
@@ -451,7 +456,8 @@ class AnalysisJobRunner:
                 inference_method="llm",
             )
             logger.info(
-                f"[claims {i}/{total}] doc={doc['doc_id']} extracted={len(result.claims)}"
+                f"[claims {i}/{total}] doc={doc['doc_id']} extracted={len(result.claims)} "
+                f"mean_conf={row_confidence:.2f}"
             )
         logger.info(f"Claim extraction complete: {total} docs processed")
         return total
@@ -591,23 +597,29 @@ class AnalysisJobRunner:
         Saves multiple time-windowed versions of sentiment (with merged GOP favorability).
         Returns dict with counts for each cached endpoint.
         """
+        from analysis.src.reporting.aggregators.base import get_bot_flagged_doc_ids
+
         logger.info("Step 10/10: Saving aggregation snapshots to cache...")
         results = {}
 
         # Time windows to pre-compute for time-sensitive endpoints
         time_windows = ["24h", "7d", "30d", "90d"]
 
+        # Compute once and share across every aggregator that needs it.
+        # Previously each aggregator re-queried bot flags per window — on a
+        # full refresh (4 windows × 3 aggregators) that's 12 identical queries.
+        bot_docs = get_bot_flagged_doc_ids(
+            self.settings.db_path,
+            min_confidence=self.settings.aggregation_min_confidence,
+        )
+
         # Public Sentiment (includes merged GOP favorability) - cache all time windows
         for window in time_windows:
-            sentiment = self.sentiment_agg.get_public_sentiment(time_window=window)
+            sentiment = self.sentiment_agg.get_public_sentiment(
+                time_window=window, bot_docs=bot_docs,
+            )
             self.cache.save(f"sentiment_{window}", sentiment.to_dict(), doc_count=sentiment.overview.volume)
             results[f"sentiment_{window}"] = sentiment.overview.volume
-
-        # Outlet Profiles (not time-windowed - shows all-time data)
-        profiles = self.outlet_agg.get_outlet_profiles()
-        profiles_data = [p.to_dict() for p in profiles]
-        self.cache.save("profiles", profiles_data, doc_count=len(profiles_data))
-        results["profiles"] = len(profiles_data)
 
         # Bot Activity (not time-windowed)
         bot_activity = self.bot_agg.get_bot_activity()
@@ -631,7 +643,9 @@ class AnalysisJobRunner:
         # the endpoint recomputed live on every UI request because no snapshot
         # was ever written.
         for window in time_windows:
-            geo = self.geo_agg.get_country_sentiment(time_window=window)
+            geo = self.geo_agg.get_country_sentiment(
+                time_window=window, bot_docs=bot_docs,
+            )
             total_posts = int(geo.get("total_posts", 0)) if isinstance(geo, dict) else 0
             self.cache.save(f"geo_sentiment_{window}", geo, doc_count=total_posts)
             results[f"geo_sentiment_{window}"] = total_posts

@@ -34,7 +34,7 @@ from typing import List, Optional
 import yaml
 
 from analysis.src.common.logger import get_logger
-from analysis.src.engine.prompts import (
+from analysis.src.llm.prompts import (
     ACCOUNT_CLASSIFIER_SYSTEM_PROMPT,
     ACCOUNT_CLASSIFIER_USER_PROMPT_TEMPLATE,
 )

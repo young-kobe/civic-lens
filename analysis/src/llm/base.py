@@ -109,9 +109,53 @@ class BaseLLMClient(ABC):
             raise ValueError(f"Expected dict, got {type(parsed).__name__}")
 
         if schema is not None:
+            BaseLLMClient._coerce_numeric_scales(parsed, schema, path="")
             BaseLLMClient._validate_against_schema(parsed, schema, path="")
 
         return parsed
+
+    @staticmethod
+    def _coerce_numeric_scales(data: Any, schema: Dict[str, Any], path: str) -> None:
+        """Coerce LLM-reported 0-100 values back to the 0-1 scale the schema expects.
+
+        Qwen-class local models occasionally emit confidence as a percentage
+        despite the prompt's explicit 0-1 rule. Rather than reject those rows
+        outright (which silently drops real classifications onto heuristic
+        fallback), divide by 100 and log a warning so the regression is
+        visible. Only applies to numeric fields with maximum=1 and minimum>=0;
+        any value in (1, 100] is in scope. Values >100 or <0 are left for
+        the validator to reject.
+        """
+        expected_type = schema.get("type")
+        if expected_type == "object" and isinstance(data, dict):
+            for key, subschema in schema.get("properties", {}).items():
+                if key not in data:
+                    continue
+                sub_type = subschema.get("type")
+                if sub_type in ("number", "integer"):
+                    v = data[key]
+                    if (
+                        isinstance(v, (int, float))
+                        and not isinstance(v, bool)
+                        and subschema.get("maximum") == 1
+                        and subschema.get("minimum", 0) >= 0
+                        and 1.0 < v <= 100.0
+                    ):
+                        logger.warning(
+                            f"Coerced {path + '.' + key if path else key} "
+                            f"from 0-100 scale ({v}) to 0-1 ({v / 100})"
+                        )
+                        data[key] = v / 100.0
+                elif sub_type in ("object", "array"):
+                    BaseLLMClient._coerce_numeric_scales(
+                        data[key], subschema,
+                        f"{path}.{key}" if path else key,
+                    )
+        elif expected_type == "array" and isinstance(data, list):
+            item_schema = schema.get("items")
+            if item_schema:
+                for i, item in enumerate(data):
+                    BaseLLMClient._coerce_numeric_scales(item, item_schema, f"{path}[{i}]")
 
     @staticmethod
     def _validate_against_schema(data: Any, schema: Dict[str, Any], path: str) -> None:

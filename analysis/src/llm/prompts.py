@@ -10,9 +10,9 @@ easier prompt engineering and A/B testing.
 # Prompt Version Constants (tracked in ai_outputs.prompt_version)
 # =============================================================================
 
-TEXT_ANALYSIS_PROMPT_VERSION = "text-analysis-v2"
-BOT_PROMPT_VERSION = "bot-v1"
-CLAIM_EXTRACTION_PROMPT_VERSION = "claim-extraction-v1"
+TEXT_ANALYSIS_PROMPT_VERSION = "text-analysis-v3"
+BOT_PROMPT_VERSION = "bot-v2"
+CLAIM_EXTRACTION_PROMPT_VERSION = "claim-extraction-v2"
 ACCOUNT_CLASSIFIER_PROMPT_VERSION = "account-classifier-v1"
 PROPAGANDA_PROMPT_VERSION = "propaganda-v1"
 
@@ -46,6 +46,7 @@ RULES:
 6. EMPTY/TRIVIAL CONTENT:
    - Text consisting only of @-mentions, links, or hashtags with no substantive content = NEUTRAL with confidence < 0.5.
 7. If uncertain about a classification, set confidence < 0.7.
+8. All confidence fields (`sentiment_confidence`, `overall_favorability_confidence`, nested `confidence` values) MUST be decimals in [0.0, 1.0] — NEVER a percentage. Example: use `0.85`, not `85` or `"85%"`. A value of `95` is WRONG; write `0.95`.
 
 OUTPUT SCHEMA:
 {
@@ -106,6 +107,7 @@ RULES:
 3. Cite specific signal values in `indicators` (e.g. "hedge_phrase_rate=1.8", "sentence_length_variance=2.1").
 4. `llm_text_likelihood` is your judgment of how LLM-generated the TEXT looks, independent of account status. A government press release can have high llm_text_likelihood AND is_bot=false.
 5. Do not assume intent — classify observable patterns only.
+6. `confidence` and `llm_text_likelihood` MUST be decimals in [0.0, 1.0] — NEVER a percentage. Example: use `0.85`, not `85` or `"85%"`. A value of `95` is WRONG; write `0.95`.
 
 OUTPUT SCHEMA:
 {
@@ -164,6 +166,19 @@ RULES:
    - Rhetorical devices with no factual assertion ("what a mess!").
    - Pure opinion with no referent ("this is great").
 6. If the text is non-political, trivial, or purely metadata (@-mentions + hashtags only), return `{"claims": []}`.
+7. Each claim's `confidence` MUST be a decimal in [0.0, 1.0] — NEVER a percentage. Example: use `0.85`, not `85` or `"85%"`.
+
+EXAMPLE INPUT:
+"Trump dominated in Pennsylvania last night, flipping the state red for the first time in decades. Meanwhile, the DNC is scrambling for a post-mortem."
+
+EXAMPLE OUTPUT:
+{
+  "claims": [
+    {"claim": "Trump won Pennsylvania", "confidence": 0.9, "evidence_span": "Trump dominated in Pennsylvania"},
+    {"claim": "Pennsylvania flipped Republican for the first time in decades", "confidence": 0.8, "evidence_span": "flipping the state red for the first time in decades"},
+    {"claim": "The DNC is conducting a post-election post-mortem", "confidence": 0.7, "evidence_span": "DNC is scrambling for a post-mortem"}
+  ]
+}
 
 OUTPUT SCHEMA:
 {

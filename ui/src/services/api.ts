@@ -4,7 +4,7 @@ import {
     ReviewQueueItem, ReviewSubmission, ReviewStats, ReviewTaskType,
 } from '../types';
 
-const API_BASE = '/api';
+const API_BASE = '/api/v1';
 
 export type TimeWindow = '24h' | '7d' | '30d' | '90d' | 'all';
 

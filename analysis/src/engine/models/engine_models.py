@@ -58,6 +58,10 @@ class BotResult:
     deterministic_signals: Optional[Dict[str, Any]] = None
     inference_method: str = "llm"
     llm_text_likelihood: float = 0.0
+    # Populated on heuristic-fallback rows to record WHY the fallback happened
+    # (e.g. 'SchemaValidationError: confidence above maximum', 'Timeout'). The
+    # 'what' is inference_method=heuristic; this is the 'why'. Audit §9.
+    fallback_reason: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)

@@ -28,7 +28,7 @@ from typing import List, Optional
 
 from analysis.src.common.logger import get_logger
 from analysis.src.engine.models import PropagandaResult, PropagandaTechnique
-from analysis.src.engine.prompts import (
+from analysis.src.llm.prompts import (
     PROPAGANDA_SYSTEM_PROMPT,
     PROPAGANDA_USER_PROMPT_TEMPLATE,
 )
