@@ -54,7 +54,15 @@ civic-lens.info, www.civic-lens.info {
         X-Content-Type-Options "nosniff"
     }
 
-    handle /api/* {
+    # /health is intentionally unversioned (server.py mounts health_router at
+    # the app root for infra probes). Route it through the API alongside the
+    # /api/v1 surface, otherwise Caddy's static file_server catches it and
+    # returns the SPA index.html — monitors would then see 200 regardless
+    # of uvicorn being alive.
+    @api {
+        path /api/* /health
+    }
+    handle @api {
         reverse_proxy 127.0.0.1:8000 {
             transport http {
                 dial_timeout 5s
