@@ -16,9 +16,15 @@
 
 civic-lens.info, www.civic-lens.info {
     tls /etc/caddy/origin.crt /etc/caddy/origin.key {
+        # Authenticated Origin Pulls (audit §1.19). Require a client cert
+        # chaining back to Cloudflare's origin-pull CA on every request;
+        # direct curl to the VPS IP fails the TLS handshake.
+        # Ubuntu 24.04 ships Caddy 2.6 which uses `trusted_ca_cert_file`;
+        # 2.8+ renamed it to `trust_pool file`. Stick with the 2.6 spelling
+        # until we upgrade the Caddy package via the official Caddy repo.
         client_auth {
             mode require_and_verify
-            trust_pool file /etc/caddy/cloudflare-authenticated-origin-pull.pem
+            trusted_ca_cert_file /etc/caddy/cloudflare-authenticated-origin-pull.pem
         }
     }
 
