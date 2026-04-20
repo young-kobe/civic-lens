@@ -7,7 +7,8 @@ Wants=network-online.target
 Type=oneshot
 User=civic-lens
 Group=civic-lens
-WorkingDirectory=/opt/civic-lens
+# See civic-lens-crawl.service for the WorkingDirectory rationale.
+WorkingDirectory=/var/lib/civic-lens
 EnvironmentFile=/etc/civic-lens.env
 ExecStart=/opt/civic-lens/civic-ingest reddit \
     --config /opt/civic-lens/data/seeds.yaml \

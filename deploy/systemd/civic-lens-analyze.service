@@ -7,7 +7,10 @@ Wants=network-online.target
 Type=oneshot
 User=civic-lens
 Group=civic-lens
-WorkingDirectory=/opt/civic-lens
+# Same WorkingDirectory rationale as civic-lens-crawl.service — keep /opt
+# read-only under ProtectSystem=strict, resolve any relative paths in the
+# job runner / aggregators under the writable data root.
+WorkingDirectory=/var/lib/civic-lens
 EnvironmentFile=/etc/civic-lens.env
 Environment=PYTHONPATH=/opt/civic-lens
 ExecStart=/opt/civic-lens/.venv/bin/python -m analysis.src.scheduler.job_runner

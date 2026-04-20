@@ -7,7 +7,11 @@ Wants=network-online.target
 Type=oneshot
 User=civic-lens
 Group=civic-lens
-WorkingDirectory=/opt/civic-lens
+# Working dir is the writable data root so relative paths in seeds.yaml
+# (raw_dir: data/raw) resolve into /var/lib/civic-lens/data/raw, which is
+# under ReadWritePaths. The binary + config are still referenced by
+# absolute paths in ExecStart below, so /opt stays read-only.
+WorkingDirectory=/var/lib/civic-lens
 EnvironmentFile=/etc/civic-lens.env
 ExecStart=/opt/civic-lens/civic-ingest crawl \
     --config /opt/civic-lens/data/seeds.yaml \
