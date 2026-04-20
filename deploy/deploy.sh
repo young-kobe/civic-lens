@@ -40,10 +40,25 @@ echo "[4/6] ui build"
 )
 
 echo "[5/6] migrations"
+# civic-ingest resolves migrations relative to the DB's parent directory,
+# so make sure the symlink to the in-repo migrations/ exists. Idempotent:
+# ln -sfn replaces any prior symlink or missing entry. Safe across git
+# pulls — deploy.sh chowns the repo at the end, but never touches
+# /var/lib/civic-lens, so this link survives each run.
+DB_PATH="${CIVIC_DB_PATH:-/var/lib/civic-lens/data/civic_lens.db}"
+DB_DIR="$(dirname "$DB_PATH")"
+mkdir -p "$DB_DIR"
+ln -sfn "$REPO/data/migrations" "$DB_DIR/migrations"
+
 # civic-ingest migrate is a no-op when schema is already current.
-"$REPO/civic-ingest" migrate --db "${CIVIC_DB_PATH:-/var/lib/civic-lens/data/civic_lens.db}"
+"$REPO/civic-ingest" migrate --db "$DB_PATH"
 
 echo "[6/6] chown + reload"
 chown -R civic-lens:civic-lens "$REPO"
+# civic-ingest runs as root inside deploy.sh and writes the DB file —
+# hand ownership back to the service user so civic-lens-api.service can
+# open it after the reload below. The /var/lib tree itself is left with
+# install.sh's 0750 perms on dirs + 0600 on files.
+chown civic-lens:civic-lens "$DB_DIR" "$DB_PATH" 2>/dev/null || true
 systemctl reload-or-restart civic-lens-api.service || true
 echo "deploy ok"
