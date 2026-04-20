@@ -78,8 +78,8 @@ function App() {
         <div className="app-container">
             {/* Header */}
             <header className="page-header">
-                <div className="flex items-center justify-between gap-4">
-                    <div className="flex items-baseline gap-3">
+                <div className="page-header-row">
+                    <div className="page-header-brand">
                         <button
                             type="button"
                             onClick={() => setActiveTab('home')}
@@ -96,20 +96,24 @@ function App() {
                         >
                             <h1 className="page-title" style={{ margin: 0 }}>CIVIC&nbsp;LENS</h1>
                         </button>
-                        <span style={{
-                            width: 1, height: 16, background: 'var(--neutral-300)',
-                            alignSelf: 'center',
-                        }} />
-                        <p className="page-subtitle" style={{ marginTop: 0 }}>
+                        <span className="page-header-separator" aria-hidden />
+                        <p className="page-subtitle page-header-subtitle" style={{ marginTop: 0 }}>
                             Political Media · Narrative &amp; Bot Tracker
                         </p>
                     </div>
-                    <div className="flex items-center gap-3">
-                        <span className="status-strip">
+                    <div className="page-header-actions">
+                        <span className="status-strip status-strip-full">
                             <span className="tick-up">●</span>
                             <span>LIVE</span>
                             <span className="sep" />
                             <span>{timestamp}</span>
+                        </span>
+                        <span
+                            className="status-strip-mini"
+                            title={`Live · ${timestamp}`}
+                            aria-label={`Live · ${timestamp}`}
+                        >
+                            <span className="tick-up">●</span>
                         </span>
                         <ExportMenu onExport={handleExport} />
                     </div>

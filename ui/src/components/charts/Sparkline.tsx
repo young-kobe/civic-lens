@@ -7,6 +7,8 @@ interface SparklineProps {
     color?: string;
     height?: number;
     showTooltip?: boolean;
+    /** Accessible label summarising what the spark represents. */
+    ariaLabel?: string;
 }
 
 /**
@@ -17,11 +19,14 @@ function Sparkline({
     dataKey = 'value',
     color = 'var(--accent)',
     height = 40,
-    showTooltip = true
+    showTooltip = true,
+    ariaLabel,
 }: SparklineProps) {
     if (!data || data.length === 0) {
         return (
             <div
+                role="img"
+                aria-label={ariaLabel ? `${ariaLabel}: no data` : 'No data'}
                 style={{
                     height,
                     display: 'flex',
@@ -36,6 +41,9 @@ function Sparkline({
         );
     }
 
+    const describedLabel = ariaLabel
+        ?? `Trend sparkline, ${data.length} points, latest value ${data[data.length - 1]?.[dataKey as keyof ChartDataPoint] ?? ''}`;
+
     const renderTooltip = ({ payload }: TooltipProps<number, string>) => {
         if (!payload || payload.length === 0) return null;
         const point = payload[0];
@@ -47,18 +55,20 @@ function Sparkline({
     };
 
     return (
-        <ResponsiveContainer width="100%" height={height}>
-            <LineChart data={data}>
-                <Line
-                    type="monotone"
-                    dataKey={dataKey}
-                    stroke={color}
-                    strokeWidth={2}
-                    dot={false}
-                />
-                {showTooltip && <Tooltip content={renderTooltip} />}
-            </LineChart>
-        </ResponsiveContainer>
+        <div role="img" aria-label={describedLabel} style={{ width: '100%' }}>
+            <ResponsiveContainer width="100%" height={height}>
+                <LineChart data={data}>
+                    <Line
+                        type="monotone"
+                        dataKey={dataKey}
+                        stroke={color}
+                        strokeWidth={2}
+                        dot={false}
+                    />
+                    {showTooltip && <Tooltip content={renderTooltip} />}
+                </LineChart>
+            </ResponsiveContainer>
+        </div>
     );
 }
 

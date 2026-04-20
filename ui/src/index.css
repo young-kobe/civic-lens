@@ -223,7 +223,6 @@ code, pre {
 
 .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--space-3); }
 .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-3); }
-.grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-3); }
 .grid-auto { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: var(--space-3); }
 
 .flex { display: flex; }
@@ -687,17 +686,184 @@ code, pre {
    ============================================ */
 
 @media (max-width: 1024px) {
-  .grid-4 { grid-template-columns: repeat(2, 1fr); }
   .grid-3 { grid-template-columns: repeat(2, 1fr); }
   :root { --sidebar-width: 240px; }
 }
 
 @media (max-width: 768px) {
-  .grid-4, .grid-3, .grid-2 { grid-template-columns: 1fr; }
+  .grid-3, .grid-2 { grid-template-columns: 1fr; }
   .app-container { padding: 0 var(--space-3); }
   .nav-tabs { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   :root { --sidebar-width: 100%; }
+
+  /* Header: drop the subtitle + full status strip; show the mini live dot. */
+  .page-header-subtitle,
+  .page-header-separator,
+  .status-strip-full { display: none; }
+  .status-strip-mini { display: inline-flex; }
 }
+
+/* Phones — bottom-fixed tab bar, tighter paddings, larger touch targets. */
+@media (max-width: 640px) {
+  /* Move tabs from the top border to a fixed bottom bar. */
+  .nav-tabs {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 20;
+    background: var(--bg-card);
+    border-top: 1px solid var(--neutral-200);
+    border-bottom: none;
+    padding: 0 var(--space-2) env(safe-area-inset-bottom, 0);
+    box-shadow: 0 -2px 8px rgba(15, 15, 25, 0.05);
+  }
+
+  .nav-tab {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 12px 8px;
+    border-bottom: none;
+    border-top: 2px solid transparent;
+    margin-bottom: 0;
+    margin-top: -1px;
+    text-align: center;
+    white-space: nowrap;
+  }
+
+  .nav-tab-active {
+    border-top-color: var(--accent);
+    border-bottom-color: transparent;
+  }
+
+  /* Reserve space above the fixed bar so content isn't hidden. 56px ≈
+     tab height + safe-area. Any page-bottom margin stacks under this. */
+  main {
+    padding-bottom: calc(var(--space-4) + 64px + env(safe-area-inset-bottom, 0)) !important;
+  }
+
+  /* Footer sits just above the tab bar; keep it out of the way. */
+  footer {
+    margin-bottom: 64px;
+  }
+
+  /* Tap-target floor for interactive pills/buttons on phones. */
+  .btn, .filter-pill {
+    min-height: 40px;
+  }
+
+  /* Page-header becomes a single row; brand truncates cleanly. */
+  .page-header {
+    padding: var(--space-3) 0 var(--space-2);
+    margin-bottom: var(--space-3);
+  }
+
+  /* Filter bar stacks into a vertical group with its own scroll rows. */
+  .filter-bar {
+    padding: var(--space-2) 0;
+    gap: var(--space-2);
+  }
+  .filter-bar > div[style] { display: none; }  /* hide the inline separators */
+  .filter-bar .flex {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 2px;
+  }
+}
+
+/* Tiny phones — tighten page padding + stack cards harder. */
+@media (max-width: 480px) {
+  .app-container { padding: 0 var(--space-2); }
+  .page-title { font-size: var(--text-lg); }
+  .grid-auto { grid-template-columns: 1fr; }
+}
+
+/* ============================================
+   PublicSentiment — TopicRow
+   ============================================ */
+
+.topic-row-button {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 10px 12px;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.topic-row-button[aria-expanded="false"] { cursor: pointer; }
+
+/* Small phones — let the text block wrap under the donut so no stat gets
+   clipped off the edge. */
+@media (max-width: 480px) {
+  .topic-row-button {
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px;
+  }
+
+  /* The first inner <div> holds title + percent chip, the second holds the
+     docs/pos/neg stats — let the stats row wrap independently. */
+  .topic-row-button > div:nth-of-type(1) > div:nth-of-type(2) {
+    flex-wrap: wrap;
+    gap: 8px 12px !important;
+  }
+}
+
+/* ============================================
+   Review page — responsive stats grid
+   ============================================ */
+
+.review-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: var(--space-4);
+}
+
+@media (max-width: 768px) {
+  .review-stats-grid { grid-template-columns: repeat(3, 1fr); gap: var(--space-3); }
+}
+
+@media (max-width: 480px) {
+  .review-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--space-2);
+  }
+  /* Accuracy — the fifth stat — spans the bottom row so it doesn't look orphaned. */
+  .review-stats-grid > :last-child { grid-column: span 2; }
+}
+
+/* ============================================
+   Global Heatmap — mobile tooltip + stats row
+   ============================================ */
+
+@media (max-width: 640px) {
+  .global-heatmap .stats-row {
+    flex-wrap: wrap;
+    gap: var(--space-3) var(--space-5);
+  }
+
+  .global-heatmap .map-container {
+    height: 340px;
+  }
+
+  /* Anchor the tooltip to the bottom of the viewport so it doesn't clip
+     off the edge after a tap near the screen margin. The JS positions it
+     at `position: fixed` based on pointer; on a touch device the pointer
+     is at the tap point so the natural spot is fine, we just cap width. */
+  .global-heatmap .map-tooltip {
+    max-width: calc(100vw - var(--space-4) * 2);
+    left: var(--space-4) !important;
+    right: var(--space-4) !important;
+    min-width: 0;
+  }
+}
+
 
 /* ============================================
    Utility Classes
@@ -769,4 +935,181 @@ code, pre {
   width: 1px;
   height: 12px;
   background: var(--neutral-600);
+}
+
+/* Mini live-dot shown instead of the full status strip on narrow screens.
+   Hidden by default; the mobile breakpoint swaps which one is visible. */
+.status-strip-mini {
+  display: none;
+  align-items: center;
+  padding: 4px 8px;
+  background: var(--neutral-900);
+  color: var(--neutral-100);
+  border-radius: var(--radius-sm);
+  font-size: 10px;
+  line-height: 1;
+}
+
+/* ============================================
+   Page header layout
+   ============================================ */
+
+.page-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.page-header-brand {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  min-width: 0; /* allow subtitle to truncate */
+}
+
+.page-header-separator {
+  width: 1px;
+  height: 16px;
+  background: var(--neutral-300);
+  align-self: center;
+  flex-shrink: 0;
+}
+
+.page-header-subtitle {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.page-header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-shrink: 0;
+}
+
+/* ============================================
+   Global Heatmap page (was in an inline <style> block)
+   ============================================ */
+
+.global-heatmap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.global-heatmap .description {
+  color: var(--neutral-500);
+  margin-bottom: var(--space-3);
+  font-size: var(--text-sm);
+}
+
+.global-heatmap .stats-row {
+  display: flex;
+  gap: var(--space-6);
+  margin-bottom: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-panel);
+  border: 1px solid var(--neutral-200);
+  border-radius: 2px;
+}
+
+.global-heatmap .stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.global-heatmap .stat-value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-xl);
+  font-weight: 600;
+  color: var(--neutral-900);
+  letter-spacing: -0.01em;
+}
+
+.global-heatmap .stat-label {
+  font-size: var(--text-xs);
+  color: var(--neutral-500);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+}
+
+.global-heatmap .legend {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--neutral-600);
+}
+
+.global-heatmap .legend-label {
+  font-weight: 700;
+  color: var(--neutral-500);
+  letter-spacing: 0.08em;
+}
+
+.global-heatmap .legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.global-heatmap .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.global-heatmap .map-container {
+  height: 500px;
+  background: var(--bg-panel);
+  border: 1px solid var(--neutral-200);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.global-heatmap .map-tooltip {
+  position: fixed;
+  background: var(--bg-card);
+  border: 1px solid var(--neutral-300);
+  border-radius: 2px;
+  padding: var(--space-2) var(--space-3);
+  box-shadow: var(--shadow-lg);
+  z-index: 1000;
+  pointer-events: none;
+  min-width: 180px;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.global-heatmap .tooltip-header {
+  font-family: var(--font-family);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--neutral-800);
+  margin-bottom: 6px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--neutral-200);
+}
+
+.global-heatmap .tooltip-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--text-xs);
+  margin-bottom: 2px;
+}
+
+.global-heatmap .tooltip-row span:first-child {
+  color: var(--neutral-500);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
