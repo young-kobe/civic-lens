@@ -42,6 +42,10 @@ fi
 install -d -m 0750 -o civic-lens -g civic-lens /var/lib/civic-lens /var/lib/civic-lens/data /var/lib/civic-lens/backups
 install -d -m 0700 -o civic-lens -g civic-lens /var/lib/civic-lens/data/cache
 install -d -m 0755 /etc/civic-lens /var/log/caddy
+# civic-ingest resolves migrations relative to the DB's directory; symlink
+# the in-repo migrations dir so `civic-ingest migrate` finds them and
+# `git pull` picks up new SQL files automatically.
+ln -sfn "$REPO/data/migrations" /var/lib/civic-lens/data/migrations
 
 echo "[3/9] env file"
 if [[ ! -f /etc/civic-lens.env ]]; then
