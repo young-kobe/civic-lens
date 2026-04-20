@@ -36,18 +36,26 @@ class GeoAggregator:
     def __init__(self, db_path: str):
         self.db_path = db_path
 
-    def get_country_sentiment(self, time_window: str = "7d") -> Dict[str, Any]:
+    def get_country_sentiment(
+        self,
+        time_window: str = "7d",
+        bot_docs: Set[int] = None,
+    ) -> Dict[str, Any]:
         """Aggregate X posts by country_code with confidence-weighted sentiment.
 
         Uses the ``docs.place_country_code`` column (populated at ingest time
         from X's ``places`` expansion) rather than re-parsing metadata_json
         per row.
+
+        ``bot_docs`` can be supplied by the caller (job_runner) to avoid
+        running the same bot-flag query once per aggregator.
         """
         from analysis.src.common.settings import get_settings
         min_conf = get_settings().aggregation_min_confidence
 
         cutoff = get_time_cutoff(time_window)
-        bot_docs = get_bot_flagged_doc_ids(self.db_path, min_confidence=min_conf)
+        if bot_docs is None:
+            bot_docs = get_bot_flagged_doc_ids(self.db_path, min_confidence=min_conf)
 
         with get_connection(self.db_path) as conn:
             cursor = conn.cursor()

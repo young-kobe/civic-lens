@@ -16,6 +16,14 @@ class Settings(BaseSettings):
     # API Server
     api_host: str = "0.0.0.0"
     api_port: int = 8000
+    # Emit a warning — but still serve — when a cached snapshot is older than
+    # this. The expected cadence of save_snapshots() is at least daily, so a
+    # day-old cache means the pipeline has silently stopped running.
+    stale_cache_warn_seconds: int = 24 * 60 * 60
+    # Minimum seconds between pipeline-trigger requests per endpoint. Clients
+    # that call /api/run/* faster than this get a 429. Prevents pile-up of
+    # background tasks from a misbehaving client (audit 2026-04-19 §3).
+    pipeline_trigger_cooldown_seconds: int = 60
 
     # Shared-secret that gates every admin endpoint (/api/run/*, /api/review/*,
     # /api/cache-status). Clients must send it in the X-Admin-Token header. If

@@ -36,7 +36,12 @@ DEFAULT_LIMIT = 20
 
 
 class NarrativeAggregator:
-    """Top narratives by support count, with per-narrative propagation data."""
+    """Top narratives by support count, with per-narrative coverage data.
+
+    'Coverage' (not 'propagation') — walkthrough 035 narrowed this from a
+    causal propagation claim to a support / citation overlay over the docs
+    we've ingested.
+    """
 
     def __init__(self, db_path: str):
         self.db_path = db_path

@@ -11,7 +11,7 @@ from analysis.src.engine.constants import (
     GOP_ENTITIES, FAVORABLE_INDICATORS, UNFAVORABLE_INDICATORS, PROXIMITY_WINDOW
 )
 from analysis.src.engine.models.engine_models import SentimentResult, FavorabilityResult, EntityStance
-from analysis.src.engine.prompts import TEXT_ANALYSIS_SYSTEM_PROMPT, TEXT_ANALYSIS_USER_PROMPT_TEMPLATE
+from analysis.src.llm.prompts import TEXT_ANALYSIS_SYSTEM_PROMPT, TEXT_ANALYSIS_USER_PROMPT_TEMPLATE
 from analysis.src.llm.schemas import TEXT_ANALYSIS_SCHEMA
 
 logger = get_logger(__name__)
@@ -67,31 +67,67 @@ class Analyzer:
             self._llm_client = get_llm_client()
             if not self._llm_client.is_available:
                 raise RuntimeError("LLM client not available")
-        except Exception as e:
-            raise RuntimeError(f"Failed to init LLM client: {e}")
+        except (ImportError, RuntimeError) as e:
+            raise RuntimeError(f"Failed to init LLM client: {e}") from e
+
+    @staticmethod
+    def _word_offsets(text_lower: str) -> List[int]:
+        """Return (char_offset → word_index) as a list indexed by char.
+
+        Splitting the whole text once lets downstream helpers map a char
+        position to a word index in O(1) via `offsets[pos]`, instead of
+        re-splitting `text_lower[:pos]` per call (the old code did this
+        inside a loop over ~100 keywords on every inference).
+        """
+        offsets = [0] * (len(text_lower) + 1)
+        word_idx = 0
+        in_word = False
+        for i, ch in enumerate(text_lower):
+            if ch.isspace():
+                if in_word:
+                    word_idx += 1
+                    in_word = False
+            else:
+                in_word = True
+            offsets[i] = word_idx
+        offsets[-1] = word_idx + (1 if in_word else 0)
+        return offsets
 
     def _extract_gop_entities(self, text_lower: str) -> List[str]:
         return list(set([e for e in GOP_ENTITIES if e in text_lower]))
 
-    def _find_entity_positions(self, text_lower: str, entities: List[str]) -> List[int]:
+    def _find_entity_positions(
+        self, text_lower: str, entities: List[str], offsets: List[int],
+    ) -> List[int]:
         positions = []
         for entity in entities:
             start = 0
             while True:
                 pos = text_lower.find(entity, start)
-                if pos == -1: break
-                positions.append(len(text_lower[:pos].split()))
+                if pos == -1:
+                    break
+                positions.append(offsets[pos])
                 start = pos + len(entity)
         return positions
 
-    def _is_keyword_near_entity(self, keyword: str, text_lower: str, entity_positions: List[int], word_count: int) -> bool:
-        if not entity_positions: return False
-        if word_count <= PROXIMITY_WINDOW: return True
+    def _is_keyword_near_entity(
+        self,
+        keyword: str,
+        text_lower: str,
+        entity_positions: List[int],
+        word_count: int,
+        offsets: List[int],
+    ) -> bool:
+        if not entity_positions:
+            return False
+        if word_count <= PROXIMITY_WINDOW:
+            return True
         start = 0
         while True:
             pos = text_lower.find(keyword, start)
-            if pos == -1: break
-            kw_word_pos = len(text_lower[:pos].split())
+            if pos == -1:
+                break
+            kw_word_pos = offsets[pos]
             if any(abs(kw_word_pos - ep) <= PROXIMITY_WINDOW for ep in entity_positions):
                 return True
             start = pos + len(keyword)
@@ -104,19 +140,29 @@ class Analyzer:
         text_lower = text.lower()
         words = text_lower.split()
         word_count = len(words)
-        
+
         # Sentiment deterministic
         pos_found = [w for w in words if w in POSITIVE_WORDS]
         neg_found = [w for w in words if w in NEGATIVE_WORDS]
         has_intensifiers = any(w in INTENSIFIERS for w in words)
         has_negators = any(w in NEGATORS for w in words)
-        
-        # Favorability deterministic
+
+        # Favorability deterministic — compute the char→word-index map once so
+        # the proximity helper below doesn't re-split the text per keyword.
         gop_entities = self._extract_gop_entities(text_lower)
-        entity_positions = self._find_entity_positions(text_lower, gop_entities)
-        
-        fav_found = [ind for ind in FAVORABLE_INDICATORS if ind in text_lower and self._is_keyword_near_entity(ind, text_lower, entity_positions, word_count)]
-        unfav_found = [ind for ind in UNFAVORABLE_INDICATORS if ind in text_lower and self._is_keyword_near_entity(ind, text_lower, entity_positions, word_count)]
+        offsets = self._word_offsets(text_lower) if gop_entities else []
+        entity_positions = self._find_entity_positions(text_lower, gop_entities, offsets)
+
+        fav_found = [
+            ind for ind in FAVORABLE_INDICATORS
+            if ind in text_lower
+            and self._is_keyword_near_entity(ind, text_lower, entity_positions, word_count, offsets)
+        ]
+        unfav_found = [
+            ind for ind in UNFAVORABLE_INDICATORS
+            if ind in text_lower
+            and self._is_keyword_near_entity(ind, text_lower, entity_positions, word_count, offsets)
+        ]
         
         return {
             "gop_entities": gop_entities,
@@ -284,8 +330,12 @@ class Analyzer:
                 )
 
                 return sentiment_res, favorability_res
-                
-            except Exception as e:
+
+            except (ValueError, RuntimeError, KeyError, TypeError) as e:
+                # ValueError: JSON parse failures, schema validation rejections,
+                # or bad float conversions in the response.
+                # RuntimeError: LLM client errors / transport failures.
+                # KeyError/TypeError: unexpected response shape.
                 logger.error(f"Unified LLM classification failed: {e}. Falling back to heuristics.")
                 return self._heuristic_classify(signals)
                 

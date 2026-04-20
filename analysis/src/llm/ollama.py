@@ -128,8 +128,10 @@ class OllamaClient(BaseLLMClient):
                 )
             
             if attempt < self.max_retries - 1:
-                time.sleep(1)
-        
+                # Exponential backoff matches gemini.py — one shared retry
+                # policy keeps behavior predictable across backends.
+                time.sleep((2 ** attempt) + 0.5)
+
         raise RuntimeError(f"Ollama API call failed after {self.max_retries} retries: {last_error}")
 
     def embed(self, text: str, model: Optional[str] = None) -> Optional[list]:

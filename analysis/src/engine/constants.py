@@ -6,10 +6,9 @@ sentiment, favorability, and bot detection analyzers.
 """
 
 
-# Confidence threshold for mild vs strong classification
-STRONG_CONFIDENCE_THRESHOLD = 0.7
-
 # Proximity window: only count stance keywords within this many words of an entity
+# (STRONG_CONFIDENCE_THRESHOLD lives in reporting/aggregators/constants.py —
+# single source of truth for the aggregator-owned threshold.)
 PROXIMITY_WINDOW = 50
 
 

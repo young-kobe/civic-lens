@@ -80,24 +80,36 @@ class TestAPI(unittest.TestCase):
         except requests.exceptions.ConnectionError:
             self.fail("Could not connect to API server")
 
-    def test_analysis_flow(self):
-        # Trigger
-        resp = requests.post(f"{API_URL}/api/run/analysis")
+    def test_health_is_unversioned(self):
+        """Health is mounted at the app root — infra probes shouldn't have
+        to track the API version."""
+        resp = requests.get(f"{API_URL}/health")
         self.assertEqual(resp.status_code, 200)
-        
-        # Wait for background task with polling
-        max_retries = 10
-        outlets = {}
-        for _ in range(max_retries):
-            time.sleep(1)
-            resp = requests.get(f"{API_URL}/api/profiles")
-            data = resp.json()
-            outlets = {p['outlet']: p for p in data}
-            if 'r/politics' in outlets and outlets['r/politics']['bot_rate'] > 0.0:
-                break
-        
-        self.assertIn('r/politics', outlets)
-        self.assertGreater(outlets['r/politics']['bot_rate'], 0.0)
+        body = resp.json()
+        self.assertIn(body["status"], ("ok", "degraded"))
+        self.assertEqual(body["api_version"], "v1")
+
+    def test_data_endpoints_under_v1(self):
+        """Data endpoints live under /api/v1 after the versioning switch."""
+        for path in ("/api/v1/sentiment", "/api/v1/bot-activity",
+                     "/api/v1/narratives", "/api/v1/propaganda",
+                     "/api/v1/geo-sentiment"):
+            resp = requests.get(f"{API_URL}{path}")
+            # With an empty/seed DB the aggregators may return empty payloads,
+            # but the endpoint must respond 200 with JSON.
+            self.assertEqual(resp.status_code, 200, f"{path} -> {resp.status_code}")
+            resp.json()  # raises if not JSON
+
+    def test_legacy_prefix_returns_404(self):
+        """The unversioned /api/* prefix is retired — clients must migrate."""
+        resp = requests.get(f"{API_URL}/api/sentiment")
+        self.assertEqual(resp.status_code, 404)
+
+    def test_admin_endpoints_reject_without_token(self):
+        """Admin endpoints require CIVIC_ADMIN_TOKEN; tests boot without one,
+        so they must return 503 (not 401) — misconfigured loudly."""
+        resp = requests.get(f"{API_URL}/api/v1/cache-status")
+        self.assertEqual(resp.status_code, 503)
 
 if __name__ == '__main__':
     unittest.main()
