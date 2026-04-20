@@ -1,12 +1,16 @@
 # Civic Lens
 
-Civic Lens is an open, audit-driven system for measuring how political narratives propagate across news media and online public discourse.
+Civic Lens is an audit-driven system for measuring **sampled political discourse** across news, Reddit, and X, with a **narrative overlay** that clusters recurring claims and a **partial citation overlay** between owned sources. Every output is traceable, confidence-scored, and labeled as a sample; the system never fabricates data.
+
+The goal is deliberately scoped: this is a sampled-discourse tracker with a narrative overlay, not a causal propagation engine. See `docs/walkthroughs/035-goal-narrowing-and-renames.md` for the scoping rationale.
 
 ## Architecture
-- **Ingestion (`ingest/`)**: Go 1.22+ crawler with SQLite frontier. Polite, resumable, crash-safe.
-- **Analysis (`analysis/`)**: Python backend for ETL, AI analysis, and pre-computed caching.
+- **Ingestion (`ingest/`)**: Go 1.22+ crawler with SQLite frontier. Polite, resumable, crash-safe. Fetches news (RSS + web), Reddit, and X.
+- **Analysis (`analysis/`)**: Python backend for ETL, sentiment/bot/claims/narratives analysis, and pre-computed caching.
 - **API (`analysis/src/api/`)**: FastAPI server serving cached analysis results.
-- **Frontend (`ui/`)**: React/Vite modern web interface.
+- **Frontend (`ui/`)**: React + Vite + TypeScript dashboard.
+
+See `docs/INVARIANTS.md` for data-integrity invariants and `docs/ARCHITECTURE_DIAGRAM.md` for the data-flow diagram.
 
 ## Prerequisites
 - [Go 1.22+](https://go.dev/dl/)
@@ -16,50 +20,58 @@ Civic Lens is an open, audit-driven system for measuring how political narrative
 ## Quick Start
 
 ```powershell
-# 1. Build and run the crawler (fetches news articles)
+# 1. Apply DB migrations
+.\run.ps1 migrate
+
+# 2. Build and run the crawler (news + Reddit + X)
 .\run.ps1 crawl
 
-# 2. Run the analysis pipeline (ETL + AI + caching)
+# 3. Run the analysis pipeline (ETL + AI + caching)
 .\run.ps1 analyze
 
-# 3. Start API + UI
+# 4. Start API + UI
 .\run.ps1 dev
 ```
 
-The API serves pre-computed data from `data/cache/`. Run `.\run.ps1 analyze` periodically to refresh the analysis.
+The API serves pre-computed data from `data/cache/`. Run `.\run.ps1 analyze` periodically (or via the scheduled task) to refresh.
 
 ## Commands
 
 | Command | Description |
 |---------|-------------|
 | `.\run.ps1 build` | Build Go ingestion binary |
-| `.\run.ps1 crawl` | Run the web crawler |
-| `.\run.ps1 analyze` | Run analysis pipeline (ETL + AI + caching) |
-| `.\run.ps1 api` | Start Python FastAPI server |
+| `.\run.ps1 migrate` | Apply pending DB migrations |
+| `.\run.ps1 crawl` | Run the web crawler (news via RSS/HTML) |
+| `.\run.ps1 reddit` | Fetch Reddit posts/comments |
+| `.\run.ps1 x` | Fetch X/Twitter posts |
+| `.\run.ps1 analyze` | Full analysis pipeline (ETL + bot + text + citations + claims + narratives + snapshots) |
+| `.\run.ps1 analyze -Tasks bot,text` | Run specific pipeline stages |
+| `.\run.ps1 api` | Start FastAPI server |
 | `.\run.ps1 ui` | Start React dev server |
 | `.\run.ps1 dev` | Start both API and UI |
 
 ## Scheduled Analysis
 
-To run the analysis pipeline automatically on a schedule:
-
 ```powershell
-# Set up Windows Task Scheduler (run as Admin)
 .\setup-scheduled-task.ps1              # Default: every 6 hours
 .\setup-scheduled-task.ps1 -RunsPerDay 4  # Customize frequency
 .\setup-scheduled-task.ps1 -Remove        # Remove the task
 ```
 
 ## Data Storage
-- **Database**: `data/civic_lens.db` (SQLite)
+- **Database**: `data/civic_lens.db` (SQLite, WAL mode)
 - **Raw content**: `data/raw/sha256/` (content-addressed)
 - **Analysis cache**: `data/cache/` (pre-computed JSON snapshots)
 
 ## Configuration
-Edit `data/seeds.yaml` to configure:
-- RSS feed seeds
-- Reddit API credentials
-- Crawl rate limits
+
+Set environment variables (prefixed `CIVIC_`) in `.env`. See `analysis/src/common/settings.py` for the full list. Key switches:
+- `CIVIC_LLM_BACKEND` = `gemini` | `ollama`
+- `CIVIC_LLM_ENABLED` = `true` | `false`
+- `CIVIC_RUN_ANALYSIS_ON` = `all` | `social_media` | `x`
+- `CIVIC_NARRATIVE_SIMILARITY_MODE` = `jaccard` | `embedding`
+
+Crawler seeds (RSS, subreddits, Reddit/X API creds, rate limits) live in `data/seeds.yaml`.
 
 ## API Endpoints
 
@@ -67,11 +79,18 @@ Edit `data/seeds.yaml` to configure:
 |----------|-------------|
 | `GET /health` | Health check |
 | `GET /api/cache-status` | Cache freshness metadata |
-| `GET /api/stories` | Story clusters |
-| `GET /api/sentiment` | Public sentiment data |
-| `GET /api/favorability` | GOP favorability metrics |
+| `GET /api/sentiment?window=7d` | Sentiment + GOP favorability snapshot |
 | `GET /api/profiles` | Outlet profiles |
-| `GET /api/bot-activity` | Bot detection metrics |
+| `GET /api/bot-activity` | Bot activity snapshot |
+| `GET /api/geo-sentiment?window=7d` | Country-level sentiment for the global heatmap |
+| `GET /api/narratives?window=7d&limit=20` | Top narratives (claim clusters) with per-source breakdown |
+| `GET /api/review/queue?task=sentiment` | Human-review queue (lowest-confidence first) |
+| `POST /api/review/submit` | Submit a human verdict (feeds golden set / calibration) |
+| `GET /api/review/stats?task=sentiment` | Reviewer accuracy + coverage stats |
+| `POST /api/run/etl` | Trigger ETL in the background |
+| `POST /api/run/analysis` | Trigger AI analysis in the background |
+| `POST /api/run/full-pipeline` | Trigger the full pipeline in the background |
 
 ## Invariants
-See [INVARIANTS.md](INVARIANTS.md) for data integrity guarantees.
+
+See [`docs/INVARIANTS.md`](docs/INVARIANTS.md) for the correctness checklist. Key points: every row in `docs` and `ai_outputs` is traceable to a `raw_hash`, all AI outputs carry a confidence score, evidence spans must be verbatim substrings of source text, and no metric that is a proxy for something larger (sentiment, reach) may be presented without that framing.

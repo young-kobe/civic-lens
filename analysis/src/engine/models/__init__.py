@@ -9,6 +9,8 @@ from analysis.src.engine.models.engine_models import (
     BotResult,
     EntityStance,
     FavorabilityResult,
+    PropagandaTechnique,
+    PropagandaResult,
 )
 
 __all__ = [
@@ -16,4 +18,6 @@ __all__ = [
     "BotResult",
     "EntityStance",
     "FavorabilityResult",
+    "PropagandaTechnique",
+    "PropagandaResult",
 ]

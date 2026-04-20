@@ -1,16 +1,44 @@
 import { useState } from 'react';
 import { Tabs, GlobalFilters, ExportMenu } from './components/common';
-import { PublicSentiment, BotActivityProfiler, GlobalHeatmap } from './pages';
+import { Home, PublicSentiment, BotActivityProfiler, GlobalHeatmap, Narratives, Propaganda, Review } from './pages';
 import type { Filters } from './types';
 
-const TABS = [
+// Admin mode is now token-based. Visit once with ?admin=<CIVIC_ADMIN_TOKEN> to
+// persist it; ?admin=0 clears it. The token is sent as X-Admin-Token on every
+// admin-endpoint request (see services/api.ts). Non-admin users never see the
+// Review tab. Global Heatmap is hidden for everyone (page kept, unlinked from nav).
+const ADMIN_MODE: boolean = (() => {
+    try {
+        const params = new URLSearchParams(window.location.search);
+        const raw = params.get('admin');
+        if (raw === '0') {
+            localStorage.removeItem('civic_admin_token');
+            return false;
+        }
+        if (raw && raw !== '1') {
+            localStorage.setItem('civic_admin_token', raw);
+        }
+        return !!localStorage.getItem('civic_admin_token');
+    } catch {
+        return false;
+    }
+})();
+
+const BASE_TABS = [
     { id: 'sentiment', label: 'Public Sentiment' },
-    { id: 'bots', label: 'Bot Activity Profiler' },
-    { id: 'heatmap', label: 'Global Heatmap' },
+    { id: 'narratives', label: 'Narratives' },
+    { id: 'propaganda', label: 'Propaganda' },
+    { id: 'bots', label: 'Bot Detector' },
 ];
 
+const ADMIN_TABS = [
+    { id: 'review', label: 'Review' },
+];
+
+const TABS = ADMIN_MODE ? [...BASE_TABS, ...ADMIN_TABS] : BASE_TABS;
+
 function App() {
-    const [activeTab, setActiveTab] = useState('sentiment');
+    const [activeTab, setActiveTab] = useState('home');
     const [filters, setFilters] = useState<Filters>({
         timeRange: '7d',
         sourceType: 'all',
@@ -24,14 +52,22 @@ function App() {
 
     const renderPage = () => {
         switch (activeTab) {
+            case 'home':
+                return <Home onNavigate={setActiveTab} isAdmin={ADMIN_MODE} />;
             case 'sentiment':
                 return <PublicSentiment filters={filters} />;
+            case 'narratives':
+                return <Narratives filters={filters} />;
+            case 'propaganda':
+                return <Propaganda filters={filters} />;
             case 'bots':
                 return <BotActivityProfiler filters={filters} />;
             case 'heatmap':
-                return <GlobalHeatmap filters={filters} />;
+                return <GlobalHeatmap filters={filters} />;  // hidden from nav; reachable only if re-linked
+            case 'review':
+                return ADMIN_MODE ? <Review /> : <Home onNavigate={setActiveTab} isAdmin={ADMIN_MODE} />;
             default:
-                return <PublicSentiment filters={filters} />;
+                return <Home onNavigate={setActiveTab} isAdmin={ADMIN_MODE} />;
         }
     };
 
@@ -44,13 +80,28 @@ function App() {
             <header className="page-header">
                 <div className="flex items-center justify-between gap-4">
                     <div className="flex items-baseline gap-3">
-                        <h1 className="page-title">CIVIC&nbsp;LENS</h1>
+                        <button
+                            type="button"
+                            onClick={() => setActiveTab('home')}
+                            aria-label="Return to home"
+                            title="Return to home"
+                            style={{
+                                background: 'transparent',
+                                border: 'none',
+                                padding: 0,
+                                cursor: 'pointer',
+                                font: 'inherit',
+                                color: 'inherit',
+                            }}
+                        >
+                            <h1 className="page-title" style={{ margin: 0 }}>CIVIC&nbsp;LENS</h1>
+                        </button>
                         <span style={{
                             width: 1, height: 16, background: 'var(--neutral-300)',
                             alignSelf: 'center',
                         }} />
                         <p className="page-subtitle" style={{ marginTop: 0 }}>
-                            Media Narrative &amp; Sentiment Analytics
+                            Political Media · Narrative &amp; Bot Tracker
                         </p>
                     </div>
                     <div className="flex items-center gap-3">
@@ -68,12 +119,14 @@ function App() {
             {/* Navigation */}
             <Tabs tabs={TABS} activeTab={activeTab} onTabChange={setActiveTab} />
 
-            {/* Global Filters */}
-            <GlobalFilters
-                filters={filters}
-                onFilterChange={setFilters}
-                showGeography={false}
-            />
+            {/* Global Filters — hidden on Home (no filtered data to scope). */}
+            {activeTab !== 'home' && (
+                <GlobalFilters
+                    filters={filters}
+                    onFilterChange={setFilters}
+                    showGeography={false}
+                />
+            )}
 
             {/* Main Content */}
             <main style={{ paddingTop: 'var(--space-4)', paddingBottom: 'var(--space-10)' }}>

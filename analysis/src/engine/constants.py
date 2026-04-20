@@ -138,21 +138,76 @@ UNFAVORABLE_INDICATORS = frozenset([
 
 
 # =============================================================================
-# Bot Detection Constants
+# Bot Detection Constants (walkthrough 040 rework)
+#
+# The old SPAM_KEYWORDS list targeted 2018-era spambots ("buy now", "viagra").
+# Modern propaganda-driver accounts use LLM-generated political text that hits
+# zero of those keywords. The signal lists below target LLM-generated text
+# and account-level automation instead.
 # =============================================================================
 
-# Spam/bot keywords commonly found in automated content
+# Low-volume retained spam signal. Still useful for pure spam / affiliate bots
+# that slip through, but no longer the headline signal.
 SPAM_KEYWORDS = frozenset([
-    "buy now", "click here", "subscribe", "limited time offer",
-    "crypto", "bitcoin", "make money", "viagra", "free gift",
-    "act now", "don't miss", "exclusive deal", "earn money",
-    "work from home", "100% free", "amazing offer", "urgent",
+    "buy now", "click here", "limited time offer", "free gift",
+    "act now", "exclusive deal", "100% free",
 ])
 
-# Patterns suggesting coordinated behavior
+# Hedge-phrase list — LLM output over-indexes on cautious, acknowledge-both-
+# sides phrasing. Casual political social-media writing uses these at a
+# much lower rate. Match case-insensitively as substrings.
+LLM_HEDGE_PHRASES = frozenset([
+    "it's important to note",
+    "it is important to note",
+    "it's worth noting",
+    "it is worth noting",
+    "while it's true that",
+    "while it is true that",
+    "one could argue",
+    "it could be argued",
+    "studies have shown",
+    "research suggests",
+    "research indicates",
+    "on one hand",
+    "on the other hand",
+    "that being said",
+    "with that said",
+    "having said that",
+    "as an ai language model",
+    "i'm just a language model",
+    "i am an ai",
+    "there are many perspectives",
+    "various factors",
+    "a complex issue",
+    "a nuanced issue",
+    "a multifaceted issue",
+    "multifaceted topic",
+    "in conclusion",
+    "to summarize",
+    "to sum up",
+    "in summary",
+    "it is essential to",
+    "it's essential to",
+    "it is crucial to",
+    "it's crucial to",
+])
+
+# Typographic tells — characters LLMs use at unnatural rates in social-media
+# writing (where most humans fall back to ASCII apostrophes / hyphens).
+LLM_TYPOGRAPHIC_TELLS = (
+    "\u2014",  # em-dash
+    "\u2018",  # left single smart quote
+    "\u2019",  # right single smart quote
+    "\u201C",  # left double smart quote
+    "\u201D",  # right double smart quote
+    "\u2026",  # horizontal ellipsis
+)
+
+# Patterns suggesting coordinated behavior (retained; aggregator uses these labels)
 COORDINATION_PATTERNS = [
     ("repetitive_text", "Text contains highly repetitive phrases"),
     ("url_density", "Unusually high URL/link density"),
     ("hashtag_spam", "Excessive hashtag usage"),
     ("timing_burst", "Posted in coordination burst window"),
+    ("llm_text_style", "Text style matches LLM-generated patterns"),
 ]

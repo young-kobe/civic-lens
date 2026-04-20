@@ -8,8 +8,10 @@ Provides endpoints for:
 - Cache status and metadata
 """
 
-from fastapi import FastAPI, BackgroundTasks, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
+import secrets
+from typing import Optional
+from fastapi import FastAPI, BackgroundTasks, Depends, Header, HTTPException
+from pydantic import BaseModel
 
 from analysis.src.common.logger import get_logger
 from analysis.src.common.settings import get_settings
@@ -22,20 +24,36 @@ from analysis.src.reporting.aggregators import (
     SentimentAggregator,
     BotAggregator,
     GeoAggregator,
+    NarrativeAggregator,
+    PropagandaAggregator,
 )
+from analysis.src.reporting.review import ReviewService
 
 app = FastAPI(title="Civic Lens API")
 settings = get_settings()
 logger = get_logger("api")
 
-# CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # TODO: Lock down in prod
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# The UI is served same-origin (Vite proxy in dev, Caddy/Cloudflare in prod),
+# so CORS middleware is intentionally absent. If the UI ever lives on a
+# different origin, add CORSMiddleware back with an explicit origin allowlist
+# — never "*" combined with allow_credentials=True.
+
+
+def require_admin_token(x_admin_token: Optional[str] = Header(default=None)):
+    """Reject requests missing or with an incorrect X-Admin-Token header.
+
+    Returns 503 (not 401) when the server has no admin token configured, so a
+    misconfigured deploy fails loudly instead of silently allowing everyone in.
+    """
+    expected = settings.admin_token
+    if not expected:
+        raise HTTPException(
+            status_code=503,
+            detail="Admin endpoints disabled: CIVIC_ADMIN_TOKEN is not set on the server.",
+        )
+    if not x_admin_token or not secrets.compare_digest(x_admin_token, expected):
+        raise HTTPException(status_code=401, detail="Invalid or missing admin token.")
+
 
 # Services
 loader = ContentLoader(settings.db_path)
@@ -44,6 +62,9 @@ outlet_agg = OutletAggregator(settings.db_path)
 sentiment_agg = SentimentAggregator(settings.db_path)
 bot_agg = BotAggregator(settings.db_path)
 geo_agg = GeoAggregator(settings.db_path)
+narrative_agg = NarrativeAggregator(settings.db_path)
+propaganda_agg = PropagandaAggregator(settings.db_path)
+review_service = ReviewService(settings.db_path)
 
 # Analyzers - only needed for on-demand analysis triggers
 bot_detector = HybridBotDetector(llm_enabled=settings.llm_enabled)
@@ -64,7 +85,7 @@ def health():
     }
 
 
-@app.get("/api/cache-status")
+@app.get("/api/cache-status", dependencies=[Depends(require_admin_token)])
 def get_cache_status():
     """
     Returns metadata for all cached snapshots.
@@ -81,21 +102,21 @@ def get_cache_status():
 # Pipeline Triggers (Manual)
 # =============================================================================
 
-@app.post("/api/run/etl")
+@app.post("/api/run/etl", dependencies=[Depends(require_admin_token)])
 def run_etl():
     """Triggers raw content loading into docs table."""
     count = loader.load_new_raw_content()
     return {"new_docs": count}
 
 
-@app.post("/api/run/analysis")
+@app.post("/api/run/analysis", dependencies=[Depends(require_admin_token)])
 def run_analysis(background_tasks: BackgroundTasks):
     """Triggers background analysis (Bot, Sentiment, Favorability)."""
     background_tasks.add_task(process_analysis_queue)
     return {"status": "Analysis queued"}
 
 
-@app.post("/api/run/full-pipeline")
+@app.post("/api/run/full-pipeline", dependencies=[Depends(require_admin_token)])
 def run_full_pipeline(background_tasks: BackgroundTasks):
     """
     Triggers the complete analysis pipeline in background.
@@ -196,15 +217,116 @@ def get_bot_activity():
     )
 
 
+@app.get("/api/narratives")
+def get_narratives(window: str = "7d", limit: int = 20):
+    """Returns top narratives in the time window with spread and sentiment metadata.
+
+    The cache stores a window-keyed top-100; this endpoint slices to the
+    caller's ``limit`` so any limit <= 100 is a cache hit (walkthrough 041).
+    Limits above 100 skip the cache and compute live.
+    Query params: ?window=24h|7d|30d|90d&limit=20
+    """
+    if limit <= 100:
+        cached = _get_cached_or_fallback(
+            f"narratives_{window}",
+            lambda: narrative_agg.get_top_narratives(time_window=window, limit=100),
+            lambda narratives: [n.to_dict() for n in narratives],
+        )
+        if isinstance(cached, list):
+            return cached[:limit]
+        return cached
+
+    narratives = narrative_agg.get_top_narratives(time_window=window, limit=limit)
+    return [n.to_dict() for n in narratives]
+
+
+# =============================================================================
+# Human review (ai_output_evals)
+# =============================================================================
+# All review endpoints are gated behind CIVIC_ADMIN_TOKEN (X-Admin-Token header).
+# /review/queue leaks up to 1200 chars of raw scraped text per item — the
+# gate is required, not optional.
+
+class ReviewSubmission(BaseModel):
+    ai_output_id: int
+    is_correct: Optional[int] = None  # 1 correct, 0 incorrect, None unscored
+    human_label: Optional[str] = None
+    human_confidence: Optional[float] = None
+    is_golden: bool = False
+    reviewer_id: Optional[str] = None
+    notes: Optional[str] = None
+
+
+@app.get("/api/review/queue", dependencies=[Depends(require_admin_token)])
+def get_review_queue(
+    task: str,
+    source_type: Optional[str] = None,
+    confidence_max: Optional[float] = None,
+    limit: int = 20,
+    offset: int = 0,
+):
+    """Return up to ``limit`` unreviewed AI outputs ordered lowest-confidence first."""
+    return review_service.get_queue(
+        task_type=task,
+        source_type=source_type,
+        confidence_max=confidence_max,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.post("/api/review/submit", dependencies=[Depends(require_admin_token)])
+def submit_review(payload: ReviewSubmission):
+    """Persist a human review for an AI output. Replaces any existing review."""
+    try:
+        return review_service.submit(
+            ai_output_id=payload.ai_output_id,
+            is_correct=payload.is_correct,
+            human_label=payload.human_label,
+            human_confidence=payload.human_confidence,
+            is_golden=payload.is_golden,
+            reviewer_id=payload.reviewer_id,
+            notes=payload.notes,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@app.get("/api/review/stats", dependencies=[Depends(require_admin_token)])
+def get_review_stats(task: Optional[str] = None):
+    """Per-task counts of total outputs, reviewed, correct, incorrect, golden, accuracy %."""
+    return review_service.get_stats(task_type=task)
+
+
+@app.get("/api/propaganda")
+def get_propaganda(window: str = "7d"):
+    """Returns propaganda-technique overview for the window.
+
+    Served from pre-computed cache when available (walkthrough 043); falls
+    back to live aggregation.
+    Query param: ?window=24h|7d|30d|90d
+    """
+    return _get_cached_or_fallback(
+        f"propaganda_{window}",
+        lambda: propaganda_agg.get_propaganda_overview(time_window=window),
+        lambda overview: overview.to_dict(),
+    )
+
+
 @app.get("/api/geo-sentiment")
 def get_geo_sentiment(window: str = "7d"):
     """
     Returns X posts aggregated by country with sentiment scores.
 
-    Uses explicit country_code from X API geo-tags (no heuristics).
+    Uses explicit country_code from X API geo-tags (no heuristics). Served
+    from pre-computed cache when available (walkthrough 041); falls back to
+    live aggregation.
     Query param: ?window=24h|7d|30d|90d
     """
-    return geo_agg.get_country_sentiment(time_window=window)
+    return _get_cached_or_fallback(
+        f"geo_sentiment_{window}",
+        lambda: geo_agg.get_country_sentiment(time_window=window),
+    )
 
 
 

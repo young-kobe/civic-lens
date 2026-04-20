@@ -135,13 +135,15 @@ class Analyzer:
         }
 
     def _heuristic_classify(self, signals: Dict[str, Any]) -> Tuple[SentimentResult, FavorabilityResult]:
-        """Fallback heuristics for both pipelines."""
+        """Fallback heuristics for both pipelines. Both results are marked
+        ``inference_method='heuristic'`` so audit queries can tell this path
+        apart from a validated LLM response (see walkthrough 038)."""
         # 1. Sentiment Fallback
         pos_count = signals.get("positive_count", 0)
         neg_count = signals.get("negative_count", 0)
         total_len = pos_count + neg_count
         conf_penalty = 0.15 if signals.get("has_negators") else 0.0
-        
+
         if total_len == 0:
             sent_label, sent_conf, sent_ev = "NEUTRAL", 0.5, []
         elif pos_count > neg_count:
@@ -156,13 +158,14 @@ class Analyzer:
             sent_label = "MIXED"
             sent_conf = 0.5
             sent_ev = signals.get("positive_words", [])[:2] + signals.get("negative_words", [])[:2]
-            
+
         sentiment_res = SentimentResult(
             label=sent_label,
             confidence=round(sent_conf, 3),
             evidence_spans=sent_ev,
             reasoning=f"Heuristic sentiment based on {pos_count} positive and {neg_count} negative.",
-            deterministic_signals=signals
+            deterministic_signals=signals,
+            inference_method="heuristic",
         )
         
         # 2. Favorability Fallback
@@ -197,9 +200,10 @@ class Analyzer:
             overall_confidence=round(fav_conf, 3),
             gop_entities_found=gop_entities,
             reasoning=f"Heuristic favorability: {fav_c} fav, {unfav_c} unfav",
-            deterministic_signals=signals
+            deterministic_signals=signals,
+            inference_method="heuristic",
         )
-        
+
         return sentiment_res, favorability_res
 
     def analyze_full(self, text: str) -> Tuple[SentimentResult, FavorabilityResult]:
@@ -214,21 +218,13 @@ class Analyzer:
             )
             
         signals = self._compute_signals(text)
-        
+
         if self.llm_enabled and self._llm_client and self._llm_client.is_available:
             gop_entities = signals.get("gop_entities", [])
-            user_prompt = TEXT_ANALYSIS_USER_PROMPT_TEMPLATE.format(
-                gop_mentions=", ".join(gop_entities[:10]) if gop_entities else "None detected",
-                positive_count=signals["positive_count"],
-                negative_count=signals["negative_count"],
-                has_intensifiers=signals["has_intensifiers"],
-                has_negators=signals["has_negators"],
-                favorable_count=signals["favorable_count"],
-                unfavorable_count=signals["unfavorable_count"],
-                favorable_keywords=", ".join(signals["favorable_keywords"]),
-                unfavorable_keywords=", ".join(signals["unfavorable_keywords"]),
-                text=text[:2000]
-            )
+            # The user-prompt template's only placeholder is {text}; the heuristic
+            # signals live on `deterministic_signals` for auditability and are no
+            # longer injected into the prompt (walkthrough 038 cleanup).
+            user_prompt = TEXT_ANALYSIS_USER_PROMPT_TEMPLATE.format(text=text[:2000])
             
             try:
                 response = self._llm_client.complete(
@@ -251,7 +247,8 @@ class Analyzer:
                     evidence_spans=sent_spans,
                     sarcasm_detected=bool(response.get("sarcasm_detected", False)),
                     reasoning=response.get("sentiment_reasoning"),
-                    deterministic_signals=signals
+                    deterministic_signals=signals,
+                    inference_method="llm",
                 )
 
                 # Parse favorability
@@ -282,7 +279,8 @@ class Analyzer:
                     overall_confidence=fav_conf,
                     gop_entities_found=gop_entities,
                     reasoning=response.get("favorability_reasoning"),
-                    deterministic_signals=signals
+                    deterministic_signals=signals,
+                    inference_method="llm",
                 )
 
                 return sentiment_res, favorability_res

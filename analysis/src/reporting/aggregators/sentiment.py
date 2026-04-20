@@ -89,52 +89,60 @@ class SentimentAggregator:
     
     def get_public_sentiment(self, time_window: str = "24h") -> PublicSentimentResult:
         """
-        Aggregate sentiment EXCLUDING bot-flagged content.
+        Aggregate sentiment EXCLUDING bot-flagged content AND rows whose
+        confidence is below ``aggregation_min_confidence`` (walkthrough 039).
         Includes merged GOP favorability data.
-        
+
         Args:
             time_window: Filter by time window (24h, 7d, 30d, 90d, all)
         """
-        bot_docs = get_bot_flagged_doc_ids(self.db_path)
+        min_conf = get_settings().aggregation_min_confidence
+        bot_docs = get_bot_flagged_doc_ids(self.db_path, min_confidence=min_conf)
         cutoff = get_time_cutoff(time_window)
-        
+
         with get_connection(self.db_path) as conn:
             cursor = conn.cursor()
-            
-            # Fetch sentiment data
+
+            # Fetch sentiment data (confidence-gated)
             if cutoff:
                 cursor.execute("""
                     SELECT a.doc_id, a.output_json, a.confidence, d.source_type, d.published_at, d.title, d.domain_or_subreddit, d.ident, d.text
                     FROM ai_outputs a
                     JOIN docs d ON a.doc_id = d.doc_id
-                    WHERE a.task_type = 'sentiment' AND d.published_at >= ?
-                """, (cutoff,))
+                    WHERE a.task_type = 'sentiment'
+                      AND a.confidence >= ?
+                      AND d.published_at >= ?
+                """, (min_conf, cutoff))
             else:
                 cursor.execute("""
                     SELECT a.doc_id, a.output_json, a.confidence, d.source_type, d.published_at, d.title, d.domain_or_subreddit, d.ident, d.text
                     FROM ai_outputs a
                     JOIN docs d ON a.doc_id = d.doc_id
                     WHERE a.task_type = 'sentiment'
-                """)
+                      AND a.confidence >= ?
+                """, (min_conf,))
             sentiment_rows = cursor.fetchall()
-            
-            # Fetch favorability data for GOP stance merge
+
+            # Fetch favorability data for GOP stance merge (confidence-gated)
             if cutoff:
                 cursor.execute("""
                     SELECT a.doc_id, a.output_json, a.confidence, d.source_type, d.published_at
                     FROM ai_outputs a
                     JOIN docs d ON a.doc_id = d.doc_id
-                    WHERE a.task_type = 'favorability' AND d.published_at >= ?
-                """, (cutoff,))
+                    WHERE a.task_type = 'favorability'
+                      AND a.confidence >= ?
+                      AND d.published_at >= ?
+                """, (min_conf, cutoff))
             else:
                 cursor.execute("""
                     SELECT a.doc_id, a.output_json, a.confidence, d.source_type, d.published_at
                     FROM ai_outputs a
                     JOIN docs d ON a.doc_id = d.doc_id
                     WHERE a.task_type = 'favorability'
-                """)
+                      AND a.confidence >= ?
+                """, (min_conf,))
             favorability_rows = cursor.fetchall()
-        
+
         result = self._process_sentiment_data(sentiment_rows, bot_docs)
         self._merge_favorability_data(result, favorability_rows, bot_docs)
         return result

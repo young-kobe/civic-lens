@@ -196,3 +196,154 @@ export interface DomainItem {
 export interface ChartDataPoint {
     [key: string]: string | number;
 }
+
+// Narrative types
+export interface NarrativeSourceBreakdownItem {
+    source_type: string;
+    label: string;
+    count: number;
+}
+
+export interface NarrativeTimelinePoint {
+    date: string;
+    count: number;
+}
+
+// Account tier for X-origin narratives. See walkthrough 036.
+export type AccountTier = 'elected_official' | 'affiliated' | 'general_public';
+
+// Faction context for X-origin narratives. Populated from account_profiles
+// via curated known_political_x_accounts.yaml. Null for news/reddit source
+// types and for unclassified X accounts.
+export interface AccountProfile {
+    handle: string | null;
+    full_name: string | null;
+    party: string | null;                 // 'D' | 'R' | 'I' | 'L' | 'G' | null
+    branch: string | null;                // 'executive' | 'legislative' | 'judicial' | 'party_org' | 'pac' | 'think_tank' | ...
+    chamber: string | null;               // 'senate' | 'house' | null
+    state_or_district: string | null;     // 'NY', 'CA33', null
+    office_title: string | null;          // 'President', 'Senator', 'Representative', etc.
+    account_type: string | null;          // 'official' | 'personal' | 'institutional' | ...
+}
+
+export interface NarrativeSummary {
+    narrative_id: number;
+    name: string;
+    first_seen_at: number;
+    // Earliest doc WE ingested carrying this claim — not world-origin.
+    first_seen_doc_id: number | null;
+    first_seen_source_type: string | null;
+    first_seen_domain: string | null;
+    // Only set for x_post source types; null for news/reddit.
+    first_seen_tier: AccountTier | null;
+    // Faction context for x_post first-seen docs; null otherwise.
+    first_seen_author: AccountProfile | null;
+    supporting_doc_count: number;
+    source_breakdown: NarrativeSourceBreakdownItem[];
+    timeline: NarrativeTimelinePoint[];
+    net_sentiment: number;
+    inbound_citation_count: number;
+    // Walkthrough 043 overlays — null when no data.
+    propaganda_score: number | null;       // 0..1 mean across supporting docs
+    bot_pushed_fraction: number | null;    // 0..1 over unique X supporting authors
+}
+
+// =============================================================================
+// Propaganda Detection (walkthrough 043)
+// =============================================================================
+
+export type PropagandaTechniqueName =
+    | 'loaded_language'
+    | 'name_calling'
+    | 'ad_hominem'
+    | 'appeal_to_fear'
+    | 'whataboutism'
+    | 'doubt_casting';
+
+export interface PropagandaTechniqueSpan {
+    technique: PropagandaTechniqueName;
+    confidence: number;
+    evidence_span: string;
+}
+
+export interface PropagandaTechniqueCount {
+    technique: PropagandaTechniqueName;
+    count: number;
+    pct_of_flagged_docs: number;
+}
+
+export interface PropagandaSourceSplit {
+    label: 'News' | 'Social Media';
+    total_docs: number;
+    flagged_docs: number;
+    flagged_rate_pct: number;
+    mean_score: number;
+}
+
+export interface PropagandaExample {
+    doc_id: number;
+    source_type: string;
+    domain: string | null;
+    title: string | null;
+    overall_score: number;
+    techniques: PropagandaTechniqueSpan[];
+    text_preview: string;
+}
+
+export interface PropagandaOverview {
+    window: string;
+    total_eligible_docs: number;
+    flagged_docs: number;
+    propaganda_rate_pct: number;
+    mean_score: number;
+    by_technique: PropagandaTechniqueCount[];
+    by_source: PropagandaSourceSplit[];
+    examples: PropagandaExample[];
+    disclaimer: string;
+}
+
+// Review types
+export type ReviewTaskType = 'sentiment' | 'favorability' | 'bot_detection' | 'claims' | 'propaganda';
+
+export interface ReviewQueueItem {
+    ai_output_id: number;
+    doc_id: number;
+    task_type: ReviewTaskType;
+    model_id: string;
+    prompt_version: string;
+    model_confidence: number | null;
+    model_output: Record<string, any>;
+    created_at: number;
+    doc: {
+        source_type: string;
+        domain: string | null;
+        title: string | null;
+        ident: string;
+        text_preview: string;
+        text_truncated: boolean;
+    };
+}
+
+export interface ReviewSubmission {
+    ai_output_id: number;
+    is_correct: number | null;
+    human_label: string | null;
+    human_confidence: number | null;
+    is_golden: boolean;
+    reviewer_id: string | null;
+    notes: string | null;
+}
+
+export interface ReviewTaskStats {
+    task_type: string;
+    total_outputs: number;
+    reviewed: number;
+    correct: number;
+    incorrect: number;
+    golden: number;
+    accuracy_pct: number | null;
+}
+
+export interface ReviewStats {
+    per_task: ReviewTaskStats[];
+}

@@ -377,31 +377,54 @@ class ContentLoader:
         model_id: str = "",
         prompt_version: str = "",
         system_prompt: Optional[str] = None,
+        user_prompt_template: Optional[str] = None,
+        inference_method: Optional[str] = None,
     ):
         """Save an AI analysis output to the database.
 
-        When ``system_prompt`` is provided alongside ``prompt_version`` it is
-        upserted into ``prompt_versions`` so the full prompt text for any row
-        can be reconstructed by joining on ``ai_outputs.prompt_version``.
+        When ``system_prompt`` (and optionally ``user_prompt_template``) is
+        provided alongside ``prompt_version`` they are upserted into
+        ``prompt_versions`` so the full prompt text for any row can be
+        reconstructed by joining on ``ai_outputs.prompt_version``.
+        Walkthrough 041 completes the B1 reproducibility invariant by
+        populating the previously-unused ``user_prompt_template`` column.
+
+        ``inference_method`` (walkthrough 038) distinguishes rows from a
+        validated LLM response ('llm') from deterministic-fallback rows
+        ('heuristic') or rows from a purely deterministic engine
+        ('deterministic'). None is allowed for backward compatibility; the
+        column will land NULL.
         """
         with self._get_conn() as conn:
             cursor = conn.cursor()
             if system_prompt is not None and prompt_version:
+                # Upsert so a later run that supplies user_prompt_template
+                # can fill it in even if the system_prompt row already exists.
                 cursor.execute(
                     """
-                    INSERT OR IGNORE INTO prompt_versions
-                        (prompt_version, task_type, system_prompt, created_at)
-                    VALUES (?, ?, ?, strftime('%s','now'))
+                    INSERT INTO prompt_versions
+                        (prompt_version, task_type, system_prompt,
+                         user_prompt_template, created_at)
+                    VALUES (?, ?, ?, ?, strftime('%s','now'))
+                    ON CONFLICT(prompt_version) DO UPDATE SET
+                        task_type = excluded.task_type,
+                        system_prompt = excluded.system_prompt,
+                        user_prompt_template = COALESCE(
+                            excluded.user_prompt_template,
+                            prompt_versions.user_prompt_template
+                        )
                     """,
-                    (prompt_version, task, system_prompt),
+                    (prompt_version, task, system_prompt, user_prompt_template),
                 )
             cursor.execute(
                 """
                 INSERT INTO ai_outputs
-                    (doc_id, task_type, output_json, confidence, model_id, prompt_version, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, strftime('%s','now'))
+                    (doc_id, task_type, output_json, confidence, model_id,
+                     prompt_version, inference_method, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, strftime('%s','now'))
                 """,
-                (doc_id, task, json.dumps(result), confidence, model_id, prompt_version),
+                (doc_id, task, json.dumps(result), confidence, model_id,
+                 prompt_version, inference_method),
             )
             conn.commit()
 
