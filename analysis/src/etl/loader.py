@@ -165,7 +165,7 @@ class ContentLoader:
             with open(path, 'r', encoding='utf-8', errors='ignore') as f:
                 html_content = f.read()
             return trafilatura.extract(html_content)
-        except Exception as e:
+        except (OSError, UnicodeError) as e:
             logger.warning(f"Failed to extract text for {raw_hash}: {e}")
             return None
 
@@ -179,11 +179,15 @@ class ContentLoader:
     def _load_news_batch(self, cursor: sqlite3.Cursor, raw_root: Path) -> tuple:
         """Load news articles from articles_raw into docs using batched inserts."""
         cursor.execute("""
-            SELECT url_canon, domain, raw_hash, title, published_at 
+            SELECT url_canon, domain, raw_hash, title, published_at
             FROM articles_raw
         """)
         articles = cursor.fetchall()
-        
+
+        # Preload existing news idents once to avoid N+1 SELECTs on large batches.
+        cursor.execute("SELECT ident FROM docs WHERE source_type = 'news'")
+        existing_idents = {row[0] for row in cursor.fetchall()}
+
         insert_query = """
             INSERT INTO docs (source_type, ident, domain_or_subreddit, published_at, title, raw_hash, text)
             VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -192,12 +196,11 @@ class ContentLoader:
         new_docs = 0
         skipped_old = 0
         skipped_nonpolitical = 0
-        
+
         for row in articles:
             url_canon, domain, raw_hash, title, published_at = row
-            
-            cursor.execute("SELECT doc_id FROM docs WHERE ident = ?", (url_canon,))
-            if cursor.fetchone():
+
+            if url_canon in existing_idents:
                 continue
             
             if not is_recent(published_at):
@@ -213,11 +216,12 @@ class ContentLoader:
                 continue
                 
             batch.append(("news", url_canon, domain, published_at, title, raw_hash, text))
-            
+            existing_idents.add(url_canon)
+
             if len(batch) >= BATCH_COMMIT_SIZE:
                 new_docs += self._flush_batch(cursor, insert_query, batch)
                 batch.clear()
-        
+
         new_docs += self._flush_batch(cursor, insert_query, batch)
         return new_docs, skipped_old, skipped_nonpolitical
 
@@ -228,7 +232,13 @@ class ContentLoader:
             FROM reddit_posts_raw
         """)
         posts = cursor.fetchall()
-        
+
+        # Preload existing reddit idents once to avoid N+1 SELECTs.
+        cursor.execute(
+            "SELECT ident FROM docs WHERE source_type IN ('reddit_post', 'reddit_comment')"
+        )
+        existing_idents = {row[0] for row in cursor.fetchall()}
+
         insert_query = """
             INSERT INTO docs (source_type, ident, domain_or_subreddit, published_at, title, text, raw_hash)
             VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -237,15 +247,11 @@ class ContentLoader:
         new_docs = 0
         skipped_old = 0
         skipped_nonpolitical = 0
-        
+
         for row in posts:
             fullname, subreddit, created_utc, title, body, raw_hash = row
-            
-            if not fullname:
-                continue
-                
-            cursor.execute("SELECT doc_id FROM docs WHERE ident = ?", (fullname,))
-            if cursor.fetchone():
+
+            if not fullname or fullname in existing_idents:
                 continue
             
             if not is_recent(created_utc):
@@ -259,11 +265,12 @@ class ContentLoader:
                 continue
             
             batch.append(("reddit_post", fullname, subreddit, created_utc, title, text, raw_hash))
-            
+            existing_idents.add(fullname)
+
             if len(batch) >= BATCH_COMMIT_SIZE:
                 new_docs += self._flush_batch(cursor, insert_query, batch)
                 batch.clear()
-        
+
         new_docs += self._flush_batch(cursor, insert_query, batch)
         return new_docs, skipped_old, skipped_nonpolitical
 
@@ -278,6 +285,10 @@ class ContentLoader:
             LEFT JOIN x_users_raw u ON p.author_id = u.user_id
         """)
         x_posts = cursor.fetchall()
+
+        # Preload existing X tweet idents once to avoid N+1 SELECTs.
+        cursor.execute("SELECT ident FROM docs WHERE source_type = 'x_post'")
+        existing_idents = {row[0] for row in cursor.fetchall()}
 
         insert_query = """
             INSERT INTO docs (source_type, ident, domain_or_subreddit, published_at, text, raw_hash, metadata_json, place_country_code)
@@ -294,11 +305,7 @@ class ContentLoader:
              user_location, user_created_at,
              followers_count, verified, verified_type) = row
 
-            if not tweet_id:
-                continue
-
-            cursor.execute("SELECT doc_id FROM docs WHERE ident = ?", (tweet_id,))
-            if cursor.fetchone():
+            if not tweet_id or tweet_id in existing_idents:
                 continue
 
             if not is_recent(created_at):
@@ -325,6 +332,7 @@ class ContentLoader:
                 "x_post", tweet_id, "x.com", created_at, text, raw_hash,
                 json.dumps(metadata), place_country_code,
             ))
+            existing_idents.add(tweet_id)
 
             if len(batch) >= BATCH_COMMIT_SIZE:
                 new_docs += self._flush_batch(cursor, insert_query, batch)
@@ -377,31 +385,54 @@ class ContentLoader:
         model_id: str = "",
         prompt_version: str = "",
         system_prompt: Optional[str] = None,
+        user_prompt_template: Optional[str] = None,
+        inference_method: Optional[str] = None,
     ):
         """Save an AI analysis output to the database.
 
-        When ``system_prompt`` is provided alongside ``prompt_version`` it is
-        upserted into ``prompt_versions`` so the full prompt text for any row
-        can be reconstructed by joining on ``ai_outputs.prompt_version``.
+        When ``system_prompt`` (and optionally ``user_prompt_template``) is
+        provided alongside ``prompt_version`` they are upserted into
+        ``prompt_versions`` so the full prompt text for any row can be
+        reconstructed by joining on ``ai_outputs.prompt_version``.
+        Walkthrough 041 completes the B1 reproducibility invariant by
+        populating the previously-unused ``user_prompt_template`` column.
+
+        ``inference_method`` (walkthrough 038) distinguishes rows from a
+        validated LLM response ('llm') from deterministic-fallback rows
+        ('heuristic') or rows from a purely deterministic engine
+        ('deterministic'). None is allowed for backward compatibility; the
+        column will land NULL.
         """
         with self._get_conn() as conn:
             cursor = conn.cursor()
             if system_prompt is not None and prompt_version:
+                # Upsert so a later run that supplies user_prompt_template
+                # can fill it in even if the system_prompt row already exists.
                 cursor.execute(
                     """
-                    INSERT OR IGNORE INTO prompt_versions
-                        (prompt_version, task_type, system_prompt, created_at)
-                    VALUES (?, ?, ?, strftime('%s','now'))
+                    INSERT INTO prompt_versions
+                        (prompt_version, task_type, system_prompt,
+                         user_prompt_template, created_at)
+                    VALUES (?, ?, ?, ?, strftime('%s','now'))
+                    ON CONFLICT(prompt_version) DO UPDATE SET
+                        task_type = excluded.task_type,
+                        system_prompt = excluded.system_prompt,
+                        user_prompt_template = COALESCE(
+                            excluded.user_prompt_template,
+                            prompt_versions.user_prompt_template
+                        )
                     """,
-                    (prompt_version, task, system_prompt),
+                    (prompt_version, task, system_prompt, user_prompt_template),
                 )
             cursor.execute(
                 """
                 INSERT INTO ai_outputs
-                    (doc_id, task_type, output_json, confidence, model_id, prompt_version, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, strftime('%s','now'))
+                    (doc_id, task_type, output_json, confidence, model_id,
+                     prompt_version, inference_method, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, strftime('%s','now'))
                 """,
-                (doc_id, task, json.dumps(result), confidence, model_id, prompt_version),
+                (doc_id, task, json.dumps(result), confidence, model_id,
+                 prompt_version, inference_method),
             )
             conn.commit()
 

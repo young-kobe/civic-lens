@@ -22,7 +22,7 @@ if project_root not in sys.path:
 from analysis.src.engine.citation_extractor import CitationExtractor, canonicalize_url
 from analysis.src.engine.claim_extractor import _validate_claim
 from analysis.src.engine.narrative_clusterer import (
-    NarrativeClusterer, jaccard, tokenize_claim,
+    NarrativeClusterer, cosine, jaccard, tokenize_claim,
 )
 
 MIGRATIONS_DIR = os.path.join(project_root, "data", "migrations")
@@ -297,6 +297,132 @@ class TestNarrativeClusterer(unittest.TestCase):
         # All docs are already assigned; second run should find nothing pending.
         self.assertEqual(second["claims_considered"], 0)
         self.assertEqual(second["assignments"], 0)
+
+
+class _FakeEmbeddingClient:
+    """Tiny embedding client that maps fixed phrases to fixed vectors.
+
+    Used to test embedding mode without spinning up Ollama. Returns None
+    for unknown text so the fallback path is also exercised.
+    """
+
+    def __init__(self, vectors):
+        self._vectors = vectors
+
+    def embed(self, text, model=None):
+        return self._vectors.get(text)
+
+
+class TestNarrativeClustererEmbeddingMode(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        self.db_path = tmp.name
+        tmp.close()
+        _apply_migrations(self.db_path)
+
+        now = int(time.time())
+        conn = sqlite3.connect(self.db_path)
+        conn.executemany(
+            """
+            INSERT INTO docs (doc_id, source_type, ident, domain_or_subreddit,
+                              published_at, text, raw_hash, metadata_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (1, "news", "a", "a.com", now, "t", "h1", "{}"),
+                (2, "news", "b", "b.com", now, "t", "h2", "{}"),
+                (3, "news", "c", "c.com", now, "t", "h3", "{}"),
+            ],
+        )
+        # Synonymous claims that Jaccard would split (low token overlap) but
+        # an embedding model would correctly cluster.
+        conn.executemany(
+            """
+            INSERT INTO ai_outputs (doc_id, task_type, output_json, confidence, created_at)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            [
+                (1, "claims", json.dumps({"claims": [
+                    {"claim": "Trump won Pennsylvania",
+                     "confidence": 0.9, "evidence_span": "trump"}
+                ]}), 0.9, now),
+                (2, "claims", json.dumps({"claims": [
+                    {"claim": "Trump victory in Keystone State",
+                     "confidence": 0.85, "evidence_span": "trump"}
+                ]}), 0.85, now),
+                (3, "claims", json.dumps({"claims": [
+                    {"claim": "Senate passed infrastructure bill",
+                     "confidence": 0.8, "evidence_span": "senate"}
+                ]}), 0.8, now),
+            ],
+        )
+        conn.commit()
+        conn.close()
+
+    def tearDown(self):
+        for suffix in ("", "-wal", "-shm"):
+            try:
+                os.remove(self.db_path + suffix)
+            except (FileNotFoundError, PermissionError):
+                pass
+
+    def test_embedding_mode_clusters_synonyms(self):
+        # Embeddings: the two PA claims point in nearly the same direction;
+        # the Senate claim is orthogonal.
+        vectors = {
+            "Trump won Pennsylvania": [1.0, 0.0, 0.05],
+            "Trump victory in Keystone State": [0.95, 0.0, 0.10],
+            "Senate passed infrastructure bill": [0.0, 1.0, 0.0],
+        }
+        client = _FakeEmbeddingClient(vectors)
+        clusterer = NarrativeClusterer(
+            self.db_path,
+            mode="embedding",
+            embedding_client=client,
+            embedding_threshold=0.65,
+        )
+        summary = clusterer.run()
+
+        # Expected: PA claims merge → 1 narrative, Senate stands alone → 1 more.
+        self.assertEqual(summary["mode"], "embedding")
+        self.assertEqual(summary["narratives_created"], 2)
+
+        conn = sqlite3.connect(self.db_path)
+        # Anchor embeddings should have been persisted on creation.
+        rows = conn.execute(
+            "SELECT name, anchor_embedding_json FROM narratives ORDER BY narrative_id"
+        ).fetchall()
+        conn.close()
+        self.assertEqual(len(rows), 2)
+        for _, embed_json in rows:
+            self.assertIsNotNone(embed_json)
+            self.assertIsInstance(json.loads(embed_json), list)
+
+    def test_embedding_mode_falls_back_when_client_returns_none(self):
+        # Client returns None for everything → behaves like jaccard mode.
+        client = _FakeEmbeddingClient({})
+        clusterer = NarrativeClusterer(
+            self.db_path, mode="embedding", embedding_client=client,
+        )
+        summary = clusterer.run()
+        # Without working embeddings, the synonymous claims won't cluster
+        # (Jaccard token overlap is too low between "Pennsylvania" and
+        # "Keystone State"), so we end up with 3 narratives.
+        self.assertEqual(summary["narratives_created"], 3)
+
+
+class TestCosine(unittest.TestCase):
+    def test_orthogonal(self):
+        self.assertEqual(cosine([1, 0], [0, 1]), 0.0)
+
+    def test_identical(self):
+        self.assertAlmostEqual(cosine([1, 2, 3], [1, 2, 3]), 1.0)
+
+    def test_empty_returns_zero(self):
+        self.assertEqual(cosine([], [1, 2]), 0.0)
+
+    def test_mismatched_length(self):
+        self.assertEqual(cosine([1, 2], [1, 2, 3]), 0.0)
 
 
 if __name__ == "__main__":

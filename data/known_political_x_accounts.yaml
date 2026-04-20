@@ -1,0 +1,5500 @@
+schema_version: 1
+generated_at_utc: '2026-04-19T20:01:48Z'
+dataset_name: known_political_accounts
+platform: x
+notes:
+- Congressional House and Senate lists were compiled from user-provided source files.
+- Executive-branch entries were appended using live verification on 2026-04-19.
+- Handles retain a leading @ and URLs point to the corresponding X profile when known.
+- Some source rows were malformed or missing a handle; see source_status and notes fields for those entries.
+- This is a working political-account seed list, not a definitive registry of all U.S. public officials.
+sources:
+  house:
+    type: user_provided_file
+    description: Members' Official X Handles - 119th Congress
+    path: Pasted text.txt
+    source_last_updated: '2026-04-14'
+  senate:
+    type: user_provided_file
+    description: 119th Congress Senate X handles HTML table
+    path: Pasted text (2).txt
+  executive:
+    type: live_web_verification
+    verified_on: '2026-04-19'
+counts:
+  executive_branch: 10
+  house: 437
+  senate: 100
+  total_entries: 547
+accounts:
+  executive_branch:
+  - name: Donald J. Trump
+    office: President of the United States
+    branch: Executive
+    accounts:
+    - platform: x
+      handle: '@POTUS'
+      url: https://x.com/POTUS
+      account_type: official
+    - platform: x
+      handle: '@realDonaldTrump'
+      url: https://x.com/realDonaldTrump
+      account_type: personal/political
+    - platform: x
+      handle: '@WhiteHouse'
+      url: https://x.com/WhiteHouse
+      account_type: institutional
+    source_status: verified_live_search
+  - name: JD Vance
+    office: Vice President of the United States
+    branch: Executive
+    accounts:
+    - platform: x
+      handle: '@VP'
+      url: https://x.com/VP
+      account_type: official
+    - platform: x
+      handle: '@JDVance'
+      url: https://x.com/JDVance
+      account_type: personal/political
+    source_status: verified_live_search
+  - name: Pete Hegseth
+    office: Secretary of Defense
+    branch: Executive
+    notes: Current official sources/search results also surface "Secretary of War" / "Department of War" branding.
+    accounts:
+    - platform: x
+      handle: '@SecWar'
+      url: https://x.com/SecWar
+      account_type: official_role
+    - platform: x
+      handle: '@PeteHegseth'
+      url: https://x.com/PeteHegseth
+      account_type: personal/official
+    - platform: x
+      handle: '@DeptofWar'
+      url: https://x.com/DeptofWar
+      account_type: institutional
+    source_status: verified_live_search
+  - name: Kash Patel
+    office: Director of the Federal Bureau of Investigation
+    branch: Executive
+    accounts:
+    - platform: x
+      handle: '@FBIDirectorKash'
+      url: https://x.com/FBIDirectorKash
+      account_type: official_role
+    - platform: x
+      handle: '@Kash_Patel'
+      url: https://x.com/Kash_Patel
+      account_type: personal
+    - platform: x
+      handle: '@FBI'
+      url: https://x.com/FBI
+      account_type: institutional
+    source_status: verified_live_search
+  - name: Markwayne Mullin
+    office: Secretary of Homeland Security
+    branch: Executive
+    accounts:
+    - platform: x
+      handle: '@SecMullinDHS'
+      url: https://x.com/SecMullinDHS
+      account_type: official_role
+    - platform: x
+      handle: '@DHSgov'
+      url: https://x.com/DHSgov
+      account_type: institutional
+    - platform: x
+      handle: '@SenMullin'
+      url: https://x.com/SenMullin
+      account_type: previous/personal
+    source_status: verified_live_search
+  - name: Todd Blanche
+    office: Acting Attorney General of the United States
+    branch: Executive
+    accounts:
+    - platform: x
+      handle: '@DAGToddBlanche'
+      url: https://x.com/DAGToddBlanche
+      account_type: official/personal
+    - platform: x
+      handle: '@TheJusticeDept'
+      url: https://x.com/TheJusticeDept
+      account_type: institutional
+    source_status: verified_live_search
+  - name: Marco Rubio
+    office: Secretary of State
+    branch: Executive
+    accounts:
+    - platform: x
+      handle: '@SecRubio'
+      url: https://x.com/SecRubio
+      account_type: official_role
+    - platform: x
+      handle: '@StateDept'
+      url: https://x.com/StateDept
+      account_type: institutional
+    - platform: x
+      handle: '@marcorubio'
+      url: https://x.com/marcorubio
+      account_type: personal/political
+    source_status: verified_live_search
+  - name: Scott Bessent
+    office: Secretary of the Treasury
+    branch: Executive
+    accounts:
+    - platform: x
+      handle: '@SecScottBessent'
+      url: https://x.com/SecScottBessent
+      account_type: official_role
+    - platform: x
+      handle: '@USTreasury'
+      url: https://x.com/USTreasury
+      account_type: institutional
+    source_status: verified_live_search
+  - name: John Ratcliffe
+    office: Director of the Central Intelligence Agency
+    branch: Executive
+    accounts:
+    - platform: x
+      handle: '@CIADirector'
+      url: https://x.com/CIADirector
+      account_type: official_role
+    - platform: x
+      handle: '@DCIARatcliffe'
+      url: https://x.com/DCIARatcliffe
+      account_type: official/personal
+    - platform: x
+      handle: '@CIA'
+      url: https://x.com/CIA
+      account_type: institutional
+    source_status: verified_live_search
+  - name: Tulsi Gabbard
+    office: Director of National Intelligence
+    branch: Executive
+    accounts:
+    - platform: x
+      handle: '@DNIGabbard'
+      url: https://x.com/DNIGabbard
+      account_type: official_role
+    - platform: x
+      handle: '@TulsiGabbard'
+      url: https://x.com/TulsiGabbard
+      account_type: personal
+    - platform: x
+      handle: '@ODNIgov'
+      url: https://x.com/ODNIgov
+      account_type: institutional
+    source_status: verified_live_search
+  congress:
+    house:
+    - name: Alma Adams
+      first_name: Alma
+      last_name: Adams
+      platform: x
+      handle: '@RepAdams'
+      url: https://x.com/RepAdams
+      chamber: House
+      state_or_district: NC12
+      party: D
+      source_status: source_file
+    - name: Robert Aderholt
+      first_name: Robert
+      last_name: Aderholt
+      platform: x
+      handle: '@Robert_Aderholt'
+      url: https://x.com/Robert_Aderholt
+      chamber: House
+      state_or_district: AL04
+      party: R
+      source_status: source_file
+    - name: Pete Aguilar
+      first_name: Pete
+      last_name: Aguilar
+      platform: x
+      handle: '@RepPeteAguilar'
+      url: https://x.com/RepPeteAguilar
+      chamber: House
+      state_or_district: CA33
+      party: D
+      source_status: source_file
+    - name: Mark Alford
+      first_name: Mark
+      last_name: Alford
+      platform: x
+      handle: '@RepMarkAlford'
+      url: https://x.com/RepMarkAlford
+      chamber: House
+      state_or_district: MO04
+      party: R
+      source_status: source_file
+    - name: Rick Allen
+      first_name: Rick
+      last_name: Allen
+      platform: x
+      handle: '@RepRickAllen'
+      url: https://x.com/RepRickAllen
+      chamber: House
+      state_or_district: GA12
+      party: R
+      source_status: source_file
+    - name: Gabe Amo
+      first_name: Gabe
+      last_name: Amo
+      platform: x
+      handle: '@RepGabeAmo'
+      url: https://x.com/RepGabeAmo
+      chamber: House
+      state_or_district: RI01
+      party: D
+      source_status: source_file
+    - name: Mark Amodei
+      first_name: Mark
+      last_name: Amodei
+      platform: x
+      handle: '@MarkAmodeiNV2'
+      url: https://x.com/MarkAmodeiNV2
+      chamber: House
+      state_or_district: NV02
+      party: R
+      source_status: source_file
+    - name: Yassamin Ansari
+      first_name: Yassamin
+      last_name: Ansari
+      platform: x
+      handle: '@RepYassAnsari'
+      url: https://x.com/RepYassAnsari
+      chamber: House
+      state_or_district: AZ03
+      party: D
+      source_status: source_file
+    - name: Jodey Arrington
+      first_name: Jodey
+      last_name: Arrington
+      platform: x
+      handle: '@RepArrington'
+      url: https://x.com/RepArrington
+      chamber: House
+      state_or_district: TX19
+      party: R
+      source_status: source_file
+    - name: Jake Auchincloss
+      first_name: Jake
+      last_name: Auchincloss
+      platform: x
+      handle: '@RepAuchincloss'
+      url: https://x.com/RepAuchincloss
+      chamber: House
+      state_or_district: MA04
+      party: D
+      source_status: source_file
+    - name: Brian Babin
+      first_name: Brian
+      last_name: Babin
+      platform: x
+      handle: '@RepBrianBabin'
+      url: https://x.com/RepBrianBabin
+      chamber: House
+      state_or_district: TX36
+      party: R
+      source_status: source_file
+    - name: Don Bacon
+      first_name: Don
+      last_name: Bacon
+      platform: x
+      handle: '@RepDonBacon'
+      url: https://x.com/RepDonBacon
+      chamber: House
+      state_or_district: NE02
+      party: R
+      source_status: source_file
+    - name: James Baird
+      first_name: James
+      last_name: Baird
+      platform: x
+      handle: '@RepJimBaird'
+      url: https://x.com/RepJimBaird
+      chamber: House
+      state_or_district: IN04
+      party: R
+      source_status: source_file
+    - name: Troy Balderson
+      first_name: Troy
+      last_name: Balderson
+      platform: x
+      handle: '@RepBalderson'
+      url: https://x.com/RepBalderson
+      chamber: House
+      state_or_district: OH12
+      party: R
+      source_status: source_file
+    - name: Becca Balint
+      first_name: Becca
+      last_name: Balint
+      platform: x
+      handle: '@RepBeccaB'
+      url: https://x.com/RepBeccaB
+      chamber: House
+      state_or_district: VT00
+      party: D
+      source_status: source_file
+    - name: Andy Barr
+      first_name: Andy
+      last_name: Barr
+      platform: x
+      handle: '@RepAndyBarr'
+      url: https://x.com/RepAndyBarr
+      chamber: House
+      state_or_district: KY06
+      party: R
+      source_status: source_file
+    - name: Nanette Barragán
+      first_name: Nanette
+      last_name: Barragán
+      platform: x
+      handle: '@RepBarragan'
+      url: https://x.com/RepBarragan
+      chamber: House
+      state_or_district: CA44
+      party: D
+      source_status: source_file
+    - name: Tom Barrett
+      first_name: Tom
+      last_name: Barrett
+      platform: x
+      handle: '@RepTomBarrett'
+      url: https://x.com/RepTomBarrett
+      chamber: House
+      state_or_district: MI07
+      party: R
+      source_status: source_file
+    - name: Michael Baumgartner
+      first_name: Michael
+      last_name: Baumgartner
+      platform: x
+      handle: '@RepBaumgartner'
+      url: https://x.com/RepBaumgartner
+      chamber: House
+      state_or_district: WA05
+      party: R
+      source_status: source_file
+    - name: Aaron Bean
+      first_name: Aaron
+      last_name: Bean
+      platform: x
+      handle: '@RepAaronBean'
+      url: https://x.com/RepAaronBean
+      chamber: House
+      state_or_district: FL04
+      party: R
+      source_status: source_file
+    - name: Joyce Beatty
+      first_name: Joyce
+      last_name: Beatty
+      platform: x
+      handle: '@RepBeatty'
+      url: https://x.com/RepBeatty
+      chamber: House
+      state_or_district: OH03
+      party: D
+      source_status: source_file
+    - name: Nick Begich
+      first_name: Nick
+      last_name: Begich
+      platform: x
+      handle: '@RepNickBegich'
+      url: https://x.com/RepNickBegich
+      chamber: House
+      state_or_district: AK00
+      party: R
+      source_status: source_file
+    - name: Wesley Bell
+      first_name: Wesley
+      last_name: Bell
+      platform: x
+      handle: '@RepWesleyBellMO'
+      url: https://x.com/RepWesleyBellMO
+      chamber: House
+      state_or_district: MO01
+      party: D
+      source_status: source_file
+    - name: Cliff Bentz
+      first_name: Cliff
+      last_name: Bentz
+      platform: x
+      handle: '@RepBentz'
+      url: https://x.com/RepBentz
+      chamber: House
+      state_or_district: OR02
+      party: R
+      source_status: source_file
+    - name: Ami Bera
+      first_name: Ami
+      last_name: Bera
+      platform: x
+      handle: '@RepBera'
+      url: https://x.com/RepBera
+      chamber: House
+      state_or_district: CA06
+      party: D
+      source_status: source_file
+    - name: Jack Bergman
+      first_name: Jack
+      last_name: Bergman
+      platform: x
+      handle: '@RepJackBergman'
+      url: https://x.com/RepJackBergman
+      chamber: House
+      state_or_district: MI01
+      party: R
+      source_status: source_file
+    - name: Donald Beyer
+      first_name: Donald
+      last_name: Beyer
+      platform: x
+      handle: '@RepDonBeyer'
+      url: https://x.com/RepDonBeyer
+      chamber: House
+      state_or_district: VA08
+      party: D
+      source_status: source_file
+    - name: Stephanie Bice
+      first_name: Stephanie
+      last_name: Bice
+      platform: x
+      handle: '@RepBice'
+      url: https://x.com/RepBice
+      chamber: House
+      state_or_district: OK05
+      party: R
+      source_status: source_file
+    - name: Andy Biggs
+      first_name: Andy
+      last_name: Biggs
+      platform: x
+      handle: '@RepAndyBiggsAZ'
+      url: https://x.com/RepAndyBiggsAZ
+      chamber: House
+      state_or_district: AZ05
+      party: R
+      source_status: source_file
+    - name: Sheri Biggs
+      first_name: Sheri
+      last_name: Biggs
+      platform: x
+      handle: '@RepSheriBiggs'
+      url: https://x.com/RepSheriBiggs
+      chamber: House
+      state_or_district: SC03
+      party: R
+      source_status: source_file
+    - name: Gus Bilirakis
+      first_name: Gus
+      last_name: Bilirakis
+      platform: x
+      handle: '@RepGusBilirakis'
+      url: https://x.com/RepGusBilirakis
+      chamber: House
+      state_or_district: FL12
+      party: R
+      source_status: source_file
+    - name: Sanford Bishop
+      first_name: Sanford
+      last_name: Bishop
+      platform: x
+      handle: '@SanfordBishop'
+      url: https://x.com/SanfordBishop
+      chamber: House
+      state_or_district: GA02
+      party: D
+      source_status: source_file
+    - name: Lauren Boebert
+      first_name: Lauren
+      last_name: Boebert
+      platform: x
+      handle: '@RepBoebert'
+      url: https://x.com/RepBoebert
+      chamber: House
+      state_or_district: CO04
+      party: R
+      source_status: source_file
+    - name: Suzanne Bonamici
+      first_name: Suzanne
+      last_name: Bonamici
+      platform: x
+      handle: '@RepBonamici'
+      url: https://x.com/RepBonamici
+      chamber: House
+      state_or_district: OR01
+      party: D
+      source_status: source_file
+    - name: Mike Bost
+      first_name: Mike
+      last_name: Bost
+      platform: x
+      handle: '@RepBost'
+      url: https://x.com/RepBost
+      chamber: House
+      state_or_district: IL12
+      party: R
+      source_status: source_file
+    - name: Brendan Boyle
+      first_name: Brendan
+      last_name: Boyle
+      platform: x
+      handle: '@CongBoyle'
+      url: https://x.com/CongBoyle
+      chamber: House
+      state_or_district: PA02
+      party: D
+      source_status: source_file
+    - name: Josh Brecheen
+      first_name: Josh
+      last_name: Brecheen
+      platform: x
+      handle: '@RepBrecheen'
+      url: https://x.com/RepBrecheen
+      chamber: House
+      state_or_district: OK02
+      party: R
+      source_status: source_file
+    - name: Robert Bresnahan Jr.
+      first_name: Robert
+      last_name: Bresnahan Jr.
+      platform: x
+      handle: '@RepBresnahan'
+      url: https://x.com/RepBresnahan
+      chamber: House
+      state_or_district: PA08
+      party: R
+      source_status: source_file
+    - name: Shontel Brown
+      first_name: Shontel
+      last_name: Brown
+      platform: x
+      handle: '@RepShontelBrown'
+      url: https://x.com/RepShontelBrown
+      chamber: House
+      state_or_district: OH11
+      party: D
+      source_status: source_file
+    - name: Julia Brownley
+      first_name: Julia
+      last_name: Brownley
+      platform: x
+      handle: '@RepBrownley'
+      url: https://x.com/RepBrownley
+      chamber: House
+      state_or_district: CA26
+      party: D
+      source_status: source_file
+    - name: Vern Buchanan
+      first_name: Vern
+      last_name: Buchanan
+      platform: x
+      handle: '@VernBuchanan'
+      url: https://x.com/VernBuchanan
+      chamber: House
+      state_or_district: FL16
+      party: R
+      source_status: source_file
+    - name: Nikki Budzinski
+      first_name: Nikki
+      last_name: Budzinski
+      platform: x
+      handle: '@RepNikkiB'
+      url: https://x.com/RepNikkiB
+      chamber: House
+      state_or_district: IL13
+      party: D
+      source_status: source_file
+    - name: Tim Burchett
+      first_name: Tim
+      last_name: Burchett
+      platform: x
+      handle: '@RepTimBurchett'
+      url: https://x.com/RepTimBurchett
+      chamber: House
+      state_or_district: TN02
+      party: R
+      source_status: source_file
+    - name: Eric Burlison
+      first_name: Eric
+      last_name: Burlison
+      platform: x
+      handle: '@RepEricBurlison'
+      url: https://x.com/RepEricBurlison
+      chamber: House
+      state_or_district: MO07
+      party: R
+      source_status: source_file
+    - name: Janelle Bynum
+      first_name: Janelle
+      last_name: Bynum
+      platform: x
+      handle: '@RepBynum'
+      url: https://x.com/RepBynum
+      chamber: House
+      state_or_district: OR05
+      party: D
+      source_status: source_file
+    - name: Ken Calvert
+      first_name: Ken
+      last_name: Calvert
+      platform: x
+      handle: '@KenCalvert'
+      url: https://x.com/KenCalvert
+      chamber: House
+      state_or_district: CA41
+      party: R
+      source_status: source_file
+    - name: Kat Cammack
+      first_name: Kat
+      last_name: Cammack
+      platform: x
+      handle: '@RepKatCammack'
+      url: https://x.com/RepKatCammack
+      chamber: House
+      state_or_district: FL03
+      party: R
+      source_status: source_file
+    - name: Salud Carbajal
+      first_name: Salud
+      last_name: Carbajal
+      platform: x
+      handle: '@RepCarbajal'
+      url: https://x.com/RepCarbajal
+      chamber: House
+      state_or_district: CA24
+      party: D
+      source_status: source_file
+    - name: Mike Carey
+      first_name: Mike
+      last_name: Carey
+      platform: x
+      handle: '@RepMikeCarey'
+      url: https://x.com/RepMikeCarey
+      chamber: House
+      state_or_district: OH15
+      party: R
+      source_status: source_file
+    - name: André Carson
+      first_name: André
+      last_name: Carson
+      platform: x
+      handle: '@RepAndreCarson'
+      url: https://x.com/RepAndreCarson
+      chamber: House
+      state_or_district: IN07
+      party: D
+      source_status: source_file
+    - name: Buddy Carter
+      first_name: Buddy
+      last_name: Carter
+      platform: x
+      handle: '@RepBuddyCarter'
+      url: https://x.com/RepBuddyCarter
+      chamber: House
+      state_or_district: GA01
+      party: R
+      source_status: source_file
+    - name: John Carter
+      first_name: John
+      last_name: Carter
+      platform: x
+      handle: '@JudgeCarter'
+      url: https://x.com/JudgeCarter
+      chamber: House
+      state_or_district: TX31
+      party: R
+      source_status: source_file
+    - name: Troy Carter
+      first_name: Troy
+      last_name: Carter
+      platform: x
+      handle: '@RepTroyCarter'
+      url: https://x.com/RepTroyCarter
+      chamber: House
+      state_or_district: LA02
+      party: D
+      source_status: source_file
+    - name: Greg Casar
+      first_name: Greg
+      last_name: Casar
+      platform: x
+      handle: '@RepCasar'
+      url: https://x.com/RepCasar
+      chamber: House
+      state_or_district: TX35
+      party: D
+      source_status: source_file
+    - name: Ed Case
+      first_name: Ed
+      last_name: Case
+      platform: x
+      handle: '@RepEdCase'
+      url: https://x.com/RepEdCase
+      chamber: House
+      state_or_district: HI01
+      party: D
+      source_status: source_file
+    - name: Sean Casten
+      first_name: Sean
+      last_name: Casten
+      platform: x
+      handle: '@RepCasten'
+      url: https://x.com/RepCasten
+      chamber: House
+      state_or_district: IL06
+      party: D
+      source_status: source_file
+    - name: Kathy Castor
+      first_name: Kathy
+      last_name: Castor
+      platform: x
+      handle: '@USRepKCastor'
+      url: https://x.com/USRepKCastor
+      chamber: House
+      state_or_district: FL14
+      party: D
+      source_status: source_file
+    - name: Joaquin Castro
+      first_name: Joaquin
+      last_name: Castro
+      platform: x
+      handle: '@JoaquinCastrotx'
+      url: https://x.com/JoaquinCastrotx
+      chamber: House
+      state_or_district: TX20
+      party: D
+      source_status: source_file
+    - name: Sheila Cherfilus-McCormick
+      first_name: Sheila
+      last_name: Cherfilus-McCormick
+      platform: x
+      handle: '@CongresswomanSC'
+      url: https://x.com/CongresswomanSC
+      chamber: House
+      state_or_district: FL20
+      party: D
+      source_status: source_file
+    - name: Judy Chu
+      first_name: Judy
+      last_name: Chu
+      platform: x
+      handle: '@RepJudyChu'
+      url: https://x.com/RepJudyChu
+      chamber: House
+      state_or_district: CA28
+      party: D
+      source_status: source_file
+    - name: Juan Ciscomani
+      first_name: Juan
+      last_name: Ciscomani
+      platform: x
+      handle: '@RepCiscomani'
+      url: https://x.com/RepCiscomani
+      chamber: House
+      state_or_district: AZ06
+      party: R
+      source_status: source_file
+    - name: Gil Cisneros
+      first_name: Gil
+      last_name: Cisneros
+      platform: x
+      handle: '@RepGilCisneros'
+      url: https://x.com/RepGilCisneros
+      chamber: House
+      state_or_district: CA31
+      party: D
+      source_status: source_file
+    - name: Katherine Clark
+      first_name: Katherine
+      last_name: Clark
+      platform: x
+      handle: '@WhipKClark'
+      url: https://x.com/WhipKClark
+      chamber: House
+      state_or_district: MA05
+      party: D
+      source_status: source_file
+    - name: Yvette Clarke
+      first_name: Yvette
+      last_name: Clarke
+      platform: x
+      handle: '@RepYvetteClarke'
+      url: https://x.com/RepYvetteClarke
+      chamber: House
+      state_or_district: NY09
+      party: D
+      source_status: source_file
+    - name: Emanuel Cleaver
+      first_name: Emanuel
+      last_name: Cleaver
+      platform: x
+      handle: '@repcleaver'
+      url: https://x.com/repcleaver
+      chamber: House
+      state_or_district: MO05
+      party: D
+      source_status: source_file
+    - name: Ben Cline
+      first_name: Ben
+      last_name: Cline
+      platform: x
+      handle: '@RepBenCline'
+      url: https://x.com/RepBenCline
+      chamber: House
+      state_or_district: VA06
+      party: R
+      source_status: source_file
+    - name: Michael Cloud
+      first_name: Michael
+      last_name: Cloud
+      platform: x
+      handle: '@RepMichaelCloud'
+      url: https://x.com/RepMichaelCloud
+      chamber: House
+      state_or_district: TX27
+      party: R
+      source_status: source_file
+    - name: James Clyburn
+      first_name: James
+      last_name: Clyburn
+      platform: x
+      handle: '@WhipClyburn'
+      url: https://x.com/WhipClyburn
+      chamber: House
+      state_or_district: SC06
+      party: D
+      source_status: source_file
+    - name: Andrew Clyde
+      first_name: Andrew
+      last_name: Clyde
+      platform: x
+      handle: '@Rep_Clyde'
+      url: https://x.com/Rep_Clyde
+      chamber: House
+      state_or_district: GA09
+      party: R
+      source_status: source_file
+    - name: Steve Cohen
+      first_name: Steve
+      last_name: Cohen
+      platform: x
+      handle: '@RepCohen'
+      url: https://x.com/RepCohen
+      chamber: House
+      state_or_district: TN09
+      party: D
+      source_status: source_file
+    - name: Tom Cole
+      first_name: Tom
+      last_name: Cole
+      platform: x
+      handle: '@TomColeOK04'
+      url: https://x.com/TomColeOK04
+      chamber: House
+      state_or_district: OK04
+      party: R
+      source_status: source_file
+    - name: Mike Collins
+      first_name: Mike
+      last_name: Collins
+      platform: x
+      handle: '@RepMikeCollins'
+      url: https://x.com/RepMikeCollins
+      chamber: House
+      state_or_district: GA10
+      party: R
+      source_status: source_file
+    - name: James Comer
+      first_name: James
+      last_name: Comer
+      platform: x
+      handle: '@RepJamesComer'
+      url: https://x.com/RepJamesComer
+      chamber: House
+      state_or_district: KY01
+      party: R
+      source_status: source_file
+    - name: Herb Conaway
+      first_name: Herb
+      last_name: Conaway
+      platform: x
+      handle: '@RepHerbConaway'
+      url: https://x.com/RepHerbConaway
+      chamber: House
+      state_or_district: NJ03
+      party: D
+      source_status: source_file
+    - name: Lou Correa
+      first_name: Lou
+      last_name: Correa
+      platform: x
+      handle: '@RepLouCorrea'
+      url: https://x.com/RepLouCorrea
+      chamber: House
+      state_or_district: CA46
+      party: D
+      source_status: source_file
+    - name: Jim Costa
+      first_name: Jim
+      last_name: Costa
+      platform: x
+      handle: '@RepJimCosta'
+      url: https://x.com/RepJimCosta
+      chamber: House
+      state_or_district: CA21
+      party: D
+      source_status: source_file
+    - name: Joe Courtney
+      first_name: Joe
+      last_name: Courtney
+      platform: x
+      handle: '@RepJoeCourtney'
+      url: https://x.com/RepJoeCourtney
+      chamber: House
+      state_or_district: CT02
+      party: D
+      source_status: source_file
+    - name: Angie Craig
+      first_name: Angie
+      last_name: Craig
+      platform: x
+      handle: '@RepAngieCraig'
+      url: https://x.com/RepAngieCraig
+      chamber: House
+      state_or_district: MN02
+      party: D
+      source_status: source_file
+    - name: Elijah Crane
+      first_name: Elijah
+      last_name: Crane
+      platform: x
+      handle: '@RepEliCrane'
+      url: https://x.com/RepEliCrane
+      chamber: House
+      state_or_district: AZ02
+      party: R
+      source_status: source_file
+    - name: Jeff Crank
+      first_name: Jeff
+      last_name: Crank
+      platform: x
+      handle: '@RepJeffCrank'
+      url: https://x.com/RepJeffCrank
+      chamber: House
+      state_or_district: CO05
+      party: R
+      source_status: source_file
+    - name: Ric Crawford
+      first_name: Ric
+      last_name: Crawford
+      platform: x
+      handle: '@RepRickCrawford'
+      url: https://x.com/RepRickCrawford
+      chamber: House
+      state_or_district: AR01
+      party: R
+      source_status: source_file
+    - name: Dan Crenshaw
+      first_name: Dan
+      last_name: Crenshaw
+      platform: x
+      handle: '@RepDanCrenshaw'
+      url: https://x.com/RepDanCrenshaw
+      chamber: House
+      state_or_district: TX02
+      party: R
+      source_status: source_file
+    - name: Jasmine Crockett
+      first_name: Jasmine
+      last_name: Crockett
+      platform: x
+      handle: '@RepJasmine'
+      url: https://x.com/RepJasmine
+      chamber: House
+      state_or_district: TX30
+      party: D
+      source_status: source_file
+    - name: Jason Crow
+      first_name: Jason
+      last_name: Crow
+      platform: x
+      handle: '@RepJasonCrow'
+      url: https://x.com/RepJasonCrow
+      chamber: House
+      state_or_district: CO06
+      party: D
+      source_status: source_file
+    - name: Henry Cuellar
+      first_name: Henry
+      last_name: Cuellar
+      platform: x
+      handle: '@RepCuellar'
+      url: https://x.com/RepCuellar
+      chamber: House
+      state_or_district: TX28
+      party: D
+      source_status: source_file
+    - name: Sharice Davids
+      first_name: Sharice
+      last_name: Davids
+      platform: x
+      handle: '@RepDavids'
+      url: https://x.com/RepDavids
+      chamber: House
+      state_or_district: KS03
+      party: D
+      source_status: source_file
+    - name: Warren Davidson
+      first_name: Warren
+      last_name: Davidson
+      platform: x
+      handle: '@WarrenDavidson'
+      url: https://x.com/WarrenDavidson
+      chamber: House
+      state_or_district: OH08
+      party: R
+      source_status: source_file
+    - name: Danny Davis
+      first_name: Danny
+      last_name: Davis
+      platform: x
+      handle: '@RepDannyDavis'
+      url: https://x.com/RepDannyDavis
+      chamber: House
+      state_or_district: IL07
+      party: D
+      source_status: source_file
+    - name: Don Davis
+      first_name: Don
+      last_name: Davis
+      platform: x
+      handle: '@RepDonDavis'
+      url: https://x.com/RepDonDavis
+      chamber: House
+      state_or_district: NC01
+      party: D
+      source_status: source_file
+    - name: Monica De La Cruz
+      first_name: Monica
+      last_name: De La Cruz
+      platform: x
+      handle: '@RepMonicaDLC'
+      url: https://x.com/RepMonicaDLC
+      chamber: House
+      state_or_district: TX15
+      party: R
+      source_status: source_file
+    - name: Madeleine Dean
+      first_name: Madeleine
+      last_name: Dean
+      platform: x
+      handle: '@RepDean'
+      url: https://x.com/RepDean
+      chamber: House
+      state_or_district: PA04
+      party: D
+      source_status: source_file
+    - name: Diana DeGette
+      first_name: Diana
+      last_name: DeGette
+      platform: x
+      handle: '@RepDianaDeGette'
+      url: https://x.com/RepDianaDeGette
+      chamber: House
+      state_or_district: CO01
+      party: D
+      source_status: source_file
+    - name: Rosa DeLauro
+      first_name: Rosa
+      last_name: DeLauro
+      platform: x
+      handle: '@rosadelauro'
+      url: https://x.com/rosadelauro
+      chamber: House
+      state_or_district: CT03
+      party: D
+      source_status: source_file
+    - name: Suzan DelBene
+      first_name: Suzan
+      last_name: DelBene
+      platform: x
+      handle: '@RepDelBene'
+      url: https://x.com/RepDelBene
+      chamber: House
+      state_or_district: WA01
+      party: D
+      source_status: source_file
+    - name: Christopher Deluzio
+      first_name: Christopher
+      last_name: Deluzio
+      platform: x
+      handle: '@RepDeluzio'
+      url: https://x.com/RepDeluzio
+      chamber: House
+      state_or_district: PA17
+      party: D
+      source_status: source_file
+    - name: Mark DeSaulnier
+      first_name: Mark
+      last_name: DeSaulnier
+      platform: x
+      handle: '@RepDeSaulnier'
+      url: https://x.com/RepDeSaulnier
+      chamber: House
+      state_or_district: CA10
+      party: D
+      source_status: source_file
+    - name: Scott DesJarlais
+      first_name: Scott
+      last_name: DesJarlais
+      platform: x
+      handle: '@DesJarlaisTN04'
+      url: https://x.com/DesJarlaisTN04
+      chamber: House
+      state_or_district: TN04
+      party: R
+      source_status: source_file
+    - name: Maxine Dexter
+      first_name: Maxine
+      last_name: Dexter
+      platform: x
+      handle: '@RepDexterOR'
+      url: https://x.com/RepDexterOR
+      chamber: House
+      state_or_district: OR03
+      party: D
+      source_status: source_file
+    - name: Mario Diaz-Balart
+      first_name: Mario
+      last_name: Diaz-Balart
+      platform: x
+      handle: '@MarioDB'
+      url: https://x.com/MarioDB
+      chamber: House
+      state_or_district: FL26
+      party: R
+      source_status: source_file
+    - name: Debbie Dingell
+      first_name: Debbie
+      last_name: Dingell
+      platform: x
+      handle: '@RepDebDingell'
+      url: https://x.com/RepDebDingell
+      chamber: House
+      state_or_district: MI06
+      party: D
+      source_status: source_file
+    - name: Lloyd Doggett
+      first_name: Lloyd
+      last_name: Doggett
+      platform: x
+      handle: '@RepLloydDoggett'
+      url: https://x.com/RepLloydDoggett
+      chamber: House
+      state_or_district: TX37
+      party: D
+      source_status: source_file
+    - name: Byron Donalds
+      first_name: Byron
+      last_name: Donalds
+      platform: x
+      handle: '@RepDonaldsPress'
+      url: https://x.com/RepDonaldsPress
+      chamber: House
+      state_or_district: FL19
+      party: R
+      source_status: source_file
+    - name: Troy Downing
+      first_name: Troy
+      last_name: Downing
+      platform: x
+      handle: '@RepTroyDowning'
+      url: https://x.com/RepTroyDowning
+      chamber: House
+      state_or_district: MT02
+      party: R
+      source_status: source_file
+    - name: Neal Dunn
+      first_name: Neal
+      last_name: Dunn
+      platform: x
+      handle: '@DrNealDunnFL2'
+      url: https://x.com/DrNealDunnFL2
+      chamber: House
+      state_or_district: FL02
+      party: R
+      source_status: source_file
+    - name: Chuck Edwards
+      first_name: Chuck
+      last_name: Edwards
+      platform: x
+      handle: '@RepChuckEdwards'
+      url: https://x.com/RepChuckEdwards
+      chamber: House
+      state_or_district: NC11
+      party: R
+      source_status: source_file
+    - name: Sarah Elfreth
+      first_name: Sarah
+      last_name: Elfreth
+      platform: x
+      handle: '@RepSarahElfreth'
+      url: https://x.com/RepSarahElfreth
+      chamber: House
+      state_or_district: MD03
+      party: D
+      source_status: source_file
+    - name: Jake Ellzey
+      first_name: Jake
+      last_name: Ellzey
+      platform: x
+      handle: '@RepEllzey'
+      url: https://x.com/RepEllzey
+      chamber: House
+      state_or_district: TX06
+      party: R
+      source_status: source_file
+    - name: Tom Emmer
+      first_name: Tom
+      last_name: Emmer
+      platform: x
+      handle: '@GOPMajorityWhip'
+      url: https://x.com/GOPMajorityWhip
+      chamber: House
+      state_or_district: MN06
+      party: R
+      source_status: source_file
+    - name: Veronica Escobar
+      first_name: Veronica
+      last_name: Escobar
+      platform: x
+      handle: '@RepEscobar'
+      url: https://x.com/RepEscobar
+      chamber: House
+      state_or_district: TX16
+      party: D
+      source_status: source_file
+    - name: Adriano Espaillat
+      first_name: Adriano
+      last_name: Espaillat
+      platform: x
+      handle: '@RepEspaillat'
+      url: https://x.com/RepEspaillat
+      chamber: House
+      state_or_district: NY13
+      party: D
+      source_status: source_file
+    - name: Ron Estes
+      first_name: Ron
+      last_name: Estes
+      platform: x
+      handle: '@RepRonEstes'
+      url: https://x.com/RepRonEstes
+      chamber: House
+      state_or_district: KS04
+      party: R
+      source_status: source_file
+    - name: Dwight Evans
+      first_name: Dwight
+      last_name: Evans
+      platform: x
+      handle: '@RepDwightEvans'
+      url: https://x.com/RepDwightEvans
+      chamber: House
+      state_or_district: PA03
+      party: D
+      source_status: source_file
+    - name: Gabe Evans
+      first_name: Gabe
+      last_name: Evans
+      platform: x
+      handle: '@repgabeevans'
+      url: https://x.com/repgabeevans
+      chamber: House
+      state_or_district: CO08
+      party: R
+      source_status: source_file
+    - name: Mike Ezell
+      first_name: Mike
+      last_name: Ezell
+      platform: x
+      handle: '@RepEzell'
+      url: https://x.com/RepEzell
+      chamber: House
+      state_or_district: MS04
+      party: R
+      source_status: source_file
+    - name: Pat Fallon
+      first_name: Pat
+      last_name: Fallon
+      platform: x
+      handle: '@RepPatFallon'
+      url: https://x.com/RepPatFallon
+      chamber: House
+      state_or_district: TX04
+      party: R
+      source_status: source_file
+    - name: Julie Fedorchak
+      first_name: Julie
+      last_name: Fedorchak
+      platform: x
+      handle: '@RepFedorchak'
+      url: https://x.com/RepFedorchak
+      chamber: House
+      state_or_district: ND00
+      party: R
+      source_status: source_file
+    - name: Randy Feenstra
+      first_name: Randy
+      last_name: Feenstra
+      platform: x
+      handle: '@RepFeenstra'
+      url: https://x.com/RepFeenstra
+      chamber: House
+      state_or_district: IA04
+      party: R
+      source_status: source_file
+    - name: Cleo Fields
+      first_name: Cleo
+      last_name: Fields
+      platform: x
+      handle: '@RepFields'
+      url: https://x.com/RepFields
+      chamber: House
+      state_or_district: LA06
+      party: D
+      source_status: source_file
+    - name: Shomari Figures
+      first_name: Shomari
+      last_name: Figures
+      platform: x
+      handle: '@repscfigures'
+      url: https://x.com/repscfigures
+      chamber: House
+      state_or_district: AL02
+      party: D
+      source_status: source_file
+    - name: Randy Fine
+      first_name: Randy
+      last_name: Fine
+      platform: x
+      handle: '@RepFine'
+      url: https://x.com/RepFine
+      chamber: House
+      state_or_district: FL06
+      party: R
+      source_status: source_file
+    - name: Brad Finstad
+      first_name: Brad
+      last_name: Finstad
+      platform: x
+      handle: '@repfinstad'
+      url: https://x.com/repfinstad
+      chamber: House
+      state_or_district: MN01
+      party: R
+      source_status: source_file
+    - name: Michelle Fischbach
+      first_name: Michelle
+      last_name: Fischbach
+      platform: x
+      handle: '@RepFischbach'
+      url: https://x.com/RepFischbach
+      chamber: House
+      state_or_district: MN07
+      party: R
+      source_status: source_file
+    - name: Scott Fitzgerald
+      first_name: Scott
+      last_name: Fitzgerald
+      platform: x
+      handle: '@RepFitzgerald'
+      url: https://x.com/RepFitzgerald
+      chamber: House
+      state_or_district: WI05
+      party: R
+      source_status: source_file
+    - name: Brian Fitzpatrick
+      first_name: Brian
+      last_name: Fitzpatrick
+      platform: x
+      handle: '@RepBrianFitz'
+      url: https://x.com/RepBrianFitz
+      chamber: House
+      state_or_district: PA01
+      party: R
+      source_status: source_file
+    - name: Charles Fleischmann
+      first_name: Charles
+      last_name: Fleischmann
+      platform: x
+      handle: '@RepChuck'
+      url: https://x.com/RepChuck
+      chamber: House
+      state_or_district: TN03
+      party: R
+      source_status: source_file
+    - name: Lizzie Fletcher
+      first_name: Lizzie
+      last_name: Fletcher
+      platform: x
+      handle: '@RepFletcher'
+      url: https://x.com/RepFletcher
+      chamber: House
+      state_or_district: TX07
+      party: D
+      source_status: source_file
+    - name: Mike Flood
+      first_name: Mike
+      last_name: Flood
+      platform: x
+      handle: '@USRepMikeFlood'
+      url: https://x.com/USRepMikeFlood
+      chamber: House
+      state_or_district: NE01
+      party: R
+      source_status: source_file
+    - name: Vince Fong
+      first_name: Vince
+      last_name: Fong
+      platform: x
+      handle: '@RepVinceFong'
+      url: https://x.com/RepVinceFong
+      chamber: House
+      state_or_district: CA20
+      party: R
+      source_status: source_file
+    - name: Bill Foster
+      first_name: Bill
+      last_name: Foster
+      platform: x
+      handle: '@RepBillFoster'
+      url: https://x.com/RepBillFoster
+      chamber: House
+      state_or_district: IL11
+      party: D
+      source_status: source_file
+    - name: Valerie Foushee
+      first_name: Valerie
+      last_name: Foushee
+      platform: x
+      handle: '@ValerieFoushee'
+      url: https://x.com/ValerieFoushee
+      chamber: House
+      state_or_district: NC04
+      party: D
+      source_status: source_file
+    - name: Virginia Foxx
+      first_name: Virginia
+      last_name: Foxx
+      platform: x
+      handle: '@virginiafoxx'
+      url: https://x.com/virginiafoxx
+      chamber: House
+      state_or_district: NC05
+      party: R
+      source_status: source_file
+    - name: Lois Frankel
+      first_name: Lois
+      last_name: Frankel
+      platform: x
+      handle: '@RepLoisFrankel'
+      url: https://x.com/RepLoisFrankel
+      chamber: House
+      state_or_district: FL22
+      party: D
+      source_status: source_file
+    - name: C. Franklin
+      first_name: C.
+      last_name: Franklin
+      platform: x
+      handle: '@RepFranklin'
+      url: https://x.com/RepFranklin
+      chamber: House
+      state_or_district: FL18
+      party: R
+      source_status: source_file
+    - name: Laura Friedman
+      first_name: Laura
+      last_name: Friedman
+      platform: x
+      handle: '@RepFriedmanCA'
+      url: https://x.com/RepFriedmanCA
+      chamber: House
+      state_or_district: CA30
+      party: D
+      source_status: source_file
+    - name: Maxwell Frost
+      first_name: Maxwell
+      last_name: Frost
+      platform: x
+      handle: '@RepMaxwellFrost'
+      url: https://x.com/RepMaxwellFrost
+      chamber: House
+      state_or_district: FL10
+      party: D
+      source_status: source_file
+    - name: Russell Fry
+      first_name: Russell
+      last_name: Fry
+      platform: x
+      handle: '@RepRussellFry'
+      url: https://x.com/RepRussellFry
+      chamber: House
+      state_or_district: SC07
+      party: R
+      source_status: source_file
+    - name: Russ Fulcher
+      first_name: Russ
+      last_name: Fulcher
+      platform: x
+      handle: '@RepRussFulcher'
+      url: https://x.com/RepRussFulcher
+      chamber: House
+      state_or_district: ID01
+      party: R
+      source_status: source_file
+    - name: John Garamendi
+      first_name: John
+      last_name: Garamendi
+      platform: x
+      handle: '@RepGaramendi'
+      url: https://x.com/RepGaramendi
+      chamber: House
+      state_or_district: CA08
+      party: D
+      source_status: source_file
+    - name: Andrew Garbarino
+      first_name: Andrew
+      last_name: Garbarino
+      platform: x
+      handle: '@RepGarbarino'
+      url: https://x.com/RepGarbarino
+      chamber: House
+      state_or_district: NY02
+      party: R
+      source_status: source_file
+    - name: Robert Garcia
+      first_name: Robert
+      last_name: Garcia
+      platform: x
+      handle: '@RepRobertGarcia'
+      url: https://x.com/RepRobertGarcia
+      chamber: House
+      state_or_district: CA42
+      party: D
+      source_status: source_file
+    - name: Sylvia Garcia
+      first_name: Sylvia
+      last_name: Garcia
+      platform: x
+      handle: '@RepSylviaGarcia'
+      url: https://x.com/RepSylviaGarcia
+      chamber: House
+      state_or_district: TX29
+      party: D
+      source_status: source_file
+    - name: Jesús García
+      first_name: Jesús
+      last_name: García
+      platform: x
+      handle: '@RepChuyGarcia'
+      url: https://x.com/RepChuyGarcia
+      chamber: House
+      state_or_district: IL04
+      party: D
+      source_status: source_file
+    - name: Brandon Gill
+      first_name: Brandon
+      last_name: Gill
+      platform: x
+      handle: '@RepBrandonGill'
+      url: https://x.com/RepBrandonGill
+      chamber: House
+      state_or_district: TX26
+      party: R
+      source_status: source_file
+    - name: Laura Gillen
+      first_name: Laura
+      last_name: Gillen
+      platform: x
+      handle: '@RepLauraGillen'
+      url: https://x.com/RepLauraGillen
+      chamber: House
+      state_or_district: NY04
+      party: D
+      source_status: source_file
+    - name: Carlos Gimenez
+      first_name: Carlos
+      last_name: Gimenez
+      platform: x
+      handle: '@RepCarlos'
+      url: https://x.com/RepCarlos
+      chamber: House
+      state_or_district: FL28
+      party: R
+      source_status: source_file
+    - name: Marie Gluesenkamp Perez
+      first_name: Marie
+      last_name: Gluesenkamp Perez
+      platform: x
+      handle: '@RepMGP'
+      url: https://x.com/RepMGP
+      chamber: House
+      state_or_district: WA03
+      party: D
+      source_status: source_file
+    - name: Jared Golden
+      first_name: Jared
+      last_name: Golden
+      platform: x
+      handle: '@RepGolden'
+      url: https://x.com/RepGolden
+      chamber: House
+      state_or_district: ME02
+      party: D
+      source_status: source_file
+    - name: Craig Goldman
+      first_name: Craig
+      last_name: Goldman
+      platform: x
+      handle: '@RepCraigGoldman'
+      url: https://x.com/RepCraigGoldman
+      chamber: House
+      state_or_district: TX12
+      party: R
+      source_status: source_file
+    - name: Daniel Goldman
+      first_name: Daniel
+      last_name: Goldman
+      platform: x
+      handle: '@RepDanGoldman'
+      url: https://x.com/RepDanGoldman
+      chamber: House
+      state_or_district: NY10
+      party: D
+      source_status: source_file
+    - name: Jimmy Gomez
+      first_name: Jimmy
+      last_name: Gomez
+      platform: x
+      handle: '@RepJimmyGomez'
+      url: https://x.com/RepJimmyGomez
+      chamber: House
+      state_or_district: CA34
+      party: D
+      source_status: source_file
+    - name: Tony Gonzales
+      first_name: Tony
+      last_name: Gonzales
+      platform: x
+      handle: '@RepTonyGonzales'
+      url: https://x.com/RepTonyGonzales
+      chamber: House
+      state_or_district: TX23
+      party: R
+      source_status: source_file
+    - name: Vicente Gonzalez
+      first_name: Vicente
+      last_name: Gonzalez
+      platform: x
+      handle: '@RepGonzalez'
+      url: https://x.com/RepGonzalez
+      chamber: House
+      state_or_district: TX34
+      party: D
+      source_status: source_file
+    - name: Lance Gooden
+      first_name: Lance
+      last_name: Gooden
+      platform: x
+      handle: '@Lancegooden'
+      url: https://x.com/Lancegooden
+      chamber: House
+      state_or_district: TX05
+      party: R
+      source_status: verified_live_search
+    - name: Maggie Goodlander
+      first_name: Maggie
+      last_name: Goodlander
+      platform: x
+      handle: '@RepGoodlander'
+      url: https://x.com/RepGoodlander
+      chamber: House
+      state_or_district: NH02
+      party: D
+      source_status: source_file
+    - name: Paul Gosar
+      first_name: Paul
+      last_name: Gosar
+      platform: x
+      handle: '@RepGosar'
+      url: https://x.com/RepGosar
+      chamber: House
+      state_or_district: AZ09
+      party: R
+      source_status: source_file
+    - name: Josh Gottheimer
+      first_name: Josh
+      last_name: Gottheimer
+      platform: x
+      handle: '@RepJoshG'
+      url: https://x.com/RepJoshG
+      chamber: House
+      state_or_district: NJ05
+      party: D
+      source_status: source_file
+    - name: Sam Graves
+      first_name: Sam
+      last_name: Graves
+      platform: x
+      handle: '@RepSamGraves'
+      url: https://x.com/RepSamGraves
+      chamber: House
+      state_or_district: MO06
+      party: R
+      source_status: source_file
+    - name: Adam Gray
+      first_name: Adam
+      last_name: Gray
+      platform: x
+      handle: '@RepAdamGrayCA'
+      url: https://x.com/RepAdamGrayCA
+      chamber: House
+      state_or_district: CA13
+      party: D
+      source_status: source_file
+    - name: Al Green
+      first_name: Al
+      last_name: Green
+      platform: x
+      handle: '@RepAlGreen'
+      url: https://x.com/RepAlGreen
+      chamber: House
+      state_or_district: TX09
+      party: D
+      source_status: source_file
+    - name: Morgan Griffith
+      first_name: Morgan
+      last_name: Griffith
+      platform: x
+      handle: '@RepMGriffith'
+      url: https://x.com/RepMGriffith
+      chamber: House
+      state_or_district: VA09
+      party: R
+      source_status: source_file
+    - name: Adelita Grijalva
+      first_name: Adelita
+      last_name: Grijalva
+      platform: x
+      handle: '@Rep_Grijalva'
+      url: https://x.com/Rep_Grijalva
+      chamber: House
+      state_or_district: AZ07
+      party: D
+      source_status: source_file
+    - name: Glenn Grothman
+      first_name: Glenn
+      last_name: Grothman
+      platform: x
+      handle: '@RepGrothman'
+      url: https://x.com/RepGrothman
+      chamber: House
+      state_or_district: WI06
+      party: R
+      source_status: source_file
+    - name: Michael Guest
+      first_name: Michael
+      last_name: Guest
+      platform: x
+      handle: '@RepMichaelGuest'
+      url: https://x.com/RepMichaelGuest
+      chamber: House
+      state_or_district: MS03
+      party: R
+      source_status: source_file
+    - name: Brett Guthrie
+      first_name: Brett
+      last_name: Guthrie
+      platform: x
+      handle: '@RepGuthrie'
+      url: https://x.com/RepGuthrie
+      chamber: House
+      state_or_district: KY02
+      party: R
+      source_status: source_file
+    - name: Harriet Hageman
+      first_name: Harriet
+      last_name: Hageman
+      platform: x
+      handle: '@RepHageman'
+      url: https://x.com/RepHageman
+      chamber: House
+      state_or_district: WY00
+      party: R
+      source_status: source_file
+    - name: Abe Hamadeh
+      first_name: Abe
+      last_name: Hamadeh
+      platform: x
+      handle: '@RepAbeHamadeh'
+      url: https://x.com/RepAbeHamadeh
+      chamber: House
+      state_or_district: AZ08
+      party: R
+      source_status: source_file
+    - name: Josh Harder
+      first_name: Josh
+      last_name: Harder
+      platform: x
+      handle: '@RepJoshHarder'
+      url: https://x.com/RepJoshHarder
+      chamber: House
+      state_or_district: CA09
+      party: D
+      source_status: source_file
+    - name: Mike Haridopolos
+      first_name: Mike
+      last_name: Haridopolos
+      platform: x
+      handle: '@RepHaridopolos'
+      url: https://x.com/RepHaridopolos
+      chamber: House
+      state_or_district: FL08
+      party: R
+      source_status: source_file
+    - name: Pat Harrigan
+      first_name: Pat
+      last_name: Harrigan
+      platform: x
+      handle: '@RepPatHarrigan'
+      url: https://x.com/RepPatHarrigan
+      chamber: House
+      state_or_district: NC10
+      party: R
+      source_status: source_file
+    - name: Andy Harris
+      first_name: Andy
+      last_name: Harris
+      platform: x
+      handle: '@RepAndyHarrisMD'
+      url: https://x.com/RepAndyHarrisMD
+      chamber: House
+      state_or_district: MD01
+      party: R
+      source_status: source_file
+    - name: Mark Harris
+      first_name: Mark
+      last_name: Harris
+      platform: x
+      handle: '@RepMarkHarrisNC'
+      url: https://x.com/RepMarkHarrisNC
+      chamber: House
+      state_or_district: NC08
+      party: R
+      source_status: source_file
+    - name: Diana Harshbarger
+      first_name: Diana
+      last_name: Harshbarger
+      platform: x
+      handle: '@RepHarshbarger'
+      url: https://x.com/RepHarshbarger
+      chamber: House
+      state_or_district: TN01
+      party: R
+      source_status: source_file
+    - name: Jahana Hayes
+      first_name: Jahana
+      last_name: Hayes
+      platform: x
+      handle: '@RepJahanaHayes'
+      url: https://x.com/RepJahanaHayes
+      chamber: House
+      state_or_district: CT05
+      party: D
+      source_status: source_file
+    - name: Kevin Hern
+      first_name: Kevin
+      last_name: Hern
+      platform: x
+      handle: '@repkevinhern'
+      url: https://x.com/repkevinhern
+      chamber: House
+      state_or_district: OK01
+      party: R
+      source_status: source_file
+    - name: Pablo José Hernández Rivera
+      first_name: Pablo José
+      last_name: Hernández Rivera
+      platform: x
+      handle: '@RepPabloJose'
+      url: https://x.com/RepPabloJose
+      chamber: House
+      state_or_district: PR00
+      party: D
+      source_status: source_file
+    - name: Clay Higgins
+      first_name: Clay
+      last_name: Higgins
+      platform: x
+      handle: '@RepClayHiggins'
+      url: https://x.com/RepClayHiggins
+      chamber: House
+      state_or_district: LA03
+      party: R
+      source_status: source_file
+    - name: French Hill
+      first_name: French
+      last_name: Hill
+      platform: x
+      handle: '@RepFrenchHill'
+      url: https://x.com/RepFrenchHill
+      chamber: House
+      state_or_district: AR02
+      party: R
+      source_status: source_file
+    - name: James Himes
+      first_name: James
+      last_name: Himes
+      platform: x
+      handle: '@jahimes'
+      url: https://x.com/jahimes
+      chamber: House
+      state_or_district: CT04
+      party: D
+      source_status: verified_live_search
+    - name: Ashley Hinson
+      first_name: Ashley
+      last_name: Hinson
+      platform: x
+      handle: '@RepAshleyHinson'
+      url: https://x.com/RepAshleyHinson
+      chamber: House
+      state_or_district: IA02
+      party: R
+      source_status: source_file
+    - name: Steven Horsford
+      first_name: Steven
+      last_name: Horsford
+      platform: x
+      handle: '@RepHorsford'
+      url: https://x.com/RepHorsford
+      chamber: House
+      state_or_district: NV04
+      party: D
+      source_status: source_file
+    - name: Erin Houchin
+      first_name: Erin
+      last_name: Houchin
+      platform: x
+      handle: '@RepHouchin'
+      url: https://x.com/RepHouchin
+      chamber: House
+      state_or_district: IN09
+      party: R
+      source_status: source_file
+    - name: Chrissy Houlahan
+      first_name: Chrissy
+      last_name: Houlahan
+      platform: x
+      handle: '@RepHoulahan'
+      url: https://x.com/RepHoulahan
+      chamber: House
+      state_or_district: PA06
+      party: D
+      source_status: source_file
+    - name: Steny Hoyer
+      first_name: Steny
+      last_name: Hoyer
+      platform: x
+      handle: '@RepStenyHoyer'
+      url: https://x.com/RepStenyHoyer
+      chamber: House
+      state_or_district: MD05
+      party: D
+      source_status: source_file
+    - name: Val Hoyle
+      first_name: Val
+      last_name: Hoyle
+      platform: x
+      handle: '@repvalhoyle'
+      url: https://x.com/repvalhoyle
+      chamber: House
+      state_or_district: OR04
+      party: D
+      source_status: source_file
+    - name: Richard Hudson
+      first_name: Richard
+      last_name: Hudson
+      platform: x
+      handle: '@RepRichHudson'
+      url: https://x.com/RepRichHudson
+      chamber: House
+      state_or_district: NC09
+      party: R
+      source_status: source_file
+    - name: Jared Huffman
+      first_name: Jared
+      last_name: Huffman
+      platform: x
+      handle: '@RepHuffman'
+      url: https://x.com/RepHuffman
+      chamber: House
+      state_or_district: CA02
+      party: D
+      source_status: source_file
+    - name: Bill Huizenga
+      first_name: Bill
+      last_name: Huizenga
+      platform: x
+      handle: '@RepHuizenga'
+      url: https://x.com/RepHuizenga
+      chamber: House
+      state_or_district: MI04
+      party: R
+      source_status: source_file
+    - name: Wesley Hunt
+      first_name: Wesley
+      last_name: Hunt
+      platform: x
+      handle: '@RepWesleyHunt'
+      url: https://x.com/RepWesleyHunt
+      chamber: House
+      state_or_district: TX38
+      party: R
+      source_status: source_file
+    - name: Jeff Hurd
+      first_name: Jeff
+      last_name: Hurd
+      platform: x
+      handle: '@RepJeffHurd'
+      url: https://x.com/RepJeffHurd
+      chamber: House
+      state_or_district: CO03
+      party: R
+      source_status: source_file
+    - name: Darrell Issa
+      first_name: Darrell
+      last_name: Issa
+      platform: x
+      handle: '@repdarrellissa'
+      url: https://x.com/repdarrellissa
+      chamber: House
+      state_or_district: CA48
+      party: R
+      source_status: source_file
+    - name: Glenn Ivey
+      first_name: Glenn
+      last_name: Ivey
+      platform: x
+      handle: '@RepGlennIvey'
+      url: https://x.com/RepGlennIvey
+      chamber: House
+      state_or_district: MD04
+      party: D
+      source_status: source_file
+    - name: Brian Jack
+      first_name: Brian
+      last_name: Jack
+      platform: x
+      handle: '@RepBrianJack'
+      url: https://x.com/RepBrianJack
+      chamber: House
+      state_or_district: GA03
+      party: R
+      source_status: source_file
+    - name: Jonathan Jackson
+      first_name: Jonathan
+      last_name: Jackson
+      platform: x
+      handle: '@rep_jackson'
+      url: https://x.com/rep_jackson
+      chamber: House
+      state_or_district: IL01
+      party: D
+      source_status: source_file
+    - name: Ronny Jackson
+      first_name: Ronny
+      last_name: Jackson
+      platform: x
+      handle: '@RepRonnyJackson'
+      url: https://x.com/RepRonnyJackson
+      chamber: House
+      state_or_district: TX13
+      party: R
+      source_status: source_file
+    - name: Sara Jacobs
+      first_name: Sara
+      last_name: Jacobs
+      platform: x
+      handle: '@RepSaraJacobs'
+      url: https://x.com/RepSaraJacobs
+      chamber: House
+      state_or_district: CA51
+      party: D
+      source_status: source_file
+    - name: John James
+      first_name: John
+      last_name: James
+      platform: x
+      handle: '@RepJames'
+      url: https://x.com/RepJames
+      chamber: House
+      state_or_district: MI10
+      party: R
+      source_status: source_file
+    - name: Pramila Jayapal
+      first_name: Pramila
+      last_name: Jayapal
+      platform: x
+      handle: '@RepJayapal'
+      url: https://x.com/RepJayapal
+      chamber: House
+      state_or_district: WA07
+      party: D
+      source_status: source_file
+    - name: Hakeem Jeffries
+      first_name: Hakeem
+      last_name: Jeffries
+      platform: x
+      handle: '@RepJeffries'
+      url: https://x.com/RepJeffries
+      chamber: House
+      state_or_district: NY08
+      party: D
+      source_status: source_file
+    - name: Dusty Johnson
+      first_name: Dusty
+      last_name: Johnson
+      platform: x
+      handle: '@RepDustyJohnson'
+      url: https://x.com/RepDustyJohnson
+      chamber: House
+      state_or_district: SD00
+      party: R
+      source_status: source_file
+    - name: Hank Johnson
+      first_name: Hank
+      last_name: Johnson
+      platform: x
+      handle: '@RepHankJohnson'
+      url: https://x.com/RepHankJohnson
+      chamber: House
+      state_or_district: GA04
+      party: D
+      source_status: source_file
+    - name: Mike Johnson
+      first_name: Mike
+      last_name: Johnson
+      platform: x
+      handle: '@SpeakerJohnson'
+      url: https://x.com/SpeakerJohnson
+      chamber: House
+      state_or_district: LA04
+      party: R
+      source_status: source_file
+    - name: Julie Johnson
+      first_name: Julie
+      last_name: Johnson
+      platform: x
+      handle: '@RepJulieJohnson'
+      url: https://x.com/RepJulieJohnson
+      chamber: House
+      state_or_district: TX32
+      party: D
+      source_status: source_file
+    - name: Jim Jordan
+      first_name: Jim
+      last_name: Jordan
+      platform: x
+      handle: '@Jim_Jordan'
+      url: https://x.com/Jim_Jordan
+      chamber: House
+      state_or_district: OH04
+      party: R
+      source_status: source_file
+    - name: David Joyce
+      first_name: David
+      last_name: Joyce
+      platform: x
+      handle: '@RepDaveJoyce'
+      url: https://x.com/RepDaveJoyce
+      chamber: House
+      state_or_district: OH14
+      party: R
+      source_status: source_file
+    - name: John Joyce
+      first_name: John
+      last_name: Joyce
+      platform: x
+      handle: '@RepJohnJoyce'
+      url: https://x.com/RepJohnJoyce
+      chamber: House
+      state_or_district: PA13
+      party: R
+      source_status: source_file
+    - name: Sydney Kamlager-Dove
+      first_name: Sydney
+      last_name: Kamlager-Dove
+      platform: x
+      handle: '@RepKamlagerDove'
+      url: https://x.com/RepKamlagerDove
+      chamber: House
+      state_or_district: CA37
+      party: D
+      source_status: source_file
+    - name: Marcy Kaptur
+      first_name: Marcy
+      last_name: Kaptur
+      platform: x
+      handle: '@RepMarcyKaptur'
+      url: https://x.com/RepMarcyKaptur
+      chamber: House
+      state_or_district: OH09
+      party: D
+      source_status: source_file
+    - name: Thomas Kean
+      first_name: Thomas
+      last_name: Kean
+      platform: x
+      handle: '@CongressmanKean'
+      url: https://x.com/CongressmanKean
+      chamber: House
+      state_or_district: NJ07
+      party: R
+      source_status: source_file
+    - name: William Keating
+      first_name: William
+      last_name: Keating
+      platform: x
+      handle: '@USRepKeating'
+      url: https://x.com/USRepKeating
+      chamber: House
+      state_or_district: MA09
+      party: D
+      source_status: source_file
+    - name: Mike Kelly
+      first_name: Mike
+      last_name: Kelly
+      platform: x
+      handle: '@MikeKellyPA'
+      url: https://x.com/MikeKellyPA
+      chamber: House
+      state_or_district: PA16
+      party: R
+      source_status: source_file
+    - name: Robin Kelly
+      first_name: Robin
+      last_name: Kelly
+      platform: x
+      handle: '@RepRobinKelly'
+      url: https://x.com/RepRobinKelly
+      chamber: House
+      state_or_district: IL02
+      party: D
+      source_status: source_file
+    - name: Trent Kelly
+      first_name: Trent
+      last_name: Kelly
+      platform: x
+      handle: '@RepTrentKelly'
+      url: https://x.com/RepTrentKelly
+      chamber: House
+      state_or_district: MS01
+      party: R
+      source_status: source_file
+    - name: Mike Kennedy
+      first_name: Mike
+      last_name: Kennedy
+      platform: x
+      handle: '@RepMikeKennedy'
+      url: https://x.com/RepMikeKennedy
+      chamber: House
+      state_or_district: UT03
+      party: R
+      source_status: source_file
+    - name: Tim Kennedy
+      first_name: Tim
+      last_name: Kennedy
+      platform: x
+      handle: '@RepTimKennedy'
+      url: https://x.com/RepTimKennedy
+      chamber: House
+      state_or_district: NY26
+      party: D
+      source_status: source_file
+    - name: Ro Khanna
+      first_name: Ro
+      last_name: Khanna
+      platform: x
+      handle: '@RepRoKhanna'
+      url: https://x.com/RepRoKhanna
+      chamber: House
+      state_or_district: CA17
+      party: D
+      source_status: source_file
+    - name: Jennifer Kiggans
+      first_name: Jennifer
+      last_name: Kiggans
+      platform: x
+      handle: '@RepKiggans'
+      url: https://x.com/RepKiggans
+      chamber: House
+      state_or_district: VA02
+      party: R
+      source_status: source_file
+    - name: Kevin Kiley
+      first_name: Kevin
+      last_name: Kiley
+      platform: x
+      handle: '@RepKiley'
+      url: https://x.com/RepKiley
+      chamber: House
+      state_or_district: CA03
+      party: R
+      source_status: source_file
+    - name: Young Kim
+      first_name: Young
+      last_name: Kim
+      platform: x
+      handle: '@RepYoungKim'
+      url: https://x.com/RepYoungKim
+      chamber: House
+      state_or_district: CA40
+      party: R
+      source_status: source_file
+    - name: Kimberlyn King-Hinds
+      first_name: Kimberlyn
+      last_name: King-Hinds
+      platform: x
+      handle: '@RepKimKingHinds'
+      url: https://x.com/RepKimKingHinds
+      chamber: House
+      state_or_district: MP00
+      party: R
+      source_status: source_file
+    - name: Brad Knott
+      first_name: Brad
+      last_name: Knott
+      platform: x
+      handle: '@RepKnott'
+      url: https://x.com/RepKnott
+      chamber: House
+      state_or_district: NC13
+      party: R
+      source_status: source_file
+    - name: Raja Krishnamoorthi
+      first_name: Raja
+      last_name: Krishnamoorthi
+      platform: x
+      handle: '@CongressmanRaja'
+      url: https://x.com/CongressmanRaja
+      chamber: House
+      state_or_district: IL08
+      party: D
+      source_status: source_file
+    - name: David Kustoff
+      first_name: David
+      last_name: Kustoff
+      platform: x
+      handle: '@RepDavidKustoff'
+      url: https://x.com/RepDavidKustoff
+      chamber: House
+      state_or_district: TN08
+      party: R
+      source_status: source_file
+    - name: Darin LaHood
+      first_name: Darin
+      last_name: LaHood
+      platform: x
+      handle: '@RepLaHood'
+      url: https://x.com/RepLaHood
+      chamber: House
+      state_or_district: IL16
+      party: R
+      source_status: source_file
+    - name: Nick LaLota
+      first_name: Nick
+      last_name: LaLota
+      platform: x
+      handle: '@RepLaLota'
+      url: https://x.com/RepLaLota
+      chamber: House
+      state_or_district: NY01
+      party: R
+      source_status: source_file
+    - name: Greg Landsman
+      first_name: Greg
+      last_name: Landsman
+      platform: x
+      handle: '@RepGregLandsman'
+      url: https://x.com/RepGregLandsman
+      chamber: House
+      state_or_district: OH01
+      party: D
+      source_status: source_file
+    - name: Nicholas Langworthy
+      first_name: Nicholas
+      last_name: Langworthy
+      platform: x
+      handle: '@RepLangworthy'
+      url: https://x.com/RepLangworthy
+      chamber: House
+      state_or_district: NY23
+      party: R
+      source_status: source_file
+    - name: Rick Larsen
+      first_name: Rick
+      last_name: Larsen
+      platform: x
+      handle: '@RepRickLarsen'
+      url: https://x.com/RepRickLarsen
+      chamber: House
+      state_or_district: WA02
+      party: D
+      source_status: source_file
+    - name: John Larson
+      first_name: John
+      last_name: Larson
+      platform: x
+      handle: '@RepJohnLarson'
+      url: https://x.com/RepJohnLarson
+      chamber: House
+      state_or_district: CT01
+      party: D
+      source_status: source_file
+    - name: George Latimer
+      first_name: George
+      last_name: Latimer
+      platform: x
+      handle: '@RepGLatimer'
+      url: https://x.com/RepGLatimer
+      chamber: House
+      state_or_district: NY16
+      party: D
+      source_status: source_file
+    - name: Robert Latta
+      first_name: Robert
+      last_name: Latta
+      platform: x
+      handle: '@boblatta'
+      url: https://x.com/boblatta
+      chamber: House
+      state_or_district: OH05
+      party: R
+      source_status: source_file
+    - name: Michael Lawler
+      first_name: Michael
+      last_name: Lawler
+      platform: x
+      handle: '@RepMikeLawler'
+      url: https://x.com/RepMikeLawler
+      chamber: House
+      state_or_district: NY17
+      party: R
+      source_status: source_file
+    - name: Laurel Lee
+      first_name: Laurel
+      last_name: Lee
+      platform: x
+      handle: '@RepLaurelLee'
+      url: https://x.com/RepLaurelLee
+      chamber: House
+      state_or_district: FL15
+      party: R
+      source_status: source_file
+    - name: Summer Lee
+      first_name: Summer
+      last_name: Lee
+      platform: x
+      handle: '@RepSummerLee'
+      url: https://x.com/RepSummerLee
+      chamber: House
+      state_or_district: PA12
+      party: D
+      source_status: source_file
+    - name: Susie Lee
+      first_name: Susie
+      last_name: Lee
+      platform: x
+      handle: '@RepSusieLee'
+      url: https://x.com/RepSusieLee
+      chamber: House
+      state_or_district: NV03
+      party: D
+      source_status: source_file
+    - name: Teresa Leger Fernandez
+      first_name: Teresa
+      last_name: Leger Fernandez
+      platform: x
+      handle: '@RepTeresaLF'
+      url: https://x.com/RepTeresaLF
+      chamber: House
+      state_or_district: NM03
+      party: D
+      source_status: source_file
+    - name: Julia Letlow
+      first_name: Julia
+      last_name: Letlow
+      platform: x
+      handle: '@repjulialetlow'
+      url: https://x.com/repjulialetlow
+      chamber: House
+      state_or_district: LA05
+      party: R
+      source_status: source_file
+    - name: Mike Levin
+      first_name: Mike
+      last_name: Levin
+      platform: x
+      handle: '@RepMikeLevin'
+      url: https://x.com/RepMikeLevin
+      chamber: House
+      state_or_district: CA49
+      party: D
+      source_status: source_file
+    - name: Sam T. Liccardo
+      first_name: Sam T.
+      last_name: Liccardo
+      platform: x
+      handle: '@RepLiccardo'
+      url: https://x.com/RepLiccardo
+      chamber: House
+      state_or_district: CA16
+      party: D
+      source_status: source_file
+    - name: Ted Lieu
+      first_name: Ted
+      last_name: Lieu
+      platform: x
+      handle: '@RepTedLieu'
+      url: https://x.com/RepTedLieu
+      chamber: House
+      state_or_district: CA36
+      party: D
+      source_status: source_file
+    - name: Zoe Lofgren
+      first_name: Zoe
+      last_name: Lofgren
+      platform: x
+      handle: '@RepZoeLofgren'
+      url: https://x.com/RepZoeLofgren
+      chamber: House
+      state_or_district: CA18
+      party: D
+      source_status: source_file
+    - name: Barry Loudermilk
+      first_name: Barry
+      last_name: Loudermilk
+      platform: x
+      handle: '@RepLoudermilk'
+      url: https://x.com/RepLoudermilk
+      chamber: House
+      state_or_district: GA11
+      party: R
+      source_status: source_file
+    - name: Frank Lucas
+      first_name: Frank
+      last_name: Lucas
+      platform: x
+      handle: '@RepFrankLucas'
+      url: https://x.com/RepFrankLucas
+      chamber: House
+      state_or_district: OK03
+      party: R
+      source_status: source_file
+    - name: Anna Paulina Luna
+      first_name: Anna Paulina
+      last_name: Luna
+      platform: x
+      handle: '@RepLuna'
+      url: https://x.com/RepLuna
+      chamber: House
+      state_or_district: FL13
+      party: R
+      source_status: source_file
+    - name: Morgan Luttrell
+      first_name: Morgan
+      last_name: Luttrell
+      platform: x
+      handle: '@RepLuttrell'
+      url: https://x.com/RepLuttrell
+      chamber: House
+      state_or_district: TX08
+      party: R
+      source_status: source_file
+    - name: Stephen Lynch
+      first_name: Stephen
+      last_name: Lynch
+      platform: x
+      handle: '@RepStephenLynch'
+      url: https://x.com/RepStephenLynch
+      chamber: House
+      state_or_district: MA08
+      party: D
+      source_status: source_file
+    - name: Nancy Mace
+      first_name: Nancy
+      last_name: Mace
+      platform: x
+      handle: '@RepNancyMace'
+      url: https://x.com/RepNancyMace
+      chamber: House
+      state_or_district: SC01
+      party: R
+      source_status: source_file
+    - name: Ryan Mackenzie
+      first_name: Ryan
+      last_name: Mackenzie
+      platform: x
+      handle: '@RepMackenzie'
+      url: https://x.com/RepMackenzie
+      chamber: House
+      state_or_district: PA07
+      party: R
+      source_status: source_file
+    - name: Seth Magaziner
+      first_name: Seth
+      last_name: Magaziner
+      platform: x
+      handle: '@Rep_Magaziner'
+      url: https://x.com/Rep_Magaziner
+      chamber: House
+      state_or_district: RI02
+      party: D
+      source_status: source_file
+    - name: Nicole Malliotakis
+      first_name: Nicole
+      last_name: Malliotakis
+      platform: x
+      handle: '@RepMalliotakis'
+      url: https://x.com/RepMalliotakis
+      chamber: House
+      state_or_district: NY11
+      party: R
+      source_status: source_file
+    - name: Celeste Maloy
+      first_name: Celeste
+      last_name: Maloy
+      platform: x
+      handle: '@RepMaloyUtah'
+      url: https://x.com/RepMaloyUtah
+      chamber: House
+      state_or_district: UT02
+      party: R
+      source_status: source_file
+    - name: Tracey Mann
+      first_name: Tracey
+      last_name: Mann
+      platform: x
+      handle: '@RepMann'
+      url: https://x.com/RepMann
+      chamber: House
+      state_or_district: KS01
+      party: R
+      source_status: source_file
+    - name: John Mannion
+      first_name: John
+      last_name: Mannion
+      platform: x
+      handle: '@JohnMannionNY22'
+      url: https://x.com/JohnMannionNY22
+      chamber: House
+      state_or_district: NY22
+      party: D
+      source_status: source_file
+    - name: Thomas Massie
+      first_name: Thomas
+      last_name: Massie
+      platform: x
+      handle: '@RepThomasMassie'
+      url: https://x.com/RepThomasMassie
+      chamber: House
+      state_or_district: KY04
+      party: R
+      source_status: source_file
+    - name: Brian Mast
+      first_name: Brian
+      last_name: Mast
+      platform: x
+      handle: '@RepBrianMast'
+      url: https://x.com/RepBrianMast
+      chamber: House
+      state_or_district: FL21
+      party: R
+      source_status: source_file
+    - name: Doris Matsui
+      first_name: Doris
+      last_name: Matsui
+      platform: x
+      handle: '@DorisMatsui'
+      url: https://x.com/DorisMatsui
+      chamber: House
+      state_or_district: CA07
+      party: D
+      source_status: source_file
+    - name: Lucy McBath
+      first_name: Lucy
+      last_name: McBath
+      platform: x
+      handle: '@RepLucyMcBath'
+      url: https://x.com/RepLucyMcBath
+      chamber: House
+      state_or_district: GA07
+      party: D
+      source_status: source_file
+    - name: Sarah McBride
+      first_name: Sarah
+      last_name: McBride
+      platform: x
+      handle: '@Rep_McBride'
+      url: https://x.com/Rep_McBride
+      chamber: House
+      state_or_district: DE00
+      party: D
+      source_status: source_file
+    - name: Michael McCaul
+      first_name: Michael
+      last_name: McCaul
+      platform: x
+      handle: '@RepMcCaul'
+      url: https://x.com/RepMcCaul
+      chamber: House
+      state_or_district: TX10
+      party: R
+      source_status: source_file
+    - name: Lisa McClain
+      first_name: Lisa
+      last_name: McClain
+      platform: x
+      handle: '@RepLisaMcClain'
+      url: https://x.com/RepLisaMcClain
+      chamber: House
+      state_or_district: MI09
+      party: R
+      source_status: source_file
+    - name: April McClain Delaney
+      first_name: April
+      last_name: McClain Delaney
+      platform: x
+      handle: '@RepAprilDelaney'
+      url: https://x.com/RepAprilDelaney
+      chamber: House
+      state_or_district: MD06
+      party: D
+      source_status: source_file
+    - name: Jennifer McClellan
+      first_name: Jennifer
+      last_name: McClellan
+      platform: x
+      handle: '@RepMcClellan'
+      url: https://x.com/RepMcClellan
+      chamber: House
+      state_or_district: VA04
+      party: D
+      source_status: source_file
+    - name: Tom McClintock
+      first_name: Tom
+      last_name: McClintock
+      platform: x
+      handle: '@RepMcClintock'
+      url: https://x.com/RepMcClintock
+      chamber: House
+      state_or_district: CA05
+      party: R
+      source_status: source_file
+    - name: Betty McCollum
+      first_name: Betty
+      last_name: McCollum
+      platform: x
+      handle: '@BettyMcCollum04'
+      url: https://x.com/BettyMcCollum04
+      chamber: House
+      state_or_district: MN04
+      party: D
+      source_status: source_file
+    - name: Richard McCormick
+      first_name: Richard
+      last_name: McCormick
+      platform: x
+      handle: '@RepMcCormick'
+      url: https://x.com/RepMcCormick
+      chamber: House
+      state_or_district: GA06
+      party: R
+      source_status: source_file
+    - name: Kristen McDonald Rivet
+      first_name: Kristen
+      last_name: McDonald Rivet
+      platform: x
+      handle: '@repkmr'
+      url: https://x.com/repkmr
+      chamber: House
+      state_or_district: MI08
+      party: D
+      source_status: source_file
+    - name: Addison McDowell
+      first_name: Addison
+      last_name: McDowell
+      platform: x
+      handle: '@RepMcDowell'
+      url: https://x.com/RepMcDowell
+      chamber: House
+      state_or_district: NC06
+      party: R
+      source_status: source_file
+    - name: Morgan McGarvey
+      first_name: Morgan
+      last_name: McGarvey
+      platform: x
+      handle: '@RepMcGarvey'
+      url: https://x.com/RepMcGarvey
+      chamber: House
+      state_or_district: KY03
+      party: D
+      source_status: source_file
+    - name: James McGovern
+      first_name: James
+      last_name: McGovern
+      platform: x
+      handle: '@RepMcGovern'
+      url: https://x.com/RepMcGovern
+      chamber: House
+      state_or_district: MA02
+      party: D
+      source_status: source_file
+    - name: John McGuire
+      first_name: John
+      last_name: McGuire
+      platform: x
+      handle: '@RepJohnMcGuire'
+      url: https://x.com/RepJohnMcGuire
+      chamber: House
+      state_or_district: VA05
+      party: R
+      source_status: source_file
+    - name: LaMonica McIver
+      first_name: LaMonica
+      last_name: McIver
+      platform: x
+      handle: '@RepLaMonica'
+      url: https://x.com/RepLaMonica
+      chamber: House
+      state_or_district: NJ10
+      party: D
+      source_status: source_file
+    - name: Gregory Meeks
+      first_name: Gregory
+      last_name: Meeks
+      platform: x
+      handle: '@RepGregoryMeeks'
+      url: https://x.com/RepGregoryMeeks
+      chamber: House
+      state_or_district: NY05
+      party: D
+      source_status: source_file
+    - name: Christian Menefee
+      first_name: Christian
+      last_name: Menefee
+      platform: x
+      handle: '@RepCDMenefee'
+      url: https://x.com/RepCDMenefee
+      chamber: House
+      state_or_district: TX18
+      party: D
+      source_status: source_file
+    - name: Robert Menendez
+      first_name: Robert
+      last_name: Menendez
+      platform: x
+      handle: '@RepMenendez'
+      url: https://x.com/RepMenendez
+      chamber: House
+      state_or_district: NJ08
+      party: D
+      source_status: source_file
+    - name: Grace Meng
+      first_name: Grace
+      last_name: Meng
+      platform: x
+      handle: '@RepGraceMeng'
+      url: https://x.com/RepGraceMeng
+      chamber: House
+      state_or_district: NY06
+      party: D
+      source_status: source_file
+    - name: Mark Messmer
+      first_name: Mark
+      last_name: Messmer
+      platform: x
+      handle: '@RepMessmer'
+      url: https://x.com/RepMessmer
+      chamber: House
+      state_or_district: IN08
+      party: R
+      source_status: source_file
+    - name: Daniel Meuser
+      first_name: Daniel
+      last_name: Meuser
+      platform: x
+      handle: '@RepMeuser'
+      url: https://x.com/RepMeuser
+      chamber: House
+      state_or_district: PA09
+      party: R
+      source_status: source_file
+    - name: Kweisi Mfume
+      first_name: Kweisi
+      last_name: Mfume
+      platform: x
+      handle: '@RepKweisiMfume'
+      url: https://x.com/RepKweisiMfume
+      chamber: House
+      state_or_district: MD07
+      party: D
+      source_status: source_file
+    - name: Carol Miller
+      first_name: Carol
+      last_name: Miller
+      platform: x
+      handle: '@RepCarolMiller'
+      url: https://x.com/RepCarolMiller
+      chamber: House
+      state_or_district: WV01
+      party: R
+      source_status: source_file
+    - name: Mary Miller
+      first_name: Mary
+      last_name: Miller
+      platform: x
+      handle: '@RepMaryMiller'
+      url: https://x.com/RepMaryMiller
+      chamber: House
+      state_or_district: IL15
+      party: R
+      source_status: source_file
+    - name: Max Miller
+      first_name: Max
+      last_name: Miller
+      platform: x
+      handle: '@RepMaxMiller'
+      url: https://x.com/RepMaxMiller
+      chamber: House
+      state_or_district: OH07
+      party: R
+      source_status: source_file
+    - name: Mariannette Miller-Meeks
+      first_name: Mariannette
+      last_name: Miller-Meeks
+      platform: x
+      handle: '@RepMMM'
+      url: https://x.com/RepMMM
+      chamber: House
+      state_or_district: IA01
+      party: R
+      source_status: source_file
+    - name: Cory Mills
+      first_name: Cory
+      last_name: Mills
+      platform: x
+      handle: '@RepMillsPress'
+      url: https://x.com/RepMillsPress
+      chamber: House
+      state_or_district: FL07
+      party: R
+      source_status: source_file
+    - name: Dave Min
+      first_name: Dave
+      last_name: Min
+      platform: x
+      handle: '@CongressMin'
+      url: https://x.com/CongressMin
+      chamber: House
+      state_or_district: CA47
+      party: D
+      source_status: source_file
+    - name: John Moolenaar
+      first_name: John
+      last_name: Moolenaar
+      platform: x
+      handle: '@RepMoolenaar'
+      url: https://x.com/RepMoolenaar
+      chamber: House
+      state_or_district: MI02
+      party: R
+      source_status: source_file
+    - name: Barry Moore
+      first_name: Barry
+      last_name: Moore
+      platform: x
+      handle: '@RepBarryMoore'
+      url: https://x.com/RepBarryMoore
+      chamber: House
+      state_or_district: AL01
+      party: R
+      source_status: source_file
+    - name: Blake Moore
+      first_name: Blake
+      last_name: Moore
+      platform: x
+      handle: '@RepBlakeMoore'
+      url: https://x.com/RepBlakeMoore
+      chamber: House
+      state_or_district: UT01
+      party: R
+      source_status: source_file
+    - name: Gwen Moore
+      first_name: Gwen
+      last_name: Moore
+      platform: x
+      handle: '@RepGwenMoore'
+      url: https://x.com/RepGwenMoore
+      chamber: House
+      state_or_district: WI04
+      party: D
+      source_status: source_file
+    - name: Riley Moore
+      first_name: Riley
+      last_name: Moore
+      platform: x
+      handle: '@RepRileyMoore'
+      url: https://x.com/RepRileyMoore
+      chamber: House
+      state_or_district: WV02
+      party: R
+      source_status: source_file
+    - name: Tim Moore
+      first_name: Tim
+      last_name: Moore
+      platform: x
+      handle: '@RepTimMooreNC'
+      url: https://x.com/RepTimMooreNC
+      chamber: House
+      state_or_district: NC14
+      party: R
+      source_status: source_file
+    - name: Nathaniel Moran
+      first_name: Nathaniel
+      last_name: Moran
+      platform: x
+      handle: '@RepNateMoran'
+      url: https://x.com/RepNateMoran
+      chamber: House
+      state_or_district: TX01
+      party: R
+      source_status: source_file
+    - name: Joseph Morelle
+      first_name: Joseph
+      last_name: Morelle
+      platform: x
+      handle: '@RepJoeMorelle'
+      url: https://x.com/RepJoeMorelle
+      chamber: House
+      state_or_district: NY25
+      party: D
+      source_status: source_file
+    - name: Kelly Morrison
+      first_name: Kelly
+      last_name: Morrison
+      platform: x
+      handle: '@KellyMorrisonMN'
+      url: https://x.com/KellyMorrisonMN
+      chamber: House
+      state_or_district: MN03
+      party: D
+      source_status: source_file
+    - name: Jared Moskowitz
+      first_name: Jared
+      last_name: Moskowitz
+      platform: x
+      handle: '@RepMoskowitz'
+      url: https://x.com/RepMoskowitz
+      chamber: House
+      state_or_district: FL23
+      party: D
+      source_status: source_file
+    - name: Seth Moulton
+      first_name: Seth
+      last_name: Moulton
+      platform: x
+      handle: '@RepMoulton'
+      url: https://x.com/RepMoulton
+      chamber: House
+      state_or_district: MA06
+      party: D
+      source_status: source_file
+    - name: James Moylan
+      first_name: James
+      last_name: Moylan
+      platform: x
+      handle: '@RepMoylan'
+      url: https://x.com/RepMoylan
+      chamber: House
+      state_or_district: GU00
+      party: R
+      source_status: source_file
+    - name: Frank Mrvan
+      first_name: Frank
+      last_name: Mrvan
+      platform: x
+      handle: '@RepMrvan'
+      url: https://x.com/RepMrvan
+      chamber: House
+      state_or_district: IN01
+      party: D
+      source_status: source_file
+    - name: Kevin Mullin
+      first_name: Kevin
+      last_name: Mullin
+      platform: x
+      handle: '@RepKevinMullin'
+      url: https://x.com/RepKevinMullin
+      chamber: House
+      state_or_district: CA15
+      party: D
+      source_status: source_file
+    - name: Gregory Murphy
+      first_name: Gregory
+      last_name: Murphy
+      platform: x
+      handle: '@RepGregMurphy'
+      url: https://x.com/RepGregMurphy
+      chamber: House
+      state_or_district: NC03
+      party: R
+      source_status: source_file
+    - name: Jerrold Nadler
+      first_name: Jerrold
+      last_name: Nadler
+      platform: x
+      handle: '@RepJerryNadler'
+      url: https://x.com/RepJerryNadler
+      chamber: House
+      state_or_district: NY12
+      party: D
+      source_status: source_file
+    - name: Richard Neal
+      first_name: Richard
+      last_name: Neal
+      platform: x
+      handle: '@RepRichardNeal'
+      url: https://x.com/RepRichardNeal
+      chamber: House
+      state_or_district: MA01
+      party: D
+      source_status: source_file
+    - name: Joe Neguse
+      first_name: Joe
+      last_name: Neguse
+      platform: x
+      handle: '@RepJoeNeguse'
+      url: https://x.com/RepJoeNeguse
+      chamber: House
+      state_or_district: CO02
+      party: D
+      source_status: source_file
+    - name: Troy Nehls
+      first_name: Troy
+      last_name: Nehls
+      platform: x
+      handle: '@RepTroyNehls'
+      url: https://x.com/RepTroyNehls
+      chamber: House
+      state_or_district: TX22
+      party: R
+      source_status: source_file
+    - name: Dan Newhouse
+      first_name: Dan
+      last_name: Newhouse
+      platform: x
+      handle: '@RepNewhouse'
+      url: https://x.com/RepNewhouse
+      chamber: House
+      state_or_district: WA04
+      party: R
+      source_status: source_file
+    - name: Donald Norcross
+      first_name: Donald
+      last_name: Norcross
+      platform: x
+      handle: '@DonaldNorcross'
+      url: https://x.com/DonaldNorcross
+      chamber: House
+      state_or_district: NJ01
+      party: D
+      source_status: source_file
+    - name: Ralph Norman
+      first_name: Ralph
+      last_name: Norman
+      platform: x
+      handle: '@RepRalphNorman'
+      url: https://x.com/RepRalphNorman
+      chamber: House
+      state_or_district: SC05
+      party: R
+      source_status: source_file
+    - name: Eleanor Norton
+      first_name: Eleanor
+      last_name: Norton
+      platform: x
+      handle: '@EleanorNorton'
+      url: https://x.com/EleanorNorton
+      chamber: House
+      state_or_district: DC00
+      party: D
+      source_status: source_file
+    - name: Zachary Nunn
+      first_name: Zachary
+      last_name: Nunn
+      platform: x
+      handle: '@ZachNunn'
+      url: https://x.com/ZachNunn
+      chamber: House
+      state_or_district: IA03
+      party: R
+      source_status: source_file
+    - name: Jay Obernolte
+      first_name: Jay
+      last_name: Obernolte
+      platform: x
+      handle: '@JayObernolte'
+      url: https://x.com/JayObernolte
+      chamber: House
+      state_or_district: CA23
+      party: R
+      source_status: source_file
+    - name: Alexandria Ocasio-Cortez
+      first_name: Alexandria
+      last_name: Ocasio-Cortez
+      platform: x
+      handle: '@RepAOC'
+      url: https://x.com/RepAOC
+      chamber: House
+      state_or_district: NY14
+      party: D
+      source_status: source_file
+    - name: Andrew Ogles
+      first_name: Andrew
+      last_name: Ogles
+      platform: x
+      handle: '@RepOgles'
+      url: https://x.com/RepOgles
+      chamber: House
+      state_or_district: TN05
+      party: R
+      source_status: source_file
+    - name: Johnny Olszewski
+      first_name: Johnny
+      last_name: Olszewski
+      platform: x
+      handle: '@RepJohnnyO'
+      url: https://x.com/RepJohnnyO
+      chamber: House
+      state_or_district: MD02
+      party: D
+      source_status: source_file
+    - name: Ilhan Omar
+      first_name: Ilhan
+      last_name: Omar
+      platform: x
+      handle: '@Ilhan'
+      url: https://x.com/Ilhan
+      chamber: House
+      state_or_district: MN05
+      party: D
+      source_status: source_file
+    - name: Bob Onder
+      first_name: Bob
+      last_name: Onder
+      platform: x
+      handle: '@RepBobOnder'
+      url: https://x.com/RepBobOnder
+      chamber: House
+      state_or_district: MO03
+      party: R
+      source_status: source_file
+    - name: Burgess Owens
+      first_name: Burgess
+      last_name: Owens
+      platform: x
+      handle: '@RepBurgessOwens'
+      url: https://x.com/RepBurgessOwens
+      chamber: House
+      state_or_district: UT04
+      party: R
+      source_status: source_file
+    - name: Frank Pallone
+      first_name: Frank
+      last_name: Pallone
+      platform: x
+      handle: '@FrankPallone'
+      url: https://x.com/FrankPallone
+      chamber: House
+      state_or_district: NJ06
+      party: D
+      source_status: source_file
+    - name: Gary Palmer
+      first_name: Gary
+      last_name: Palmer
+      platform: x
+      handle: '@USRepGaryPalmer'
+      url: https://x.com/USRepGaryPalmer
+      chamber: House
+      state_or_district: AL06
+      party: R
+      source_status: source_file
+    - name: Jimmy Panetta
+      first_name: Jimmy
+      last_name: Panetta
+      platform: x
+      handle: '@RepJimmyPanetta'
+      url: https://x.com/RepJimmyPanetta
+      chamber: House
+      state_or_district: CA19
+      party: D
+      source_status: source_file
+    - name: Chris Pappas
+      first_name: Chris
+      last_name: Pappas
+      platform: x
+      handle: '@RepChrisPappas'
+      url: https://x.com/RepChrisPappas
+      chamber: House
+      state_or_district: NH01
+      party: D
+      source_status: source_file
+    - name: Jimmy Patronis
+      first_name: Jimmy
+      last_name: Patronis
+      platform: x
+      handle: '@PatronisFL'
+      url: https://x.com/PatronisFL
+      chamber: House
+      state_or_district: FL01
+      party: R
+      source_status: source_file
+    - name: Nancy Pelosi
+      first_name: Nancy
+      last_name: Pelosi
+      platform: x
+      handle: '@SpeakerPelosi'
+      url: https://x.com/SpeakerPelosi
+      chamber: House
+      state_or_district: CA11
+      party: D
+      source_status: source_file
+    - name: Scott Perry
+      first_name: Scott
+      last_name: Perry
+      platform: x
+      handle: '@RepScottPerry'
+      url: https://x.com/RepScottPerry
+      chamber: House
+      state_or_district: PA10
+      party: R
+      source_status: source_file
+    - name: Scott Peters
+      first_name: Scott
+      last_name: Peters
+      platform: x
+      handle: '@RepScottPeters'
+      url: https://x.com/RepScottPeters
+      chamber: House
+      state_or_district: CA50
+      party: D
+      source_status: source_file
+    - name: Brittany Pettersen
+      first_name: Brittany
+      last_name: Pettersen
+      platform: x
+      handle: '@RepPettersen'
+      url: https://x.com/RepPettersen
+      chamber: House
+      state_or_district: CO07
+      party: D
+      source_status: source_file
+    - name: August Pfluger
+      first_name: August
+      last_name: Pfluger
+      platform: x
+      handle: '@RepPfluger'
+      url: https://x.com/RepPfluger
+      chamber: House
+      state_or_district: TX11
+      party: R
+      source_status: source_file
+    - name: Chellie Pingree
+      first_name: Chellie
+      last_name: Pingree
+      platform: x
+      handle: '@chelliepingree'
+      url: https://x.com/chelliepingree
+      chamber: House
+      state_or_district: ME01
+      party: D
+      source_status: source_file
+    - name: Stacey Plaskett
+      first_name: Stacey
+      last_name: Plaskett
+      platform: x
+      handle: '@StaceyPlaskett'
+      url: https://x.com/StaceyPlaskett
+      chamber: House
+      state_or_district: VI00
+      party: D
+      source_status: source_file
+    - name: Mark Pocan
+      first_name: Mark
+      last_name: Pocan
+      platform: x
+      handle: '@repmarkpocan'
+      url: https://x.com/repmarkpocan
+      chamber: House
+      state_or_district: WI02
+      party: D
+      source_status: source_file
+    - name: Nellie Pou
+      first_name: Nellie
+      last_name: Pou
+      platform: x
+      handle: '@RepNellie'
+      url: https://x.com/RepNellie
+      chamber: House
+      state_or_district: NJ09
+      party: D
+      source_status: source_file
+    - name: Ayanna Pressley
+      first_name: Ayanna
+      last_name: Pressley
+      platform: x
+      handle: '@RepPressley'
+      url: https://x.com/RepPressley
+      chamber: House
+      state_or_district: MA07
+      party: D
+      source_status: source_file
+    - name: Mike Quigley
+      first_name: Mike
+      last_name: Quigley
+      platform: x
+      handle: '@RepMikeQuigley'
+      url: https://x.com/RepMikeQuigley
+      chamber: House
+      state_or_district: IL05
+      party: D
+      source_status: source_file
+    - name: Aumua Amata Radewagen
+      first_name: Aumua Amata
+      last_name: Radewagen
+      platform: x
+      handle: '@RepAmata'
+      url: https://x.com/RepAmata
+      chamber: House
+      state_or_district: AS00
+      party: R
+      source_status: source_file
+    - name: Delia Ramirez
+      first_name: Delia
+      last_name: Ramirez
+      platform: x
+      handle: '@repdeliaramirez'
+      url: https://x.com/repdeliaramirez
+      chamber: House
+      state_or_district: IL03
+      party: D
+      source_status: source_file
+    - name: Emily Randall
+      first_name: Emily
+      last_name: Randall
+      platform: x
+      handle: '@RepEmilyRandall'
+      url: https://x.com/RepEmilyRandall
+      chamber: House
+      state_or_district: WA06
+      party: D
+      source_status: source_file
+    - name: Jamie Raskin
+      first_name: Jamie
+      last_name: Raskin
+      platform: x
+      handle: '@RepRaskin'
+      url: https://x.com/RepRaskin
+      chamber: House
+      state_or_district: MD08
+      party: D
+      source_status: source_file
+    - name: Guy Reschenthaler
+      first_name: Guy
+      last_name: Reschenthaler
+      platform: x
+      handle: '@GReschenthaler'
+      url: https://x.com/GReschenthaler
+      chamber: House
+      state_or_district: PA14
+      party: R
+      source_status: source_file
+    - name: Josh Riley
+      first_name: Josh
+      last_name: Riley
+      platform: x
+      handle: '@RepRileyNY'
+      url: https://x.com/RepRileyNY
+      chamber: House
+      state_or_district: NY19
+      party: D
+      source_status: source_file
+    - name: Luz Rivas
+      first_name: Luz
+      last_name: Rivas
+      platform: x
+      handle: '@RepLuzRivas'
+      url: https://x.com/RepLuzRivas
+      chamber: House
+      state_or_district: CA29
+      party: D
+      source_status: source_file
+    - name: Harold Rogers
+      first_name: Harold
+      last_name: Rogers
+      platform: x
+      handle: '@RepHalRogers'
+      url: https://x.com/RepHalRogers
+      chamber: House
+      state_or_district: KY05
+      party: R
+      source_status: source_file
+    - name: Mike Rogers
+      first_name: Mike
+      last_name: Rogers
+      platform: x
+      handle: '@RepMikeRogersAL'
+      url: https://x.com/RepMikeRogersAL
+      chamber: House
+      state_or_district: AL03
+      party: R
+      source_status: source_file
+    - name: John Rose
+      first_name: John
+      last_name: Rose
+      platform: x
+      handle: '@RepJohnRose'
+      url: https://x.com/RepJohnRose
+      chamber: House
+      state_or_district: TN06
+      party: R
+      source_status: source_file
+    - name: Deborah Ross
+      first_name: Deborah
+      last_name: Ross
+      platform: x
+      handle: '@RepDeborahRoss'
+      url: https://x.com/RepDeborahRoss
+      chamber: House
+      state_or_district: NC02
+      party: D
+      source_status: source_file
+    - name: David Rouzer
+      first_name: David
+      last_name: Rouzer
+      platform: x
+      handle: '@RepDavidRouzer'
+      url: https://x.com/RepDavidRouzer
+      chamber: House
+      state_or_district: NC07
+      party: R
+      source_status: source_file
+    - name: Chip Roy
+      first_name: Chip
+      last_name: Roy
+      platform: x
+      handle: '@RepChipRoy'
+      url: https://x.com/RepChipRoy
+      chamber: House
+      state_or_district: TX21
+      party: R
+      source_status: source_file
+    - name: Raul Ruiz
+      first_name: Raul
+      last_name: Ruiz
+      platform: x
+      handle: '@RepRaulRuizMD'
+      url: https://x.com/RepRaulRuizMD
+      chamber: House
+      state_or_district: CA25
+      party: D
+      source_status: source_file
+    - name: Michael Rulli
+      first_name: Michael
+      last_name: Rulli
+      platform: x
+      handle: '@RepMichaelRulli'
+      url: https://x.com/RepMichaelRulli
+      chamber: House
+      state_or_district: OH06
+      party: R
+      source_status: source_file
+    - name: John Rutherford
+      first_name: John
+      last_name: Rutherford
+      platform: x
+      handle: '@RepRutherfordFL'
+      url: https://x.com/RepRutherfordFL
+      chamber: House
+      state_or_district: FL05
+      party: R
+      source_status: source_file
+    - name: Patrick Ryan
+      first_name: Patrick
+      last_name: Ryan
+      platform: x
+      handle: '@RepPatRyanNY'
+      url: https://x.com/RepPatRyanNY
+      chamber: House
+      state_or_district: NY18
+      party: D
+      source_status: source_file
+    - name: Maria Salazar
+      first_name: Maria
+      last_name: Salazar
+      platform: x
+      handle: '@RepMariaSalazar'
+      url: https://x.com/RepMariaSalazar
+      chamber: House
+      state_or_district: FL27
+      party: R
+      source_status: source_file
+    - name: Andrea Salinas
+      first_name: Andrea
+      last_name: Salinas
+      platform: x
+      handle: '@RepSalinas'
+      url: https://x.com/RepSalinas
+      chamber: House
+      state_or_district: OR06
+      party: D
+      source_status: source_file
+    - name: Linda Sánchez
+      first_name: Linda
+      last_name: Sánchez
+      platform: x
+      handle: '@RepLindaSanchez'
+      url: https://x.com/RepLindaSanchez
+      chamber: House
+      state_or_district: CA38
+      party: D
+      source_status: source_file
+    - name: Steve Scalise
+      first_name: Steve
+      last_name: Scalise
+      platform: x
+      handle: '@SteveScalise'
+      url: https://x.com/SteveScalise
+      chamber: House
+      state_or_district: LA01
+      party: R
+      source_status: source_file
+    - name: Mary Scanlon
+      first_name: Mary
+      last_name: Scanlon
+      platform: x
+      handle: '@RepMGS'
+      url: https://x.com/RepMGS
+      chamber: House
+      state_or_district: PA05
+      party: D
+      source_status: source_file
+    - name: Janice Schakowsky
+      first_name: Janice
+      last_name: Schakowsky
+      platform: x
+      handle: '@RepSchakowsky'
+      url: https://x.com/RepSchakowsky
+      chamber: House
+      state_or_district: IL09
+      party: D
+      source_status: source_file
+    - name: Derek Schmidt
+      first_name: Derek
+      last_name: Schmidt
+      platform: x
+      handle: '@RepDerekSchmidt'
+      url: https://x.com/RepDerekSchmidt
+      chamber: House
+      state_or_district: KS02
+      party: R
+      source_status: source_file
+    - name: Bradley Schneider
+      first_name: Bradley
+      last_name: Schneider
+      platform: x
+      handle: '@RepSchneider'
+      url: https://x.com/RepSchneider
+      chamber: House
+      state_or_district: IL10
+      party: D
+      source_status: source_file
+    - name: Hillary Scholten
+      first_name: Hillary
+      last_name: Scholten
+      platform: x
+      handle: '@RepScholten'
+      url: https://x.com/RepScholten
+      chamber: House
+      state_or_district: MI03
+      party: D
+      source_status: source_file
+    - name: Kim Schrier
+      first_name: Kim
+      last_name: Schrier
+      platform: x
+      handle: '@RepKimSchrier'
+      url: https://x.com/RepKimSchrier
+      chamber: House
+      state_or_district: WA08
+      party: D
+      source_status: source_file
+    - name: David Schweikert
+      first_name: David
+      last_name: Schweikert
+      platform: x
+      handle: '@RepDavid'
+      url: https://x.com/RepDavid
+      chamber: House
+      state_or_district: AZ01
+      party: R
+      source_status: source_file
+    - name: Austin Scott
+      first_name: Austin
+      last_name: Scott
+      platform: x
+      handle: '@AustinScottGA08'
+      url: https://x.com/AustinScottGA08
+      chamber: House
+      state_or_district: GA08
+      party: R
+      source_status: source_file
+    - name: David Scott
+      first_name: David
+      last_name: Scott
+      platform: x
+      handle: '@repdavidscott'
+      url: https://x.com/repdavidscott
+      chamber: House
+      state_or_district: GA13
+      party: D
+      source_status: source_file
+    - name: Robert Scott
+      first_name: Robert
+      last_name: Scott
+      platform: x
+      handle: '@BobbyScott'
+      url: https://x.com/BobbyScott
+      chamber: House
+      state_or_district: VA03
+      party: D
+      source_status: source_file
+    - name: Keith Self
+      first_name: Keith
+      last_name: Self
+      platform: x
+      handle: '@RepKeithSelf'
+      url: https://x.com/RepKeithSelf
+      chamber: House
+      state_or_district: TX03
+      party: R
+      source_status: source_file
+    - name: Pete Sessions
+      first_name: Pete
+      last_name: Sessions
+      platform: x
+      handle: '@PeteSessions'
+      url: https://x.com/PeteSessions
+      chamber: House
+      state_or_district: TX17
+      party: R
+      source_status: source_file
+    - name: Terri Sewell
+      first_name: Terri
+      last_name: Sewell
+      platform: x
+      handle: '@RepTerriSewell'
+      url: https://x.com/RepTerriSewell
+      chamber: House
+      state_or_district: AL07
+      party: D
+      source_status: source_file
+    - name: Brad Sherman
+      first_name: Brad
+      last_name: Sherman
+      platform: x
+      handle: '@BradSherman'
+      url: https://x.com/BradSherman
+      chamber: House
+      state_or_district: CA32
+      party: D
+      source_status: source_file
+    - name: Jefferson Shreve
+      first_name: Jefferson
+      last_name: Shreve
+      platform: x
+      handle: '@RepShreve'
+      url: https://x.com/RepShreve
+      chamber: House
+      state_or_district: IN06
+      party: R
+      source_status: source_file
+    - name: Lateefah Simon
+      first_name: Lateefah
+      last_name: Simon
+      platform: x
+      handle: '@RepLSimon'
+      url: https://x.com/RepLSimon
+      chamber: House
+      state_or_district: CA12
+      party: D
+      source_status: source_file
+    - name: Michael Simpson
+      first_name: Michael
+      last_name: Simpson
+      platform: x
+      handle: '@CongMikeSimpson'
+      url: https://x.com/CongMikeSimpson
+      chamber: House
+      state_or_district: ID02
+      party: R
+      source_status: source_file
+    - name: Adam Smith
+      first_name: Adam
+      last_name: Smith
+      platform: x
+      handle: '@RepAdamSmith'
+      url: https://x.com/RepAdamSmith
+      chamber: House
+      state_or_district: WA09
+      party: D
+      source_status: source_file
+    - name: Adrian Smith
+      first_name: Adrian
+      last_name: Smith
+      platform: x
+      handle: '@RepAdrianSmith'
+      url: https://x.com/RepAdrianSmith
+      chamber: House
+      state_or_district: NE03
+      party: R
+      source_status: source_file
+    - name: Christopher Smith
+      first_name: Christopher
+      last_name: Smith
+      platform: x
+      handle: null
+      handle_raw: Rep. Chris Smith (R), NJ
+      url: null
+      chamber: House
+      state_or_district: NJ04
+      party: R
+      source_status: source_file_malformed_or_missing
+    - name: Jason Smith
+      first_name: Jason
+      last_name: Smith
+      platform: x
+      handle: '@RepJasonSmith'
+      url: https://x.com/RepJasonSmith
+      chamber: House
+      state_or_district: MO08
+      party: R
+      source_status: source_file
+    - name: Lloyd Smucker
+      first_name: Lloyd
+      last_name: Smucker
+      platform: x
+      handle: '@RepSmucker'
+      url: https://x.com/RepSmucker
+      chamber: House
+      state_or_district: PA11
+      party: R
+      source_status: source_file
+    - name: Eric Sorensen
+      first_name: Eric
+      last_name: Sorensen
+      platform: x
+      handle: '@RepEricSorensen'
+      url: https://x.com/RepEricSorensen
+      chamber: House
+      state_or_district: IL17
+      party: D
+      source_status: source_file
+    - name: Darren Soto
+      first_name: Darren
+      last_name: Soto
+      platform: x
+      handle: '@RepDarrenSoto'
+      url: https://x.com/RepDarrenSoto
+      chamber: House
+      state_or_district: FL09
+      party: D
+      source_status: source_file
+    - name: Victoria Spartz
+      first_name: Victoria
+      last_name: Spartz
+      platform: x
+      handle: '@RepSpartz'
+      url: https://x.com/RepSpartz
+      chamber: House
+      state_or_district: IN05
+      party: R
+      source_status: source_file
+    - name: Melanie Stansbury
+      first_name: Melanie
+      last_name: Stansbury
+      platform: x
+      handle: '@Rep_Stansbury'
+      url: https://x.com/Rep_Stansbury
+      chamber: House
+      state_or_district: NM01
+      party: D
+      source_status: source_file
+    - name: Greg Stanton
+      first_name: Greg
+      last_name: Stanton
+      platform: x
+      handle: '@RepGregStanton'
+      url: https://x.com/RepGregStanton
+      chamber: House
+      state_or_district: AZ04
+      party: D
+      source_status: source_file
+    - name: Pete Stauber
+      first_name: Pete
+      last_name: Stauber
+      platform: x
+      handle: '@RepPeteStauber'
+      url: https://x.com/RepPeteStauber
+      chamber: House
+      state_or_district: MN08
+      party: R
+      source_status: source_file
+    - name: Elise Stefanik
+      first_name: Elise
+      last_name: Stefanik
+      platform: x
+      handle: '@RepStefanik'
+      url: https://x.com/RepStefanik
+      chamber: House
+      state_or_district: NY21
+      party: R
+      source_status: source_file
+    - name: Bryan Steil
+      first_name: Bryan
+      last_name: Steil
+      platform: x
+      handle: '@RepBryanSteil'
+      url: https://x.com/RepBryanSteil
+      chamber: House
+      state_or_district: WI01
+      party: R
+      source_status: source_file
+    - name: W. Steube
+      first_name: W.
+      last_name: Steube
+      platform: x
+      handle: '@RepGregSteube'
+      url: https://x.com/RepGregSteube
+      chamber: House
+      state_or_district: FL17
+      party: R
+      source_status: source_file
+    - name: Haley Stevens
+      first_name: Haley
+      last_name: Stevens
+      platform: x
+      handle: '@RepHaleyStevens'
+      url: https://x.com/RepHaleyStevens
+      chamber: House
+      state_or_district: MI11
+      party: D
+      source_status: source_file
+    - name: Marilyn Strickland
+      first_name: Marilyn
+      last_name: Strickland
+      platform: x
+      handle: '@RepStricklandWA'
+      url: https://x.com/RepStricklandWA
+      chamber: House
+      state_or_district: WA10
+      party: D
+      source_status: source_file
+    - name: Dale Strong
+      first_name: Dale
+      last_name: Strong
+      platform: x
+      handle: '@RepDaleStrong'
+      url: https://x.com/RepDaleStrong
+      chamber: House
+      state_or_district: AL05
+      party: R
+      source_status: source_file
+    - name: Marlin Stutzman
+      first_name: Marlin
+      last_name: Stutzman
+      platform: x
+      handle: '@RepStutzman'
+      url: https://x.com/RepStutzman
+      chamber: House
+      state_or_district: IN03
+      party: R
+      source_status: source_file
+    - name: Suhas Subramanyam
+      first_name: Suhas
+      last_name: Subramanyam
+      platform: x
+      handle: '@RepSuhas'
+      url: https://x.com/RepSuhas
+      chamber: House
+      state_or_district: VA10
+      party: D
+      source_status: source_file
+    - name: Tom Suozzi
+      first_name: Tom
+      last_name: Suozzi
+      platform: x
+      handle: '@RepTomSuozzi'
+      url: https://x.com/RepTomSuozzi
+      chamber: House
+      state_or_district: NY03
+      party: D
+      source_status: source_file
+    - name: Emilia Sykes
+      first_name: Emilia
+      last_name: Sykes
+      platform: x
+      handle: '@RepEmiliaSykes'
+      url: https://x.com/RepEmiliaSykes
+      chamber: House
+      state_or_district: OH13
+      party: D
+      source_status: source_file
+    - name: Mark Takano
+      first_name: Mark
+      last_name: Takano
+      platform: x
+      handle: '@RepMarkTakano'
+      url: https://x.com/RepMarkTakano
+      chamber: House
+      state_or_district: CA39
+      party: D
+      source_status: source_file
+    - name: Dave Taylor
+      first_name: Dave
+      last_name: Taylor
+      platform: x
+      handle: '@RepDaveTaylor'
+      url: https://x.com/RepDaveTaylor
+      chamber: House
+      state_or_district: OH02
+      party: R
+      source_status: source_file
+    - name: Claudia Tenney
+      first_name: Claudia
+      last_name: Tenney
+      platform: x
+      handle: '@RepTenney'
+      url: https://x.com/RepTenney
+      chamber: House
+      state_or_district: NY24
+      party: R
+      source_status: source_file
+    - name: Shri Thanedar
+      first_name: Shri
+      last_name: Thanedar
+      platform: x
+      handle: '@RepShriThanedar'
+      url: https://x.com/RepShriThanedar
+      chamber: House
+      state_or_district: MI13
+      party: D
+      source_status: source_file
+    - name: Bennie Thompson
+      first_name: Bennie
+      last_name: Thompson
+      platform: x
+      handle: '@BennieGThompson'
+      url: https://x.com/BennieGThompson
+      chamber: House
+      state_or_district: MS02
+      party: D
+      source_status: source_file
+    - name: Glenn Thompson
+      first_name: Glenn
+      last_name: Thompson
+      platform: x
+      handle: '@CongressmanGT'
+      url: https://x.com/CongressmanGT
+      chamber: House
+      state_or_district: PA15
+      party: R
+      source_status: source_file
+    - name: Mike Thompson
+      first_name: Mike
+      last_name: Thompson
+      platform: x
+      handle: '@RepThompson'
+      url: https://x.com/RepThompson
+      chamber: House
+      state_or_district: CA04
+      party: D
+      source_status: source_file
+    - name: Thomas Tiffany
+      first_name: Thomas
+      last_name: Tiffany
+      platform: x
+      handle: '@RepTiffany'
+      url: https://x.com/RepTiffany
+      chamber: House
+      state_or_district: WI07
+      party: R
+      source_status: source_file
+    - name: William Timmons
+      first_name: William
+      last_name: Timmons
+      platform: x
+      handle: '@RepTimmons'
+      url: https://x.com/RepTimmons
+      chamber: House
+      state_or_district: SC04
+      party: R
+      source_status: source_file
+    - name: Dina Titus
+      first_name: Dina
+      last_name: Titus
+      platform: x
+      handle: '@repdinatitus'
+      url: https://x.com/repdinatitus
+      chamber: House
+      state_or_district: NV01
+      party: D
+      source_status: source_file
+    - name: Rashida Tlaib
+      first_name: Rashida
+      last_name: Tlaib
+      platform: x
+      handle: '@RepRashida'
+      url: https://x.com/RepRashida
+      chamber: House
+      state_or_district: MI12
+      party: D
+      source_status: source_file
+    - name: Jill Tokuda
+      first_name: Jill
+      last_name: Tokuda
+      platform: x
+      handle: '@RepJillTokuda'
+      url: https://x.com/RepJillTokuda
+      chamber: House
+      state_or_district: HI02
+      party: D
+      source_status: source_file
+    - name: Paul Tonko
+      first_name: Paul
+      last_name: Tonko
+      platform: x
+      handle: '@RepPaulTonko'
+      url: https://x.com/RepPaulTonko
+      chamber: House
+      state_or_district: NY20
+      party: D
+      source_status: source_file
+    - name: Norma Torres
+      first_name: Norma
+      last_name: Torres
+      platform: x
+      handle: '@NormaJTorres'
+      url: https://x.com/NormaJTorres
+      chamber: House
+      state_or_district: CA35
+      party: D
+      source_status: source_file
+    - name: Ritchie Torres
+      first_name: Ritchie
+      last_name: Torres
+      platform: x
+      handle: '@RepRitchie'
+      url: https://x.com/RepRitchie
+      chamber: House
+      state_or_district: NY15
+      party: D
+      source_status: source_file
+    - name: Lori Trahan
+      first_name: Lori
+      last_name: Trahan
+      platform: x
+      handle: '@RepLoriTrahan'
+      url: https://x.com/RepLoriTrahan
+      chamber: House
+      state_or_district: MA03
+      party: D
+      source_status: source_file
+    - name: Derek Tran
+      first_name: Derek
+      last_name: Tran
+      platform: x
+      handle: '@RepDerekTranCA'
+      url: https://x.com/RepDerekTranCA
+      chamber: House
+      state_or_district: CA45
+      party: D
+      source_status: source_file
+    - name: Michael Turner
+      first_name: Michael
+      last_name: Turner
+      platform: x
+      handle: '@RepMikeTurner'
+      url: https://x.com/RepMikeTurner
+      chamber: House
+      state_or_district: OH10
+      party: R
+      source_status: source_file
+    - name: Lauren Underwood
+      first_name: Lauren
+      last_name: Underwood
+      platform: x
+      handle: '@RepUnderwood'
+      url: https://x.com/RepUnderwood
+      chamber: House
+      state_or_district: IL14
+      party: D
+      source_status: source_file
+    - name: David Valadao
+      first_name: David
+      last_name: Valadao
+      platform: x
+      handle: '@RepDavidValadao'
+      url: https://x.com/RepDavidValadao
+      chamber: House
+      state_or_district: CA22
+      party: R
+      source_status: source_file
+    - name: Jefferson Van Drew
+      first_name: Jefferson
+      last_name: Van Drew
+      platform: x
+      handle: '@Congressman_JVD'
+      url: https://x.com/Congressman_JVD
+      chamber: House
+      state_or_district: NJ02
+      party: R
+      source_status: source_file
+    - name: Beth Van Duyne
+      first_name: Beth
+      last_name: Van Duyne
+      platform: x
+      handle: '@RepBethVanDuyne'
+      url: https://x.com/RepBethVanDuyne
+      chamber: House
+      state_or_district: TX24
+      party: R
+      source_status: source_file
+    - name: Matt Van Epps
+      first_name: Matt
+      last_name: Van Epps
+      platform: x
+      handle: '@repvanepps'
+      url: https://x.com/repvanepps
+      chamber: House
+      state_or_district: TN07
+      party: R
+      source_status: source_file
+    - name: Derrick Van Orden
+      first_name: Derrick
+      last_name: Van Orden
+      platform: x
+      handle: '@RepVanOrden'
+      url: https://x.com/RepVanOrden
+      chamber: House
+      state_or_district: WI03
+      party: R
+      source_status: source_file
+    - name: Juan Vargas
+      first_name: Juan
+      last_name: Vargas
+      platform: x
+      handle: '@RepJuanVargas'
+      url: https://x.com/RepJuanVargas
+      chamber: House
+      state_or_district: CA52
+      party: D
+      source_status: source_file
+    - name: Gabe Vasquez
+      first_name: Gabe
+      last_name: Vasquez
+      platform: x
+      handle: '@RepGabeVasquez'
+      url: https://x.com/RepGabeVasquez
+      chamber: House
+      state_or_district: NM02
+      party: D
+      source_status: source_file
+    - name: Marc Veasey
+      first_name: Marc
+      last_name: Veasey
+      platform: x
+      handle: '@RepVeasey'
+      url: https://x.com/RepVeasey
+      chamber: House
+      state_or_district: TX33
+      party: D
+      source_status: source_file
+    - name: Nydia Velázquez
+      first_name: Nydia
+      last_name: Velázquez
+      platform: x
+      handle: '@NydiaVelazquez'
+      url: https://x.com/NydiaVelazquez
+      chamber: House
+      state_or_district: NY07
+      party: D
+      source_status: source_file
+    - name: Eugene Vindman
+      first_name: Eugene
+      last_name: Vindman
+      platform: x
+      handle: '@RepVindman'
+      url: https://x.com/RepVindman
+      chamber: House
+      state_or_district: VA07
+      party: D
+      source_status: source_file
+    - name: Ann Wagner
+      first_name: Ann
+      last_name: Wagner
+      platform: x
+      handle: '@RepAnnWagner'
+      url: https://x.com/RepAnnWagner
+      chamber: House
+      state_or_district: MO02
+      party: R
+      source_status: source_file
+    - name: Tim Walberg
+      first_name: Tim
+      last_name: Walberg
+      platform: x
+      handle: '@RepWalberg'
+      url: https://x.com/RepWalberg
+      chamber: House
+      state_or_district: MI05
+      party: R
+      source_status: source_file
+    - name: James Walkinshaw
+      first_name: James
+      last_name: Walkinshaw
+      platform: x
+      handle: '@Rep_Walkinshaw'
+      url: https://x.com/Rep_Walkinshaw
+      chamber: House
+      state_or_district: VA11
+      party: D
+      source_status: source_file
+    - name: Debbie Wasserman Schultz
+      first_name: Debbie
+      last_name: Wasserman Schultz
+      platform: x
+      handle: '@RepDWStweets'
+      url: https://x.com/RepDWStweets
+      chamber: House
+      state_or_district: FL25
+      party: D
+      source_status: source_file
+    - name: Maxine Waters
+      first_name: Maxine
+      last_name: Waters
+      platform: x
+      handle: '@RepMaxineWaters'
+      url: https://x.com/RepMaxineWaters
+      chamber: House
+      state_or_district: CA43
+      party: D
+      source_status: source_file
+    - name: Bonnie Watson Coleman
+      first_name: Bonnie
+      last_name: Watson Coleman
+      platform: x
+      handle: '@RepBonnie'
+      url: https://x.com/RepBonnie
+      chamber: House
+      state_or_district: NJ12
+      party: D
+      source_status: source_file
+    - name: Randy Weber
+      first_name: Randy
+      last_name: Weber
+      platform: x
+      handle: '@TXRandy14'
+      url: https://x.com/TXRandy14
+      chamber: House
+      state_or_district: TX14
+      party: R
+      source_status: source_file
+    - name: Daniel Webster
+      first_name: Daniel
+      last_name: Webster
+      platform: x
+      handle: '@RepWebster'
+      url: https://x.com/RepWebster
+      chamber: House
+      state_or_district: FL11
+      party: R
+      source_status: source_file
+    - name: Bruce Westerman
+      first_name: Bruce
+      last_name: Westerman
+      platform: x
+      handle: '@RepWesterman'
+      url: https://x.com/RepWesterman
+      chamber: House
+      state_or_district: AR04
+      party: R
+      source_status: source_file
+    - name: George Whitesides
+      first_name: George
+      last_name: Whitesides
+      platform: x
+      handle: '@Rep_Whitesides'
+      url: https://x.com/Rep_Whitesides
+      chamber: House
+      state_or_district: CA27
+      party: D
+      source_status: source_file
+    - name: Tony Wied
+      first_name: Tony
+      last_name: Wied
+      platform: x
+      handle: '@RepTonyWied'
+      url: https://x.com/RepTonyWied
+      chamber: House
+      state_or_district: WI08
+      party: R
+      source_status: source_file
+    - name: Nikema Williams
+      first_name: Nikema
+      last_name: Williams
+      platform: x
+      handle: '@RepNikema'
+      url: https://x.com/RepNikema
+      chamber: House
+      state_or_district: GA05
+      party: D
+      source_status: source_file
+    - name: Roger Williams
+      first_name: Roger
+      last_name: Williams
+      platform: x
+      handle: '@RepRWilliams'
+      url: https://x.com/RepRWilliams
+      chamber: House
+      state_or_district: TX25
+      party: R
+      source_status: source_file
+    - name: Frederica Wilson
+      first_name: Frederica
+      last_name: Wilson
+      platform: x
+      handle: '@RepWilson'
+      url: https://x.com/RepWilson
+      chamber: House
+      state_or_district: FL24
+      party: D
+      source_status: source_file
+    - name: Joe Wilson
+      first_name: Joe
+      last_name: Wilson
+      platform: x
+      handle: '@RepJoeWilson'
+      url: https://x.com/RepJoeWilson
+      chamber: House
+      state_or_district: SC02
+      party: R
+      source_status: source_file
+    - name: Robert Wittman
+      first_name: Robert
+      last_name: Wittman
+      platform: x
+      handle: '@RobWittman'
+      url: https://x.com/RobWittman
+      chamber: House
+      state_or_district: VA01
+      party: R
+      source_status: source_file
+    - name: Steve Womack
+      first_name: Steve
+      last_name: Womack
+      platform: x
+      handle: '@rep_stevewomack'
+      url: https://x.com/rep_stevewomack
+      chamber: House
+      state_or_district: AR03
+      party: R
+      source_status: source_file
+    - name: Rudy Yakym
+      first_name: Rudy
+      last_name: Yakym
+      platform: x
+      handle: '@RepRudyYakym'
+      url: https://x.com/RepRudyYakym
+      chamber: House
+      state_or_district: IN02
+      party: R
+      source_status: source_file
+    - name: Ryan Zinke
+      first_name: Ryan
+      last_name: Zinke
+      platform: x
+      handle: '@RepRyanZinke'
+      url: https://x.com/RepRyanZinke
+      chamber: House
+      state_or_district: MT01
+      party: R
+      source_status: source_file
+    senate:
+    - name: Angela Alsobrooks
+      platform: x
+      handle: '@Sen_Alsobrooks'
+      url: https://x.com/Sen_Alsobrooks
+      chamber: Senate
+      state_or_district: MD
+      party: D
+      source_name: Alsobrooks, Angela
+      source_status: source_file
+    - name: Tammy Baldwin
+      platform: x
+      handle: '@SenatorBaldwin'
+      url: https://x.com/SenatorBaldwin
+      chamber: Senate
+      state_or_district: WI
+      party: D
+      source_name: Baldwin, Tammy
+      source_status: source_file
+    - name: Jim Banks
+      platform: x
+      handle: '@SenatorBanks'
+      url: https://x.com/SenatorBanks
+      chamber: Senate
+      state_or_district: IN
+      party: R
+      source_name: Banks, Jim
+      source_status: source_file
+    - name: John Barrasso
+      platform: x
+      handle: '@SenJohnBarrasso'
+      url: https://x.com/SenJohnBarrasso
+      chamber: Senate
+      state_or_district: WY
+      party: R
+      source_name: Barrasso, John
+      source_status: source_file
+    - name: Michael Bennet
+      platform: x
+      handle: '@SenatorBennet'
+      url: https://x.com/SenatorBennet
+      chamber: Senate
+      state_or_district: CO
+      party: D
+      source_name: Bennet, Michael
+      source_status: source_file
+    - name: Marsha Blackburn
+      platform: x
+      handle: '@MarshaBlackburn'
+      url: https://x.com/MarshaBlackburn
+      chamber: Senate
+      state_or_district: TN
+      party: R
+      source_name: Blackburn, Marsha
+      source_status: source_file
+    - name: Richard Blumenthal
+      platform: x
+      handle: '@SenBlumenthal'
+      url: https://x.com/SenBlumenthal
+      chamber: Senate
+      state_or_district: CT
+      party: D
+      source_name: Blumenthal, Richard
+      source_status: source_file
+    - name: LIsa Blunt-Rochester
+      platform: x
+      handle: '@SenLBR'
+      url: https://x.com/SenLBR
+      chamber: Senate
+      state_or_district: DE
+      party: D
+      source_name: Blunt-Rochester, LIsa
+      source_status: source_file
+    - name: Cory Booker
+      platform: x
+      handle: '@CoryBooker'
+      url: https://x.com/CoryBooker
+      chamber: Senate
+      state_or_district: NJ
+      party: D
+      source_name: Booker, Cory
+      source_status: source_file
+    - name: John Boozman
+      platform: x
+      handle: '@JohnBoozman'
+      url: https://x.com/JohnBoozman
+      chamber: Senate
+      state_or_district: AR
+      party: R
+      source_name: Boozman, John
+      source_status: source_file
+    - name: Katie Britt
+      platform: x
+      handle: '@SenKatieBritt'
+      url: https://x.com/SenKatieBritt
+      chamber: Senate
+      state_or_district: AL
+      party: R
+      source_name: Britt, Katie
+      source_status: source_file
+    - name: Ted Budd
+      platform: x
+      handle: '@SenTedBuddNC'
+      url: https://x.com/SenTedBuddNC
+      chamber: Senate
+      state_or_district: NC
+      party: R
+      source_name: Budd, Ted
+      source_status: source_file
+    - name: Maria Cantwell
+      platform: x
+      handle: '@SenatorCantwell'
+      url: https://x.com/SenatorCantwell
+      chamber: Senate
+      state_or_district: WA
+      party: D
+      source_name: Cantwell, Maria
+      source_status: source_file
+    - name: Shelley Moore Capito
+      platform: x
+      handle: '@SenCapito'
+      url: https://x.com/SenCapito
+      chamber: Senate
+      state_or_district: WV
+      party: R
+      source_name: Capito, Shelley Moore
+      source_status: source_file
+    - name: Bill Cassidy
+      platform: x
+      handle: '@SenBillCassidy'
+      url: https://x.com/SenBillCassidy
+      chamber: Senate
+      state_or_district: LA
+      party: R
+      source_name: Cassidy, Bill
+      source_status: source_file
+    - name: Susan Collins
+      platform: x
+      handle: '@SenatorCollins'
+      url: https://x.com/SenatorCollins
+      chamber: Senate
+      state_or_district: ME
+      party: R
+      source_name: Collins, Susan
+      source_status: source_file
+    - name: Chris Coons
+      platform: x
+      handle: '@ChrisCoons'
+      url: https://x.com/ChrisCoons
+      chamber: Senate
+      state_or_district: DE
+      party: D
+      source_name: Coons, Chris
+      source_status: source_file
+    - name: John Cornyn
+      platform: x
+      handle: '@JohnCornyn'
+      url: https://x.com/JohnCornyn
+      chamber: Senate
+      state_or_district: TX
+      party: R
+      source_name: Cornyn, John
+      source_status: source_file
+    - name: Catherine Cortez Masto
+      platform: x
+      handle: '@SenCortezMasto'
+      url: https://x.com/SenCortezMasto
+      chamber: Senate
+      state_or_district: NV
+      party: D
+      source_name: Cortez Masto, Catherine
+      source_status: source_file
+    - name: Tom Cotton
+      platform: x
+      handle: '@SenTomCotton'
+      url: https://x.com/SenTomCotton
+      chamber: Senate
+      state_or_district: AR
+      party: R
+      source_name: Cotton, Tom
+      source_status: source_file
+    - name: Kevin Cramer
+      platform: x
+      handle: '@SenKevinCramer'
+      url: https://x.com/SenKevinCramer
+      chamber: Senate
+      state_or_district: ND
+      party: R
+      source_name: Cramer, Kevin
+      source_status: source_file
+    - name: Mike Crapo
+      platform: x
+      handle: '@MikeCrapo'
+      url: https://x.com/MikeCrapo
+      chamber: Senate
+      state_or_district: ID
+      party: R
+      source_name: Crapo, Mike
+      source_status: source_file
+    - name: Ted Cruz
+      platform: x
+      handle: '@SenTedCruz'
+      url: https://x.com/SenTedCruz
+      chamber: Senate
+      state_or_district: TX
+      party: R
+      source_name: Cruz, Ted
+      source_status: source_file
+    - name: John R. Curtis
+      platform: x
+      handle: '@SenJohnCurtis'
+      url: https://x.com/SenJohnCurtis
+      chamber: Senate
+      state_or_district: TX
+      party: R
+      source_name: Curtis, John R.
+      source_status: source_file
+    - name: Steve Daines
+      platform: x
+      handle: '@SteveDaines'
+      url: https://x.com/SteveDaines
+      chamber: Senate
+      state_or_district: MT
+      party: R
+      source_name: Daines, Steve
+      source_status: source_file
+    - name: Tammy Duckworth
+      platform: x
+      handle: '@SenDuckworth'
+      url: https://x.com/SenDuckworth
+      chamber: Senate
+      state_or_district: IL
+      party: D
+      source_name: Duckworth, Tammy
+      source_status: source_file
+    - name: Richard Durbin
+      platform: x
+      handle: '@SenatorDurbin'
+      url: https://x.com/SenatorDurbin
+      chamber: Senate
+      state_or_district: IL
+      party: D
+      source_name: Durbin, Richard
+      source_status: source_file
+    - name: Joni Ernst
+      platform: x
+      handle: '@SenJoniErnst'
+      url: https://x.com/SenJoniErnst
+      chamber: Senate
+      state_or_district: IA
+      party: R
+      source_name: Ernst, Joni
+      source_status: source_file
+    - name: John Fetterman
+      platform: x
+      handle: '@SenFettermanPA'
+      url: https://x.com/SenFettermanPA
+      chamber: Senate
+      state_or_district: PA
+      party: D
+      source_name: Fetterman, John
+      source_status: source_file
+    - name: Deb Fischer
+      platform: x
+      handle: '@SenatorFischer'
+      url: https://x.com/SenatorFischer
+      chamber: Senate
+      state_or_district: NE
+      party: R
+      source_name: Fischer, Deb
+      source_status: source_file
+    - name: Ruben Gallego
+      platform: x
+      handle: '@SenRubenGallego'
+      url: https://x.com/SenRubenGallego
+      chamber: Senate
+      state_or_district: AZ
+      party: D
+      source_name: Gallego, Ruben
+      source_status: source_file
+    - name: Kirsten Gillibrand
+      platform: x
+      handle: '@SenGillibrand'
+      url: https://x.com/SenGillibrand
+      chamber: Senate
+      state_or_district: NY
+      party: D
+      source_name: Gillibrand, Kirsten
+      source_status: source_file
+    - name: Lindsey Graham
+      platform: x
+      handle: '@LindseyGrahamSC'
+      url: https://x.com/LindseyGrahamSC
+      chamber: Senate
+      state_or_district: SC
+      party: R
+      source_name: Graham, Lindsey
+      source_status: source_file
+    - name: Chuck Grassley
+      platform: x
+      handle: '@ChuckGrassley'
+      url: https://x.com/ChuckGrassley
+      chamber: Senate
+      state_or_district: IA
+      party: R
+      source_name: Grassley, Chuck
+      source_status: source_file
+    - name: Bill Hagerty
+      platform: x
+      handle: '@SenatorHagerty'
+      url: https://x.com/SenatorHagerty
+      chamber: Senate
+      state_or_district: TN
+      party: R
+      source_name: Hagerty, Bill
+      source_status: source_file
+    - name: Maggie Hassan
+      platform: x
+      handle: '@SenatorHassan'
+      url: https://x.com/SenatorHassan
+      chamber: Senate
+      state_or_district: NH
+      party: D
+      source_name: Hassan, Maggie
+      source_status: source_file
+    - name: Josh Hawley
+      platform: x
+      handle: '@HawleyMO'
+      url: https://x.com/HawleyMO
+      chamber: Senate
+      state_or_district: MO
+      party: R
+      source_name: Hawley, Josh
+      source_status: source_file
+    - name: Martin Heinrich
+      platform: x
+      handle: '@MartinHeinrich'
+      url: https://x.com/MartinHeinrich
+      chamber: Senate
+      state_or_district: NM
+      party: D
+      source_name: Heinrich, Martin
+      source_status: source_file
+    - name: John Hickenlooper
+      platform: x
+      handle: '@SenatorHick'
+      url: https://x.com/SenatorHick
+      chamber: Senate
+      state_or_district: CO
+      party: D
+      source_name: Hickenlooper, John
+      source_status: source_file
+    - name: Mazie Hirono
+      platform: x
+      handle: '@maziehirono'
+      url: https://x.com/maziehirono
+      chamber: Senate
+      state_or_district: HI
+      party: D
+      source_name: Hirono, Mazie
+      source_status: source_file
+    - name: John Hoeven
+      platform: x
+      handle: '@SenJohnHoeven'
+      url: https://x.com/SenJohnHoeven
+      chamber: Senate
+      state_or_district: ND
+      party: R
+      source_name: Hoeven, John
+      source_status: source_file
+    - name: Jon Husted
+      platform: x
+      handle: '@SenJonHusted'
+      url: https://x.com/SenJonHusted
+      chamber: Senate
+      state_or_district: OH
+      party: R
+      source_name: Husted, Jon
+      source_status: source_file
+    - name: Cindy Hyde-Smith
+      platform: x
+      handle: '@SenHydeSmith'
+      url: https://x.com/SenHydeSmith
+      chamber: Senate
+      state_or_district: MS
+      party: R
+      source_name: Hyde-Smith, Cindy
+      source_status: source_file
+    - name: Ron Johnson
+      platform: x
+      handle: '@SenRonJohnson'
+      url: https://x.com/SenRonJohnson
+      chamber: Senate
+      state_or_district: WI
+      party: R
+      source_name: Johnson, Ron
+      source_status: source_file
+    - name: James C Justice
+      platform: x
+      handle: '@JimJustice_WV'
+      url: https://x.com/JimJustice_WV
+      chamber: Senate
+      state_or_district: WV
+      party: R
+      source_name: Justice, James C
+      source_status: source_file
+    - name: Tim Kaine
+      platform: x
+      handle: '@timkaine'
+      url: https://x.com/timkaine
+      chamber: Senate
+      state_or_district: VA
+      party: D
+      source_name: Kaine, Tim
+      source_status: source_file
+    - name: Mark Kelly
+      platform: x
+      handle: '@SenMarkKelly'
+      url: https://x.com/SenMarkKelly
+      chamber: Senate
+      state_or_district: AZ
+      party: D
+      source_name: Kelly, Mark
+      source_status: source_file
+    - name: John Kennedy
+      platform: x
+      handle: '@SenJohnKennedy'
+      url: https://x.com/SenJohnKennedy
+      chamber: Senate
+      state_or_district: LA
+      party: R
+      source_name: Kennedy, John
+      source_status: source_file
+    - name: Andy Kim
+      platform: x
+      handle: '@SenatorAndyKim'
+      url: https://x.com/SenatorAndyKim
+      chamber: Senate
+      state_or_district: NJ
+      party: D
+      source_name: Kim, Andy
+      source_status: source_file
+    - name: Angus King
+      platform: x
+      handle: '@SenAngusKing'
+      url: https://x.com/SenAngusKing
+      chamber: Senate
+      state_or_district: ME
+      party: I
+      source_name: King, Angus
+      source_status: source_file
+    - name: Amy Klobuchar
+      platform: x
+      handle: '@SenAmyKlobuchar'
+      url: https://x.com/SenAmyKlobuchar
+      chamber: Senate
+      state_or_district: MN
+      party: D
+      source_name: Klobuchar, Amy
+      source_status: source_file
+    - name: James Lankford
+      platform: x
+      handle: '@SenatorLankford'
+      url: https://x.com/SenatorLankford
+      chamber: Senate
+      state_or_district: OK
+      party: R
+      source_name: Lankford, James
+      source_status: source_file
+    - name: Mike Lee
+      platform: x
+      handle: '@SenMikeLee'
+      url: https://x.com/SenMikeLee
+      chamber: Senate
+      state_or_district: UT
+      party: R
+      source_name: Lee, Mike
+      source_status: source_file
+    - name: Ben Ray Luján
+      platform: x
+      handle: '@SenatorLujan'
+      url: https://x.com/SenatorLujan
+      chamber: Senate
+      state_or_district: NM
+      party: D
+      source_name: Luján, Ben Ray
+      source_status: source_file
+    - name: Cynthia Lummis
+      platform: x
+      handle: '@SenLummis'
+      url: https://x.com/SenLummis
+      chamber: Senate
+      state_or_district: WY
+      party: R
+      source_name: Lummis, Cynthia
+      source_status: source_file
+    - name: Ed Markey
+      platform: x
+      handle: '@SenMarkey'
+      url: https://x.com/SenMarkey
+      chamber: Senate
+      state_or_district: MA
+      party: D
+      source_name: Markey, Ed
+      source_status: source_file
+    - name: Roger Marshall
+      platform: x
+      handle: '@SenatorMarshall'
+      url: https://x.com/SenatorMarshall
+      chamber: Senate
+      state_or_district: KS
+      party: R
+      source_name: Marshall, Roger
+      source_status: source_file
+    - name: Mitch McConnell
+      platform: x
+      handle: '@McConnellPress'
+      url: https://x.com/McConnellPress
+      chamber: Senate
+      state_or_district: KY
+      party: R
+      source_name: McConnell, Mitch
+      source_status: source_file
+    - name: David McCormick
+      platform: x
+      handle: '@SenMcCormickPA'
+      url: https://x.com/SenMcCormickPA
+      chamber: Senate
+      state_or_district: PA
+      party: R
+      source_name: McCormick, David
+      source_status: source_file
+    - name: Jeff Merkley
+      platform: x
+      handle: '@SenJeffMerkley'
+      url: https://x.com/SenJeffMerkley
+      chamber: Senate
+      state_or_district: OR
+      party: D
+      source_name: Merkley, Jeff
+      source_status: source_file
+    - name: Ashley Moody
+      platform: x
+      handle: '@SenAshleyMoody'
+      url: https://x.com/SenAshleyMoody
+      chamber: Senate
+      state_or_district: FL
+      party: R
+      source_name: Moody, Ashley
+      source_status: source_file
+    - name: Jerry Moran
+      platform: x
+      handle: '@JerryMoran'
+      url: https://x.com/JerryMoran
+      chamber: Senate
+      state_or_district: KS
+      party: R
+      source_name: Moran, Jerry
+      source_status: source_file
+    - name: Bernie Moreno
+      platform: x
+      handle: '@berniemoreno'
+      url: https://x.com/berniemoreno
+      chamber: Senate
+      state_or_district: OH
+      party: R
+      source_name: Moreno, Bernie
+      source_status: source_file
+    - name: Markwayne Mullin
+      platform: x
+      handle: '@SenMullin'
+      url: https://x.com/SenMullin
+      chamber: Senate
+      state_or_district: OK
+      party: R
+      source_name: Mullin, Markwayne
+      source_status: source_file
+    - name: Lisa Murkowski
+      platform: x
+      handle: '@lisamurkowski'
+      url: https://x.com/lisamurkowski
+      chamber: Senate
+      state_or_district: AK
+      party: R
+      source_name: Murkowski, Lisa
+      source_status: source_file
+    - name: Chris Murphy
+      platform: x
+      handle: '@ChrisMurphyCT'
+      url: https://x.com/ChrisMurphyCT
+      chamber: Senate
+      state_or_district: CT
+      party: D
+      source_name: Murphy, Chris
+      source_status: source_file
+    - name: Patty Murray
+      platform: x
+      handle: '@PattyMurray'
+      url: https://x.com/PattyMurray
+      chamber: Senate
+      state_or_district: WA
+      party: D
+      source_name: Murray, Patty
+      source_status: source_file
+    - name: Jon Ossoff
+      platform: x
+      handle: '@ossoff'
+      url: https://x.com/ossoff
+      chamber: Senate
+      state_or_district: GA
+      party: D
+      source_name: Ossoff, Jon
+      source_status: source_file
+    - name: Alex Padilla
+      platform: x
+      handle: '@SenAlexPadilla'
+      url: https://x.com/SenAlexPadilla
+      chamber: Senate
+      state_or_district: CA
+      party: D
+      source_name: Padilla, Alex
+      source_status: source_file
+    - name: Rand Paul
+      platform: x
+      handle: '@RandPaul'
+      url: https://x.com/RandPaul
+      chamber: Senate
+      state_or_district: KY
+      party: R
+      source_name: Paul, Rand
+      source_status: source_file
+    - name: Gary Peters
+      platform: x
+      handle: '@SenGaryPeters'
+      url: https://x.com/SenGaryPeters
+      chamber: Senate
+      state_or_district: MI
+      party: D
+      source_name: Peters, Gary
+      source_status: source_file
+    - name: Jack Reed
+      platform: x
+      handle: '@SenJackReed'
+      url: https://x.com/SenJackReed
+      chamber: Senate
+      state_or_district: RI
+      party: D
+      source_name: Reed, Jack
+      source_status: source_file
+    - name: Pete Ricketts
+      platform: x
+      handle: '@SenatorRicketts'
+      url: https://x.com/SenatorRicketts
+      chamber: Senate
+      state_or_district: NE
+      party: R
+      source_name: Ricketts, Pete
+      source_status: source_file
+    - name: Jim Risch
+      platform: x
+      handle: '@SenatorRisch'
+      url: https://x.com/SenatorRisch
+      chamber: Senate
+      state_or_district: ID
+      party: R
+      source_name: Risch, Jim
+      source_status: source_file
+    - name: Jacky Rosen
+      platform: x
+      handle: '@SenJackyRosen'
+      url: https://x.com/SenJackyRosen
+      chamber: Senate
+      state_or_district: NV
+      party: D
+      source_name: Rosen, Jacky
+      source_status: source_file
+    - name: Mike Rounds
+      platform: x
+      handle: '@SenatorRounds'
+      url: https://x.com/SenatorRounds
+      chamber: Senate
+      state_or_district: SD
+      party: R
+      source_name: Rounds, Mike
+      source_status: source_file
+    - name: Bernie Sanders
+      platform: x
+      handle: '@SenSanders'
+      url: https://x.com/SenSanders
+      chamber: Senate
+      state_or_district: VT
+      party: I
+      source_name: Sanders, Bernie
+      source_status: source_file
+    - name: Brian Schatz
+      platform: x
+      handle: '@SenBrianSchatz'
+      url: https://x.com/SenBrianSchatz
+      chamber: Senate
+      state_or_district: HI
+      party: D
+      source_name: Schatz, Brian
+      source_status: source_file
+    - name: Adam B. Schiff
+      platform: x
+      handle: '@SenAdamSchiff'
+      url: https://x.com/SenAdamSchiff
+      chamber: Senate
+      state_or_district: CA
+      party: D
+      source_name: Schiff, Adam B.
+      source_status: source_file
+    - name: Eric Schmitt
+      platform: x
+      handle: '@SenEricSchmitt'
+      url: https://x.com/SenEricSchmitt
+      chamber: Senate
+      state_or_district: MO
+      party: R
+      source_name: Schmitt, Eric
+      source_status: source_file
+    - name: Chuck Schumer
+      platform: x
+      handle: '@SenSchumer'
+      url: https://x.com/SenSchumer
+      chamber: Senate
+      state_or_district: NY
+      party: D
+      source_name: Schumer, Chuck
+      source_status: source_file
+    - name: Rick Scott
+      platform: x
+      handle: '@SenRickScott'
+      url: https://x.com/SenRickScott
+      chamber: Senate
+      state_or_district: FL
+      party: R
+      source_name: Scott, Rick
+      source_status: source_file
+    - name: Tim Scott
+      platform: x
+      handle: '@SenatorTimScott'
+      url: https://x.com/SenatorTimScott
+      chamber: Senate
+      state_or_district: SC
+      party: R
+      source_name: Scott, Tim
+      source_status: source_file
+    - name: Jeanne Shaheen
+      platform: x
+      handle: '@SenatorShaheen'
+      url: https://x.com/SenatorShaheen
+      chamber: Senate
+      state_or_district: NH
+      party: D
+      source_name: Shaheen, Jeanne
+      source_status: source_file
+    - name: Tim Sheehy
+      platform: x
+      handle: '@TimSheehyMT'
+      url: https://x.com/TimSheehyMT
+      chamber: Senate
+      state_or_district: MT
+      party: R
+      source_name: Sheehy, Tim
+      source_status: verified_live_search
+    - name: Elissa Slotkin
+      platform: x
+      handle: '@SenatorSlotkin'
+      url: https://x.com/SenatorSlotkin
+      chamber: Senate
+      state_or_district: MI
+      party: D
+      source_name: Slotkin, Elissa
+      source_status: source_file
+    - name: Tina Smith
+      platform: x
+      handle: '@SenTinaSmith'
+      url: https://x.com/SenTinaSmith
+      chamber: Senate
+      state_or_district: MN
+      party: D
+      source_name: Smith, Tina
+      source_status: source_file
+    - name: Dan Sullivan
+      platform: x
+      handle: '@SenDanSullivan'
+      url: https://x.com/SenDanSullivan
+      chamber: Senate
+      state_or_district: AK
+      party: R
+      source_name: Sullivan, Dan
+      source_status: source_file
+    - name: John Thune
+      platform: x
+      handle: '@SenJohnThune'
+      url: https://x.com/SenJohnThune
+      chamber: Senate
+      state_or_district: SD
+      party: R
+      source_name: Thune, John
+      source_status: source_file
+    - name: Thom Tillis
+      platform: x
+      handle: '@SenThomTillis'
+      url: https://x.com/SenThomTillis
+      chamber: Senate
+      state_or_district: NC
+      party: R
+      source_name: Tillis, Thom
+      source_status: source_file
+    - name: Tommy Tuberville
+      platform: x
+      handle: '@SenTuberville'
+      url: https://x.com/SenTuberville
+      chamber: Senate
+      state_or_district: AL
+      party: R
+      source_name: Tuberville, Tommy
+      source_status: source_file
+    - name: Chris Van Hollen
+      platform: x
+      handle: '@ChrisVanHollen'
+      url: https://x.com/ChrisVanHollen
+      chamber: Senate
+      state_or_district: MD
+      party: D
+      source_name: Van Hollen, Chris
+      source_status: source_file
+    - name: Mark Warner
+      platform: x
+      handle: '@MarkWarner'
+      url: https://x.com/MarkWarner
+      chamber: Senate
+      state_or_district: VA
+      party: D
+      source_name: Warner, Mark
+      source_status: source_file
+    - name: Raphael Warnock
+      platform: x
+      handle: '@SenatorWarnock'
+      url: https://x.com/SenatorWarnock
+      chamber: Senate
+      state_or_district: GA
+      party: D
+      source_name: Warnock, Raphael
+      source_status: source_file
+    - name: Elizabeth Warren
+      platform: x
+      handle: '@SenWarren'
+      url: https://x.com/SenWarren
+      chamber: Senate
+      state_or_district: MA
+      party: D
+      source_name: Warren, Elizabeth
+      source_status: source_file
+    - name: Peter Welch
+      platform: x
+      handle: '@PeterWelch'
+      url: https://x.com/PeterWelch
+      chamber: Senate
+      state_or_district: VT
+      party: D
+      source_name: Welch, Peter
+      source_status: source_file
+    - name: Sheldon Whitehouse
+      platform: x
+      handle: '@SenWhitehouse'
+      url: https://x.com/SenWhitehouse
+      chamber: Senate
+      state_or_district: RI
+      party: D
+      source_name: Whitehouse, Sheldon
+      source_status: source_file
+    - name: Roger Wicker
+      platform: x
+      handle: '@SenatorWicker'
+      url: https://x.com/SenatorWicker
+      chamber: Senate
+      state_or_district: MS
+      party: R
+      source_name: Wicker, Roger
+      source_status: source_file
+    - name: Ron Wyden
+      platform: x
+      handle: '@RonWyden'
+      url: https://x.com/RonWyden
+      chamber: Senate
+      state_or_district: OR
+      party: D
+      source_name: Wyden, Ron
+      source_status: source_file
+    - name: Todd Young
+      platform: x
+      handle: '@SenToddYoung'
+      url: https://x.com/SenToddYoung
+      chamber: Senate
+      state_or_district: IN
+      party: R
+      source_name: Young, Todd
+      source_status: source_file
+
+# =============================================================================
+# Affiliated top-level list — party committees, PACs, think tanks, major orgs.
+# These are NOT elected officials but drive / amplify political narratives.
+# Loader recognizes this legacy flat key alongside the rich accounts.* tree
+# (see analysis/src/engine/account_classifier.py::_parse_curated_yaml).
+# =============================================================================
+affiliated:
+  # Party organizations
+  - handle: GOP
+    notes: "Republican National Committee"
+  - handle: TheDemocrats
+    notes: "Democratic National Committee"
+  - handle: DCCC
+    notes: "Democratic Congressional Campaign Committee"
+  - handle: NRCC
+    notes: "National Republican Congressional Committee"
+  - handle: DSCC
+    notes: "Democratic Senatorial Campaign Committee"
+  - handle: NRSC
+    notes: "National Republican Senatorial Committee"
+  # Major think tanks / policy orgs
+  - handle: Heritage
+    notes: "Heritage Foundation"
+  - handle: BrookingsInst
+    notes: "Brookings Institution"
+  - handle: CatoInstitute
+    notes: "Cato Institute"
+  - handle: AEI
+    notes: "American Enterprise Institute"
+  - handle: CAPAction
+    notes: "Center for American Progress Action Fund"
+  # Major PACs
+  - handle: ClubForGrowth
+    notes: "Club for Growth (PAC)"
+  - handle: MoveOn
+    notes: "MoveOn (progressive PAC)"

@@ -16,8 +16,10 @@ class TestEngines(unittest.TestCase):
     def test_bot_detector(self):
         detector = HybridBotDetector()
 
-        # Test bot case
-        score, label = detector.analyze("buy now click here make money", {})
+        # Test bot case — three SPAM_KEYWORDS hits pushes score above 0.5.
+        # ("make money" was dropped from SPAM_KEYWORDS in walkthrough 040 —
+        # the list is now LLM-oriented with a small legacy spam tail.)
+        score, label = detector.analyze("buy now click here free gift act now", {})
         self.assertIn(label, ['bot', 'suspicious'])
         self.assertGreater(score, 0.5)
 

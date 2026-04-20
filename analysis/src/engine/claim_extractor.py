@@ -12,7 +12,7 @@ from dataclasses import dataclass, asdict
 from typing import List, Optional
 
 from analysis.src.common.logger import get_logger
-from analysis.src.engine.prompts import (
+from analysis.src.llm.prompts import (
     CLAIM_EXTRACTION_SYSTEM_PROMPT,
     CLAIM_EXTRACTION_USER_PROMPT_TEMPLATE,
 )

@@ -24,14 +24,13 @@ type DatabaseConfig struct {
 
 // CrawlConfig holds crawl behavior settings.
 type CrawlConfig struct {
-	MaxConcurrency      int           `yaml:"max_concurrency"`
-	MaxConcurrentDomain int           `yaml:"max_concurrent_domain"`
-	RequestTimeout      time.Duration `yaml:"request_timeout"`
-	MaxRetries          int           `yaml:"max_retries"`
-	RateLimitPerSec     float64       `yaml:"rate_limit_per_sec"`
-	MaxRedirects        int           `yaml:"max_redirects"`
-	UserAgent           string        `yaml:"user_agent"`
-	StaleInflightAge    time.Duration `yaml:"stale_inflight_age"`
+	MaxConcurrency   int           `yaml:"max_concurrency"`
+	RequestTimeout   time.Duration `yaml:"request_timeout"`
+	MaxRetries       int           `yaml:"max_retries"`
+	RateLimitPerSec  float64       `yaml:"rate_limit_per_sec"`
+	MaxRedirects     int           `yaml:"max_redirects"`
+	UserAgent        string        `yaml:"user_agent"`
+	StaleInflightAge time.Duration `yaml:"stale_inflight_age"`
 }
 
 // RedditConfig holds Reddit API settings.
@@ -66,14 +65,13 @@ func Load(path string) (*Config, error) {
 	cfg := &Config{
 		// Defaults
 		Crawl: CrawlConfig{
-			MaxConcurrency:      10,
-			MaxConcurrentDomain: 2,
-			RequestTimeout:      30 * time.Second,
-			MaxRetries:          3,
-			RateLimitPerSec:     1.0,
-			MaxRedirects:        5,
-			UserAgent:           "CivicLens/1.0 (+https://github.com/young-kobe/civic-lens)",
-			StaleInflightAge:    10 * time.Minute,
+			MaxConcurrency:   10,
+			RequestTimeout:   30 * time.Second,
+			MaxRetries:       3,
+			RateLimitPerSec:  1.0,
+			MaxRedirects:     5,
+			UserAgent:        "CivicLens/1.0 (+https://github.com/young-kobe/civic-lens)",
+			StaleInflightAge: 10 * time.Minute,
 		},
 		Database: DatabaseConfig{
 			Path:   "data/civic_lens.db",

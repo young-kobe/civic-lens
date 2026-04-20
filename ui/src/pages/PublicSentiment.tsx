@@ -1,405 +1,24 @@
-import { useState, useEffect } from 'react';
-import { Card, ConfidenceBadge, MethodPopover, LoadingCard, EmptyState, ErrorState } from '../components/common';
+import { Card, MethodPopover, LoadingCard, EmptyState, ErrorState } from '../components/common';
 import { SentimentBar, TrendStrip } from '../components/charts';
-import type { Filters, PublicSentimentData, SentimentOverview, SentimentBreakdown, SentimentDistribution, SocialVsNewsSentiment, PollingSocialComparison, TrendPoint, ClassificationSample } from '../types';
+import type { Filters, PublicSentimentData, SentimentBreakdown, SocialVsNewsSentiment, PollingSocialComparison, TrendPoint } from '../types';
 
 import { fetchSentiment } from '../services/api';
 import { transformPublicSentiment } from '../services/transformers';
-
-const SENTIMENT_COLORS = {
-    positive: '#008a4c',
-    negative: '#d41e0e',
-    neutral: '#8e8e96',
-};
+import { useFetch } from '../services/useFetch';
+import { SEMANTIC_COLORS } from '../theme';
+import { SentimentDistributionCard } from './publicSentiment/SentimentDistributionCard';
+import { SentimentOverviewHeader } from './publicSentiment/SentimentOverviewHeader';
+import { TopicRow } from './publicSentiment/TopicRow';
 
 const LABEL_BADGE_STYLES: Record<string, { bg: string; text: string }> = {
-    POSITIVE: { bg: '#e3f6eb', text: '#008a4c' },
-    NEGATIVE: { bg: '#fbe7e4', text: '#d41e0e' },
-    NEUTRAL: { bg: '#f4f4f5', text: '#45454d' },
-    MIXED: { bg: '#fdf0dd', text: '#b26100' },
+    POSITIVE: { bg: SEMANTIC_COLORS.positiveLight, text: SEMANTIC_COLORS.positive },
+    NEGATIVE: { bg: SEMANTIC_COLORS.negativeLight, text: SEMANTIC_COLORS.negative },
+    NEUTRAL: { bg: SEMANTIC_COLORS.neutralLight, text: '#45454d' },
+    MIXED: { bg: SEMANTIC_COLORS.warningLight, text: SEMANTIC_COLORS.warning },
 };
 
 
-interface SentimentOverviewHeaderProps {
-    data: SentimentOverview;
-}
 
-function SentimentOverviewHeader({ data }: SentimentOverviewHeaderProps) {
-    const getScoreDisplay = (score: number) => {
-        if (score > 0.1) return { label: 'Positive', class: 'metric-delta-positive' };
-        if (score < -0.1) return { label: 'Negative', class: 'metric-delta-negative' };
-        return { label: 'Neutral', class: 'metric-delta-neutral' };
-    };
-
-    const scoreInfo = getScoreDisplay(data.netScore);
-
-    return (
-        <Card className="mb-4">
-            <div className="flex items-start justify-between">
-                <div>
-                    <div className="eyebrow mb-2">Net Sentiment Score</div>
-                    <div className="flex items-baseline gap-3">
-                        <span className={`metric-value-lg ${scoreInfo.class}`}>
-                            {data.netScore >= 0 ? '+' : ''}{data.netScore.toFixed(1)}%
-                        </span>
-                        <span className={`text-sm font-bold uppercase ${scoreInfo.class}`}>
-                            {scoreInfo.label}
-                        </span>
-                    </div>
-                </div>
-                <div className="text-right">
-                    <div className="eyebrow mb-2">Total Volume</div>
-                    <div className="num" style={{ fontSize: 'var(--text-2xl)', fontWeight: 600, letterSpacing: '-0.02em' }}>
-                        {data.volume.toLocaleString()}
-                    </div>
-                </div>
-            </div>
-            <div className="mt-3 pt-3" style={{ borderTop: '1px solid var(--neutral-200)' }}>
-                <ConfidenceBadge
-                    coverage={data.coverage}
-                    confidence={data.confidence}
-                    sampleSize={data.volume}
-                />
-            </div>
-        </Card>
-    );
-}
-
-
-/* ------------------------------------------------------------------ */
-/*  Mini Donut Chart (CSS-only conic gradient)                        */
-/* ------------------------------------------------------------------ */
-
-interface MiniDonutProps {
-    positive: number;
-    negative: number;
-    neutral: number;
-    size?: number;
-}
-
-function MiniDonut({ positive, negative, neutral, size = 56 }: MiniDonutProps) {
-    const total = positive + negative + neutral || 1;
-    const negPct = (negative / total) * 100;
-    const neuPct = (neutral / total) * 100;
-    const posPct = (positive / total) * 100;
-
-    const gradient = `conic-gradient(
-        ${SENTIMENT_COLORS.negative} 0% ${negPct}%,
-        ${SENTIMENT_COLORS.neutral} ${negPct}% ${negPct + neuPct}%,
-        ${SENTIMENT_COLORS.positive} ${negPct + neuPct}% 100%
-    )`;
-
-    return (
-        <div style={{
-            width: size, height: size, borderRadius: '50%',
-            background: gradient, position: 'relative', flexShrink: 0,
-        }}>
-            <div style={{
-                position: 'absolute', inset: size * 0.22,
-                borderRadius: '50%', background: 'var(--bg-card, #fff)',
-            }} />
-            <div style={{
-                position: 'absolute', inset: 0, display: 'flex',
-                alignItems: 'center', justifyContent: 'center',
-                fontSize: '11px', fontWeight: 600, color: 'var(--text-primary)',
-            }}>
-                {posPct.toFixed(0)}%
-            </div>
-        </div>
-    );
-}
-
-
-/* ------------------------------------------------------------------ */
-/*  Single Topic Row (expandable)                                     */
-/* ------------------------------------------------------------------ */
-
-interface TopicRowProps {
-    item: SentimentBreakdown;
-}
-
-function TopicRow({ item }: TopicRowProps) {
-    const [expanded, setExpanded] = useState(false);
-    const total = item.positive + item.negative + item.neutral || 1;
-    const netScore = ((item.positive - item.negative) / total * 100);
-    const netColor = netScore > 5 ? SENTIMENT_COLORS.positive
-        : netScore < -5 ? SENTIMENT_COLORS.negative
-        : SENTIMENT_COLORS.neutral;
-    const hasSamples = (item.classificationSamples?.length ?? 0) > 0;
-
-    return (
-        <div style={{
-            background: 'var(--bg-card)', borderRadius: 'var(--radius-sm)',
-            border: '1px solid var(--neutral-200)',
-        }}>
-            {/* Header row */}
-            <button
-                onClick={() => hasSamples && setExpanded(!expanded)}
-                style={{
-                    display: 'flex', alignItems: 'center', gap: '14px',
-                    width: '100%', padding: '10px 12px', border: 'none',
-                    background: 'transparent', cursor: hasSamples ? 'pointer' : 'default',
-                    textAlign: 'left',
-                }}
-                id={`topic-row-${item.topic?.replace(/\s/g, '-').toLowerCase()}`}
-            >
-                <MiniDonut positive={item.positive} negative={item.negative} neutral={item.neutral} size={44} />
-
-                <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                        <span style={{ fontWeight: 700, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.03em' }}>{item.topic}</span>
-                        <span className="num" style={{
-                            fontSize: '11px', fontWeight: 700, padding: '1px 6px',
-                            borderRadius: '2px', color: netColor,
-                            background: netColor === SENTIMENT_COLORS.positive ? 'var(--semantic-positive-light)'
-                                : netColor === SENTIMENT_COLORS.negative ? 'var(--semantic-negative-light)'
-                                : 'var(--neutral-100)',
-                        }}>
-                            {netScore >= 0 ? '+' : ''}{netScore.toFixed(1)}%
-                        </span>
-                        {(item.sarcasm_rate ?? 0) > 0 && (
-                            <span className="badge badge-warning num">
-                                {item.sarcasm_rate?.toFixed(0)}% SARC
-                            </span>
-                        )}
-                    </div>
-                    <div style={{ display: 'flex', gap: '14px', fontSize: '11px', color: 'var(--neutral-500)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
-                        <span>{item.volume.toLocaleString()} docs</span>
-                        <span style={{ color: SENTIMENT_COLORS.positive }}>
-                            +{((item.positive / total) * 100).toFixed(0)}% pos
-                        </span>
-                        <span style={{ color: SENTIMENT_COLORS.negative }}>
-                            -{((item.negative / total) * 100).toFixed(0)}% neg
-                        </span>
-                    </div>
-                </div>
-
-                {hasSamples && (
-                    <span style={{
-                        fontSize: '14px', color: 'var(--neutral-500)',
-                        transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)',
-                        transition: 'transform 0.2s ease', lineHeight: 1,
-                        fontFamily: 'var(--font-mono)',
-                    }}>
-                        v
-                    </span>
-                )}
-            </button>
-
-            {/* Expanded reasoning panel */}
-            {expanded && hasSamples && (
-                <div style={{
-                    padding: '0 12px 12px 12px',
-                    borderTop: '1px solid var(--neutral-200)',
-                }}>
-                    <div className="eyebrow" style={{ padding: '10px 0 8px' }}>
-                        Classification Reasoning · Top {item.classificationSamples!.length}
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        {item.classificationSamples!.map((sample: ClassificationSample) => (
-                            <ClassificationSampleCard key={sample.doc_id} sample={sample} />
-                        ))}
-                    </div>
-                </div>
-            )}
-        </div>
-    );
-}
-
-
-/* ------------------------------------------------------------------ */
-/*  Classification Sample Card                                        */
-/* ------------------------------------------------------------------ */
-
-interface ClassificationSampleCardProps {
-    sample: ClassificationSample;
-}
-
-function ClassificationSampleCard({ sample }: ClassificationSampleCardProps) {
-    const [showFull, setShowFull] = useState(false);
-    const badgeStyle = LABEL_BADGE_STYLES[sample.label] || LABEL_BADGE_STYLES.NEUTRAL;
-
-    // Aggressively filter and deduplicate evidence spans
-    const MAX_EVIDENCE_DISPLAY = 5;
-    const seen = new Set<string>();
-    const meaningfulSpans = (sample.evidence_spans || []).filter((span: string) => {
-        const trimmed = span.trim();
-        if (!trimmed || trimmed.length < 4) return false;
-        // Filter placeholder text the LLM may return from schema examples
-        if (/^exact quote/i.test(trimmed)) return false;
-        if (/^<.*>$/.test(trimmed)) return false;
-        // Do not filter by word count or single mentions (they are valid if the LLM outputted them)
-        // Deduplicate (case-insensitive)
-        const key = trimmed.toLowerCase();
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-    }).slice(0, MAX_EVIDENCE_DISPLAY);
-
-    // Confidence color coding
-    const confPct = sample.confidence * 100;
-    const confColor = confPct >= 80 ? '#16a34a' : confPct >= 50 ? '#ca8a04' : '#dc2626';
-    const confLabel = confPct >= 80 ? 'High' : confPct >= 50 ? 'Medium' : 'Low';
-
-    return (
-        <div style={{
-            background: 'var(--bg-card)', borderRadius: 'var(--radius-sm)',
-            padding: '10px 12px', border: '1px solid var(--neutral-200)',
-        }}>
-            {/* Header row */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px', flexWrap: 'wrap' }}>
-                {/* Label badge */}
-                <span style={{
-                    fontSize: '10px', fontWeight: 700, padding: '2px 6px',
-                    borderRadius: '2px', background: badgeStyle.bg, color: badgeStyle.text,
-                    textTransform: 'uppercase', letterSpacing: '0.06em',
-                }}>
-                    {sample.label}
-                </span>
-                {/* Confidence indicator */}
-                <span
-                    title={`Model confidence: ${confPct.toFixed(1)}% (${confLabel})`}
-                    style={{
-                        display: 'inline-flex', alignItems: 'center', gap: '4px',
-                        fontSize: '10px', color: 'var(--neutral-500)',
-                        fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums',
-                    }}
-                >
-                    <span style={{ fontSize: '9px', opacity: 0.7, textTransform: 'uppercase', letterSpacing: '0.08em' }}>CONF</span>
-                    <span style={{
-                        display: 'inline-block', width: '36px', height: '3px',
-                        borderRadius: '1px', background: 'var(--neutral-200)',
-                        overflow: 'hidden', position: 'relative',
-                    }}>
-                        <span style={{
-                            position: 'absolute', left: 0, top: 0, bottom: 0,
-                            width: `${confPct}%`, background: confColor,
-                            borderRadius: '1px', transition: 'width 0.3s ease',
-                        }} />
-                    </span>
-                    <span style={{ color: confColor, fontWeight: 700 }}>
-                        {confPct.toFixed(0)}%
-                    </span>
-                </span>
-                {/* Sarcasm flag */}
-                {sample.sarcasm_detected && (
-                    <span style={{
-                        fontSize: '9px', fontWeight: 700, padding: '2px 5px',
-                        borderRadius: '2px', background: 'var(--semantic-warning-light)',
-                        color: 'var(--semantic-warning)', letterSpacing: '0.08em',
-                    }}>
-                        SARCASM
-                    </span>
-                )}
-                {/* Source info */}
-                <span style={{
-                    fontSize: '10px', color: 'var(--neutral-500)', marginLeft: 'auto',
-                    display: 'flex', alignItems: 'center', gap: '6px',
-                    fontFamily: 'var(--font-mono)',
-                }}>
-                    {(sample.source_name || sample.date) && (
-                        <span>
-                            {[sample.source_name, sample.date].filter(Boolean).join(' · ')}
-                        </span>
-                    )}
-                    <span style={{
-                        padding: '1px 5px', borderRadius: '2px',
-                        background: 'var(--neutral-100)', textTransform: 'uppercase', letterSpacing: '0.06em',
-                        fontWeight: 600,
-                    }}>
-                        {sample.source_type}
-                    </span>
-                </span>
-            </div>
-
-            {/* Title */}
-            {sample.title && (
-                <div style={{ fontSize: '12px', fontWeight: 500, marginBottom: '4px', lineHeight: 1.3 }}>
-                    {sample.title.length > 100 ? sample.title.slice(0, 100) + '...' : sample.title}
-                </div>
-            )}
-
-            {/* Reasoning (truncated with expand) */}
-            <div style={{ fontSize: '12px', color: 'var(--neutral-700)', lineHeight: 1.5 }}>
-                {showFull || sample.reasoning.length <= 150
-                    ? sample.reasoning
-                    : sample.reasoning.slice(0, 150) + '...'}
-                {sample.reasoning.length > 150 && (
-                    <button
-                        onClick={() => setShowFull(!showFull)}
-                        style={{
-                            background: 'none', border: 'none', color: 'var(--accent)',
-                            cursor: 'pointer', fontSize: '11px', fontWeight: 600,
-                            marginLeft: '4px', padding: 0, textTransform: 'uppercase',
-                            letterSpacing: '0.06em',
-                        }}
-                    >
-                        {showFull ? 'Show less' : 'Show more'}
-                    </button>
-                )}
-            </div>
-
-            {/* Evidence spans - only meaningful, deduped, capped */}
-            {meaningfulSpans.length > 0 && (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '8px' }}>
-                    {meaningfulSpans.map((span: string, i: number) => (
-                        <span
-                            key={i}
-                            title={span}
-                            style={{
-                                fontSize: '10px', padding: '2px 6px', borderRadius: '2px',
-                                background: 'var(--neutral-100)',
-                                color: 'var(--neutral-700)', fontStyle: 'italic',
-                                maxWidth: '280px', overflow: 'hidden', textOverflow: 'ellipsis',
-                                whiteSpace: 'nowrap', cursor: 'help',
-                                borderLeft: `2px solid ${badgeStyle.text}`,
-                            }}
-                        >
-                            &quot;{span}&quot;
-                        </span>
-                    ))}
-                </div>
-            )}
-
-            {/* Source Text */}
-            {sample.full_text && (
-                <div style={{
-                    marginTop: '10px', padding: '8px 10px', background: 'var(--bg-inset)',
-                    borderRadius: '2px', borderLeft: '2px solid var(--neutral-300)',
-                    fontSize: '11px', color: 'var(--neutral-700)',
-                }}>
-                    <div className="eyebrow" style={{
-                        marginBottom: '6px',
-                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                    }}>
-                        <span>Source Text</span>
-                        {sample.url && (
-                            <a href={sample.url} target="_blank" rel="noreferrer" style={{
-                                color: 'var(--accent)', textDecoration: 'none',
-                                textTransform: 'none', fontSize: '11px', letterSpacing: 'normal',
-                            }}>
-                                View Original ↗
-                            </a>
-                        )}
-                    </div>
-                    <div style={{ lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
-                        {showFull || sample.full_text.length <= 150
-                            ? sample.full_text
-                            : sample.full_text.slice(0, 150) + '...'}
-                    </div>
-                </div>
-            )}
-
-            {/* Doc reference */}
-            <div style={{
-                marginTop: '6px', fontSize: '10px', color: 'var(--neutral-400)',
-                fontFamily: 'var(--font-mono)', letterSpacing: '0.04em',
-            }}>
-                DOC #{sample.doc_id}
-            </div>
-        </div>
-    );
-}
 
 
 /* ------------------------------------------------------------------ */
@@ -426,7 +45,7 @@ function TopicSentimentCard({ data }: TopicSentimentCardProps) {
         >
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 {data.map((item, i) => (
-                    <TopicRow key={i} item={item} />
+                    <TopicRow key={i} item={item} labelBadgeStyles={LABEL_BADGE_STYLES} />
                 ))}
             </div>
         </Card>
@@ -435,77 +54,6 @@ function TopicSentimentCard({ data }: TopicSentimentCardProps) {
 
 
 
-interface SentimentDistributionCardProps {
-    data: SentimentDistribution;
-}
-
-function SentimentDistributionCard({ data }: SentimentDistributionCardProps) {
-    const total = Object.values(data).reduce((a, b) => a + b, 0) || 1;
-
-    const segments = [
-        { label: 'Strong unfavorable', value: data.strongNegative, color: '#991b1b' },
-        { label: 'Mild unfavorable', value: data.mildNegative, color: '#dc2626' },
-        { label: 'Neutral', value: data.neutral, color: '#9ca3af' },
-        { label: 'Mild favorable', value: data.mildPositive, color: '#22c55e' },
-        { label: 'Strong favorable', value: data.strongPositive, color: '#16a34a' },
-    ];
-
-    return (
-        <Card
-            title="Sentiment Distribution"
-            subtitle="Including intensity levels"
-            headerActions={
-                <MethodPopover
-                    description="Sentiment intensity classified using a 5-point scale based on lexical and contextual signals."
-                    limitations={['Intensity thresholds are model-dependent']}
-                />
-            }
-        >
-            {/* Stacked bar */}
-            <div
-                style={{
-                    display: 'flex',
-                    height: '48px',
-                    borderRadius: 'var(--radius-md)',
-                    overflow: 'hidden',
-                    marginBottom: 'var(--space-4)'
-                }}
-            >
-                {segments.map((seg, i) => (
-                    <div
-                        key={i}
-                        style={{
-                            width: `${(seg.value / total) * 100}%`,
-                            background: seg.color,
-                            transition: 'width var(--transition-base)',
-                        }}
-                        title={`${seg.label}: ${seg.value}`}
-                    />
-                ))}
-            </div>
-
-            {/* Legend */}
-            <div className="grid-2 gap-2">
-                {segments.map((seg, i) => (
-                    <div key={i} className="flex items-center gap-2">
-                        <div
-                            style={{
-                                width: '12px',
-                                height: '12px',
-                                borderRadius: 'var(--radius-sm)',
-                                background: seg.color
-                            }}
-                        />
-                        <span className="text-sm">{seg.label}</span>
-                        <span className="text-xs text-muted ml-auto">
-                            {((seg.value / total) * 100).toFixed(1)}%
-                        </span>
-                    </div>
-                ))}
-            </div>
-        </Card>
-    );
-}
 
 interface SocialVsNewsCardProps {
     data: SocialVsNewsSentiment | null | undefined;
@@ -647,30 +195,14 @@ interface PublicSentimentProps {
 }
 
 function PublicSentiment({ filters }: PublicSentimentProps) {
-    const [data, setData] = useState<PublicSentimentData | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-
-    useEffect(() => {
-        const loadData = async () => {
-            setLoading(true);
-            setError(null);
-            try {
-                const rawData = await fetchSentiment(filters.timeRange);
-                const processedData = transformPublicSentiment(rawData);
-                setData(processedData);
-            } catch (err: any) {
-                console.error("Failed to load sentiment:", err);
-                setError(err.message || "Failed to load sentiment data.");
-            } finally {
-                setLoading(false);
-            }
-        };
-        loadData();
-    }, [filters]);
+    const { data, loading, error, refetch } = useFetch<PublicSentimentData>(
+        async () => transformPublicSentiment(await fetchSentiment(filters.timeRange)),
+        [filters.timeRange],
+        `sentiment:${filters.timeRange}`,
+    );
 
     if (error) {
-        return <ErrorState message={error} onRetry={() => window.location.reload()} />;
+        return <ErrorState message={error.message} onRetry={refetch} />;
     }
 
 
@@ -703,8 +235,10 @@ function PublicSentiment({ filters }: PublicSentimentProps) {
                     color: '#92400e',
                 }}
             >
-                <strong>Sampled data:</strong> sentiment reflects US-political news articles plus sampled Reddit and X
-                discussions from the last 30 days. It is not a scientific poll and does not represent the full population.
+                <strong>Sampled political discourse:</strong> sentiment reflects US political news articles plus
+                sampled political Reddit and X discussions from the last 30 days. This is a snapshot of what the
+                sources we ingest are saying about politics — not a scientific poll and not a representation of the
+                full population.
             </div>
 
             {/* Overview Header */}

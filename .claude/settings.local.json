@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run *)",
+      "Read(//c/c/Users/kobey/civic-lens/analysis/src/**)",
+      "Read(//c/c/Users/kobey/civic-lens/analysis/src/reporting/**)",
+      "Bash(go test *)",
+      "Bash(go build *)",
+      "Bash(rm /tmp/civic-ingest.exe)"
+    ]
+  }
+}

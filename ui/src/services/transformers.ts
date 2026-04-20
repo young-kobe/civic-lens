@@ -1,5 +1,4 @@
-
-import { BotData, PublicSentimentData } from '../types';
+import { PublicSentimentData } from '../types';
 
 export function transformPublicSentiment(apiData: any): PublicSentimentData {
     return {
@@ -38,29 +37,3 @@ export function transformPublicSentiment(apiData: any): PublicSentimentData {
     };
 }
 
-export function transformBotData(profiles: any[]): BotData {
-    // Transform outlet profiles into a summary BotData object
-    const totalScanned = profiles.reduce((acc, p) => acc + p.total_scanned, 0);
-    const totalBot = profiles.reduce((acc, p) => acc + p.bot_flags, 0);
-    const avgBotRate = totalScanned > 0 ? (totalBot / totalScanned) * 100 : 0;
-
-    return {
-        overview: {
-            suspectedAutomationRate: Math.round(avgBotRate * 10) / 10,
-            narrativeAmplification: "Low", // Placeholder
-            coordinatedNetworks: 0 // Placeholder
-        },
-        narrativeAmplification: [
-            // Placeholder for now, could be derived if we had more data
-        ],
-        coordinationStats: {
-            // Simplify to showing top bot-heavy outlets
-        },
-        behavioralSignals: profiles.slice(0, 5).map(p => ({
-            signal: `High Bot Activity: ${p.outlet}`,
-            impact: "High",
-            confidence: 0.9,
-            description: `${Math.round(p.bot_rate * 100)}% of content flagged as bot or suspicious.`
-        }))
-    } as unknown as BotData;
-}

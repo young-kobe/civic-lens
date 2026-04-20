@@ -36,6 +36,9 @@ func NewXRunner(a *app.App) *XRunner {
 func (xr *XRunner) Run(ctx context.Context) (*XResult, error) {
 	cfg := xr.app.Config
 
+	// Reset any INFLIGHT rows left behind by a crashed previous run.
+	xr.app.Frontier.EnsureRecovered(ctx, cfg.Crawl.StaleInflightAge)
+
 	xr.client = x.NewFromEnv(x.Config{
 		BearerToken:     cfg.X.BearerToken,
 		UserAgent:       cfg.X.UserAgent,
@@ -105,24 +108,24 @@ func (xr *XRunner) Run(ctx context.Context) (*XResult, error) {
 }
 
 func (xr *XRunner) insertPost(ctx context.Context, post model.XPost) error {
-	_, err := xr.app.Database.Conn().ExecContext(ctx, `
-		INSERT OR REPLACE INTO x_posts_raw 
-		(tweet_id, author_id, conversation_id, created_at, fetched_at, text, lang,
-		 retweet_count, reply_count, like_count, quote_count,
-		 place_id, place_country_code, place_full_name,
-		 context_annotations_json, in_reply_to_user_id,
-		 referenced_tweet_id, referenced_tweet_type,
-		 raw_hash, extraction_version)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, post.TweetID, post.AuthorID, post.ConversationID,
-		post.CreatedAt, post.FetchedAt, post.Text, post.Lang,
-		post.RetweetCount, post.ReplyCount, post.LikeCount, post.QuoteCount,
-		post.PlaceID, post.PlaceCountryCode, post.PlaceFullName,
-		post.ContextAnnotationsJSON, post.InReplyToUserID,
-		post.ReferencedTweetID, post.ReferencedTweetType,
-		post.RawHash, post.ExtractionVersion)
-
-	return err
+	return upsertRow(ctx, xr.app.Database.Conn(), "x_posts_raw",
+		[]string{
+			"tweet_id", "author_id", "conversation_id", "created_at", "fetched_at",
+			"text", "lang", "retweet_count", "reply_count", "like_count", "quote_count",
+			"place_id", "place_country_code", "place_full_name",
+			"context_annotations_json", "in_reply_to_user_id",
+			"referenced_tweet_id", "referenced_tweet_type",
+			"raw_hash", "extraction_version",
+		},
+		[]any{
+			post.TweetID, post.AuthorID, post.ConversationID, post.CreatedAt, post.FetchedAt,
+			post.Text, post.Lang, post.RetweetCount, post.ReplyCount, post.LikeCount, post.QuoteCount,
+			post.PlaceID, post.PlaceCountryCode, post.PlaceFullName,
+			post.ContextAnnotationsJSON, post.InReplyToUserID,
+			post.ReferencedTweetID, post.ReferencedTweetType,
+			post.RawHash, post.ExtractionVersion,
+		},
+	)
 }
 
 func (xr *XRunner) insertUser(ctx context.Context, user model.XUser) error {
@@ -135,17 +138,18 @@ func (xr *XRunner) insertUser(ctx context.Context, user model.XUser) error {
 		protected = 1
 	}
 
-	_, err := xr.app.Database.Conn().ExecContext(ctx, `
-		INSERT OR REPLACE INTO x_users_raw 
-		(user_id, username, name, location, description, created_at,
-		 followers_count, following_count, tweet_count, listed_count,
-		 verified, verified_type, profile_image_url, protected,
-		 fetched_at, raw_hash)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, user.UserID, user.Username, user.Name, user.Location, user.Description,
-		user.CreatedAt, user.FollowersCount, user.FollowingCount,
-		user.TweetCount, user.ListedCount, verified, user.VerifiedType,
-		user.ProfileImageURL, protected, user.FetchedAt, user.RawHash)
-
-	return err
+	return upsertRow(ctx, xr.app.Database.Conn(), "x_users_raw",
+		[]string{
+			"user_id", "username", "name", "location", "description", "created_at",
+			"followers_count", "following_count", "tweet_count", "listed_count",
+			"verified", "verified_type", "profile_image_url", "protected",
+			"fetched_at", "raw_hash",
+		},
+		[]any{
+			user.UserID, user.Username, user.Name, user.Location, user.Description, user.CreatedAt,
+			user.FollowersCount, user.FollowingCount, user.TweetCount, user.ListedCount,
+			verified, user.VerifiedType, user.ProfileImageURL, protected,
+			user.FetchedAt, user.RawHash,
+		},
+	)
 }

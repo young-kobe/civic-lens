@@ -4,7 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-Civic Lens measures how political narratives propagate across news media and online discourse. It is an audit-driven system: every output must be traceable, include a confidence score, and never fabricate data (see `docs/INVARIANTS.md` and `.agent/rules/`).
+Civic Lens measures **sampled political discourse** across news, Reddit, and X, with a **narrative overlay** that clusters recurring claims and a **partial citation overlay** between owned sources. It is an audit-driven system: every output is traceable, confidence-scored, labeled as a sample, and never fabricates data (see `docs/INVARIANTS.md` and `.agent/rules/`).
+
+The goal is deliberately scoped to what the data supports. We do not claim to measure "propagation" in the causal sense (origin-in-the-world, full cross-medium flow) — the citation graph only covers edges between docs we ingested, and "first seen" refers to first-ingested-by-us. See walkthrough 035 for the rationale.
 
 ## Four-Layer Architecture
 
@@ -13,10 +15,11 @@ The codebase is strictly layered. Changes should respect these boundaries — do
 1. **Ingestion — Go (`ingest/`)**: Crash-resumable crawler + Reddit/X fetchers. Writes raw HTML/JSON to content-addressed storage (`data/raw/sha256/<hash>`) and metadata to SQLite (`data/civic_lens.db`). Entry: `ingest/cmd/civic-ingest/main.go` (cobra CLI with `migrate|ingest|crawl|reddit|x|requeue-stale` subcommands). Frontier state machine: `QUEUED -> INFLIGHT -> DONE|FAILED`; `INFLIGHT` rows are reset on startup.
 2. **Analysis — Python (`analysis/src/`)**:
    - `etl/loader.py` normalizes raw → `docs` table, filtered to ~30 days of US-politics content.
-   - `engine/` runs bot detection, unified sentiment+favorability (`analyzer.py`), and TF-IDF clustering. Writes to `ai_outputs` and `clusters`.
+   - `engine/` runs bot detection, unified sentiment+favorability (`analyzer.py`), deterministic citation extraction (`citation_extractor.py`), LLM claim extraction (`claim_extractor.py`), and lexical / embedding narrative clustering (`narrative_clusterer.py`). Writes to `ai_outputs`, `narratives`, `narrative_docs`, `narrative_citations`.
    - `llm/` wraps Gemini and Ollama behind `factory.get_llm_client()`, selected by `CIVIC_LLM_BACKEND`.
    - `reporting/aggregators/` pre-computes dashboard data into `SnapshotCache` (`data/cache/*.json`) at multiple time windows (`24h|7d|30d|90d`).
-   - `scheduler/job_runner.py` orchestrates the full pipeline (ETL → bot → text → clustering → snapshots).
+   - `reporting/review.py` serves the human-in-loop review queue and writes `ai_output_evals` (golden-set + correctness markers) — consumed by the Review tab.
+   - `scheduler/job_runner.py` orchestrates the full pipeline (ETL → bot → text → citations → claims → narratives → snapshots).
 3. **API — FastAPI (`analysis/src/api/server.py`)**: Stateless; serves pre-computed JSON from `data/cache/`. Heavy aggregation does *not* happen at request time — it runs in `job_runner.save_snapshots()`.
 4. **UI — React + Vite + TypeScript (`ui/src/`)**: Dev server proxies `/api/*` to `http://localhost:8000`. Consumes API only; no direct DB access.
 
@@ -42,7 +45,7 @@ All orchestration goes through `run.ps1` (PowerShell, Windows). It auto-creates 
 .\run.ps1 dev                       # API + UI in separate windows
 ```
 
-Valid `-Tasks` values: `etl, bot, text, clustering, snapshots`.
+Valid `-Tasks` values: `etl, bot, text, citations, claims, narratives, snapshots`.
 
 ### Tests and typecheck
 
@@ -69,7 +72,9 @@ All Python settings use the `CIVIC_` env prefix and are defined in `analysis/src
 - `CIVIC_LLM_BACKEND` = `gemini` | `ollama`
 - `CIVIC_LLM_ENABLED` = `true` | `false`
 - `CIVIC_RUN_ANALYSIS_ON` = `all` | `social_media` | `x` (scopes which `source_type` docs are analyzed)
-- `CIVIC_LOADER_BATCH_SIZE`, `CIVIC_CLUSTERING_THRESHOLD`
+- `CIVIC_LOADER_BATCH_SIZE`
+- `CIVIC_NARRATIVE_SIMILARITY_MODE` = `jaccard` (lexical, default) | `embedding` (semantic via Ollama)
+- `CIVIC_NARRATIVE_JACCARD_THRESHOLD`, `CIVIC_NARRATIVE_EMBEDDING_THRESHOLD`
 
 `data/seeds.yaml` drives the Go ingestor (RSS seeds, subreddits, Reddit API creds, rate limits).
 

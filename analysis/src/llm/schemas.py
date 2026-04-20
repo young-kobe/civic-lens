@@ -92,7 +92,60 @@ CLAIM_EXTRACTION_SCHEMA = {
     "required": ["claims"],
 }
 
-# Bot Detection Schema
+# Propaganda Detection Schema (walkthrough 042)
+PROPAGANDA_TECHNIQUE_ENUM = [
+    "loaded_language",
+    "name_calling",
+    "ad_hominem",
+    "appeal_to_fear",
+    "whataboutism",
+    "doubt_casting",
+]
+
+PROPAGANDA_TECHNIQUE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "technique": {
+            "type": "string",
+            "enum": PROPAGANDA_TECHNIQUE_ENUM,
+        },
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "evidence_span": {"type": "string"},
+    },
+    "required": ["technique", "confidence", "evidence_span"],
+}
+
+PROPAGANDA_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "techniques": {
+            "type": "array",
+            "items": PROPAGANDA_TECHNIQUE_SCHEMA,
+        },
+        "overall_propaganda_score": {
+            "type": "number", "minimum": 0, "maximum": 1,
+        },
+        "reasoning": {"type": "string"},
+    },
+    "required": ["techniques", "overall_propaganda_score"],
+}
+
+
+# Account Classifier Schema
+ACCOUNT_CLASSIFIER_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "tier": {
+            "type": "string",
+            "enum": ["elected_official", "affiliated", "general_public"],
+        },
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "reasoning": {"type": "string"},
+    },
+    "required": ["tier", "confidence"],
+}
+
+# Bot Detection Schema (walkthrough 040 — added llm_text_likelihood)
 BOT_SCHEMA = {
     "type": "object",
     "properties": {
@@ -107,6 +160,11 @@ BOT_SCHEMA = {
             "type": "number",
             "minimum": 0,
             "maximum": 1
+        },
+        "llm_text_likelihood": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
         },
         "indicators": {
             "type": "array",

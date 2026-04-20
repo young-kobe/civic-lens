@@ -310,6 +310,69 @@ class BehavioralSignals:
 
 
 @dataclass
+class NarrativeSummary:
+    """Summary of a single narrative for the Narratives list view.
+
+    ``first_seen_*`` fields reference the earliest doc WE ingested that
+    carried this claim — not where the claim originated in the world.
+    ``first_seen_tier`` is only populated for x_post source types and uses
+    ``account_profiles`` (curated list + LLM classifier). Defaults to
+    'general_public' when the X author isn't classified; None for news and
+    reddit source types.
+
+    ``first_seen_author`` is a faction-context sub-object for x_post
+    first-seen docs: handle, full_name, party, branch, chamber,
+    state_or_district, office_title, account_type. Lets the UI render
+    "Rep Adams (D, NC-12)"-style labels. None for news/reddit.
+
+    ``propaganda_score`` (walkthrough 043) is the mean propaganda density
+    across supporting docs that have been through propaganda detection. None
+    when no supporting doc has a propaganda row yet.
+
+    ``bot_pushed_fraction`` (walkthrough 043) is the fraction of the
+    narrative's unique X supporting authors whose ``author_bot_scores.score
+    >= 0.5`` or who have any bot-labeled posts. None when no supporting doc
+    is an X post with a resolved author. Together with ``propaganda_score``
+    it lets the UI show "this narrative is heavily bot-pushed AND heavy on
+    propaganda techniques."
+    """
+    narrative_id: int
+    name: str
+    first_seen_at: int
+    first_seen_doc_id: Optional[int]
+    first_seen_source_type: Optional[str]
+    first_seen_domain: Optional[str]
+    first_seen_tier: Optional[str]  # 'elected_official' | 'affiliated' | 'general_public' | None
+    first_seen_author: Optional[Dict[str, Any]]
+    supporting_doc_count: int
+    source_breakdown: List[Dict[str, Any]]
+    timeline: List[Dict[str, Any]]
+    net_sentiment: float
+    inbound_citation_count: int
+    propaganda_score: Optional[float] = None
+    bot_pushed_fraction: Optional[float] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "narrative_id": self.narrative_id,
+            "name": self.name,
+            "first_seen_at": self.first_seen_at,
+            "first_seen_doc_id": self.first_seen_doc_id,
+            "first_seen_source_type": self.first_seen_source_type,
+            "first_seen_domain": self.first_seen_domain,
+            "first_seen_tier": self.first_seen_tier,
+            "first_seen_author": self.first_seen_author,
+            "supporting_doc_count": self.supporting_doc_count,
+            "source_breakdown": self.source_breakdown,
+            "timeline": self.timeline,
+            "net_sentiment": self.net_sentiment,
+            "inbound_citation_count": self.inbound_citation_count,
+            "propaganda_score": self.propaganda_score,
+            "bot_pushed_fraction": self.bot_pushed_fraction,
+        }
+
+
+@dataclass
 class BotActivityData:
     """Complete bot activity response."""
     overview: BotOverview

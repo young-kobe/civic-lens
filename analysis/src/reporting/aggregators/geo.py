@@ -36,27 +36,46 @@ class GeoAggregator:
     def __init__(self, db_path: str):
         self.db_path = db_path
 
-    def get_country_sentiment(self, time_window: str = "7d") -> Dict[str, Any]:
+    def get_country_sentiment(
+        self,
+        time_window: str = "7d",
+        bot_docs: Set[int] = None,
+    ) -> Dict[str, Any]:
         """Aggregate X posts by country_code with confidence-weighted sentiment.
 
         Uses the ``docs.place_country_code`` column (populated at ingest time
         from X's ``places`` expansion) rather than re-parsing metadata_json
         per row.
+
+        ``bot_docs`` can be supplied by the caller (job_runner) to avoid
+        running the same bot-flag query once per aggregator.
         """
+        from analysis.src.common.settings import get_settings
+        min_conf = get_settings().aggregation_min_confidence
+
         cutoff = get_time_cutoff(time_window)
-        bot_docs = get_bot_flagged_doc_ids(self.db_path)
+        if bot_docs is None:
+            bot_docs = get_bot_flagged_doc_ids(self.db_path, min_confidence=min_conf)
 
         with get_connection(self.db_path) as conn:
             cursor = conn.cursor()
 
+            # ai_outputs join is LEFT so we still count posts that don't have
+            # a sentiment row. Confidence gate is applied in the ON clause so
+            # low-confidence sentiment effectively becomes "no sentiment" for
+            # the post — the post still contributes to geo coverage counts,
+            # just not to the colored aggregate (walkthrough 039).
             query = """
                 SELECT d.doc_id, d.place_country_code, a.output_json, a.confidence
                 FROM docs d
-                LEFT JOIN ai_outputs a ON d.doc_id = a.doc_id AND a.task_type = 'sentiment'
+                LEFT JOIN ai_outputs a
+                       ON d.doc_id = a.doc_id
+                      AND a.task_type = 'sentiment'
+                      AND a.confidence >= ?
                 WHERE d.source_type = 'x_post'
                   AND d.place_country_code IS NOT NULL
             """
-            params: list = []
+            params: list = [min_conf]
 
             if cutoff:
                 query += " AND d.published_at >= ?"

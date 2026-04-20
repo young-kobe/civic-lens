@@ -1,10 +1,23 @@
 """
 Cross-source citation extractor for Civic Lens.
 
+Produces a *partial* link graph — not a full propagation trace. The goal of
+the project (see CLAUDE.md, walkthrough 035) is sampled discourse with a
+narrative overlay; this module provides a citation-overlay signal, honestly
+labeled as partial in the UI.
+
 Deterministic (no LLM). Writes two kinds of edge to ``narrative_citations``:
-  - X quote/reply/retweet edges driven by ``x_posts_raw.referenced_tweet_id``
+  - X quote/reply/retweet edges driven by ``x_posts_raw.referenced_tweet_id``.
+    Dropped entirely when the referenced tweet is not one we ingested
+    (we don't know its URL without a re-fetch).
   - URL citation edges extracted from doc text, matched against ``docs.ident``
     when we own the target and stored as ``target_url`` otherwise.
+
+What this module does NOT capture (by design, not bug):
+  - News-to-news syndication without an explicit URL mention.
+  - Social content paraphrasing an article with no link.
+  - Blockquotes of external content.
+  - Any edge from content we don't host to content we don't host.
 
 Per-doc idempotency is tracked via an ``ai_outputs`` row with
 ``task_type='citations'``, so re-running the job skips already-processed docs.
@@ -77,8 +90,10 @@ class CitationExtractor:
                 cursor.execute(
                     """
                     INSERT INTO ai_outputs
-                        (doc_id, task_type, output_json, confidence, model_id, prompt_version, created_at)
-                    VALUES (?, 'citations', ?, 1.0, ?, ?, strftime('%s','now'))
+                        (doc_id, task_type, output_json, confidence, model_id,
+                         prompt_version, inference_method, created_at)
+                    VALUES (?, 'citations', ?, 1.0, ?, ?, 'deterministic',
+                            strftime('%s','now'))
                     """,
                     (
                         doc["doc_id"],
