@@ -100,7 +100,10 @@ func (c *Client) SearchRecentPosts(ctx context.Context, query string, maxResults
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	// Cap body size — a hostile proxy or saturated API response can't hang
+	// the fetcher reading gigabytes (audit §1.11). X API responses for one
+	// page of recent search are KB-sized.
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 10<<20))
 	if err != nil {
 		return nil, nil, err
 	}

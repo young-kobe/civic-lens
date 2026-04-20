@@ -1,0 +1,8 @@
+# Template for /home/deployment/.ssh/authorized_keys.
+#
+# The forced command below is the only thing this key can execute. Agent /
+# TCP / X11 forwarding are disabled so the SSH session can't be used as a
+# tunnel. Replace the placeholder at the end with the actual public key
+# stored in the GitHub repo's DEPLOY_SSH_KEY secret.
+
+command="sudo /opt/civic-lens/deploy/deploy.sh",no-pty,no-agent-forwarding,no-port-forwarding,no-X11-forwarding,no-user-rc ssh-ed25519 AAAA...REPLACE-WITH-DEPLOY-PUB-KEY... civic-lens-deploy

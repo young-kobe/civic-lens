@@ -1,0 +1,10 @@
+[Unit]
+Description=Civic Lens Reddit fetch timer
+
+[Timer]
+OnCalendar=*-*-* 00/2:30:00
+RandomizedDelaySec=5m
+Persistent=true
+
+[Install]
+WantedBy=timers.target

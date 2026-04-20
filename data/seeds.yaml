@@ -1,4 +1,9 @@
 # Civic Lens seed configuration
+#
+# Budget target: ~$50/month total operating cost. X credit spend is capped at
+# $25/month via x.monthly_budget_cents + the x_api_budget persistent counter
+# (walkthrough 048). News + Reddit are free. Hetzner + Gemini + R2 backups
+# round out the remaining ~$23/month.
 
 database:
   path: data/civic_lens.db
@@ -14,65 +19,65 @@ crawl:
   stale_inflight_age: 10m
 
 reddit:
-  user_agent: "CivicLens/1.0 by u/your_username"
+  user_agent: "CivicLens/1.0 by u/civic-lens"
+  # Subreddits balanced across left / center / right plus two structured
+  # viewpoint subs (AskConservatives, AskALiberal) that tend to produce
+  # higher-signal sentiment than hot-take aggregators. The old r/Liberal
+  # sub was dropped — it's near-dead and its traffic was drowning
+  # r/Conservative in the left/right parity math.
   subreddits:
     - politics
     - news
     - worldnews
     - PoliticalDiscussion
     - NeutralPolitics
-    - geopolitics
-    - Conservative
-    - Liberal
     - moderatepolitics
+    - Conservative
+    - democrats
+    - AskConservatives
+    - AskALiberal
+    - PoliticalHumor
+    - geopolitics
 
 x:
-  # Get Bearer Token from https://developer.twitter.com/
-  # Set via environment variable X_BEARER_TOKEN 
+  # Bearer token comes from X_BEARER_TOKEN environment variable; never
+  # put it in this file (seeds.yaml is tracked in git).
   user_agent: "CivicLens/1.0"
-  # Budget control: ~70 requests/hour = ~$50/month at $0.015/100 tweets
-  max_requests_hour: 70
-  max_tweets_per_query: 100
+
+  # Per-session rate pacing (not the real budget limit — that's below).
+  max_requests_hour: 30
+
+  # Per-query tweet pull. X pricing is $0.005 per tweet + $0.010 per hydrated
+  # user; keeping this low means the user-expansion cost stays bounded
+  # (~8-12 unique authors per 10 tweets in practice). Tuning knob: bump back
+  # toward 25 if you raise monthly_budget_cents; cap at 100 (X API max).
+  max_tweets_per_query: 10
+
+  # Hard ceiling enforced by the x_api_budget table (migration 017). When
+  # the month-to-date estimated spend hits this, the runner aborts any
+  # remaining queries for the month. $25 = 2500 cents buys roughly 2,400
+  # tweets + user hydration at current pricing.
+  monthly_budget_cents: 2500
+
+  # Eight high-signal topics, de-duplicated from the old 21-query list.
+  # `MAGA` alone removed because `Trump OR MAGA` subsumes it. Hyperlocal
+  # Minnesota/Minneapolis queries removed. Markets-adjacent (Dollar/Stock/
+  # Market) removed — too noisy for the political-sentiment signal. Added
+  # abortion/SCOTUS and inflation/economy (two of the top political drivers
+  # missing from the old list).
   political_queries:
     - "GOP OR Republican"
     - "Trump OR MAGA"
-    - "Biden OR Democrat"
+    - "Biden OR Democrats"
     - "Congress OR Senate"
-    - "election 2024"
-    - "Immigration"
-    - "ICE"
-    - "Border"
-    - "Immigrant"
-    - "Citizen"
-    - "Citizenship"
-    - "Immigration Reform"
-    - "Immigration Law"
-    - "Minnesota"
-    - "Minneapolis"
-    - "MAGA"
-    - "Leftists"
-    # - "Violence"
-    - "2nd Amendment"
-    # - "Gun rights"
-    # - "Gun control"
-    # - "Technology"
-    # - "Silicon Valley"
-    # - "Wall Street"
-    # - "AI"
-    # - "Healthcare"
-    # - "Senator"
-    # - "Mayor"
-    # - "President"
-    # - "Judge"
-    # - "Economy"
-    - "Dollar"
-    - "Stock"
-    - "Market"
-    # - "Earnings"
-    # - "Inflation"
+    - "abortion OR SCOTUS OR Roe"
+    - "immigration OR border OR ICE"
+    - "inflation OR economy"
+    - "2nd Amendment OR guns"
 
 seeds:
-  # Major news RSS feeds
+  # Major news RSS feeds — left / center / right spread + neutral wire baseline.
+  # Priority 10 = primary political desk; 9 = secondary; 8 = international.
   - url: https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml
     type: rss
     priority: 10
@@ -109,3 +114,20 @@ seeds:
   - url: https://www.cbsnews.com/latest/rss/politics
     type: rss
     priority: 10
+  # Additions (walkthrough 048) — wire-neutral baseline, progressive long-form,
+  # conservative long-form, progressive investigative.
+  - url: https://feeds.apnews.com/apnews
+    type: rss
+    priority: 10
+  - url: https://api.axios.com/feed/politics
+    type: rss
+    priority: 9
+  - url: https://feeds.a.dj.com/rss/RSSOpinion.xml
+    type: rss
+    priority: 9
+  - url: https://thefederalist.com/feed/
+    type: rss
+    priority: 9
+  - url: https://theintercept.com/feed/
+    type: rss
+    priority: 9

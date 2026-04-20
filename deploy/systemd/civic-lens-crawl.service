@@ -1,0 +1,42 @@
+[Unit]
+Description=Civic Lens web crawler (one-shot)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=civic-lens
+Group=civic-lens
+WorkingDirectory=/opt/civic-lens
+EnvironmentFile=/etc/civic-lens.env
+ExecStart=/opt/civic-lens/civic-ingest crawl \
+    --config /opt/civic-lens/data/seeds.yaml \
+    --db ${CIVIC_DB_PATH} \
+    --duration 10m
+
+# Hardening (audit §1.14)
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectKernelLogs=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+SystemCallArchitectures=native
+SystemCallFilter=~@privileged @debug @module @mount @obsolete @reboot @swap @raw-io @cpu-emulation
+SystemCallErrorNumber=EPERM
+ReadWritePaths=/var/lib/civic-lens
+MemoryMax=512M
+CPUQuota=80%
+TasksMax=64

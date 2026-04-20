@@ -47,6 +47,11 @@ func New(cfg Config) *Fetcher {
 			if len(via) >= cfg.MaxRedirects {
 				return fmt.Errorf("stopped after %d redirects", cfg.MaxRedirects)
 			}
+			// Guard against redirect-chain SSRF: a trusted initial host can
+			// 302 us to 169.254.169.254 or 127.0.0.1 (audit §1.10).
+			if err := validateURL(req.URL.String()); err != nil {
+				return fmt.Errorf("redirect target rejected: %w", err)
+			}
 			return nil
 		},
 	}
@@ -86,6 +91,12 @@ type FetchResult struct {
 
 // Fetch retrieves a URL with rate limiting and retries.
 func (f *Fetcher) Fetch(ctx context.Context, urlStr string, domain string) *FetchResult {
+	// Reject private / loopback / non-http(s) URLs up-front so a poisoned
+	// seeds.yaml or DB row can't reach local services. Redirect targets
+	// are validated inside CheckRedirect (audit §1.10).
+	if err := validateURL(urlStr); err != nil {
+		return &FetchResult{Error: fmt.Errorf("url rejected: %w", err)}
+	}
 	limiter := f.getRateLimiter(domain)
 
 	var lastErr error

@@ -3,20 +3,31 @@ import { Tabs, GlobalFilters, ExportMenu } from './components/common';
 import { Home, PublicSentiment, BotActivityProfiler, GlobalHeatmap, Narratives, Propaganda, Review } from './pages';
 import type { Filters } from './types';
 
-// Admin mode is now token-based. Visit once with ?admin=<CIVIC_ADMIN_TOKEN> to
+// Admin mode is token-based. Visit once with ?admin=<CIVIC_ADMIN_TOKEN> to
 // persist it; ?admin=0 clears it. The token is sent as X-Admin-Token on every
 // admin-endpoint request (see services/api.ts). Non-admin users never see the
 // Review tab. Global Heatmap is hidden for everyone (page kept, unlinked from nav).
+//
+// The URL is scrubbed after capture via history.replaceState — otherwise the
+// token would ride along in the Referer header on any outbound click (font
+// assets, external article links in review rows, analytics if ever added).
+// This is defense-in-depth on top of the Cloudflare Access SSO layer that
+// actually gates the admin endpoints (audit §1.12).
 const ADMIN_MODE: boolean = (() => {
     try {
         const params = new URLSearchParams(window.location.search);
         const raw = params.get('admin');
+        const tokenChanged = raw !== null;
         if (raw === '0') {
             localStorage.removeItem('civic_admin_token');
-            return false;
-        }
-        if (raw && raw !== '1') {
+        } else if (raw && raw !== '1') {
             localStorage.setItem('civic_admin_token', raw);
+        }
+        if (tokenChanged) {
+            params.delete('admin');
+            const qs = params.toString();
+            const cleanUrl = `${window.location.pathname}${qs ? `?${qs}` : ''}${window.location.hash}`;
+            window.history.replaceState({}, '', cleanUrl);
         }
         return !!localStorage.getItem('civic_admin_token');
     } catch {

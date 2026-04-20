@@ -4,9 +4,11 @@ where possible (see ``job_runner.save_snapshots``), falling back to live
 aggregation on a miss.
 """
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
+from starlette.requests import Request
 
 from analysis.src.api.cache_utils import WindowLiteral, get_cached_or_fallback
+from analysis.src.api.rate_limits import limiter
 from analysis.src.common.cache import SnapshotCache
 from analysis.src.common.settings import get_settings
 from analysis.src.reporting.aggregators import (
@@ -55,12 +57,18 @@ def get_bot_activity():
 
 
 @router.get("/narratives")
-def get_narratives(window: WindowLiteral = "7d", limit: int = 20):
+@limiter.limit("10/minute")
+def get_narratives(
+    request: Request,
+    window: WindowLiteral = "7d",
+    limit: int = Query(default=20, ge=1, le=500),
+):
     """Returns top narratives in the time window.
 
     The cache stores a window-keyed top-100; limits <= 100 hit cache and are
-    sliced to the caller's limit. Limits above 100 skip the cache and compute
-    live.
+    sliced to the caller's limit. Limits between 101 and 500 skip the cache and
+    compute live — the upper bound exists so a `?limit=1_000_000` request
+    can't blow up the SQL aggregator (audit §1.3).
     """
     if limit <= NARRATIVE_CACHE_SIZE:
         cached = get_cached_or_fallback(
@@ -89,7 +97,8 @@ def get_propaganda(window: WindowLiteral = "7d"):
 
 
 @router.get("/geo-sentiment")
-def get_geo_sentiment(window: WindowLiteral = "7d"):
+@limiter.limit("10/minute")
+def get_geo_sentiment(request: Request, window: WindowLiteral = "7d"):
     """Returns X posts aggregated by country with sentiment scores.
 
     Uses explicit country_code from X API geo-tags (no heuristics).
