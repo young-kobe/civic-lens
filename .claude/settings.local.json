@@ -10,7 +10,8 @@
       "Bash(xargs grep *)",
       "Bash(npm audit *)",
       "Bash(xargs cat *)",
-      "Bash(npm install *)"
+      "Bash(npm install *)",
+      "Bash(grep -E \"\\\\.\\(tsx|ts\\)$\")"
     ]
   }
 }

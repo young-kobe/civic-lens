@@ -148,7 +148,7 @@ function ExampleCard({ example }: ExampleCardProps) {
                         title={`confidence ${t.confidence.toFixed(2)}`}
                     >
                         <strong>{TECHNIQUE_LABEL[t.technique as PropagandaTechniqueName] || t.technique}</strong>
-                        {' — '}
+                        {': '}
                         <em>"{t.evidence_span}"</em>
                     </div>
                 ))}
@@ -204,7 +204,7 @@ function Propaganda({ filters }: PropagandaProps) {
             >
                 <strong>How to read this:</strong> Each doc is scored per-technique by an LLM, and only flagged when
                 the model provides a verbatim evidence quote from the source text. "Flagged rate" is the % of scored
-                docs the model flagged for one or more techniques. High propaganda rates do not imply intent — they
+                docs the model flagged for one or more techniques. High propaganda rates do not imply intent. They
                 show how often the sample leaned on these specific techniques. {data.disclaimer}
             </div>
 

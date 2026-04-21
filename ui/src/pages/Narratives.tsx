@@ -278,7 +278,7 @@ function Narratives({ filters }: NarrativesProps) {
                 }}
             >
                 <strong>What a narrative is here:</strong> a recurring <em>political</em> claim we detected across the
-                docs we ingested — US-political news articles, Reddit posts and comments, and X posts. Narratives
+                docs we ingested (US-political news articles, Reddit posts and comments, and X posts). Narratives
                 below are split by <em>where we first saw the claim</em> (news vs social), and social X-origin
                 narratives are further split by <em>who first said it</em> (elected official, politically-affiliated
                 figure, or general public). "First seen" is the earliest doc in our sample, not the true world-origin.
@@ -305,7 +305,7 @@ function Narratives({ filters }: NarrativesProps) {
                     {' '}(current/former officeholders and institutional accounts), <strong>politically affiliated</strong>
                     {' '}(journalists, pundits, party committees, PACs, think tanks), and <strong>general public</strong>
                     {' '}(everyone else). Elected and affiliated classifications come from a curated list plus an LLM
-                    classifier — everyone unclassified defaults to general public. Reddit-origin narratives are not
+                    classifier. Everyone unclassified defaults to general public. Reddit-origin narratives are not
                     tier-split and share one list.
                 </div>
             </div>
@@ -339,7 +339,7 @@ function Narratives({ filters }: NarrativesProps) {
                 subtitle={`Claims first seen in Reddit posts or comments we ingested (${filters.timeRange})`}
                 narratives={redditNarratives}
                 emptyHint="No Reddit-originated narratives detected in this window."
-                methodNote="Reddit authors are not tier-classified in this release — electeds and formal political orgs are rare on Reddit and we do not have an equivalent signal."
+                methodNote="Reddit authors are not tier-classified in this release. Electeds and formal political orgs are rare on Reddit and we do not have an equivalent signal."
             />
 
             {orphanNarratives.length > 0 && (
@@ -368,13 +368,13 @@ function NarrativeSection({ title, subtitle, narratives, emptyHint, methodNote }
             subtitle={subtitle}
             headerActions={
                 <MethodPopover
-                    description="Each row is a narrative — a recurring claim detected by extracting canonical claim statements from doc text and clustering similar claims together. Doc count is the number of distinct docs in the time window that contributed a matching claim."
+                    description="Each row is a narrative: a recurring claim detected by extracting canonical claim statements from doc text and clustering similar claims together. Doc count is the number of distinct docs in the time window that contributed a matching claim."
                     limitations={[
-                        '"First seen" means the earliest ingested doc carrying this claim — not world-origin.',
+                        '"First seen" means the earliest ingested doc carrying this claim, not world-origin.',
                         ...(methodNote ? [methodNote] : []),
                         'Synonyms can split a single semantic narrative into two rows (e.g. "Trump won" vs "Trump victory"). An embedding-mode clusterer is available via CIVIC_NARRATIVE_SIMILARITY_MODE=embedding.',
                         'Inbound citations are a partial link graph: they count only edges where the cited doc is one we also ingested. External citations (to news outlets or X accounts we do not track) are not represented.',
-                        'Claim extraction quality depends on the configured LLM — small Ollama models will return few or no claims.',
+                        'Claim extraction quality depends on the configured LLM. Small Ollama models will return few or no claims.',
                     ]}
                 />
             }

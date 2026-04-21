@@ -409,9 +409,9 @@ function BotActivityProfiler({ filters: _filters }: BotActivityProfilerProps) {
                         </div>
                         <p className="text-sm mt-1">
                             This page flags accounts and posts <strong>in our political-content sample</strong> that
-                            look automated. The detector uses behavioral signals — posting rate, text repetition,
-                            account age, and coordinated timing — to score each account. Some real users post in
-                            bot-like ways, and some real bots post like humans. Treat flags as <strong>leads, not
+                            look automated. The detector scores each account from behavioral signals: posting rate,
+                            text repetition, account age, and coordinated timing. Some real users post in bot-like
+                            ways, and some real bots post like humans. Treat flags as <strong>leads, not
                             verdicts</strong>.
                         </p>
                     </div>
