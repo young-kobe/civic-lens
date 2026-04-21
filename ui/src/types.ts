@@ -34,7 +34,15 @@ export interface PublicSentimentData {
     byTopic: SentimentBreakdown[];
     byPlatform: SentimentBreakdown[];
     byTimeWindow: SentimentBreakdown[];
+    // Per-weekday breakdown (Mon..Sun). Populated by the sentiment aggregator
+    // from each doc's published_at weekday; orthogonal to byTimeWindow's age
+    // buckets. Optional for backwards-compat with older cached snapshots.
+    byDayOfWeek?: SentimentBreakdown[];
     distribution: SentimentDistribution;
+    // Per-intensity drill-down samples. Keys match the five fields on
+    // SentimentDistribution. Each list is confidence-sorted desc and capped
+    // server-side (~15 per bucket). Absent on older snapshots.
+    distributionSamples?: Partial<Record<SentimentSegmentKey, ClassificationSample[]>>;
     socialVsNews?: SocialVsNewsSentiment | null;
     // Merged GOP favorability data
     gopFavorability?: {
@@ -50,6 +58,14 @@ export interface PublicSentimentData {
     gopByPlatform?: DemographicBreakdown[] | null;
     pollingVsSocial?: PollingSocialComparison | null;
 }
+
+/** Keys of SentimentDistribution. Used as lookup keys for distributionSamples. */
+export type SentimentSegmentKey =
+    | 'strongPositive'
+    | 'mildPositive'
+    | 'neutral'
+    | 'mildNegative'
+    | 'strongNegative';
 
 export interface SentimentOverview {
     netScore: number;
@@ -77,6 +93,8 @@ export interface SentimentBreakdown {
     topic?: string;
     platform?: string;
     window?: string;
+    /** Weekday short label (Mon..Sun) when used for byDayOfWeek rows. */
+    day?: string;
     positive: number;
     negative: number;
     neutral: number;

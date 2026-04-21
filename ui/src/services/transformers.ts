@@ -20,6 +20,7 @@ export function transformPublicSentiment(apiData: any): PublicSentimentData {
             volume: p.volume || 0,
         })),
         byTimeWindow: apiData.byTimeWindow || [],
+        byDayOfWeek: apiData.byDayOfWeek || [],
         distribution: apiData.distribution || {
             strongPositive: 0,
             mildPositive: 0,
@@ -27,6 +28,7 @@ export function transformPublicSentiment(apiData: any): PublicSentimentData {
             mildNegative: 0,
             strongNegative: 0
         },
+        distributionSamples: apiData.distributionSamples || {},
         // Social vs News comparison data
         socialVsNews: apiData.socialVsNews || null,
         // Merged GOP favorability data

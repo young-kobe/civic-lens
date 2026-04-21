@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Modal } from '../../components/common';
 import { SEMANTIC_COLORS } from '../../theme';
 import type { ClassificationSample, SentimentBreakdown } from '../../types';
 import { ClassificationSampleCard } from './ClassificationSampleCard';
@@ -11,7 +12,7 @@ interface TopicRowProps {
 }
 
 export function TopicRow({ item, labelBadgeStyles }: TopicRowProps) {
-    const [expanded, setExpanded] = useState(false);
+    const [modalOpen, setModalOpen] = useState(false);
     const total = item.positive + item.negative + item.neutral || 1;
     const netScore = ((item.positive - item.negative) / total * 100);
     const netColor = netScore > 5 ? SEMANTIC_COLORS.positive
@@ -29,8 +30,8 @@ export function TopicRow({ item, labelBadgeStyles }: TopicRowProps) {
         >
             <button
                 className="topic-row-button"
-                onClick={() => hasSamples && setExpanded(!expanded)}
-                aria-expanded={hasSamples ? expanded : undefined}
+                onClick={() => hasSamples && setModalOpen(true)}
+                aria-haspopup={hasSamples ? 'dialog' : undefined}
                 id={`topic-row-${item.topic?.replace(/\s/g, '-').toLowerCase()}`}
             >
                 <MiniDonut
@@ -73,25 +74,26 @@ export function TopicRow({ item, labelBadgeStyles }: TopicRowProps) {
                     <span
                         aria-hidden
                         style={{
-                            fontSize: '14px', color: 'var(--neutral-500)',
-                            transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)',
-                            transition: 'transform 0.2s ease', lineHeight: 1,
-                            fontFamily: 'var(--font-mono)',
+                            fontSize: '11px',
+                            fontWeight: 700,
+                            color: 'var(--accent)',
+                            letterSpacing: '0.06em',
+                            textTransform: 'uppercase',
                         }}
                     >
-                        v
+                        View ›
                     </span>
                 )}
             </button>
 
-            {expanded && hasSamples && (
-                <div style={{
-                    padding: '0 12px 12px 12px',
-                    borderTop: '1px solid var(--neutral-200)',
-                }}>
-                    <div className="eyebrow" style={{ padding: '10px 0 8px' }}>
-                        Classification Reasoning · Top {item.classificationSamples!.length}
-                    </div>
+            {hasSamples && (
+                <Modal
+                    isOpen={modalOpen}
+                    onClose={() => setModalOpen(false)}
+                    title={`${item.topic} · classification reasoning`}
+                    subtitle={`Top ${item.classificationSamples!.length} of ${item.volume.toLocaleString()} docs · sorted by model confidence`}
+                    accentColor={netColor}
+                >
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                         {item.classificationSamples!.map((sample: ClassificationSample) => (
                             <ClassificationSampleCard
@@ -101,7 +103,7 @@ export function TopicRow({ item, labelBadgeStyles }: TopicRowProps) {
                             />
                         ))}
                     </div>
-                </div>
+                </Modal>
             )}
         </div>
     );

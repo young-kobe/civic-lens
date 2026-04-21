@@ -114,18 +114,9 @@ function NarrativeRow({ narrative }: NarrativeRowProps) {
             : 'unknown source';
 
     return (
-        <div
-            style={{
-                display: 'grid',
-                gridTemplateColumns: '1fr 100px 80px 90px 80px',
-                gap: 'var(--space-4)',
-                padding: 'var(--space-3) var(--space-4)',
-                borderBottom: '1px solid var(--neutral-150)',
-                alignItems: 'center',
-            }}
-        >
+        <div className="narrative-row">
             {/* Claim + origin */}
-            <div style={{ minWidth: 0 }}>
+            <div className="narrative-row-claim">
                 <div
                     style={{
                         fontWeight: 600,
@@ -145,8 +136,7 @@ function NarrativeRow({ narrative }: NarrativeRowProps) {
                 <div style={{ marginTop: 6 }}>
                     <SourceBar items={narrative.source_breakdown} total={narrative.supporting_doc_count} />
                 </div>
-                {/* Walkthrough 043: propaganda + bot-pushed overlay badges.
-                    Shown only when the narrative has a value for the signal. */}
+                {/* Walkthrough 043: propaganda + bot-pushed overlay badges. */}
                 {(narrative.propaganda_score !== null || narrative.bot_pushed_fraction !== null) && (
                     <div style={{ marginTop: 6, display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
                         {narrative.propaganda_score !== null && (
@@ -184,23 +174,31 @@ function NarrativeRow({ narrative }: NarrativeRowProps) {
             </div>
 
             {/* Sparkline */}
-            <div>
+            <div className="narrative-row-sparkline">
                 <Sparkline data={timelineData} dataKey="value" height={28} color="var(--neutral-700)" />
             </div>
 
-            {/* Doc count */}
-            <div className="num" style={{ textAlign: 'right', fontWeight: 600, fontSize: 'var(--text-base)' }}>
+            {/* Metrics — grouped on mobile into a 3-up strip via CSS. */}
+            <div
+                className="narrative-row-metric"
+                data-label="Docs"
+                style={{ fontWeight: 600, fontSize: 'var(--text-base)' }}
+            >
                 {narrative.supporting_doc_count}
             </div>
-
-            {/* Net sentiment */}
-            <div className="num" style={{ textAlign: 'right', color: sentColor, fontWeight: 600 }}>
+            <div
+                className="narrative-row-metric"
+                data-label="Net sentiment"
+                style={{ color: sentColor, fontWeight: 600 }}
+            >
                 {narrative.net_sentiment >= 0 ? '+' : ''}
                 {narrative.net_sentiment.toFixed(1)}%
             </div>
-
-            {/* Inbound citations */}
-            <div className="num" style={{ textAlign: 'right', color: 'var(--neutral-500)' }}>
+            <div
+                className="narrative-row-metric"
+                data-label="Citations"
+                style={{ color: 'var(--neutral-500)' }}
+            >
                 {narrative.inbound_citation_count}
             </div>
         </div>
@@ -265,9 +263,12 @@ function Narratives({ filters }: NarrativesProps) {
     );
 
     return (
-        <div className="flex flex-col gap-4">
-            {/* Plain-language disclaimer — invariant: never imply universal sentiment */}
+        <div className="dashboard-grid">
+            {/* Row: disclaimer (8) + social-media explainer (4) — pairs the
+                two framing blocks at the top so the dashboard reads dense from
+                the first fold. */}
             <div
+                className="col-span-8"
                 style={{
                     padding: 'var(--space-3) var(--space-4)',
                     background: '#fffbeb',
@@ -284,14 +285,8 @@ function Narratives({ filters }: NarrativesProps) {
                 figure, or general public). "First seen" is the earliest doc in our sample, not the true world-origin.
             </div>
 
-            <NarrativeSection
-                title="News Media Narratives"
-                subtitle={`Claims first seen in news articles we ingested (${filters.timeRange})`}
-                narratives={newsNarratives}
-                emptyHint="No news-originated narratives detected in this window."
-            />
-
             <div
+                className="col-span-4"
                 style={{
                     padding: 'var(--space-3) var(--space-4)',
                     background: 'var(--bg-panel)',
@@ -301,53 +296,74 @@ function Narratives({ filters }: NarrativesProps) {
             >
                 <div className="eyebrow" style={{ marginBottom: 'var(--space-1)' }}>Social Media Narratives</div>
                 <div style={{ fontSize: 'var(--text-xs)', color: 'var(--neutral-600)', lineHeight: 'var(--leading-normal)' }}>
-                    X-origin narratives are grouped by the author's classification: <strong>elected officials</strong>
-                    {' '}(current/former officeholders and institutional accounts), <strong>politically affiliated</strong>
-                    {' '}(journalists, pundits, party committees, PACs, think tanks), and <strong>general public</strong>
-                    {' '}(everyone else). Elected and affiliated classifications come from a curated list plus an LLM
-                    classifier. Everyone unclassified defaults to general public. Reddit-origin narratives are not
-                    tier-split and share one list.
+                    X-origin narratives are grouped by author tier: <strong>elected officials</strong>,
+                    {' '}<strong>politically affiliated</strong> (journalists, PACs, think tanks), and
+                    {' '}<strong>general public</strong>. Reddit narratives share one list.
                 </div>
             </div>
 
-            <NarrativeSection
-                title="Social · Elected Officials (X)"
-                subtitle={`Claims first seen in X posts from elected officials or institutional accounts (${filters.timeRange})`}
-                narratives={electedX}
-                emptyHint="No elected-official-originated narratives detected in this window."
-                methodNote="Tier assignment: curated list at data/known_accounts.yaml (high-confidence institutional) plus LLM classifier for individuals."
-            />
+            {/* Primary list — news narratives (full width) */}
+            <div className="col-span-12">
+                <NarrativeSection
+                    title="News Media Narratives"
+                    subtitle={`Claims first seen in news articles we ingested (${filters.timeRange})`}
+                    narratives={newsNarratives}
+                    emptyHint="No news-originated narratives detected in this window."
+                />
+            </div>
 
-            <NarrativeSection
-                title="Social · Politically Affiliated (X)"
-                subtitle={`Claims first seen in X posts from journalists, pundits, PACs, or party orgs (${filters.timeRange})`}
-                narratives={affiliatedX}
-                emptyHint="No affiliated-originated narratives detected in this window."
-                methodNote="Tier assignment: curated list for major orgs (RNC, DNC, think tanks) plus LLM classifier for individual journalists and strategists."
-            />
+            {/* Social sections — each full width to preserve row readability.
+                The narrative row's fixed-column layout (1fr + 4 numeric cols)
+                needs real width for the claim title to not ellipsize into
+                uselessness at sub-700px card widths. */}
+            <div className="col-span-12">
+                <NarrativeSection
+                    title="Social · Elected Officials (X)"
+                    subtitle={`Claims first seen in X posts from elected officials or institutional accounts (${filters.timeRange})`}
+                    narratives={electedX}
+                    emptyHint="No elected-official-originated narratives detected in this window."
+                    methodNote="Tier assignment: curated list at data/known_accounts.yaml (high-confidence institutional) plus LLM classifier for individuals."
+                />
+            </div>
 
-            <NarrativeSection
-                title="Social · General Public (X)"
-                subtitle={`Claims first seen in X posts from non-classified accounts (${filters.timeRange})`}
-                narratives={generalPublicX}
-                emptyHint="No general-public-originated narratives detected in this window."
-                methodNote="Default bucket: any X author not matched by the curated list or classified as elected/affiliated by the LLM."
-            />
+            <div className="col-span-12">
+                <NarrativeSection
+                    title="Social · Politically Affiliated (X)"
+                    subtitle={`Claims first seen in X posts from journalists, pundits, PACs, or party orgs (${filters.timeRange})`}
+                    narratives={affiliatedX}
+                    emptyHint="No affiliated-originated narratives detected in this window."
+                    methodNote="Tier assignment: curated list for major orgs (RNC, DNC, think tanks) plus LLM classifier for individual journalists and strategists."
+                />
+            </div>
 
-            <NarrativeSection
-                title="Social · Reddit"
-                subtitle={`Claims first seen in Reddit posts or comments we ingested (${filters.timeRange})`}
-                narratives={redditNarratives}
-                emptyHint="No Reddit-originated narratives detected in this window."
-                methodNote="Reddit authors are not tier-classified in this release. Electeds and formal political orgs are rare on Reddit and we do not have an equivalent signal."
-            />
+            <div className="col-span-12">
+                <NarrativeSection
+                    title="Social · General Public (X)"
+                    subtitle={`Claims first seen in X posts from non-classified accounts (${filters.timeRange})`}
+                    narratives={generalPublicX}
+                    emptyHint="No general-public-originated narratives detected in this window."
+                    methodNote="Default bucket: any X author not matched by the curated list or classified as elected/affiliated by the LLM."
+                />
+            </div>
+
+            <div className="col-span-12">
+                <NarrativeSection
+                    title="Social · Reddit"
+                    subtitle={`Claims first seen in Reddit posts or comments we ingested (${filters.timeRange})`}
+                    narratives={redditNarratives}
+                    emptyHint="No Reddit-originated narratives detected in this window."
+                    methodNote="Reddit authors are not tier-classified in this release. Electeds and formal political orgs are rare on Reddit and we do not have an equivalent signal."
+                />
+            </div>
 
             {orphanNarratives.length > 0 && (
-                <NarrativeSection
-                    title="Other Narratives"
-                    subtitle="Narratives with no identified first-seen source"
-                    narratives={orphanNarratives}
-                />
+                <div className="col-span-12">
+                    <NarrativeSection
+                        title="Other Narratives"
+                        subtitle="Narratives with no identified first-seen source"
+                        narratives={orphanNarratives}
+                    />
+                </div>
             )}
         </div>
     );
@@ -385,24 +401,12 @@ function NarrativeSection({ title, subtitle, narratives, emptyHint, methodNote }
                 </div>
             ) : (
                 <>
-                    <div
-                        style={{
-                            display: 'grid',
-                            gridTemplateColumns: '1fr 100px 80px 90px 80px',
-                            gap: 'var(--space-4)',
-                            padding: 'var(--space-2) var(--space-4)',
-                            borderBottom: '1px solid var(--neutral-200)',
-                        }}
-                        className="eyebrow"
-                    >
+                    <div className="narrative-row-header eyebrow">
                         <span>Narrative · First Seen · Source Mix</span>
-                        <span style={{ textAlign: 'right' }}>Daily</span>
-                        <span style={{ textAlign: 'right' }}>Docs</span>
-                        <span style={{ textAlign: 'right' }}>Net Sent.</span>
-                        <span
-                            style={{ textAlign: 'right' }}
-                            title="Partial link graph: counts only citation edges where the cited doc is one we also ingested. External citations are not tracked."
-                        >
+                        <span>Daily</span>
+                        <span>Docs</span>
+                        <span>Net Sent.</span>
+                        <span title="Partial link graph: counts only citation edges where the cited doc is one we also ingested. External citations are not tracked.">
                             Inbound (partial)
                         </span>
                     </div>

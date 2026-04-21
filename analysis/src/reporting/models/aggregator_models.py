@@ -105,6 +105,22 @@ class TimeWindowSentiment:
 
 
 @dataclass
+class DayOfWeekSentiment:
+    """Per-weekday sentiment breakdown. `day` is a short label (Mon..Sun).
+
+    Aggregated from each doc's local calendar weekday so a reader can see
+    whether weekend vs weekday coverage leans differently. Orthogonal to
+    TimeWindowSentiment's age buckets: one answers "when in the week",
+    the other answers "how recently".
+    """
+    day: str
+    positive: int
+    negative: int
+    neutral: int
+    volume: int
+
+
+@dataclass
 class PublicSentimentResult:
     """Complete public sentiment response with merged GOP favorability data."""
     overview: SentimentOverview
@@ -114,6 +130,12 @@ class PublicSentimentResult:
     excluded_bot_content: int
     byTopic: List[TopicSentiment] = field(default_factory=list)
     byTimeWindow: List[TimeWindowSentiment] = field(default_factory=list)
+    byDayOfWeek: List[DayOfWeekSentiment] = field(default_factory=list)
+    # Per-intensity-bucket drill-down samples. Keys: strongPositive, mildPositive,
+    # neutral, mildNegative, strongNegative. Each value is a list of up to
+    # DISTRIBUTION_SAMPLES_PER_BUCKET docs, confidence-sorted descending, so the
+    # UI can open a bucket and audit the actual classifications.
+    distributionSamples: Dict[str, List[ClassificationSample]] = field(default_factory=dict)
     socialVsNews: Optional[Dict[str, Any]] = None  # Social vs News comparison
     # Merged GOP favorability data
     gopFavorability: Optional[Dict[str, Any]] = None  # Stance breakdown (favorable/unfavorable/neutral %)
@@ -166,6 +188,27 @@ class PublicSentimentResult:
                 {"window": w.window, "positive": w.positive, "negative": w.negative, "neutral": w.neutral, "volume": w.volume}
                 for w in self.byTimeWindow
             ],
+            "byDayOfWeek": [
+                {"day": d.day, "positive": d.positive, "negative": d.negative, "neutral": d.neutral, "volume": d.volume}
+                for d in self.byDayOfWeek
+            ],
+            "distributionSamples": {
+                bucket: [
+                    {
+                        "doc_id": s.doc_id, "label": s.label,
+                        "confidence": s.confidence, "reasoning": s.reasoning,
+                        "evidence_spans": s.evidence_spans,
+                        "sarcasm_detected": s.sarcasm_detected,
+                        "title": s.title or "", "source_type": s.source_type,
+                        "source_name": s.source_name,
+                        "date": s.date,
+                        "full_text": s.full_text,
+                        "url": s.url,
+                    }
+                    for s in samples
+                ]
+                for bucket, samples in self.distributionSamples.items()
+            },
             "disclaimer": self.disclaimer,
             "excluded_bot_content": self.excluded_bot_content,
         }

@@ -28,6 +28,27 @@ function adminHeaders(): HeadersInit {
     }
 }
 
+// Flag flipped when we trigger a CF Access bounce so concurrent admin fetches
+// (Review tab fires queue + stats in parallel) don't each race to set
+// sessionStorage + call location.href.
+let redirectingToCfAccess = false;
+
+const CF_ACCESS_BOOTSTRAP_PATH = '/api/v1/review/bootstrap';
+
+function triggerCfAccessLogin(): void {
+    if (redirectingToCfAccess) return;
+    redirectingToCfAccess = true;
+    try {
+        // Same-origin path only (pathname+search+hash) — the bootstrap HTML
+        // validates it starts with "/" and not "//" before navigating, so a
+        // tampered value can't be coerced into an open redirect.
+        const returnTo =
+            window.location.pathname + window.location.search + window.location.hash;
+        sessionStorage.setItem('civic_post_auth_return', returnTo);
+    } catch { /* sessionStorage may be blocked; bootstrap falls back to "/" */ }
+    window.location.href = CF_ACCESS_BOOTSTRAP_PATH;
+}
+
 async function fetchJSON<T>(
     path: string,
     init: RequestInit & { admin?: boolean } = {},
@@ -38,7 +59,34 @@ async function fetchJSON<T>(
         ...(admin ? adminHeaders() : {}),
         ...(headers || {}),
     };
-    const resp = await fetch(`${API_BASE}${path}`, { ...rest, headers: mergedHeaders });
+    // For admin endpoints, opt out of auto-following redirects: CF Access's
+    // 302 to cloudflareaccess.com is cross-origin and would surface as an
+    // opaque CORS TypeError. `redirect: 'manual'` lets us detect the 302 as
+    // `resp.type === 'opaqueredirect'` and trigger a top-level navigation
+    // instead, so the browser can actually complete the CF login flow.
+    const fetchInit: RequestInit = admin
+        ? { ...rest, headers: mergedHeaders, redirect: 'manual' }
+        : { ...rest, headers: mergedHeaders };
+
+    let resp: Response;
+    try {
+        resp = await fetch(`${API_BASE}${path}`, fetchInit);
+    } catch (err) {
+        // Network-level failure on an admin endpoint usually means CF Access
+        // intercepted with a cross-origin redirect fetch() couldn't handle.
+        // Bounce to the bootstrap endpoint so the browser can follow it.
+        if (admin && err instanceof TypeError) {
+            triggerCfAccessLogin();
+            throw new Error('Redirecting to sign in...');
+        }
+        throw err;
+    }
+
+    if (admin && resp.type === 'opaqueredirect') {
+        triggerCfAccessLogin();
+        throw new Error('Redirecting to sign in...');
+    }
+
     if (!resp.ok) {
         throw new Error(`API ${resp.status} ${resp.statusText} on ${path}`);
     }

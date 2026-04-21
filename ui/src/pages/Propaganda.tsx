@@ -190,9 +190,10 @@ function Propaganda({ filters }: PropagandaProps) {
     const maxTechniqueCount = data.by_technique.reduce((m, t) => Math.max(m, t.count), 0);
 
     return (
-        <div className="flex flex-col gap-4">
+        <div className="dashboard-grid">
             {/* Plain-language disclaimer */}
             <div
+                className="col-span-12"
                 style={{
                     padding: 'var(--space-3) var(--space-4)',
                     background: '#fffbeb',
@@ -208,18 +209,22 @@ function Propaganda({ filters }: PropagandaProps) {
                 show how often the sample leaned on these specific techniques. {data.disclaimer}
             </div>
 
-            {/* Overview metrics */}
-            <div className="grid-3">
+            {/* Row: three overview metrics — each col-span-4 to pack a tight header row */}
+            <div className="col-span-4">
                 <MetricCard
                     label="Flagged Rate"
                     value={`${data.propaganda_rate_pct.toFixed(1)}%`}
                     subtitle={`${data.flagged_docs.toLocaleString()} of ${data.total_eligible_docs.toLocaleString()} scored docs (${data.window})`}
                 />
+            </div>
+            <div className="col-span-4">
                 <MetricCard
                     label="Mean Propaganda Score"
                     value={data.mean_score.toFixed(2)}
                     subtitle="Averaged across all scored docs (0 - 1 scale)"
                 />
+            </div>
+            <div className="col-span-4">
                 <MetricCard
                     label="Window"
                     value={data.window}
@@ -227,60 +232,67 @@ function Propaganda({ filters }: PropagandaProps) {
                 />
             </div>
 
-            {/* Technique breakdown */}
-            <Card
-                title="Techniques Used"
-                subtitle="Across flagged docs. A doc can contribute to multiple techniques."
-                headerActions={
-                    <MethodPopover
-                        description="Each technique count is the number of flagged docs where the model identified that technique with a verbatim evidence span."
-                        limitations={[
-                            'Techniques are detected by an LLM. An empty or unvalidated response drops the technique rather than hallucinating an evidence quote.',
-                            'Starter taxonomy covers six techniques; expansion is a schema-compatible future change.',
-                        ]}
-                    />
-                }
-            >
-                {data.by_technique.map((t) => (
-                    <TechniqueRow key={t.technique} technique={t} maxCount={maxTechniqueCount} />
-                ))}
-            </Card>
-
-            {/* Source split */}
-            <Card title="News vs. Social Media" subtitle="Flagged rate and mean score by source bucket">
-                <div
-                    style={{
-                        display: 'grid',
-                        gridTemplateColumns: '1fr 80px 90px 80px',
-                        gap: 'var(--space-4)',
-                        padding: 'var(--space-2) var(--space-4)',
-                        borderBottom: '1px solid var(--neutral-200)',
-                    }}
-                    className="eyebrow"
+            {/* Row: technique breakdown (7) + source split (5).
+                Technique card is a variable-length list; source split is a short
+                2-row table. Pairing packs the mid-page efficiently. */}
+            <div className="col-span-7">
+                <Card
+                    title="Techniques Used"
+                    subtitle="Across flagged docs. A doc can contribute to multiple techniques."
+                    headerActions={
+                        <MethodPopover
+                            description="Each technique count is the number of flagged docs where the model identified that technique with a verbatim evidence span."
+                            limitations={[
+                                'Techniques are detected by an LLM. An empty or unvalidated response drops the technique rather than hallucinating an evidence quote.',
+                                'Starter taxonomy covers six techniques; expansion is a schema-compatible future change.',
+                            ]}
+                        />
+                    }
                 >
-                    <span>Source</span>
-                    <span style={{ textAlign: 'right' }}>Docs</span>
-                    <span style={{ textAlign: 'right' }}>Flagged %</span>
-                    <span style={{ textAlign: 'right' }}>Mean Score</span>
-                </div>
-                {data.by_source.map((s) => (
-                    <SourceSplitRow key={s.label} split={s} />
-                ))}
-            </Card>
+                    {data.by_technique.map((t) => (
+                        <TechniqueRow key={t.technique} technique={t} maxCount={maxTechniqueCount} />
+                    ))}
+                </Card>
+            </div>
 
-            {/* Examples */}
-            <Card
-                title="Recent Flagged Examples"
-                subtitle="Most-recent docs above the flag threshold, with verbatim evidence spans"
-            >
-                {data.examples.length === 0 ? (
-                    <div className="eyebrow" style={{ padding: 'var(--space-4)', color: 'var(--neutral-500)' }}>
-                        No flagged examples in this window.
+            <div className="col-span-5">
+                <Card title="News vs. Social Media" subtitle="Flagged rate and mean score by source bucket">
+                    <div
+                        style={{
+                            display: 'grid',
+                            gridTemplateColumns: '1fr 80px 90px 80px',
+                            gap: 'var(--space-4)',
+                            padding: 'var(--space-2) var(--space-4)',
+                            borderBottom: '1px solid var(--neutral-200)',
+                        }}
+                        className="eyebrow"
+                    >
+                        <span>Source</span>
+                        <span style={{ textAlign: 'right' }}>Docs</span>
+                        <span style={{ textAlign: 'right' }}>Flagged %</span>
+                        <span style={{ textAlign: 'right' }}>Mean Score</span>
                     </div>
-                ) : (
-                    data.examples.map((ex) => <ExampleCard key={ex.doc_id} example={ex} />)
-                )}
-            </Card>
+                    {data.by_source.map((s) => (
+                        <SourceSplitRow key={s.label} split={s} />
+                    ))}
+                </Card>
+            </div>
+
+            {/* Row: examples list (full) */}
+            <div className="col-span-12">
+                <Card
+                    title="Recent Flagged Examples"
+                    subtitle="Most-recent docs above the flag threshold, with verbatim evidence spans"
+                >
+                    {data.examples.length === 0 ? (
+                        <div className="eyebrow" style={{ padding: 'var(--space-4)', color: 'var(--neutral-500)' }}>
+                            No flagged examples in this window.
+                        </div>
+                    ) : (
+                        data.examples.map((ex) => <ExampleCard key={ex.doc_id} example={ex} />)
+                    )}
+                </Card>
+            </div>
         </div>
     );
 }

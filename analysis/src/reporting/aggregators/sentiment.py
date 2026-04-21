@@ -32,7 +32,17 @@ from analysis.src.reporting.models import (
     TopicSentiment,
     ClassificationSample,
     TimeWindowSentiment,
+    DayOfWeekSentiment,
 )
+
+# Keys used for per-intensity drill-down sampling. Must match the field names
+# on SentimentDistribution so the UI can look them up directly.
+STRENGTH_BUCKETS = (
+    "strongPositive", "mildPositive", "neutral", "mildNegative", "strongNegative",
+)
+MAX_DISTRIBUTION_SAMPLES_PER_BUCKET = 15
+# Short weekday labels, indexed by datetime.weekday() (Mon=0..Sun=6).
+_DOW_LABELS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 
 
 class SentimentAggregator:
@@ -61,6 +71,23 @@ class SentimentAggregator:
                 return topic
         return "General"
     
+    def _get_day_of_week(self, published_at: Any) -> Optional[str]:
+        """Return short weekday label (Mon..Sun) from a published_at value,
+        or None if we can't parse it. Mirrors _get_time_bucket's tolerance
+        for int/float unix timestamps and ISO strings."""
+        try:
+            if isinstance(published_at, (int, float)):
+                pub_dt = datetime.fromtimestamp(published_at)
+            elif isinstance(published_at, str):
+                pub_dt = datetime.fromisoformat(published_at.replace('Z', '+00:00'))
+                if pub_dt.tzinfo:
+                    pub_dt = pub_dt.replace(tzinfo=None)
+            else:
+                return None
+            return _DOW_LABELS[pub_dt.weekday()]
+        except (ValueError, TypeError, OSError):
+            return None
+
     def _get_time_bucket(self, published_at: Any, now: datetime) -> str:
         """Get time bucket for a document based on published_at."""
         try:
@@ -143,8 +170,10 @@ class SentimentAggregator:
             "neutral": 0, "mixed": 0, "count": 0, "excluded_bots": 0,
             "social": {"positive": 0, "negative": 0, "neutral": 0, "mixed": 0},
             "news": {"positive": 0, "negative": 0, "neutral": 0, "mixed": 0},
-            "by_platform": {}, "by_topic": {}, "by_time": {},
+            "by_platform": {}, "by_topic": {}, "by_time": {}, "by_dow": {},
             "topic_samples": {},
+            # Per-intensity drill-down samples; keyed by STRENGTH_BUCKETS.
+            "strength_samples": {b: [] for b in STRENGTH_BUCKETS},
         }
         now = datetime.now()
         label_map = {"POSITIVE": "positive", "NEGATIVE": "negative", "NEUTRAL": "neutral", "MIXED": "neutral"}
@@ -160,7 +189,7 @@ class SentimentAggregator:
 
             label = data.get('label', 'NEUTRAL')
             conf = float(data.get('confidence', confidence or 0.5))
-            self._count_sentiment_strength(accum, label, conf)
+            strength_key = self._count_sentiment_strength(accum, label, conf)
 
             label_key = label_map.get(label, "neutral")
             platform = source_type or 'unknown'
@@ -175,8 +204,15 @@ class SentimentAggregator:
             topic = self._extract_topic(title)
             self._increment_bucket(accum["by_topic"], topic, label_key)
             self._increment_bucket(accum["by_time"], self._get_time_bucket(published_at, now), label_key)
+            dow = self._get_day_of_week(published_at)
+            if dow is not None:
+                self._increment_bucket(accum["by_dow"], dow, label_key)
             self._collect_topic_sample(
                 accum["topic_samples"], topic, doc_id, label, conf,
+                data, title, source_type, published_at, domain_or_subreddit, ident, text,
+            )
+            self._collect_strength_sample(
+                accum["strength_samples"], strength_key, doc_id, label, conf,
                 data, title, source_type, published_at, domain_or_subreddit, ident, text,
             )
             accum["count"] += 1
@@ -184,17 +220,31 @@ class SentimentAggregator:
         return accum
 
     @staticmethod
-    def _count_sentiment_strength(accum: Dict[str, Any], label: str, conf: float) -> None:
-        """Increment mild/strong positive/negative counters based on confidence."""
+    def _count_sentiment_strength(accum: Dict[str, Any], label: str, conf: float) -> str:
+        """Increment intensity counters based on label + confidence, and return
+        the UI-facing bucket key (one of STRENGTH_BUCKETS) so the caller can
+        collect samples keyed the same way.
+
+        MIXED is counted into the neutral bucket for both the headline
+        counter (matches _build_sentiment_result, which folds mixed into
+        distribution.neutral) and the drill-down samples."""
         if label == 'POSITIVE':
-            key = "strong_pos" if conf >= STRONG_CONFIDENCE_THRESHOLD else "mild_pos"
-        elif label == 'NEGATIVE':
-            key = "strong_neg" if conf >= STRONG_CONFIDENCE_THRESHOLD else "mild_neg"
-        elif label == 'MIXED':
-            key = "mixed"
-        else:
-            key = "neutral"
-        accum[key] += 1
+            if conf >= STRONG_CONFIDENCE_THRESHOLD:
+                accum["strong_pos"] += 1
+                return "strongPositive"
+            accum["mild_pos"] += 1
+            return "mildPositive"
+        if label == 'NEGATIVE':
+            if conf >= STRONG_CONFIDENCE_THRESHOLD:
+                accum["strong_neg"] += 1
+                return "strongNegative"
+            accum["mild_neg"] += 1
+            return "mildNegative"
+        if label == 'MIXED':
+            accum["mixed"] += 1
+            return "neutral"
+        accum["neutral"] += 1
+        return "neutral"
 
     @staticmethod
     def _increment_bucket(bucket: Dict[str, Dict[str, int]], key: str, label_key: str) -> None:
@@ -267,6 +317,68 @@ class SentimentAggregator:
             samples.sort(key=lambda s: s["confidence"], reverse=True)
 
     @staticmethod
+    def _collect_strength_sample(
+        strength_samples: Dict[str, List[Dict[str, Any]]],
+        bucket: str,
+        doc_id: int,
+        label: str,
+        confidence: float,
+        data: Dict[str, Any],
+        title: Optional[str],
+        source_type: Optional[str],
+        published_at: Optional[float],
+        domain_or_subreddit: Optional[str],
+        ident: Optional[str],
+        text: Optional[str],
+    ) -> None:
+        """Collect a classification sample keyed by intensity bucket.
+
+        Mirrors _collect_topic_sample's selection rule (confidence-sorted,
+        capped, no duplicate doc_ids) so the drill-down list the UI shows
+        is the most-informative slice of each bucket."""
+        samples = strength_samples.get(bucket)
+        if samples is None:
+            return
+        reasoning = data.get("reasoning", "")
+        if not reasoning:
+            return
+        if any(s["doc_id"] == doc_id for s in samples):
+            return
+
+        raw_spans = data.get("evidence_spans", [])
+        clean_spans = SentimentAggregator._sanitize_evidence(raw_spans, 5)
+
+        date_str = datetime.fromtimestamp(published_at).strftime('%b %d, %Y') if published_at else None
+        url = None
+        if ident:
+            if ident.startswith("http"):
+                url = ident
+            elif source_type and source_type.startswith("reddit"):
+                post_id = ident.replace("t3_", "").replace("t1_", "")
+                url = f"https://reddit.com/r/{domain_or_subreddit or 'all'}/comments/{post_id}"
+
+        sample = {
+            "doc_id": doc_id,
+            "label": label,
+            "confidence": confidence,
+            "reasoning": reasoning,
+            "evidence_spans": clean_spans,
+            "sarcasm_detected": bool(data.get("sarcasm_detected", False)),
+            "title": title or "",
+            "source_type": source_type or "unknown",
+            "source_name": domain_or_subreddit,
+            "date": date_str,
+            "full_text": text or "",
+            "url": url,
+        }
+        if len(samples) < MAX_DISTRIBUTION_SAMPLES_PER_BUCKET:
+            samples.append(sample)
+            samples.sort(key=lambda s: s["confidence"], reverse=True)
+        elif confidence > samples[-1]["confidence"]:
+            samples[-1] = sample
+            samples.sort(key=lambda s: s["confidence"], reverse=True)
+
+    @staticmethod
     def _sanitize_evidence(spans: list, max_count: int = 5) -> list:
         """
         Clean evidence spans: deduplicate, remove placeholders, filter trivial.
@@ -328,6 +440,8 @@ class SentimentAggregator:
             byPlatform=self._format_platform_sentiment(accum["by_platform"]),
             byTopic=self._format_topic_sentiment(accum["by_topic"], accum["topic_samples"]),
             byTimeWindow=self._format_time_window_sentiment(accum["by_time"]),
+            byDayOfWeek=self._format_day_of_week_sentiment(accum["by_dow"]),
+            distributionSamples=self._format_distribution_samples(accum["strength_samples"]),
             disclaimer="Represents sampled platform discourse, not verified population sentiment",
             excluded_bot_content=accum["excluded_bots"],
         )
@@ -497,7 +611,7 @@ class SentimentAggregator:
         """Format time window sentiment breakdown in chronological order."""
         # Define order for time buckets
         order = {"24 hours": 0, "7 days": 1, "30 days": 2, "90+ days": 3, "Unknown": 4}
-        
+
         windows = [
             TimeWindowSentiment(
                 window=window,
@@ -509,3 +623,46 @@ class SentimentAggregator:
             for window, counts in by_time_window.items()
         ]
         return sorted(windows, key=lambda w: order.get(w.window, 999))
+
+    def _format_day_of_week_sentiment(
+        self, by_dow: Dict[str, Dict[str, int]]
+    ) -> List[DayOfWeekSentiment]:
+        """Format day-of-week sentiment breakdown in Mon..Sun order,
+        omitting days with zero volume."""
+        order = {label: i for i, label in enumerate(_DOW_LABELS)}
+        rows = [
+            DayOfWeekSentiment(
+                day=day,
+                positive=counts["positive"],
+                negative=counts["negative"],
+                neutral=counts["neutral"],
+                volume=sum(counts.values()),
+            )
+            for day, counts in by_dow.items()
+        ]
+        return sorted(rows, key=lambda r: order.get(r.day, 999))
+
+    def _format_distribution_samples(
+        self, strength_samples: Dict[str, List[Dict[str, Any]]]
+    ) -> Dict[str, List[ClassificationSample]]:
+        """Wrap raw-dict samples into ClassificationSample objects, dropping
+        buckets that have no samples so the UI doesn't render empty panels."""
+        out: Dict[str, List[ClassificationSample]] = {}
+        for bucket, raw_samples in strength_samples.items():
+            if not raw_samples:
+                continue
+            out[bucket] = [
+                ClassificationSample(
+                    doc_id=s["doc_id"], label=s["label"],
+                    confidence=s["confidence"], reasoning=s["reasoning"],
+                    evidence_spans=s["evidence_spans"],
+                    sarcasm_detected=s["sarcasm_detected"],
+                    title=s.get("title"), source_type=s.get("source_type"),
+                    source_name=s.get("source_name"),
+                    date=s.get("date"),
+                    full_text=s.get("full_text", ""),
+                    url=s.get("url"),
+                )
+                for s in raw_samples
+            ]
+        return out

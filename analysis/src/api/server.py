@@ -23,6 +23,7 @@ from starlette.responses import Response
 from analysis.src.api.rate_limits import limiter
 from analysis.src.api.routers import (
     admin_router,
+    auth_bootstrap_router,
     data_router,
     health_router,
     review_router,
@@ -95,3 +96,6 @@ app.include_router(health_router)
 app.include_router(admin_router, prefix=V1_PREFIX)
 app.include_router(data_router, prefix=V1_PREFIX)
 app.include_router(review_router, prefix=V1_PREFIX)
+# Mounted after review_router so the /review/* CF Access path covers it; the
+# bootstrap handler itself is not admin-token-gated (see routers/auth_bootstrap.py).
+app.include_router(auth_bootstrap_router, prefix=V1_PREFIX)
