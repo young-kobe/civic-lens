@@ -57,7 +57,7 @@ const BASE_TABS: Tab[] = [
     {
         id: 'narratives',
         label: 'Narratives',
-        shortLabel: 'Claims',
+        shortLabel: 'Narratives',
         icon: (
             <svg {...iconProps}>
                 <path d="M4 7h16M4 12h16M4 17h10" />
@@ -105,6 +105,17 @@ const ADMIN_TABS: Tab[] = [
 
 const TABS: Tab[] = ADMIN_MODE ? [...BASE_TABS, ...ADMIN_TABS] : BASE_TABS;
 
+// Valid tab ids — kept in sync with TABS + the 'home' landing + the hidden
+// 'heatmap' route. Used to validate the URL hash before we trust it as a tab.
+const TAB_IDS: ReadonlySet<string> = new Set([
+    'home', 'sentiment', 'narratives', 'propaganda', 'bots', 'heatmap', 'review',
+]);
+
+function readTabFromHash(): string {
+    const raw = window.location.hash.replace(/^#/, '');
+    return TAB_IDS.has(raw) ? raw : 'home';
+}
+
 function useScrolled(threshold = 4) {
     const [scrolled, setScrolled] = useState(false);
     useEffect(() => {
@@ -117,13 +128,32 @@ function useScrolled(threshold = 4) {
 }
 
 function App() {
-    const [activeTab, setActiveTab] = useState('home');
+    // Tab is mirrored into window.location.hash so the CF Access bootstrap
+    // bounce (see services/api.ts) can return the user to the tab they were on
+    // before the login prompt. Without the hash mirror, a round-trip would
+    // always land on Home.
+    const [activeTab, setActiveTab] = useState(readTabFromHash);
     const [filters, setFilters] = useState<Filters>({
         timeRange: '7d',
         sourceType: 'all',
         geography: 'all',
     });
     const scrolled = useScrolled();
+
+    useEffect(() => {
+        const current = window.location.hash.replace(/^#/, '');
+        if (current !== activeTab) {
+            const hash = activeTab === 'home' ? '' : `#${activeTab}`;
+            const url = `${window.location.pathname}${window.location.search}${hash}`;
+            window.history.replaceState({}, '', url);
+        }
+    }, [activeTab]);
+
+    useEffect(() => {
+        const onHashChange = () => setActiveTab(readTabFromHash());
+        window.addEventListener('hashchange', onHashChange);
+        return () => window.removeEventListener('hashchange', onHashChange);
+    }, []);
 
     const renderPage = () => {
         switch (activeTab) {

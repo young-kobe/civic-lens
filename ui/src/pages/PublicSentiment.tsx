@@ -2,6 +2,104 @@ import { Card, MethodPopover, LoadingCard, EmptyState, ErrorState } from '../com
 import { SentimentBar, TrendStrip } from '../components/charts';
 import type { Filters, PublicSentimentData, SentimentBreakdown, SocialVsNewsSentiment, PollingSocialComparison, TrendPoint } from '../types';
 
+/* ------------------------------------------------------------------ */
+/*  Day-of-week / time-window sentiment card                          */
+/* ------------------------------------------------------------------ */
+
+interface DayOfWeekCardProps {
+    byDayOfWeek?: SentimentBreakdown[];
+    byTimeWindow: SentimentBreakdown[];
+}
+
+function DayOfWeekCard({ byDayOfWeek, byTimeWindow }: DayOfWeekCardProps) {
+    const items = byDayOfWeek ?? byTimeWindow;
+    const isDow = Boolean(byDayOfWeek);
+    const title = isDow ? 'Sentiment by Day of Week' : 'Sentiment by Time Window';
+    const subtitle = isDow
+        ? 'How tone shifts across weekdays vs weekends in the current window'
+        : 'Age buckets of docs in the current window';
+
+    if (items.length === 0) {
+        return (
+            <Card title={title}>
+                <p className="text-muted text-sm">No breakdown available for this window.</p>
+            </Card>
+        );
+    }
+
+    return (
+        <Card title={title} subtitle={subtitle}>
+            <div
+                style={{
+                    display: 'grid',
+                    gridTemplateColumns: `repeat(${Math.min(items.length, 7)}, minmax(0, 1fr))`,
+                    gap: 'var(--space-2)',
+                }}
+            >
+                {items.map((item, i) => {
+                    const bucketLabel = item.day ?? item.window ?? '—';
+                    const total = item.positive + item.negative + item.neutral || 1;
+                    const net = ((item.positive - item.negative) / total) * 100;
+                    const netColor = net >= 5 ? 'var(--semantic-positive)'
+                        : net <= -5 ? 'var(--semantic-negative)'
+                        : 'var(--neutral-500)';
+                    return (
+                        <div
+                            key={i}
+                            style={{
+                                background: 'var(--bg-inset)',
+                                borderRadius: 'var(--radius-sm)',
+                                padding: 'var(--space-3)',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: 'var(--space-2)',
+                            }}
+                        >
+                            <div className="flex items-baseline justify-between" style={{ gap: 4 }}>
+                                <span
+                                    className="text-sm font-semibold"
+                                    style={{ letterSpacing: '-0.01em' }}
+                                >
+                                    {bucketLabel}
+                                </span>
+                                <span
+                                    className="num"
+                                    style={{
+                                        fontVariantNumeric: 'tabular-nums',
+                                        fontSize: '11px',
+                                        fontWeight: 600,
+                                        color: netColor,
+                                    }}
+                                >
+                                    {net >= 0 ? '+' : ''}{net.toFixed(0)}%
+                                </span>
+                            </div>
+                            <SentimentBar
+                                positive={item.positive}
+                                negative={item.negative}
+                                neutral={item.neutral}
+                                height={16}
+                                showLabels={false}
+                            />
+                            <span
+                                className="text-muted num"
+                                style={{
+                                    fontVariantNumeric: 'tabular-nums',
+                                    fontSize: '10px',
+                                    textTransform: 'uppercase',
+                                    letterSpacing: '0.06em',
+                                }}
+                            >
+                                {item.volume.toLocaleString()} docs
+                            </span>
+                        </div>
+                    );
+                })}
+            </div>
+        </Card>
+    );
+}
+
 import { fetchSentiment } from '../services/api';
 import { transformPublicSentiment } from '../services/transformers';
 import { useFetch } from '../services/useFetch';
@@ -55,6 +153,81 @@ function TopicSentimentCard({ data }: TopicSentimentCardProps) {
 
 
 
+interface ComparisonPanelProps {
+    badgeClassName: string;
+    badgeLabel: string;
+    netScore: number;
+    volume: number;
+    positive: number;
+    negative: number;
+    neutral: number;
+    formatNetScore: (n: number) => string;
+    getScoreColor: (n: number) => string;
+}
+
+/**
+ * One side of SocialVsNewsCard. Designed to be dense and legible:
+ * - Badge + volume inline at top (no center gutter)
+ * - Net score anchored left with an eyebrow label to its right
+ * - SentimentBar fills remaining width
+ *
+ * Replaces a prior layout that centered the big score over empty whitespace
+ * and stacked two independent rows of vertical padding.
+ */
+function ComparisonPanel({
+    badgeClassName, badgeLabel, netScore, volume,
+    positive, negative, neutral,
+    formatNetScore, getScoreColor,
+}: ComparisonPanelProps) {
+    return (
+        <div
+            style={{
+                background: 'var(--bg-inset)',
+                borderRadius: 'var(--radius-md)',
+                padding: 'var(--space-4)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 'var(--space-3)',
+            }}
+        >
+            <div className="flex justify-between items-center" style={{ gap: 'var(--space-2)' }}>
+                <span className={badgeClassName}>{badgeLabel}</span>
+                <span
+                    className="text-xs text-muted num"
+                    style={{ fontVariantNumeric: 'tabular-nums' }}
+                >
+                    {volume.toLocaleString()} docs
+                </span>
+            </div>
+
+            <div className="flex items-baseline" style={{ gap: 'var(--space-2)' }}>
+                <span
+                    style={{
+                        fontFamily: 'var(--font-mono)',
+                        fontVariantNumeric: 'tabular-nums',
+                        fontSize: 'var(--text-3xl)',
+                        fontWeight: 600,
+                        letterSpacing: '-0.02em',
+                        lineHeight: 1,
+                        color: getScoreColor(netScore),
+                    }}
+                >
+                    {formatNetScore(netScore)}
+                </span>
+                <span className="eyebrow">Net Score</span>
+            </div>
+
+            <SentimentBar
+                positive={positive}
+                negative={negative}
+                neutral={neutral}
+                height={20}
+                showLabels={false}
+            />
+        </div>
+    );
+}
+
 interface SocialVsNewsCardProps {
     data: SocialVsNewsSentiment | null | undefined;
 }
@@ -94,48 +267,29 @@ function SocialVsNewsCard({ data }: SocialVsNewsCardProps) {
                 />
             }
         >
-            <div className="grid-2 gap-6">
-                {/* Sampled Social (Reddit + X) */}
-                <div className="card" style={{ background: 'var(--neutral-50)', border: 'none', padding: 'var(--space-4)' }}>
-                    <div className="flex justify-between items-center mb-3">
-                        <span className="badge badge-accent">Sampled Social (Reddit + X)</span>
-                        <span className="text-xs text-muted">{data.social.volume.toLocaleString()} items</span>
-                    </div>
-                    <div className="text-center mb-3">
-                        <div className="text-2xl font-bold" style={{ color: getScoreColor(data.social.netScore) }}>
-                            {formatNetScore(data.social.netScore)}
-                        </div>
-                        <div className="text-xs text-muted">Net Score</div>
-                    </div>
-                    <SentimentBar
-                        positive={data.social.positive}
-                        negative={data.social.negative}
-                        neutral={data.social.neutral}
-                        height={24}
-                        showLabels={false}
-                    />
-                </div>
-
-                {/* News Outlets */}
-                <div className="card" style={{ background: 'var(--neutral-50)', border: 'none', padding: 'var(--space-4)' }}>
-                    <div className="flex justify-between items-center mb-3">
-                        <span className="badge badge-neutral">News Outlets</span>
-                        <span className="text-xs text-muted">{data.news.volume.toLocaleString()} items</span>
-                    </div>
-                    <div className="text-center mb-3">
-                        <div className="text-2xl font-bold" style={{ color: getScoreColor(data.news.netScore) }}>
-                            {formatNetScore(data.news.netScore)}
-                        </div>
-                        <div className="text-xs text-muted">Net Score</div>
-                    </div>
-                    <SentimentBar
-                        positive={data.news.positive}
-                        negative={data.news.negative}
-                        neutral={data.news.neutral}
-                        height={24}
-                        showLabels={false}
-                    />
-                </div>
+            <div className="grid-2 gap-4">
+                <ComparisonPanel
+                    badgeClassName="badge badge-accent"
+                    badgeLabel="Sampled Social (Reddit + X)"
+                    netScore={data.social.netScore}
+                    volume={data.social.volume}
+                    positive={data.social.positive}
+                    negative={data.social.negative}
+                    neutral={data.social.neutral}
+                    formatNetScore={formatNetScore}
+                    getScoreColor={getScoreColor}
+                />
+                <ComparisonPanel
+                    badgeClassName="badge badge-neutral"
+                    badgeLabel="News Outlets"
+                    netScore={data.news.netScore}
+                    volume={data.news.volume}
+                    positive={data.news.positive}
+                    negative={data.news.negative}
+                    neutral={data.news.neutral}
+                    formatNetScore={formatNetScore}
+                    getScoreColor={getScoreColor}
+                />
             </div>
 
             {/* Disparity indicator */}
@@ -223,9 +377,10 @@ function PublicSentiment({ filters }: PublicSentimentProps) {
     }
 
     return (
-        <div className="flex flex-col gap-6">
+        <div className="dashboard-grid">
             {/* Sampling disclaimer — invariant: never imply universal American sentiment */}
             <div
+                className="col-span-12"
                 style={{
                     padding: 'var(--space-3) var(--space-4)',
                     background: '#fffbeb',
@@ -241,52 +396,53 @@ function PublicSentiment({ filters }: PublicSentimentProps) {
                 of the full population.
             </div>
 
-            {/* Overview Header */}
-            <SentimentOverviewHeader data={data.overview} />
+            {/* Row: compact overview (5) + social vs news comparison (7) */}
+            <div className="col-span-5">
+                <SentimentOverviewHeader data={data.overview} />
+            </div>
+            <div className="col-span-7">
+                <SocialVsNewsCard data={data.socialVsNews} />
+            </div>
 
-            {/* Social Media vs News Comparison */}
-            <SocialVsNewsCard data={data.socialVsNews} />
-
-            {/* Topic Sentiment (new design with reasoning) */}
-            <TopicSentimentCard data={data.byTopic} />
-
-            {/* Distribution */}
-            <SentimentDistributionCard
-                data={data.distribution}
-                overview={data.overview}
-                byPlatform={data.byPlatform}
-            />
-
-            {/* Time Window Breakdown */}
-            <Card title="Sentiment by Time Window">
-                <div className="grid-3">
-                    {data.byTimeWindow.map((item: any, i: number) => (
-                        <div key={i} className="card" style={{ background: 'var(--neutral-50)', border: 'none' }}>
-                            <div className="text-sm font-medium mb-2">{item.window}</div>
-                            <SentimentBar
-                                positive={item.positive}
-                                negative={item.negative}
-                                neutral={item.neutral}
-                                height={20}
-                                showLabels={true}
-                            />
-                            <div className="text-xs text-muted mt-2">{item.volume.toLocaleString()} items</div>
-                        </div>
-                    ))}
-                </div>
-            </Card>
-
-            {/* GOP Favorability (merged) */}
-            {data.gopFavorability && (
-                <GOPFavorabilityCard
-                    favorability={data.gopFavorability}
-                    trend={data.gopTrend}
-                    pollingVsSocial={data.pollingVsSocial}
+            {/* Row: topic list (5) + day-of-week tiles (7).
+                DoW's 7 tiles breathe better in the wider slot; Topic's list fits
+                the narrower one because each row is vertically compact. */}
+            <div className="col-span-5">
+                <TopicSentimentCard data={data.byTopic} />
+            </div>
+            <div className="col-span-7">
+                <DayOfWeekCard
+                    byDayOfWeek={data.byDayOfWeek && data.byDayOfWeek.length > 0 ? data.byDayOfWeek : undefined}
+                    byTimeWindow={data.byTimeWindow}
                 />
+            </div>
+
+            {/* Row: distribution (full) — 5-seg bar + drill-down modal want full width */}
+            <div className="col-span-12">
+                <SentimentDistributionCard
+                    data={data.distribution}
+                    overview={data.overview}
+                    byPlatform={data.byPlatform}
+                    samples={data.distributionSamples}
+                />
+            </div>
+
+            {/* Row: GOP favorability (full) — trend chart wants horizontal room;
+                internal hero is a 2-col layout so the big number doesn't leave whitespace. */}
+            {data.gopFavorability && (
+                <div className="col-span-12">
+                    <GOPFavorabilityCard
+                        favorability={data.gopFavorability}
+                        trend={data.gopTrend}
+                        pollingVsSocial={data.pollingVsSocial}
+                    />
+                </div>
             )}
 
-            {/* Method Transparency */}
-            <MethodTransparencyPanel />
+            {/* Row: methodology (full) */}
+            <div className="col-span-12">
+                <MethodTransparencyPanel />
+            </div>
         </div>
     );
 }
@@ -313,39 +469,65 @@ function GOPFavorabilityCard({ favorability, trend, pollingVsSocial }: GOPFavora
                 />
             }
         >
-            {/* Net favorability hero metric */}
-            <div className="text-center mb-4">
-                <div className="text-3xl font-bold" style={{ color: netColor }}>
-                    {favorability.netFavorability >= 0 ? '+' : ''}{favorability.netFavorability.toFixed(1)}%
+            {/* Compact hero: net favorability + stance distribution side-by-side.
+                Replaces the old centered big-number stack which left a lot of
+                whitespace on wide viewports. */}
+            <div
+                style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                    gap: 'var(--space-4)',
+                    alignItems: 'center',
+                    marginBottom: 'var(--space-4)',
+                }}
+            >
+                <div>
+                    <div className="eyebrow mb-1">Net Favorability</div>
+                    <div
+                        style={{
+                            fontSize: 'var(--text-4xl)',
+                            fontWeight: 600,
+                            color: netColor,
+                            letterSpacing: '-0.02em',
+                            lineHeight: 1,
+                            fontFamily: 'var(--font-mono)',
+                            fontVariantNumeric: 'tabular-nums',
+                        }}
+                    >
+                        {favorability.netFavorability >= 0 ? '+' : ''}{favorability.netFavorability.toFixed(1)}%
+                    </div>
+                    <div className="text-xs text-muted mt-2">
+                        {favorability.sampleSize.toLocaleString()} docs &middot; {favorability.sourceCount} platforms
+                    </div>
                 </div>
-                <div className="text-xs text-muted">Net Favorability</div>
-            </div>
-
-            {/* Stance distribution using SentimentBar */}
-            <div className="mb-4">
-                <div className="flex justify-between items-center mb-2">
-                    <span className="font-medium text-sm">Stance Distribution</span>
-                    <span className="text-xs text-muted">{favorability.sampleSize.toLocaleString()} docs</span>
+                <div
+                    style={{
+                        paddingLeft: 'var(--space-4)',
+                        borderLeft: '1px solid var(--neutral-200)',
+                    }}
+                >
+                    <div className="eyebrow mb-2">Stance Distribution</div>
+                    <SentimentBar
+                        positive={favorability.favorable}
+                        negative={favorability.unfavorable}
+                        neutral={favorability.neutral}
+                        height={28}
+                        showLabels={true}
+                    />
                 </div>
-                <SentimentBar
-                    positive={favorability.favorable}
-                    negative={favorability.unfavorable}
-                    neutral={favorability.neutral}
-                    height={32}
-                    showLabels={true}
-                />
             </div>
 
             {/* Trend chart */}
             {trend && trend.length > 0 && (
-                <div className="mt-6 pt-4" style={{ borderTop: '1px solid var(--neutral-100)' }}>
-                    <h4 className="font-medium text-sm mb-3">Favorability Trend</h4>
+                <div className="mt-4 pt-4" style={{ borderTop: '1px solid var(--neutral-150)' }}>
+                    <div className="eyebrow mb-2">Favorability Trend</div>
                     <TrendStrip
                         data={trend}
                         dataKey="value"
                         xKey="date"
                         height={160}
                         color={netColor}
+                        unit="%"
                     />
                 </div>
             )}

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Card, MetricCard, MethodPopover, LoadingCard, EmptyState, ErrorState } from '../components/common';
+import { Card, MetricCard, MethodPopover, Modal, LoadingCard, EmptyState, ErrorState } from '../components/common';
 import { Heatmap } from '../components/charts';
 import { fetchBotActivity } from '../services/api';
 import { useFetch } from '../services/useFetch';
@@ -42,7 +42,7 @@ interface NarrativeAmplificationCardProps {
 }
 
 function NarrativeAmplificationCard({ narrative }: NarrativeAmplificationCardProps) {
-    const [expanded, setExpanded] = useState(false);
+    const [modalOpen, setModalOpen] = useState(false);
 
     const getConfidenceBadge = (confidence: ConfidenceLevel) => {
         switch (confidence) {
@@ -53,92 +53,114 @@ function NarrativeAmplificationCard({ narrative }: NarrativeAmplificationCardPro
         }
     };
 
+    const accentColor = narrative.confidence === 'high' ? 'var(--semantic-negative)'
+        : narrative.confidence === 'medium' ? 'var(--semantic-warning)'
+        : 'var(--neutral-500)';
+
     return (
-        <Card className="mb-3">
-            <div className="flex items-start justify-between mb-3">
+        <>
+            <Card>
+                <div className="flex items-start justify-between mb-3" style={{ gap: 'var(--space-3)', flexWrap: 'wrap' }}>
+                    <div style={{ minWidth: 0 }}>
+                        <h4 className="font-semibold uppercase" style={{ letterSpacing: '0.02em' }}>{narrative.narrative}</h4>
+                        <div className="flex items-center gap-2 mt-1" style={{ flexWrap: 'wrap' }}>
+                            {getConfidenceBadge(narrative.confidence)}
+                            <span className="eyebrow num">
+                                {narrative.suspectedBotVolume.toLocaleString()} suspected bot posts
+                            </span>
+                        </div>
+                    </div>
+                    <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        onClick={() => setModalOpen(true)}
+                        aria-haspopup="dialog"
+                    >
+                        View details
+                    </button>
+                </div>
+
+                {/* Always visible: Why flagged */}
                 <div>
-                    <h4 className="font-semibold uppercase" style={{ letterSpacing: '0.02em' }}>{narrative.narrative}</h4>
-                    <div className="flex items-center gap-2 mt-1">
-                        {getConfidenceBadge(narrative.confidence)}
-                        <span className="eyebrow num">
-                            {narrative.suspectedBotVolume.toLocaleString()} suspected bot posts
-                        </span>
+                    <div className="eyebrow mb-2">Why Flagged · Coordination Indicators</div>
+                    <ul style={{ margin: 0, paddingLeft: 'var(--space-5)' }} className="text-sm">
+                        {narrative.whyFlagged.map((reason, i) => (
+                            <li key={i} className="mb-1">{reason}</li>
+                        ))}
+                    </ul>
+                </div>
+            </Card>
+
+            <Modal
+                isOpen={modalOpen}
+                onClose={() => setModalOpen(false)}
+                title={narrative.narrative}
+                subtitle={`${narrative.suspectedBotVolume.toLocaleString()} suspected bot posts · ${narrative.confidence} likelihood`}
+                accentColor={accentColor}
+            >
+                {/* Example Posts */}
+                <div className="mb-4">
+                    <div className="eyebrow mb-2">Example Posts</div>
+                    <div className="flex flex-col gap-2">
+                        {narrative.examplePosts.map((post, i) => (
+                            <div
+                                key={i}
+                                className="text-sm"
+                                style={{
+                                    padding: 'var(--space-2) var(--space-3)',
+                                    background: 'var(--bg-inset)',
+                                    borderLeft: '2px solid var(--neutral-300)',
+                                    borderRadius: '2px',
+                                    fontStyle: 'italic',
+                                }}
+                            >
+                                "{post}"
+                            </div>
+                        ))}
                     </div>
                 </div>
-                <button
-                    className="btn btn-ghost btn-sm"
-                    onClick={() => setExpanded(!expanded)}
-                >
-                    {expanded ? 'Collapse' : 'Expand'}
-                </button>
-            </div>
 
-            {/* Always visible: Why flagged */}
-            <div className="mb-3">
-                <div className="eyebrow mb-2">Why Flagged · Coordination Indicators</div>
-                <ul style={{ margin: 0, paddingLeft: 'var(--space-5)' }} className="text-sm">
-                    {narrative.whyFlagged.map((reason, i) => (
-                        <li key={i} className="mb-1">{reason}</li>
-                    ))}
-                </ul>
-            </div>
-
-            {expanded && (
-                <>
-                    {/* Example Posts */}
-                    <div className="mb-3">
-                        <div className="eyebrow mb-2">Example Posts</div>
-                        <div className="flex flex-col gap-2">
-                            {narrative.examplePosts.map((post, i) => (
-                                <div
-                                    key={i}
-                                    className="text-sm"
-                                    style={{
-                                        padding: 'var(--space-2) var(--space-3)',
-                                        background: 'var(--bg-inset)',
-                                        borderLeft: '2px solid var(--neutral-300)',
-                                        borderRadius: '2px',
-                                        fontStyle: 'italic',
-                                    }}
-                                >
-                                    "{post}"
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-
-                    {/* Hashtags and Phrases */}
-                    <div className="grid-2 gap-3 mb-3">
-                        <div>
-                            <div className="eyebrow mb-2">Top Hashtags</div>
-                            <div className="flex flex-wrap gap-1">
-                                {narrative.topHashtags.map((tag, i) => (
-                                    <span key={i} className="badge badge-accent">{tag}</span>
-                                ))}
-                            </div>
-                        </div>
-                        <div>
-                            <div className="eyebrow mb-2">Key Phrases</div>
-                            <div className="flex flex-wrap gap-1">
-                                {narrative.topPhrases.map((phrase, i) => (
-                                    <span key={i} className="badge badge-neutral">{phrase}</span>
-                                ))}
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Targets */}
+                {/* Hashtags and Phrases */}
+                <div className="grid-2 gap-3 mb-4">
                     <div>
-                        <div className="eyebrow mb-2">Primary Targets</div>
+                        <div className="eyebrow mb-2">Top Hashtags</div>
                         <div className="flex flex-wrap gap-1">
-                            {narrative.targets.map((target, i) => (
-                                <span key={i} className="badge badge-negative">{target}</span>
+                            {narrative.topHashtags.map((tag, i) => (
+                                <span key={i} className="badge badge-accent">{tag}</span>
                             ))}
                         </div>
                     </div>
-                </>
-            )}
-        </Card>
+                    <div>
+                        <div className="eyebrow mb-2">Key Phrases</div>
+                        <div className="flex flex-wrap gap-1">
+                            {narrative.topPhrases.map((phrase, i) => (
+                                <span key={i} className="badge badge-neutral">{phrase}</span>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+
+                {/* Targets */}
+                <div className="mb-4">
+                    <div className="eyebrow mb-2">Primary Targets</div>
+                    <div className="flex flex-wrap gap-1">
+                        {narrative.targets.map((target, i) => (
+                            <span key={i} className="badge badge-negative">{target}</span>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Why Flagged (repeated in modal for full context) */}
+                <div>
+                    <div className="eyebrow mb-2">Why Flagged · Coordination Indicators</div>
+                    <ul style={{ margin: 0, paddingLeft: 'var(--space-5)' }} className="text-sm">
+                        {narrative.whyFlagged.map((reason, i) => (
+                            <li key={i} className="mb-1">{reason}</li>
+                        ))}
+                    </ul>
+                </div>
+            </Modal>
+        </>
     );
 }
 
@@ -194,150 +216,142 @@ interface BehavioralSignalsPanelProps {
     data: BehavioralSignals;
 }
 
+/**
+ * Renders four behavioural-signal cards as direct children of the outer
+ * dashboard grid. Account age + text similarity pair as 6-col siblings on
+ * wide screens; the heatmap takes a full row because its 24-col matrix
+ * needs horizontal room; link-domain concentration takes the remainder.
+ */
 function BehavioralSignalsPanel({ data }: BehavioralSignalsPanelProps) {
     return (
-        <div className="grid-2 gap-3">
-            {/* Account Age Distribution */}
-            <Card title="Account Age Distribution">
-                <div className="flex flex-col gap-2">
-                    {data.accountAgeDistribution.map((item, i) => (
-                        <div key={i}>
-                            <div className="flex justify-between text-sm mb-1">
-                                <span>{item.range}</span>
-                                <span className="num text-muted">{item.percentage}%</span>
-                            </div>
-                            <div
-                                style={{
-                                    height: '6px',
-                                    background: 'var(--neutral-100)',
-                                    borderRadius: '1px',
-                                    overflow: 'hidden'
-                                }}
-                            >
+        <>
+            {/* Row: account age (6) + text similarity (6) — both compact bar lists */}
+            <div className="col-span-6">
+                <Card title="Account Age Distribution">
+                    <div className="flex flex-col gap-2">
+                        {data.accountAgeDistribution.map((item, i) => (
+                            <div key={i}>
+                                <div className="flex justify-between text-sm mb-1">
+                                    <span>{item.range}</span>
+                                    <span className="num text-muted">{item.percentage}%</span>
+                                </div>
                                 <div
                                     style={{
-                                        width: `${item.percentage}%`,
-                                        height: '100%',
-                                        background: item.range.includes('<') ? 'var(--semantic-warning)' : 'var(--accent)',
+                                        height: '6px',
+                                        background: 'var(--neutral-100)',
+                                        borderRadius: '1px',
+                                        overflow: 'hidden',
                                     }}
-                                />
+                                >
+                                    <div
+                                        style={{
+                                            width: `${item.percentage}%`,
+                                            height: '100%',
+                                            background: item.range.includes('<') ? 'var(--semantic-warning)' : 'var(--accent)',
+                                        }}
+                                    />
+                                </div>
                             </div>
-                        </div>
-                    ))}
-                </div>
-                <div className="card-note mt-4">
-                    Young accounts (&lt;30 days) are over-represented in suspected bot activity.
-                </div>
-            </Card>
-
-            {/* Posting Cadence Heatmap */}
-            <Card title="Posting Cadence Heatmap">
-                <div className="text-xs text-muted mb-2">
-                    Rows are days of the week (0 = Sunday), columns are hours (0–23, UTC). Darker cells indicate heavier
-                    posting volume among suspected-bot accounts. Human baseline is 9am–11pm local time; clusters in
-                    off-hours (02:00–05:00 UTC) are a red flag for automation, not proof of it.
-                </div>
-                <Heatmap data={data.postingCadence} cellSize={12} gap={1} />
-                <div className="card-note mt-4">
-                    Unusual posting patterns detected: concentrated activity during off-hours (02:00–05:00 UTC).
-                </div>
-            </Card>
-
-            {/* Copy/Paste Similarity */}
-            <Card title="Text Similarity Distribution">
-                <div className="text-xs text-muted mb-3">
-                    Pairwise text similarity across suspected-bot posts. Natural discourse typically sits in the 20–30%
-                    range (shared vocabulary on the same topic). Values above 80% indicate near-duplicate content, a
-                    strong indicator of copy-paste amplification.
-                </div>
-                <div className="flex flex-col gap-3">
-                    <div>
-                        <div className="flex justify-between text-sm mb-1">
-                            <span>High similarity (&gt;80%)</span>
-                            <span className="font-medium" style={{ color: 'var(--semantic-negative)' }}>
-                                {data.copyPasteSimilarity.high}%
-                            </span>
-                        </div>
-                        <div
-                            style={{
-                                height: '8px',
-                                background: 'var(--neutral-100)',
-                                borderRadius: '1px',
-                                overflow: 'hidden'
-                            }}
-                        >
-                            <div
-                                style={{
-                                    width: `${data.copyPasteSimilarity.high}%`,
-                                    height: '100%',
-                                    background: 'var(--semantic-negative)',
-                                }}
-                            />
-                        </div>
+                        ))}
                     </div>
-                    <div>
-                        <div className="flex justify-between text-sm mb-1">
-                            <span>Medium similarity (50-80%)</span>
-                            <span className="font-medium" style={{ color: 'var(--semantic-warning)' }}>
-                                {data.copyPasteSimilarity.medium}%
-                            </span>
-                        </div>
-                        <div
-                            style={{
-                                height: '8px',
-                                background: 'var(--neutral-100)',
-                                borderRadius: '1px',
-                                overflow: 'hidden'
-                            }}
-                        >
-                            <div
-                                style={{
-                                    width: `${data.copyPasteSimilarity.medium}%`,
-                                    height: '100%',
-                                    background: 'var(--semantic-warning)',
-                                }}
-                            />
-                        </div>
+                    <div className="card-note mt-4">
+                        Young accounts (&lt;30 days) are over-represented in suspected bot activity.
                     </div>
-                    <div>
-                        <div className="flex justify-between text-sm mb-1">
-                            <span>Low similarity (&lt;50%)</span>
-                            <span className="font-medium">{data.copyPasteSimilarity.low}%</span>
-                        </div>
-                        <div
-                            style={{
-                                height: '8px',
-                                background: 'var(--neutral-100)',
-                                borderRadius: '1px',
-                                overflow: 'hidden'
-                            }}
-                        >
-                            <div
-                                style={{
-                                    width: `${data.copyPasteSimilarity.low}%`,
-                                    height: '100%',
-                                    background: 'var(--accent)',
-                                }}
-                            />
-                        </div>
-                    </div>
-                </div>
-            </Card>
+                </Card>
+            </div>
 
-            {/* Link Domain Concentration */}
-            <Card title="Link Domain Concentration">
-                <div className="flex flex-col">
-                    {data.linkDomainConcentration.map((item, i) => (
-                        <div key={i} className="flex justify-between items-center" style={{ padding: '6px 0', borderBottom: '1px solid var(--neutral-150)' }}>
-                            <span className="text-sm" style={{ fontFamily: 'var(--font-mono)' }}>{item.domain}</span>
-                            <span className="num text-sm text-muted">{item.percentage}%</span>
-                        </div>
-                    ))}
-                </div>
-                <div className="card-note mt-4">
-                    High concentration of links to a small number of domains may indicate coordinated promotion.
-                </div>
-            </Card>
+            <div className="col-span-6">
+                <Card title="Text Similarity Distribution">
+                    <div className="text-xs text-muted mb-3">
+                        Pairwise text similarity across suspected-bot posts. Natural discourse typically sits in the
+                        20–30% range. Values above 80% indicate near-duplicate content, a strong indicator of
+                        copy-paste amplification.
+                    </div>
+                    <div className="flex flex-col gap-3">
+                        <SimilarityBar
+                            label="High similarity (>80%)"
+                            value={data.copyPasteSimilarity.high}
+                            color="var(--semantic-negative)"
+                        />
+                        <SimilarityBar
+                            label="Medium similarity (50–80%)"
+                            value={data.copyPasteSimilarity.medium}
+                            color="var(--semantic-warning)"
+                        />
+                        <SimilarityBar
+                            label="Low similarity (<50%)"
+                            value={data.copyPasteSimilarity.low}
+                            color="var(--accent)"
+                        />
+                    </div>
+                </Card>
+            </div>
+
+            {/* Row: posting cadence heatmap (8) + link domain concentration (4).
+                The 24-col matrix wants width; link domains is a short list that
+                fits the narrow slot nicely. */}
+            <div className="col-span-8">
+                <Card title="Posting Cadence Heatmap">
+                    <div className="text-xs text-muted mb-2">
+                        Rows are days of the week, columns are hours (0–23, UTC). Darker cells indicate heavier
+                        posting volume among suspected-bot accounts. Clusters in off-hours (02:00–05:00 UTC) are a
+                        red flag for automation, not proof of it.
+                    </div>
+                    <Heatmap data={data.postingCadence} cellSize={12} gap={1} />
+                    <div className="card-note mt-4">
+                        Concentrated activity during off-hours (02:00–05:00 UTC) was detected in this window.
+                    </div>
+                </Card>
+            </div>
+
+            <div className="col-span-4">
+                <Card title="Link Domain Concentration">
+                    <div className="flex flex-col">
+                        {data.linkDomainConcentration.map((item, i) => (
+                            <div
+                                key={i}
+                                className="flex justify-between items-center"
+                                style={{ padding: '6px 0', borderBottom: '1px solid var(--neutral-150)' }}
+                            >
+                                <span className="text-sm" style={{ fontFamily: 'var(--font-mono)' }}>
+                                    {item.domain}
+                                </span>
+                                <span className="num text-sm text-muted">{item.percentage}%</span>
+                            </div>
+                        ))}
+                    </div>
+                    <div className="card-note mt-4">
+                        High concentration of links to a small number of domains may indicate coordinated promotion.
+                    </div>
+                </Card>
+            </div>
+        </>
+    );
+}
+
+interface SimilarityBarProps {
+    label: string;
+    value: number;
+    color: string;
+}
+
+function SimilarityBar({ label, value, color }: SimilarityBarProps) {
+    return (
+        <div>
+            <div className="flex justify-between text-sm mb-1">
+                <span>{label}</span>
+                <span className="font-medium" style={{ color }}>{value}%</span>
+            </div>
+            <div
+                style={{
+                    height: '8px',
+                    background: 'var(--neutral-100)',
+                    borderRadius: '1px',
+                    overflow: 'hidden',
+                }}
+            >
+                <div style={{ width: `${value}%`, height: '100%', background: color }} />
+            </div>
         </div>
     );
 }
@@ -385,9 +399,10 @@ function BotActivityProfiler({ filters: _filters }: BotActivityProfilerProps) {
     }
 
     return (
-        <div className="flex flex-col gap-4">
-            {/* Important Disclaimer */}
+        <div className="dashboard-grid">
+            {/* Row: disclaimer (full) */}
             <div
+                className="col-span-12"
                 style={{
                     background: 'var(--semantic-warning-light)',
                     borderLeft: '3px solid var(--semantic-warning)',
@@ -418,25 +433,51 @@ function BotActivityProfiler({ filters: _filters }: BotActivityProfilerProps) {
                 </div>
             </div>
 
-            {/* Overview Metrics */}
-            <BotOverviewMetrics data={data.overview} />
-
-            {/* Narrative Amplification */}
-            <div>
-                <div className="eyebrow mb-3">Narratives with Suspected Bot Amplification</div>
-                {data.narrativeAmplification.map((narrative) => (
-                    <NarrativeAmplificationCard key={narrative.id} narrative={narrative} />
-                ))}
+            {/* Row: overview metrics — BotOverviewMetrics already renders 3
+                items; wrap full-width and let its internal grid-3 handle the
+                column layout so we don't double-nest grids. */}
+            <div className="col-span-12">
+                <BotOverviewMetrics data={data.overview} />
             </div>
 
-            {/* Coordination Summary */}
-            <CoordinationSummary data={data.coordinationStats} />
-
-            {/* Behavioral Signals */}
-            <div>
-                <div className="eyebrow mb-3">Behavioral Signals</div>
-                <BehavioralSignalsPanel data={data.behavioralSignals} />
+            {/* Row: coordination summary (5) + narrative amplification section label (7).
+                Coord is a compact 4-stat card; the amplification section headline pairs
+                with it so the narrative-detail cards below get a clean section start. */}
+            <div className="col-span-5">
+                <CoordinationSummary data={data.coordinationStats} />
             </div>
+            <div
+                className="col-span-7"
+                style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'center',
+                    padding: 'var(--space-3) var(--space-4)',
+                    background: 'var(--bg-panel)',
+                    border: '1px solid var(--neutral-200)',
+                    borderRadius: 'var(--radius-md)',
+                }}
+            >
+                <div className="eyebrow" style={{ marginBottom: 'var(--space-1)' }}>
+                    Narratives with Suspected Bot Amplification
+                </div>
+                <div className="text-xs text-muted" style={{ lineHeight: 'var(--leading-relaxed)' }}>
+                    Each row below is a narrative whose amplifying accounts score as likely bots. Expand to see
+                    example posts, flagged hashtags, and the signals that triggered the flag.
+                </div>
+            </div>
+
+            {/* Narrative amplification cards — each full-width so their
+                expanded state has room for the example post grid. */}
+            {data.narrativeAmplification.map((narrative) => (
+                <div key={narrative.id} className="col-span-12">
+                    <NarrativeAmplificationCard narrative={narrative} />
+                </div>
+            ))}
+
+            {/* Behavioral signals — four cards rendered as direct grid children.
+                See BehavioralSignalsPanel for per-card span decisions. */}
+            <BehavioralSignalsPanel data={data.behavioralSignals} />
         </div>
     );
 }

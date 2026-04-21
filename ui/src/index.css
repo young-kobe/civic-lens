@@ -149,6 +149,10 @@ body {
   min-height: 100dvh;
   font-feature-settings: 'cv11', 'ss01';
   overscroll-behavior-y: none;
+  /* Belt-and-suspenders: never let a stray wide child force horizontal
+     scroll on the whole page. Components that genuinely need to scroll
+     (heatmap grid, long tables) must handle it in their own wrapper. */
+  overflow-x: hidden;
 }
 
 h1, h2, h3, h4, h5, h6 {
@@ -283,6 +287,64 @@ code, pre {
 .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--space-3); }
 .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-3); }
 .grid-auto { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: var(--space-3); }
+
+/* Newspaper-style 12-col dashboard grid.
+   Lets us pair narrow cards (e.g. a 3-stat summary at col-span-5) next to
+   a wider panel (col-span-7) so the page has visual rhythm instead of
+   identical full-bleed rows. Each child picks its own span based on
+   content density.
+
+   Cards paired in a row stretch to match the tallest sibling so there are
+   no jagged bottom edges between neighbors. Wrappers use flex-column +
+   flex:1 on their child so the Card (or banner) inside inflates to fill
+   the allotted row height.
+
+   Collapses to single-column below 1024px (tablet / phone) so no card is
+   forced into a too-narrow slot. */
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: var(--space-4);
+  /* align-items defaults to stretch — equal-height cards per row. */
+}
+
+.col-span-12 { grid-column: span 12; }
+.col-span-8  { grid-column: span 8; }
+.col-span-7  { grid-column: span 7; }
+.col-span-6  { grid-column: span 6; }
+.col-span-5  { grid-column: span 5; }
+.col-span-4  { grid-column: span 4; }
+
+/* Each grid cell becomes a flex column so its child (usually a .card)
+   stretches to the row's height instead of hugging its natural content. */
+.dashboard-grid > [class*="col-span-"] {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.dashboard-grid > [class*="col-span-"] > * {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* Cards fill their flex parent vertically so background + border reach
+   the full row height; their internal content stays top-aligned, which
+   reads as "this card's data ends here" rather than "the card is short". */
+.dashboard-grid > [class*="col-span-"] > .card,
+.dashboard-grid > [class*="col-span-"] > .surface-card,
+.dashboard-grid > [class*="col-span-"] > .surface-panel,
+.dashboard-grid > [class*="col-span-"] > .surface-hero {
+  height: 100%;
+}
+
+@media (max-width: 1024px) {
+  .col-span-4,
+  .col-span-5,
+  .col-span-6,
+  .col-span-7,
+  .col-span-8 { grid-column: span 12; }
+}
 
 .flex { display: flex; }
 .flex-col { flex-direction: column; }
@@ -911,6 +973,99 @@ code, pre {
   line-height: var(--leading-relaxed);
 }
 
+/* ============================================
+   Modal (portal-rendered dialog)
+   ============================================ */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(10, 11, 15, 0.55);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 5vh var(--space-4) var(--space-4);
+  overflow-y: auto;
+  animation: modal-fade-in 140ms ease-out;
+}
+
+@keyframes modal-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.modal-surface {
+  width: 100%;
+  background: var(--bg-card);
+  border: 1px solid var(--neutral-200);
+  border-left: 3px solid transparent;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  max-height: 90vh;
+  animation: modal-rise-in 180ms ease-out;
+}
+
+@keyframes modal-rise-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.99); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--neutral-150);
+  position: sticky;
+  top: 0;
+  background: var(--bg-card);
+  border-top-left-radius: var(--radius-lg);
+  border-top-right-radius: var(--radius-lg);
+}
+
+.modal-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--neutral-500);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+  flex-shrink: 0;
+}
+.modal-close:hover { background: var(--bg-inset); color: var(--neutral-800); }
+
+.modal-body {
+  padding: var(--space-4);
+  overflow-y: auto;
+  flex: 1 1 auto;
+}
+
+@media (max-width: 640px) {
+  .modal-backdrop { padding: var(--space-2); align-items: flex-end; }
+  .modal-surface {
+    max-height: 92vh;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    animation: modal-slide-up 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  @keyframes modal-slide-up {
+    from { opacity: 0; transform: translateY(100%); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+}
+
+
 /* Distribution / stacked bar segments with a subtle rise on hover. */
 .seg {
   position: relative;
@@ -1204,6 +1359,79 @@ code, pre {
   color: var(--neutral-500);
   text-transform: uppercase;
   letter-spacing: 0.06em;
+}
+
+
+/* ============================================
+   Narratives — row layout
+   ============================================ */
+
+.narrative-row {
+  display: grid;
+  grid-template-columns: 1fr 100px 80px 90px 80px;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--neutral-150);
+  align-items: center;
+}
+
+.narrative-row-header {
+  display: grid;
+  grid-template-columns: 1fr 100px 80px 90px 80px;
+  gap: var(--space-4);
+  padding: var(--space-2) var(--space-4);
+  border-bottom: 1px solid var(--neutral-200);
+}
+.narrative-row-header > span:not(:first-child) { text-align: right; }
+
+.narrative-row-claim { min-width: 0; }
+.narrative-row-sparkline { min-width: 0; }
+.narrative-row-metric {
+  text-align: right;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Phones — stack the row into a claim block + a 3-up metric strip below.
+   The fixed-width desktop columns overflow a 360px viewport. */
+@media (max-width: 640px) {
+  .narrative-row-header { display: none; }
+  .narrative-row {
+    grid-template-columns: 1fr;
+    gap: var(--space-2);
+    padding: var(--space-3);
+  }
+  .narrative-row-claim { order: 0; }
+  .narrative-row-sparkline {
+    order: 1;
+    grid-column: 1;
+    width: 100%;
+  }
+  .narrative-row-metrics {
+    order: 2;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--space-2);
+    padding-top: var(--space-2);
+    border-top: 1px dashed var(--neutral-150);
+  }
+  .narrative-row-metric {
+    text-align: left;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: var(--text-xs);
+  }
+  .narrative-row-metric::before {
+    content: attr(data-label);
+    font-family: var(--font-family);
+    font-variant-numeric: normal;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--neutral-500);
+    font-weight: 600;
+  }
 }
 
 

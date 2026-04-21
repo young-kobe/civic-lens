@@ -82,10 +82,14 @@ function Heatmap({
                 ))}
             </div>
 
-            {/* Grid */}
-            <div onMouseLeave={() => setActive(null)}>
+            {/* Grid — wrapped for horizontal scroll so the 24-col matrix
+                doesn't push the page out on narrow phones. */}
+            <div
+                onMouseLeave={() => setActive(null)}
+                style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}
+            >
                 {DAYS.map((day, dayIndex) => (
-                    <div key={day} className="flex items-center gap-1 mb-1">
+                    <div key={day} className="flex items-center gap-1 mb-1" style={{ minWidth: 'max-content' }}>
                         <span
                             className="text-xs text-muted"
                             style={{ width: '36px', textAlign: 'right' }}

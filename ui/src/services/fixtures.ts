@@ -13,9 +13,11 @@
 
 import type {
     BotData,
+    ClassificationSample,
     HeatmapDataPoint,
     NarrativeSummary,
     PublicSentimentData,
+    SentimentSegmentKey,
 } from '../types';
 
 const NOW = Math.floor(Date.now() / 1000);
@@ -61,15 +63,21 @@ export function mockSentiment(): PublicSentimentData {
             { platform: 'X', positive: 410, negative: 428, neutral: 59, volume: 897 },
         ],
         byTimeWindow: [
-            { window: 'Mon', positive: 120, negative: 210, neutral: 380, volume: 710 },
-            { window: 'Tue', positive: 140, negative: 260, neutral: 410, volume: 810 },
-            { window: 'Wed', positive: 155, negative: 290, neutral: 395, volume: 840 },
-            { window: 'Thu', positive: 165, negative: 310, neutral: 410, volume: 885 },
-            { window: 'Fri', positive: 180, negative: 270, neutral: 420, volume: 870 },
-            { window: 'Sat', positive: 175, negative: 230, neutral: 400, volume: 805 },
-            { window: 'Sun', positive: 175, negative: 238, neutral: 380, volume: 793 },
+            { window: '24 hours', positive: 310, negative: 420, neutral: 520, volume: 1250 },
+            { window: '7 days', positive: 620, negative: 850, neutral: 1180, volume: 2650 },
+            { window: '30 days', positive: 480, negative: 720, neutral: 890, volume: 2090 },
+        ],
+        byDayOfWeek: [
+            { day: 'Mon', positive: 170, negative: 280, neutral: 410, volume: 860 },
+            { day: 'Tue', positive: 195, negative: 310, neutral: 445, volume: 950 },
+            { day: 'Wed', positive: 210, negative: 335, neutral: 430, volume: 975 },
+            { day: 'Thu', positive: 225, negative: 360, neutral: 420, volume: 1005 },
+            { day: 'Fri', positive: 240, negative: 305, neutral: 400, volume: 945 },
+            { day: 'Sat', positive: 210, negative: 245, neutral: 360, volume: 815 },
+            { day: 'Sun', positive: 160, negative: 305, neutral: 320, volume: 785 },
         ],
         distribution,
+        distributionSamples: mockDistributionSamples(),
         socialVsNews: {
             social: { positive: 630, negative: 1068, neutral: 369, netScore: -21.2, volume: 2067 },
             news: { positive: 480, negative: 520, neutral: 1120, netScore: -1.9, volume: 2120 },
@@ -110,6 +118,129 @@ export function mockSentiment(): PublicSentimentData {
                 date: isoDay(3),
             },
         },
+    };
+}
+
+/* ---------- Distribution drill-down samples ---------- */
+
+function sample(
+    base: Omit<ClassificationSample, 'doc_id' | 'evidence_spans' | 'sarcasm_detected' | 'reasoning'> & {
+        reasoning: string;
+        evidence: string[];
+        sarcasm?: boolean;
+    },
+    docId: number,
+): ClassificationSample {
+    const { reasoning, evidence, sarcasm, ...rest } = base;
+    return {
+        doc_id: docId,
+        reasoning,
+        evidence_spans: evidence,
+        sarcasm_detected: !!sarcasm,
+        ...rest,
+    };
+}
+
+function mockDistributionSamples(): Partial<Record<SentimentSegmentKey, ClassificationSample[]>> {
+    return {
+        strongNegative: [
+            sample({
+                label: 'NEGATIVE', confidence: 0.94,
+                title: '"Catastrophic failure of leadership" — op-ed slams border response',
+                source_type: 'news', source_name: 'nypost.com', date: isoDay(1),
+                url: 'https://example.com/op-ed-border',
+                full_text: 'The administration has failed on every metric that matters...',
+                reasoning: 'Multiple intensifiers ("catastrophic", "every metric"), zero qualification, explicit blame.',
+                evidence: ['catastrophic failure of leadership', 'failed on every metric that matters'],
+            }, 88421),
+            sample({
+                label: 'NEGATIVE', confidence: 0.91,
+                title: 'They are literally destroying this country in real time',
+                source_type: 'x_post', source_name: '@politics_pundit', date: isoDay(2),
+                url: 'https://twitter.com/politics_pundit/status/123',
+                full_text: 'They are literally destroying this country in real time. Nothing subtle about it.',
+                reasoning: 'Absolute terms ("literally destroying"), present-tense accusation.',
+                evidence: ['literally destroying this country', 'Nothing subtle about it'],
+            }, 90884),
+            sample({
+                label: 'NEGATIVE', confidence: 0.89,
+                title: 'Comment: this is the worst administration in my lifetime',
+                source_type: 'reddit_post', source_name: 'r/politics', date: isoDay(3),
+                url: 'https://reddit.com/r/politics/comments/xyz',
+                full_text: 'Nothing good has come from this. Worst admin in my lifetime, full stop.',
+                reasoning: 'Superlative + emphatic closure ("full stop").',
+                evidence: ['worst administration in my lifetime', 'full stop'],
+            }, 91002),
+        ],
+        mildNegative: [
+            sample({
+                label: 'NEGATIVE', confidence: 0.72,
+                title: 'Critics say drug pricing plan falls short of promises',
+                source_type: 'news', source_name: 'reuters.com', date: isoDay(1),
+                url: 'https://example.com/drug-pricing-critics',
+                full_text: 'The plan has merits but critics note it exempts several major classes...',
+                reasoning: 'Criticism acknowledged but softened by "has merits". Net-negative but qualified.',
+                evidence: ['falls short of promises', 'exempts several major classes'],
+            }, 90114),
+            sample({
+                label: 'NEGATIVE', confidence: 0.68,
+                title: 'Skeptical take on the Ukraine aid package from House Republicans',
+                source_type: 'news', source_name: 'apnews.com', date: isoDay(4),
+                url: 'https://example.com/skeptical-ukraine',
+                full_text: 'Representatives expressed unease, though several left room for compromise.',
+                reasoning: 'Concerns voiced but explicit openness to compromise.',
+                evidence: ['expressed unease', 'left room for compromise'],
+            }, 91640),
+        ],
+        neutral: [
+            sample({
+                label: 'NEUTRAL', confidence: 0.88,
+                title: 'House schedules vote on Ukraine aid package',
+                source_type: 'news', source_name: 'reuters.com', date: isoDay(2),
+                url: 'https://example.com/ukraine-vote-schedule',
+                full_text: 'The House will vote Tuesday on the $61 billion package, sources confirmed.',
+                reasoning: 'Straight reportage. Dates, figures, attribution; no evaluative language.',
+                evidence: ['House will vote Tuesday', 'sources confirmed'],
+            }, 91641),
+            sample({
+                label: 'NEUTRAL', confidence: 0.84,
+                title: 'Polling data: 41% approve of handling of economy',
+                source_type: 'news', source_name: 'pewresearch.org', date: isoDay(3),
+                reasoning: 'Reported number, cited source, no commentary.',
+                evidence: ['41% approve', 'according to Pew'],
+            }, 90230),
+        ],
+        mildPositive: [
+            sample({
+                label: 'POSITIVE', confidence: 0.71,
+                title: 'Bipartisan push on prescription drug pricing gains momentum',
+                source_type: 'news', source_name: 'reuters.com', date: isoDay(4),
+                url: 'https://example.com/bipartisan-drug',
+                full_text: 'Members from both parties signaled willingness, though details remain.',
+                reasoning: 'Positive framing ("gains momentum"), tempered by "details remain".',
+                evidence: ['gains momentum', 'members from both parties signaled willingness'],
+            }, 90115),
+        ],
+        strongPositive: [
+            sample({
+                label: 'POSITIVE', confidence: 0.93,
+                title: 'Landmark drug pricing deal praised as "historic victory"',
+                source_type: 'news', source_name: 'politico.com', date: isoDay(5),
+                url: 'https://example.com/historic-drug-deal',
+                full_text: 'Advocates called it "the biggest win in a decade" for consumers.',
+                reasoning: 'Unqualified endorsement language ("historic victory", "biggest win").',
+                evidence: ['historic victory', 'biggest win in a decade'],
+            }, 90116),
+            sample({
+                label: 'POSITIVE', confidence: 0.87,
+                title: 'Local healthcare rollout exceeds enrollment targets by 40%',
+                source_type: 'news', source_name: 'apnews.com', date: isoDay(6),
+                url: 'https://example.com/healthcare-rollout',
+                full_text: 'Officials described the numbers as "a remarkable success".',
+                reasoning: 'Concrete positive outcome + explicit endorsement quote.',
+                evidence: ['exceeds enrollment targets by 40%', 'a remarkable success'],
+            }, 90117),
+        ],
     };
 }
 
