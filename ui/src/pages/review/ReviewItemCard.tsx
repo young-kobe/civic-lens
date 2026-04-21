@@ -213,12 +213,12 @@ export default function ReviewItemCard({ item, reviewerId, onSubmitted }: Review
                         onChange={(e) => setIsGolden(e.target.checked)}
                     />
                     <span className="text-sm">
-                        <strong>Add to golden set</strong> — use this row as ground truth for accuracy benchmarks
+                        <strong>Add to golden set</strong>: use this row as ground truth for accuracy benchmarks
                     </span>
                 </label>
 
                 <textarea
-                    placeholder="Notes (optional) — why was this correct/incorrect, edge case, etc."
+                    placeholder="Notes (optional): why was this correct/incorrect, edge case, etc."
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
                     rows={2}

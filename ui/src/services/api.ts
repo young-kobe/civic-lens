@@ -8,6 +8,17 @@ const API_BASE = '/api/v1';
 
 export type TimeWindow = '24h' | '7d' | '30d' | '90d' | 'all';
 
+/**
+ * Dev-only mock toggle. Set VITE_USE_MOCKS=true in ui/.env.local (gitignored)
+ * to render the UI against deterministic fixtures without a live backend.
+ * Vite inlines import.meta.env at build time, so this branch dead-code-
+ * eliminates in production builds when the flag is off.
+ *
+ * When you retire the fixtures, delete this constant, the three `if (USE_MOCKS)`
+ * branches below, and `src/services/fixtures.ts`. No other code references them.
+ */
+const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
+
 function adminHeaders(): HeadersInit {
     try {
         const token = localStorage.getItem('civic_admin_token');
@@ -17,12 +28,6 @@ function adminHeaders(): HeadersInit {
     }
 }
 
-/**
- * Minimal JSON fetch helper. Collapses the per-endpoint try/response-ok/json
- * boilerplate and gives us one place to add auth headers, retry, or
- * telemetry later. Endpoints that need admin auth pass `admin: true`; the
- * helper merges the X-Admin-Token header on top of the caller's init.
- */
 async function fetchJSON<T>(
     path: string,
     init: RequestInit & { admin?: boolean } = {},
@@ -41,10 +46,18 @@ async function fetchJSON<T>(
 }
 
 export async function fetchSentiment(window: TimeWindow = '24h'): Promise<PublicSentimentData> {
+    if (USE_MOCKS) {
+        const { mockSentiment } = await import('./fixtures');
+        return mockSentiment();
+    }
     return fetchJSON<PublicSentimentData>(`/sentiment?window=${window}`);
 }
 
 export async function fetchBotActivity(): Promise<BotData> {
+    if (USE_MOCKS) {
+        const { mockBotActivity } = await import('./fixtures');
+        return mockBotActivity();
+    }
     return fetchJSON<BotData>('/bot-activity');
 }
 
@@ -69,6 +82,10 @@ export async function fetchGeoSentiment(window: TimeWindow = '7d'): Promise<GeoS
 }
 
 export async function fetchNarratives(window: TimeWindow = '7d', limit: number = 20): Promise<NarrativeSummary[]> {
+    if (USE_MOCKS) {
+        const { mockNarratives } = await import('./fixtures');
+        return mockNarratives();
+    }
     return fetchJSON<NarrativeSummary[]>(`/narratives?window=${window}&limit=${limit}`);
 }
 

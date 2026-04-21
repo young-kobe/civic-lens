@@ -149,7 +149,7 @@ function GlobalHeatmap({ filters }: GlobalHeatmapProps) {
                 <p className="description">
                     Country-level sentiment of <strong>political X posts</strong> that carry a geo tag. Dot size =
                     volume, color = net sentiment. Most X posts have no location metadata, so coverage is thin and
-                    uneven — treat this view as indicative, not comprehensive.
+                    uneven. Treat this view as indicative, not comprehensive.
                 </p>
                 <StatsOverview data={data} />
                 <SentimentLegend />

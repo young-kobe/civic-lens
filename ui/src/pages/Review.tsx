@@ -143,7 +143,7 @@ function Review() {
                     color: '#1e3a8a',
                 }}
             >
-                <strong>Reviews populate <code>ai_output_evals</code></strong> — marking rows as <em>golden</em> builds the
+                <strong>Reviews populate <code>ai_output_evals</code></strong>. Marking rows as <em>golden</em> builds the
                 benchmark set used to compute calibrated accuracy. Lowest-confidence model outputs are surfaced first because
                 those are where human review yields the most signal. Admin-gated via the <code>X-Admin-Token</code> header;
                 set a reviewer ID below for attribution.

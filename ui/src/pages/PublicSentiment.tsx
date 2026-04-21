@@ -85,7 +85,7 @@ function SocialVsNewsCard({ data }: SocialVsNewsCardProps) {
             subtitle="Comparing sentiment between sampled social posts (Reddit + X) and news coverage"
             headerActions={
                 <MethodPopover
-                    description="The left column is drawn from sampled political discussions on Reddit and X — posts are not a statistical sample of the wider population, only of content we ingested through public APIs. The right column is news-article sentiment."
+                    description="The left column is drawn from sampled political discussions on Reddit and X. Posts are not a statistical sample of the wider population, only of content we ingested through public APIs. The right column is news-article sentiment."
                     limitations={[
                         'Social sample over-represents engaged users and the specific subreddits / X queries we follow',
                         'News outlet sentiment may reflect editorial framing',
@@ -164,7 +164,7 @@ function MethodTransparencyPanel() {
                     <p className="text-muted">
                         Sentiment is derived from news articles, sampled Reddit discussions, and sampled X (Twitter) posts.
                         The social-media data is explicitly labeled as "sampled" because it only covers the specific subreddits
-                        and X queries we ingest through public APIs — it does not represent the full population of online discourse.
+                        and X queries we ingest through public APIs. It does not represent the full population of online discourse.
                     </p>
                 </div>
 
@@ -237,8 +237,8 @@ function PublicSentiment({ filters }: PublicSentimentProps) {
             >
                 <strong>Sampled political discourse:</strong> sentiment reflects US political news articles plus
                 sampled political Reddit and X discussions from the last 30 days. This is a snapshot of what the
-                sources we ingest are saying about politics — not a scientific poll and not a representation of the
-                full population.
+                sources we ingest are saying about politics. It is not a scientific poll and not a representation
+                of the full population.
             </div>
 
             {/* Overview Header */}
@@ -251,7 +251,11 @@ function PublicSentiment({ filters }: PublicSentimentProps) {
             <TopicSentimentCard data={data.byTopic} />
 
             {/* Distribution */}
-            <SentimentDistributionCard data={data.distribution} />
+            <SentimentDistributionCard
+                data={data.distribution}
+                overview={data.overview}
+                byPlatform={data.byPlatform}
+            />
 
             {/* Time Window Breakdown */}
             <Card title="Sentiment by Time Window">
