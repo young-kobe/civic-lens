@@ -1,8 +1,13 @@
 """
 JSON Schemas for LLM Structured Output.
 
-These schemas are passed to Ollama (format parameter) and Gemini (response_schema)
-to enforce deterministic JSON responses from the LLM.
+These schemas are passed to Ollama (format parameter) and Gemini
+(response_schema) to enforce deterministic JSON responses from the LLM.
+
+Note: Gemini's schema validator rejects OpenAPI-spec ``minimum``/``maximum``
+keywords. Numeric confidences are documented as being in [0,1] in the
+prompts, and the engine code clamps when it reads them — we don't bake
+range constraints into the schema here.
 """
 
 # Entity Stance Schema (nested in favorability)
@@ -32,9 +37,7 @@ TEXT_ANALYSIS_SCHEMA = {
             "enum": ["POSITIVE", "NEGATIVE", "NEUTRAL", "MIXED"]
         },
         "sentiment_confidence": {
-            "type": "number",
-            "minimum": 0,
-            "maximum": 1
+            "type": "number"
         },
         "sentiment_evidence_spans": {
             "type": "array",
@@ -52,9 +55,7 @@ TEXT_ANALYSIS_SCHEMA = {
             "enum": ["favorable", "unfavorable", "neutral", "mixed"]
         },
         "overall_favorability_confidence": {
-            "type": "number",
-            "minimum": 0,
-            "maximum": 1
+            "type": "number"
         },
         "sentiment_reasoning": {
             "type": "string"
@@ -64,8 +65,8 @@ TEXT_ANALYSIS_SCHEMA = {
         }
     },
     "required": [
-        "sentiment_label", "sentiment_confidence", "sentiment_evidence_spans", 
-        "sarcasm_detected", "overall_gop_stance", "overall_favorability_confidence", 
+        "sentiment_label", "sentiment_confidence", "sentiment_evidence_spans",
+        "sarcasm_detected", "overall_gop_stance", "overall_favorability_confidence",
         "sentiment_reasoning", "favorability_reasoning"
     ]
 }
@@ -75,7 +76,7 @@ CLAIM_SCHEMA = {
     "type": "object",
     "properties": {
         "claim": {"type": "string"},
-        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "confidence": {"type": "number"},
         "evidence_span": {"type": "string"},
     },
     "required": ["claim", "confidence", "evidence_span"],
@@ -109,7 +110,7 @@ PROPAGANDA_TECHNIQUE_SCHEMA = {
             "type": "string",
             "enum": PROPAGANDA_TECHNIQUE_ENUM,
         },
-        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "confidence": {"type": "number"},
         "evidence_span": {"type": "string"},
     },
     "required": ["technique", "confidence", "evidence_span"],
@@ -123,7 +124,7 @@ PROPAGANDA_SCHEMA = {
             "items": PROPAGANDA_TECHNIQUE_SCHEMA,
         },
         "overall_propaganda_score": {
-            "type": "number", "minimum": 0, "maximum": 1,
+            "type": "number",
         },
         "reasoning": {"type": "string"},
     },
@@ -139,7 +140,7 @@ ACCOUNT_CLASSIFIER_SCHEMA = {
             "type": "string",
             "enum": ["elected_official", "affiliated", "general_public"],
         },
-        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "confidence": {"type": "number"},
         "reasoning": {"type": "string"},
     },
     "required": ["tier", "confidence"],
@@ -157,14 +158,10 @@ BOT_SCHEMA = {
             "enum": ["human", "bot", "suspicious"]
         },
         "confidence": {
-            "type": "number",
-            "minimum": 0,
-            "maximum": 1
+            "type": "number"
         },
         "llm_text_likelihood": {
-            "type": "number",
-            "minimum": 0,
-            "maximum": 1,
+            "type": "number"
         },
         "indicators": {
             "type": "array",
