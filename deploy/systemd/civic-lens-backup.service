@@ -1,0 +1,31 @@
+[Unit]
+Description=Civic Lens SQLite backup (one-shot)
+
+[Service]
+Type=oneshot
+User=civic-lens
+Group=civic-lens
+WorkingDirectory=/opt/civic-lens
+EnvironmentFile=/etc/civic-lens.env
+ExecStart=/opt/civic-lens/deploy/backup.sh
+
+# Hardening. Backup touches DB read-only + writes a tarball to /var/lib/civic-lens/backups
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+SystemCallArchitectures=native
+SystemCallFilter=~@privileged @debug @module @mount @obsolete @reboot @swap @raw-io @cpu-emulation
+SystemCallErrorNumber=EPERM
+ReadWritePaths=/var/lib/civic-lens
+MemoryMax=256M

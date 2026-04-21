@@ -11,6 +11,11 @@ import (
 	"github.com/young-kobe/civic-lens/ingest/internal/model"
 )
 
+// maxRespBody caps how much of a Reddit response we will read. A hostile
+// or misbehaving endpoint can't park the crawler reading a 10 GB body
+// (audit §1.11). Matches the limit already in place for crawl HTML.
+const maxRespBody = 10 << 20 // 10 MiB
+
 // Client interfaces with Reddit's public JSON endpoints.
 type Client struct {
 	httpClient *http.Client
@@ -46,7 +51,7 @@ func (c *Client) FetchSubredditPostsPublic(ctx context.Context, subreddit string
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxRespBody))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -76,7 +81,7 @@ func (c *Client) FetchPostCommentBodiesPublic(ctx context.Context, subreddit, po
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxRespBody))
 	if err != nil {
 		return nil, nil, err
 	}

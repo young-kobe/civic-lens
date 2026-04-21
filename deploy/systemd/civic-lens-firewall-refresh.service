@@ -1,0 +1,17 @@
+[Unit]
+Description=Refresh UFW rules from Cloudflare IP ranges
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/opt/civic-lens/deploy/firewall.sh
+
+# Needs to mutate firewall — can't drop caps to zero. Only kept as a
+# scheduled task so CF range rotations eventually flow through without a
+# manual re-run. Still blocks unexpected exec + filesystem writes outside
+# the firewall touch-points.
+NoNewPrivileges=yes
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+PrivateTmp=yes

@@ -49,10 +49,23 @@ class SnapshotCache:
         logger.info(f"SnapshotCache initialized at {self.cache_dir.absolute()}")
     
     def _get_path(self, key: str) -> Path:
-        """Get file path for a cache key."""
-        # Sanitize key to be filesystem-safe
+        """Get file path for a cache key.
+
+        Callers pass keys assembled from request query params (e.g.
+        ``f"sentiment_{window}"``). Reject traversal payloads even though the
+        Pydantic ``Literal`` validators on the routers already constrain the
+        values — defense-in-depth so a future endpoint that forgets to
+        validate can't escape ``cache_dir`` (audit §1.4).
+        """
+        if "\x00" in key or ".." in key:
+            raise ValueError(f"Invalid cache key: {key!r}")
         safe_key = key.replace("/", "_").replace("\\", "_")
-        return self.cache_dir / f"{safe_key}.json"
+        candidate = (self.cache_dir / f"{safe_key}.json").resolve()
+        cache_root = self.cache_dir.resolve()
+        # Path.is_relative_to lands in 3.9; we target 3.12 so this is safe.
+        if not candidate.is_relative_to(cache_root):
+            raise ValueError(f"Cache key escapes cache_dir: {key!r}")
+        return candidate
     
     def save(self, key: str, data: Any, doc_count: int = 0) -> None:
         """

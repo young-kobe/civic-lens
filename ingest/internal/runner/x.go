@@ -32,7 +32,9 @@ func NewXRunner(a *app.App) *XRunner {
 	return &XRunner{app: a}
 }
 
-// Run fetches posts from X using configured political queries.
+// Run fetches posts from X using configured political queries. Aborts the
+// loop cleanly if the month-to-date budget ceiling is reached (walkthrough
+// 048); partial progress is persisted.
 func (xr *XRunner) Run(ctx context.Context) (*XResult, error) {
 	cfg := xr.app.Config
 
@@ -49,9 +51,27 @@ func (xr *XRunner) Run(ctx context.Context) (*XResult, error) {
 		return nil, fmt.Errorf("X bearer token not configured (set x.bearer_token in seeds.yaml or X_BEARER_TOKEN env var)")
 	}
 
+	budget, err := NewXBudgetTracker(ctx, xr.app.Database.Conn(), cfg.X.MonthlyBudgetCents)
+	if err != nil {
+		return nil, fmt.Errorf("x budget tracker: %w", err)
+	}
+	start := budget.Summary()
+	fmt.Printf("X budget %s: $%0.2f of $%0.2f used (%d posts / %d users / %d reqs)\n",
+		start.MonthKey,
+		float64(start.EstimatedCents)/100.0,
+		float64(start.CeilingCents)/100.0,
+		start.PostCount, start.UserCount, start.RequestCount)
+
 	now := time.Now().Unix()
 
 	for _, query := range cfg.X.PoliticalQueries {
+		if budget.OverBudget() {
+			s := budget.Summary()
+			fmt.Printf("X budget ceiling hit: $%0.2f / $%0.2f — skipping remaining queries\n",
+				float64(s.EstimatedCents)/100.0, float64(s.CeilingCents)/100.0)
+			break
+		}
+
 		fmt.Printf("Searching X for: %s\n", query)
 
 		resp, rawJSON, err := xr.client.SearchRecentPosts(ctx, query, cfg.X.MaxTweetsPerQuery)
@@ -65,6 +85,13 @@ func (xr *XRunner) Run(ctx context.Context) (*XResult, error) {
 
 		posts, users := x.ToModels(resp)
 		fmt.Printf("  Got %d posts, %d users (raw: %s)\n", len(posts), len(users), hash[:8])
+
+		// Persist the budget hit BEFORE the DB inserts — if inserts fail we
+		// still paid for the API call, and forgetting to record it would
+		// let the ceiling drift over time.
+		if err := budget.Record(ctx, len(posts), len(users)); err != nil {
+			fmt.Printf("  Budget record error: %v\n", err)
+		}
 
 		// Insert posts
 		for _, post := range posts {
@@ -98,6 +125,13 @@ func (xr *XRunner) Run(ctx context.Context) (*XResult, error) {
 			fmt.Printf("  (More results available, limited by budget)\n")
 		}
 	}
+
+	end := budget.Summary()
+	fmt.Printf("X budget %s now: $%0.2f of $%0.2f used (%d posts / %d users / %d reqs)\n",
+		end.MonthKey,
+		float64(end.EstimatedCents)/100.0,
+		float64(end.CeilingCents)/100.0,
+		end.PostCount, end.UserCount, end.RequestCount)
 
 	return &XResult{
 		QueriesProcessed: xr.queriesProcessed,

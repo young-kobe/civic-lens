@@ -1,0 +1,11 @@
+# /etc/fail2ban/jail.d/civic-lens.local — tighter SSH jail than the default.
+
+[sshd]
+enabled = true
+port = 22
+maxretry = 3
+findtime = 10m
+bantime = 1h
+# Ban on any failed auth after three tries in ten minutes. The CF-pinned
+# firewall already blocks :80/:443 from anything but Cloudflare; this is
+# for the SSH surface.

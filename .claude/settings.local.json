@@ -6,7 +6,11 @@
       "Read(//c/c/Users/kobey/civic-lens/analysis/src/reporting/**)",
       "Bash(go test *)",
       "Bash(go build *)",
-      "Bash(rm /tmp/civic-ingest.exe)"
+      "Bash(rm /tmp/civic-ingest.exe)",
+      "Bash(xargs grep *)",
+      "Bash(npm audit *)",
+      "Bash(xargs cat *)",
+      "Bash(npm install *)"
     ]
   }
 }

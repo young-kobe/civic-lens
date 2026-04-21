@@ -46,6 +46,12 @@ type XConfig struct {
 	MaxRequestsHour   int      `yaml:"max_requests_hour"`
 	PoliticalQueries  []string `yaml:"political_queries"`
 	MaxTweetsPerQuery int      `yaml:"max_tweets_per_query"`
+	// MonthlyBudgetCents caps the X API spend per calendar-month (UTC).
+	// Enforced by a persistent counter in the x_api_budget table. When the
+	// estimated spend hits this value, the runner aborts remaining queries
+	// for the month. Zero disables the check — but always set this in
+	// production. (walkthrough 048.)
+	MonthlyBudgetCents int `yaml:"monthly_budget_cents"`
 }
 
 // SeedConfig holds a seed URL or feed.
