@@ -1,6 +1,6 @@
 # Walkthrough 047 — Pre-Deploy Hardening
 
-Status: in-progress 2026-04-20. Consolidates remediation of the 04_20 consolidated security audit (`docs/audits/04_20_2026_pre_deploy_consolidated.md`). Goal: ship `civic-lens.info` with zero open HIGH/CRITICAL security items.
+Status: **landed + launched 2026-04-21**. See `049-launch.md` for the cutover log and the small fixes that came up during the real deploy. Consolidates remediation of the 04_20 consolidated security audit (`docs/audits/04_20_2026_pre_deploy_consolidated.md`). Goal: ship `civic-lens.info` with zero open HIGH/CRITICAL security items.
 
 Everything here lands in five sequential PRs against branch `19-harden-for-v1-deployment`, then one merge to `main` that kicks off the first CI/CD deploy. The deploy-day dashboard work (Cloudflare Access, Authenticated Origin Pulls, Gemini key rotation) is not code but tracked here so the sequence is preserved in one place.
 

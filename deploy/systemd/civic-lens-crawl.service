@@ -13,6 +13,14 @@ Group=civic-lens
 # absolute paths in ExecStart below, so /opt stays read-only.
 WorkingDirectory=/var/lib/civic-lens
 EnvironmentFile=/etc/civic-lens.env
+# Two-phase cycle: `ingest` parses RSS seeds and pushes new URLs onto the
+# frontier; `crawl` drains the frontier. Running them as back-to-back
+# ExecStart lines inside a single oneshot unit keeps them coupled so a
+# scheduled fetch always picks up newly-published articles (walkthrough
+# 049 — launch wrap-up).
+ExecStart=/opt/civic-lens/civic-ingest ingest \
+    --config /opt/civic-lens/data/seeds.yaml \
+    --db ${CIVIC_DB_PATH}
 ExecStart=/opt/civic-lens/civic-ingest crawl \
     --config /opt/civic-lens/data/seeds.yaml \
     --db ${CIVIC_DB_PATH} \
