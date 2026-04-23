@@ -4,7 +4,6 @@
 export interface Filters {
     timeRange: '24h' | '7d' | '30d' | '90d' | 'all';
     sourceType: 'all' | 'news' | 'reddit' | 'social';
-    geography: string;
 }
 
 // Confidence levels
@@ -44,6 +43,12 @@ export interface PublicSentimentData {
     // server-side (~15 per bucket). Absent on older snapshots.
     distributionSamples?: Partial<Record<SentimentSegmentKey, ClassificationSample[]>>;
     socialVsNews?: SocialVsNewsSentiment | null;
+    // Three-way entity rollups (walkthrough 057/058). Lists the dashboard
+    // renders as the News Outlets / Verified Officials / General Public
+    // columns. Optional for pre-Phase-3b cached snapshots.
+    byNewsOutlet?: EntitySentimentItem[];
+    byOfficial?: EntitySentimentItem[];
+    byGeneralPublic?: EntitySentimentItem[];
     // Merged GOP favorability data
     gopFavorability?: {
         favorable: number;
@@ -57,6 +62,48 @@ export interface PublicSentimentData {
     gopTrend?: TrendPoint[] | null;
     gopByPlatform?: DemographicBreakdown[] | null;
     pollingVsSocial?: PollingSocialComparison | null;
+}
+
+/**
+ * Editorial profile payload attached to every entity card. Shape is
+ * keyed by `kind`: registry entities carry outlet/official/subreddit
+ * metadata; unmatched docs get a `catch_all` placeholder with a minimal
+ * blurb and no partisan-lean fields.
+ */
+export interface EntityProfile {
+    kind: 'outlet' | 'official' | 'subreddit' | 'catch_all';
+    key: string;
+    displayName: string;
+    blurb: string;
+    // Shared lean/leanSource axis across outlets + subreddits (null on
+    // officials + catch_all). Outlets use the 6-bucket partisan_lean;
+    // subreddits the 4-bucket tilt.
+    lean?: string | null;
+    leanSource?: string | null;
+    // Outlet-only.
+    owner?: string | null;
+    founded?: number | null;
+    circulationNote?: string | null;
+    // Official-only.
+    office?: string;
+    party?: string;
+    termStart?: string;
+    bioSource?: string;
+    // Subreddit-only.
+    subscriberCountProxy?: string | null;
+}
+
+/** Per-entity sentiment card on the three-way dashboard frame. */
+export interface EntitySentimentItem {
+    key: string;
+    kind: 'outlet' | 'official' | 'subreddit' | 'catch_all';
+    positive: number;
+    negative: number;
+    neutral: number;
+    volume: number;
+    netScore: number;
+    entityProfile: EntityProfile;
+    classificationSamples?: ClassificationSample[];
 }
 
 /** Keys of SentimentDistribution. Used as lookup keys for distributionSamples. */
@@ -101,6 +148,15 @@ export interface SentimentBreakdown {
     volume: number;
     sarcasm_rate?: number;
     classificationSamples?: ClassificationSample[];
+    // Per-topic three-way split (walkthrough 057). Only present on byTopic
+    // rows — null when a tier had zero volume on that topic so the UI can
+    // distinguish "no data" from a real zero.
+    newsNet?: number | null;
+    officialsNet?: number | null;
+    publicNet?: number | null;
+    newsVolume?: number;
+    officialsVolume?: number;
+    publicVolume?: number;
 }
 
 export interface SentimentDistribution {
@@ -161,6 +217,60 @@ export interface BotOverview {
     topClusters: string[];
     totalFlaggedAccounts: number;
     confidence: ConfidenceLevel;
+    // Three-way entity rollups — registry-matched outlets / officials /
+    // subreddits (+ a catch-all per tier) with their per-entity bot rate.
+    // Empty lists on older snapshots.
+    by_news_outlet?: BotEntityItem[];
+    by_official?: BotEntityItem[];
+    by_general_public?: BotEntityItem[];
+}
+
+// =============================================================================
+// Movers (window-over-window deltas)
+// =============================================================================
+
+/** One row of the political-tone movers ticker — an outlet, official, or
+ *  subreddit whose net tone shifted meaningfully between the previous
+ *  equivalent window and the current one. */
+export interface EntityToneMover {
+    key: string;
+    kind: 'outlet' | 'official' | 'subreddit';
+    displayName: string;
+    current_net: number;
+    prev_net: number;
+    delta_pts: number;     // signed: positive = climbing, negative = falling
+    current_volume: number;
+    prev_volume: number;
+    entity_profile: EntityProfile;
+}
+
+/** Window-over-window shift in overall GOP favorability — one summary row
+ *  that lives alongside the entity movers in the same ticker. */
+export interface FavorabilityMover {
+    label: string;          // "GOP party stance"
+    current_net: number;
+    prev_net: number;
+    delta_pts: number;
+    current_volume: number;
+    prev_volume: number;
+}
+
+export interface MoversResult {
+    window: string;
+    entity_movers: EntityToneMover[];
+    favorability_mover: FavorabilityMover | null;
+}
+
+
+/** Per-entity bot-amplification rollup for the Bot Detector's three-way
+ *  grid. Sort by `bot_rate_pct` desc. */
+export interface BotEntityItem {
+    key: string;
+    kind: 'outlet' | 'official' | 'subreddit' | 'catch_all';
+    total_docs: number;
+    bot_docs: number;
+    bot_rate_pct: number;
+    entity_profile: EntityProfile;
 }
 
 export interface NarrativeAmplification {
@@ -227,6 +337,26 @@ export interface NarrativeTimelinePoint {
     count: number;
 }
 
+/** One row of the "Supporting documents" drill-down table used on the
+ *  Political Narratives and Overall Tone pages. Mirror of
+ *  `NarrativeAggregator._top_supporting_docs` / `_build_source_label`
+ *  output — headline / source / publish date / sentiment + confidence /
+ *  LLM reasoning / link. Different shape than ClassificationSample: the
+ *  narrative side synthesizes a pre-formatted `source_label`, emits unix
+ *  `published_at`, and uses lowercase sentiment enum. */
+export interface SupportingDoc {
+    doc_id: number;
+    title: string | null;
+    source_type: string;
+    source_label: string;   // "News · nytimes.com", "X · @Schumer", "Reddit · r/politics"
+    url: string | null;
+    published_at: number | null;  // unix seconds
+    sentiment_label: 'positive' | 'negative' | 'neutral' | null;
+    confidence: number | null;
+    reasoning: string | null;
+}
+
+
 // Account tier for X-origin narratives. See walkthrough 036.
 export type AccountTier = 'elected_official' | 'affiliated' | 'general_public';
 
@@ -264,6 +394,12 @@ export interface NarrativeSummary {
     // Walkthrough 043 overlays — null when no data.
     propaganda_score: number | null;       // 0..1 mean across supporting docs
     bot_pushed_fraction: number | null;    // 0..1 over unique X supporting authors
+    // Walkthrough 058 — three-way entity framing. Optional for
+    // backwards-compat with pre-Phase-3b cached snapshots.
+    first_seen_entity_profile?: EntityProfile | null;
+    first_seen_tier_group?: 'news' | 'officials' | 'public' | null;
+    cross_tier?: boolean;
+    top_supporting_docs?: SupportingDoc[];
 }
 
 // =============================================================================
@@ -306,6 +442,26 @@ export interface PropagandaExample {
     overall_score: number;
     techniques: PropagandaTechniqueSpan[];
     text_preview: string;
+    // X handle for x_post examples; null for news/reddit. Used to filter the
+    // Examples list down to one entity inside PropagandaEntityModal.
+    author_handle?: string | null;
+    // External source URL — news story, X permalink, or Reddit post link.
+    url?: string | null;
+}
+
+/**
+ * Per-entity propaganda rollup for the three-way dashboard frame
+ * (walkthrough 058). Sort the "Top flagged entities" card by
+ * ``mean_score`` desc; catch-all buckets sort to the end.
+ */
+export interface PropagandaEntityItem {
+    key: string;
+    kind: 'outlet' | 'official' | 'subreddit' | 'catch_all';
+    total_docs: number;
+    flagged_docs: number;
+    flagged_rate_pct: number;
+    mean_score: number;
+    entity_profile: EntityProfile;
 }
 
 export interface PropagandaOverview {
@@ -318,6 +474,10 @@ export interface PropagandaOverview {
     by_source: PropagandaSourceSplit[];
     examples: PropagandaExample[];
     disclaimer: string;
+    // Walkthrough 058 — three-way entity rollups. Empty on older snapshots.
+    by_news_outlet?: PropagandaEntityItem[];
+    by_official?: PropagandaEntityItem[];
+    by_general_public?: PropagandaEntityItem[];
 }
 
 // Review types
@@ -337,6 +497,10 @@ export interface ReviewQueueItem {
         domain: string | null;
         title: string | null;
         ident: string;
+        /** External permalink to the original source. Null when the ingest
+         *  layer didn't have enough metadata to synthesize one (rare).
+         *  Rendered as a clickable title in the reviewer UI — invariant C1. */
+        url: string | null;
         text_preview: string;
         text_truncated: boolean;
     };

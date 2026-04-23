@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Card, MethodPopover, Modal } from '../../components/common';
+import { Card, ClassificationSampleCard, MethodPopover, Modal } from '../../components/common';
 import type {
     ClassificationSample,
     SentimentBreakdown,
@@ -7,7 +7,7 @@ import type {
     SentimentOverview,
     SentimentSegmentKey,
 } from '../../types';
-import { ClassificationSampleCard } from './ClassificationSampleCard';
+import { COLORS } from '../../theme';
 
 interface SentimentDistributionCardProps {
     data: SentimentDistribution;
@@ -54,46 +54,46 @@ export function SentimentDistributionCard({
             key: 'strongNegative',
             label: 'Strong unfavorable',
             value: data.strongNegative,
-            gradient: 'linear-gradient(135deg, #7a1109 0%, #c91b0e 100%)',
-            solid: '#991b1b',
+            gradient: COLORS.toneGradStrongNeg,
+            solid:    COLORS.toneStrongNeg,
             description: 'Docs scored as clearly, emphatically negative. Evidence span carries intensifiers or explicit hostility.',
-            badge: { bg: '#fbe7e4', text: '#991b1b' },
+            badge: { bg: COLORS.unfavBg, text: COLORS.unfavText },
         },
         {
             key: 'mildNegative',
             label: 'Mild unfavorable',
             value: data.mildNegative,
-            gradient: 'linear-gradient(135deg, #c91b0e 0%, #f0705f 100%)',
-            solid: '#dc2626',
+            gradient: COLORS.toneGradMildNeg,
+            solid:    COLORS.toneMildNeg,
             description: 'Docs leaning negative but qualified or mixed with acknowledgement. Softer tone, still a net-negative read.',
-            badge: { bg: '#fbe7e4', text: '#dc2626' },
+            badge: { bg: COLORS.unfavBg, text: COLORS.unfavSolid },
         },
         {
             key: 'neutral',
             label: 'Neutral',
             value: data.neutral,
-            gradient: 'linear-gradient(135deg, #8b919e 0%, #c0c4cd 100%)',
-            solid: '#8b919e',
+            gradient: COLORS.toneGradNeu,
+            solid:    COLORS.toneNeu,
             description: 'Docs with no clear leaning. Typically reportage, definitions, or multi-sided coverage.',
-            badge: { bg: '#f4f5f7', text: '#45454d' },
+            badge: { bg: COLORS.neutralLight, text: COLORS.toneNeuText },
         },
         {
             key: 'mildPositive',
             label: 'Mild favorable',
             value: data.mildPositive,
-            gradient: 'linear-gradient(135deg, #3ec37d 0%, #22c55e 100%)',
-            solid: '#22c55e',
+            gradient: COLORS.toneGradMildPos,
+            solid:    COLORS.toneMildPos,
             description: 'Docs leaning positive but qualified. Approving tone without strong endorsement.',
-            badge: { bg: '#e3f6eb', text: '#16a34a' },
+            badge: { bg: COLORS.favBg, text: COLORS.favSolid },
         },
         {
             key: 'strongPositive',
             label: 'Strong favorable',
             value: data.strongPositive,
-            gradient: 'linear-gradient(135deg, #00a358 0%, #006b3b 100%)',
-            solid: '#16a34a',
+            gradient: COLORS.toneGradStrongPos,
+            solid:    COLORS.toneStrongPos,
             description: 'Docs scored as clearly, emphatically positive. Endorsement, celebration, or strong approval.',
-            badge: { bg: '#e3f6eb', text: '#16a34a' },
+            badge: { bg: COLORS.favBg, text: COLORS.favSolid },
         },
     ]), [data]);
 
@@ -101,19 +101,39 @@ export function SentimentDistributionCard({
     const pos = data.strongPositive + data.mildPositive;
     const neg = data.strongNegative + data.mildNegative;
     const neu = data.neutral;
-    const polarized = total > 0 ? (data.strongPositive + data.strongNegative) / total : 0;
+    const intensePct = total > 0 ? ((data.strongPositive + data.strongNegative) / total) * 100 : 0;
+    const measuredPct = total > 0 ? ((data.mildPositive + data.mildNegative) / total) * 100 : 0;
     const netPct = total > 0 ? ((pos - neg) / total) * 100 : 0;
 
     const skewChip = (() => {
         if (total === 0) return null;
-        if (netPct >= 10) return { className: 'chip chip-positive', label: `Skews favorable ${formatNet(netPct)}%` };
-        if (netPct <= -10) return { className: 'chip chip-negative', label: `Skews unfavorable ${formatNet(netPct)}%` };
+        if (netPct >= 10) return { className: 'chip chip-positive', label: `Leans favorable ${formatNet(netPct)}%` };
+        if (netPct <= -10) return { className: 'chip chip-negative', label: `Leans unfavorable ${formatNet(netPct)}%` };
         return { className: 'chip', label: `Near-even ${formatNet(netPct)}%` };
     })();
 
-    const polarizationChip = total > 0 && polarized >= 0.35
-        ? { className: 'chip chip-accent', label: `Polarized · ${(polarized * 100).toFixed(0)}% at extremes` }
+    const polarizationChip = total > 0 && intensePct >= 35
+        ? { className: 'chip chip-accent', label: `Polarized · ${intensePct.toFixed(0)}% at extremes` }
         : null;
+
+    // One-line plain-English interpretation. Priority: polarization > lean.
+    const readsAs = (() => {
+        if (total === 0) return null;
+        if (intensePct >= 45) {
+            return `Reads as: heavily polarized — ${intensePct.toFixed(0)}% of docs land in the strong-positive or strong-negative buckets.`;
+        }
+        if (intensePct >= 30) {
+            const direction = data.strongNegative > data.strongPositive ? 'negative' : 'positive';
+            return `Reads as: the sample is intense and leans ${direction} — ${intensePct.toFixed(0)}% sit at the extremes.`;
+        }
+        if (netPct <= -15) {
+            return `Reads as: the sample leans clearly unfavorable (${netPct.toFixed(1)} pts), mostly in the mild-negative bucket.`;
+        }
+        if (netPct >= 15) {
+            return `Reads as: the sample leans clearly favorable (+${netPct.toFixed(1)} pts), mostly in the mild-positive bucket.`;
+        }
+        return `Reads as: near-even tone with ${Math.round((neu / total) * 100)}% of docs reading as straight neutral reportage.`;
+    })();
 
     const topPlatform = useMemo(() => {
         if (!byPlatform || byPlatform.length === 0) return null;
@@ -126,8 +146,8 @@ export function SentimentDistributionCard({
 
     return (
         <Card
-            title="Sentiment Distribution"
-            subtitle={`5-point intensity scale across ${total.toLocaleString()} scored docs`}
+            title="Tone Intensity"
+            subtitle={`How strongly ${total.toLocaleString()} docs lean in each direction (5-point scale)`}
             headerActions={
                 <MethodPopover
                     description="Sentiment intensity scored on a 5-point scale from each document's evidence span. Strong buckets require confident, unambiguous signal; mild buckets allow qualification. Click any segment to audit the underlying docs."
@@ -139,12 +159,71 @@ export function SentimentDistributionCard({
                 />
             }
         >
-            {/* Context strip — chips */}
+            {/* Intensity summary — the primary takeaway for this card.
+                Strong vs mild split is the real story; doc counts per bucket
+                are secondary detail (legend handles those). */}
+            <div className="flex items-baseline gap-4 mb-3" style={{ flexWrap: 'wrap' }}>
+                <div>
+                    <div className="eyebrow" style={{ color: 'var(--neutral-500)' }}>Intense</div>
+                    <div
+                        className="num"
+                        style={{
+                            fontFamily: 'var(--font-mono)',
+                            fontVariantNumeric: 'tabular-nums',
+                            fontSize: 'var(--text-2xl)',
+                            fontWeight: 600,
+                            letterSpacing: '-0.02em',
+                            color: intensePct >= 30 ? COLORS.negative : 'var(--neutral-800)',
+                            lineHeight: 1,
+                        }}
+                    >
+                        {intensePct.toFixed(0)}%
+                    </div>
+                </div>
+                <span aria-hidden style={{ width: 1, height: 32, background: 'var(--neutral-200)' }} />
+                <div>
+                    <div className="eyebrow" style={{ color: 'var(--neutral-500)' }}>Measured</div>
+                    <div
+                        className="num"
+                        style={{
+                            fontFamily: 'var(--font-mono)',
+                            fontVariantNumeric: 'tabular-nums',
+                            fontSize: 'var(--text-2xl)',
+                            fontWeight: 600,
+                            letterSpacing: '-0.02em',
+                            color: 'var(--neutral-700)',
+                            lineHeight: 1,
+                        }}
+                    >
+                        {measuredPct.toFixed(0)}%
+                    </div>
+                </div>
+                <span aria-hidden style={{ width: 1, height: 32, background: 'var(--neutral-200)' }} />
+                <div>
+                    <div className="eyebrow" style={{ color: 'var(--neutral-500)' }}>Neutral</div>
+                    <div
+                        className="num"
+                        style={{
+                            fontFamily: 'var(--font-mono)',
+                            fontVariantNumeric: 'tabular-nums',
+                            fontSize: 'var(--text-2xl)',
+                            fontWeight: 600,
+                            letterSpacing: '-0.02em',
+                            color: 'var(--neutral-500)',
+                            lineHeight: 1,
+                        }}
+                    >
+                        {total > 0 ? Math.round((neu / total) * 100) : 0}%
+                    </div>
+                </div>
+            </div>
+
+            {/* Chips — context tags that qualify the big numbers above. */}
             <div className="flex items-center gap-2 mb-3" style={{ flexWrap: 'wrap' }}>
                 {skewChip && <span className={skewChip.className}>{skewChip.label}</span>}
                 {polarizationChip && <span className={polarizationChip.className}>{polarizationChip.label}</span>}
                 {overview?.confidence && (
-                    <span className="chip">
+                    <span className="chip" title={`Coverage ${overview.coverage}, confidence ${overview.confidence}`}>
                         <span className={`confidence-dot confidence-${overview.confidence}`} />
                         {overview.confidence} confidence
                     </span>
@@ -156,7 +235,29 @@ export function SentimentDistributionCard({
                 )}
             </div>
 
-            {/* Distribution bar — click to open drill-down */}
+            {/* Plain-English interpretation — one line, honest about what the
+                distribution actually implies. Picks the framing based on
+                which pattern dominates (polarization, lean, or balance). */}
+            {readsAs && (
+                <div
+                    style={{
+                        marginBottom: 'var(--space-3)',
+                        padding: 'var(--space-2) var(--space-3)',
+                        background: 'var(--bg-inset)',
+                        borderLeft: '2px solid var(--accent-muted)',
+                        borderRadius: 'var(--radius-sm)',
+                        fontSize: 'var(--text-xs)',
+                        color: 'var(--neutral-700)',
+                        lineHeight: 'var(--leading-relaxed)',
+                    }}
+                >
+                    {readsAs}
+                </div>
+            )}
+
+            {/* Relative wrapper anchors the floating hover card to the bar
+                so it overlays content below instead of reflowing the page. */}
+            <div style={{ position: 'relative', marginBottom: 'var(--space-3)' }}>
             <div
                 role="group"
                 aria-label={`Sentiment distribution: ${segments.map(s => `${s.label} ${formatPct(s.value, total)}`).join(', ')}`}
@@ -165,7 +266,6 @@ export function SentimentDistributionCard({
                     height: '56px',
                     borderRadius: 'var(--radius-md)',
                     overflow: 'hidden',
-                    marginBottom: 'var(--space-3)',
                     background: 'var(--bg-inset)',
                     boxShadow: 'inset 0 1px 0 rgba(15, 20, 35, 0.04)',
                 }}
@@ -216,54 +316,58 @@ export function SentimentDistributionCard({
                 })}
             </div>
 
-            {/* Active segment hint — shows on hover before clicking */}
-            <div
-                aria-live="polite"
-                style={{
-                    minHeight: 54,
-                    padding: 'var(--space-2) var(--space-3)',
-                    borderRadius: 'var(--radius-sm)',
-                    background: 'var(--bg-inset)',
-                    border: '1px solid var(--neutral-150)',
-                    marginBottom: 'var(--space-3)',
-                    fontSize: 'var(--text-xs)',
-                }}
-            >
-                {active ? (
-                    (() => {
-                        const seg = segments.find(s => s.key === active)!;
-                        const count = samples?.[seg.key]?.length ?? 0;
-                        return (
-                            <div>
-                                <div className="hover-card-title" style={{ color: seg.solid, marginBottom: 2 }}>
-                                    {seg.label}
-                                </div>
-                                <div className="hover-card-row">
-                                    <span>Docs</span>
-                                    <strong>{seg.value.toLocaleString()}</strong>
-                                </div>
-                                <div className="hover-card-row">
-                                    <span>Share</span>
-                                    <strong>{formatPct(seg.value, total)}</strong>
-                                </div>
-                                <div className="hover-card-note" style={{ marginTop: 6 }}>
-                                    {seg.description}
-                                    {count > 0 && (
-                                        <>
-                                            {' '}Click the segment to view {count} sample doc{count === 1 ? '' : 's'}.
-                                        </>
-                                    )}
-                                </div>
+                {/* Floating hover card — sits inside the bar wrapper so it
+                    anchors to the bar and overlays whatever's below. */}
+                {active && (() => {
+                    const seg = segments.find(s => s.key === active)!;
+                    const count = samples?.[seg.key]?.length ?? 0;
+                    return (
+                        <div
+                            className="popover"
+                            role="tooltip"
+                            aria-live="polite"
+                            style={{
+                                top: 'calc(100% + 8px)',
+                                left: 0,
+                                maxWidth: 360,
+                                minWidth: 220,
+                            }}
+                        >
+                            <div className="hover-card-title" style={{ color: seg.solid, marginBottom: 2 }}>
+                                {seg.label}
                             </div>
-                        );
-                    })()
-                ) : (
-                    <span className="text-muted">
-                        Hover or tap a segment for definition and counts. {total > 0 && (
-                            <>Positive {formatPct(pos, total)} &middot; Neutral {formatPct(neu, total)} &middot; Negative {formatPct(neg, total)}.</>
-                        )}
-                    </span>
-                )}
+                            <div className="hover-card-row">
+                                <span>Docs</span>
+                                <strong>{seg.value.toLocaleString()}</strong>
+                            </div>
+                            <div className="hover-card-row">
+                                <span>Share</span>
+                                <strong>{formatPct(seg.value, total)}</strong>
+                            </div>
+                            <div className="hover-card-note" style={{ marginTop: 6 }}>
+                                {seg.description}
+                                {count > 0 && (
+                                    <>
+                                        {' '}Click the segment to view {count} sample doc{count === 1 ? '' : 's'}.
+                                    </>
+                                )}
+                            </div>
+                        </div>
+                    );
+                })()}
+            </div>
+
+            {/* Static summary line — always visible, doesn't move on hover. */}
+            <div
+                className="text-xs text-muted mb-3"
+                style={{ fontVariantNumeric: 'tabular-nums' }}
+            >
+                {total > 0 ? (
+                    <>
+                        Positive {formatPct(pos, total)} &middot; Neutral {formatPct(neu, total)} &middot; Negative {formatPct(neg, total)}.
+                        {' '}Hover a segment for definition; click to view sample docs.
+                    </>
+                ) : 'No scored docs in this window.'}
             </div>
 
             {/* Legend grid */}

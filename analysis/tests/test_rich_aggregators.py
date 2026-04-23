@@ -22,7 +22,11 @@ class TestRichAggregators(unittest.TestCase):
             DROP TABLE IF EXISTS ai_outputs;
         """)
 
-        # Create schema (matches 001_initial.sql)
+        # Create schema (matches 001_initial.sql + the X tables from 002).
+        # x_posts_raw + x_users_raw are required by the sentiment aggregator's
+        # LEFT JOIN for author-handle resolution (walkthrough 057). Even an
+        # empty pair of tables is enough — the join is a no-op when no rows
+        # match the x_post source_type.
         self.cursor.executescript("""
             CREATE TABLE docs (
                 doc_id INTEGER PRIMARY KEY,
@@ -44,6 +48,16 @@ class TestRichAggregators(unittest.TestCase):
                 output_json TEXT,
                 confidence REAL,
                 created_at INTEGER
+            );
+
+            CREATE TABLE x_posts_raw (
+                tweet_id TEXT PRIMARY KEY,
+                author_id TEXT
+            );
+
+            CREATE TABLE x_users_raw (
+                user_id TEXT PRIMARY KEY,
+                username TEXT
             );
         """)
 

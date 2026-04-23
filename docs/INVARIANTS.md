@@ -52,6 +52,7 @@ See `docs/walkthroughs/035-goal-narrowing-and-renames.md` for the rationale behi
 ### C1. Data Fidelity
 - [ ] **Honesty**: The UI must display confidence scores alongside AI predictions.
 - [ ] **Proxy Labeling**: "Reach" and "Influence" metrics must be explicitly labeled as proxies (e.g., "Reddit Score") unless verified traffic data exists.
+- [ ] **Source attribution on evidence**: Any UI surface that shows an individual doc as evidence — flagged example, classification sample, supporting doc, narrative citation — MUST link back to the original source (news article URL, X tweet permalink, or Reddit post link). The aggregator is responsible for synthesizing the URL when it isn't stored literally. A doc row without a link is a bug, not a layout choice: without the link the reader can't audit the claim and the system is no longer traceable end-to-end.
 
 ### C2. User Experience
 - [ ] **Responsiveness**: The UI should never freeze during data loading; use skeletons or spinners.

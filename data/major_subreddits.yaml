@@ -1,0 +1,140 @@
+schema_version: 1
+dataset_name: major_subreddits
+description: >
+  Editorial registry of the 10 major US-political subreddits Civic Lens
+  tracks as first-class entities on the General Public column of the
+  three-way dashboard frame. Each entry pairs a canonical subreddit name
+  with a neutral 2-3 sentence blurb covering community size, stance, and
+  tone, plus a tilt label and the citation for that label.
+
+  Scope is deliberately narrow. Other subreddits Civic Lens ingests will
+  still be aggregated but surface under an "Other subreddits" catch-all.
+  Adding an entry to this file promotes the community to a first-class
+  actor on the dashboard.
+
+  Tilt is a community skew, not a declared editorial position — treat it
+  as "where this community tends to land" rather than "what this community
+  officially says". Subreddit tone shifts over time; review cadence is
+  quarterly alongside the outlets and officials registries.
+
+notes:
+  - Tilt buckets are one of left | center | right | mixed.
+  - Tilt sources cite public rating aggregators (e.g. allsides, Pew subreddit studies) where available; otherwise cite the subreddit's own sidebar rules / about text that describe its orientation.
+  - Subscriber counts are a reach proxy, not an engagement measure — large subscriber counts often dwarf active posters by 2–3 orders of magnitude.
+  - The stored subreddit name uses the canonical casing Reddit returns from its API (mixed case). The aggregator normalizes to lowercase when matching against `docs.domain_or_subreddit`.
+
+subreddits:
+  - subreddit: politics
+    display_name: r/politics
+    blurb: >
+      The largest general US-politics subreddit, with ~8M subscribers.
+      The community rules restrict posts to US political news, and moderation
+      historically enforces a "factual sources" standard. Despite being
+      nominally neutral, the community skew has been widely characterized
+      as strongly liberal.
+    tilt: left
+    tilt_source: Community sidebar + widely documented liberal skew (e.g. Barberá 2024; Pew 2020)
+    subscriber_count_proxy: "~8M"
+
+  - subreddit: Conservative
+    display_name: r/Conservative
+    blurb: >
+      A ~1.3M-subscriber subreddit for American conservative political
+      discussion. The sidebar describes the community as a "safe space for
+      conservatives"; non-conservative commenters are typically restricted
+      in designated threads ("flaired users only"). Community skew is
+      strongly right.
+    tilt: right
+    tilt_source: Community sidebar + flair-gated participation rules
+    subscriber_count_proxy: "~1.3M"
+
+  - subreddit: democrats
+    display_name: r/democrats
+    blurb: >
+      A ~550k-subscriber subreddit for supporters of the US Democratic
+      Party. Smaller than r/politics but more declaratively partisan; the
+      sidebar names the Democratic Party platform as the community's
+      orientation.
+    tilt: left
+    tilt_source: Community sidebar
+    subscriber_count_proxy: "~550k"
+
+  - subreddit: Republican
+    display_name: r/Republican
+    blurb: >
+      A ~200k-subscriber subreddit for discussion by and about supporters
+      of the US Republican Party. Smaller and lower-activity than
+      r/Conservative, which tends to be the more active right-leaning hub.
+    tilt: right
+    tilt_source: Community sidebar
+    subscriber_count_proxy: "~200k"
+
+  - subreddit: PoliticalDiscussion
+    display_name: r/PoliticalDiscussion
+    blurb: >
+      A ~2M-subscriber subreddit oriented toward policy and analytical
+      political discussion rather than news-link sharing. Moderators
+      enforce substantive-comment rules and discourage low-effort partisan
+      posts, producing a community skew closer to the center than
+      r/politics though still lean-left on most questions.
+    tilt: mixed
+    tilt_source: Community rules + observed comment patterns
+    subscriber_count_proxy: "~2M"
+
+  - subreddit: Libertarian
+    display_name: r/Libertarian
+    blurb: >
+      A ~480k-subscriber subreddit for libertarian political discussion,
+      covering both left-libertarian (civil-liberties, anti-war) and
+      right-libertarian (free-market, anti-regulation) strands. Tilt is
+      mixed by ideological composition though overall the community leans
+      toward right-libertarian economic positions.
+    tilt: mixed
+    tilt_source: Community sidebar + composition studies (Pew 2020 libertarian cluster)
+    subscriber_count_proxy: "~480k"
+
+  - subreddit: AskConservatives
+    display_name: r/AskConservatives
+    blurb: >
+      A ~55k-subscriber subreddit in the "Ask*" format: non-conservative
+      users post questions for conservatives to answer. Flair-gated
+      replies produce a conservative respondent pool, so treat the
+      sampled sentiment as what self-identifying conservatives argue in
+      response to prompted questions.
+    tilt: right
+    tilt_source: Community sidebar + flair-gated answer rules
+    subscriber_count_proxy: "~55k"
+
+  - subreddit: AskALiberal
+    display_name: r/AskALiberal
+    blurb: >
+      A ~75k-subscriber "Ask*" subreddit where non-liberal users post
+      questions for liberals to answer. Flair-gated answers produce a
+      liberal respondent pool; the sampled sentiment reflects
+      self-identifying liberals' responses to prompted questions.
+    tilt: left
+    tilt_source: Community sidebar + flair-gated answer rules
+    subscriber_count_proxy: "~75k"
+
+  - subreddit: neoliberal
+    display_name: r/neoliberal
+    blurb: >
+      A ~230k-subscriber subreddit originating as a counter-weight to
+      r/politics from a center-left, technocratic perspective. Heavy on
+      economic policy, market-friendly liberalism, and critique of both
+      populist-right and progressive-left positions; skew is center-left
+      with a distinctively pro-globalization, pro-immigration stance.
+    tilt: left
+    tilt_source: Community sidebar + FAQ ("Why we're called neoliberal")
+    subscriber_count_proxy: "~230k"
+
+  - subreddit: PoliticalHumor
+    display_name: r/PoliticalHumor
+    blurb: >
+      A ~2.3M-subscriber subreddit of political satire, memes, and
+      cartoons. The format (image macros + short captions) is
+      lower-signal than discussion subs; community skew is strongly
+      liberal, with most top content targeting Republican figures.
+    tilt: left
+    tilt_source: Community norms + widely-observed liberal skew
+    subscriber_count_proxy: "~2.3M"

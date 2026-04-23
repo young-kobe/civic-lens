@@ -19,6 +19,7 @@ import tempfile
 import textwrap
 import time
 import unittest
+from typing import Optional
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(os.path.dirname(current_dir))
@@ -484,6 +485,136 @@ class TestNarrativeAggregatorTierJoin(unittest.TestCase):
         self.assertIsNone(by_name["C"].first_seen_tier)
         # News first-seen docs carry no author-faction payload.
         self.assertIsNone(by_name["C"].first_seen_author)
+
+
+# --------------------------------------------------------------------------- #
+#  Phase 3b entity routing — walkthrough 058.                                 #
+#  Verifies NarrativeAggregator attaches the registry-matched entity profile
+#  to each narrative + flags cross-tier narratives when supporting docs span
+#  multiple tier groups.
+# --------------------------------------------------------------------------- #
+
+class TestNarrativeEntityRouting(unittest.TestCase):
+    def setUp(self):
+        fd, self.db_path = tempfile.mkstemp(suffix=".db")
+        os.close(fd)
+        _apply_migrations(self.db_path)
+        self.now = int(time.time())
+        self.conn = sqlite3.connect(self.db_path)
+        # @POTUS is in verified_officials.yaml — a registry-matched official.
+        _seed_x_user(self.conn, user_id="u_potus", username="POTUS")
+        # Unmatched author for the general-public tier.
+        _seed_x_user(self.conn, user_id="u_rand", username="random_account")
+        self.conn.commit()
+
+    def tearDown(self):
+        try:
+            self.conn.close()
+        except Exception:
+            pass
+        os.unlink(self.db_path)
+
+    def _insert_news_doc(self, doc_id: int, domain: str, ident: Optional[str] = None) -> None:
+        self.conn.execute(
+            "INSERT INTO docs (doc_id, source_type, ident, domain_or_subreddit, "
+            "published_at, text, raw_hash) VALUES (?, 'news', ?, ?, ?, 'body', ?)",
+            (doc_id, ident or f"https://{domain}/a{doc_id}", domain, self.now, f"rh-{doc_id}"),
+        )
+
+    def _insert_reddit_doc(self, doc_id: int, subreddit: str) -> None:
+        self.conn.execute(
+            "INSERT INTO docs (doc_id, source_type, ident, domain_or_subreddit, "
+            "published_at, text, raw_hash) VALUES (?, 'reddit_post', ?, ?, ?, 'body', ?)",
+            (doc_id, f"t3_rp{doc_id}", subreddit, self.now, f"rh-{doc_id}"),
+        )
+
+    def _insert_narrative(self, narrative_id: int, name: str, first_seen_doc_id: int) -> None:
+        self.conn.execute(
+            "INSERT INTO narratives (narrative_id, name, description, first_seen_at, "
+            "first_seen_doc_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (narrative_id, name, name, self.now, first_seen_doc_id, self.now, self.now),
+        )
+
+    def _link_doc(self, narrative_id: int, doc_id: int) -> None:
+        self.conn.execute(
+            "INSERT INTO narrative_docs (narrative_id, doc_id, discovered_at, confidence) "
+            "VALUES (?, ?, ?, 0.9)",
+            (narrative_id, doc_id, self.now),
+        )
+
+    def test_first_seen_entity_profile_for_news(self):
+        """News narrative first-seen at www.nytimes.com → NYT profile."""
+        self._insert_news_doc(10, "www.nytimes.com")
+        self._insert_narrative(10, "N-news", first_seen_doc_id=10)
+        self._link_doc(10, 10)
+        self.conn.commit()
+
+        [narrative] = NarrativeAggregator(self.db_path).get_top_narratives(
+            time_window="all", limit=10,
+        )
+        self.assertEqual(narrative.first_seen_tier_group, "news")
+        self.assertIsNotNone(narrative.first_seen_entity_profile)
+        self.assertEqual(narrative.first_seen_entity_profile["displayName"], "The New York Times")
+        self.assertFalse(narrative.cross_tier)
+
+    def test_first_seen_entity_profile_for_verified_official(self):
+        """X post by @POTUS → officials tier + official profile from registry."""
+        _seed_x_post(self.conn, tweet_id="t_potus", author_id="u_potus", text="claim", created_at=self.now)
+        _seed_doc_x(self.conn, doc_id=20, tweet_id="t_potus")
+        self._insert_narrative(20, "N-official", first_seen_doc_id=20)
+        self._link_doc(20, 20)
+        self.conn.commit()
+
+        [narrative] = NarrativeAggregator(self.db_path).get_top_narratives(
+            time_window="all", limit=10,
+        )
+        self.assertEqual(narrative.first_seen_tier_group, "officials")
+        self.assertEqual(narrative.first_seen_entity_profile["kind"], "official")
+
+    def test_first_seen_entity_profile_for_unmatched_x_author(self):
+        """X post by unverified author → public tier + catch-all profile."""
+        _seed_x_post(self.conn, tweet_id="t_rand", author_id="u_rand", text="claim", created_at=self.now)
+        _seed_doc_x(self.conn, doc_id=30, tweet_id="t_rand")
+        self._insert_narrative(30, "N-public-x", first_seen_doc_id=30)
+        self._link_doc(30, 30)
+        self.conn.commit()
+
+        [narrative] = NarrativeAggregator(self.db_path).get_top_narratives(
+            time_window="all", limit=10,
+        )
+        self.assertEqual(narrative.first_seen_tier_group, "public")
+        self.assertEqual(narrative.first_seen_entity_profile["kind"], "catch_all")
+
+    def test_cross_tier_flag_when_narrative_spans_tiers(self):
+        """Supporting docs across news + X(official) + reddit → cross_tier True."""
+        self._insert_news_doc(100, "www.nytimes.com")
+        _seed_x_post(self.conn, tweet_id="t_cross", author_id="u_potus", text="claim", created_at=self.now)
+        _seed_doc_x(self.conn, doc_id=101, tweet_id="t_cross")
+        self._insert_reddit_doc(102, "politics")
+        self._insert_narrative(40, "N-cross", first_seen_doc_id=100)
+        self._link_doc(40, 100)
+        self._link_doc(40, 101)
+        self._link_doc(40, 102)
+        self.conn.commit()
+
+        [narrative] = NarrativeAggregator(self.db_path).get_top_narratives(
+            time_window="all", limit=10,
+        )
+        self.assertTrue(narrative.cross_tier)
+
+    def test_cross_tier_false_for_single_tier_narrative(self):
+        """All supporting docs from one tier → cross_tier False."""
+        self._insert_news_doc(200, "www.nytimes.com")
+        self._insert_news_doc(201, "www.bbc.com")
+        self._insert_narrative(50, "N-single", first_seen_doc_id=200)
+        self._link_doc(50, 200)
+        self._link_doc(50, 201)
+        self.conn.commit()
+
+        [narrative] = NarrativeAggregator(self.db_path).get_top_narratives(
+            time_window="all", limit=10,
+        )
+        self.assertFalse(narrative.cross_tier)
 
 
 if __name__ == "__main__":

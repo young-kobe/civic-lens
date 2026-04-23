@@ -1,9 +1,165 @@
 import { useState } from 'react';
-import { Card, MetricCard, MethodPopover, Modal, LoadingCard, EmptyState, ErrorState } from '../components/common';
+import {
+    Card, CollapsibleInfo, EmptyState, EntityProfileCard, ErrorState, GlobalTicker,
+    LoadingCard, MethodPopover, MetricCard, Modal, entityExternalUrl,
+} from '../components/common';
+import type { TickerItem } from '../components/common';
 import { Heatmap } from '../components/charts';
 import { fetchBotActivity } from '../services/api';
+import { asOfTodayEyebrow } from '../services/timeWindow';
 import { useFetch } from '../services/useFetch';
-import type { Filters, BotData, BotOverview, NarrativeAmplification, CoordinationStats, BehavioralSignals, ConfidenceLevel } from '../types';
+import { COLORS } from '../theme';
+import type {
+    BehavioralSignals, BotData, BotEntityItem, BotOverview, ConfidenceLevel,
+    CoordinationStats, Filters, NarrativeAmplification,
+} from '../types';
+
+// --------------------------------------------------------------------------- //
+//  Amplification by tier — three-way entity grid                              //
+// --------------------------------------------------------------------------- //
+
+const BOT_TOP_N = 12;
+
+function BotEntityCard({ item }: { item: BotEntityItem }) {
+    const profile = item.entity_profile;
+    const rateColor = item.bot_rate_pct > 10
+        ? COLORS.negative
+        : item.bot_rate_pct > 3
+            ? COLORS.warning
+            : 'var(--neutral-700)';
+
+    return (
+        <EntityProfileCard
+            profile={profile}
+            stats={item.total_docs > 0 ? [
+                { label: 'Bot rate',    value: `${item.bot_rate_pct.toFixed(1)}%`, color: rateColor, emphasis: true },
+                { label: 'Bot posts',   value: item.bot_docs.toLocaleString() },
+                { label: 'Posts scanned', value: item.total_docs.toLocaleString() },
+            ] : []}
+            href={entityExternalUrl(profile) ?? undefined}
+            emptyNote="Tracked — no posts classified in this window yet."
+        />
+    );
+}
+
+function BotThreeWayColumn({
+    header, byline, items, empty,
+}: {
+    header: string;
+    byline: string;
+    items: BotEntityItem[];
+    empty: string;
+}) {
+    return (
+        <div className="three-way-column">
+            <div>
+                <div className="three-way-column-header">{header}</div>
+                <div className="three-way-column-byline">{byline}</div>
+            </div>
+            {items.length === 0 ? (
+                <p className="text-xs text-muted" style={{ padding: 'var(--space-3)' }}>{empty}</p>
+            ) : (
+                items.slice(0, BOT_TOP_N).map((it) => (
+                    <BotEntityCard key={`${it.kind}:${it.key}`} item={it} />
+                ))
+            )}
+        </div>
+    );
+}
+
+function BotThreeWayGrid({ overview }: { overview: BotOverview }) {
+    const outlets = overview.by_news_outlet ?? [];
+    const officials = overview.by_official ?? [];
+    const publics = overview.by_general_public ?? [];
+    const hasAny = outlets.length + officials.length + publics.length > 0;
+    if (!hasAny) return null;
+
+    return (
+        <div className="three-way-grid">
+            <BotThreeWayColumn
+                header="The News"
+                byline="Outlets whose scanned posts classify as bot — should skew near 0%."
+                items={outlets}
+                empty="No news posts scored for bot detection."
+            />
+            <BotThreeWayColumn
+                header="Politicians & Officials"
+                byline="Tracked officeholders on X, ranked by bot-classification rate of their posts."
+                items={officials}
+                empty="No official X posts scored for bot detection."
+            />
+            <BotThreeWayColumn
+                header="The Public"
+                byline="Subreddits + the broader X user catch-all — where bot amplification actually lives."
+                items={publics}
+                empty="No public social posts scored for bot detection."
+            />
+        </div>
+    );
+}
+
+
+/** Headline derived from top flagged cluster + automation rate. */
+function readsAsToday(data: BotData): string {
+    const rate = data.overview.suspectedAutomationRate;
+    const topCluster = data.overview.topClusters[0];
+    const topNarrative = data.narrativeAmplification[0];
+    const parts: string[] = [];
+    if (rate > 10) {
+        parts.push(`Suspected automation rate is elevated at ${rate.toFixed(1)}%.`);
+    } else if (rate > 3) {
+        parts.push(`Suspected automation rate sits at ${rate.toFixed(1)}%.`);
+    } else {
+        parts.push(`Suspected automation rate is low at ${rate.toFixed(1)}%.`);
+    }
+    if (topCluster) {
+        parts.push(`Most-amplified cluster: "${topCluster}".`);
+    }
+    if (topNarrative) {
+        parts.push(`${topNarrative.suspectedBotVolume.toLocaleString()} suspected bot posts are amplifying "${topNarrative.narrative}".`);
+    }
+    return parts.join(' ');
+}
+
+function buildBotTickerItems(overview: BotOverview): { items: TickerItem[]; accentColor: string } {
+    const rate = overview.suspectedAutomationRate;
+    const rateTone = rate > 10 ? 'warning' : rate > 3 ? 'neutral' : 'positive';
+    const accentColor = rateTone === 'warning'
+        ? COLORS.warning
+        : rateTone === 'positive'
+            ? COLORS.positive
+            : 'var(--neutral-400)';
+
+    const items: TickerItem[] = [
+        {
+            label: 'Automation Rate',
+            value: `${rate.toFixed(1)}%`,
+            hint: 'of accounts',
+            tone: rateTone as TickerItem['tone'],
+            emphasis: true,
+            ariaLabel: `Suspected automation rate ${rate.toFixed(1)} percent`,
+        },
+        {
+            label: 'Coordination Idx',
+            value: overview.coordinationIndex.toFixed(2),
+            hint: '0–1',
+        },
+        {
+            label: 'Flagged Accounts',
+            value: overview.totalFlaggedAccounts.toLocaleString(),
+        },
+        {
+            label: 'Confidence',
+            value: overview.confidence,
+            tone: overview.confidence === 'high'
+                ? 'positive'
+                : overview.confidence === 'low'
+                    ? 'warning'
+                    : 'neutral',
+        },
+    ];
+    return { items, accentColor };
+}
 
 interface BotOverviewMetricsProps {
     data: BotOverview;
@@ -41,8 +197,36 @@ interface NarrativeAmplificationCardProps {
     narrative: NarrativeAmplification;
 }
 
+/**
+ * Drop `whyFlagged` entries that don't carry useful evidence. The backend
+ * sometimes emits raw `key=value` signal strings where the value is None,
+ * 0, or empty — those are absence-of-data, not signal. Keeping them on
+ * the card pollutes the "Why Flagged" list with noise that reads like
+ * false positives to a user. Filtering at the UI level is a workaround;
+ * the canonical fix belongs in the bot detector's signal generator
+ * (see follow-ups).
+ */
+function sanitizeWhyFlagged(reasons: string[]): string[] {
+    const noisePatterns: RegExp[] = [
+        /=\s*None\b/i,      // account_age=None days
+        /=\s*0(\s|$)/,       // followers=0 / following=0
+        /=\s*$/,             // key=
+        /=\s*null\b/i,
+        /=\s*undefined\b/i,
+    ];
+    return reasons.filter((r) => {
+        const text = (r || '').trim();
+        if (!text) return false;
+        return !noisePatterns.some((re) => re.test(text));
+    });
+}
+
 function NarrativeAmplificationCard({ narrative }: NarrativeAmplificationCardProps) {
     const [modalOpen, setModalOpen] = useState(false);
+    const cleanWhyFlagged = sanitizeWhyFlagged(narrative.whyFlagged);
+    // If every signal was noise, suppress the whole card — surfacing an
+    // "amplification" with no real evidence is misleading.
+    if (cleanWhyFlagged.length === 0) return null;
 
     const getConfidenceBadge = (confidence: ConfidenceLevel) => {
         switch (confidence) {
@@ -53,8 +237,8 @@ function NarrativeAmplificationCard({ narrative }: NarrativeAmplificationCardPro
         }
     };
 
-    const accentColor = narrative.confidence === 'high' ? 'var(--semantic-negative)'
-        : narrative.confidence === 'medium' ? 'var(--semantic-warning)'
+    const accentColor = narrative.confidence === 'high' ? COLORS.negative
+        : narrative.confidence === 'medium' ? COLORS.warning
         : 'var(--neutral-500)';
 
     return (
@@ -84,7 +268,7 @@ function NarrativeAmplificationCard({ narrative }: NarrativeAmplificationCardPro
                 <div>
                     <div className="eyebrow mb-2">Why Flagged · Coordination Indicators</div>
                     <ul style={{ margin: 0, paddingLeft: 'var(--space-5)' }} className="text-sm">
-                        {narrative.whyFlagged.map((reason, i) => (
+                        {cleanWhyFlagged.map((reason, i) => (
                             <li key={i} className="mb-1">{reason}</li>
                         ))}
                     </ul>
@@ -154,7 +338,7 @@ function NarrativeAmplificationCard({ narrative }: NarrativeAmplificationCardPro
                 <div>
                     <div className="eyebrow mb-2">Why Flagged · Coordination Indicators</div>
                     <ul style={{ margin: 0, paddingLeft: 'var(--space-5)' }} className="text-sm">
-                        {narrative.whyFlagged.map((reason, i) => (
+                        {cleanWhyFlagged.map((reason, i) => (
                             <li key={i} className="mb-1">{reason}</li>
                         ))}
                     </ul>
@@ -247,7 +431,7 @@ function BehavioralSignalsPanel({ data }: BehavioralSignalsPanelProps) {
                                         style={{
                                             width: `${item.percentage}%`,
                                             height: '100%',
-                                            background: item.range.includes('<') ? 'var(--semantic-warning)' : 'var(--accent)',
+                                            background: item.range.includes('<') ? COLORS.warning : COLORS.accent,
                                         }}
                                     />
                                 </div>
@@ -267,23 +451,36 @@ function BehavioralSignalsPanel({ data }: BehavioralSignalsPanelProps) {
                         20–30% range. Values above 80% indicate near-duplicate content, a strong indicator of
                         copy-paste amplification.
                     </div>
-                    <div className="flex flex-col gap-3">
-                        <SimilarityBar
-                            label="High similarity (>80%)"
-                            value={data.copyPasteSimilarity.high}
-                            color="var(--semantic-negative)"
-                        />
-                        <SimilarityBar
-                            label="Medium similarity (50–80%)"
-                            value={data.copyPasteSimilarity.medium}
-                            color="var(--semantic-warning)"
-                        />
-                        <SimilarityBar
-                            label="Low similarity (<50%)"
-                            value={data.copyPasteSimilarity.low}
-                            color="var(--accent)"
-                        />
-                    </div>
+                    {(() => {
+                        // Backend currently emits raw counts for high/medium/low,
+                        // which caused values like "3070%" to render when appended
+                        // with a % sign. Normalize to percentages locally so the
+                        // card is always legible; when backend starts returning
+                        // percentages, this still produces the right result
+                        // (sum == 100 → no-op).
+                        const { high, medium, low } = data.copyPasteSimilarity;
+                        const total = high + medium + low;
+                        const pct = (n: number) => total > 0 ? Math.round((n / total) * 100) : 0;
+                        return (
+                            <div className="flex flex-col gap-3">
+                                <SimilarityBar
+                                    label="High similarity (>80%)"
+                                    value={pct(high)}
+                                    color="var(--semantic-negative)"
+                                />
+                                <SimilarityBar
+                                    label="Medium similarity (50–80%)"
+                                    value={pct(medium)}
+                                    color="var(--semantic-warning)"
+                                />
+                                <SimilarityBar
+                                    label="Low similarity (<50%)"
+                                    value={pct(low)}
+                                    color="var(--accent)"
+                                />
+                            </div>
+                        );
+                    })()}
                 </Card>
             </div>
 
@@ -360,7 +557,7 @@ interface BotActivityProfilerProps {
     filters: Filters;
 }
 
-function BotActivityProfiler({ filters: _filters }: BotActivityProfilerProps) {
+function BotActivityProfiler({ filters }: BotActivityProfilerProps) {
     // Bot activity is not time-window filtered at the API layer (it's a
     // snapshot cache rebuilt on each pipeline run), so `filters` doesn't
     // influence the key. If that changes, fold the relevant filter fields
@@ -398,39 +595,31 @@ function BotActivityProfiler({ filters: _filters }: BotActivityProfilerProps) {
         );
     }
 
+    const { items: botTickerItems, accentColor: botAccentColor } = buildBotTickerItems(data.overview);
+    const botRefreshed = new Date().toISOString().slice(0, 19).replace('T', ' ') + ' UTC';
+
     return (
         <div className="dashboard-grid">
-            {/* Row: disclaimer (full) */}
-            <div
-                className="col-span-12"
-                style={{
-                    background: 'var(--semantic-warning-light)',
-                    borderLeft: '3px solid var(--semantic-warning)',
-                    padding: 'var(--space-3) var(--space-4)',
-                    borderRadius: '2px',
-                }}
-            >
-                <div className="flex gap-3">
-                    <svg
-                        viewBox="0 0 20 20"
-                        fill="currentColor"
-                        style={{ width: '18px', height: '18px', color: 'var(--semantic-warning)', flexShrink: 0, marginTop: '2px' }}
-                    >
-                        <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
-                    </svg>
-                    <div>
-                        <div className="eyebrow" style={{ color: 'var(--semantic-warning)' }}>
-                            How to read this page
-                        </div>
-                        <p className="text-sm mt-1">
-                            This page flags accounts and posts <strong>in our political-content sample</strong> that
-                            look automated. The detector scores each account from behavioral signals: posting rate,
-                            text repetition, account age, and coordinated timing. Some real users post in bot-like
-                            ways, and some real bots post like humans. Treat flags as <strong>leads, not
-                            verdicts</strong>.
-                        </p>
-                    </div>
+            <div className="col-span-12">
+                <GlobalTicker
+                    items={botTickerItems}
+                    refreshed={botRefreshed}
+                    accentColor={botAccentColor}
+                    ariaLabel="Bot detector overview"
+                />
+            </div>
+
+            <div className="col-span-12">
+                <div className="reads-as-today">
+                    <span className="eyebrow reads-as-today-eyebrow">
+                        {asOfTodayEyebrow(filters.timeRange)}
+                    </span>
+                    <p className="lead" style={{ margin: 0 }}>{readsAsToday(data)}</p>
                 </div>
+            </div>
+
+            <div className="col-span-12">
+                <BotThreeWayGrid overview={data.overview} />
             </div>
 
             {/* Row: overview metrics — BotOverviewMetrics already renders 3
@@ -478,6 +667,21 @@ function BotActivityProfiler({ filters: _filters }: BotActivityProfilerProps) {
             {/* Behavioral signals — four cards rendered as direct grid children.
                 See BehavioralSignalsPanel for per-card span decisions. */}
             <BehavioralSignalsPanel data={data.behavioralSignals} />
+
+            <div className="col-span-12">
+                <CollapsibleInfo>
+                    <p className="text-sm">
+                        This page flags accounts and posts in our political-content sample that look
+                        automated. The detector scores each account from behavioral signals — posting
+                        rate, text repetition, account age, and coordinated timing.
+                    </p>
+                    <p className="text-sm">
+                        Some real users post in bot-like ways, and some real bots post like humans.
+                        Treat flags as <strong>leads, not verdicts</strong>: every signal points at
+                        the specific behavior that triggered it, so a reader can audit each call.
+                    </p>
+                </CollapsibleInfo>
+            </div>
         </div>
     );
 }

@@ -11,7 +11,10 @@
       "Bash(npm audit *)",
       "Bash(xargs cat *)",
       "Bash(npm install *)",
-      "Bash(grep -E \"\\\\.\\(tsx|ts\\)$\")"
+      "Bash(grep -E \"\\\\.\\(tsx|ts\\)$\")",
+      "Bash(PYTHONPATH=. ./analysis/.venv/Scripts/python.exe -m unittest discover analysis/tests)",
+      "Bash(npm uninstall *)",
+      "Bash(awk -F'[,{ ]' '{print $1}')"
     ]
   }
 }

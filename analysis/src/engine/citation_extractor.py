@@ -103,7 +103,7 @@ class CitationExtractor:
                     ),
                 )
                 total_edges += edges
-                logger.info(
+                logger.debug(
                     f"[citations {i}/{len(docs)}] doc={doc['doc_id']} "
                     f"type={doc.get('source_type')} edges={edges}"
                 )

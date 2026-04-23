@@ -91,7 +91,7 @@ EOF
 chmod 0440 /etc/sudoers.d/civic-lens-deploy
 
 echo "[9/9] timer enable"
-systemctl enable civic-lens-crawl.timer civic-lens-reddit.timer \
+systemctl enable civic-lens-crawl.timer \
     civic-lens-x.timer civic-lens-analyze.timer \
     civic-lens-backup.timer civic-lens-firewall-refresh.timer
 # API service stays disabled until /etc/civic-lens.env is filled in.

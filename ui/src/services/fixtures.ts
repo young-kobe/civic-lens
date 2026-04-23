@@ -12,10 +12,18 @@
  */
 
 import type {
+    AccountProfile,
     BotData,
-    ClassificationSample,
+    EntityProfile,
+    EntitySentimentItem,
     HeatmapDataPoint,
+    ClassificationSample,
+    MoversResult,
+    NarrativeSourceBreakdownItem,
     NarrativeSummary,
+    SupportingDoc,
+    PropagandaEntityItem,
+    PropagandaOverview,
     PublicSentimentData,
     SentimentSegmentKey,
 } from '../types';
@@ -51,11 +59,16 @@ export function mockSentiment(): PublicSentimentData {
             confidence: 'high',
         },
         byTopic: [
-            { topic: 'Border & immigration', positive: 180, negative: 820, neutral: 410, volume: 1410, sarcasm_rate: 0.08, classificationSamples: [] },
-            { topic: 'Economy & inflation', positive: 290, negative: 540, neutral: 620, volume: 1450, sarcasm_rate: 0.05, classificationSamples: [] },
-            { topic: 'Foreign policy', positive: 210, negative: 340, neutral: 500, volume: 1050, sarcasm_rate: 0.03, classificationSamples: [] },
-            { topic: 'Healthcare', positive: 360, negative: 280, neutral: 430, volume: 1070, sarcasm_rate: 0.04, classificationSamples: [] },
-            { topic: 'Climate & energy', positive: 240, negative: 420, neutral: 380, volume: 1040, sarcasm_rate: 0.06, classificationSamples: [] },
+            { topic: 'Border & immigration', positive: 180, negative: 820, neutral: 410, volume: 1410, sarcasm_rate: 0.08, classificationSamples: [],
+              newsNet: -24.1, officialsNet: -48.3, publicNet: -55.2, newsVolume: 540, officialsVolume: 210, publicVolume: 660 },
+            { topic: 'Economy & inflation', positive: 290, negative: 540, neutral: 620, volume: 1450, sarcasm_rate: 0.05, classificationSamples: [],
+              newsNet: -8.5, officialsNet: 12.4, publicNet: -22.0, newsVolume: 620, officialsVolume: 180, publicVolume: 650 },
+            { topic: 'Foreign policy', positive: 210, negative: 340, neutral: 500, volume: 1050, sarcasm_rate: 0.03, classificationSamples: [],
+              newsNet: -5.2, officialsNet: 18.0, publicNet: -14.6, newsVolume: 480, officialsVolume: 150, publicVolume: 420 },
+            { topic: 'Healthcare', positive: 360, negative: 280, neutral: 430, volume: 1070, sarcasm_rate: 0.04, classificationSamples: [],
+              newsNet: 10.1, officialsNet: 4.2, publicNet: 15.8, newsVolume: 410, officialsVolume: 90, publicVolume: 570 },
+            { topic: 'Climate & energy', positive: 240, negative: 420, neutral: 380, volume: 1040, sarcasm_rate: 0.06, classificationSamples: [],
+              newsNet: -15.4, officialsNet: null, publicNet: -22.8, newsVolume: 460, officialsVolume: 0, publicVolume: 580 },
         ],
         byPlatform: [
             { platform: 'News', positive: 480, negative: 520, neutral: 1120, volume: 2120 },
@@ -82,6 +95,9 @@ export function mockSentiment(): PublicSentimentData {
             social: { positive: 630, negative: 1068, neutral: 369, netScore: -21.2, volume: 2067 },
             news: { positive: 480, negative: 520, neutral: 1120, netScore: -1.9, volume: 2120 },
         },
+        byNewsOutlet: mockOutletSentiment(),
+        byOfficial: mockOfficialSentiment(),
+        byGeneralPublic: mockGeneralPublicSentiment(),
         gopFavorability: {
             favorable: 780,
             unfavorable: 1210,
@@ -244,6 +260,119 @@ function mockDistributionSamples(): Partial<Record<SentimentSegmentKey, Classifi
     };
 }
 
+/* ---------- Three-way entity rollups (walkthrough 058) ---------- */
+
+function outletProfile(
+    key: string, displayName: string, lean: string, leanSource: string, blurb: string,
+): EntityProfile {
+    return { kind: 'outlet', key, displayName, lean, leanSource, blurb };
+}
+
+function officialProfile(
+    key: string, displayName: string, office: string, party: string, blurb: string,
+): EntityProfile {
+    return {
+        kind: 'official', key, displayName, office, party, blurb,
+        lean: null, leanSource: null,
+    };
+}
+
+function subredditProfile(
+    key: string, displayName: string, lean: string, leanSource: string, blurb: string,
+): EntityProfile {
+    return { kind: 'subreddit', key, displayName, lean, leanSource, blurb };
+}
+
+function catchAll(key: string, displayName: string, blurb: string): EntityProfile {
+    return { kind: 'catch_all', key, displayName, blurb, lean: null, leanSource: null };
+}
+
+function entityItem(
+    profile: EntityProfile,
+    counts: { positive: number; negative: number; neutral: number },
+): EntitySentimentItem {
+    const volume = counts.positive + counts.negative + counts.neutral;
+    const net = volume > 0 ? ((counts.positive - counts.negative) / volume) * 100 : 0;
+    return {
+        key: profile.key,
+        kind: profile.kind,
+        ...counts,
+        volume,
+        netScore: Math.round(net * 10) / 10,
+        entityProfile: profile,
+        classificationSamples: [],
+    };
+}
+
+function mockOutletSentiment(): EntitySentimentItem[] {
+    return [
+        entityItem(
+            outletProfile('nytimes.com', 'The New York Times', 'center-left',
+                'AllSides 2024 (Lean Left)',
+                'A general-interest daily of record and the largest US paper by paid digital subscriptions.'),
+            { positive: 140, negative: 220, neutral: 320 },
+        ),
+        entityItem(
+            outletProfile('foxnews.com', 'Fox News', 'right', 'AllSides 2024 (Right)',
+                'The most-watched US cable news network and the dominant conservative TV voice.'),
+            { positive: 95, negative: 310, neutral: 180 },
+        ),
+        entityItem(
+            outletProfile('bbc.com', 'BBC', 'center', 'AllSides 2024 (Center)',
+                'UK public broadcaster; one of the most-read non-US outlets covering American politics.'),
+            { positive: 130, negative: 160, neutral: 310 },
+        ),
+        entityItem(
+            catchAll('other-outlets', 'Other news outlets',
+                'News docs whose domain is not in the tracked outlet registry.'),
+            { positive: 115, negative: 180, neutral: 240 },
+        ),
+    ];
+}
+
+function mockOfficialSentiment(): EntitySentimentItem[] {
+    return [
+        entityItem(
+            officialProfile('potus', 'Donald J. Trump', 'President of the United States', 'R',
+                '47th President; high-volume X poster driving news cycles.'),
+            { positive: 58, negative: 22, neutral: 30 },
+        ),
+        entityItem(
+            officialProfile('senschumer', 'Chuck Schumer', 'Senate Minority Leader', 'D',
+                'Senior Democratic senator from New York; Senate minority leader since Jan 2025.'),
+            { positive: 18, negative: 44, neutral: 12 },
+        ),
+        entityItem(
+            officialProfile('speakerjohnson', 'Mike Johnson', 'Speaker of the House', 'R',
+                'Speaker of the US House since October 2023.'),
+            { positive: 30, negative: 15, neutral: 18 },
+        ),
+    ];
+}
+
+function mockGeneralPublicSentiment(): EntitySentimentItem[] {
+    return [
+        entityItem(
+            subredditProfile('politics', 'r/politics', 'left',
+                'Community sidebar + widely documented liberal skew',
+                'The largest general US-politics subreddit; ~8M subscribers with a strong liberal skew.'),
+            { positive: 110, negative: 380, neutral: 210 },
+        ),
+        entityItem(
+            subredditProfile('conservative', 'r/Conservative', 'right',
+                'Community sidebar + flair-gated participation',
+                '~1.3M-subscriber subreddit; sidebar positions it as a "safe space for conservatives".'),
+            { positive: 180, negative: 60, neutral: 95 },
+        ),
+        entityItem(
+            catchAll('other-x-users', 'Other X users',
+                'X posts whose author is not in the tracked officials registry.'),
+            { positive: 220, negative: 360, neutral: 140 },
+        ),
+    ];
+}
+
+
 /* ---------- Narratives ---------- */
 
 function mockTimeline(points: number, base: number, swing: number): { date: string; count: number }[] {
@@ -259,110 +388,328 @@ function mockTimeline(points: number, base: number, swing: number): { date: stri
     return out;
 }
 
+// Real entity profiles the registry would emit — reused across narratives
+// so the officials column actually populates with recognisable names.
+const NYT_PROFILE = outletProfile(
+    'nytimes.com', 'The New York Times', 'center-left', 'AllSides 2024 (Lean Left)',
+    'General-interest daily of record; largest US paper by paid digital subs.',
+);
+const FOX_PROFILE = outletProfile(
+    'foxnews.com', 'Fox News', 'right', 'AllSides 2024 (Right)',
+    'Most-watched US cable network; dominant conservative TV voice.',
+);
+const BBC_PROFILE = outletProfile(
+    'bbc.com', 'BBC', 'center', 'AllSides 2024 (Center)',
+    'UK public broadcaster; one of the most-read non-US outlets on US politics.',
+);
+const POTUS_PROFILE = officialProfile(
+    'potus', 'Donald J. Trump', 'President of the United States', 'R',
+    '47th President; high-volume X poster driving daily news cycles.',
+);
+const SCHUMER_PROFILE = officialProfile(
+    'senschumer', 'Chuck Schumer', 'Senate Minority Leader', 'D',
+    'Senior NY Democrat; Senate minority leader since Jan 2025.',
+);
+const JOHNSON_PROFILE = officialProfile(
+    'speakerjohnson', 'Mike Johnson', 'Speaker of the House', 'R',
+    'Speaker of the US House since October 2023.',
+);
+const R_POLITICS_PROFILE = subredditProfile(
+    'politics', 'r/politics', 'left', 'Community sidebar + widely-documented liberal skew',
+    'The largest general US-politics subreddit; ~8M subscribers.',
+);
+
+// Short helper to build one supporting-doc row for narrative drill-down mocks.
+function supDoc(n: {
+    id: number; title: string;
+    sourceType: 'news' | 'x_post' | 'reddit_post' | 'reddit_comment';
+    sourceLabel: string;
+    url: string | null;
+    daysAgo: number;
+    sentiment: 'positive' | 'negative' | 'neutral';
+    confidence: number;
+    reasoning: string;
+}): SupportingDoc {
+    return {
+        doc_id: n.id,
+        title: n.title,
+        source_type: n.sourceType,
+        source_label: n.sourceLabel,
+        url: n.url,
+        published_at: daysAgo(n.daysAgo),
+        sentiment_label: n.sentiment,
+        confidence: n.confidence,
+        reasoning: n.reasoning,
+    };
+}
+
+// Helper that builds a narrative dict — less repetition per entry below.
+function narrative(n: {
+    id: number; name: string;
+    seenAgoDays: number;
+    profile: EntityProfile;
+    tierGroup: 'news' | 'officials' | 'public';
+    sourceType: string;
+    domain: string | null;
+    author?: AccountProfile | null;
+    docs: number;
+    mix: { news: number; reddit: number; x: number };
+    net: number;
+    citations: number;
+    propaganda: number | null;
+    botPushed: number | null;
+    cross: boolean;
+    trendBase?: number;
+    supporting?: SupportingDoc[];
+}): NarrativeSummary {
+    const mix: NarrativeSourceBreakdownItem[] = [];
+    if (n.mix.news)   mix.push({ source_type: 'news',        label: 'News',   count: n.mix.news });
+    if (n.mix.reddit) mix.push({ source_type: 'reddit_post', label: 'Reddit', count: n.mix.reddit });
+    if (n.mix.x)      mix.push({ source_type: 'x_post',      label: 'X',      count: n.mix.x });
+    return {
+        narrative_id: n.id,
+        name: n.name,
+        first_seen_at: daysAgo(n.seenAgoDays),
+        first_seen_doc_id: 90000 + n.id,
+        first_seen_source_type: n.sourceType,
+        first_seen_domain: n.domain,
+        first_seen_tier: n.author?.office_title ? 'elected_official' : null,
+        first_seen_author: n.author ?? null,
+        supporting_doc_count: n.docs,
+        source_breakdown: mix,
+        timeline: mockTimeline(14, n.trendBase ?? Math.max(3, Math.round(n.docs / 14)), 4),
+        net_sentiment: n.net,
+        inbound_citation_count: n.citations,
+        propaganda_score: n.propaganda,
+        bot_pushed_fraction: n.botPushed,
+        first_seen_entity_profile: n.profile,
+        first_seen_tier_group: n.tierGroup,
+        cross_tier: n.cross,
+        top_supporting_docs: n.supporting ?? [],
+    };
+}
+
 export function mockNarratives(): NarrativeSummary[] {
     return [
-        {
-            narrative_id: 1001,
-            name: 'Border crossings hit record high, federal response insufficient',
-            first_seen_at: daysAgo(12),
-            first_seen_doc_id: 88421,
-            first_seen_source_type: 'news',
-            first_seen_domain: 'nypost.com',
-            first_seen_tier: null,
-            first_seen_author: null,
-            supporting_doc_count: 142,
-            source_breakdown: [
-                { source_type: 'news', label: 'News', count: 58 },
-                { source_type: 'reddit_post', label: 'Reddit', count: 34 },
-                { source_type: 'x_post', label: 'X', count: 50 },
+        // --- News-tier ------------------------------------------------
+        narrative({
+            id: 1001,
+            name: 'Border crossings hit record high; federal response insufficient',
+            seenAgoDays: 12, sourceType: 'news', domain: 'nytimes.com',
+            profile: NYT_PROFILE, tierGroup: 'news',
+            docs: 142, mix: { news: 58, reddit: 34, x: 50 },
+            net: -38.4, citations: 23, propaganda: 0.44, botPushed: 0.18, cross: true,
+            trendBase: 10,
+            supporting: [
+                supDoc({
+                    id: 910011, title: 'Border Crossings Surge to Record Levels, Straining Federal Response',
+                    sourceType: 'news', sourceLabel: 'News · nytimes.com', daysAgo: 12,
+                    url: 'https://www.nytimes.com/2026/04/10/us/politics/border-crossings-record.html',
+                    sentiment: 'negative', confidence: 0.92,
+                    reasoning: 'Reports unprecedented crossing numbers and quotes officials calling response "inadequate".',
+                }),
+                supDoc({
+                    id: 910012, title: 'DHS Official Admits Agency Overwhelmed by April Surge',
+                    sourceType: 'news', sourceLabel: 'News · washingtonpost.com', daysAgo: 11,
+                    url: 'https://www.washingtonpost.com/politics/2026/04/11/dhs-april-surge',
+                    sentiment: 'negative', confidence: 0.88,
+                    reasoning: 'Direct admission of agency incapacity; tone critical of executive handling.',
+                }),
+                supDoc({
+                    id: 910013, title: 'Fox Panel: Administration Has "No Plan" for Border',
+                    sourceType: 'news', sourceLabel: 'News · foxnews.com', daysAgo: 10,
+                    url: 'https://www.foxnews.com/politics/administration-no-plan-border',
+                    sentiment: 'negative', confidence: 0.79,
+                    reasoning: 'Opinion panel harshly critical; loaded language flagged but not propaganda-level.',
+                }),
+                supDoc({
+                    id: 910014, title: 'r/politics thread: "Why nothing is being done about the border"',
+                    sourceType: 'reddit_post', sourceLabel: 'Reddit · r/politics', daysAgo: 9,
+                    url: 'https://reddit.com/r/politics/comments/xyz910014',
+                    sentiment: 'negative', confidence: 0.71,
+                    reasoning: 'Community thread echoing the "federal response insufficient" framing; mostly critical.',
+                }),
+                supDoc({
+                    id: 910015, title: 'POTUS: "Our southern border is more secure than ever before."',
+                    sourceType: 'x_post', sourceLabel: 'X · @POTUS', daysAgo: 8,
+                    url: 'https://x.com/POTUS/status/910015',
+                    sentiment: 'positive', confidence: 0.83,
+                    reasoning: 'Official counter-framing; categorized under the same narrative cluster by contrast.',
+                }),
+                supDoc({
+                    id: 910016, title: 'Border sheriffs say resource shortfalls continuing into Q2',
+                    sourceType: 'news', sourceLabel: 'News · apnews.com', daysAgo: 6,
+                    url: 'https://apnews.com/article/border-sheriffs-resources-910016',
+                    sentiment: 'negative', confidence: 0.86,
+                    reasoning: 'Straight reporting of local-official concerns; reinforces the "insufficient response" framing.',
+                }),
             ],
-            timeline: mockTimeline(14, 10, 6),
-            net_sentiment: -38.4,
-            inbound_citation_count: 23,
-            propaganda_score: 0.44,
-            bot_pushed_fraction: 0.18,
-        },
-        {
-            narrative_id: 1002,
-            name: 'Prescription drug pricing reform gaining bipartisan traction',
-            first_seen_at: daysAgo(9),
-            first_seen_doc_id: 90114,
-            first_seen_source_type: 'news',
-            first_seen_domain: 'reuters.com',
-            first_seen_tier: null,
-            first_seen_author: null,
-            supporting_doc_count: 74,
-            source_breakdown: [
-                { source_type: 'news', label: 'News', count: 46 },
-                { source_type: 'reddit_post', label: 'Reddit', count: 18 },
-                { source_type: 'x_post', label: 'X', count: 10 },
+        }),
+        narrative({
+            id: 1002,
+            name: 'Prescription-drug pricing reform gains bipartisan traction',
+            seenAgoDays: 9, sourceType: 'news', domain: 'bbc.com',
+            profile: BBC_PROFILE, tierGroup: 'news',
+            docs: 74, mix: { news: 46, reddit: 18, x: 10 },
+            net: 12.7, citations: 9, propaganda: 0.08, botPushed: 0.02, cross: true,
+            trendBase: 5,
+        }),
+        narrative({
+            id: 1003,
+            name: 'New immigration bill stalls in committee amid partisan divide',
+            seenAgoDays: 6, sourceType: 'news', domain: 'foxnews.com',
+            profile: FOX_PROFILE, tierGroup: 'news',
+            docs: 61, mix: { news: 39, reddit: 12, x: 10 },
+            net: -21.4, citations: 6, propaganda: 0.28, botPushed: 0.06, cross: false,
+            trendBase: 4,
+        }),
+
+        // --- Officials-tier ------------------------------------------
+        narrative({
+            id: 2001,
+            name: 'Trump: "We will impose reciprocal tariffs on every country that has tariffed us"',
+            seenAgoDays: 5, sourceType: 'x_post', domain: null,
+            profile: POTUS_PROFILE, tierGroup: 'officials',
+            author: {
+                handle: 'POTUS', full_name: 'Donald J. Trump', party: 'R', branch: 'executive',
+                chamber: null, state_or_district: null,
+                office_title: 'President', account_type: 'official',
+            },
+            docs: 188, mix: { news: 42, reddit: 56, x: 90 },
+            net: -12.3, citations: 14, propaganda: 0.32, botPushed: 0.24, cross: true,
+            trendBase: 13,
+            supporting: [
+                supDoc({
+                    id: 920011, title: '"Reciprocal tariffs on every country that has tariffed us."',
+                    sourceType: 'x_post', sourceLabel: 'X · @POTUS', daysAgo: 5,
+                    url: 'https://x.com/POTUS/status/920011',
+                    sentiment: 'neutral', confidence: 0.74,
+                    reasoning: 'Policy-declaration tweet; reads as directive rather than opinion.',
+                }),
+                supDoc({
+                    id: 920012, title: 'White House: Reciprocal Tariff Framework Details Released',
+                    sourceType: 'news', sourceLabel: 'News · reuters.com', daysAgo: 5,
+                    url: 'https://www.reuters.com/markets/us/reciprocal-tariff-framework-920012',
+                    sentiment: 'neutral', confidence: 0.90,
+                    reasoning: 'Straight policy reporting without editorialization.',
+                }),
+                supDoc({
+                    id: 920013, title: 'WSJ editorial: "Reciprocal Tariffs Risk Inflation Spike"',
+                    sourceType: 'news', sourceLabel: 'News · wsj.com', daysAgo: 4,
+                    url: 'https://www.wsj.com/articles/reciprocal-tariffs-inflation-920013',
+                    sentiment: 'negative', confidence: 0.85,
+                    reasoning: 'Opinion piece critical of tariff approach on economic grounds.',
+                }),
+                supDoc({
+                    id: 920014, title: 'r/Conservative: "Finally, reciprocal tariffs — about time"',
+                    sourceType: 'reddit_post', sourceLabel: 'Reddit · r/Conservative', daysAgo: 4,
+                    url: 'https://reddit.com/r/Conservative/comments/xyz920014',
+                    sentiment: 'positive', confidence: 0.78,
+                    reasoning: 'Supportive community thread; clearly favorable framing.',
+                }),
+                supDoc({
+                    id: 920015, title: 'Schumer: "Reciprocal tariffs are a tax on American families."',
+                    sourceType: 'x_post', sourceLabel: 'X · @SenSchumer', daysAgo: 3,
+                    url: 'https://x.com/SenSchumer/status/920015',
+                    sentiment: 'negative', confidence: 0.91,
+                    reasoning: 'Opposition framing from Senate minority leader; rhetorical attack.',
+                }),
             ],
-            timeline: mockTimeline(14, 5, 3),
-            net_sentiment: 12.7,
-            inbound_citation_count: 9,
-            propaganda_score: 0.08,
-            bot_pushed_fraction: 0.02,
-        },
-        {
-            narrative_id: 1003,
+        }),
+        narrative({
+            id: 2002,
+            name: 'Schumer demands hearing on campus-speech enforcement order',
+            seenAgoDays: 4, sourceType: 'x_post', domain: null,
+            profile: SCHUMER_PROFILE, tierGroup: 'officials',
+            author: {
+                handle: 'SenSchumer', full_name: 'Chuck Schumer', party: 'D', branch: 'legislative',
+                chamber: 'senate', state_or_district: 'NY',
+                office_title: 'Senator', account_type: 'official',
+            },
+            docs: 64, mix: { news: 18, reddit: 9, x: 37 },
+            net: -8.1, citations: 4, propaganda: 0.14, botPushed: 0.04, cross: true,
+            trendBase: 5,
+        }),
+        narrative({
+            id: 2003,
+            name: 'Speaker Johnson: House will advance continuing resolution this week',
+            seenAgoDays: 2, sourceType: 'x_post', domain: null,
+            profile: JOHNSON_PROFILE, tierGroup: 'officials',
+            author: {
+                handle: 'SpeakerJohnson', full_name: 'Mike Johnson', party: 'R', branch: 'legislative',
+                chamber: 'house', state_or_district: 'LA04',
+                office_title: 'Representative', account_type: 'official',
+            },
+            docs: 48, mix: { news: 15, reddit: 6, x: 27 },
+            net: 4.8, citations: 3, propaganda: 0.11, botPushed: 0.03, cross: false,
+            trendBase: 4,
+        }),
+
+        // --- Public-tier ---------------------------------------------
+        narrative({
+            id: 3001,
             name: 'Tech giants colluding to suppress conservative voices',
-            first_seen_at: daysAgo(7),
-            first_seen_doc_id: 90884,
-            first_seen_source_type: 'x_post',
-            first_seen_domain: null,
-            first_seen_tier: 'affiliated',
-            first_seen_author: {
-                handle: 'politics_pundit',
-                full_name: 'Jordan Parker',
-                party: 'R',
-                branch: null,
-                chamber: null,
-                state_or_district: null,
-                office_title: null,
-                account_type: 'personal',
-            },
-            supporting_doc_count: 203,
-            source_breakdown: [
-                { source_type: 'x_post', label: 'X', count: 148 },
-                { source_type: 'reddit_post', label: 'Reddit', count: 42 },
-                { source_type: 'news', label: 'News', count: 13 },
+            seenAgoDays: 7, sourceType: 'x_post', domain: null,
+            profile: catchAll('other-x-users', 'Other X users',
+                'X post whose author is not in the tracked officials registry.'),
+            tierGroup: 'public',
+            docs: 203, mix: { news: 13, reddit: 42, x: 148 },
+            net: -44.1, citations: 6, propaganda: 0.71, botPushed: 0.38, cross: true,
+            trendBase: 14,
+            supporting: [
+                supDoc({
+                    id: 930011, title: '"They are BURYING every story about X — wake up people."',
+                    sourceType: 'x_post', sourceLabel: 'X · unverified account', daysAgo: 7,
+                    url: 'https://x.com/_anon/status/930011',
+                    sentiment: 'negative', confidence: 0.82,
+                    reasoning: 'Flagged for loaded language + near-identical phrasing across a cluster of accounts.',
+                }),
+                supDoc({
+                    id: 930012, title: 'r/Conservative: "Shadowban evidence thread (megathread)"',
+                    sourceType: 'reddit_post', sourceLabel: 'Reddit · r/Conservative', daysAgo: 6,
+                    url: 'https://reddit.com/r/Conservative/comments/xyz930012',
+                    sentiment: 'negative', confidence: 0.80,
+                    reasoning: 'Community megathread aggregating suppression claims; some evidence-based, some speculative.',
+                }),
+                supDoc({
+                    id: 930013, title: 'Platform engagement metrics dispute suppression claims',
+                    sourceType: 'news', sourceLabel: 'News · theatlantic.com', daysAgo: 5,
+                    url: 'https://www.theatlantic.com/technology/archive/2026/04/930013',
+                    sentiment: 'neutral', confidence: 0.87,
+                    reasoning: 'Evidence-based piece weighing claims; reaches no-consensus conclusion.',
+                }),
+                supDoc({
+                    id: 930014, title: '"Same script, same timing, same accounts — coincidence?"',
+                    sourceType: 'x_post', sourceLabel: 'X · unverified account', daysAgo: 4,
+                    url: 'https://x.com/_anon/status/930014',
+                    sentiment: 'negative', confidence: 0.76,
+                    reasoning: 'High-confidence bot-pushed classification — phrasing matches 37 other accounts.',
+                }),
             ],
-            timeline: mockTimeline(14, 14, 10),
-            net_sentiment: -44.1,
-            inbound_citation_count: 6,
-            propaganda_score: 0.71,
-            bot_pushed_fraction: 0.38,
-        },
-        {
-            narrative_id: 1004,
-            name: 'Ukraine aid package vote scheduled for next week',
-            first_seen_at: daysAgo(3),
-            first_seen_doc_id: 91640,
-            first_seen_source_type: 'x_post',
-            first_seen_domain: null,
-            first_seen_tier: 'elected_official',
-            first_seen_author: {
-                handle: 'SenSmith',
-                full_name: 'Jane Smith',
-                party: 'D',
-                branch: 'legislative',
-                chamber: 'senate',
-                state_or_district: 'OH',
-                office_title: 'Senator',
-                account_type: 'official',
-            },
-            supporting_doc_count: 58,
-            source_breakdown: [
-                { source_type: 'x_post', label: 'X', count: 31 },
-                { source_type: 'news', label: 'News', count: 22 },
-                { source_type: 'reddit_post', label: 'Reddit', count: 5 },
-            ],
-            timeline: mockTimeline(14, 3, 4),
-            net_sentiment: -4.2,
-            inbound_citation_count: 14,
-            propaganda_score: 0.21,
-            bot_pushed_fraction: 0.05,
-        },
+        }),
+        narrative({
+            id: 3002,
+            name: 'Young voters abandoning both parties over inflation',
+            seenAgoDays: 5, sourceType: 'reddit_post', domain: 'politics',
+            profile: R_POLITICS_PROFILE, tierGroup: 'public',
+            docs: 96, mix: { news: 7, reddit: 71, x: 18 },
+            net: -17.2, citations: 2, propaganda: 0.10, botPushed: 0.05, cross: false,
+            trendBase: 6,
+        }),
+        narrative({
+            id: 3003,
+            name: 'SCOTUS ruling seen as victory for religious-liberty advocates',
+            seenAgoDays: 8, sourceType: 'reddit_post', domain: 'Conservative',
+            profile: subredditProfile(
+                'conservative', 'r/Conservative', 'right',
+                'Community sidebar + flair-gated participation',
+                '~1.3M-subscriber subreddit; sidebar positions it as a "safe space for conservatives".',
+            ),
+            tierGroup: 'public',
+            docs: 54, mix: { news: 8, reddit: 39, x: 7 },
+            net: 22.6, citations: 1, propaganda: 0.06, botPushed: 0.01, cross: false,
+            trendBase: 4,
+        }),
     ];
 }
 
@@ -394,6 +741,40 @@ export function mockBotActivity(): BotData {
             topClusters: ['anti-immigration amplifiers', 'pro-candidate X ring', 'climate-denial chorus'],
             totalFlaggedAccounts: 247,
             confidence: 'medium',
+            by_news_outlet: [
+                { key: 'nytimes.com', kind: 'outlet',  total_docs: 162, bot_docs: 1, bot_rate_pct: 0.6, entity_profile: NYT_PROFILE },
+                { key: 'foxnews.com', kind: 'outlet',  total_docs: 128, bot_docs: 3, bot_rate_pct: 2.3, entity_profile: FOX_PROFILE },
+                { key: 'bbc.com',     kind: 'outlet',  total_docs:  94, bot_docs: 0, bot_rate_pct: 0.0, entity_profile: BBC_PROFILE },
+                {
+                    key: 'other-outlets', kind: 'catch_all',
+                    total_docs: 240, bot_docs: 4, bot_rate_pct: 1.7,
+                    entity_profile: catchAll('other-outlets', 'Other news outlets',
+                        'News docs whose domain is not in the tracked outlet registry.'),
+                },
+            ],
+            by_official: [
+                { key: 'potus',          kind: 'official', total_docs: 82, bot_docs: 0, bot_rate_pct: 0.0, entity_profile: POTUS_PROFILE },
+                { key: 'senschumer',     kind: 'official', total_docs: 31, bot_docs: 0, bot_rate_pct: 0.0, entity_profile: SCHUMER_PROFILE },
+                { key: 'speakerjohnson', kind: 'official', total_docs: 20, bot_docs: 0, bot_rate_pct: 0.0, entity_profile: JOHNSON_PROFILE },
+            ],
+            by_general_public: [
+                {
+                    key: 'other-x-users', kind: 'catch_all',
+                    total_docs: 412, bot_docs: 94, bot_rate_pct: 22.8,
+                    entity_profile: catchAll('other-x-users', 'Other X users',
+                        'X posts whose author is not in the tracked officials registry.'),
+                },
+                { key: 'politics',     kind: 'subreddit', total_docs: 186, bot_docs: 18, bot_rate_pct:  9.7, entity_profile: R_POLITICS_PROFILE },
+                {
+                    key: 'conservative', kind: 'subreddit',
+                    total_docs: 102, bot_docs: 12, bot_rate_pct: 11.8,
+                    entity_profile: subredditProfile(
+                        'conservative', 'r/Conservative', 'right',
+                        'Community sidebar + flair-gated participation',
+                        '~1.3M-subscriber subreddit; sidebar positions it as a "safe space for conservatives".',
+                    ),
+                },
+            ],
         },
         narrativeAmplification: [
             {
@@ -456,5 +837,196 @@ export function mockBotActivity(): BotData {
                 { domain: 'breitbart.com', percentage: 7 },
             ],
         },
+    };
+}
+
+
+/* ---------- Propaganda ---------- */
+
+function propagandaItem(
+    profile: EntityProfile,
+    stats: { total: number; flagged: number; mean: number },
+): PropagandaEntityItem {
+    return {
+        key: profile.key,
+        kind: profile.kind,
+        total_docs: stats.total,
+        flagged_docs: stats.flagged,
+        flagged_rate_pct: Math.round((stats.flagged / stats.total) * 1000) / 10,
+        mean_score: Math.round(stats.mean * 1000) / 1000,
+        entity_profile: profile,
+    };
+}
+
+export function mockPropaganda(): PropagandaOverview {
+    return {
+        window: '7d',
+        total_eligible_docs: 1210,
+        flagged_docs: 187,
+        propaganda_rate_pct: 15.5,
+        mean_score: 0.22,
+        by_technique: [
+            { technique: 'loaded_language', count: 88, pct_of_flagged_docs: 47.1 },
+            { technique: 'name_calling', count: 61, pct_of_flagged_docs: 32.6 },
+            { technique: 'appeal_to_fear', count: 46, pct_of_flagged_docs: 24.6 },
+            { technique: 'whataboutism', count: 34, pct_of_flagged_docs: 18.2 },
+            { technique: 'ad_hominem', count: 28, pct_of_flagged_docs: 15.0 },
+            { technique: 'doubt_casting', count: 21, pct_of_flagged_docs: 11.2 },
+        ],
+        by_source: [
+            { label: 'News', total_docs: 640, flagged_docs: 82, flagged_rate_pct: 12.8, mean_score: 0.19 },
+            { label: 'Social Media', total_docs: 570, flagged_docs: 105, flagged_rate_pct: 18.4, mean_score: 0.26 },
+        ],
+        examples: [
+            {
+                doc_id: 71001, source_type: 'x_post', domain: null, author_handle: 'POTUS',
+                title: 'The radical left are BETRAYING everything America stands for. WAKE UP.',
+                overall_score: 0.82,
+                techniques: [
+                    { technique: 'loaded_language', confidence: 0.88, evidence_span: 'BETRAYING everything America stands for' },
+                    { technique: 'name_calling', confidence: 0.74, evidence_span: 'radical left' },
+                    { technique: 'appeal_to_fear', confidence: 0.66, evidence_span: 'WAKE UP' },
+                ],
+                text_preview: 'The radical left are BETRAYING everything America stands for. WAKE UP before it\'s too late for this country.',
+                url: 'https://x.com/POTUS/status/71001',
+            },
+            {
+                doc_id: 71002, source_type: 'news', domain: 'foxnews.com', author_handle: null,
+                title: 'Op-ed: Border policy "catastrophic failure" of leadership',
+                overall_score: 0.68,
+                techniques: [
+                    { technique: 'loaded_language', confidence: 0.79, evidence_span: 'catastrophic failure' },
+                    { technique: 'appeal_to_fear', confidence: 0.58, evidence_span: 'open invitation to criminals' },
+                ],
+                text_preview: 'The administration\'s handling of the border is a catastrophic failure of leadership. It is an open invitation to criminals...',
+                url: 'https://www.foxnews.com/opinion/border-policy-catastrophic-failure',
+            },
+            {
+                doc_id: 71003, source_type: 'reddit_post', domain: 'politics', author_handle: null,
+                title: 'Why do conservatives never answer this question?',
+                overall_score: 0.55,
+                techniques: [
+                    { technique: 'whataboutism', confidence: 0.72, evidence_span: 'never answer this question' },
+                ],
+                text_preview: 'Every time the topic comes up, they pivot to something Biden did. Why do conservatives never answer this question directly?',
+                url: 'https://reddit.com/r/politics/comments/71003',
+            },
+            {
+                doc_id: 71004, source_type: 'news', domain: 'foxnews.com', author_handle: null,
+                title: 'Commentary: the administration\'s "disastrous" economic record',
+                overall_score: 0.62,
+                techniques: [
+                    { technique: 'loaded_language', confidence: 0.81, evidence_span: 'disastrous economic record' },
+                    { technique: 'doubt_casting', confidence: 0.54, evidence_span: 'no one should trust their numbers' },
+                ],
+                text_preview: 'After four years of this administration\'s disastrous economic record, no one should trust their numbers on inflation or growth...',
+                url: 'https://www.foxnews.com/opinion/administration-economic-record',
+            },
+            {
+                doc_id: 71005, source_type: 'x_post', domain: null, author_handle: 'POTUS',
+                title: 'Reciprocal tariffs coming for every country that cheated us!',
+                overall_score: 0.58,
+                techniques: [
+                    { technique: 'loaded_language', confidence: 0.72, evidence_span: 'cheated us' },
+                    { technique: 'appeal_to_fear', confidence: 0.48, evidence_span: 'they will pay the price' },
+                ],
+                text_preview: 'Reciprocal tariffs coming for every country that cheated us! They will pay the price for decades of unfair trade.',
+                url: 'https://x.com/POTUS/status/71005',
+            },
+            {
+                doc_id: 71006, source_type: 'reddit_post', domain: 'Conservative', author_handle: null,
+                title: 'Megathread: why the media ignores stories that hurt their narrative',
+                overall_score: 0.61,
+                techniques: [
+                    { technique: 'doubt_casting', confidence: 0.68, evidence_span: 'their narrative' },
+                    { technique: 'whataboutism', confidence: 0.55, evidence_span: 'but nothing when a Democrat does the same' },
+                ],
+                text_preview: 'The mainstream media buries every story that hurts their narrative but nothing when a Democrat does the same thing. Pattern is obvious at this point.',
+                url: 'https://reddit.com/r/Conservative/comments/71006',
+            },
+        ],
+        disclaimer:
+            'Sampled political discourse. Propaganda scoring is a per-doc LLM classification with verbatim evidence spans; a high rate means the sample leaned on these techniques, not that every flagged doc is propaganda-by-intent.',
+        by_news_outlet: [
+            propagandaItem(FOX_PROFILE,  { total: 122, flagged: 31, mean: 0.34 }),
+            propagandaItem(NYT_PROFILE,  { total: 168, flagged: 19, mean: 0.17 }),
+            propagandaItem(BBC_PROFILE,  { total: 96,  flagged:  7, mean: 0.11 }),
+            propagandaItem(
+                catchAll('other-outlets', 'Other news outlets',
+                    'News docs whose domain is not in the tracked outlet registry.'),
+                { total: 254, flagged: 25, mean: 0.18 },
+            ),
+        ],
+        by_official: [
+            propagandaItem(POTUS_PROFILE,   { total: 88, flagged: 34, mean: 0.41 }),
+            propagandaItem(SCHUMER_PROFILE, { total: 34, flagged:  6, mean: 0.19 }),
+            propagandaItem(JOHNSON_PROFILE, { total: 22, flagged:  3, mean: 0.15 }),
+        ],
+        by_general_public: [
+            propagandaItem(
+                subredditProfile(
+                    'conservative', 'r/Conservative', 'right',
+                    'Community sidebar + flair-gated participation',
+                    '~1.3M-subscriber subreddit; sidebar positions it as a "safe space for conservatives".',
+                ),
+                { total: 118, flagged: 29, mean: 0.31 },
+            ),
+            propagandaItem(R_POLITICS_PROFILE, { total: 204, flagged: 32, mean: 0.22 }),
+            propagandaItem(
+                catchAll('other-x-users', 'Other X users',
+                    'X posts whose author is not in the tracked officials registry.'),
+                { total: 204, flagged: 44, mean: 0.29 },
+            ),
+        ],
+    };
+}
+
+/**
+ * Mock movers payload — exercises the MoversTicker with a handful of
+ * plausibly-shaped entity deltas plus one GOP-favorability row.
+ */
+export function mockMovers(): MoversResult {
+    return {
+        window: '7d',
+        favorability_mover: {
+            label: 'GOP party stance',
+            current_net: -14.2,
+            prev_net: -8.7,
+            delta_pts: -5.5,
+            current_volume: 4318,
+            prev_volume: 4102,
+        },
+        entity_movers: [
+            {
+                key: 'foxnews.com', kind: 'outlet', displayName: 'Fox News',
+                current_net: -12.4, prev_net: -3.2, delta_pts: -9.2,
+                current_volume: 221, prev_volume: 208,
+                entity_profile: FOX_PROFILE,
+            },
+            {
+                key: 'senschumer', kind: 'official', displayName: 'Chuck Schumer',
+                current_net: 18.1, prev_net: 11.6, delta_pts: 6.5,
+                current_volume: 34, prev_volume: 31,
+                entity_profile: SCHUMER_PROFILE,
+            },
+            {
+                key: 'r/politics', kind: 'subreddit', displayName: 'r/politics',
+                current_net: -7.9, prev_net: -12.4, delta_pts: 4.5,
+                current_volume: 612, prev_volume: 580,
+                entity_profile: R_POLITICS_PROFILE,
+            },
+            {
+                key: 'nytimes.com', kind: 'outlet', displayName: 'The New York Times',
+                current_net: 3.7, prev_net: -0.8, delta_pts: 4.5,
+                current_volume: 168, prev_volume: 162,
+                entity_profile: NYT_PROFILE,
+            },
+            {
+                key: 'bbc.com', kind: 'outlet', displayName: 'BBC',
+                current_net: 1.2, prev_net: 5.0, delta_pts: -3.8,
+                current_volume: 96, prev_volume: 102,
+                entity_profile: BBC_PROFILE,
+            },
+        ],
     };
 }

@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { COLORS } from '../../theme';
 import type { HeatmapDataPoint } from '../../types';
 
 interface HeatmapProps {
@@ -16,14 +17,19 @@ const HOURS = Array.from({ length: 24 }, (_, i) => i);
  * quartiles of the non-zero distribution so the brightest cells actually
  * pop even on a spiky dataset. Hover surfaces a rich card; empty cells
  * stay silent.
+ *
+ * The two middle stops of the default scale are translucent renditions
+ * of the accent color — if you change `--accent` in index.css, update
+ * these rgba() values too, or switch to `rgb(from ...)` once browser
+ * support is guaranteed.
  */
 function Heatmap({
     data,
     colorScale = [
         'var(--neutral-100)',
-        'rgba(0, 71, 179, 0.18)',
-        'rgba(0, 71, 179, 0.48)',
-        'var(--chart-accent)',
+        'rgba(35, 80, 138, 0.18)',
+        'rgba(35, 80, 138, 0.48)',
+        COLORS.chartAccent,
     ],
     cellSize = 16,
     gap = 2,
@@ -152,18 +158,22 @@ function Heatmap({
                 )}
             </div>
 
-            {/* Hover card */}
+            {/* Floating hover card — absolutely positioned so hovering a cell
+                doesn't reflow the page; the legend and subsequent sections
+                stay put while this overlays on top. */}
             {active && (
                 <div
+                    className="popover"
+                    role="tooltip"
                     aria-live="polite"
                     style={{
+                        top: '100%',
+                        left: 'var(--space-4)',
                         marginTop: 'var(--space-2)',
-                        padding: 'var(--space-2) var(--space-3)',
-                        borderRadius: 'var(--radius-sm)',
-                        background: 'var(--bg-inset)',
-                        border: '1px solid var(--neutral-150)',
                         fontSize: 'var(--text-xs)',
                         fontVariantNumeric: 'tabular-nums',
+                        padding: 'var(--space-2) var(--space-3)',
+                        minWidth: 0,
                     }}
                 >
                     <strong>{DAYS[active.day]} {formatHour(active.hour)}</strong>

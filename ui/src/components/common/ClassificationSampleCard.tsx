@@ -1,6 +1,6 @@
 import { useState } from 'react';
+import { COLORS } from '../../theme';
 import type { ClassificationSample } from '../../types';
-import { SEMANTIC_COLORS } from '../../theme';
 
 interface ClassificationSampleCardProps {
     sample: ClassificationSample;
@@ -33,9 +33,9 @@ export function ClassificationSampleCard({ sample, badgeStyle }: ClassificationS
     const spans = meaningfulEvidence(sample.evidence_spans || []);
 
     const confPct = sample.confidence * 100;
-    const confColor = confPct >= 80 ? SEMANTIC_COLORS.positive
-        : confPct >= 50 ? SEMANTIC_COLORS.warning
-        : SEMANTIC_COLORS.negative;
+    const confColor = confPct >= 80 ? COLORS.positive
+        : confPct >= 50 ? COLORS.warning
+        : COLORS.negative;
     const confLabel = confPct >= 80 ? 'High' : confPct >= 50 ? 'Medium' : 'Low';
 
     return (
@@ -84,8 +84,8 @@ export function ClassificationSampleCard({ sample, badgeStyle }: ClassificationS
                 {sample.sarcasm_detected && (
                     <span style={{
                         fontSize: '9px', fontWeight: 700, padding: '2px 5px',
-                        borderRadius: '2px', background: 'var(--semantic-warning-light)',
-                        color: 'var(--semantic-warning)', letterSpacing: '0.08em',
+                        borderRadius: '2px', background: COLORS.warningLight,
+                        color: COLORS.warning, letterSpacing: '0.08em',
                     }}>
                         SARCASM
                     </span>
@@ -126,7 +126,7 @@ export function ClassificationSampleCard({ sample, badgeStyle }: ClassificationS
                     <button
                         onClick={() => setShowFull(!showFull)}
                         style={{
-                            background: 'none', border: 'none', color: 'var(--accent)',
+                            background: 'none', border: 'none', color: COLORS.accent,
                             cursor: 'pointer', fontSize: '11px', fontWeight: 600,
                             marginLeft: '4px', padding: 0, textTransform: 'uppercase',
                             letterSpacing: '0.06em',
@@ -173,7 +173,7 @@ export function ClassificationSampleCard({ sample, badgeStyle }: ClassificationS
                         <span>Source Text</span>
                         {sample.url && (
                             <a href={sample.url} target="_blank" rel="noreferrer" style={{
-                                color: 'var(--accent)', textDecoration: 'none',
+                                color: COLORS.accent, textDecoration: 'none',
                                 textTransform: 'none', fontSize: '11px', letterSpacing: 'normal',
                             }}>
                                 View Original ↗

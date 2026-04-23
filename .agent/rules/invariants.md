@@ -12,3 +12,4 @@ trigger: always_on
 8. Never use emojis in codebase
 9. Maintain clear layer boundaries: ingest (Go) -> analysis (Python) -> api (FastAPI) -> ui (React)
 10. Follow DRY and SOLID principles (see code-style.md for details)
+11. Plan -> audit-trail workflow: non-trivial work starts as a checklist in `docs/todos/<initiative>.md` and ships with a dated entry under the affected layer(s) in `docs/audit-trail/<layer>/`. Completed todos are deleted. See `docs/audit-trail/README.md`.

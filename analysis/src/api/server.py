@@ -41,7 +41,7 @@ app = FastAPI(title="Civic Lens API", version=API_VERSION)
 
 # Rate limits: default 120/min per client IP via middleware, plus tighter
 # per-route decorators in the routers (/run/* = 1/hour, /review/submit =
-# 30/hour, /geo-sentiment + /narratives live path = 10/min). See
+# 30/hour, /narratives live path = 10/min, /movers = 20/min). See
 # rate_limits.py for the CF-aware key_func (audit §1.6).
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)

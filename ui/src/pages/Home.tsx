@@ -1,4 +1,5 @@
 import { Card } from '../components/common';
+import { COLORS } from '../theme';
 
 interface HomeProps {
     onNavigate: (tabId: string) => void;
@@ -35,7 +36,7 @@ function TabCard({ tabId, title, tagline, body, onClick }: TabCardProps) {
                 transition: 'border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease',
             }}
             onMouseEnter={(e) => {
-                e.currentTarget.style.borderColor = 'var(--accent)';
+                e.currentTarget.style.borderColor = COLORS.accent;
                 e.currentTarget.style.boxShadow = 'var(--shadow-md)';
                 e.currentTarget.style.transform = 'translateY(-1px)';
             }}
@@ -45,7 +46,7 @@ function TabCard({ tabId, title, tagline, body, onClick }: TabCardProps) {
                 e.currentTarget.style.transform = 'translateY(0)';
             }}
         >
-            <div className="eyebrow" style={{ color: 'var(--accent)' }}>{tagline}</div>
+            <div className="eyebrow" style={{ color: COLORS.accent }}>{tagline}</div>
             <div style={{ fontSize: 'var(--text-lg)', fontWeight: 600, letterSpacing: '-0.01em' }}>{title}</div>
             <div style={{ fontSize: 'var(--text-sm)', color: 'var(--neutral-600)', lineHeight: 'var(--leading-normal)' }}>
                 {body}
@@ -65,7 +66,7 @@ function Home({ onNavigate, isAdmin = false }: HomeProps) {
         <div className="flex flex-col gap-6" style={{ maxWidth: 980, margin: '0 auto' }}>
             {/* Hero */}
             <section className="surface-hero">
-                <div className="eyebrow" style={{ color: 'var(--accent)' }}>
+                <div className="eyebrow" style={{ color: COLORS.accent }}>
                     Political media analysis &middot; narrative &amp; bot tracker
                 </div>
                 <h2
@@ -87,8 +88,8 @@ function Home({ onNavigate, isAdmin = false }: HomeProps) {
                     maxWidth: 680,
                 }}>
                     Most political coverage tells you how to feel about a story. Civic Lens
-                    does something different. We pull US political content from news sites,
-                    Reddit, and X, then score each post for sentiment, propaganda techniques,
+                    does something different. We pull US political content from news sites
+                    and X, then score each post for sentiment, propaganda techniques,
                     automation signals, and the claims it repeats. Every number here links
                     back to the raw text it came from, with a confidence score attached. It
                     is a sample of what we collected. It is not a poll.
@@ -143,17 +144,17 @@ function Home({ onNavigate, isAdmin = false }: HomeProps) {
                     }}
                 >
                     <div>
-                        <div className="num" style={{ fontSize: 'var(--text-sm)', color: 'var(--accent)', fontWeight: 600 }}>
+                        <div className="num" style={{ fontSize: 'var(--text-sm)', color: COLORS.accent, fontWeight: 600 }}>
                             01 &middot; Collect
                         </div>
                         <div style={{ marginTop: 'var(--space-1)', fontSize: 'var(--text-sm)', color: 'var(--neutral-700)', lineHeight: 'var(--leading-relaxed)' }}>
-                            We pull US political content from curated news, Reddit, and X on
+                            We pull US political content from curated news sites and X on
                             a loop. Every raw response is saved by its content hash so any
                             claim on the site can be audited back to what was originally seen.
                         </div>
                     </div>
                     <div>
-                        <div className="num" style={{ fontSize: 'var(--text-sm)', color: 'var(--accent)', fontWeight: 600 }}>
+                        <div className="num" style={{ fontSize: 'var(--text-sm)', color: COLORS.accent, fontWeight: 600 }}>
                             02 &middot; Score
                         </div>
                         <div style={{ marginTop: 'var(--space-1)', fontSize: 'var(--text-sm)', color: 'var(--neutral-700)', lineHeight: 'var(--leading-relaxed)' }}>
@@ -164,7 +165,7 @@ function Home({ onNavigate, isAdmin = false }: HomeProps) {
                         </div>
                     </div>
                     <div>
-                        <div className="num" style={{ fontSize: 'var(--text-sm)', color: 'var(--accent)', fontWeight: 600 }}>
+                        <div className="num" style={{ fontSize: 'var(--text-sm)', color: COLORS.accent, fontWeight: 600 }}>
                             03 &middot; Serve
                         </div>
                         <div style={{ marginTop: 'var(--space-1)', fontSize: 'var(--text-sm)', color: 'var(--neutral-700)', lineHeight: 'var(--leading-relaxed)' }}>
@@ -188,16 +189,16 @@ function Home({ onNavigate, isAdmin = false }: HomeProps) {
                 >
                     <TabCard
                         tabId="sentiment"
-                        tagline="Tab &middot; Public Sentiment"
+                        tagline="Tab &middot; Overall Tone"
                         title="How sources are talking about politics"
-                        body="Net sentiment of the political content we sampled, broken down by platform, by topic, and over time. Includes a side-by-side comparison of social media vs news tone on the same political stories, and a GOP-favorability card sourced from the same per-document analysis."
+                        body="Net tone of the political content we sampled, split three ways: news outlets, verified officials, and the general public. Each entity gets its own card with a partisan-lean chip and an editorial blurb. A divergence panel shows where the three tiers disagree most on each topic."
                         onClick={onNavigate}
                     />
                     <TabCard
                         tabId="narratives"
-                        tagline="Tab &middot; Narratives"
+                        tagline="Tab &middot; Political Narratives"
                         title="Political claims repeating across sources"
-                        body="Each row is a political claim we saw in more than one doc, grouped by where we first saw it (news vs social). You get the number of docs repeating the claim, the source mix, daily volume, net sentiment of the supporting docs, and how many of the cited sources are also in our sample."
+                        body="Each row is a political claim we saw in more than one doc, bucketed by where we first saw it: news outlets, verified officials, or the general public. Cross-tier narratives — claims that show up in more than one tier — get a dedicated panel. Amplification overlays flag claims with high propaganda density or a bot-pushed fraction."
                         onClick={onNavigate}
                     />
                     <TabCard
@@ -239,8 +240,8 @@ function Home({ onNavigate, isAdmin = false }: HomeProps) {
                         carries a score, and evidence spans are verified as a verbatim substring of the source.
                     </li>
                     <li>
-                        <strong>Samples are labeled as samples.</strong> &ldquo;Public Sentiment&rdquo; means the
-                        sentiment of the docs we ingested, not the sentiment of the public. Reach and influence
+                        <strong>Samples are labeled as samples.</strong> &ldquo;Overall Tone&rdquo; means the
+                        tone of the docs we ingested, not the tone of the public. Reach and influence
                         numbers are marked as proxies when they are not backed by verified audience data.
                     </li>
                     <li>

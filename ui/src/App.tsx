@@ -1,12 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Tabs, GlobalFilters, Footer, type Tab } from './components/common';
-import { Home, PublicSentiment, BotActivityProfiler, GlobalHeatmap, Narratives, Propaganda, Review } from './pages';
+import { Home, PublicSentiment, BotActivityProfiler, Narratives, Propaganda, Review } from './pages';
 import type { Filters } from './types';
 
 /* Admin mode is token-based. Visit once with ?admin=<CIVIC_ADMIN_TOKEN> to persist it;
    ?admin=0 clears it. The token is sent as X-Admin-Token on every admin-endpoint
-   request (see services/api.ts). Non-admin users never see the Review tab. The
-   Global Heatmap is hidden for everyone (page kept, unlinked from nav).
+   request (see services/api.ts). Non-admin users never see the Review tab.
 
    The URL is scrubbed after capture via history.replaceState so the token doesn't
    ride along in the Referer header on any outbound click. This is defense-in-depth
@@ -44,9 +43,11 @@ const iconProps = {
 
 const BASE_TABS: Tab[] = [
     {
+        // Tab id stays 'sentiment' for URL hash + cache-key stability
+        // (walkthrough 060 renamed the display label only).
         id: 'sentiment',
-        label: 'Public Sentiment',
-        shortLabel: 'Sentiment',
+        label: 'Overall Tone',
+        shortLabel: 'Tone',
         icon: (
             <svg {...iconProps}>
                 <path d="M3 3v18h18" />
@@ -55,8 +56,9 @@ const BASE_TABS: Tab[] = [
         ),
     },
     {
+        // Walkthrough 061 renamed label to "Political Narratives"; id + shortLabel unchanged.
         id: 'narratives',
-        label: 'Narratives',
+        label: 'Political Narratives',
         shortLabel: 'Narratives',
         icon: (
             <svg {...iconProps}>
@@ -105,10 +107,10 @@ const ADMIN_TABS: Tab[] = [
 
 const TABS: Tab[] = ADMIN_MODE ? [...BASE_TABS, ...ADMIN_TABS] : BASE_TABS;
 
-// Valid tab ids — kept in sync with TABS + the 'home' landing + the hidden
-// 'heatmap' route. Used to validate the URL hash before we trust it as a tab.
+// Valid tab ids — kept in sync with TABS + the 'home' landing. Used to
+// validate the URL hash before we trust it as a tab.
 const TAB_IDS: ReadonlySet<string> = new Set([
-    'home', 'sentiment', 'narratives', 'propaganda', 'bots', 'heatmap', 'review',
+    'home', 'sentiment', 'narratives', 'propaganda', 'bots', 'review',
 ]);
 
 function readTabFromHash(): string {
@@ -136,7 +138,6 @@ function App() {
     const [filters, setFilters] = useState<Filters>({
         timeRange: '7d',
         sourceType: 'all',
-        geography: 'all',
     });
     const scrolled = useScrolled();
 
@@ -167,8 +168,6 @@ function App() {
                 return <Propaganda filters={filters} />;
             case 'bots':
                 return <BotActivityProfiler filters={filters} />;
-            case 'heatmap':
-                return <GlobalHeatmap filters={filters} />;
             case 'review':
                 return ADMIN_MODE ? <Review /> : <Home onNavigate={setActiveTab} isAdmin={ADMIN_MODE} />;
             default:
@@ -224,7 +223,10 @@ function App() {
                 <GlobalFilters
                     filters={filters}
                     onFilterChange={setFilters}
-                    showGeography={false}
+                    /* Source filter is honored on every data page except
+                       Bot — bot detection is scoped to social platforms by
+                       definition, so the pill has nothing to narrow there. */
+                    showSourceType={activeTab !== 'bots'}
                 />
             )}
 

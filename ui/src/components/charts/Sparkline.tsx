@@ -1,5 +1,6 @@
 import { useId } from 'react';
 import { AreaChart, Area, XAxis, ResponsiveContainer, Tooltip, TooltipProps } from 'recharts';
+import { COLORS } from '../../theme';
 import type { ChartDataPoint } from '../../types';
 
 interface SparklineProps {
@@ -20,7 +21,7 @@ function Sparkline({
     data,
     dataKey = 'value',
     xKey = 'date',
-    color = 'var(--chart-accent)',
+    color = COLORS.chartAccent,
     height = 40,
     showTooltip = true,
     ariaLabel,

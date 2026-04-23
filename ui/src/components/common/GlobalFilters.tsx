@@ -21,25 +21,29 @@ const TIME_RANGES: TimeRange[] = [
 const SOURCE_TYPES: SourceType[] = [
     { id: 'all', label: 'All Sources' },
     { id: 'news', label: 'News' },
-    { id: 'reddit', label: 'Reddit' },
     { id: 'social', label: 'Social' },
 ];
 
 interface GlobalFiltersProps {
     filters: Filters;
     onFilterChange: (filters: Filters) => void;
-    showGeography?: boolean;
+    /**
+     * Whether the Source pills should render. Defaults to true. Pages where
+     * the source filter isn't yet wired (requires backend aggregation that
+     * accepts a source param) pass `false` so we don't surface a dead control.
+     */
+    showSourceType?: boolean;
 }
 
 /**
- * GlobalFilters - Persistent filter bar for time range, source, and geography.
+ * GlobalFilters - Persistent filter bar for time range and source.
  */
 function GlobalFilters({
     filters,
     onFilterChange,
-    showGeography = false
+    showSourceType = true,
 }: GlobalFiltersProps) {
-    const { timeRange = '7d', sourceType = 'all', geography = 'all' } = filters;
+    const { timeRange = '7d', sourceType = 'all' } = filters;
 
     return (
         <div className="filter-bar">
@@ -56,43 +60,30 @@ function GlobalFilters({
                 ))}
             </div>
 
-            <div style={{ width: '1px', height: '24px', background: 'var(--neutral-200)', margin: '0 8px' }} />
-
-            {/* Source Type */}
-            <div className="flex gap-1">
-                {SOURCE_TYPES.map((source) => (
-                    <button
-                        key={source.id}
-                        className={`filter-pill ${sourceType === source.id ? 'filter-pill-active' : ''}`}
-                        onClick={() => onFilterChange({ ...filters, sourceType: source.id })}
-                    >
-                        {source.label}
-                    </button>
-                ))}
-            </div>
-
-            {showGeography && (
+            {showSourceType && (
                 <>
                     <div style={{ width: '1px', height: '24px', background: 'var(--neutral-200)', margin: '0 8px' }} />
-                    <select
-                        className="input select"
-                        value={geography}
-                        onChange={(e) => onFilterChange({ ...filters, geography: e.target.value })}
-                        style={{ width: 'auto', minWidth: '150px' }}
-                    >
-                        <option value="all">All Regions</option>
-                        <option value="us">United States</option>
-                        <option value="eu">Europe</option>
-                        <option value="other">Other</option>
-                    </select>
+
+                    {/* Source Type */}
+                    <div className="flex gap-1">
+                        {SOURCE_TYPES.map((source) => (
+                            <button
+                                key={source.id}
+                                className={`filter-pill ${sourceType === source.id ? 'filter-pill-active' : ''}`}
+                                onClick={() => onFilterChange({ ...filters, sourceType: source.id })}
+                            >
+                                {source.label}
+                            </button>
+                        ))}
+                    </div>
                 </>
             )}
 
             {/* Clear filters button */}
-            {(timeRange !== '7d' || sourceType !== 'all' || geography !== 'all') && (
+            {(timeRange !== '7d' || (showSourceType && sourceType !== 'all')) && (
                 <button
                     className="btn btn-ghost btn-sm"
-                    onClick={() => onFilterChange({ timeRange: '7d', sourceType: 'all', geography: 'all' })}
+                    onClick={() => onFilterChange({ timeRange: '7d', sourceType: 'all' })}
                 >
                     Clear filters
                 </button>
