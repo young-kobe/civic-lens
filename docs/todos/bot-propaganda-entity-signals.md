@@ -1,16 +1,18 @@
 # TODO — Feed news / political-entity signals into bot + propaganda calculations
 
-**Status:** Tracked, not started. Companion to [ui-redesign-plan.md](./ui-redesign-plan.md).
+**Status:** In progress. Bot-detector §"Sanitize whyFlagged at source" landed 2026-04-23; other bot items partially covered by `_enrich_x_metadata` pre-exclusion in `job_runner.py`. Propaganda items still deferred.
 
-**Why this doc exists:** Once the UI redesign builds curated registries for
-major news outlets, verified officials, and major subreddits
-(ui-redesign-plan.md Phase 2), those registries become a proprietary
+**Why this doc exists:** The UI redesign built curated registries for
+major news outlets, verified officials, and major subreddits (see
+`docs/audit-trail/ui/` entries). Those registries are a proprietary
 signal we can feed *back into* the AI detectors to improve accuracy.
-Right now the bot detector and propaganda detector treat every account /
-domain as anonymous. That's leaving signal on the floor.
+Currently the bot detector and propaganda detector treat every account /
+domain as mostly-anonymous. That's leaving signal on the floor.
 
-This doc is a reminder list of what to add and how, not a complete design.
-When picking this up, promote each bullet into a proper walkthrough.
+Each bullet below, when picked up, lands as a dated entry under
+`docs/audit-trail/analysis/` — not a walkthrough (the walkthroughs
+sequence was retired in favor of layered audit-trail buckets; see
+`docs/audit-trail/README.md`).
 
 ---
 
@@ -31,26 +33,45 @@ That produces two failure modes:
    rhythm gets flagged as "suspected automation" when the posts are
    legitimate communications from a named human officeholder.
 2. **Missed context on flagged amplifiers.** Noise in `whyFlagged`
-   (e.g. `followers=0`, `account_age=None`) the UI currently strips at
-   display time (see walkthrough 052). The canonical fix belongs in the
-   detector.
+   (e.g. `followers=0`, `account_age=None`) originates in the LLM
+   prompt (missing signal fields render as the string "None", which
+   the LLM echoes back in its indicators list).
 
 ### What to add
 
-- [ ] **Registry lookup as a negative signal.** If the author's handle
-  matches `data/verified_officials.yaml` or `data/known_political_x_accounts.yaml`,
-  cap the bot-likelihood at `low` regardless of behavioral signals.
-  Store the registry match on the output so the audit trail shows
-  "excluded by registry match" rather than silent overrides.
+- [ ] **Registry lookup as a negative signal** — needs rethinking.
+  Partial support via `_enrich_x_metadata` in
+  `analysis/src/scheduler/job_runner.py` pre-excludes X accounts whose
+  `verified_type='government'` (White House / federal agency channels
+  that are human-run by institutional necessity). A wider rule that
+  pre-excluded any `tier in ("elected_official", "affiliated")` account
+  was REVERTED on 2026-04-23: politicians and their staff legitimately
+  use automation (scheduled cross-posting, party-coordinated messaging,
+  platform-native scheduling tools), and blanket exclusion made the
+  "Politicians & Officials" tier on the Bot Detector page permanently
+  empty. Elected officials now flow through the normal bot pipeline.
+  The future design question for this item is: is there a more surgical
+  registry-based signal than a blanket cap? Possibilities: downweight
+  (not zero) for registry matches, exclude only for specific
+  high-verification institutional accounts, or always-run-but-separate
+  calibration cohort.
 - [ ] **Registry lookup as a positive-exemption signal.** For Reddit
   moderator accounts of major political subreddits (listed in
-  `major_subreddits.yaml` once built), also reduce bot-likelihood by
-  one notch — these are operationally active human accounts.
-- [ ] **Sanitize `whyFlagged` at source.** The UI currently filters out
-  entries matching `=None`, `=0`, `=null`, `=undefined` before display
-  (`sanitizeWhyFlagged` in `BotActivityProfiler.tsx`). Move that into
-  the bot detector's signal generator so non-signal strings never
-  reach the output. Once this lands, remove the UI workaround.
+  `major_subreddits.yaml` once built), reduce bot-likelihood by one
+  notch — these are operationally active human accounts.
+- [x] **Sanitize `whyFlagged` at source** — landed 2026-04-23. Two-part
+  fix in `analysis/src/engine/bot.py`:
+    1. `_safe_prompt_value()` substitutes None / missing signal fields
+       with "unknown" in the LLM prompt, so the model never sees a
+       placeholder it might echo verbatim.
+    2. `_sanitize_llm_indicators()` filters the returned indicators
+       array, dropping any `=None` / `=0` / `=null` / `=undefined` /
+       trailing-`=` entries that slip through.
+  UI-side `sanitizeWhyFlagged` + `isNoiseNarrative` workarounds in
+  `BotActivityProfiler.tsx` removed. Unit tests in
+  `analysis/tests/test_bot_indicator_sanitization.py` (12 cases).
+  Historical ai_outputs rows written before this fix may surface noise
+  until they age out of the snapshot windows (~7 days).
 - [ ] **Per-entity amplification attribution.** When the detector
   identifies coordinated amplification of a narrative, surface *which
   registered entity (official / outlet / subreddit)* the amplification
@@ -60,16 +81,20 @@ That produces two failure modes:
 
 ### Where the code lives
 
-- `analysis/src/engine/bot_detector.py` (and related files in `engine/`).
-- Registry-match signal should be applied late in the scoring pipeline,
-  after behavioral scores compute, so the audit trail retains the raw
-  behavioral numbers that *would have* flagged the account.
+- `analysis/src/engine/bot.py` (+ prompt/schema in `analysis/src/llm/`).
+- `analysis/src/scheduler/job_runner.py::_enrich_x_metadata` already does
+  the pre-exclusion pass; extending to consult `verified_officials.yaml`
+  directly happens there.
+- Registry-match signal is applied late in the scoring pipeline (pre-LLM
+  exclusion or post-classification suppression) so the audit trail retains
+  the raw behavioral numbers that *would have* flagged the account.
 
-### Walkthrough
+### Audit-trail entry
 
-When picked up: walkthrough should cover the behavioral-raw-scores vs
-final-adjusted scores split, audit record changes, and any schema
-addition on `ai_outputs` (e.g. a `registry_match` field) if needed.
+When picked up: entry under `docs/audit-trail/analysis/` covers the
+behavioral-raw-scores vs final-adjusted scores split, audit record
+changes, and any schema addition on `ai_outputs` (e.g. a
+`registry_match` field) if needed.
 
 ---
 
@@ -112,14 +137,14 @@ input matters. Options, cheapest to most invasive:
 
 ### Where the code lives
 
-- `analysis/src/engine/propaganda_*.py`
-- Prompt: `analysis/src/engine/prompts.py` (bump prompt version if the
+- `analysis/src/engine/propaganda_detector.py`.
+- Prompt: `analysis/src/llm/prompts.py` (bump prompt version if the
   prompt changes — mandatory, see CLAUDE.md AI output contract).
 
-### Walkthrough
+### Audit-trail entry
 
-When picked up: walkthrough must include A/B evaluation results against
-the golden set — especially per-lean-bucket flag rates, to verify the
+When picked up: entry must include A/B evaluation results against the
+golden set — especially per-lean-bucket flag rates, to verify the
 detector isn't just learning "mark right-leaning outlets as propaganda"
 or vice versa. This is a tripwire for the project's audit-first
 invariant.
@@ -128,18 +153,15 @@ invariant.
 
 ## Ordering
 
-- Do **ui-redesign-plan.md Phase 2** first (the registries need to exist
-  before detectors can consume them).
-- Then bot detector work (lower risk, higher immediate value — kills
-  false positives on named officials).
+- Registries already exist (UI redesign Phase 2 completed).
+- Bot-detector "sanitize whyFlagged" landed 2026-04-23.
+- Remaining bot items next (lower risk, higher immediate value).
 - Propaganda work last, and only with measurable eval evidence.
 
 ---
 
 ## Revisit cadence
 
-Re-read this doc at the end of the UI redesign (after Phase 8 lands).
-By then the registries exist and the three-way framing makes the case
-for feeding entity context into the detectors self-evident.
-
 - 2026-04-21 — Doc created.
+- 2026-04-23 — Sanitize-at-source landed; registry de-bias partially
+  covered; remaining items re-ordered by risk.

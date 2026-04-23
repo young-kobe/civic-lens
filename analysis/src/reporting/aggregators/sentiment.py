@@ -22,6 +22,7 @@ from typing import Any, Dict, List, Optional, Set
 from analysis.src.common.cache import SnapshotCache
 from analysis.src.common.settings import get_settings
 from analysis.src.reporting.aggregators.base import (
+    X_AUTHOR_JOIN_SQL,
     fetch_task_rows,
     get_bot_flagged_doc_ids,
     get_connection,
@@ -117,10 +118,7 @@ class SentimentAggregator:
                 task_type="sentiment",
                 cutoff=cutoff,
                 min_confidence=min_conf,
-                extra_joins=(
-                    "LEFT JOIN x_posts_raw x ON d.source_type = 'x_post' AND x.tweet_id = d.ident "
-                    "LEFT JOIN x_users_raw u ON u.user_id = x.author_id"
-                ),
+                extra_joins=X_AUTHOR_JOIN_SQL,
             )
             favorability_rows = fetch_task_rows(
                 cursor,

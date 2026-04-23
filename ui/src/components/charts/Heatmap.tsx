@@ -79,21 +79,27 @@ function Heatmap({
                 )}
             </div>
 
-            {/* Hour labels row */}
-            <div className="flex gap-1 mb-1 text-xs text-muted" style={{ marginLeft: '40px' }}>
-                {[0, 6, 12, 18].map(h => (
-                    <span key={h} style={{ width: `${(cellSize + gap) * 6}px` }}>
-                        {formatHour(h)}
-                    </span>
-                ))}
-            </div>
-
-            {/* Grid — wrapped for horizontal scroll so the 24-col matrix
-                doesn't push the page out on narrow phones. */}
+            {/* Both hour labels and the 24-col grid live inside the same
+                horizontal-scroll wrapper so they stay aligned when the
+                viewport can't fit all 24 columns. Previously the hour
+                labels had a fixed 40px left-margin and sat outside the
+                scroll container, producing misaligned labels on phones. */}
             <div
                 onMouseLeave={() => setActive(null)}
                 style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}
             >
+                {/* Hour labels row — 40px leader matches the day-label
+                    column width so 00:00 aligns with the first cell. */}
+                <div
+                    className="flex gap-1 mb-1 text-xs text-muted"
+                    style={{ marginLeft: '40px', minWidth: 'max-content' }}
+                >
+                    {[0, 6, 12, 18].map(h => (
+                        <span key={h} style={{ width: `${(cellSize + gap) * 6}px` }}>
+                            {formatHour(h)}
+                        </span>
+                    ))}
+                </div>
                 {DAYS.map((day, dayIndex) => (
                     <div key={day} className="flex items-center gap-1 mb-1" style={{ minWidth: 'max-content' }}>
                         <span

@@ -659,7 +659,17 @@ code, pre {
 .btn-ghost { background: transparent; color: var(--neutral-600); }
 .btn-ghost:hover { background: var(--bg-inset); color: var(--neutral-800); }
 
-.btn-sm { padding: 4px var(--space-2); font-size: 10px; }
+.btn-sm { padding: 4px var(--space-2); font-size: 10px; min-height: 28px; }
+
+/* Mobile upsizes .btn-sm to meet the 44px WCAG tap-target minimum.
+   Keeps the compact look on desktop where mouse precision is fine. */
+@media (max-width: 640px) {
+  .btn-sm {
+    padding: 10px var(--space-3);
+    font-size: 12px;
+    min-height: 44px;
+  }
+}
 
 
 /* ============================================
@@ -1608,9 +1618,31 @@ code, pre {
   border-top: 1px solid var(--neutral-150);
 }
 
+/* Mini-metric row — deterministic 3-column grid.
+   Column 1 (auto):  label, fixed to its intrinsic width.
+   Column 2 (auto):  value, fixed to its intrinsic width.
+   Column 3 (1fr):   visuals — hosts a .mini-metric-visual flex wrapper
+                     containing fixed-width chart widgets (sparkline, bar,
+                     hint). The visual WRAPPER — not the children — owns
+                     the flex container, so adding/removing widgets never
+                     reshuffles the top-level grid.
+
+   Previously columns were `auto auto 1fr auto` and each call site
+   rendered children directly into them: `GOPMini` had 4 children
+   (label/value/trend/bar) and `IntensityMini` had 4 children
+   (label/value/bar/hint). The `bar` child ended up in different
+   columns in each — column 4 in GOP, column 3 in Intensity — because
+   grid places anonymous children in document order. Two consumers
+   looked visually different for no reason other than child count.
+
+   The fix is structural: consumers must wrap their visuals in a
+   .mini-metric-visual span. That wrapper is the only thing that
+   occupies column 3; the widgets inside it have fixed widths, so the
+   horizontal layout of every mini-metric is identical regardless of
+   the specific widgets shown. */
 .mini-metric {
   display: grid;
-  grid-template-columns: auto auto 1fr auto;
+  grid-template-columns: auto auto 1fr;
   gap: var(--space-2);
   align-items: center;
 }
@@ -1630,24 +1662,62 @@ code, pre {
   font-size: var(--text-sm);
   font-weight: 700;
   color: var(--neutral-800);
+  white-space: nowrap;
+}
+
+/* The visual wrapper pushes its widgets to the right edge of the grid
+   cell and gives them a small, consistent gap. Widgets are fixed-width
+   (trend 60px, bar 120px) so the cluster always occupies the same
+   horizontal space no matter which widgets are present. */
+.mini-metric-visual {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  min-width: 0;
 }
 
 .mini-metric-trend {
   display: block;
+  flex: 0 0 60px;
   width: 60px;
   height: 22px;
-  min-width: 60px;
+}
+
+/* Placeholder painted when a filter yields too few daily points to draw
+   a sparkline. A single dashed baseline reads as "no trend available"
+   without pretending to carry data. Keeps the 60px slot reserved so the
+   card renders identically whether the trend is present or not. */
+.mini-metric-trend-empty {
+  position: relative;
+}
+.mini-metric-trend-empty::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  border-top: 1px dashed var(--neutral-300);
 }
 
 .mini-metric-bar {
   display: flex;
-  width: 100%;
+  flex: 0 0 120px;
+  width: 120px;
   height: 8px;
   border-radius: 4px;
   overflow: hidden;
   background: var(--neutral-100);
 }
 .mini-metric-bar > span { display: block; height: 100%; }
+
+/* Empty states — render the slot at the same dimensions but visually
+   muted so the 2-up aux grid stays symmetric when one side has no data. */
+.mini-metric-value-muted { color: var(--neutral-400); }
+.mini-metric-bar-empty {
+  background: var(--neutral-100);
+  border: 1px dashed var(--neutral-300);
+}
 
 .mini-bar-favorable   { background: var(--chart-accent); }
 .mini-bar-neutral     { background: var(--neutral-300); }
@@ -1674,6 +1744,23 @@ code, pre {
   }
   .tier-row-verb { grid-column: 1 / -1; }
   .top-metrics-aux { grid-template-columns: 1fr; }
+}
+
+/* Phones — the fixed 60 + 120 + gap on the visual wrapper plus the
+   label + value intrinsic widths can exceed a 320px viewport. Collapse
+   to a two-row layout: label + value on the top row, visual cluster
+   on the bottom row spanning the full card. Both mini-metrics render
+   at the same height because the visuals take the same space. */
+@media (max-width: 640px) {
+  .mini-metric {
+    grid-template-columns: auto 1fr;
+    row-gap: var(--space-1);
+  }
+  .mini-metric-visual {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+  .mini-metric-bar { flex: 1 1 auto; width: 100%; min-width: 0; }
 }
 
 
@@ -1861,6 +1948,63 @@ code, pre {
   .topic-divergence-row-label { grid-column: 1 / 2; }
   .topic-divergence-row-range { grid-column: 2 / 3; }
   .topic-divergence-axis { grid-column: 1 / 3; }
+}
+
+
+/* Home page tab-card — reused for each of the dashboard entry buttons.
+   Uses CSS-only hover + focus-visible + active so keyboard and touch
+   users get the same affordance as mouse users. Previously the hover
+   state was applied via inline onMouseEnter which never fires for
+   keyboard-focus or tap-without-mouse. */
+.tab-card {
+  text-align: left;
+  background: var(--bg-card);
+  border: 1px solid var(--neutral-200);
+  border-radius: var(--radius-md);
+  padding: var(--space-4) var(--space-5);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 100%;
+  font-family: inherit;
+  color: inherit;
+  box-shadow: var(--shadow-sm);
+  transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+}
+
+.tab-card:hover,
+.tab-card:focus-visible {
+  border-color: var(--accent);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+  outline: none;
+}
+
+.tab-card:focus-visible {
+  /* keyboard-only affordance: accent ring overlays the border transition. */
+  box-shadow: var(--shadow-md), 0 0 0 2px var(--accent-light);
+}
+
+.tab-card:active {
+  transform: translateY(0);
+  box-shadow: var(--shadow-sm);
+}
+
+.tab-card-tagline { color: var(--accent); }
+.tab-card-title {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.tab-card-body {
+  font-size: var(--text-sm);
+  color: var(--neutral-600);
+  line-height: var(--leading-normal);
+}
+.tab-card-cta {
+  color: var(--neutral-500);
+  margin-top: var(--space-1);
 }
 
 
@@ -3053,6 +3197,13 @@ code, pre {
   .grid-auto { grid-template-columns: 1fr; }
   .site-footer-grid { grid-template-columns: 1fr; }
   .site-footer-bottom { flex-direction: column; align-items: flex-start; gap: var(--space-1); }
+
+  /* Review page — 5-stat bar collapses to 1-column on tiny phones.
+     At 320px, 2-column puts pairs like "Reviewer ID / Your confidence"
+     in ~130px slots that clip their labels. Single column lets each
+     Stat breathe and prevents label truncation. */
+  .review-stats-grid { grid-template-columns: 1fr; gap: var(--space-2); }
+  .review-stats-grid > :last-child { grid-column: auto; }
 }
 
 /* Respect reduced motion preference */

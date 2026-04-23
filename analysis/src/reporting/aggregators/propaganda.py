@@ -25,6 +25,7 @@ from typing import Any, Dict, List, Optional, Set
 from analysis.src.common.logger import get_logger
 from analysis.src.llm.schemas import PROPAGANDA_TECHNIQUE_ENUM
 from analysis.src.reporting.aggregators.base import (
+    X_AUTHOR_JOIN_SQL,
     get_connection,
     get_time_cutoff,
     source_filter_allowed,
@@ -169,7 +170,7 @@ class PropagandaAggregator:
         """Return (doc_id, source_type, domain, confidence, output_json,
         inference_method, x_handle). X handle is None for non-X rows;
         used for the three-way entity rollup (walkthrough 058)."""
-        sql = """
+        sql = f"""
             SELECT a.doc_id,
                    d.source_type,
                    d.domain_or_subreddit,
@@ -179,9 +180,7 @@ class PropagandaAggregator:
                    u.username
             FROM ai_outputs a
             JOIN docs d ON d.doc_id = a.doc_id
-            LEFT JOIN x_posts_raw x
-              ON d.source_type = 'x_post' AND x.tweet_id = d.ident
-            LEFT JOIN x_users_raw u ON u.user_id = x.author_id
+            {X_AUTHOR_JOIN_SQL}
             WHERE a.task_type = 'propaganda'
               AND COALESCE(a.inference_method, '') != 'deterministic'
         """
@@ -194,7 +193,7 @@ class PropagandaAggregator:
 
     def _fetch_examples(self, cursor, cutoff) -> List[tuple]:
         """Most-recent flagged docs for the Examples card."""
-        sql = """
+        sql = f"""
             SELECT a.doc_id,
                    d.source_type,
                    d.domain_or_subreddit,
@@ -207,9 +206,7 @@ class PropagandaAggregator:
                    u.username
             FROM ai_outputs a
             JOIN docs d ON d.doc_id = a.doc_id
-            LEFT JOIN x_posts_raw x
-                   ON d.source_type = 'x_post' AND x.tweet_id = d.ident
-            LEFT JOIN x_users_raw u ON u.user_id = x.author_id
+            {X_AUTHOR_JOIN_SQL}
             WHERE a.task_type = 'propaganda'
               AND COALESCE(a.inference_method, '') != 'deterministic'
               AND a.confidence >= ?

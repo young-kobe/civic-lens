@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Optional
 
 from analysis.src.common.logger import get_logger
 from analysis.src.reporting.aggregators.base import (
+    X_AUTHOR_JOIN_SQL,
     get_connection,
     get_time_cutoff,
 )
@@ -233,12 +234,11 @@ class NarrativeAggregator:
           * reddit_post / reddit_comment → 'public'
         """
         officials_handles = {h for h in get_registry().officials.keys()}
-        sql = """
+        sql = f"""
             SELECT DISTINCT d.source_type, LOWER(u.username)
             FROM narrative_docs nd
             JOIN docs d ON d.doc_id = nd.doc_id
-            LEFT JOIN x_posts_raw x ON x.tweet_id = d.ident AND d.source_type = 'x_post'
-            LEFT JOIN x_users_raw u ON u.user_id = x.author_id
+            {X_AUTHOR_JOIN_SQL}
             WHERE nd.narrative_id = ?
         """
         params: List[Any] = [narrative_id]
@@ -352,15 +352,13 @@ class NarrativeAggregator:
         if first_seen_doc_id is None:
             return None, None, None, None, None
         cursor.execute(
-            """
+            f"""
             SELECT d.source_type, d.domain_or_subreddit,
                    ap.tier, ap.full_name, ap.party, ap.branch, ap.chamber,
                    ap.state_or_district, ap.office_title, ap.account_type,
                    x.author_id, u.username
             FROM docs d
-            LEFT JOIN x_posts_raw x
-              ON d.source_type = 'x_post' AND x.tweet_id = d.ident
-            LEFT JOIN x_users_raw u ON u.user_id = x.author_id
+            {X_AUTHOR_JOIN_SQL}
             LEFT JOIN account_profiles ap
               ON ap.platform = 'x' AND ap.author_id = x.author_id
             WHERE d.doc_id = ?
@@ -496,15 +494,13 @@ class NarrativeAggregator:
         synthesized here — "News · nytimes.com" / "X · @Schumer" /
         "Reddit · r/politics" — so the UI doesn't have to re-derive it.
         """
-        sql = """
+        sql = f"""
             SELECT d.doc_id, d.title, d.source_type, d.domain_or_subreddit,
                    d.ident, d.published_at, u.username,
                    a.output_json, a.confidence
             FROM narrative_docs nd
             JOIN docs d ON d.doc_id = nd.doc_id
-            LEFT JOIN x_posts_raw x
-                   ON d.source_type = 'x_post' AND x.tweet_id = d.ident
-            LEFT JOIN x_users_raw u ON u.user_id = x.author_id
+            {X_AUTHOR_JOIN_SQL}
             LEFT JOIN ai_outputs a
                    ON a.doc_id = d.doc_id
                   AND a.task_type = 'sentiment'

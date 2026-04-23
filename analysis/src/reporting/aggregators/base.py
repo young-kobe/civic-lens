@@ -24,6 +24,23 @@ TIME_WINDOWS = {
     "all": None,
 }
 
+
+# Canonical SQL fragment joining docs → x_posts_raw → x_users_raw so an
+# aggregator row can pick up the X author (handle, name, verification,
+# follower counts, etc.) via `u.*` / `x.*`. Ten aggregator query sites
+# duplicated these two joins verbatim; centralizing one fragment keeps
+# them drift-free and means a future schema change (e.g., a new x_authors
+# view) touches exactly one constant.
+#
+# The joins assume the caller aliases `docs AS d`. Both joins are LEFT
+# so non-x_post rows pass through with NULLs in the x.* / u.* columns —
+# callers filter by `d.source_type = 'x_post'` when they only want X docs.
+X_AUTHOR_JOIN_SQL = (
+    "LEFT JOIN x_posts_raw x "
+    "ON d.source_type = 'x_post' AND x.tweet_id = d.ident "
+    "LEFT JOIN x_users_raw u ON u.user_id = x.author_id"
+)
+
 # UI-facing source filter keys mapped to the set of doc source_type values
 # they select. "all" means no filter. Keep in lockstep with the Filters
 # type in ui/src/types.ts.

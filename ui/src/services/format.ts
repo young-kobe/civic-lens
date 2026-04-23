@@ -5,10 +5,15 @@
  * rendered UI: the backend *should* emit well-formed percentages in
  * [0, 100] (or [-100, 100] for signed measures), but aggregator bugs
  * can produce values outside those ranges — e.g. a historical
- * `pct_of_flagged_docs` bug that counted multiple evidence spans per
- * doc rendered as "Loaded language: 197% of flagged posts." Clamping
- * + a dev-only warning catches those regressions before they reach a
- * reader.
+ * `pct_of_flagged_docs` bug counted multiple evidence spans per doc and
+ * rendered as "Loaded language: 197% of flagged posts."
+ *
+ * Policy: when a value is outside its declared range, render the
+ * fallback ("—" by default), NOT a clamped edge value. Clamping 197
+ * to "100%" would still show a false number — and a false number in a
+ * data-integrity dashboard is the failure mode we explicitly don't
+ * accept. "—" plus a dev-mode console warning is the honest signal:
+ * something is wrong upstream, fix it at the source.
  */
 
 export interface FormatPctOpts {
@@ -31,11 +36,16 @@ export interface FormatPctOpts {
  * Format a number as a percentage string for display.
  *
  *   formatPct(34.5)                        → "34.5%"
- *   formatPct(197)                         → "100%" (+ dev warning)
+ *   formatPct(197)                         → "—" (+ dev warning)
  *   formatPct(null)                        → "—"
  *   formatPct(12.3, { decimals: 0 })       → "12%"
  *   formatPct(12.3, { signed: true })      → "+12.3%"
  *   formatPct(-15, { min: -100, signed: true }) → "-15.0%"
+ *
+ * Out-of-range values return the fallback rather than clamping to the
+ * edge, because a clamped "100%" derived from a buggy 197 is still a
+ * false number — and the reader has no way to tell those apart. "—"
+ * reads honestly as "we don't have a trustworthy number here."
  */
 export function formatPct(
     value: number | null | undefined,
@@ -47,17 +57,19 @@ export function formatPct(
     }
     const min = opts.min ?? 0;
     const max = opts.max ?? 100;
-    const clamped = Math.max(min, Math.min(max, value));
-    if (clamped !== value && typeof import.meta !== 'undefined' && (import.meta as ImportMeta).env?.DEV) {
-        // eslint-disable-next-line no-console
-        console.warn(
-            `formatPct: value ${value} clamped to [${min}, ${max}] → ${clamped}. ` +
-            `Likely a backend aggregator bug — investigate the source field.`,
-        );
+    if (value < min || value > max) {
+        if (typeof import.meta !== 'undefined' && (import.meta as ImportMeta).env?.DEV) {
+            // eslint-disable-next-line no-console
+            console.warn(
+                `formatPct: value ${value} outside [${min}, ${max}] — rendering "${fallback}". ` +
+                `Likely a backend aggregator bug — investigate the source field.`,
+            );
+        }
+        return fallback;
     }
     const decimals = opts.decimals ?? 1;
-    const sign = opts.signed && clamped > 0 ? '+' : '';
-    return `${sign}${clamped.toFixed(decimals)}%`;
+    const sign = opts.signed && value > 0 ? '+' : '';
+    return `${sign}${value.toFixed(decimals)}%`;
 }
 
 /**

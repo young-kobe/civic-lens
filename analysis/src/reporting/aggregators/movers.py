@@ -17,6 +17,7 @@ import json
 from typing import Any, Dict, List, Optional, Tuple
 
 from analysis.src.reporting.aggregators.base import (
+    X_AUTHOR_JOIN_SQL,
     get_connection,
     get_previous_window_range,
     get_time_cutoff,
@@ -79,15 +80,13 @@ class MoversAggregator:
         ``end_ts=None`` means "up to now" (current window). Otherwise bounded
         so the previous window doesn't bleed into the current one.
         """
-        sql = """
+        sql = f"""
             SELECT a.output_json, a.confidence,
                    d.source_type, d.domain_or_subreddit,
                    u.username
             FROM ai_outputs a
             JOIN docs d ON d.doc_id = a.doc_id
-            LEFT JOIN x_posts_raw x
-                   ON d.source_type = 'x_post' AND x.tweet_id = d.ident
-            LEFT JOIN x_users_raw u ON u.user_id = x.author_id
+            {X_AUTHOR_JOIN_SQL}
             WHERE a.task_type = 'sentiment'
               AND COALESCE(a.inference_method, '') != 'deterministic'
               AND d.published_at >= ?

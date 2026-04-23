@@ -96,29 +96,18 @@ function friendlyCluster(cluster: string): string {
     return cluster.replace(/^www\./i, '');
 }
 
-/**
- * A "narrative" in narrativeAmplification is sometimes a raw signal string
- * like `account_age=None days` or `followers=0` — the detector emits those
- * when a specific field has no useful value. Those aren't topics a reader
- * can reason about, so don't surface them in the banner. sanitizeWhyFlagged
- * below uses the same noise patterns for the flagged-indicators list.
- */
-function isNoiseNarrative(label: string | null | undefined): boolean {
-    if (!label) return true;
-    const text = label.trim();
-    if (!text) return true;
-    if (/=\s*(None|null|undefined|0)\b/i.test(text)) return true;
-    if (/=\s*$/.test(text)) return true;
-    return false;
-}
-
-/** Headline derived from top flagged cluster + automation rate. */
+/** Headline derived from top flagged cluster + automation rate.
+ *
+ *  The backend bot detector (analysis/src/engine/bot.py::_sanitize_llm_indicators)
+ *  already drops `=None` / `=0` / `=null` / `=undefined` / trailing-`=`
+ *  noise at the source, so this code can trust `narrativeAmplification[0]`
+ *  to be a real topic label rather than a field-name artifact. Any
+ *  historical ai_outputs rows written before that fix will age out of
+ *  the snapshot windows within 7 days. */
 function readsAsToday(data: BotData): string {
     const rate = data.overview.suspectedAutomationRate;
     const topCluster = data.overview.topClusters[0];
-    const topNarrative = data.narrativeAmplification.find(
-        (n) => !isNoiseNarrative(n.narrative),
-    );
+    const topNarrative = data.narrativeAmplification[0];
     const parts: string[] = [];
     const ratePct = formatPct(rate, { decimals: 0 });
     if (rate > 10) {
@@ -218,36 +207,17 @@ interface NarrativeAmplificationCardProps {
     narrative: NarrativeAmplification;
 }
 
-/**
- * Drop `whyFlagged` entries that don't carry useful evidence. The backend
- * sometimes emits raw `key=value` signal strings where the value is None,
- * 0, or empty — those are absence-of-data, not signal. Keeping them on
- * the card pollutes the "Why Flagged" list with noise that reads like
- * false positives to a user. Filtering at the UI level is a workaround;
- * the canonical fix belongs in the bot detector's signal generator
- * (see follow-ups).
- */
-function sanitizeWhyFlagged(reasons: string[]): string[] {
-    const noisePatterns: RegExp[] = [
-        /=\s*None\b/i,      // account_age=None days
-        /=\s*0(\s|$)/,       // followers=0 / following=0
-        /=\s*$/,             // key=
-        /=\s*null\b/i,
-        /=\s*undefined\b/i,
-    ];
-    return reasons.filter((r) => {
-        const text = (r || '').trim();
-        if (!text) return false;
-        return !noisePatterns.some((re) => re.test(text));
-    });
-}
-
 function NarrativeAmplificationCard({ narrative }: NarrativeAmplificationCardProps) {
     const [modalOpen, setModalOpen] = useState(false);
-    const cleanWhyFlagged = sanitizeWhyFlagged(narrative.whyFlagged);
-    // If every signal was noise, suppress the whole card — surfacing an
-    // "amplification" with no real evidence is misleading.
-    if (cleanWhyFlagged.length === 0) return null;
+    // `whyFlagged` is sanitized by the backend bot detector now —
+    // `_sanitize_llm_indicators` in analysis/src/engine/bot.py drops any
+    // `=None` / `=0` / `=null` / `=undefined` / trailing-`=` noise before
+    // the indicators ever reach ai_outputs. See
+    // docs/todos/bot-propaganda-entity-signals.md (§"Sanitize whyFlagged
+    // at source"). We still short-circuit on an empty list so the card
+    // doesn't render with a title but no "Why Flagged" content.
+    const whyFlagged = narrative.whyFlagged ?? [];
+    if (whyFlagged.length === 0) return null;
 
     const getConfidenceBadge = (confidence: ConfidenceLevel) => {
         switch (confidence) {
@@ -289,7 +259,7 @@ function NarrativeAmplificationCard({ narrative }: NarrativeAmplificationCardPro
                 <div>
                     <div className="eyebrow mb-2">Why Flagged · Coordination Indicators</div>
                     <ul style={{ margin: 0, paddingLeft: 'var(--space-5)' }} className="text-sm">
-                        {cleanWhyFlagged.map((reason, i) => (
+                        {whyFlagged.map((reason, i) => (
                             <li key={i} className="mb-1">{reason}</li>
                         ))}
                     </ul>
@@ -385,7 +355,7 @@ function NarrativeAmplificationCard({ narrative }: NarrativeAmplificationCardPro
                 <div>
                     <div className="eyebrow mb-2">Why Flagged · Coordination Indicators</div>
                     <ul style={{ margin: 0, paddingLeft: 'var(--space-5)' }} className="text-sm">
-                        {cleanWhyFlagged.map((reason, i) => (
+                        {whyFlagged.map((reason, i) => (
                             <li key={i} className="mb-1">{reason}</li>
                         ))}
                     </ul>

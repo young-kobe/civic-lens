@@ -15,48 +15,22 @@ interface TabCardProps {
 }
 
 function TabCard({ tabId, title, tagline, body, onClick }: TabCardProps) {
+    // All interactive styling (hover/focus/active) lives in the
+    // `.tab-card` CSS class so keyboard users and touch users get the
+    // same affordances as mouse users. Previously the hover state was
+    // applied inline via onMouseEnter, which never fires for
+    // keyboard-focus or touch, so tab navigation produced no visual
+    // feedback.
     return (
         <button
             type="button"
             onClick={() => onClick(tabId)}
             className="tab-card"
-            style={{
-                textAlign: 'left',
-                background: 'var(--bg-card)',
-                border: '1px solid var(--neutral-200)',
-                borderRadius: 'var(--radius-md)',
-                padding: 'var(--space-4) var(--space-5)',
-                cursor: 'pointer',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 'var(--space-2)',
-                width: '100%',
-                fontFamily: 'inherit',
-                color: 'inherit',
-                transition: 'border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease',
-            }}
-            onMouseEnter={(e) => {
-                e.currentTarget.style.borderColor = COLORS.accent;
-                e.currentTarget.style.boxShadow = 'var(--shadow-md)';
-                e.currentTarget.style.transform = 'translateY(-1px)';
-            }}
-            onMouseLeave={(e) => {
-                e.currentTarget.style.borderColor = 'var(--neutral-200)';
-                e.currentTarget.style.boxShadow = 'var(--shadow-sm)';
-                e.currentTarget.style.transform = 'translateY(0)';
-            }}
         >
-            <div className="eyebrow" style={{ color: COLORS.accent }}>{tagline}</div>
-            <div style={{ fontSize: 'var(--text-lg)', fontWeight: 600, letterSpacing: '-0.01em' }}>{title}</div>
-            <div style={{ fontSize: 'var(--text-sm)', color: 'var(--neutral-600)', lineHeight: 'var(--leading-normal)' }}>
-                {body}
-            </div>
-            <div
-                className="eyebrow"
-                style={{ color: 'var(--neutral-500)', marginTop: 'var(--space-1)' }}
-            >
-                Open &rarr;
-            </div>
+            <div className="eyebrow tab-card-tagline">{tagline}</div>
+            <div className="tab-card-title">{title}</div>
+            <div className="tab-card-body">{body}</div>
+            <div className="eyebrow tab-card-cta">Open &rarr;</div>
         </button>
     );
 }

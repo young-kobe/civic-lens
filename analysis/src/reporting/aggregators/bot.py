@@ -24,7 +24,7 @@ import statistics
 from collections import Counter, defaultdict
 from typing import Any, Dict, Iterable, List, Tuple
 
-from analysis.src.reporting.aggregators.base import get_connection
+from analysis.src.reporting.aggregators.base import X_AUTHOR_JOIN_SQL, get_connection
 from analysis.src.reporting.aggregators.narrative import (
     _build_doc_url,
     _build_source_label,
@@ -97,8 +97,9 @@ class BotAggregator:
                    u.username
             FROM ai_outputs a
             JOIN docs d ON a.doc_id = d.doc_id
-            LEFT JOIN x_posts_raw x ON d.source_type = 'x_post' AND x.tweet_id = d.ident
-            LEFT JOIN x_users_raw u ON u.user_id = x.author_id
+            """
+            + X_AUTHOR_JOIN_SQL
+            + """
             WHERE a.task_type = 'bot_detection'
             """
         )
@@ -263,9 +264,9 @@ class BotAggregator:
                    u.username
             FROM ai_outputs a
             JOIN docs d ON d.doc_id = a.doc_id
-            LEFT JOIN x_posts_raw x
-                   ON d.source_type = 'x_post' AND x.tweet_id = d.ident
-            LEFT JOIN x_users_raw u ON u.user_id = x.author_id
+            """
+            + X_AUTHOR_JOIN_SQL
+            + """
             WHERE a.task_type = 'bot_detection'
             """
         )

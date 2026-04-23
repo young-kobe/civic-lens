@@ -130,6 +130,12 @@ export default function ReviewItemCard({ item, reviewerId, onSubmitted }: Review
                         borderLeft: '3px solid var(--neutral-300)',
                         fontSize: 'var(--text-sm)',
                         whiteSpace: 'pre-wrap',
+                        // Break long unbroken strings (URLs, concatenated
+                        // tokens) so they don't force horizontal scroll on
+                        // phones. overflowWrap handles the common case,
+                        // wordBreak catches CJK and very long URLs.
+                        overflowWrap: 'anywhere',
+                        wordBreak: 'break-word',
                         maxHeight: 240,
                         overflow: 'auto',
                     }}

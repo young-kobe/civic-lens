@@ -1,0 +1,38 @@
+[Unit]
+Description=Civic Lens failure alerter for %i
+# Templated unit — invoked by OnFailure= on civic-lens-* services.
+# The %i placeholder is substituted with the failing unit's full name
+# (e.g. civic-lens-analyze.service) via `OnFailure=civic-lens-alert@%n.service`.
+
+[Service]
+Type=oneshot
+User=civic-lens
+Group=civic-lens
+WorkingDirectory=/var/lib/civic-lens
+EnvironmentFile=/etc/civic-lens.env
+# The system Python is fine here — the alerter uses only stdlib
+# (smtplib, email, subprocess). Avoiding the project .venv lets the alert
+# fire even if the venv itself is the thing that broke.
+ExecStart=/usr/bin/python3 /opt/civic-lens/deploy/scripts/send-alert.py %i
+# Cap time spent on alerting — a misconfigured SMTP server must not
+# leave the alerter running forever. The script's internal SMTP_TIMEOUT
+# is 15s; 60s here is a generous outer bound.
+TimeoutStartSec=60s
+
+# Hardening — less strict than the pipeline because we need journalctl +
+# systemctl access (ReadOnlyPaths for /run/systemd happens automatically
+# under ProtectSystem=strict). Outbound SMTP on 587 is allowed because we
+# don't set RestrictAddressFamilies.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryMax=128M
+CPUQuota=50%
+TasksMax=16

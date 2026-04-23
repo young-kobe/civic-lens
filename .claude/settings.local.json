@@ -14,7 +14,8 @@
       "Bash(grep -E \"\\\\.\\(tsx|ts\\)$\")",
       "Bash(PYTHONPATH=. ./analysis/.venv/Scripts/python.exe -m unittest discover analysis/tests)",
       "Bash(npm uninstall *)",
-      "Bash(awk -F'[,{ ]' '{print $1}')"
+      "Bash(awk -F'[,{ ]' '{print $1}')",
+      "Bash(PYTHONPATH=. ./analysis/.venv/Scripts/python.exe *)"
     ]
   }
 }

@@ -16,9 +16,8 @@ export function formatPct(
 Behavior:
 
 - `null` / `undefined` / non-finite → `"—"` (configurable via `fallback`).
-- Clamps to `[min, max]` before formatting. Defaults to `[0, 100]`; pass `{ min: -100 }` for signed measures like net sentiment.
+- **Out of `[min, max]` → `"—"` (not clamped to the edge).** Defaults to `[0, 100]`; pass `{ min: -100 }` for signed measures like net sentiment. Rationale: a clamped "100%" derived from a buggy 197 is still a *false* number, and data-integrity dashboards can't afford false numbers. "—" reads honestly as "we don't have a trustworthy value here," and the dev-mode console warning points whoever has DevTools open at the upstream aggregator bug.
 - `signed: true` prefixes `+` on positive values (for diff-style display).
-- When clamping activates in development, prints a `console.warn` naming the value and the clamped result, so the backend bug surfaces to whichever engineer is in DevTools.
 
 Also exports `clampWidthPct(value)` — returns a plain 0-100 number for piping into `style={{ width: \`${x}%\` }}` where a "—" would break layout.
 
@@ -46,9 +45,11 @@ Dead-code cleanup along the way: four unused `const sign = x >= 0 ? '+' : ''` de
 
 User feedback: *"we need to guard against erroneous percentages like this everywhere before displaying on ui."*
 
-Context: the 197% on `pct_of_flagged_docs` was a real backend bug (multiple evidence spans per doc inflated the counter), already fixed at the source in `analysis/2026-04-22-propaganda-technique-pct-dedup.md`. The UI-side guard is the belt on top of those suspenders — it makes the class of bug visible-but-non-fatal the next time anything similar slips through, so a user's first encounter is never "the app shows nonsense" but "the number is capped at 100% and we see the warning in DevTools."
+Context: the 197% on `pct_of_flagged_docs` was a real backend bug (multiple evidence spans per doc inflated the counter), already fixed at the source in `analysis/2026-04-22-propaganda-technique-pct-dedup.md`. The UI-side guard is the belt on top of those suspenders — it makes the class of bug visible-but-non-fatal the next time anything similar slips through.
 
-The guard is a pure presentation layer — it does not, and cannot, reconstruct the *correct* value from a corrupted backend field. When the underlying `count` is inflated, clamping the rendered % hides the magnitude of the bug but the correct number only comes back once the backend regenerates the affected cache (in this case, re-running `analyze -Tasks propaganda,snapshots` with the fixed aggregator).
+**Policy follow-up (2026-04-23):** the first cut of `formatPct` clamped out-of-range values to the nearest edge. User pushed back: "we must not show incorrect numbers." A clamped "100%" from a buggy 197 is still false — the reader cannot distinguish it from a legitimate 100%. Revised to return the fallback (`"—"` by default) instead. Honest missing-data beats a plausible-looking lie.
+
+The guard is a pure presentation layer — it does not, and cannot, reconstruct the *correct* value from a corrupted backend field. The correct number only comes back once the backend regenerates the affected cache (in this case, re-running `analyze -Tasks propaganda,snapshots` with the fixed aggregator).
 
 ## Follow-ups
 

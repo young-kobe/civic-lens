@@ -306,7 +306,12 @@ class HybridBotDetector:
             is_bot=is_bot,
             label=label,
             confidence=round(confidence, 3),
-            indicators=indicators,
+            # Pass through the sanitizer so any `=None`-style string slipped
+            # in by an upstream helper is dropped. The heuristic branch
+            # doesn't generate those today, but running the same filter on
+            # both code paths keeps the output contract uniform — one
+            # canonical shape regardless of which classifier ran.
+            indicators=_sanitize_llm_indicators(indicators),
             reasoning=f"Heuristic classification, aggregated_score={score:.2f}",
             deterministic_signals=signals,
             inference_method="heuristic",
@@ -316,6 +321,12 @@ class HybridBotDetector:
     # ---------- LLM classification ----------
 
     def _llm_classify(self, text: str, signals: Dict[str, Any]) -> BotResult:
+        # Previously `signals.get(key, "N/A")` returned None when the key
+        # EXISTED with value None — so the prompt rendered lines like
+        # "Account age: None days" and the LLM echoed those literals back
+        # in its indicators list ("account_age=None days"). Now we
+        # substitute any None / empty value with "unknown" so the model
+        # never sees ambiguous placeholders in the first place.
         user_prompt = BOT_USER_PROMPT_TEMPLATE.format(
             text=text[:1500],
             # Text / behavioral context
@@ -329,13 +340,14 @@ class HybridBotDetector:
             hedge_phrase_hits=signals["hedge_phrase_hits"],
             hedge_phrase_rate=signals["hedge_phrase_rate"],
             typographic_purity_score=signals["typographic_purity_score"],
-            # Account metadata
-            account_age_days=signals.get("account_age_days", "N/A"),
-            posting_frequency=signals.get("posting_frequency", "N/A"),
-            followers=signals.get("followers", "N/A"),
-            following=signals.get("following", "N/A"),
-            listed_count=signals.get("listed_count", "N/A"),
-            verified_type=signals.get("verified_type", "N/A"),
+            # Account metadata — route through _safe_prompt_value so None
+            # renders as "unknown" rather than the literal string "None".
+            account_age_days=_safe_prompt_value(signals.get("account_age_days")),
+            posting_frequency=_safe_prompt_value(signals.get("posting_frequency")),
+            followers=_safe_prompt_value(signals.get("followers")),
+            following=_safe_prompt_value(signals.get("following")),
+            listed_count=_safe_prompt_value(signals.get("listed_count")),
+            verified_type=_safe_prompt_value(signals.get("verified_type")),
         )
 
         try:
@@ -345,11 +357,17 @@ class HybridBotDetector:
                 response_schema=BOT_SCHEMA,
             )
             llm_text_lik = float(response.get("llm_text_likelihood", 0.0))
+            # Belt-and-suspenders: even with the prompt cleanup above, older
+            # stored outputs + the occasional LLM-generated placeholder string
+            # can leak noise entries. Filter them at the boundary so the UI
+            # never has to work around it. Canonical fix for todos/
+            # bot-propaganda-entity-signals.md §"Sanitize whyFlagged at source".
+            raw_indicators = response.get("indicators", [])
             return BotResult(
                 is_bot=response.get("is_bot", False),
                 label=response.get("label", "human"),
                 confidence=float(response.get("confidence", 0.5)),
-                indicators=response.get("indicators", []),
+                indicators=_sanitize_llm_indicators(raw_indicators),
                 reasoning=response.get("reasoning"),
                 deterministic_signals=signals,
                 inference_method="llm",
@@ -402,6 +420,59 @@ class HybridBotDetector:
 # =============================================================================
 # Module-level helpers (pure functions, easy to unit-test)
 # =============================================================================
+
+
+def _safe_prompt_value(value: Any) -> str:
+    """Return a human-readable string for an LLM prompt field that never
+    surfaces the literal Python ``None`` / empty-string as a visible value.
+
+    Why: BOT_USER_PROMPT_TEMPLATE lines like "Account age: {account_age_days} days"
+    render "Account age: None days" when the signal is None. The LLM sometimes
+    echoes those literals back in its `indicators` list, producing entries like
+    "account_age=None days" that reach the UI as noise. Feeding "unknown"
+    removes the ambiguous placeholder from the model's input entirely.
+    """
+    if value is None:
+        return "unknown"
+    text = str(value).strip()
+    if not text or text.lower() in {"none", "null", "undefined", "n/a"}:
+        return "unknown"
+    return text
+
+
+# Noise patterns for post-hoc indicator sanitization. Mirrors (and supersedes)
+# the `sanitizeWhyFlagged` filter the UI used to apply in BotActivityProfiler.
+# Matched entries are dropped from the indicators list before persistence,
+# so downstream consumers (UI, review queue, narrative-amplification rollups)
+# only ever see signal-bearing strings.
+_NOISE_INDICATOR_PATTERNS: Tuple[re.Pattern, ...] = (
+    re.compile(r"=\s*None\b", re.IGNORECASE),
+    re.compile(r"=\s*null\b", re.IGNORECASE),
+    re.compile(r"=\s*undefined\b", re.IGNORECASE),
+    re.compile(r"=\s*0(\s|$)"),
+    re.compile(r"=\s*$"),
+)
+
+
+def _sanitize_llm_indicators(raw: Any) -> List[str]:
+    """Drop noise entries from the LLM's indicator list.
+
+    The LLM's structured output says ``indicators`` is a list of strings, but
+    we defensively coerce non-string entries to str so a malformed response
+    doesn't raise. Empty strings and entries matching a noise pattern are
+    skipped; everything else passes through unchanged.
+    """
+    if not isinstance(raw, list):
+        return []
+    out: List[str] = []
+    for item in raw:
+        text = str(item).strip() if item is not None else ""
+        if not text:
+            continue
+        if any(p.search(text) for p in _NOISE_INDICATOR_PATTERNS):
+            continue
+        out.append(text)
+    return out
 
 
 def _empty_signals() -> Dict[str, Any]:

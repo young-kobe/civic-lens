@@ -6,18 +6,12 @@ The UI redesign consolidated shared primitives on the frontend; the backend aggr
 
 ## Concrete hotspots
 
-### 1. X-author join duplicated across 4+ aggregators
+### 1. X-author join duplicated across 4+ aggregators — **DONE 2026-04-23**
 
-```
-sentiment.py:121    LEFT JOIN x_posts_raw … LEFT JOIN x_users_raw …
-propaganda.py:173   LEFT JOIN x_posts_raw … LEFT JOIN x_users_raw …
-narrative.py:240    LEFT JOIN x_posts_raw … LEFT JOIN x_users_raw …
-narrative.py:363    LEFT JOIN x_posts_raw …                               (first-seen author)
-narrative.py:505    LEFT JOIN x_posts_raw …                               (top supporting docs)
-```
+Ten call sites across `sentiment.py` / `propaganda.py` / `narrative.py` / `bot.py` / `movers.py` / `review.py` now route through `base.X_AUTHOR_JOIN_SQL` — a single constant containing the two LEFT JOINs. No helper function or SQL view was needed: a string constant is the simplest thing that drifts nowhere. A future move to a materialized `docs_with_x_author` view would be a one-constant change.
 
-- [ ] Introduce `base.resolve_x_handle(cursor, doc_id) -> (author_id, username)` OR a `docs_with_x_author` SQL view.
-- [ ] Migrate every `LEFT JOIN x_posts_raw / x_users_raw` in aggregators to the helper/view.
+- [x] Single canonical SQL fragment in `base.X_AUTHOR_JOIN_SQL` (2026-04-23).
+- [x] All ten aggregator + review sites migrated.
 
 ### 2. `_first_seen_info` + `_registry_lookup` overlap
 
@@ -105,7 +99,7 @@ Some metrics may be computed twice because two aggregators emit them for differe
 4. `WindowContext` build-once pipeline (#8) — most impactful; do after 1–3.
 5. Snapshot key audit (#9) + confidence rule (#10).
 
-Each step is its own audit-trail entry under `docs/audit-trail/analysis/`.
+Each step is its own audit-trail entry under `docs/audit-trail/analysis/`. First step landed as `2026-04-23-x-author-join-helper.md`.
 
 ## MVP constraints — do NOT
 

@@ -279,9 +279,20 @@ class AnalysisJobRunner:
         (author_id, verified, verified_type, followers, following,
          listed, tweet_count, user_created, tier) = row
 
-        # Pre-exclusion rules (walkthrough 040).
-        if tier in ("elected_official", "affiliated"):
-            return metadata, f"tier={tier}"
+        # Pre-exclusion rules.
+        #
+        # Historical note: a wider rule that pre-excluded any
+        # `tier in ("elected_official", "affiliated")` account was removed
+        # on 2026-04-23. Politicians DO use automation (staff-run accounts,
+        # scheduled cross-posting, party-coordinated messaging); blanket
+        # exclusion made the "Politicians & Officials" tier on the Bot
+        # Detector page permanently empty and hid a real class of signal.
+        # The bot classifier's post-hoc `verified_type=government` de-bias
+        # (see engine/bot.py::_heuristic_classify) is the surgical
+        # counterpart — it nullifies scores for state-operated accounts
+        # (White House, federal agency channels) that are human-run by
+        # institutional necessity. Elected officials themselves flow
+        # through the normal pipeline.
         if (verified_type or "").lower() == "government":
             return metadata, "verified_type=government"
 
@@ -690,19 +701,73 @@ class AnalysisJobRunner:
         logger.info(f"Snapshots saved: {results}")
         return results
     
-    def run_full_pipeline(self, tasks: list[str] | None = None, limit: int | None = None) -> dict:
-        """
-        Run the specified analysis pipeline tasks.
-        
-        Returns summary of what was processed.
+    # LLM-heavy stages the time-budget guard may skip when the run is about
+    # to exhaust its wall-clock allocation. Deterministic stages (etl,
+    # citations) + snapshots are excluded: those either finish in seconds
+    # or must always run.
+    _BUDGETED_LLM_STAGES = frozenset({
+        "bot", "text", "propaganda", "claims", "narratives",
+        "accounts", "bot_rollup",
+    })
+
+    # Seconds reserved at the tail of the budget so `save_snapshots()`
+    # always has time to rebuild the cache. The UI's correctness depends
+    # on snapshots running — 120s is a comfortable margin for 4-window
+    # sentiment + narrative + propaganda aggregations on a warm DB.
+    _SNAPSHOTS_RESERVE_SECONDS = 120
+
+    def run_full_pipeline(
+        self,
+        tasks: list[str] | None = None,
+        limit: int | None = None,
+        budget_seconds: float | None = None,
+    ) -> dict:
+        """Run the analysis pipeline with per-stage failure isolation, a
+        soft wall-clock budget, and a guaranteed snapshot rebuild.
+
+        Three guarantees the simple sequential version did not provide:
+
+        1. **Per-stage failure isolation.** Each stage runs inside its own
+           try/except. A Gemini 429, a transient DB lock, or a malformed
+           upstream row in stage N no longer aborts stages N+1..10. The
+           pipeline records the per-stage status + error message and keeps
+           going; the aggregate status becomes "partial" when any stage
+           other than snapshots failed.
+
+        2. **Soft time-budget for LLM stages.** When `budget_seconds` is
+           passed (CLI) or set in `CIVIC_BUDGET_SECONDS`, each LLM-heavy
+           stage checks remaining wall-clock before starting. If less than
+           `_SNAPSHOTS_RESERVE_SECONDS` remain, the stage skips with status
+           `skipped_budget`. That reserve guarantees the UI gets a fresh
+           cache even on days when upstream LLM latency blows past every
+           LLM stage — two cron fires making partial LLM progress plus a
+           fresh cache is strictly better than one cron fire that chewed
+           the whole budget and left the UI 2 days stale.
+
+        3. **Snapshots always run.** The `save_snapshots()` call lives in
+           a `finally` block and executes regardless of prior failures,
+           skips, or exceptions. Aggregators are pure SQL → JSON; they
+           work against whatever the DB currently contains.
+
+        Returns a summary dict with per-stage status/error + an aggregate
+        `status` field: "success" | "partial" | "failed".
         """
         start_time = time.time()
+        if budget_seconds is None:
+            env_budget = os.environ.get("CIVIC_BUDGET_SECONDS")
+            budget_seconds = float(env_budget) if env_budget else None
+
         logger.info("=" * 60)
         logger.info("STARTING ANALYSIS PIPELINE")
         logger.info(f"Time: {datetime.now(timezone.utc).isoformat()}")
+        if budget_seconds is not None:
+            logger.info(
+                f"Budget: {budget_seconds:.0f}s "
+                f"(reserving {self._SNAPSHOTS_RESERVE_SECONDS}s for snapshots)"
+            )
         logger.info("=" * 60)
-        
-        summary = {
+
+        summary: Dict[str, Any] = {
             "started_at": datetime.now(timezone.utc).isoformat(),
             "etl_new_docs": 0,
             "bot_detection": 0,
@@ -714,66 +779,198 @@ class AnalysisJobRunner:
             "account_classification": {},
             "bot_rollup": {},
             "snapshots": {},
+            "stage_status": {},
+            "stage_errors": {},
             "duration_seconds": 0,
-            "status": "success"
+            "status": "success",
         }
 
-        try:
-            # If no tasks specified, run all
-            run_all = not tasks
+        def _budget_allows(stage_key: str) -> tuple[bool, str | None]:
+            """Return (allowed, skip-reason). Non-budgeted stages always run."""
+            if budget_seconds is None or stage_key not in self._BUDGETED_LLM_STAGES:
+                return True, None
+            elapsed = time.time() - start_time
+            remaining = budget_seconds - elapsed
+            if remaining < self._SNAPSHOTS_RESERVE_SECONDS:
+                return False, (
+                    f"budget exhausted: {remaining:.0f}s remain, "
+                    f"need {self._SNAPSHOTS_RESERVE_SECONDS}s reserve for snapshots"
+                )
+            return True, None
 
-            if run_all or "etl" in tasks:
-                summary["etl_new_docs"] = self.run_etl()
-            if run_all or "bot" in tasks:
-                summary["bot_detection"] = self.run_bot_detection(limit=limit)
-            if run_all or "text" in tasks:
-                summary["text_analysis"] = self.run_text_analysis(limit=limit)
-            if run_all or "propaganda" in tasks:
-                summary["propaganda"] = self.run_propaganda_detection(limit=limit)
-            if run_all or "citations" in tasks:
-                summary["citations"] = self.run_citation_extraction(limit=limit)
-            if run_all or "claims" in tasks:
-                summary["claims"] = self.run_claim_extraction(limit=limit)
-            if run_all or "narratives" in tasks:
-                summary["narratives"] = self.run_narrative_clustering()
-            if run_all or "accounts" in tasks:
-                summary["account_classification"] = self.run_account_classification()
-            if run_all or "bot_rollup" in tasks:
-                summary["bot_rollup"] = self.run_account_bot_rollup()
-            if run_all or "snapshots" in tasks:
-                summary["snapshots"] = self.save_snapshots()
-        except Exception as e:
-            logger.error(f"Pipeline failed: {e}")
-            summary["status"] = "failed"
-            summary["error"] = str(e)
-            raise
+        def _run_stage(stage_key: str, summary_key: str, fn, *args, **kwargs) -> None:
+            """Run a stage with budget + failure isolation. Never re-raises."""
+            allowed, reason = _budget_allows(stage_key)
+            if not allowed:
+                summary["stage_status"][stage_key] = "skipped_budget"
+                summary["stage_errors"][stage_key] = reason
+                logger.warning(f"Skipping stage '{stage_key}' — {reason}")
+                return
+            try:
+                summary[summary_key] = fn(*args, **kwargs)
+                summary["stage_status"][stage_key] = "ok"
+            except Exception as e:
+                summary["stage_status"][stage_key] = "failed"
+                summary["stage_errors"][stage_key] = f"{type(e).__name__}: {e}"
+                logger.exception(f"Stage '{stage_key}' failed — continuing pipeline")
+
+        run_all = not tasks
+        task_set = set(tasks or [])
+
+        try:
+            if run_all or "etl" in task_set:
+                _run_stage("etl", "etl_new_docs", self.run_etl)
+            if run_all or "bot" in task_set:
+                _run_stage("bot", "bot_detection", self.run_bot_detection, limit=limit)
+            if run_all or "text" in task_set:
+                _run_stage("text", "text_analysis", self.run_text_analysis, limit=limit)
+            if run_all or "propaganda" in task_set:
+                _run_stage("propaganda", "propaganda", self.run_propaganda_detection, limit=limit)
+            if run_all or "citations" in task_set:
+                _run_stage("citations", "citations", self.run_citation_extraction, limit=limit)
+            if run_all or "claims" in task_set:
+                _run_stage("claims", "claims", self.run_claim_extraction, limit=limit)
+            if run_all or "narratives" in task_set:
+                _run_stage("narratives", "narratives", self.run_narrative_clustering)
+            if run_all or "accounts" in task_set:
+                _run_stage("accounts", "account_classification", self.run_account_classification)
+            if run_all or "bot_rollup" in task_set:
+                _run_stage("bot_rollup", "bot_rollup", self.run_account_bot_rollup)
         finally:
+            # Snapshots always run. The UI's correctness depends on this;
+            # even when every earlier stage failed or was skipped, the
+            # aggregators produce a consistent view of whatever data the
+            # DB currently holds.
+            if run_all or "snapshots" in task_set:
+                try:
+                    summary["snapshots"] = self.save_snapshots()
+                    summary["stage_status"]["snapshots"] = "ok"
+                except Exception as e:
+                    summary["stage_status"]["snapshots"] = "failed"
+                    summary["stage_errors"]["snapshots"] = f"{type(e).__name__}: {e}"
+                    logger.exception(
+                        "Snapshot rebuild failed — UI cache will stay stale "
+                        "until the next successful run"
+                    )
+
+            # Derive aggregate status from per-stage results.
+            stage_statuses = set(summary["stage_status"].values())
+            snapshots_ok = summary["stage_status"].get("snapshots") == "ok"
+            if not stage_statuses or stage_statuses == {"ok"}:
+                summary["status"] = "success"
+            elif snapshots_ok:
+                # LLM stages had problems, but the UI cache is fresh.
+                summary["status"] = "partial"
+            else:
+                summary["status"] = "failed"
+
             summary["duration_seconds"] = round(time.time() - start_time, 2)
             logger.info("=" * 60)
-            logger.info("PIPELINE COMPLETE")
+            logger.info(f"PIPELINE {summary['status'].upper()}")
             logger.info(f"Duration: {summary['duration_seconds']}s")
-            logger.info(f"Summary: {summary}")
+            logger.info(f"Stage status: {summary['stage_status']}")
+            if summary["stage_errors"]:
+                logger.info(f"Stage errors: {summary['stage_errors']}")
             logger.info("=" * 60)
-        
+
         return summary
+
+
+def _build_partial_alert_body(summary: Dict[str, Any]) -> str:
+    """Format a summary dict into a plain-text email body for partial runs.
+
+    Partial means: snapshots succeeded (UI cache is fresh), but at least
+    one LLM-heavy stage either failed or was skipped by the budget guard.
+    The operator wants to know which stage and why, not just "it ran weird."
+    """
+    lines: List[str] = [
+        "Civic Lens analysis pipeline finished in a PARTIAL state.",
+        "",
+        f"  Status:       {summary.get('status')}",
+        f"  Duration:     {summary.get('duration_seconds')}s",
+        f"  Started at:   {summary.get('started_at')}",
+        "",
+        "The UI cache WAS refreshed (snapshots ran) — data integrity is "
+        "preserved. But the following LLM stages did not complete this fire:",
+        "",
+    ]
+    statuses = summary.get("stage_status", {})
+    errors = summary.get("stage_errors", {})
+    for stage, status in statuses.items():
+        if status == "ok":
+            continue
+        reason = errors.get(stage, "(no reason recorded)")
+        lines.append(f"  - {stage:<12} [{status}]  {reason}")
+    lines.extend([
+        "",
+        "Next timer fire should pick up the remaining docs. If every run "
+        "lands in partial state, consider:",
+        "  - Raising CIVIC_BUDGET_SECONDS or the systemd TimeoutStartSec",
+        "  - Lowering CIVIC_LOADER_BATCH_SIZE so stages finish faster",
+        "  - Checking Gemini latency / budget at aistudio.google.com",
+    ])
+    return "\n".join(lines)
 
 
 def main():
     """Entry point for the job runner."""
     parser = argparse.ArgumentParser(description="Civic Lens Analysis Job Runner")
-    parser.add_argument("--tasks", type=str, help="Comma-separated tasks to run: etl, bot, text, propaganda, citations, claims, narratives, accounts, bot_rollup, snapshots. Defaults to all.")
-    parser.add_argument("--limit", type=int, help="Limit maximum documents processed per analysis stage (useful for dev/testing)")
+    parser.add_argument(
+        "--tasks", type=str,
+        help="Comma-separated tasks to run: etl, bot, text, propaganda, "
+             "citations, claims, narratives, accounts, bot_rollup, snapshots. "
+             "Defaults to all.",
+    )
+    parser.add_argument(
+        "--limit", type=int,
+        help="Cap the number of documents processed per analysis stage "
+             "(useful for dev/testing).",
+    )
+    parser.add_argument(
+        "--budget-seconds", type=float, default=None,
+        help="Soft wall-clock budget (seconds). LLM-heavy stages skip when "
+             "less than 120s remain, guaranteeing snapshots run. Also reads "
+             "CIVIC_BUDGET_SECONDS from the environment. Unset = no budget.",
+    )
     args = parser.parse_args()
 
     tasks_to_run = [t.strip().lower() for t in args.tasks.split(",")] if args.tasks else None
 
-    logger.info(f"Civic Lens Analysis Job Runner starting. Tasks: {args.tasks or 'all'}, Limit: {args.limit or 'default'}")
-    
+    logger.info(
+        f"Civic Lens Analysis Job Runner starting. "
+        f"Tasks: {args.tasks or 'all'}, "
+        f"Limit: {args.limit or 'default'}, "
+        f"Budget: {args.budget_seconds or os.environ.get('CIVIC_BUDGET_SECONDS') or 'unbounded'}"
+    )
+
     runner = AnalysisJobRunner()
-    summary = runner.run_full_pipeline(tasks=tasks_to_run, limit=args.limit)
-    
-    # Return appropriate exit code
-    return 0 if summary["status"] == "success" else 1
+    summary = runner.run_full_pipeline(
+        tasks=tasks_to_run,
+        limit=args.limit,
+        budget_seconds=args.budget_seconds,
+    )
+
+    status = summary.get("status", "failed")
+
+    # Partial runs: snapshots succeeded so the UI is fine, but the operator
+    # still wants to know that LLM stages had to cut early. Systemd sees an
+    # exit code of 0 (the unit completed, the UI was served) so the OnFailure
+    # alerter is NOT triggered — instead we send the email ourselves here.
+    # Failed runs: snapshots themselves failed, or the pipeline raised before
+    # the finally block — exit 1 so systemd's OnFailure= wiring fires the
+    # deploy/scripts/send-alert.py alerter automatically.
+    if status == "partial":
+        try:
+            from analysis.src.common.alerts import send_alert
+            send_alert(
+                subject="civic-lens-analyze PARTIAL",
+                body=_build_partial_alert_body(summary),
+            )
+        except Exception:
+            logger.exception("Failed to send partial-run alert (pipeline itself is fine)")
+        return 0
+
+    return 0 if status == "success" else 1
 
 
 if __name__ == "__main__":
