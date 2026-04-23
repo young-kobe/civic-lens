@@ -10,6 +10,7 @@ import { fetchPropaganda, fetchSnapshotStatus, type SnapshotStatus } from '../se
 import { asOfTodayEyebrow, formatTimeWindow } from '../services/timeWindow';
 import { useFetch } from '../services/useFetch';
 import { formatRefreshedAgo, getSnapshotTimestamp } from '../services/freshness';
+import { formatPct } from '../services/format';
 import { COLORS } from '../theme';
 import type {
     Filters, PropagandaEntityItem, PropagandaExample,
@@ -77,12 +78,12 @@ function PropagandaTopMetrics({
     if (newsSplit) splitDots.push({
         pct: newsSplit.flagged_rate_pct,
         color: 'var(--neutral-600)',
-        title: `News ${newsSplit.flagged_rate_pct.toFixed(1)}%`,
+        title: `News ${formatPct(newsSplit.flagged_rate_pct)}`,
     });
     if (socialSplit) splitDots.push({
         pct: socialSplit.flagged_rate_pct,
         color: COLORS.warning,
-        title: `Social ${socialSplit.flagged_rate_pct.toFixed(1)}%`,
+        title: `Social ${formatPct(socialSplit.flagged_rate_pct)}`,
     });
 
     return (
@@ -92,7 +93,7 @@ function PropagandaTopMetrics({
         >
             <TierRow
                 label="Flagged rate"
-                value={`${data.propaganda_rate_pct.toFixed(1)}%`}
+                value={formatPct(data.propaganda_rate_pct)}
                 verb={`${data.flagged_docs.toLocaleString()} flagged · mean score ${data.mean_score.toFixed(2)}`}
                 dotPct={data.propaganda_rate_pct}
                 dotColor={flaggedDotColor}
@@ -107,7 +108,7 @@ function PropagandaTopMetrics({
             />
             <TierRow
                 label="Top technique"
-                value={topTech ? `${topTech.pct_of_flagged_docs.toFixed(0)}%` : '—'}
+                value={topTech ? formatPct(topTech.pct_of_flagged_docs, { decimals: 0 }) : '—'}
                 verb={topTech
                     ? `${topTechLabel} · in ${topTech.count.toLocaleString()} flagged posts`
                     : topTechLabel}
@@ -132,7 +133,7 @@ function buildPropagandaTickerItems(data: PropagandaOverview): TickerItem[] {
     return [
         {
             label: 'Flagged rate',
-            value: `${rate.toFixed(1)}%`,
+            value: formatPct(rate),
             tone: rate > 20 ? 'negative' : rate > 10 ? 'accent' : 'positive',
             emphasis: true,
             ariaLabel: `Flagged rate ${rate.toFixed(1)} percent`,
@@ -149,13 +150,15 @@ function buildPropagandaTickerItems(data: PropagandaOverview): TickerItem[] {
         {
             label: 'Top technique',
             value: topTechLabel,
-            hint: topTech ? `${topTech.pct_of_flagged_docs.toFixed(0)}% of flagged` : undefined,
+            hint: topTech ? `${formatPct(topTech.pct_of_flagged_docs, { decimals: 0 })} of flagged` : undefined,
         },
     ];
 }
 
-/** Template-derived headline naming whichever side (news or social) is
- *  using more techniques, plus the single most prevalent technique. */
+/** Reader-facing headline: which side leans harder on these techniques,
+ *  plus which technique shows up most. Intentionally avoids the "X% of
+ *  flagged posts" phrasing — with multiple techniques per post that
+ *  figure can read >100% and confuse everyday readers. */
 function readsAsToday(data: PropagandaOverview): string {
     const news = data.by_source.find((s) => s.label === 'News');
     const social = data.by_source.find((s) => s.label === 'Social Media');
@@ -168,15 +171,15 @@ function readsAsToday(data: PropagandaOverview): string {
     if (news && social) {
         const gap = news.flagged_rate_pct - social.flagged_rate_pct;
         if (Math.abs(gap) < 2) {
-            parts.push('News and social media use these techniques at similar rates.');
+            parts.push('News and social media are leaning on these techniques at about the same rate.');
         } else if (gap > 0) {
-            parts.push(`News leans on these techniques more than social media (${news.flagged_rate_pct.toFixed(1)}% vs ${social.flagged_rate_pct.toFixed(1)}% flagged).`);
+            parts.push('News is leaning on these techniques more than social media right now.');
         } else {
-            parts.push(`Social media leans on these techniques more than news (${social.flagged_rate_pct.toFixed(1)}% vs ${news.flagged_rate_pct.toFixed(1)}% flagged).`);
+            parts.push('Social media is leaning on these techniques more than news right now.');
         }
     }
-    if (topTechLabel && topTech) {
-        parts.push(`${topTechLabel} is the most common, appearing in ${topTech.pct_of_flagged_docs.toFixed(0)}% of flagged posts.`);
+    if (topTechLabel && topTech && topTech.count > 0) {
+        parts.push(`${topTechLabel} is the technique we're seeing the most.`);
     }
     return parts.length > 0
         ? parts.join(' ')
@@ -206,7 +209,7 @@ function PropagandaEntityCard({
         <EntityProfileCard
             profile={profile}
             stats={item.total_docs > 0 ? [
-                { label: 'Flagged',      value: `${item.flagged_rate_pct.toFixed(1)}%`, color: rateColor, emphasis: true },
+                { label: 'Flagged',      value: formatPct(item.flagged_rate_pct), color: rateColor, emphasis: true },
                 { label: 'Mean score',   value: item.mean_score.toFixed(2) },
                 { label: 'Posts scored', value: item.total_docs.toLocaleString() },
             ] : []}
@@ -271,7 +274,7 @@ function PropagandaEntityModal({
                 <div>
                     <div className="eyebrow">Flagged rate</div>
                     <div className="metric-value" style={{ color: rateColor }}>
-                        {item.flagged_rate_pct.toFixed(1)}%
+                        {formatPct(item.flagged_rate_pct)}
                     </div>
                 </div>
                 <div>
@@ -402,7 +405,7 @@ function TechniquesCard({ techniques }: { techniques: PropagandaTechniqueCount[]
                             <div className="technique-row-count">
                                 {t.count.toLocaleString()}
                                 <span className="technique-row-count-pct">
-                                    {t.pct_of_flagged_docs.toFixed(0)}% of flagged
+                                    {formatPct(t.pct_of_flagged_docs, { decimals: 0 })} of flagged
                                 </span>
                             </div>
                         </div>
@@ -444,7 +447,7 @@ function NewsVsSocialCard({ splits }: { splits: PropagandaSourceSplit[] }) {
                             {s.total_docs.toLocaleString()} posts
                         </span>
                         <span className="source-split-row-rate">
-                            {s.flagged_rate_pct.toFixed(1)}%
+                            {formatPct(s.flagged_rate_pct)}
                             <span className="source-split-row-sub">flagged</span>
                         </span>
                         <span className="source-split-row-score">
@@ -588,11 +591,6 @@ function Propaganda({ filters }: PropagandaProps) {
     if (!data) return <EmptyState title="No propaganda data available" />;
 
     const windowLabel = formatTimeWindow(filters.timeRange);
-    const hasEntityData =
-        (data.by_news_outlet?.length ?? 0) +
-        (data.by_official?.length ?? 0) +
-        (data.by_general_public?.length ?? 0) > 0;
-
     const tickerItems = buildPropagandaTickerItems(data);
     const refreshed = formatRefreshedAgo(
         getSnapshotTimestamp(snapshotStatus, `propaganda_${filters.timeRange}`),
@@ -622,11 +620,12 @@ function Propaganda({ filters }: PropagandaProps) {
                     <PropagandaTopMetrics data={data} windowLabel={windowLabel} />
                 </div>
 
-                {hasEntityData && (
-                    <div className="col-span-12">
-                        <ThreeWayEntityGrid data={data} onOpen={setActiveEntity} />
-                    </div>
-                )}
+                {/* Always render the three-way frame, even when every tier is
+                    empty. Per-column empty copy inside ThreeWayEntityGrid is
+                    the honest shape — matches Tone/Narratives/Bot. */}
+                <div className="col-span-12">
+                    <ThreeWayEntityGrid data={data} onOpen={setActiveEntity} />
+                </div>
 
                 <div className="col-span-7">
                     <TechniquesCard techniques={data.by_technique} />

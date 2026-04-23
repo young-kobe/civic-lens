@@ -14,6 +14,7 @@ import type {
 import { fetchMovers, fetchSentiment, fetchSnapshotStatus, type SnapshotStatus } from '../services/api';
 import { asOfTodayEyebrow, formatTimeWindow } from '../services/timeWindow';
 import { formatRefreshedAgo, getSnapshotTimestamp } from '../services/freshness';
+import { formatPct } from '../services/format';
 import { transformPublicSentiment } from '../services/transformers';
 import { useFetch } from '../services/useFetch';
 import { COLORS } from '../theme';
@@ -90,7 +91,6 @@ function TopMetrics({ data, windowLabel }: TopMetricsProps) {
 }
 
 function ToneTierRow({ label, agg }: { label: string; agg: TierAggregate }) {
-    const sign = agg.net >= 0 ? '+' : '';
     const color = toneColor(agg.net);
     const axisPct = ((agg.net + 100) / 200) * 100;
     const hasData = agg.volume > 0;
@@ -98,7 +98,7 @@ function ToneTierRow({ label, agg }: { label: string; agg: TierAggregate }) {
     return (
         <TierRow
             label={label}
-            value={hasData ? `${sign}${agg.net.toFixed(1)}%` : '—'}
+            value={hasData ? formatPct(agg.net, { min: -100, signed: true }) : '—'}
             valueColor={color}
             verb={hasData
                 ? `${toneVerb(agg.net)} · ${agg.volume.toLocaleString()} posts`
@@ -117,7 +117,6 @@ function GOPMini({
     favorability: NonNullable<PublicSentimentData['gopFavorability']>;
     trend?: Array<{ date: string; value: number }>;
 }) {
-    const sign = favorability.netFavorability >= 0 ? '+' : '';
     const color = favorability.netFavorability > 0
         ? COLORS.positive
         : favorability.netFavorability < 0
@@ -132,7 +131,7 @@ function GOPMini({
         <div className="mini-metric">
             <span className="mini-metric-label">GOP party stance</span>
             <span className="mini-metric-value" style={{ color }}>
-                {sign}{favorability.netFavorability.toFixed(1)}%
+                {formatPct(favorability.netFavorability, { min: -100, signed: true })}
             </span>
             {trend && trend.length > 1 && (
                 <span className="mini-metric-trend" aria-hidden>
@@ -185,7 +184,7 @@ function IntensityMini({ distribution }: { distribution: SentimentDistribution }
                 <span className="mini-bar-strongneg" style={{ width: `${pct(distribution.strongNegative)}%` }} />
             </span>
             <span className="mini-metric-hint">
-                {biggestPct.toFixed(0)}% of posts
+                {formatPct(biggestPct, { decimals: 0 })} of posts
             </span>
         </div>
     );
@@ -264,7 +263,6 @@ function EntitySentimentModal({
     onClose: () => void;
 }) {
     const { entityProfile: profile, netScore, volume, classificationSamples } = item;
-    const sign = netScore >= 0 ? '+' : '';
     const sourceUrl = entityExternalUrl(profile);
 
     return (
@@ -281,7 +279,7 @@ function EntitySentimentModal({
                 <div>
                     <div className="eyebrow">How they lean</div>
                     <div className="metric-value">
-                        {sign}{netScore.toFixed(1)}%
+                        {formatPct(netScore, { min: -100, signed: true })}
                     </div>
                 </div>
                 <div>
@@ -351,15 +349,15 @@ function PollingComparison({ data }: { data: PollingSocialComparison }) {
                 <div>
                     <div className="eyebrow">Online stance (ours)</div>
                     <div className="text-sm">
-                        favorable {data.onlineSentiment?.favorable ?? 0}% · unfavorable{' '}
-                        {data.onlineSentiment?.unfavorable ?? 0}%
+                        favorable {formatPct(data.onlineSentiment?.favorable ?? 0, { decimals: 0 })} · unfavorable{' '}
+                        {formatPct(data.onlineSentiment?.unfavorable ?? 0, { decimals: 0 })}
                     </div>
                 </div>
                 {data.pollingData && (
                     <div>
                         <div className="eyebrow">Live polling</div>
                         <div className="text-sm">
-                            favorable {data.pollingData.favorable}% · unfavorable {data.pollingData.unfavorable}%
+                            favorable {formatPct(data.pollingData.favorable, { decimals: 0 })} · unfavorable {formatPct(data.pollingData.unfavorable, { decimals: 0 })}
                             {data.pollingData.date && (
                                 <span className="text-muted"> · {data.pollingData.date}</span>
                             )}
@@ -402,25 +400,23 @@ function HowThisWorks() {
 
 function buildSentimentTickerItems(data: PublicSentimentData): TickerItem[] {
     const overall = data.overview;
-    const sign = overall.netScore >= 0 ? '+' : '';
     const tone: TickerItem['tone'] = overall.netScore > 10 ? 'accent'
         : overall.netScore < -10 ? 'negative' : 'neutral';
     const items: TickerItem[] = [
         {
             label: 'Overall tone',
-            value: `${sign}${overall.netScore.toFixed(1)}%`,
+            value: formatPct(overall.netScore, { min: -100, signed: true }),
             tone,
             emphasis: true,
-            ariaLabel: `Overall tone ${sign}${overall.netScore.toFixed(1)} percent`,
+            ariaLabel: `Overall tone ${formatPct(overall.netScore, { min: -100, signed: true })}`,
         },
         { label: 'Posts scored', value: overall.volume.toLocaleString() },
         { label: 'Confidence', value: overall.confidence },
     ];
     if (data.gopFavorability) {
-        const gopSign = data.gopFavorability.netFavorability >= 0 ? '+' : '';
         items.push({
             label: 'GOP stance',
-            value: `${gopSign}${data.gopFavorability.netFavorability.toFixed(1)}%`,
+            value: formatPct(data.gopFavorability.netFavorability, { min: -100, signed: true }),
         });
     }
     return items;

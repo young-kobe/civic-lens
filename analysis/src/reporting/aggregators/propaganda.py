@@ -20,7 +20,7 @@ from __future__ import annotations
 import json
 from collections import Counter, defaultdict
 from dataclasses import asdict, dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 
 from analysis.src.common.logger import get_logger
 from analysis.src.llm.schemas import PROPAGANDA_TECHNIQUE_ENUM
@@ -273,12 +273,21 @@ class PropagandaAggregator:
 
             if is_flagged:
                 flagged += 1
+                # De-dup per-doc: a single doc can carry multiple evidence
+                # spans for the same technique (e.g. two loaded-language
+                # phrases). Counting each would double-count — with
+                # pct_of_flagged_docs = count / flagged * 100, values can
+                # exceed 100% and read as "Loaded language: 197% of flagged
+                # posts." Track (technique -> seen-in-this-doc) with a set.
+                doc_techs: Set[str] = set()
                 for t in techs:
                     if not isinstance(t, dict):
                         continue
                     name = t.get("technique")
                     if name in PROPAGANDA_TECHNIQUE_ENUM:
-                        technique_counts[name] += 1
+                        doc_techs.add(name)
+                for name in doc_techs:
+                    technique_counts[name] += 1
             score_sum += score
             score_samples += 1
 

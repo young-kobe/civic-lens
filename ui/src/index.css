@@ -1864,6 +1864,30 @@ code, pre {
 }
 
 
+/* Bot page — label band that sits next to CoordinationSummary.
+   On desktop it reads as a paired sibling panel; on mobile the frame is
+   dropped so the label doesn't masquerade as another card stacked
+   between two real Cards. */
+.bot-section-label {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: var(--space-3) var(--space-4);
+  background: var(--bg-panel);
+  border: 1px solid var(--neutral-200);
+  border-radius: var(--radius-md);
+}
+
+@media (max-width: 1024px) {
+  .bot-section-label {
+    padding: 0;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+  }
+}
+
+
 /* ============================================
    Reads-as-today headline (walkthrough 060 — Phase 5) — one-line
    editorial framing of the current window. Serif + larger than body,

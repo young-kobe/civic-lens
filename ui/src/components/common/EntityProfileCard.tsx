@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import type { ConfidenceLevel, EntityProfile } from '../../types';
 import { COLORS, leanClass } from '../../theme';
+import { formatPct } from '../../services/format';
 
 /** One stat cell in the card's stats row. */
 export interface EntityStat {
@@ -210,12 +211,11 @@ export function sentimentStats({
 }: {
     netTone: number; volume: number; confidence?: ConfidenceLevel;
 }): EntityStat[] {
-    const sign = netTone >= 0 ? '+' : '';
     const color = netTone > 10 ? COLORS.positive
         : netTone < -10 ? COLORS.negative
         : 'var(--neutral-500)';
     const stats: EntityStat[] = [
-        { label: 'How they lean', value: `${sign}${netTone.toFixed(1)}%`, color, emphasis: true },
+        { label: 'How they lean', value: formatPct(netTone, { min: -100, signed: true }), color, emphasis: true },
         { label: 'Posts', value: volume.toLocaleString() },
     ];
     if (confidence) {

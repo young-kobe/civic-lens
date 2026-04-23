@@ -8,6 +8,7 @@ import type {
     SentimentSegmentKey,
 } from '../../types';
 import { COLORS } from '../../theme';
+import { formatPct } from '../../services/format';
 
 interface SentimentDistributionCardProps {
     data: SentimentDistribution;
@@ -30,14 +31,10 @@ interface Segment {
     badge: { bg: string; text: string };
 }
 
-function formatPct(value: number, total: number): string {
-    if (total <= 0) return '0.0%';
-    return `${((value / total) * 100).toFixed(1)}%`;
-}
-
-function formatNet(score: number): string {
-    const sign = score >= 0 ? '+' : '';
-    return `${sign}${score.toFixed(1)}`;
+/** Share formatter — renders `value/total` as a bounded-and-guarded percent. */
+function fracPct(value: number, total: number): string {
+    if (total <= 0) return formatPct(0, { decimals: 1 });
+    return formatPct((value / total) * 100, { decimals: 1 });
 }
 
 export function SentimentDistributionCard({
@@ -107,24 +104,24 @@ export function SentimentDistributionCard({
 
     const skewChip = (() => {
         if (total === 0) return null;
-        if (netPct >= 10) return { className: 'chip chip-positive', label: `Leans favorable ${formatNet(netPct)}%` };
-        if (netPct <= -10) return { className: 'chip chip-negative', label: `Leans unfavorable ${formatNet(netPct)}%` };
-        return { className: 'chip', label: `Near-even ${formatNet(netPct)}%` };
+        if (netPct >= 10) return { className: 'chip chip-positive', label: `Leans favorable ${formatPct(netPct, { min: -100, signed: true })}` };
+        if (netPct <= -10) return { className: 'chip chip-negative', label: `Leans unfavorable ${formatPct(netPct, { min: -100, signed: true })}` };
+        return { className: 'chip', label: `Near-even ${formatPct(netPct, { min: -100, signed: true })}` };
     })();
 
     const polarizationChip = total > 0 && intensePct >= 35
-        ? { className: 'chip chip-accent', label: `Polarized · ${intensePct.toFixed(0)}% at extremes` }
+        ? { className: 'chip chip-accent', label: `Polarized · ${formatPct(intensePct, { decimals: 0 })} at extremes` }
         : null;
 
     // One-line plain-English interpretation. Priority: polarization > lean.
     const readsAs = (() => {
         if (total === 0) return null;
         if (intensePct >= 45) {
-            return `Reads as: heavily polarized — ${intensePct.toFixed(0)}% of docs land in the strong-positive or strong-negative buckets.`;
+            return `Reads as: heavily polarized — ${formatPct(intensePct, { decimals: 0 })} of docs land in the strong-positive or strong-negative buckets.`;
         }
         if (intensePct >= 30) {
             const direction = data.strongNegative > data.strongPositive ? 'negative' : 'positive';
-            return `Reads as: the sample is intense and leans ${direction} — ${intensePct.toFixed(0)}% sit at the extremes.`;
+            return `Reads as: the sample is intense and leans ${direction} — ${formatPct(intensePct, { decimals: 0 })} sit at the extremes.`;
         }
         if (netPct <= -15) {
             return `Reads as: the sample leans clearly unfavorable (${netPct.toFixed(1)} pts), mostly in the mild-negative bucket.`;
@@ -132,7 +129,7 @@ export function SentimentDistributionCard({
         if (netPct >= 15) {
             return `Reads as: the sample leans clearly favorable (+${netPct.toFixed(1)} pts), mostly in the mild-positive bucket.`;
         }
-        return `Reads as: near-even tone with ${Math.round((neu / total) * 100)}% of docs reading as straight neutral reportage.`;
+        return `Reads as: near-even tone with ${formatPct((neu / total) * 100, { decimals: 0 })} of docs reading as straight neutral reportage.`;
     })();
 
     const topPlatform = useMemo(() => {
@@ -177,7 +174,7 @@ export function SentimentDistributionCard({
                             lineHeight: 1,
                         }}
                     >
-                        {intensePct.toFixed(0)}%
+                        {formatPct(intensePct, { decimals: 0 })}
                     </div>
                 </div>
                 <span aria-hidden style={{ width: 1, height: 32, background: 'var(--neutral-200)' }} />
@@ -195,7 +192,7 @@ export function SentimentDistributionCard({
                             lineHeight: 1,
                         }}
                     >
-                        {measuredPct.toFixed(0)}%
+                        {formatPct(measuredPct, { decimals: 0 })}
                     </div>
                 </div>
                 <span aria-hidden style={{ width: 1, height: 32, background: 'var(--neutral-200)' }} />
@@ -260,7 +257,7 @@ export function SentimentDistributionCard({
             <div style={{ position: 'relative', marginBottom: 'var(--space-3)' }}>
             <div
                 role="group"
-                aria-label={`Sentiment distribution: ${segments.map(s => `${s.label} ${formatPct(s.value, total)}`).join(', ')}`}
+                aria-label={`Sentiment distribution: ${segments.map(s => `${s.label} ${fracPct(s.value, total)}`).join(', ')}`}
                 style={{
                     display: 'flex',
                     height: '56px',
@@ -303,7 +300,7 @@ export function SentimentDistributionCard({
                             onBlur={() => setActive(null)}
                             onClick={() => hasSamples && toggleBucket(seg.key)}
                             aria-expanded={openBucket === seg.key}
-                            aria-label={`${seg.label}: ${seg.value.toLocaleString()} docs, ${formatPct(seg.value, total)}${hasSamples ? ', click to view samples' : ''}`}
+                            aria-label={`${seg.label}: ${seg.value.toLocaleString()} docs, ${fracPct(seg.value, total)}${hasSamples ? ', click to view samples' : ''}`}
                         >
                             {pct >= 8 && <span>{pct.toFixed(0)}%</span>}
                             {hasSamples && pct >= 12 && (
@@ -342,7 +339,7 @@ export function SentimentDistributionCard({
                             </div>
                             <div className="hover-card-row">
                                 <span>Share</span>
-                                <strong>{formatPct(seg.value, total)}</strong>
+                                <strong>{fracPct(seg.value, total)}</strong>
                             </div>
                             <div className="hover-card-note" style={{ marginTop: 6 }}>
                                 {seg.description}
@@ -364,7 +361,7 @@ export function SentimentDistributionCard({
             >
                 {total > 0 ? (
                     <>
-                        Positive {formatPct(pos, total)} &middot; Neutral {formatPct(neu, total)} &middot; Negative {formatPct(neg, total)}.
+                        Positive {fracPct(pos, total)} &middot; Neutral {fracPct(neu, total)} &middot; Negative {fracPct(neg, total)}.
                         {' '}Hover a segment for definition; click to view sample docs.
                     </>
                 ) : 'No scored docs in this window.'}
@@ -405,7 +402,7 @@ export function SentimentDistributionCard({
                         />
                         <span className="text-sm">{seg.label}</span>
                         <span className="text-xs text-muted ml-auto num">
-                            {seg.value.toLocaleString()} &middot; {formatPct(seg.value, total)}
+                            {seg.value.toLocaleString()} &middot; {fracPct(seg.value, total)}
                         </span>
                     </button>
                 ))}

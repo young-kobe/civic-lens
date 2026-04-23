@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { COLORS } from '../../theme';
+import { formatPct } from '../../services/format';
 import type { ClassificationSample } from '../../types';
 
 interface ClassificationSampleCardProps {
@@ -53,12 +54,12 @@ export function ClassificationSampleCard({ sample, badgeStyle }: ClassificationS
                     {sample.label}
                 </span>
                 <span
-                    title={`Model confidence: ${confPct.toFixed(1)}% (${confLabel})`}
+                    title={`Model confidence: ${formatPct(confPct)} (${confLabel})`}
                     role="progressbar"
                     aria-valuenow={Math.round(confPct)}
                     aria-valuemin={0}
                     aria-valuemax={100}
-                    aria-label={`Model confidence ${confLabel.toLowerCase()}, ${confPct.toFixed(0)} percent`}
+                    aria-label={`Model confidence ${confLabel.toLowerCase()}, ${formatPct(confPct, { decimals: 0 })}`}
                     style={{
                         display: 'inline-flex', alignItems: 'center', gap: '4px',
                         fontSize: '10px', color: 'var(--neutral-500)',
@@ -78,7 +79,7 @@ export function ClassificationSampleCard({ sample, badgeStyle }: ClassificationS
                         }} />
                     </span>
                     <span style={{ color: confColor, fontWeight: 700 }}>
-                        {confPct.toFixed(0)}%
+                        {formatPct(confPct, { decimals: 0 })}
                     </span>
                 </span>
                 {sample.sarcasm_detected && (

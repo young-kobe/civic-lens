@@ -11,6 +11,7 @@ import { fetchBotActivity, fetchSnapshotStatus, type SnapshotStatus } from '../s
 import { asOfTodayEyebrow } from '../services/timeWindow';
 import { useFetch } from '../services/useFetch';
 import { formatRefreshedAgo, getSnapshotTimestamp } from '../services/freshness';
+import { formatPct } from '../services/format';
 import { COLORS } from '../theme';
 import type {
     BehavioralSignals, BotData, BotEntityItem, BotOverview, ConfidenceLevel,
@@ -35,7 +36,7 @@ function BotEntityCard({ item }: { item: BotEntityItem }) {
         <EntityProfileCard
             profile={profile}
             stats={item.total_docs > 0 ? [
-                { label: 'Bot rate',    value: `${item.bot_rate_pct.toFixed(1)}%`, color: rateColor, emphasis: true },
+                { label: 'Bot rate',    value: formatPct(item.bot_rate_pct), color: rateColor, emphasis: true },
                 { label: 'Bot posts',   value: item.bot_docs.toLocaleString() },
                 { label: 'Posts scanned', value: item.total_docs.toLocaleString() },
             ] : []}
@@ -87,24 +88,52 @@ function BotThreeWayGrid({ overview }: { overview: BotOverview }) {
 }
 
 
+/**
+ * Strip the "www." prefix from domain clusters so the banner reads like a
+ * source name, not a URL fragment.
+ */
+function friendlyCluster(cluster: string): string {
+    return cluster.replace(/^www\./i, '');
+}
+
+/**
+ * A "narrative" in narrativeAmplification is sometimes a raw signal string
+ * like `account_age=None days` or `followers=0` — the detector emits those
+ * when a specific field has no useful value. Those aren't topics a reader
+ * can reason about, so don't surface them in the banner. sanitizeWhyFlagged
+ * below uses the same noise patterns for the flagged-indicators list.
+ */
+function isNoiseNarrative(label: string | null | undefined): boolean {
+    if (!label) return true;
+    const text = label.trim();
+    if (!text) return true;
+    if (/=\s*(None|null|undefined|0)\b/i.test(text)) return true;
+    if (/=\s*$/.test(text)) return true;
+    return false;
+}
+
 /** Headline derived from top flagged cluster + automation rate. */
 function readsAsToday(data: BotData): string {
     const rate = data.overview.suspectedAutomationRate;
     const topCluster = data.overview.topClusters[0];
-    const topNarrative = data.narrativeAmplification[0];
+    const topNarrative = data.narrativeAmplification.find(
+        (n) => !isNoiseNarrative(n.narrative),
+    );
     const parts: string[] = [];
+    const ratePct = formatPct(rate, { decimals: 0 });
     if (rate > 10) {
-        parts.push(`Suspected automation rate is elevated at ${rate.toFixed(1)}%.`);
+        parts.push(`A high share of the posts we scanned look automated — roughly ${ratePct}.`);
     } else if (rate > 3) {
-        parts.push(`Suspected automation rate sits at ${rate.toFixed(1)}%.`);
+        parts.push(`Some of the posts we scanned look automated — about ${ratePct}.`);
     } else {
-        parts.push(`Suspected automation rate is low at ${rate.toFixed(1)}%.`);
+        parts.push(`Most posts we scanned look like real people — only about ${ratePct} look automated.`);
     }
     if (topCluster) {
-        parts.push(`Most-amplified cluster: "${topCluster}".`);
+        parts.push(`A lot of those suspect posts are pointing back at ${friendlyCluster(topCluster)}.`);
     }
     if (topNarrative) {
-        parts.push(`${topNarrative.suspectedBotVolume.toLocaleString()} suspected bot posts are amplifying "${topNarrative.narrative}".`);
+        const count = topNarrative.suspectedBotVolume.toLocaleString();
+        parts.push(`${count} of them are pushing the same talking point: "${topNarrative.narrative}".`);
     }
     return parts.join(' ');
 }
@@ -121,7 +150,7 @@ function buildBotTickerItems(overview: BotOverview): { items: TickerItem[]; acce
     const items: TickerItem[] = [
         {
             label: 'Automation Rate',
-            value: `${rate.toFixed(1)}%`,
+            value: formatPct(rate),
             hint: 'of accounts',
             tone: rateTone as TickerItem['tone'],
             emphasis: true,
@@ -154,11 +183,15 @@ interface BotOverviewMetricsProps {
 }
 
 function BotOverviewMetrics({ data }: BotOverviewMetricsProps) {
+    // mb-4 removed — the parent `dashboard-grid` already supplies row gap.
+    // On mobile (grid-3 collapses to 1-col) the extra 16px margin doubled
+    // the spacing between this block and the one below, breaking the
+    // otherwise-consistent rhythm.
     return (
-        <div className="grid-3 mb-4">
+        <div className="grid-3">
             <MetricCard
                 label="Suspected Automation Rate"
-                value={`${data.suspectedAutomationRate}%`}
+                value={formatPct(data.suspectedAutomationRate, { decimals: 0 })}
                 subtitle="of analyzed accounts"
                 className={data.suspectedAutomationRate > 10 ? 'border-warning' : ''}
             />
@@ -385,7 +418,7 @@ function CoordinationSummary({ data }: CoordinationSummaryProps) {
                 <div className="flex flex-col gap-2">
                     <div className="flex justify-between items-center" style={{ padding: '6px 0', borderBottom: '1px solid var(--neutral-150)' }}>
                         <span className="text-sm">Burst timing similarity</span>
-                        <span className="num font-semibold">{(data.burstTimingSimilarity * 100).toFixed(0)}%</span>
+                        <span className="num font-semibold">{formatPct(data.burstTimingSimilarity * 100, { decimals: 0 })}</span>
                     </div>
                     <div className="flex justify-between items-center" style={{ padding: '6px 0' }}>
                         <span className="text-sm">Accounts showing reuse patterns</span>
@@ -431,7 +464,7 @@ function BehavioralSignalsPanel({ data }: BehavioralSignalsPanelProps) {
                             <div key={i}>
                                 <div className="flex justify-between text-sm mb-1">
                                     <span>{item.range}</span>
-                                    <span className="num text-muted">{item.percentage}%</span>
+                                    <span className="num text-muted">{formatPct(item.percentage, { decimals: 0 })}</span>
                                 </div>
                                 <div
                                     style={{
@@ -527,7 +560,7 @@ function BehavioralSignalsPanel({ data }: BehavioralSignalsPanelProps) {
                                 <span className="text-sm" style={{ fontFamily: 'var(--font-mono)' }}>
                                     {item.domain}
                                 </span>
-                                <span className="num text-sm text-muted">{item.percentage}%</span>
+                                <span className="num text-sm text-muted">{formatPct(item.percentage, { decimals: 0 })}</span>
                             </div>
                         ))}
                     </div>
@@ -551,7 +584,7 @@ function SimilarityBar({ label, value, color }: SimilarityBarProps) {
         <div>
             <div className="flex justify-between text-sm mb-1">
                 <span>{label}</span>
-                <span className="font-medium" style={{ color }}>{value}%</span>
+                <span className="font-medium" style={{ color }}>{formatPct(value, { decimals: 0 })}</span>
             </div>
             <div
                 style={{
@@ -652,18 +685,11 @@ function BotActivityProfiler({ filters }: BotActivityProfilerProps) {
             <div className="col-span-5">
                 <CoordinationSummary data={data.coordinationStats} />
             </div>
-            <div
-                className="col-span-7"
-                style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    justifyContent: 'center',
-                    padding: 'var(--space-3) var(--space-4)',
-                    background: 'var(--bg-panel)',
-                    border: '1px solid var(--neutral-200)',
-                    borderRadius: 'var(--radius-md)',
-                }}
-            >
+            {/* Section-label band. Kept styling light on purpose so it
+                reads as a header, not a card — on mobile this would
+                otherwise stack as a bordered panel between two real
+                Cards and look like an orphan. */}
+            <div className="col-span-7 bot-section-label">
                 <div className="eyebrow" style={{ marginBottom: 'var(--space-1)' }}>
                     Narratives with Suspected Bot Amplification
                 </div>

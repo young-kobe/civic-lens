@@ -5,6 +5,7 @@ import {
     classificationSampleToSupportingDoc,
 } from '../../components/common';
 import { COLORS } from '../../theme';
+import { formatPct } from '../../services/format';
 
 interface TopicDivergencePanelProps {
     topics: SentimentBreakdown[];
@@ -153,7 +154,7 @@ function TopicDivergenceRow({ row, onOpen }: TopicDivergenceRowProps) {
                                 left: `${axisPct(value)}%`,
                                 background: tier.color,
                             }}
-                            title={`${tier.label}: ${value >= 0 ? '+' : ''}${value.toFixed(1)}%`}
+                            title={`${tier.label}: ${formatPct(value, { min: -100, signed: true })}`}
                         />
                     );
                 })}
@@ -170,7 +171,7 @@ function tierTooltip(row: SentimentBreakdown): string {
     for (const tier of TIER_META) {
         const value = row[tier.key] as number | null | undefined;
         if (value == null) continue;
-        parts.push(`${tier.label} ${value >= 0 ? '+' : ''}${value.toFixed(1)}%`);
+        parts.push(`${tier.label} ${formatPct(value, { min: -100, signed: true })}`);
     }
     return parts.join(' · ');
 }

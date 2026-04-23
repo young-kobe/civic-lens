@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Card, LoadingCard, EmptyState, ErrorState } from '../components/common';
 import { COLORS } from '../theme';
+import { formatPct } from '../services/format';
 import {
     fetchReviewQueue, fetchReviewStats,
 } from '../services/api';
@@ -35,8 +36,8 @@ function StatsBar({ stats, activeTask }: StatsBarProps) {
         );
     }
     const reviewedPct = taskStats.total_outputs
-        ? ((taskStats.reviewed / taskStats.total_outputs) * 100).toFixed(1)
-        : '0.0';
+        ? (taskStats.reviewed / taskStats.total_outputs) * 100
+        : 0;
     return (
         <div
             className="review-stats-grid"
@@ -48,12 +49,12 @@ function StatsBar({ stats, activeTask }: StatsBarProps) {
             }}
         >
             <Stat label="Total outputs" value={taskStats.total_outputs} />
-            <Stat label="Reviewed" value={`${taskStats.reviewed} (${reviewedPct}%)`} />
+            <Stat label="Reviewed" value={`${taskStats.reviewed} (${formatPct(reviewedPct, { decimals: 0 })})`} />
             <Stat label="Correct" value={taskStats.correct} color="var(--semantic-positive)" />
             <Stat label="Incorrect" value={taskStats.incorrect} color="var(--semantic-negative)" />
             <Stat
                 label="Accuracy"
-                value={taskStats.accuracy_pct === null ? '—' : `${taskStats.accuracy_pct}%`}
+                value={formatPct(taskStats.accuracy_pct, { decimals: 0 })}
                 color={
                     taskStats.accuracy_pct === null ? undefined
                         : taskStats.accuracy_pct >= 95 ? COLORS.positive

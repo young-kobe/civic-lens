@@ -11,6 +11,7 @@ import { Sparkline } from '../components/charts';
 import { fetchMovers, fetchNarratives, fetchSnapshotStatus, type SnapshotStatus } from '../services/api';
 import { asOfTodayEyebrow } from '../services/timeWindow';
 import { formatRefreshedAgo, getSnapshotTimestamp } from '../services/freshness';
+import { formatPct } from '../services/format';
 import { useFetch } from '../services/useFetch';
 import { COLORS } from '../theme';
 import type {
@@ -179,8 +180,7 @@ function NarrativeCard({ narrative, onOpen }: NarrativeCardProps) {
                 </span>
                 <span>
                     <span className="narrative-card-metric-value" style={{ color: sentColor }}>
-                        {narrative.net_sentiment >= 0 ? '+' : ''}
-                        {narrative.net_sentiment.toFixed(1)}%
+                        {formatPct(narrative.net_sentiment, { min: -100, signed: true })}
                     </span>
                     <span className="narrative-card-metric-label">net</span>
                 </span>
@@ -236,7 +236,6 @@ function NarrativeDetailModal({ narrative, onClose, onBack, backLabel }: Narrati
         [narrative.timeline],
     );
     const sentColor = netSentimentColor(narrative.net_sentiment);
-    const sign = narrative.net_sentiment >= 0 ? '+' : '';
     const supportingDocs = narrative.top_supporting_docs ?? [];
 
     return (
@@ -258,7 +257,7 @@ function NarrativeDetailModal({ narrative, onClose, onBack, backLabel }: Narrati
                 <div>
                     <div className="eyebrow">Net sentiment</div>
                     <div className="metric-value" style={{ color: sentColor }}>
-                        {sign}{narrative.net_sentiment.toFixed(1)}%
+                        {formatPct(narrative.net_sentiment, { min: -100, signed: true })}
                     </div>
                 </div>
                 <div>
@@ -385,7 +384,6 @@ function groupNarrativesByEntity(narratives: NarrativeSummary[]): NarrativeEntit
 
 function entityStatsForNarratives(g: NarrativeEntityGroup): EntityStat[] {
     if (g.count === 0) return [];
-    const sign = g.avgNetSentiment >= 0 ? '+' : '';
     const sentColor = netSentimentColor(g.avgNetSentiment);
     const stats: EntityStat[] = [
         {
@@ -395,7 +393,7 @@ function entityStatsForNarratives(g: NarrativeEntityGroup): EntityStat[] {
         },
         {
             label: 'Avg tone',
-            value: `${sign}${g.avgNetSentiment.toFixed(1)}%`,
+            value: formatPct(g.avgNetSentiment, { min: -100, signed: true }),
             color: sentColor,
         },
         {
@@ -425,7 +423,6 @@ function NarrativeEntityModal({
     onOpenNarrative: (n: NarrativeSummary) => void;
 }) {
     const { profile } = group;
-    const sign = group.avgNetSentiment >= 0 ? '+' : '';
     const sentColor = netSentimentColor(group.avgNetSentiment);
     const sourceUrl = entityExternalUrl(profile);
 
@@ -452,7 +449,7 @@ function NarrativeEntityModal({
                 <div>
                     <div className="eyebrow">Avg tone</div>
                     <div className="metric-value" style={{ color: sentColor }}>
-                        {sign}{group.avgNetSentiment.toFixed(1)}%
+                        {formatPct(group.avgNetSentiment, { min: -100, signed: true })}
                     </div>
                 </div>
                 <div>
