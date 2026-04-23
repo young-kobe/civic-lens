@@ -5,9 +5,10 @@ import {
 } from '../components/common';
 import type { TickerItem } from '../components/common';
 import { Heatmap } from '../components/charts';
-import { fetchBotActivity } from '../services/api';
+import { fetchBotActivity, fetchSnapshotStatus, type SnapshotStatus } from '../services/api';
 import { asOfTodayEyebrow } from '../services/timeWindow';
 import { useFetch } from '../services/useFetch';
+import { formatRefreshedAgo, getSnapshotTimestamp } from '../services/freshness';
 import { COLORS } from '../theme';
 import type {
     BehavioralSignals, BotData, BotEntityItem, BotOverview, ConfidenceLevel,
@@ -567,6 +568,11 @@ function BotActivityProfiler({ filters }: BotActivityProfilerProps) {
         [],
         'bot-activity',
     );
+    const { data: snapshotStatus } = useFetch<SnapshotStatus>(
+        () => fetchSnapshotStatus(),
+        [],
+        'snapshot-status',
+    );
 
     if (error) {
         return <ErrorState message={error.message} onRetry={refetch} />;
@@ -596,7 +602,7 @@ function BotActivityProfiler({ filters }: BotActivityProfilerProps) {
     }
 
     const { items: botTickerItems, accentColor: botAccentColor } = buildBotTickerItems(data.overview);
-    const botRefreshed = new Date().toISOString().slice(0, 19).replace('T', ' ') + ' UTC';
+    const botRefreshed = formatRefreshedAgo(getSnapshotTimestamp(snapshotStatus, 'bot_activity'));
 
     return (
         <div className="dashboard-grid">

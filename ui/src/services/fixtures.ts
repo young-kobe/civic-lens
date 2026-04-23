@@ -982,6 +982,24 @@ export function mockPropaganda(): PropagandaOverview {
 }
 
 /**
+ * Mock snapshot-status payload — one row per cached aggregation with a
+ * timestamp 18 minutes in the past, mimicking a recent pipeline run.
+ */
+export function mockSnapshotStatus() {
+    const recent = new Date(Date.now() - 18 * 60 * 1000).toISOString();
+    const keys = [
+        'sentiment_24h', 'sentiment_7d', 'sentiment_30d', 'sentiment_90d',
+        'bot_activity',
+        'narratives_24h', 'narratives_7d', 'narratives_30d', 'narratives_90d',
+        'propaganda_24h', 'propaganda_7d', 'propaganda_30d', 'propaganda_90d',
+        'polling_gop',
+    ];
+    return {
+        snapshots: keys.map((key) => ({ key, generated_at: recent, doc_count: 100 })),
+    };
+}
+
+/**
  * Mock movers payload — exercises the MoversTicker with a handful of
  * plausibly-shaped entity deltas plus one GOP-favorability row.
  */

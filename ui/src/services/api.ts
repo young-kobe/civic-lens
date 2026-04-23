@@ -144,6 +144,27 @@ export async function fetchMovers(window: TimeWindow = '7d'): Promise<MoversResu
     return fetchJSON<MoversResult>(`/movers?window=${window}`);
 }
 
+/** One row of /snapshot-status — the pipeline's record of when each cached
+ *  aggregation was last written. Consumed by the header "LIVE · <ts>" strip
+ *  and each page's GlobalTicker refreshed timestamp. */
+export interface SnapshotStatusEntry {
+    key: string;            // e.g. "sentiment_7d", "bot_activity", "narratives_24h"
+    generated_at: string;   // ISO 8601
+    doc_count: number;
+}
+
+export interface SnapshotStatus {
+    snapshots: SnapshotStatusEntry[];
+}
+
+export async function fetchSnapshotStatus(): Promise<SnapshotStatus> {
+    if (USE_MOCKS) {
+        const { mockSnapshotStatus } = await import('./fixtures');
+        return mockSnapshotStatus();
+    }
+    return fetchJSON<SnapshotStatus>(`/snapshot-status`);
+}
+
 export interface ReviewQueueParams {
     task: ReviewTaskType;
     sourceType?: string;

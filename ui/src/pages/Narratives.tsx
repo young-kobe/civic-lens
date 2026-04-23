@@ -7,8 +7,9 @@ import {
 import type { EntityStat, TickerItem } from '../components/common';
 import type { EntityProfile } from '../types';
 import { Sparkline } from '../components/charts';
-import { fetchMovers, fetchNarratives } from '../services/api';
+import { fetchMovers, fetchNarratives, fetchSnapshotStatus, type SnapshotStatus } from '../services/api';
 import { asOfTodayEyebrow } from '../services/timeWindow';
+import { formatRefreshedAgo, getSnapshotTimestamp } from '../services/freshness';
 import { useFetch } from '../services/useFetch';
 import { COLORS } from '../theme';
 import type {
@@ -660,6 +661,11 @@ function Narratives({ filters }: NarrativesProps) {
         [filters.timeRange],
         `movers:${filters.timeRange}`,
     );
+    const { data: snapshotStatus } = useFetch<SnapshotStatus>(
+        () => fetchSnapshotStatus(),
+        [],
+        'snapshot-status',
+    );
 
     if (error) return <ErrorState message={error.message} onRetry={refetch} />;
     if (loading) {
@@ -703,7 +709,9 @@ function Narratives({ filters }: NarrativesProps) {
     const crossTier = filtered.filter((n) => n.cross_tier);
 
     const tickerItems = buildNarrativeTickerItems(filtered, filters.timeRange);
-    const refreshed = new Date().toISOString().slice(0, 19).replace('T', ' ') + ' UTC';
+    const refreshed = formatRefreshedAgo(
+        getSnapshotTimestamp(snapshotStatus, `narratives_${filters.timeRange}`),
+    );
 
     return (
         <>

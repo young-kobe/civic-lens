@@ -131,3 +131,31 @@ def get_movers(request: Request, window: WindowLiteral = "7d"):
     Computed live (not snapshot-cached) — it's a two-SQL-pass diff, cheap
     enough to run per-request at the rate limit configured here."""
     return movers_agg.get_movers(time_window=window).to_dict()
+
+
+@router.get("/snapshot-status")
+def get_snapshot_status():
+    """Returns `generated_at` + `doc_count` per cached snapshot.
+
+    Public (non-admin): the UI uses this to show the real "data refreshed at"
+    timestamp in the header and in each page's GlobalTicker, instead of
+    render-time ``new Date()``. The absolute ``cache_dir`` path is NOT
+    exposed here — only the key, its ISO timestamp, and the doc count. Admin
+    operators get the fuller view at ``/admin/cache-status``.
+
+    No per-route rate limit — inherits the server-wide 120/min-per-IP
+    default, matching the plain ``/sentiment`` + ``/bot-activity`` pattern.
+    The SPA calls it once per page mount and the useFetch module cache
+    dedupes across tab switches, so a well-behaved client sits well under
+    the cap. Cost is bounded: ~14 file stats + JSON _meta reads per call.
+    """
+    return {
+        "snapshots": [
+            {
+                "key": m["key"],
+                "generated_at": m["generated_at"],
+                "doc_count": m["doc_count"],
+            }
+            for m in cache.get_all_metadata()
+        ],
+    }

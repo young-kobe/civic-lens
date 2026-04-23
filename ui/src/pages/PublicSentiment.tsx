@@ -11,8 +11,9 @@ import type {
     EntitySentimentItem, Filters, MoversResult, PollingSocialComparison, PublicSentimentData,
     SentimentDistribution,
 } from '../types';
-import { fetchMovers, fetchSentiment } from '../services/api';
+import { fetchMovers, fetchSentiment, fetchSnapshotStatus, type SnapshotStatus } from '../services/api';
 import { asOfTodayEyebrow, formatTimeWindow } from '../services/timeWindow';
+import { formatRefreshedAgo, getSnapshotTimestamp } from '../services/freshness';
 import { transformPublicSentiment } from '../services/transformers';
 import { useFetch } from '../services/useFetch';
 import { COLORS } from '../theme';
@@ -488,6 +489,11 @@ function PublicSentiment({ filters }: PublicSentimentProps) {
         [filters.timeRange],
         `movers:${filters.timeRange}`,
     );
+    const { data: snapshotStatus } = useFetch<SnapshotStatus>(
+        () => fetchSnapshotStatus(),
+        [],
+        'snapshot-status',
+    );
 
     if (error) return <ErrorState message={error.message} onRetry={refetch} />;
 
@@ -506,7 +512,9 @@ function PublicSentiment({ filters }: PublicSentimentProps) {
     if (!data) return <EmptyState title="No tone data available" />;
 
     const tickerItems = buildSentimentTickerItems(data);
-    const refreshed = new Date().toISOString().slice(0, 19).replace('T', ' ') + ' UTC';
+    const refreshed = formatRefreshedAgo(
+        getSnapshotTimestamp(snapshotStatus, `sentiment_${filters.timeRange}`),
+    );
 
     return (
         <div className="dashboard-grid">

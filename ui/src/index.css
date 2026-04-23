@@ -1137,15 +1137,16 @@ code, pre {
 }
 
 @media (max-width: 640px) {
-  .modal-backdrop { padding: var(--space-2); align-items: flex-end; }
-  .modal-surface {
-    max-height: 92vh;
-    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-    animation: modal-slide-up 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  /* Keep the desktop anchoring (top-biased via 5vh padding + rise-in
+     animation) but tighten the backdrop gutter so the surface can use
+     the full viewport width. The previous bottom-sheet layout pinned
+     modals to the bottom of the screen on mobile, which read as stuck
+     rather than centered. */
+  .modal-backdrop {
+    padding: 5vh var(--space-2) var(--space-2);
   }
-  @keyframes modal-slide-up {
-    from { opacity: 0; transform: translateY(100%); }
-    to { opacity: 1; transform: translateY(0); }
+  .modal-surface {
+    max-height: 90vh;
   }
 }
 
