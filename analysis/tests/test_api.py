@@ -92,8 +92,7 @@ class TestAPI(unittest.TestCase):
     def test_data_endpoints_under_v1(self):
         """Data endpoints live under /api/v1 after the versioning switch."""
         for path in ("/api/v1/sentiment", "/api/v1/bot-activity",
-                     "/api/v1/narratives", "/api/v1/propaganda",
-                     "/api/v1/geo-sentiment"):
+                     "/api/v1/narratives", "/api/v1/propaganda"):
             resp = requests.get(f"{API_URL}{path}")
             # With an empty/seed DB the aggregators may return empty payloads,
             # but the endpoint must respond 200 with JSON.

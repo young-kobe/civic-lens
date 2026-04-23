@@ -25,12 +25,21 @@ from collections import Counter, defaultdict
 from typing import Any, Dict, Iterable, List, Tuple
 
 from analysis.src.reporting.aggregators.base import get_connection
+from analysis.src.reporting.entity_registry import (
+    catch_all_profile,
+    CATCH_ALL_OUTLETS,
+    CATCH_ALL_SUBREDDITS,
+    CATCH_ALL_X_USERS,
+    get_registry,
+    resolve_entity,
+)
 from analysis.src.reporting.models import (
+    BotActivityData,
+    BotEntityItem,
     BotOverview,
-    NarrativeAmplification,
     CoordinationStats,
     BehavioralSignals,
-    BotActivityData,
+    NarrativeAmplification,
 )
 
 
@@ -53,7 +62,8 @@ class BotAggregator:
                 bot_data["bot_doc_ids"],
                 bot_data["bot_authors"],
             )
-        return self._format_bot_activity(bot_data, behavior)
+            rollups = self._fetch_entity_rollups(cursor)
+        return self._format_bot_activity(bot_data, behavior, rollups)
 
     # ---------- Fetch ----------
 
@@ -218,10 +228,96 @@ class BotAggregator:
             "account_reuse": round(account_reuse, 3),
         }
 
+    # ---------- Entity rollups (three-way Bot Detector grid) ----------
+
+    def _fetch_entity_rollups(self, cursor) -> Dict[str, List[BotEntityItem]]:
+        """Per-entity bot-classification rates for the three-way grid.
+
+        Runs one joined scan of ai_outputs.task='bot_detection' rows together
+        with x author-handle lookup, then buckets each row into news /
+        officials / public via ``resolve_entity``. Per-entity output: total
+        eligible docs + bot-labelled subset + rate. Catch-alls sorted last;
+        entities sorted by bot_rate_pct desc inside each tier.
+        """
+        cursor.execute(
+            """
+            SELECT a.output_json, a.inference_method,
+                   d.source_type, d.domain_or_subreddit,
+                   u.username
+            FROM ai_outputs a
+            JOIN docs d ON d.doc_id = a.doc_id
+            LEFT JOIN x_posts_raw x
+                   ON d.source_type = 'x_post' AND x.tweet_id = d.ident
+            LEFT JOIN x_users_raw u ON u.user_id = x.author_id
+            WHERE a.task_type = 'bot_detection'
+            """
+        )
+        # (tier, key) -> accumulator
+        accum: Dict[Tuple[str, str], Dict[str, Any]] = {}
+        registry = get_registry()
+        for (output_json, inf_method, source_type, domain, handle) in cursor.fetchall():
+            if (inf_method or "") == "deterministic":
+                continue
+            try:
+                data = json.loads(output_json) if output_json else {}
+            except json.JSONDecodeError:
+                continue
+            label = data.get("label", "human")
+
+            tier, entity = resolve_entity(registry, source_type, domain, handle)
+            if tier is None:
+                continue
+            if entity is not None:
+                profile = entity.profile_dict()
+                key = profile["key"]
+            else:
+                if tier == "news":
+                    profile = catch_all_profile(
+                        CATCH_ALL_OUTLETS, "Other news outlets",
+                        "News doc whose domain is not in the tracked outlet registry.",
+                    )
+                elif tier == "public" and source_type == "x_post":
+                    profile = catch_all_profile(
+                        CATCH_ALL_X_USERS, "Other X users",
+                        "X post whose author is not in the tracked officials registry.",
+                    )
+                elif tier == "public":
+                    profile = catch_all_profile(
+                        CATCH_ALL_SUBREDDITS, "Other subreddits",
+                        "Reddit post whose subreddit is not in the tracked subreddit registry.",
+                    )
+                else:
+                    continue
+                key = profile["key"]
+
+            slot = accum.setdefault((tier, key), {
+                "kind": profile["kind"], "profile": profile,
+                "total": 0, "bot": 0,
+            })
+            slot["total"] += 1
+            if label == "bot":
+                slot["bot"] += 1
+
+        rollups: Dict[str, List[BotEntityItem]] = {
+            "news": [], "officials": [], "public": [],
+        }
+        for (tier, key), s in accum.items():
+            rate = (s["bot"] / s["total"] * 100) if s["total"] else 0.0
+            rollups[tier].append(BotEntityItem(
+                key=key, kind=s["kind"],
+                total_docs=s["total"], bot_docs=s["bot"],
+                bot_rate_pct=round(rate, 1),
+                entity_profile=s["profile"],
+            ))
+        for tier, items in rollups.items():
+            items.sort(key=_entity_sort_key)
+        return rollups
+
     # ---------- Format ----------
 
     def _format_bot_activity(
         self, bot_data: Dict[str, Any], behavior: Dict[str, Any],
+        rollups: Dict[str, List[BotEntityItem]],
     ) -> BotActivityData:
         total_eligible = bot_data["total_eligible"]
         bot_count = bot_data["bot_count"]
@@ -251,6 +347,9 @@ class BotAggregator:
                 topClusters=[c[0] for c in top_clusters],
                 totalFlaggedAccounts=bot_count + suspicious_count,
                 confidence="medium" if total_eligible > 100 else "low",
+                by_news_outlet=rollups.get("news", []),
+                by_official=rollups.get("officials", []),
+                by_general_public=rollups.get("public", []),
             ),
             narrativeAmplification=narratives,
             coordinationStats=CoordinationStats(
@@ -271,6 +370,13 @@ class BotAggregator:
 # =============================================================================
 # Pure helpers (unit-testable)
 # =============================================================================
+
+
+def _entity_sort_key(item: BotEntityItem) -> Tuple[int, float, int]:
+    """Sort bot-rollup entities: registry-matched first (catch-alls last),
+    highest bot_rate_pct next, then highest bot_docs as tie-break."""
+    is_catch_all = 1 if item.kind == "catch_all" else 0
+    return (is_catch_all, -item.bot_rate_pct, -item.bot_docs)
 
 
 def _compute_coordination_index(hourly_distribution: Dict[int, int]) -> float:

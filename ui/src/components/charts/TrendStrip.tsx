@@ -3,6 +3,7 @@ import {
     AreaChart, Area, XAxis, YAxis,
     ResponsiveContainer, Tooltip, ReferenceDot, TooltipProps, CartesianGrid,
 } from 'recharts';
+import { COLORS } from '../../theme';
 import type { TrendPoint, TrendAnnotation } from '../../types';
 
 interface TrendStripProps {
@@ -22,7 +23,7 @@ function TrendStrip({
     xKey = 'date',
     height = 160,
     annotations = [],
-    color = 'var(--chart-accent)',
+    color = COLORS.chartAccent,
     unit = '',
 }: TrendStripProps) {
     const gradientId = `trend-${useId().replace(/:/g, '')}`;
@@ -102,7 +103,7 @@ function TrendStrip({
                             <stop offset="100%" stopColor={color} stopOpacity={0} />
                         </linearGradient>
                     </defs>
-                    <CartesianGrid stroke="var(--chart-grid)" vertical={false} />
+                    <CartesianGrid stroke={COLORS.chartGrid} vertical={false} />
                     <XAxis
                         dataKey={xKey}
                         tick={{ fontSize: 10, fill: 'var(--neutral-500)' }}

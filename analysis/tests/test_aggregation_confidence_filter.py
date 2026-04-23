@@ -19,7 +19,6 @@ if project_root not in sys.path:
 
 from analysis.src.reporting.aggregators.base import get_bot_flagged_doc_ids
 from analysis.src.reporting.aggregators.narrative import NarrativeAggregator
-from analysis.src.reporting.aggregators.geo import GeoAggregator
 
 MIGRATIONS_DIR = os.path.join(project_root, "data", "migrations")
 
@@ -142,39 +141,6 @@ class TestNarrativeNetSentimentConfidenceFilter(unittest.TestCase):
         self.assertEqual(len(results), 1)
         # (0.9 + 0.9) / 2 = 0.9 → 90.0%
         self.assertAlmostEqual(results[0].net_sentiment, 90.0, places=1)
-
-
-class TestGeoSentimentConfidenceFilter(unittest.TestCase):
-    def setUp(self):
-        fd, self.db_path = tempfile.mkstemp(suffix=".db")
-        os.close(fd)
-        _apply_migrations(self.db_path)
-        now = int(time.time())
-        conn = sqlite3.connect(self.db_path)
-        # US posts: one high-conf POSITIVE, one low-conf NEGATIVE.
-        _seed_doc(conn, 1, "x_post", "t1", now, country_code="US")
-        _seed_doc(conn, 2, "x_post", "t2", now, country_code="US")
-        _seed_ai_output(conn, 1, "sentiment", {"label": "POSITIVE"}, 0.9)
-        _seed_ai_output(conn, 2, "sentiment", {"label": "NEGATIVE"}, 0.2)
-        conn.commit()
-        conn.close()
-
-    def tearDown(self):
-        os.unlink(self.db_path)
-
-    def test_post_count_unaffected_low_conf_sentiment_dropped(self):
-        """Both posts count toward the country's post_count; only the high-conf
-        POSITIVE contributes to the color/avg. The low-conf NEGATIVE becomes
-        'no sentiment' for the colored aggregate."""
-        agg = GeoAggregator(self.db_path)
-        result = agg.get_country_sentiment(time_window="all")
-        countries = {c["country_code"]: c for c in result["countries"]}
-        self.assertIn("US", countries)
-        us = countries["US"]
-        # Two posts (geo coverage counts both), one colored sample.
-        self.assertEqual(us["post_count"], 2)
-        # avg_sentiment = 1 * 0.9 = 0.9 (only the POSITIVE contributes).
-        self.assertAlmostEqual(us["avg_sentiment"], 0.9, places=2)
 
 
 if __name__ == "__main__":

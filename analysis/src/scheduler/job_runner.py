@@ -54,7 +54,6 @@ from analysis.src.reporting.aggregators import (
     SentimentAggregator,
     BotAggregator,
     NarrativeAggregator,
-    GeoAggregator,
     PropagandaAggregator,
 )
 from analysis.src.etl.polling import PollingDataScraper, PollingDataError
@@ -76,7 +75,6 @@ class AnalysisJobRunner:
         self.sentiment_agg = SentimentAggregator(self.settings.db_path)
         self.bot_agg = BotAggregator(self.settings.db_path)
         self.narrative_agg = NarrativeAggregator(self.settings.db_path)
-        self.geo_agg = GeoAggregator(self.settings.db_path)
         self.propaganda_agg = PropagandaAggregator(self.settings.db_path)
 
         # Resolve model_id for DB tracking
@@ -214,7 +212,7 @@ class AnalysisJobRunner:
                         inference_method="deterministic",
                     )
                     excluded_count += 1
-                    logger.info(
+                    logger.debug(
                         f"[bot {i}/{total}] doc={doc['doc_id']} PRE-EXCLUDED ({pre_exclude_reason})"
                     )
                     continue
@@ -233,7 +231,7 @@ class AnalysisJobRunner:
                     inference_method=result.inference_method,
                 )
                 processed += 1
-                logger.info(
+                logger.debug(
                     f"[bot {i}/{total}] doc={doc['doc_id']} "
                     f"label={result.label} conf={result.confidence:.2f} "
                     f"llm_text={result.llm_text_likelihood:.2f}"
@@ -344,7 +342,7 @@ class AnalysisJobRunner:
                 inference_method=fav_result.inference_method,
             )
             
-            logger.info(
+            logger.debug(
                 f"[text-analysis {i}/{total}] doc={doc['doc_id']} type={doc.get('source_type', 'unknown')} "
                 f"sent={sent_result.label}({sent_result.confidence:.2f}) "
                 f"fav={fav_result.overall_gop_stance}({fav_result.overall_confidence:.2f})"
@@ -391,7 +389,7 @@ class AnalysisJobRunner:
                 user_prompt_template=PROPAGANDA_USER_PROMPT_TEMPLATE,
                 inference_method=result.inference_method,
             )
-            logger.info(
+            logger.debug(
                 f"[propaganda {i}/{total}] doc={doc['doc_id']} "
                 f"techniques={len(result.techniques)} "
                 f"score={result.overall_propaganda_score:.2f}"
@@ -455,7 +453,7 @@ class AnalysisJobRunner:
                 user_prompt_template=CLAIM_EXTRACTION_USER_PROMPT_TEMPLATE,
                 inference_method="llm",
             )
-            logger.info(
+            logger.debug(
                 f"[claims {i}/{total}] doc={doc['doc_id']} extracted={len(result.claims)} "
                 f"mean_conf={row_confidence:.2f}"
             )
@@ -638,17 +636,6 @@ class AnalysisJobRunner:
             data = [n.to_dict() for n in narratives]
             self.cache.save(f"narratives_{window}", data, doc_count=len(data))
             results[f"narratives_{window}"] = len(data)
-
-        # Geo sentiment — cache per time window (walkthrough 041). Previously
-        # the endpoint recomputed live on every UI request because no snapshot
-        # was ever written.
-        for window in time_windows:
-            geo = self.geo_agg.get_country_sentiment(
-                time_window=window, bot_docs=bot_docs,
-            )
-            total_posts = int(geo.get("total_posts", 0)) if isinstance(geo, dict) else 0
-            self.cache.save(f"geo_sentiment_{window}", geo, doc_count=total_posts)
-            results[f"geo_sentiment_{window}"] = total_posts
 
         # Propaganda — cache per time window (walkthrough 043).
         for window in time_windows:

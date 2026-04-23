@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Card } from '../../components/common';
 import { submitReview } from '../../services/api';
+import { COLORS } from '../../theme';
 import type { ReviewQueueItem, ReviewTaskType } from '../../types';
 
 const LABEL_OPTIONS_BY_TASK: Record<ReviewTaskType, string[]> = {
@@ -95,8 +96,28 @@ export default function ReviewItemCard({ item, reviewerId, onSubmitted }: Review
         ?? item.model_output.sentiment_evidence_spans
         ?? []) as string[];
 
+    // Source link — invariant C1. Every evidence surface (including the admin
+    // review queue) must outbound-link to the original doc. url comes from the
+    // backend's _build_doc_url helper; null in the rare case the ingest layer
+    // didn't capture enough metadata to synthesize a permalink.
+    const sourceLink = item.doc.url ? (
+        <a
+            href={item.doc.url}
+            target="_blank"
+            rel="noreferrer"
+            className="example-row-link"
+            style={{ fontSize: 'var(--text-xs)' }}
+        >
+            View original ↗
+        </a>
+    ) : null;
+
     return (
-        <Card title={`Doc #${item.doc_id} · ${item.doc.source_type}`} subtitle={item.doc.title || item.doc.ident}>
+        <Card
+            title={`Doc #${item.doc_id} · ${item.doc.source_type}`}
+            subtitle={item.doc.title || item.doc.ident}
+            headerActions={sourceLink}
+        >
             {/* Doc text */}
             <details open style={{ marginBottom: 'var(--space-4)' }}>
                 <summary className="eyebrow" style={{ cursor: 'pointer', marginBottom: 'var(--space-2)' }}>
@@ -121,7 +142,7 @@ export default function ReviewItemCard({ item, reviewerId, onSubmitted }: Review
             <div
                 style={{
                     padding: 'var(--space-3)',
-                    background: '#fbfaf6',
+                    background: COLORS.adminCardBg,
                     border: '1px solid var(--neutral-200)',
                     marginBottom: 'var(--space-4)',
                 }}
@@ -232,7 +253,7 @@ export default function ReviewItemCard({ item, reviewerId, onSubmitted }: Review
                 />
 
                 {error && (
-                    <div style={{ color: 'var(--semantic-negative)', fontSize: 'var(--text-sm)' }}>
+                    <div style={{ color: COLORS.negative, fontSize: 'var(--text-sm)' }}>
                         {error}
                     </div>
                 )}

@@ -4,7 +4,7 @@ trigger: always_on
 
 ## Design Principles
 
-1. Follow DRY (Don't Repeat Yourself): Extract shared logic into reusable functions, modules, or base classes.
+1. Follow DRY (Don't Repeat Yourself): Extract shared logic into reusable functions, modules, or base classes — *after* the third copy. Three similar lines is better than a premature abstraction.
 2. Follow SOLID principles:
    - Single Responsibility: Each module/class handles one concern
    - Open/Closed: Extend via composition or inheritance, not modification
@@ -12,6 +12,9 @@ trigger: always_on
    - Interface Segregation: Prefer small, focused interfaces
    - Dependency Inversion: Depend on abstractions, not concrete implementations
 3. Maintain clear layer boundaries: ingest (Go) -> analysis (Python) -> api (FastAPI) -> ui (React)
+4. **Avoid unnecessary abstractions.** Don't introduce a helper, wrapper, class, or adapter until a concrete consumer demands it. No speculative base classes, no "might reuse later" utilities, no generic helpers written ahead of the second call site. If two consumers have ~80% shared code, inline both before extracting. MVP constraint: the cost of the wrong abstraction is greater than the cost of some duplication.
+5. **Clean up dead code as you go.** In every change, remove code that is no longer referenced by the change you just made — unused imports, now-orphaned helpers, CSS classes with no markup, branches that can't fire, comments describing a state that no longer exists. Don't leave `// deprecated` / `# removed` markers; delete. Don't leave backwards-compat shims; we're pre-1.0. If you add a replacement, delete the replaced thing in the same PR.
+6. **No backwards-compat shims.** Breaking an older snapshot shape, API response, or storage layout is fine — the cron rebuilds and the frontend reloads. Don't mark fields `Optional[...]` "in case older data exists" unless older data genuinely coexists in prod right now.
 
 ## Python Style
 
@@ -45,3 +48,8 @@ trigger: always_on
 3. Prefer explicit over implicit behavior
 4. Write self-documenting code; add comments only for non-obvious logic
 5. Keep function and method lengths to ~60 lines MAXIMUM as general rule, unless unavoidable. Do not eclipse 100 lines.
+6. **Plan -> audit-trail workflow.** Non-trivial work starts as a checklist in `docs/todos/<initiative>.md`. On merge, the change lands with a dated entry in `docs/audit-trail/<layer>/YYYY-MM-DD-short-slug.md`. Completed todos get deleted; audit-trail entries are permanent. See `docs/audit-trail/README.md` for the entry template. Do not add new files under `docs/walkthroughs/` — that directory is being consolidated (see `docs/todos/walkthrough-consolidation.md`).
+
+## Current project shape (reference)
+
+Four layers, strictly ordered (see CLAUDE.md for detail): Go ingest → Python analysis (ETL + engine + aggregators + scheduler) → FastAPI API (serves snapshot cache) → React UI. Public-facing data is editorial, bucketed by the three-way entity frame (News Outlets / Verified Officials / General Public) driven by YAML registries under `data/`. Confidence scores, sample labeling, and source-back-links (`docs/INVARIANTS.md` C1) are non-negotiable on every evidence surface.

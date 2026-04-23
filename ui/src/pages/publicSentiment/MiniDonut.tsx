@@ -1,5 +1,3 @@
-import { SEMANTIC_COLORS } from '../../theme';
-
 interface MiniDonutProps {
     positive: number;
     negative: number;
@@ -22,9 +20,9 @@ export function MiniDonut({ positive, negative, neutral, size = 56, ariaLabel }:
     const posPct = (positive / total) * 100;
 
     const gradient = `conic-gradient(
-        ${SEMANTIC_COLORS.negative} 0% ${negPct}%,
-        ${SEMANTIC_COLORS.neutral} ${negPct}% ${negPct + neuPct}%,
-        ${SEMANTIC_COLORS.positive} ${negPct + neuPct}% 100%
+        var(--semantic-negative) 0% ${negPct}%,
+        var(--semantic-neutral) ${negPct}% ${negPct + neuPct}%,
+        var(--semantic-positive) ${negPct + neuPct}% 100%
     )`;
 
     const accessibility = ariaLabel

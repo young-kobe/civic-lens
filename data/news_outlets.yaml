@@ -1,0 +1,317 @@
+schema_version: 1
+dataset_name: news_outlets
+description: >
+  Editorial registry of the 20 major US-political news outlets Civic Lens
+  tracks as first-class entities. Each entry pairs a canonical domain (so
+  the Go ingestor and the Python aggregators can route docs to the entity)
+  with a neutral 2-3 sentence blurb, a partisan-lean classification, and
+  the citation for that classification.
+
+  Scope is deliberately narrow. 20 outlets cover the bulk of US political
+  news discourse; every other outlet bucketed in the UI as "Other outlets".
+  Adding an entry to this file is an editorial decision — it promotes the
+  outlet to a first-class actor on the dashboard — so expansions should be
+  reviewed, not drive-by.
+
+  Blurb voice: neutral third-person, 2-3 sentences, structured as
+  {who they are} + {why they matter in US political media} +
+  {partisan lean / editorial stance}. Blurbs date over time (ownership
+  changes, editorial stances shift) — review cadence quarterly.
+
+notes:
+  - Partisan-lean buckets are one of left | center-left | center | center-right | right | mixed.
+  - Lean source is AllSides Media Bias Ratings where available. Some outlets are rated at both levels (news desk vs opinion page) by AllSides; we pick the overall rating that best describes the outlet's political coverage as seen by a general reader.
+  - The circulation_note field is a reach proxy, not validated traffic; always read as indicative, not precise (invariant — media-analysis rule 2).
+  - Two outlets (BBC, Reuters) are non-US by headquarters but cover US politics at scale; they remain in scope because US political discourse treats them as first-class sources.
+
+outlets:
+  - domain: nytimes.com
+    also_domains:
+      - nyt.com
+    display_name: The New York Times
+    blurb: >
+      A general-interest daily of record founded in 1851, the Times is the
+      largest US newspaper by paid digital subscriptions and a dominant
+      agenda-setter for political reporting across the rest of the press.
+      The news desk's selection and framing are regularly cited as setting
+      the left-of-center register for mainstream coverage.
+    partisan_lean: center-left
+    lean_source: AllSides 2024 (Lean Left)
+    owner: The New York Times Company
+    founded: 1851
+    circulation_note: ~10M paid digital subscribers (proxy)
+
+  - domain: washingtonpost.com
+    also_domains:
+      - wapo.st
+      - washpost.com
+    display_name: The Washington Post
+    blurb: >
+      Founded in 1877 and based in the US capital, the Post is a major
+      driver of executive-branch and congressional coverage, with a national
+      political desk whose reporting is widely syndicated. Owned since 2013
+      by Jeff Bezos through Nash Holdings, with an editorial board that has
+      historically leaned liberal while recent owner-directed changes have
+      pushed the opinion page rightward.
+    partisan_lean: center-left
+    lean_source: AllSides 2024 (Lean Left)
+    owner: Nash Holdings (Jeff Bezos)
+    founded: 1877
+    circulation_note: ~2.5M paid digital subscribers (proxy)
+
+  - domain: wsj.com
+    also_domains: []
+    display_name: The Wall Street Journal
+    blurb: >
+      A business-first daily founded in 1889 and owned by News Corp since
+      2007, the Journal's news desk is among the most-cited wires for
+      economic and regulatory reporting, while its opinion page is a
+      prominent conservative editorial voice. AllSides rates the overall
+      outlet to the right of center driven largely by the opinion split.
+    partisan_lean: center-right
+    lean_source: AllSides 2024 (Center news / Lean Right opinion — overall Lean Right)
+    owner: News Corp (Rupert Murdoch family trust)
+    founded: 1889
+    circulation_note: ~4M paid subscribers (proxy)
+
+  - domain: usatoday.com
+    also_domains: []
+    display_name: USA Today
+    blurb: >
+      A high-circulation national daily founded in 1982 and owned by
+      Gannett, the largest US newspaper chain. Aimed at a general audience
+      with short-form political coverage and fact-checking partnerships, it
+      sits near the center with a mild lean-left on AllSides' rating.
+    partisan_lean: center-left
+    lean_source: AllSides 2024 (Lean Left)
+    owner: Gannett
+    founded: 1982
+    circulation_note: ~1.7M print + digital subscribers (proxy)
+
+  - domain: apnews.com
+    also_domains:
+      - ap.org
+    display_name: Associated Press
+    blurb: >
+      A nonprofit news cooperative founded in 1846 whose wire copy is
+      distributed to thousands of US outlets and shapes the baseline text
+      of most political stories. Its reporting style is deliberately
+      neutral, and AllSides rates the wire at center.
+    partisan_lean: center
+    lean_source: AllSides 2024 (Center)
+    owner: Associated Press (nonprofit cooperative)
+    founded: 1846
+    circulation_note: Wire service syndicated to thousands of outlets (no direct subscriber count)
+
+  - domain: reuters.com
+    also_domains: []
+    display_name: Reuters
+    blurb: >
+      A global wire service headquartered in London and owned by Thomson
+      Reuters, Reuters supplies much of the factual spine of US political
+      reporting alongside AP. Its Trust Principles bind the newsroom to
+      neutrality, and AllSides rates it at center.
+    partisan_lean: center
+    lean_source: AllSides 2024 (Center)
+    owner: Thomson Reuters
+    founded: 1851
+    circulation_note: Wire service + reuters.com digital (no direct subscriber count)
+
+  - domain: npr.org
+    also_domains: []
+    display_name: NPR
+    blurb: >
+      National Public Radio, a nonprofit network founded in 1970 that
+      produces political, policy, and cultural reporting distributed
+      through ~1,000 member stations. Partially federally funded; AllSides
+      rates the outlet as Lean Left.
+    partisan_lean: center-left
+    lean_source: AllSides 2024 (Lean Left)
+    owner: National Public Radio (nonprofit)
+    founded: 1970
+    circulation_note: ~50M weekly radio listeners (proxy)
+
+  - domain: bbc.com
+    also_domains:
+      - bbc.co.uk
+    display_name: BBC
+    blurb: >
+      The British Broadcasting Corporation, publicly funded by the UK
+      license fee, is one of the most-read non-US news outlets covering
+      American politics. Its editorial charter emphasizes impartiality;
+      AllSides rates its US-facing coverage at center.
+    partisan_lean: center
+    lean_source: AllSides 2024 (Center)
+    owner: British Broadcasting Corporation (UK public broadcaster)
+    founded: 1922
+    circulation_note: Major global outlet; US-facing traffic large but not separately reported (proxy)
+
+  - domain: foxnews.com
+    also_domains: []
+    display_name: Fox News
+    blurb: >
+      Founded in 1996 by Rupert Murdoch and Roger Ailes, Fox News is the
+      most-watched US cable news network and the dominant conservative
+      television voice in US politics. AllSides rates the overall outlet
+      as Right, with a sharp divide between news-hour reporting and a
+      heavily opinionated prime-time block.
+    partisan_lean: right
+    lean_source: AllSides 2024 (Right)
+    owner: Fox Corporation (Murdoch family trust)
+    founded: 1996
+    circulation_note: ~2M average prime-time viewers (proxy)
+
+  - domain: cnn.com
+    also_domains: []
+    display_name: CNN
+    blurb: >
+      The Cable News Network, founded in 1980 and now part of Warner Bros.
+      Discovery, was the first 24-hour cable news channel and remains a
+      major hub for breaking political coverage. AllSides rates it Lean
+      Left, with editorial shifts through the 2020s that have moved the
+      outlet closer to the center on some coverage.
+    partisan_lean: center-left
+    lean_source: AllSides 2024 (Lean Left)
+    owner: Warner Bros. Discovery
+    founded: 1980
+    circulation_note: ~500k-1M average prime-time viewers (proxy)
+
+  - domain: msnbc.com
+    also_domains: []
+    display_name: MSNBC
+    blurb: >
+      A cable news network launched in 1996 and currently part of
+      NBCUniversal (a Comcast spinoff is pending). MSNBC's prime-time
+      schedule is overtly progressive and it is widely regarded as the
+      Democratic-leaning counterpart to Fox News; AllSides rates it Left.
+    partisan_lean: left
+    lean_source: AllSides 2024 (Left)
+    owner: NBCUniversal / Comcast (spinoff pending)
+    founded: 1996
+    circulation_note: ~1M average prime-time viewers (proxy)
+
+  - domain: bloomberg.com
+    also_domains: []
+    display_name: Bloomberg News
+    blurb: >
+      The news arm of Bloomberg L.P., founded in 1990 and privately held
+      by Michael Bloomberg. Political coverage is secondary to market and
+      regulatory reporting, but Bloomberg's Washington desk is a major
+      source on economic policy. AllSides rates it at center.
+    partisan_lean: center
+    lean_source: AllSides 2024 (Center)
+    owner: Bloomberg L.P. (Michael Bloomberg)
+    founded: 1990
+    circulation_note: ~350k paying terminal subscribers + large free digital reach (proxy)
+
+  - domain: politico.com
+    also_domains: []
+    display_name: Politico
+    blurb: >
+      Founded in 2007 and acquired by Axel Springer in 2021, Politico is a
+      Washington-focused political trade publication and one of the most
+      influential outlets among Hill staff, lobbyists, and campaign
+      operators. AllSides rates it Lean Left.
+    partisan_lean: center-left
+    lean_source: AllSides 2024 (Lean Left)
+    owner: Axel Springer SE
+    founded: 2007
+    circulation_note: Political/policy-insider audience; free digital + paid Pro tier
+
+  - domain: thehill.com
+    also_domains: []
+    display_name: The Hill
+    blurb: >
+      A Washington-centric daily founded in 1994 and owned by Nexstar Media
+      Group since 2021. Heavy Congressional and campaign coverage with a
+      volume-driven digital publishing model; AllSides rates it at center.
+    partisan_lean: center
+    lean_source: AllSides 2024 (Center)
+    owner: Nexstar Media Group
+    founded: 1994
+    circulation_note: Large free digital reach; no paywall (proxy)
+
+  - domain: axios.com
+    also_domains: []
+    display_name: Axios
+    blurb: >
+      A Washington-based digital outlet founded in 2017 and acquired by
+      Cox Enterprises in 2022, known for short-form "smart brevity"
+      political reporting and heavily-read newsletters. AllSides rates it
+      at center.
+    partisan_lean: center
+    lean_source: AllSides 2024 (Center)
+    owner: Cox Enterprises
+    founded: 2017
+    circulation_note: Newsletter-led distribution; ~5M newsletter subscribers (proxy)
+
+  - domain: theatlantic.com
+    also_domains: []
+    display_name: The Atlantic
+    blurb: >
+      A long-form monthly founded in 1857, now majority-owned by Emerson
+      Collective (Laurene Powell Jobs). Its political reporting and
+      essays are widely read among liberal and centrist professional
+      readers; AllSides rates it Left.
+    partisan_lean: left
+    lean_source: AllSides 2024 (Left)
+    owner: Emerson Collective
+    founded: 1857
+    circulation_note: ~1M paid subscribers (proxy)
+
+  - domain: nationalreview.com
+    also_domains: []
+    display_name: National Review
+    blurb: >
+      A conservative opinion magazine founded in 1955 by William F.
+      Buckley Jr., historically central to the intellectual development
+      of post-war American conservatism. Owned by the nonprofit National
+      Review Institute; AllSides rates it Right.
+    partisan_lean: right
+    lean_source: AllSides 2024 (Right)
+    owner: National Review Institute (nonprofit)
+    founded: 1955
+    circulation_note: Opinion magazine + digital; reach is professional-conservative (proxy)
+
+  - domain: thefederalist.com
+    also_domains: []
+    display_name: The Federalist
+    blurb: >
+      An online conservative magazine founded in 2013 and operated by
+      FDRLST Media. Editorially populist-right and a regular source of
+      primary documents and arguments for the US conservative movement's
+      activist wing; AllSides rates it Right.
+    partisan_lean: right
+    lean_source: AllSides 2024 (Right)
+    owner: FDRLST Media
+    founded: 2013
+    circulation_note: Digital only; reach is conservative-activist (proxy)
+
+  - domain: breitbart.com
+    also_domains: []
+    display_name: Breitbart News
+    blurb: >
+      A right-wing news site founded in 2007 and strongly associated with
+      the US populist-right and MAGA coalition. AllSides rates it Right;
+      fact-check organizations have flagged Breitbart repeatedly for
+      misleading framing, so readers should treat its factual claims as
+      needing corroboration.
+    partisan_lean: right
+    lean_source: AllSides 2024 (Right)
+    owner: Breitbart News Network
+    founded: 2007
+    circulation_note: Digital only; reach concentrated on the populist right (proxy)
+
+  - domain: theintercept.com
+    also_domains: []
+    display_name: The Intercept
+    blurb: >
+      A digital magazine founded in 2014 by First Look Media and
+      editorially known for investigative national-security and
+      surveillance reporting from a left perspective. AllSides rates it
+      Left.
+    partisan_lean: left
+    lean_source: AllSides 2024 (Left)
+    owner: First Look Media
+    founded: 2014
+    circulation_note: Digital only; reach is left-investigative audience (proxy)

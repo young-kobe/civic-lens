@@ -8,7 +8,7 @@ import contextlib
 import sqlite3
 import json
 import time
-from typing import Optional, Set
+from typing import FrozenSet, Literal, Optional, Set
 
 from analysis.src.common.logger import get_logger
 
@@ -23,6 +23,29 @@ TIME_WINDOWS = {
     "90d": 90 * 24 * 60 * 60,
     "all": None,
 }
+
+# UI-facing source filter keys mapped to the set of doc source_type values
+# they select. "all" means no filter. Keep in lockstep with the Filters
+# type in ui/src/types.ts.
+SourceFilter = Literal["all", "news", "reddit", "social"]
+
+_SOURCE_FILTER_SETS: dict = {
+    "news": frozenset({"news"}),
+    "reddit": frozenset({"reddit_post", "reddit_comment"}),
+    "social": frozenset({"reddit_post", "reddit_comment", "x_post"}),
+}
+
+
+def source_filter_allowed(source_filter: str) -> Optional[FrozenSet[str]]:
+    """Return the set of allowed source_type values for a filter key, or None
+    when no filter should be applied ("all" or any unknown value).
+
+    Callers iterate rows and skip when source_type not in the returned set.
+    Returning None (rather than every-type) lets the caller short-circuit
+    the check entirely in the unfiltered case."""
+    if source_filter == "all" or source_filter not in _SOURCE_FILTER_SETS:
+        return None
+    return _SOURCE_FILTER_SETS[source_filter]
 
 
 @contextlib.contextmanager
@@ -41,6 +64,20 @@ def get_time_cutoff(window: str) -> Optional[int]:
     if seconds is None:
         return None
     return int(time.time()) - seconds
+
+
+def get_previous_window_range(window: str) -> Optional[tuple]:
+    """Return (start, end) unix timestamps for the window *before* the given
+    one — same duration, ending at the current window's start. Returns None
+    for ``all`` (no preceding window) or unknown keys.
+
+    7d → (now - 14*86400, now - 7*86400)
+    """
+    seconds = TIME_WINDOWS.get(window)
+    if seconds is None:
+        return None
+    now = int(time.time())
+    return (now - 2 * seconds, now - seconds)
 
 
 def fetch_task_rows(

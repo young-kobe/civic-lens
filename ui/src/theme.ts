@@ -1,23 +1,107 @@
 /**
- * Design tokens mirrored from index.css `:root` for use in JS/TS.
+ * Color tokens — wrappers around the CSS custom properties in
+ * `ui/src/index.css` :root.
  *
- * Keep these in lockstep with the CSS custom properties — when you change a
- * palette value, change it in both places (or the CSS becomes the lone
- * source of truth and the pages that import hex here drift). The pages
- * that need runtime access (SVG fills computed via d3-style threshold
- * functions, canvas charts, etc.) import from here; everything else
- * should prefer `var(--semantic-*)` in the stylesheet.
+ * **Source of truth = index.css**. This file exposes a typed
+ * `COLORS` dictionary that returns `var(--token)` strings so
+ * TS components get autocomplete + typo catching without
+ * duplicating hex values.
+ *
+ * Rule: **components reference `COLORS.foo` OR plain CSS classes —
+ * never inline `'var(--…)'` strings**. That keeps one convention
+ * everywhere and makes renames safe. The only hex left in the
+ * codebase should be inside CSS custom properties.
  */
 
-export const SEMANTIC_COLORS = {
-  positive: '#008a4c',
-  positiveLight: '#e3f6eb',
-  negative: '#d41e0e',
-  negativeLight: '#fbe7e4',
-  neutral: '#62626a',
-  neutralLight: '#f4f4f5',
-  warning: '#b26100',
-  warningLight: '#fdf0dd',
+/**
+ * Typed color dictionary. Keys are camelCase; values are
+ * `var(--token)` strings that resolve at paint time via the
+ * CSS custom properties in `:root`.
+ *
+ * Grouped for readability; when you need a new token:
+ *  1. Add the `--foo-bar` var to `:root` in `index.css`.
+ *  2. Add a matching key to this object.
+ *  3. Use `COLORS.fooBar` in components.
+ */
+export const COLORS = {
+    // Semantic palette
+    positive:      'var(--semantic-positive)',
+    positiveLight: 'var(--semantic-positive-light)',
+    negative:      'var(--semantic-negative)',
+    negativeLight: 'var(--semantic-negative-light)',
+    warning:       'var(--semantic-warning)',
+    warningLight:  'var(--semantic-warning-light)',
+    neutral:       'var(--semantic-neutral)',
+    neutralLight:  'var(--semantic-neutral-light)',
+
+    // Accent
+    accent:       'var(--accent)',
+    accentHover:  'var(--accent-hover)',
+    accentMuted:  'var(--accent-muted)',
+    accentLight:  'var(--accent-light)',
+
+    // Surfaces
+    bgApp:   'var(--bg-app)',
+    bgCard:  'var(--bg-card)',
+    bgPanel: 'var(--bg-panel)',
+    bgInset: 'var(--bg-inset)',
+
+    // Chart ramp
+    chartPositive:       'var(--chart-positive)',
+    chartPositiveStrong: 'var(--chart-positive-strong)',
+    chartPositiveSoft:   'var(--chart-positive-soft)',
+    chartNegative:       'var(--chart-negative)',
+    chartNegativeStrong: 'var(--chart-negative-strong)',
+    chartNegativeSoft:   'var(--chart-negative-soft)',
+    chartNeutral:        'var(--chart-neutral)',
+    chartNeutralSoft:    'var(--chart-neutral-soft)',
+    chartAccent:         'var(--chart-accent)',
+    chartAccentSoft:     'var(--chart-accent-soft)',
+    gradPositive:        'var(--chart-gradient-positive)',
+    gradNegative:        'var(--chart-gradient-negative)',
+    gradNeutral:         'var(--chart-gradient-neutral)',
+    gradAccent:          'var(--chart-gradient-accent)',
+    chartGrid:           'var(--chart-grid)',
+
+    // Tone-intensity palette (5-way distribution)
+    toneStrongNeg: 'var(--tone-strong-neg)',
+    toneMildNeg:   'var(--tone-mild-neg)',
+    toneNeu:       'var(--tone-neu-solid)',
+    toneNeuText:   'var(--tone-neu-text)',
+    toneMildPos:   'var(--tone-mild-pos)',
+    toneStrongPos: 'var(--tone-strong-pos)',
+    toneGradStrongNeg: 'var(--tone-grad-strong-neg)',
+    toneGradMildNeg:   'var(--tone-grad-mild-neg)',
+    toneGradNeu:       'var(--tone-grad-neu)',
+    toneGradMildPos:   'var(--tone-grad-mild-pos)',
+    toneGradStrongPos: 'var(--tone-grad-strong-pos)',
+
+    // Political-stance palette
+    stanceSupportive:      'var(--stance-supportive-solid)',
+    stanceOpposed:         'var(--stance-opposed-solid)',
+    stanceNeutral:         'var(--stance-neutral-solid)',
+    stanceGradSupportive:  'var(--stance-grad-supportive)',
+    stanceGradOpposed:     'var(--stance-grad-opposed)',
+    stanceGradNeutral:     'var(--stance-grad-neutral)',
+
+    // Favorability badge trio
+    favSolid:   'var(--sent-favorable-solid)',
+    favBg:      'var(--sent-favorable-bg)',
+    favText:    'var(--sent-favorable-text)',
+    unfavSolid: 'var(--sent-unfavorable-solid)',
+    unfavBg:    'var(--sent-unfavorable-bg)',
+    unfavText:  'var(--sent-unfavorable-text)',
+
+    // Source-type
+    sourceNews:   'var(--source-news)',
+    sourceReddit: 'var(--source-reddit)',
+    sourceX:      'var(--source-x)',
+
+    // Review admin
+    adminBannerBg:     'var(--admin-banner-bg)',
+    adminBannerBorder: 'var(--admin-banner-border)',
+    adminBannerText:   'var(--admin-banner-text)',
+    adminCardBg:       'var(--admin-card-bg)',
 } as const;
 
 /**
@@ -25,29 +109,58 @@ export const SEMANTIC_COLORS = {
  * Mirrors the CSS `.badge-*` / `.metric-delta-*` classes.
  */
 export function sentimentColor(label: 'POSITIVE' | 'NEGATIVE' | 'NEUTRAL' | 'MIXED' | string): string {
-  if (label === 'POSITIVE') return SEMANTIC_COLORS.positive;
-  if (label === 'NEGATIVE') return SEMANTIC_COLORS.negative;
-  if (label === 'MIXED') return SEMANTIC_COLORS.warning;
-  return SEMANTIC_COLORS.neutral;
+  if (label === 'POSITIVE') return COLORS.positive;
+  if (label === 'NEGATIVE') return COLORS.negative;
+  if (label === 'MIXED')    return COLORS.warning;
+  return COLORS.neutral;
 }
 
 /**
  * Map a numeric net-sentiment score to a threshold-based color.
- * Used by narratives, heatmap, and review screens for consistent coloring.
+ * Used by narratives and review screens.
  */
 export function netSentimentColor(score: number, strongThreshold = 0.3, mildThreshold = 0.1): string {
-  if (score >= strongThreshold) return SEMANTIC_COLORS.positive;
-  if (score >= mildThreshold) return SEMANTIC_COLORS.positiveLight;
-  if (score <= -strongThreshold) return SEMANTIC_COLORS.negative;
-  if (score <= -mildThreshold) return SEMANTIC_COLORS.negativeLight;
-  return SEMANTIC_COLORS.neutral;
+  if (score >= strongThreshold)  return COLORS.positive;
+  if (score >= mildThreshold)    return COLORS.positiveLight;
+  if (score <= -strongThreshold) return COLORS.negative;
+  if (score <= -mildThreshold)   return COLORS.negativeLight;
+  return COLORS.neutral;
 }
 
 /**
- * Accuracy-bucket color for review stats: green high, warning mid, negative low.
+ * Accuracy-bucket color for review stats: positive high, warning mid, negative low.
  */
 export function accuracyColor(accuracyPct: number): string {
-  if (accuracyPct >= 80) return SEMANTIC_COLORS.positive;
-  if (accuracyPct >= 60) return SEMANTIC_COLORS.warning;
-  return SEMANTIC_COLORS.negative;
+  if (accuracyPct >= 80) return COLORS.positive;
+  if (accuracyPct >= 60) return COLORS.warning;
+  return COLORS.negative;
+}
+
+/**
+ * Partisan-lean "class name" for an EntityProfile — one of
+ * `'left' | 'center' | 'right' | 'mixed' | 'neutral'`. Used by
+ * EntityProfileCard for the left-border color and chip styling; each
+ * class is paired with a `.lean-*` CSS rule in `index.css`.
+ *
+ * Officials derive their class from party (R → right, D → left, else
+ * neutral). Outlets/subreddits use the registry's lean/tilt value
+ * (left / center-left → left; right / center-right → right; mixed →
+ * mixed; else center). Catch-all profiles land on neutral.
+ */
+export function leanClass(profile: {
+  kind: string;
+  party?: string;
+  lean?: string | null;
+}): 'left' | 'center' | 'right' | 'mixed' | 'neutral' {
+  if (profile.kind === 'catch_all') return 'neutral';
+  if (profile.kind === 'official') {
+    if (profile.party === 'R') return 'right';
+    if (profile.party === 'D') return 'left';
+    return 'neutral';
+  }
+  const l = (profile.lean || 'center').toLowerCase();
+  if (l === 'mixed') return 'mixed';
+  if (l.includes('left')) return 'left';
+  if (l.includes('right')) return 'right';
+  return 'center';
 }

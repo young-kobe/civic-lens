@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { COLORS } from '../../theme';
 
 interface SentimentBarProps {
     positive?: number;
@@ -28,16 +29,18 @@ function SentimentBar({
     const [active, setActive] = useState<SegKey | null>(null);
     const total = positive + negative + neutral || 1;
 
+    // Palettes pull from the central COLORS dictionary — source of
+    // truth is :root in index.css; COLORS is its typed TS wrapper.
     const palette = colorScheme === 'political'
         ? {
-            positive: { gradient: 'linear-gradient(135deg, #1e4fd1 0%, #3d82e6 100%)', solid: '#2563eb', label: 'Supportive' },
-            neutral: { gradient: 'linear-gradient(135deg, #8b919e 0%, #c0c4cd 100%)', solid: '#9ca3af', label: 'Neutral' },
-            negative: { gradient: 'linear-gradient(135deg, #a0160a 0%, #e0261a 100%)', solid: '#dc2626', label: 'Opposed' },
+            positive: { gradient: COLORS.stanceGradSupportive, solid: COLORS.stanceSupportive, label: 'Supportive' },
+            neutral:  { gradient: COLORS.stanceGradNeutral,    solid: COLORS.stanceNeutral,    label: 'Neutral' },
+            negative: { gradient: COLORS.stanceGradOpposed,    solid: COLORS.stanceOpposed,    label: 'Opposed' },
         }
         : {
-            positive: { gradient: 'linear-gradient(135deg, #00a358 0%, #3ec37d 100%)', solid: '#16a34a', label: 'Favorable' },
-            neutral: { gradient: 'linear-gradient(135deg, #8b919e 0%, #c0c4cd 100%)', solid: '#9ca3af', label: 'Neutral' },
-            negative: { gradient: 'linear-gradient(135deg, #a0160a 0%, #e0261a 100%)', solid: '#dc2626', label: 'Unfavorable' },
+            positive: { gradient: COLORS.gradPositive, solid: COLORS.favSolid,       label: 'Favorable' },
+            neutral:  { gradient: COLORS.gradNeutral,  solid: COLORS.stanceNeutral,  label: 'Neutral' },
+            negative: { gradient: COLORS.gradNegative, solid: COLORS.unfavSolid,     label: 'Unfavorable' },
         };
 
     const segments: { key: SegKey; value: number; gradient: string; solid: string; label: string }[] = [
@@ -47,14 +50,14 @@ function SentimentBar({
     ];
 
     return (
-        <div>
+        <div style={{ position: 'relative' }}>
             <div
                 style={{
                     display: 'flex',
                     height,
                     borderRadius: 'var(--radius-md)',
                     overflow: 'hidden',
-                    background: 'var(--bg-inset)',
+                    background: COLORS.bgInset,
                     boxShadow: 'inset 0 1px 0 rgba(15, 20, 35, 0.04)',
                 }}
                 onMouseLeave={() => setActive(null)}
@@ -107,26 +110,27 @@ function SentimentBar({
                 </div>
             )}
 
-            {active && (
-                <div
-                    aria-live="polite"
-                    className="text-xs"
-                    style={{
-                        marginTop: 'var(--space-2)',
-                        padding: 'var(--space-1) var(--space-2)',
-                        borderRadius: 'var(--radius-sm)',
-                        background: 'var(--bg-inset)',
-                        color: 'var(--neutral-700)',
-                        fontVariantNumeric: 'tabular-nums',
-                    }}
-                >
-                    <strong style={{ color: segments.find(s => s.key === active)!.solid }}>
-                        {segments.find(s => s.key === active)!.label}
-                    </strong>
-                    {' '}&middot; {segments.find(s => s.key === active)!.value.toLocaleString()} docs
-                    {' '}&middot; {((segments.find(s => s.key === active)!.value / total) * 100).toFixed(1)}%
-                </div>
-            )}
+            {active && (() => {
+                const seg = segments.find(s => s.key === active)!;
+                return (
+                    <div
+                        className="popover"
+                        role="tooltip"
+                        aria-live="polite"
+                        style={{
+                            top: `calc(${height}px + 8px)`,
+                            left: 0,
+                            fontVariantNumeric: 'tabular-nums',
+                            padding: 'var(--space-2) var(--space-3)',
+                            minWidth: 0,
+                        }}
+                    >
+                        <strong style={{ color: seg.solid }}>{seg.label}</strong>
+                        {' '}&middot; {seg.value.toLocaleString()} docs
+                        {' '}&middot; {((seg.value / total) * 100).toFixed(1)}%
+                    </div>
+                );
+            })()}
         </div>
     );
 }

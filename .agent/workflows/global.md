@@ -54,14 +54,20 @@ RSS/Reddit -> Go Crawler -> SQLite -> Python ETL -> AI Analysis -> Cache -> Fast
 - `data/seeds.yaml` - RSS feeds, Reddit subreddits, API config
 - `data/civic_lens.db` - SQLite database
 - `data/cache/*.json` - Pre-computed analysis snapshots
-- `docs/walkthroughs/` - Code audit walkthroughs (see below)
+- `docs/todos/` - Checklists of planned work (see below)
+- `docs/audit-trail/` - Permanent record of what shipped, bucketed by layer (see below)
+- `docs/walkthroughs/` - Legacy linear log; being consolidated — do not add to it
 
-## Walkthrough Archival (Required)
+## Plan -> audit-trail workflow (required)
 
-Every completed task that involves code changes **must** produce a walkthrough:
+Non-trivial work follows three steps:
 
-1. Save the walkthrough to `docs/walkthroughs/NNN-short-description.md`
-2. Use the next sequential number (check existing files for the current max)
-3. Update `docs/walkthroughs/README.md` index table with the new entry
-4. Walkthroughs document: what changed, why, and verification results
-5. This is a permanent code audit trail - never delete existing walkthroughs
+1. **Plan.** Create a checklist at `docs/todos/<initiative>.md`. One file per initiative. Each item concrete enough to tick off.
+2. **Execute.** As boxes tick, the code lands.
+3. **Record.** In the same PR, add a dated entry under the affected layer(s) at `docs/audit-trail/<layer>/YYYY-MM-DD-short-slug.md`. Buckets: `ingestion/`, `analysis/`, `api/`, `ui/`, `infra/`. Multi-layer changes write one entry per layer, cross-linked.
+
+When every box in a todo is checked, delete the todo file — the audit-trail entries are the permanent record.
+
+Entries describe *the current system*, not the diff from what came before. See `docs/audit-trail/README.md` for the template.
+
+Update `docs/INVARIANTS.md` in the same PR when an invariant is created, changed, or removed.

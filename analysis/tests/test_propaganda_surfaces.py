@@ -18,6 +18,7 @@ import sys
 import tempfile
 import time
 import unittest
+from typing import Optional
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(os.path.dirname(current_dir))
@@ -284,6 +285,142 @@ class TestNarrativeOverlayNullsWhenNoData(unittest.TestCase):
         self.assertEqual(len(results), 1)
         self.assertIsNone(results[0].propaganda_score)
         self.assertIsNone(results[0].bot_pushed_fraction)
+
+
+# --------------------------------------------------------------------------- #
+#  Phase 3b propaganda entity routing — walkthrough 058.                      #
+#  Verifies PropagandaAggregator buckets each scored doc into the correct
+#  byNewsOutlet / byOfficial / byGeneralPublic list with per-entity
+#  flagged_rate_pct + mean_score + profile payload.
+# --------------------------------------------------------------------------- #
+
+from analysis.src.reporting.entity_registry import (
+    CATCH_ALL_OUTLETS, CATCH_ALL_SUBREDDITS, CATCH_ALL_X_USERS,
+)
+
+
+class TestPropagandaEntityRouting(unittest.TestCase):
+    def setUp(self):
+        fd, self.db_path = tempfile.mkstemp(suffix=".db")
+        os.close(fd)
+        _apply_migrations(self.db_path)
+        self.now = int(time.time())
+        self.conn = sqlite3.connect(self.db_path)
+        # Seed two X authors: @POTUS (in verified_officials.yaml) + a
+        # generic unmatched account.
+        self.conn.execute(
+            "INSERT INTO x_users_raw (user_id, username, fetched_at, raw_hash) "
+            "VALUES ('u_potus', 'POTUS', ?, 'rh-u1')",
+            (self.now,),
+        )
+        self.conn.execute(
+            "INSERT INTO x_users_raw (user_id, username, fetched_at, raw_hash) "
+            "VALUES ('u_rand', 'random_user', ?, 'rh-u2')",
+            (self.now,),
+        )
+        self.conn.commit()
+
+    def tearDown(self):
+        self.conn.close()
+        os.unlink(self.db_path)
+
+    def _seed_x_post(self, tweet_id: str, author_id: str) -> None:
+        self.conn.execute(
+            "INSERT INTO x_posts_raw (tweet_id, author_id, text, created_at, "
+            "fetched_at, raw_hash, extraction_version) "
+            "VALUES (?, ?, 'body', ?, ?, 'rh-p', '1.0')",
+            (tweet_id, author_id, self.now, self.now),
+        )
+
+    def _seed_doc(self, doc_id: int, source_type: str, ident: str, domain: Optional[str] = None) -> None:
+        _seed_doc(
+            self.conn, doc_id, source_type, ident, self.now,
+            domain=domain or source_type,
+        )
+
+    def _by_key(self, items):
+        return {it.key: it for it in items}
+
+    def test_news_outlet_rollup(self):
+        """Matched + unmatched news outlets populate byNewsOutlet with
+        per-entity flagged rate and the NYT registry profile attached."""
+        self._seed_doc(1, "news", "https://nytimes.com/a1", "www.nytimes.com")
+        _seed_propaganda(self.conn, 1, techniques=["loaded_language"], overall_score=0.8)
+        self._seed_doc(2, "news", "https://nytimes.com/a2", "www.nytimes.com")
+        _seed_propaganda(self.conn, 2, techniques=[], overall_score=0.1)  # unflagged
+        self._seed_doc(3, "news", "https://other.invalid/a3", "other.invalid")
+        _seed_propaganda(self.conn, 3, techniques=["name_calling"], overall_score=0.6)
+        self.conn.commit()
+
+        result = PropagandaAggregator(self.db_path).get_propaganda_overview(time_window="all")
+        outlets = self._by_key(result.by_news_outlet)
+
+        self.assertIn("nytimes.com", outlets)
+        nyt = outlets["nytimes.com"]
+        self.assertEqual(nyt.total_docs, 2)
+        self.assertEqual(nyt.flagged_docs, 1)
+        self.assertEqual(nyt.flagged_rate_pct, 50.0)
+        self.assertEqual(nyt.entity_profile["displayName"], "The New York Times")
+
+        self.assertIn(CATCH_ALL_OUTLETS, outlets)
+        self.assertEqual(outlets[CATCH_ALL_OUTLETS].total_docs, 1)
+        self.assertEqual(outlets[CATCH_ALL_OUTLETS].flagged_docs, 1)
+
+    def test_official_rollup_and_catch_all_x_users(self):
+        self._seed_x_post("t_potus_1", "u_potus")
+        self._seed_doc(10, "x_post", "t_potus_1")
+        _seed_propaganda(self.conn, 10, techniques=["appeal_to_fear"], overall_score=0.7)
+
+        self._seed_x_post("t_rand_1", "u_rand")
+        self._seed_doc(11, "x_post", "t_rand_1")
+        _seed_propaganda(self.conn, 11, techniques=["loaded_language"], overall_score=0.5)
+        self.conn.commit()
+
+        result = PropagandaAggregator(self.db_path).get_propaganda_overview(time_window="all")
+        officials = self._by_key(result.by_official)
+        public = self._by_key(result.by_general_public)
+
+        self.assertIn("potus", officials)
+        self.assertEqual(officials["potus"].total_docs, 1)
+        self.assertEqual(officials["potus"].flagged_docs, 1)
+        self.assertEqual(officials["potus"].entity_profile["kind"], "official")
+
+        self.assertIn(CATCH_ALL_X_USERS, public)
+        self.assertEqual(public[CATCH_ALL_X_USERS].kind, "catch_all")
+
+    def test_subreddit_rollup(self):
+        self._seed_doc(20, "reddit_post", "t3_rp1", domain="politics")
+        _seed_propaganda(self.conn, 20, techniques=["ad_hominem"], overall_score=0.4)
+        self._seed_doc(21, "reddit_post", "t3_rp2", domain="offbrand_sub")
+        _seed_propaganda(self.conn, 21, techniques=[], overall_score=0.05)
+        self.conn.commit()
+
+        result = PropagandaAggregator(self.db_path).get_propaganda_overview(time_window="all")
+        public = self._by_key(result.by_general_public)
+
+        self.assertIn("politics", public)
+        self.assertEqual(public["politics"].entity_profile["kind"], "subreddit")
+        self.assertIn(CATCH_ALL_SUBREDDITS, public)
+        self.assertEqual(public[CATCH_ALL_SUBREDDITS].kind, "catch_all")
+
+    def test_entity_items_sorted_by_mean_score_catch_all_last(self):
+        # Two outlets with different mean scores + a catch-all — catch-all
+        # should sort last regardless of its mean score.
+        self._seed_doc(30, "news", "https://nytimes.com/a30", "www.nytimes.com")
+        _seed_propaganda(self.conn, 30, techniques=[], overall_score=0.2)
+        self._seed_doc(31, "news", "https://bbc.com/a31", "www.bbc.com")
+        _seed_propaganda(self.conn, 31, techniques=["loaded_language"], overall_score=0.9)
+        self._seed_doc(32, "news", "https://other.invalid/a32", "other.invalid")
+        _seed_propaganda(self.conn, 32, techniques=["loaded_language"], overall_score=0.95)
+        self.conn.commit()
+
+        result = PropagandaAggregator(self.db_path).get_propaganda_overview(time_window="all")
+        order = [(it.kind, it.key) for it in result.by_news_outlet]
+        # bbc.com's mean (0.9) > nytimes.com (0.2); catch-all mean (0.95)
+        # is highest but must sink to the end.
+        self.assertEqual(order[0][1], "bbc.com")
+        self.assertEqual(order[1][1], "nytimes.com")
+        self.assertEqual(order[2][0], "catch_all")
 
 
 if __name__ == "__main__":

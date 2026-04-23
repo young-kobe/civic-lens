@@ -1,364 +1,495 @@
-import { Card, MethodPopover, LoadingCard, EmptyState, ErrorState } from '../components/common';
-import { SentimentBar, TrendStrip } from '../components/charts';
-import type { Filters, PublicSentimentData, SentimentBreakdown, SocialVsNewsSentiment, PollingSocialComparison, TrendPoint } from '../types';
-
-/* ------------------------------------------------------------------ */
-/*  Day-of-week / time-window sentiment card                          */
-/* ------------------------------------------------------------------ */
-
-interface DayOfWeekCardProps {
-    byDayOfWeek?: SentimentBreakdown[];
-    byTimeWindow: SentimentBreakdown[];
-}
-
-function DayOfWeekCard({ byDayOfWeek, byTimeWindow }: DayOfWeekCardProps) {
-    const items = byDayOfWeek ?? byTimeWindow;
-    const isDow = Boolean(byDayOfWeek);
-    const title = isDow ? 'Sentiment by Day of Week' : 'Sentiment by Time Window';
-    const subtitle = isDow
-        ? 'How tone shifts across weekdays vs weekends in the current window'
-        : 'Age buckets of docs in the current window';
-
-    if (items.length === 0) {
-        return (
-            <Card title={title}>
-                <p className="text-muted text-sm">No breakdown available for this window.</p>
-            </Card>
-        );
-    }
-
-    return (
-        <Card title={title} subtitle={subtitle}>
-            <div
-                style={{
-                    display: 'grid',
-                    gridTemplateColumns: `repeat(${Math.min(items.length, 7)}, minmax(0, 1fr))`,
-                    gap: 'var(--space-2)',
-                }}
-            >
-                {items.map((item, i) => {
-                    const bucketLabel = item.day ?? item.window ?? '—';
-                    const total = item.positive + item.negative + item.neutral || 1;
-                    const net = ((item.positive - item.negative) / total) * 100;
-                    const netColor = net >= 5 ? 'var(--semantic-positive)'
-                        : net <= -5 ? 'var(--semantic-negative)'
-                        : 'var(--neutral-500)';
-                    return (
-                        <div
-                            key={i}
-                            style={{
-                                background: 'var(--bg-inset)',
-                                borderRadius: 'var(--radius-sm)',
-                                padding: 'var(--space-3)',
-                                display: 'flex',
-                                flexDirection: 'column',
-                                gap: 'var(--space-2)',
-                            }}
-                        >
-                            <div className="flex items-baseline justify-between" style={{ gap: 4 }}>
-                                <span
-                                    className="text-sm font-semibold"
-                                    style={{ letterSpacing: '-0.01em' }}
-                                >
-                                    {bucketLabel}
-                                </span>
-                                <span
-                                    className="num"
-                                    style={{
-                                        fontVariantNumeric: 'tabular-nums',
-                                        fontSize: '11px',
-                                        fontWeight: 600,
-                                        color: netColor,
-                                    }}
-                                >
-                                    {net >= 0 ? '+' : ''}{net.toFixed(0)}%
-                                </span>
-                            </div>
-                            <SentimentBar
-                                positive={item.positive}
-                                negative={item.negative}
-                                neutral={item.neutral}
-                                height={16}
-                                showLabels={false}
-                            />
-                            <span
-                                className="text-muted num"
-                                style={{
-                                    fontVariantNumeric: 'tabular-nums',
-                                    fontSize: '10px',
-                                    textTransform: 'uppercase',
-                                    letterSpacing: '0.06em',
-                                }}
-                            >
-                                {item.volume.toLocaleString()} docs
-                            </span>
-                        </div>
-                    );
-                })}
-            </div>
-        </Card>
-    );
-}
-
-import { fetchSentiment } from '../services/api';
+import { useState } from 'react';
+import {
+    CollapsibleInfo, EmptyState, EntityHeader, EntityProfileCard,
+    ErrorState, GlobalTicker, LoadingCard, Modal, MoversTicker, SupportingDocsTable,
+    TierRow, TopMetricsBlock,
+    classificationSampleToSupportingDoc, entityExternalUrl, entityLeanAccent, sentimentStats,
+} from '../components/common';
+import type { TickerItem } from '../components/common';
+import { Sparkline } from '../components/charts';
+import type {
+    EntitySentimentItem, Filters, MoversResult, PollingSocialComparison, PublicSentimentData,
+    SentimentDistribution,
+} from '../types';
+import { fetchMovers, fetchSentiment } from '../services/api';
+import { asOfTodayEyebrow, formatTimeWindow } from '../services/timeWindow';
 import { transformPublicSentiment } from '../services/transformers';
 import { useFetch } from '../services/useFetch';
-import { SEMANTIC_COLORS } from '../theme';
-import { SentimentDistributionCard } from './publicSentiment/SentimentDistributionCard';
-import { SentimentOverviewHeader } from './publicSentiment/SentimentOverviewHeader';
-import { TopicRow } from './publicSentiment/TopicRow';
-
-const LABEL_BADGE_STYLES: Record<string, { bg: string; text: string }> = {
-    POSITIVE: { bg: SEMANTIC_COLORS.positiveLight, text: SEMANTIC_COLORS.positive },
-    NEGATIVE: { bg: SEMANTIC_COLORS.negativeLight, text: SEMANTIC_COLORS.negative },
-    NEUTRAL: { bg: SEMANTIC_COLORS.neutralLight, text: '#45454d' },
-    MIXED: { bg: SEMANTIC_COLORS.warningLight, text: SEMANTIC_COLORS.warning },
-};
+import { COLORS } from '../theme';
+import { TopicDivergencePanel } from './publicSentiment/TopicDivergencePanel';
 
 
+// --------------------------------------------------------------------------- //
+//  Top metrics block — Bloomberg-style dense header                           //
+// --------------------------------------------------------------------------- //
 
-
-
-/* ------------------------------------------------------------------ */
-/*  Topic Sentiment Card (replaces flat-bar breakdown for topics)     */
-/* ------------------------------------------------------------------ */
-
-interface TopicSentimentCardProps {
-    data: SentimentBreakdown[];
+interface TierAggregate {
+    net: number;
+    volume: number;
 }
 
-function TopicSentimentCard({ data }: TopicSentimentCardProps) {
+function aggregateTier(items: EntitySentimentItem[] | undefined): TierAggregate {
+    if (!items || items.length === 0) return { net: 0, volume: 0 };
+    let pos = 0, neg = 0, neu = 0;
+    for (const it of items) {
+        pos += it.positive;
+        neg += it.negative;
+        neu += it.neutral;
+    }
+    const total = pos + neg + neu;
+    const net = total > 0 ? ((pos - neg) / total) * 100 : 0;
+    return { net: Math.round(net * 10) / 10, volume: total };
+}
+
+function toneVerb(net: number): string {
+    if (net > 15) return 'clearly positive';
+    if (net > 5)  return 'slightly positive';
+    if (net < -15) return 'clearly negative';
+    if (net < -5)  return 'slightly negative';
+    return 'roughly neutral';
+}
+
+function toneColor(net: number): string {
+    if (net > 10) return COLORS.positive;
+    if (net < -10) return COLORS.negative;
+    return 'var(--neutral-500)';
+}
+
+interface TopMetricsProps {
+    data: PublicSentimentData;
+    windowLabel: string;
+}
+
+function TopMetrics({ data, windowLabel }: TopMetricsProps) {
+    const news = aggregateTier(data.byNewsOutlet);
+    const officials = aggregateTier(data.byOfficial);
+    const pub = aggregateTier(data.byGeneralPublic);
+
     return (
-        <Card
-            title="Sentiment by Topic"
-            headerActions={
-                <MethodPopover
-                    description="Topics are extracted via keyword matching. Each topic shows a donut chart of sentiment proportions, a net sentiment badge, and expandable LLM reasoning samples."
-                    limitations={[
-                        'Sentiment classification may miss sarcasm or irony (flagged when detected)',
-                        'Sample may not be representative of all discourse',
-                    ]}
-                />
+        <TopMetricsBlock
+            eyebrow={`As of ${windowLabel}`}
+            meta={`${data.overview.volume.toLocaleString()} posts · ${data.overview.confidence} confidence`}
+            aux={
+                <>
+                    {data.gopFavorability && (
+                        <GOPMini
+                            favorability={data.gopFavorability}
+                            trend={data.gopTrend ?? undefined}
+                        />
+                    )}
+                    <IntensityMini distribution={data.distribution} />
+                </>
             }
         >
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {data.map((item, i) => (
-                    <TopicRow key={i} item={item} labelBadgeStyles={LABEL_BADGE_STYLES} />
-                ))}
-            </div>
-        </Card>
+            <ToneTierRow label="News articles are" agg={news} />
+            <ToneTierRow label="Officials are" agg={officials} />
+            <ToneTierRow label="The public is" agg={pub} />
+        </TopMetricsBlock>
+    );
+}
+
+function ToneTierRow({ label, agg }: { label: string; agg: TierAggregate }) {
+    const sign = agg.net >= 0 ? '+' : '';
+    const color = toneColor(agg.net);
+    const axisPct = ((agg.net + 100) / 200) * 100;
+    const hasData = agg.volume > 0;
+
+    return (
+        <TierRow
+            label={label}
+            value={hasData ? `${sign}${agg.net.toFixed(1)}%` : '—'}
+            valueColor={color}
+            verb={hasData
+                ? `${toneVerb(agg.net)} · ${agg.volume.toLocaleString()} posts`
+                : 'no posts yet'}
+            showZeroTick
+            dotPct={hasData ? axisPct : undefined}
+            dotColor={hasData ? color : undefined}
+        />
+    );
+}
+
+function GOPMini({
+    favorability,
+    trend,
+}: {
+    favorability: NonNullable<PublicSentimentData['gopFavorability']>;
+    trend?: Array<{ date: string; value: number }>;
+}) {
+    const sign = favorability.netFavorability >= 0 ? '+' : '';
+    const color = favorability.netFavorability > 0
+        ? COLORS.positive
+        : favorability.netFavorability < 0
+            ? COLORS.negative
+            : 'var(--neutral-500)';
+    const total = favorability.favorable + favorability.unfavorable + favorability.neutral;
+    const favPct = total > 0 ? (favorability.favorable / total) * 100 : 0;
+    const unfavPct = total > 0 ? (favorability.unfavorable / total) * 100 : 0;
+    const neuPct = total > 0 ? (favorability.neutral / total) * 100 : 0;
+
+    return (
+        <div className="mini-metric">
+            <span className="mini-metric-label">GOP party stance</span>
+            <span className="mini-metric-value" style={{ color }}>
+                {sign}{favorability.netFavorability.toFixed(1)}%
+            </span>
+            {trend && trend.length > 1 && (
+                <span className="mini-metric-trend" aria-hidden>
+                    <Sparkline
+                        data={trend}
+                        dataKey="value"
+                        xKey="date"
+                        height={22}
+                        color={color}
+                        showTooltip={false}
+                    />
+                </span>
+            )}
+            <span className="mini-metric-bar" aria-label="Stance distribution">
+                <span className="mini-bar-favorable" style={{ width: `${favPct}%` }} />
+                <span className="mini-bar-neutral"  style={{ width: `${neuPct}%` }} />
+                <span className="mini-bar-unfavorable" style={{ width: `${unfavPct}%` }} />
+            </span>
+        </div>
+    );
+}
+
+function IntensityMini({ distribution }: { distribution: SentimentDistribution }) {
+    const total = distribution.strongPositive + distribution.mildPositive
+        + distribution.neutral + distribution.mildNegative + distribution.strongNegative;
+    if (total === 0) return null;
+    const pct = (n: number) => (n / total) * 100;
+    // Label the biggest bucket.
+    const buckets: Array<[string, number, string]> = [
+        ['strongly positive', distribution.strongPositive, 'Strong +'],
+        ['mild positive',     distribution.mildPositive,   'Mild +'],
+        ['neutral',           distribution.neutral,        'Neutral'],
+        ['mild negative',     distribution.mildNegative,   'Mild −'],
+        ['strongly negative', distribution.strongNegative, 'Strong −'],
+    ];
+    const biggest = buckets.reduce((a, b) => (a[1] >= b[1] ? a : b));
+    const biggestPct = (biggest[1] / total) * 100;
+
+    return (
+        <div className="mini-metric">
+            <span className="mini-metric-label">Tone intensity</span>
+            <span className="mini-metric-value">
+                most {biggest[0]}
+            </span>
+            <span className="mini-metric-bar mini-intensity" aria-label="Tone intensity distribution">
+                <span className="mini-bar-strongpos" style={{ width: `${pct(distribution.strongPositive)}%` }} />
+                <span className="mini-bar-mildpos"   style={{ width: `${pct(distribution.mildPositive)}%` }} />
+                <span className="mini-bar-neu"       style={{ width: `${pct(distribution.neutral)}%` }} />
+                <span className="mini-bar-mildneg"   style={{ width: `${pct(distribution.mildNegative)}%` }} />
+                <span className="mini-bar-strongneg" style={{ width: `${pct(distribution.strongNegative)}%` }} />
+            </span>
+            <span className="mini-metric-hint">
+                {biggestPct.toFixed(0)}% of posts
+            </span>
+        </div>
     );
 }
 
 
+// --------------------------------------------------------------------------- //
+//  Three-way grid                                                             //
+// --------------------------------------------------------------------------- //
 
+const TOP_N = 12;
 
-interface ComparisonPanelProps {
-    badgeClassName: string;
-    badgeLabel: string;
-    netScore: number;
-    volume: number;
-    positive: number;
-    negative: number;
-    neutral: number;
-    formatNetScore: (n: number) => string;
-    getScoreColor: (n: number) => string;
+interface ThreeWayGridProps {
+    newsOutlets: EntitySentimentItem[];
+    officials: EntitySentimentItem[];
+    generalPublic: EntitySentimentItem[];
+    confidence: PublicSentimentData['overview']['confidence'];
+    onOpen: (item: EntitySentimentItem) => void;
 }
 
-/**
- * One side of SocialVsNewsCard. Designed to be dense and legible:
- * - Badge + volume inline at top (no center gutter)
- * - Net score anchored left with an eyebrow label to its right
- * - SentimentBar fills remaining width
- *
- * Replaces a prior layout that centered the big score over empty whitespace
- * and stacked two independent rows of vertical padding.
- */
-function ComparisonPanel({
-    badgeClassName, badgeLabel, netScore, volume,
-    positive, negative, neutral,
-    formatNetScore, getScoreColor,
-}: ComparisonPanelProps) {
+function ThreeWayGrid({
+    newsOutlets, officials, generalPublic, confidence, onOpen,
+}: ThreeWayGridProps) {
     return (
-        <div
-            style={{
-                background: 'var(--bg-inset)',
-                borderRadius: 'var(--radius-md)',
-                padding: 'var(--space-4)',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 'var(--space-3)',
-            }}
-        >
-            <div className="flex justify-between items-center" style={{ gap: 'var(--space-2)' }}>
-                <span className={badgeClassName}>{badgeLabel}</span>
-                <span
-                    className="text-xs text-muted num"
-                    style={{ fontVariantNumeric: 'tabular-nums' }}
-                >
-                    {volume.toLocaleString()} docs
-                </span>
-            </div>
-
-            <div className="flex items-baseline" style={{ gap: 'var(--space-2)' }}>
-                <span
-                    style={{
-                        fontFamily: 'var(--font-mono)',
-                        fontVariantNumeric: 'tabular-nums',
-                        fontSize: 'var(--text-3xl)',
-                        fontWeight: 600,
-                        letterSpacing: '-0.02em',
-                        lineHeight: 1,
-                        color: getScoreColor(netScore),
-                    }}
-                >
-                    {formatNetScore(netScore)}
-                </span>
-                <span className="eyebrow">Net Score</span>
-            </div>
-
-            <SentimentBar
-                positive={positive}
-                negative={negative}
-                neutral={neutral}
-                height={20}
-                showLabels={false}
+        <div className="three-way-grid">
+            <ThreeWayColumn
+                header="The News"
+                byline="Top outlets by coverage volume, with their editorial lean"
+                items={newsOutlets.slice(0, TOP_N)}
+                confidence={confidence}
+                emptyCopy="No news articles in this window."
+                onOpen={onOpen}
+            />
+            <ThreeWayColumn
+                header="Politicians & Officials"
+                byline="Tracked officeholders posting on X"
+                items={officials.slice(0, TOP_N)}
+                confidence={confidence}
+                emptyCopy="No officials have posted in this window yet."
+                onOpen={onOpen}
+            />
+            <ThreeWayColumn
+                header="The Public"
+                byline="Subreddits + the broader X user catch-all"
+                items={generalPublic.slice(0, TOP_N)}
+                confidence={confidence}
+                emptyCopy="No social posts in this window."
+                onOpen={onOpen}
             />
         </div>
     );
 }
 
-interface SocialVsNewsCardProps {
-    data: SocialVsNewsSentiment | null | undefined;
+interface ThreeWayColumnProps {
+    header: string;
+    byline: string;
+    items: EntitySentimentItem[];
+    confidence: PublicSentimentData['overview']['confidence'];
+    emptyCopy: string;
+    onOpen: (item: EntitySentimentItem) => void;
 }
 
-function SocialVsNewsCard({ data }: SocialVsNewsCardProps) {
-    if (!data) {
-        return (
-            <Card title="Social Media vs News Outlets">
-                <p className="text-muted text-sm">No comparison data available.</p>
-            </Card>
-        );
-    }
+function ThreeWayColumn({ header, byline, items, confidence, emptyCopy, onOpen }: ThreeWayColumnProps) {
+    return (
+        <div className="three-way-column">
+            <div>
+                <div className="three-way-column-header">{header}</div>
+                <div className="three-way-column-byline">{byline}</div>
+            </div>
+            {items.length === 0 ? (
+                <p className="text-xs text-muted" style={{ padding: 'var(--space-3)' }}>
+                    {emptyCopy}
+                </p>
+            ) : (
+                items.map((item) => (
+                    <EntityProfileCard
+                        key={item.key}
+                        profile={item.entityProfile}
+                        stats={item.volume > 0
+                            ? sentimentStats({ netTone: item.netScore, volume: item.volume, confidence })
+                            : []}
+                        onClick={() => onOpen(item)}
+                    />
+                ))
+            )}
+        </div>
+    );
+}
 
-    const formatNetScore = (score: number) => {
-        const sign = score >= 0 ? '+' : '';
-        return `${sign}${score.toFixed(1)}%`;
-    };
 
-    const getScoreColor = (score: number) => {
-        if (score > 10) return '#16a34a';
-        if (score < -10) return '#dc2626';
-        return '#9ca3af';
-    };
+// --------------------------------------------------------------------------- //
+//  Entity detail modal (sentiment page)                                        //
+// --------------------------------------------------------------------------- //
+
+function EntitySentimentModal({
+    item, onClose,
+}: {
+    item: EntitySentimentItem;
+    onClose: () => void;
+}) {
+    const { entityProfile: profile, netScore, volume, classificationSamples } = item;
+    const sign = netScore >= 0 ? '+' : '';
+    const sourceUrl = entityExternalUrl(profile);
 
     return (
-        <Card
-            title="Sampled Social Media vs News Outlets"
-            subtitle="Comparing sentiment between sampled social posts (Reddit + X) and news coverage"
-            headerActions={
-                <MethodPopover
-                    description="The left column is drawn from sampled political discussions on Reddit and X. Posts are not a statistical sample of the wider population, only of content we ingested through public APIs. The right column is news-article sentiment."
-                    limitations={[
-                        'Social sample over-represents engaged users and the specific subreddits / X queries we follow',
-                        'News outlet sentiment may reflect editorial framing',
-                        'Other platforms (TikTok, Facebook, private Discords, etc.) are not included',
-                    ]}
-                />
-            }
+        <Modal
+            isOpen
+            onClose={onClose}
+            title={profile.displayName}
+            subtitle={buildEntitySubtitle(profile)}
+            accentColor={entityLeanAccent(profile)}
         >
-            <div className="grid-2 gap-4">
-                <ComparisonPanel
-                    badgeClassName="badge badge-accent"
-                    badgeLabel="Sampled Social (Reddit + X)"
-                    netScore={data.social.netScore}
-                    volume={data.social.volume}
-                    positive={data.social.positive}
-                    negative={data.social.negative}
-                    neutral={data.social.neutral}
-                    formatNetScore={formatNetScore}
-                    getScoreColor={getScoreColor}
-                />
-                <ComparisonPanel
-                    badgeClassName="badge badge-neutral"
-                    badgeLabel="News Outlets"
-                    netScore={data.news.netScore}
-                    volume={data.news.volume}
-                    positive={data.news.positive}
-                    negative={data.news.negative}
-                    neutral={data.news.neutral}
-                    formatNetScore={formatNetScore}
-                    getScoreColor={getScoreColor}
-                />
+            <EntityHeader profile={profile} />
+
+            <div className="entity-modal-stats">
+                <div>
+                    <div className="eyebrow">How they lean</div>
+                    <div className="metric-value">
+                        {sign}{netScore.toFixed(1)}%
+                    </div>
+                </div>
+                <div>
+                    <div className="eyebrow">Posts scored</div>
+                    <div className="metric-value">{volume.toLocaleString()}</div>
+                </div>
             </div>
 
-            {/* Disparity indicator */}
-            {data.social.volume > 0 && data.news.volume > 0 && (
-                <div className="card-note mt-4">
-                    {Math.abs(data.social.netScore - data.news.netScore) > 20 ? (
-                        <strong>Significant disparity detected:</strong>
-                    ) : null}
-                    {' '}Sampled social (Reddit + X) sentiment is {data.social.netScore > data.news.netScore ? 'more favorable' : 'less favorable'} than news coverage
-                    by {Math.abs(data.social.netScore - data.news.netScore).toFixed(1)} percentage points.
+            {(sourceUrl || profile.leanSource || profile.bioSource) && (
+                <div className="entity-modal-links">
+                    {sourceUrl && (
+                        <a href={sourceUrl} target="_blank" rel="noreferrer">
+                            Visit {profile.displayName} ↗
+                        </a>
+                    )}
+                    {profile.leanSource && (
+                        <span className="text-xs text-muted">
+                            Lean source: {profile.leanSource}
+                        </span>
+                    )}
+                    {profile.kind === 'official' && profile.bioSource && (
+                        <a href={profile.bioSource} target="_blank" rel="noreferrer">Bio ↗</a>
+                    )}
                 </div>
             )}
-        </Card>
+
+            {classificationSamples && classificationSamples.length > 0 && (
+                <>
+                    <h3 className="card-title mt-4 mb-2">Recent classified posts</h3>
+                    <SupportingDocsTable
+                        docs={classificationSamples.map(classificationSampleToSupportingDoc)}
+                    />
+                </>
+            )}
+        </Modal>
     );
 }
 
-function MethodTransparencyPanel() {
+function buildEntitySubtitle(profile: EntitySentimentItem['entityProfile']): string | undefined {
+    if (profile.kind === 'outlet') {
+        const parts = [profile.owner, profile.founded ? `est. ${profile.founded}` : null, profile.lean]
+            .filter(Boolean);
+        return parts.length > 0 ? parts.join(' · ') : undefined;
+    }
+    if (profile.kind === 'official') {
+        return [profile.office, profile.party].filter(Boolean).join(' · ');
+    }
+    if (profile.kind === 'subreddit') {
+        return [profile.subscriberCountProxy, profile.lean].filter(Boolean).join(' · ');
+    }
+    return undefined;
+}
+
+
+// --------------------------------------------------------------------------- //
+//  Polling-vs-online comparison — kept as a small collapsible below            //
+// --------------------------------------------------------------------------- //
+
+function PollingComparison({ data }: { data: PollingSocialComparison }) {
     return (
-        <Card
-            title="Methodology"
-            note="This section explains how sentiment scores are derived and their limitations."
-        >
-            <div className="flex flex-col gap-4 text-sm">
+        <CollapsibleInfo summary="Online stance vs. live polling">
+            <p className="text-xs text-muted">
+                Our GOP-stance number is derived from sampled online discussion — it's not a
+                scientific poll. For reference, here's {data.pollingData?.source || 'the latest polling'}:
+            </p>
+            <div className="polling-pair">
                 <div>
-                    <h4 className="font-medium mb-1">Data Sources</h4>
-                    <p className="text-muted">
-                        Sentiment is derived from news articles, sampled Reddit discussions, and sampled X (Twitter) posts.
-                        The social-media data is explicitly labeled as "sampled" because it only covers the specific subreddits
-                        and X queries we ingest through public APIs. It does not represent the full population of online discourse.
-                    </p>
+                    <div className="eyebrow">Online stance (ours)</div>
+                    <div className="text-sm">
+                        favorable {data.onlineSentiment?.favorable ?? 0}% · unfavorable{' '}
+                        {data.onlineSentiment?.unfavorable ?? 0}%
+                    </div>
                 </div>
-
-                <div>
-                    <h4 className="font-medium mb-1">Classification Method</h4>
-                    <p className="text-muted">
-                        Text is classified by an LLM (Gemini or local Ollama) with evidence-span validation and per-sample
-                        confidence scores. Classifications with unverifiable evidence are capped at low confidence.
-                    </p>
-                </div>
-
-                <div>
-                    <h4 className="font-medium mb-1">Known Limitations</h4>
-                    <ul className="text-muted" style={{ margin: 0, paddingLeft: 'var(--space-5)' }}>
-                        <li>Sarcasm and irony may be misclassified</li>
-                        <li>Non-English content is excluded from analysis</li>
-                        <li>Social media samples may over-represent highly engaged users</li>
-                        <li>Sentiment does not equal opinion polling</li>
-                    </ul>
-                </div>
+                {data.pollingData && (
+                    <div>
+                        <div className="eyebrow">Live polling</div>
+                        <div className="text-sm">
+                            favorable {data.pollingData.favorable}% · unfavorable {data.pollingData.unfavorable}%
+                            {data.pollingData.date && (
+                                <span className="text-muted"> · {data.pollingData.date}</span>
+                            )}
+                        </div>
+                    </div>
+                )}
             </div>
-        </Card>
+        </CollapsibleInfo>
     );
 }
+
+
+// --------------------------------------------------------------------------- //
+//  How-this-works collapsible                                                  //
+// --------------------------------------------------------------------------- //
+
+function HowThisWorks() {
+    return (
+        <CollapsibleInfo>
+            <p className="text-sm">
+                We aggregate news articles and X posts about US politics from the
+                last 30 days, then score each one for tone (positive / negative / neutral) with
+                evidence-span validation. Tracked outlets and officials each get their own
+                profile card; everything else rolls up into the general-public column or into an
+                "Other" catch-all bucket.
+            </p>
+            <p className="text-sm">
+                Tone is a classification of what the post says, not what the author feels. Don't
+                read it as opinion polling. Sarcasm and irony are flagged when the model detects
+                them but can still be misclassified.
+            </p>
+        </CollapsibleInfo>
+    );
+}
+
+
+// --------------------------------------------------------------------------- //
+//  Page                                                                       //
+// --------------------------------------------------------------------------- //
+
+function buildSentimentTickerItems(data: PublicSentimentData): TickerItem[] {
+    const overall = data.overview;
+    const sign = overall.netScore >= 0 ? '+' : '';
+    const tone: TickerItem['tone'] = overall.netScore > 10 ? 'accent'
+        : overall.netScore < -10 ? 'negative' : 'neutral';
+    const items: TickerItem[] = [
+        {
+            label: 'Overall tone',
+            value: `${sign}${overall.netScore.toFixed(1)}%`,
+            tone,
+            emphasis: true,
+            ariaLabel: `Overall tone ${sign}${overall.netScore.toFixed(1)} percent`,
+        },
+        { label: 'Posts scored', value: overall.volume.toLocaleString() },
+        { label: 'Confidence', value: overall.confidence },
+    ];
+    if (data.gopFavorability) {
+        const gopSign = data.gopFavorability.netFavorability >= 0 ? '+' : '';
+        items.push({
+            label: 'GOP stance',
+            value: `${gopSign}${data.gopFavorability.netFavorability.toFixed(1)}%`,
+        });
+    }
+    return items;
+}
+
+/** Headline naming the tier with the most tonally-different read on the
+ *  day, plus the single biggest topic divergence when present. */
+function readsAsToday(data: PublicSentimentData): string {
+    const tiers: Array<[string, number, number]> = [
+        ['News outlets', aggregateTier(data.byNewsOutlet).net, aggregateTier(data.byNewsOutlet).volume],
+        ['Officials',    aggregateTier(data.byOfficial).net,    aggregateTier(data.byOfficial).volume],
+        ['The public',   aggregateTier(data.byGeneralPublic).net, aggregateTier(data.byGeneralPublic).volume],
+    ];
+    const withVolume = tiers.filter(([, , v]) => v > 0);
+    if (withVolume.length === 0) return 'No scored posts in this window yet.';
+
+    withVolume.sort((a, b) => a[1] - b[1]);
+    const lowest = withVolume[0];
+    const highest = withVolume[withVolume.length - 1];
+    const parts: string[] = [];
+    if (withVolume.length >= 2 && highest[1] - lowest[1] >= 10) {
+        parts.push(`${highest[0]} are reading most positive (${highest[1] >= 0 ? '+' : ''}${highest[1].toFixed(1)}%) while ${lowest[0].toLowerCase()} read most negative (${lowest[1] >= 0 ? '+' : ''}${lowest[1].toFixed(1)}%).`);
+    } else {
+        parts.push(`All three tiers reading within a few points of each other — no dominant divergence today.`);
+    }
+    return parts.join(' ');
+}
+
 
 interface PublicSentimentProps {
     filters: Filters;
 }
 
 function PublicSentiment({ filters }: PublicSentimentProps) {
+    const [activeEntity, setActiveEntity] = useState<EntitySentimentItem | null>(null);
     const { data, loading, error, refetch } = useFetch<PublicSentimentData>(
-        async () => transformPublicSentiment(await fetchSentiment(filters.timeRange)),
+        async () => transformPublicSentiment(await fetchSentiment(filters.timeRange, filters.sourceType)),
+        [filters.timeRange, filters.sourceType],
+        `sentiment:${filters.timeRange}:${filters.sourceType}`,
+    );
+    const { data: movers } = useFetch<MoversResult>(
+        () => fetchMovers(filters.timeRange),
         [filters.timeRange],
-        `sentiment:${filters.timeRange}`,
+        `movers:${filters.timeRange}`,
     );
 
-    if (error) {
-        return <ErrorState message={error.message} onRetry={refetch} />;
-    }
-
+    if (error) return <ErrorState message={error.message} onRetry={refetch} />;
 
     if (loading) {
         return (
@@ -372,229 +503,74 @@ function PublicSentiment({ filters }: PublicSentimentProps) {
         );
     }
 
-    if (!data) {
-        return <EmptyState title="No sentiment data available" />;
-    }
+    if (!data) return <EmptyState title="No tone data available" />;
+
+    const tickerItems = buildSentimentTickerItems(data);
+    const refreshed = new Date().toISOString().slice(0, 19).replace('T', ' ') + ' UTC';
 
     return (
         <div className="dashboard-grid">
-            {/* Sampling disclaimer — invariant: never imply universal American sentiment */}
-            <div
-                className="col-span-12"
-                style={{
-                    padding: 'var(--space-3) var(--space-4)',
-                    background: '#fffbeb',
-                    border: '1px solid #fbbf24',
-                    borderRadius: 'var(--radius-md)',
-                    fontSize: 'var(--text-xs)',
-                    color: '#92400e',
-                }}
-            >
-                <strong>Sampled political discourse:</strong> sentiment reflects US political news articles plus
-                sampled political Reddit and X discussions from the last 30 days. This is a snapshot of what the
-                sources we ingest are saying about politics. It is not a scientific poll and not a representation
-                of the full population.
-            </div>
-
-            {/* Row: compact overview (5) + social vs news comparison (7) */}
-            <div className="col-span-5">
-                <SentimentOverviewHeader data={data.overview} />
-            </div>
-            <div className="col-span-7">
-                <SocialVsNewsCard data={data.socialVsNews} />
-            </div>
-
-            {/* Row: topic list (5) + day-of-week tiles (7).
-                DoW's 7 tiles breathe better in the wider slot; Topic's list fits
-                the narrower one because each row is vertically compact. */}
-            <div className="col-span-5">
-                <TopicSentimentCard data={data.byTopic} />
-            </div>
-            <div className="col-span-7">
-                <DayOfWeekCard
-                    byDayOfWeek={data.byDayOfWeek && data.byDayOfWeek.length > 0 ? data.byDayOfWeek : undefined}
-                    byTimeWindow={data.byTimeWindow}
-                />
-            </div>
-
-            {/* Row: distribution (full) — 5-seg bar + drill-down modal want full width */}
             <div className="col-span-12">
-                <SentimentDistributionCard
-                    data={data.distribution}
-                    overview={data.overview}
-                    byPlatform={data.byPlatform}
-                    samples={data.distributionSamples}
+                <GlobalTicker
+                    items={tickerItems}
+                    refreshed={refreshed}
+                    ariaLabel="Overall tone overview"
                 />
             </div>
 
-            {/* Row: GOP favorability (full) — trend chart wants horizontal room;
-                internal hero is a 2-col layout so the big number doesn't leave whitespace. */}
-            {data.gopFavorability && (
+            {movers && (
                 <div className="col-span-12">
-                    <GOPFavorabilityCard
-                        favorability={data.gopFavorability}
-                        trend={data.gopTrend}
-                        pollingVsSocial={data.pollingVsSocial}
-                    />
+                    <MoversTicker data={movers} />
                 </div>
             )}
 
-            {/* Row: methodology (full) */}
             <div className="col-span-12">
-                <MethodTransparencyPanel />
+                <div className="reads-as-today">
+                    <span className="eyebrow reads-as-today-eyebrow">
+                        {asOfTodayEyebrow(filters.timeRange)}
+                    </span>
+                    <p className="lead" style={{ margin: 0 }}>{readsAsToday(data)}</p>
+                </div>
             </div>
-        </div>
-    );
-}
 
-interface GOPFavorabilityCardProps {
-    favorability: NonNullable<PublicSentimentData['gopFavorability']>;
-    trend: TrendPoint[] | null | undefined;
-    pollingVsSocial: PollingSocialComparison | null | undefined;
-}
+            {/* Compact top-metrics block — tier tones + GOP + intensity. */}
+            <div className="col-span-12">
+                <TopMetrics data={data} windowLabel={formatTimeWindow(filters.timeRange)} />
+            </div>
 
-function GOPFavorabilityCard({ favorability, trend, pollingVsSocial }: GOPFavorabilityCardProps) {
-    const netColor = favorability.netFavorability > 0
-        ? '#16a34a' : favorability.netFavorability < 0
-            ? '#dc2626' : '#9ca3af';
-
-    return (
-        <Card
-            title="GOP Favorability"
-            subtitle={`Based on ${favorability.sampleSize.toLocaleString()} analyzed documents across ${favorability.sourceCount} platforms`}
-            headerActions={
-                <MethodPopover
-                    description="GOP favorability is derived from stance indicators found in the same content analyzed for sentiment. Stance is determined via LLM classification with proximity matching to GOP entities."
-                    limitations={['Stance may not reflect personal opinion of the author', 'Neutral stance may simply indicate factual reporting']}
+            {/* Three-way grid: News / Officials / Public. */}
+            <div className="col-span-12">
+                <ThreeWayGrid
+                    newsOutlets={data.byNewsOutlet ?? []}
+                    officials={data.byOfficial ?? []}
+                    generalPublic={data.byGeneralPublic ?? []}
+                    confidence={data.overview.confidence}
+                    onOpen={setActiveEntity}
                 />
-            }
-        >
-            {/* Compact hero: net favorability + stance distribution side-by-side.
-                Replaces the old centered big-number stack which left a lot of
-                whitespace on wide viewports. */}
-            <div
-                style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-                    gap: 'var(--space-4)',
-                    alignItems: 'center',
-                    marginBottom: 'var(--space-4)',
-                }}
-            >
-                <div>
-                    <div className="eyebrow mb-1">Net Favorability</div>
-                    <div
-                        style={{
-                            fontSize: 'var(--text-4xl)',
-                            fontWeight: 600,
-                            color: netColor,
-                            letterSpacing: '-0.02em',
-                            lineHeight: 1,
-                            fontFamily: 'var(--font-mono)',
-                            fontVariantNumeric: 'tabular-nums',
-                        }}
-                    >
-                        {favorability.netFavorability >= 0 ? '+' : ''}{favorability.netFavorability.toFixed(1)}%
-                    </div>
-                    <div className="text-xs text-muted mt-2">
-                        {favorability.sampleSize.toLocaleString()} docs &middot; {favorability.sourceCount} platforms
-                    </div>
-                </div>
-                <div
-                    style={{
-                        paddingLeft: 'var(--space-4)',
-                        borderLeft: '1px solid var(--neutral-200)',
-                    }}
-                >
-                    <div className="eyebrow mb-2">Stance Distribution</div>
-                    <SentimentBar
-                        positive={favorability.favorable}
-                        negative={favorability.unfavorable}
-                        neutral={favorability.neutral}
-                        height={28}
-                        showLabels={true}
-                    />
-                </div>
             </div>
 
-            {/* Trend chart */}
-            {trend && trend.length > 0 && (
-                <div className="mt-4 pt-4" style={{ borderTop: '1px solid var(--neutral-150)' }}>
-                    <div className="eyebrow mb-2">Favorability Trend</div>
-                    <TrendStrip
-                        data={trend}
-                        dataKey="value"
-                        xKey="date"
-                        height={160}
-                        color={netColor}
-                        unit="%"
-                    />
+            {activeEntity && (
+                <EntitySentimentModal
+                    item={activeEntity}
+                    onClose={() => setActiveEntity(null)}
+                />
+            )}
+
+            {/* Topic divergence panel. */}
+            <div className="col-span-12">
+                <TopicDivergencePanel topics={data.byTopic} />
+            </div>
+
+            {/* Polling-vs-online collapsible (optional). */}
+            {data.pollingVsSocial && (
+                <div className="col-span-12">
+                    <PollingComparison data={data.pollingVsSocial} />
                 </div>
             )}
 
-            {/* Polling comparison */}
-            {pollingVsSocial && (
-                <GOPPollingComparison data={pollingVsSocial} />
-            )}
-        </Card>
-    );
-}
-
-function GOPPollingComparison({ data }: { data: PollingSocialComparison }) {
-    return (
-        <div className="mt-6 pt-4" style={{ borderTop: '1px solid var(--neutral-100)' }}>
-            <h4 className="font-medium text-sm mb-3">Polling vs Online Sentiment</h4>
-            <div className="grid-2 gap-4">
-                <div className="card" style={{ background: 'var(--neutral-50)', border: 'none', padding: 'var(--space-3)' }}>
-                    <div className="flex items-center gap-2 mb-2">
-                        <span className="badge badge-accent">Online Sentiment</span>
-                    </div>
-                    <SentimentBar
-                        positive={data.onlineSentiment?.favorable ?? 0}
-                        negative={data.onlineSentiment?.unfavorable ?? 0}
-                        neutral={data.onlineSentiment?.neutral ?? 0}
-                        height={24}
-                        showLabels={true}
-                    />
-                </div>
-                <div className="card" style={{ background: 'var(--neutral-50)', border: 'none', padding: 'var(--space-3)' }}>
-                    <div className="flex items-center gap-2 mb-2">
-                        <span className="badge badge-neutral">Live Polling</span>
-                        {data.pollingData?.source && (
-                            <span style={{ fontSize: '10px', color: 'var(--text-muted)', marginLeft: 'auto' }}>
-                                {data.pollingData.source}
-                            </span>
-                        )}
-                    </div>
-                    {data.pollingData ? (
-                        <>
-                            <SentimentBar
-                                positive={data.pollingData.favorable}
-                                negative={data.pollingData.unfavorable}
-                                neutral={data.pollingData.neutral}
-                                height={24}
-                                showLabels={true}
-                            />
-                            {data.pollingData.date && (
-                                <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '4px', textAlign: 'right' }}>
-                                    Last updated: {data.pollingData.date}
-                                </div>
-                            )}
-                        </>
-                    ) : (
-                        <div style={{
-                            padding: '8px 12px', borderRadius: 'var(--radius-sm)',
-                            background: 'rgba(234,179,8,0.08)', border: '1px solid rgba(234,179,8,0.2)',
-                        }}>
-                            <p className="text-muted text-xs" style={{ margin: 0 }}>
-                                Live polling data is currently unavailable. This may be due to a network issue or a change in the source page structure.
-                            </p>
-                        </div>
-                    )}
-                </div>
-            </div>
-            <div className="card-note mt-3">
-                Online sentiment is derived from sampled social media discourse and should not be interpreted as equivalent to scientific polling data.
+            {/* How this page works — self-documenting content + collapsible backup. */}
+            <div className="col-span-12">
+                <HowThisWorks />
             </div>
         </div>
     );

@@ -1,12 +1,13 @@
 import {
     PublicSentimentData, BotData, NarrativeSummary,
-    PropagandaOverview,
+    PropagandaOverview, MoversResult,
     ReviewQueueItem, ReviewSubmission, ReviewStats, ReviewTaskType,
 } from '../types';
 
 const API_BASE = '/api/v1';
 
 export type TimeWindow = '24h' | '7d' | '30d' | '90d' | 'all';
+export type SourceFilter = 'all' | 'news' | 'reddit' | 'social';
 
 /**
  * Dev-only mock toggle. Set VITE_USE_MOCKS=true in ui/.env.local (gitignored)
@@ -93,12 +94,17 @@ async function fetchJSON<T>(
     return resp.json();
 }
 
-export async function fetchSentiment(window: TimeWindow = '24h'): Promise<PublicSentimentData> {
+export async function fetchSentiment(
+    window: TimeWindow = '24h',
+    source: SourceFilter = 'all',
+): Promise<PublicSentimentData> {
     if (USE_MOCKS) {
         const { mockSentiment } = await import('./fixtures');
         return mockSentiment();
     }
-    return fetchJSON<PublicSentimentData>(`/sentiment?window=${window}`);
+    const qs = new URLSearchParams({ window });
+    if (source !== 'all') qs.set('source', source);
+    return fetchJSON<PublicSentimentData>(`/sentiment?${qs}`);
 }
 
 export async function fetchBotActivity(): Promise<BotData> {
@@ -109,26 +115,6 @@ export async function fetchBotActivity(): Promise<BotData> {
     return fetchJSON<BotData>('/bot-activity');
 }
 
-export interface GeoSentimentData {
-    countries: CountryStats[];
-    total_posts: number;
-    posts_with_geo: number;
-    geo_coverage_pct: number;
-    excluded_bots: number;
-    country_count: number;
-}
-
-export interface CountryStats {
-    country_code: string;
-    country_name: string;
-    post_count: number;
-    avg_sentiment: number;
-}
-
-export async function fetchGeoSentiment(window: TimeWindow = '7d'): Promise<GeoSentimentData> {
-    return fetchJSON<GeoSentimentData>(`/geo-sentiment?window=${window}`);
-}
-
 export async function fetchNarratives(window: TimeWindow = '7d', limit: number = 20): Promise<NarrativeSummary[]> {
     if (USE_MOCKS) {
         const { mockNarratives } = await import('./fixtures');
@@ -137,8 +123,25 @@ export async function fetchNarratives(window: TimeWindow = '7d', limit: number =
     return fetchJSON<NarrativeSummary[]>(`/narratives?window=${window}&limit=${limit}`);
 }
 
-export async function fetchPropaganda(window: TimeWindow = '7d'): Promise<PropagandaOverview> {
-    return fetchJSON<PropagandaOverview>(`/propaganda?window=${window}`);
+export async function fetchPropaganda(
+    window: TimeWindow = '7d',
+    source: SourceFilter = 'all',
+): Promise<PropagandaOverview> {
+    if (USE_MOCKS) {
+        const { mockPropaganda } = await import('./fixtures');
+        return mockPropaganda();
+    }
+    const qs = new URLSearchParams({ window });
+    if (source !== 'all') qs.set('source', source);
+    return fetchJSON<PropagandaOverview>(`/propaganda?${qs}`);
+}
+
+export async function fetchMovers(window: TimeWindow = '7d'): Promise<MoversResult> {
+    if (USE_MOCKS) {
+        const { mockMovers } = await import('./fixtures');
+        return mockMovers();
+    }
+    return fetchJSON<MoversResult>(`/movers?window=${window}`);
 }
 
 export interface ReviewQueueParams {

@@ -1,0 +1,284 @@
+schema_version: 1
+dataset_name: verified_officials
+description: >
+  Editorial registry of 16 high-profile US political officeholders Civic
+  Lens tracks as first-class entities on the Verified Officials column of
+  the three-way dashboard frame. Each entry pairs a canonical X handle
+  with a neutral 2-3 sentence blurb, the officeholder's role and party,
+  term start, and a bio citation.
+
+  Scope is deliberately narrow: the 16 seats the dashboard treats as
+  "verified officials" (president + VP + party leaders in both chambers
+  + both party committee chairs + selected cabinet secretaries + FBI
+  director). Individual members of Congress stay in the larger
+  `known_political_x_accounts.yaml` registry and roll up into the
+  General Public / Elected tiers of the aggregator rather than getting
+  their own editorial card.
+
+  Handles MUST also exist in `data/known_political_x_accounts.yaml` so
+  the ingestion layer can match docs to the account — this file adds
+  the editorial layer on top. If a seat here is not in the larger
+  registry, add it there first.
+
+  Blurb voice: neutral third-person, 2-3 sentences, structured as
+  {who they are} + {why they matter in US political media} +
+  {partisan lean / media stance}.
+
+  Blurbs are time-sensitive: administrations change, cabinet secretaries
+  are replaced, leadership can flip mid-session. Review cadence is
+  quarterly; on any confirmed vacancy, the relevant entry should be
+  updated the same pass as the wider system state changes.
+
+notes:
+  - Party values are R | D | I | independent-dem | other.
+  - term_start is the ISO date the officeholder took their CURRENT named role, not their first public office.
+  - bio_source cites Wikipedia (canonical and continuously updated) for each entry; richer primary sources (official bios) may be added later.
+  - X handles as of 2025-04-21 (Trump 47 administration, 119th Congress). The registry is a snapshot — verify before using for any time-sensitive publishing decision.
+  - Some cabinet institutional handles change with administration (e.g. DoD's account rebranded under Hegseth); the blurbs flag this where it matters.
+
+officials:
+  - handle: "@POTUS"
+    also_handles:
+      - "@realDonaldTrump"
+      - "@WhiteHouse"
+    display_name: Donald J. Trump
+    office: President of the United States
+    party: R
+    blurb: >
+      47th President of the United States, serving his second
+      non-consecutive term after winning the 2024 election. Trump is the
+      dominant voice in US conservative politics and one of the most
+      high-volume political posters on X; his personal account regularly
+      drives news cycles and sets the framing other Republican officials
+      then amplify.
+    term_start: "2025-01-20"
+    bio_source: "https://en.wikipedia.org/wiki/Donald_Trump"
+
+  - handle: "@VP"
+    also_handles:
+      - "@JDVance"
+    display_name: JD Vance
+    office: Vice President of the United States
+    party: R
+    blurb: >
+      50th Vice President of the United States, former senator from Ohio
+      and author of the memoir "Hillbilly Elegy". Vance is a central voice
+      in the administration's populist-nationalist coalition and is often
+      cited in coverage of the Republican Party's generational transition.
+    term_start: "2025-01-20"
+    bio_source: "https://en.wikipedia.org/wiki/JD_Vance"
+
+  - handle: "@SpeakerJohnson"
+    also_handles:
+      - "@RepMikeJohnson"
+    display_name: Mike Johnson
+    office: Speaker of the House
+    party: R
+    blurb: >
+      Speaker of the US House of Representatives and Republican
+      representative for Louisiana's 4th congressional district. Elected
+      Speaker in October 2023 after Kevin McCarthy's removal and
+      re-elected with the 119th Congress; Johnson is one of the
+      Republican caucus's most influential leaders on legislative strategy.
+    term_start: "2023-10-25"
+    bio_source: "https://en.wikipedia.org/wiki/Mike_Johnson"
+
+  - handle: "@LeaderJohnThune"
+    also_handles:
+      - "@SenJohnThune"
+    display_name: John Thune
+    office: Senate Majority Leader
+    party: R
+    blurb: >
+      Senate Majority Leader since January 2025 and the senior Republican
+      senator from South Dakota. Thune succeeded Mitch McConnell as party
+      leader in the 119th Congress; his leadership style is widely
+      characterized as institutionalist relative to the populist wing of
+      the caucus.
+    term_start: "2025-01-03"
+    bio_source: "https://en.wikipedia.org/wiki/John_Thune"
+
+  - handle: "@SenSchumer"
+    also_handles:
+      - "@chuckschumer"
+    display_name: Chuck Schumer
+    office: Senate Minority Leader
+    party: D
+    blurb: >
+      Senate Minority Leader and senior Democratic senator from New York.
+      Schumer was Senate Majority Leader from 2021-2025 and transitioned
+      to Minority Leader with the 119th Congress; he remains the primary
+      spokesperson for Senate Democrats on floor strategy.
+    term_start: "2025-01-03"
+    bio_source: "https://en.wikipedia.org/wiki/Chuck_Schumer"
+
+  - handle: "@SteveScalise"
+    also_handles: []
+    display_name: Steve Scalise
+    office: House Majority Leader
+    party: R
+    blurb: >
+      House Majority Leader and Republican representative for Louisiana's
+      1st congressional district. Scalise has held senior House
+      Republican leadership continuously since 2014 and is a regular
+      television presence on Sunday political programs.
+    term_start: "2023-01-03"
+    bio_source: "https://en.wikipedia.org/wiki/Steve_Scalise"
+
+  - handle: "@RepJeffries"
+    also_handles:
+      - "@hakeemjeffries"
+    display_name: Hakeem Jeffries
+    office: House Minority Leader
+    party: D
+    blurb: >
+      House Minority Leader and Democratic representative for New York's
+      8th congressional district. Jeffries succeeded Nancy Pelosi as
+      House Democratic leader in January 2023 and is the first Black
+      American to lead either party in either chamber of Congress.
+    term_start: "2023-01-03"
+    bio_source: "https://en.wikipedia.org/wiki/Hakeem_Jeffries"
+
+  - handle: "@ChairmanWhatley"
+    also_handles:
+      - "@GOP"
+    display_name: Michael Whatley
+    office: RNC Chair
+    party: R
+    blurb: >
+      Chairman of the Republican National Committee since March 2024,
+      previously chair of the North Carolina Republican Party. Whatley was
+      backed by Donald Trump for the role during the 2024 campaign and
+      oversees national Republican party infrastructure, fundraising,
+      and election integrity operations.
+    term_start: "2024-03-08"
+    bio_source: "https://en.wikipedia.org/wiki/Michael_Whatley"
+
+  - handle: "@TheDemocrats"
+    also_handles:
+      - "@kenmartinmn"
+    display_name: Ken Martin
+    office: DNC Chair
+    party: D
+    blurb: >
+      Chairman of the Democratic National Committee since February 2025
+      and former longtime chair of the Minnesota Democratic-Farmer-Labor
+      Party. Martin took the role after the 2024 election loss with a
+      mandate to rebuild Democratic infrastructure in non-coastal states.
+      Personal X handle is used less than the institutional @TheDemocrats
+      account; match-against on the institutional handle will catch the
+      majority of relevant posts.
+    term_start: "2025-02-01"
+    bio_source: "https://en.wikipedia.org/wiki/Ken_Martin_(Minnesota_politician)"
+
+  - handle: "@SecRubio"
+    also_handles:
+      - "@marcorubio"
+      - "@StateDept"
+    display_name: Marco Rubio
+    office: Secretary of State
+    party: R
+    blurb: >
+      Secretary of State since January 2025 and former senior senator
+      from Florida, where he served three terms. Rubio is one of the
+      administration's most visible foreign-policy spokespeople and is
+      frequently cited in coverage of Latin America policy, China policy,
+      and sanctions enforcement.
+    term_start: "2025-01-21"
+    bio_source: "https://en.wikipedia.org/wiki/Marco_Rubio"
+
+  - handle: "@SecScottBessent"
+    also_handles:
+      - "@USTreasury"
+    display_name: Scott Bessent
+    office: Secretary of the Treasury
+    party: R
+    blurb: >
+      Secretary of the Treasury since January 2025 and former hedge-fund
+      manager at Soros Fund Management and Key Square Group. Bessent is
+      the administration's lead voice on tax, tariff, and financial
+      regulation policy and is a frequent source in business-press
+      coverage of the administration.
+    term_start: "2025-01-28"
+    bio_source: "https://en.wikipedia.org/wiki/Scott_Bessent"
+
+  - handle: "@SecWar"
+    also_handles:
+      - "@PeteHegseth"
+      - "@DeptofWar"
+    display_name: Pete Hegseth
+    office: Secretary of Defense
+    party: R
+    blurb: >
+      Secretary of Defense since January 2025, a former Army National
+      Guard officer and former Fox News host. Hegseth's confirmation
+      process was among the most contested of the Trump 47 cabinet; the
+      Department of Defense has been branded externally as the "Department
+      of War" on his X accounts, so both @SecWar and @DeptofWar catch
+      official content.
+    term_start: "2025-01-25"
+    bio_source: "https://en.wikipedia.org/wiki/Pete_Hegseth"
+
+  - handle: "@AGPamBondi"
+    also_handles:
+      - "@TheJusticeDept"
+    display_name: Pam Bondi
+    office: Attorney General
+    party: R
+    blurb: >
+      US Attorney General since February 2025 and former Florida
+      Attorney General (2011-2019). Bondi is the administration's lead
+      voice on law-enforcement priorities and on the ongoing
+      restructuring of the Department of Justice; coverage has focused
+      on prosecutorial priorities shifting from prior-administration
+      baselines.
+    term_start: "2025-02-05"
+    bio_source: "https://en.wikipedia.org/wiki/Pam_Bondi"
+
+  - handle: "@Sec_Noem"
+    also_handles:
+      - "@KristiNoem"
+      - "@DHSgov"
+    display_name: Kristi Noem
+    office: Secretary of Homeland Security
+    party: R
+    blurb: >
+      Secretary of Homeland Security since January 2025 and former
+      Governor of South Dakota (2019-2025). Noem is the lead
+      administration spokesperson on immigration enforcement and border
+      security and is frequently on-camera during ICE and CBP operations.
+    term_start: "2025-01-25"
+    bio_source: "https://en.wikipedia.org/wiki/Kristi_Noem"
+
+  - handle: "@SecKennedy"
+    also_handles:
+      - "@RobertKennedyJr"
+      - "@HHSGov"
+    display_name: Robert F. Kennedy Jr.
+    office: Secretary of Health and Human Services
+    party: R
+    blurb: >
+      Secretary of Health and Human Services since February 2025, former
+      environmental lawyer, and a 2024 presidential candidate who ran
+      first as a Democrat and then as an independent before endorsing
+      Donald Trump. Kennedy is a polarizing figure in public-health
+      coverage for his positions on vaccines, food policy, and public
+      health agency restructuring.
+    term_start: "2025-02-13"
+    bio_source: "https://en.wikipedia.org/wiki/Robert_F._Kennedy_Jr."
+
+  - handle: "@FBIDirectorKash"
+    also_handles:
+      - "@Kash_Patel"
+      - "@FBI"
+    display_name: Kash Patel
+    office: Director of the Federal Bureau of Investigation
+    party: R
+    blurb: >
+      Director of the Federal Bureau of Investigation since February
+      2025, former Chief of Staff at the Department of Defense under
+      Trump's first term, and a prominent Trump-aligned critic of the
+      pre-2025 FBI leadership. Coverage has focused on Patel's
+      restructuring of senior FBI posts and investigative priorities.
+    term_start: "2025-02-21"
+    bio_source: "https://en.wikipedia.org/wiki/Kash_Patel"
