@@ -80,7 +80,12 @@ All Python settings use the `CIVIC_` env prefix and are defined in `analysis/src
 
 ## Project Conventions
 
-- **Walkthroughs are required.** Every non-trivial code change gets a numbered walkthrough in `docs/walkthroughs/NNN-short-description.md`, with the index in `docs/walkthroughs/README.md` updated. Use the next sequential number. This is the permanent audit trail; never delete existing walkthroughs.
+- **Plan -> audit-trail workflow.** This is a hard rule. Every non-trivial change follows three steps:
+  1. **Plan.** Future work lives in `docs/todos/<initiative>.md` as a checklist. One file per initiative. No speculative "someday" entries — if it's not concrete enough to tick off, it doesn't belong there.
+  2. **Execute.** As boxes tick, the code lands.
+  3. **Record.** In the same PR, add a dated entry under the affected layer(s) in `docs/audit-trail/<layer>/YYYY-MM-DD-short-slug.md`. Buckets: `ingestion/`, `analysis/`, `api/`, `ui/`, `infra/`. A multi-layer change writes one entry per layer, cross-linked. When every box in a todo is checked, delete the todo file — the audit-trail entries are the permanent record.
+  Entries are forward-looking — they describe *the system as it is now* and name what replaced whatever was there, not the old thing on its own. Keep each under ~200 lines; split otherwise. See `docs/audit-trail/README.md` for the entry template.
+  The pre-existing `docs/walkthroughs/` linear log is being consolidated into this structure (see `docs/todos/walkthrough-consolidation.md`); until that lands, treat the walkthroughs as a secondary source and do not add to them.
 - **Style and invariants live in `.agent/`** — `rules/code-style.md`, `rules/invariants.md`, `rules/media-analysis.md` are always-on and define DRY/SOLID expectations, per-language style, and labeling requirements. `workflows/global.md`, `go-ingestion.md`, `python-ai-reporting.md` have layer-specific details.
 - **No emojis anywhere in the codebase** (see `invariants.md` rule 8).
 - **Labeling discipline** (media-analysis rules): Reddit outputs are "sampled Reddit discourse"; "Reach" is a proxy unless backed by real traffic; never claim universal American sentiment. UI must display confidence scores next to AI predictions.

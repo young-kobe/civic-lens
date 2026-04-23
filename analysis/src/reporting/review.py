@@ -17,7 +17,8 @@ import time
 from typing import Any, Dict, List, Optional
 
 from analysis.src.common.logger import get_logger
-from analysis.src.reporting.aggregators.base import get_connection
+from analysis.src.reporting.aggregators.base import X_AUTHOR_JOIN_SQL, get_connection
+from analysis.src.reporting.aggregators.narrative import _build_doc_url
 
 logger = get_logger(__name__)
 
@@ -45,13 +46,19 @@ class ReviewService:
         Ordered lowest-confidence-first: the rows where the model is least
         sure are the most valuable to put a human eye on.
         """
-        sql = """
+        # LEFT JOIN x_posts_raw + x_users_raw so we can synthesize an X
+        # permalink for x_post docs. Invariant C1: every evidence surface
+        # must link back to the original. This join is a flagged duplication
+        # hotspot; see docs/todos/backend-aggregator-audit.md §1.
+        sql = f"""
             SELECT a.output_id, a.doc_id, a.task_type, a.output_json, a.confidence,
                    a.model_id, a.prompt_version, a.created_at,
-                   d.source_type, d.domain_or_subreddit, d.title, d.text, d.ident
+                   d.source_type, d.domain_or_subreddit, d.title, d.text, d.ident,
+                   u.username
             FROM ai_outputs a
             JOIN docs d ON d.doc_id = a.doc_id
             LEFT JOIN ai_output_evals e ON e.ai_output_id = a.output_id
+            {X_AUTHOR_JOIN_SQL}
             WHERE a.task_type = ?
               AND e.ai_output_id IS NULL
         """
@@ -73,7 +80,7 @@ class ReviewService:
         items = []
         for row in rows:
             (output_id, doc_id, t, output_json, conf, model_id, prompt_version,
-             created_at, src, domain, title, text, ident) = row
+             created_at, src, domain, title, text, ident, x_handle) = row
             try:
                 payload = json.loads(output_json) if output_json else {}
             except json.JSONDecodeError:
@@ -93,6 +100,7 @@ class ReviewService:
                     "domain": domain,
                     "title": title,
                     "ident": ident,
+                    "url": _build_doc_url(src, domain, ident, x_handle=x_handle),
                     "text_preview": text[:_TEXT_PREVIEW_CHARS],
                     "text_truncated": len(text) > _TEXT_PREVIEW_CHARS,
                 },

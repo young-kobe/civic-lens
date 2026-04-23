@@ -344,9 +344,16 @@ class ContentLoader:
     def get_unprocessed_docs(self, task_type: str, source_types: Optional[List[str]] = None, batch_size: int = 500) -> List[Dict[str, Any]]:
         """
         Returns docs that do not have an entry in ai_outputs for the given task.
+
+        ``raw_hash`` is included so callers can de-dup scoring at the
+        content-hash level (e.g. syndicated AP wire stories reprinted by
+        multiple outlets share the same raw_hash) — score once, fan result
+        to siblings. See ``job_runner.run_propaganda_detection`` for the
+        current consumer.
         """
         query = f"""
-            SELECT d.doc_id, d.text, d.metadata_json, d.title, d.source_type, d.ident
+            SELECT d.doc_id, d.text, d.metadata_json, d.title, d.source_type,
+                   d.ident, d.raw_hash
             FROM docs d
             LEFT JOIN ai_outputs a ON d.doc_id = a.doc_id AND a.task_type = ?
             WHERE a.output_id IS NULL AND d.text IS NOT NULL
@@ -372,6 +379,7 @@ class ContentLoader:
                 "title": r[3],
                 "source_type": r[4],
                 "ident": r[5],
+                "raw_hash": r[6],
             }
             for r in rows
         ]

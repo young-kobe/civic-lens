@@ -1,6 +1,7 @@
 import { useState } from 'react';
+import { COLORS } from '../../theme';
+import { formatPct } from '../../services/format';
 import type { ClassificationSample } from '../../types';
-import { SEMANTIC_COLORS } from '../../theme';
 
 interface ClassificationSampleCardProps {
     sample: ClassificationSample;
@@ -33,9 +34,9 @@ export function ClassificationSampleCard({ sample, badgeStyle }: ClassificationS
     const spans = meaningfulEvidence(sample.evidence_spans || []);
 
     const confPct = sample.confidence * 100;
-    const confColor = confPct >= 80 ? SEMANTIC_COLORS.positive
-        : confPct >= 50 ? SEMANTIC_COLORS.warning
-        : SEMANTIC_COLORS.negative;
+    const confColor = confPct >= 80 ? COLORS.positive
+        : confPct >= 50 ? COLORS.warning
+        : COLORS.negative;
     const confLabel = confPct >= 80 ? 'High' : confPct >= 50 ? 'Medium' : 'Low';
 
     return (
@@ -53,12 +54,12 @@ export function ClassificationSampleCard({ sample, badgeStyle }: ClassificationS
                     {sample.label}
                 </span>
                 <span
-                    title={`Model confidence: ${confPct.toFixed(1)}% (${confLabel})`}
+                    title={`Model confidence: ${formatPct(confPct)} (${confLabel})`}
                     role="progressbar"
                     aria-valuenow={Math.round(confPct)}
                     aria-valuemin={0}
                     aria-valuemax={100}
-                    aria-label={`Model confidence ${confLabel.toLowerCase()}, ${confPct.toFixed(0)} percent`}
+                    aria-label={`Model confidence ${confLabel.toLowerCase()}, ${formatPct(confPct, { decimals: 0 })}`}
                     style={{
                         display: 'inline-flex', alignItems: 'center', gap: '4px',
                         fontSize: '10px', color: 'var(--neutral-500)',
@@ -78,14 +79,14 @@ export function ClassificationSampleCard({ sample, badgeStyle }: ClassificationS
                         }} />
                     </span>
                     <span style={{ color: confColor, fontWeight: 700 }}>
-                        {confPct.toFixed(0)}%
+                        {formatPct(confPct, { decimals: 0 })}
                     </span>
                 </span>
                 {sample.sarcasm_detected && (
                     <span style={{
                         fontSize: '9px', fontWeight: 700, padding: '2px 5px',
-                        borderRadius: '2px', background: 'var(--semantic-warning-light)',
-                        color: 'var(--semantic-warning)', letterSpacing: '0.08em',
+                        borderRadius: '2px', background: COLORS.warningLight,
+                        color: COLORS.warning, letterSpacing: '0.08em',
                     }}>
                         SARCASM
                     </span>
@@ -126,7 +127,7 @@ export function ClassificationSampleCard({ sample, badgeStyle }: ClassificationS
                     <button
                         onClick={() => setShowFull(!showFull)}
                         style={{
-                            background: 'none', border: 'none', color: 'var(--accent)',
+                            background: 'none', border: 'none', color: COLORS.accent,
                             cursor: 'pointer', fontSize: '11px', fontWeight: 600,
                             marginLeft: '4px', padding: 0, textTransform: 'uppercase',
                             letterSpacing: '0.06em',
@@ -173,7 +174,7 @@ export function ClassificationSampleCard({ sample, badgeStyle }: ClassificationS
                         <span>Source Text</span>
                         {sample.url && (
                             <a href={sample.url} target="_blank" rel="noreferrer" style={{
-                                color: 'var(--accent)', textDecoration: 'none',
+                                color: COLORS.accent, textDecoration: 'none',
                                 textTransform: 'none', fontSize: '11px', letterSpacing: 'normal',
                             }}>
                                 View Original ↗

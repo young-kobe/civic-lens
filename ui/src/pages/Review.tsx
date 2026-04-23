@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Card, LoadingCard, EmptyState, ErrorState } from '../components/common';
+import { COLORS } from '../theme';
+import { formatPct } from '../services/format';
 import {
     fetchReviewQueue, fetchReviewStats,
 } from '../services/api';
-import { SEMANTIC_COLORS } from '../theme';
 import ReviewItemCard from './review/ReviewItemCard';
 import type {
     ReviewQueueItem, ReviewStats, ReviewTaskType,
@@ -35,8 +36,8 @@ function StatsBar({ stats, activeTask }: StatsBarProps) {
         );
     }
     const reviewedPct = taskStats.total_outputs
-        ? ((taskStats.reviewed / taskStats.total_outputs) * 100).toFixed(1)
-        : '0.0';
+        ? (taskStats.reviewed / taskStats.total_outputs) * 100
+        : 0;
     return (
         <div
             className="review-stats-grid"
@@ -48,17 +49,17 @@ function StatsBar({ stats, activeTask }: StatsBarProps) {
             }}
         >
             <Stat label="Total outputs" value={taskStats.total_outputs} />
-            <Stat label="Reviewed" value={`${taskStats.reviewed} (${reviewedPct}%)`} />
-            <Stat label="Correct" value={taskStats.correct} color={SEMANTIC_COLORS.positive} />
-            <Stat label="Incorrect" value={taskStats.incorrect} color={SEMANTIC_COLORS.negative} />
+            <Stat label="Reviewed" value={`${taskStats.reviewed} (${formatPct(reviewedPct, { decimals: 0 })})`} />
+            <Stat label="Correct" value={taskStats.correct} color="var(--semantic-positive)" />
+            <Stat label="Incorrect" value={taskStats.incorrect} color="var(--semantic-negative)" />
             <Stat
                 label="Accuracy"
-                value={taskStats.accuracy_pct === null ? '—' : `${taskStats.accuracy_pct}%`}
+                value={formatPct(taskStats.accuracy_pct, { decimals: 0 })}
                 color={
                     taskStats.accuracy_pct === null ? undefined
-                        : taskStats.accuracy_pct >= 95 ? SEMANTIC_COLORS.positive
-                        : taskStats.accuracy_pct >= 80 ? SEMANTIC_COLORS.warning
-                        : SEMANTIC_COLORS.negative
+                        : taskStats.accuracy_pct >= 95 ? COLORS.positive
+                        : taskStats.accuracy_pct >= 80 ? COLORS.warning
+                        : COLORS.negative
                 }
             />
         </div>
@@ -136,40 +137,42 @@ function Review() {
             <div
                 style={{
                     padding: 'var(--space-3) var(--space-4)',
-                    background: '#eff6ff',
-                    border: '1px solid #93c5fd',
+                    background: COLORS.adminBannerBg,
+                    border: `1px solid ${COLORS.adminBannerBorder}`,
                     borderRadius: 'var(--radius-md)',
                     fontSize: 'var(--text-xs)',
-                    color: '#1e3a8a',
+                    color: COLORS.adminBannerText,
                 }}
             >
-                <strong>Reviews populate <code>ai_output_evals</code></strong> — marking rows as <em>golden</em> builds the
+                <strong>Reviews populate <code>ai_output_evals</code></strong>. Marking rows as <em>golden</em> builds the
                 benchmark set used to compute calibrated accuracy. Lowest-confidence model outputs are surfaced first because
                 those are where human review yields the most signal. Admin-gated via the <code>X-Admin-Token</code> header;
                 set a reviewer ID below for attribution.
             </div>
 
-            {/* Controls */}
+            {/* Controls — layout + mobile sizing live in `.review-controls`
+                (index.css). Inputs shrink to full-width on phones and bump
+                padding so selects/text fields hit the 44px touch target. */}
             <Card>
-                <div className="flex items-center gap-4 flex-wrap">
-                    <div className="flex items-center gap-2">
+                <div className="review-controls">
+                    <div className="review-controls-field">
                         <span className="eyebrow">Task:</span>
                         <select
                             value={task}
                             onChange={(e) => setTask(e.target.value as ReviewTaskType)}
-                            style={{ padding: '4px 8px', border: '1px solid var(--neutral-300)' }}
+                            className="review-controls-input"
                         >
                             {TASK_OPTIONS.map((t) => (
                                 <option key={t.id} value={t.id}>{t.label}</option>
                             ))}
                         </select>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="review-controls-field">
                         <span className="eyebrow">Only conf ≤</span>
                         <select
                             value={confidenceMax === null ? '' : String(confidenceMax)}
                             onChange={(e) => setConfidenceMax(e.target.value === '' ? null : parseFloat(e.target.value))}
-                            style={{ padding: '4px 8px', border: '1px solid var(--neutral-300)' }}
+                            className="review-controls-input"
                         >
                             <option value="">all</option>
                             <option value="0.5">0.50</option>
@@ -177,16 +180,16 @@ function Review() {
                             <option value="0.9">0.90</option>
                         </select>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="review-controls-field">
                         <span className="eyebrow">Reviewer ID:</span>
                         <input
                             value={reviewerId}
                             onChange={(e) => setReviewerId(e.target.value)}
                             placeholder="e.g. kobe"
-                            style={{ padding: '4px 8px', border: '1px solid var(--neutral-300)', width: 140 }}
+                            className="review-controls-input review-controls-input-text"
                         />
                     </div>
-                    <div style={{ marginLeft: 'auto' }}>
+                    <div className="review-controls-actions">
                         <button className="btn btn-sm" onClick={skip} disabled={!current} type="button">
                             Skip this one
                         </button>

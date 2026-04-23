@@ -24,13 +24,27 @@ import statistics
 from collections import Counter, defaultdict
 from typing import Any, Dict, Iterable, List, Tuple
 
-from analysis.src.reporting.aggregators.base import get_connection
+from analysis.src.reporting.aggregators.base import X_AUTHOR_JOIN_SQL, get_connection
+from analysis.src.reporting.aggregators.narrative import (
+    _build_doc_url,
+    _build_source_label,
+)
+from analysis.src.reporting.entity_registry import (
+    catch_all_profile,
+    CATCH_ALL_OUTLETS,
+    CATCH_ALL_SUBREDDITS,
+    CATCH_ALL_X_USERS,
+    get_registry,
+    resolve_entity,
+)
 from analysis.src.reporting.models import (
+    BotActivityData,
+    BotEntityItem,
     BotOverview,
-    NarrativeAmplification,
     CoordinationStats,
     BehavioralSignals,
-    BotActivityData,
+    FlaggedExample,
+    NarrativeAmplification,
 )
 
 
@@ -53,7 +67,8 @@ class BotAggregator:
                 bot_data["bot_doc_ids"],
                 bot_data["bot_authors"],
             )
-        return self._format_bot_activity(bot_data, behavior)
+            rollups = self._fetch_entity_rollups(cursor)
+        return self._format_bot_activity(bot_data, behavior, rollups)
 
     # ---------- Fetch ----------
 
@@ -63,6 +78,11 @@ class BotAggregator:
         Pre-excluded rows (inference_method='deterministic') are dropped from
         every count so the automation rate denominator is eligible posts only.
         """
+        # LEFT JOIN x_posts_raw + x_users_raw so bot-flagged x_posts
+        # carry the author handle we need to synthesize an X permalink in
+        # _narrative_amplification (C1 invariant: every evidence surface
+        # links back to the original). This join is a flagged duplication
+        # hotspot; see docs/todos/backend-aggregator-audit.md §1.
         cursor.execute(
             """
             SELECT a.doc_id,
@@ -73,9 +93,13 @@ class BotAggregator:
                    d.domain_or_subreddit,
                    d.published_at,
                    d.text,
-                   d.ident
+                   d.ident,
+                   u.username
             FROM ai_outputs a
             JOIN docs d ON a.doc_id = d.doc_id
+            """
+            + X_AUTHOR_JOIN_SQL
+            + """
             WHERE a.task_type = 'bot_detection'
             """
         )
@@ -92,7 +116,7 @@ class BotAggregator:
         bot_idents: List[str] = []  # for author lookup (tweet_ids)
 
         for (doc_id, output_json, confidence, inf_method, source_type,
-             domain, pub_at, text, ident) in cursor.fetchall():
+             domain, pub_at, text, ident, x_handle) in cursor.fetchall():
             # Drop pre-exclusion rows from the denominator entirely.
             if (inf_method or "") == "deterministic":
                 continue
@@ -108,7 +132,11 @@ class BotAggregator:
                 bot_docs_data.append({
                     "doc_id": doc_id,
                     "data": data,
+                    "source_type": source_type,
                     "domain": domain,
+                    "ident": ident,
+                    "x_handle": x_handle,
+                    "text": text,
                     "pub_at": pub_at,
                 })
                 if domain:
@@ -218,10 +246,96 @@ class BotAggregator:
             "account_reuse": round(account_reuse, 3),
         }
 
+    # ---------- Entity rollups (three-way Bot Detector grid) ----------
+
+    def _fetch_entity_rollups(self, cursor) -> Dict[str, List[BotEntityItem]]:
+        """Per-entity bot-classification rates for the three-way grid.
+
+        Runs one joined scan of ai_outputs.task='bot_detection' rows together
+        with x author-handle lookup, then buckets each row into news /
+        officials / public via ``resolve_entity``. Per-entity output: total
+        eligible docs + bot-labelled subset + rate. Catch-alls sorted last;
+        entities sorted by bot_rate_pct desc inside each tier.
+        """
+        cursor.execute(
+            """
+            SELECT a.output_json, a.inference_method,
+                   d.source_type, d.domain_or_subreddit,
+                   u.username
+            FROM ai_outputs a
+            JOIN docs d ON d.doc_id = a.doc_id
+            """
+            + X_AUTHOR_JOIN_SQL
+            + """
+            WHERE a.task_type = 'bot_detection'
+            """
+        )
+        # (tier, key) -> accumulator
+        accum: Dict[Tuple[str, str], Dict[str, Any]] = {}
+        registry = get_registry()
+        for (output_json, inf_method, source_type, domain, handle) in cursor.fetchall():
+            if (inf_method or "") == "deterministic":
+                continue
+            try:
+                data = json.loads(output_json) if output_json else {}
+            except json.JSONDecodeError:
+                continue
+            label = data.get("label", "human")
+
+            tier, entity = resolve_entity(registry, source_type, domain, handle)
+            if tier is None:
+                continue
+            if entity is not None:
+                profile = entity.profile_dict()
+                key = profile["key"]
+            else:
+                if tier == "news":
+                    profile = catch_all_profile(
+                        CATCH_ALL_OUTLETS, "Other news outlets",
+                        "News doc whose domain is not in the tracked outlet registry.",
+                    )
+                elif tier == "public" and source_type == "x_post":
+                    profile = catch_all_profile(
+                        CATCH_ALL_X_USERS, "Other X users",
+                        "X post whose author is not in the tracked officials registry.",
+                    )
+                elif tier == "public":
+                    profile = catch_all_profile(
+                        CATCH_ALL_SUBREDDITS, "Other subreddits",
+                        "Reddit post whose subreddit is not in the tracked subreddit registry.",
+                    )
+                else:
+                    continue
+                key = profile["key"]
+
+            slot = accum.setdefault((tier, key), {
+                "kind": profile["kind"], "profile": profile,
+                "total": 0, "bot": 0,
+            })
+            slot["total"] += 1
+            if label == "bot":
+                slot["bot"] += 1
+
+        rollups: Dict[str, List[BotEntityItem]] = {
+            "news": [], "officials": [], "public": [],
+        }
+        for (tier, key), s in accum.items():
+            rate = (s["bot"] / s["total"] * 100) if s["total"] else 0.0
+            rollups[tier].append(BotEntityItem(
+                key=key, kind=s["kind"],
+                total_docs=s["total"], bot_docs=s["bot"],
+                bot_rate_pct=round(rate, 1),
+                entity_profile=s["profile"],
+            ))
+        for tier, items in rollups.items():
+            items.sort(key=_entity_sort_key)
+        return rollups
+
     # ---------- Format ----------
 
     def _format_bot_activity(
         self, bot_data: Dict[str, Any], behavior: Dict[str, Any],
+        rollups: Dict[str, List[BotEntityItem]],
     ) -> BotActivityData:
         total_eligible = bot_data["total_eligible"]
         bot_count = bot_data["bot_count"]
@@ -251,6 +365,9 @@ class BotAggregator:
                 topClusters=[c[0] for c in top_clusters],
                 totalFlaggedAccounts=bot_count + suspicious_count,
                 confidence="medium" if total_eligible > 100 else "low",
+                by_news_outlet=rollups.get("news", []),
+                by_official=rollups.get("officials", []),
+                by_general_public=rollups.get("public", []),
             ),
             narrativeAmplification=narratives,
             coordinationStats=CoordinationStats(
@@ -273,6 +390,13 @@ class BotAggregator:
 # =============================================================================
 
 
+def _entity_sort_key(item: BotEntityItem) -> Tuple[int, float, int]:
+    """Sort bot-rollup entities: registry-matched first (catch-alls last),
+    highest bot_rate_pct next, then highest bot_docs as tie-break."""
+    is_catch_all = 1 if item.kind == "catch_all" else 0
+    return (is_catch_all, -item.bot_rate_pct, -item.bot_docs)
+
+
 def _compute_coordination_index(hourly_distribution: Dict[int, int]) -> float:
     if not hourly_distribution:
         return 0.0
@@ -280,6 +404,15 @@ def _compute_coordination_index(hourly_distribution: Dict[int, int]) -> float:
     if total == 0:
         return 0.0
     return max(hourly_distribution.values()) / total
+
+
+# How many real posts to surface per amplified indicator. Each appears in
+# the Bot Detector's amplification modal as an evidence excerpt with an
+# outbound source link.
+_EXAMPLES_PER_INDICATOR = 3
+# Character budget for the excerpt shown in the modal. Full text is
+# one click away via the permalink; the preview is just for recognition.
+_EXAMPLE_TEXT_CHARS = 220
 
 
 def _narrative_amplification(
@@ -294,7 +427,7 @@ def _narrative_amplification(
             id=idx + 1,
             narrative=indicator,
             confidence="medium" if count > 5 else "low",
-            examplePosts=[],
+            examplePosts=_pick_examples_for_indicator(indicator, bot_docs_data),
             topHashtags=[],
             topPhrases=[indicator],
             targets=[],
@@ -303,6 +436,48 @@ def _narrative_amplification(
         )
         for idx, (indicator, count) in enumerate(top_indicators)
     ]
+
+
+def _pick_examples_for_indicator(
+    indicator: str,
+    bot_docs_data: List[Dict[str, Any]],
+) -> List[FlaggedExample]:
+    """Return up to ``_EXAMPLES_PER_INDICATOR`` bot-flagged docs whose
+    indicator list includes ``indicator``. Each comes with a permalink
+    built from ingestion metadata via the shared ``_build_doc_url`` helper
+    (news → http ident, reddit → synthesized, x_post → x.com/handle/status/id).
+
+    C1 invariant: every evidence surface links back to the original.
+    """
+    out: List[FlaggedExample] = []
+    for row in bot_docs_data:
+        if indicator not in row["data"].get("indicators", []):
+            continue
+        text = (row.get("text") or "").strip()
+        if not text:
+            continue
+        if len(text) > _EXAMPLE_TEXT_CHARS:
+            text = text[: _EXAMPLE_TEXT_CHARS].rstrip() + "…"
+        out.append(
+            FlaggedExample(
+                doc_id=row["doc_id"],
+                text=text,
+                source_label=_build_source_label(
+                    row.get("source_type"),
+                    row.get("domain"),
+                    row.get("x_handle"),
+                ),
+                url=_build_doc_url(
+                    row.get("source_type"),
+                    row.get("domain"),
+                    row.get("ident"),
+                    x_handle=row.get("x_handle"),
+                ),
+            )
+        )
+        if len(out) >= _EXAMPLES_PER_INDICATOR:
+            break
+    return out
 
 
 def _shingles(text: str, k: int = 8) -> set:

@@ -53,6 +53,24 @@ ln -sfn "$REPO/data/migrations" "$DB_DIR/migrations"
 # civic-ingest migrate is a no-op when schema is already current.
 "$REPO/civic-ingest" migrate --db "$DB_PATH"
 
+# Disable the Reddit timer + service if a previous install enabled them.
+# Reddit API access was withdrawn; keeping the timer running would just log
+# failures every 2h. Idempotent: `disable --now` on a missing unit is a no-op;
+# removing the files then `daemon-reload` purges anything still referencing
+# them. If Reddit comes back, restore the unit files and rerun install.sh.
+for unit in civic-lens-reddit.timer civic-lens-reddit.service; do
+    systemctl disable --now "$unit" 2>/dev/null || true
+    rm -f "/etc/systemd/system/$unit"
+done
+
+# Sync systemd unit files from the repo. install.sh drops these once on
+# first install; deploys also need to pick up unit-level changes (timeout
+# bumps, new OnFailure wiring, new templated units like the alerter).
+# Idempotent: install overwrites with the same mode each time.
+install -m 0644 "$REPO"/deploy/systemd/*.service /etc/systemd/system/
+install -m 0644 "$REPO"/deploy/systemd/*.timer   /etc/systemd/system/
+systemctl daemon-reload
+
 echo "[6/6] chown + reload"
 chown -R civic-lens:civic-lens "$REPO"
 # civic-ingest runs as root inside deploy.sh and writes the DB file —

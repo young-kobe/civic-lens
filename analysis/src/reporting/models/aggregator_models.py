@@ -5,7 +5,7 @@ Contains dataclasses for structured API responses.
 """
 
 import datetime
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, List, Optional
 
 
@@ -84,7 +84,14 @@ class ClassificationSample:
 
 @dataclass
 class TopicSentiment:
-    """Topic-level sentiment breakdown with classification samples."""
+    """Topic-level sentiment breakdown with classification samples.
+
+    The ``newsNet`` / ``officialsNet`` / ``publicNet`` fields are the
+    three-way net-sentiment split that powers the topic-divergence panel
+    in the Overall Tone page redesign (Phase 5). They are optional because
+    pre-Phase-3b callers and cached snapshots won't carry them; when None,
+    the UI falls back to the single-tier net derived from positive/negative.
+    """
     topic: str
     positive: int
     negative: int
@@ -92,6 +99,12 @@ class TopicSentiment:
     volume: int
     sarcasm_rate: float = 0.0
     classification_samples: List[ClassificationSample] = field(default_factory=list)
+    newsNet: Optional[float] = None
+    officialsNet: Optional[float] = None
+    publicNet: Optional[float] = None
+    newsVolume: int = 0
+    officialsVolume: int = 0
+    publicVolume: int = 0
 
 
 @dataclass
@@ -105,6 +118,79 @@ class TimeWindowSentiment:
 
 
 @dataclass
+class DayOfWeekSentiment:
+    """Per-weekday sentiment breakdown. `day` is a short label (Mon..Sun).
+
+    Aggregated from each doc's local calendar weekday so a reader can see
+    whether weekend vs weekday coverage leans differently. Orthogonal to
+    TimeWindowSentiment's age buckets: one answers "when in the week",
+    the other answers "how recently".
+    """
+    day: str
+    positive: int
+    negative: int
+    neutral: int
+    volume: int
+
+
+@dataclass
+class EntitySentimentItem:
+    """Per-entity sentiment breakdown for the three-way dashboard frame.
+
+    One instance per registry-matched entity (news outlet, verified
+    official, or major subreddit) plus catch-alls keyed by pseudo-entity
+    names like ``other-outlets``, ``general-public``. ``entity_profile``
+    carries the static editorial metadata rendered next to the metrics
+    (display name, blurb, partisan lean, etc.) — populated from the
+    entity registry, or a lightweight placeholder dict for catch-alls.
+    """
+    key: str                    # domain / handle / subreddit / sentinel like "other-outlets"
+    kind: str                   # outlet | official | subreddit | catch_all
+    positive: int
+    negative: int
+    neutral: int
+    volume: int
+    netScore: float
+    entity_profile: Dict[str, Any] = field(default_factory=dict)
+    classification_samples: List[ClassificationSample] = field(default_factory=list)
+
+
+def _entity_item_to_dict(item: "EntitySentimentItem") -> Dict[str, Any]:
+    """Serialize an EntitySentimentItem into the UI-facing wire shape.
+
+    Split out so PublicSentimentResult.to_dict() keeps a flat table layout
+    instead of nesting another five-level comprehension for every new
+    entity tier. Also used by any future consumer that needs to serialize
+    an EntitySentimentItem directly (e.g. the narrative aggregator's
+    per-tier entity rollups).
+    """
+    return {
+        "key": item.key,
+        "kind": item.kind,
+        "positive": item.positive,
+        "negative": item.negative,
+        "neutral": item.neutral,
+        "volume": item.volume,
+        "netScore": item.netScore,
+        "entityProfile": item.entity_profile,
+        "classificationSamples": [
+            {
+                "doc_id": s.doc_id, "label": s.label,
+                "confidence": s.confidence, "reasoning": s.reasoning,
+                "evidence_spans": s.evidence_spans,
+                "sarcasm_detected": s.sarcasm_detected,
+                "title": s.title or "", "source_type": s.source_type,
+                "source_name": s.source_name,
+                "date": s.date,
+                "full_text": s.full_text,
+                "url": s.url,
+            }
+            for s in item.classification_samples
+        ],
+    }
+
+
+@dataclass
 class PublicSentimentResult:
     """Complete public sentiment response with merged GOP favorability data."""
     overview: SentimentOverview
@@ -114,6 +200,18 @@ class PublicSentimentResult:
     excluded_bot_content: int
     byTopic: List[TopicSentiment] = field(default_factory=list)
     byTimeWindow: List[TimeWindowSentiment] = field(default_factory=list)
+    byDayOfWeek: List[DayOfWeekSentiment] = field(default_factory=list)
+    # Three-way entity breakdown (walkthrough 057 — Phase 3b).
+    # Present when the aggregator matched docs against the entity registries;
+    # older cached snapshots leave these empty so old API consumers are safe.
+    byNewsOutlet: List[EntitySentimentItem] = field(default_factory=list)
+    byOfficial: List[EntitySentimentItem] = field(default_factory=list)
+    byGeneralPublic: List[EntitySentimentItem] = field(default_factory=list)
+    # Per-intensity-bucket drill-down samples. Keys: strongPositive, mildPositive,
+    # neutral, mildNegative, strongNegative. Each value is a list of up to
+    # DISTRIBUTION_SAMPLES_PER_BUCKET docs, confidence-sorted descending, so the
+    # UI can open a bucket and audit the actual classifications.
+    distributionSamples: Dict[str, List[ClassificationSample]] = field(default_factory=dict)
     socialVsNews: Optional[Dict[str, Any]] = None  # Social vs News comparison
     # Merged GOP favorability data
     gopFavorability: Optional[Dict[str, Any]] = None  # Stance breakdown (favorable/unfavorable/neutral %)
@@ -145,6 +243,12 @@ class PublicSentimentResult:
                     "topic": t.topic, "positive": t.positive, "negative": t.negative,
                     "neutral": t.neutral, "volume": t.volume,
                     "sarcasm_rate": t.sarcasm_rate,
+                    "newsNet": t.newsNet,
+                    "officialsNet": t.officialsNet,
+                    "publicNet": t.publicNet,
+                    "newsVolume": t.newsVolume,
+                    "officialsVolume": t.officialsVolume,
+                    "publicVolume": t.publicVolume,
                     "classificationSamples": [
                         {
                             "doc_id": s.doc_id, "label": s.label,
@@ -162,10 +266,34 @@ class PublicSentimentResult:
                 }
                 for t in self.byTopic
             ],
+            "byNewsOutlet": [_entity_item_to_dict(e) for e in self.byNewsOutlet],
+            "byOfficial": [_entity_item_to_dict(e) for e in self.byOfficial],
+            "byGeneralPublic": [_entity_item_to_dict(e) for e in self.byGeneralPublic],
             "byTimeWindow": [
                 {"window": w.window, "positive": w.positive, "negative": w.negative, "neutral": w.neutral, "volume": w.volume}
                 for w in self.byTimeWindow
             ],
+            "byDayOfWeek": [
+                {"day": d.day, "positive": d.positive, "negative": d.negative, "neutral": d.neutral, "volume": d.volume}
+                for d in self.byDayOfWeek
+            ],
+            "distributionSamples": {
+                bucket: [
+                    {
+                        "doc_id": s.doc_id, "label": s.label,
+                        "confidence": s.confidence, "reasoning": s.reasoning,
+                        "evidence_spans": s.evidence_spans,
+                        "sarcasm_detected": s.sarcasm_detected,
+                        "title": s.title or "", "source_type": s.source_type,
+                        "source_name": s.source_name,
+                        "date": s.date,
+                        "full_text": s.full_text,
+                        "url": s.url,
+                    }
+                    for s in samples
+                ]
+                for bucket, samples in self.distributionSamples.items()
+            },
             "disclaimer": self.disclaimer,
             "excluded_bot_content": self.excluded_bot_content,
         }
@@ -264,8 +392,74 @@ class GOPFavorabilityResult:
 
 
 # =============================================================================
+# Movers (window-over-window deltas)
+# =============================================================================
+
+@dataclass
+class EntityToneMover:
+    """One entity whose political-tone net score shifted meaningfully between
+    the previous equivalent window and the current one.
+
+    ``delta_pts`` is signed (current_net - prev_net). Positive = more
+    positive tone this window. ``min_volume`` enforced upstream so a
+    low-volume swing from 1 → 2 docs doesn't rank."""
+    key: str
+    kind: str                    # outlet | official | subreddit
+    displayName: str
+    current_net: float
+    prev_net: float
+    delta_pts: float             # signed: positive = climbing, negative = falling
+    current_volume: int
+    prev_volume: int
+    entity_profile: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class FavorabilityMover:
+    """Window-over-window shift in overall GOP favorability. Shipped as a
+    single row alongside the entity-tone movers so the ticker can foreground
+    the party-stance trend (not just per-entity moves)."""
+    label: str                   # "GOP party stance"
+    current_net: float
+    prev_net: float
+    delta_pts: float
+    current_volume: int
+    prev_volume: int
+
+
+@dataclass
+class MoversResult:
+    """Top N biggest movers (up and down) for the political-tone +
+    GOP-favorability ticker. Window-over-window shape — previous window is
+    the same duration ending at the current window start."""
+    window: str                       # '24h' | '7d' | '30d' | '90d'
+    entity_movers: List[EntityToneMover] = field(default_factory=list)
+    favorability_mover: Optional[FavorabilityMover] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "window": self.window,
+            "entity_movers": [asdict(m) for m in self.entity_movers],
+            "favorability_mover": asdict(self.favorability_mover) if self.favorability_mover else None,
+        }
+
+
+# =============================================================================
 # Bot Activity
 # =============================================================================
+
+@dataclass
+class BotEntityItem:
+    """Per-entity bot-amplification rollup for the three-way Bot Detector
+    grid. Sort the UI list by ``bot_rate_pct`` desc; tie-break by
+    ``bot_docs`` desc; catch-alls sorted last."""
+    key: str                    # registry key or catch-all sentinel
+    kind: str                   # outlet | official | subreddit | catch_all
+    total_docs: int             # bot_detection-scored docs attributed to this entity
+    bot_docs: int               # subset flagged as label='bot'
+    bot_rate_pct: float         # bot_docs / total_docs * 100
+    entity_profile: Dict[str, Any] = field(default_factory=dict)
+
 
 @dataclass
 class BotOverview:
@@ -275,6 +469,23 @@ class BotOverview:
     topClusters: List[str]
     totalFlaggedAccounts: int
     confidence: str
+    # Three-way entity rollups — which outlets / officials / subreddits have
+    # the highest bot-classification rate on their contributed posts. Empty
+    # on older snapshots.
+    by_news_outlet: List[BotEntityItem] = field(default_factory=list)
+    by_official: List[BotEntityItem] = field(default_factory=list)
+    by_general_public: List[BotEntityItem] = field(default_factory=list)
+
+
+@dataclass
+class FlaggedExample:
+    """One bot-flagged post displayed as evidence on the Bot Detector.
+    Every instance must carry a URL back to the original when one can be
+    synthesized — invariant C1 (source links on evidence)."""
+    doc_id: int
+    text: str
+    source_label: str          # "News · foo.com" / "X · @handle" / "Reddit · r/politics"
+    url: Optional[str]         # null when ingest metadata wasn't enough to synthesize
 
 
 @dataclass
@@ -283,7 +494,7 @@ class NarrativeAmplification:
     id: int
     narrative: str
     confidence: str
-    examplePosts: List[str]
+    examplePosts: List[FlaggedExample]
     topHashtags: List[str]
     topPhrases: List[str]
     targets: List[str]
@@ -351,6 +562,20 @@ class NarrativeSummary:
     inbound_citation_count: int
     propaganda_score: Optional[float] = None
     bot_pushed_fraction: Optional[float] = None
+    # Walkthrough 058 — three-way entity framing:
+    #   first_seen_entity_profile: profile_dict()-shaped dict for the
+    #     registry entity the first-seen doc maps to (outlet / official /
+    #     subreddit / catch_all). None when first_seen_doc_id is null.
+    #   first_seen_tier_group: coarse tier bucket ('news' | 'officials' |
+    #     'public') driven by entity_registry.resolve_entity, independent
+    #     of the existing first_seen_tier which comes from account_profiles.
+    #   cross_tier: True when supporting docs span >1 tier group.
+    first_seen_entity_profile: Optional[Dict[str, Any]] = None
+    first_seen_tier_group: Optional[str] = None
+    cross_tier: bool = False
+    # Top N supporting docs for the modal drill-down table — matches the
+    # SupportingDoc TS interface in ui/src/types.ts.
+    top_supporting_docs: List[Dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -369,6 +594,10 @@ class NarrativeSummary:
             "inbound_citation_count": self.inbound_citation_count,
             "propaganda_score": self.propaganda_score,
             "bot_pushed_fraction": self.bot_pushed_fraction,
+            "first_seen_entity_profile": self.first_seen_entity_profile,
+            "first_seen_tier_group": self.first_seen_tier_group,
+            "cross_tier": self.cross_tier,
+            "top_supporting_docs": self.top_supporting_docs,
         }
 
 
@@ -388,13 +617,16 @@ class BotActivityData:
                 "topClusters": self.overview.topClusters,
                 "totalFlaggedAccounts": self.overview.totalFlaggedAccounts,
                 "confidence": self.overview.confidence,
+                "by_news_outlet": [asdict(e) for e in self.overview.by_news_outlet],
+                "by_official": [asdict(e) for e in self.overview.by_official],
+                "by_general_public": [asdict(e) for e in self.overview.by_general_public],
             },
             "narrativeAmplification": [
                 {
                     "id": n.id,
                     "narrative": n.narrative,
                     "confidence": n.confidence,
-                    "examplePosts": n.examplePosts,
+                    "examplePosts": [asdict(ex) for ex in n.examplePosts],
                     "topHashtags": n.topHashtags,
                     "topPhrases": n.topPhrases,
                     "targets": n.targets,

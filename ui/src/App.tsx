@@ -1,18 +1,18 @@
-import { useState } from 'react';
-import { Tabs, GlobalFilters, ExportMenu } from './components/common';
-import { Home, PublicSentiment, BotActivityProfiler, GlobalHeatmap, Narratives, Propaganda, Review } from './pages';
+import { useEffect, useState } from 'react';
+import { Tabs, GlobalFilters, Footer, type Tab } from './components/common';
+import { Home, PublicSentiment, BotActivityProfiler, Narratives, Propaganda, Review } from './pages';
 import type { Filters } from './types';
+import { fetchSnapshotStatus, type SnapshotStatus } from './services/api';
+import { useFetch } from './services/useFetch';
+import { formatRefreshedAgo, latestSnapshotTimestamp } from './services/freshness';
 
-// Admin mode is token-based. Visit once with ?admin=<CIVIC_ADMIN_TOKEN> to
-// persist it; ?admin=0 clears it. The token is sent as X-Admin-Token on every
-// admin-endpoint request (see services/api.ts). Non-admin users never see the
-// Review tab. Global Heatmap is hidden for everyone (page kept, unlinked from nav).
-//
-// The URL is scrubbed after capture via history.replaceState — otherwise the
-// token would ride along in the Referer header on any outbound click (font
-// assets, external article links in review rows, analytics if ever added).
-// This is defense-in-depth on top of the Cloudflare Access SSO layer that
-// actually gates the admin endpoints (audit §1.12).
+/* Admin mode is token-based. Visit once with ?admin=<CIVIC_ADMIN_TOKEN> to persist it;
+   ?admin=0 clears it. The token is sent as X-Admin-Token on every admin-endpoint
+   request (see services/api.ts). Non-admin users never see the Review tab.
+
+   The URL is scrubbed after capture via history.replaceState so the token doesn't
+   ride along in the Referer header on any outbound click. This is defense-in-depth
+   on top of the Cloudflare Access SSO layer that actually gates admin endpoints. */
 const ADMIN_MODE: boolean = (() => {
     try {
         const params = new URLSearchParams(window.location.search);
@@ -35,31 +35,129 @@ const ADMIN_MODE: boolean = (() => {
     }
 })();
 
-const BASE_TABS = [
-    { id: 'sentiment', label: 'Public Sentiment' },
-    { id: 'narratives', label: 'Narratives' },
-    { id: 'propaganda', label: 'Propaganda' },
-    { id: 'bots', label: 'Bot Detector' },
+const iconProps = {
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 2,
+    strokeLinecap: 'round' as const,
+    strokeLinejoin: 'round' as const,
+};
+
+const BASE_TABS: Tab[] = [
+    {
+        // Tab id stays 'sentiment' for URL hash + cache-key stability
+        // (walkthrough 060 renamed the display label only).
+        id: 'sentiment',
+        label: 'Overall Tone',
+        shortLabel: 'Tone',
+        icon: (
+            <svg {...iconProps}>
+                <path d="M3 3v18h18" />
+                <path d="M7 14l4-4 4 4 5-6" />
+            </svg>
+        ),
+    },
+    {
+        // Walkthrough 061 renamed label to "Political Narratives"; id + shortLabel unchanged.
+        id: 'narratives',
+        label: 'Political Narratives',
+        shortLabel: 'Narratives',
+        icon: (
+            <svg {...iconProps}>
+                <path d="M4 7h16M4 12h16M4 17h10" />
+            </svg>
+        ),
+    },
+    {
+        id: 'propaganda',
+        label: 'Propaganda',
+        shortLabel: 'Propaganda',
+        icon: (
+            <svg {...iconProps}>
+                <path d="M12 3l8 4v5c0 5-3.5 8.5-8 9-4.5-.5-8-4-8-9V7l8-4z" />
+                <path d="M12 8v4M12 16h.01" />
+            </svg>
+        ),
+    },
+    {
+        id: 'bots',
+        label: 'Bot Detector',
+        shortLabel: 'Bots',
+        icon: (
+            <svg {...iconProps}>
+                <rect x="4" y="7" width="16" height="12" rx="2" />
+                <path d="M12 3v4M8 12h.01M16 12h.01M9 16h6" />
+            </svg>
+        ),
+    },
 ];
 
-const ADMIN_TABS = [
-    { id: 'review', label: 'Review' },
+const ADMIN_TABS: Tab[] = [
+    {
+        id: 'review',
+        label: 'Review',
+        shortLabel: 'Review',
+        icon: (
+            <svg {...iconProps}>
+                <path d="M9 4h6a1 1 0 011 1v2H8V5a1 1 0 011-1z" />
+                <rect x="5" y="6" width="14" height="15" rx="2" />
+                <path d="M9 13l2 2 4-4" />
+            </svg>
+        ),
+    },
 ];
 
-const TABS = ADMIN_MODE ? [...BASE_TABS, ...ADMIN_TABS] : BASE_TABS;
+const TABS: Tab[] = ADMIN_MODE ? [...BASE_TABS, ...ADMIN_TABS] : BASE_TABS;
+
+// Valid tab ids — kept in sync with TABS + the 'home' landing. Used to
+// validate the URL hash before we trust it as a tab.
+const TAB_IDS: ReadonlySet<string> = new Set([
+    'home', 'sentiment', 'narratives', 'propaganda', 'bots', 'review',
+]);
+
+function readTabFromHash(): string {
+    const raw = window.location.hash.replace(/^#/, '');
+    return TAB_IDS.has(raw) ? raw : 'home';
+}
+
+function useScrolled(threshold = 4) {
+    const [scrolled, setScrolled] = useState(false);
+    useEffect(() => {
+        const onScroll = () => setScrolled(window.scrollY > threshold);
+        onScroll();
+        window.addEventListener('scroll', onScroll, { passive: true });
+        return () => window.removeEventListener('scroll', onScroll);
+    }, [threshold]);
+    return scrolled;
+}
 
 function App() {
-    const [activeTab, setActiveTab] = useState('home');
+    // Tab is mirrored into window.location.hash so the CF Access bootstrap
+    // bounce (see services/api.ts) can return the user to the tab they were on
+    // before the login prompt. Without the hash mirror, a round-trip would
+    // always land on Home.
+    const [activeTab, setActiveTab] = useState(readTabFromHash);
     const [filters, setFilters] = useState<Filters>({
         timeRange: '7d',
         sourceType: 'all',
-        geography: 'all',
     });
+    const scrolled = useScrolled();
 
-    const handleExport = (format: string) => {
-        console.log('Exporting as:', format);
-        // Export implementation would go here
-    };
+    useEffect(() => {
+        const current = window.location.hash.replace(/^#/, '');
+        if (current !== activeTab) {
+            const hash = activeTab === 'home' ? '' : `#${activeTab}`;
+            const url = `${window.location.pathname}${window.location.search}${hash}`;
+            window.history.replaceState({}, '', url);
+        }
+    }, [activeTab]);
+
+    useEffect(() => {
+        const onHashChange = () => setActiveTab(readTabFromHash());
+        window.addEventListener('hashchange', onHashChange);
+        return () => window.removeEventListener('hashchange', onHashChange);
+    }, []);
 
     const renderPage = () => {
         switch (activeTab) {
@@ -73,8 +171,6 @@ function App() {
                 return <Propaganda filters={filters} />;
             case 'bots':
                 return <BotActivityProfiler filters={filters} />;
-            case 'heatmap':
-                return <GlobalHeatmap filters={filters} />;  // hidden from nav; reachable only if re-linked
             case 'review':
                 return ADMIN_MODE ? <Review /> : <Home onNavigate={setActiveTab} isAdmin={ADMIN_MODE} />;
             default:
@@ -82,89 +178,82 @@ function App() {
         }
     };
 
-    const now = new Date();
-    const timestamp = now.toISOString().slice(0, 19).replace('T', ' ') + ' UTC';
+    // Latest cache-write timestamp across all snapshots — the honest
+    // "when was data last refreshed" for the header strip. Before this we
+    // rendered new Date() which advertised "just now" regardless of whether
+    // the pipeline had actually run recently.
+    const { data: snapshotStatus } = useFetch<SnapshotStatus>(
+        () => fetchSnapshotStatus(),
+        [],
+        'snapshot-status',
+    );
+    const latestIso = latestSnapshotTimestamp(snapshotStatus);
+    const refreshedAgo = formatRefreshedAgo(latestIso);
+    const refreshedTitle = latestIso
+        ? `Data refreshed ${refreshedAgo} (${latestIso})`
+        : 'Data refresh time unavailable';
 
     return (
         <div className="app-container">
-            {/* Header */}
-            <header className="page-header">
+            <header className={`page-header ${scrolled ? 'is-scrolled' : ''}`}>
                 <div className="page-header-row">
                     <div className="page-header-brand">
                         <button
                             type="button"
+                            className="brand-lockup"
                             onClick={() => setActiveTab('home')}
                             aria-label="Return to home"
                             title="Return to home"
-                            style={{
-                                background: 'transparent',
-                                border: 'none',
-                                padding: 0,
-                                cursor: 'pointer',
-                                font: 'inherit',
-                                color: 'inherit',
-                            }}
+                            style={{ padding: 0 }}
                         >
+                            <span className="brand-mark" aria-hidden />
                             <h1 className="page-title" style={{ margin: 0 }}>CIVIC&nbsp;LENS</h1>
                         </button>
                         <span className="page-header-separator" aria-hidden />
                         <p className="page-subtitle page-header-subtitle" style={{ marginTop: 0 }}>
-                            Political Media · Narrative &amp; Bot Tracker
+                            Political Media &middot; Narrative &amp; Bot Tracker
                         </p>
                     </div>
                     <div className="page-header-actions">
-                        <span className="status-strip status-strip-full">
-                            <span className="tick-up">●</span>
+                        <span
+                            className="status-strip status-strip-full"
+                            title={refreshedTitle}
+                            aria-label={refreshedTitle}
+                        >
+                            <span className="tick-live" aria-hidden />
                             <span>LIVE</span>
-                            <span className="sep" />
-                            <span>{timestamp}</span>
+                            <span className="sep" aria-hidden />
+                            <span>Refreshed {refreshedAgo}</span>
                         </span>
                         <span
                             className="status-strip-mini"
-                            title={`Live · ${timestamp}`}
-                            aria-label={`Live · ${timestamp}`}
+                            title={refreshedTitle}
+                            aria-label={refreshedTitle}
                         >
-                            <span className="tick-up">●</span>
+                            <span className="tick-live" aria-hidden />
                         </span>
-                        <ExportMenu onExport={handleExport} />
                     </div>
                 </div>
             </header>
 
-            {/* Navigation */}
             <Tabs tabs={TABS} activeTab={activeTab} onTabChange={setActiveTab} />
 
-            {/* Global Filters — hidden on Home (no filtered data to scope). */}
             {activeTab !== 'home' && (
                 <GlobalFilters
                     filters={filters}
                     onFilterChange={setFilters}
-                    showGeography={false}
+                    /* Source filter is honored on every data page except
+                       Bot — bot detection is scoped to social platforms by
+                       definition, so the pill has nothing to narrow there. */
+                    showSourceType={activeTab !== 'bots'}
                 />
             )}
 
-            {/* Main Content */}
             <main style={{ paddingTop: 'var(--space-4)', paddingBottom: 'var(--space-10)' }}>
                 {renderPage()}
             </main>
 
-            {/* Footer */}
-            <footer
-                style={{
-                    borderTop: '1px solid var(--neutral-200)',
-                    padding: 'var(--space-3) 0',
-                    marginTop: 'var(--space-6)',
-                    fontSize: 'var(--text-xs)',
-                    color: 'var(--neutral-500)',
-                    fontFamily: 'var(--font-mono)',
-                    letterSpacing: '0.04em',
-                }}
-            >
-                <div className="flex justify-between uppercase">
-                    <span>Civic Lens · Open Source Media Analytics</span>
-                    <span>Refreshed: {timestamp}</span>
-                </div>
-            </footer>
+            <Footer timestamp={refreshedAgo} />
         </div>
     );
 }

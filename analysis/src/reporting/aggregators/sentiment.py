@@ -1,108 +1,104 @@
 """
 Public sentiment aggregator.
 
-Aggregates sentiment metrics excluding bot-flagged content.
-Provides separate breakdowns for Social Media vs News Outlets.
-Includes merged GOP favorability data.
+Aggregates sentiment metrics excluding bot-flagged content. Produces the
+headline net score, per-intensity distribution, per-platform / per-topic
+/ per-time / per-day-of-week breakdowns, and (walkthrough 057) the
+three-way tier split: news outlets / verified officials / general
+public. GOP favorability is merged in as a secondary data path.
+
+The file is deliberately structured with the class up top (the public
+surface the rest of the system talks to) and the pure helpers below,
+following the pattern in ``bot.py`` and peers.
 """
+
+from __future__ import annotations
 
 import json
 import re
-from collections import Counter
-from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional, Set, Tuple
+from datetime import datetime
+from typing import Any, Dict, List, Optional, Set
 
 from analysis.src.common.cache import SnapshotCache
 from analysis.src.common.settings import get_settings
 from analysis.src.reporting.aggregators.base import (
+    X_AUTHOR_JOIN_SQL,
+    fetch_task_rows,
+    get_bot_flagged_doc_ids,
     get_connection,
     get_time_cutoff,
-    get_bot_flagged_doc_ids,
-    fetch_task_rows,
+    source_filter_allowed,
 )
 from analysis.src.reporting.aggregators.constants import (
-    SOCIAL_PLATFORMS, NEWS_PLATFORMS, TOPIC_KEYWORDS,
-    STRONG_CONFIDENCE_THRESHOLD,
+    NEWS_PLATFORMS, SOCIAL_PLATFORMS, STRONG_CONFIDENCE_THRESHOLD, TOPIC_KEYWORDS,
+)
+from analysis.src.reporting.entity_registry import (
+    CATCH_ALL_OUTLETS, CATCH_ALL_SUBREDDITS, CATCH_ALL_X_USERS,
+    catch_all_profile, get_registry, resolve_entity,
 )
 from analysis.src.reporting.models import (
-    SentimentOverview,
-    SentimentDistribution,
+    ClassificationSample,
+    DayOfWeekSentiment,
+    EntitySentimentItem,
     PlatformSentiment,
     PublicSentimentResult,
-    TopicSentiment,
-    ClassificationSample,
+    SentimentDistribution,
+    SentimentOverview,
     TimeWindowSentiment,
+    TopicSentiment,
 )
 
+
+# --------------------------------------------------------------------------- #
+#  Module constants                                                           #
+# --------------------------------------------------------------------------- #
+
+# Keys for per-intensity drill-down sampling — must match SentimentDistribution
+# field names so the UI can look them up directly.
+STRENGTH_BUCKETS = (
+    "strongPositive", "mildPositive", "neutral", "mildNegative", "strongNegative",
+)
+MAX_DISTRIBUTION_SAMPLES_PER_BUCKET = 15
+MAX_SAMPLES_PER_TOPIC = 5
+MAX_SAMPLES_PER_ENTITY = 10
+MAX_EVIDENCE_PER_SAMPLE = 5
+
+_DOW_LABELS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+_LABEL_MAP = {
+    "POSITIVE": "positive",
+    "NEGATIVE": "negative",
+    "NEUTRAL": "neutral",
+    "MIXED": "neutral",
+}
+
+
+# --------------------------------------------------------------------------- #
+#  Class                                                                      #
+# --------------------------------------------------------------------------- #
 
 class SentimentAggregator:
     """Aggregates public sentiment metrics with merged GOP favorability data."""
-    
+
     def __init__(self, db_path: str):
         self.db_path = db_path
-        settings = get_settings()
-        self.cache = SnapshotCache(settings.cache_dir)
-    
-    def _categorize_platform(self, source_type: str) -> str:
-        """Categorize source_type into Social Media or News Outlets."""
-        if source_type in SOCIAL_PLATFORMS:
-            return "Social Media"
-        elif source_type in NEWS_PLATFORMS:
-            return "News Outlets"
-        return "Other"
-    
-    def _extract_topic(self, title: str) -> str:
-        """Extract topic from title using keyword matching."""
-        if not title:
-            return "General"
-        title_lower = title.lower()
-        for topic, keywords in TOPIC_KEYWORDS.items():
-            if any(kw in title_lower for kw in keywords):
-                return topic
-        return "General"
-    
-    def _get_time_bucket(self, published_at: Any, now: datetime) -> str:
-        """Get time bucket for a document based on published_at."""
-        try:
-            # Handle different formats
-            if isinstance(published_at, (int, float)):
-                # Unix timestamp
-                pub_dt = datetime.fromtimestamp(published_at)
-            elif isinstance(published_at, str):
-                # ISO format string
-                pub_dt = datetime.fromisoformat(published_at.replace('Z', '+00:00'))
-                if pub_dt.tzinfo:
-                    pub_dt = pub_dt.replace(tzinfo=None)
-            else:
-                return "Unknown"
-            
-            delta = now - pub_dt
-            if delta.days < 1:
-                return "24 hours"
-            elif delta.days < 7:
-                return "7 days"
-            elif delta.days < 30:
-                return "30 days"
-            else:
-                return "90+ days"
-        except (ValueError, TypeError, OSError):
-            return "Unknown"
-    
+        self.cache = SnapshotCache(get_settings().cache_dir)
+
     def get_public_sentiment(
         self,
         time_window: str = "24h",
         bot_docs: Optional[Set[int]] = None,
+        source_filter: str = "all",
     ) -> PublicSentimentResult:
-        """
-        Aggregate sentiment EXCLUDING bot-flagged content AND rows whose
+        """Aggregate sentiment excluding bot-flagged content + rows whose
         confidence is below ``aggregation_min_confidence`` (walkthrough 039).
-        Includes merged GOP favorability data.
 
         Args:
-            time_window: Filter by time window (24h, 7d, 30d, 90d, all)
-            bot_docs: Optional pre-computed bot-flagged doc id set. When None,
-                the aggregator queries it itself. job_runner passes a cached
+            time_window: 24h | 7d | 30d | 90d | all.
+            bot_docs: Pre-computed bot-flagged doc id set. When None, the
+                aggregator queries it itself. job_runner passes a cached
                 set so the query doesn't run once per aggregator.
+            source_filter: all | news | reddit | social. Filtered requests
+                bypass the snapshot cache.
         """
         min_conf = get_settings().aggregation_min_confidence
         if bot_docs is None:
@@ -112,12 +108,17 @@ class SentimentAggregator:
         with get_connection(self.db_path) as conn:
             cursor = conn.cursor()
 
+            # Left-join x_posts_raw + x_users_raw so every sentiment row can
+            # carry the post author's handle for registry matching. No-op
+            # for non-X rows; u.username is NULL and entity_routing handles
+            # that downstream (walkthrough 057).
             sentiment_rows = fetch_task_rows(
                 cursor,
-                "SELECT a.doc_id, a.output_json, a.confidence, d.source_type, d.published_at, d.title, d.domain_or_subreddit, d.ident, d.text",
+                "SELECT a.doc_id, a.output_json, a.confidence, d.source_type, d.published_at, d.title, d.domain_or_subreddit, d.ident, d.text, u.username",
                 task_type="sentiment",
                 cutoff=cutoff,
                 min_confidence=min_conf,
+                extra_joins=X_AUTHOR_JOIN_SQL,
             )
             favorability_rows = fetch_task_rows(
                 cursor,
@@ -127,182 +128,94 @@ class SentimentAggregator:
                 min_confidence=min_conf,
             )
 
-        result = self._process_sentiment_data(sentiment_rows, bot_docs)
-        self._merge_favorability_data(result, favorability_rows, bot_docs)
+        allowed_sources = source_filter_allowed(source_filter)
+        result = self._process_sentiment_data(sentiment_rows, bot_docs, allowed_sources)
+        _merge_favorability_data(result, favorability_rows, bot_docs, allowed_sources, self.cache)
         return result
 
-    def _process_sentiment_data(self, rows: List[tuple], bot_docs: Set[int]) -> PublicSentimentResult:
-        """Process sentiment data into structured response with social vs news separation."""
-        accum = self._aggregate_sentiment_rows(rows, bot_docs)
-        return self._build_sentiment_result(accum)
+    def _process_sentiment_data(
+        self, rows: List[tuple], bot_docs: Set[int], allowed_sources: Optional[frozenset],
+    ) -> PublicSentimentResult:
+        accum = self._aggregate_rows(rows, bot_docs, allowed_sources)
+        return self._build_result(accum)
 
-    def _aggregate_sentiment_rows(self, rows: List[tuple], bot_docs: Set[int]) -> Dict[str, Any]:
-        """Parse raw sentiment rows into intermediate aggregation structures."""
+    def _aggregate_rows(
+        self, rows: List[tuple], bot_docs: Set[int], allowed_sources: Optional[frozenset],
+    ) -> Dict[str, Any]:
+        """Walk each row once, fanning counts + samples into every
+        accumulator the result consumer needs. Keep inline work tight —
+        branchy logic lives in module-level helpers below."""
+        registry = get_registry()
         accum: Dict[str, Any] = {
             "strong_pos": 0, "mild_pos": 0, "strong_neg": 0, "mild_neg": 0,
             "neutral": 0, "mixed": 0, "count": 0, "excluded_bots": 0,
             "social": {"positive": 0, "negative": 0, "neutral": 0, "mixed": 0},
             "news": {"positive": 0, "negative": 0, "neutral": 0, "mixed": 0},
-            "by_platform": {}, "by_topic": {}, "by_time": {},
+            "by_platform": {}, "by_topic": {}, "by_time": {}, "by_dow": {},
             "topic_samples": {},
+            "strength_samples": {b: [] for b in STRENGTH_BUCKETS},
+            # Three-way entity rollups + per-topic tier split (walkthrough 057).
+            "by_news_outlet": {}, "by_official": {}, "by_general_public": {},
+            "by_topic_tier": {},
         }
         now = datetime.now()
-        label_map = {"POSITIVE": "positive", "NEGATIVE": "negative", "NEUTRAL": "neutral", "MIXED": "neutral"}
 
-        for doc_id, output_json, confidence, source_type, published_at, title, domain_or_subreddit, ident, text in rows:
+        for (
+            doc_id, output_json, confidence, source_type, published_at,
+            title, domain_or_subreddit, ident, text, x_handle,
+        ) in rows:
             if doc_id in bot_docs:
                 accum["excluded_bots"] += 1
+                continue
+            if allowed_sources is not None and (source_type or "") not in allowed_sources:
                 continue
             try:
                 data = json.loads(output_json)
             except json.JSONDecodeError:
                 continue
 
-            label = data.get('label', 'NEUTRAL')
-            conf = float(data.get('confidence', confidence or 0.5))
-            self._count_sentiment_strength(accum, label, conf)
+            label = data.get("label", "NEUTRAL")
+            conf = float(data.get("confidence", confidence or 0.5))
+            strength_key = _count_strength(accum, label, conf)
 
-            label_key = label_map.get(label, "neutral")
-            platform = source_type or 'unknown'
-            category = self._categorize_platform(platform)
+            label_key = _LABEL_MAP.get(label, "neutral")
+            category = _categorize_platform(source_type)
 
             if category == "Social Media":
                 accum["social"][label_key] += 1
             elif category == "News Outlets":
                 accum["news"][label_key] += 1
 
-            self._increment_bucket(accum["by_platform"], category, label_key)
-            topic = self._extract_topic(title)
-            self._increment_bucket(accum["by_topic"], topic, label_key)
-            self._increment_bucket(accum["by_time"], self._get_time_bucket(published_at, now), label_key)
-            self._collect_topic_sample(
+            _increment_bucket(accum["by_platform"], category, label_key)
+            topic = _extract_topic(title)
+            _increment_bucket(accum["by_topic"], topic, label_key)
+            _increment_bucket(accum["by_time"], _time_bucket(published_at, now), label_key)
+            dow = _day_of_week(published_at)
+            if dow is not None:
+                _increment_bucket(accum["by_dow"], dow, label_key)
+
+            _collect_topic_sample(
                 accum["topic_samples"], topic, doc_id, label, conf,
                 data, title, source_type, published_at, domain_or_subreddit, ident, text,
             )
+            _collect_strength_sample(
+                accum["strength_samples"], strength_key, doc_id, label, conf,
+                data, title, source_type, published_at, domain_or_subreddit, ident, text,
+            )
+
+            tier = _route_and_record(
+                accum, registry, source_type, domain_or_subreddit, x_handle,
+                doc_id, label, conf, data, title, published_at, ident, text,
+            )
+            if tier is not None:
+                _increment_bucket(accum["by_topic_tier"], f"{topic}\x00{tier}", label_key)
+
             accum["count"] += 1
 
         return accum
 
-    @staticmethod
-    def _count_sentiment_strength(accum: Dict[str, Any], label: str, conf: float) -> None:
-        """Increment mild/strong positive/negative counters based on confidence."""
-        if label == 'POSITIVE':
-            key = "strong_pos" if conf >= STRONG_CONFIDENCE_THRESHOLD else "mild_pos"
-        elif label == 'NEGATIVE':
-            key = "strong_neg" if conf >= STRONG_CONFIDENCE_THRESHOLD else "mild_neg"
-        elif label == 'MIXED':
-            key = "mixed"
-        else:
-            key = "neutral"
-        accum[key] += 1
-
-    @staticmethod
-    def _increment_bucket(bucket: Dict[str, Dict[str, int]], key: str, label_key: str) -> None:
-        """Increment a label count within a named bucket."""
-        if key not in bucket:
-            bucket[key] = {"positive": 0, "negative": 0, "neutral": 0, "mixed": 0}
-        bucket[key][label_key] += 1
-
-    @staticmethod
-    def _collect_topic_sample(
-        topic_samples: Dict[str, List[Dict[str, Any]]],
-        topic: str,
-        doc_id: int,
-        label: str,
-        confidence: float,
-        data: Dict[str, Any],
-        title: Optional[str],
-        source_type: Optional[str],
-        published_at: Optional[float],
-        domain_or_subreddit: Optional[str],
-        ident: Optional[str],
-        text: Optional[str],
-    ) -> None:
-        """Collect a classification sample for a topic (capped at 5 per topic)."""
-        MAX_SAMPLES_PER_TOPIC = 5
-        MAX_EVIDENCE_PER_SAMPLE = 5
-        if topic not in topic_samples:
-            topic_samples[topic] = []
-        samples = topic_samples[topic]
-        reasoning = data.get("reasoning", "")
-        if not reasoning:
-            return
-
-        # Skip if this doc_id is already represented in the topic's samples
-        # (ai_outputs can have multiple rows per doc across prompt versions / reruns)
-        if any(s["doc_id"] == doc_id for s in samples):
-            return
-
-        raw_spans = data.get("evidence_spans", [])
-        clean_spans = SentimentAggregator._sanitize_evidence(raw_spans, MAX_EVIDENCE_PER_SAMPLE)
-
-        date_str = datetime.fromtimestamp(published_at).strftime('%b %d, %Y') if published_at else None
-        url = None
-        if ident:
-            if ident.startswith("http"):
-                url = ident
-            elif source_type and source_type.startswith("reddit"):
-                post_id = ident.replace("t3_", "").replace("t1_", "")
-                url = f"https://reddit.com/r/{domain_or_subreddit or 'all'}/comments/{post_id}"
-
-        sample = {
-            "doc_id": doc_id,
-            "label": label,
-            "confidence": confidence,
-            "reasoning": reasoning,
-            "evidence_spans": clean_spans,
-            "sarcasm_detected": bool(data.get("sarcasm_detected", False)),
-            "title": title or "",
-            "source_type": source_type or "unknown",
-            "source_name": domain_or_subreddit,
-            "date": date_str,
-            "full_text": text or "",
-            "url": url,
-        }
-        if len(samples) < MAX_SAMPLES_PER_TOPIC:
-            samples.append(sample)
-            samples.sort(key=lambda s: s["confidence"], reverse=True)
-        elif confidence > samples[-1]["confidence"]:
-            samples[-1] = sample
-            samples.sort(key=lambda s: s["confidence"], reverse=True)
-
-    @staticmethod
-    def _sanitize_evidence(spans: list, max_count: int = 5) -> list:
-        """
-        Clean evidence spans: deduplicate, remove placeholders, filter trivial.
-
-        Removes:
-        - Placeholder text (e.g. 'exact quote 1')
-        - @-mention-only spans
-        - Very short or single-word spans
-        - Duplicate spans (case-insensitive)
-        """
-        seen: set = set()
-        result: list = []
-        placeholder_pattern = re.compile(r"^exact quote", re.IGNORECASE)
-        mention_pattern = re.compile(r"^@\w+$")
-
-        for span in spans:
-            if not isinstance(span, str):
-                continue
-            trimmed = span.strip()
-            if not trimmed or len(trimmed) < 4:
-                continue
-            if placeholder_pattern.match(trimmed):
-                continue
-            # Filter placeholders, but do NOT filter by word count or mentions
-            # since a single word like 'Satanists' or a single mention '@x' is valid evidence if the LLM chose it.
-            key = trimmed.lower()
-            if key in seen:
-                continue
-            seen.add(key)
-            result.append(trimmed)
-            if len(result) >= max_count:
-                break
-        return result
-
-    def _build_sentiment_result(self, accum: Dict[str, Any]) -> PublicSentimentResult:
-        """Construct PublicSentimentResult from pre-aggregated data."""
+    def _build_result(self, accum: Dict[str, Any]) -> PublicSentimentResult:
+        """Assemble PublicSentimentResult from the aggregation accumulator."""
         total_pos = accum["strong_pos"] + accum["mild_pos"]
         total_neg = accum["strong_neg"] + accum["mild_neg"]
         total = total_pos + total_neg + accum["neutral"] + accum["mixed"]
@@ -325,9 +238,16 @@ class SentimentAggregator:
                 neutral=accum["neutral"] + accum["mixed"],
                 mildNegative=accum["mild_neg"], strongNegative=accum["strong_neg"],
             ),
-            byPlatform=self._format_platform_sentiment(accum["by_platform"]),
-            byTopic=self._format_topic_sentiment(accum["by_topic"], accum["topic_samples"]),
-            byTimeWindow=self._format_time_window_sentiment(accum["by_time"]),
+            byPlatform=_format_platform(accum["by_platform"]),
+            byTopic=_format_topic(
+                accum["by_topic"], accum["topic_samples"], accum["by_topic_tier"],
+            ),
+            byTimeWindow=_format_time_window(accum["by_time"]),
+            byDayOfWeek=_format_day_of_week(accum["by_dow"]),
+            distributionSamples=_format_distribution_samples(accum["strength_samples"]),
+            byNewsOutlet=_format_entity_items(accum["by_news_outlet"]),
+            byOfficial=_format_entity_items(accum["by_official"]),
+            byGeneralPublic=_format_entity_items(accum["by_general_public"]),
             disclaimer="Represents sampled platform discourse, not verified population sentiment",
             excluded_bot_content=accum["excluded_bots"],
         )
@@ -336,176 +256,615 @@ class SentimentAggregator:
             "news": {**news, "netScore": round(news_net, 1), "volume": news_total},
         }
         return result
-    
-    def _merge_favorability_data(
-        self, result: PublicSentimentResult, fav_rows: List[tuple], bot_docs: Set[int]
-    ) -> None:
-        """
-        Merge GOP favorability data into the sentiment result.
-        Processes favorability rows into stance breakdown, trend, and platform data.
-        """
-        distribution, by_platform, daily_net, count = self._parse_favorability_rows(fav_rows, bot_docs)
-        if count == 0:
-            return
-        self._format_favorability_result(result, distribution, by_platform, daily_net, count)
 
-    def _parse_favorability_rows(
-        self, fav_rows: List[tuple], bot_docs: Set[int]
-    ) -> tuple:
-        """Parse raw favorability rows into intermediate aggregation structures."""
-        distribution = {"favorable": 0, "unfavorable": 0, "neutral": 0, "mixed": 0}
-        by_platform: Dict[str, Dict[str, int]] = {}
-        daily_net: Dict[str, Dict[str, Any]] = {}
-        count = 0
 
-        for doc_id, output_json, confidence, source_type, pub_at in fav_rows:
-            if doc_id in bot_docs:
-                continue
-            try:
-                data = json.loads(output_json)
-            except json.JSONDecodeError:
-                continue
+# --------------------------------------------------------------------------- #
+#  Sample collection                                                          #
+# --------------------------------------------------------------------------- #
 
-            stance = data.get('overall_gop_stance', 'neutral')
-            if stance not in distribution:
-                stance = 'neutral'
-            distribution[stance] += 1
+def _sanitize_evidence(spans: list, max_count: int = MAX_EVIDENCE_PER_SAMPLE) -> list:
+    """Deduplicate + strip placeholders from an LLM's evidence_spans list.
 
-            # Platform breakdown (normalize reddit types)
-            platform = source_type or 'unknown'
-            if platform in ('reddit_post', 'reddit_comment'):
-                platform = 'reddit'
-            if platform not in by_platform:
-                by_platform[platform] = {"favorable": 0, "unfavorable": 0, "neutral": 0}
-            if stance in by_platform[platform]:
-                by_platform[platform][stance] += 1
+    Placeholder text (``exact quote``-style) and duplicates are dropped;
+    short spans (< 4 chars) are skipped. Single-word and ``@mention``
+    spans are preserved — the LLM can legitimately point at a single
+    loaded word like ``Satanists`` as evidence.
+    """
+    seen: set = set()
+    result: list = []
+    placeholder_pattern = re.compile(r"^exact quote", re.IGNORECASE)
+    for span in spans:
+        if not isinstance(span, str):
+            continue
+        trimmed = span.strip()
+        if not trimmed or len(trimmed) < 4:
+            continue
+        if placeholder_pattern.match(trimmed):
+            continue
+        key = trimmed.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(trimmed)
+        if len(result) >= max_count:
+            break
+    return result
 
-            # Track daily trend
-            if pub_at:
-                self._track_daily_favorability(daily_net, pub_at, stance)
 
-            count += 1
+def _build_sample_dict(
+    doc_id: int,
+    label: str,
+    confidence: float,
+    data: Dict[str, Any],
+    title: Optional[str],
+    source_type: Optional[str],
+    published_at: Optional[float],
+    domain_or_subreddit: Optional[str],
+    ident: Optional[str],
+    text: Optional[str],
+) -> Dict[str, Any]:
+    """Build the dict representation of a classification sample used by
+    every collector. Centralizing this avoids the 3-place duplication
+    that pre-split sentiment.py was carrying."""
+    date_str = (
+        datetime.fromtimestamp(published_at).strftime("%b %d, %Y")
+        if published_at else None
+    )
+    url = None
+    if ident:
+        if ident.startswith(("http://", "https://")):
+            url = ident
+        elif source_type and source_type.startswith("reddit"):
+            post_id = ident.replace("t3_", "").replace("t1_", "")
+            url = f"https://reddit.com/r/{domain_or_subreddit or 'all'}/comments/{post_id}"
+    return {
+        "doc_id": doc_id,
+        "label": label,
+        "confidence": confidence,
+        "reasoning": data.get("reasoning", ""),
+        "evidence_spans": _sanitize_evidence(data.get("evidence_spans", [])),
+        "sarcasm_detected": bool(data.get("sarcasm_detected", False)),
+        "title": title or "",
+        "source_type": source_type or "unknown",
+        "source_name": domain_or_subreddit,
+        "date": date_str,
+        "full_text": text or "",
+        "url": url,
+    }
 
-        return distribution, by_platform, daily_net, count
 
-    def _track_daily_favorability(
-        self, daily_net: Dict[str, Dict[str, Any]], pub_at: float, stance: str
-    ) -> None:
-        """Accumulate daily favorability scores for trend data."""
+def _sample_dict_to_model(s: Dict[str, Any]) -> ClassificationSample:
+    """Convert a sample dict into the ClassificationSample dataclass.
+    Used in every list-level formatter to avoid repeated field hoisting."""
+    return ClassificationSample(
+        doc_id=s["doc_id"],
+        label=s["label"],
+        confidence=s["confidence"],
+        reasoning=s["reasoning"],
+        evidence_spans=s["evidence_spans"],
+        sarcasm_detected=s["sarcasm_detected"],
+        title=s.get("title"),
+        source_type=s.get("source_type"),
+        source_name=s.get("source_name"),
+        date=s.get("date"),
+        full_text=s.get("full_text", ""),
+        url=s.get("url"),
+    )
+
+
+def _insert_capped(samples: List[Dict[str, Any]], sample: Dict[str, Any], cap: int) -> None:
+    """Keep the list sorted by confidence desc and capped at ``cap``.
+    De-dupes by doc_id so the same row can't show up twice from the
+    ai_outputs table (which may have multiple rows per doc across prompt
+    versions / reruns)."""
+    if any(s["doc_id"] == sample["doc_id"] for s in samples):
+        return
+    if len(samples) < cap:
+        samples.append(sample)
+        samples.sort(key=lambda s: s["confidence"], reverse=True)
+    elif sample["confidence"] > samples[-1]["confidence"]:
+        samples[-1] = sample
+        samples.sort(key=lambda s: s["confidence"], reverse=True)
+
+
+def _collect_topic_sample(
+    topic_samples: Dict[str, List[Dict[str, Any]]],
+    topic: str,
+    doc_id: int, label: str, confidence: float,
+    data: Dict[str, Any],
+    title: Optional[str], source_type: Optional[str], published_at: Optional[float],
+    domain_or_subreddit: Optional[str], ident: Optional[str], text: Optional[str],
+) -> None:
+    if not data.get("reasoning"):
+        return
+    samples = topic_samples.setdefault(topic, [])
+    sample = _build_sample_dict(
+        doc_id, label, confidence, data, title, source_type,
+        published_at, domain_or_subreddit, ident, text,
+    )
+    _insert_capped(samples, sample, MAX_SAMPLES_PER_TOPIC)
+
+
+def _collect_strength_sample(
+    strength_samples: Dict[str, List[Dict[str, Any]]],
+    bucket: str,
+    doc_id: int, label: str, confidence: float,
+    data: Dict[str, Any],
+    title: Optional[str], source_type: Optional[str], published_at: Optional[float],
+    domain_or_subreddit: Optional[str], ident: Optional[str], text: Optional[str],
+) -> None:
+    """Append a sample to one of the five STRENGTH_BUCKETS. Silently
+    drops rows for unknown buckets so callers can pass the key through
+    without branching."""
+    samples = strength_samples.get(bucket)
+    if samples is None or not data.get("reasoning"):
+        return
+    sample = _build_sample_dict(
+        doc_id, label, confidence, data, title, source_type,
+        published_at, domain_or_subreddit, ident, text,
+    )
+    _insert_capped(samples, sample, MAX_DISTRIBUTION_SAMPLES_PER_BUCKET)
+
+
+def _collect_entity_sample(
+    entity_accum: Dict[str, Any],
+    doc_id: int, label: str, confidence: float,
+    data: Dict[str, Any],
+    title: Optional[str], source_type: Optional[str], published_at: Optional[float],
+    domain_or_subreddit: Optional[str], ident: Optional[str], text: Optional[str],
+) -> None:
+    """Bump an entity bucket's counters + append a sample when there's room."""
+    label_key = _LABEL_MAP.get(label, "neutral")
+    entity_accum[label_key] += 1
+    entity_accum["volume"] += 1
+    if not data.get("reasoning"):
+        return
+    sample = _build_sample_dict(
+        doc_id, label, confidence, data, title, source_type,
+        published_at, domain_or_subreddit, ident, text,
+    )
+    _insert_capped(entity_accum["samples"], sample, MAX_SAMPLES_PER_ENTITY)
+
+
+# --------------------------------------------------------------------------- #
+#  Entity routing wrapper                                                     #
+# --------------------------------------------------------------------------- #
+
+def _route_and_record(
+    accum: Dict[str, Any],
+    registry,
+    source_type: Optional[str],
+    domain_or_subreddit: Optional[str],
+    x_handle: Optional[str],
+    doc_id: int,
+    label: str,
+    conf: float,
+    data: Dict[str, Any],
+    title: Optional[str],
+    published_at: Any,
+    ident: Optional[str],
+    text: Optional[str],
+) -> Optional[str]:
+    """Resolve the row's tier + entity via the shared entity_routing
+    module, then bucket the row into the right per-entity accumulator
+    (sentiment-specific shape).
+
+    Returns the tier label ('news' | 'officials' | 'public') for use by
+    the per-topic three-way split; None for unknown source_types.
+    """
+    tier, entity = resolve_entity(registry, source_type, domain_or_subreddit, x_handle)
+    if tier is None:
+        return None
+
+    if tier == "news":
+        bucket_dict = accum["by_news_outlet"]
+        if entity is not None:
+            key, profile, kind = entity.domain, entity.profile_dict(), "outlet"
+        else:
+            key = CATCH_ALL_OUTLETS
+            profile = catch_all_profile(
+                CATCH_ALL_OUTLETS, "Other news outlets",
+                "News docs whose domain is not in the tracked outlet registry.",
+            )
+            kind = "catch_all"
+    elif tier == "officials":
+        bucket_dict = accum["by_official"]
+        # entity is always present for officials tier (resolve_entity guarantees).
+        key, profile, kind = entity.handle, entity.profile_dict(), "official"
+    else:  # public
+        bucket_dict = accum["by_general_public"]
+        if entity is not None:
+            key, profile, kind = entity.subreddit, entity.profile_dict(), "subreddit"
+        elif source_type == "x_post":
+            key = CATCH_ALL_X_USERS
+            profile = catch_all_profile(
+                CATCH_ALL_X_USERS, "Other X users",
+                "X posts whose author is not in the tracked officials registry.",
+            )
+            kind = "catch_all"
+        else:
+            key = CATCH_ALL_SUBREDDITS
+            profile = catch_all_profile(
+                CATCH_ALL_SUBREDDITS, "Other subreddits",
+                "Reddit posts whose subreddit is not in the tracked subreddit registry.",
+            )
+            kind = "catch_all"
+
+    _init_entity_bucket(bucket_dict, key, kind, profile)
+    _collect_entity_sample(
+        bucket_dict[key], doc_id, label, conf, data,
+        title, source_type, published_at, domain_or_subreddit, ident, text,
+    )
+    return tier
+
+
+def _init_entity_bucket(
+    bucket: Dict[str, Dict[str, Any]],
+    key: str,
+    kind: str,
+    profile: Dict[str, Any],
+) -> None:
+    """Create a fresh per-entity accumulator if ``key`` isn't present."""
+    if key in bucket:
+        return
+    bucket[key] = {
+        "kind": kind, "profile": profile,
+        "positive": 0, "negative": 0, "neutral": 0, "volume": 0,
+        "samples": [],
+    }
+
+
+# --------------------------------------------------------------------------- #
+#  Row-level helpers (pure functions)                                         #
+# --------------------------------------------------------------------------- #
+
+def _categorize_platform(source_type: Optional[str]) -> str:
+    if source_type in SOCIAL_PLATFORMS:
+        return "Social Media"
+    if source_type in NEWS_PLATFORMS:
+        return "News Outlets"
+    return "Other"
+
+
+def _extract_topic(title: Optional[str]) -> str:
+    if not title:
+        return "General"
+    title_lower = title.lower()
+    for topic, keywords in TOPIC_KEYWORDS.items():
+        if any(kw in title_lower for kw in keywords):
+            return topic
+    return "General"
+
+
+def _day_of_week(published_at: Any) -> Optional[str]:
+    """Short weekday label (Mon..Sun) or None when the timestamp is unparseable."""
+    dt = _parse_published_at(published_at)
+    if dt is None:
+        return None
+    return _DOW_LABELS[dt.weekday()]
+
+
+def _time_bucket(published_at: Any, now: datetime) -> str:
+    dt = _parse_published_at(published_at)
+    if dt is None:
+        return "Unknown"
+    delta = now - dt
+    if delta.days < 1:
+        return "24 hours"
+    if delta.days < 7:
+        return "7 days"
+    if delta.days < 30:
+        return "30 days"
+    return "90+ days"
+
+
+def _parse_published_at(published_at: Any) -> Optional[datetime]:
+    try:
+        if isinstance(published_at, (int, float)):
+            return datetime.fromtimestamp(published_at)
+        if isinstance(published_at, str):
+            dt = datetime.fromisoformat(published_at.replace("Z", "+00:00"))
+            if dt.tzinfo:
+                dt = dt.replace(tzinfo=None)
+            return dt
+    except (ValueError, TypeError, OSError):
+        return None
+    return None
+
+
+def _count_strength(accum: Dict[str, Any], label: str, conf: float) -> str:
+    """Increment the overall intensity counters and return the per-row
+    drill-down bucket key.
+
+    MIXED folds into the neutral headline counter and the neutral
+    drill-down bucket — mirrors how the UI renders Tone Intensity."""
+    if label == "POSITIVE":
+        if conf >= STRONG_CONFIDENCE_THRESHOLD:
+            accum["strong_pos"] += 1
+            return "strongPositive"
+        accum["mild_pos"] += 1
+        return "mildPositive"
+    if label == "NEGATIVE":
+        if conf >= STRONG_CONFIDENCE_THRESHOLD:
+            accum["strong_neg"] += 1
+            return "strongNegative"
+        accum["mild_neg"] += 1
+        return "mildNegative"
+    if label == "MIXED":
+        accum["mixed"] += 1
+        return "neutral"
+    accum["neutral"] += 1
+    return "neutral"
+
+
+def _increment_bucket(bucket: Dict[str, Dict[str, int]], key: str, label_key: str) -> None:
+    bucket.setdefault(key, {"positive": 0, "negative": 0, "neutral": 0, "mixed": 0})
+    bucket[key][label_key] += 1
+
+
+# --------------------------------------------------------------------------- #
+#  Formatters — produce response objects from the accumulator                 #
+# --------------------------------------------------------------------------- #
+
+def _format_platform(by_platform: Dict[str, Dict[str, int]]) -> List[PlatformSentiment]:
+    return [
+        PlatformSentiment(
+            platform=platform,
+            positive=counts["positive"],
+            negative=counts["negative"],
+            neutral=counts["neutral"],
+            volume=sum(counts.values()),
+        )
+        for platform, counts in by_platform.items()
+    ]
+
+
+def _format_topic(
+    by_topic: Dict[str, Dict[str, int]],
+    topic_samples: Dict[str, List[Dict[str, Any]]],
+    by_topic_tier: Dict[str, Dict[str, int]],
+) -> List[TopicSentiment]:
+    """Build TopicSentiment rows with samples + the three-way tier split."""
+    tier_lookup = _split_topic_tier(by_topic_tier)
+    topics: List[TopicSentiment] = []
+    for topic, counts in by_topic.items():
+        raw_samples = topic_samples.get(topic, [])
+        sarcasm_count = sum(1 for s in raw_samples if s.get("sarcasm_detected"))
+        volume = sum(counts.values())
+        sarcasm_rate = round(sarcasm_count / volume * 100, 1) if volume > 0 else 0.0
+
+        tiers = tier_lookup.get(topic, {})
+        news_net, news_vol = _net_from_tier(tiers.get("news"))
+        off_net, off_vol = _net_from_tier(tiers.get("officials"))
+        pub_net, pub_vol = _net_from_tier(tiers.get("public"))
+
+        topics.append(TopicSentiment(
+            topic=topic, positive=counts["positive"],
+            negative=counts["negative"], neutral=counts["neutral"],
+            volume=volume, sarcasm_rate=sarcasm_rate,
+            classification_samples=[_sample_dict_to_model(s) for s in raw_samples],
+            newsNet=news_net, officialsNet=off_net, publicNet=pub_net,
+            newsVolume=news_vol, officialsVolume=off_vol, publicVolume=pub_vol,
+        ))
+    # Pin "General" to the top; sort the rest by volume descending.
+    return sorted(topics, key=lambda t: (t.topic != "General", -t.volume))
+
+
+def _split_topic_tier(
+    by_topic_tier: Dict[str, Dict[str, int]],
+) -> Dict[str, Dict[str, Dict[str, int]]]:
+    """Unpack the composite ``"topic\\x00tier"`` keys into a nested
+    ``topic → tier → counts`` mapping. The composite key keeps the
+    accumulator flat (cheaper increments on the hot path)."""
+    out: Dict[str, Dict[str, Dict[str, int]]] = {}
+    for composite, counts in by_topic_tier.items():
+        if "\x00" not in composite:
+            continue
+        topic, tier = composite.split("\x00", 1)
+        out.setdefault(topic, {})[tier] = counts
+    return out
+
+
+def _net_from_tier(counts: Optional[Dict[str, int]]):
+    """(netScore, volume) for a tier; (None, 0) when empty so the UI can
+    distinguish "no data" from a real zero."""
+    if not counts:
+        return None, 0
+    total = sum(counts.values())
+    if total == 0:
+        return None, 0
+    net = (counts.get("positive", 0) - counts.get("negative", 0)) / total * 100
+    return round(net, 1), total
+
+
+def _format_entity_items(bucket: Dict[str, Dict[str, Any]]) -> List[EntitySentimentItem]:
+    """Materialize per-entity accumulators into EntitySentimentItem, with
+    real registry entities first and catch-all buckets sorted to the end."""
+    items: List[EntitySentimentItem] = []
+    for key, stats in bucket.items():
+        volume = stats["volume"]
+        if volume == 0:
+            continue
+        net = (stats["positive"] - stats["negative"]) / volume * 100
+        items.append(EntitySentimentItem(
+            key=key,
+            kind=stats["kind"],
+            positive=stats["positive"],
+            negative=stats["negative"],
+            neutral=stats["neutral"],
+            volume=volume,
+            netScore=round(net, 1),
+            entity_profile=stats["profile"],
+            classification_samples=[_sample_dict_to_model(s) for s in stats["samples"]],
+        ))
+    items.sort(key=lambda it: (it.kind == "catch_all", -it.volume))
+    return items
+
+
+def _format_time_window(by_time_window: Dict[str, Dict[str, int]]) -> List[TimeWindowSentiment]:
+    order = {"24 hours": 0, "7 days": 1, "30 days": 2, "90+ days": 3, "Unknown": 4}
+    windows = [
+        TimeWindowSentiment(
+            window=window,
+            positive=counts["positive"],
+            negative=counts["negative"],
+            neutral=counts["neutral"],
+            volume=sum(counts.values()),
+        )
+        for window, counts in by_time_window.items()
+    ]
+    return sorted(windows, key=lambda w: order.get(w.window, 999))
+
+
+def _format_day_of_week(by_dow: Dict[str, Dict[str, int]]) -> List[DayOfWeekSentiment]:
+    order = {label: i for i, label in enumerate(_DOW_LABELS)}
+    rows = [
+        DayOfWeekSentiment(
+            day=day,
+            positive=counts["positive"],
+            negative=counts["negative"],
+            neutral=counts["neutral"],
+            volume=sum(counts.values()),
+        )
+        for day, counts in by_dow.items()
+    ]
+    return sorted(rows, key=lambda r: order.get(r.day, 999))
+
+
+def _format_distribution_samples(
+    strength_samples: Dict[str, List[Dict[str, Any]]],
+) -> Dict[str, List[ClassificationSample]]:
+    """Drop empty buckets so the UI doesn't render empty drill-down panels."""
+    return {
+        bucket: [_sample_dict_to_model(s) for s in raw_samples]
+        for bucket, raw_samples in strength_samples.items()
+        if raw_samples
+    }
+
+
+# --------------------------------------------------------------------------- #
+#  GOP favorability merge                                                     #
+# --------------------------------------------------------------------------- #
+
+def _merge_favorability_data(
+    result: PublicSentimentResult,
+    fav_rows: List[tuple],
+    bot_docs: Set[int],
+    allowed_sources: Optional[frozenset],
+    cache: SnapshotCache,
+) -> None:
+    """Merge GOP favorability into the sentiment result. No-op when
+    every row is filtered (bot-flagged / wrong source / parse failure)
+    so downstream consumers see a clean 'no data' via the default
+    None fields."""
+    distribution, by_platform, daily_net, count = _parse_favorability_rows(
+        fav_rows, bot_docs, allowed_sources,
+    )
+    if count == 0:
+        return
+    _format_favorability_result(result, distribution, by_platform, daily_net, count, cache)
+
+
+def _parse_favorability_rows(
+    fav_rows: List[tuple],
+    bot_docs: Set[int],
+    allowed_sources: Optional[frozenset],
+) -> tuple:
+    distribution = {"favorable": 0, "unfavorable": 0, "neutral": 0, "mixed": 0}
+    by_platform: Dict[str, Dict[str, int]] = {}
+    daily_net: Dict[str, Dict[str, Any]] = {}
+    count = 0
+
+    for doc_id, output_json, _confidence, source_type, pub_at in fav_rows:
+        if doc_id in bot_docs:
+            continue
+        if allowed_sources is not None and (source_type or "") not in allowed_sources:
+            continue
         try:
-            date_str = datetime.fromtimestamp(pub_at).strftime('%Y-%m-%d')
-            if date_str not in daily_net:
-                daily_net[date_str] = {"score": 0, "count": 0}
-            val = 1 if stance == 'favorable' else (-1 if stance == 'unfavorable' else 0)
-            daily_net[date_str]["score"] += val
-            daily_net[date_str]["count"] += 1
-        except (ValueError, TypeError, OSError):
-            pass
+            data = json.loads(output_json)
+        except json.JSONDecodeError:
+            continue
 
-    def _format_favorability_result(
-        self,
-        result: PublicSentimentResult,
-        distribution: Dict[str, int],
-        by_platform: Dict[str, Dict[str, int]],
-        daily_net: Dict[str, Dict[str, Any]],
-        count: int,
-    ) -> None:
-        """Format parsed favorability data into the PublicSentimentResult fields."""
-        total = sum(distribution.values())
-        net_favorability = ((distribution["favorable"] - distribution["unfavorable"]) / total * 100) if total > 0 else 0
+        stance = data.get("overall_gop_stance", "neutral")
+        if stance not in distribution:
+            stance = "neutral"
+        distribution[stance] += 1
 
-        result.gopFavorability = {
-            "favorable": round((distribution["favorable"] / total) * 100, 1) if total else 0,
-            "unfavorable": round((distribution["unfavorable"] / total) * 100, 1) if total else 0,
-            "neutral": round((distribution["neutral"] / total) * 100, 1) if total else 0,
-            "netFavorability": round(net_favorability, 1),
-            "sampleSize": count,
-            "sourceCount": len(by_platform),
-            "lastUpdated": datetime.now().isoformat(),
+        platform = source_type or "unknown"
+        if platform in ("reddit_post", "reddit_comment"):
+            platform = "reddit"
+        by_platform.setdefault(platform, {"favorable": 0, "unfavorable": 0, "neutral": 0})
+        if stance in by_platform[platform]:
+            by_platform[platform][stance] += 1
+
+        if pub_at:
+            _track_daily_favorability(daily_net, pub_at, stance)
+
+        count += 1
+
+    return distribution, by_platform, daily_net, count
+
+
+def _track_daily_favorability(
+    daily_net: Dict[str, Dict[str, Any]],
+    pub_at: float,
+    stance: str,
+) -> None:
+    try:
+        date_str = datetime.fromtimestamp(pub_at).strftime("%Y-%m-%d")
+    except (ValueError, TypeError, OSError):
+        return
+    bucket = daily_net.setdefault(date_str, {"score": 0, "count": 0})
+    bucket["score"] += 1 if stance == "favorable" else (-1 if stance == "unfavorable" else 0)
+    bucket["count"] += 1
+
+
+def _format_favorability_result(
+    result: PublicSentimentResult,
+    distribution: Dict[str, int],
+    by_platform: Dict[str, Dict[str, int]],
+    daily_net: Dict[str, Dict[str, Any]],
+    count: int,
+    cache: SnapshotCache,
+) -> None:
+    total = sum(distribution.values())
+    net_favorability = ((distribution["favorable"] - distribution["unfavorable"]) / total * 100) if total > 0 else 0
+
+    result.gopFavorability = {
+        "favorable": round((distribution["favorable"] / total) * 100, 1) if total else 0,
+        "unfavorable": round((distribution["unfavorable"] / total) * 100, 1) if total else 0,
+        "neutral": round((distribution["neutral"] / total) * 100, 1) if total else 0,
+        "netFavorability": round(net_favorability, 1),
+        "sampleSize": count,
+        "sourceCount": len(by_platform),
+        "lastUpdated": datetime.now().isoformat(),
+    }
+
+    result.gopTrend = [
+        {
+            "date": date,
+            "value": round((stats["score"] / stats["count"]) * 100, 1) if stats["count"] > 0 else 0,
         }
+        for date, stats in sorted(daily_net.items())
+    ][-30:]
 
-        result.gopTrend = [
-            {"date": date, "value": round((stats["score"] / stats["count"]) * 100, 1) if stats["count"] > 0 else 0}
-            for date, stats in sorted(daily_net.items())
-        ][-30:]
+    result.gopByPlatform = [
+        {
+            "group": platform.capitalize(),
+            "favorable": stats["favorable"],
+            "unfavorable": stats["unfavorable"],
+            "neutral": stats["neutral"],
+        }
+        for platform, stats in by_platform.items()
+    ]
 
-        result.gopByPlatform = [
-            {"group": platform.capitalize(), "favorable": stats["favorable"], "unfavorable": stats["unfavorable"], "neutral": stats["neutral"]}
-            for platform, stats in by_platform.items()
-        ]
-
-        polling_data = self.cache.load("polling_gop")
-        if polling_data:
-            result.pollingVsSocial = {
-                "onlineSentiment": {
-                    "favorable": result.gopFavorability["favorable"],
-                    "unfavorable": result.gopFavorability["unfavorable"],
-                    "neutral": result.gopFavorability["neutral"],
-                },
-                "pollingData": polling_data,
-            }
-
-    def _format_platform_sentiment(self, by_platform: Dict[str, Dict[str, int]]) -> List[PlatformSentiment]:
-        """Format platform sentiment breakdown."""
-        return [
-            PlatformSentiment(
-                platform=platform,
-                positive=counts["positive"],
-                negative=counts["negative"],
-                neutral=counts["neutral"],
-                volume=sum(counts.values()),
-            )
-            for platform, counts in by_platform.items()
-        ]
-    
-    def _format_topic_sentiment(
-        self,
-        by_topic: Dict[str, Dict[str, int]],
-        topic_samples: Dict[str, List[Dict[str, Any]]],
-    ) -> List[TopicSentiment]:
-        """Format topic sentiment breakdown with classification samples."""
-        topics = []
-        for topic, counts in by_topic.items():
-            raw_samples = topic_samples.get(topic, [])
-            sarcasm_count = sum(1 for s in raw_samples if s.get("sarcasm_detected"))
-            volume = sum(counts.values())
-            sarcasm_rate = round(sarcasm_count / volume * 100, 1) if volume > 0 else 0.0
-            samples = [
-                ClassificationSample(
-                    doc_id=s["doc_id"], label=s["label"],
-                    confidence=s["confidence"], reasoning=s["reasoning"],
-                    evidence_spans=s["evidence_spans"],
-                    sarcasm_detected=s["sarcasm_detected"],
-                    title=s.get("title"), source_type=s.get("source_type"),
-                    source_name=s.get("source_name"),
-                    date=s.get("date"),
-                    full_text=s.get("full_text", ""),
-                    url=s.get("url"),
-                )
-                for s in raw_samples
-            ]
-            topics.append(TopicSentiment(
-                topic=topic, positive=counts["positive"],
-                negative=counts["negative"], neutral=counts["neutral"],
-                volume=volume, sarcasm_rate=sarcasm_rate,
-                classification_samples=samples,
-            ))
-        # Pin "General" to the top; sort the rest by volume descending.
-        return sorted(topics, key=lambda t: (t.topic != "General", -t.volume))
-    
-    def _format_time_window_sentiment(self, by_time_window: Dict[str, Dict[str, int]]) -> List[TimeWindowSentiment]:
-        """Format time window sentiment breakdown in chronological order."""
-        # Define order for time buckets
-        order = {"24 hours": 0, "7 days": 1, "30 days": 2, "90+ days": 3, "Unknown": 4}
-        
-        windows = [
-            TimeWindowSentiment(
-                window=window,
-                positive=counts["positive"],
-                negative=counts["negative"],
-                neutral=counts["neutral"],
-                volume=sum(counts.values()),
-            )
-            for window, counts in by_time_window.items()
-        ]
-        return sorted(windows, key=lambda w: order.get(w.window, 999))
+    polling_data = cache.load("polling_gop")
+    if polling_data:
+        result.pollingVsSocial = {
+            "onlineSentiment": {
+                "favorable": result.gopFavorability["favorable"],
+                "unfavorable": result.gopFavorability["unfavorable"],
+                "neutral": result.gopFavorability["neutral"],
+            },
+            "pollingData": polling_data,
+        }

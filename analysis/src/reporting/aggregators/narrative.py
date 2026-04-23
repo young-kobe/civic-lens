@@ -15,8 +15,17 @@ from typing import Any, Dict, List, Optional
 
 from analysis.src.common.logger import get_logger
 from analysis.src.reporting.aggregators.base import (
+    X_AUTHOR_JOIN_SQL,
     get_connection,
     get_time_cutoff,
+)
+from analysis.src.reporting.entity_registry import (
+    catch_all_profile,
+    CATCH_ALL_OUTLETS,
+    CATCH_ALL_SUBREDDITS,
+    CATCH_ALL_X_USERS,
+    get_registry,
+    resolve_entity,
 )
 from analysis.src.reporting.models import NarrativeSummary
 
@@ -26,6 +35,49 @@ _SOURCE_LABELS = {
     "reddit_comment": "Reddit",
     "x_post": "X",
 }
+
+# How many supporting docs to surface per narrative in the modal drill-down
+# table. Small enough that the table fits above the fold on desktop; large
+# enough to show a mix of tones and sources.
+TOP_SUPPORTING_DOCS_LIMIT = 6
+
+
+def _build_source_label(
+    source_type: Optional[str],
+    domain: Optional[str],
+    x_handle: Optional[str],
+) -> str:
+    """Human-readable source label for the supporting-docs table row."""
+    if source_type == "news":
+        return f"News · {domain}" if domain else "News"
+    if source_type == "x_post":
+        return f"X · @{x_handle}" if x_handle else "X"
+    if source_type in ("reddit_post", "reddit_comment") and domain:
+        return f"Reddit · r/{domain}"
+    if source_type in ("reddit_post", "reddit_comment"):
+        return "Reddit"
+    return source_type or "unknown"
+
+
+def _build_doc_url(
+    source_type: Optional[str],
+    domain: Optional[str],
+    ident: Optional[str],
+    x_handle: Optional[str] = None,
+) -> Optional[str]:
+    """External URL for a supporting doc, mirroring the sentiment sampler's
+    logic: news rows store URL in ``ident``; reddit rows synthesize from
+    subreddit + post id; x_post rows synthesize from handle + tweet id."""
+    if not ident:
+        return None
+    if ident.startswith(("http://", "https://")):
+        return ident
+    if source_type and source_type.startswith("reddit"):
+        post_id = ident.replace("t3_", "").replace("t1_", "")
+        return f"https://reddit.com/r/{domain or 'all'}/comments/{post_id}"
+    if source_type == "x_post" and x_handle:
+        return f"https://x.com/{x_handle}/status/{ident}"
+    return None
 
 logger = get_logger(__name__)
 
@@ -91,11 +143,21 @@ class NarrativeAggregator:
         narrative_id, name, first_seen_at, first_seen_doc_id, support_count = row
 
         (first_seen_source_type, first_seen_domain, first_seen_tier,
-         first_seen_author) = self._first_seen_info(cursor, first_seen_doc_id)
+         first_seen_author, first_seen_handle) = self._first_seen_info(
+            cursor, first_seen_doc_id,
+        )
         # For x_post docs we default the tier to 'general_public' when the
         # author is not in account_profiles. For news/reddit we leave it null.
         if first_seen_tier is None and first_seen_source_type == "x_post":
             first_seen_tier = "general_public"
+
+        # Registry lookup for the UI's three-way frame (walkthrough 058).
+        # Independent of first_seen_tier, which comes from account_profiles
+        # and can say 'elected_official' for X accounts that aren't in our
+        # 16-seat verified_officials.yaml (e.g. individual Congress members).
+        tier_group, entity_profile = self._registry_lookup(
+            first_seen_source_type, first_seen_domain, first_seen_handle,
+        )
 
         source_breakdown = self._source_breakdown(cursor, narrative_id, cutoff)
         timeline = self._timeline(cursor, narrative_id, cutoff)
@@ -103,6 +165,8 @@ class NarrativeAggregator:
         inbound = self._inbound_citations(cursor, narrative_id, cutoff)
         propaganda_score = self._propaganda_score(cursor, narrative_id, cutoff)
         bot_pushed_fraction = self._bot_pushed_fraction(cursor, narrative_id, cutoff)
+        cross_tier = self._is_cross_tier(cursor, narrative_id, cutoff)
+        top_supporting = self._top_supporting_docs(cursor, narrative_id, cutoff)
 
         return NarrativeSummary(
             narrative_id=narrative_id,
@@ -120,7 +184,79 @@ class NarrativeAggregator:
             inbound_citation_count=inbound,
             propaganda_score=propaganda_score,
             bot_pushed_fraction=bot_pushed_fraction,
+            first_seen_entity_profile=entity_profile,
+            first_seen_tier_group=tier_group,
+            cross_tier=cross_tier,
+            top_supporting_docs=top_supporting,
         )
+
+    @staticmethod
+    def _registry_lookup(
+        source_type: Optional[str],
+        domain: Optional[str],
+        x_handle: Optional[str],
+    ) -> tuple:
+        """(tier_group, entity_profile_dict) for the first-seen doc.
+        Catch-all profile when source is classifiable but no registry
+        entry matched; (None, None) when source_type is unknown."""
+        tier, entity = resolve_entity(get_registry(), source_type, domain, x_handle)
+        if tier is None:
+            return None, None
+        if entity is not None:
+            return tier, entity.profile_dict()
+        # Matched tier but no registry entity — catch-all.
+        if tier == "news":
+            return tier, catch_all_profile(
+                CATCH_ALL_OUTLETS, "Other news outlets",
+                "News doc whose domain is not in the tracked outlet registry.",
+            )
+        if tier == "public" and source_type == "x_post":
+            return tier, catch_all_profile(
+                CATCH_ALL_X_USERS, "Other X users",
+                "X post whose author is not in the tracked officials registry.",
+            )
+        if tier == "public":
+            return tier, catch_all_profile(
+                CATCH_ALL_SUBREDDITS, "Other subreddits",
+                "Reddit post whose subreddit is not in the tracked subreddit registry.",
+            )
+        return tier, None
+
+    def _is_cross_tier(
+        self, cursor, narrative_id: int, cutoff: Optional[int],
+    ) -> bool:
+        """True when supporting docs span >1 of {news, officials, public}.
+
+        Tier assignment here is coarse and matches resolve_entity:
+          * news → 'news'
+          * x_post authored by a verified official → 'officials'
+          * x_post by anyone else → 'public'
+          * reddit_post / reddit_comment → 'public'
+        """
+        officials_handles = {h for h in get_registry().officials.keys()}
+        sql = f"""
+            SELECT DISTINCT d.source_type, LOWER(u.username)
+            FROM narrative_docs nd
+            JOIN docs d ON d.doc_id = nd.doc_id
+            {X_AUTHOR_JOIN_SQL}
+            WHERE nd.narrative_id = ?
+        """
+        params: List[Any] = [narrative_id]
+        if cutoff is not None:
+            sql += " AND d.published_at >= ?"
+            params.append(cutoff)
+        cursor.execute(sql, params)
+        tiers: set = set()
+        for source_type, handle in cursor.fetchall():
+            if source_type == "news":
+                tiers.add("news")
+            elif source_type == "x_post":
+                tiers.add("officials" if handle in officials_handles else "public")
+            elif source_type in ("reddit_post", "reddit_comment"):
+                tiers.add("public")
+            if len(tiers) >= 2:
+                return True
+        return False
 
     def _propaganda_score(
         self, cursor, narrative_id: int, cutoff: Optional[int],
@@ -201,29 +337,28 @@ class NarrativeAggregator:
         return round(bot_authors / len(seen_authors), 3)
 
     def _first_seen_info(self, cursor, first_seen_doc_id: Optional[int]) -> tuple:
-        """(source_type, domain, tier, author_profile) for the earliest doc
-        we ingested carrying the claim.
+        """(source_type, domain, tier, author_profile, handle) for the
+        earliest doc we ingested carrying the claim.
 
         ``tier`` and ``author_profile`` are only populated for x_post
         first-seen docs, resolved via ``x_posts_raw.author_id`` →
         ``account_profiles.*``. ``author_profile`` is a dict (or None) with
         faction context (party/branch/chamber/state/office/etc.) used by the
-        UI to render "Rep Adams (D, NC-12)"-style labels. Absence from
-        account_profiles returns tier='general_public' and author_profile=None.
-        Naming rationale: see walkthrough 035.
+        UI to render "Rep Adams (D, NC-12)"-style labels. ``handle`` is the
+        post author's X username (raw-case) for x_post rows, None otherwise
+        — the caller passes it into the entity_registry resolve_entity for
+        the three-way frame lookup. Naming rationale: see walkthrough 035.
         """
         if first_seen_doc_id is None:
-            return None, None, None, None
+            return None, None, None, None, None
         cursor.execute(
-            """
+            f"""
             SELECT d.source_type, d.domain_or_subreddit,
                    ap.tier, ap.full_name, ap.party, ap.branch, ap.chamber,
                    ap.state_or_district, ap.office_title, ap.account_type,
                    x.author_id, u.username
             FROM docs d
-            LEFT JOIN x_posts_raw x
-              ON d.source_type = 'x_post' AND x.tweet_id = d.ident
-            LEFT JOIN x_users_raw u ON u.user_id = x.author_id
+            {X_AUTHOR_JOIN_SQL}
             LEFT JOIN account_profiles ap
               ON ap.platform = 'x' AND ap.author_id = x.author_id
             WHERE d.doc_id = ?
@@ -232,7 +367,7 @@ class NarrativeAggregator:
         )
         row = cursor.fetchone()
         if not row:
-            return None, None, None, None
+            return None, None, None, None, None
 
         (source_type, domain, tier, full_name, party, branch, chamber,
          state_or_district, office_title, account_type, author_id, username) = row
@@ -252,7 +387,7 @@ class NarrativeAggregator:
                 "account_type": account_type,
             }
 
-        return source_type, domain, tier, author_profile
+        return source_type, domain, tier, author_profile, username
 
     def _source_breakdown(
         self, cursor, narrative_id: int, cutoff: Optional[int],
@@ -346,6 +481,80 @@ class NarrativeAggregator:
         if count == 0:
             return 0.0
         return round((total / count) * 100, 1)
+
+    def _top_supporting_docs(
+        self, cursor, narrative_id: int, cutoff: Optional[int],
+    ) -> List[Dict[str, Any]]:
+        """Top N supporting docs for the modal drill-down table.
+
+        Orders by sentiment AI-output confidence desc so the table surfaces the
+        highest-signal classifications first. Rows without a sentiment row
+        still appear (with null label/confidence/reasoning) so the table
+        doesn't drop a doc purely for missing analysis. Source-label is
+        synthesized here — "News · nytimes.com" / "X · @Schumer" /
+        "Reddit · r/politics" — so the UI doesn't have to re-derive it.
+        """
+        sql = f"""
+            SELECT d.doc_id, d.title, d.source_type, d.domain_or_subreddit,
+                   d.ident, d.published_at, u.username,
+                   a.output_json, a.confidence
+            FROM narrative_docs nd
+            JOIN docs d ON d.doc_id = nd.doc_id
+            {X_AUTHOR_JOIN_SQL}
+            LEFT JOIN ai_outputs a
+                   ON a.doc_id = d.doc_id
+                  AND a.task_type = 'sentiment'
+            WHERE nd.narrative_id = ?
+        """
+        params: List[Any] = [narrative_id]
+        if cutoff is not None:
+            sql += " AND d.published_at >= ?"
+            params.append(cutoff)
+        sql += """
+            ORDER BY COALESCE(a.confidence, 0) DESC, d.published_at DESC
+            LIMIT ?
+        """
+        params.append(TOP_SUPPORTING_DOCS_LIMIT)
+        cursor.execute(sql, params)
+
+        rows = []
+        for (
+            doc_id, title, source_type, domain, ident, published_at,
+            x_handle, output_json, confidence,
+        ) in cursor.fetchall():
+            sentiment_label = None
+            reasoning = None
+            if output_json:
+                try:
+                    parsed = json.loads(output_json)
+                    raw_label = parsed.get("label")
+                    if raw_label == "POSITIVE":
+                        sentiment_label = "positive"
+                    elif raw_label == "NEGATIVE":
+                        sentiment_label = "negative"
+                    elif raw_label in ("NEUTRAL", "MIXED"):
+                        sentiment_label = "neutral"
+                    reasoning = parsed.get("reasoning") or None
+                    if reasoning and len(reasoning) > 240:
+                        reasoning = reasoning[:237].rstrip() + "..."
+                except json.JSONDecodeError:
+                    pass
+
+            source_label = _build_source_label(source_type, domain, x_handle)
+            url = _build_doc_url(source_type, domain, ident, x_handle)
+
+            rows.append({
+                "doc_id": doc_id,
+                "title": title or None,
+                "source_type": source_type or "unknown",
+                "source_label": source_label,
+                "url": url,
+                "published_at": published_at,
+                "sentiment_label": sentiment_label,
+                "confidence": float(confidence) if confidence is not None else None,
+                "reasoning": reasoning,
+            })
+        return rows
 
     def _inbound_citations(
         self, cursor, narrative_id: int, cutoff: Optional[int],

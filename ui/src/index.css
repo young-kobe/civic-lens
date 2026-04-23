@@ -1,88 +1,165 @@
-/* Civic Lens Design System */
-/* Terminal-dense information dashboard, light theme */
+/* Civic Lens Design System
+   Dense information dashboard, light theme, app-shell mobile treatment. */
+
 
 /* ============================================
-   CSS Custom Properties (Design Tokens)
+   Design Tokens
    ============================================ */
 
 :root {
-  /* Typography */
-  --font-family: 'IBM Plex Sans', 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  /* Typography
+     --font-family: body + data (dense sans).
+     --font-display: card titles + deck intros (restrained serif).
+     --font-lead: standfirst / "reads as today" intro prose (larger serif, relaxed).
+     --font-mono: numeric / timestamps / tabular data. */
+  --font-family: 'Inter', 'IBM Plex Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-display: 'Source Serif 4', 'Source Serif Pro', Georgia, 'Times New Roman', serif;
+  --font-lead: 'Source Serif 4', 'Source Serif Pro', Georgia, 'Times New Roman', serif;
   --font-mono: 'JetBrains Mono', 'IBM Plex Mono', 'Fira Code', ui-monospace, Menlo, Consolas, monospace;
 
-  /* Font Sizes — tight, dense, terminal-grade */
-  --text-xs: 0.6875rem;   /* 11px */
-  --text-sm: 0.8125rem;   /* 13px */
-  --text-base: 0.875rem;  /* 14px */
-  --text-lg: 1rem;        /* 16px */
-  --text-xl: 1.125rem;    /* 18px */
-  --text-2xl: 1.375rem;   /* 22px */
-  --text-3xl: 1.75rem;    /* 28px */
-  --text-4xl: 2.25rem;    /* 36px */
+  --text-xs: 0.6875rem;
+  --text-sm: 0.8125rem;
+  --text-base: 0.875rem;
+  --text-lg: 1rem;
+  --text-xl: 1.125rem;
+  --text-2xl: 1.375rem;
+  --text-3xl: 1.75rem;
+  --text-4xl: 2.25rem;
 
-  /* Line Heights — tighter than default */
   --leading-tight: 1.15;
   --leading-normal: 1.35;
   --leading-relaxed: 1.55;
 
-  /* Neutral Palette — high-contrast on pure white */
+  /* Neutral palette — slight cool cast for a modern, technical feel */
   --neutral-50: #ffffff;
-  --neutral-75: #fafafa;
-  --neutral-100: #f4f4f5;
-  --neutral-150: #ececef;
-  --neutral-200: #d9d9de;
-  --neutral-300: #c0c0c7;
-  --neutral-400: #8e8e96;
-  --neutral-500: #62626a;
-  --neutral-600: #45454d;
-  --neutral-700: #2e2e35;
-  --neutral-800: #1a1a1f;
-  --neutral-900: #0a0a0f;
+  --neutral-75: #fafbfc;
+  --neutral-100: #f4f5f7;
+  --neutral-150: #eceef2;
+  --neutral-200: #d9dce3;
+  --neutral-300: #bec2cc;
+  --neutral-400: #8b909c;
+  --neutral-500: #5e6370;
+  --neutral-600: #42464f;
+  --neutral-700: #2c2f36;
+  --neutral-800: #191b20;
+  --neutral-900: #0a0b0f;
 
-  /* Surfaces */
-  --bg-app: #ffffff;
+  /* Surfaces — warmed toward a paper register (iteration 3).
+     --bg-app previously #fafbfc (cool); now a touch warmer so the page
+     doesn't read as sterile under the lifted cards. */
+  --bg-app: #f7f5f1;
   --bg-card: #ffffff;
-  --bg-panel: #fafafa;
-  --bg-inset: #f4f4f5;
+  --bg-panel: #f1ede6;
+  --bg-inset: #ece8e0;
 
-  /* Accent — restrained terminal blue */
-  --accent: #0047b3;
-  --accent-hover: #003080;
-  --accent-muted: #2463d1;
-  --accent-light: #eaf1fb;
+  /* Signature accent — ink blue. Toned down from #0047b3 for a more
+     organic editorial register. */
+  --accent: #23508a;
+  --accent-hover: #173b6a;
+  --accent-muted: #4e6f9c;
+  --accent-light: #dce3ee;
+  --accent-gradient: linear-gradient(135deg, #23508a 0%, #4e6f9c 60%, #6d8ab8 100%);
 
-  /* Semantic — Bloomberg-style saturated ticker colors */
-  --semantic-positive: #008a4c;
-  --semantic-positive-light: #e3f6eb;
-  --semantic-negative: #d41e0e;
-  --semantic-negative-light: #fbe7e4;
-  --semantic-neutral: #62626a;
-  --semantic-neutral-light: #f4f4f5;
-  --semantic-warning: #b26100;
-  --semantic-warning-light: #fdf0dd;
+  /* Semantic colors — toned down from bright RGB primaries toward
+     editorial / dusty / earth hues. Forest green, brick red, ochre. */
+  --semantic-positive: #2d7042;
+  --semantic-positive-light: #d9e8dc;
+  --semantic-negative: #a63a2a;
+  --semantic-negative-light: #f0dcd5;
+  --semantic-neutral: #5e6370;
+  --semantic-neutral-light: #f1ede6;
+  --semantic-warning: #96651f;
+  --semantic-warning-light: #f0e3c7;
 
-  /* Spacing Scale (8px base) */
+  /* Chart palette — dusty primaries matching the semantic set.
+     Paired dark/light stops for gradient fills that still read at low
+     opacity against the paper background. */
+  --chart-positive-strong: #245a35;
+  --chart-positive: #3d8451;
+  --chart-positive-soft: #6da678;
+  --chart-negative-strong: #7a2015;
+  --chart-negative: #a63a2a;
+  --chart-negative-soft: #c97869;
+  --chart-neutral: #8b919e;
+  --chart-neutral-soft: #c0c4cd;
+  --chart-accent: #23508a;
+  --chart-accent-soft: #5d82bf;
+  --chart-grid: rgba(15, 20, 35, 0.06);
+  --chart-gradient-positive: linear-gradient(135deg, #245a35 0%, #6da678 100%);
+  --chart-gradient-negative: linear-gradient(135deg, #7a2015 0%, #c97869 100%);
+  --chart-gradient-neutral:  linear-gradient(135deg, #8b919e 0%, #c0c4cd 100%);
+  --chart-gradient-accent:   linear-gradient(135deg, #23508a 0%, #5d82bf 100%);
+
+  /* Source-type colors — narrative-card mix bar + reference elsewhere. */
+  --source-news: #1a3e5a;
+  --source-reddit: #b85525;
+  --source-x: #1d1d1f;
+
+  /* Tone-intensity palette — 5-way distribution (SentimentDistributionCard
+     + top-metrics mini-bar). Dusty siblings of the chart ramps. */
+  --tone-strong-neg: #7a2015;
+  --tone-mild-neg:   #a63a2a;
+  --tone-neu-solid:  #8b919e;
+  --tone-neu-text:   #45454d;
+  --tone-mild-pos:   #6da678;
+  --tone-strong-pos: #245a35;
+  --tone-grad-strong-neg: linear-gradient(135deg, #5a1509 0%, #962a1e 100%);
+  --tone-grad-mild-neg:   linear-gradient(135deg, #962a1e 0%, #c97869 100%);
+  --tone-grad-neu:        linear-gradient(135deg, #8b919e 0%, #c0c4cd 100%);
+  --tone-grad-mild-pos:   linear-gradient(135deg, #6da678 0%, #3d8451 100%);
+  --tone-grad-strong-pos: linear-gradient(135deg, #3d8451 0%, #1a4a2a 100%);
+
+  /* Political-stance palette (SentimentBar colorScheme="political") —
+     blue vs red framing used for GOP Party Stance rather than tone. */
+  --stance-supportive-solid: #23508a;
+  --stance-opposed-solid:    #a63a2a;
+  --stance-neutral-solid:    #9ca3af;
+  --stance-grad-supportive: linear-gradient(135deg, #1a3e6c 0%, #5d82bf 100%);
+  --stance-grad-opposed:    linear-gradient(135deg, #7a2015 0%, #c97869 100%);
+  --stance-grad-neutral:    linear-gradient(135deg, #8b919e 0%, #c0c4cd 100%);
+
+  /* Sentiment-favorability palette — used by the GOP-stance intensity
+     card's badges, the SentimentDistributionCard, and a few spots that
+     need bg + text + solid variants together. */
+  --sent-favorable-solid: #2d7042;
+  --sent-favorable-bg:    #d9e8dc;
+  --sent-favorable-text:  #245a35;
+  --sent-unfavorable-solid: #a63a2a;
+  --sent-unfavorable-bg:    #f0dcd5;
+  --sent-unfavorable-text:  #7a2015;
+
+  /* Review admin — banner + card backgrounds. */
+  --admin-banner-bg:     #e4ecf3;
+  --admin-banner-border: #8aa4c2;
+  --admin-banner-text:   #23508a;
+  --admin-card-bg:       #f7f4ea;
+
+  /* Spacing */
   --space-0: 0;
-  --space-1: 0.25rem;  /* 4px */
-  --space-2: 0.5rem;   /* 8px */
-  --space-3: 0.75rem;  /* 12px */
-  --space-4: 1rem;     /* 16px */
-  --space-5: 1.25rem;  /* 20px */
-  --space-6: 1.5rem;   /* 24px */
-  --space-8: 2rem;     /* 32px */
-  --space-10: 2.5rem;  /* 40px */
-  --space-12: 3rem;    /* 48px */
-  --space-16: 4rem;    /* 64px */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
 
-  /* Shadows — flat by default */
-  --shadow-sm: none;
-  --shadow-md: 0 2px 4px rgba(15, 15, 25, 0.04);
-  --shadow-lg: 0 4px 12px rgba(15, 15, 25, 0.08);
+  /* Shadows — iteration 3 bumped to "hovering above paper" registers.
+     Each token is a two-layer shadow: a 1-2px close layer for the crisp
+     edge + a wider soft layer that sells the elevation. */
+  --shadow-sm: 0 1px 2px rgba(15, 20, 35, 0.05), 0 2px 6px rgba(15, 20, 35, 0.05);
+  --shadow-md: 0 2px 4px rgba(15, 20, 35, 0.07), 0 6px 16px rgba(15, 20, 35, 0.09);
+  --shadow-lg: 0 4px 8px rgba(15, 20, 35, 0.10), 0 16px 40px rgba(15, 20, 35, 0.16);
+  --shadow-inset: inset 0 1px 0 rgba(15, 20, 35, 0.03);
 
-  /* Border Radius — sharp */
-  --radius-sm: 2px;
-  --radius-md: 2px;
-  --radius-lg: 3px;
+  /* Radius — sharper on dense data, softer on cards */
+  --radius-sm: 3px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
   --radius-full: 9999px;
 
   /* Transitions */
@@ -91,13 +168,16 @@
   --transition-slow: 260ms ease;
 
   /* Layout */
-  --sidebar-width: 280px;
   --header-height: 56px;
-  --max-content-width: 1560px;
+  --bottom-nav-height: 60px;
+  /* Walkthrough iteration: narrowed from 1560px → 1280px for FT/Bloomberg
+     editorial register (keeps line measure from stretching on wide desktops). */
+  --max-content-width: 1280px;
 }
 
+
 /* ============================================
-   Global Resets
+   Resets
    ============================================ */
 
 *,
@@ -112,6 +192,8 @@ html {
   font-size: 16px;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  text-size-adjust: 100%;
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
@@ -120,8 +202,29 @@ body {
   line-height: var(--leading-normal);
   color: var(--neutral-800);
   background-color: var(--bg-app);
+  /* Paper-grain overlay (iteration 3). SVG noise data-URI at very low
+     opacity gives the app background a subtle tactile feel without
+     introducing a real image asset.
+     NOTE: `background-attachment: fixed` was removed 2026-04-23. On iOS
+     Safari, combining it with `overflow-x: hidden` on body creates a
+     scroll-containing block that breaks `position: fixed` on descendants
+     — specifically, the bottom nav bar on phones would drift off-screen
+     or clip mid-row depending on the page. The overlay still renders
+     correctly as a non-repeating static pattern; tactile effect is
+     visually indistinguishable to a reader. */
+  background-image: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 140 140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.12 0 0 0 0 0.10 0 0 0 0 0.07 0 0 0 0.07 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   min-height: 100vh;
+  min-height: 100dvh;
   font-feature-settings: 'cv11', 'ss01';
+  overscroll-behavior-y: none;
+  /* `overflow-x: clip` prevents horizontal overflow WITHOUT creating a
+     scroll container — essential on iOS so `position: fixed` on the
+     bottom nav stays anchored to the visual viewport. `overflow-x: hidden`
+     (the prior value) creates a scroll container in Safari that breaks
+     fixed positioning for any descendant. `clip` has ~97% browser
+     support and degrades gracefully (older browsers allow horizontal
+     scroll, which individual components already guard against). */
+  overflow-x: clip;
 }
 
 h1, h2, h3, h4, h5, h6 {
@@ -135,6 +238,16 @@ h1 { font-size: var(--text-2xl); }
 h2 { font-size: var(--text-xl); }
 h3 { font-size: var(--text-lg); }
 h4 { font-size: var(--text-base); font-weight: 600; }
+
+/* Editorial display serif — applied selectively to marketing/hero headlines,
+   not general body headings. Use on the large prose h2/h1 on Home and
+   similar outward-facing surfaces. */
+.headline-display {
+  font-family: var(--font-display);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  font-optical-sizing: auto;
+}
 
 p { color: var(--neutral-700); }
 
@@ -157,6 +270,15 @@ button {
   background: none;
 }
 
+button:focus-visible,
+a:focus-visible,
+[role="tab"]:focus-visible,
+[role="button"]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
 input, select, textarea {
   font-family: inherit;
   font-size: inherit;
@@ -169,14 +291,13 @@ code, pre {
 /* Numeric data: tabular + monospaced */
 .num,
 .metric-value,
-.metric-value-lg,
 .metric-delta {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   font-feature-settings: 'tnum' 1, 'zero' 1;
 }
 
-/* Eyebrow / section label — small caps, tracked */
+/* Eyebrow / section label */
 .eyebrow {
   font-size: var(--text-xs);
   font-weight: 600;
@@ -185,13 +306,24 @@ code, pre {
   color: var(--neutral-500);
 }
 
-/* Ticker-style colored text */
 .tick-up { color: var(--semantic-positive); }
 .tick-down { color: var(--semantic-negative); }
 .tick-flat { color: var(--neutral-500); }
 
+/* Lead / standfirst paragraph — serif, larger, relaxed line-height.
+   Used for "reads as today" headline cards and other editorial intros. */
+.lead {
+  font-family: var(--font-lead);
+  font-size: var(--text-xl);
+  font-weight: 400;
+  line-height: var(--leading-relaxed);
+  color: var(--neutral-800);
+  letter-spacing: -0.005em;
+  font-optical-sizing: auto;
+}
+
 /* ============================================
-   Layout Utilities
+   App shell
    ============================================ */
 
 .app-container {
@@ -200,10 +332,23 @@ code, pre {
   padding: 0 var(--space-5);
 }
 
+/* Page header sticks to the top and compresses on scroll. */
 .page-header {
+  position: sticky;
+  top: 0;
+  z-index: 30;
   padding: var(--space-4) 0 var(--space-3);
-  border-bottom: 1px solid var(--neutral-200);
+  background: color-mix(in srgb, var(--bg-app) 90%, transparent);
+  backdrop-filter: saturate(1.4) blur(8px);
+  -webkit-backdrop-filter: saturate(1.4) blur(8px);
+  border-bottom: 1px solid transparent;
+  transition: border-color var(--transition-base), padding var(--transition-base);
   margin-bottom: var(--space-4);
+}
+
+.page-header.is-scrolled {
+  border-bottom-color: var(--neutral-200);
+  padding: var(--space-2) 0;
 }
 
 .page-title {
@@ -225,6 +370,65 @@ code, pre {
 .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-3); }
 .grid-auto { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: var(--space-3); }
 
+/* Newspaper-style 12-col dashboard grid.
+   Lets us pair narrow cards (e.g. a 3-stat summary at col-span-5) next to
+   a wider panel (col-span-7) so the page has visual rhythm instead of
+   identical full-bleed rows. Each child picks its own span based on
+   content density.
+
+   Cards paired in a row stretch to match the tallest sibling so there are
+   no jagged bottom edges between neighbors. Wrappers use flex-column +
+   flex:1 on their child so the Card (or banner) inside inflates to fill
+   the allotted row height.
+
+   Collapses to single-column below 1024px (tablet / phone) so no card is
+   forced into a too-narrow slot. */
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: var(--space-3);
+  /* align-items defaults to stretch — equal-height cards per row.
+     Walkthrough 061 tightened from space-4 → space-3 for FT-style density. */
+}
+
+.col-span-12 { grid-column: span 12; }
+.col-span-8  { grid-column: span 8; }
+.col-span-7  { grid-column: span 7; }
+.col-span-6  { grid-column: span 6; }
+.col-span-5  { grid-column: span 5; }
+.col-span-4  { grid-column: span 4; }
+
+/* Each grid cell becomes a flex column so its child (usually a .card)
+   stretches to the row's height instead of hugging its natural content. */
+.dashboard-grid > [class*="col-span-"] {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.dashboard-grid > [class*="col-span-"] > * {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* Cards fill their flex parent vertically so background + border reach
+   the full row height; their internal content stays top-aligned, which
+   reads as "this card's data ends here" rather than "the card is short". */
+.dashboard-grid > [class*="col-span-"] > .card,
+.dashboard-grid > [class*="col-span-"] > .surface-card,
+.dashboard-grid > [class*="col-span-"] > .surface-panel,
+.dashboard-grid > [class*="col-span-"] > .surface-hero {
+  height: 100%;
+}
+
+@media (max-width: 1024px) {
+  .col-span-4,
+  .col-span-5,
+  .col-span-6,
+  .col-span-7,
+  .col-span-8 { grid-column: span 12; }
+}
+
 .flex { display: flex; }
 .flex-col { flex-direction: column; }
 .items-center { align-items: center; }
@@ -241,16 +445,64 @@ code, pre {
 .gap-8 { gap: var(--space-8); }
 .ml-auto { margin-left: auto; }
 
+
 /* ============================================
-   Card / Panel System
+   Brand mark
+   ============================================ */
+
+.brand-lockup {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: inherit;
+}
+
+.brand-mark {
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-gradient);
+  position: relative;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.04), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+
+.brand-mark::after {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  border: 1.5px solid rgba(255, 255, 255, 0.85);
+  border-radius: 50%;
+}
+
+.brand-mark::before {
+  content: '';
+  position: absolute;
+  width: 6px;
+  height: 1.5px;
+  background: rgba(255, 255, 255, 0.85);
+  bottom: 4px;
+  right: 2px;
+  transform: rotate(45deg);
+  border-radius: 2px;
+}
+
+
+/* ============================================
+   Cards
    ============================================ */
 
 .card {
   background: var(--bg-card);
   border-radius: var(--radius-md);
   padding: var(--space-4);
-  box-shadow: var(--shadow-sm);
+  /* Two-layer shadow (iteration 3) — cards lift off the paper-feel
+     background rather than sitting flush on it. */
+  box-shadow:
+    0 1px 2px rgba(15, 20, 35, 0.06),
+    0 6px 16px rgba(15, 20, 35, 0.08);
   border: 1px solid var(--neutral-200);
+  transition: box-shadow var(--transition-base), border-color var(--transition-base);
 }
 
 .card-header {
@@ -258,27 +510,33 @@ code, pre {
   padding: var(--space-2) var(--space-4);
   border-bottom: 1px solid var(--neutral-200);
   background: var(--bg-panel);
+  border-top-left-radius: var(--radius-md);
+  border-top-right-radius: var(--radius-md);
 }
 
+/* Editorial card title — restrained serif, sized to sit above data.
+   Replaces the prior uppercase small-caps treatment; eyebrow/small-caps
+   is now reserved for section labels and metric labels, so card titles
+   can reclaim a headline role without fighting them. */
 .card-title {
-  font-size: var(--text-xs);
-  font-weight: 700;
-  color: var(--neutral-800);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  color: var(--neutral-900);
+  letter-spacing: -0.005em;
+  font-optical-sizing: auto;
+  line-height: var(--leading-tight);
 }
 
+/* Deck-style subtitle: grey serif italic, one notch larger than the old
+   uppercase eyebrow. Reads as a standfirst under the headline. */
 .card-subtitle {
-  font-size: var(--text-xs);
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-style: italic;
   color: var(--neutral-500);
   margin-top: 2px;
-}
-
-.card-footer {
-  margin: var(--space-3) calc(-1 * var(--space-4)) calc(-1 * var(--space-4));
-  padding: var(--space-2) var(--space-4);
-  border-top: 1px solid var(--neutral-200);
-  background: var(--bg-panel);
+  line-height: var(--leading-normal);
 }
 
 .card-note {
@@ -287,12 +545,58 @@ code, pre {
   margin-top: var(--space-3);
   padding: var(--space-2) var(--space-3);
   background: var(--bg-inset);
-  border-left: 2px solid var(--neutral-300);
-  border-radius: 0;
+  border-left: 2px solid var(--accent-muted);
+  border-radius: var(--radius-sm);
 }
 
+/* Hero surface for landing / splash areas */
+.surface-hero {
+  position: relative;
+  padding: var(--space-8) var(--space-6);
+  background:
+    radial-gradient(120% 140% at 0% 0%, rgba(36, 99, 209, 0.08) 0%, transparent 55%),
+    radial-gradient(80% 100% at 100% 0%, rgba(0, 71, 179, 0.05) 0%, transparent 50%),
+    linear-gradient(180deg, #ffffff 0%, #fafbfc 100%);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--neutral-200);
+  overflow: hidden;
+}
+
+.surface-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(to right, rgba(15, 20, 35, 0.025) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(15, 20, 35, 0.025) 1px, transparent 1px);
+  background-size: 32px 32px;
+  mask-image: radial-gradient(ellipse at top left, black 20%, transparent 75%);
+  -webkit-mask-image: radial-gradient(ellipse at top left, black 20%, transparent 75%);
+  pointer-events: none;
+}
+
+.surface-hero > * {
+  position: relative;
+}
+
+/* Panels with tinted backgrounds */
+.surface-panel {
+  padding: var(--space-5);
+  background: var(--bg-panel);
+  border: 1px solid var(--neutral-200);
+  border-radius: var(--radius-md);
+}
+
+.surface-card {
+  padding: var(--space-5);
+  background: var(--bg-card);
+  border: 1px solid var(--neutral-200);
+  border-radius: var(--radius-md);
+}
+
+
 /* ============================================
-   Metric Display
+   Metrics
    ============================================ */
 
 .metric-value {
@@ -301,12 +605,6 @@ code, pre {
   color: var(--neutral-900);
   line-height: 1;
   letter-spacing: -0.02em;
-}
-
-.metric-value-lg {
-  font-size: var(--text-4xl);
-  font-weight: 600;
-  letter-spacing: -0.025em;
 }
 
 .metric-label {
@@ -329,6 +627,7 @@ code, pre {
 .metric-delta-negative { color: var(--semantic-negative); }
 .metric-delta-neutral { color: var(--neutral-500); }
 
+
 /* ============================================
    Buttons
    ============================================ */
@@ -338,7 +637,7 @@ code, pre {
   align-items: center;
   justify-content: center;
   gap: var(--space-2);
-  padding: 6px var(--space-3);
+  padding: 8px var(--space-3);
   font-size: var(--text-xs);
   font-weight: 600;
   text-transform: uppercase;
@@ -346,6 +645,8 @@ code, pre {
   border-radius: var(--radius-sm);
   border: 1px solid transparent;
   transition: all var(--transition-fast);
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .btn-primary {
@@ -367,19 +668,34 @@ code, pre {
 .btn-ghost { background: transparent; color: var(--neutral-600); }
 .btn-ghost:hover { background: var(--bg-inset); color: var(--neutral-800); }
 
-.btn-sm { padding: 3px var(--space-2); font-size: 10px; }
+.btn-sm { padding: 4px var(--space-2); font-size: 10px; min-height: 28px; }
+
+/* Mobile upsizes .btn-sm to meet the 44px WCAG tap-target minimum.
+   Keeps the compact look on desktop where mouse precision is fine. */
+@media (max-width: 640px) {
+  .btn-sm {
+    padding: 10px var(--space-3);
+    font-size: 12px;
+    min-height: 44px;
+  }
+}
+
 
 /* ============================================
-   Navigation Tabs
+   Top navigation tabs (desktop)
    ============================================ */
 
 .nav-tabs {
   display: flex;
   gap: 0;
   border-bottom: 1px solid var(--neutral-200);
+  background: var(--bg-app);
 }
 
 .nav-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
   padding: var(--space-2) var(--space-4);
   font-size: var(--text-xs);
   font-weight: 600;
@@ -392,6 +708,7 @@ code, pre {
   margin-bottom: -1px;
   transition: all var(--transition-fast);
   cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .nav-tab:hover { color: var(--neutral-800); background: var(--bg-inset); }
@@ -402,8 +719,20 @@ code, pre {
   background: transparent;
 }
 
+.nav-tab-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  stroke-width: 2;
+}
+
+.nav-tab-label-short {
+  display: none;
+}
+
+
 /* ============================================
-   Filter Pills
+   Filter pills
    ============================================ */
 
 .filter-bar {
@@ -418,7 +747,7 @@ code, pre {
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);
-  padding: 4px var(--space-3);
+  padding: 6px var(--space-3);
   font-size: var(--text-xs);
   font-weight: 600;
   text-transform: uppercase;
@@ -426,9 +755,10 @@ code, pre {
   color: var(--neutral-600);
   background: var(--bg-card);
   border: 1px solid var(--neutral-200);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-full);
   cursor: pointer;
   transition: all var(--transition-fast);
+  -webkit-tap-highlight-color: transparent;
 }
 
 .filter-pill:hover {
@@ -445,8 +775,9 @@ code, pre {
 
 .filter-pill-active:hover { background: var(--neutral-800); color: white; }
 
+
 /* ============================================
-   Badges & Indicators
+   Badges
    ============================================ */
 
 .badge {
@@ -462,12 +793,10 @@ code, pre {
 }
 
 .badge-neutral { background: var(--neutral-100); color: var(--neutral-700); }
-.badge-positive { background: var(--semantic-positive-light); color: var(--semantic-positive); }
 .badge-negative { background: var(--semantic-negative-light); color: var(--semantic-negative); }
 .badge-warning { background: var(--semantic-warning-light); color: var(--semantic-warning); }
 .badge-accent { background: var(--accent-light); color: var(--accent); }
 
-/* Confidence indicator */
 .confidence-indicator {
   display: inline-flex;
   align-items: center;
@@ -480,6 +809,7 @@ code, pre {
 .confidence-high { background: var(--semantic-positive); }
 .confidence-medium { background: var(--semantic-warning); }
 .confidence-low { background: var(--neutral-400); }
+
 
 /* ============================================
    Tables
@@ -517,25 +847,26 @@ code, pre {
 .table tr:last-child td { border-bottom: none; }
 .table tr:hover td { background: var(--bg-inset); }
 
+
 /* ============================================
    Forms
    ============================================ */
 
 .input {
   width: 100%;
-  padding: 6px var(--space-3);
+  padding: 8px var(--space-3);
   font-size: var(--text-sm);
   color: var(--neutral-900);
   background: var(--bg-card);
   border: 1px solid var(--neutral-300);
   border-radius: var(--radius-sm);
-  transition: border-color var(--transition-fast);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
 .input:focus {
   outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 2px var(--accent-light);
+  box-shadow: 0 0 0 3px var(--accent-light);
 }
 
 .input::placeholder { color: var(--neutral-400); }
@@ -543,14 +874,15 @@ code, pre {
 .select {
   appearance: none;
   padding-right: var(--space-8);
-  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%2362626a' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%235e6370' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
   background-position: right var(--space-2) center;
   background-repeat: no-repeat;
   background-size: 18px;
 }
 
+
 /* ============================================
-   Loading States
+   Loading / empty / error
    ============================================ */
 
 .skeleton {
@@ -571,10 +903,6 @@ code, pre {
 .skeleton-text { height: 1em; margin-bottom: var(--space-2); }
 .skeleton-title { height: 1.5em; width: 60%; margin-bottom: var(--space-3); }
 .skeleton-metric { height: 2.25rem; width: 120px; }
-
-/* ============================================
-   Empty & Error States
-   ============================================ */
 
 .empty-state {
   display: flex;
@@ -610,8 +938,9 @@ code, pre {
 
 .error-state-message { font-size: var(--text-sm); color: var(--semantic-negative); font-weight: 500; }
 
+
 /* ============================================
-   Tooltips & Popovers
+   Tooltips & popovers
    ============================================ */
 
 .tooltip-trigger {
@@ -629,10 +958,11 @@ code, pre {
   background: var(--bg-card);
   border-radius: var(--radius-sm);
   box-shadow: var(--shadow-lg);
-  border: 1px solid var(--neutral-300);
-  padding: var(--space-3);
+  border: 1px solid var(--neutral-200);
+  padding: var(--space-2) var(--space-3);
   max-width: 320px;
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
+  line-height: 1.5;
 }
 
 .popover-title {
@@ -643,6 +973,7 @@ code, pre {
   color: var(--neutral-800);
   margin-bottom: var(--space-2);
 }
+
 
 /* ============================================
    Charts (Recharts overrides)
@@ -681,139 +1012,2043 @@ code, pre {
 
 .chart-tooltip-value { color: var(--neutral-600); font-family: var(--font-mono); }
 
-/* ============================================
-   Responsive Breakpoints
-   ============================================ */
-
-@media (max-width: 1024px) {
-  .grid-3 { grid-template-columns: repeat(2, 1fr); }
-  :root { --sidebar-width: 240px; }
+/* Richer hover card used for distribution/bar segments.
+   Positioned absolutely by the caller; wrapper just styles it. */
+.hover-card {
+  background: var(--bg-card);
+  border: 1px solid var(--neutral-200);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  padding: var(--space-3);
+  font-size: var(--text-xs);
+  min-width: 200px;
+  max-width: 280px;
+  pointer-events: none;
+  z-index: 60;
 }
 
-@media (max-width: 768px) {
-  .grid-3, .grid-2 { grid-template-columns: 1fr; }
-  .app-container { padding: 0 var(--space-3); }
-  .nav-tabs { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-  :root { --sidebar-width: 100%; }
-
-  /* Header: drop the subtitle + full status strip; show the mini live dot. */
-  .page-header-subtitle,
-  .page-header-separator,
-  .status-strip-full { display: none; }
-  .status-strip-mini { display: inline-flex; }
+.hover-card-title {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--neutral-800);
+  margin-bottom: var(--space-1);
 }
 
-/* Phones — bottom-fixed tab bar, tighter paddings, larger touch targets. */
-@media (max-width: 640px) {
-  /* Move tabs from the top border to a fixed bottom bar. */
-  .nav-tabs {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    z-index: 20;
-    background: var(--bg-card);
-    border-top: 1px solid var(--neutral-200);
-    border-bottom: none;
-    padding: 0 var(--space-2) env(safe-area-inset-bottom, 0);
-    box-shadow: 0 -2px 8px rgba(15, 15, 25, 0.05);
-  }
-
-  .nav-tab {
-    flex: 1 1 auto;
-    min-width: 0;
-    padding: 12px 8px;
-    border-bottom: none;
-    border-top: 2px solid transparent;
-    margin-bottom: 0;
-    margin-top: -1px;
-    text-align: center;
-    white-space: nowrap;
-  }
-
-  .nav-tab-active {
-    border-top-color: var(--accent);
-    border-bottom-color: transparent;
-  }
-
-  /* Reserve space above the fixed bar so content isn't hidden. 56px ≈
-     tab height + safe-area. Any page-bottom margin stacks under this. */
-  main {
-    padding-bottom: calc(var(--space-4) + 64px + env(safe-area-inset-bottom, 0)) !important;
-  }
-
-  /* Footer sits just above the tab bar; keep it out of the way. */
-  footer {
-    margin-bottom: 64px;
-  }
-
-  /* Tap-target floor for interactive pills/buttons on phones. */
-  .btn, .filter-pill {
-    min-height: 40px;
-  }
-
-  /* Page-header becomes a single row; brand truncates cleanly. */
-  .page-header {
-    padding: var(--space-3) 0 var(--space-2);
-    margin-bottom: var(--space-3);
-  }
-
-  /* Filter bar stacks into a vertical group with its own scroll rows. */
-  .filter-bar {
-    padding: var(--space-2) 0;
-    gap: var(--space-2);
-  }
-  .filter-bar > div[style] { display: none; }  /* hide the inline separators */
-  .filter-bar .flex {
-    width: 100%;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    padding-bottom: 2px;
-  }
+.hover-card-row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 2px 0;
+  color: var(--neutral-600);
+  font-variant-numeric: tabular-nums;
 }
 
-/* Tiny phones — tighten page padding + stack cards harder. */
-@media (max-width: 480px) {
-  .app-container { padding: 0 var(--space-2); }
-  .page-title { font-size: var(--text-lg); }
-  .grid-auto { grid-template-columns: 1fr; }
+.hover-card-row strong {
+  color: var(--neutral-900);
+  font-family: var(--font-mono);
+}
+
+.hover-card-note {
+  margin-top: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--neutral-150);
+  color: var(--neutral-500);
+  line-height: var(--leading-relaxed);
 }
 
 /* ============================================
-   PublicSentiment — TopicRow
+   Modal (portal-rendered dialog)
    ============================================ */
 
-.topic-row-button {
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(10, 11, 15, 0.55);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 5vh var(--space-4) var(--space-4);
+  overflow-y: auto;
+  animation: modal-fade-in 140ms ease-out;
+}
+
+@keyframes modal-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.modal-surface {
+  width: 100%;
+  background: var(--bg-card);
+  border: 1px solid var(--neutral-200);
+  border-left: 3px solid transparent;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  max-height: 90vh;
+  animation: modal-rise-in 180ms ease-out;
+}
+
+@keyframes modal-rise-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.99); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.modal-header {
   display: flex;
   align-items: center;
-  gap: 14px;
-  width: 100%;
-  padding: 10px 12px;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-4);
+  border-bottom: 1px solid var(--neutral-150);
+  position: sticky;
+  top: 0;
+  background: var(--bg-card);
+  border-top-left-radius: var(--radius-lg);
+  border-top-right-radius: var(--radius-lg);
+}
+
+.modal-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
   border: none;
   background: transparent;
+  color: var(--neutral-500);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+  flex-shrink: 0;
+}
+.modal-close:hover { background: var(--bg-inset); color: var(--neutral-800); }
+
+.modal-back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--neutral-500);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+  flex-shrink: 0;
+  margin-right: calc(-1 * var(--space-1));
+}
+.modal-back:hover { background: var(--bg-inset); color: var(--neutral-800); }
+
+.modal-body {
+  padding: var(--space-3) var(--space-4);
+  overflow-y: auto;
+  flex: 1 1 auto;
+}
+
+@media (max-width: 640px) {
+  /* Keep the desktop anchoring (top-biased via 5vh padding + rise-in
+     animation) but tighten the backdrop gutter so the surface can use
+     the full viewport width. The previous bottom-sheet layout pinned
+     modals to the bottom of the screen on mobile, which read as stuck
+     rather than centered. */
+  .modal-backdrop {
+    padding: 5vh var(--space-2) var(--space-2);
+  }
+  .modal-surface {
+    max-height: 90vh;
+  }
+}
+
+
+/* Distribution / stacked bar segments with a subtle rise on hover. */
+.seg {
+  position: relative;
+  transition: filter var(--transition-fast), transform var(--transition-fast);
+}
+.seg:hover,
+.seg.is-active {
+  filter: brightness(1.08) saturate(1.1);
+  z-index: 1;
+}
+
+/* Skew direction chip (used on distribution card) */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--neutral-200);
+  background: var(--bg-card);
+  color: var(--neutral-700);
+}
+.chip-positive { border-color: var(--semantic-positive-light); background: var(--semantic-positive-light); color: var(--semantic-positive); }
+.chip-negative { border-color: var(--semantic-negative-light); background: var(--semantic-negative-light); color: var(--semantic-negative); }
+.chip-accent { border-color: var(--accent-light); background: var(--accent-light); color: var(--accent); }
+
+
+/* ============================================
+   Paper-texture overlay — applied broadly so the whole UI has the
+   same printed register. Two intensities:
+     .paper-strong — on colored bars/chips/filled areas (opacity 0.45)
+     .paper-subtle — on white/near-white surfaces like cards + modals
+                     (opacity 0.14, barely there)
+   Both use the same data-URI noise + mix-blend-mode: multiply so the
+   underlying color/gradient stays dominant.
+   Small elements (10px dots, sparkline strokes) excluded — noise
+   doesn't render meaningfully at that scale.
+   ============================================ */
+
+/* Strong overlay: colored bars, segments, chips, flags. */
+.seg,
+.mini-metric-bar > span,
+.technique-row-bar-fill,
+.narrative-source-bar > div,
+.entity-card-chip,
+.narrative-flag,
+.cross-tier-chip,
+.example-tech,
+.badge,
+.badge-negative,
+.badge-warning,
+.badge-accent,
+.badge-neutral {
+  position: relative;
+  isolation: isolate;
+}
+
+.seg::after,
+.mini-metric-bar > span::after,
+.technique-row-bar-fill::after,
+.narrative-source-bar > div::after,
+.entity-card-chip::after,
+.narrative-flag::after,
+.cross-tier-chip::after,
+.example-tech::after,
+.badge::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 80'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.3' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.5 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  mix-blend-mode: multiply;
+  opacity: 0.45;
+  pointer-events: none;
+  border-radius: inherit;
+}
+
+/* Subtle overlay: cards, modals, surfaces — white backgrounds get
+   a faint grain so they feel printed, not LCD-flat. */
+.card,
+.entity-card,
+.narrative-card,
+.surface-card,
+.surface-panel,
+.surface-hero,
+.modal-surface,
+.top-metrics,
+.how-this-works {
+  position: relative;
+  isolation: isolate;
+}
+
+.card::after,
+.entity-card::after,
+.narrative-card::after,
+.surface-card::after,
+.surface-panel::after,
+.surface-hero::after,
+.modal-surface::after,
+.top-metrics::after,
+.how-this-works::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.95' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.14 0 0 0 0 0.12 0 0 0 0 0.09 0 0 0 0.45 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  mix-blend-mode: multiply;
+  opacity: 0.18;
+  pointer-events: none;
+  border-radius: inherit;
+}
+
+/* Children of textured cards need to sit above the ::after overlay so
+   they stay crisp and clickable. Most cards are already flex/grid which
+   creates a stacking context, but buttons / links inside benefit from
+   an explicit z-index. */
+.card > *,
+.entity-card > *,
+.narrative-card > *,
+.surface-card > *,
+.surface-panel > *,
+.surface-hero > *,
+.modal-surface > *,
+.top-metrics > *,
+.how-this-works > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Recharts SVG chart surfaces — Sparkline + TrendStrip area fills.
+   We wrap Recharts area fills in a named pattern rather than a
+   post-process filter because SVG <feTurbulence> + blend on a gradient
+   fill is expensive per-repaint; the data-URI approach is static. */
+
+
+/* ============================================
+   Propaganda page — techniques + source split + examples rows.
+   All row-based for density; share the Overall-Tone top-metrics layout.
+   ============================================ */
+
+.technique-rows,
+.source-split-rows,
+.example-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.technique-row {
+  display: grid;
+  grid-template-columns: 200px 1fr 80px;
+  gap: var(--space-3);
+  align-items: center;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--neutral-150);
+}
+.technique-row:last-child { border-bottom: none; }
+
+.technique-row-name {
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--neutral-900);
+  letter-spacing: -0.005em;
+}
+
+.technique-row-blurb {
+  font-size: 11px;
+  color: var(--neutral-500);
+  font-style: italic;
+  line-height: 1.3;
+}
+
+.technique-row-bar {
+  height: 8px;
+  background: var(--neutral-100);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.technique-row-bar-fill {
+  height: 100%;
+  background: var(--semantic-negative);
+  border-radius: 4px;
+}
+
+.technique-row-count {
+  text-align: right;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--neutral-800);
+}
+
+.technique-row-count-pct {
+  display: block;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--neutral-500);
+  font-family: var(--font-family);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-top: 2px;
+}
+
+.source-split-row {
+  display: grid;
+  grid-template-columns: 120px 1fr 1fr 1fr;
+  gap: var(--space-3);
+  align-items: baseline;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--neutral-150);
+}
+.source-split-row:last-child { border-bottom: none; }
+
+.source-split-row-label {
+  font-weight: 600;
+  font-size: var(--text-sm);
+  color: var(--neutral-900);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.source-split-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.source-split-row-total {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  color: var(--neutral-500);
+}
+
+.source-split-row-rate,
+.source-split-row-score {
+  display: flex;
+  flex-direction: column;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: var(--neutral-900);
+  text-align: right;
+  font-size: var(--text-base);
+}
+
+.source-split-row-sub {
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--neutral-500);
+  font-family: var(--font-family);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-top: 2px;
+}
+
+/* Example rows — compact, evidence-span heavy. */
+.example-row {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--neutral-150);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.example-row:last-child { border-bottom: none; }
+
+.example-row-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.example-row-link {
+  font-size: 11px;
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.example-row-link:hover { color: var(--accent-hover); }
+
+.example-row-meta {
+  font-size: 10px;
+  color: var(--neutral-500);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.example-row-score {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: var(--semantic-negative);
+  font-size: var(--text-sm);
+}
+
+.example-row-title {
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--neutral-900);
+  line-height: 1.3;
+}
+
+.example-row-preview {
+  font-size: 11px;
+  color: var(--neutral-600);
+  line-height: 1.5;
+  font-style: italic;
+}
+
+.example-row-techs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-top: 2px;
+}
+
+.example-tech {
+  font-size: 11px;
+  padding: 2px 6px;
+  border: 1px solid var(--semantic-negative-light);
+  background: var(--semantic-negative-light);
+  color: var(--semantic-negative);
+  border-radius: 3px;
+  line-height: 1.3;
+}
+
+.example-tech em {
+  color: var(--neutral-800);
+  font-style: italic;
+}
+
+
+/* ============================================
+   Top-metrics block — Bloomberg-style dense header for Overall Tone.
+   Replaces the old GlobalTicker + reads-as-today + GOP card + Tone
+   Intensity card at the top of the page.
+   ============================================ */
+
+.top-metrics {
+  background: var(--bg-card);
+  border: 1px solid var(--neutral-200);
+  border-radius: var(--radius-sm);
+  padding: var(--space-3) var(--space-4);
+  box-shadow:
+    0 1px 2px rgba(15, 20, 35, 0.06),
+    0 6px 16px rgba(15, 20, 35, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.top-metrics-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--neutral-150);
+  flex-wrap: wrap;
+}
+
+.top-metrics-meta {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  color: var(--neutral-500);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.top-metrics-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* Per-tier "News articles are +X.X%" row with inline tone-axis visual. */
+.tier-row {
+  display: grid;
+  grid-template-columns: 160px 1fr 72px 1fr;
+  gap: var(--space-3);
+  align-items: center;
+  padding: 3px 0;
+}
+
+.tier-row-label {
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--neutral-800);
+  letter-spacing: -0.005em;
+}
+
+.tier-row-axis {
+  position: relative;
+  height: 10px;
+  background: var(--neutral-100);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.tier-row-zero {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  background: var(--neutral-300);
+}
+
+.tier-row-dot {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--bg-card);
+}
+
+.tier-row-value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  text-align: right;
+  letter-spacing: -0.01em;
+}
+
+.tier-row-verb {
+  font-size: 11px;
+  color: var(--neutral-500);
+  font-style: italic;
+}
+
+/* Aux row — GOP mini + Tone intensity mini side-by-side. */
+.top-metrics-aux {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--neutral-150);
+}
+
+/* Mini-metric row — deterministic 3-column grid.
+   Column 1 (auto):  label, fixed to its intrinsic width.
+   Column 2 (auto):  value, fixed to its intrinsic width.
+   Column 3 (1fr):   visuals — hosts a .mini-metric-visual flex wrapper
+                     containing fixed-width chart widgets (sparkline, bar,
+                     hint). The visual WRAPPER — not the children — owns
+                     the flex container, so adding/removing widgets never
+                     reshuffles the top-level grid.
+
+   Previously columns were `auto auto 1fr auto` and each call site
+   rendered children directly into them: `GOPMini` had 4 children
+   (label/value/trend/bar) and `IntensityMini` had 4 children
+   (label/value/bar/hint). The `bar` child ended up in different
+   columns in each — column 4 in GOP, column 3 in Intensity — because
+   grid places anonymous children in document order. Two consumers
+   looked visually different for no reason other than child count.
+
+   The fix is structural: consumers must wrap their visuals in a
+   .mini-metric-visual span. That wrapper is the only thing that
+   occupies column 3; the widgets inside it have fixed widths, so the
+   horizontal layout of every mini-metric is identical regardless of
+   the specific widgets shown. */
+.mini-metric {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.mini-metric-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--neutral-500);
+  white-space: nowrap;
+}
+
+.mini-metric-value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--neutral-800);
+  white-space: nowrap;
+}
+
+/* Visuals wrapper — uses a 4-slot grid (not flex) so each widget sits in
+   a fixed-width column regardless of which components render which
+   widgets. Layout:
+     [trend 60px] [bar 120px] [hint auto] [trailing pad 1fr]
+   The trailing `1fr` absorbs any remaining horizontal space so the
+   cluster stays tight against the value column rather than drifting
+   to the right edge with a huge gap. Both GOP mini (trend + bar) and
+   Intensity mini (bar + hint) render into the SAME column positions;
+   missing widgets leave their slot empty instead of compressing the
+   row. This is what makes the two cards look structurally identical
+   in the 2-up aux grid.
+
+   Previously this was flex with `justify-content: flex-end` — and the
+   trend's width was pinned at 60px via `flex: 0 0 60px`. Flex was
+   deterministic within a card, but BETWEEN cards the widget sizes
+   could differ because individual children computed their sizes
+   against their own container. Grid locks cross-card alignment. */
+.mini-metric-visual {
+  display: grid;
+  grid-template-columns: 60px 120px auto 1fr;
+  align-items: center;
+  column-gap: var(--space-2);
+  min-width: 0;
+}
+
+.mini-metric-trend {
+  display: block;
+  width: 60px;
+  height: 22px;
+  overflow: hidden;
+  grid-column: 1;
+}
+
+/* Placeholder painted when a filter yields too few daily points to draw
+   a sparkline. A single dashed baseline reads as "no trend available"
+   without pretending to carry data. Keeps the 60px slot reserved so the
+   card renders identically whether the trend is present or not. */
+.mini-metric-trend-empty {
+  position: relative;
+}
+.mini-metric-trend-empty::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  border-top: 1px dashed var(--neutral-300);
+}
+
+.mini-metric-bar {
+  display: flex;
+  width: 120px;
+  height: 8px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--neutral-100);
+  grid-column: 2;
+}
+.mini-metric-bar > span { display: block; height: 100%; }
+
+.mini-metric-hint { grid-column: 3; }
+
+/* Empty states — render the slot at the same dimensions but visually
+   muted so the 2-up aux grid stays symmetric when one side has no data. */
+.mini-metric-value-muted { color: var(--neutral-400); }
+.mini-metric-bar-empty {
+  background: var(--neutral-100);
+  border: 1px dashed var(--neutral-300);
+}
+
+.mini-bar-favorable   { background: var(--chart-accent); }
+.mini-bar-neutral     { background: var(--neutral-300); }
+.mini-bar-unfavorable { background: var(--semantic-negative); }
+
+.mini-bar-strongpos { background: var(--chart-positive-strong); }
+.mini-bar-mildpos   { background: var(--chart-positive-soft); }
+.mini-bar-neu       { background: var(--neutral-300); }
+.mini-bar-mildneg   { background: var(--chart-negative-soft); }
+.mini-bar-strongneg { background: var(--chart-negative-strong); }
+
+.mini-metric-hint {
+  font-size: 10px;
+  color: var(--neutral-500);
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 900px) {
+  .tier-row {
+    grid-template-columns: 140px 1fr 60px;
+    row-gap: 4px;
+  }
+  .tier-row-verb { grid-column: 1 / -1; }
+  .top-metrics-aux { grid-template-columns: 1fr; }
+}
+
+/* Phones — 60 + 120 + intrinsic label + value widths exceed a 320px
+   viewport. Collapse to a two-row layout: label + value on the top row,
+   visual cluster spanning both columns on the bottom row. Visual
+   wrapper switches from 4-slot grid to a 3-slot grid (trend 44 / bar
+   stretch / hint auto) so the bar gets the remaining horizontal space.
+   Both mini-metrics collapse identically — same row structure across
+   GOP and Intensity on every phone size. */
+@media (max-width: 640px) {
+  .mini-metric {
+    grid-template-columns: auto 1fr;
+    row-gap: var(--space-1);
+  }
+  .mini-metric-visual {
+    grid-column: 1 / -1;
+    grid-template-columns: 44px 1fr auto;
+    column-gap: var(--space-2);
+  }
+  .mini-metric-trend {
+    width: 44px;
+    grid-column: 1;
+  }
+  .mini-metric-bar {
+    width: auto;
+    min-width: 0;
+    grid-column: 2;
+  }
+  .mini-metric-hint { grid-column: 3; }
+}
+
+
+/* ============================================
+   "How this page works" collapsible — replaces full-width Methodology
+   cards + yellow sampling disclaimers. Self-documenting content carries
+   the rest; this stays out of the way until the reader clicks.
+   ============================================ */
+
+.how-this-works {
+  font-size: var(--text-sm);
+  background: var(--bg-card);
+  border: 1px solid var(--neutral-200);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  box-shadow:
+    0 1px 2px rgba(15, 20, 35, 0.04),
+    0 2px 6px rgba(15, 20, 35, 0.04);
+}
+
+.how-this-works > summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--neutral-700);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  user-select: none;
+}
+
+.how-this-works > summary:hover { color: var(--neutral-900); }
+
+.how-this-works-body {
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--neutral-150);
+  margin-top: var(--space-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.polling-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+  padding-top: var(--space-2);
+}
+
+
+/* ============================================
+   Topic Divergence panel (walkthrough 060) — one row per topic, three
+   dots on a −100..+100 axis showing news / officials / public net
+   tone. Replaces the standalone Sentiment-by-Topic card.
+   ============================================ */
+
+.topic-divergence-legend {
+  display: flex;
+  gap: var(--space-4);
+  margin-bottom: var(--space-3);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--neutral-150);
+  font-size: var(--text-xs);
+  color: var(--neutral-600);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+}
+
+.topic-divergence-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.topic-divergence-legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+  box-shadow: 0 0 0 2px var(--bg-card);
+}
+
+.topic-divergence-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.topic-divergence-row {
+  display: grid;
+  grid-template-columns: 180px 1fr 70px;
+  gap: var(--space-3);
+  align-items: center;
+  padding: 6px var(--space-3);
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--neutral-150);
+  border-radius: 0;
+  width: 100%;
+  cursor: pointer;
   text-align: left;
+  transition: background var(--transition-fast);
+}
+.topic-divergence-row:last-child { border-bottom: none; }
+
+.topic-divergence-row:hover { background: var(--bg-inset); }
+.topic-divergence-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.topic-divergence-row-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.topic-divergence-row-name {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--neutral-900);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.topic-divergence-row-volume {
+  font-size: 10px;
+  color: var(--neutral-500);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Axis line with the three tier dots. Drawn as a thin neutral bar that
+   shows a dashed vertical at the zero position (mid-axis). */
+.topic-divergence-axis {
+  position: relative;
+  height: 18px;
+  background: var(--neutral-100);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.topic-divergence-zero {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  background: repeating-linear-gradient(
+    to bottom,
+    var(--neutral-300) 0 3px,
+    transparent 3px 6px
+  );
+}
+
+.topic-divergence-dot {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--bg-card);
+}
+
+.topic-divergence-row-range {
+  text-align: right;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--neutral-700);
+}
+
+@media (max-width: 640px) {
+  .topic-divergence-row {
+    grid-template-columns: 1fr 60px;
+    grid-template-rows: auto auto;
+    row-gap: var(--space-1);
+  }
+  .topic-divergence-row-label { grid-column: 1 / 2; }
+  .topic-divergence-row-range { grid-column: 2 / 3; }
+  .topic-divergence-axis { grid-column: 1 / 3; }
+}
+
+
+/* Home page tab-card — reused for each of the dashboard entry buttons.
+   Uses CSS-only hover + focus-visible + active so keyboard and touch
+   users get the same affordance as mouse users. Previously the hover
+   state was applied via inline onMouseEnter which never fires for
+   keyboard-focus or tap-without-mouse. */
+.tab-card {
+  text-align: left;
+  background: var(--bg-card);
+  border: 1px solid var(--neutral-200);
+  border-radius: var(--radius-md);
+  padding: var(--space-4) var(--space-5);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 100%;
+  font-family: inherit;
+  color: inherit;
+  box-shadow: var(--shadow-sm);
+  transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+}
+
+.tab-card:hover,
+.tab-card:focus-visible {
+  border-color: var(--accent);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+  outline: none;
+}
+
+.tab-card:focus-visible {
+  /* keyboard-only affordance: accent ring overlays the border transition. */
+  box-shadow: var(--shadow-md), 0 0 0 2px var(--accent-light);
+}
+
+.tab-card:active {
+  transform: translateY(0);
+  box-shadow: var(--shadow-sm);
+}
+
+.tab-card-tagline { color: var(--accent); }
+.tab-card-title {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.tab-card-body {
+  font-size: var(--text-sm);
+  color: var(--neutral-600);
+  line-height: var(--leading-normal);
+}
+.tab-card-cta {
+  color: var(--neutral-500);
+  margin-top: var(--space-1);
+}
+
+
+/* Bot page — label band that sits next to CoordinationSummary.
+   On desktop it reads as a paired sibling panel; on mobile the frame is
+   dropped so the label doesn't masquerade as another card stacked
+   between two real Cards. */
+.bot-section-label {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: var(--space-3) var(--space-4);
+  background: var(--bg-panel);
+  border: 1px solid var(--neutral-200);
+  border-radius: var(--radius-md);
+}
+
+@media (max-width: 1024px) {
+  .bot-section-label {
+    padding: 0;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+  }
+}
+
+
+/* ============================================
+   Reads-as-today headline (walkthrough 060 — Phase 5) — one-line
+   editorial framing of the current window. Serif + larger than body,
+   lives above the three-way grid.
+   ============================================ */
+
+.reads-as-today {
+  padding: var(--space-3) var(--space-4);
+  background: var(--bg-card);
+  border: 1px solid var(--neutral-200);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-sm);
+}
+
+.reads-as-today-eyebrow {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 10px;
+}
+
+/* The `.lead` class is sized text-xl (18px) globally — reduce it here
+   specifically to fit the tighter editorial density. */
+.reads-as-today .lead {
+  font-size: var(--text-lg);
+  line-height: 1.4;
+}
+
+
+/* ============================================
+   Three-way grid — three columns (News Outlets / Verified Officials /
+   General Public) each holding a stack of EntityProfileCards.
+   Collapses to single-column below 1024px.
+   ============================================ */
+
+.three-way-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.three-way-column {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.three-way-column-header {
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--neutral-800);
+  letter-spacing: -0.005em;
+  padding-bottom: 4px;
+  border-bottom: 2px solid var(--neutral-800);
+  text-transform: uppercase;
+}
+
+.three-way-column-byline {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 11px;
+  color: var(--neutral-500);
+  margin-top: 2px;
+  padding-bottom: 4px;
+}
+
+@media (max-width: 1024px) {
+  .three-way-grid { grid-template-columns: 1fr; }
+}
+
+
+/* ============================================
+   EntityProfileCard (walkthrough 059) — the reusable card rendered in
+   every three-way dashboard column. Styled as a clickable Card with a
+   lean-colored left border, a serif headline, deck blurb, stats strip,
+   and optional "Reads as:" line. Opens a Modal on click.
+   ============================================ */
+
+.entity-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  background: var(--bg-card);
+  border: 1px solid var(--neutral-200);
+  border-left: 3px solid var(--neutral-400);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  /* Rest state: card hovers above the paper background with a subtle
+     two-layer shadow (iteration 3). Close layer gives the crisp edge;
+     far layer gives the soft drop. */
+  box-shadow:
+    0 1px 2px rgba(15, 20, 35, 0.06),
+    0 4px 12px rgba(15, 20, 35, 0.07);
+  transition:
+    border-color var(--transition-fast),
+    box-shadow var(--transition-base),
+    transform var(--transition-fast);
+  font-family: var(--font-family);
+  color: inherit;
+}
+
+.entity-card:hover {
+  border-color: var(--neutral-400);
+  box-shadow:
+    0 2px 4px rgba(15, 20, 35, 0.08),
+    0 12px 28px rgba(15, 20, 35, 0.14);
+  transform: translateY(-2px);
+}
+
+.entity-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.entity-card-head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.entity-card-head-text {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-2);
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* Avatar: outlet favicon, official X PFP, or subreddit/catch-all monogram. */
+.entity-avatar {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-inset);
+  border: 1px solid var(--neutral-200);
+}
+
+.entity-avatar-img { padding: 0; }
+.entity-avatar-img img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.entity-avatar-mono {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--neutral-600);
+  background: var(--bg-panel);
+}
+
+/* Modal head — bigger avatar + lead paragraph side-by-side. */
+.entity-modal-head {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+  margin-bottom: var(--space-4);
+}
+
+.entity-modal-head .entity-avatar {
+  width: 56px;
+  height: 56px;
+}
+
+.entity-modal-head .entity-avatar-mono {
+  font-size: 22px;
+}
+
+.entity-modal-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+  padding: var(--space-2) 0;
+  margin-top: var(--space-2);
+  border-top: 1px solid var(--neutral-150);
+  font-size: var(--text-xs);
+}
+
+.entity-modal-links a {
+  font-weight: 600;
+  text-decoration: none;
+}
+.entity-modal-links a:hover { text-decoration: underline; }
+
+.entity-card-name {
+  font-family: var(--font-display);
+  font-size: var(--text-base);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--neutral-900);
+  margin: 0;
+  line-height: 1.2;
+  font-optical-sizing: auto;
+  /* Clamp to two lines to keep the grid tidy; longer names ellipsize. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.entity-card-chip {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 1px 5px;
+  border-radius: 2px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  border: 1px solid var(--neutral-200);
+  background: var(--bg-panel);
+  color: var(--neutral-700);
+}
+
+.entity-card-blurb {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: var(--text-xs);
+  color: var(--neutral-600);
+  margin: 0;
+  line-height: 1.4;
+}
+
+.entity-card-stats {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.entity-card-stat {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.entity-card-stat-value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-lg);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--neutral-900);
+}
+
+.entity-card-stat-label {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--neutral-500);
+}
+
+.entity-card-reads-as {
+  font-size: 11px;
+  color: var(--neutral-600);
+  margin: 0;
+  padding-top: 4px;
+  border-top: 1px dashed var(--neutral-150);
+  line-height: 1.4;
+}
+
+/* Empty-state card — rendered when a registry entity has no aggregator
+   data yet. Reads as a muted version of the same card so the user sees
+   the tracked roster without thinking the dashboard is broken. */
+.entity-card-empty {
+  opacity: 0.78;
+}
+.entity-card-empty .entity-card-name {
+  color: var(--neutral-700);
+}
+
+.entity-card-empty-note {
+  font-size: 11px;
+  color: var(--neutral-500);
+  font-style: italic;
+  padding-top: 4px;
+  border-top: 1px dashed var(--neutral-150);
+}
+
+/* Lean-keyed border color. Applied to .entity-card AND .lean-chip-*
+   variants so both the whole card and the small chip signal direction. */
+.entity-card.lean-left    { border-left-color: var(--chart-accent); }
+.entity-card.lean-right   { border-left-color: var(--semantic-negative); }
+.entity-card.lean-center  { border-left-color: var(--neutral-400); }
+.entity-card.lean-mixed   {
+  /* Hatched band for mixed-lean entities — two-tone repeating gradient
+     on the left border simulates editorial ambivalence without picking
+     a color. The extra-wide border keeps the stripes legible. */
+  border-left: 4px solid transparent;
+  background-image: linear-gradient(var(--bg-card), var(--bg-card)),
+    repeating-linear-gradient(
+      45deg,
+      var(--semantic-warning) 0,
+      var(--semantic-warning) 3px,
+      var(--neutral-300) 3px,
+      var(--neutral-300) 6px
+    );
+  background-origin: border-box;
+  background-clip: padding-box, border-box;
+}
+.entity-card.lean-neutral { border-left-color: var(--neutral-300); }
+
+.entity-card-chip.lean-chip-left    { color: var(--chart-accent); border-color: var(--accent-light); background: var(--accent-light); }
+.entity-card-chip.lean-chip-right   { color: var(--semantic-negative); border-color: var(--semantic-negative-light); background: var(--semantic-negative-light); }
+.entity-card-chip.lean-chip-mixed   { color: var(--semantic-warning); border-color: var(--semantic-warning-light); background: var(--semantic-warning-light); }
+.entity-card-chip.lean-chip-center,
+.entity-card-chip.lean-chip-neutral { color: var(--neutral-600); }
+
+/* Stats strip inside the EntityProfile modal — flat metric row. */
+.entity-modal-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--space-4);
+  padding: var(--space-3) 0;
+  border-top: 1px solid var(--neutral-150);
+  border-bottom: 1px solid var(--neutral-150);
+}
+
+
+/* ============================================
+   Global ticker — editorial stat strip at the top of every data page.
+   Thin (~40px), single row on desktop, wraps on mobile. Each item has
+   a small-caps label and a mono value; items are separated by hairline
+   dividers. Not a card — lives flush with the page.
+   ============================================ */
+
+.global-ticker {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-2) var(--space-4);
+  background: var(--bg-card);
+  border: 1px solid var(--neutral-200);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  flex-wrap: wrap;
+  min-height: 40px;
+}
+
+.global-ticker-accent {
+  border-left-width: 3px;
+  border-left-style: solid;
+}
+
+.global-ticker-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.global-ticker-label {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--neutral-500);
+  white-space: nowrap;
+}
+
+.global-ticker-value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--neutral-900);
+  letter-spacing: -0.01em;
+}
+
+.global-ticker-value-lg {
+  font-size: var(--text-xl);
+}
+
+.global-ticker-hint {
+  font-size: var(--text-xs);
+  color: var(--neutral-500);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+
+.global-ticker-sep {
+  width: 1px;
+  height: 18px;
+  background: var(--neutral-200);
+  flex-shrink: 0;
+}
+
+.global-ticker-timestamp {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--neutral-500);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .global-ticker {
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+  }
+  .global-ticker-sep { display: none; }
+  .global-ticker-timestamp { margin-left: 0; width: 100%; }
+}
+
+
+/* ============================================
+   Movers ticker — scrolling marquee of biggest window-over-window shifts
+   in political tone + GOP favorability. Lives below GlobalTicker on the
+   Overall Tone + Political Narratives pages.
+   ============================================ */
+
+.movers-ticker {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 8px var(--space-3);
+  background: var(--bg-panel);
+  border: 1px solid var(--neutral-200);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  min-height: 36px;
+}
+
+.movers-ticker-eyebrow {
+  flex-shrink: 0;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--neutral-500);
+  padding-right: var(--space-3);
+  border-right: 1px solid var(--neutral-200);
+}
+
+.movers-ticker-viewport {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  mask-image: linear-gradient(90deg, transparent 0, #000 24px, #000 calc(100% - 24px), transparent 100%);
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 24px, #000 calc(100% - 24px), transparent 100%);
+}
+
+.movers-ticker-track {
+  display: inline-flex;
+  gap: var(--space-4);
+  align-items: center;
+  padding-right: var(--space-4);
+  animation: movers-scroll 60s linear infinite;
+  white-space: nowrap;
+  will-change: transform;
+}
+
+.movers-ticker:hover .movers-ticker-track {
+  animation-play-state: paused;
+}
+
+.movers-ticker-static .movers-ticker-viewport {
+  overflow-x: auto;
+}
+
+.movers-ticker-static .movers-ticker-track {
+  animation: none;
+  padding-right: 0;
+}
+
+@keyframes movers-scroll {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+
+.movers-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-family: inherit;
+  color: inherit;
+  white-space: nowrap;
+}
+
+.movers-item-clickable {
   cursor: pointer;
 }
 
-.topic-row-button[aria-expanded="false"] { cursor: pointer; }
-
-/* Small phones — let the text block wrap under the donut so no stat gets
-   clipped off the edge. */
-@media (max-width: 480px) {
-  .topic-row-button {
-    flex-wrap: wrap;
-    align-items: flex-start;
-    gap: 10px;
-    padding: 12px;
-  }
-
-  /* The first inner <div> holds title + percent chip, the second holds the
-     docs/pos/neg stats — let the stats row wrap independently. */
-  .topic-row-button > div:nth-of-type(1) > div:nth-of-type(2) {
-    flex-wrap: wrap;
-    gap: 8px 12px !important;
-  }
+.movers-item-clickable:hover .movers-item-label {
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
+
+.movers-item-label {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--neutral-800);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.movers-item-fav .movers-item-label {
+  color: var(--accent);
+}
+
+.movers-delta {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+
+.movers-delta-up    { color: var(--semantic-positive); }
+.movers-delta-down  { color: var(--semantic-negative); }
+.movers-delta-flat  { color: var(--neutral-500); }
+
+@media (prefers-reduced-motion: reduce) {
+  .movers-ticker-track { animation: none; }
+}
+
+
+/* ============================================
+   Status strip
+   ============================================ */
+
+.status-strip {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-1) var(--space-3);
+  background: var(--neutral-900);
+  color: var(--neutral-100);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  border-radius: var(--radius-sm);
+}
+
+.status-strip .sep {
+  width: 1px;
+  height: 12px;
+  background: var(--neutral-600);
+}
+
+.status-strip-mini {
+  display: none;
+  align-items: center;
+  padding: 4px 8px;
+  background: var(--neutral-900);
+  color: var(--neutral-100);
+  border-radius: var(--radius-sm);
+  font-size: 10px;
+  line-height: 1;
+}
+
+/* Pulsing live dot */
+.tick-live {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--semantic-positive);
+  box-shadow: 0 0 0 0 rgba(0, 138, 76, 0.6);
+  animation: pulse-live 2s infinite;
+}
+
+@keyframes pulse-live {
+  0% { box-shadow: 0 0 0 0 rgba(0, 138, 76, 0.55); }
+  70% { box-shadow: 0 0 0 6px rgba(0, 138, 76, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(0, 138, 76, 0); }
+}
+
+
+/* ============================================
+   Page header row
+   ============================================ */
+
+.page-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.page-header-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.page-header-separator {
+  width: 1px;
+  height: 16px;
+  background: var(--neutral-300);
+  align-self: center;
+  flex-shrink: 0;
+}
+
+.page-header-subtitle {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.page-header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-shrink: 0;
+}
+
+
+/* ============================================
+   Footer
+   ============================================ */
+
+.site-footer {
+  margin-top: var(--space-8);
+  padding: var(--space-6) 0 var(--space-4);
+  border-top: 1px solid var(--neutral-200);
+  color: var(--neutral-500);
+  font-size: var(--text-xs);
+}
+
+.site-footer-grid {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr 1fr;
+  gap: var(--space-6);
+  margin-bottom: var(--space-4);
+}
+
+.site-footer-heading {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--neutral-700);
+  margin-bottom: var(--space-2);
+}
+
+.site-footer p { color: var(--neutral-500); font-size: var(--text-xs); line-height: var(--leading-relaxed); }
+
+.site-footer a {
+  color: var(--neutral-600);
+  transition: color var(--transition-fast);
+}
+
+.site-footer a:hover { color: var(--accent); text-decoration: none; }
+
+.site-footer-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.site-footer-bottom {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--neutral-150);
+  font-family: var(--font-mono);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-size: 10px;
+}
+
+
+/* ============================================
+   Political Narratives (walkthrough 061) — compact clickable card used
+   inside each three-way column + the cross-tier + amplification panels.
+   Replaces the prior 5-column .narrative-row layout.
+   ============================================ */
+
+.narrative-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  background: var(--bg-card);
+  border: 1px solid var(--neutral-200);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  box-shadow:
+    0 1px 2px rgba(15, 20, 35, 0.06),
+    0 4px 12px rgba(15, 20, 35, 0.07);
+  font-family: var(--font-family);
+  color: inherit;
+  transition:
+    border-color var(--transition-fast),
+    box-shadow var(--transition-base),
+    transform var(--transition-fast);
+}
+
+.narrative-card:hover {
+  border-color: var(--neutral-400);
+  box-shadow:
+    0 2px 4px rgba(15, 20, 35, 0.08),
+    0 12px 28px rgba(15, 20, 35, 0.14);
+  transform: translateY(-2px);
+}
+
+.narrative-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.narrative-card-claim {
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--neutral-900);
+  line-height: 1.25;
+  letter-spacing: -0.005em;
+  /* Two-line clamp keeps the grid tidy. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.narrative-card-origin {
+  font-size: 10px;
+  color: var(--neutral-500);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-family: var(--font-family);
+  line-height: 1.3;
+}
+
+.narrative-source-bar {
+  display: flex;
+  height: 4px;
+  border-radius: 2px;
+  overflow: hidden;
+  background: var(--neutral-100);
+}
+
+.narrative-card-metrics {
+  display: flex;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.narrative-card-metrics > span {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+}
+
+.narrative-card-metric-value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--neutral-900);
+}
+
+.narrative-card-metric-label {
+  font-size: 9px;
+  color: var(--neutral-500);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+}
+
+.narrative-card-flags {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  padding-top: 4px;
+  border-top: 1px dashed var(--neutral-150);
+}
+
+.narrative-flag {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 1px 5px;
+  border-radius: 2px;
+  border: 1px solid var(--neutral-200);
+  background: var(--bg-panel);
+  color: var(--neutral-700);
+}
+
+.narrative-flag-prop   { background: var(--semantic-negative-light); border-color: var(--semantic-negative-light); color: var(--semantic-negative); }
+.narrative-flag-bot    { background: var(--semantic-warning-light);  border-color: var(--semantic-warning-light);  color: var(--semantic-warning); }
+.narrative-flag-cross  { background: var(--accent-light);            border-color: var(--accent-light);            color: var(--accent); }
+
+/* Cross-tier panel — dense list with tier chips per row. */
+.cross-tier-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.cross-tier-row {
+  display: grid;
+  grid-template-columns: 1fr auto 70px;
+  gap: var(--space-3);
+  align-items: center;
+  padding: var(--space-2) var(--space-3);
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--neutral-150);
+  border-radius: 0;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  transition: background var(--transition-fast);
+}
+
+.cross-tier-row:hover { background: var(--bg-inset); }
+.cross-tier-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.cross-tier-row:last-child { border-bottom: none; }
+
+.cross-tier-row-claim {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--neutral-900);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cross-tier-row-tiers {
+  display: inline-flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.cross-tier-chip {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--neutral-200);
+  background: var(--bg-panel);
+  color: var(--neutral-700);
+}
+.cross-tier-chip-news      { background: var(--accent-light);            color: var(--accent);            border-color: var(--accent-light); }
+.cross-tier-chip-officials { background: var(--semantic-positive-light); color: var(--semantic-positive); border-color: var(--semantic-positive-light); }
+.cross-tier-chip-public    { background: var(--semantic-warning-light);  color: var(--semantic-warning);  border-color: var(--semantic-warning-light); }
+
+.cross-tier-row-docs {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  justify-content: flex-end;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--neutral-800);
+}
+
+.cross-tier-row-docs-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--neutral-500);
+  font-family: var(--font-family);
+  font-weight: 600;
+}
+
+/* Modal stats row for narrative detail. */
+.narrative-modal-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--space-4);
+  padding: var(--space-3) 0;
+  border-top: 1px solid var(--neutral-150);
+  border-bottom: 1px solid var(--neutral-150);
+  margin-bottom: var(--space-4);
+}
+
+/* Top supporting documents — editorial table used in NarrativeDetailModal.
+   Matches the paper-feel aesthetic: hairline rules, serif-adjacent spacing,
+   mono numerics. Keeps horizontal scroll on narrow screens. */
+.supporting-docs-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--neutral-150);
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+}
+.supporting-docs-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.supporting-docs-table thead th {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--neutral-500);
+  font-weight: 600;
+  text-align: left;
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-inset);
+  border-bottom: 1px solid var(--neutral-200);
+  white-space: nowrap;
+}
+.supporting-docs-table tbody td {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--neutral-100);
+  vertical-align: top;
+}
+.supporting-docs-table tbody tr:last-child td { border-bottom: none; }
+.supporting-docs-table tbody tr:hover { background: var(--bg-inset); }
+
+.supporting-docs-headline {
+  font-weight: 500;
+  color: var(--neutral-900);
+  min-width: 220px;
+  max-width: 420px;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+.supporting-docs-source {
+  color: var(--neutral-700);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.supporting-docs-when {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.supporting-docs-tone { white-space: nowrap; }
+.supporting-docs-reasoning {
+  color: var(--neutral-700);
+  min-width: 240px;
+  max-width: 460px;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+.supporting-docs-link a {
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 14px;
+  padding: 0 var(--space-1);
+}
+.supporting-docs-link a:hover { color: var(--accent-hover); }
+
 
 /* ============================================
    Review page — responsive stats grid
@@ -825,43 +3060,55 @@ code, pre {
   gap: var(--space-4);
 }
 
-@media (max-width: 768px) {
-  .review-stats-grid { grid-template-columns: repeat(3, 1fr); gap: var(--space-3); }
+/* Review page controls row.
+   Desktop: flex row, wraps at card width. Skip button pushed right via
+   margin-left:auto on .review-controls-actions.
+   Phone (≤640px): every field stacks full-width. Inputs gain padding +
+   min-height so the touch target hits WCAG's 44px. */
+.review-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  flex-wrap: wrap;
 }
-
-@media (max-width: 480px) {
-  .review-stats-grid {
-    grid-template-columns: repeat(2, 1fr);
-    gap: var(--space-2);
-  }
-  /* Accuracy — the fifth stat — spans the bottom row so it doesn't look orphaned. */
-  .review-stats-grid > :last-child { grid-column: span 2; }
+.review-controls-field {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
 }
-
-/* ============================================
-   Global Heatmap — mobile tooltip + stats row
-   ============================================ */
+.review-controls-input {
+  padding: 6px 10px;
+  border: 1px solid var(--neutral-300);
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+  font: inherit;
+  color: inherit;
+  min-height: 32px;
+}
+.review-controls-input-text { width: 140px; }
+.review-controls-actions { margin-left: auto; }
 
 @media (max-width: 640px) {
-  .global-heatmap .stats-row {
-    flex-wrap: wrap;
-    gap: var(--space-3) var(--space-5);
+  .review-controls {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-3);
   }
-
-  .global-heatmap .map-container {
-    height: 340px;
+  .review-controls-field {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
   }
-
-  /* Anchor the tooltip to the bottom of the viewport so it doesn't clip
-     off the edge after a tap near the screen margin. The JS positions it
-     at `position: fixed` based on pointer; on a touch device the pointer
-     is at the tap point so the natural spot is fine, we just cap width. */
-  .global-heatmap .map-tooltip {
-    max-width: calc(100vw - var(--space-4) * 2);
-    left: var(--space-4) !important;
-    right: var(--space-4) !important;
-    min-width: 0;
+  .review-controls-input {
+    width: 100%;
+    min-height: 44px;
+    padding: 10px 12px;
+    font-size: var(--text-sm);
   }
+  .review-controls-input-text { width: 100%; }
+  .review-controls-actions { margin-left: 0; }
+  .review-controls-actions .btn { width: 100%; }
 }
 
 
@@ -883,8 +3130,6 @@ code, pre {
 .uppercase { text-transform: uppercase; letter-spacing: 0.06em; }
 
 .text-muted { color: var(--neutral-500); }
-.text-dark { color: var(--neutral-900); }
-.text-accent { color: var(--accent); }
 
 .mt-1 { margin-top: var(--space-1); }
 .mt-2 { margin-top: var(--space-2); }
@@ -914,202 +3159,148 @@ code, pre {
   border: 0;
 }
 
-/* ============================================
-   Terminal Status Strip
-   ============================================ */
-
-.status-strip {
-  display: flex;
-  align-items: center;
-  gap: var(--space-4);
-  padding: var(--space-1) var(--space-4);
-  background: var(--neutral-900);
-  color: var(--neutral-100);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.04em;
-  border-radius: var(--radius-sm);
-}
-
-.status-strip .sep {
-  width: 1px;
-  height: 12px;
-  background: var(--neutral-600);
-}
-
-/* Mini live-dot shown instead of the full status strip on narrow screens.
-   Hidden by default; the mobile breakpoint swaps which one is visible. */
-.status-strip-mini {
-  display: none;
-  align-items: center;
-  padding: 4px 8px;
-  background: var(--neutral-900);
-  color: var(--neutral-100);
-  border-radius: var(--radius-sm);
-  font-size: 10px;
-  line-height: 1;
-}
 
 /* ============================================
-   Page header layout
+   Responsive breakpoints
    ============================================ */
 
-.page-header-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-4);
+@media (max-width: 1024px) {
+  .grid-3 { grid-template-columns: repeat(2, 1fr); }
 }
 
-.page-header-brand {
-  display: flex;
-  align-items: baseline;
-  gap: var(--space-3);
-  min-width: 0; /* allow subtitle to truncate */
+@media (max-width: 768px) {
+  .grid-3, .grid-2 { grid-template-columns: 1fr; }
+  .app-container { padding: 0 var(--space-3); }
+  .nav-tabs { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+  .page-header-subtitle,
+  .page-header-separator,
+  .status-strip-full { display: none; }
+  .status-strip-mini { display: inline-flex; }
+
+  .review-stats-grid { grid-template-columns: repeat(3, 1fr); gap: var(--space-3); }
+
+  .site-footer-grid { grid-template-columns: 1fr 1fr; gap: var(--space-4); }
 }
 
-.page-header-separator {
-  width: 1px;
-  height: 16px;
-  background: var(--neutral-300);
-  align-self: center;
-  flex-shrink: 0;
+/* Phones — bottom tab bar, tighter paddings, larger tap targets. */
+@media (max-width: 640px) {
+  .app-container { padding: 0 var(--space-3); }
+
+  .page-header {
+    padding: var(--space-3) 0 var(--space-2);
+    margin-bottom: var(--space-3);
+  }
+
+  /* Bottom-fixed tab bar with icons above labels */
+  .nav-tabs {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 40;
+    background: var(--bg-card);
+    border-top: 1px solid var(--neutral-200);
+    border-bottom: none;
+    padding: 6px var(--space-2) calc(6px + env(safe-area-inset-bottom, 0));
+    box-shadow: 0 -2px 12px rgba(15, 20, 35, 0.06);
+    overflow: visible;
+    justify-content: space-around;
+  }
+
+  .nav-tab {
+    flex: 1 1 0;
+    min-width: 0;
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    padding: 6px 4px 4px;
+    margin: 0;
+    border: none;
+    border-radius: var(--radius-md);
+    min-height: 48px;
+    font-size: 9px;
+    letter-spacing: 0.05em;
+    color: var(--neutral-500);
+    text-align: center;
+  }
+
+  .nav-tab:hover { background: transparent; color: var(--neutral-700); }
+
+  .nav-tab-active,
+  .nav-tab-active:hover {
+    color: var(--accent);
+    background: var(--accent-light);
+  }
+
+  .nav-tab-icon { width: 20px; height: 20px; }
+
+  .nav-tab-label { display: none; }
+  .nav-tab-label-short { display: inline; }
+
+  /* Reserve space above the fixed bar so content isn't hidden. */
+  main {
+    padding-bottom: calc(var(--space-4) + var(--bottom-nav-height) + env(safe-area-inset-bottom, 0)) !important;
+  }
+
+  .site-footer { margin-bottom: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0)); }
+
+  .btn, .filter-pill { min-height: 38px; }
+
+  /* Filter bar wraps naturally on phone so pills stay visible. */
+  .filter-bar {
+    padding: var(--space-2) 0;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+  .filter-bar > div[style] { display: none; }
+  .filter-bar .flex {
+    flex-wrap: wrap;
+    gap: var(--space-2);
+  }
+  .filter-pill { white-space: nowrap; }
+
+  /* Full-bleed cards on phone — ditch outer radius for a cleaner strip */
+  .card, .surface-card, .surface-panel {
+    border-radius: var(--radius-md);
+    padding: var(--space-4);
+  }
+
+  .surface-hero {
+    padding: var(--space-6) var(--space-4);
+    border-radius: var(--radius-md);
+  }
+
+  .review-stats-grid { grid-template-columns: repeat(2, 1fr); gap: var(--space-2); }
+  .review-stats-grid > :last-child { grid-column: span 2; }
 }
 
-.page-header-subtitle {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+/* Tiny phones */
+@media (max-width: 480px) {
+  .app-container { padding: 0 var(--space-3); }
+  .page-title { font-size: var(--text-lg); }
+  .grid-auto { grid-template-columns: 1fr; }
+  .site-footer-grid { grid-template-columns: 1fr; }
+  .site-footer-bottom { flex-direction: column; align-items: flex-start; gap: var(--space-1); }
+
+  /* Review page — 5-stat bar collapses to 1-column on tiny phones.
+     At 320px, 2-column puts pairs like "Reviewer ID / Your confidence"
+     in ~130px slots that clip their labels. Single column lets each
+     Stat breathe and prevents label truncation. */
+  .review-stats-grid { grid-template-columns: 1fr; gap: var(--space-2); }
+  .review-stats-grid > :last-child { grid-column: auto; }
 }
 
-.page-header-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  flex-shrink: 0;
-}
-
-/* ============================================
-   Global Heatmap page (was in an inline <style> block)
-   ============================================ */
-
-.global-heatmap {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-
-.global-heatmap .description {
-  color: var(--neutral-500);
-  margin-bottom: var(--space-3);
-  font-size: var(--text-sm);
-}
-
-.global-heatmap .stats-row {
-  display: flex;
-  gap: var(--space-6);
-  margin-bottom: var(--space-3);
-  padding: var(--space-2) var(--space-3);
-  background: var(--bg-panel);
-  border: 1px solid var(--neutral-200);
-  border-radius: 2px;
-}
-
-.global-heatmap .stat {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.global-heatmap .stat-value {
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-  font-size: var(--text-xl);
-  font-weight: 600;
-  color: var(--neutral-900);
-  letter-spacing: -0.01em;
-}
-
-.global-heatmap .stat-label {
-  font-size: var(--text-xs);
-  color: var(--neutral-500);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  font-weight: 600;
-}
-
-.global-heatmap .legend {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  margin-bottom: var(--space-3);
-  font-size: var(--text-xs);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--neutral-600);
-}
-
-.global-heatmap .legend-label {
-  font-weight: 700;
-  color: var(--neutral-500);
-  letter-spacing: 0.08em;
-}
-
-.global-heatmap .legend-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.global-heatmap .dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-}
-
-.global-heatmap .map-container {
-  height: 500px;
-  background: var(--bg-panel);
-  border: 1px solid var(--neutral-200);
-  border-radius: 2px;
-  overflow: hidden;
-}
-
-.global-heatmap .map-tooltip {
-  position: fixed;
-  background: var(--bg-card);
-  border: 1px solid var(--neutral-300);
-  border-radius: 2px;
-  padding: var(--space-2) var(--space-3);
-  box-shadow: var(--shadow-lg);
-  z-index: 1000;
-  pointer-events: none;
-  min-width: 180px;
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-}
-
-.global-heatmap .tooltip-header {
-  font-family: var(--font-family);
-  font-size: var(--text-xs);
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--neutral-800);
-  margin-bottom: 6px;
-  padding-bottom: 6px;
-  border-bottom: 1px solid var(--neutral-200);
-}
-
-.global-heatmap .tooltip-row {
-  display: flex;
-  justify-content: space-between;
-  font-size: var(--text-xs);
-  margin-bottom: 2px;
-}
-
-.global-heatmap .tooltip-row span:first-child {
-  color: var(--neutral-500);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+/* Respect reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

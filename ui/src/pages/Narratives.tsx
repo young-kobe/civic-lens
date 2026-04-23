@@ -1,86 +1,141 @@
-import { useMemo } from 'react';
-import { Card, MethodPopover, LoadingCard, EmptyState, ErrorState } from '../components/common';
+import { useMemo, useState } from 'react';
+import {
+    Card, CollapsibleInfo, EmptyState, EntityHeader, EntityProfileCard,
+    ErrorState, GlobalTicker, LoadingCard, Modal, MoversTicker, SupportingDocsTable,
+    ThreeWayColumn, ThreeWayGrid,
+    entityExternalUrl, entityLeanAccent,
+} from '../components/common';
+import type { EntityStat, TickerItem } from '../components/common';
+import type { EntityProfile } from '../types';
 import { Sparkline } from '../components/charts';
-import { fetchNarratives } from '../services/api';
+import { fetchMovers, fetchNarratives, fetchSnapshotStatus, type SnapshotStatus } from '../services/api';
+import { asOfTodayEyebrow } from '../services/timeWindow';
+import { formatRefreshedAgo, getSnapshotTimestamp } from '../services/freshness';
+import { formatPct } from '../services/format';
 import { useFetch } from '../services/useFetch';
-import { SEMANTIC_COLORS } from '../theme';
-import type { Filters, NarrativeSummary, NarrativeSourceBreakdownItem, AccountProfile } from '../types';
+import { COLORS } from '../theme';
+import type {
+    AccountProfile, Filters, MoversResult, NarrativeSourceBreakdownItem, NarrativeSummary,
+} from '../types';
 
-// Short human-readable label for the first-seen author.
-// Examples: "Rep Adams (D, NC-12)", "Sec. Hegseth (R, DoD)", "President Trump (R)",
-// "@GOP (Republican Party)", "@handle" when we only know the handle.
-function authorLabel(author: AccountProfile | null): string | null {
-    if (!author) return null;
-    const pieces: string[] = [];
-    const titleShort: Record<string, string> = {
-        'President': 'Pres.',
-        'Vice President': 'VP',
-        'Senator': 'Sen.',
-        'Representative': 'Rep.',
-    };
-    const title = author.office_title
-        ? (titleShort[author.office_title] || author.office_title)
-        : null;
-    const name = author.full_name || author.handle;
-    if (title && name) pieces.push(`${title} ${name}`);
-    else if (name) pieces.push(name);
-    else if (author.handle) pieces.push(`@${author.handle}`);
 
-    const badges: string[] = [];
-    if (author.party) badges.push(author.party);
-    if (author.chamber === 'house' && author.state_or_district) {
-        // House district like "NC12" -> "NC-12"
-        const sd = author.state_or_district;
-        const m = sd.match(/^([A-Z]{2})(\d+)$/);
-        badges.push(m ? `${m[1]}-${m[2]}` : sd);
-    } else if (author.state_or_district) {
-        badges.push(author.state_or_district);
+// --------------------------------------------------------------------------- //
+//  Small helpers                                                              //
+// --------------------------------------------------------------------------- //
+
+function buildNarrativeTickerItems(data: NarrativeSummary[], window: string): TickerItem[] {
+    const total = data.length;
+    const nowSec = Date.now() / 1000;
+    const dayCutoff = nowSec - 24 * 60 * 60;
+    const freshCount = data.filter((n) => n.first_seen_at >= dayCutoff).length;
+
+    let topClaim: NarrativeSummary | null = null;
+    for (const n of data) {
+        if (!topClaim || n.supporting_doc_count > topClaim.supporting_doc_count) topClaim = n;
     }
 
-    if (pieces.length === 0) return null;
-    return badges.length > 0 ? `${pieces.join(' ')} (${badges.join(', ')})` : pieces[0];
+    const items: TickerItem[] = [
+        {
+            label: 'Tracked', value: total.toLocaleString(), hint: 'narratives',
+            emphasis: true,
+            ariaLabel: `${total} narratives tracked`,
+        },
+        {
+            label: 'New (24h)', value: freshCount.toLocaleString(),
+            tone: freshCount > 0 ? 'accent' : 'neutral',
+        },
+        { label: 'Window', value: window },
+    ];
+    if (topClaim) {
+        const short = topClaim.name.length > 48
+            ? topClaim.name.slice(0, 48).trimEnd() + '…'
+            : topClaim.name;
+        items.push({
+            label: 'Top Amplified', value: short,
+            hint: `${topClaim.supporting_doc_count.toLocaleString()} docs`,
+            ariaLabel: `Top amplified narrative: ${topClaim.name}, ${topClaim.supporting_doc_count} supporting docs`,
+        });
+    }
+    return items;
 }
 
-const SOURCE_DOT_COLOR: Record<string, string> = {
-    news: '#0a3d62',
-    reddit_post: '#d35400',
-    reddit_comment: '#d35400',
-    x_post: '#1d1d1f',
-};
-
 function netSentimentColor(net: number): string {
-    if (net > 10) return SEMANTIC_COLORS.positive;
-    if (net < -10) return SEMANTIC_COLORS.negative;
-    return SEMANTIC_COLORS.neutral;
+    if (net > 10) return COLORS.positive;
+    if (net < -10) return COLORS.negative;
+    return COLORS.neutral;
 }
 
 function formatRelativeDate(unixSeconds: number): string {
     if (!unixSeconds) return '—';
     const d = new Date(unixSeconds * 1000);
-    const now = new Date();
-    const diffMs = now.getTime() - d.getTime();
-    const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    const days = Math.floor((Date.now() - d.getTime()) / (1000 * 60 * 60 * 24));
     if (days === 0) return 'today';
     if (days === 1) return '1 day ago';
     if (days < 30) return `${days} days ago`;
     return d.toISOString().slice(0, 10);
 }
 
-interface SourceBarProps {
-    items: NarrativeSourceBreakdownItem[];
-    total: number;
+/** Short faction-aware author label used when the first-seen author is an
+ *  X account with profile metadata. */
+function authorLabel(author: AccountProfile | null): string | null {
+    if (!author) return null;
+    const titleShort: Record<string, string> = {
+        'President': 'Pres.', 'Vice President': 'VP', 'Senator': 'Sen.', 'Representative': 'Rep.',
+    };
+    const title = author.office_title ? (titleShort[author.office_title] || author.office_title) : null;
+    const name = author.full_name || author.handle;
+    const nameBit = title && name ? `${title} ${name}` : name ? name : author.handle ? `@${author.handle}` : null;
+    if (!nameBit) return null;
+    const badges: string[] = [];
+    if (author.party) badges.push(author.party);
+    if (author.chamber === 'house' && author.state_or_district) {
+        const m = author.state_or_district.match(/^([A-Z]{2})(\d+)$/);
+        badges.push(m ? `${m[1]}-${m[2]}` : author.state_or_district);
+    } else if (author.state_or_district) {
+        badges.push(author.state_or_district);
+    }
+    return badges.length > 0 ? `${nameBit} (${badges.join(', ')})` : nameBit;
 }
 
-function SourceBar({ items, total }: SourceBarProps) {
+function firstSeenLabel(n: NarrativeSummary): string {
+    const authorDisp = authorLabel(n.first_seen_author);
+    if (authorDisp) return authorDisp;
+    if (n.first_seen_source_type) {
+        return n.first_seen_domain
+            ? `${n.first_seen_source_type} · ${n.first_seen_domain}`
+            : n.first_seen_source_type;
+    }
+    return 'unknown source';
+}
+
+const SOURCE_DOT_COLOR: Record<string, string> = {
+    news:           COLORS.sourceNews,
+    reddit_post:    COLORS.sourceReddit,
+    reddit_comment: COLORS.sourceReddit,
+    x_post:         COLORS.sourceX,
+};
+
+function SourceBar({ items, total }: { items: NarrativeSourceBreakdownItem[]; total: number }) {
     if (items.length === 0 || total === 0) return null;
+    // Wrapper-level title gives a one-line summary ("Source mix: 45 docs
+    // — 60% News, 30% X, 10% Reddit"); per-segment titles expose the
+    // exact count + share on hover. Segment widths are percentages of
+    // the bar's total, so hovering a thin slice gives the actual figure.
+    const summary = items
+        .map((it) => `${Math.round((it.count / total) * 100)}% ${it.label}`)
+        .join(', ');
     return (
-        <div style={{ display: 'flex', height: 6, borderRadius: 2, overflow: 'hidden', background: 'var(--neutral-100)' }}>
+        <div
+            className="narrative-source-bar"
+            aria-label={`Source mix across ${total} docs: ${summary}`}
+            title={`Source mix across ${total} docs: ${summary}.`}
+        >
             {items.map((item) => {
                 const pct = (item.count / total) * 100;
                 return (
                     <div
                         key={item.source_type}
-                        title={`${item.label}: ${item.count}`}
+                        title={`${item.label}: ${item.count} of ${total} docs (${pct.toFixed(0)}%).`}
                         style={{
                             width: `${pct}%`,
                             background: SOURCE_DOT_COLOR[item.source_type] || 'var(--neutral-400)',
@@ -92,130 +147,521 @@ function SourceBar({ items, total }: SourceBarProps) {
     );
 }
 
-interface NarrativeRowProps {
-    narrative: NarrativeSummary;
+/**
+ * Static framing sentence for the Political Narratives page. The prior
+ * version templated in raw counts ("Most claims (3 of 9) first surfaced in
+ * news outlets. 5 narratives now cross ≥ 2 tiers.") and leaked internal
+ * vocabulary (claims, tiers, the ≥ glyph) into the first sentence a casual
+ * reader encounters. The grid + cross-tier panel below already surface the
+ * counts in shapes built for them.
+ */
+function readsAsToday(_narratives: NarrativeSummary[]): string {
+    return "The recurring talking points we've picked up across coverage.";
 }
 
-function NarrativeRow({ narrative }: NarrativeRowProps) {
+
+// --------------------------------------------------------------------------- //
+//  Compact narrative card (used in the three-way grid + cross-tier panel)     //
+// --------------------------------------------------------------------------- //
+
+interface NarrativeCardProps {
+    narrative: NarrativeSummary;
+    onOpen: (n: NarrativeSummary) => void;
+}
+
+function NarrativeCard({ narrative, onOpen }: NarrativeCardProps) {
     const sentColor = netSentimentColor(narrative.net_sentiment);
-    const timelineData = useMemo(
+    const propFlag = narrative.propaganda_score != null && narrative.propaganda_score >= 0.4;
+    const botFlag = narrative.bot_pushed_fraction != null && narrative.bot_pushed_fraction >= 0.3;
+
+    return (
+        <button
+            type="button"
+            className="narrative-card"
+            onClick={() => onOpen(narrative)}
+            aria-label={`${narrative.name}. ${narrative.supporting_doc_count} docs, net sentiment ${narrative.net_sentiment.toFixed(1)}%. Open details.`}
+            title={narrative.name}
+        >
+            <div className="narrative-card-claim">{narrative.name || '(unnamed)'}</div>
+            <div className="narrative-card-origin">
+                first seen {formatRelativeDate(narrative.first_seen_at)} · {firstSeenLabel(narrative)}
+            </div>
+            <SourceBar items={narrative.source_breakdown} total={narrative.supporting_doc_count} />
+            <div className="narrative-card-metrics">
+                <span>
+                    <span className="narrative-card-metric-value">{narrative.supporting_doc_count}</span>
+                    <span className="narrative-card-metric-label">docs</span>
+                </span>
+                <span>
+                    <span className="narrative-card-metric-value" style={{ color: sentColor }}>
+                        {formatPct(narrative.net_sentiment, { min: -100, signed: true })}
+                    </span>
+                    <span className="narrative-card-metric-label">net</span>
+                </span>
+                {narrative.inbound_citation_count > 0 && (
+                    <span>
+                        <span className="narrative-card-metric-value">{narrative.inbound_citation_count}</span>
+                        <span className="narrative-card-metric-label">cites</span>
+                    </span>
+                )}
+            </div>
+            {(propFlag || botFlag || narrative.cross_tier) && (
+                <div className="narrative-card-flags">
+                    {propFlag && (
+                        <span className="narrative-flag narrative-flag-prop"
+                            title={`Mean propaganda score ${narrative.propaganda_score?.toFixed(2)}`}>
+                            prop {narrative.propaganda_score?.toFixed(2)}
+                        </span>
+                    )}
+                    {botFlag && (
+                        <span className="narrative-flag narrative-flag-bot"
+                            title={`${Math.round((narrative.bot_pushed_fraction ?? 0) * 100)}% of unique X authors flagged bot-pushed`}>
+                            bot-pushed {Math.round((narrative.bot_pushed_fraction ?? 0) * 100)}%
+                        </span>
+                    )}
+                    {narrative.cross_tier && (
+                        <span className="narrative-flag narrative-flag-cross"
+                            title="Supporting docs span two or more tiers">
+                            cross-tier
+                        </span>
+                    )}
+                </div>
+            )}
+        </button>
+    );
+}
+
+
+// --------------------------------------------------------------------------- //
+//  Detail modal                                                               //
+// --------------------------------------------------------------------------- //
+
+interface NarrativeDetailModalProps {
+    narrative: NarrativeSummary;
+    onClose: () => void;
+    /** When set, shows a ← arrow returning to the parent (entity) modal. */
+    onBack?: () => void;
+    backLabel?: string;
+}
+
+function NarrativeDetailModal({ narrative, onClose, onBack, backLabel }: NarrativeDetailModalProps) {
+    const timeline = useMemo(
         () => narrative.timeline.map((t) => ({ date: t.date, value: t.count })),
         [narrative.timeline],
     );
-    // Prefer faction-aware author label when we have one; fall back to
-    // source_type + domain.
-    const authorDisplay = authorLabel(narrative.first_seen_author);
-    const firstSeenLabel = authorDisplay
-        ? authorDisplay
-        : narrative.first_seen_source_type
-            ? narrative.first_seen_domain
-                ? `${narrative.first_seen_source_type} · ${narrative.first_seen_domain}`
-                : narrative.first_seen_source_type
-            : 'unknown source';
+    const sentColor = netSentimentColor(narrative.net_sentiment);
+    const supportingDocs = narrative.top_supporting_docs ?? [];
 
     return (
-        <div
-            style={{
-                display: 'grid',
-                gridTemplateColumns: '1fr 100px 80px 90px 80px',
-                gap: 'var(--space-4)',
-                padding: 'var(--space-3) var(--space-4)',
-                borderBottom: '1px solid var(--neutral-150)',
-                alignItems: 'center',
-            }}
+        <Modal
+            isOpen
+            onClose={onClose}
+            onBack={onBack}
+            backLabel={backLabel}
+            title={narrative.name || '(unnamed narrative)'}
+            subtitle={`First seen ${formatRelativeDate(narrative.first_seen_at)} · ${firstSeenLabel(narrative)}`}
+            accentColor={sentColor}
+            maxWidth={1040}
         >
-            {/* Claim + origin */}
-            <div style={{ minWidth: 0 }}>
-                <div
-                    style={{
-                        fontWeight: 600,
-                        fontSize: 'var(--text-sm)',
-                        marginBottom: 4,
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                    }}
-                    title={narrative.name}
-                >
-                    {narrative.name || '(unnamed narrative)'}
+            <div className="narrative-modal-stats">
+                <div>
+                    <div className="eyebrow">Supporting docs</div>
+                    <div className="metric-value">{narrative.supporting_doc_count}</div>
                 </div>
-                <div className="eyebrow num" style={{ color: 'var(--neutral-500)' }}>
-                    first seen in {firstSeenLabel} · {formatRelativeDate(narrative.first_seen_at)}
+                <div>
+                    <div className="eyebrow">Net sentiment</div>
+                    <div className="metric-value" style={{ color: sentColor }}>
+                        {formatPct(narrative.net_sentiment, { min: -100, signed: true })}
+                    </div>
                 </div>
-                <div style={{ marginTop: 6 }}>
-                    <SourceBar items={narrative.source_breakdown} total={narrative.supporting_doc_count} />
+                <div>
+                    <div className="eyebrow">Inbound citations</div>
+                    <div className="metric-value">{narrative.inbound_citation_count}</div>
                 </div>
-                {/* Walkthrough 043: propaganda + bot-pushed overlay badges.
-                    Shown only when the narrative has a value for the signal. */}
-                {(narrative.propaganda_score !== null || narrative.bot_pushed_fraction !== null) && (
-                    <div style={{ marginTop: 6, display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
-                        {narrative.propaganda_score !== null && (
-                            <span
-                                title="Mean propaganda score across supporting docs"
-                                style={{
-                                    padding: '1px 6px',
-                                    background: narrative.propaganda_score >= 0.4 ? '#fef2f2' : '#f4f4f5',
-                                    border: `1px solid ${narrative.propaganda_score >= 0.4 ? '#fecaca' : 'var(--neutral-200)'}`,
-                                    borderRadius: 3,
-                                    fontSize: 'var(--text-xs)',
-                                    color: narrative.propaganda_score >= 0.4 ? '#b91c1c' : 'var(--neutral-600)',
-                                }}
-                            >
-                                prop {narrative.propaganda_score.toFixed(2)}
-                            </span>
-                        )}
-                        {narrative.bot_pushed_fraction !== null && (
-                            <span
-                                title="Fraction of unique X supporting authors whose bot score is >= 0.5 or who have any bot-labeled post"
-                                style={{
-                                    padding: '1px 6px',
-                                    background: narrative.bot_pushed_fraction >= 0.3 ? '#fef3c7' : '#f4f4f5',
-                                    border: `1px solid ${narrative.bot_pushed_fraction >= 0.3 ? '#fde68a' : 'var(--neutral-200)'}`,
-                                    borderRadius: 3,
-                                    fontSize: 'var(--text-xs)',
-                                    color: narrative.bot_pushed_fraction >= 0.3 ? '#92400e' : 'var(--neutral-600)',
-                                }}
-                            >
-                                bot-pushed {Math.round(narrative.bot_pushed_fraction * 100)}%
-                            </span>
-                        )}
+                {narrative.propaganda_score != null && (
+                    <div>
+                        <div className="eyebrow">Propaganda score</div>
+                        <div className="metric-value">{narrative.propaganda_score.toFixed(2)}</div>
+                    </div>
+                )}
+                {narrative.bot_pushed_fraction != null && (
+                    <div>
+                        <div className="eyebrow">Bot-pushed</div>
+                        <div className="metric-value">
+                            {Math.round(narrative.bot_pushed_fraction * 100)}%
+                        </div>
                     </div>
                 )}
             </div>
 
-            {/* Sparkline */}
-            <div>
-                <Sparkline data={timelineData} dataKey="value" height={28} color="var(--neutral-700)" />
-            </div>
+            <h3 className="card-title mt-4 mb-2">Daily volume</h3>
+            <Sparkline data={timeline} dataKey="value" height={80} color="var(--neutral-700)" />
 
-            {/* Doc count */}
-            <div className="num" style={{ textAlign: 'right', fontWeight: 600, fontSize: 'var(--text-base)' }}>
-                {narrative.supporting_doc_count}
-            </div>
+            <h3 className="card-title mt-4 mb-2">Source mix</h3>
+            <SourceBar items={narrative.source_breakdown} total={narrative.supporting_doc_count} />
+            <ul style={{ listStyle: 'none', padding: 0, marginTop: 'var(--space-2)', display: 'flex', gap: 'var(--space-3)', flexWrap: 'wrap' }}>
+                {narrative.source_breakdown.map((item) => (
+                    <li key={item.source_type} className="text-xs text-muted">
+                        <span
+                            style={{
+                                display: 'inline-block', width: 10, height: 10, borderRadius: '50%',
+                                background: SOURCE_DOT_COLOR[item.source_type] || 'var(--neutral-400)',
+                                marginRight: 6, verticalAlign: 'middle',
+                            }}
+                        />
+                        {item.label}: {item.count}
+                    </li>
+                ))}
+            </ul>
 
-            {/* Net sentiment */}
-            <div className="num" style={{ textAlign: 'right', color: sentColor, fontWeight: 600 }}>
-                {narrative.net_sentiment >= 0 ? '+' : ''}
-                {narrative.net_sentiment.toFixed(1)}%
-            </div>
+            {narrative.first_seen_entity_profile && (
+                <>
+                    <h3 className="card-title mt-4 mb-2">First-seen entity</h3>
+                    <p className="text-sm">
+                        <strong>{narrative.first_seen_entity_profile.displayName}</strong>
+                        {narrative.first_seen_entity_profile.kind !== 'catch_all' && (
+                            <> — {narrative.first_seen_entity_profile.blurb}</>
+                        )}
+                    </p>
+                </>
+            )}
 
-            {/* Inbound citations */}
-            <div className="num" style={{ textAlign: 'right', color: 'var(--neutral-500)' }}>
-                {narrative.inbound_citation_count}
-            </div>
-        </div>
+            {supportingDocs.length > 0 && (
+                <>
+                    <h3 className="card-title mt-4 mb-2">Top supporting documents</h3>
+                    <SupportingDocsTable docs={supportingDocs} />
+                </>
+            )}
+        </Modal>
     );
 }
+
+
+
+
+// --------------------------------------------------------------------------- //
+//  Entity grouping — narratives rolled up by first-seen entity                //
+// --------------------------------------------------------------------------- //
+
+/** One row of the entity-grouped three-way grid. Each first-seen entity with
+ *  ≥ 1 narrative becomes a card; the modal lists that entity's narratives. */
+interface NarrativeEntityGroup {
+    profile: EntityProfile;
+    narratives: NarrativeSummary[];
+    // Precomputed summary stats.
+    count: number;
+    totalDocs: number;
+    avgNetSentiment: number;        // doc-weighted
+    crossTierCount: number;
+    mostRecent: number;             // unix seconds of most recent first_seen
+}
+
+/** Group narratives by first_seen_entity_profile (keyed by kind+key so
+ *  catch-alls across tiers don't collide). Sorts each group's narratives
+ *  by supporting_doc_count desc, groups themselves by narrative count desc. */
+function groupNarrativesByEntity(narratives: NarrativeSummary[]): NarrativeEntityGroup[] {
+    const byKey = new Map<string, NarrativeEntityGroup>();
+    for (const n of narratives) {
+        if (!n.first_seen_entity_profile) continue;
+        const profile = n.first_seen_entity_profile;
+        const key = `${profile.kind}:${profile.key}`;
+        let group = byKey.get(key);
+        if (!group) {
+            group = {
+                profile,
+                narratives: [],
+                count: 0,
+                totalDocs: 0,
+                avgNetSentiment: 0,
+                crossTierCount: 0,
+                mostRecent: 0,
+            };
+            byKey.set(key, group);
+        }
+        group.narratives.push(n);
+    }
+
+    const groups = Array.from(byKey.values());
+    for (const g of groups) {
+        g.narratives.sort((a, b) => b.supporting_doc_count - a.supporting_doc_count);
+        g.count = g.narratives.length;
+        g.totalDocs = g.narratives.reduce((s, n) => s + n.supporting_doc_count, 0);
+        g.crossTierCount = g.narratives.filter((n) => n.cross_tier).length;
+        g.mostRecent = g.narratives.reduce((mx, n) => Math.max(mx, n.first_seen_at), 0);
+        g.avgNetSentiment = g.totalDocs > 0
+            ? g.narratives.reduce((s, n) => s + n.net_sentiment * n.supporting_doc_count, 0) / g.totalDocs
+            : 0;
+    }
+    groups.sort((a, b) => b.count - a.count || b.totalDocs - a.totalDocs);
+    return groups;
+}
+
+function entityStatsForNarratives(g: NarrativeEntityGroup): EntityStat[] {
+    if (g.count === 0) return [];
+    const sentColor = netSentimentColor(g.avgNetSentiment);
+    const stats: EntityStat[] = [
+        {
+            label: g.count === 1 ? 'Story' : 'Stories',
+            value: g.count.toLocaleString(),
+            emphasis: true,
+        },
+        {
+            label: 'Avg tone',
+            value: formatPct(g.avgNetSentiment, { min: -100, signed: true }),
+            color: sentColor,
+        },
+        {
+            label: 'Supporting docs',
+            value: g.totalDocs.toLocaleString(),
+        },
+    ];
+    if (g.crossTierCount > 0) {
+        stats.push({
+            label: 'Crossing groups',
+            value: g.crossTierCount.toLocaleString(),
+        });
+    }
+    return stats;
+}
+
+
+// --------------------------------------------------------------------------- //
+//  Entity modal — lists one entity's narratives                               //
+// --------------------------------------------------------------------------- //
+
+function NarrativeEntityModal({
+    group, onClose, onOpenNarrative,
+}: {
+    group: NarrativeEntityGroup;
+    onClose: () => void;
+    onOpenNarrative: (n: NarrativeSummary) => void;
+}) {
+    const { profile } = group;
+    const sentColor = netSentimentColor(group.avgNetSentiment);
+    const sourceUrl = entityExternalUrl(profile);
+
+    const subtitle = [
+        `${group.count} ${group.count === 1 ? 'story' : 'stories'} first surfaced here`,
+        group.mostRecent ? `most recent ${formatRelativeDate(group.mostRecent)}` : null,
+    ].filter(Boolean).join(' · ');
+
+    return (
+        <Modal
+            isOpen
+            onClose={onClose}
+            title={profile.displayName}
+            subtitle={subtitle}
+            accentColor={entityLeanAccent(profile)}
+        >
+            <EntityHeader profile={profile} />
+
+            <div className="entity-modal-stats">
+                <div>
+                    <div className="eyebrow">Stories</div>
+                    <div className="metric-value">{group.count.toLocaleString()}</div>
+                </div>
+                <div>
+                    <div className="eyebrow">Avg tone</div>
+                    <div className="metric-value" style={{ color: sentColor }}>
+                        {formatPct(group.avgNetSentiment, { min: -100, signed: true })}
+                    </div>
+                </div>
+                <div>
+                    <div className="eyebrow">Supporting docs</div>
+                    <div className="metric-value">{group.totalDocs.toLocaleString()}</div>
+                </div>
+                {group.crossTierCount > 0 && (
+                    <div>
+                        <div className="eyebrow">Crossing groups</div>
+                        <div className="metric-value">{group.crossTierCount.toLocaleString()}</div>
+                    </div>
+                )}
+            </div>
+
+            {sourceUrl && (
+                <div className="entity-modal-links">
+                    <a href={sourceUrl} target="_blank" rel="noreferrer">
+                        Visit {profile.displayName} ↗
+                    </a>
+                </div>
+            )}
+
+            <h3 className="card-title mt-4 mb-2">
+                {group.count === 1 ? 'The story' : 'The stories'}
+            </h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+                {group.narratives.map((n) => (
+                    <NarrativeCard
+                        key={n.narrative_id}
+                        narrative={n}
+                        onOpen={onOpenNarrative}
+                    />
+                ))}
+            </div>
+        </Modal>
+    );
+}
+
+
+// --------------------------------------------------------------------------- //
+//  Three-way grid — entity-profile split, mirrors Overall Tone layout         //
+// --------------------------------------------------------------------------- //
+
+const TOP_N = 12;
+
+interface NarrativeColumnProps {
+    header: string;
+    byline: string;
+    groups: NarrativeEntityGroup[];
+    onOpen: (g: NarrativeEntityGroup) => void;
+    emptyCopy: string;
+}
+
+function NarrativeThreeWayColumn({ header, byline, groups, onOpen, emptyCopy }: NarrativeColumnProps) {
+    const visible = groups.slice(0, TOP_N);
+    return (
+        <ThreeWayColumn
+            header={header}
+            byline={byline}
+            empty={emptyCopy}
+            isEmpty={visible.length === 0}
+        >
+            {visible.map((g) => {
+                const readsAs = g.count === 1
+                    ? 'One story first surfaced here.'
+                    : `${g.count} stories first surfaced here.`;
+                return (
+                    <EntityProfileCard
+                        key={`${g.profile.kind}:${g.profile.key}`}
+                        profile={g.profile}
+                        stats={entityStatsForNarratives(g)}
+                        readsAs={readsAs}
+                        onClick={() => onOpen(g)}
+                        emptyNote="Tracked — no stories originated here in this window."
+                    />
+                );
+            })}
+        </ThreeWayColumn>
+    );
+}
+
+
+// --------------------------------------------------------------------------- //
+//  Cross-tier + amplification panels                                          //
+// --------------------------------------------------------------------------- //
+
+const TIER_LABEL: Record<string, string> = {
+    news: 'News',
+    officials: 'Officials',
+    public: 'Public',
+};
+
+function tierChipsForNarrative(n: NarrativeSummary): string[] {
+    const seen = new Set<string>();
+    for (const item of n.source_breakdown) {
+        if (item.source_type === 'news') seen.add('news');
+        else if (item.source_type === 'x_post') {
+            // We can't cheaply tell officials vs public here without re-querying,
+            // but first_seen_tier_group is a reasonable proxy for the origin tier.
+            if (n.first_seen_tier_group === 'officials') seen.add('officials');
+            else seen.add('public');
+        } else if (item.source_type === 'reddit_post' || item.source_type === 'reddit_comment') {
+            seen.add('public');
+        }
+    }
+    // Always include the origin tier as a fallback.
+    if (n.first_seen_tier_group) seen.add(n.first_seen_tier_group);
+    return Array.from(seen);
+}
+
+const CROSS_TIER_LIMIT = 5;
+
+/**
+ * The same story is showing up in more than one group (the news is
+ * talking about it AND officials are AND/OR the public is). Capped at
+ * CROSS_TIER_LIMIT to match the mockups — reads as a scannable list,
+ * not an exhaustive feed.
+ */
+function ClaimsSpreadingPanel({ narratives, onOpen }: { narratives: NarrativeSummary[]; onOpen: (n: NarrativeSummary) => void }) {
+    if (narratives.length === 0) {
+        return (
+            <Card
+                title="Top political narratives"
+                subtitle="No stories are being repeated across more than one group yet — the news, officials, and the public aren't overlapping in this window."
+            >
+                <p className="text-muted text-sm">
+                    Check back as coverage develops.
+                </p>
+            </Card>
+        );
+    }
+
+    const visible = narratives.slice(0, CROSS_TIER_LIMIT);
+    return (
+        <Card
+            title="Top political narratives"
+            subtitle={`${visible.length} ${visible.length === 1 ? 'story is' : 'stories are'} being repeated by more than one group — the news, officials, and the public are all talking about them.`}
+        >
+            <div className="cross-tier-list">
+                {visible.map((n) => {
+                    const tiers = tierChipsForNarrative(n);
+                    return (
+                        <button
+                            key={n.narrative_id}
+                            type="button"
+                            className="cross-tier-row"
+                            onClick={() => onOpen(n)}
+                            aria-label={`${n.name}. Being repeated by ${tiers.map((t) => TIER_LABEL[t] || t).join(', ')}. Click for details.`}
+                        >
+                            <span className="cross-tier-row-claim" title={n.name}>
+                                {n.name || '(unnamed)'}
+                            </span>
+                            <span className="cross-tier-row-tiers">
+                                {tiers.map((t) => (
+                                    <span key={t} className={`cross-tier-chip cross-tier-chip-${t}`}>
+                                        {TIER_LABEL[t] || t}
+                                    </span>
+                                ))}
+                            </span>
+                            <span className="cross-tier-row-docs">
+                                {n.supporting_doc_count}
+                                <span className="cross-tier-row-docs-label">posts</span>
+                            </span>
+                        </button>
+                    );
+                })}
+            </div>
+        </Card>
+    );
+}
+
+
+// --------------------------------------------------------------------------- //
+//  Page                                                                       //
+// --------------------------------------------------------------------------- //
 
 interface NarrativesProps {
     filters: Filters;
 }
 
 function Narratives({ filters }: NarrativesProps) {
+    const [activeNarrative, setActiveNarrative] = useState<NarrativeSummary | null>(null);
+    const [activeEntity, setActiveEntity] = useState<NarrativeEntityGroup | null>(null);
+
     const { data, loading, error, refetch } = useFetch<NarrativeSummary[]>(
         () => fetchNarratives(filters.timeRange),
         [filters.timeRange],
         `narratives:${filters.timeRange}`,
+    );
+    const { data: movers } = useFetch<MoversResult>(
+        () => fetchMovers(filters.timeRange),
+        [filters.timeRange],
+        `movers:${filters.timeRange}`,
+    );
+    const { data: snapshotStatus } = useFetch<SnapshotStatus>(
+        () => fetchSnapshotStatus(),
+        [],
+        'snapshot-status',
     );
 
     if (error) return <ErrorState message={error.message} onRetry={refetch} />;
@@ -227,191 +673,142 @@ function Narratives({ filters }: NarrativesProps) {
             </div>
         );
     }
-    if (!data || data.length === 0) {
-        return (
-            <EmptyState
-                title="No narratives detected"
-                description="No claims have been clustered yet for this time window. Run the analysis pipeline (claims + narratives tasks) to populate this view."
-            />
-        );
-    }
+    // Early-return only when the fetch itself yielded nothing. An empty
+    // narratives array (zero clusters) is a valid state — render the frame
+    // with per-column "No X-originated stories in this window" copy so
+    // readers can see which axes are empty, matching Tone's behavior.
+    if (!data) return <EmptyState title="No narratives data available" />;
 
-    const newsNarratives = data.filter((n) => n.first_seen_source_type === 'news');
+    // Client-side source filter (API already returns all sources).
+    const sourceMatches = (st: string | null): boolean => {
+        if (filters.sourceType === 'all') return true;
+        if (filters.sourceType === 'news') return st === 'news';
+        if (filters.sourceType === 'reddit') return st === 'reddit_post' || st === 'reddit_comment';
+        if (filters.sourceType === 'social') return st === 'reddit_post' || st === 'reddit_comment' || st === 'x_post';
+        return true;
+    };
+    const filtered = data.filter((n) => sourceMatches(n.first_seen_source_type));
 
-    // Social = x_post + reddit_*; further split x_post by author tier.
-    const isSocial = (n: NarrativeSummary) =>
-        n.first_seen_source_type === 'x_post'
-        || n.first_seen_source_type === 'reddit_post'
-        || n.first_seen_source_type === 'reddit_comment';
-    const socialNarratives = data.filter(isSocial);
-    // Tier split only applies to X-origin narratives; Reddit-origin narratives
-    // stay together in a "Reddit" group because we don't classify Reddit authors.
-    const electedX = socialNarratives.filter(
-        (n) => n.first_seen_source_type === 'x_post' && n.first_seen_tier === 'elected_official',
+    // Three-way split by first_seen_tier_group (walkthrough 058), then
+    // rolled up by first_seen_entity_profile so each entity gets one card.
+    const newsGroups = groupNarrativesByEntity(
+        filtered.filter((n) => n.first_seen_tier_group === 'news'),
     );
-    const affiliatedX = socialNarratives.filter(
-        (n) => n.first_seen_source_type === 'x_post' && n.first_seen_tier === 'affiliated',
+    const officialGroups = groupNarrativesByEntity(
+        filtered.filter((n) => n.first_seen_tier_group === 'officials'),
     );
-    const generalPublicX = socialNarratives.filter(
-        (n) => n.first_seen_source_type === 'x_post' && (n.first_seen_tier === 'general_public' || n.first_seen_tier === null),
+    const publicGroups = groupNarrativesByEntity(
+        filtered.filter((n) => n.first_seen_tier_group === 'public'),
     );
-    const redditNarratives = socialNarratives.filter(
-        (n) => n.first_seen_source_type === 'reddit_post' || n.first_seen_source_type === 'reddit_comment',
-    );
+    const crossTier = filtered.filter((n) => n.cross_tier);
 
-    const orphanNarratives = data.filter(
-        (n) => !n.first_seen_source_type
-            || ['news', 'x_post', 'reddit_post', 'reddit_comment'].indexOf(n.first_seen_source_type) === -1,
+    const tickerItems = buildNarrativeTickerItems(filtered, filters.timeRange);
+    const refreshed = formatRefreshedAgo(
+        getSnapshotTimestamp(snapshotStatus, `narratives_${filters.timeRange}`),
     );
 
     return (
-        <div className="flex flex-col gap-4">
-            {/* Plain-language disclaimer — invariant: never imply universal sentiment */}
-            <div
-                style={{
-                    padding: 'var(--space-3) var(--space-4)',
-                    background: '#fffbeb',
-                    border: '1px solid #fbbf24',
-                    borderRadius: 'var(--radius-md)',
-                    fontSize: 'var(--text-xs)',
-                    color: '#92400e',
-                }}
-            >
-                <strong>What a narrative is here:</strong> a recurring <em>political</em> claim we detected across the
-                docs we ingested — US-political news articles, Reddit posts and comments, and X posts. Narratives
-                below are split by <em>where we first saw the claim</em> (news vs social), and social X-origin
-                narratives are further split by <em>who first said it</em> (elected official, politically-affiliated
-                figure, or general public). "First seen" is the earliest doc in our sample, not the true world-origin.
-            </div>
-
-            <NarrativeSection
-                title="News Media Narratives"
-                subtitle={`Claims first seen in news articles we ingested (${filters.timeRange})`}
-                narratives={newsNarratives}
-                emptyHint="No news-originated narratives detected in this window."
-            />
-
-            <div
-                style={{
-                    padding: 'var(--space-3) var(--space-4)',
-                    background: 'var(--bg-panel)',
-                    border: '1px solid var(--neutral-200)',
-                    borderRadius: 'var(--radius-md)',
-                }}
-            >
-                <div className="eyebrow" style={{ marginBottom: 'var(--space-1)' }}>Social Media Narratives</div>
-                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--neutral-600)', lineHeight: 'var(--leading-normal)' }}>
-                    X-origin narratives are grouped by the author's classification: <strong>elected officials</strong>
-                    {' '}(current/former officeholders and institutional accounts), <strong>politically affiliated</strong>
-                    {' '}(journalists, pundits, party committees, PACs, think tanks), and <strong>general public</strong>
-                    {' '}(everyone else). Elected and affiliated classifications come from a curated list plus an LLM
-                    classifier — everyone unclassified defaults to general public. Reddit-origin narratives are not
-                    tier-split and share one list.
+        <>
+            <div className="dashboard-grid">
+                {/* Ticker — tracked count, new this window, top amplified. */}
+                <div className="col-span-12">
+                    <GlobalTicker
+                        items={tickerItems}
+                        refreshed={refreshed}
+                        ariaLabel="Narratives overview"
+                    />
                 </div>
-            </div>
 
-            <NarrativeSection
-                title="Social · Elected Officials (X)"
-                subtitle={`Claims first seen in X posts from elected officials or institutional accounts (${filters.timeRange})`}
-                narratives={electedX}
-                emptyHint="No elected-official-originated narratives detected in this window."
-                methodNote="Tier assignment: curated list at data/known_accounts.yaml (high-confidence institutional) plus LLM classifier for individuals."
-            />
-
-            <NarrativeSection
-                title="Social · Politically Affiliated (X)"
-                subtitle={`Claims first seen in X posts from journalists, pundits, PACs, or party orgs (${filters.timeRange})`}
-                narratives={affiliatedX}
-                emptyHint="No affiliated-originated narratives detected in this window."
-                methodNote="Tier assignment: curated list for major orgs (RNC, DNC, think tanks) plus LLM classifier for individual journalists and strategists."
-            />
-
-            <NarrativeSection
-                title="Social · General Public (X)"
-                subtitle={`Claims first seen in X posts from non-classified accounts (${filters.timeRange})`}
-                narratives={generalPublicX}
-                emptyHint="No general-public-originated narratives detected in this window."
-                methodNote="Default bucket: any X author not matched by the curated list or classified as elected/affiliated by the LLM."
-            />
-
-            <NarrativeSection
-                title="Social · Reddit"
-                subtitle={`Claims first seen in Reddit posts or comments we ingested (${filters.timeRange})`}
-                narratives={redditNarratives}
-                emptyHint="No Reddit-originated narratives detected in this window."
-                methodNote="Reddit authors are not tier-classified in this release — electeds and formal political orgs are rare on Reddit and we do not have an equivalent signal."
-            />
-
-            {orphanNarratives.length > 0 && (
-                <NarrativeSection
-                    title="Other Narratives"
-                    subtitle="Narratives with no identified first-seen source"
-                    narratives={orphanNarratives}
-                />
-            )}
-        </div>
-    );
-}
-
-interface NarrativeSectionProps {
-    title: string;
-    subtitle: string;
-    narratives: NarrativeSummary[];
-    emptyHint?: string;
-    methodNote?: string;
-}
-
-function NarrativeSection({ title, subtitle, narratives, emptyHint, methodNote }: NarrativeSectionProps) {
-    return (
-        <Card
-            title={title}
-            subtitle={subtitle}
-            headerActions={
-                <MethodPopover
-                    description="Each row is a narrative — a recurring claim detected by extracting canonical claim statements from doc text and clustering similar claims together. Doc count is the number of distinct docs in the time window that contributed a matching claim."
-                    limitations={[
-                        '"First seen" means the earliest ingested doc carrying this claim — not world-origin.',
-                        ...(methodNote ? [methodNote] : []),
-                        'Synonyms can split a single semantic narrative into two rows (e.g. "Trump won" vs "Trump victory"). An embedding-mode clusterer is available via CIVIC_NARRATIVE_SIMILARITY_MODE=embedding.',
-                        'Inbound citations are a partial link graph: they count only edges where the cited doc is one we also ingested. External citations (to news outlets or X accounts we do not track) are not represented.',
-                        'Claim extraction quality depends on the configured LLM — small Ollama models will return few or no claims.',
-                    ]}
-                />
-            }
-        >
-            {narratives.length === 0 ? (
-                <div className="eyebrow" style={{ padding: 'var(--space-4)', color: 'var(--neutral-500)' }}>
-                    {emptyHint || 'No narratives in this section.'}
-                </div>
-            ) : (
-                <>
-                    <div
-                        style={{
-                            display: 'grid',
-                            gridTemplateColumns: '1fr 100px 80px 90px 80px',
-                            gap: 'var(--space-4)',
-                            padding: 'var(--space-2) var(--space-4)',
-                            borderBottom: '1px solid var(--neutral-200)',
-                        }}
-                        className="eyebrow"
-                    >
-                        <span>Narrative · First Seen · Source Mix</span>
-                        <span style={{ textAlign: 'right' }}>Daily</span>
-                        <span style={{ textAlign: 'right' }}>Docs</span>
-                        <span style={{ textAlign: 'right' }}>Net Sent.</span>
-                        <span
-                            style={{ textAlign: 'right' }}
-                            title="Partial link graph: counts only citation edges where the cited doc is one we also ingested. External citations are not tracked."
-                        >
-                            Inbound (partial)
-                        </span>
+                {movers && (
+                    <div className="col-span-12">
+                        <MoversTicker data={movers} />
                     </div>
-                    {narratives.map((n) => (
-                        <NarrativeRow key={n.narrative_id} narrative={n} />
-                    ))}
-                </>
+                )}
+
+                {/* Reads-as-today headline card. */}
+                <div className="col-span-12">
+                    <div className="reads-as-today">
+                        <span className="eyebrow reads-as-today-eyebrow">
+                            {asOfTodayEyebrow(filters.timeRange)}
+                        </span>
+                        <p className="lead" style={{ margin: 0 }}>{readsAsToday(filtered)}</p>
+                    </div>
+                </div>
+
+                {/* Three-way grid — one profile card per first-seen entity. */}
+                <div className="col-span-12">
+                    <ThreeWayGrid>
+                        <NarrativeThreeWayColumn
+                            header="The News"
+                            byline="Outlets that first surfaced each story, with editorial lean"
+                            groups={newsGroups}
+                            onOpen={setActiveEntity}
+                            emptyCopy="No news-originated stories in this window."
+                        />
+                        <NarrativeThreeWayColumn
+                            header="Politicians & Officials"
+                            byline="Tracked officeholders whose posts first surfaced each story"
+                            groups={officialGroups}
+                            onOpen={setActiveEntity}
+                            emptyCopy="No official-originated stories yet. Coverage grows as we pull more posts directly from tracked officials."
+                        />
+                        <NarrativeThreeWayColumn
+                            header="The Public"
+                            byline="Subreddits and X accounts that first surfaced each story"
+                            groups={publicGroups}
+                            onOpen={setActiveEntity}
+                            emptyCopy="No public-originated stories in this window."
+                        />
+                    </ThreeWayGrid>
+                </div>
+
+                {/* Claims spreading between groups (was "Cross-tier narratives"). */}
+                <div className="col-span-12">
+                    <ClaimsSpreadingPanel narratives={crossTier} onOpen={setActiveNarrative} />
+                </div>
+
+                {/* How this page works — self-documenting content + collapsible backup. */}
+                <div className="col-span-12">
+                    <CollapsibleInfo>
+                        <p className="text-sm">
+                            A "story" here is a political claim we saw repeated across multiple posts.
+                            Each one is placed in the column where we first saw it: a news outlet, a
+                            verified official, or someone in the general public. "First seen" means the
+                            earliest post we've ingested — not necessarily where the claim started in the
+                            world.
+                        </p>
+                        <p className="text-sm">
+                            The "claims spreading between groups" panel lists stories that have since
+                            surfaced in more than one of those three groups.
+                        </p>
+                    </CollapsibleInfo>
+                </div>
+            </div>
+
+            {activeEntity && !activeNarrative && (
+                <NarrativeEntityModal
+                    group={activeEntity}
+                    onClose={() => setActiveEntity(null)}
+                    onOpenNarrative={setActiveNarrative}
+                />
             )}
-        </Card>
+
+            {activeNarrative && (
+                <NarrativeDetailModal
+                    narrative={activeNarrative}
+                    onClose={() => {
+                        // Close the whole drill-down chain when exiting the
+                        // narrative modal via the X / backdrop / Esc.
+                        setActiveNarrative(null);
+                        setActiveEntity(null);
+                    }}
+                    onBack={activeEntity
+                        ? () => setActiveNarrative(null)
+                        : undefined}
+                    backLabel={activeEntity?.profile.displayName}
+                />
+            )}
+        </>
     );
 }
 
