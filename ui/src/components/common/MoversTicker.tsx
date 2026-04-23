@@ -34,13 +34,27 @@ function deltaGlyph(delta: number): string {
     return '▪';
 }
 
+function formatNet(net: number): string {
+    const sign = net > 0 ? '+' : '';
+    return `${sign}${net.toFixed(1)}`;
+}
+
 function EntityPill({ mover, onClick }: { mover: EntityToneMover; onClick?: () => void }) {
     const Wrapper = onClick ? 'button' : 'span';
+    // Hover tooltip spells out what the delta represents, both window
+    // endpoints, and the sample size on each side so a reader can tell
+    // whether a big mover is driven by real shift or low-volume noise.
+    const title =
+        `${mover.displayName}: net tone moved from ${formatNet(mover.prev_net)} ` +
+        `→ ${formatNet(mover.current_net)} (${formatDelta(mover.delta_pts)}) ` +
+        `vs. the previous window. Sample: ${mover.current_volume.toLocaleString()} posts now, ` +
+        `${mover.prev_volume.toLocaleString()} before.`;
     return (
         <Wrapper
             type={onClick ? 'button' : undefined}
             className={`movers-item ${onClick ? 'movers-item-clickable' : ''}`}
             onClick={onClick}
+            title={title}
         >
             <span className="movers-item-label">{mover.displayName}</span>
             <span className={deltaClass(mover.delta_pts)}>
@@ -52,8 +66,13 @@ function EntityPill({ mover, onClick }: { mover: EntityToneMover; onClick?: () =
 }
 
 function FavorabilityPill({ mover }: { mover: FavorabilityMover }) {
+    const title =
+        `${mover.label}: ${formatNet(mover.prev_net)} → ${formatNet(mover.current_net)} ` +
+        `(${formatDelta(mover.delta_pts)}) vs. the previous window. ` +
+        `Sample: ${mover.current_volume.toLocaleString()} posts now, ` +
+        `${mover.prev_volume.toLocaleString()} before.`;
     return (
-        <span className="movers-item movers-item-fav">
+        <span className="movers-item movers-item-fav" title={title}>
             <span className="movers-item-label">{mover.label}</span>
             <span className={deltaClass(mover.delta_pts)}>
                 <span aria-hidden>{deltaGlyph(mover.delta_pts)}</span>

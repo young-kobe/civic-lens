@@ -117,18 +117,32 @@ const SOURCE_DOT_COLOR: Record<string, string> = {
 
 function SourceBar({ items, total }: { items: NarrativeSourceBreakdownItem[]; total: number }) {
     if (items.length === 0 || total === 0) return null;
+    // Wrapper-level title gives a one-line summary ("Source mix: 45 docs
+    // — 60% News, 30% X, 10% Reddit"); per-segment titles expose the
+    // exact count + share on hover. Segment widths are percentages of
+    // the bar's total, so hovering a thin slice gives the actual figure.
+    const summary = items
+        .map((it) => `${Math.round((it.count / total) * 100)}% ${it.label}`)
+        .join(', ');
     return (
-        <div className="narrative-source-bar" aria-label="Source mix">
-            {items.map((item) => (
-                <div
-                    key={item.source_type}
-                    title={`${item.label}: ${item.count}`}
-                    style={{
-                        width: `${(item.count / total) * 100}%`,
-                        background: SOURCE_DOT_COLOR[item.source_type] || 'var(--neutral-400)',
-                    }}
-                />
-            ))}
+        <div
+            className="narrative-source-bar"
+            aria-label={`Source mix across ${total} docs: ${summary}`}
+            title={`Source mix across ${total} docs: ${summary}.`}
+        >
+            {items.map((item) => {
+                const pct = (item.count / total) * 100;
+                return (
+                    <div
+                        key={item.source_type}
+                        title={`${item.label}: ${item.count} of ${total} docs (${pct.toFixed(0)}%).`}
+                        style={{
+                            width: `${pct}%`,
+                            background: SOURCE_DOT_COLOR[item.source_type] || 'var(--neutral-400)',
+                        }}
+                    />
+                );
+            })}
         </div>
     );
 }

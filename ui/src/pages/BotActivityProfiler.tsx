@@ -570,8 +570,12 @@ interface SimilarityBarProps {
 }
 
 function SimilarityBar({ label, value, color }: SimilarityBarProps) {
+    const title =
+        `${label}: ${formatPct(value, { decimals: 0 })} of pairwise text comparisons ` +
+        `fall in this similarity band. Natural discourse typically clusters in the ` +
+        `low band (<50%); values above 80% indicate near-duplicate posts.`;
     return (
-        <div>
+        <div title={title}>
             <div className="flex justify-between text-sm mb-1">
                 <span>{label}</span>
                 <span className="font-medium" style={{ color }}>{formatPct(value, { decimals: 0 })}</span>

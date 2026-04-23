@@ -128,21 +128,30 @@ function GOPMini({
     const neuPct = total > 0 ? (favorability.neutral / total) * 100 : 0;
 
     const hasTrend = Boolean(trend && trend.length > 1);
+    const sampleSize = total.toLocaleString();
 
-    // Visual widgets live inside a single .mini-metric-visual wrapper so
-    // the top-level .mini-metric grid is stable (label + value + one
-    // visuals slot) regardless of which widgets are present. Widgets
-    // themselves are fixed-width via CSS — the row never reflows when
-    // the filter changes or a sparkline has too few points to render.
+    // Native `title` tooltips on the widgets keep the page uncluttered —
+    // no popover UI, no extra JS, long-press works on touch. Each tooltip
+    // names what the widget shows, the numeric breakdown, and the sample
+    // size so a reader can tell at a glance whether a number is
+    // meaningful or from a sparse bucket.
+    const trendTitle = hasTrend
+        ? `Daily net GOP favorability over the last ${trend!.length} days in this filter. ` +
+          `Sample: ${sampleSize} posts.`
+        : 'Not enough daily points in this filter to draw a trend.';
+    const barTitle =
+        `GOP stance distribution across ${sampleSize} sampled posts: ` +
+        `${favPct.toFixed(0)}% favorable · ${neuPct.toFixed(0)}% neutral · ${unfavPct.toFixed(0)}% unfavorable.`;
+
     return (
-        <div className="mini-metric">
+        <div className="mini-metric" title={`Net GOP favorability: ${formatPct(favorability.netFavorability, { min: -100, signed: true })} across ${sampleSize} sampled posts.`}>
             <span className="mini-metric-label">GOP party stance</span>
             <span className="mini-metric-value" style={{ color }}>
                 {formatPct(favorability.netFavorability, { min: -100, signed: true })}
             </span>
             <span className="mini-metric-visual">
                 {hasTrend ? (
-                    <span className="mini-metric-trend" aria-hidden>
+                    <span className="mini-metric-trend" aria-hidden title={trendTitle}>
                         <Sparkline
                             data={trend!}
                             dataKey="value"
@@ -156,10 +165,14 @@ function GOPMini({
                     <span
                         className="mini-metric-trend mini-metric-trend-empty"
                         aria-hidden
-                        title="Not enough daily points in this filter to draw a trend."
+                        title={trendTitle}
                     />
                 )}
-                <span className="mini-metric-bar" aria-label="Stance distribution">
+                <span
+                    className="mini-metric-bar"
+                    aria-label={barTitle}
+                    title={barTitle}
+                >
                     <span className="mini-bar-favorable" style={{ width: `${favPct}%` }} />
                     <span className="mini-bar-neutral"  style={{ width: `${neuPct}%` }} />
                     <span className="mini-bar-unfavorable" style={{ width: `${unfavPct}%` }} />
@@ -206,24 +219,42 @@ function IntensityMini({ distribution }: { distribution: SentimentDistribution }
     const biggest = buckets.reduce((a, b) => (a[1] >= b[1] ? a : b));
     const biggestPct = (biggest[1] / total) * 100;
 
+    const sampleSize = total.toLocaleString();
+    const barTitle =
+        `Tone intensity across ${sampleSize} sampled posts: ` +
+        `${pct(distribution.strongPositive).toFixed(0)}% strong + · ` +
+        `${pct(distribution.mildPositive).toFixed(0)}% mild + · ` +
+        `${pct(distribution.neutral).toFixed(0)}% neutral · ` +
+        `${pct(distribution.mildNegative).toFixed(0)}% mild − · ` +
+        `${pct(distribution.strongNegative).toFixed(0)}% strong −.`;
+    const hintTitle =
+        `${formatPct(biggestPct, { decimals: 0 })} of ${sampleSize} posts fall in the "${biggest[0]}" bucket.`;
+
     // Same .mini-metric-visual wrapper pattern as GOPMini — the visuals
     // (bar + hint) live inside a flex container so the top-level grid
     // sees a consistent 3-column shape regardless of child count.
     return (
-        <div className="mini-metric">
+        <div
+            className="mini-metric"
+            title={`Tone intensity distribution across ${sampleSize} sampled posts.`}
+        >
             <span className="mini-metric-label">Tone intensity</span>
             <span className="mini-metric-value">
                 most {biggest[0]}
             </span>
             <span className="mini-metric-visual">
-                <span className="mini-metric-bar mini-intensity" aria-label="Tone intensity distribution">
+                <span
+                    className="mini-metric-bar mini-intensity"
+                    aria-label={barTitle}
+                    title={barTitle}
+                >
                     <span className="mini-bar-strongpos" style={{ width: `${pct(distribution.strongPositive)}%` }} />
                     <span className="mini-bar-mildpos"   style={{ width: `${pct(distribution.mildPositive)}%` }} />
                     <span className="mini-bar-neu"       style={{ width: `${pct(distribution.neutral)}%` }} />
                     <span className="mini-bar-mildneg"   style={{ width: `${pct(distribution.mildNegative)}%` }} />
                     <span className="mini-bar-strongneg" style={{ width: `${pct(distribution.strongNegative)}%` }} />
                 </span>
-                <span className="mini-metric-hint">
+                <span className="mini-metric-hint" title={hintTitle}>
                     {formatPct(biggestPct, { decimals: 0 })} of posts
                 </span>
             </span>
