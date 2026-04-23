@@ -5,9 +5,10 @@ import {
     TierRow, TopMetricsBlock, entityExternalUrl, entityLeanAccent,
 } from '../components/common';
 import type { TickerItem, TierRowDot } from '../components/common';
-import { fetchPropaganda } from '../services/api';
+import { fetchPropaganda, fetchSnapshotStatus, type SnapshotStatus } from '../services/api';
 import { asOfTodayEyebrow, formatTimeWindow } from '../services/timeWindow';
 import { useFetch } from '../services/useFetch';
+import { formatRefreshedAgo, getSnapshotTimestamp } from '../services/freshness';
 import { COLORS } from '../theme';
 import type {
     Filters, PropagandaEntityItem, PropagandaExample,
@@ -580,6 +581,11 @@ function Propaganda({ filters }: PropagandaProps) {
         [filters.timeRange, filters.sourceType],
         `propaganda:${filters.timeRange}:${filters.sourceType}`,
     );
+    const { data: snapshotStatus } = useFetch<SnapshotStatus>(
+        () => fetchSnapshotStatus(),
+        [],
+        'snapshot-status',
+    );
 
     if (error) return <ErrorState message={error.message} onRetry={refetch} />;
     if (loading) {
@@ -606,7 +612,9 @@ function Propaganda({ filters }: PropagandaProps) {
         (data.by_general_public?.length ?? 0) > 0;
 
     const tickerItems = buildPropagandaTickerItems(data);
-    const refreshed = new Date().toISOString().slice(0, 19).replace('T', ' ') + ' UTC';
+    const refreshed = formatRefreshedAgo(
+        getSnapshotTimestamp(snapshotStatus, `propaganda_${filters.timeRange}`),
+    );
 
     return (
         <>

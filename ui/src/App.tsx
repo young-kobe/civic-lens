@@ -2,6 +2,9 @@ import { useEffect, useState } from 'react';
 import { Tabs, GlobalFilters, Footer, type Tab } from './components/common';
 import { Home, PublicSentiment, BotActivityProfiler, Narratives, Propaganda, Review } from './pages';
 import type { Filters } from './types';
+import { fetchSnapshotStatus, type SnapshotStatus } from './services/api';
+import { useFetch } from './services/useFetch';
+import { formatRefreshedAgo, latestSnapshotTimestamp } from './services/freshness';
 
 /* Admin mode is token-based. Visit once with ?admin=<CIVIC_ADMIN_TOKEN> to persist it;
    ?admin=0 clears it. The token is sent as X-Admin-Token on every admin-endpoint
@@ -175,8 +178,20 @@ function App() {
         }
     };
 
-    const now = new Date();
-    const timestamp = now.toISOString().slice(0, 19).replace('T', ' ') + ' UTC';
+    // Latest cache-write timestamp across all snapshots — the honest
+    // "when was data last refreshed" for the header strip. Before this we
+    // rendered new Date() which advertised "just now" regardless of whether
+    // the pipeline had actually run recently.
+    const { data: snapshotStatus } = useFetch<SnapshotStatus>(
+        () => fetchSnapshotStatus(),
+        [],
+        'snapshot-status',
+    );
+    const latestIso = latestSnapshotTimestamp(snapshotStatus);
+    const refreshedAgo = formatRefreshedAgo(latestIso);
+    const refreshedTitle = latestIso
+        ? `Data refreshed ${refreshedAgo} (${latestIso})`
+        : 'Data refresh time unavailable';
 
     return (
         <div className="app-container">
@@ -200,16 +215,20 @@ function App() {
                         </p>
                     </div>
                     <div className="page-header-actions">
-                        <span className="status-strip status-strip-full" aria-label={`Live, last refresh ${timestamp}`}>
+                        <span
+                            className="status-strip status-strip-full"
+                            title={refreshedTitle}
+                            aria-label={refreshedTitle}
+                        >
                             <span className="tick-live" aria-hidden />
                             <span>LIVE</span>
                             <span className="sep" aria-hidden />
-                            <span>{timestamp}</span>
+                            <span>Refreshed {refreshedAgo}</span>
                         </span>
                         <span
                             className="status-strip-mini"
-                            title={`Live · ${timestamp}`}
-                            aria-label={`Live · ${timestamp}`}
+                            title={refreshedTitle}
+                            aria-label={refreshedTitle}
                         >
                             <span className="tick-live" aria-hidden />
                         </span>
@@ -234,7 +253,7 @@ function App() {
                 {renderPage()}
             </main>
 
-            <Footer timestamp={timestamp} />
+            <Footer timestamp={refreshedAgo} />
         </div>
     );
 }
