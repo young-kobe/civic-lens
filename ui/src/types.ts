@@ -273,11 +273,21 @@ export interface BotEntityItem {
     entity_profile: EntityProfile;
 }
 
+/** One bot-flagged post displayed as evidence inside the Bot Detector's
+ *  amplification modal. Every row carries a URL back to the original when
+ *  the backend was able to synthesize one — invariant C1. */
+export interface FlaggedExample {
+    doc_id: number;
+    text: string;
+    source_label: string;   // "News · foo.com", "X · @handle", "Reddit · r/politics"
+    url: string | null;
+}
+
 export interface NarrativeAmplification {
     id: number;
     narrative: string;
     confidence: ConfidenceLevel;
-    examplePosts: string[];
+    examplePosts: FlaggedExample[];
     topHashtags: string[];
     topPhrases: string[];
     targets: string[];

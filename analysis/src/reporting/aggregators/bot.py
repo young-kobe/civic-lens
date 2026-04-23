@@ -25,6 +25,10 @@ from collections import Counter, defaultdict
 from typing import Any, Dict, Iterable, List, Tuple
 
 from analysis.src.reporting.aggregators.base import get_connection
+from analysis.src.reporting.aggregators.narrative import (
+    _build_doc_url,
+    _build_source_label,
+)
 from analysis.src.reporting.entity_registry import (
     catch_all_profile,
     CATCH_ALL_OUTLETS,
@@ -39,6 +43,7 @@ from analysis.src.reporting.models import (
     BotOverview,
     CoordinationStats,
     BehavioralSignals,
+    FlaggedExample,
     NarrativeAmplification,
 )
 
@@ -73,6 +78,11 @@ class BotAggregator:
         Pre-excluded rows (inference_method='deterministic') are dropped from
         every count so the automation rate denominator is eligible posts only.
         """
+        # LEFT JOIN x_posts_raw + x_users_raw so bot-flagged x_posts
+        # carry the author handle we need to synthesize an X permalink in
+        # _narrative_amplification (C1 invariant: every evidence surface
+        # links back to the original). This join is a flagged duplication
+        # hotspot; see docs/todos/backend-aggregator-audit.md §1.
         cursor.execute(
             """
             SELECT a.doc_id,
@@ -83,9 +93,12 @@ class BotAggregator:
                    d.domain_or_subreddit,
                    d.published_at,
                    d.text,
-                   d.ident
+                   d.ident,
+                   u.username
             FROM ai_outputs a
             JOIN docs d ON a.doc_id = d.doc_id
+            LEFT JOIN x_posts_raw x ON d.source_type = 'x_post' AND x.tweet_id = d.ident
+            LEFT JOIN x_users_raw u ON u.user_id = x.author_id
             WHERE a.task_type = 'bot_detection'
             """
         )
@@ -102,7 +115,7 @@ class BotAggregator:
         bot_idents: List[str] = []  # for author lookup (tweet_ids)
 
         for (doc_id, output_json, confidence, inf_method, source_type,
-             domain, pub_at, text, ident) in cursor.fetchall():
+             domain, pub_at, text, ident, x_handle) in cursor.fetchall():
             # Drop pre-exclusion rows from the denominator entirely.
             if (inf_method or "") == "deterministic":
                 continue
@@ -118,7 +131,11 @@ class BotAggregator:
                 bot_docs_data.append({
                     "doc_id": doc_id,
                     "data": data,
+                    "source_type": source_type,
                     "domain": domain,
+                    "ident": ident,
+                    "x_handle": x_handle,
+                    "text": text,
                     "pub_at": pub_at,
                 })
                 if domain:
@@ -388,6 +405,15 @@ def _compute_coordination_index(hourly_distribution: Dict[int, int]) -> float:
     return max(hourly_distribution.values()) / total
 
 
+# How many real posts to surface per amplified indicator. Each appears in
+# the Bot Detector's amplification modal as an evidence excerpt with an
+# outbound source link.
+_EXAMPLES_PER_INDICATOR = 3
+# Character budget for the excerpt shown in the modal. Full text is
+# one click away via the permalink; the preview is just for recognition.
+_EXAMPLE_TEXT_CHARS = 220
+
+
 def _narrative_amplification(
     indicators_frequency: Counter,
     bot_docs_data: List[Dict[str, Any]],
@@ -400,7 +426,7 @@ def _narrative_amplification(
             id=idx + 1,
             narrative=indicator,
             confidence="medium" if count > 5 else "low",
-            examplePosts=[],
+            examplePosts=_pick_examples_for_indicator(indicator, bot_docs_data),
             topHashtags=[],
             topPhrases=[indicator],
             targets=[],
@@ -409,6 +435,48 @@ def _narrative_amplification(
         )
         for idx, (indicator, count) in enumerate(top_indicators)
     ]
+
+
+def _pick_examples_for_indicator(
+    indicator: str,
+    bot_docs_data: List[Dict[str, Any]],
+) -> List[FlaggedExample]:
+    """Return up to ``_EXAMPLES_PER_INDICATOR`` bot-flagged docs whose
+    indicator list includes ``indicator``. Each comes with a permalink
+    built from ingestion metadata via the shared ``_build_doc_url`` helper
+    (news → http ident, reddit → synthesized, x_post → x.com/handle/status/id).
+
+    C1 invariant: every evidence surface links back to the original.
+    """
+    out: List[FlaggedExample] = []
+    for row in bot_docs_data:
+        if indicator not in row["data"].get("indicators", []):
+            continue
+        text = (row.get("text") or "").strip()
+        if not text:
+            continue
+        if len(text) > _EXAMPLE_TEXT_CHARS:
+            text = text[: _EXAMPLE_TEXT_CHARS].rstrip() + "…"
+        out.append(
+            FlaggedExample(
+                doc_id=row["doc_id"],
+                text=text,
+                source_label=_build_source_label(
+                    row.get("source_type"),
+                    row.get("domain"),
+                    row.get("x_handle"),
+                ),
+                url=_build_doc_url(
+                    row.get("source_type"),
+                    row.get("domain"),
+                    row.get("ident"),
+                    x_handle=row.get("x_handle"),
+                ),
+            )
+        )
+        if len(out) >= _EXAMPLES_PER_INDICATOR:
+            break
+    return out
 
 
 def _shingles(text: str, k: int = 8) -> set:

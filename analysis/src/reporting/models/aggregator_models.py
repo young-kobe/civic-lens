@@ -478,12 +478,23 @@ class BotOverview:
 
 
 @dataclass
+class FlaggedExample:
+    """One bot-flagged post displayed as evidence on the Bot Detector.
+    Every instance must carry a URL back to the original when one can be
+    synthesized — invariant C1 (source links on evidence)."""
+    doc_id: int
+    text: str
+    source_label: str          # "News · foo.com" / "X · @handle" / "Reddit · r/politics"
+    url: Optional[str]         # null when ingest metadata wasn't enough to synthesize
+
+
+@dataclass
 class NarrativeAmplification:
     """Narrative being amplified by suspected bots."""
     id: int
     narrative: str
     confidence: str
-    examplePosts: List[str]
+    examplePosts: List[FlaggedExample]
     topHashtags: List[str]
     topPhrases: List[str]
     targets: List[str]
@@ -615,7 +626,7 @@ class BotActivityData:
                     "id": n.id,
                     "narrative": n.narrative,
                     "confidence": n.confidence,
-                    "examplePosts": n.examplePosts,
+                    "examplePosts": [asdict(ex) for ex in n.examplePosts],
                     "topHashtags": n.topHashtags,
                     "topPhrases": n.topPhrases,
                     "targets": n.targets,

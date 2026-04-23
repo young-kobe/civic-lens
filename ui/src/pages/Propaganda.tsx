@@ -2,6 +2,7 @@ import { useState } from 'react';
 import {
     Card, CollapsibleInfo, EmptyState, EntityHeader, EntityProfileCard,
     ErrorState, GlobalTicker, LoadingCard, Modal,
+    ThreeWayColumn, ThreeWayGrid,
     TierRow, TopMetricsBlock, entityExternalUrl, entityLeanAccent,
 } from '../components/common';
 import type { TickerItem, TierRowDot } from '../components/common';
@@ -333,55 +334,37 @@ function ThreeWayEntityGrid({
     const outlets = (data.by_news_outlet ?? []).slice(0, TOP_N);
     const officials = (data.by_official ?? []).slice(0, TOP_N);
     const publics = (data.by_general_public ?? []).slice(0, TOP_N);
+    const renderCard = (it: PropagandaEntityItem) => (
+        <PropagandaEntityCard key={it.key} item={it} onOpen={onOpen} />
+    );
 
     return (
-        <div className="three-way-grid">
+        <ThreeWayGrid>
             <ThreeWayColumn
                 header="The News"
                 byline="News outlets sorted by how heavily their posts use these techniques"
-                items={outlets}
                 empty="No news articles scored yet."
-                onOpen={onOpen}
-            />
+                isEmpty={outlets.length === 0}
+            >
+                {outlets.map(renderCard)}
+            </ThreeWayColumn>
             <ThreeWayColumn
                 header="Politicians & Officials"
                 byline="Tracked officeholders, sorted by mean propaganda score"
-                items={officials}
                 empty="No officials scored yet."
-                onOpen={onOpen}
-            />
+                isEmpty={officials.length === 0}
+            >
+                {officials.map(renderCard)}
+            </ThreeWayColumn>
             <ThreeWayColumn
                 header="The Public"
                 byline="Subreddits + the broader X user catch-all"
-                items={publics}
                 empty="No social posts scored yet."
-                onOpen={onOpen}
-            />
-        </div>
-    );
-}
-
-function ThreeWayColumn({
-    header, byline, items, empty, onOpen,
-}: {
-    header: string;
-    byline: string;
-    items: PropagandaEntityItem[];
-    empty: string;
-    onOpen: (item: PropagandaEntityItem) => void;
-}) {
-    return (
-        <div className="three-way-column">
-            <div>
-                <div className="three-way-column-header">{header}</div>
-                <div className="three-way-column-byline">{byline}</div>
-            </div>
-            {items.length === 0 ? (
-                <p className="text-xs text-muted" style={{ padding: 'var(--space-3)' }}>{empty}</p>
-            ) : (
-                items.map((it) => <PropagandaEntityCard key={it.key} item={it} onOpen={onOpen} />)
-            )}
-        </div>
+                isEmpty={publics.length === 0}
+            >
+                {publics.map(renderCard)}
+            </ThreeWayColumn>
+        </ThreeWayGrid>
     );
 }
 

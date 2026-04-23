@@ -782,8 +782,18 @@ export function mockBotActivity(): BotData {
                 narrative: 'Tech giants colluding to suppress conservative voices',
                 confidence: 'high',
                 examplePosts: [
-                    'They are BURYING every story about X, wake up people.',
-                    'Same script, same timing, same accounts — coincidence?',
+                    {
+                        doc_id: 91001,
+                        text: 'They are BURYING every story about X, wake up people.',
+                        source_label: 'X · @liberty_patriot_88',
+                        url: 'https://x.com/liberty_patriot_88/status/1781234500001',
+                    },
+                    {
+                        doc_id: 91002,
+                        text: 'Same script, same timing, same accounts — coincidence?',
+                        source_label: 'X · @real_truth_seeker',
+                        url: 'https://x.com/real_truth_seeker/status/1781234500002',
+                    },
                 ],
                 topHashtags: ['#shadowban', '#censorship', '#bigtech'],
                 topPhrases: ['wake up', 'same script', 'coincidence'],
@@ -800,8 +810,18 @@ export function mockBotActivity(): BotData {
                 narrative: 'Border crossings hit record high, federal response insufficient',
                 confidence: 'medium',
                 examplePosts: [
-                    'Another day, another broken border. Act now.',
-                    'These numbers are UNPRECEDENTED. Why is nobody talking about this?',
+                    {
+                        doc_id: 91010,
+                        text: 'Another day, another broken border. Act now.',
+                        source_label: 'X · @border_watch_now',
+                        url: 'https://x.com/border_watch_now/status/1781234500010',
+                    },
+                    {
+                        doc_id: 91011,
+                        text: 'These numbers are UNPRECEDENTED. Why is nobody talking about this?',
+                        source_label: 'Reddit · r/Conservative',
+                        url: 'https://reddit.com/r/Conservative/comments/1abc011',
+                    },
                 ],
                 topHashtags: ['#borderCrisis', '#secureTheBorder'],
                 topPhrases: ['unprecedented', 'act now', 'broken border'],

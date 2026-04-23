@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import {
     Card, CollapsibleInfo, EmptyState, EntityHeader, EntityProfileCard,
     ErrorState, GlobalTicker, LoadingCard, Modal, MoversTicker, SupportingDocsTable,
+    ThreeWayColumn, ThreeWayGrid,
     entityExternalUrl, entityLeanAccent,
 } from '../components/common';
 import type { EntityStat, TickerItem } from '../components/common';
@@ -131,33 +132,16 @@ function SourceBar({ items, total }: { items: NarrativeSourceBreakdownItem[]; to
     );
 }
 
-/** Headline sentence above the three-way grid. Names the tier with the most
- *  fresh narratives, and flags cross-tier activity when it's meaningful. */
-function readsAsToday(narratives: NarrativeSummary[]): string {
-    if (narratives.length === 0) return 'No narratives tracked in this window.';
-
-    const byTier: Record<string, number> = { news: 0, officials: 0, public: 0, unknown: 0 };
-    let crossTier = 0;
-    for (const n of narratives) {
-        const tg = n.first_seen_tier_group ?? 'unknown';
-        byTier[tg] = (byTier[tg] ?? 0) + 1;
-        if (n.cross_tier) crossTier += 1;
-    }
-
-    const tierPairs = (['news', 'officials', 'public'] as const)
-        .map((t) => [t, byTier[t]] as const)
-        .sort((a, b) => b[1] - a[1]);
-    const leader = tierPairs[0];
-    if (leader[1] === 0) return `${narratives.length} narratives tracked — no tier dominates yet.`;
-
-    const label: Record<string, string> = {
-        news: 'news outlets',
-        officials: 'verified officials',
-        public: 'the general public',
-    };
-    const leaderSentence = `Most claims (${leader[1]} of ${narratives.length}) first surfaced in ${label[leader[0]]}.`;
-    if (crossTier === 0) return leaderSentence;
-    return `${leaderSentence} ${crossTier} narrative${crossTier === 1 ? '' : 's'} now cross ≥ 2 tiers.`;
+/**
+ * Static framing sentence for the Political Narratives page. The prior
+ * version templated in raw counts ("Most claims (3 of 9) first surfaced in
+ * news outlets. 5 narratives now cross ≥ 2 tiers.") and leaked internal
+ * vocabulary (claims, tiers, the ≥ glyph) into the first sentence a casual
+ * reader encounters. The grid + cross-tier panel below already surface the
+ * counts in shapes built for them.
+ */
+function readsAsToday(_narratives: NarrativeSummary[]): string {
+    return "The recurring talking points we've picked up across coverage.";
 }
 
 
@@ -514,7 +498,7 @@ function NarrativeEntityModal({
 
 const TOP_N = 12;
 
-interface ThreeWayColumnProps {
+interface NarrativeColumnProps {
     header: string;
     byline: string;
     groups: NarrativeEntityGroup[];
@@ -522,33 +506,31 @@ interface ThreeWayColumnProps {
     emptyCopy: string;
 }
 
-function ThreeWayColumn({ header, byline, groups, onOpen, emptyCopy }: ThreeWayColumnProps) {
+function NarrativeThreeWayColumn({ header, byline, groups, onOpen, emptyCopy }: NarrativeColumnProps) {
+    const visible = groups.slice(0, TOP_N);
     return (
-        <div className="three-way-column">
-            <div>
-                <div className="three-way-column-header">{header}</div>
-                <div className="three-way-column-byline">{byline}</div>
-            </div>
-            {groups.length === 0 ? (
-                <p className="text-xs text-muted" style={{ padding: 'var(--space-3)' }}>{emptyCopy}</p>
-            ) : (
-                groups.slice(0, TOP_N).map((g) => {
-                    const readsAs = g.count === 1
-                        ? 'One story first surfaced here.'
-                        : `${g.count} stories first surfaced here.`;
-                    return (
-                        <EntityProfileCard
-                            key={`${g.profile.kind}:${g.profile.key}`}
-                            profile={g.profile}
-                            stats={entityStatsForNarratives(g)}
-                            readsAs={readsAs}
-                            onClick={() => onOpen(g)}
-                            emptyNote="Tracked — no stories originated here in this window."
-                        />
-                    );
-                })
-            )}
-        </div>
+        <ThreeWayColumn
+            header={header}
+            byline={byline}
+            empty={emptyCopy}
+            isEmpty={visible.length === 0}
+        >
+            {visible.map((g) => {
+                const readsAs = g.count === 1
+                    ? 'One story first surfaced here.'
+                    : `${g.count} stories first surfaced here.`;
+                return (
+                    <EntityProfileCard
+                        key={`${g.profile.kind}:${g.profile.key}`}
+                        profile={g.profile}
+                        stats={entityStatsForNarratives(g)}
+                        readsAs={readsAs}
+                        onClick={() => onOpen(g)}
+                        emptyNote="Tracked — no stories originated here in this window."
+                    />
+                );
+            })}
+        </ThreeWayColumn>
     );
 }
 
@@ -743,29 +725,29 @@ function Narratives({ filters }: NarrativesProps) {
 
                 {/* Three-way grid — one profile card per first-seen entity. */}
                 <div className="col-span-12">
-                    <div className="three-way-grid">
-                        <ThreeWayColumn
+                    <ThreeWayGrid>
+                        <NarrativeThreeWayColumn
                             header="The News"
                             byline="Outlets that first surfaced each story, with editorial lean"
                             groups={newsGroups}
                             onOpen={setActiveEntity}
                             emptyCopy="No news-originated stories in this window."
                         />
-                        <ThreeWayColumn
+                        <NarrativeThreeWayColumn
                             header="Politicians & Officials"
                             byline="Tracked officeholders whose posts first surfaced each story"
                             groups={officialGroups}
                             onOpen={setActiveEntity}
                             emptyCopy="No official-originated stories yet. Coverage grows as we pull more posts directly from tracked officials."
                         />
-                        <ThreeWayColumn
+                        <NarrativeThreeWayColumn
                             header="The Public"
                             byline="Subreddits and X accounts that first surfaced each story"
                             groups={publicGroups}
                             onOpen={setActiveEntity}
                             emptyCopy="No public-originated stories in this window."
                         />
-                    </div>
+                    </ThreeWayGrid>
                 </div>
 
                 {/* Claims spreading between groups (was "Cross-tier narratives"). */}

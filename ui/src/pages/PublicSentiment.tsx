@@ -2,7 +2,7 @@ import { useState } from 'react';
 import {
     CollapsibleInfo, EmptyState, EntityHeader, EntityProfileCard,
     ErrorState, GlobalTicker, LoadingCard, Modal, MoversTicker, SupportingDocsTable,
-    TierRow, TopMetricsBlock,
+    ThreeWayColumn, ThreeWayGrid, TierRow, TopMetricsBlock,
     classificationSampleToSupportingDoc, entityExternalUrl, entityLeanAccent, sentimentStats,
 } from '../components/common';
 import type { TickerItem } from '../components/common';
@@ -206,72 +206,49 @@ interface ThreeWayGridProps {
     onOpen: (item: EntitySentimentItem) => void;
 }
 
-function ThreeWayGrid({
+function SentimentThreeWayGrid({
     newsOutlets, officials, generalPublic, confidence, onOpen,
 }: ThreeWayGridProps) {
+    const news = newsOutlets.slice(0, TOP_N);
+    const offs = officials.slice(0, TOP_N);
+    const pub = generalPublic.slice(0, TOP_N);
+    const renderCard = (item: EntitySentimentItem) => (
+        <EntityProfileCard
+            key={item.key}
+            profile={item.entityProfile}
+            stats={item.volume > 0
+                ? sentimentStats({ netTone: item.netScore, volume: item.volume, confidence })
+                : []}
+            onClick={() => onOpen(item)}
+        />
+    );
     return (
-        <div className="three-way-grid">
+        <ThreeWayGrid>
             <ThreeWayColumn
                 header="The News"
                 byline="Top outlets by coverage volume, with their editorial lean"
-                items={newsOutlets.slice(0, TOP_N)}
-                confidence={confidence}
-                emptyCopy="No news articles in this window."
-                onOpen={onOpen}
-            />
+                empty="No news articles in this window."
+                isEmpty={news.length === 0}
+            >
+                {news.map(renderCard)}
+            </ThreeWayColumn>
             <ThreeWayColumn
                 header="Politicians & Officials"
                 byline="Tracked officeholders posting on X"
-                items={officials.slice(0, TOP_N)}
-                confidence={confidence}
-                emptyCopy="No officials have posted in this window yet."
-                onOpen={onOpen}
-            />
+                empty="No officials have posted in this window yet."
+                isEmpty={offs.length === 0}
+            >
+                {offs.map(renderCard)}
+            </ThreeWayColumn>
             <ThreeWayColumn
                 header="The Public"
                 byline="Subreddits + the broader X user catch-all"
-                items={generalPublic.slice(0, TOP_N)}
-                confidence={confidence}
-                emptyCopy="No social posts in this window."
-                onOpen={onOpen}
-            />
-        </div>
-    );
-}
-
-interface ThreeWayColumnProps {
-    header: string;
-    byline: string;
-    items: EntitySentimentItem[];
-    confidence: PublicSentimentData['overview']['confidence'];
-    emptyCopy: string;
-    onOpen: (item: EntitySentimentItem) => void;
-}
-
-function ThreeWayColumn({ header, byline, items, confidence, emptyCopy, onOpen }: ThreeWayColumnProps) {
-    return (
-        <div className="three-way-column">
-            <div>
-                <div className="three-way-column-header">{header}</div>
-                <div className="three-way-column-byline">{byline}</div>
-            </div>
-            {items.length === 0 ? (
-                <p className="text-xs text-muted" style={{ padding: 'var(--space-3)' }}>
-                    {emptyCopy}
-                </p>
-            ) : (
-                items.map((item) => (
-                    <EntityProfileCard
-                        key={item.key}
-                        profile={item.entityProfile}
-                        stats={item.volume > 0
-                            ? sentimentStats({ netTone: item.netScore, volume: item.volume, confidence })
-                            : []}
-                        onClick={() => onOpen(item)}
-                    />
-                ))
-            )}
-        </div>
+                empty="No social posts in this window."
+                isEmpty={pub.length === 0}
+            >
+                {pub.map(renderCard)}
+            </ThreeWayColumn>
+        </ThreeWayGrid>
     );
 }
 
@@ -451,25 +428,17 @@ function buildSentimentTickerItems(data: PublicSentimentData): TickerItem[] {
 
 /** Headline naming the tier with the most tonally-different read on the
  *  day, plus the single biggest topic divergence when present. */
-function readsAsToday(data: PublicSentimentData): string {
-    const tiers: Array<[string, number, number]> = [
-        ['News outlets', aggregateTier(data.byNewsOutlet).net, aggregateTier(data.byNewsOutlet).volume],
-        ['Officials',    aggregateTier(data.byOfficial).net,    aggregateTier(data.byOfficial).volume],
-        ['The public',   aggregateTier(data.byGeneralPublic).net, aggregateTier(data.byGeneralPublic).volume],
-    ];
-    const withVolume = tiers.filter(([, , v]) => v > 0);
-    if (withVolume.length === 0) return 'No scored posts in this window yet.';
-
-    withVolume.sort((a, b) => a[1] - b[1]);
-    const lowest = withVolume[0];
-    const highest = withVolume[withVolume.length - 1];
-    const parts: string[] = [];
-    if (withVolume.length >= 2 && highest[1] - lowest[1] >= 10) {
-        parts.push(`${highest[0]} are reading most positive (${highest[1] >= 0 ? '+' : ''}${highest[1].toFixed(1)}%) while ${lowest[0].toLowerCase()} read most negative (${lowest[1] >= 0 ? '+' : ''}${lowest[1].toFixed(1)}%).`);
-    } else {
-        parts.push(`All three tiers reading within a few points of each other — no dominant divergence today.`);
-    }
-    return parts.join(' ');
+/**
+ * Static framing sentence for the Overall Tone page. Earlier versions
+ * templated in per-tier net scores ("News outlets are reading most positive
+ * (+4.2%) while the public..."), which leaked internal metric language
+ * ("tiers", "dominant divergence") into a banner that non-technical readers
+ * skim first. The static sentence frames the page without pretending to
+ * summarize the data — the grid and divergence panel below do the actual
+ * summarizing in shapes they're built for.
+ */
+function readsAsToday(_data: PublicSentimentData): string {
+    return 'How news outlets, public officials, and everyday people are reading American politics.';
 }
 
 
@@ -548,7 +517,7 @@ function PublicSentiment({ filters }: PublicSentimentProps) {
 
             {/* Three-way grid: News / Officials / Public. */}
             <div className="col-span-12">
-                <ThreeWayGrid
+                <SentimentThreeWayGrid
                     newsOutlets={data.byNewsOutlet ?? []}
                     officials={data.byOfficial ?? []}
                     generalPublic={data.byGeneralPublic ?? []}

@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import {
     Card, CollapsibleInfo, EmptyState, EntityProfileCard, ErrorState, GlobalTicker,
-    LoadingCard, MethodPopover, MetricCard, Modal, entityExternalUrl,
+    LoadingCard, MethodPopover, MetricCard, Modal,
+    ThreeWayColumn, ThreeWayGrid,
+    entityExternalUrl,
 } from '../components/common';
 import type { TickerItem } from '../components/common';
 import { Heatmap } from '../components/charts';
@@ -43,59 +45,44 @@ function BotEntityCard({ item }: { item: BotEntityItem }) {
     );
 }
 
-function BotThreeWayColumn({
-    header, byline, items, empty,
-}: {
-    header: string;
-    byline: string;
-    items: BotEntityItem[];
-    empty: string;
-}) {
-    return (
-        <div className="three-way-column">
-            <div>
-                <div className="three-way-column-header">{header}</div>
-                <div className="three-way-column-byline">{byline}</div>
-            </div>
-            {items.length === 0 ? (
-                <p className="text-xs text-muted" style={{ padding: 'var(--space-3)' }}>{empty}</p>
-            ) : (
-                items.slice(0, BOT_TOP_N).map((it) => (
-                    <BotEntityCard key={`${it.kind}:${it.key}`} item={it} />
-                ))
-            )}
-        </div>
-    );
-}
-
 function BotThreeWayGrid({ overview }: { overview: BotOverview }) {
-    const outlets = overview.by_news_outlet ?? [];
-    const officials = overview.by_official ?? [];
-    const publics = overview.by_general_public ?? [];
-    const hasAny = outlets.length + officials.length + publics.length > 0;
-    if (!hasAny) return null;
+    // Always render the three-way frame when we have an overview, even if
+    // individual tiers are empty — per-column empty copy is more honest
+    // ("no official X posts scored") than hiding the grid entirely.
+    const outlets = (overview.by_news_outlet ?? []).slice(0, BOT_TOP_N);
+    const officials = (overview.by_official ?? []).slice(0, BOT_TOP_N);
+    const publics = (overview.by_general_public ?? []).slice(0, BOT_TOP_N);
+    const renderCard = (it: BotEntityItem) => (
+        <BotEntityCard key={`${it.kind}:${it.key}`} item={it} />
+    );
 
     return (
-        <div className="three-way-grid">
-            <BotThreeWayColumn
+        <ThreeWayGrid>
+            <ThreeWayColumn
                 header="The News"
                 byline="Outlets whose scanned posts classify as bot — should skew near 0%."
-                items={outlets}
                 empty="No news posts scored for bot detection."
-            />
-            <BotThreeWayColumn
+                isEmpty={outlets.length === 0}
+            >
+                {outlets.map(renderCard)}
+            </ThreeWayColumn>
+            <ThreeWayColumn
                 header="Politicians & Officials"
                 byline="Tracked officeholders on X, ranked by bot-classification rate of their posts."
-                items={officials}
                 empty="No official X posts scored for bot detection."
-            />
-            <BotThreeWayColumn
+                isEmpty={officials.length === 0}
+            >
+                {officials.map(renderCard)}
+            </ThreeWayColumn>
+            <ThreeWayColumn
                 header="The Public"
                 byline="Subreddits + the broader X user catch-all — where bot amplification actually lives."
-                items={publics}
                 empty="No public social posts scored for bot detection."
-            />
-        </div>
+                isEmpty={publics.length === 0}
+            >
+                {publics.map(renderCard)}
+            </ThreeWayColumn>
+        </ThreeWayGrid>
     );
 }
 
@@ -283,26 +270,52 @@ function NarrativeAmplificationCard({ narrative }: NarrativeAmplificationCardPro
                 subtitle={`${narrative.suspectedBotVolume.toLocaleString()} suspected bot posts · ${narrative.confidence} likelihood`}
                 accentColor={accentColor}
             >
-                {/* Example Posts */}
+                {/* Example Posts — every row carries an outbound source link
+                    when the backend synthesized one (invariant C1). */}
                 <div className="mb-4">
-                    <div className="eyebrow mb-2">Example Posts</div>
-                    <div className="flex flex-col gap-2">
-                        {narrative.examplePosts.map((post, i) => (
-                            <div
-                                key={i}
-                                className="text-sm"
-                                style={{
-                                    padding: 'var(--space-2) var(--space-3)',
-                                    background: 'var(--bg-inset)',
-                                    borderLeft: '2px solid var(--neutral-300)',
-                                    borderRadius: '2px',
-                                    fontStyle: 'italic',
-                                }}
-                            >
-                                "{post}"
-                            </div>
-                        ))}
-                    </div>
+                    <div className="eyebrow mb-2">Flagged Posts</div>
+                    {narrative.examplePosts.length === 0 ? (
+                        <div className="text-sm text-muted" style={{ fontStyle: 'italic' }}>
+                            No individual posts surfaced yet for this indicator.
+                        </div>
+                    ) : (
+                        <div className="flex flex-col gap-2">
+                            {narrative.examplePosts.map((ex) => (
+                                <div
+                                    key={ex.doc_id}
+                                    style={{
+                                        padding: 'var(--space-2) var(--space-3)',
+                                        background: 'var(--bg-inset)',
+                                        borderLeft: '2px solid var(--neutral-300)',
+                                        borderRadius: '2px',
+                                    }}
+                                >
+                                    <div
+                                        className="text-sm"
+                                        style={{ fontStyle: 'italic', marginBottom: 4 }}
+                                    >
+                                        "{ex.text}"
+                                    </div>
+                                    <div
+                                        className="text-xs text-muted"
+                                        style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'baseline' }}
+                                    >
+                                        <span>{ex.source_label}</span>
+                                        {ex.url && (
+                                            <a
+                                                href={ex.url}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                                className="example-row-link"
+                                            >
+                                                View original ↗
+                                            </a>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </div>
 
                 {/* Hashtags and Phrases */}
