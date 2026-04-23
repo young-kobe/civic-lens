@@ -563,32 +563,36 @@ function tierChipsForNarrative(n: NarrativeSummary): string[] {
     return Array.from(seen);
 }
 
+const CROSS_TIER_LIMIT = 5;
+
 /**
  * The same story is showing up in more than one group (the news is
- * talking about it AND officials are AND/OR the public is). Rename
- * softened from the jargon-y "cross-tier" to everyday language.
+ * talking about it AND officials are AND/OR the public is). Capped at
+ * CROSS_TIER_LIMIT to match the mockups — reads as a scannable list,
+ * not an exhaustive feed.
  */
 function ClaimsSpreadingPanel({ narratives, onOpen }: { narratives: NarrativeSummary[]; onOpen: (n: NarrativeSummary) => void }) {
     if (narratives.length === 0) {
         return (
             <Card
-                title="Claims spreading between groups"
-                subtitle="Stories we've seen pop up in more than one of The News / Officials / The Public"
+                title="Top political narratives"
+                subtitle="No stories are being repeated across more than one group yet — the news, officials, and the public aren't overlapping in this window."
             >
                 <p className="text-muted text-sm">
-                    No stories in this window have surfaced in more than one group yet.
+                    Check back as coverage develops.
                 </p>
             </Card>
         );
     }
 
+    const visible = narratives.slice(0, CROSS_TIER_LIMIT);
     return (
         <Card
             title="Top political narratives"
-            subtitle={`${narratives.length} ${narratives.length === 1 ? 'story is' : 'stories are'} being repeated by more than one group — the news, officials, and the public are all talking about them.`}
+            subtitle={`${visible.length} ${visible.length === 1 ? 'story is' : 'stories are'} being repeated by more than one group — the news, officials, and the public are all talking about them.`}
         >
             <div className="cross-tier-list">
-                {narratives.map((n) => {
+                {visible.map((n) => {
                     const tiers = tierChipsForNarrative(n);
                     return (
                         <button
@@ -658,14 +662,11 @@ function Narratives({ filters }: NarrativesProps) {
             </div>
         );
     }
-    if (!data || data.length === 0) {
-        return (
-            <EmptyState
-                title="No narratives detected"
-                description="No claims have been clustered yet for this time window. Run the analysis pipeline (claims + narratives tasks) to populate this view."
-            />
-        );
-    }
+    // Early-return only when the fetch itself yielded nothing. An empty
+    // narratives array (zero clusters) is a valid state — render the frame
+    // with per-column "No X-originated stories in this window" copy so
+    // readers can see which axes are empty, matching Tone's behavior.
+    if (!data) return <EmptyState title="No narratives data available" />;
 
     // Client-side source filter (API already returns all sources).
     const sourceMatches = (st: string | null): boolean => {

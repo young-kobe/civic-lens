@@ -19,8 +19,10 @@ import sys
 import os
 import time
 import argparse
+from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any, Dict, List
 
 # Ensure project root is in path. job_runner lives at
 # <repo>/analysis/src/scheduler/job_runner.py, so four parents up is the repo.
@@ -374,27 +376,54 @@ class AnalysisJobRunner:
             logger.info("Propaganda detection: no unprocessed docs")
             return 0
 
-        logger.info(f"Processing {total} docs for propaganda detection")
-        for i, doc in enumerate(docs, 1):
-            result = self.propaganda_detector.detect(doc["text"])
-            payload = result.to_dict()
-            self.loader.save_ai_output(
-                doc["doc_id"],
-                "propaganda",
-                payload,
-                result.overall_propaganda_score,
-                model_id=self.model_id,
-                prompt_version=PROPAGANDA_PROMPT_VERSION,
-                system_prompt=PROPAGANDA_SYSTEM_PROMPT,
-                user_prompt_template=PROPAGANDA_USER_PROMPT_TEMPLATE,
-                inference_method=result.inference_method,
+        # De-dup by raw_hash so syndicated wire stories (same AP/Reuters
+        # copy re-hosted by multiple outlets) are LLM-scored once and the
+        # result is fanned out to every sibling doc. Docs with a null/empty
+        # raw_hash (rare — pre-migration-006 rows, or future source types
+        # we haven't backfilled) get a per-doc sentinel key so they don't
+        # collapse into a single bucket.
+        groups: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+        for doc in docs:
+            key = doc.get("raw_hash") or f"__no_hash__:{doc['doc_id']}"
+            groups[key].append(doc)
+
+        scored_groups = 0
+        duplicates_fanned = 0
+        logger.info(
+            f"Processing {total} docs for propaganda detection "
+            f"({len(groups)} unique content hashes)"
+        )
+        for group in groups.values():
+            primary = group[0]
+            result = self.propaganda_detector.detect(
+                primary["text"], title=primary.get("title"),
             )
+            payload = result.to_dict()
+            for doc in group:
+                self.loader.save_ai_output(
+                    doc["doc_id"],
+                    "propaganda",
+                    payload,
+                    result.overall_propaganda_score,
+                    model_id=self.model_id,
+                    prompt_version=PROPAGANDA_PROMPT_VERSION,
+                    system_prompt=PROPAGANDA_SYSTEM_PROMPT,
+                    user_prompt_template=PROPAGANDA_USER_PROMPT_TEMPLATE,
+                    inference_method=result.inference_method,
+                )
+            scored_groups += 1
+            duplicates_fanned += len(group) - 1
             logger.debug(
-                f"[propaganda {i}/{total}] doc={doc['doc_id']} "
+                f"[propaganda {scored_groups}/{len(groups)}] "
+                f"hash={primary.get('raw_hash', '(none)')[:8]}… "
+                f"docs={len(group)} "
                 f"techniques={len(result.techniques)} "
                 f"score={result.overall_propaganda_score:.2f}"
             )
-        logger.info(f"Propaganda detection complete: {total} docs processed")
+        logger.info(
+            f"Propaganda detection complete: {total} docs processed "
+            f"({scored_groups} LLM calls, {duplicates_fanned} dedup-fanned)"
+        )
         return total
 
     def run_citation_extraction(self, limit: int | None = None) -> int:

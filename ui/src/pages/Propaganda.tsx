@@ -579,14 +579,13 @@ function Propaganda({ filters }: PropagandaProps) {
             </div>
         );
     }
-    if (!data || data.total_eligible_docs === 0) {
-        return (
-            <EmptyState
-                title="No propaganda-scored posts yet"
-                description="Run the analysis pipeline with the LLM backend enabled to populate this view."
-            />
-        );
-    }
+    // Early-return only when the fetch itself yielded nothing. Zero flagged
+    // docs is a legitimate state that the page should render honestly —
+    // GlobalTicker + three-way grid with per-column empty copy, same as
+    // Tone and Narratives do. Hiding the frame on empty data was
+    // misleading: a stalled propaganda-detection cron looked identical to
+    // a clean run with nothing to flag.
+    if (!data) return <EmptyState title="No propaganda data available" />;
 
     const windowLabel = formatTimeWindow(filters.timeRange);
     const hasEntityData =

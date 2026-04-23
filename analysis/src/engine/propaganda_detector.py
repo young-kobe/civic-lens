@@ -26,7 +26,10 @@ from __future__ import annotations
 
 from typing import List, Optional
 
+import re
+
 from analysis.src.common.logger import get_logger
+from analysis.src.engine.constants import INTENSIFIERS, NEGATIVE_WORDS
 from analysis.src.engine.models import PropagandaResult, PropagandaTechnique
 from analysis.src.llm.prompts import (
     PROPAGANDA_SYSTEM_PROMPT,
@@ -41,6 +44,40 @@ logger = get_logger(__name__)
 
 MIN_EVIDENCE_WORDS = 4
 UNVERIFIED_EVIDENCE_CAP = 0.2
+
+# Character budget for the text the LLM actually sees. Propaganda techniques
+# (loaded language, name-calling, appeal-to-fear, etc.) surface in the
+# opening rhetoric of a piece — the hook paragraphs, not paragraph 12. Was
+# 2500 chars; dropped to 800 to cut per-call token cost by ~70%. Roughly
+# "headline + first 2-3 paragraphs" of news copy. Social posts are always
+# under this cap so they're unaffected.
+PROPAGANDA_TEXT_MAX_CHARS = 800
+
+# Tokenizer used by the pre-filter. Matches the tokenization used by the
+# sentiment engine so the two agree on what counts as a "word".
+_WORD_RE = re.compile(r"[a-zA-Z']+")
+
+# Loaded-language keyword set used by the pre-filter. Union of the
+# engine's negative-word lexicon (what fuels name-calling, appeal-to-fear)
+# and its intensifier list (what amplifies that language). If a doc's
+# opening ~600 chars contain zero of these, propaganda techniques are
+# overwhelmingly unlikely — we write a deterministic empty result instead
+# of burning an LLM call. The lexicon is deliberately broad; the pre-filter
+# should aim for high recall, not precision.
+_LOADED_LEXICON = NEGATIVE_WORDS | INTENSIFIERS
+_PRE_FILTER_SCAN_CHARS = 600
+
+
+def _has_loaded_language(text: str) -> bool:
+    """True if the first ``_PRE_FILTER_SCAN_CHARS`` contain any loaded
+    token from the combined negative + intensifier lexicon."""
+    if not text:
+        return False
+    window = text[:_PRE_FILTER_SCAN_CHARS].lower()
+    for match in _WORD_RE.finditer(window):
+        if match.group() in _LOADED_LEXICON:
+            return True
+    return False
 
 
 def _validate_technique(raw: dict, source_text: str) -> Optional[PropagandaTechnique]:
@@ -80,17 +117,37 @@ class PropagandaDetector:
             if not self._llm_client.is_available:
                 raise RuntimeError("LLM client not available for PropagandaDetector")
 
-    def detect(self, text: str) -> PropagandaResult:
-        """Analyze one doc. Returns an empty result when LLM is disabled/fails."""
+    def detect(self, text: str, title: Optional[str] = None) -> PropagandaResult:
+        """Analyze one doc. Returns an empty result when LLM is disabled/fails.
+
+        When ``title`` is provided, it's prepended to the body so the LLM
+        sees "HEADLINE\\n\\nBODY…" — propaganda techniques often live in the
+        headline wording. The combined string is clamped to
+        ``PROPAGANDA_TEXT_MAX_CHARS`` to keep per-call token cost bounded.
+        """
         if not text or not self.llm_enabled or self._llm_client is None:
             return PropagandaResult()
         if not self._llm_client.is_available:
             return PropagandaResult()
 
+        combined = f"{title}\n\n{text}" if title else text
+        clamped = combined[:PROPAGANDA_TEXT_MAX_CHARS]
+
+        # Loaded-language pre-filter. Docs whose opening contains zero
+        # negative-or-intensifier tokens almost never surface propaganda
+        # techniques (the six starter techniques — loaded language,
+        # name-calling, ad hominem, appeal to fear, whataboutism,
+        # doubt-casting — all require loaded vocabulary to land). Short-
+        # circuit with a deterministic empty result so the doc lands in
+        # ai_outputs and isn't re-queued on the next pipeline run. Cuts
+        # LLM fan-out materially on straight-wire news coverage.
+        if not _has_loaded_language(clamped):
+            return PropagandaResult(inference_method="deterministic")
+
         try:
             response = self._llm_client.complete(
                 system_prompt=PROPAGANDA_SYSTEM_PROMPT,
-                user_prompt=PROPAGANDA_USER_PROMPT_TEMPLATE.format(text=text[:2500]),
+                user_prompt=PROPAGANDA_USER_PROMPT_TEMPLATE.format(text=clamped),
                 response_schema=PROPAGANDA_SCHEMA,
             )
         except Exception as e:
@@ -102,7 +159,10 @@ class PropagandaDetector:
         raw_techniques = raw_techniques[:5]
         validated: List[PropagandaTechnique] = []
         for raw in raw_techniques:
-            t = _validate_technique(raw, text)
+            # Validate evidence-span substring match against the *clamped*
+            # text — the LLM only saw those characters, so any verbatim span
+            # it quotes must appear inside that window.
+            t = _validate_technique(raw, clamped)
             if t is not None:
                 validated.append(t)
 

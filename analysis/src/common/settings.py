@@ -33,7 +33,12 @@ class Settings(BaseSettings):
     
     # Analysis Scope & Batching
     run_analysis_on: Literal["all", "social_media", "x"] = "social_media"
-    loader_batch_size: int = 500
+    # Per-run ceiling on unscored docs handed to each pipeline stage.
+    # Upper bound on per-stage LLM spend per cron fire (4×/day analyze).
+    # Was 500; dropped to 200 so a single run can't blow through the $15/mo
+    # Gemini budget even if the backlog spikes. Override via
+    # CIVIC_LOADER_BATCH_SIZE if you intentionally want to catch up a backlog.
+    loader_batch_size: int = 200
     
     # Gemini LLM Config
     gemini_api_key: str = ""

@@ -605,14 +605,12 @@ function BotActivityProfiler({ filters }: BotActivityProfilerProps) {
         );
     }
 
-    if (!data || data.overview.totalFlaggedAccounts === 0) {
-        return (
-            <EmptyState
-                title="No Bot Activity Data"
-                description="No bot detection analysis has been run yet. Run the analysis pipeline to generate data."
-            />
-        );
-    }
+    // Early-return only when the fetch itself yielded nothing. Zero flagged
+    // accounts is a legitimate signal (pipeline ran, nothing tripped) — the
+    // frame still renders with per-column empty copy, matching Tone's
+    // pattern. Previously this hid the whole page, which made a healthy
+    // "nothing to flag" run indistinguishable from a broken pipeline.
+    if (!data) return <EmptyState title="No bot-activity data available" />;
 
     const { items: botTickerItems, accentColor: botAccentColor } = buildBotTickerItems(data.overview);
     const botRefreshed = formatRefreshedAgo(getSnapshotTimestamp(snapshotStatus, 'bot_activity'));
