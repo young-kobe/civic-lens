@@ -96,18 +96,34 @@ function friendlyCluster(cluster: string): string {
     return cluster.replace(/^www\./i, '');
 }
 
-/** Headline derived from top flagged cluster + automation rate.
- *
- *  The backend bot detector (analysis/src/engine/bot.py::_sanitize_llm_indicators)
- *  already drops `=None` / `=0` / `=null` / `=undefined` / trailing-`=`
- *  noise at the source, so this code can trust `narrativeAmplification[0]`
- *  to be a real topic label rather than a field-name artifact. Any
- *  historical ai_outputs rows written before that fix will age out of
- *  the snapshot windows within 7 days. */
+/**
+ * True for narrative/indicator labels that are actually raw signal
+ * artifacts — `account_age=None days`, `followers=0`, `field=null`,
+ * trailing `=`, etc. The backend bot detector sanitizes these at write
+ * time (`_sanitize_llm_indicators` in `analysis/src/engine/bot.py`),
+ * but historical `ai_outputs` rows written before that fix landed can
+ * surface in the 24h/7d/30d aggregations until they age out of the
+ * window. Filtering on display keeps readers from seeing a leaked
+ * internal field name while the snapshot cache rebuilds.
+ */
+function isNoiseLabel(label: string | null | undefined): boolean {
+    if (!label) return true;
+    const text = label.trim();
+    if (!text) return true;
+    if (/=\s*(None|null|undefined|0)\b/i.test(text)) return true;
+    if (/=\s*$/.test(text)) return true;
+    return false;
+}
+
+/** Headline derived from top flagged cluster + automation rate. */
 function readsAsToday(data: BotData): string {
     const rate = data.overview.suspectedAutomationRate;
     const topCluster = data.overview.topClusters[0];
-    const topNarrative = data.narrativeAmplification[0];
+    // Prefer the first non-noise narrative so we don't headline the banner
+    // with a leaked signal-field name from a pre-sanitization row.
+    const topNarrative = data.narrativeAmplification.find(
+        (n) => !isNoiseLabel(n.narrative),
+    );
     const parts: string[] = [];
     const ratePct = formatPct(rate, { decimals: 0 });
     if (rate > 10) {
@@ -209,15 +225,19 @@ interface NarrativeAmplificationCardProps {
 
 function NarrativeAmplificationCard({ narrative }: NarrativeAmplificationCardProps) {
     const [modalOpen, setModalOpen] = useState(false);
-    // `whyFlagged` is sanitized by the backend bot detector now —
-    // `_sanitize_llm_indicators` in analysis/src/engine/bot.py drops any
-    // `=None` / `=0` / `=null` / `=undefined` / trailing-`=` noise before
-    // the indicators ever reach ai_outputs. See
-    // docs/todos/bot-propaganda-entity-signals.md (§"Sanitize whyFlagged
-    // at source"). We still short-circuit on an empty list so the card
-    // doesn't render with a title but no "Why Flagged" content.
-    const whyFlagged = narrative.whyFlagged ?? [];
-    if (whyFlagged.length === 0) return null;
+    // Transition-period filter. Backend sanitizes `indicators` at write
+    // time (`_sanitize_llm_indicators` in analysis/src/engine/bot.py), but
+    // ai_outputs rows written before that fix can still surface in the
+    // aggregation window. Drop noise entries so readers never see a leaked
+    // `account_age=None days`-style indicator; once the snapshot cache
+    // fully rebuilds with only post-fix rows (max 7 days), this filter
+    // becomes a no-op and can be removed.
+    const whyFlagged = (narrative.whyFlagged ?? []).filter((r) => !isNoiseLabel(r));
+    // If the narrative ITSELF is a noise artifact (its label matches the
+    // pattern) OR every signal filtered out, suppress the card — showing
+    // an amplification card with a title like "ACCOUNT_AGE=NONE DAYS" is
+    // worse than showing nothing.
+    if (isNoiseLabel(narrative.narrative) || whyFlagged.length === 0) return null;
 
     const getConfidenceBadge = (confidence: ConfidenceLevel) => {
         switch (confidence) {

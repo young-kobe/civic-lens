@@ -67,11 +67,26 @@ That produces two failure modes:
     2. `_sanitize_llm_indicators()` filters the returned indicators
        array, dropping any `=None` / `=0` / `=null` / `=undefined` /
        trailing-`=` entries that slip through.
-  UI-side `sanitizeWhyFlagged` + `isNoiseNarrative` workarounds in
-  `BotActivityProfiler.tsx` removed. Unit tests in
-  `analysis/tests/test_bot_indicator_sanitization.py` (12 cases).
-  Historical ai_outputs rows written before this fix may surface noise
-  until they age out of the snapshot windows (~7 days).
+  Unit tests in `analysis/tests/test_bot_indicator_sanitization.py`
+  (12 cases).
+- [ ] **Remove the UI-side transition-period noise filter.** After
+  landing the backend sanitizer, production screenshots still showed
+  `account_age=None days` on the Bot Detector page because the 24h /
+  7d / 30d snapshot windows still held `ai_outputs` rows written by
+  the pre-fix detector. On 2026-04-23 a slim `isNoiseLabel()` guard
+  was re-added to `ui/src/pages/BotActivityProfiler.tsx` as a pure
+  display-time filter: it drops noise entries from `whyFlagged`, picks
+  the first non-noise narrative for the banner, and suppresses
+  amplification cards whose narrative label itself is an artifact
+  (e.g. `ACCOUNT_AGE=NONE DAYS`). Once every pre-fix row has aged out
+  of the 30d window — which happens automatically after the scheduled
+  `analyze` + `snapshots` pipeline rebuilds the cache past 2026-05-23
+  (30 days after the sanitizer landed) — this filter becomes a
+  no-op and should be removed along with the `isNoiseLabel()` helper.
+  To accelerate: run `./run.ps1 analyze` (or `systemctl start
+  civic-lens-analyze`) against a DB whose narratives/indicators
+  frequency-maps have dropped below the noise threshold, then delete
+  the filter in the same PR.
 - [ ] **Per-entity amplification attribution.** When the detector
   identifies coordinated amplification of a narrative, surface *which
   registered entity (official / outlet / subreddit)* the amplification

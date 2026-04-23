@@ -147,3 +147,5 @@ data/cache/*
 
 
 clear_ai_outputs.py
+
+docs/evidence/*

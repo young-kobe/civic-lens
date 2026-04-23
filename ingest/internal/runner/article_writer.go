@@ -136,6 +136,26 @@ func (w *ArticleWriter) flush(ctx context.Context, batch []articleEntry) {
 		return
 	}
 
+	// When WriteFromMeta prefers the HTML's <link rel="canonical"> over the
+	// URL we actually fetched, the canonical URL is often NOT in the `pages`
+	// table yet (only the fetched url_canon is). articles_raw has a FK to
+	// pages(url_canon) so the insert fails with SQLITE_CONSTRAINT_FOREIGNKEY
+	// (code 787) and the article is dropped. Fix: upsert a DONE pages row
+	// for the canonical URL before the article insert. The placeholder row
+	// carries state=2 (DONE) + next_fetch_at=0 so the frontier never picks
+	// it up as work; url_raw mirrors url_canon since we don't have a
+	// separate raw form for these synthetic rows.
+	pageStmt, err := tx.PrepareContext(ctx, `
+		INSERT OR IGNORE INTO pages (url_canon, url_raw, domain, state, priority, retries, next_fetch_at, inflight_at)
+		VALUES (?, ?, ?, 2, 0, 0, 0, 0)
+	`)
+	if err != nil {
+		log.Printf("ArticleWriter: prepare pages upsert failed: %v", err)
+		tx.Rollback()
+		return
+	}
+	defer pageStmt.Close()
+
 	stmt, err := tx.PrepareContext(ctx, `
 		INSERT INTO articles_raw (url_canon, domain, fetched_at, published_at, title, raw_hash, extraction_version)
 		VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -154,6 +174,12 @@ func (w *ArticleWriter) flush(ctx context.Context, batch []articleEntry) {
 	defer stmt.Close()
 
 	for _, e := range batch {
+		// Ensure a pages row exists for this canonical URL so the
+		// articles_raw FK resolves. No-op when the row already exists.
+		if _, err := pageStmt.ExecContext(ctx, e.CanonURL, e.CanonURL, e.Domain); err != nil {
+			log.Printf("ArticleWriter: pages upsert %s failed: %v", e.CanonURL, err)
+			continue
+		}
 		if _, err := stmt.ExecContext(ctx, e.CanonURL, e.Domain, e.FetchedAt, e.PublishedAt, e.Title, e.RawHash, e.Version); err != nil {
 			log.Printf("ArticleWriter: insert %s failed: %v", e.CanonURL, err)
 		}

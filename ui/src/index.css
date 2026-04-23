@@ -204,18 +204,27 @@ body {
   background-color: var(--bg-app);
   /* Paper-grain overlay (iteration 3). SVG noise data-URI at very low
      opacity gives the app background a subtle tactile feel without
-     introducing a real image asset. Layered as an image over the
-     solid background so cards stay on clean white. */
+     introducing a real image asset.
+     NOTE: `background-attachment: fixed` was removed 2026-04-23. On iOS
+     Safari, combining it with `overflow-x: hidden` on body creates a
+     scroll-containing block that breaks `position: fixed` on descendants
+     — specifically, the bottom nav bar on phones would drift off-screen
+     or clip mid-row depending on the page. The overlay still renders
+     correctly as a non-repeating static pattern; tactile effect is
+     visually indistinguishable to a reader. */
   background-image: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 140 140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.12 0 0 0 0 0.10 0 0 0 0 0.07 0 0 0 0.07 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-  background-attachment: fixed;
   min-height: 100vh;
   min-height: 100dvh;
   font-feature-settings: 'cv11', 'ss01';
   overscroll-behavior-y: none;
-  /* Belt-and-suspenders: never let a stray wide child force horizontal
-     scroll on the whole page. Components that genuinely need to scroll
-     (heatmap grid, long tables) must handle it in their own wrapper. */
-  overflow-x: hidden;
+  /* `overflow-x: clip` prevents horizontal overflow WITHOUT creating a
+     scroll container — essential on iOS so `position: fixed` on the
+     bottom nav stays anchored to the visual viewport. `overflow-x: hidden`
+     (the prior value) creates a scroll container in Safari that breaks
+     fixed positioning for any descendant. `clip` has ~97% browser
+     support and degrades gracefully (older browsers allow horizontal
+     scroll, which individual components already guard against). */
+  overflow-x: clip;
 }
 
 h1, h2, h3, h4, h5, h6 {
@@ -1665,23 +1674,37 @@ code, pre {
   white-space: nowrap;
 }
 
-/* The visual wrapper pushes its widgets to the right edge of the grid
-   cell and gives them a small, consistent gap. Widgets are fixed-width
-   (trend 60px, bar 120px) so the cluster always occupies the same
-   horizontal space no matter which widgets are present. */
+/* Visuals wrapper — uses a 4-slot grid (not flex) so each widget sits in
+   a fixed-width column regardless of which components render which
+   widgets. Layout:
+     [trend 60px] [bar 120px] [hint auto] [trailing pad 1fr]
+   The trailing `1fr` absorbs any remaining horizontal space so the
+   cluster stays tight against the value column rather than drifting
+   to the right edge with a huge gap. Both GOP mini (trend + bar) and
+   Intensity mini (bar + hint) render into the SAME column positions;
+   missing widgets leave their slot empty instead of compressing the
+   row. This is what makes the two cards look structurally identical
+   in the 2-up aux grid.
+
+   Previously this was flex with `justify-content: flex-end` — and the
+   trend's width was pinned at 60px via `flex: 0 0 60px`. Flex was
+   deterministic within a card, but BETWEEN cards the widget sizes
+   could differ because individual children computed their sizes
+   against their own container. Grid locks cross-card alignment. */
 .mini-metric-visual {
-  display: flex;
+  display: grid;
+  grid-template-columns: 60px 120px auto 1fr;
   align-items: center;
-  justify-content: flex-end;
-  gap: var(--space-2);
+  column-gap: var(--space-2);
   min-width: 0;
 }
 
 .mini-metric-trend {
   display: block;
-  flex: 0 0 60px;
   width: 60px;
   height: 22px;
+  overflow: hidden;
+  grid-column: 1;
 }
 
 /* Placeholder painted when a filter yields too few daily points to draw
@@ -1702,14 +1725,16 @@ code, pre {
 
 .mini-metric-bar {
   display: flex;
-  flex: 0 0 120px;
   width: 120px;
   height: 8px;
   border-radius: 4px;
   overflow: hidden;
   background: var(--neutral-100);
+  grid-column: 2;
 }
 .mini-metric-bar > span { display: block; height: 100%; }
+
+.mini-metric-hint { grid-column: 3; }
 
 /* Empty states — render the slot at the same dimensions but visually
    muted so the 2-up aux grid stays symmetric when one side has no data. */
@@ -1746,11 +1771,13 @@ code, pre {
   .top-metrics-aux { grid-template-columns: 1fr; }
 }
 
-/* Phones — the fixed 60 + 120 + gap on the visual wrapper plus the
-   label + value intrinsic widths can exceed a 320px viewport. Collapse
-   to a two-row layout: label + value on the top row, visual cluster
-   on the bottom row spanning the full card. Both mini-metrics render
-   at the same height because the visuals take the same space. */
+/* Phones — 60 + 120 + intrinsic label + value widths exceed a 320px
+   viewport. Collapse to a two-row layout: label + value on the top row,
+   visual cluster spanning both columns on the bottom row. Visual
+   wrapper switches from 4-slot grid to a 3-slot grid (trend 44 / bar
+   stretch / hint auto) so the bar gets the remaining horizontal space.
+   Both mini-metrics collapse identically — same row structure across
+   GOP and Intensity on every phone size. */
 @media (max-width: 640px) {
   .mini-metric {
     grid-template-columns: auto 1fr;
@@ -1758,9 +1785,19 @@ code, pre {
   }
   .mini-metric-visual {
     grid-column: 1 / -1;
-    justify-content: flex-start;
+    grid-template-columns: 44px 1fr auto;
+    column-gap: var(--space-2);
   }
-  .mini-metric-bar { flex: 1 1 auto; width: 100%; min-width: 0; }
+  .mini-metric-trend {
+    width: 44px;
+    grid-column: 1;
+  }
+  .mini-metric-bar {
+    width: auto;
+    min-width: 0;
+    grid-column: 2;
+  }
+  .mini-metric-hint { grid-column: 3; }
 }
 
 
@@ -3021,6 +3058,57 @@ code, pre {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
   gap: var(--space-4);
+}
+
+/* Review page controls row.
+   Desktop: flex row, wraps at card width. Skip button pushed right via
+   margin-left:auto on .review-controls-actions.
+   Phone (≤640px): every field stacks full-width. Inputs gain padding +
+   min-height so the touch target hits WCAG's 44px. */
+.review-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+.review-controls-field {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.review-controls-input {
+  padding: 6px 10px;
+  border: 1px solid var(--neutral-300);
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+  font: inherit;
+  color: inherit;
+  min-height: 32px;
+}
+.review-controls-input-text { width: 140px; }
+.review-controls-actions { margin-left: auto; }
+
+@media (max-width: 640px) {
+  .review-controls {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-3);
+  }
+  .review-controls-field {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+  .review-controls-input {
+    width: 100%;
+    min-height: 44px;
+    padding: 10px 12px;
+    font-size: var(--text-sm);
+  }
+  .review-controls-input-text { width: 100%; }
+  .review-controls-actions { margin-left: 0; }
+  .review-controls-actions .btn { width: 100%; }
 }
 
 

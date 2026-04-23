@@ -150,27 +150,29 @@ function Review() {
                 set a reviewer ID below for attribution.
             </div>
 
-            {/* Controls */}
+            {/* Controls — layout + mobile sizing live in `.review-controls`
+                (index.css). Inputs shrink to full-width on phones and bump
+                padding so selects/text fields hit the 44px touch target. */}
             <Card>
-                <div className="flex items-center gap-4 flex-wrap">
-                    <div className="flex items-center gap-2">
+                <div className="review-controls">
+                    <div className="review-controls-field">
                         <span className="eyebrow">Task:</span>
                         <select
                             value={task}
                             onChange={(e) => setTask(e.target.value as ReviewTaskType)}
-                            style={{ padding: '4px 8px', border: '1px solid var(--neutral-300)' }}
+                            className="review-controls-input"
                         >
                             {TASK_OPTIONS.map((t) => (
                                 <option key={t.id} value={t.id}>{t.label}</option>
                             ))}
                         </select>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="review-controls-field">
                         <span className="eyebrow">Only conf ≤</span>
                         <select
                             value={confidenceMax === null ? '' : String(confidenceMax)}
                             onChange={(e) => setConfidenceMax(e.target.value === '' ? null : parseFloat(e.target.value))}
-                            style={{ padding: '4px 8px', border: '1px solid var(--neutral-300)' }}
+                            className="review-controls-input"
                         >
                             <option value="">all</option>
                             <option value="0.5">0.50</option>
@@ -178,16 +180,16 @@ function Review() {
                             <option value="0.9">0.90</option>
                         </select>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="review-controls-field">
                         <span className="eyebrow">Reviewer ID:</span>
                         <input
                             value={reviewerId}
                             onChange={(e) => setReviewerId(e.target.value)}
                             placeholder="e.g. kobe"
-                            style={{ padding: '4px 8px', border: '1px solid var(--neutral-300)', width: 140 }}
+                            className="review-controls-input review-controls-input-text"
                         />
                     </div>
-                    <div style={{ marginLeft: 'auto' }}>
+                    <div className="review-controls-actions">
                         <button className="btn btn-sm" onClick={skip} disabled={!current} type="button">
                             Skip this one
                         </button>
