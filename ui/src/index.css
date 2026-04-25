@@ -3171,7 +3171,13 @@ code, pre {
 @media (max-width: 768px) {
   .grid-3, .grid-2 { grid-template-columns: 1fr; }
   .app-container { padding: 0 var(--space-3); }
-  .nav-tabs { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  /* Switch the top-nav to short labels at the tablet breakpoint so the
+     four tabs fit the viewport without horizontal scroll. The phone
+     bottom-bar (<= 640px) takes over below that. */
+  .nav-tabs { flex-wrap: nowrap; }
+  .nav-tab { padding: var(--space-2) var(--space-3); }
+  .nav-tab-label { display: none; }
+  .nav-tab-label-short { display: inline; }
 
   .page-header-subtitle,
   .page-header-separator,

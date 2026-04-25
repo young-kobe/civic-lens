@@ -5,6 +5,7 @@ import type { Filters } from './types';
 import { fetchSnapshotStatus, type SnapshotStatus } from './services/api';
 import { useFetch } from './services/useFetch';
 import { formatRefreshedAgo, latestSnapshotTimestamp } from './services/freshness';
+import { useMediaQuery, BREAKPOINTS } from './services/useMediaQuery';
 
 /* Admin mode is token-based. Visit once with ?admin=<CIVIC_ADMIN_TOKEN> to persist it;
    ?admin=0 clears it. The token is sent as X-Admin-Token on every admin-endpoint
@@ -108,7 +109,15 @@ const ADMIN_TABS: Tab[] = [
     },
 ];
 
-const TABS: Tab[] = ADMIN_MODE ? [...BASE_TABS, ...ADMIN_TABS] : BASE_TABS;
+// Review is desktop-only by design — the queue UI assumes a wide layout
+// (table columns, side-by-side reviewer panes) that doesn't condense
+// usefully on phones or small tablets. Computed at render time from
+// useMediaQuery so the tab is removed from the render tree, not just
+// hidden via CSS.
+function getTabs(isAdmin: boolean, isCompactNav: boolean): Tab[] {
+    if (!isAdmin || isCompactNav) return BASE_TABS;
+    return [...BASE_TABS, ...ADMIN_TABS];
+}
 
 // Valid tab ids — kept in sync with TABS + the 'home' landing. Used to
 // validate the URL hash before we trust it as a tab.
@@ -140,9 +149,21 @@ function App() {
     const [activeTab, setActiveTab] = useState(readTabFromHash);
     const [filters, setFilters] = useState<Filters>({
         timeRange: '7d',
-        sourceType: 'all',
     });
     const scrolled = useScrolled();
+    // Review tab is hidden through tablet (`<= 768px`): the queue UI
+    // assumes wide-layout reviewer panes that don't condense usefully.
+    const isCompactNav = useMediaQuery(BREAKPOINTS.tablet);
+    const tabs = getTabs(ADMIN_MODE, isCompactNav);
+
+    // If the admin lands on #review and then resizes down past the tablet
+    // breakpoint, the tab is gone from the nav — bounce them home so they
+    // aren't stuck on a route the nav can't reach.
+    useEffect(() => {
+        if (isCompactNav && activeTab === 'review') {
+            setActiveTab('home');
+        }
+    }, [isCompactNav, activeTab]);
 
     useEffect(() => {
         const current = window.location.hash.replace(/^#/, '');
@@ -236,16 +257,12 @@ function App() {
                 </div>
             </header>
 
-            <Tabs tabs={TABS} activeTab={activeTab} onTabChange={setActiveTab} />
+            <Tabs tabs={tabs} activeTab={activeTab} onTabChange={setActiveTab} />
 
             {activeTab !== 'home' && (
                 <GlobalFilters
                     filters={filters}
                     onFilterChange={setFilters}
-                    /* Source filter is honored on every data page except
-                       Bot — bot detection is scoped to social platforms by
-                       definition, so the pill has nothing to narrow there. */
-                    showSourceType={activeTab !== 'bots'}
                 />
             )}
 

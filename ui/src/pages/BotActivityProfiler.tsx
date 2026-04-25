@@ -12,6 +12,7 @@ import { asOfTodayEyebrow } from '../services/timeWindow';
 import { useFetch } from '../services/useFetch';
 import { formatRefreshedAgo, getSnapshotTimestamp } from '../services/freshness';
 import { formatPct } from '../services/format';
+import { dedupeById } from '../services/dedupe';
 import { COLORS } from '../theme';
 import type {
     BehavioralSignals, BotData, BotEntityItem, BotOverview, ConfidenceLevel,
@@ -297,13 +298,18 @@ function NarrativeAmplificationCard({ narrative }: NarrativeAmplificationCardPro
                     when the backend synthesized one (invariant C1). */}
                 <div className="mb-4">
                     <div className="eyebrow mb-2">Flagged Posts</div>
-                    {narrative.examplePosts.length === 0 ? (
-                        <div className="text-sm text-muted" style={{ fontStyle: 'italic' }}>
-                            No individual posts surfaced yet for this indicator.
-                        </div>
-                    ) : (
+                    {(() => {
+                        const uniquePosts = dedupeById(narrative.examplePosts, (ex) => ex.doc_id);
+                        if (uniquePosts.length === 0) {
+                            return (
+                                <div className="text-sm text-muted" style={{ fontStyle: 'italic' }}>
+                                    No individual posts surfaced yet for this indicator.
+                                </div>
+                            );
+                        }
+                        return (
                         <div className="flex flex-col gap-2">
-                            {narrative.examplePosts.map((ex) => (
+                            {uniquePosts.map((ex) => (
                                 <div
                                     key={ex.doc_id}
                                     style={{
@@ -338,7 +344,8 @@ function NarrativeAmplificationCard({ narrative }: NarrativeAmplificationCardPro
                                 </div>
                             ))}
                         </div>
-                    )}
+                        );
+                    })()}
                 </div>
 
                 {/* Hashtags and Phrases */}

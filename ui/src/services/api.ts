@@ -7,7 +7,6 @@ import {
 const API_BASE = '/api/v1';
 
 export type TimeWindow = '24h' | '7d' | '30d' | '90d' | 'all';
-export type SourceFilter = 'all' | 'news' | 'reddit' | 'social';
 
 /**
  * Dev-only mock toggle. Set VITE_USE_MOCKS=true in ui/.env.local (gitignored)
@@ -96,15 +95,12 @@ async function fetchJSON<T>(
 
 export async function fetchSentiment(
     window: TimeWindow = '24h',
-    source: SourceFilter = 'all',
 ): Promise<PublicSentimentData> {
     if (USE_MOCKS) {
         const { mockSentiment } = await import('./fixtures');
         return mockSentiment();
     }
-    const qs = new URLSearchParams({ window });
-    if (source !== 'all') qs.set('source', source);
-    return fetchJSON<PublicSentimentData>(`/sentiment?${qs}`);
+    return fetchJSON<PublicSentimentData>(`/sentiment?window=${window}`);
 }
 
 export async function fetchBotActivity(): Promise<BotData> {
@@ -125,15 +121,12 @@ export async function fetchNarratives(window: TimeWindow = '7d', limit: number =
 
 export async function fetchPropaganda(
     window: TimeWindow = '7d',
-    source: SourceFilter = 'all',
 ): Promise<PropagandaOverview> {
     if (USE_MOCKS) {
         const { mockPropaganda } = await import('./fixtures');
         return mockPropaganda();
     }
-    const qs = new URLSearchParams({ window });
-    if (source !== 'all') qs.set('source', source);
-    return fetchJSON<PropagandaOverview>(`/propaganda?${qs}`);
+    return fetchJSON<PropagandaOverview>(`/propaganda?window=${window}`);
 }
 
 export async function fetchMovers(window: TimeWindow = '7d'): Promise<MoversResult> {
