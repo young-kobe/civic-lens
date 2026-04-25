@@ -1,24 +1,28 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
     CollapsibleInfo, EmptyState, EntityHeader, EntityProfileCard,
-    ErrorState, GlobalTicker, LoadingCard, Modal, MoversTicker, SupportingDocsTable,
+    ErrorState, GlobalTicker, LoadingCard, Modal, SupportingDocsTable,
     ThreeWayColumn, ThreeWayGrid, TierRow, TopMetricsBlock,
     classificationSampleToSupportingDoc, entityExternalUrl, entityLeanAccent, sentimentStats,
 } from '../components/common';
 import type { TickerItem } from '../components/common';
-import { Sparkline } from '../components/charts';
 import type {
-    EntitySentimentItem, Filters, MoversResult, PollingSocialComparison, PublicSentimentData,
-    SentimentDistribution,
+    ClassificationSample, EntitySentimentItem, Filters,
+    PollingSocialComparison, PublicSentimentData, SentimentBreakdown, SentimentDistribution,
 } from '../types';
-import { fetchMovers, fetchSentiment, fetchSnapshotStatus, type SnapshotStatus } from '../services/api';
+import { fetchSentiment, fetchSnapshotStatus, type SnapshotStatus } from '../services/api';
 import { asOfTodayEyebrow, formatTimeWindow } from '../services/timeWindow';
 import { formatRefreshedAgo, getSnapshotTimestamp } from '../services/freshness';
 import { formatPct } from '../services/format';
 import { transformPublicSentiment } from '../services/transformers';
 import { useFetch } from '../services/useFetch';
 import { COLORS } from '../theme';
+import {
+    TOPICS, matchesTopic, topicByKey, topicFromSlug,
+    type Topic, type TopicKey,
+} from '../services/topics';
 import { TopicDivergencePanel } from './publicSentiment/TopicDivergencePanel';
+import { TopicTabBar } from './publicSentiment/TopicTabBar';
 
 
 // --------------------------------------------------------------------------- //
@@ -26,12 +30,12 @@ import { TopicDivergencePanel } from './publicSentiment/TopicDivergencePanel';
 // --------------------------------------------------------------------------- //
 
 interface TierAggregate {
-    net: number;
+    net: number | null;     // null = no data for this tier under the active filter
     volume: number;
 }
 
 function aggregateTier(items: EntitySentimentItem[] | undefined): TierAggregate {
-    if (!items || items.length === 0) return { net: 0, volume: 0 };
+    if (!items || items.length === 0) return { net: null, volume: 0 };
     let pos = 0, neg = 0, neu = 0;
     for (const it of items) {
         pos += it.positive;
@@ -39,8 +43,25 @@ function aggregateTier(items: EntitySentimentItem[] | undefined): TierAggregate 
         neu += it.neutral;
     }
     const total = pos + neg + neu;
-    const net = total > 0 ? ((pos - neg) / total) * 100 : 0;
+    if (total === 0) return { net: null, volume: 0 };
+    const net = ((pos - neg) / total) * 100;
     return { net: Math.round(net * 10) / 10, volume: total };
+}
+
+/** Tier aggregates pulled from a single per-topic byTopic row. Returns
+ *  null-net for tiers the aggregator marked as having zero volume on the
+ *  topic — the UI distinguishes that from a real zero-net reading. */
+function aggregateTopicTier(
+    topicRow: SentimentBreakdown | null,
+    tier: 'news' | 'officials' | 'public',
+): TierAggregate {
+    if (!topicRow) return { net: null, volume: 0 };
+    const netKey = tier === 'news' ? 'newsNet' : tier === 'officials' ? 'officialsNet' : 'publicNet';
+    const volKey = tier === 'news' ? 'newsVolume' : tier === 'officials' ? 'officialsVolume' : 'publicVolume';
+    const net = topicRow[netKey] as number | null | undefined;
+    const volume = (topicRow[volKey] as number | undefined) ?? 0;
+    if (net == null || volume === 0) return { net: null, volume };
+    return { net: Math.round(net * 10) / 10, volume };
 }
 
 function toneVerb(net: number): string {
@@ -60,28 +81,43 @@ function toneColor(net: number): string {
 interface TopMetricsProps {
     data: PublicSentimentData;
     windowLabel: string;
+    activeTopic: Topic;
+    /** Per-topic row matching `activeTopic`, or null when activeTopic is
+     *  'all'. Pre-resolved by the parent so TopMetrics doesn't repeat the
+     *  lookup. */
+    topicRow: SentimentBreakdown | null;
 }
 
-function TopMetrics({ data, windowLabel }: TopMetricsProps) {
-    const news = aggregateTier(data.byNewsOutlet);
-    const officials = aggregateTier(data.byOfficial);
-    const pub = aggregateTier(data.byGeneralPublic);
+function TopMetrics({ data, windowLabel, activeTopic, topicRow }: TopMetricsProps) {
+    const isFiltered = activeTopic.key !== 'all';
+
+    // When filtered: tier rows derive from the per-topic three-way row in
+    // data.byTopic (already pre-computed by the aggregator). When not:
+    // fall back to the global per-tier entity rollups.
+    const news      = isFiltered
+        ? aggregateTopicTier(topicRow, 'news')
+        : aggregateTier(data.byNewsOutlet);
+    const officials = isFiltered
+        ? aggregateTopicTier(topicRow, 'officials')
+        : aggregateTier(data.byOfficial);
+    const pub       = isFiltered
+        ? aggregateTopicTier(topicRow, 'public')
+        : aggregateTier(data.byGeneralPublic);
+
+    const eyebrow = isFiltered
+        ? `${activeTopic.label} · As of ${windowLabel}`
+        : `As of ${windowLabel}`;
+
+    const filteredVolume = (news.volume) + (officials.volume) + (pub.volume);
+    const meta = isFiltered
+        ? `${filteredVolume.toLocaleString()} posts on ${activeTopic.label} · ${data.overview.confidence} confidence overall`
+        : `${data.overview.volume.toLocaleString()} posts · ${data.overview.confidence} confidence`;
 
     return (
         <TopMetricsBlock
-            eyebrow={`As of ${windowLabel}`}
-            meta={`${data.overview.volume.toLocaleString()} posts · ${data.overview.confidence} confidence`}
-            aux={
-                <>
-                    {data.gopFavorability && (
-                        <GOPMini
-                            favorability={data.gopFavorability}
-                            trend={data.gopTrend ?? undefined}
-                        />
-                    )}
-                    <IntensityMini distribution={data.distribution} />
-                </>
-            }
+            eyebrow={eyebrow}
+            meta={meta}
+            aux={<IntensityMini distribution={data.distribution} />}
         >
             <ToneTierRow label="News articles are" agg={news} />
             <ToneTierRow label="Officials are" agg={officials} />
@@ -91,94 +127,22 @@ function TopMetrics({ data, windowLabel }: TopMetricsProps) {
 }
 
 function ToneTierRow({ label, agg }: { label: string; agg: TierAggregate }) {
-    const color = toneColor(agg.net);
-    const axisPct = ((agg.net + 100) / 200) * 100;
-    const hasData = agg.volume > 0;
+    const hasData = agg.net !== null;
+    const color = hasData ? toneColor(agg.net!) : 'var(--neutral-500)';
+    const axisPct = hasData ? ((agg.net! + 100) / 200) * 100 : undefined;
 
     return (
         <TierRow
             label={label}
-            value={hasData ? formatPct(agg.net, { min: -100, signed: true }) : '—'}
+            value={hasData ? formatPct(agg.net!, { min: -100, signed: true }) : '—'}
             valueColor={color}
             verb={hasData
-                ? `${toneVerb(agg.net)} · ${agg.volume.toLocaleString()} posts`
-                : 'no posts yet'}
+                ? `${toneVerb(agg.net!)} · ${agg.volume.toLocaleString()} posts`
+                : 'no posts on this topic'}
             showZeroTick
-            dotPct={hasData ? axisPct : undefined}
+            dotPct={axisPct}
             dotColor={hasData ? color : undefined}
         />
-    );
-}
-
-function GOPMini({
-    favorability,
-    trend,
-}: {
-    favorability: NonNullable<PublicSentimentData['gopFavorability']>;
-    trend?: Array<{ date: string; value: number }>;
-}) {
-    const color = favorability.netFavorability > 0
-        ? COLORS.positive
-        : favorability.netFavorability < 0
-            ? COLORS.negative
-            : 'var(--neutral-500)';
-    const total = favorability.favorable + favorability.unfavorable + favorability.neutral;
-    const favPct = total > 0 ? (favorability.favorable / total) * 100 : 0;
-    const unfavPct = total > 0 ? (favorability.unfavorable / total) * 100 : 0;
-    const neuPct = total > 0 ? (favorability.neutral / total) * 100 : 0;
-
-    const hasTrend = Boolean(trend && trend.length > 1);
-    const sampleSize = total.toLocaleString();
-
-    // Native `title` tooltips on the widgets keep the page uncluttered —
-    // no popover UI, no extra JS, long-press works on touch. Each tooltip
-    // names what the widget shows, the numeric breakdown, and the sample
-    // size so a reader can tell at a glance whether a number is
-    // meaningful or from a sparse bucket.
-    const trendTitle = hasTrend
-        ? `Daily net GOP favorability over the last ${trend!.length} days in this filter. ` +
-          `Sample: ${sampleSize} posts.`
-        : 'Not enough daily points in this filter to draw a trend.';
-    const barTitle =
-        `GOP stance distribution across ${sampleSize} sampled posts: ` +
-        `${favPct.toFixed(0)}% favorable · ${neuPct.toFixed(0)}% neutral · ${unfavPct.toFixed(0)}% unfavorable.`;
-
-    return (
-        <div className="mini-metric" title={`Net GOP favorability: ${formatPct(favorability.netFavorability, { min: -100, signed: true })} across ${sampleSize} sampled posts.`}>
-            <span className="mini-metric-label">GOP party stance</span>
-            <span className="mini-metric-value" style={{ color }}>
-                {formatPct(favorability.netFavorability, { min: -100, signed: true })}
-            </span>
-            <span className="mini-metric-visual">
-                {hasTrend ? (
-                    <span className="mini-metric-trend" aria-hidden title={trendTitle}>
-                        <Sparkline
-                            data={trend!}
-                            dataKey="value"
-                            xKey="date"
-                            height={22}
-                            color={color}
-                            showTooltip={false}
-                        />
-                    </span>
-                ) : (
-                    <span
-                        className="mini-metric-trend mini-metric-trend-empty"
-                        aria-hidden
-                        title={trendTitle}
-                    />
-                )}
-                <span
-                    className="mini-metric-bar"
-                    aria-label={barTitle}
-                    title={barTitle}
-                >
-                    <span className="mini-bar-favorable" style={{ width: `${favPct}%` }} />
-                    <span className="mini-bar-neutral"  style={{ width: `${neuPct}%` }} />
-                    <span className="mini-bar-unfavorable" style={{ width: `${unfavPct}%` }} />
-                </span>
-            </span>
-        </div>
     );
 }
 
@@ -186,11 +150,6 @@ function IntensityMini({ distribution }: { distribution: SentimentDistribution }
     const total = distribution.strongPositive + distribution.mildPositive
         + distribution.neutral + distribution.mildNegative + distribution.strongNegative;
 
-    // Never return null — the parent `.top-metrics-aux` is a 2-column
-    // grid. If IntensityMini disappears, the grid loses one cell and
-    // GOPMini expands to fill both columns, which looks like a different
-    // page depending on whether the filter yielded distribution data.
-    // Instead render an "—" placeholder that occupies the same slot.
     if (total === 0) {
         return (
             <div className="mini-metric">
@@ -208,7 +167,6 @@ function IntensityMini({ distribution }: { distribution: SentimentDistribution }
     }
 
     const pct = (n: number) => (n / total) * 100;
-    // Label the biggest bucket.
     const buckets: Array<[string, number, string]> = [
         ['strongly positive', distribution.strongPositive, 'Strong +'],
         ['mild positive',     distribution.mildPositive,   'Mild +'],
@@ -230,9 +188,6 @@ function IntensityMini({ distribution }: { distribution: SentimentDistribution }
     const hintTitle =
         `${formatPct(biggestPct, { decimals: 0 })} of ${sampleSize} posts fall in the "${biggest[0]}" bucket.`;
 
-    // Same .mini-metric-visual wrapper pattern as GOPMini — the visuals
-    // (bar + hint) live inside a flex container so the top-level grid
-    // sees a consistent 3-column shape regardless of child count.
     return (
         <div
             className="mini-metric"
@@ -275,10 +230,11 @@ interface ThreeWayGridProps {
     generalPublic: EntitySentimentItem[];
     confidence: PublicSentimentData['overview']['confidence'];
     onOpen: (item: EntitySentimentItem) => void;
+    activeTopic: Topic;
 }
 
 function SentimentThreeWayGrid({
-    newsOutlets, officials, generalPublic, confidence, onOpen,
+    newsOutlets, officials, generalPublic, confidence, onOpen, activeTopic,
 }: ThreeWayGridProps) {
     const news = newsOutlets.slice(0, TOP_N);
     const offs = officials.slice(0, TOP_N);
@@ -293,11 +249,22 @@ function SentimentThreeWayGrid({
             onClick={() => onOpen(item)}
         />
     );
+
+    // When a topic is active we keep the same global entity cards (the
+    // backend doesn't yet expose per-entity per-topic rollups — see PR
+    // description). The bylines reflect that, and clicking a card opens
+    // a modal that DOES filter its evidence to the active topic, so the
+    // user-visible drill-down is honest even when the card-level score
+    // remains global.
+    const topicSuffix = activeTopic.key === 'all'
+        ? ''
+        : ` · scores are global; click to filter evidence to ${activeTopic.label}`;
+
     return (
         <ThreeWayGrid>
             <ThreeWayColumn
                 header="The News"
-                byline="Top outlets by coverage volume, with their editorial lean"
+                byline={`Top outlets by coverage volume, with their editorial lean${topicSuffix}`}
                 empty="No news articles in this window."
                 isEmpty={news.length === 0}
             >
@@ -305,7 +272,7 @@ function SentimentThreeWayGrid({
             </ThreeWayColumn>
             <ThreeWayColumn
                 header="Politicians & Officials"
-                byline="Tracked officeholders posting on X"
+                byline={`Tracked officeholders posting on X${topicSuffix}`}
                 empty="No officials have posted in this window yet."
                 isEmpty={offs.length === 0}
             >
@@ -313,7 +280,7 @@ function SentimentThreeWayGrid({
             </ThreeWayColumn>
             <ThreeWayColumn
                 header="The Public"
-                byline="Subreddits + the broader X user catch-all"
+                byline={`Subreddits + the broader X user catch-all${topicSuffix}`}
                 empty="No social posts in this window."
                 isEmpty={pub.length === 0}
             >
@@ -329,13 +296,24 @@ function SentimentThreeWayGrid({
 // --------------------------------------------------------------------------- //
 
 function EntitySentimentModal({
-    item, onClose,
+    item, onClose, activeTopic,
 }: {
     item: EntitySentimentItem;
     onClose: () => void;
+    activeTopic: Topic;
 }) {
     const { entityProfile: profile, netScore, volume, classificationSamples } = item;
     const sourceUrl = entityExternalUrl(profile);
+
+    // When a topic is active, filter the visible classification samples
+    // client-side. We don't have entity-scoped-by-topic scores from the
+    // backend (API gap), so the headline net score remains the entity's
+    // global score — the topic strip is explicit about that.
+    const allSamples: ClassificationSample[] = classificationSamples ?? [];
+    const filteredSamples = activeTopic.key === 'all'
+        ? allSamples
+        : allSamples.filter(s => matchesTopic(activeTopic, s.title, s.full_text, ...s.evidence_spans));
+    const samplesAreFiltered = activeTopic.key !== 'all';
 
     return (
         <Modal
@@ -345,6 +323,14 @@ function EntitySentimentModal({
             subtitle={buildEntitySubtitle(profile)}
             accentColor={entityLeanAccent(profile)}
         >
+            {samplesAreFiltered && (
+                <TopicScopeStrip
+                    activeTopic={activeTopic}
+                    matched={filteredSamples.length}
+                    total={allSamples.length}
+                />
+            )}
+
             <EntityHeader profile={profile} />
 
             <div className="entity-modal-stats">
@@ -353,6 +339,11 @@ function EntitySentimentModal({
                     <div className="metric-value">
                         {formatPct(netScore, { min: -100, signed: true })}
                     </div>
+                    {samplesAreFiltered && (
+                        <div className="text-xs text-muted">
+                            (across all topics — {activeTopic.label}-only score not yet available)
+                        </div>
+                    )}
                 </div>
                 <div>
                     <div className="eyebrow">Posts scored</div>
@@ -378,15 +369,59 @@ function EntitySentimentModal({
                 </div>
             )}
 
-            {classificationSamples && classificationSamples.length > 0 && (
+            {filteredSamples.length > 0 ? (
                 <>
-                    <h3 className="card-title mt-4 mb-2">Recent classified posts</h3>
+                    <h3 className="card-title mt-4 mb-2">
+                        {samplesAreFiltered
+                            ? `Recent posts matching ${activeTopic.label}`
+                            : 'Recent classified posts'}
+                    </h3>
                     <SupportingDocsTable
-                        docs={classificationSamples.map(classificationSampleToSupportingDoc)}
+                        docs={filteredSamples.map(classificationSampleToSupportingDoc)}
                     />
                 </>
-            )}
+            ) : samplesAreFiltered ? (
+                <p className="text-muted text-sm mt-4">
+                    None of this entity's recent classified posts match {activeTopic.label}.
+                </p>
+            ) : null}
         </Modal>
+    );
+}
+
+function TopicScopeStrip({
+    activeTopic, matched, total,
+}: {
+    activeTopic: Topic;
+    matched: number;
+    total: number;
+}) {
+    return (
+        <div
+            className="modal-topic-strip"
+            role="status"
+            aria-label={`Filtered to topic: ${activeTopic.label}`}
+        >
+            <span className="modal-topic-strip-icon">
+                <svg
+                    viewBox="0 0 24 24"
+                    width={14}
+                    height={14}
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth={1.75}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden
+                >
+                    {activeTopic.iconPaths.map((d, i) => <path key={i} d={d} />)}
+                </svg>
+            </span>
+            <span className="modal-topic-strip-label">Showing: {activeTopic.label}</span>
+            <span className="modal-topic-strip-detail">
+                · {matched} of {total} recent posts match this topic
+            </span>
+        </div>
     );
 }
 
@@ -467,46 +502,105 @@ function HowThisWorks() {
 
 
 // --------------------------------------------------------------------------- //
+//  Topic state — URL persistence + default selection                          //
+// --------------------------------------------------------------------------- //
+
+const TOPIC_QS_KEY = 'topic';
+
+function readTopicFromUrl(): TopicKey {
+    try {
+        const params = new URLSearchParams(window.location.search);
+        const slug = params.get(TOPIC_QS_KEY);
+        return topicFromSlug(slug).key;
+    } catch {
+        return 'all';
+    }
+}
+
+function writeTopicToUrl(key: TopicKey): void {
+    try {
+        const topic = topicByKey(key);
+        const params = new URLSearchParams(window.location.search);
+        if (topic.key === 'all') {
+            params.delete(TOPIC_QS_KEY);
+        } else {
+            params.set(TOPIC_QS_KEY, topic.slug);
+        }
+        const qs = params.toString();
+        const url =
+            window.location.pathname + (qs ? `?${qs}` : '') + window.location.hash;
+        window.history.replaceState({}, '', url);
+    } catch { /* noop — older browsers / sandboxed contexts */ }
+}
+
+function pickDefaultTopic(byTopic: SentimentBreakdown[] | undefined): TopicKey {
+    // First load behavior: pick the topic with the most volume in the
+    // current window so the page lands on something substantive instead
+    // of an arbitrary alphabetical default. Falls back to 'all' if no
+    // per-topic data is available.
+    if (!byTopic || byTopic.length === 0) return 'all';
+    const validTopicNames = new Set(TOPICS.filter(t => t.key !== 'all').map(t => t.key));
+    let best: { key: TopicKey; volume: number } | null = null;
+    for (const row of byTopic) {
+        if (!row.topic || !validTopicNames.has(row.topic as TopicKey)) continue;
+        const volume = row.volume ?? 0;
+        if (!best || volume > best.volume) {
+            best = { key: row.topic as TopicKey, volume };
+        }
+    }
+    return best && best.volume > 0 ? best.key : 'all';
+}
+
+
+// --------------------------------------------------------------------------- //
 //  Page                                                                       //
 // --------------------------------------------------------------------------- //
 
+function netToneColor(net: number): TickerItem['tone'] {
+    if (net > 10) return 'accent';
+    if (net < -10) return 'negative';
+    return 'neutral';
+}
+
 function buildSentimentTickerItems(data: PublicSentimentData): TickerItem[] {
     const overall = data.overview;
-    const tone: TickerItem['tone'] = overall.netScore > 10 ? 'accent'
-        : overall.netScore < -10 ? 'negative' : 'neutral';
     const items: TickerItem[] = [
         {
             label: 'Overall tone',
             value: formatPct(overall.netScore, { min: -100, signed: true }),
-            tone,
+            tone: netToneColor(overall.netScore),
             emphasis: true,
             ariaLabel: `Overall tone ${formatPct(overall.netScore, { min: -100, signed: true })}`,
         },
-        { label: 'Posts scored', value: overall.volume.toLocaleString() },
-        { label: 'Confidence', value: overall.confidence },
     ];
     if (data.gopFavorability) {
+        const gopNet = data.gopFavorability.netFavorability;
         items.push({
             label: 'GOP stance',
-            value: formatPct(data.gopFavorability.netFavorability, { min: -100, signed: true }),
+            value: formatPct(gopNet, { min: -100, signed: true }),
+            tone: netToneColor(gopNet),
+            emphasis: true,
+            ariaLabel: `GOP stance ${formatPct(gopNet, { min: -100, signed: true })}`,
         });
     }
+    items.push(
+        { label: 'Posts scored', value: overall.volume.toLocaleString() },
+        { label: 'Confidence', value: overall.confidence },
+    );
     return items;
 }
 
-/** Headline naming the tier with the most tonally-different read on the
- *  day, plus the single biggest topic divergence when present. */
 /**
- * Static framing sentence for the Overall Tone page. Earlier versions
- * templated in per-tier net scores ("News outlets are reading most positive
- * (+4.2%) while the public..."), which leaked internal metric language
- * ("tiers", "dominant divergence") into a banner that non-technical readers
- * skim first. The static sentence frames the page without pretending to
- * summarize the data — the grid and divergence panel below do the actual
- * summarizing in shapes they're built for.
+ * Static framing sentence for the Overall Tone page. When a topic is
+ * active, the spec calls for "How news outlets, public officials, and
+ * everyday people are feeling and talking about [TOPIC]." The unfiltered
+ * default keeps the original sentence.
  */
-function readsAsToday(_data: PublicSentimentData): string {
-    return 'How news outlets, public officials, and everyday people are reading American politics.';
+function readsAsToday(activeTopic: Topic): string {
+    if (activeTopic.key === 'all') {
+        return 'How news outlets, public officials, and everyday people are reading American politics.';
+    }
+    return `How news outlets, public officials, and everyday people are feeling and talking about ${activeTopic.label}.`;
 }
 
 
@@ -516,21 +610,61 @@ interface PublicSentimentProps {
 
 function PublicSentiment({ filters }: PublicSentimentProps) {
     const [activeEntity, setActiveEntity] = useState<EntitySentimentItem | null>(null);
+    const [activeTopicKey, setActiveTopicKeyState] = useState<TopicKey>(() => readTopicFromUrl());
+    // Tracks whether the current activeTopicKey came from the URL (or
+    // explicit user click) vs. the implicit default. We only auto-pick a
+    // most-discussed default on the first render where no URL value was
+    // present — re-fetches on filter changes shouldn't keep flipping the
+    // user's selection.
+    const [pickedDefault, setPickedDefault] = useState<boolean>(() => readTopicFromUrl() !== 'all');
+
+    const setActiveTopicKey = (key: TopicKey) => {
+        setActiveTopicKeyState(key);
+        setPickedDefault(true);
+        writeTopicToUrl(key);
+    };
+
     const { data, loading, error, refetch } = useFetch<PublicSentimentData>(
         async () => transformPublicSentiment(await fetchSentiment(filters.timeRange, filters.sourceType)),
         [filters.timeRange, filters.sourceType],
         `sentiment:${filters.timeRange}:${filters.sourceType}`,
-    );
-    const { data: movers } = useFetch<MoversResult>(
-        () => fetchMovers(filters.timeRange),
-        [filters.timeRange],
-        `movers:${filters.timeRange}`,
     );
     const { data: snapshotStatus } = useFetch<SnapshotStatus>(
         () => fetchSnapshotStatus(),
         [],
         'snapshot-status',
     );
+
+    // Pick the most-discussed topic as the default once data lands, but
+    // only if the user hasn't already chosen something (URL or click).
+    useEffect(() => {
+        if (pickedDefault) return;
+        if (!data) return;
+        const def = pickDefaultTopic(data.byTopic);
+        if (def !== 'all') {
+            setActiveTopicKeyState(def);
+            writeTopicToUrl(def);
+            setPickedDefault(true);
+        }
+    }, [data, pickedDefault]);
+
+    // Sync state from popstate/back-forward navigation that mutates the
+    // ?topic= query param while staying on the page.
+    useEffect(() => {
+        const onPop = () => {
+            const next = readTopicFromUrl();
+            setActiveTopicKeyState(next);
+            setPickedDefault(next !== 'all');
+        };
+        window.addEventListener('popstate', onPop);
+        return () => window.removeEventListener('popstate', onPop);
+    }, []);
+
+    const activeTopic = topicByKey(activeTopicKey);
+    const topicRow = useMemo<SentimentBreakdown | null>(() => {
+        if (!data || activeTopic.key === 'all') return null;
+        return data.byTopic.find(t => t.topic === activeTopic.key) ?? null;
+    }, [data, activeTopic.key]);
 
     if (error) return <ErrorState message={error.message} onRetry={refetch} />;
 
@@ -563,24 +697,33 @@ function PublicSentiment({ filters }: PublicSentimentProps) {
                 />
             </div>
 
-            {movers && (
-                <div className="col-span-12">
-                    <MoversTicker data={movers} />
-                </div>
-            )}
+            {/* Topic tab bar — visual anchor of the page (spec A2). */}
+            <div className="col-span-12">
+                <TopicTabBar
+                    activeKey={activeTopicKey}
+                    onChange={setActiveTopicKey}
+                    byTopic={data.byTopic}
+                />
+            </div>
 
             <div className="col-span-12">
                 <div className="reads-as-today">
                     <span className="eyebrow reads-as-today-eyebrow">
                         {asOfTodayEyebrow(filters.timeRange)}
                     </span>
-                    <p className="lead" style={{ margin: 0 }}>{readsAsToday(data)}</p>
+                    <p className="lead" style={{ margin: 0 }}>{readsAsToday(activeTopic)}</p>
                 </div>
             </div>
 
-            {/* Compact top-metrics block — tier tones + GOP + intensity. */}
+            {/* Compact top-metrics block — tier tones (topic-scoped when filtered)
+                + GOP + intensity. */}
             <div className="col-span-12">
-                <TopMetrics data={data} windowLabel={formatTimeWindow(filters.timeRange)} />
+                <TopMetrics
+                    data={data}
+                    windowLabel={formatTimeWindow(filters.timeRange)}
+                    activeTopic={activeTopic}
+                    topicRow={topicRow}
+                />
             </div>
 
             {/* Three-way grid: News / Officials / Public. */}
@@ -591,6 +734,7 @@ function PublicSentiment({ filters }: PublicSentimentProps) {
                     generalPublic={data.byGeneralPublic ?? []}
                     confidence={data.overview.confidence}
                     onOpen={setActiveEntity}
+                    activeTopic={activeTopic}
                 />
             </div>
 
@@ -598,6 +742,7 @@ function PublicSentiment({ filters }: PublicSentimentProps) {
                 <EntitySentimentModal
                     item={activeEntity}
                     onClose={() => setActiveEntity(null)}
+                    activeTopic={activeTopic}
                 />
             )}
 

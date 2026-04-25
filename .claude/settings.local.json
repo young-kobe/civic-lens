@@ -15,7 +15,15 @@
       "Bash(PYTHONPATH=. ./analysis/.venv/Scripts/python.exe -m unittest discover analysis/tests)",
       "Bash(npm uninstall *)",
       "Bash(awk -F'[,{ ]' '{print $1}')",
-      "Bash(PYTHONPATH=. ./analysis/.venv/Scripts/python.exe *)"
+      "Bash(PYTHONPATH=. ./analysis/.venv/Scripts/python.exe *)",
+      "WebFetch(domain:civic-lens.info)",
+      "Bash(curl -s -o /dev/null -w \"main: %{http_code}\\\\n\" http://localhost:3002/src/main.tsx)",
+      "Bash(curl -s -o /dev/null -w \"topics: %{http_code}\\\\n\" http://localhost:3002/src/services/topics.ts)",
+      "Bash(curl -s -o /dev/null -w \"tabbar: %{http_code}\\\\n\" http://localhost:3002/src/pages/publicSentiment/TopicTabBar.tsx)",
+      "Bash(curl -s -o /dev/null -w \"moversticker: %{http_code}\\\\n\" http://localhost:3002/src/components/common/MoversTicker.tsx)",
+      "Bash(curl -s -o /dev/null -w \"publicsentiment: %{http_code}\\\\n\" http://localhost:3002/src/pages/PublicSentiment.tsx)",
+      "Bash(curl -s -o /dev/null -w \"3001:%{http_code} \" http://localhost:3001)",
+      "Bash(curl -s -o /dev/null -w \"3002:%{http_code}\\\\n\" http://localhost:3002)"
     ]
   }
 }
