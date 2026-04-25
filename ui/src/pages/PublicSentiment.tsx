@@ -517,9 +517,9 @@ interface PublicSentimentProps {
 function PublicSentiment({ filters }: PublicSentimentProps) {
     const [activeEntity, setActiveEntity] = useState<EntitySentimentItem | null>(null);
     const { data, loading, error, refetch } = useFetch<PublicSentimentData>(
-        async () => transformPublicSentiment(await fetchSentiment(filters.timeRange, filters.sourceType)),
-        [filters.timeRange, filters.sourceType],
-        `sentiment:${filters.timeRange}:${filters.sourceType}`,
+        async () => transformPublicSentiment(await fetchSentiment(filters.timeRange)),
+        [filters.timeRange],
+        `sentiment:${filters.timeRange}`,
     );
     const { data: movers } = useFetch<MoversResult>(
         () => fetchMovers(filters.timeRange),

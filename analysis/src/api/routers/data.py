@@ -4,8 +4,6 @@ where possible (see ``job_runner.save_snapshots``), falling back to live
 aggregation on a miss.
 """
 
-from typing import Literal
-
 from fastapi import APIRouter, Query
 from starlette.requests import Request
 
@@ -20,9 +18,6 @@ from analysis.src.reporting.aggregators import (
     PropagandaAggregator,
     SentimentAggregator,
 )
-
-# Kept in lockstep with ui/src/types.ts Filters.sourceType.
-SourceLiteral = Literal["all", "news", "reddit", "social"]
 
 settings = get_settings()
 cache = SnapshotCache(settings.cache_dir)
@@ -42,24 +37,19 @@ NARRATIVE_CACHE_SIZE = 100
 @router.get("/sentiment")
 def get_public_sentiment(
     window: WindowLiteral = "24h",
-    source: SourceLiteral = "all",
 ):
-    """Returns sentiment filtered by time window (and optionally by source).
+    """Returns sentiment for the time window.
 
-    The snapshot cache stores the unfiltered variant; any non-"all" source
-    filter bypasses the cache and computes live. This avoids exploding the
-    cache into 4x entries for a rarely-used filter dimension and keeps the
-    scheduled aggregation cost flat."""
-    if source == "all":
-        return get_cached_or_fallback(
-            cache,
-            f"sentiment_{window}",
-            lambda: sentiment_agg.get_public_sentiment(time_window=window),
-            lambda s: s.to_dict(),
-        )
-    return sentiment_agg.get_public_sentiment(
-        time_window=window, source_filter=source,
-    ).to_dict()
+    Source separation is built into the response shape via the three-tier
+    rollup (news outlets / officials / general public), so the previous
+    ``source`` query param has been removed alongside the UI's
+    "Filter by sources" pills."""
+    return get_cached_or_fallback(
+        cache,
+        f"sentiment_{window}",
+        lambda: sentiment_agg.get_public_sentiment(time_window=window),
+        lambda s: s.to_dict(),
+    )
 
 
 @router.get("/bot-activity")
@@ -105,21 +95,17 @@ def get_narratives(
 @router.get("/propaganda")
 def get_propaganda(
     window: WindowLiteral = "7d",
-    source: SourceLiteral = "all",
 ):
-    """Returns propaganda-technique overview for the window (optionally
-    filtered by source). Non-"all" source bypasses the cache for the same
-    reason as /sentiment."""
-    if source == "all":
-        return get_cached_or_fallback(
-            cache,
-            f"propaganda_{window}",
-            lambda: propaganda_agg.get_propaganda_overview(time_window=window),
-            lambda overview: overview.to_dict(),
-        )
-    return propaganda_agg.get_propaganda_overview(
-        time_window=window, source_filter=source,
-    ).to_dict()
+    """Returns propaganda-technique overview for the window. Source
+    separation is built into the three-tier response shape; the previous
+    ``source`` query param has been removed alongside the UI's
+    "Filter by sources" pills."""
+    return get_cached_or_fallback(
+        cache,
+        f"propaganda_{window}",
+        lambda: propaganda_agg.get_propaganda_overview(time_window=window),
+        lambda overview: overview.to_dict(),
+    )
 
 
 @router.get("/movers")
