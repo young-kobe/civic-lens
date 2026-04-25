@@ -3,7 +3,6 @@
 // Filter types
 export interface Filters {
     timeRange: '24h' | '7d' | '30d' | '90d' | 'all';
-    sourceType: 'all' | 'news' | 'reddit' | 'social';
 }
 
 // Confidence levels
@@ -488,6 +487,11 @@ export interface PropagandaOverview {
     by_news_outlet?: PropagandaEntityItem[];
     by_official?: PropagandaEntityItem[];
     by_general_public?: PropagandaEntityItem[];
+    // Per-entity flagged-example bucket. Keyed by the same key used in
+    // PropagandaEntityItem.key (outlet domain, official handle, subreddit
+    // name, or catch-all sentinel). The drill-down modal reads from this
+    // — the global ``examples`` array is too small to filter by entity.
+    examples_by_entity?: Record<string, PropagandaExample[]>;
 }
 
 // Review types

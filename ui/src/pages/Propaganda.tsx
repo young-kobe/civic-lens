@@ -11,6 +11,7 @@ import { asOfTodayEyebrow, formatTimeWindow } from '../services/timeWindow';
 import { useFetch } from '../services/useFetch';
 import { formatRefreshedAgo, getSnapshotTimestamp } from '../services/freshness';
 import { formatPct } from '../services/format';
+import { dedupeById } from '../services/dedupe';
 import { COLORS } from '../theme';
 import type {
     Filters, PropagandaEntityItem, PropagandaExample,
@@ -222,33 +223,17 @@ function PropagandaEntityCard({
 
 
 // --------------------------------------------------------------------------- //
-//  Per-entity detail modal — filters the overall examples list down to just  //
-//  the one outlet / official / subreddit the reader clicked.                 //
+//  Per-entity detail modal — reads the per-entity examples bucket the         //
+//  backend builds in lockstep with PropagandaEntityItem.key (see              //
+//  propaganda.py::_resolve_entity_key). Previously this filtered the          //
+//  global ``examples`` list (capped at 10) and almost always read empty.     //
 // --------------------------------------------------------------------------- //
 
-function entityMatchesExample(item: PropagandaEntityItem, ex: PropagandaExample): boolean {
-    if (item.kind === 'outlet') {
-        return ex.source_type === 'news'
-            && (ex.domain ?? '').toLowerCase().replace(/^www\./, '')
-               === item.key.toLowerCase().replace(/^www\./, '');
-    }
-    if (item.kind === 'official') {
-        return ex.source_type === 'x_post'
-            && (ex.author_handle ?? '').toLowerCase() === item.key.toLowerCase();
-    }
-    if (item.kind === 'subreddit') {
-        return (ex.source_type === 'reddit_post' || ex.source_type === 'reddit_comment')
-            && (ex.domain ?? '').toLowerCase() === item.key.toLowerCase();
-    }
-    // catch-all buckets don't correspond to a single entity's examples.
-    return false;
-}
-
 function PropagandaEntityModal({
-    item, examples, onClose,
+    item, examplesByEntity, onClose,
 }: {
     item: PropagandaEntityItem;
-    examples: PropagandaExample[];
+    examplesByEntity: Record<string, PropagandaExample[]>;
     onClose: () => void;
 }) {
     const profile = item.entity_profile;
@@ -258,7 +243,7 @@ function PropagandaEntityModal({
             ? COLORS.warning
             : 'var(--neutral-700)';
     const sourceUrl = entityExternalUrl(profile);
-    const matching = examples.filter((ex) => entityMatchesExample(item, ex));
+    const matching = dedupeById(examplesByEntity[item.key] ?? [], (ex) => ex.doc_id);
 
     return (
         <Modal
@@ -309,8 +294,7 @@ function PropagandaEntityModal({
             </h3>
             {matching.length === 0 ? (
                 <p className="text-muted text-sm">
-                    This entity has a score above but none of the recent flagged examples we fetched
-                    for the Examples card come from it. Try widening the time window.
+                    No flagged examples available for this entity in the current window.
                 </p>
             ) : (
                 <div className="example-rows">
@@ -516,14 +500,18 @@ function ExampleRow({ ex }: { ex: PropagandaExample }) {
 }
 
 function ExamplesCard({ examples }: { examples: PropagandaExample[] }) {
-    if (examples.length === 0) return null;
+    // Defensive dedupe: the SQL pulling examples joins ``ai_outputs`` to
+    // ``docs`` and a doc with multiple propaganda rows (stale prompt
+    // versions, re-runs) would otherwise render the same tweet 10 times.
+    const unique = dedupeById(examples, (ex) => ex.doc_id);
+    if (unique.length === 0) return null;
     return (
         <Card
             title="Recent flagged posts"
             subtitle="Each flag comes with a verbatim evidence quote from the source."
         >
             <div className="example-rows">
-                {examples.map((ex) => <ExampleRow key={ex.doc_id} ex={ex} />)}
+                {unique.map((ex) => <ExampleRow key={ex.doc_id} ex={ex} />)}
             </div>
         </Card>
     );
@@ -563,9 +551,9 @@ interface PropagandaProps {
 function Propaganda({ filters }: PropagandaProps) {
     const [activeEntity, setActiveEntity] = useState<PropagandaEntityItem | null>(null);
     const { data, loading, error, refetch } = useFetch<PropagandaOverview>(
-        () => fetchPropaganda(filters.timeRange, filters.sourceType),
-        [filters.timeRange, filters.sourceType],
-        `propaganda:${filters.timeRange}:${filters.sourceType}`,
+        () => fetchPropaganda(filters.timeRange),
+        [filters.timeRange],
+        `propaganda:${filters.timeRange}`,
     );
     const { data: snapshotStatus } = useFetch<SnapshotStatus>(
         () => fetchSnapshotStatus(),
@@ -647,7 +635,7 @@ function Propaganda({ filters }: PropagandaProps) {
             {activeEntity && (
                 <PropagandaEntityModal
                     item={activeEntity}
-                    examples={data.examples}
+                    examplesByEntity={data.examples_by_entity ?? {}}
                     onClose={() => setActiveEntity(null)}
                 />
             )}
