@@ -13,7 +13,7 @@ The X ingestor now walks `data/verified_officials.yaml` on every run and pulls e
   - Officials run **before** topic queries in `XRunner.Run` so a tight monthly budget cannot starve the highest-signal surface we collect.
   - Budget guard on `XBudgetTracker` is checked before every API call (lookup or timeline). Skipped accounts are reported in the run summary.
 - Migration `data/migrations/018_x_posts_official_tier.sql`: adds `is_official_tier INTEGER NOT NULL DEFAULT 0` plus a partial index for `WHERE is_official_tier = 1`. Existing rows and any post arriving via topic-search queries keep the default.
-- Config `XConfig.OfficialsListPath` (default `data/verified_officials.yaml`) and `XConfig.MaxTweetsPerOfficial` (default 5, padded up to 5 if a smaller value is configured because the X API minimum on the timeline endpoint is 5).
+- Config `XConfig.OfficialsListPath` (relative entries are resolved against the seeds.yaml directory by `config.Load`, NOT the process working directory — required for the deploy where `WorkingDirectory=/var/lib/civic-lens` but the YAML lives at `/opt/civic-lens/data/`; default `verified_officials.yaml` next to seeds.yaml). `XConfig.MaxTweetsPerOfficial` (default 5, padded up to 5 if a smaller value is configured because the X API minimum on the timeline endpoint is 5).
 - `data/seeds.yaml` no longer carries the two `from:`-clause officials timeline queries (lines 97 + 102 of the prior version). They were redundant with the explicit pass and only covered the search-index recency window. The eight topic queries remain; they fire after the officials pass.
 - Tests:
   - `ingest/internal/extract/x/officials_test.go` covers YAML parsing, handle normalization, missing-file = empty, malformed-YAML = error.

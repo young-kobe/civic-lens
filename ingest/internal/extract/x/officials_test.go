@@ -1,6 +1,10 @@
 package x
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
@@ -90,6 +94,49 @@ func TestLoadVerifiedOfficials_MalformedYAMLErrors(t *testing.T) {
 	path := writeYAML(t, "officials: [: not valid")
 	if _, err := LoadVerifiedOfficials(path); err == nil {
 		t.Fatal("want error from malformed YAML")
+	}
+}
+
+// TestSearchRecentPosts_PadsMaxResultsAboveAPIMin pins down the defensive
+// floor that prevented production from failing every topic-search query
+// with HTTP 400 when `max_tweets_per_query: 8` slipped into seeds.yaml.
+// The X /2/tweets/search/recent endpoint requires max_results in [10,100];
+// the client must silently raise smaller values rather than propagate the
+// 400.
+func TestSearchRecentPosts_PadsMaxResultsAboveAPIMin(t *testing.T) {
+	cases := []struct {
+		name      string
+		requested int
+		wantParam string
+	}{
+		{"below floor pads to 10", 8, "10"},
+		{"floor preserved", 10, "10"},
+		{"in-range preserved", 50, "50"},
+		{"above ceiling clamps to 100", 250, "100"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var seen url.Values
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				seen = r.URL.Query()
+				_, _ = w.Write([]byte(`{"data":[]}`))
+			}))
+			defer srv.Close()
+
+			client := New(Config{
+				BearerToken:     "t",
+				UserAgent:       "test",
+				MaxRequestsHour: 36000,
+				BaseURL:         srv.URL,
+			})
+			if _, _, err := client.SearchRecentPosts(context.Background(), "any", tc.requested); err != nil {
+				t.Fatalf("search: %v", err)
+			}
+			if got := seen.Get("max_results"); got != tc.wantParam {
+				t.Errorf("max_results: requested %d, want sent=%q, got %q",
+					tc.requested, tc.wantParam, got)
+			}
+		})
 	}
 }
 

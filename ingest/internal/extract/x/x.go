@@ -92,7 +92,17 @@ func (c *Client) SearchRecentPosts(ctx context.Context, query string, maxResults
 	baseURL := c.baseURL + "/2/tweets/search/recent"
 	params := url.Values{}
 	params.Set("query", query)
-	params.Set("max_results", fmt.Sprintf("%d", min(maxResults, 100))) // API max is 100
+	// X API requires max_results in [10, 100] for /2/tweets/search/recent
+	// (HTTP 400 below 10). Pad up so a smaller per-query cap in seeds.yaml
+	// doesn't break every run — same defensive pattern as UserTimeline,
+	// which has its own floor of 5.
+	if maxResults < 10 {
+		maxResults = 10
+	}
+	if maxResults > 100 {
+		maxResults = 100
+	}
+	params.Set("max_results", fmt.Sprintf("%d", maxResults))
 	params.Set("tweet.fields", "author_id,created_at,text,public_metrics,geo,context_annotations,lang,conversation_id,in_reply_to_user_id,referenced_tweets")
 	params.Set("user.fields", "id,username,name,location,description,created_at,public_metrics,verified,verified_type,protected,profile_image_url")
 	params.Set("place.fields", "id,full_name,country,country_code")
