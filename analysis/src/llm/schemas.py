@@ -132,20 +132,6 @@ PROPAGANDA_SCHEMA = {
 }
 
 
-# Account Classifier Schema
-ACCOUNT_CLASSIFIER_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "tier": {
-            "type": "string",
-            "enum": ["elected_official", "affiliated", "general_public"],
-        },
-        "confidence": {"type": "number"},
-        "reasoning": {"type": "string"},
-    },
-    "required": ["tier", "confidence"],
-}
-
 # Bot Detection Schema (walkthrough 040 — added llm_text_likelihood)
 BOT_SCHEMA = {
     "type": "object",

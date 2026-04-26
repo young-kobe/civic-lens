@@ -10,11 +10,27 @@ easier prompt engineering and A/B testing.
 # Prompt Version Constants (tracked in ai_outputs.prompt_version)
 # =============================================================================
 
-TEXT_ANALYSIS_PROMPT_VERSION = "text-analysis-v3"
+TEXT_ANALYSIS_PROMPT_VERSION = "text-analysis-v4"
 BOT_PROMPT_VERSION = "bot-v2"
-CLAIM_EXTRACTION_PROMPT_VERSION = "claim-extraction-v2"
-ACCOUNT_CLASSIFIER_PROMPT_VERSION = "account-classifier-v1"
+CLAIM_EXTRACTION_PROMPT_VERSION = "claim-extraction-v3"
 PROPAGANDA_PROMPT_VERSION = "propaganda-v1"
+
+# Shared system-prompt addendum used by stages that accept a REFERENCE
+# CONTEXT block (text analysis + claim extraction). The block is ONLY
+# present when the seed loader matches at least one entry against the
+# doc text — for unrelated docs the addendum has no effect on output.
+# Phrased to inform the model rather than retrain it: scoring rubrics
+# above stay identical with or without the block.
+REFERENCE_CONTEXT_ADDENDUM = """
+
+REFERENCE CONTEXT HANDLING:
+- If a `REFERENCE CONTEXT` block precedes the <text> input, it cites
+  authoritative external sources (CDC, IPCC, BLS, etc.) and is purely
+  informational background — treat its content as factual baseline.
+- The scoring rubric above is unchanged whether or not the block is
+  present. Do not flag, label, or score differently because of it; do
+  not paraphrase the reference into output fields. Use it only as
+  grounding when reading the input text."""
 
 # =============================================================================
 # Text Analysis Prompts
@@ -66,7 +82,7 @@ OUTPUT SCHEMA:
   "overall_favorability_confidence": 0.0-1.0,
   "sentiment_reasoning": "Explanation of sentiment logic only",
   "favorability_reasoning": "Explanation of favorability logic only"
-}"""
+}""" + REFERENCE_CONTEXT_ADDENDUM
 
 TEXT_ANALYSIS_USER_PROMPT_TEMPLATE = """Analyze sentiment and favorability in this text:
 
@@ -189,53 +205,13 @@ OUTPUT SCHEMA:
       "evidence_span": "<verbatim phrase from the input text>"
     }
   ]
-}"""
+}""" + REFERENCE_CONTEXT_ADDENDUM
 
 CLAIM_EXTRACTION_USER_PROMPT_TEMPLATE = """Extract discrete claims from this text:
 
 <text>
 {text}
 </text>"""
-
-
-# =============================================================================
-# Account Classifier Prompts
-# =============================================================================
-
-ACCOUNT_CLASSIFIER_SYSTEM_PROMPT = """You classify a social media account into one of three political tiers based on its display name, recent posts, and optional profile metadata.
-
-TIERS:
-- elected_official: a sitting or former elected official in US politics, or an institutional account of an elected body (e.g. "@POTUS", "@WhiteHouse"). Only use this tier when the account is unambiguously an elected official or their official office.
-- affiliated: a politically affiliated figure or organization. Covers: journalists who cover US politics, pundits, party strategists, policy-org / think-tank accounts, PACs, party committees (RNC/DNC/DCCC/etc.), campaign staff, press secretaries, and people who self-describe as political professionals.
-- general_public: anyone who does not fit the two tiers above — ordinary users who post about politics but have no known political-industry role.
-
-RULES:
-1. Return ONLY valid JSON matching the schema below.
-2. If the evidence is thin or contradictory, prefer "general_public" with low confidence rather than guessing into the other tiers.
-3. "Verified" status on X is NOT sufficient to promote a user out of general_public; many ordinary users pay for verification.
-4. If the account posts heavily about politics but is clearly an ordinary citizen (e.g. a hobbyist, activist without organizational affiliation), classify as general_public.
-5. Explain your classification briefly in "reasoning". Cite what in the input pushed you toward the tier (display-name keyword, post wording, self-description).
-
-OUTPUT SCHEMA:
-{
-  "tier": "elected_official" | "affiliated" | "general_public",
-  "confidence": 0.0-1.0,
-  "reasoning": "Brief explanation"
-}"""
-
-ACCOUNT_CLASSIFIER_USER_PROMPT_TEMPLATE = """Classify the following account:
-
-Platform: {platform}
-Handle: @{handle}
-Display name: {display_name}
-Self-description: {description}
-Verified: {verified}
-Followers: {followers_count}
-
-Recent posts (up to 5 samples):
-{post_samples}
-
-Return a tier classification in JSON."""
 
 
 # =============================================================================

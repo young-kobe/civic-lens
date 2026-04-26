@@ -11,6 +11,9 @@ from analysis.src.engine.constants import (
     GOP_ENTITIES, FAVORABLE_INDICATORS, UNFAVORABLE_INDICATORS, PROXIMITY_WINDOW
 )
 from analysis.src.engine.models.engine_models import SentimentResult, FavorabilityResult, EntityStance
+from analysis.src.llm.context_seeds import (
+    format_seeds_block, match_seeds, matched_slugs,
+)
 from analysis.src.llm.prompts import TEXT_ANALYSIS_SYSTEM_PROMPT, TEXT_ANALYSIS_USER_PROMPT_TEMPLATE
 from analysis.src.llm.schemas import TEXT_ANALYSIS_SCHEMA
 
@@ -270,7 +273,13 @@ class Analyzer:
             # The user-prompt template's only placeholder is {text}; the heuristic
             # signals live on `deterministic_signals` for auditability and are no
             # longer injected into the prompt (walkthrough 038 cleanup).
-            user_prompt = TEXT_ANALYSIS_USER_PROMPT_TEMPLATE.format(text=text[:2000])
+            #
+            # Reference-context seeds (CDC / IPCC / BLS / etc.) are matched
+            # against the doc text and prepended above the input. Unrelated
+            # docs match nothing → empty block → no token cost.
+            seeded = match_seeds(text)
+            seeds_block = format_seeds_block(seeded)
+            user_prompt = seeds_block + TEXT_ANALYSIS_USER_PROMPT_TEMPLATE.format(text=text[:2000])
             
             try:
                 response = self._llm_client.complete(
@@ -287,13 +296,20 @@ class Analyzer:
                 if sent_had_invalid and not sent_spans:
                     sent_conf = min(sent_conf, UNVERIFIED_EVIDENCE_CONFIDENCE_CAP)
 
+                # Audit trail: stamp which reference seeds (if any) the LLM
+                # saw alongside this doc's deterministic signals so reviewers
+                # can correlate outputs with the seed registry version.
+                signals_with_seeds = dict(signals)
+                if seeded:
+                    signals_with_seeds["reference_seeds"] = matched_slugs(seeded)
+
                 sentiment_res = SentimentResult(
                     label=response.get("sentiment_label", "NEUTRAL"),
                     confidence=sent_conf,
                     evidence_spans=sent_spans,
                     sarcasm_detected=bool(response.get("sarcasm_detected", False)),
                     reasoning=response.get("sentiment_reasoning"),
-                    deterministic_signals=signals,
+                    deterministic_signals=signals_with_seeds,
                     inference_method="llm",
                 )
 
@@ -325,7 +341,7 @@ class Analyzer:
                     overall_confidence=fav_conf,
                     gop_entities_found=gop_entities,
                     reasoning=response.get("favorability_reasoning"),
-                    deterministic_signals=signals,
+                    deterministic_signals=signals_with_seeds,
                     inference_method="llm",
                 )
 
