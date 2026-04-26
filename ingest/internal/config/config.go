@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"path/filepath"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -98,6 +99,20 @@ func Load(path string) (*Config, error) {
 
 	if err := yaml.Unmarshal(data, cfg); err != nil {
 		return nil, err
+	}
+
+	// Resolve config-file paths (read-only, source-controlled) relative to
+	// the seeds.yaml directory, not the process working directory. This is
+	// what makes deploy work where `WorkingDirectory=/var/lib/civic-lens`
+	// (the runtime data root) but seeds.yaml + verified_officials.yaml
+	// live at `/opt/civic-lens/data/`. Runtime-data paths (database.path,
+	// database.raw_dir) stay relative to the working directory because
+	// those ARE meant to live next to the runtime data, not the binary.
+	seedsDir := filepath.Dir(path)
+	if cfg.X.OfficialsListPath == "" {
+		cfg.X.OfficialsListPath = filepath.Join(seedsDir, "verified_officials.yaml")
+	} else if !filepath.IsAbs(cfg.X.OfficialsListPath) {
+		cfg.X.OfficialsListPath = filepath.Join(seedsDir, cfg.X.OfficialsListPath)
 	}
 
 	return cfg, nil

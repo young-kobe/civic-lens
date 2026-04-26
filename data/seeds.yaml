@@ -1,9 +1,12 @@
 # Civic Lens seed configuration
 #
-# Budget target: ~$50/month total operating cost. X credit spend is capped at
-# $25/month via x.monthly_budget_cents + the x_api_budget persistent counter
-# (walkthrough 048). News + Reddit are free. Hetzner + Gemini + R2 backups
-# round out the remaining ~$23/month.
+# Budget target: ~$75/month total operating cost. X credit spend is capped at
+# $50/month via x.monthly_budget_cents + the x_api_budget persistent counter.
+# That ceiling covers daily verified-officials timeline pulls (~$22/mo) plus
+# the 8 topic queries at the X API's 10-tweet minimum (~$24/mo); the rest is
+# headroom for the first-run user-by-username lookups and one-off retries.
+# News + Reddit are free. Hetzner + Gemini + R2 backups round out the
+# remaining ~$23/month.
 
 database:
   path: data/civic_lens.db
@@ -47,24 +50,30 @@ x:
   # Per-session rate pacing (not the real budget limit — that's below).
   max_requests_hour: 30
 
-  # Per-query tweet pull. X pricing is $0.005 per tweet + $0.010 per hydrated
-  # user; keeping this low means the user-expansion cost stays bounded
-  # (~8-12 unique authors per 10 tweets in practice).
-  max_tweets_per_query: 8
+  # Per-query tweet pull. The X /2/tweets/search/recent endpoint enforces
+  # a minimum of 10 (HTTP 400 below); the client pads up defensively, so
+  # smaller values here are silently raised. X pricing is $0.005 per tweet
+  # + $0.010 per hydrated user; keeping this at the floor means the
+  # user-expansion cost stays bounded (~8-12 unique authors per 10 tweets
+  # in practice).
+  max_tweets_per_query: 10
 
   # Hard ceiling enforced by the x_api_budget table (migration 017). When
   # the month-to-date estimated spend hits this, the runner aborts any
-  # remaining queries for the month.
-  monthly_budget_cents: 3000
+  # remaining queries for the month. Sized to fit daily officials
+  # timelines + topic queries at the API's 10-tweet floor — see the
+  # header comment for the breakdown.
+  monthly_budget_cents: 5000
 
   # Officials path — runs BEFORE topic queries on every X ingest pass. The
-  # runner reads data/verified_officials.yaml and pulls the user-timeline
-  # for each handle (primary + alternates). Posts land with
+  # runner reads verified_officials.yaml (resolved relative to THIS file's
+  # directory, not the process working directory) and pulls the
+  # user-timeline for each handle (primary + alternates). Posts land with
   # x_posts_raw.is_official_tier=1 so the analysis layer can route them
   # without re-running the LLM tier classifier. 5 tweets/handle × ~24
   # distinct handles ≈ 120 tweets/run; fits comfortably in the $30 cap
-  # alongside the topic queries below.
-  officials_list_path: data/verified_officials.yaml
+  # alongside the topic queries below. Leaving officials_list_path unset
+  # uses the default `verified_officials.yaml` next to seeds.yaml.
   max_tweets_per_official: 5
 
   # Topic queries — what the sample audience is talking about. These run

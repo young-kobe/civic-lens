@@ -70,15 +70,13 @@ func (xr *XRunner) Run(ctx context.Context) (*XResult, error) {
 	// content we collect, and topic queries can degrade more gracefully
 	// (their coverage is sample-based to begin with). Failures inside the
 	// pass are per-account; they never abort the topic-query loop below.
-	officialsPath := cfg.X.OfficialsListPath
-	if officialsPath == "" {
-		officialsPath = "data/verified_officials.yaml"
-	}
+	// OfficialsListPath was resolved against the seeds.yaml directory by
+	// config.Load, so it's always absolute by the time it reaches us here.
 	maxPerOfficial := cfg.X.MaxTweetsPerOfficial
 	if maxPerOfficial <= 0 {
 		maxPerOfficial = 5
 	}
-	officialsRes, err := xr.runOfficialsPass(ctx, budget, officialsPath, maxPerOfficial)
+	officialsRes, err := xr.runOfficialsPass(ctx, budget, cfg.X.OfficialsListPath, maxPerOfficial)
 	if err != nil {
 		// A torn-up YAML is the only failure that aborts the pass; everything
 		// else is per-account and logged inline. We surface this rather than
