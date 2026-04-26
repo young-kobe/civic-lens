@@ -21,6 +21,10 @@ The Overall Tone page is filtered by political topic. A 15-tab category bar (14 
   - Three-way grid columns keep their global entity cards; the column bylines get a suffix when a topic is active ("scores are global; click to filter evidence to <topic>") so the user understands the click-through is the topic-scoped surface, not the card itself.
   - `MoversTicker` is no longer rendered on this page — neither the entity-mover strip nor any topic-pill variant. The page's only ticker is now the `GlobalTicker` at the top. The `fetchMovers` call and its `useFetch` were removed; the `MoversTicker` component file is kept in `components/common/` for possible reintroduction elsewhere.
 
+### Pre-existing transformer bug fixed in the same PR
+
+`ui/src/services/transformers.ts::transformPublicSentiment` whitelisted fields off the API response and silently dropped `byNewsOutlet`, `byOfficial`, `byGeneralPublic`, and the per-tier three-way fields on each `byTopic` row (`newsNet`/`officialsNet`/`publicNet`/`newsVolume`/`officialsVolume`/`publicVolume`). The page rendered the three-way grid as empty in every column, and once the topic filter went in, every topic-scoped tier headline read "no posts on this topic" because the per-tier fields never reached the UI. The transformer now passes entity rollups through verbatim and uses spread + defensive defaults on `byTopic` rows so future aggregator additions don't silently disappear. The fix is in this PR because the topic-redesign work is what surfaced the dropped `byTopic` fields — without per-topic tier scoping, the bug looked like a quirk of an empty staging environment.
+
 ### Internal fixture rename
 
 `ui/src/services/fixtures.ts` topic names were renamed from prose labels (`'Border & immigration'`, `'Economy & inflation'`, `'Foreign policy'`, `'Climate & energy'`) to the canonical backend keys (`'Immigration'`, `'Economy'`, `'Foreign Policy'`, `'Climate'`). Fixtures were already inaccurate to current production output; the rename makes mock-mode usable for verifying topic-scoped behavior.
