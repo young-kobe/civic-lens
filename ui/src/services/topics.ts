@@ -11,9 +11,6 @@
  * modal can client-side-filter classification samples by topic until the
  * backend exposes per-entity per-topic rollups. When that backend work
  * lands, delete the keywords field and the `matchesTopic` helper below.
- *
- * Narratives and Propaganda do not yet consume this taxonomy. A follow-up
- * should migrate them to the same shared list.
  */
 
 export type TopicKey =

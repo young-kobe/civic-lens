@@ -45,5 +45,4 @@ Spec was authored in collaboration with the user during the implementation conve
 
 ## Follow-ups (UI side)
 
-- Migrate the Narratives and Propaganda pages to consume `ui/src/services/topics.ts` once they grow a topic axis. Today neither uses topic taxonomy at all.
 - After the per-entity per-topic backend work lands, delete the `keywords` field + `matchesTopic` helper from `topics.ts`, replace the modal's client-side sample filter with the topic-scoped backend payload, and drop the "scores are global" disclosure from the modal + grid bylines.
