@@ -34,11 +34,15 @@ function buildNarrativeTickerItems(data: NarrativeSummary[], window: string): Ti
         if (!topClaim || n.supporting_doc_count > topClaim.supporting_doc_count) topClaim = n;
     }
 
+    // "Top stories / in window" rather than "Tracked / narratives" — the
+    // /narratives endpoint returns at most ?limit (defaulted to 20 by the
+    // UI), so this number is "the top-N most-supported in the selected
+    // window," not a count of every narrative the system has on file.
     const items: TickerItem[] = [
         {
-            label: 'Tracked', value: total.toLocaleString(), hint: 'narratives',
+            label: 'Top stories', value: total.toLocaleString(), hint: 'in window',
             emphasis: true,
-            ariaLabel: `${total} narratives tracked`,
+            ariaLabel: `${total} top stories in window`,
         },
         {
             label: 'New (24h)', value: freshCount.toLocaleString(),
@@ -587,10 +591,10 @@ function ClaimsSpreadingPanel({ narratives, onOpen }: { narratives: NarrativeSum
         return (
             <Card
                 title="Top political narratives"
-                subtitle="No stories are being repeated across more than one group yet — the news, officials, and the public aren't overlapping in this window."
+                subtitle="No story has surfaced in more than one group yet in this window — see the per-group breakdown above for what each is talking about."
             >
                 <p className="text-muted text-sm">
-                    Check back as coverage develops.
+                    We'll list stories here as soon as the same recurring claim is being repeated by at least two of the three groups (news, officials, the public).
                 </p>
             </Card>
         );
