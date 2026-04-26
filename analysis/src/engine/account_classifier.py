@@ -1,26 +1,16 @@
 """
-Account tier classifier for Civic Lens (walkthrough 036).
+Curated account-tier loader for Civic Lens.
 
-Classifies each author we see in our political-content sample into one of
-three tiers — elected_official, affiliated, general_public — and persists
-affirmative classifications to ``account_profiles``. Absence from the table
-means "general_public" by default.
+Reads ``data/known_political_x_accounts.yaml`` (and the legacy flat shape
+that pre-dated it) and writes one row per handle into ``account_profiles``
+with ``classification_method='curated_list'``. Re-running overwrites all
+metadata columns, so the YAML is the single source of truth.
 
-Two classification paths, priority curated > llm:
-
-1. Curated list (``data/known_accounts.yaml``). Deterministic, high trust.
-   Re-running overwrites any existing row for the same handle, so YAML
-   edits are the source of truth.
-
-2. LLM classifier. Runs for X authors who appear in ``x_posts_raw`` with
-   meaningful volume AND are not already classified. Uses the author's
-   display name, self-description, verified flag, follower count, and up
-   to 5 recent posts as evidence. Skipped entirely when ``llm_enabled``
-   is False.
-
-Reddit classification is intentionally not implemented — electeds and
-formal political orgs are rare on Reddit, and the equivalent signal does
-not exist in the data we collect.
+The earlier LLM-driven classifier path was removed on 2026-04-25. Officials-
+tier identification now flows through ``analysis.src.reporting.entity_registry``
+(``data/verified_officials.yaml`` lookup) and the curated YAML loader here;
+no LLM is involved. Accounts not present in the curated YAML are treated as
+``general_public`` by default at the aggregator layer.
 """
 
 from __future__ import annotations
@@ -34,35 +24,13 @@ from typing import List, Optional
 import yaml
 
 from analysis.src.common.logger import get_logger
-from analysis.src.llm.prompts import (
-    ACCOUNT_CLASSIFIER_SYSTEM_PROMPT,
-    ACCOUNT_CLASSIFIER_USER_PROMPT_TEMPLATE,
-)
-from analysis.src.llm.schemas import ACCOUNT_CLASSIFIER_SCHEMA
 
 logger = get_logger(__name__)
 
 
-# Minimum post volume from an author in the last lookback window before we
-# spend LLM tokens on them. Lower = more coverage, higher = fewer calls.
-MIN_POSTS_FOR_LLM_CLASSIFICATION = 3
-LLM_LOOKBACK_SECONDS = 30 * 24 * 60 * 60  # 30 days
-# Hard cap per run so one misconfiguration can't burn through a quota.
-MAX_LLM_CLASSIFICATIONS_PER_RUN = 200
-
-# Tiers persisted to account_profiles. "general_public" is the implicit default
-# (no row); it is written only when the LLM affirmatively picks it — that lets
-# us skip re-classifying the same author on every run.
-ALLOWED_TIERS = {"elected_official", "affiliated", "general_public"}
-VALID_CLASSIFICATION_METHODS = {"curated_list", "llm"}
-
-
-@dataclass
-class ClassificationResult:
-    tier: str
-    confidence: Optional[float]
-    method: str  # 'curated_list' | 'llm'
-    reasoning: Optional[str] = None
+# Tiers persisted to account_profiles. "general_public" is the implicit
+# default (no row); we never write a row for it.
+ALLOWED_TIERS = {"elected_official", "affiliated"}
 
 
 @dataclass
@@ -165,20 +133,13 @@ def _parse_curated_yaml(payload: dict) -> List[CuratedEntry]:
 
 
 class AccountClassifier:
-    """Curated-list + LLM-backed author tier classifier."""
+    """Curated-YAML loader for account_profiles. The class shape is kept
+    (rather than collapsing to a free function) so callers can construct
+    once at startup with a db_path and load multiple YAMLs in sequence
+    without re-passing it."""
 
-    def __init__(self, db_path: str, llm_enabled: bool = False):
+    def __init__(self, db_path: str):
         self.db_path = db_path
-        self.llm_enabled = llm_enabled
-        self._llm_client = None
-        if llm_enabled:
-            from analysis.src.llm import get_llm_client
-            self._llm_client = get_llm_client()
-            if not self._llm_client.is_available:
-                logger.warning("LLM unavailable; account classifier will run curated-list only")
-                self._llm_client = None
-
-    # ---------- Curated list ----------
 
     def load_curated(self, yaml_path: Path | str) -> dict:
         """Upsert entries from the curated YAML into account_profiles.
@@ -209,7 +170,7 @@ class AccountClassifier:
         try:
             cursor = conn.cursor()
             for entry in entries:
-                if entry.tier not in counts:
+                if entry.tier not in ALLOWED_TIERS:
                     counts["skipped"] += 1
                     continue
                 author_id = self._resolve_x_author_id(cursor, entry.handle)
@@ -222,18 +183,16 @@ class AccountClassifier:
                     """
                     INSERT INTO account_profiles
                         (platform, author_id, display_name, tier,
-                         classification_method, classified_at, confidence,
-                         reasoning, notes, full_name, party, branch, chamber,
+                         classification_method, classified_at,
+                         notes, full_name, party, branch, chamber,
                          state_or_district, office_title, account_type)
-                    VALUES ('x', ?, ?, ?, 'curated_list', ?, NULL, NULL,
+                    VALUES ('x', ?, ?, ?, 'curated_list', ?,
                             ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(platform, author_id) DO UPDATE SET
                         display_name = excluded.display_name,
                         tier = excluded.tier,
                         classification_method = excluded.classification_method,
                         classified_at = excluded.classified_at,
-                        confidence = NULL,
-                        reasoning = NULL,
                         notes = excluded.notes,
                         full_name = excluded.full_name,
                         party = excluded.party,
@@ -271,8 +230,9 @@ class AccountClassifier:
         )
         return counts
 
+    @staticmethod
     def _resolve_x_author_id(
-        self, cursor: sqlite3.Cursor, handle: str,
+        cursor: sqlite3.Cursor, handle: str,
     ) -> Optional[str]:
         cursor.execute(
             "SELECT user_id FROM x_users_raw WHERE LOWER(username) = ?",
@@ -280,163 +240,3 @@ class AccountClassifier:
         )
         row = cursor.fetchone()
         return row[0] if row else None
-
-    # ---------- LLM classification ----------
-
-    def classify_with_llm(self, limit: int = MAX_LLM_CLASSIFICATIONS_PER_RUN) -> int:
-        """Run the LLM classifier on unclassified X authors that meet the
-        volume threshold. Returns count of rows written.
-        """
-        if not self.llm_enabled or self._llm_client is None:
-            logger.info("LLM account classifier skipped (llm disabled or unavailable)")
-            return 0
-
-        cutoff = int(time.time()) - LLM_LOOKBACK_SECONDS
-        conn = sqlite3.connect(self.db_path)
-        conn.execute("PRAGMA busy_timeout = 5000")
-        try:
-            cursor = conn.cursor()
-            candidates = self._load_unclassified_authors(cursor, cutoff, limit)
-            logger.info(f"LLM account classification: {len(candidates)} candidates")
-            written = 0
-            for author_id, handle, display_name, description, verified, followers in candidates:
-                samples = self._recent_posts(cursor, author_id, cutoff, k=5)
-                if not samples:
-                    continue
-                result = self._classify_single(
-                    platform="x",
-                    handle=handle or "",
-                    display_name=display_name or handle or "(unknown)",
-                    description=description or "",
-                    verified=bool(verified),
-                    followers_count=followers or 0,
-                    post_samples=samples,
-                )
-                if result is None:
-                    continue
-                self._persist_llm(cursor, "x", author_id, display_name or handle, result)
-                written += 1
-                conn.commit()
-            logger.info(f"LLM account classification complete: {written} written")
-            return written
-        finally:
-            conn.close()
-
-    def _load_unclassified_authors(
-        self,
-        cursor: sqlite3.Cursor,
-        cutoff: int,
-        limit: int,
-    ) -> List[tuple]:
-        """X authors with >= threshold posts in window, not yet classified."""
-        cursor.execute(
-            """
-            SELECT p.author_id, u.username, u.name, u.description,
-                   u.verified, u.followers_count
-            FROM x_posts_raw p
-            LEFT JOIN x_users_raw u ON u.user_id = p.author_id
-            LEFT JOIN account_profiles ap
-              ON ap.platform = 'x' AND ap.author_id = p.author_id
-            WHERE p.created_at >= ?
-              AND ap.author_id IS NULL
-            GROUP BY p.author_id
-            HAVING COUNT(p.tweet_id) >= ?
-            ORDER BY COUNT(p.tweet_id) DESC
-            LIMIT ?
-            """,
-            (cutoff, MIN_POSTS_FOR_LLM_CLASSIFICATION, limit),
-        )
-        return cursor.fetchall()
-
-    def _recent_posts(
-        self, cursor: sqlite3.Cursor, author_id: str, cutoff: int, k: int = 5,
-    ) -> List[str]:
-        cursor.execute(
-            """
-            SELECT text FROM x_posts_raw
-            WHERE author_id = ? AND created_at >= ?
-            ORDER BY created_at DESC LIMIT ?
-            """,
-            (author_id, cutoff, k),
-        )
-        return [row[0] for row in cursor.fetchall() if row[0]]
-
-    def _classify_single(
-        self,
-        platform: str,
-        handle: str,
-        display_name: str,
-        description: str,
-        verified: bool,
-        followers_count: int,
-        post_samples: List[str],
-    ) -> Optional[ClassificationResult]:
-        if self._llm_client is None:
-            return None
-        samples_block = "\n".join(
-            f"- {post[:240]}" for post in post_samples[:5]
-        )
-        user_prompt = ACCOUNT_CLASSIFIER_USER_PROMPT_TEMPLATE.format(
-            platform=platform,
-            handle=handle,
-            display_name=display_name or "(none)",
-            description=(description or "(none)")[:400],
-            verified="yes" if verified else "no",
-            followers_count=followers_count,
-            post_samples=samples_block or "(no recent posts available)",
-        )
-        try:
-            response = self._llm_client.complete(
-                system_prompt=ACCOUNT_CLASSIFIER_SYSTEM_PROMPT,
-                user_prompt=user_prompt,
-                response_schema=ACCOUNT_CLASSIFIER_SCHEMA,
-            )
-        except Exception as e:
-            logger.warning(f"Account classifier LLM call failed for @{handle}: {e}")
-            return None
-
-        tier = response.get("tier")
-        if tier not in ALLOWED_TIERS:
-            return None
-        try:
-            confidence = float(response.get("confidence", 0.5))
-        except (TypeError, ValueError):
-            confidence = 0.5
-        confidence = max(0.0, min(1.0, confidence))
-        reasoning = response.get("reasoning") or None
-        return ClassificationResult(
-            tier=tier, confidence=confidence, method="llm", reasoning=reasoning,
-        )
-
-    def _persist_llm(
-        self,
-        cursor: sqlite3.Cursor,
-        platform: str,
-        author_id: str,
-        display_name: Optional[str],
-        result: ClassificationResult,
-    ) -> None:
-        # Only the LLM path uses ON CONFLICT DO NOTHING — we never overwrite
-        # an existing classification (curated beats llm; llm doesn't re-run
-        # itself to avoid churn). Curated reruns use a separate UPSERT above.
-        # Faction columns (party/branch/office_title/etc.) stay NULL — the
-        # LLM classifies tier only, not faction metadata.
-        cursor.execute(
-            """
-            INSERT INTO account_profiles
-                (platform, author_id, display_name, full_name, tier,
-                 classification_method, classified_at, confidence, reasoning)
-            VALUES (?, ?, ?, ?, ?, 'llm', ?, ?, ?)
-            ON CONFLICT(platform, author_id) DO NOTHING
-            """,
-            (
-                platform,
-                author_id,
-                display_name,
-                display_name,
-                result.tier,
-                int(time.time()),
-                result.confidence,
-                result.reasoning,
-            ),
-        )

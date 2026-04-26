@@ -16,6 +16,7 @@ type XResult struct {
 	PostsIngested    int
 	UsersIngested    int
 	RequestsMade     int64
+	Officials        OfficialsResult
 }
 
 // XRunner orchestrates X post ingestion.
@@ -63,6 +64,37 @@ func (xr *XRunner) Run(ctx context.Context) (*XResult, error) {
 		start.PostCount, start.UserCount, start.RequestCount)
 
 	now := time.Now().Unix()
+
+	// Officials pass runs FIRST so a tight monthly budget never starves the
+	// verified-officials surface — those accounts are the highest-signal
+	// content we collect, and topic queries can degrade more gracefully
+	// (their coverage is sample-based to begin with). Failures inside the
+	// pass are per-account; they never abort the topic-query loop below.
+	officialsPath := cfg.X.OfficialsListPath
+	if officialsPath == "" {
+		officialsPath = "data/verified_officials.yaml"
+	}
+	maxPerOfficial := cfg.X.MaxTweetsPerOfficial
+	if maxPerOfficial <= 0 {
+		maxPerOfficial = 5
+	}
+	officialsRes, err := xr.runOfficialsPass(ctx, budget, officialsPath, maxPerOfficial)
+	if err != nil {
+		// A torn-up YAML is the only failure that aborts the pass; everything
+		// else is per-account and logged inline. We surface this rather than
+		// skipping silently because a malformed registry is an editorial bug
+		// the operator must fix.
+		fmt.Printf("Officials pass error: %v\n", err)
+	} else if officialsRes != nil {
+		xr.postsIngested += officialsRes.PostsIngested
+		xr.usersIngested += officialsRes.UsersIngested
+		fmt.Printf(
+			"Officials pass complete: %d/%d handles ok, %d failed, %d skipped, %d posts, %d users\n",
+			officialsRes.HandlesSucceeded, officialsRes.HandlesAttempted,
+			officialsRes.HandlesFailed, officialsRes.HandlesSkipped,
+			officialsRes.PostsIngested, officialsRes.UsersIngested,
+		)
+	}
 
 	for _, query := range cfg.X.PoliticalQueries {
 		if budget.OverBudget() {
@@ -133,12 +165,16 @@ func (xr *XRunner) Run(ctx context.Context) (*XResult, error) {
 		float64(end.CeilingCents)/100.0,
 		end.PostCount, end.UserCount, end.RequestCount)
 
-	return &XResult{
+	result := &XResult{
 		QueriesProcessed: xr.queriesProcessed,
 		PostsIngested:    xr.postsIngested,
 		UsersIngested:    xr.usersIngested,
 		RequestsMade:     xr.client.RequestCount(),
-	}, nil
+	}
+	if officialsRes != nil {
+		result.Officials = *officialsRes
+	}
+	return result, nil
 }
 
 func (xr *XRunner) insertPost(ctx context.Context, post model.XPost) error {

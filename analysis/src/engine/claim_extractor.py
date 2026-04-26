@@ -8,10 +8,11 @@ drops the claim entirely, so a model that hallucinates can't silently
 populate the narrative layer.
 """
 
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 from typing import List, Optional
 
 from analysis.src.common.logger import get_logger
+from analysis.src.llm.context_seeds import format_seeds_block, match_seeds, matched_slugs
 from analysis.src.llm.prompts import (
     CLAIM_EXTRACTION_SYSTEM_PROMPT,
     CLAIM_EXTRACTION_USER_PROMPT_TEMPLATE,
@@ -42,9 +43,17 @@ class ExtractedClaim:
 class ClaimExtractionResult:
     claims: List[ExtractedClaim]
     reasoning: Optional[str] = None
+    # Slugs of any reference seeds that matched the doc's text and were
+    # injected into the LLM prompt. Persisted into ai_outputs.output_json
+    # as audit metadata so reviewers can re-derive which references the
+    # model saw for a given claim row.
+    reference_seeds: List[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
-        return {"claims": [c.to_dict() for c in self.claims]}
+        out: dict = {"claims": [c.to_dict() for c in self.claims]}
+        if self.reference_seeds:
+            out["reference_seeds"] = list(self.reference_seeds)
+        return out
 
 
 def _validate_claim(raw: dict, source_text: str) -> Optional[ExtractedClaim]:
@@ -91,10 +100,14 @@ class ClaimExtractor:
         if not self._llm_client.is_available:
             return ClaimExtractionResult(claims=[])
 
+        seeded = match_seeds(text)
+        seeds_block = format_seeds_block(seeded)
+        user_prompt = seeds_block + CLAIM_EXTRACTION_USER_PROMPT_TEMPLATE.format(text=text[:2000])
+
         try:
             response = self._llm_client.complete(
                 system_prompt=CLAIM_EXTRACTION_SYSTEM_PROMPT,
-                user_prompt=CLAIM_EXTRACTION_USER_PROMPT_TEMPLATE.format(text=text[:2000]),
+                user_prompt=user_prompt,
                 response_schema=CLAIM_EXTRACTION_SCHEMA,
             )
         except Exception as e:
@@ -108,4 +121,7 @@ class ClaimExtractor:
             if claim is not None:
                 validated.append(claim)
 
-        return ClaimExtractionResult(claims=validated)
+        return ClaimExtractionResult(
+            claims=validated,
+            reference_seeds=matched_slugs(seeded),
+        )
