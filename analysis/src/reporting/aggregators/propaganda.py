@@ -28,7 +28,6 @@ from analysis.src.reporting.aggregators.base import (
     X_AUTHOR_JOIN_SQL,
     get_connection,
     get_time_cutoff,
-    source_filter_allowed,
 )
 from analysis.src.reporting.aggregators.constants import (
     SOCIAL_PLATFORMS,
@@ -51,6 +50,16 @@ logger = get_logger(__name__)
 # un-flagged or low-signal.
 FLAG_THRESHOLD = 0.3
 EXAMPLE_LIMIT = 10
+# Pool size for the per-entity examples lookup. We pull a much larger
+# slice of recent flagged docs than the global Examples card needs so
+# that drill-down modals (PropagandaEntityModal) consistently have at
+# least a few rows even for narrow entities. Sized for a 30d window with
+# a long tail of low-volume outlets/officials; raise if the modal still
+# reads empty for active entities.
+EXAMPLE_POOL_LIMIT = 500
+# Cap per entity to keep payload bounded — readers only need a handful
+# of examples to verify the score, not an exhaustive list.
+EXAMPLES_PER_ENTITY = 6
 TEXT_PREVIEW_CHARS = 240
 
 
@@ -121,6 +130,12 @@ class PropagandaOverview:
     by_news_outlet: List[PropagandaEntityItem] = field(default_factory=list)
     by_official: List[PropagandaEntityItem] = field(default_factory=list)
     by_general_public: List[PropagandaEntityItem] = field(default_factory=list)
+    # Per-entity flagged-example bucket (walkthrough fix: per-entity drill
+    # down modals were filtering the global ``examples`` list and almost
+    # always finding zero matches because that list is capped at 10).
+    # Keyed by the same key used in ``PropagandaEntityItem.key`` (outlet
+    # domain, official handle, subreddit name, or catch-all sentinel).
+    examples_by_entity: Dict[str, List["PropagandaExample"]] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -136,6 +151,10 @@ class PropagandaOverview:
             "by_news_outlet": [asdict(e) for e in self.by_news_outlet],
             "by_official": [asdict(e) for e in self.by_official],
             "by_general_public": [asdict(e) for e in self.by_general_public],
+            "examples_by_entity": {
+                key: [asdict(e) for e in exs]
+                for key, exs in self.examples_by_entity.items()
+            },
         }
 
 
@@ -153,17 +172,13 @@ class PropagandaAggregator:
         self.db_path = db_path
 
     def get_propaganda_overview(
-        self, time_window: str = "7d", source_filter: str = "all",
+        self, time_window: str = "7d",
     ) -> PropagandaOverview:
         cutoff = get_time_cutoff(time_window)
         with get_connection(self.db_path) as conn:
             cursor = conn.cursor()
             rows = self._fetch_rows(cursor, cutoff)
             examples = self._fetch_examples(cursor, cutoff)
-        allowed = source_filter_allowed(source_filter)
-        if allowed is not None:
-            rows = [r for r in rows if (r[1] or "") in allowed]
-            examples = [e for e in examples if (e[1] or "") in allowed]
         return self._build_overview(rows, examples, window=time_window)
 
     def _fetch_rows(self, cursor, cutoff) -> List[tuple]:
@@ -192,7 +207,10 @@ class PropagandaAggregator:
         return cursor.fetchall()
 
     def _fetch_examples(self, cursor, cutoff) -> List[tuple]:
-        """Most-recent flagged docs for the Examples card."""
+        """Recent flagged docs — pool used for both the global Examples
+        card (top ``EXAMPLE_LIMIT``) and per-entity drill-down modals
+        (bucketed below). Pool size is intentionally larger than the
+        global card limit so narrow entities still have rows."""
         sql = f"""
             SELECT a.doc_id,
                    d.source_type,
@@ -216,7 +234,7 @@ class PropagandaAggregator:
             sql += " AND d.published_at >= ?"
             params.append(cutoff)
         sql += " ORDER BY d.published_at DESC LIMIT ?"
-        params.append(EXAMPLE_LIMIT)
+        params.append(EXAMPLE_POOL_LIMIT)
         cursor.execute(sql, params)
         return cursor.fetchall()
 
@@ -317,9 +335,25 @@ class PropagandaAggregator:
                 mean_score=round(src_mean, 3),
             ))
 
-        examples: List[PropagandaExample] = []
+        # Build the full example pool (already sorted DESC by published_at
+        # via the SQL). Bucket each example by its resolved entity key so
+        # per-entity drill-down modals always have rows for active
+        # entities, while the global "Recent flagged posts" card still
+        # only shows the top ``EXAMPLE_LIMIT`` most-recent.
+        #
+        # Dedupe by ``doc_id``: ai_outputs has no UNIQUE(doc_id, task_type)
+        # constraint, so re-runs / older prompt versions can leave multiple
+        # rows for the same doc. Without dedupe the same tweet would render
+        # ten times on the Examples card. We keep the first occurrence
+        # (most recent published_at) for each doc.
+        example_pool: List[PropagandaExample] = []
+        examples_by_entity: Dict[str, List[PropagandaExample]] = {}
+        seen_doc_ids: Set[int] = set()
         for (doc_id, source_type, domain, title, text, _conf, output_json,
              _pub, ident, author_handle) in example_rows:
+            if doc_id in seen_doc_ids:
+                continue
+            seen_doc_ids.add(doc_id)
             try:
                 payload = json.loads(output_json) if output_json else {}
             except json.JSONDecodeError:
@@ -335,7 +369,7 @@ class PropagandaAggregator:
                     "evidence_span": t.get("evidence_span"),
                 })
             preview = (text or "")[:TEXT_PREVIEW_CHARS]
-            examples.append(PropagandaExample(
+            example = PropagandaExample(
                 doc_id=doc_id,
                 source_type=source_type or "unknown",
                 domain=domain,
@@ -345,7 +379,18 @@ class PropagandaAggregator:
                 text_preview=preview,
                 author_handle=author_handle,
                 url=_build_doc_url(source_type, domain, ident, author_handle),
-            ))
+            )
+            example_pool.append(example)
+
+            entity_key = _resolve_entity_key(
+                registry, source_type, domain, author_handle,
+            )
+            if entity_key is not None:
+                bucket = examples_by_entity.setdefault(entity_key, [])
+                if len(bucket) < EXAMPLES_PER_ENTITY:
+                    bucket.append(example)
+
+        examples = example_pool[:EXAMPLE_LIMIT]
 
         return PropagandaOverview(
             window=window,
@@ -360,6 +405,7 @@ class PropagandaAggregator:
             by_news_outlet=_finalize_entity_items(by_outlet),
             by_official=_finalize_entity_items(by_official),
             by_general_public=_finalize_entity_items(by_public),
+            examples_by_entity=examples_by_entity,
         )
 
 
@@ -419,6 +465,32 @@ def _accumulate_entity(
     bucket["score_sum"] += score
     if is_flagged:
         bucket["flagged"] += 1
+
+
+def _resolve_entity_key(
+    registry,
+    source_type: Optional[str],
+    domain: Optional[str],
+    x_handle: Optional[str],
+) -> Optional[str]:
+    """Resolve a doc to the same key ``_accumulate_entity`` uses for its
+    entity bucket. Keeps ``examples_by_entity`` lookups in lockstep with
+    the ``by_news_outlet`` / ``by_official`` / ``by_general_public`` keys
+    the UI gets in ``PropagandaEntityItem.key`` — without that alignment
+    the modal would always read empty."""
+    tier, entity = resolve_entity(registry, source_type, domain, x_handle)
+    if tier is None:
+        return None
+    if tier == "news":
+        return entity.domain if entity is not None else CATCH_ALL_OUTLETS
+    if tier == "officials":
+        return entity.handle if entity is not None else None
+    # public
+    if entity is not None:
+        return entity.subreddit
+    if source_type == "x_post":
+        return CATCH_ALL_X_USERS
+    return CATCH_ALL_SUBREDDITS
 
 
 def _finalize_entity_items(

@@ -97,10 +97,7 @@ class AnalysisJobRunner:
             if self.settings.llm_enabled else PropagandaDetector(llm_enabled=False)
         )
         self.narrative_clusterer = self._build_narrative_clusterer()
-        self.account_classifier = AccountClassifier(
-            db_path=self.settings.db_path,
-            llm_enabled=self.settings.llm_enabled and self.settings.account_classifier_llm_enabled,
-        )
+        self.account_classifier = AccountClassifier(db_path=self.settings.db_path)
         self.polling_scraper = PollingDataScraper() if self.settings.polling_enabled else None
 
     def _build_narrative_clusterer(self) -> NarrativeClusterer:
@@ -506,16 +503,17 @@ class AnalysisJobRunner:
         return self.narrative_clusterer.run()
 
     def run_account_classification(self) -> dict:
-        """Seed curated accounts then run the LLM classifier on unclassified
-        high-volume X authors. Returns a summary dict."""
-        logger.info("Step 8/10: Running account tier classification...")
+        """Seed curated accounts from the registry YAML. The earlier LLM
+        classifier path was removed on 2026-04-25 — officials-tier
+        identification flows through entity_registry (verified_officials.yaml)
+        and authors not in the curated YAML default to general_public at
+        the aggregator layer."""
+        logger.info("Step 8/10: Running account tier classification (curated)...")
         yaml_path = project_root / self.settings.known_accounts_yaml
         curated = self.account_classifier.load_curated(yaml_path)
-        llm_written = self.account_classifier.classify_with_llm()
         summary = {
             "curated_elected_official": curated.get("elected_official", 0),
             "curated_affiliated": curated.get("affiliated", 0),
-            "llm_written": llm_written,
         }
         logger.info(f"Account classification complete: {summary}")
         return summary

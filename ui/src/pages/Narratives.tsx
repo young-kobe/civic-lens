@@ -1,21 +1,21 @@
 import { useMemo, useState } from 'react';
 import {
     Card, CollapsibleInfo, EmptyState, EntityHeader, EntityProfileCard,
-    ErrorState, GlobalTicker, LoadingCard, Modal, MoversTicker, SupportingDocsTable,
+    ErrorState, GlobalTicker, LoadingCard, Modal, SupportingDocsTable,
     ThreeWayColumn, ThreeWayGrid,
     entityExternalUrl, entityLeanAccent,
 } from '../components/common';
 import type { EntityStat, TickerItem } from '../components/common';
 import type { EntityProfile } from '../types';
 import { Sparkline } from '../components/charts';
-import { fetchMovers, fetchNarratives, fetchSnapshotStatus, type SnapshotStatus } from '../services/api';
+import { fetchNarratives, fetchSnapshotStatus, type SnapshotStatus } from '../services/api';
 import { asOfTodayEyebrow } from '../services/timeWindow';
 import { formatRefreshedAgo, getSnapshotTimestamp } from '../services/freshness';
 import { formatPct } from '../services/format';
 import { useFetch } from '../services/useFetch';
 import { COLORS } from '../theme';
 import type {
-    AccountProfile, Filters, MoversResult, NarrativeSourceBreakdownItem, NarrativeSummary,
+    AccountProfile, Filters, NarrativeSourceBreakdownItem, NarrativeSummary,
 } from '../types';
 
 
@@ -34,11 +34,15 @@ function buildNarrativeTickerItems(data: NarrativeSummary[], window: string): Ti
         if (!topClaim || n.supporting_doc_count > topClaim.supporting_doc_count) topClaim = n;
     }
 
+    // "Top stories / in window" rather than "Tracked / narratives" — the
+    // /narratives endpoint returns at most ?limit (defaulted to 20 by the
+    // UI), so this number is "the top-N most-supported in the selected
+    // window," not a count of every narrative the system has on file.
     const items: TickerItem[] = [
         {
-            label: 'Tracked', value: total.toLocaleString(), hint: 'narratives',
+            label: 'Top stories', value: total.toLocaleString(), hint: 'in window',
             emphasis: true,
-            ariaLabel: `${total} narratives tracked`,
+            ariaLabel: `${total} top stories in window`,
         },
         {
             label: 'New (24h)', value: freshCount.toLocaleString(),
@@ -587,10 +591,10 @@ function ClaimsSpreadingPanel({ narratives, onOpen }: { narratives: NarrativeSum
         return (
             <Card
                 title="Top political narratives"
-                subtitle="No stories are being repeated across more than one group yet — the news, officials, and the public aren't overlapping in this window."
+                subtitle="No story has surfaced in more than one group yet in this window — see the per-group breakdown above for what each is talking about."
             >
                 <p className="text-muted text-sm">
-                    Check back as coverage develops.
+                    We'll list stories here as soon as the same recurring claim is being repeated by at least two of the three groups (news, officials, the public).
                 </p>
             </Card>
         );
@@ -653,11 +657,6 @@ function Narratives({ filters }: NarrativesProps) {
         [filters.timeRange],
         `narratives:${filters.timeRange}`,
     );
-    const { data: movers } = useFetch<MoversResult>(
-        () => fetchMovers(filters.timeRange),
-        [filters.timeRange],
-        `movers:${filters.timeRange}`,
-    );
     const { data: snapshotStatus } = useFetch<SnapshotStatus>(
         () => fetchSnapshotStatus(),
         [],
@@ -679,30 +678,22 @@ function Narratives({ filters }: NarrativesProps) {
     // readers can see which axes are empty, matching Tone's behavior.
     if (!data) return <EmptyState title="No narratives data available" />;
 
-    // Client-side source filter (API already returns all sources).
-    const sourceMatches = (st: string | null): boolean => {
-        if (filters.sourceType === 'all') return true;
-        if (filters.sourceType === 'news') return st === 'news';
-        if (filters.sourceType === 'reddit') return st === 'reddit_post' || st === 'reddit_comment';
-        if (filters.sourceType === 'social') return st === 'reddit_post' || st === 'reddit_comment' || st === 'x_post';
-        return true;
-    };
-    const filtered = data.filter((n) => sourceMatches(n.first_seen_source_type));
-
     // Three-way split by first_seen_tier_group (walkthrough 058), then
     // rolled up by first_seen_entity_profile so each entity gets one card.
+    // The three-tier split (news / officials / public) is the source
+    // separation now — the global "Filter by sources" pills were removed.
     const newsGroups = groupNarrativesByEntity(
-        filtered.filter((n) => n.first_seen_tier_group === 'news'),
+        data.filter((n) => n.first_seen_tier_group === 'news'),
     );
     const officialGroups = groupNarrativesByEntity(
-        filtered.filter((n) => n.first_seen_tier_group === 'officials'),
+        data.filter((n) => n.first_seen_tier_group === 'officials'),
     );
     const publicGroups = groupNarrativesByEntity(
-        filtered.filter((n) => n.first_seen_tier_group === 'public'),
+        data.filter((n) => n.first_seen_tier_group === 'public'),
     );
-    const crossTier = filtered.filter((n) => n.cross_tier);
+    const crossTier = data.filter((n) => n.cross_tier);
 
-    const tickerItems = buildNarrativeTickerItems(filtered, filters.timeRange);
+    const tickerItems = buildNarrativeTickerItems(data, filters.timeRange);
     const refreshed = formatRefreshedAgo(
         getSnapshotTimestamp(snapshotStatus, `narratives_${filters.timeRange}`),
     );
@@ -719,19 +710,13 @@ function Narratives({ filters }: NarrativesProps) {
                     />
                 </div>
 
-                {movers && (
-                    <div className="col-span-12">
-                        <MoversTicker data={movers} />
-                    </div>
-                )}
-
                 {/* Reads-as-today headline card. */}
                 <div className="col-span-12">
                     <div className="reads-as-today">
                         <span className="eyebrow reads-as-today-eyebrow">
                             {asOfTodayEyebrow(filters.timeRange)}
                         </span>
-                        <p className="lead" style={{ margin: 0 }}>{readsAsToday(filtered)}</p>
+                        <p className="lead" style={{ margin: 0 }}>{readsAsToday(data)}</p>
                     </div>
                 </div>
 

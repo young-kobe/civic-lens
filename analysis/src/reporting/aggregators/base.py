@@ -8,7 +8,7 @@ import contextlib
 import sqlite3
 import json
 import time
-from typing import FrozenSet, Literal, Optional, Set
+from typing import Optional, Set
 
 from analysis.src.common.logger import get_logger
 
@@ -40,30 +40,6 @@ X_AUTHOR_JOIN_SQL = (
     "ON d.source_type = 'x_post' AND x.tweet_id = d.ident "
     "LEFT JOIN x_users_raw u ON u.user_id = x.author_id"
 )
-
-# UI-facing source filter keys mapped to the set of doc source_type values
-# they select. "all" means no filter. Keep in lockstep with the Filters
-# type in ui/src/types.ts.
-SourceFilter = Literal["all", "news", "reddit", "social"]
-
-_SOURCE_FILTER_SETS: dict = {
-    "news": frozenset({"news"}),
-    "reddit": frozenset({"reddit_post", "reddit_comment"}),
-    "social": frozenset({"reddit_post", "reddit_comment", "x_post"}),
-}
-
-
-def source_filter_allowed(source_filter: str) -> Optional[FrozenSet[str]]:
-    """Return the set of allowed source_type values for a filter key, or None
-    when no filter should be applied ("all" or any unknown value).
-
-    Callers iterate rows and skip when source_type not in the returned set.
-    Returning None (rather than every-type) lets the caller short-circuit
-    the check entirely in the unfiltered case."""
-    if source_filter == "all" or source_filter not in _SOURCE_FILTER_SETS:
-        return None
-    return _SOURCE_FILTER_SETS[source_filter]
-
 
 @contextlib.contextmanager
 def get_connection(db_path: str):

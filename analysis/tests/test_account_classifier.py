@@ -1,17 +1,18 @@
 """
-Tests for the account tier classifier (walkthrough 036).
+Tests for the curated-YAML account tier loader.
 
 Covers:
   - Curated-YAML loader seeds account_profiles correctly and is idempotent.
   - Curated rerun with a changed tier overwrites the earlier row.
-  - LLM classifier path via a mock client — affirmative tier is persisted,
-    and a second run does not overwrite it.
   - NarrativeAggregator attaches first_seen_tier for x_post narratives via
     the account_profiles join, and defaults to general_public when the
     X author is unclassified.
+
+The earlier LLM-classifier tests were removed on 2026-04-25 alongside the
+LLM classifier itself; tier identification now flows through the curated
+YAML here plus verified_officials.yaml in entity_registry.
 """
 
-import json
 import os
 import sqlite3
 import sys
@@ -27,7 +28,7 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 from analysis.src.engine.account_classifier import (
-    AccountClassifier, ClassificationResult, _parse_curated_yaml,
+    AccountClassifier, _parse_curated_yaml,
 )
 from analysis.src.reporting.aggregators.narrative import NarrativeAggregator
 
@@ -99,32 +100,6 @@ def _seed_narrative_with_doc(conn, narrative_id: int, doc_id: int, name: str):
     )
 
 
-class _FakeLLMClient:
-    """Minimal LLM client double for AccountClassifier tests."""
-
-    is_available = True
-
-    def __init__(self, responses: dict):
-        # responses keyed by handle → dict of tier/confidence/reasoning
-        self._responses = responses
-        self.calls = []
-
-    def complete(self, system_prompt, user_prompt, response_schema=None):
-        # Pull handle out of the user_prompt (ACCOUNT_CLASSIFIER_USER_PROMPT_TEMPLATE
-        # inserts "Handle: @<handle>") to pick a canned response.
-        handle = ""
-        for line in user_prompt.splitlines():
-            if line.startswith("Handle: @"):
-                handle = line.split("@", 1)[1].strip()
-                break
-        self.calls.append(handle)
-        return self._responses.get(handle, {
-            "tier": "general_public",
-            "confidence": 0.5,
-            "reasoning": "default fake",
-        })
-
-
 class TestCuratedLoader(unittest.TestCase):
     def setUp(self):
         fd, self.db_path = tempfile.mkstemp(suffix=".db")
@@ -155,7 +130,7 @@ class TestCuratedLoader(unittest.TestCase):
           - handle: GOP
             notes: "RNC"
         """)
-        clf = AccountClassifier(self.db_path, llm_enabled=False)
+        clf = AccountClassifier(self.db_path)
         counts = clf.load_curated(yaml_path)
         self.assertEqual(counts["elected_official"], 1)
         self.assertEqual(counts["affiliated"], 1)
@@ -180,7 +155,7 @@ class TestCuratedLoader(unittest.TestCase):
         elected_official:
           - handle: POTUS
         """)
-        clf = AccountClassifier(self.db_path, llm_enabled=False)
+        clf = AccountClassifier(self.db_path)
         clf.load_curated(yaml_path)
         clf.load_curated(yaml_path)
         conn = sqlite3.connect(self.db_path)
@@ -198,7 +173,7 @@ class TestCuratedLoader(unittest.TestCase):
           - handle: POTUS
             notes: "reclassified"
         """)
-        clf = AccountClassifier(self.db_path, llm_enabled=False)
+        clf = AccountClassifier(self.db_path)
         clf.load_curated(yaml1)
         clf.load_curated(yaml2)
         conn = sqlite3.connect(self.db_path)
@@ -208,69 +183,6 @@ class TestCuratedLoader(unittest.TestCase):
         conn.close()
         self.assertEqual(row[0], "affiliated")
         self.assertEqual(row[1], "reclassified")
-
-
-class TestLLMClassifier(unittest.TestCase):
-    def setUp(self):
-        fd, self.db_path = tempfile.mkstemp(suffix=".db")
-        os.close(fd)
-        _apply_migrations(self.db_path)
-        now = int(time.time())
-        conn = sqlite3.connect(self.db_path)
-        _seed_x_user(conn, user_id="u1", username="journo1", followers=50000)
-        _seed_x_user(conn, user_id="u2", username="randomuser", followers=50)
-        # Meet the volume threshold (>=3 posts in window) for both.
-        for i in range(3):
-            _seed_x_post(conn, tweet_id=f"t_u1_{i}", author_id="u1",
-                         text="politics post", created_at=now - i * 3600)
-            _seed_x_post(conn, tweet_id=f"t_u2_{i}", author_id="u2",
-                         text="some random take", created_at=now - i * 3600)
-        conn.commit()
-        conn.close()
-
-    def tearDown(self):
-        os.unlink(self.db_path)
-
-    def test_llm_classifier_persists_affirmative_tier(self):
-        fake = _FakeLLMClient({
-            "journo1": {"tier": "affiliated", "confidence": 0.8,
-                         "reasoning": "bio says journalist"},
-            "randomuser": {"tier": "general_public", "confidence": 0.6,
-                           "reasoning": "no known role"},
-        })
-        clf = AccountClassifier(self.db_path, llm_enabled=False)
-        # Force the fake client into place without taking the real init path.
-        clf._llm_client = fake
-        clf.llm_enabled = True
-        written = clf.classify_with_llm(limit=10)
-        self.assertEqual(written, 2)
-
-        conn = sqlite3.connect(self.db_path)
-        rows = {
-            row[0]: (row[1], row[2])
-            for row in conn.execute(
-                "SELECT author_id, tier, classification_method FROM account_profiles"
-            ).fetchall()
-        }
-        conn.close()
-        self.assertEqual(rows["u1"], ("affiliated", "llm"))
-        self.assertEqual(rows["u2"], ("general_public", "llm"))
-
-    def test_llm_classifier_skips_already_classified(self):
-        fake = _FakeLLMClient({
-            "journo1": {"tier": "affiliated", "confidence": 0.8, "reasoning": "x"},
-            "randomuser": {"tier": "general_public", "confidence": 0.6, "reasoning": "y"},
-        })
-        clf = AccountClassifier(self.db_path, llm_enabled=False)
-        clf._llm_client = fake
-        clf.llm_enabled = True
-        clf.classify_with_llm(limit=10)
-        initial_calls = len(fake.calls)
-        # Second pass should find no unclassified authors.
-        fake.calls.clear()
-        clf.classify_with_llm(limit=10)
-        self.assertEqual(len(fake.calls), 0)
-        self.assertEqual(initial_calls, 2)
 
 
 class TestParseCuratedYAMLRichFormat(unittest.TestCase):

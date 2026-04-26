@@ -80,9 +80,10 @@ class Settings(BaseSettings):
     aggregation_min_confidence: float = 0.5
 
     # Account tier classification (walkthrough 036).
-    # Path is relative to the repo root; resolved in job_runner.
+    # Path is relative to the repo root; resolved in job_runner. Loader is
+    # curated-only — the LLM-driven tier classifier was removed on 2026-04-25
+    # in favour of the verified_officials.yaml + curated-YAML pair.
     known_accounts_yaml: str = "data/known_political_x_accounts.yaml"
-    account_classifier_llm_enabled: bool = True
 
     model_config = SettingsConfigDict(
         env_prefix="CIVIC_",
