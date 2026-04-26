@@ -1,4 +1,5 @@
 import { COLORS } from '../../theme';
+import { dedupeById } from '../../services/dedupe';
 import type { ClassificationSample, SupportingDoc } from '../../types';
 
 // --------------------------------------------------------------------------- //
@@ -32,7 +33,11 @@ interface SupportingDocsTableProps {
 }
 
 export function SupportingDocsTable({ docs, whenLabel = formatRelativeDate }: SupportingDocsTableProps) {
-    if (docs.length === 0) return null;
+    // Dedupe defensively: backend joins on ai_outputs which has no
+    // (doc_id, task_type) unique constraint, so the same doc can arrive
+    // multiple times when prompts have been re-run.
+    const unique = dedupeById(docs, (d) => d.doc_id);
+    if (unique.length === 0) return null;
     return (
         <div className="supporting-docs-table-wrap">
             <table className="supporting-docs-table">
@@ -47,7 +52,7 @@ export function SupportingDocsTable({ docs, whenLabel = formatRelativeDate }: Su
                     </tr>
                 </thead>
                 <tbody>
-                    {docs.map((d) => {
+                    {unique.map((d) => {
                         const tone = d.sentiment_label;
                         const toneColor = tone ? SENT_LABEL_COLOR[tone] : 'var(--neutral-400)';
                         const conf = d.confidence != null ? Math.round(d.confidence * 100) : null;

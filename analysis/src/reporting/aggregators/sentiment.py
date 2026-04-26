@@ -27,7 +27,6 @@ from analysis.src.reporting.aggregators.base import (
     get_bot_flagged_doc_ids,
     get_connection,
     get_time_cutoff,
-    source_filter_allowed,
 )
 from analysis.src.reporting.aggregators.constants import (
     NEWS_PLATFORMS, SOCIAL_PLATFORMS, STRONG_CONFIDENCE_THRESHOLD, TOPIC_KEYWORDS,
@@ -87,7 +86,6 @@ class SentimentAggregator:
         self,
         time_window: str = "24h",
         bot_docs: Optional[Set[int]] = None,
-        source_filter: str = "all",
     ) -> PublicSentimentResult:
         """Aggregate sentiment excluding bot-flagged content + rows whose
         confidence is below ``aggregation_min_confidence`` (walkthrough 039).
@@ -97,8 +95,6 @@ class SentimentAggregator:
             bot_docs: Pre-computed bot-flagged doc id set. When None, the
                 aggregator queries it itself. job_runner passes a cached
                 set so the query doesn't run once per aggregator.
-            source_filter: all | news | reddit | social. Filtered requests
-                bypass the snapshot cache.
         """
         min_conf = get_settings().aggregation_min_confidence
         if bot_docs is None:
@@ -128,7 +124,12 @@ class SentimentAggregator:
                 min_confidence=min_conf,
             )
 
-        allowed_sources = source_filter_allowed(source_filter)
+        # ``allowed_sources=None`` means no filter — the only path now that
+        # the UI's "Filter by sources" pills have been removed. Internal
+        # plumbing kept as an Optional[frozenset] so the per-row scoping
+        # in ``_aggregate_rows`` / ``_merge_favorability_data`` short-
+        # circuits cleanly without rewriting those hot loops.
+        allowed_sources = None
         result = self._process_sentiment_data(sentiment_rows, bot_docs, allowed_sources)
         _merge_favorability_data(result, favorability_rows, bot_docs, allowed_sources, self.cache)
         return result

@@ -16,11 +16,15 @@ import (
 	"golang.org/x/time/rate"
 )
 
+// DefaultBaseURL is the production X API v2 root.
+const DefaultBaseURL = "https://api.x.com"
+
 // Client interfaces with X API v2.
 type Client struct {
 	httpClient   *http.Client
 	bearerToken  string // unexported default
 	userAgent    string
+	baseURL      string // injectable; defaults to DefaultBaseURL
 	rateLimiter  *rate.Limiter
 	requestCount int64 // Track for cost estimation
 }
@@ -30,6 +34,9 @@ type Config struct {
 	BearerToken     string
 	UserAgent       string
 	MaxRequestsHour int // Budget control
+	// BaseURL overrides the API root for tests (httptest server). Empty
+	// string falls back to DefaultBaseURL — production never sets this.
+	BaseURL string
 }
 
 // New creates a new X API v2 client.
@@ -42,10 +49,16 @@ func New(cfg Config) *Client {
 	}
 	reqPerSec := float64(maxReqHour) / 3600.0
 
+	baseURL := cfg.BaseURL
+	if baseURL == "" {
+		baseURL = DefaultBaseURL
+	}
+
 	return &Client{
 		httpClient:  &http.Client{Timeout: 30 * time.Second},
 		bearerToken: cfg.BearerToken,
 		userAgent:   cfg.UserAgent,
+		baseURL:     baseURL,
 		rateLimiter: rate.NewLimiter(rate.Limit(reqPerSec), 1),
 	}
 }
@@ -76,10 +89,20 @@ func (c *Client) SearchRecentPosts(ctx context.Context, query string, maxResults
 	}
 
 	// Build URL with required fields and expansions
-	baseURL := "https://api.x.com/2/tweets/search/recent"
+	baseURL := c.baseURL + "/2/tweets/search/recent"
 	params := url.Values{}
 	params.Set("query", query)
-	params.Set("max_results", fmt.Sprintf("%d", min(maxResults, 100))) // API max is 100
+	// X API requires max_results in [10, 100] for /2/tweets/search/recent
+	// (HTTP 400 below 10). Pad up so a smaller per-query cap in seeds.yaml
+	// doesn't break every run — same defensive pattern as UserTimeline,
+	// which has its own floor of 5.
+	if maxResults < 10 {
+		maxResults = 10
+	}
+	if maxResults > 100 {
+		maxResults = 100
+	}
+	params.Set("max_results", fmt.Sprintf("%d", maxResults))
 	params.Set("tweet.fields", "author_id,created_at,text,public_metrics,geo,context_annotations,lang,conversation_id,in_reply_to_user_id,referenced_tweets")
 	params.Set("user.fields", "id,username,name,location,description,created_at,public_metrics,verified,verified_type,protected,profile_image_url")
 	params.Set("place.fields", "id,full_name,country,country_code")

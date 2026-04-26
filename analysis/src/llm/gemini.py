@@ -13,6 +13,25 @@ from analysis.src.common.logger import get_logger
 logger = get_logger(__name__)
 
 
+# Gemini's default safety thresholds (BLOCK_MEDIUM_AND_ABOVE) refuse a large
+# fraction of political-discourse posts as "harassment" or "hate speech",
+# which is exactly the content we are tasked with ANALYZING. A blocked
+# prompt forces a heuristic fallback (or an empty result for claim/
+# propaganda tasks), which is the failure mode the audit trail flags as
+# "ai_outputs.inference_method='heuristic'". Setting BLOCK_NONE on the
+# four configurable categories lets the model read the input; the model
+# still self-censors what it WRITES via the structured-output schema, and
+# we never display its reasoning verbatim — only the labelled outputs that
+# the prompt rubric requires. Documented at
+# https://ai.google.dev/gemini-api/docs/safety-settings
+_PERMISSIVE_SAFETY_SETTINGS = [
+    {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+    {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+    {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+    {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
+]
+
+
 class GeminiClient(BaseLLMClient):
     """
     Client for Google Gemini API.
@@ -95,10 +114,12 @@ class GeminiClient(BaseLLMClient):
         if response_schema:
             generation_config["response_schema"] = response_schema
         
-        # Create model instance with config
+        # Create model instance with config + permissive safety settings
+        # (see _PERMISSIVE_SAFETY_SETTINGS for the rationale).
         model_instance = self._genai.GenerativeModel(
             model_name=self.model,
-            generation_config=generation_config
+            generation_config=generation_config,
+            safety_settings=_PERMISSIVE_SAFETY_SETTINGS,
         )
         
         last_error = None

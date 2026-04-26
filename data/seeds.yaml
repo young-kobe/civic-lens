@@ -1,9 +1,12 @@
 # Civic Lens seed configuration
 #
-# Budget target: ~$50/month total operating cost. X credit spend is capped at
-# $25/month via x.monthly_budget_cents + the x_api_budget persistent counter
-# (walkthrough 048). News + Reddit are free. Hetzner + Gemini + R2 backups
-# round out the remaining ~$23/month.
+# Budget target: ~$75/month total operating cost. X credit spend is capped at
+# $50/month via x.monthly_budget_cents + the x_api_budget persistent counter.
+# That ceiling covers daily verified-officials timeline pulls (~$22/mo) plus
+# the 8 topic queries at the X API's 10-tweet minimum (~$24/mo); the rest is
+# headroom for the first-run user-by-username lookups and one-off retries.
+# News + Reddit are free. Hetzner + Gemini + R2 backups round out the
+# remaining ~$23/month.
 
 database:
   path: data/civic_lens.db
@@ -47,42 +50,39 @@ x:
   # Per-session rate pacing (not the real budget limit — that's below).
   max_requests_hour: 30
 
-  # Per-query tweet pull. X pricing is $0.005 per tweet + $0.010 per hydrated
-  # user; keeping this low means the user-expansion cost stays bounded
-  # (~8-12 unique authors per 10 tweets in practice).
-  #
-  # Walkthrough 056 dropped this from 10 → 8 to make room for the two new
-  # official-timeline queries below without blowing the budget. Cycle
-  # remains once/day at 04:00 UTC per civic-lens-x.timer. 11 queries × 8
-  # tweets × 30 days × ~$0.0104 (tweet + user hydration amortized) ≈
-  # $27.50/month, which fits comfortably under the $30 cap.
-  max_tweets_per_query: 8
+  # Per-query tweet pull. The X /2/tweets/search/recent endpoint enforces
+  # a minimum of 10 (HTTP 400 below); the client pads up defensively, so
+  # smaller values here are silently raised. X pricing is $0.005 per tweet
+  # + $0.010 per hydrated user; keeping this at the floor means the
+  # user-expansion cost stays bounded (~8-12 unique authors per 10 tweets
+  # in practice).
+  max_tweets_per_query: 10
 
   # Hard ceiling enforced by the x_api_budget table (migration 017). When
   # the month-to-date estimated spend hits this, the runner aborts any
-  # remaining queries for the month. Walkthrough 056 bumped this from
-  # $25 → $30 to give headroom for the added official-timeline queries.
-  monthly_budget_cents: 3000
+  # remaining queries for the month. Sized to fit daily officials
+  # timelines + topic queries at the API's 10-tweet floor — see the
+  # header comment for the breakdown.
+  monthly_budget_cents: 5000
 
-  # Query composition (walkthrough 056 — "option C hybrid"):
-  #
-  #   1. Eight topic queries (what the sample audience is talking about).
-  #   2. One pure-timeline query for the 9 highest-profile officials
-  #      (president + VP + congressional leadership + party chairs) so
-  #      their Verified Officials cards reflect their actual feed,
-  #      including off-topic posts.
-  #   3. One intersection query for the 7 cabinet secretaries + FBI
-  #      director × all topic keywords — surfaces the cabinet-level
-  #      signal on the shared topic axes without spending budget on
-  #      their off-topic posts (their media profile is narrower).
-  #
-  # When handles on the timeline queries don't resolve (e.g. if the
-  # registry's best-guess handle is wrong), the X API silently returns
-  # zero results for that from:-clause — watch x_api_budget and the
-  # narrative/sentiment aggregators' registry-match logs after the
-  # first few runs to spot misses.
+  # Officials path — runs BEFORE topic queries on every X ingest pass. The
+  # runner reads verified_officials.yaml (resolved relative to THIS file's
+  # directory, not the process working directory) and pulls the
+  # user-timeline for each handle (primary + alternates). Posts land with
+  # x_posts_raw.is_official_tier=1 so the analysis layer can route them
+  # without re-running the LLM tier classifier. 5 tweets/handle × ~24
+  # distinct handles ≈ 120 tweets/run; fits comfortably in the $30 cap
+  # alongside the topic queries below. Leaving officials_list_path unset
+  # uses the default `verified_officials.yaml` next to seeds.yaml.
+  max_tweets_per_official: 5
+
+  # Topic queries — what the sample audience is talking about. These run
+  # AFTER the officials pass; if the budget is already spent on officials
+  # the loop short-circuits cleanly. The two old `from:`-search queries
+  # for officials' timelines were removed when the explicit officials
+  # pass landed (2026-04-25); user-timeline calls give us the same
+  # coverage without the search-index recency window.
   political_queries:
-    # Topic queries — de-duplicated from the old 21-query list in walkthrough 048.
     - "GOP OR Republican"
     - "Trump OR MAGA"
     - "Biden OR Democrats"
@@ -91,15 +91,6 @@ x:
     - "immigration OR border OR ICE"
     - "inflation OR economy"
     - "2nd Amendment OR guns"
-
-    # Verified-officials timeline — exec + congressional leadership + party chairs.
-    # Pure from:-operators; every hit is authored by one of these 9 officials.
-    - "from:POTUS OR from:VP OR from:realDonaldTrump OR from:JDVance OR from:SpeakerJohnson OR from:RepJeffries OR from:SteveScalise OR from:LeaderJohnThune OR from:SenSchumer OR from:ChairmanWhatley OR from:TheDemocrats"
-
-    # Cabinet + FBI × topic intersection — only posts by these 7 officials
-    # that touch one of the topic axes. Narrower surface but higher per-post
-    # signal for the three-way topic-divergence panel.
-    - "(from:SecRubio OR from:SecScottBessent OR from:SecWar OR from:PeteHegseth OR from:AGPamBondi OR from:Sec_Noem OR from:KristiNoem OR from:SecKennedy OR from:RobertKennedyJr OR from:FBIDirectorKash OR from:Kash_Patel) (GOP OR Republican OR Trump OR MAGA OR Biden OR Democrats OR Congress OR Senate OR abortion OR SCOTUS OR immigration OR border OR inflation OR economy OR guns)"
 
 seeds:
   # Major news RSS feeds — left / center / right spread + neutral wire baseline.

@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"path/filepath"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -52,6 +53,17 @@ type XConfig struct {
 	// for the month. Zero disables the check — but always set this in
 	// production. (walkthrough 048.)
 	MonthlyBudgetCents int `yaml:"monthly_budget_cents"`
+	// OfficialsListPath points at the editorial verified-officials YAML
+	// (default: data/verified_officials.yaml). The X runner walks this
+	// list every pass and pulls each account's user-timeline; posts land
+	// with x_posts_raw.is_official_tier=1 so downstream stages skip the
+	// LLM tier classifier for them. Empty string falls back to the default.
+	OfficialsListPath string `yaml:"officials_list_path"`
+	// MaxTweetsPerOfficial bounds the per-account timeline pull. The X API
+	// minimum on /2/users/:id/tweets is 5; the client pads up if a smaller
+	// value is configured. Default 5 keeps the officials pass at roughly
+	// 16 handles × 5 tweets ≈ $1/run on the X v2 retail price card.
+	MaxTweetsPerOfficial int `yaml:"max_tweets_per_official"`
 }
 
 // SeedConfig holds a seed URL or feed.
@@ -87,6 +99,20 @@ func Load(path string) (*Config, error) {
 
 	if err := yaml.Unmarshal(data, cfg); err != nil {
 		return nil, err
+	}
+
+	// Resolve config-file paths (read-only, source-controlled) relative to
+	// the seeds.yaml directory, not the process working directory. This is
+	// what makes deploy work where `WorkingDirectory=/var/lib/civic-lens`
+	// (the runtime data root) but seeds.yaml + verified_officials.yaml
+	// live at `/opt/civic-lens/data/`. Runtime-data paths (database.path,
+	// database.raw_dir) stay relative to the working directory because
+	// those ARE meant to live next to the runtime data, not the binary.
+	seedsDir := filepath.Dir(path)
+	if cfg.X.OfficialsListPath == "" {
+		cfg.X.OfficialsListPath = filepath.Join(seedsDir, "verified_officials.yaml")
+	} else if !filepath.IsAbs(cfg.X.OfficialsListPath) {
+		cfg.X.OfficialsListPath = filepath.Join(seedsDir, cfg.X.OfficialsListPath)
 	}
 
 	return cfg, nil
