@@ -1,8 +1,9 @@
 # Civic Lens deploy/
 
 Infrastructure-as-code for the production deploy. Everything here is flat
-config — no Ansible, no Terraform, no Docker. Matches the one-VPS shape
-documented in `docs/deployment/plan.md`.
+config — no Ansible, no Terraform, no Docker. This is the canonical
+description of the one-VPS shape; deploy history lives under
+`docs/audit-trail/infra/`.
 
 ## Layout
 

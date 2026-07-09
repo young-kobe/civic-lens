@@ -6,7 +6,7 @@ The goal is deliberately scoped: this is a sampled-discourse tracker with a narr
 
 ## Architecture
 - **Ingestion (`ingest/`)**: Go 1.22+ crawler with SQLite frontier. Polite, resumable, crash-safe. Fetches news (RSS + web), Reddit, and X.
-- **Analysis (`analysis/`)**: Python backend for ETL, sentiment/bot/claims/narratives analysis, and pre-computed caching.
+- **Analysis (`analysis/`)**: Python backend for ETL and AI analysis — bot detection, unified sentiment + GOP favorability, deterministic citation extraction, LLM claim extraction, propaganda-technique detection, narrative clustering — plus pre-computed snapshot caching.
 - **API (`analysis/src/api/`)**: FastAPI server serving cached analysis results.
 - **Frontend (`ui/`)**: React + Vite + TypeScript dashboard.
 
@@ -75,21 +75,23 @@ Crawler seeds (RSS, subreddits, Reddit/X API creds, rate limits) live in `data/s
 
 ## API Endpoints
 
+Health is unversioned; everything else is mounted under `/api/v1`. Read routes serve pre-computed snapshots; `run/*` and `review/*` are write/admin surfaces gated by `CIVIC_ADMIN_TOKEN`.
+
 | Endpoint | Description |
 |----------|-------------|
 | `GET /health` | Health check |
-| `GET /api/cache-status` | Cache freshness metadata |
-| `GET /api/sentiment?window=7d` | Sentiment + GOP favorability snapshot |
-| `GET /api/profiles` | Outlet profiles |
-| `GET /api/bot-activity` | Bot activity snapshot |
-| `GET /api/geo-sentiment?window=7d` | Country-level sentiment for the global heatmap |
-| `GET /api/narratives?window=7d&limit=20` | Top narratives (claim clusters) with per-source breakdown |
-| `GET /api/review/queue?task=sentiment` | Human-review queue (lowest-confidence first) |
-| `POST /api/review/submit` | Submit a human verdict (feeds golden set / calibration) |
-| `GET /api/review/stats?task=sentiment` | Reviewer accuracy + coverage stats |
-| `POST /api/run/etl` | Trigger ETL in the background |
-| `POST /api/run/analysis` | Trigger AI analysis in the background |
-| `POST /api/run/full-pipeline` | Trigger the full pipeline in the background |
+| `GET /api/v1/cache-status` | Cache freshness metadata |
+| `GET /api/v1/snapshot-status` | Per-snapshot build status |
+| `GET /api/v1/sentiment?window=7d` | Sentiment + GOP favorability snapshot |
+| `GET /api/v1/bot-activity` | Bot activity snapshot |
+| `GET /api/v1/propaganda?window=7d` | Propaganda-technique snapshot |
+| `GET /api/v1/movers?window=7d` | Largest sentiment movers |
+| `GET /api/v1/narratives?window=7d&limit=20` | Top narratives (claim clusters) with per-source breakdown |
+| `GET /api/v1/review/queue?task=sentiment` | Human-review queue (lowest-confidence first) — admin |
+| `POST /api/v1/review/submit` | Submit a human verdict (feeds golden set / calibration) — admin |
+| `GET /api/v1/review/stats?task=sentiment` | Reviewer accuracy + coverage stats — admin |
+| `POST /api/v1/run/etl` | Trigger ETL in the background — admin |
+| `POST /api/v1/run/full-pipeline` | Trigger the full pipeline in the background — admin |
 
 ## Invariants
 

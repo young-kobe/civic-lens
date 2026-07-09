@@ -1,49 +1,72 @@
 # Civic Lens - Analysis Module
 
-This module handles the extraction, transformation, and AI analysis of news and social media content.
+This module handles the extraction, transformation, and AI analysis of news and social
+media content. It reads raw blobs ingested by the Go crawler, normalizes them into `docs`,
+runs the analysis engines, and pre-computes the JSON snapshot caches the API serves.
 
 ## Architecture
 
-The analysis pipeline is modularized into the following components:
-
--   **ETL (`src/etl/`)**: Loads raw data from SQLite, normalizes it into `docs`, and handles deduplication.
--   **Engine (`src/engine/`)**: Core analysis logic.
-    -   `bot.py`: Detects bot-like patterns (heuristic).
-    -   `sentiment.py`: Analyzes text sentiment.
-    -   `clustering.py`: Groups stories using TF-IDF and Cosine Similarity.
--   **Reporting (`src/reporting/`)**: Aggregates results into outlet profiles and story summaries.
--   **API (`src/api/`)**: FastAPI server exposing endpoints for the UI.
+- **ETL (`src/etl/`)**: `loader.py` loads raw data from SQLite, normalizes it into the
+  `docs` table (filtered to ~30 days of US-politics content), deduplicates, and stamps an
+  `etl_version` onto every row.
+- **Engine (`src/engine/`)**: core analysis logic.
+  - `bot.py`: bot / coordinated-inauthenticity detection (heuristic + optional LLM).
+  - `analyzer.py`: unified sentiment + GOP-favorability classification.
+  - `citation_extractor.py`: deterministic citation extraction between owned sources.
+  - `claim_extractor.py`: LLM claim extraction.
+  - `propaganda_detector.py`: LLM propaganda-technique detection (LLM-only, no fallback).
+  - `narrative_clusterer.py`: lexical (Jaccard) / embedding narrative clustering.
+  - `account_classifier.py`: account-tier classification.
+  - `text_prep.py`: shared deterministic pre-LLM gates (sentence-boundary truncation,
+    trivial-content short-circuit).
+- **LLM (`src/llm/`)**: Gemini + Ollama clients behind `factory.get_llm_client()`,
+  selected by `CIVIC_LLM_BACKEND`. Structured output enforced via JSON schemas in
+  `schemas.py`; prompts + version constants in `prompts.py`.
+- **Reporting (`src/reporting/`)**: `aggregators/` pre-compute dashboard data into the
+  snapshot cache (`data/cache/*.json`) at multiple time windows; `review.py` serves the
+  human-in-loop review queue and writes `ai_output_evals`.
+- **Scheduler (`src/scheduler/`)**: `job_runner.py` orchestrates the full pipeline
+  (ETL -> bot -> text -> citations -> claims -> propaganda -> narratives -> snapshots).
+- **API (`src/api/`)**: FastAPI server (`server.py`) exposing versioned endpoints under
+  `/api/v1`. Stateless — it serves the pre-computed cache, not live aggregation.
 
 ## Workflows
 
+The canonical entry point for everything below is `run.ps1` at the repo root (see the
+top-level README). The commands here are the underlying invocations.
+
 ### 1. Setup
-Install dependencies:
+
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. Running the Backend
-The entry point is `src/main.py`, which starts the FastAPI server (Uvicorn).
-```bash
-python src/main.py
-```
-Server runs at `http://localhost:8000`.
+### 2. Running the API
 
-### 3. API Usage
--   **Trigger Analysis**: `POST /api/run/analysis` (Queues bot/sentiment tasks)
--   **Trigger Clustering**: `POST /api/run/clustering`
--   **Get Stories**: `GET /api/stories`
--   **Get Profiles**: `GET /api/profiles`
+`src/main.py` boots the FastAPI app (Uvicorn) defined in `api/server.py`:
+
+```bash
+python -m analysis.src.main   # or: .\run.ps1 api
+```
+
+Server runs at `http://localhost:8000`; health at `/health`, data under `/api/v1`.
+
+### 3. Running the pipeline
+
+```bash
+.\run.ps1 analyze                    # full pipeline
+.\run.ps1 analyze -Tasks bot,text    # specific stages
+```
 
 ### 4. Testing
-Run the unit and integration tests:
+
+Run from the repo root with `PYTHONPATH` set so `analysis.src.*` imports resolve:
+
 ```bash
-# Unit tests for core logic
-python analysis/tests/test_engines.py
+# all tests
+python -m unittest discover analysis/tests
 
-# Integration tests for API
-python analysis/tests/test_api.py
-
-# Full workflow test against local DB
-python analysis/tests/test_workflow.py
+# a single module / test
+python -m unittest analysis.tests.test_engines
+python -m unittest analysis.tests.test_engines.TestEngines.test_bot_detector
 ```

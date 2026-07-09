@@ -1,10 +1,13 @@
 # Civic Lens - UI Module
 
-This is the frontend for Civic Lens, built with **React** (Vite). It provides a dashboard to visualize story clusters and outlet profiles.
+This is the frontend for Civic Lens, built with **React + Vite + TypeScript**. It provides a
+dashboard visualizing sampled political discourse: sentiment + GOP favorability, bot activity,
+propaganda techniques, and narrative (claim-cluster) overlays. It consumes the API only — no
+direct DB access.
 
 ## Architecture
--   **Framework**: React 18 + Vite
--   **State/API**: Standard `fetch` + React Hooks
+-   **Framework**: React 18 + Vite + TypeScript
+-   **State/API**: Standard `fetch` + React Hooks against `/api/v1`
 -   **Visualization**: Recharts
 
 ## Workflows
