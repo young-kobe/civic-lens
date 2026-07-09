@@ -19,8 +19,8 @@ See `docs/walkthroughs/035-goal-narrowing-and-renames.md` for the rationale behi
 - [ ] **Crash Safety**: On system restart, any `INFLIGHT` URLs must be reset to `QUEUED` (fetch never completed).
 
 ### A4. Fetcher
-- [ ] **Politeness**: Request rate per domain strictly never exceeds the configured token bucket limit.
-- [ ] **Completeness**: Every fetch attempt results in a recorded `fetch_event` (success or failure). Data is never silently dropped.
+- [ ] **Politeness**: Request rate per domain strictly never exceeds the configured token bucket limit. Redirect targets take a token against the target domain too, so a chain of source domains cannot multiply one host's request rate.
+- [ ] **Failure accounting**: Every fetch outcome updates the page's frontier row: a success transitions it to `DONE`; a failure records `pages.last_error` and either re-queues it with an incremented `retries` and backoff or marks it `FAILED`. There is no per-attempt `fetch_event` ledger — only the latest error and the retry count survive per page. This is the audit surface the system actually maintains; API-fetch history (robots.txt, Reddit/X calls) is captured only via the content-addressed raw blobs those calls persist, not as fetch events.
 
 ### A5. Content Capture
 - [ ] **Integrity**: `Hash(StoredBytes) == FilenameHash`.

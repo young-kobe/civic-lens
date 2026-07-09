@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"time"
@@ -97,7 +98,13 @@ func Load(path string) (*Config, error) {
 		},
 	}
 
-	if err := yaml.Unmarshal(data, cfg); err != nil {
+	// Strict decoding: an unknown or misspelled key (e.g. `max_concurency:`)
+	// is a hard error instead of silently falling back to the default. A typo
+	// in seeds.yaml that quietly disables a politeness setting is exactly the
+	// class of bug this catches (I-12b).
+	dec := yaml.NewDecoder(bytes.NewReader(data))
+	dec.KnownFields(true)
+	if err := dec.Decode(cfg); err != nil {
 		return nil, err
 	}
 

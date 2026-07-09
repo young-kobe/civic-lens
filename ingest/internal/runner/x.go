@@ -110,11 +110,17 @@ func (xr *XRunner) Run(ctx context.Context) (*XResult, error) {
 			continue
 		}
 
-		// Store raw JSON
-		hash, _ := xr.app.RawStore.Store(ctx, rawJSON, ".json")
+		// Store raw JSON. Skip the whole batch on failure — persisting posts
+		// with an empty raw_hash would create untraceable rows (A6/A7), and
+		// the old hash[:8] log used to panic on the empty string.
+		hash, err := xr.app.RawStore.Store(ctx, rawJSON, ".json")
+		if err != nil {
+			fmt.Printf("  Raw store error, skipping batch: %v\n", err)
+			continue
+		}
 
 		posts, users := x.ToModels(resp)
-		fmt.Printf("  Got %d posts, %d users (raw: %s)\n", len(posts), len(users), hash[:8])
+		fmt.Printf("  Got %d posts, %d users (raw: %s)\n", len(posts), len(users), safePrefix(hash, 8))
 
 		// Persist the budget hit BEFORE the DB inserts — if inserts fail we
 		// still paid for the API call, and forgetting to record it would
@@ -176,7 +182,12 @@ func (xr *XRunner) Run(ctx context.Context) (*XResult, error) {
 }
 
 func (xr *XRunner) insertPost(ctx context.Context, post model.XPost) error {
-	return upsertRow(ctx, xr.app.Database.Conn(), "x_posts_raw",
+	// ON CONFLICT DO UPDATE without is_official_tier in the column list: a
+	// topic-query match on a tweet already ingested by the officials pass
+	// updates the metrics/text but leaves is_official_tier=1 intact. A brand
+	// new topic post gets the column default (0). INSERT OR REPLACE would
+	// have erased the flag on the overlap (I-6).
+	return upsertRowOnConflict(ctx, xr.app.Database.Conn(), "x_posts_raw", "tweet_id",
 		[]string{
 			"tweet_id", "author_id", "conversation_id", "created_at", "fetched_at",
 			"text", "lang", "retweet_count", "reply_count", "like_count", "quote_count",

@@ -9,6 +9,7 @@ import (
 	"github.com/young-kobe/civic-lens/ingest/internal/extract/html"
 	"github.com/young-kobe/civic-lens/ingest/internal/model"
 	"github.com/young-kobe/civic-lens/ingest/internal/storage/db"
+	"github.com/young-kobe/civic-lens/ingest/internal/util"
 )
 
 const (
@@ -61,10 +62,16 @@ func (w *ArticleWriter) Write(entry articleEntry) {
 }
 
 // WriteFromMeta creates an articleEntry from page metadata and enqueues it.
+//
+// The page-declared canonical (<link rel="canonical"> or og:url) is untrusted:
+// a hostile or misconfigured page could point it at another publisher's URL to
+// overwrite that outlet's articles_raw row. We accept the declared canonical
+// only when it parses, canonicalizes, and shares a registrable domain with the
+// page we actually fetched; otherwise we key the article off the frontier URL.
 func (w *ArticleWriter) WriteFromMeta(page *model.Page, meta *html.Metadata, hash string) {
 	canonURL := page.URLCanon
-	if meta.CanonicalURL != "" {
-		canonURL = meta.CanonicalURL
+	if declared := validateCanonical(meta.CanonicalURL, page.Domain); declared != "" {
+		canonURL = declared
 	}
 
 	var publishedAt int64
@@ -81,6 +88,25 @@ func (w *ArticleWriter) WriteFromMeta(page *model.Page, meta *html.Metadata, has
 		RawHash:     hash,
 		Version:     "go-v1.0",
 	})
+}
+
+// validateCanonical returns the canonicalized declared canonical URL when it
+// is safe to key an article off it, or "" to signal the caller should fall
+// back to the frontier URL. "Safe" means: non-empty, parseable/canonicalizable,
+// and same registrable domain as the fetched page. fetchedDomain is the host
+// of the URL we actually retrieved (page.Domain).
+func validateCanonical(declared, fetchedDomain string) string {
+	if declared == "" {
+		return ""
+	}
+	canon, err := util.CanonicalizeURL(declared)
+	if err != nil {
+		return ""
+	}
+	if !util.SameRegistrableDomain(util.ExtractDomain(canon), fetchedDomain) {
+		return ""
+	}
+	return canon
 }
 
 // Start begins the background flush loop. Call this in a goroutine.
@@ -136,18 +162,22 @@ func (w *ArticleWriter) flush(ctx context.Context, batch []articleEntry) {
 		return
 	}
 
-	// When WriteFromMeta prefers the HTML's <link rel="canonical"> over the
-	// URL we actually fetched, the canonical URL is often NOT in the `pages`
-	// table yet (only the fetched url_canon is). articles_raw has a FK to
-	// pages(url_canon) so the insert fails with SQLITE_CONSTRAINT_FOREIGNKEY
-	// (code 787) and the article is dropped. Fix: upsert a DONE pages row
-	// for the canonical URL before the article insert. The placeholder row
-	// carries state=2 (DONE) + next_fetch_at=0 so the frontier never picks
-	// it up as work; url_raw mirrors url_canon since we don't have a
-	// separate raw form for these synthetic rows.
+	// When WriteFromMeta keys an article off a validated same-domain
+	// canonical that differs from the URL we fetched, that canonical URL is
+	// often NOT in the `pages` table yet (only the fetched url_canon is).
+	// articles_raw has a FK to pages(url_canon) so the insert would fail with
+	// SQLITE_CONSTRAINT_FOREIGNKEY (code 787) and the article would be
+	// dropped. We upsert a placeholder pages row before the article insert.
+	//
+	// The placeholder is QUEUED (state=0), NOT DONE: this is a real,
+	// same-publisher URL we have not fetched, so it is honest crawl work.
+	// Marking it DONE would permanently block the crawler from ever fetching
+	// it (PushLinks's INSERT OR IGNORE would no-op on the existing row). When
+	// the canonical equals the URL we just fetched, the row already exists as
+	// INFLIGHT/DONE and INSERT OR IGNORE leaves it untouched.
 	pageStmt, err := tx.PrepareContext(ctx, `
 		INSERT OR IGNORE INTO pages (url_canon, url_raw, domain, state, priority, retries, next_fetch_at, inflight_at)
-		VALUES (?, ?, ?, 2, 0, 0, 0, 0)
+		VALUES (?, ?, ?, 0, 0, 0, 0, 0)
 	`)
 	if err != nil {
 		log.Printf("ArticleWriter: prepare pages upsert failed: %v", err)
