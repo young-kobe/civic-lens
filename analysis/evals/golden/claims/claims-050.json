@@ -1,0 +1,16 @@
+{
+  "id": "claims-050",
+  "task": "claim_extraction",
+  "input_text": "Everyone screaming about the deficit was silent when their side passed the 2 trillion dollar package in 2020. I keep receipts.",
+  "input_provenance": "synthetic-draft",
+  "expected_claims": [
+    {
+      "claim": "Congress passed a 2 trillion dollar package in 2020",
+      "evidence_span": "passed the 2 trillion dollar package in 2020"
+    }
+  ],
+  "review_status": "PENDING_HUMAN_REVIEW",
+  "reviewed_by": null,
+  "reviewed_at": null,
+  "notes": "Whataboutism with a real embedded event claim, unlike the pure-question variant."
+}

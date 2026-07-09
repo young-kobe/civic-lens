@@ -15,6 +15,8 @@ audit-trail/
 
 One file per bucket per change, dated `YYYY-MM-DD-short-slug.md`. When a change spans layers, write one entry per affected layer with cross-links.
 
+Point-in-time reviews (adversarial audits, health checks) are recorded the same way: a dated entry in each reviewed layer's bucket, findings-first. The former `docs/audits/` directory was folded in here; its one surviving file is `infra/2026-04-20-pre-deploy-security-audit.md`, kept because "audit §N" comments across the Go/Python/CI code cite its section numbers.
+
 ## Entry shape
 
 Keep entries dense and forward-looking — a future reader should be able to understand *the system as it is now* from the entries they read, not a diff of what used to be.

@@ -1,0 +1,16 @@
+{
+  "id": "claims-022",
+  "task": "claim_extraction",
+  "input_text": "Love him or hate him, the governor did cut the state gas tax for the third straight year.",
+  "input_provenance": "synthetic-draft",
+  "expected_claims": [
+    {
+      "claim": "The governor cut the state gas tax for the third straight year",
+      "evidence_span": "cut the state gas tax for the third straight year"
+    }
+  ],
+  "review_status": "PENDING_HUMAN_REVIEW",
+  "reviewed_by": null,
+  "reviewed_at": null,
+  "notes": "Concessive framing around one checkable action."
+}

@@ -1,0 +1,20 @@
+{
+  "id": "claims-005",
+  "task": "claim_extraction",
+  "input_text": "The RNC filed lawsuits in six swing states challenging mail-in ballot deadlines. Election officials in Pennsylvania called the suits meritless and warned they could disenfranchise military voters.",
+  "input_provenance": "synthetic-draft",
+  "expected_claims": [
+    {
+      "claim": "The RNC filed lawsuits in six swing states over mail-in ballot deadlines",
+      "evidence_span": "filed lawsuits in six swing states challenging mail-in ballot deadlines"
+    },
+    {
+      "claim": "Pennsylvania election officials called the RNC ballot lawsuits meritless",
+      "evidence_span": "called the suits meritless"
+    }
+  ],
+  "review_status": "PENDING_HUMAN_REVIEW",
+  "reviewed_by": null,
+  "reviewed_at": null,
+  "notes": "Both-sides lede; claim attribution must stay separated."
+}

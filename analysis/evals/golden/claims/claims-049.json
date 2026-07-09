@@ -1,0 +1,20 @@
+{
+  "id": "claims-049",
+  "task": "claim_extraction",
+  "input_text": "The hearing lasted eleven hours and produced exactly one new fact: the agency knew about the leak in March.",
+  "input_provenance": "synthetic-draft",
+  "expected_claims": [
+    {
+      "claim": "The agency knew about the leak in March",
+      "evidence_span": "the agency knew about the leak in March"
+    },
+    {
+      "claim": "The oversight hearing lasted eleven hours",
+      "evidence_span": "The hearing lasted eleven hours"
+    }
+  ],
+  "review_status": "PENDING_HUMAN_REVIEW",
+  "reviewed_by": null,
+  "reviewed_at": null,
+  "notes": "Buried-lede structure; the embedded finding is the higher-value claim."
+}

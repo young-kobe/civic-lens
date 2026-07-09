@@ -1,0 +1,20 @@
+{
+  "id": "claims-046",
+  "task": "claim_extraction",
+  "input_text": "He said he'd never take PAC money. FEC filings this quarter show 1.2 million from leadership PACs.",
+  "input_provenance": "synthetic-draft",
+  "expected_claims": [
+    {
+      "claim": "He pledged to never take PAC money",
+      "evidence_span": "he'd never take PAC money"
+    },
+    {
+      "claim": "FEC filings show he received 1.2 million dollars from leadership PACs this quarter",
+      "evidence_span": "show 1.2 million from leadership PACs"
+    }
+  ],
+  "review_status": "PENDING_HUMAN_REVIEW",
+  "reviewed_by": null,
+  "reviewed_at": null,
+  "notes": "Contradiction pair; both the pledge and the filing are claims."
+}

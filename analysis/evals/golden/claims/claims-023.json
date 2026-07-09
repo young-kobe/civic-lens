@@ -1,0 +1,16 @@
+{
+  "id": "claims-023",
+  "task": "claim_extraction",
+  "input_text": "The GOP talks fiscal responsibility while their own caucus just tanked the debt commission bill they sponsored. You cannot make this up.",
+  "input_provenance": "synthetic-draft",
+  "expected_claims": [
+    {
+      "claim": "Republicans voted down the debt commission bill they sponsored",
+      "evidence_span": "tanked the debt commission bill they sponsored"
+    }
+  ],
+  "review_status": "PENDING_HUMAN_REVIEW",
+  "reviewed_by": null,
+  "reviewed_at": null,
+  "notes": "Hypocrisy framing; underlying event claim should surface."
+}

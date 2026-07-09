@@ -1,0 +1,16 @@
+{
+  "id": "claims-041",
+  "task": "claim_extraction",
+  "input_text": "The bill does NOT cut Medicaid. It caps the growth rate at inflation plus one percent starting in 2027. Read section 4.",
+  "input_provenance": "synthetic-draft",
+  "expected_claims": [
+    {
+      "claim": "The bill caps Medicaid growth at inflation plus one percent starting in 2027",
+      "evidence_span": "caps the growth rate at inflation plus one percent starting in 2027"
+    }
+  ],
+  "review_status": "PENDING_HUMAN_REVIEW",
+  "reviewed_by": null,
+  "reviewed_at": null,
+  "notes": "Negation correction; the affirmative cap detail is the claim, tests negation handling."
+}

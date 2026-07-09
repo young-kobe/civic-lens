@@ -1,0 +1,11 @@
+{
+  "id": "claims-034",
+  "task": "claim_extraction",
+  "input_text": "Thoughts and prayers to everyone affected. Stay safe out there tonight.",
+  "input_provenance": "synthetic-draft",
+  "expected_claims": [],
+  "review_status": "PENDING_HUMAN_REVIEW",
+  "reviewed_by": null,
+  "reviewed_at": null,
+  "notes": "Sympathy post; non-political, no claim."
+}

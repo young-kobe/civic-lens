@@ -1,0 +1,11 @@
+{
+  "id": "claims-029",
+  "task": "claim_extraction",
+  "input_text": "Does anyone actually believe either party is going to fix the deficit?",
+  "input_provenance": "synthetic-draft",
+  "expected_claims": [],
+  "review_status": "PENDING_HUMAN_REVIEW",
+  "reviewed_by": null,
+  "reviewed_at": null,
+  "notes": "Pure rhetorical question; rule 5 says no claims from questions."
+}
