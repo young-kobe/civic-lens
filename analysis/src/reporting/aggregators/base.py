@@ -51,6 +51,16 @@ def get_connection(db_path: str):
         conn.close()
 
 
+def get_aggregation_min_confidence() -> float:
+    """Single source for the confidence floor every public-facing aggregate
+    applies. Sentiment, narrative net-sentiment, and now movers all read the
+    same setting so 'what counts as confident' can't drift between the
+    Overall-Tone chart and the biggest-movers ticker on the same page
+    (audit A-5; backend-aggregator-audit item 3)."""
+    from analysis.src.common.settings import get_settings
+    return get_settings().aggregation_min_confidence
+
+
 def get_time_cutoff(window: str) -> Optional[int]:
     """Convert time window string to Unix timestamp cutoff."""
     seconds = TIME_WINDOWS.get(window)

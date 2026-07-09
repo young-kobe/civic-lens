@@ -295,7 +295,6 @@ export interface NarrativeAmplification {
 }
 
 export interface CoordinationStats {
-    burstTimingSimilarity: number;
     accountReuse: number;
     identicalTextPairs: number;
     avgPostsPerSuspectedAccount: number;
@@ -360,7 +359,7 @@ export interface SupportingDoc {
     source_label: string;   // "News · nytimes.com", "X · @Schumer", "Reddit · r/politics"
     url: string | null;
     published_at: number | null;  // unix seconds
-    sentiment_label: 'positive' | 'negative' | 'neutral' | null;
+    sentiment_label: 'positive' | 'negative' | 'neutral' | 'mixed' | null;
     confidence: number | null;
     reasoning: string | null;
 }

@@ -125,10 +125,13 @@ class PropagandaDetector:
         headline wording. The combined string is clamped to
         ``PROPAGANDA_TEXT_MAX_CHARS`` to keep per-call token cost bounded.
         """
-        if not text or not self.llm_enabled or self._llm_client is None:
-            return PropagandaResult()
-        if not self._llm_client.is_available:
-            return PropagandaResult()
+        if not text:
+            # Nothing to score — a clean empty deterministic result.
+            return PropagandaResult(inference_method="deterministic")
+        if not self.llm_enabled or self._llm_client is None or not self._llm_client.is_available:
+            # Client unavailable — a failure, not a clean verdict. Flag it so
+            # job_runner skips the doc (no ai_outputs row) and it re-queues.
+            return PropagandaResult(detection_failed=True)
 
         combined = f"{title}\n\n{text}" if title else text
         clamped = combined[:PROPAGANDA_TEXT_MAX_CHARS]
@@ -152,7 +155,7 @@ class PropagandaDetector:
             )
         except Exception as e:
             logger.warning(f"Propaganda LLM call failed: {e}")
-            return PropagandaResult()
+            return PropagandaResult(detection_failed=True)
 
         raw_techniques = response.get("techniques") or []
         # Enforce the schema's cap of 5 defensively.

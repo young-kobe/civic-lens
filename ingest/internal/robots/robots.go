@@ -19,14 +19,17 @@ type Checker struct {
 }
 
 type robotsData struct {
-	rules     []rule
+	groups    []*group
 	fetchedAt time.Time
 }
 
-type rule struct {
-	userAgent string
-	disallow  []string
-	allow     []string
+// group is one robots.txt record: one or more User-agent lines followed by the
+// Allow/Disallow directives that apply to all of them. Agent tokens are stored
+// lowercased for case-insensitive matching.
+type group struct {
+	agents   []string
+	disallow []string
+	allow    []string
 }
 
 // New creates a new robots.txt checker.
@@ -74,7 +77,7 @@ func (c *Checker) getRobots(ctx context.Context, host string) *robotsData {
 	req.Header.Set("User-Agent", c.userAgent)
 
 	resp, err := c.httpClient.Do(req)
-	if err != nil || resp.StatusCode != 200 {
+	if err != nil {
 		// Cache negative result
 		c.cacheMu.Lock()
 		c.cache[host] = &robotsData{fetchedAt: time.Now()}
@@ -83,8 +86,17 @@ func (c *Checker) getRobots(ctx context.Context, host string) *robotsData {
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode != 200 {
+		// Non-200 (404 is the common case): close the body via the deferred
+		// call above and cache a negative result.
+		c.cacheMu.Lock()
+		c.cache[host] = &robotsData{fetchedAt: time.Now()}
+		c.cacheMu.Unlock()
+		return nil
+	}
+
 	data = &robotsData{
-		rules:     parseRobots(resp.Body),
+		groups:    parseRobots(resp.Body),
 		fetchedAt: time.Now(),
 	}
 
@@ -95,10 +107,14 @@ func (c *Checker) getRobots(ctx context.Context, host string) *robotsData {
 	return data
 }
 
-func parseRobots(body interface{ Read([]byte) (int, error) }) []rule {
+func parseRobots(body interface{ Read([]byte) (int, error) }) []*group {
 	scanner := bufio.NewScanner(body)
-	var rules []rule
-	var current *rule
+	var groups []*group
+	var current *group
+	// sawDirective tracks whether the current group already has directives.
+	// Consecutive User-agent lines (no directive between them) share one
+	// group; a User-agent line AFTER a directive opens a fresh group.
+	sawDirective := false
 
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
@@ -116,68 +132,115 @@ func parseRobots(body interface{ Read([]byte) (int, error) }) []rule {
 
 		switch key {
 		case "user-agent":
-			if current != nil {
-				rules = append(rules, *current)
+			if current == nil || sawDirective {
+				current = &group{}
+				groups = append(groups, current)
+				sawDirective = false
 			}
-			current = &rule{userAgent: value}
+			current.agents = append(current.agents, strings.ToLower(value))
 		case "disallow":
+			// A Disallow with an empty value is an explicit "allow all" and
+			// carries no path to match, so we skip storing it; the absence of
+			// any matching Disallow already yields "allowed".
 			if current != nil && value != "" {
 				current.disallow = append(current.disallow, value)
+			}
+			if current != nil {
+				sawDirective = true
 			}
 		case "allow":
 			if current != nil && value != "" {
 				current.allow = append(current.allow, value)
 			}
+			if current != nil {
+				sawDirective = true
+			}
 		}
 	}
 
-	if current != nil {
-		rules = append(rules, *current)
-	}
-
-	return rules
+	return groups
 }
 
-func (c *Checker) checkPath(data *robotsData, path string) bool {
-	// Find applicable rules
-	var applicable *rule
-	for i := range data.rules {
-		r := &data.rules[i]
-		if r.userAgent == "*" || strings.Contains(c.userAgent, r.userAgent) {
-			applicable = r
-			break
+// selectGroup picks the group governing our user agent: the group whose agent
+// token is the longest case-insensitive substring match, falling back to the
+// wildcard ("*") group. Most-specific-block-wins.
+func (c *Checker) selectGroup(groups []*group) *group {
+	ua := strings.ToLower(c.userAgent)
+	var best, wildcard *group
+	bestLen := -1
+	for _, g := range groups {
+		for _, a := range g.agents {
+			if a == "*" {
+				if wildcard == nil {
+					wildcard = g
+				}
+				continue
+			}
+			if strings.Contains(ua, a) && len(a) > bestLen {
+				bestLen = len(a)
+				best = g
+			}
 		}
 	}
+	if best != nil {
+		return best
+	}
+	return wildcard
+}
 
-	if applicable == nil {
+// checkPath applies the longest-match rule within the governing group: the
+// directive (Allow or Disallow) with the longest matching pattern wins, and an
+// Allow wins ties. No matching directive means allowed. This is what makes
+// `Allow: /` + `Disallow: /private/` correctly block /private/ while allowing
+// everything else, instead of the old Allow-first short-circuit that nullified
+// every Disallow.
+func (c *Checker) checkPath(data *robotsData, path string) bool {
+	g := c.selectGroup(data.groups)
+	if g == nil {
 		return true
 	}
 
-	// Check allow first (more specific)
-	for _, pattern := range applicable.allow {
-		if matchPath(pattern, path) {
-			return true
+	bestLen := -1
+	allowed := true
+	// Allow patterns first, then Disallow. consider() only overrides on a
+	// strictly longer match, or an equal-length Allow — so ties favour Allow.
+	consider := func(pattern string, isAllow bool) {
+		n, ok := matchLen(pattern, path)
+		if !ok {
+			return
+		}
+		if n > bestLen || (n == bestLen && isAllow) {
+			bestLen = n
+			allowed = isAllow
 		}
 	}
-
-	// Check disallow
-	for _, pattern := range applicable.disallow {
-		if matchPath(pattern, path) {
-			return false
-		}
+	for _, p := range g.allow {
+		consider(p, true)
 	}
-
-	return true
+	for _, p := range g.disallow {
+		consider(p, false)
+	}
+	return allowed
 }
 
-func matchPath(pattern, path string) bool {
+// matchLen reports whether pattern matches the start of path and, if so, the
+// length of the matched prefix (used to rank directives). A trailing "*" is a
+// wildcard; its contributed length excludes the star.
+func matchLen(pattern, path string) (int, bool) {
 	if pattern == "" {
-		return false
+		return 0, false
 	}
 	if strings.HasSuffix(pattern, "*") {
-		return strings.HasPrefix(path, strings.TrimSuffix(pattern, "*"))
+		prefix := strings.TrimSuffix(pattern, "*")
+		if strings.HasPrefix(path, prefix) {
+			return len(prefix), true
+		}
+		return 0, false
 	}
-	return strings.HasPrefix(path, pattern)
+	if strings.HasPrefix(path, pattern) {
+		return len(pattern), true
+	}
+	return 0, false
 }
 
 func extractHost(urlStr string) string {

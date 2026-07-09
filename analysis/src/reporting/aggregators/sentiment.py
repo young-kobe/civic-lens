@@ -198,10 +198,12 @@ class SentimentAggregator:
             _collect_topic_sample(
                 accum["topic_samples"], topic, doc_id, label, conf,
                 data, title, source_type, published_at, domain_or_subreddit, ident, text,
+                x_handle,
             )
             _collect_strength_sample(
                 accum["strength_samples"], strength_key, doc_id, label, conf,
                 data, title, source_type, published_at, domain_or_subreddit, ident, text,
+                x_handle,
             )
 
             tier = _route_and_record(
@@ -303,6 +305,7 @@ def _build_sample_dict(
     domain_or_subreddit: Optional[str],
     ident: Optional[str],
     text: Optional[str],
+    x_handle: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Build the dict representation of a classification sample used by
     every collector. Centralizing this avoids the 3-place duplication
@@ -318,6 +321,10 @@ def _build_sample_dict(
         elif source_type and source_type.startswith("reddit"):
             post_id = ident.replace("t3_", "").replace("t1_", "")
             url = f"https://reddit.com/r/{domain_or_subreddit or 'all'}/comments/{post_id}"
+        elif source_type == "x_post" and x_handle:
+            # Synthesize the tweet permalink so every X sample is auditable
+            # (invariant C1 / audit A-7), mirroring narrative.py's builder.
+            url = f"https://x.com/{x_handle}/status/{ident}"
     return {
         "doc_id": doc_id,
         "label": label,
@@ -375,13 +382,14 @@ def _collect_topic_sample(
     data: Dict[str, Any],
     title: Optional[str], source_type: Optional[str], published_at: Optional[float],
     domain_or_subreddit: Optional[str], ident: Optional[str], text: Optional[str],
+    x_handle: Optional[str] = None,
 ) -> None:
     if not data.get("reasoning"):
         return
     samples = topic_samples.setdefault(topic, [])
     sample = _build_sample_dict(
         doc_id, label, confidence, data, title, source_type,
-        published_at, domain_or_subreddit, ident, text,
+        published_at, domain_or_subreddit, ident, text, x_handle,
     )
     _insert_capped(samples, sample, MAX_SAMPLES_PER_TOPIC)
 
@@ -393,6 +401,7 @@ def _collect_strength_sample(
     data: Dict[str, Any],
     title: Optional[str], source_type: Optional[str], published_at: Optional[float],
     domain_or_subreddit: Optional[str], ident: Optional[str], text: Optional[str],
+    x_handle: Optional[str] = None,
 ) -> None:
     """Append a sample to one of the five STRENGTH_BUCKETS. Silently
     drops rows for unknown buckets so callers can pass the key through
@@ -402,7 +411,7 @@ def _collect_strength_sample(
         return
     sample = _build_sample_dict(
         doc_id, label, confidence, data, title, source_type,
-        published_at, domain_or_subreddit, ident, text,
+        published_at, domain_or_subreddit, ident, text, x_handle,
     )
     _insert_capped(samples, sample, MAX_DISTRIBUTION_SAMPLES_PER_BUCKET)
 
@@ -413,6 +422,7 @@ def _collect_entity_sample(
     data: Dict[str, Any],
     title: Optional[str], source_type: Optional[str], published_at: Optional[float],
     domain_or_subreddit: Optional[str], ident: Optional[str], text: Optional[str],
+    x_handle: Optional[str] = None,
 ) -> None:
     """Bump an entity bucket's counters + append a sample when there's room."""
     label_key = _LABEL_MAP.get(label, "neutral")
@@ -422,7 +432,7 @@ def _collect_entity_sample(
         return
     sample = _build_sample_dict(
         doc_id, label, confidence, data, title, source_type,
-        published_at, domain_or_subreddit, ident, text,
+        published_at, domain_or_subreddit, ident, text, x_handle,
     )
     _insert_capped(entity_accum["samples"], sample, MAX_SAMPLES_PER_ENTITY)
 
@@ -494,7 +504,7 @@ def _route_and_record(
     _init_entity_bucket(bucket_dict, key, kind, profile)
     _collect_entity_sample(
         bucket_dict[key], doc_id, label, conf, data,
-        title, source_type, published_at, domain_or_subreddit, ident, text,
+        title, source_type, published_at, domain_or_subreddit, ident, text, x_handle,
     )
     return tier
 

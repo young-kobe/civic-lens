@@ -86,6 +86,10 @@ function Review() {
     const [stats, setStats] = useState<ReviewStats | null>(null);
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
+    // Ids the reviewer skipped this session. A background refetch replaces
+    // the queue wholesale, so without this the same skipped rows resurface;
+    // we filter them out of every (re)fetched page.
+    const [skippedIds, setSkippedIds] = useState<Set<number>>(() => new Set());
 
     const loadQueue = useCallback(async () => {
         setLoading(true);
@@ -95,13 +99,19 @@ function Review() {
                 fetchReviewQueue({ task, confidenceMax: confidenceMax ?? undefined, limit: 20 }),
                 fetchReviewStats(),
             ]);
-            setQueue(items);
+            setQueue(items.filter((it) => !skippedIds.has(it.ai_output_id)));
             setStats(statsResult);
         } catch (err: any) {
             setError(err?.message ?? 'Failed to load review queue.');
         } finally {
             setLoading(false);
         }
+    }, [task, confidenceMax, skippedIds]);
+
+    // Switching task/confidence starts a fresh queue — clear the skip set so
+    // a different task's rows aren't hidden by ids skipped under the old one.
+    useEffect(() => {
+        setSkippedIds(new Set());
     }, [task, confidenceMax]);
 
     useEffect(() => {
@@ -126,7 +136,11 @@ function Review() {
     }, [loadQueue]);
 
     const skip = useCallback(() => {
-        setQueue((prev) => prev.slice(1));
+        setQueue((prev) => {
+            const [head, ...rest] = prev;
+            if (head) setSkippedIds((s) => new Set(s).add(head.ai_output_id));
+            return rest;
+        });
     }, []);
 
     const current = queue[0] ?? null;
@@ -202,7 +216,7 @@ function Review() {
 
             {/* Queue */}
             {error && <ErrorState message={error} onRetry={loadQueue} />}
-            {loading && !error && <LoadingCard />}
+            {loading && !error && !current && <LoadingCard />}
             {!loading && !error && !current && (
                 <EmptyState
                     title="Queue is empty"

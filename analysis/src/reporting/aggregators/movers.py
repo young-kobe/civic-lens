@@ -18,6 +18,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from analysis.src.reporting.aggregators.base import (
     X_AUTHOR_JOIN_SQL,
+    get_aggregation_min_confidence,
+    get_bot_flagged_doc_ids,
     get_connection,
     get_previous_window_range,
     get_time_cutoff,
@@ -54,12 +56,18 @@ class MoversAggregator:
         if prev_range is None or current_cutoff is None:
             return MoversResult(window=time_window)
 
+        # Exclude bot-flagged docs and apply the same confidence floor the
+        # sibling Overall-Tone chart uses, so the ticker and the chart agree
+        # on the same window (audit A-5).
+        min_conf = get_aggregation_min_confidence()
+        bot_docs = get_bot_flagged_doc_ids(self.db_path, min_confidence=min_conf)
+
         with get_connection(self.db_path) as conn:
             cursor = conn.cursor()
-            current_stats = self._entity_stats(cursor, current_cutoff, None)
-            prev_stats = self._entity_stats(cursor, prev_range[0], prev_range[1])
-            current_fav = self._gop_favorability(cursor, current_cutoff, None)
-            prev_fav = self._gop_favorability(cursor, prev_range[0], prev_range[1])
+            current_stats = self._entity_stats(cursor, current_cutoff, None, bot_docs, min_conf)
+            prev_stats = self._entity_stats(cursor, prev_range[0], prev_range[1], bot_docs, min_conf)
+            current_fav = self._gop_favorability(cursor, current_cutoff, None, bot_docs, min_conf)
+            prev_fav = self._gop_favorability(cursor, prev_range[0], prev_range[1], bot_docs, min_conf)
 
         entity_movers = self._diff_entity_stats(current_stats, prev_stats)
         favorability = self._diff_favorability(current_fav, prev_fav)
@@ -74,14 +82,18 @@ class MoversAggregator:
 
     def _entity_stats(
         self, cursor, start_ts: int, end_ts: Optional[int],
+        bot_docs: set, min_conf: float,
     ) -> Dict[Tuple[str, str], Dict[str, Any]]:
         """Per-entity {net, volume, profile} over [start_ts, end_ts).
 
         ``end_ts=None`` means "up to now" (current window). Otherwise bounded
         so the previous window doesn't bleed into the current one.
+
+        Bot-flagged docs are dropped and rows below ``min_conf`` are excluded
+        via the SQL floor, matching the Overall-Tone chart (audit A-5).
         """
         sql = f"""
-            SELECT a.output_json, a.confidence,
+            SELECT a.doc_id, a.output_json, a.confidence,
                    d.source_type, d.domain_or_subreddit,
                    u.username
             FROM ai_outputs a
@@ -89,9 +101,10 @@ class MoversAggregator:
             {X_AUTHOR_JOIN_SQL}
             WHERE a.task_type = 'sentiment'
               AND COALESCE(a.inference_method, '') != 'deterministic'
+              AND a.confidence >= ?
               AND d.published_at >= ?
         """
-        params: List[Any] = [start_ts]
+        params: List[Any] = [min_conf, start_ts]
         if end_ts is not None:
             sql += " AND d.published_at < ?"
             params.append(end_ts)
@@ -99,7 +112,9 @@ class MoversAggregator:
 
         registry = get_registry()
         accum: Dict[Tuple[str, str], Dict[str, Any]] = {}
-        for (output_json, conf, source_type, domain, handle) in cursor.fetchall():
+        for (doc_id, output_json, conf, source_type, domain, handle) in cursor.fetchall():
+            if doc_id in bot_docs:
+                continue
             try:
                 payload = json.loads(output_json) if output_json else {}
             except json.JSONDecodeError:
@@ -166,22 +181,29 @@ class MoversAggregator:
 
     def _gop_favorability(
         self, cursor, start_ts: int, end_ts: Optional[int],
+        bot_docs: set, min_conf: float,
     ) -> Dict[str, Any]:
         """Overall GOP net favorability + volume in [start_ts, end_ts).
 
-        Pulled from ai_outputs.task='favorability' rows with target='GOP'.
-        Mirrors the per-window computation SentimentAggregator does for the
-        GOP card, simplified to the two numbers the mover needs.
+        The favorability task IS the GOP-stance task: every row carries an
+        ``overall_gop_stance`` of favorable/unfavorable/neutral/mixed (see
+        ``FavorabilityResult.to_dict``). The previous code filtered on
+        ``target``/``label`` keys the writer never emits, so volume was always
+        0 and the mover was permanently null (audit A-4). Reads the real key
+        now, matching ``sentiment.py::_parse_favorability_rows``. Bot-flagged
+        and sub-confidence rows are excluded to match the ticker's siblings
+        (audit A-5).
         """
         sql = """
-            SELECT a.output_json, a.confidence
+            SELECT a.doc_id, a.output_json, a.confidence
             FROM ai_outputs a
             JOIN docs d ON d.doc_id = a.doc_id
             WHERE a.task_type = 'favorability'
               AND COALESCE(a.inference_method, '') != 'deterministic'
+              AND a.confidence >= ?
               AND d.published_at >= ?
         """
-        params: List[Any] = [start_ts]
+        params: List[Any] = [min_conf, start_ts]
         if end_ts is not None:
             sql += " AND d.published_at < ?"
             params.append(end_ts)
@@ -190,21 +212,18 @@ class MoversAggregator:
         fav = 0
         unfav = 0
         volume = 0
-        for (output_json, _conf) in cursor.fetchall():
+        for (doc_id, output_json, _conf) in cursor.fetchall():
+            if doc_id in bot_docs:
+                continue
             try:
                 payload = json.loads(output_json) if output_json else {}
             except json.JSONDecodeError:
                 continue
-            # Many favorability outputs are dicts with a 'gop' or 'republicans'
-            # target — keep this flexible, count any target that reads as GOP.
-            target = str(payload.get("target", "")).lower()
-            if "gop" not in target and "republican" not in target:
-                continue
+            stance = str(payload.get("overall_gop_stance", "")).lower()
             volume += 1
-            label = str(payload.get("label", "")).lower()
-            if label == "favorable":
+            if stance == "favorable":
                 fav += 1
-            elif label == "unfavorable":
+            elif stance == "unfavorable":
                 unfav += 1
         net = ((fav - unfav) / volume * 100) if volume else 0.0
         return {"net": round(net, 1), "volume": volume}

@@ -56,8 +56,8 @@ function buildNarrativeTickerItems(data: NarrativeSummary[], window: string): Ti
             : topClaim.name;
         items.push({
             label: 'Top Amplified', value: short,
-            hint: `${topClaim.supporting_doc_count.toLocaleString()} docs`,
-            ariaLabel: `Top amplified narrative: ${topClaim.name}, ${topClaim.supporting_doc_count} supporting docs`,
+            hint: `${topClaim.supporting_doc_count.toLocaleString()} posts`,
+            ariaLabel: `Top amplified narrative: ${topClaim.name}, ${topClaim.supporting_doc_count} supporting posts`,
         });
     }
     return items;
@@ -119,35 +119,45 @@ const SOURCE_DOT_COLOR: Record<string, string> = {
     x_post:         COLORS.sourceX,
 };
 
-function SourceBar({ items, total }: { items: NarrativeSourceBreakdownItem[]; total: number }) {
-    if (items.length === 0 || total === 0) return null;
-    // Wrapper-level title gives a one-line summary ("Source mix: 45 docs
-    // — 60% News, 30% X, 10% Reddit"); per-segment titles expose the
-    // exact count + share on hover. Segment widths are percentages of
-    // the bar's total, so hovering a thin slice gives the actual figure.
+function SourceBar({ items, showLegend = false }: { items: NarrativeSourceBreakdownItem[]; showLegend?: boolean }) {
+    // Normalize widths by the sum of the breakdown counts themselves, NOT by
+    // supporting_doc_count from a different query — the two can disagree, which
+    // made segments fail to sum to 100% (U-10).
+    const barTotal = items.reduce((s, it) => s + it.count, 0);
+    if (items.length === 0 || barTotal === 0) return null;
+    // Wrapper-level title gives a one-line summary; per-segment titles expose
+    // the exact count + share on hover. When showLegend is set, the same
+    // summary also renders as visible text so the colors aren't the only key
+    // (R-8) — used on the compact card, where the modal has its own dotted
+    // legend below the bar.
     const summary = items
-        .map((it) => `${Math.round((it.count / total) * 100)}% ${it.label}`)
+        .map((it) => `${Math.round((it.count / barTotal) * 100)}% ${it.label}`)
         .join(', ');
     return (
-        <div
-            className="narrative-source-bar"
-            aria-label={`Source mix across ${total} docs: ${summary}`}
-            title={`Source mix across ${total} docs: ${summary}.`}
-        >
-            {items.map((item) => {
-                const pct = (item.count / total) * 100;
-                return (
-                    <div
-                        key={item.source_type}
-                        title={`${item.label}: ${item.count} of ${total} docs (${pct.toFixed(0)}%).`}
-                        style={{
-                            width: `${pct}%`,
-                            background: SOURCE_DOT_COLOR[item.source_type] || 'var(--neutral-400)',
-                        }}
-                    />
-                );
-            })}
-        </div>
+        <>
+            <div
+                className="narrative-source-bar"
+                aria-label={`Source mix across ${barTotal} posts: ${summary}`}
+                title={`Source mix across ${barTotal} posts: ${summary}.`}
+            >
+                {items.map((item) => {
+                    const pct = (item.count / barTotal) * 100;
+                    return (
+                        <div
+                            key={item.source_type}
+                            title={`${item.label}: ${item.count} of ${barTotal} posts (${pct.toFixed(0)}%).`}
+                            style={{
+                                width: `${pct}%`,
+                                background: SOURCE_DOT_COLOR[item.source_type] || 'var(--neutral-400)',
+                            }}
+                        />
+                    );
+                })}
+            </div>
+            {showLegend && (
+                <div className="narrative-card-sources text-xs text-muted">{summary}</div>
+            )}
+        </>
     );
 }
 
@@ -183,18 +193,18 @@ function NarrativeCard({ narrative, onOpen }: NarrativeCardProps) {
             type="button"
             className="narrative-card"
             onClick={() => onOpen(narrative)}
-            aria-label={`${narrative.name}. ${narrative.supporting_doc_count} docs, net sentiment ${narrative.net_sentiment.toFixed(1)}%. Open details.`}
+            aria-label={`${narrative.name}. ${narrative.supporting_doc_count} posts, net sentiment ${narrative.net_sentiment.toFixed(1)}%. Open details.`}
             title={narrative.name}
         >
             <div className="narrative-card-claim">{narrative.name || '(unnamed)'}</div>
             <div className="narrative-card-origin">
                 first seen {formatRelativeDate(narrative.first_seen_at)} · {firstSeenLabel(narrative)}
             </div>
-            <SourceBar items={narrative.source_breakdown} total={narrative.supporting_doc_count} />
+            <SourceBar items={narrative.source_breakdown} showLegend />
             <div className="narrative-card-metrics">
                 <span>
                     <span className="narrative-card-metric-value">{narrative.supporting_doc_count}</span>
-                    <span className="narrative-card-metric-label">docs</span>
+                    <span className="narrative-card-metric-label">posts</span>
                 </span>
                 <span>
                     <span className="narrative-card-metric-value" style={{ color: sentColor }}>
@@ -213,20 +223,20 @@ function NarrativeCard({ narrative, onOpen }: NarrativeCardProps) {
                 <div className="narrative-card-flags">
                     {propFlag && (
                         <span className="narrative-flag narrative-flag-prop"
-                            title={`Mean propaganda score ${narrative.propaganda_score?.toFixed(2)}`}>
-                            prop {narrative.propaganda_score?.toFixed(2)}
+                            title={`Mean propaganda score ${narrative.propaganda_score?.toFixed(2)} on a 0-to-1 scale`}>
+                            Propaganda {narrative.propaganda_score?.toFixed(2)} / 1
                         </span>
                     )}
                     {botFlag && (
                         <span className="narrative-flag narrative-flag-bot"
                             title={`${Math.round((narrative.bot_pushed_fraction ?? 0) * 100)}% of unique X authors flagged bot-pushed`}>
-                            bot-pushed {Math.round((narrative.bot_pushed_fraction ?? 0) * 100)}%
+                            Bot-pushed {Math.round((narrative.bot_pushed_fraction ?? 0) * 100)}%
                         </span>
                     )}
                     {narrative.cross_tier && (
                         <span className="narrative-flag narrative-flag-cross"
-                            title="Supporting docs span two or more tiers">
-                            cross-tier
+                            title="Supporting posts span two or more groups (news, officials, public)">
+                            Cross-group
                         </span>
                     )}
                 </div>
@@ -269,7 +279,7 @@ function NarrativeDetailModal({ narrative, onClose, onBack, backLabel }: Narrati
         >
             <div className="narrative-modal-stats">
                 <div>
-                    <div className="eyebrow">Supporting docs</div>
+                    <div className="eyebrow">Supporting posts</div>
                     <div className="metric-value">{narrative.supporting_doc_count}</div>
                 </div>
                 <div>
@@ -302,7 +312,7 @@ function NarrativeDetailModal({ narrative, onClose, onBack, backLabel }: Narrati
             <Sparkline data={timeline} dataKey="value" height={80} color="var(--neutral-700)" />
 
             <h3 className="card-title mt-4 mb-2">Source mix</h3>
-            <SourceBar items={narrative.source_breakdown} total={narrative.supporting_doc_count} />
+            <SourceBar items={narrative.source_breakdown} />
             <ul style={{ listStyle: 'none', padding: 0, marginTop: 'var(--space-2)', display: 'flex', gap: 'var(--space-3)', flexWrap: 'wrap' }}>
                 {narrative.source_breakdown.map((item) => (
                     <li key={item.source_type} className="text-xs text-muted">
@@ -332,7 +342,7 @@ function NarrativeDetailModal({ narrative, onClose, onBack, backLabel }: Narrati
 
             {supportingDocs.length > 0 && (
                 <>
-                    <h3 className="card-title mt-4 mb-2">Top supporting documents</h3>
+                    <h3 className="card-title mt-4 mb-2">Top supporting posts</h3>
                     <SupportingDocsTable docs={supportingDocs} />
                 </>
             )}
@@ -415,7 +425,7 @@ function entityStatsForNarratives(g: NarrativeEntityGroup): EntityStat[] {
             color: sentColor,
         },
         {
-            label: 'Supporting docs',
+            label: 'Supporting posts',
             value: g.totalDocs.toLocaleString(),
         },
     ];
@@ -471,7 +481,7 @@ function NarrativeEntityModal({
                     </div>
                 </div>
                 <div>
-                    <div className="eyebrow">Supporting docs</div>
+                    <div className="eyebrow">Supporting posts</div>
                     <div className="metric-value">{group.totalDocs.toLocaleString()}</div>
                 </div>
                 {group.crossTierCount > 0 && (
@@ -561,20 +571,22 @@ const TIER_LABEL: Record<string, string> = {
 };
 
 function tierChipsForNarrative(n: NarrativeSummary): string[] {
+    // Chips reflect the groups actually present in source_breakdown — not
+    // first_seen_tier_group alone, which could stamp a group that contributed
+    // no supporting posts (U-9). One known limit: x_post rows can't be split
+    // officials-vs-public from the breakdown, so we fall back to the origin
+    // tier for those; a story carried by BOTH officials and public over X may
+    // therefore under-report one of them until the backend exposes the split.
     const seen = new Set<string>();
     for (const item of n.source_breakdown) {
+        if (item.count <= 0) continue;
         if (item.source_type === 'news') seen.add('news');
         else if (item.source_type === 'x_post') {
-            // We can't cheaply tell officials vs public here without re-querying,
-            // but first_seen_tier_group is a reasonable proxy for the origin tier.
-            if (n.first_seen_tier_group === 'officials') seen.add('officials');
-            else seen.add('public');
+            seen.add(n.first_seen_tier_group === 'officials' ? 'officials' : 'public');
         } else if (item.source_type === 'reddit_post' || item.source_type === 'reddit_comment') {
             seen.add('public');
         }
     }
-    // Always include the origin tier as a fallback.
-    if (n.first_seen_tier_group) seen.add(n.first_seen_tier_group);
     return Array.from(seen);
 }
 
@@ -604,7 +616,7 @@ function ClaimsSpreadingPanel({ narratives, onOpen }: { narratives: NarrativeSum
     return (
         <Card
             title="Top political narratives"
-            subtitle={`${visible.length} ${visible.length === 1 ? 'story is' : 'stories are'} being repeated by more than one group — the news, officials, and the public are all talking about them.`}
+            subtitle={`${visible.length} ${visible.length === 1 ? 'story is' : 'stories are'} being repeated across more than one group — at least two of news, officials, and the public.`}
         >
             <div className="cross-tier-list">
                 {visible.map((n) => {

@@ -113,7 +113,15 @@ func (xr *XRunner) runOfficialsPass(
 			continue
 		}
 
-		hash, _ := xr.app.RawStore.Store(ctx, rawJSON, ".json")
+		hash, err := xr.app.RawStore.Store(ctx, rawJSON, ".json")
+		if err != nil {
+			// Never persist official posts with an empty raw_hash — that
+			// breaks A6/A7 traceability for the highest-signal surface we
+			// collect. Count the handle as failed and move on.
+			res.HandlesFailed++
+			fmt.Printf("  @%s raw store error: %v\n", job.handle, err)
+			continue
+		}
 		posts, hydrated := x.ToModels(resp)
 
 		// Persist budget BEFORE inserts so a DB error on one timeline

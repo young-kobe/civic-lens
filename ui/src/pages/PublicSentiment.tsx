@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
     CollapsibleInfo, EmptyState, EntityHeader, EntityProfileCard,
-    ErrorState, GlobalTicker, LoadingCard, Modal, SupportingDocsTable,
+    ErrorState, GlobalTicker, LoadingCard, MethodPopover, Modal, SupportingDocsTable,
     ThreeWayColumn, ThreeWayGrid, TierRow, TopMetricsBlock,
     classificationSampleToSupportingDoc, entityExternalUrl, entityLeanAccent, sentimentStats,
 } from '../components/common';
@@ -110,14 +110,14 @@ function TopMetrics({ data, windowLabel, activeTopic, topicRow }: TopMetricsProp
 
     const filteredVolume = (news.volume) + (officials.volume) + (pub.volume);
     const meta = isFiltered
-        ? `${filteredVolume.toLocaleString()} posts on ${activeTopic.label} · ${data.overview.confidence} confidence overall`
-        : `${data.overview.volume.toLocaleString()} posts · ${data.overview.confidence} confidence`;
+        ? `${filteredVolume.toLocaleString()} posts on ${activeTopic.label}`
+        : `${data.overview.volume.toLocaleString()} posts`;
 
     return (
         <TopMetricsBlock
             eyebrow={eyebrow}
             meta={meta}
-            aux={<IntensityMini distribution={data.distribution} />}
+            aux={<IntensityMini distribution={data.distribution} allTopics={isFiltered} />}
         >
             <ToneTierRow label="News articles are" agg={news} />
             <ToneTierRow label="Officials are" agg={officials} />
@@ -146,14 +146,18 @@ function ToneTierRow({ label, agg }: { label: string; agg: TierAggregate }) {
     );
 }
 
-function IntensityMini({ distribution }: { distribution: SentimentDistribution }) {
+function IntensityMini({ distribution, allTopics = false }: { distribution: SentimentDistribution; allTopics?: boolean }) {
+    // The distribution is a site-wide rollup, not topic-scoped. Inside a
+    // topic filter, mark the label "all topics" so it isn't misread as the
+    // filtered topic's intensity (R-2).
+    const label = allTopics ? 'Tone intensity · all topics' : 'Tone intensity';
     const total = distribution.strongPositive + distribution.mildPositive
         + distribution.neutral + distribution.mildNegative + distribution.strongNegative;
 
     if (total === 0) {
         return (
             <div className="mini-metric">
-                <span className="mini-metric-label">Tone intensity</span>
+                <span className="mini-metric-label">{label}</span>
                 <span className="mini-metric-value mini-metric-value-muted">—</span>
                 <span className="mini-metric-visual">
                     <span
@@ -193,7 +197,7 @@ function IntensityMini({ distribution }: { distribution: SentimentDistribution }
             className="mini-metric"
             title={`Tone intensity distribution across ${sampleSize} sampled posts.`}
         >
-            <span className="mini-metric-label">Tone intensity</span>
+            <span className="mini-metric-label">{label}</span>
             <span className="mini-metric-value">
                 most {biggest[0]}
             </span>
@@ -228,13 +232,12 @@ interface ThreeWayGridProps {
     newsOutlets: EntitySentimentItem[];
     officials: EntitySentimentItem[];
     generalPublic: EntitySentimentItem[];
-    confidence: PublicSentimentData['overview']['confidence'];
     onOpen: (item: EntitySentimentItem) => void;
     activeTopic: Topic;
 }
 
 function SentimentThreeWayGrid({
-    newsOutlets, officials, generalPublic, confidence, onOpen, activeTopic,
+    newsOutlets, officials, generalPublic, onOpen, activeTopic,
 }: ThreeWayGridProps) {
     const news = newsOutlets.slice(0, TOP_N);
     const offs = officials.slice(0, TOP_N);
@@ -244,7 +247,7 @@ function SentimentThreeWayGrid({
             key={item.key}
             profile={item.entityProfile}
             stats={item.volume > 0
-                ? sentimentStats({ netTone: item.netScore, volume: item.volume, confidence })
+                ? sentimentStats({ netTone: item.netScore, volume: item.volume })
                 : []}
             onClick={() => onOpen(item)}
         />
@@ -562,12 +565,18 @@ function netToneColor(net: number): TickerItem['tone'] {
     return 'neutral';
 }
 
-function buildSentimentTickerItems(data: PublicSentimentData): TickerItem[] {
+function buildSentimentTickerItems(data: PublicSentimentData, activeTopic: Topic): TickerItem[] {
     const overall = data.overview;
+    // The ticker always reads the site-wide sentiment rollup; the backend
+    // doesn't expose these figures scoped to a single topic. When a topic
+    // filter is active we mark each item "all topics" so a reader inside a
+    // filtered view doesn't read a global number as a topic number (R-2).
+    const scopeHint = activeTopic.key === 'all' ? undefined : 'all topics';
     const items: TickerItem[] = [
         {
             label: 'Overall tone',
             value: formatPct(overall.netScore, { min: -100, signed: true }),
+            hint: scopeHint,
             tone: netToneColor(overall.netScore),
             emphasis: true,
             ariaLabel: `Overall tone ${formatPct(overall.netScore, { min: -100, signed: true })}`,
@@ -578,14 +587,14 @@ function buildSentimentTickerItems(data: PublicSentimentData): TickerItem[] {
         items.push({
             label: 'GOP stance',
             value: formatPct(gopNet, { min: -100, signed: true }),
+            hint: scopeHint,
             tone: netToneColor(gopNet),
             emphasis: true,
             ariaLabel: `GOP stance ${formatPct(gopNet, { min: -100, signed: true })}`,
         });
     }
     items.push(
-        { label: 'Posts scored', value: overall.volume.toLocaleString() },
-        { label: 'Confidence', value: overall.confidence },
+        { label: 'Posts scored', value: overall.volume.toLocaleString(), hint: scopeHint },
     );
     return items;
 }
@@ -682,7 +691,7 @@ function PublicSentiment({ filters }: PublicSentimentProps) {
 
     if (!data) return <EmptyState title="No tone data available" />;
 
-    const tickerItems = buildSentimentTickerItems(data);
+    const tickerItems = buildSentimentTickerItems(data, activeTopic);
     const refreshed = formatRefreshedAgo(
         getSnapshotTimestamp(snapshotStatus, `sentiment_${filters.timeRange}`),
     );
@@ -694,6 +703,18 @@ function PublicSentiment({ filters }: PublicSentimentProps) {
                     items={tickerItems}
                     refreshed={refreshed}
                     ariaLabel="Overall tone overview"
+                    legend={
+                        <MethodPopover
+                            title="How to read these numbers"
+                            description={
+                                'Net tone = the share of sampled posts scored positive minus the share scored '
+                                + 'negative, on a -100 to +100 scale (0 means positive and negative balance out). '
+                                + 'GOP stance = the net stance of sampled posts toward Republican-party entities, '
+                                + 'on the same scale. Both summarize the posts we collected — they are samples, '
+                                + 'not polls of the public.'
+                            }
+                        />
+                    }
                 />
             </div>
 
@@ -732,7 +753,6 @@ function PublicSentiment({ filters }: PublicSentimentProps) {
                     newsOutlets={data.byNewsOutlet ?? []}
                     officials={data.byOfficial ?? []}
                     generalPublic={data.byGeneralPublic ?? []}
-                    confidence={data.overview.confidence}
                     onOpen={setActiveEntity}
                     activeTopic={activeTopic}
                 />

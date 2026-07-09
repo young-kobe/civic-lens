@@ -34,6 +34,7 @@ from analysis.src.engine.constants import (
 from analysis.src.engine.models import BotResult
 from analysis.src.llm.prompts import BOT_SYSTEM_PROMPT, BOT_USER_PROMPT_TEMPLATE
 from analysis.src.llm.schemas import BOT_SCHEMA
+from analysis.src.llm.base import normalize_confidence
 
 logger = get_logger(__name__)
 
@@ -356,8 +357,10 @@ class HybridBotDetector:
                 user_prompt=user_prompt,
                 response_schema=BOT_SCHEMA,
             )
-            llm_text_lik = float(response.get("llm_text_likelihood", 0.0))
-            # Belt-and-suspenders: even with the prompt cleanup above, older
+            llm_text_lik = normalize_confidence(
+                response.get("llm_text_likelihood", 0.0), "llm_text_likelihood"
+            )
+            # even with the prompt cleanup above, older
             # stored outputs + the occasional LLM-generated placeholder string
             # can leak noise entries. Filter them at the boundary so the UI
             # never has to work around it. Canonical fix for todos/
@@ -366,12 +369,14 @@ class HybridBotDetector:
             return BotResult(
                 is_bot=response.get("is_bot", False),
                 label=response.get("label", "human"),
-                confidence=float(response.get("confidence", 0.5)),
+                confidence=normalize_confidence(
+                    response.get("confidence", 0.5), "bot_confidence"
+                ),
                 indicators=_sanitize_llm_indicators(raw_indicators),
                 reasoning=response.get("reasoning"),
                 deterministic_signals=signals,
                 inference_method="llm",
-                llm_text_likelihood=max(0.0, min(1.0, llm_text_lik)),
+                llm_text_likelihood=llm_text_lik,
             )
         except (ValueError, RuntimeError, KeyError, TypeError) as e:
             # See analyzer.py for exception-class rationale.

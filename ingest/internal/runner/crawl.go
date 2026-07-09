@@ -223,9 +223,11 @@ func (cr *CrawlRunner) extractAndEnqueue(ctx context.Context, page *model.Page, 
 		}
 	}
 
-	if meta.CanonicalURL != "" {
-		page.URLCanon = meta.CanonicalURL
-	}
-
+	// Do NOT overwrite page.URLCanon here: it is the frontier key that
+	// MarkDone matches on. The page-declared <link rel="canonical"> is
+	// untrusted and often differs (trailing slash, tracking params, or an
+	// entirely different domain); mutating the key would leave the fetched
+	// row stuck INFLIGHT and refetched forever. WriteFromMeta validates the
+	// declared canonical on its own and keys articles_raw off it when safe.
 	cr.writer.WriteFromMeta(page, meta, hash)
 }
