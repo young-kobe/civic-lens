@@ -12,6 +12,7 @@ from dataclasses import dataclass, asdict, field
 from typing import List, Optional
 
 from analysis.src.common.logger import get_logger
+from analysis.src.engine.text_prep import is_trivial_content, truncate_at_sentence
 from analysis.src.llm.context_seeds import format_seeds_block, match_seeds, matched_slugs
 from analysis.src.llm.prompts import (
     CLAIM_EXTRACTION_SYSTEM_PROMPT,
@@ -27,6 +28,8 @@ MIN_EVIDENCE_WORDS = 3
 # Canonical claim bounds — rejecting fragments that look like headline scraps.
 MIN_CLAIM_WORDS = 4
 MAX_CLAIM_WORDS = 20
+# Character budget for the text the LLM sees, clamped at a sentence boundary.
+CLAIM_TEXT_MAX_CHARS = 2000
 
 
 @dataclass
@@ -104,9 +107,10 @@ class ClaimExtractor:
                 raise RuntimeError("LLM client not available for ClaimExtractor")
 
     def extract(self, text: str) -> ClaimExtractionResult:
-        # Empty text is a genuine "no claims" (not a failure): the doc has
-        # nothing to extract and should get a clean empty row.
-        if not text:
+        # Empty or trivial text (only @-mentions, links, hashtags) is a
+        # genuine "no claims" (not a failure): prompt rule 6 tells the LLM
+        # to return an empty array for it, which code answers without a call.
+        if not text or is_trivial_content(text):
             return ClaimExtractionResult(claims=[])
         # A missing / unavailable client is a failure, not a clean empty — the
         # doc was never actually analyzed. Flag it so job_runner skips it.
@@ -115,7 +119,9 @@ class ClaimExtractor:
 
         seeded = match_seeds(text)
         seeds_block = format_seeds_block(seeded)
-        user_prompt = seeds_block + CLAIM_EXTRACTION_USER_PROMPT_TEMPLATE.format(text=text[:2000])
+        user_prompt = seeds_block + CLAIM_EXTRACTION_USER_PROMPT_TEMPLATE.format(
+            text=truncate_at_sentence(text, CLAIM_TEXT_MAX_CHARS)
+        )
 
         try:
             response = self._llm_client.complete(
