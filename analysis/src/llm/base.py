@@ -16,6 +16,44 @@ class SchemaValidationError(ValueError):
     """Raised when an LLM response does not satisfy the provided JSON schema."""
 
 
+# Values at or above this (up to 100) are read as a 0-100 percentage and
+# divided by 100. Values strictly between 1 and this are treated as small
+# overshoots of the 0-1 scale and clamped down to 1.0 instead of divided —
+# a model that reports 1.5 meant "very confident", not "0.015".
+_PERCENTAGE_SCALE_MIN = 2.0
+
+
+def normalize_confidence(value: Any, field_name: str = "confidence") -> float:
+    """Coerce an LLM-reported confidence onto the [0, 1] scale.
+
+    Two regressions are handled here, in order:
+
+    1. **0-100 percentage scale.** Qwen-class local models occasionally emit
+       confidence as a percentage despite the prompt's 0-1 rule. A value in
+       ``[_PERCENTAGE_SCALE_MIN, 100]`` is divided by 100 with a warning so the
+       regression stays visible. This mirrors ``_coerce_numeric_scales`` but
+       fires at the engine read sites, because the Gemini-facing schemas omit
+       ``minimum``/``maximum`` (Gemini rejects those keywords) and so the
+       schema-level coercer never runs.
+    2. **Range overshoot.** Everything is then clamped to ``[0.0, 1.0]`` — the
+       same guard claims/propaganda already apply inline. A value just above 1
+       (e.g. 1.5) clamps to 1.0 rather than being read as a tiny percentage.
+
+    Non-numeric input falls back to 0.5 (the neutral default the read sites
+    already used).
+    """
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        return 0.5
+    if _PERCENTAGE_SCALE_MIN <= v <= 100.0:
+        logger.warning(
+            f"Coerced {field_name} from 0-100 scale ({v}) to 0-1 ({v / 100})"
+        )
+        v = v / 100.0
+    return max(0.0, min(1.0, v))
+
+
 class BaseLLMClient(ABC):
     """
     Abstract base class for LLM clients.

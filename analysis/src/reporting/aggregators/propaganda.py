@@ -9,10 +9,14 @@ Reads ``ai_outputs`` rows with ``task_type='propaganda'`` and produces:
   - A short list of recent flagged examples with verbatim evidence spans so a
     reader can audit what the classifier is calling out.
 
-Rows with ``inference_method='deterministic'`` (pre-excluded, from other tasks
-that borrow the column) do not exist for propaganda today, but the aggregator
-filters them out defensively so future pre-exclusion work doesn't silently
-corrupt these numbers.
+Rows with ``inference_method='deterministic'`` are REAL "no propaganda"
+verdicts: the walkthrough-048 loaded-language pre-filter short-circuits docs
+whose opening carries no charged vocabulary, writing a clean deterministic
+result instead of burning an LLM call. Those docs are eligible and count in
+``total_eligible_docs`` (the denominator) and pull the mean score toward 0 —
+they are simply never in the flagged numerator (score 0, no techniques). See
+audit A-2: excluding them inflated the headline rate (1000 scored, 600
+pre-filtered clean, 100 flagged read 25% instead of 10%).
 """
 
 from __future__ import annotations
@@ -184,7 +188,12 @@ class PropagandaAggregator:
     def _fetch_rows(self, cursor, cutoff) -> List[tuple]:
         """Return (doc_id, source_type, domain, confidence, output_json,
         inference_method, x_handle). X handle is None for non-X rows;
-        used for the three-way entity rollup (walkthrough 058)."""
+        used for the three-way entity rollup (walkthrough 058).
+
+        Deterministic (pre-filter-clean) rows ARE included — they are real
+        "no propaganda" verdicts and belong in the denominator (audit A-2).
+        Their score is 0 with no techniques, so they never enter the flagged
+        numerator built in ``_build_overview``."""
         sql = f"""
             SELECT a.doc_id,
                    d.source_type,
@@ -197,7 +206,6 @@ class PropagandaAggregator:
             JOIN docs d ON d.doc_id = a.doc_id
             {X_AUTHOR_JOIN_SQL}
             WHERE a.task_type = 'propaganda'
-              AND COALESCE(a.inference_method, '') != 'deterministic'
         """
         params: list = []
         if cutoff is not None:

@@ -30,7 +30,7 @@ class OllamaClient(BaseLLMClient):
         host: str = "http://localhost:11434",
         model: str = "llama3.2:3b",
         timeout: int = 60,
-        max_retries: int = 1,
+        max_retries: int = 3,
     ):
         super().__init__()
         self.host = host.rstrip("/")

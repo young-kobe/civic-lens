@@ -98,11 +98,15 @@ class TestPropagandaAggregator(unittest.TestCase):
         _seed_propaganda(conn, 4, techniques=["ad_hominem"], overall_score=0.55)
         _seed_doc(conn, 5, "reddit_post", "t5", now, domain="politics")
         _seed_propaganda(conn, 5, techniques=[], overall_score=0.1)
-        # Pre-excluded row — must be ignored by aggregator.
+        # Deterministic pre-filter-clean row (walkthrough-048): the doc's
+        # opening carried no loaded language so no LLM call was made and a
+        # score-0 "no propaganda" verdict was written. Per audit A-2 this IS
+        # a real eligible result — it counts in the denominator (never in the
+        # flagged numerator).
         _seed_doc(conn, 6, "x_post", "t6", now)
         _seed_propaganda(
             conn, 6,
-            techniques=["loaded_language"], overall_score=0.9,
+            techniques=[], overall_score=0.0,
             inference_method="deterministic",
         )
         conn.commit()
@@ -114,12 +118,13 @@ class TestPropagandaAggregator(unittest.TestCase):
     def test_headline_rate_and_mean_score(self):
         agg = PropagandaAggregator(self.db_path)
         result = agg.get_propaganda_overview(time_window="all")
-        # 5 eligible docs (pre-excluded not counted).
-        self.assertEqual(result.total_eligible_docs, 5)
+        # 6 eligible docs: deterministic pre-filter-clean doc 6 counts in the
+        # denominator (audit A-2), it just never enters the numerator.
+        self.assertEqual(result.total_eligible_docs, 6)
         # Flagged = docs with score >= FLAG_THRESHOLD AND len(techniques) > 0.
-        # Doc1 (0.7), Doc2 (0.4), Doc4 (0.55) qualify. Doc3 has score 0. Doc5 score 0.1.
+        # Doc1 (0.7), Doc2 (0.4), Doc4 (0.55) qualify. Docs 3/5/6 are clean.
         self.assertEqual(result.flagged_docs, 3)
-        self.assertAlmostEqual(result.propaganda_rate_pct, 60.0, places=1)
+        self.assertAlmostEqual(result.propaganda_rate_pct, 50.0, places=1)
         self.assertGreater(result.mean_score, 0.0)
 
     def test_technique_breakdown(self):
@@ -141,8 +146,8 @@ class TestPropagandaAggregator(unittest.TestCase):
         # News: 3 total, 2 flagged
         self.assertEqual(by_label["News"].total_docs, 3)
         self.assertEqual(by_label["News"].flagged_docs, 2)
-        # Social: 2 total (pre-excluded doc 6 stripped), 1 flagged
-        self.assertEqual(by_label["Social Media"].total_docs, 2)
+        # Social: 3 total (docs 4, 5, and clean deterministic doc 6), 1 flagged
+        self.assertEqual(by_label["Social Media"].total_docs, 3)
         self.assertEqual(by_label["Social Media"].flagged_docs, 1)
 
 
