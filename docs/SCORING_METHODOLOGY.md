@@ -1,7 +1,7 @@
 # Civic Lens Scoring Methodology
 
-> **Version**: 1.0  
-> **Last Updated**: 2026-01-23
+> **Version**: 2.0  
+> **Last Updated**: 2026-07-09
 
 ---
 
@@ -21,34 +21,47 @@ Identifies potential automated accounts or coordinated inauthentic behavior.
 
 ### Labels
 
-| Label | Confidence Range | Action |
+The `label` is derived from a blended 0-1 `score`, not from confidence:
+
+| Label | Score Range | Action |
 |-------|-----------------|--------|
-| `human` | 0.0 - 0.3 | Included in all aggregations |
-| `suspicious` | 0.3 - 0.7 | Included in aggregations, flagged for review |
-| `bot` | 0.7 - 1.0 | **Excluded** from sentiment, favorability, and cluster APIs |
+| `human` | 0.0 - 0.4 | Included in all aggregations |
+| `suspicious` | 0.4 - 0.7 | Included in aggregations, flagged for review |
+| `bot` | 0.7 - 1.0 | **Excluded** from sentiment, favorability, and narrative aggregations |
 
-### Indicators Checked
+### Signals
 
-| Indicator | Weight | Description |
-|-----------|--------|-------------|
-| `new_account` | 0.15 | Account age < 30 days |
-| `high_frequency` | 0.20 | Posting rate > 10 posts/hour |
-| `repetitive_content` | 0.25 | >70% similar text across posts |
-| `templated_text` | 0.20 | Matches known template patterns |
-| `coordination_timing` | 0.20 | Posts clustered within seconds of others |
+The detector blends an LLM (or heuristic) text-likelihood estimate with deterministic
+behavioral signals into a single 0-1 `score`. Rather than fixed weights, it accumulates
+human-readable indicator strings, each naming the exact signal that fired:
 
-### Confidence Calculation
+- **Text / stylometric**: near-duplicate or templated phrasing; unnatural typographic
+  purity (smart quotes / em-dashes rare in casual social writing).
+- **Account / behavioral**: new account (< 7 days), high posting rate (> 50/day),
+  X account < 90 days old, X account with < 50 followers, non-US geo-tagged origin,
+  follow-ratio anomalies, sustained high tweet-rate over account lifetime, active account
+  with zero list memberships.
+- **De-bias**: government-verified X accounts are forced to `human` with the score
+  suppressed — an officeholder's account is not a bot in our model.
+
+### Label & Confidence
+
+The label comes from `score`; `confidence` is computed separately from signal strength and
+indicator count (it is NOT a sum of indicator weights):
 
 ```python
-confidence = sum(indicator_weight for indicator in detected_indicators)
-confidence = min(1.0, confidence)  # Cap at 1.0
+# Label from the blended score
+if score >= 0.7:    label = "bot"
+elif score >= 0.4:  label = "suspicious"
+else:               label = "human"
 
-if confidence >= 0.7:
-    label = "bot"
-elif confidence >= 0.3:
-    label = "suspicious"
+# Confidence from signal strength + indicator count
+if score >= 0.7 and len(indicators) >= 2:
+    confidence = min(0.6 + 0.1 * len(indicators), 0.95)
+elif score >= 0.4:
+    confidence = 0.5 + (score - 0.4)
 else:
-    label = "human"
+    confidence = 0.7 - score
 ```
 
 ### Output Schema
@@ -58,13 +71,16 @@ else:
   "label": "bot",
   "confidence": 0.85,
   "is_bot": true,
-  "indicators": ["high_frequency", "repetitive_content", "new_account"],
-  "explanation": "Account shows automated posting patterns"
+  "indicators": ["New account (3 days)", "High posting rate (120/day)", "X account has < 50 followers"],
+  "reasoning": "Account shows automated posting patterns",
+  "inference_method": "heuristic"
 }
 ```
 
 > [!IMPORTANT]  
-> Classification is heuristic-based and may include false positives. All bot-flagged content is excluded from public-facing metrics but retained for audit.
+> Classification is a probabilistic lead, not a verdict, and may include false positives.
+> Each indicator names the specific behavior that triggered it so a reader can audit the call.
+> Bot-flagged content is excluded from public-facing metrics but retained for audit.
 
 ---
 
@@ -134,14 +150,19 @@ net_score = ((positive_count - negative_count) / total_count) * 100
 ```json
 {
   "label": "NEGATIVE",
-  "score": -0.65,
   "confidence": 0.78,
-  "method": "heuristic"
+  "evidence_spans": ["criticized the administration's handling of..."],
+  "reasoning": "Strongly critical framing of the policy.",
+  "sarcasm_detected": false,
+  "inference_method": "heuristic"
 }
 ```
 
 > [!NOTE]  
-> Sentiment represents content tone, not author intent. Results are labeled as "sampled platform discourse" in the UI.
+> Sentiment represents content tone, not author intent. Sarcasm is flagged when the model
+> detects it (`sarcasm_detected`) and the tone label accounts for it. Results are labeled as
+> "sampled political discourse" in the UI, and net tone is rendered in points ("pts") on a
+> -100 to +100 scale, not as a percentage.
 
 ---
 
@@ -206,6 +227,45 @@ if source_type in ('reddit_post', 'reddit_comment'):
 
 > [!WARNING]  
 > This is a **proxy metric** based on sampled media/social discourse, NOT polling data. Results represent content sentiment toward GOP, not verified population opinion.
+
+---
+
+## Propaganda Technique Detection
+
+LLM-driven classifier that flags one or more of six starter rhetorical techniques in
+political content. A flag measures rhetorical *style* — not truth, intent, or whether a post
+is "propaganda" in the everyday sense.
+
+### Techniques
+
+`loaded_language`, `name_calling`, `ad_hominem`, `appeal_to_fear`, `whataboutism`, `doubt_casting`.
+
+### Method
+
+1. A cheap deterministic pre-gate short-circuits obviously plain text (no loaded-language
+   markers in the opening) so the LLM is only spent where techniques are plausible.
+2. The LLM returns candidate techniques, each with a verbatim `evidence_span`.
+3. **Validation**: a technique whose evidence span is under four words, or is not a
+   case-insensitive substring of the source text, is dropped. If the LLM returned techniques
+   but none validate, `overall_propaganda_score` is capped at 0.2.
+
+There is intentionally **no deterministic fallback** — a technique claim without a verifiable
+quote is not surfaced.
+
+### Output Schema
+
+```json
+{
+  "techniques": [
+    {"technique": "loaded_language", "confidence": 0.85, "evidence_span": "radical extremist agenda"}
+  ],
+  "overall_propaganda_score": 0.62
+}
+```
+
+> [!NOTE]  
+> `overall_propaganda_score` runs 0 (none) to 1 (saturated) — the mean technique intensity
+> across scored posts. It is not a truth or intent score. The UI renders it as "0.62 / 1".
 
 ---
 
