@@ -213,11 +213,14 @@ class TestPropagandaDetector(unittest.TestCase):
         )
         r = PropagandaResult(
             techniques=[t], overall_propaganda_score=0.5, reasoning="test",
+            inference_method="llm",
         )
         d = r.to_dict()
         self.assertEqual(d["overall_propaganda_score"], 0.5)
         self.assertEqual(d["techniques"][0]["technique"], "loaded_language")
         self.assertEqual(d["inference_method"], "llm")
+        # A bare result carries no method — it is not a real LLM verdict (A-3).
+        self.assertIsNone(PropagandaResult().inference_method)
 
 
 if __name__ == "__main__":

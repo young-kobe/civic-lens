@@ -16,6 +16,7 @@ from analysis.src.llm.context_seeds import (
 )
 from analysis.src.llm.prompts import TEXT_ANALYSIS_SYSTEM_PROMPT, TEXT_ANALYSIS_USER_PROMPT_TEMPLATE
 from analysis.src.llm.schemas import TEXT_ANALYSIS_SCHEMA
+from analysis.src.llm.base import normalize_confidence
 
 logger = get_logger(__name__)
 
@@ -289,7 +290,9 @@ class Analyzer:
                 )
                 
                 # Parse sentiment with evidence-span validation (invariant B2).
-                sent_conf = float(response.get("sentiment_confidence", 0.5))
+                sent_conf = normalize_confidence(
+                    response.get("sentiment_confidence", 0.5), "sentiment_confidence"
+                )
                 sent_spans, sent_had_invalid = _validate_evidence_spans(
                     response.get("sentiment_evidence_spans", []) or [], text
                 )
@@ -317,7 +320,9 @@ class Analyzer:
                 entity_stances = []
                 for es in response.get("entity_stances", []):
                     if not isinstance(es, dict): continue
-                    es_conf = float(es.get("confidence", 0.5))
+                    es_conf = normalize_confidence(
+                        es.get("confidence", 0.5), "entity_stance_confidence"
+                    )
                     es_spans, es_had_invalid = _validate_evidence_spans(
                         es.get("evidence_spans", []) or [], text
                     )
@@ -330,7 +335,10 @@ class Analyzer:
                         evidence_spans=es_spans,
                     ))
 
-                fav_conf = float(response.get("overall_favorability_confidence", 0.5))
+                fav_conf = normalize_confidence(
+                    response.get("overall_favorability_confidence", 0.5),
+                    "overall_favorability_confidence",
+                )
                 if entity_stances and all(not s.evidence_spans for s in entity_stances):
                     # Whole favorability call had no verifiable evidence — cap overall too.
                     fav_conf = min(fav_conf, UNVERIFIED_EVIDENCE_CONFIDENCE_CAP)

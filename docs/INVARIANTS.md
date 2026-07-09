@@ -33,8 +33,8 @@ See `docs/walkthroughs/035-goal-narrowing-and-renames.md` for the rationale behi
 ## Part B: Analysis API (Python)
 
 ### B1. ETL / Dataset Builder
-- [ ] **Traceability**: Every row in the `docs` table links to a `raw_hash`.
-- [ ] **Versioning**: ETL jobs log the version of the code/logic used to produce the output.
+- [x] **Traceability**: Every row in the `docs` table links to a `raw_hash`.
+- [x] **Versioning**: ETL jobs stamp the logic version onto every `docs` row via the `etl_version` column (`loader.ETL_VERSION`, migration `020_docs_etl_version.sql`) and log it per run, so docs produced by different filter/extraction logic are distinguishable (audit A-9). Bump `ETL_VERSION` when the keyword filter, 30-day rule, or extraction changes.
 
 ### B2. AI Analysis
 - [ ] **Evidence**: AI classifications (topic, stance, propaganda) must cite specific spans/quotes from the text as evidence.

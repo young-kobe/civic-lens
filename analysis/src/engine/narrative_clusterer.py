@@ -150,38 +150,51 @@ class NarrativeClusterer:
             if self.mode == "embedding" and self.embedding_client is not None:
                 self._warm_anchor_embeddings(anchors, cursor)
 
+            # Group pending claims by their source doc so all of a doc's
+            # claims commit atomically. Exclusion from re-processing is
+            # per-doc (any narrative_docs row), so committing per-claim let a
+            # crash between claim 1 and claim 3 leave a permanently
+            # under-clustered doc with no marker (audit A-10). One commit per
+            # doc means a mid-doc crash rolls the whole doc back and it is
+            # fully re-processed next run. Insertion order (created_at ASC) is
+            # preserved by dict.
+            claims_by_doc: Dict[int, List[_PendingClaim]] = {}
             for pc in pending:
                 if not pc.tokens:
                     continue
+                claims_by_doc.setdefault(pc.doc_id, []).append(pc)
 
-                claim_embedding = self._embed_if_needed(pc.claim_text)
-                if self.mode == "embedding" and claim_embedding is None:
-                    embedding_fallbacks += 1
+            for doc_claims in claims_by_doc.values():
+                for pc in doc_claims:
+                    claim_embedding = self._embed_if_needed(pc.claim_text)
+                    if self.mode == "embedding" and claim_embedding is None:
+                        embedding_fallbacks += 1
 
-                best_id, best_sim = self._best_match(pc, claim_embedding, anchors, cursor)
+                    best_id, best_sim = self._best_match(pc, claim_embedding, anchors, cursor)
 
-                threshold = (
-                    self.embedding_threshold
-                    if (self.mode == "embedding" and claim_embedding is not None)
-                    else self.jaccard_threshold
-                )
-
-                if best_sim >= threshold and best_id is not None:
-                    narrative_id = best_id
-                else:
-                    narrative_id = self._create_narrative(cursor, pc, claim_embedding, now)
-                    anchors[narrative_id] = _NarrativeAnchor(
-                        narrative_id=narrative_id,
-                        name=pc.claim_text,
-                        anchor_text=pc.claim_text,
-                        anchor_tokens=pc.tokens,
-                        anchor_embedding=claim_embedding,
+                    threshold = (
+                        self.embedding_threshold
+                        if (self.mode == "embedding" and claim_embedding is not None)
+                        else self.jaccard_threshold
                     )
-                    narratives_created += 1
 
-                if self._assign_doc(cursor, narrative_id, pc, now):
-                    assignments += 1
+                    if best_sim >= threshold and best_id is not None:
+                        narrative_id = best_id
+                    else:
+                        narrative_id = self._create_narrative(cursor, pc, claim_embedding, now)
+                        anchors[narrative_id] = _NarrativeAnchor(
+                            narrative_id=narrative_id,
+                            name=pc.claim_text,
+                            anchor_text=pc.claim_text,
+                            anchor_tokens=pc.tokens,
+                            anchor_embedding=claim_embedding,
+                        )
+                        narratives_created += 1
 
+                    if self._assign_doc(cursor, narrative_id, pc, now):
+                        assignments += 1
+
+                # Commit once the doc's claims are all assigned.
                 conn.commit()
 
             logger.info(

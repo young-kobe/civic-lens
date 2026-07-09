@@ -137,11 +137,18 @@ class GeminiClient(BaseLLMClient):
                 
             except Exception as e:
                 last_error = e
-                wait_time = (2 ** attempt) + 0.5
-                logger.warning(
-                    f"Gemini API call failed (attempt {attempt + 1}/{self.max_retries}): {e}. "
-                    f"Retrying in {wait_time:.1f}s..."
-                )
-                time.sleep(wait_time)
-        
+                # Don't sleep after the final attempt — there's no retry to
+                # back off for (audit A-12), matching ollama.py's guard.
+                if attempt < self.max_retries - 1:
+                    wait_time = (2 ** attempt) + 0.5
+                    logger.warning(
+                        f"Gemini API call failed (attempt {attempt + 1}/{self.max_retries}): {e}. "
+                        f"Retrying in {wait_time:.1f}s..."
+                    )
+                    time.sleep(wait_time)
+                else:
+                    logger.warning(
+                        f"Gemini API call failed (attempt {attempt + 1}/{self.max_retries}): {e}."
+                    )
+
         raise RuntimeError(f"Gemini API call failed after {self.max_retries} retries: {last_error}")

@@ -108,7 +108,15 @@ class PropagandaResult:
     techniques: List[PropagandaTechnique] = field(default_factory=list)
     overall_propaganda_score: float = 0.0
     reasoning: Optional[str] = None
-    inference_method: str = "llm"
+    # No default 'llm' here: a bare PropagandaResult() is NOT a real LLM
+    # verdict. The detector sets 'llm' or 'deterministic' explicitly on every
+    # genuine result path; a None here means "not scored" (e.g. a failure
+    # sentinel) and must never be persisted as though the model ran (audit A-3).
+    inference_method: Optional[str] = None
+    # True when the LLM call failed (transport error / unavailable client)
+    # rather than legitimately finding no propaganda. job_runner MUST skip
+    # persisting a failed result so the doc is re-queued next run.
+    detection_failed: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
         return {

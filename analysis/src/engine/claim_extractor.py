@@ -43,6 +43,12 @@ class ExtractedClaim:
 class ClaimExtractionResult:
     claims: List[ExtractedClaim]
     reasoning: Optional[str] = None
+    # True when the LLM call itself failed (transport error / unavailable
+    # client) rather than legitimately returning no claims. job_runner MUST
+    # skip persisting a failed result so the doc has no ai_outputs row and is
+    # re-queued next run — otherwise a transient Ollama outage would be
+    # frozen as a permanent "LLM found no claims" verdict (audit A-3).
+    extraction_failed: bool = False
     # Slugs of any reference seeds that matched the doc's text and were
     # injected into the LLM prompt. Persisted into ai_outputs.output_json
     # as audit metadata so reviewers can re-derive which references the
@@ -98,10 +104,14 @@ class ClaimExtractor:
                 raise RuntimeError("LLM client not available for ClaimExtractor")
 
     def extract(self, text: str) -> ClaimExtractionResult:
-        if not text or not self.llm_enabled or self._llm_client is None:
+        # Empty text is a genuine "no claims" (not a failure): the doc has
+        # nothing to extract and should get a clean empty row.
+        if not text:
             return ClaimExtractionResult(claims=[])
-        if not self._llm_client.is_available:
-            return ClaimExtractionResult(claims=[])
+        # A missing / unavailable client is a failure, not a clean empty — the
+        # doc was never actually analyzed. Flag it so job_runner skips it.
+        if not self.llm_enabled or self._llm_client is None or not self._llm_client.is_available:
+            return ClaimExtractionResult(claims=[], extraction_failed=True)
 
         seeded = match_seeds(text)
         seeds_block = format_seeds_block(seeded)
@@ -115,7 +125,7 @@ class ClaimExtractor:
             )
         except Exception as e:
             logger.warning(f"Claim extraction LLM call failed: {e}")
-            return ClaimExtractionResult(claims=[])
+            return ClaimExtractionResult(claims=[], extraction_failed=True)
 
         raw_claims = response.get("claims", []) or []
         validated: List[ExtractedClaim] = []

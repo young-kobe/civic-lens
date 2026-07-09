@@ -263,7 +263,11 @@ class NarrativeAggregator:
     ) -> Optional[float]:
         """Mean overall_propaganda_score across supporting docs with a
         propaganda row, in the window. None when no supporting doc has been
-        through propaganda detection (walkthrough 043)."""
+        through propaganda detection (walkthrough 043).
+
+        Deterministic (pre-filter-clean) rows are included: they are real
+        score-0 "no propaganda" verdicts and belong in the mean, matching the
+        headline denominator fix (audit A-2)."""
         sql = """
             SELECT a.output_json, a.confidence
             FROM narrative_docs nd
@@ -271,7 +275,6 @@ class NarrativeAggregator:
             JOIN ai_outputs a
                  ON a.doc_id = d.doc_id
                 AND a.task_type = 'propaganda'
-                AND COALESCE(a.inference_method, '') != 'deterministic'
             WHERE nd.narrative_id = ?
         """
         params: List[Any] = [narrative_id]
@@ -474,8 +477,10 @@ class NarrativeAggregator:
                 total += c
             elif label == "NEGATIVE":
                 total -= c
-            else:
-                continue  # NEUTRAL / MIXED do not pull the net.
+            # NEUTRAL / MIXED contribute 0 to the numerator but DO count in
+            # the denominator (audit A-6) — the docstring's "NEUTRAL=0, average
+            # over supporting docs" contract, matching the sentiment page. A
+            # narrative that is 49 NEUTRAL + 1 POSITIVE reports ~+2, not +90.
             count += 1
 
         if count == 0:
@@ -518,10 +523,19 @@ class NarrativeAggregator:
         cursor.execute(sql, params)
 
         rows = []
+        seen_doc_ids: set = set()
         for (
             doc_id, title, source_type, domain, ident, published_at,
             x_handle, output_json, confidence,
         ) in cursor.fetchall():
+            # Dedupe by doc_id: ai_outputs has no UNIQUE(doc_id, task_type),
+            # so concurrent cron + admin runs can leave >1 sentiment row per
+            # doc and the LEFT JOIN would render the doc twice (audit A-11,
+            # same guard propaganda.py documents). Keep the first (highest
+            # confidence, per the ORDER BY).
+            if doc_id in seen_doc_ids:
+                continue
+            seen_doc_ids.add(doc_id)
             sentiment_label = None
             reasoning = None
             if output_json:
