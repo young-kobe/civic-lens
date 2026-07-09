@@ -512,9 +512,14 @@ class CoordinationStats:
 
 @dataclass
 class BehavioralSignals:
-    """Behavioral signal breakdowns."""
+    """Behavioral signal breakdowns.
+
+    The former ``postingCadence`` heatmap field was dropped: the aggregator
+    only ever emitted ``day: 0`` for every row and bucketed by server-local
+    hour, so the heatmap it fed was fabricated. The UI viz was removed first;
+    this drops the dead payload (audit HEATMAP / ui-rework Phase B).
+    """
     accountAgeDistribution: List[Dict[str, Any]]
-    postingCadence: List[Dict[str, Any]]
     copyPasteSimilarity: Dict[str, float]
     linkDomainConcentration: List[Dict[str, Any]]
 
@@ -575,6 +580,11 @@ class NarrativeSummary:
     # Top N supporting docs for the modal drill-down table — matches the
     # SupportingDoc TS interface in ui/src/types.ts.
     top_supporting_docs: List[Dict[str, Any]] = field(default_factory=list)
+    # Mean sentiment-row confidence across ALL supporting docs in the window
+    # (not just top_supporting_docs, which would misrepresent the cluster) —
+    # lets the UI show a narrative-level confidence chip (audit R-3). None when
+    # no supporting doc has a sentiment row.
+    mean_confidence: Optional[float] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -597,6 +607,7 @@ class NarrativeSummary:
             "first_seen_tier_group": self.first_seen_tier_group,
             "cross_tier": self.cross_tier,
             "top_supporting_docs": self.top_supporting_docs,
+            "mean_confidence": self.mean_confidence,
         }
 
 
@@ -641,7 +652,6 @@ class BotActivityData:
             },
             "behavioralSignals": {
                 "accountAgeDistribution": self.behavioralSignals.accountAgeDistribution,
-                "postingCadence": self.behavioralSignals.postingCadence,
                 "copyPasteSimilarity": self.behavioralSignals.copyPasteSimilarity,
                 "linkDomainConcentration": self.behavioralSignals.linkDomainConcentration,
             },

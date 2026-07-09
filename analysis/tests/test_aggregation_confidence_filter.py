@@ -35,16 +35,15 @@ def _apply_migrations(db_path: str) -> None:
 
 
 def _seed_doc(conn, doc_id: int, source_type: str, ident: str,
-              published_at: int, text: str = "body",
-              country_code: str = None):
+              published_at: int, text: str = "body"):
     conn.execute(
         """
         INSERT INTO docs (doc_id, source_type, ident, domain_or_subreddit,
-                           published_at, text, raw_hash, place_country_code)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                           published_at, text, raw_hash)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
         (doc_id, source_type, ident, source_type, published_at, text,
-         f"rh-{doc_id}", country_code),
+         f"rh-{doc_id}"),
     )
 
 

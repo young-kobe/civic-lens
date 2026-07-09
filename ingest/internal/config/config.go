@@ -62,8 +62,9 @@ type XConfig struct {
 	OfficialsListPath string `yaml:"officials_list_path"`
 	// MaxTweetsPerOfficial bounds the per-account timeline pull. The X API
 	// minimum on /2/users/:id/tweets is 5; the client pads up if a smaller
-	// value is configured. Default 5 keeps the officials pass at roughly
-	// 16 handles × 5 tweets ≈ $1/run on the X v2 retail price card.
+	// value is configured. Default 5 keeps the officials pass at the 37
+	// handles AllHandles() returns (16 primaries + 21 alternates) × 5 tweets
+	// on the X v2 retail price card.
 	MaxTweetsPerOfficial int `yaml:"max_tweets_per_official"`
 }
 

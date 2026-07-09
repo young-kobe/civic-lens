@@ -335,14 +335,25 @@ def resolve_entity(
     source_type: Optional[str],
     domain_or_subreddit: Optional[str],
     x_handle: Optional[str],
+    is_official_tier: bool = False,
 ) -> Tuple[Optional[Tier], Optional[AnyEntity]]:
     """Classify a doc into (tier, matched_entity).
 
     * news → ("news", OutletEntity | None)
     * x_post authored by a verified official → ("officials", OfficialEntity)
+    * x_post with ``is_official_tier`` provenance but no registry match →
+      ("officials", None)
     * x_post by anyone else → ("public", None)
     * reddit → ("public", SubredditEntity | None)
     * unknown source_type → (None, None)
+
+    ``is_official_tier`` is the ingestor's provenance flag
+    (``x_posts_raw.is_official_tier``): the post was pulled via the
+    verified-officials timeline. It upgrades a post to the officials tier even
+    when the stored handle string doesn't canonicalize to a registry key
+    (renamed handle, alt handle not in the editorial list) — a robustness
+    signal independent of string matching. Callers that pass it must tolerate
+    an ("officials", None) return (no editorial entity to render).
     """
     if source_type == "news":
         return "news", registry.get_outlet(domain_or_subreddit)
@@ -350,6 +361,8 @@ def resolve_entity(
         official = registry.get_official(x_handle)
         if official is not None:
             return "officials", official
+        if is_official_tier:
+            return "officials", None
         return "public", None
     if source_type in ("reddit_post", "reddit_comment"):
         return "public", registry.get_subreddit(domain_or_subreddit)

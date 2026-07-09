@@ -12,14 +12,13 @@
 -- This column is the *provenance* signal: "we explicitly fetched this
 -- because the author is on the editorial officials list," distinct from
 -- "the author happens to be on a list."
-
-BEGIN TRANSACTION;
+--
+-- No explicit transaction here: the migration runner wraps this file in one
+-- (audit D-6).
 
 ALTER TABLE x_posts_raw ADD COLUMN is_official_tier INTEGER NOT NULL DEFAULT 0;
 
 CREATE INDEX IF NOT EXISTS idx_x_posts_raw_official_tier
     ON x_posts_raw(is_official_tier) WHERE is_official_tier = 1;
-
-COMMIT;
 
 INSERT OR IGNORE INTO schema_version (version, applied_at) VALUES (18, strftime('%s', 'now'));

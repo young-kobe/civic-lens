@@ -53,9 +53,11 @@ class NewsOutletsTests(unittest.TestCase):
 
     def test_count_matches_plan(self):
         self.assertEqual(
-            len(self.entries), 20,
-            "Phase 2 of the UI Redesign Plan requires exactly 20 outlets; "
-            "see docs/ui-redesign-plan.md 'Outlet coverage list'."
+            len(self.entries), 21,
+            "Outlet registry size changed. 21 = the original 20 + cbsnews.com "
+            "added by the D-8 seed/registry reconciliation (cbsnews.com is a "
+            "priority-10 RSS seed). test_registry_consistency enforces the "
+            "seeds<->registry coverage; update this count deliberately."
         )
 
     def test_required_fields_present(self):
@@ -224,9 +226,12 @@ class MajorSubredditsTests(unittest.TestCase):
 
     def test_count_matches_plan(self):
         self.assertEqual(
-            len(self.entries), 10,
-            "Phase 2 of the UI Redesign Plan requires exactly 10 subreddits; "
-            "see docs/ui-redesign-plan.md 'Subreddit coverage list'."
+            len(self.entries), 15,
+            "Subreddit registry size changed. 15 = the original 10 + the 5 "
+            "seeded-but-unregistered subs (news, worldnews, NeutralPolitics, "
+            "moderatepolitics, geopolitics) added by the D-8 seed/registry "
+            "reconciliation. test_registry_consistency enforces the "
+            "seeds<->registry coverage; update this count deliberately."
         )
 
     def test_required_fields_present(self):

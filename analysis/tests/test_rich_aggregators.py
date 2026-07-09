@@ -52,7 +52,8 @@ class TestRichAggregators(unittest.TestCase):
 
             CREATE TABLE x_posts_raw (
                 tweet_id TEXT PRIMARY KEY,
-                author_id TEXT
+                author_id TEXT,
+                is_official_tier INTEGER NOT NULL DEFAULT 0
             );
 
             CREATE TABLE x_users_raw (

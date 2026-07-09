@@ -22,10 +22,10 @@ sources:
     type: live_web_verification
     verified_on: '2026-04-19'
 counts:
-  executive_branch: 10
+  executive_branch: 12
   house: 437
   senate: 100
-  total_entries: 547
+  total_entries: 549
 accounts:
   executive_branch:
   - name: Donald J. Trump
@@ -93,22 +93,51 @@ accounts:
       url: https://x.com/FBI
       account_type: institutional
     source_status: verified_live_search
-  - name: Markwayne Mullin
+  - name: Kristi Noem
     office: Secretary of Homeland Security
     branch: Executive
+    notes: DHS Secretary since 2025-01-25 (former Governor of South Dakota); reconciled with verified_officials.yaml. @DHSgov is the DHS institutional account and belongs to the sitting Secretary. Markwayne Mullin is the OK senator (@SenMullin), listed under congress.senate, not DHS.
     accounts:
     - platform: x
-      handle: '@SecMullinDHS'
-      url: https://x.com/SecMullinDHS
+      handle: '@Sec_Noem'
+      url: https://x.com/Sec_Noem
       account_type: official_role
+    - platform: x
+      handle: '@KristiNoem'
+      url: https://x.com/KristiNoem
+      account_type: personal/official
     - platform: x
       handle: '@DHSgov'
       url: https://x.com/DHSgov
       account_type: institutional
+    source_status: verified_live_search
+  - name: Pam Bondi
+    office: Attorney General
+    branch: Executive
+    notes: US Attorney General since 2025-02-05; added to reconcile with verified_officials.yaml. The DOJ institutional handle @TheJusticeDept is listed under Todd Blanche's entry.
+    accounts:
     - platform: x
-      handle: '@SenMullin'
-      url: https://x.com/SenMullin
-      account_type: previous/personal
+      handle: '@AGPamBondi'
+      url: https://x.com/AGPamBondi
+      account_type: official_role
+    source_status: verified_live_search
+  - name: Robert F. Kennedy Jr.
+    office: Secretary of Health and Human Services
+    branch: Executive
+    notes: HHS Secretary since 2025-02-13; added to reconcile with verified_officials.yaml.
+    accounts:
+    - platform: x
+      handle: '@SecKennedy'
+      url: https://x.com/SecKennedy
+      account_type: official_role
+    - platform: x
+      handle: '@RobertKennedyJr'
+      url: https://x.com/RobertKennedyJr
+      account_type: personal/political
+    - platform: x
+      handle: '@HHSGov'
+      url: https://x.com/HHSGov
+      account_type: institutional
     source_status: verified_live_search
   - name: Todd Blanche
     office: Acting Attorney General of the United States
@@ -117,7 +146,7 @@ accounts:
     - platform: x
       handle: '@DAGToddBlanche'
       url: https://x.com/DAGToddBlanche
-      account_type: official/personal
+      account_type: personal/official
     - platform: x
       handle: '@TheJusticeDept'
       url: https://x.com/TheJusticeDept
@@ -164,7 +193,7 @@ accounts:
     - platform: x
       handle: '@DCIARatcliffe'
       url: https://x.com/DCIARatcliffe
-      account_type: official/personal
+      account_type: personal/official
     - platform: x
       handle: '@CIA'
       url: https://x.com/CIA
@@ -2164,6 +2193,8 @@ accounts:
       last_name: Jeffries
       platform: x
       handle: '@RepJeffries'
+      also_handles:
+      - '@hakeemjeffries'   # personal handle (verified_officials.yaml)
       url: https://x.com/RepJeffries
       chamber: House
       state_or_district: NY08
@@ -2194,6 +2225,8 @@ accounts:
       last_name: Johnson
       platform: x
       handle: '@SpeakerJohnson'
+      also_handles:
+      - '@RepMikeJohnson'   # district handle (verified_officials.yaml)
       url: https://x.com/SpeakerJohnson
       chamber: House
       state_or_district: LA04
@@ -3893,12 +3926,14 @@ accounts:
       first_name: Christopher
       last_name: Smith
       platform: x
-      handle: null
+      handle: '@RepChrisSmith'
       handle_raw: Rep. Chris Smith (R), NJ
-      url: null
+      url: https://x.com/RepChrisSmith
       chamber: House
       state_or_district: NJ04
       party: R
+      source_status: manual_fill
+      notes: Handle filled manually — the source-file row carried only handle_raw. @RepChrisSmith is Rep. Chris Smith's (NJ-04) official House account; verify before time-sensitive use.
       source_status: source_file_malformed_or_missing
     - name: Jason Smith
       first_name: Jason
@@ -5284,6 +5319,8 @@ accounts:
     - name: Chuck Schumer
       platform: x
       handle: '@SenSchumer'
+      also_handles:
+      - '@chuckschumer'   # personal handle (verified_officials.yaml)
       url: https://x.com/SenSchumer
       chamber: Senate
       state_or_district: NY
@@ -5356,6 +5393,8 @@ accounts:
     - name: John Thune
       platform: x
       handle: '@SenJohnThune'
+      also_handles:
+      - '@LeaderJohnThune'   # Majority Leader handle (verified_officials.yaml)
       url: https://x.com/SenJohnThune
       chamber: Senate
       state_or_district: SD
@@ -5474,6 +5513,10 @@ affiliated:
     notes: "Republican National Committee"
   - handle: TheDemocrats
     notes: "Democratic National Committee"
+  - handle: ChairmanWhatley
+    notes: "Michael Whatley - RNC Chair (verified_officials.yaml)"
+  - handle: kenmartinmn
+    notes: "Ken Martin - DNC Chair (verified_officials.yaml)"
   - handle: DCCC
     notes: "Democratic Congressional Campaign Committee"
   - handle: NRCC

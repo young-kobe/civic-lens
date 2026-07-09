@@ -53,12 +53,14 @@ def get_public_sentiment(
 
 
 @router.get("/bot-activity")
-def get_bot_activity():
-    """Returns bot-activity metrics (automation rate, coordination, behavioral signals)."""
+def get_bot_activity(window: WindowLiteral = "24h"):
+    """Returns bot-activity metrics (automation rate, coordination, behavioral
+    signals) for the time window. The window applies a published_at cutoff in
+    the aggregator so the numbers match the selected pill (audit U-1a)."""
     return get_cached_or_fallback(
         cache,
-        "bot_activity",
-        bot_agg.get_bot_activity,
+        f"bot_activity_{window}",
+        lambda: bot_agg.get_bot_activity(time_window=window),
         lambda b: b.to_dict(),
     )
 
