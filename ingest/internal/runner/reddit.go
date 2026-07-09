@@ -50,31 +50,29 @@ func (rr *RedditRunner) Run(ctx context.Context) (*RedditResult, error) {
 			continue
 		}
 
-		// Store raw JSON
-		hash, _ := rr.app.RawStore.Store(ctx, rawJSON, ".json")
+		// Store raw JSON. Skip the subreddit on failure rather than persist
+		// posts with an empty raw_hash (A6/A7 traceability); the old hash[:8]
+		// log also panicked on the empty string.
+		hash, err := rr.app.RawStore.Store(ctx, rawJSON, ".json")
+		if err != nil {
+			fmt.Printf("  Raw store error, skipping subreddit: %v\n", err)
+			continue
+		}
 
-		fmt.Printf("  Got %d posts (raw: %s)\n", len(posts), hash[:8])
+		fmt.Printf("  Got %d posts (raw: %s)\n", len(posts), safePrefix(hash, 8))
 
-		// Insert posts
+		// Insert posts. NOTE: we intentionally do NOT merge comment bodies
+		// into post.Body. The comments endpoint's raw JSON is a separate blob
+		// with its own hash, and reddit_posts_raw.raw_hash points at the
+		// listing JSON — merging comment text here would persist records whose
+		// raw_hash does not cover them, breaking A6/A7 traceability (I-11).
+		// Reddit ingestion is currently disabled; before re-enabling comment
+		// collection, store the comments-endpoint JSON via RawStore and write
+		// the comment rows to reddit_comments_raw keyed by that hash.
 		for _, post := range posts {
 			post.FetchedAt = now
 			post.RawHash = hash
 			post.ExtractionVersion = "1.0"
-
-			postID := post.Fullname
-			if len(postID) > 3 && postID[:3] == "t3_" {
-				postID = postID[3:]
-			}
-
-			bodies, _, err := client.FetchPostCommentBodiesPublic(ctx, post.Subreddit, postID, 5)
-			if err == nil {
-				for _, body := range bodies {
-					if body != "[deleted]" && body != "[removed]" {
-						post.Body += fmt.Sprintf("\n\n--- Comment:\n%s", body)
-					}
-				}
-			}
-			time.Sleep(500 * time.Millisecond)
 
 			if err := rr.insertPost(ctx, post); err != nil {
 				fmt.Printf("  Insert error: %v\n", err)

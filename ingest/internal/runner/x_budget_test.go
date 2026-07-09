@@ -65,12 +65,13 @@ func TestXBudgetTracker_RecordAccumulates(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Call 1: 25 tweets, 18 new users. Posts cost 25 * 5/10 = 12 cents.
-	// Users cost 18 * 10/10 = 18 cents. Total: 30 cents.
+	// Call 1: 25 tweets, 18 new users. Raw cost = 25*5 + 18*10 = 305 tenths
+	// of a cent = 30.5c, rounded UP to 31c (never truncated to 30).
 	if err := b.Record(context.Background(), 25, 18); err != nil {
 		t.Fatal(err)
 	}
-	// Call 2: 10 tweets, 7 new users. +5 +7 = +12. Total: 42 cents.
+	// Call 2: 10 tweets, 7 new users. 10*5 + 7*10 = 120 tenths = 12c exactly.
+	// Running total: 43 cents.
 	if err := b.Record(context.Background(), 10, 7); err != nil {
 		t.Fatal(err)
 	}
@@ -79,8 +80,8 @@ func TestXBudgetTracker_RecordAccumulates(t *testing.T) {
 	if s.PostCount != 35 || s.UserCount != 25 || s.RequestCount != 2 {
 		t.Errorf("counters: posts=%d users=%d reqs=%d", s.PostCount, s.UserCount, s.RequestCount)
 	}
-	if s.EstimatedCents != 42 {
-		t.Errorf("want 42 cents, got %d", s.EstimatedCents)
+	if s.EstimatedCents != 43 {
+		t.Errorf("want 43 cents (ceil), got %d", s.EstimatedCents)
 	}
 
 	// DB side should reflect the same.
@@ -88,8 +89,8 @@ func TestXBudgetTracker_RecordAccumulates(t *testing.T) {
 	if err := db.QueryRow(`SELECT estimated_cents FROM x_api_budget WHERE month_key = '2026-05'`).Scan(&dbCents); err != nil {
 		t.Fatal(err)
 	}
-	if dbCents != 42 {
-		t.Errorf("db persisted %d cents, want 42", dbCents)
+	if dbCents != 43 {
+		t.Errorf("db persisted %d cents, want 43", dbCents)
 	}
 }
 
