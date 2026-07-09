@@ -2,6 +2,13 @@
 
 Status: draft 2026-04-19. Domain purchased via Cloudflare. Target: public internet.
 
+> **2026-07-09 addendum:** the Docker Compose shape this plan recommends has
+> shipped — see `docker-compose.yml` at the repo root and
+> `docs/audit-trail/infra/2026-07-09-docker-compose-stack.md` for the system
+> as it is now (GHCR-built images, systemd timers exec `docker compose run
+> --rm`, Litestream replication). Sections below describing on-box builds and
+> a host Caddy package are superseded.
+
 ## Recommendation
 
 **Single small VPS (Hetzner CX22 or DigitalOcean Basic) running everything via Docker Compose + systemd timers, Caddy for TLS, Cloudflare in front.** One box, one SSH login, one `git pull && deploy.sh` to redeploy. ~$10-17/mo all-in.
