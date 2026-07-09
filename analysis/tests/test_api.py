@@ -110,5 +110,15 @@ class TestAPI(unittest.TestCase):
         resp = requests.get(f"{API_URL}/api/v1/cache-status")
         self.assertEqual(resp.status_code, 503)
 
+    def test_review_endpoints_reject_without_token(self):
+        """The review routes are the API's only eval write surface
+        (ai_output_evals) and /review/queue leaks raw scraped text, so they
+        share the admin gate and must fail closed — a deploy that forgets
+        CIVIC_ADMIN_TOKEN gets 503 for everyone, never an open write path."""
+        resp = requests.get(f"{API_URL}/api/v1/review/queue", params={"task": "claims"})
+        self.assertEqual(resp.status_code, 503)
+        resp = requests.post(f"{API_URL}/api/v1/review/submit", json={"ai_output_id": 1})
+        self.assertEqual(resp.status_code, 503)
+
 if __name__ == '__main__':
     unittest.main()
