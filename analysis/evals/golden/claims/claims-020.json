@@ -1,0 +1,16 @@
+{
+  "id": "claims-020",
+  "task": "claim_extraction",
+  "input_text": "FEMA denied our county's disaster declaration request. Third time in five years. People here are done waiting.",
+  "input_provenance": "synthetic-draft",
+  "expected_claims": [
+    {
+      "claim": "FEMA denied the county's disaster declaration request for the third time in five years",
+      "evidence_span": "denied our county's disaster declaration request"
+    }
+  ],
+  "review_status": "PENDING_HUMAN_REVIEW",
+  "reviewed_by": null,
+  "reviewed_at": null,
+  "notes": "First-person civic complaint anchoring a factual denial claim."
+}

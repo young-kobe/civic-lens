@@ -1,0 +1,11 @@
+{
+  "id": "claims-036",
+  "task": "claim_extraction",
+  "input_text": "If the polls are wrong again this cycle I'm deleting this app, I swear.",
+  "input_provenance": "synthetic-draft",
+  "expected_claims": [],
+  "review_status": "PENDING_HUMAN_REVIEW",
+  "reviewed_by": null,
+  "reviewed_at": null,
+  "notes": "Conditional hypothetical; no assertion about the world."
+}

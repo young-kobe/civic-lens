@@ -1,0 +1,20 @@
+{
+  "id": "claims-004",
+  "task": "claim_extraction",
+  "input_text": "Former President Trump was fined 350 million dollars in the New York civil fraud case, and the judge barred him from serving as an officer of any New York company for three years.",
+  "input_provenance": "synthetic-draft",
+  "expected_claims": [
+    {
+      "claim": "Trump was fined 350 million dollars in the New York civil fraud case",
+      "evidence_span": "fined 350 million dollars in the New York civil fraud case"
+    },
+    {
+      "claim": "Trump was barred from serving as a New York company officer for three years",
+      "evidence_span": "barred him from serving as an officer of any New York company for three years"
+    }
+  ],
+  "review_status": "PENDING_HUMAN_REVIEW",
+  "reviewed_by": null,
+  "reviewed_at": null,
+  "notes": "Legal-outcome claims; tests entity plus penalty extraction."
+}

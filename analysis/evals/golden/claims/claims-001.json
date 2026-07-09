@@ -1,0 +1,20 @@
+{
+  "id": "claims-001",
+  "task": "claim_extraction",
+  "input_text": "The Senate passed the border security bill 52-48 on Tuesday, sending it to the House where Speaker Johnson has promised a floor vote before the August recess.",
+  "input_provenance": "synthetic-draft",
+  "expected_claims": [
+    {
+      "claim": "The Senate passed the border security bill 52-48",
+      "evidence_span": "Senate passed the border security bill 52-48"
+    },
+    {
+      "claim": "Speaker Johnson promised a House floor vote before August recess",
+      "evidence_span": "promised a floor vote before the August recess"
+    }
+  ],
+  "review_status": "PENDING_HUMAN_REVIEW",
+  "reviewed_by": null,
+  "reviewed_at": null,
+  "notes": "Two-claim news lede; vote-count detail should survive canonicalization."
+}

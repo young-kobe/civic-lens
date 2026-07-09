@@ -1,0 +1,6 @@
+{
+  "task": "claim_extraction",
+  "baseline": null,
+  "tolerance": 0.02,
+  "note": "baseline is null until the golden labels are hand-verified and live outputs recorded; the CI gate is inactive (passes with a warning) until then. Establish it with: python -m analysis.evals.run_eval --mode live --record, review the scores, then python -m analysis.evals.run_eval --write-baseline. See docs/EVALS.md."
+}

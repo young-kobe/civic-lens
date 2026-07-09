@@ -1,0 +1,11 @@
+{
+  "id": "claims-038",
+  "task": "claim_extraction",
+  "input_text": "VOTE VOTE VOTE!!! November is coming!!!",
+  "input_provenance": "synthetic-draft",
+  "expected_claims": [],
+  "review_status": "PENDING_HUMAN_REVIEW",
+  "reviewed_by": null,
+  "reviewed_at": null,
+  "notes": "Exhortation only."
+}
