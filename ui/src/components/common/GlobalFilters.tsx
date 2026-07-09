@@ -16,6 +16,10 @@ const TIME_RANGES: TimeRange[] = [
 interface GlobalFiltersProps {
     filters: Filters;
     onFilterChange: (filters: Filters) => void;
+    /** When false, the tab ignores the time window (serves the full sample),
+     *  so we hide the pills and say so outright instead of rendering controls
+     *  that silently do nothing. Defaults to true. */
+    windowScoped?: boolean;
 }
 
 /**
@@ -27,8 +31,17 @@ interface GlobalFiltersProps {
 function GlobalFilters({
     filters,
     onFilterChange,
+    windowScoped = true,
 }: GlobalFiltersProps) {
     const { timeRange = '7d' } = filters;
+
+    if (!windowScoped) {
+        return (
+            <div className="filter-bar">
+                <span className="eyebrow text-muted">Full sample &middot; not time-windowed</span>
+            </div>
+        );
+    }
 
     return (
         <div className="filter-bar">

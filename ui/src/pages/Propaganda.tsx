@@ -450,18 +450,23 @@ function NewsVsSocialCard({ splits }: { splits: PropagandaSourceSplit[] }) {
 //  Examples                                                                   //
 // --------------------------------------------------------------------------- //
 
+function friendlySourceMeta(ex: PropagandaExample): string {
+    if (ex.source_type === 'x_post') return ex.author_handle ? `X · @${ex.author_handle}` : 'X';
+    if (ex.source_type === 'news') return ex.domain ? `News · ${ex.domain}` : 'News';
+    if (ex.source_type.startsWith('reddit')) return ex.domain ? `Reddit · r/${ex.domain}` : 'Reddit';
+    return ex.domain || ex.source_type;
+}
+
 function ExampleRow({ ex }: { ex: PropagandaExample }) {
-    const sourceMeta = ex.source_type === 'x_post' && ex.author_handle
-        ? `X · @${ex.author_handle}`
-        : `${ex.source_type} · ${ex.domain || 'unknown'}`;
+    const sourceMeta = friendlySourceMeta(ex);
     return (
         <div className="example-row">
             <div className="example-row-head">
                 <span className="example-row-meta">
-                    {sourceMeta} · doc #{ex.doc_id}
+                    {sourceMeta}
                 </span>
                 <span className="example-row-score">
-                    score {ex.overall_score.toFixed(2)}
+                    score {ex.overall_score.toFixed(2)} / 1
                 </span>
                 {ex.url && (
                     <a
@@ -485,11 +490,12 @@ function ExampleRow({ ex }: { ex: PropagandaExample }) {
                     <span
                         key={i}
                         className="example-tech"
-                        title={`confidence ${t.confidence.toFixed(2)}`}
                     >
                         <strong>
                             {TECHNIQUE_LABEL[t.technique as PropagandaTechniqueName] || t.technique}
                         </strong>
+                        {' '}
+                        <span className="example-tech-conf">{formatPct(t.confidence * 100, { decimals: 0 })} conf</span>
                         {': '}
                         <em>"{t.evidence_span}"</em>
                     </span>

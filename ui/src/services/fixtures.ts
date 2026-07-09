@@ -834,7 +834,6 @@ export function mockBotActivity(): BotData {
             },
         ],
         coordinationStats: {
-            burstTimingSimilarity: 0.67,
             accountReuse: 0.24,
             identicalTextPairs: 412,
             avgPostsPerSuspectedAccount: 38.4,

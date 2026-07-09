@@ -52,7 +52,7 @@ function Home({ onNavigate, isAdmin = false }: HomeProps) {
                         maxWidth: 720,
                     }}
                 >
-                    See the shape of political media, unbiased.
+                    See the shape of political media.
                 </h2>
                 <p style={{
                     margin: 0,
@@ -102,7 +102,7 @@ function Home({ onNavigate, isAdmin = false }: HomeProps) {
                     <li>How <strong>news tone</strong> compares to <strong>social media tone</strong> on the same political stories.</li>
                     <li>Which accounts in political discussion look <strong>automated</strong>, and what signals flagged them.</li>
                     <li>Which <strong>propaganda techniques</strong> show up in political content, quoted verbatim from the source.</li>
-                    <li><strong>Favorability</strong> scores per political figure, pulled from the same per-document analysis.</li>
+                    <li>Where sampled discussion nets out on <strong>GOP stance</strong>, pulled from the same per-document analysis.</li>
                     <li>Every one of these is broken down by source, topic, and time window.</li>
                 </ul>
             </section>

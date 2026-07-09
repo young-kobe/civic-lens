@@ -505,7 +505,6 @@ class NarrativeAmplification:
 @dataclass
 class CoordinationStats:
     """Coordination behavior statistics."""
-    burstTimingSimilarity: float
     accountReuse: float
     identicalTextPairs: int
     avgPostsPerSuspectedAccount: float
@@ -636,7 +635,6 @@ class BotActivityData:
                 for n in self.narrativeAmplification
             ],
             "coordinationStats": {
-                "burstTimingSimilarity": self.coordinationStats.burstTimingSimilarity,
                 "accountReuse": self.coordinationStats.accountReuse,
                 "identicalTextPairs": self.coordinationStats.identicalTextPairs,
                 "avgPostsPerSuspectedAccount": self.coordinationStats.avgPostsPerSuspectedAccount,

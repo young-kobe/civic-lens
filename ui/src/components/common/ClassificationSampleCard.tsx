@@ -11,6 +11,15 @@ interface ClassificationSampleCardProps {
 
 const MAX_EVIDENCE_DISPLAY = 5;
 
+/** Reader-facing source label — the wire carries raw enums ("x_post") that
+ *  shouldn't surface to end users (R-9). */
+function friendlySourceType(sourceType: string): string {
+    if (sourceType === 'x_post') return 'X';
+    if (sourceType === 'news') return 'News';
+    if (sourceType.startsWith('reddit')) return 'Reddit';
+    return sourceType;
+}
+
 function meaningfulEvidence(spans: string[]): string[] {
     const seen = new Set<string>();
     const result: string[] = [];
@@ -106,7 +115,7 @@ export function ClassificationSampleCard({ sample, badgeStyle }: ClassificationS
                         background: 'var(--neutral-100)', textTransform: 'uppercase', letterSpacing: '0.06em',
                         fontWeight: 600,
                     }}>
-                        {sample.source_type}
+                        {friendlySourceType(sample.source_type)}
                     </span>
                 </span>
             </div>
@@ -188,14 +197,6 @@ export function ClassificationSampleCard({ sample, badgeStyle }: ClassificationS
                     </div>
                 </div>
             )}
-
-            {/* Doc reference */}
-            <div style={{
-                marginTop: '6px', fontSize: '10px', color: 'var(--neutral-400)',
-                fontFamily: 'var(--font-mono)', letterSpacing: '0.04em',
-            }}>
-                DOC #{sample.doc_id}
-            </div>
         </div>
     );
 }

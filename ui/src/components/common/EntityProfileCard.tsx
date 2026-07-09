@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import type { ConfidenceLevel, EntityProfile } from '../../types';
+import type { EntityProfile } from '../../types';
 import { COLORS, leanClass } from '../../theme';
 import { formatPct } from '../../services/format';
 
@@ -205,23 +205,23 @@ export function entityLeanAccent(profile: EntityProfile): string {
 // --------------------------------------------------------------------------- //
 
 /** Build the sentiment-page stats trio from raw values. Handy so the
- *  Overall Tone page doesn't repeat the color/emphasis logic inline. */
+ *  Overall Tone page doesn't repeat the color/emphasis logic inline.
+ *  Confidence is intentionally not stamped here: the sentiment aggregator
+ *  currently hardcodes a single "medium" value, so surfacing it per-entity
+ *  read as a live, computed trust signal it isn't. It returns once the
+ *  aggregator derives real per-entity confidence. */
 export function sentimentStats({
-    netTone, volume, confidence,
+    netTone, volume,
 }: {
-    netTone: number; volume: number; confidence?: ConfidenceLevel;
+    netTone: number; volume: number;
 }): EntityStat[] {
     const color = netTone > 10 ? COLORS.positive
         : netTone < -10 ? COLORS.negative
         : 'var(--neutral-500)';
-    const stats: EntityStat[] = [
+    return [
         { label: 'How they lean', value: formatPct(netTone, { min: -100, signed: true }), color, emphasis: true },
         { label: 'Posts', value: volume.toLocaleString() },
     ];
-    if (confidence) {
-        stats.push({ label: `${confidence} confidence`, value: '' });
-    }
-    return stats;
 }
 
 
