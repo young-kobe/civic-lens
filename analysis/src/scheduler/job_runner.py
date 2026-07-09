@@ -397,6 +397,7 @@ class AnalysisJobRunner:
 
         scored_groups = 0
         duplicates_fanned = 0
+        skipped_docs = 0
         logger.info(
             f"Processing {total} docs for propaganda detection "
             f"({len(groups)} unique content hashes)"
@@ -406,6 +407,16 @@ class AnalysisJobRunner:
             result = self.propaganda_detector.detect(
                 primary["text"], title=primary.get("title"),
             )
+            if result.detection_failed:
+                # Transport failure — persist nothing for this group so the
+                # docs re-queue next run rather than freezing as a permanent
+                # "no propaganda" verdict (audit A-3).
+                skipped_docs += len(group)
+                logger.warning(
+                    f"[propaganda] hash={primary.get('raw_hash', '(none)')[:8]}… "
+                    f"detection FAILED — skipping {len(group)} doc(s) (will re-queue)"
+                )
+                continue
             payload = result.to_dict()
             for doc in group:
                 self.loader.save_ai_output(
@@ -429,10 +440,11 @@ class AnalysisJobRunner:
                 f"score={result.overall_propaganda_score:.2f}"
             )
         logger.info(
-            f"Propaganda detection complete: {total} docs processed "
-            f"({scored_groups} LLM calls, {duplicates_fanned} dedup-fanned)"
+            f"Propaganda detection complete: {total - skipped_docs} docs processed "
+            f"({scored_groups} LLM calls, {duplicates_fanned} dedup-fanned, "
+            f"{skipped_docs} skipped on failure)"
         )
-        return total
+        return total - skipped_docs
 
     def run_citation_extraction(self, limit: int | None = None) -> int:
         """Extract cross-source citation edges. Deterministic, no LLM. Returns count of edges written."""
@@ -469,8 +481,20 @@ class AnalysisJobRunner:
             return 0
 
         logger.info(f"Processing {total} docs for claim extraction")
+        skipped = 0
         for i, doc in enumerate(docs, 1):
             result = self.claim_extractor.extract(doc["text"])
+            if result.extraction_failed:
+                # Transport failure / unavailable client — do NOT write an
+                # ai_outputs row. get_unprocessed_docs re-queues the doc next
+                # run so a transient outage never freezes as a permanent
+                # "no claims" verdict (audit A-3).
+                skipped += 1
+                logger.warning(
+                    f"[claims {i}/{total}] doc={doc['doc_id']} extraction FAILED — "
+                    "skipping (will re-queue)"
+                )
+                continue
             # Row-level confidence is the mean of per-claim confidences rather
             # than the old max(). A doc with claims at (0.4, 0.4, 0.9) should
             # not advertise 0.9 as the row confidence — downstream aggregators
@@ -494,8 +518,11 @@ class AnalysisJobRunner:
                 f"[claims {i}/{total}] doc={doc['doc_id']} extracted={len(result.claims)} "
                 f"mean_conf={row_confidence:.2f}"
             )
-        logger.info(f"Claim extraction complete: {total} docs processed")
-        return total
+        logger.info(
+            f"Claim extraction complete: {total - skipped} docs processed, "
+            f"{skipped} skipped on failure (will re-queue)"
+        )
+        return total - skipped
 
     def run_narrative_clustering(self) -> dict:
         """Cluster unassigned claims into narratives. Returns summary dict."""
@@ -657,10 +684,16 @@ class AnalysisJobRunner:
             self.cache.save(f"sentiment_{window}", sentiment.to_dict(), doc_count=sentiment.overview.volume)
             results[f"sentiment_{window}"] = sentiment.overview.volume
 
-        # Bot Activity (not time-windowed)
-        bot_activity = self.bot_agg.get_bot_activity()
-        self.cache.save("bot_activity", bot_activity.to_dict(), doc_count=bot_activity.overview.totalFlaggedAccounts)
-        results["bot_activity"] = 1
+        # Bot Activity — cache all time windows (audit U-1a; the endpoint now
+        # applies a published_at cutoff per window instead of relabeling the
+        # full sample with the selected pill).
+        for window in time_windows:
+            bot_activity = self.bot_agg.get_bot_activity(time_window=window)
+            self.cache.save(
+                f"bot_activity_{window}", bot_activity.to_dict(),
+                doc_count=bot_activity.overview.totalFlaggedAccounts,
+            )
+            results[f"bot_activity_{window}"] = bot_activity.overview.totalFlaggedAccounts
 
         # Narratives — cache top 100 per time window; the API slices to the
         # caller's requested limit (walkthrough 041). Previously the key was

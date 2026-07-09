@@ -6,6 +6,7 @@ import (
 	"io"
 	"math/rand"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -40,7 +41,15 @@ func New(cfg Config) *Fetcher {
 		IdleConnTimeout:     90 * time.Second,
 	}
 
-	client := &http.Client{
+	f := &Fetcher{
+		userAgent:    cfg.UserAgent,
+		maxRetries:   cfg.MaxRetries,
+		limiters:     make(map[string]*rate.Limiter),
+		ratePerSec:   cfg.RatePerSec,
+		maxRedirects: cfg.MaxRedirects,
+	}
+
+	f.client = &http.Client{
 		Transport: transport,
 		Timeout:   cfg.RequestTimeout,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
@@ -52,18 +61,21 @@ func New(cfg Config) *Fetcher {
 			if err := validateURL(req.URL.String()); err != nil {
 				return fmt.Errorf("redirect target rejected: %w", err)
 			}
+			// Politeness: take a token against the REDIRECT TARGET's domain
+			// too. Without this, N source domains all 30x-ing onto one host
+			// would hit that host at N times its configured rate (I-10). We
+			// do not re-check robots.txt on cross-domain redirects here — the
+			// initial URL's robots decision was already made in the crawl
+			// loop; per-hop robots re-checks are a documented follow-up.
+			domain := strings.ToLower(req.URL.Host)
+			if err := f.getRateLimiter(domain).Wait(req.Context()); err != nil {
+				return fmt.Errorf("redirect rate limit wait: %w", err)
+			}
 			return nil
 		},
 	}
 
-	return &Fetcher{
-		client:       client,
-		userAgent:    cfg.UserAgent,
-		maxRetries:   cfg.MaxRetries,
-		limiters:     make(map[string]*rate.Limiter),
-		ratePerSec:   cfg.RatePerSec,
-		maxRedirects: cfg.MaxRedirects,
-	}
+	return f
 }
 
 // getRateLimiter returns a per-domain rate limiter.

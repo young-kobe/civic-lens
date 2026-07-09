@@ -21,7 +21,29 @@ func New(baseDir string) (*Store, error) {
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return nil, fmt.Errorf("create raw store directory: %w", err)
 	}
-	return &Store{baseDir: baseDir}, nil
+	s := &Store{baseDir: baseDir}
+	// Sweep .tmp files left behind by a Store() that crashed between write and
+	// rename. They are never referenced by any hash, so removing them on
+	// startup keeps the store from accumulating orphans over time.
+	if err := s.sweepTemp(dir); err != nil {
+		return nil, fmt.Errorf("sweep orphaned temp files: %w", err)
+	}
+	return s, nil
+}
+
+// sweepTemp removes orphaned *.tmp files under the sha256 tree.
+func (s *Store) sweepTemp(shaDir string) error {
+	return filepath.WalkDir(shaDir, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !d.IsDir() && filepath.Ext(path) == ".tmp" {
+			if rmErr := os.Remove(path); rmErr != nil && !os.IsNotExist(rmErr) {
+				return rmErr
+			}
+		}
+		return nil
+	})
 }
 
 // Store writes content to disk and returns its SHA256 hash.
@@ -45,10 +67,14 @@ func (s *Store) Store(ctx context.Context, data []byte, ext string) (string, err
 		return hashStr, nil
 	}
 
-	// Write atomically via temp file
+	// Write atomically via temp file, fsync'd before the rename so a
+	// power-loss can never leave a referenced hash pointing at a truncated
+	// file (A5 integrity). Without the fsync the rename can be persisted
+	// ahead of the data on some filesystems.
 	tmpPath := path + ".tmp"
-	if err := os.WriteFile(tmpPath, data, 0644); err != nil {
-		return "", fmt.Errorf("write temp file: %w", err)
+	if err := writeFileSync(tmpPath, data); err != nil {
+		os.Remove(tmpPath)
+		return "", err
 	}
 
 	if err := os.Rename(tmpPath, path); err != nil {
@@ -57,6 +83,27 @@ func (s *Store) Store(ctx context.Context, data []byte, ext string) (string, err
 	}
 
 	return hashStr, nil
+}
+
+// writeFileSync writes data to path and fsyncs the file before returning, so
+// the bytes are durable on disk prior to the caller's rename.
+func writeFileSync(path string, data []byte) error {
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+	if err != nil {
+		return fmt.Errorf("create temp file: %w", err)
+	}
+	if _, err := f.Write(data); err != nil {
+		f.Close()
+		return fmt.Errorf("write temp file: %w", err)
+	}
+	if err := f.Sync(); err != nil {
+		f.Close()
+		return fmt.Errorf("fsync temp file: %w", err)
+	}
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("close temp file: %w", err)
+	}
+	return nil
 }
 
 // Retrieve reads content by its hash. Returns os.ErrNotExist if not found.

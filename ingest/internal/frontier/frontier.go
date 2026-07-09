@@ -39,6 +39,14 @@ func New(database *db.DB, maxRetries int) *Frontier {
 
 // RecoverStale requeues any items stuck in INFLIGHT state for too long.
 // This provides crash recovery and is called automatically by EnsureRecovered.
+//
+// Only rows whose inflight_at is older than staleAge are recovered, so an
+// in-progress fetch is skipped as long as staleAge exceeds the fetch timeout
+// (the default 10m stale age is far above the 30s request timeout). Even if an
+// operator tunes staleAge below the fetch timeout and a still-live row is
+// recovered and re-claimed, the claim guard in updatePageState makes the
+// original worker's completion a no-op error rather than a clobber, so
+// exclusivity (A3) holds regardless.
 func (f *Frontier) RecoverStale(ctx context.Context, staleAge time.Duration) (int64, error) {
 	cutoff := time.Now().Add(-staleAge).Unix()
 
@@ -109,7 +117,7 @@ func (f *Frontier) ClaimItems(ctx context.Context, batchSize int) ([]*model.Page
 
 // MarkDone marks a page as successfully fetched.
 func (f *Frontier) MarkDone(ctx context.Context, page *model.Page) error {
-	return f.updatePageState(ctx, page.URLCanon, model.StateDone, map[string]any{
+	return f.updatePageState(ctx, page, model.StateDone, map[string]any{
 		"http_status":    page.HTTPStatus,
 		"content_sha256": page.ContentSHA256,
 		"etag":           page.ETag,
@@ -122,7 +130,7 @@ func (f *Frontier) MarkDone(ctx context.Context, page *model.Page) error {
 // If permanent is false and retries are available, schedules for retry with backoff.
 func (f *Frontier) MarkFailed(ctx context.Context, page *model.Page, errMsg string, permanent bool) error {
 	if permanent || page.Retries >= f.maxRetries {
-		return f.updatePageState(ctx, page.URLCanon, model.StateFailed, map[string]any{
+		return f.updatePageState(ctx, page, model.StateFailed, map[string]any{
 			"last_error": errMsg,
 		})
 	}
@@ -130,7 +138,7 @@ func (f *Frontier) MarkFailed(ctx context.Context, page *model.Page, errMsg stri
 	backoff := time.Duration(1<<uint(page.Retries)) * time.Minute
 	nextFetch := time.Now().Add(backoff).Unix()
 
-	return f.updatePageState(ctx, page.URLCanon, model.StateQueued, map[string]any{
+	return f.updatePageState(ctx, page, model.StateQueued, map[string]any{
 		"retries":       "retries + 1", // sentinel so the expression is spliced, not parameterized
 		"next_fetch_at": nextFetch,
 		"last_error":    errMsg,
@@ -141,7 +149,14 @@ func (f *Frontier) MarkFailed(ctx context.Context, page *model.Page, errMsg stri
 // in a single UPDATE. `inflight_at` is always reset to 0. Values are
 // parameterized except for the "retries + 1" sentinel, which is spliced
 // as an expression so SQLite can evaluate it.
-func (f *Frontier) updatePageState(ctx context.Context, urlCanon string, state model.PageState, updates map[string]any) error {
+//
+// The WHERE clause guards on the claim (state = INFLIGHT AND inflight_at =
+// the timestamp this worker claimed the row at). A worker whose row was
+// recovered by RecoverStale and re-claimed by another worker will match 0
+// rows and get a "not claimed" error instead of silently clobbering the
+// new claim (A3 exclusivity). Matching 0 rows is always surfaced as an
+// error so a mismatched frontier key can never fail silently again.
+func (f *Frontier) updatePageState(ctx context.Context, page *model.Page, state model.PageState, updates map[string]any) error {
 	// Build SET clauses in a stable order so prepared-statement reuse is possible.
 	args := []any{state, 0} // state, inflight_at
 	setClauses := "state = ?, inflight_at = ?"
@@ -162,11 +177,21 @@ func (f *Frontier) updatePageState(ctx context.Context, urlCanon string, state m
 		setClauses += ", " + col + " = ?"
 		args = append(args, v)
 	}
-	args = append(args, urlCanon)
+	args = append(args, page.URLCanon, model.StateInflight, page.InflightAt)
 
-	query := "UPDATE pages SET " + setClauses + " WHERE url_canon = ?"
-	_, err := f.db.Conn().ExecContext(ctx, query, args...)
-	return err
+	query := "UPDATE pages SET " + setClauses + " WHERE url_canon = ? AND state = ? AND inflight_at = ?"
+	result, err := f.db.Conn().ExecContext(ctx, query, args...)
+	if err != nil {
+		return err
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("updatePageState rows affected: %w", err)
+	}
+	if rows == 0 {
+		return fmt.Errorf("updatePageState: %s not updated (not INFLIGHT under this claim; re-claimed or wrong key)", page.URLCanon)
+	}
+	return nil
 }
 
 // PushLinks adds new URLs to the frontier and returns categorized

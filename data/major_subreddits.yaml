@@ -1,7 +1,7 @@
 schema_version: 1
 dataset_name: major_subreddits
 description: >
-  Editorial registry of the 10 major US-political subreddits Civic Lens
+  Editorial registry of the 15 major US-political subreddits Civic Lens
   tracks as first-class entities on the General Public column of the
   three-way dashboard frame. Each entry pairs a canonical subreddit name
   with a neutral 2-3 sentence blurb covering community size, stance, and
@@ -138,3 +138,57 @@ subreddits:
     tilt: left
     tilt_source: Community norms + widely-observed liberal skew
     subscriber_count_proxy: "~2.3M"
+
+  - subreddit: NeutralPolitics
+    display_name: r/NeutralPolitics
+    blurb: >
+      A ~180k-subscriber subreddit built around a strict "cite your
+      sources" rule and heavy moderation toward fact-based, non-partisan
+      discussion. The format suppresses hot takes, producing a community
+      that reads closer to the center than the large partisan subs.
+    tilt: center
+    tilt_source: Community rules (sourcing requirement) + moderation norms
+    subscriber_count_proxy: "~180k"
+
+  - subreddit: moderatepolitics
+    display_name: r/moderatepolitics
+    blurb: >
+      A ~90k-subscriber subreddit whose civility rules ("law of civil
+      discourse") aim for cross-partisan debate. The moderated format
+      draws a mixed-composition community from both left and right rather
+      than a single skew.
+    tilt: mixed
+    tilt_source: Community rules (civil-discourse standard) + mixed composition
+    subscriber_count_proxy: "~90k"
+
+  - subreddit: geopolitics
+    display_name: r/geopolitics
+    blurb: >
+      A ~1M-subscriber subreddit for analysis of international relations,
+      security, and foreign policy. Coverage is issue-driven and
+      globally scoped rather than US-partisan; community skew is mixed.
+    tilt: mixed
+    tilt_source: Community sidebar (analysis focus) + issue-driven composition
+    subscriber_count_proxy: "~1M"
+
+  - subreddit: news
+    display_name: r/news
+    blurb: >
+      A ~28M-subscriber general-news subreddit (not politics-specific)
+      whose rules bar editorializing and opinion pieces. US political
+      stories surface heavily but alongside non-political news; community
+      skew is mixed.
+    tilt: mixed
+    tilt_source: Community rules (no op-eds) + general-news composition
+    subscriber_count_proxy: "~28M"
+
+  - subreddit: worldnews
+    display_name: r/worldnews
+    blurb: >
+      A ~35M-subscriber subreddit for international news, explicitly
+      excluding US-internal stories in its rules. US political coverage
+      appears through its foreign-policy dimension; community skew is
+      mixed.
+    tilt: mixed
+    tilt_source: Community rules (non-US scope) + general-news composition
+    subscriber_count_proxy: "~35M"

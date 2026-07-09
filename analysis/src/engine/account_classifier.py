@@ -102,17 +102,27 @@ def _parse_curated_yaml(payload: dict) -> List[CuratedEntry]:
                     if not handle:
                         continue
                     office_title = "Senator" if chamber_label == "senate" else "Representative"
-                    entries.append(CuratedEntry(
-                        handle=handle,
-                        tier="elected_official",
-                        full_name=person.get("name"),
-                        party=person.get("party"),
-                        branch="legislative",
-                        chamber=chamber_label,
-                        state_or_district=person.get("state_or_district"),
-                        office_title=office_title,
-                        account_type=None,
-                    ))
+                    # Primary handle plus any leadership/personal alternates
+                    # (also_handles) — leadership figures carry a second handle
+                    # (e.g. @SpeakerJohnson + @RepMikeJohnson) that must resolve
+                    # to the same person so both tier systems agree (audit D-1).
+                    handles = [handle] + [
+                        h for h in (
+                            _strip_handle(a) for a in (person.get("also_handles") or [])
+                        ) if h
+                    ]
+                    for member_handle in handles:
+                        entries.append(CuratedEntry(
+                            handle=member_handle,
+                            tier="elected_official",
+                            full_name=person.get("name"),
+                            party=person.get("party"),
+                            branch="legislative",
+                            chamber=chamber_label,
+                            state_or_district=person.get("state_or_district"),
+                            office_title=office_title,
+                            account_type=None,
+                        ))
 
     # Legacy flat format (data/known_accounts.yaml) — still honored so we don't
     # lose the small affiliated list (RNC, DNC, think tanks) that shipped with 036.
@@ -167,6 +177,7 @@ class AccountClassifier:
         now = int(time.time())
         conn = sqlite3.connect(self.db_path)
         conn.execute("PRAGMA busy_timeout = 5000")
+        conn.execute("PRAGMA foreign_keys = ON")  # match Go ingestor (audit D-5)
         try:
             cursor = conn.cursor()
             for entry in entries:

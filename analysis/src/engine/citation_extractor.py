@@ -82,6 +82,7 @@ class CitationExtractor:
         conn = sqlite3.connect(self.db_path)
         conn.execute("PRAGMA busy_timeout = 5000")
         conn.execute("PRAGMA journal_mode = WAL")
+        conn.execute("PRAGMA foreign_keys = ON")  # match Go ingestor (audit D-5)
         try:
             cursor = conn.cursor()
             for i, doc in enumerate(docs, 1):

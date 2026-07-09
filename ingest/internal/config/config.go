@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"time"
@@ -61,8 +62,9 @@ type XConfig struct {
 	OfficialsListPath string `yaml:"officials_list_path"`
 	// MaxTweetsPerOfficial bounds the per-account timeline pull. The X API
 	// minimum on /2/users/:id/tweets is 5; the client pads up if a smaller
-	// value is configured. Default 5 keeps the officials pass at roughly
-	// 16 handles × 5 tweets ≈ $1/run on the X v2 retail price card.
+	// value is configured. Default 5 keeps the officials pass at the 37
+	// handles AllHandles() returns (16 primaries + 21 alternates) × 5 tweets
+	// on the X v2 retail price card.
 	MaxTweetsPerOfficial int `yaml:"max_tweets_per_official"`
 }
 
@@ -97,7 +99,13 @@ func Load(path string) (*Config, error) {
 		},
 	}
 
-	if err := yaml.Unmarshal(data, cfg); err != nil {
+	// Strict decoding: an unknown or misspelled key (e.g. `max_concurency:`)
+	// is a hard error instead of silently falling back to the default. A typo
+	// in seeds.yaml that quietly disables a politeness setting is exactly the
+	// class of bug this catches (I-12b).
+	dec := yaml.NewDecoder(bytes.NewReader(data))
+	dec.KnownFields(true)
+	if err := dec.Decode(cfg); err != nil {
 		return nil, err
 	}
 

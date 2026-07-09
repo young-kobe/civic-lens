@@ -6,36 +6,39 @@ Preserve throughout (these tested well): the plain-English banner pattern, TierR
 
 ## Phase A — correctness fixes (small PRs, no visual redesign)
 
-- [ ] **U-2a: delete the fabricated static notes.** `BotActivityProfiler.tsx:541-544` ("Concentrated activity ... was detected in this window.") and `:486` ("Young accounts ... over-represented"). Replace with nothing, or with copy derived from the actual data — never a hardcoded conclusion. This is the single worst honesty defect in the UI; it can ship alone, today.
-- [ ] **U-6: stop rendering hardcoded "medium" confidence as a trust signal.** Until `coverage`/`confidence` are computed (`sentiment.py:235` hardcodes both), remove them from the ticker, the header meta, and entity-card stamps. Backend follow-up (compute from sample size + mean row confidence) can re-introduce them honestly — track that as a checkbox here so the removal isn't forgotten: 
-  - [ ] compute real coverage/confidence in the sentiment aggregator, then restore the UI surfaces.
-- [ ] **U-4: fix posts-vs-accounts labels.** `BotActivityProfiler.tsx:158-172` — captions say "accounts" over doc counts. Relabel to "posts" (or plumb real account counts; relabel is the honest minimum).
-- [ ] **U-5: stop showing one metric as two.** `bot.py:351,374` assigns `coordination_index` to `burstTimingSimilarity`. Drop the duplicate row from the UI and the duplicated field from the payload.
-- [ ] **U-3: MetricCard renders subtitle without delta.** `MetricCard.tsx:88-95` — move `subtitle` out of the `delta !== undefined` block. Restores the Coordination Index scale note.
-- [ ] **U-8: show MIXED as Mixed.** `SupportingDocsTable.tsx:113-115` — add the missing bucket instead of silently mapping to Neutral.
-- [ ] **U-7: Review queue skip/refetch.** `Review.tsx:115-130` — track skipped ids and filter them from refetched queues; render LoadingCard only when `!current`.
-- [ ] **U-9: cross-tier chips from the actual breakdown.** `Narratives.tsx:563-578` — derive chips from `source_breakdown` tier groups present, not `first_seen_tier_group` alone; soften the "all talking about them" subtitle to match the real >=2-group criterion.
-- [ ] **U-10: SourceBar denominators + date parsing.** Normalize segment widths by the sum of `source_breakdown` counts (not `supporting_doc_count`); parse date-only strings as local dates in `SupportingDocsTable.tsx:127`.
-- [ ] **R-7: Home copy fixes.** Drop "unbiased" from the hero (it is the exact universal claim the media-analysis rules prohibit); fix the "Favorability scores per political figure" bullet to describe the GOP-stance surface that actually ships.
+- [x] **U-2a: delete the fabricated static notes.** Both hardcoded conclusions removed. The account-age note is now data-derived (renders the youngest bucket's actual share, or nothing); the heatmap note is gone with the heatmap.
+- [x] **U-6: stop rendering hardcoded "medium" confidence as a trust signal.** Removed from the sentiment ticker, the header meta, and entity-card stamps (`sentimentStats`). Backend recompute stays a tracked follow-up:
+  - [x] compute real coverage/confidence in the sentiment aggregator (`sentiment.py`) — DONE (branch 40): confidence from mean per-row confidence, coverage from sample size. UI surface restore stays a separate UI PR.
+- [x] **U-4: fix posts-vs-accounts labels.** Ticker hint/label + metric-card subtitle + flagged-count caption relabeled "accounts" -> "posts" (honest minimum; real account counts not plumbed).
+- [x] **U-5: stop showing one metric as two.** Dropped the "Burst timing similarity" row from the UI and removed `burstTimingSimilarity` from `bot.py`, `aggregator_models.py` (dataclass + `to_dict`), `types.ts`, and `fixtures.ts`.
+- [x] **U-3: MetricCard renders subtitle without delta.** Subtitle now renders in a delta-less branch too; restores the Coordination Index scale note.
+- [x] **U-8: show MIXED as Mixed.** Added a `mixed` bucket to `SupportingDocsTable` + the `SupportingDoc` type; no longer folded into Neutral.
+- [x] **U-7: Review queue skip/refetch.** Skipped ids tracked in a set and filtered from every (re)fetched page (cleared on task/confidence change); LoadingCard renders only when `!current`.
+- [x] **U-9: cross-tier chips from the actual breakdown.** Chips derive from `source_breakdown` groups actually present (dropped the unconditional origin-tier fallback); subtitle softened to the real ">=2 of three groups" criterion. Known limit: x_post can't be split officials-vs-public from the breakdown (noted in code).
+- [x] **U-10: SourceBar denominators + date parsing.** Widths normalize by the sum of `source_breakdown` counts; date-only strings parse as local dates in `SupportingDocsTable`.
+- [x] **R-7: Home copy fixes.** Dropped "unbiased" from the hero; replaced the "Favorability scores per political figure" bullet with a GOP-stance description matching what ships.
 
 ## Phase B — Bot Detector rework (structural)
 
 The page fabricates, mislabels, and ignores its filters (U-1, U-2, U-4, U-5, R-5); Phase A stops the bleeding, this phase makes the page worth keeping.
 
-- [ ] **U-1: window honesty decision.** Either (a) add a `window` param to `/api/bot-activity` + cutoff in `get_bot_activity()` and honor the pills, or (b) suppress the GlobalFilters pills and the "As of <window>" eyebrow on this tab and label the page "full sample". Decide (a) vs (b) first — everything else in this phase depends on it. (a) is the better product; (b) is a one-day honesty patch.
-- [ ] **Heatmap: fix or drop.** Backend emits `day: 0` for all rows and buckets by server-local hour while the legend claims per-day UTC (`bot.py:147,356-358`). Either emit real (day, hour) buckets in UTC and keep the viz, or drop the heatmap until the data supports it. No middle ground where the legend describes data that isn't there.
-- [ ] **R-5: de-editorialize bylines.** Replace "where bot amplification actually lives" / "should skew near 0%" with measured descriptions; rename "Coordination Idx" to a plain-language label with an inline scale note (the MetricCard subtitle fix from Phase A gives it a home).
-- [ ] **Metric provenance pass.** For each number on the page, trace payload field -> SQL -> meaning, and caption it with what it actually counts (posts, authors, share-of-sample). The U-4/U-5 fixes are the first two instances; finish the page.
-- [ ] Re-run the review's Bot Detector findings as an acceptance checklist before closing this phase.
+- [x] **U-1: window honesty decision — chose (b).** Bot Detector takes no `filters` prop, hides the GlobalFilters window pills (App passes `windowScoped={false}`, which renders a "Full sample · not time-windowed" note), and the eyebrow now reads "Full sample · all collected data, not time-windowed". Backend windowing stays a tracked follow-up:
+  - [x] add a `window` param to `/api/bot-activity` + cutoff in `get_bot_activity()` — DONE (branch 40; snapshots cached per window). Re-enabling the pills on this tab (option (a)) stays a separate UI PR.
+- [x] **Heatmap: dropped.** Backend emits `day: 0` for all rows and buckets by server-local hour, so the viz + its shade legend were fabricated; both removed from the UI. Backend cadence payload left in place. Follow-up:
+  - [x] Heatmap resolved by DROP (branch 40): rather than emit real (day, hour) UTC buckets, the broken `postingCadence` payload was removed from `bot.py` and `BehavioralSignals` (the UI viz was already gone).
+- [x] **R-5: de-editorialize bylines.** "where bot amplification actually lives" / "should skew near 0%" replaced with measured rate descriptions; "Coordination Idx" ticker label renamed "Coordination" with a "0-1 scale" hint, and the MetricCard subtitle (U-3) now carries the full scale note.
+- [x] **Metric provenance pass.** U-4/U-5 relabels plus the data-derived account-age caption; every remaining number on the page is captioned by what it counts (posts / accounts / share-of-sample).
+- [x] Re-ran the review's Bot Detector findings (U-1, U-2, U-4, U-5, R-5) as an acceptance checklist — all closed UI-side.
 
 ## Phase C — number-literacy + vocabulary pass (site-wide)
 
-- [ ] **R-1: GlobalTicker legend.** One shared affordance (info popover or persistent sublabel) explaining net tone ("share positive minus share negative, -100..+100") and "GOP stance" (stance of sampled posts toward GOP entities), rendered wherever GlobalTicker appears. This is the first number every visitor sees; it must be self-explanatory.
-- [ ] **R-2: topic-filter scope markers.** `PublicSentiment.tsx` — when a topic filter is active, either scope "Tone intensity" and the ticker to the topic or stamp them "all topics" the way entity cards already do. No unmarked global numbers inside a filtered view.
-- [ ] **R-3: Narratives vocabulary unification.** One pass: "tiers" -> "groups" everywhere user-facing; one name for the doc count (pick "posts"); replace "prop 0.42" chips with labeled values ("Propaganda 0.42 / 1"); decide the narrative-level confidence treatment (mean row confidence chip is the cheapest C1-consistent option).
-- [ ] **R-4: Propaganda example rows -> SupportingDocsTable pattern.** Friendly source labels (not "x_post · unknown"), visible confidence (not hover-only title attr), no "doc #4821" ids. Overlaps `ui-consistency-audit.md` formatter items — use its `formatScore` helper.
-- [ ] **R-6: window-honesty indicator.** After the Phase B decision, ensure every tab either honors the window pills or visibly opts out — no silent ignoring.
-- [ ] **R-8/R-9: color-only encodings + raw enums.** Text legend or on-card counts for SourceBar; friendly source-type labels in ClassificationSampleCard; drop "DOC #" footers from end-user surfaces (keep ids in admin Review only). Heatmap shade legend gets value ranges if the heatmap survives Phase B.
+- [x] **R-1: GlobalTicker legend.** Added an optional `legend` slot to `GlobalTicker` (rendered inline before the timestamp) and wired a `MethodPopover` on the Overall Tone ticker defining net tone (-100..+100, share positive minus share negative) and GOP stance (net stance of sampled posts toward GOP entities). Reusable on any ticker.
+- [x] **R-2: topic-filter scope markers.** When a topic filter is active, the ticker's tone/stance/posts items and the "Tone intensity" mini are stamped "all topics" — no unmarked global numbers inside a filtered view.
+- [ ] **R-3: Narratives vocabulary unification.** DONE UI-side: "tiers" -> "groups" in user-facing chips/titles, doc count unified to "posts", "prop 0.42" -> "Propaganda 0.42 / 1", "cross-tier" -> "Cross-group". LEFT OPEN — narrative-level confidence chip: `NarrativeSummary` carries no confidence field, and averaging only the top-N `top_supporting_docs` would misrepresent the full cluster. Needs a backend mean-row-confidence field before it can ship honestly:
+  - [x] expose mean supporting-row confidence per narrative in the aggregator — DONE (branch 40): `NarrativeSummary.mean_confidence`, mean over ALL supporting docs in the window. Adding the chip stays a separate UI PR.
+- [x] **R-4: Propaganda example rows.** Friendly source labels (News · domain / X · @handle / Reddit · r/...), visible per-technique confidence (was a hover-only `title`), and the "doc #NNNN" id dropped. (`formatScore` from `ui-consistency-audit.md` doesn't exist yet; used the existing `formatPct`.)
+- [x] **R-6: window-honesty indicator.** Satisfied by U-1: Bot Detector visibly opts out ("Full sample · not time-windowed" in both the filter bar and the eyebrow); every other tab honors the pills.
+- [x] **R-8/R-9: color-only encodings + raw enums.** SourceBar renders a visible text legend on the compact card (colors no longer the only key); ClassificationSampleCard shows friendly source-type labels and its "DOC #" footer was dropped (ids remain only in admin Review). Heatmap shade legend removed with the heatmap.
 
 ## Exit criteria
 

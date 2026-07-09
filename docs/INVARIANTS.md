@@ -19,8 +19,8 @@ See `docs/walkthroughs/035-goal-narrowing-and-renames.md` for the rationale behi
 - [ ] **Crash Safety**: On system restart, any `INFLIGHT` URLs must be reset to `QUEUED` (fetch never completed).
 
 ### A4. Fetcher
-- [ ] **Politeness**: Request rate per domain strictly never exceeds the configured token bucket limit.
-- [ ] **Completeness**: Every fetch attempt results in a recorded `fetch_event` (success or failure). Data is never silently dropped.
+- [ ] **Politeness**: Request rate per domain strictly never exceeds the configured token bucket limit. Redirect targets take a token against the target domain too, so a chain of source domains cannot multiply one host's request rate.
+- [ ] **Failure accounting**: Every fetch outcome updates the page's frontier row: a success transitions it to `DONE`; a failure records `pages.last_error` and either re-queues it with an incremented `retries` and backoff or marks it `FAILED`. There is no per-attempt `fetch_event` ledger — only the latest error and the retry count survive per page. This is the audit surface the system actually maintains; API-fetch history (robots.txt, Reddit/X calls) is captured only via the content-addressed raw blobs those calls persist, not as fetch events.
 
 ### A5. Content Capture
 - [ ] **Integrity**: `Hash(StoredBytes) == FilenameHash`.
@@ -33,8 +33,8 @@ See `docs/walkthroughs/035-goal-narrowing-and-renames.md` for the rationale behi
 ## Part B: Analysis API (Python)
 
 ### B1. ETL / Dataset Builder
-- [ ] **Traceability**: Every row in the `docs` table links to a `raw_hash`.
-- [ ] **Versioning**: ETL jobs log the version of the code/logic used to produce the output.
+- [x] **Traceability**: Every row in the `docs` table links to a `raw_hash`.
+- [x] **Versioning**: ETL jobs stamp the logic version onto every `docs` row via the `etl_version` column (`loader.ETL_VERSION`, migration `020_docs_etl_version.sql`) and log it per run, so docs produced by different filter/extraction logic are distinguishable (audit A-9). Bump `ETL_VERSION` when the keyword filter, 30-day rule, or extraction changes.
 
 ### B2. AI Analysis
 - [ ] **Evidence**: AI classifications (topic, stance, propaganda) must cite specific spans/quotes from the text as evidence.

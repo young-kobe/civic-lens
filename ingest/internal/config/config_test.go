@@ -59,6 +59,42 @@ func TestLoad_OfficialsListPath_RelativeResolvedAgainstSeedsDir(t *testing.T) {
 	}
 }
 
+// TestLoad_StrictRejectsUnknownKey is the I-12b regression: a misspelled key
+// must fail loudly instead of silently falling back to a default. Before strict
+// decoding, `max_concurency:` (typo) was ignored and the crawler ran with the
+// default concurrency, quietly discarding the operator's intended setting.
+func TestLoad_StrictRejectsUnknownKey(t *testing.T) {
+	path := writeSeedsYAML(t, `crawl:
+  max_concurency: 3
+`)
+	if _, err := Load(path); err == nil {
+		t.Fatal("Load should reject an unknown/misspelled key, got nil error")
+	}
+}
+
+// TestLoad_KnownKeysStillParse guards against strict mode being too strict:
+// the real key shapes (including duration strings) must still load.
+func TestLoad_KnownKeysStillParse(t *testing.T) {
+	path := writeSeedsYAML(t, `crawl:
+  max_concurrency: 3
+  request_timeout: 30s
+  stale_inflight_age: 10m
+reddit:
+  subreddits:
+    - politics
+`)
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.Crawl.MaxConcurrency != 3 {
+		t.Errorf("max_concurrency = %d, want 3", cfg.Crawl.MaxConcurrency)
+	}
+	if cfg.Crawl.RequestTimeout.String() != "30s" {
+		t.Errorf("request_timeout = %v, want 30s", cfg.Crawl.RequestTimeout)
+	}
+}
+
 func TestLoad_OfficialsListPath_AbsoluteIsPreserved(t *testing.T) {
 	// Absolute paths in the YAML pass through untouched — an operator who
 	// wants to point at a system-wide registry shouldn't have it mangled

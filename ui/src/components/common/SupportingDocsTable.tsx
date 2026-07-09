@@ -13,6 +13,7 @@ const SENT_LABEL_COLOR: Record<string, string> = {
     positive: COLORS.positive,
     negative: COLORS.negative,
     neutral:  'var(--neutral-500)',
+    mixed:    COLORS.warning,
 };
 
 function formatRelativeDate(unixSeconds: number | null): string {
@@ -112,7 +113,8 @@ export function classificationSampleToSupportingDoc(s: ClassificationSample): Su
     const raw = s.label?.toUpperCase();
     if (raw === 'POSITIVE') sentiment = 'positive';
     else if (raw === 'NEGATIVE') sentiment = 'negative';
-    else if (raw === 'NEUTRAL' || raw === 'MIXED') sentiment = 'neutral';
+    else if (raw === 'MIXED') sentiment = 'mixed';
+    else if (raw === 'NEUTRAL') sentiment = 'neutral';
 
     const st = s.source_type;
     const name = s.source_name;
@@ -124,8 +126,18 @@ export function classificationSampleToSupportingDoc(s: ClassificationSample): Su
 
     let published: number | null = null;
     if (s.date) {
-        const parsed = Date.parse(s.date);
-        if (!isNaN(parsed)) published = Math.floor(parsed / 1000);
+        // Date-only strings ("2026-04-14") parse as UTC midnight via
+        // Date.parse, which can render "1 day ago" off-by-one near local
+        // midnight. Parse those as a LOCAL date instead; fall back to
+        // Date.parse for full timestamps that carry their own zone.
+        const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s.date);
+        if (dateOnly) {
+            const [, y, m, d] = dateOnly;
+            published = Math.floor(new Date(Number(y), Number(m) - 1, Number(d)).getTime() / 1000);
+        } else {
+            const parsed = Date.parse(s.date);
+            if (!isNaN(parsed)) published = Math.floor(parsed / 1000);
+        }
     }
 
     return {

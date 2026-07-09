@@ -45,10 +45,21 @@ X_AUTHOR_JOIN_SQL = (
 def get_connection(db_path: str):
     """Context manager for database connections."""
     conn = sqlite3.connect(db_path)
+    conn.execute("PRAGMA foreign_keys = ON")  # match Go ingestor (audit D-5)
     try:
         yield conn
     finally:
         conn.close()
+
+
+def get_aggregation_min_confidence() -> float:
+    """Single source for the confidence floor every public-facing aggregate
+    applies. Sentiment, narrative net-sentiment, and now movers all read the
+    same setting so 'what counts as confident' can't drift between the
+    Overall-Tone chart and the biggest-movers ticker on the same page
+    (audit A-5; backend-aggregator-audit item 3)."""
+    from analysis.src.common.settings import get_settings
+    return get_settings().aggregation_min_confidence
 
 
 def get_time_cutoff(window: str) -> Optional[int]:

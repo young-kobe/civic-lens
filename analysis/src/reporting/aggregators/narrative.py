@@ -167,6 +167,7 @@ class NarrativeAggregator:
         bot_pushed_fraction = self._bot_pushed_fraction(cursor, narrative_id, cutoff)
         cross_tier = self._is_cross_tier(cursor, narrative_id, cutoff)
         top_supporting = self._top_supporting_docs(cursor, narrative_id, cutoff)
+        mean_confidence = self._mean_confidence(cursor, narrative_id, cutoff)
 
         return NarrativeSummary(
             narrative_id=narrative_id,
@@ -188,6 +189,7 @@ class NarrativeAggregator:
             first_seen_tier_group=tier_group,
             cross_tier=cross_tier,
             top_supporting_docs=top_supporting,
+            mean_confidence=mean_confidence,
         )
 
     @staticmethod
@@ -263,7 +265,11 @@ class NarrativeAggregator:
     ) -> Optional[float]:
         """Mean overall_propaganda_score across supporting docs with a
         propaganda row, in the window. None when no supporting doc has been
-        through propaganda detection (walkthrough 043)."""
+        through propaganda detection (walkthrough 043).
+
+        Deterministic (pre-filter-clean) rows are included: they are real
+        score-0 "no propaganda" verdicts and belong in the mean, matching the
+        headline denominator fix (audit A-2)."""
         sql = """
             SELECT a.output_json, a.confidence
             FROM narrative_docs nd
@@ -271,7 +277,6 @@ class NarrativeAggregator:
             JOIN ai_outputs a
                  ON a.doc_id = d.doc_id
                 AND a.task_type = 'propaganda'
-                AND COALESCE(a.inference_method, '') != 'deterministic'
             WHERE nd.narrative_id = ?
         """
         params: List[Any] = [narrative_id]
@@ -474,13 +479,54 @@ class NarrativeAggregator:
                 total += c
             elif label == "NEGATIVE":
                 total -= c
-            else:
-                continue  # NEUTRAL / MIXED do not pull the net.
+            # NEUTRAL / MIXED contribute 0 to the numerator but DO count in
+            # the denominator (audit A-6) — the docstring's "NEUTRAL=0, average
+            # over supporting docs" contract, matching the sentiment page. A
+            # narrative that is 49 NEUTRAL + 1 POSITIVE reports ~+2, not +90.
             count += 1
 
         if count == 0:
             return 0.0
         return round((total / count) * 100, 1)
+
+    def _mean_confidence(
+        self, cursor, narrative_id: int, cutoff: Optional[int],
+    ) -> Optional[float]:
+        """Mean sentiment-row confidence across the narrative's supporting docs
+        in the window (audit R-3).
+
+        Averages over ALL supporting docs that have a sentiment row — not just
+        the top-N drill-down slice — so the chip reflects the whole cluster.
+        Deduped by doc_id (ai_outputs has no UNIQUE(doc_id, task_type), so a
+        LEFT JOIN can surface >1 sentiment row per doc; keep the highest, per
+        the ORDER BY) so a doc with duplicate rows isn't double-weighted.
+        Returns None when no supporting doc has a sentiment row.
+        """
+        sql = """
+            SELECT d.doc_id, a.confidence
+            FROM narrative_docs nd
+            JOIN docs d ON d.doc_id = nd.doc_id
+            JOIN ai_outputs a
+                 ON a.doc_id = d.doc_id
+                AND a.task_type = 'sentiment'
+            WHERE nd.narrative_id = ?
+        """
+        params: List[Any] = [narrative_id]
+        if cutoff is not None:
+            sql += " AND d.published_at >= ?"
+            params.append(cutoff)
+        sql += " ORDER BY COALESCE(a.confidence, 0) DESC"
+        cursor.execute(sql, params)
+
+        best_per_doc: Dict[int, float] = {}
+        for doc_id, conf in cursor.fetchall():
+            if doc_id in best_per_doc:
+                continue
+            best_per_doc[doc_id] = float(conf) if conf is not None else 0.0
+
+        if not best_per_doc:
+            return None
+        return round(sum(best_per_doc.values()) / len(best_per_doc), 3)
 
     def _top_supporting_docs(
         self, cursor, narrative_id: int, cutoff: Optional[int],
@@ -518,10 +564,19 @@ class NarrativeAggregator:
         cursor.execute(sql, params)
 
         rows = []
+        seen_doc_ids: set = set()
         for (
             doc_id, title, source_type, domain, ident, published_at,
             x_handle, output_json, confidence,
         ) in cursor.fetchall():
+            # Dedupe by doc_id: ai_outputs has no UNIQUE(doc_id, task_type),
+            # so concurrent cron + admin runs can leave >1 sentiment row per
+            # doc and the LEFT JOIN would render the doc twice (audit A-11,
+            # same guard propaganda.py documents). Keep the first (highest
+            # confidence, per the ORDER BY).
+            if doc_id in seen_doc_ids:
+                continue
+            seen_doc_ids.add(doc_id)
             sentiment_label = None
             reasoning = None
             if output_json:

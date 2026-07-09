@@ -6,12 +6,19 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 
 	_ "modernc.org/sqlite"
 )
+
+// beginStmtRe detects a migration that manages its own transaction (a
+// BEGIN ... COMMIT block). Those are the table-rebuild migrations that also
+// toggle `PRAGMA foreign_keys` — a pragma that is a no-op inside an open
+// transaction, so they cannot be wrapped and are run as-is.
+var beginStmtRe = regexp.MustCompile(`(?im)^\s*BEGIN\b`)
 
 // DB wraps the SQLite database connection.
 type DB struct {
@@ -78,12 +85,41 @@ func (d *DB) Migrate(ctx context.Context) error {
 				return fmt.Errorf("read migration file %s: %w", migrationPath, err)
 			}
 
-			if _, err := d.conn.ExecContext(ctx, string(migrationSQL)); err != nil {
-				return fmt.Errorf("apply migration %s: %w", m.Filename, err)
+			if err := d.applyMigration(ctx, m, string(migrationSQL)); err != nil {
+				return err
 			}
 		}
 	}
 
+	return nil
+}
+
+// applyMigration runs one migration file atomically. Migrations without their
+// own transaction control are wrapped in a single transaction so the schema
+// change and its `schema_version` INSERT commit together: a crash (or a
+// failing statement) mid-migration rolls the whole file back, leaving
+// schema_version unchanged so a re-run re-applies it cleanly (audit D-6).
+// Migrations that manage their own transaction (see beginStmtRe) are executed
+// as-is — they are already atomic and cannot be nested.
+func (d *DB) applyMigration(ctx context.Context, m migration, migrationSQL string) error {
+	if beginStmtRe.MatchString(migrationSQL) {
+		if _, err := d.conn.ExecContext(ctx, migrationSQL); err != nil {
+			return fmt.Errorf("apply migration %s: %w", m.Filename, err)
+		}
+		return nil
+	}
+
+	tx, err := d.conn.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin migration %s: %w", m.Filename, err)
+	}
+	if _, err := tx.ExecContext(ctx, migrationSQL); err != nil {
+		_ = tx.Rollback()
+		return fmt.Errorf("apply migration %s: %w", m.Filename, err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit migration %s: %w", m.Filename, err)
+	}
 	return nil
 }
 

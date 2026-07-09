@@ -86,23 +86,46 @@ func (t *XBudgetTracker) OverBudget() bool {
 // same user seen twice in the same month is still billed twice by X, but
 // within a single API response each unique user is billed once).
 func (t *XBudgetTracker) Record(ctx context.Context, posts, newUsers int) error {
-	t.postCount += posts
-	t.userCount += newUsers
-	t.reqCount++
-	t.estimated += posts*centsPerPost/centsConversionUnit +
-		newUsers*centsPerUser/centsConversionUnit
+	// Round the per-call cost UP to the next whole cent. The rates are in
+	// tenths-of-a-cent, so 5 tweets (25 tenths = 2.5c) must bill 3c, never 2c
+	// — truncating undercounts spend and lets OverBudget release calls past
+	// the ceiling.
+	costCents := ceilDiv(posts*centsPerPost+newUsers*centsPerUser, centsConversionUnit)
 
-	_, err := t.db.ExecContext(ctx,
+	// Apply the increment RELATIVE to the stored value in a single statement
+	// rather than writing an absolute in-memory total. Two overlapping
+	// `civic-ingest x` runs would otherwise clobber each other's increments;
+	// `x = x + ?` composes correctly regardless of interleaving.
+	if _, err := t.db.ExecContext(ctx,
 		`UPDATE x_api_budget
-		 SET post_count = ?, user_count = ?, request_count = ?,
-		     estimated_cents = ?, last_updated = ?
+		 SET post_count = post_count + ?, user_count = user_count + ?,
+		     request_count = request_count + 1,
+		     estimated_cents = estimated_cents + ?, last_updated = ?
 		 WHERE month_key = ?`,
-		t.postCount, t.userCount, t.reqCount, t.estimated, t.now().Unix(), t.monthKey,
-	)
-	if err != nil {
+		posts, newUsers, costCents, t.now().Unix(), t.monthKey,
+	); err != nil {
 		return fmt.Errorf("x_api_budget update: %w", err)
 	}
+
+	// Reload the authoritative totals so OverBudget/Summary reflect the true
+	// stored spend, including any increments a concurrent run committed.
+	row := t.db.QueryRowContext(ctx,
+		`SELECT post_count, user_count, request_count, estimated_cents
+		 FROM x_api_budget WHERE month_key = ?`,
+		t.monthKey,
+	)
+	if err := row.Scan(&t.postCount, &t.userCount, &t.reqCount, &t.estimated); err != nil {
+		return fmt.Errorf("x_api_budget reload: %w", err)
+	}
 	return nil
+}
+
+// ceilDiv returns ceil(a/b) for non-negative integers (b > 0).
+func ceilDiv(a, b int) int {
+	if a <= 0 {
+		return 0
+	}
+	return (a + b - 1) / b
 }
 
 // Summary returns the current month's tallies for logging or the admin UI.

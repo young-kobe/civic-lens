@@ -346,6 +346,114 @@ func TestFrontierPushLinksMalformed(t *testing.T) {
 	}
 }
 
+// TestMarkDoneUsesFrontierKey asserts MarkDone transitions the row that was
+// actually claimed to DONE. Regression for I-1: the crawler used to overwrite
+// page.URLCanon with the page-declared <link rel="canonical"> before MarkDone,
+// so the UPDATE matched the wrong key (or none) and the fetched row stayed
+// INFLIGHT, to be recovered and refetched forever.
+func TestMarkDoneUsesFrontierKey(t *testing.T) {
+	f, database, cleanup := newTestFrontier(t, 3)
+	defer cleanup()
+
+	ctx := context.Background()
+	f.PushLinks(ctx, []string{"https://example.com/article?utm_source=x"}, 0)
+	items, _ := f.ClaimItems(ctx, 1)
+	if len(items) != 1 {
+		t.Fatal("expected 1 claimed item")
+	}
+	items[0].HTTPStatus = 200
+	items[0].ContentSHA256 = "abc123"
+	if err := f.MarkDone(ctx, items[0]); err != nil {
+		t.Fatalf("MarkDone: %v", err)
+	}
+
+	var state int
+	row := database.Conn().QueryRowContext(ctx, `SELECT state FROM pages WHERE url_canon = ?`, items[0].URLCanon)
+	if err := row.Scan(&state); err != nil {
+		t.Fatal(err)
+	}
+	if model.PageState(state) != model.StateDone {
+		t.Errorf("state = %d, want StateDone", state)
+	}
+}
+
+// TestMarkDoneWrongKeyIsLoud asserts that a MarkDone whose key does not match
+// a live claimed row returns an error instead of silently updating nothing.
+// Regression for I-1b (zero-row UPDATE used to be swallowed) and the reason
+// the crawler must not mutate the frontier key: a mutated key lands here as a
+// loud error, and the real claimed row is left untouched rather than clobbered.
+func TestMarkDoneWrongKeyIsLoud(t *testing.T) {
+	f, database, cleanup := newTestFrontier(t, 3)
+	defer cleanup()
+
+	ctx := context.Background()
+	f.PushLinks(ctx, []string{"https://example.com/real"}, 0)
+	items, _ := f.ClaimItems(ctx, 1)
+	if len(items) != 1 {
+		t.Fatal("expected 1 claimed item")
+	}
+
+	// Simulate the old bug: key swapped to the page-declared canonical.
+	stuck := *items[0]
+	stuck.URLCanon = "https://example.com/declared-canonical"
+	stuck.HTTPStatus = 200
+	if err := f.MarkDone(ctx, &stuck); err == nil {
+		t.Fatal("MarkDone with a non-matching key should error, got nil")
+	}
+
+	var state int
+	row := database.Conn().QueryRowContext(ctx, `SELECT state FROM pages WHERE url_canon = ?`, items[0].URLCanon)
+	if err := row.Scan(&state); err != nil {
+		t.Fatal(err)
+	}
+	if model.PageState(state) != model.StateInflight {
+		t.Errorf("claimed row state = %d, want StateInflight (untouched)", state)
+	}
+}
+
+// TestMarkDoneStaleReclaimGuard asserts a worker whose row was recovered and
+// re-claimed by another worker cannot clobber the new claim. Regression for
+// I-7: MarkDone/MarkFailed guard on (state = INFLIGHT AND inflight_at = the
+// timestamp this worker claimed at), so a late completion from the original
+// worker no-ops loudly instead of flipping the re-claimed row.
+func TestMarkDoneStaleReclaimGuard(t *testing.T) {
+	f, database, cleanup := newTestFrontier(t, 3)
+	defer cleanup()
+
+	ctx := context.Background()
+	f.PushLinks(ctx, []string{"https://example.com/race"}, 0)
+	itemsA, _ := f.ClaimItems(ctx, 1)
+	if len(itemsA) != 1 {
+		t.Fatal("expected 1 claimed item")
+	}
+	a := itemsA[0] // worker A's claim, inflight_at = a.InflightAt
+
+	// Worker B re-claims after a stale recovery. We simulate B's fresh claim
+	// by advancing inflight_at on the row while it stays INFLIGHT.
+	newClaim := a.InflightAt + 100
+	if _, err := database.Conn().ExecContext(ctx,
+		`UPDATE pages SET inflight_at = ? WHERE url_canon = ?`, newClaim, a.URLCanon); err != nil {
+		t.Fatal(err)
+	}
+
+	// Worker A finishes late and tries to mark done under its stale claim.
+	a.HTTPStatus = 200
+	a.ContentSHA256 = "stale"
+	if err := f.MarkDone(ctx, a); err == nil {
+		t.Fatal("stale MarkDone should error under the claim guard, got nil")
+	}
+
+	var state int
+	var inflight int64
+	row := database.Conn().QueryRowContext(ctx, `SELECT state, inflight_at FROM pages WHERE url_canon = ?`, a.URLCanon)
+	if err := row.Scan(&state, &inflight); err != nil {
+		t.Fatal(err)
+	}
+	if model.PageState(state) != model.StateInflight || inflight != newClaim {
+		t.Errorf("row clobbered: state=%d inflight_at=%d, want INFLIGHT under B's claim (%d)", state, inflight, newClaim)
+	}
+}
+
 // itoa is a tiny helper to avoid pulling in strconv at the test site.
 func itoa(n int) string {
 	if n == 0 {

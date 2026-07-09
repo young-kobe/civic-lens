@@ -62,6 +62,10 @@ MAX_SAMPLES_PER_TOPIC = 5
 MAX_SAMPLES_PER_ENTITY = 10
 MAX_EVIDENCE_PER_SAMPLE = 5
 
+# Sentinel key for x_posts routed to the officials tier by the ingestor's
+# is_official_tier provenance flag alone (no editorial registry entity) — D-4.
+CATCH_ALL_VERIFIED_OFFICIALS = "verified-officials-provenance"
+
 _DOW_LABELS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 _LABEL_MAP = {
     "POSITIVE": "positive",
@@ -110,7 +114,7 @@ class SentimentAggregator:
             # that downstream (walkthrough 057).
             sentiment_rows = fetch_task_rows(
                 cursor,
-                "SELECT a.doc_id, a.output_json, a.confidence, d.source_type, d.published_at, d.title, d.domain_or_subreddit, d.ident, d.text, u.username",
+                "SELECT a.doc_id, a.output_json, a.confidence, d.source_type, d.published_at, d.title, d.domain_or_subreddit, d.ident, d.text, u.username, x.is_official_tier",
                 task_type="sentiment",
                 cutoff=cutoff,
                 min_confidence=min_conf,
@@ -150,6 +154,7 @@ class SentimentAggregator:
         accum: Dict[str, Any] = {
             "strong_pos": 0, "mild_pos": 0, "strong_neg": 0, "mild_neg": 0,
             "neutral": 0, "mixed": 0, "count": 0, "excluded_bots": 0,
+            "conf_sum": 0.0,
             "social": {"positive": 0, "negative": 0, "neutral": 0, "mixed": 0},
             "news": {"positive": 0, "negative": 0, "neutral": 0, "mixed": 0},
             "by_platform": {}, "by_topic": {}, "by_time": {}, "by_dow": {},
@@ -163,7 +168,7 @@ class SentimentAggregator:
 
         for (
             doc_id, output_json, confidence, source_type, published_at,
-            title, domain_or_subreddit, ident, text, x_handle,
+            title, domain_or_subreddit, ident, text, x_handle, is_official_tier,
         ) in rows:
             if doc_id in bot_docs:
                 accum["excluded_bots"] += 1
@@ -198,20 +203,24 @@ class SentimentAggregator:
             _collect_topic_sample(
                 accum["topic_samples"], topic, doc_id, label, conf,
                 data, title, source_type, published_at, domain_or_subreddit, ident, text,
+                x_handle,
             )
             _collect_strength_sample(
                 accum["strength_samples"], strength_key, doc_id, label, conf,
                 data, title, source_type, published_at, domain_or_subreddit, ident, text,
+                x_handle,
             )
 
             tier = _route_and_record(
                 accum, registry, source_type, domain_or_subreddit, x_handle,
                 doc_id, label, conf, data, title, published_at, ident, text,
+                is_official_tier=bool(is_official_tier),
             )
             if tier is not None:
                 _increment_bucket(accum["by_topic_tier"], f"{topic}\x00{tier}", label_key)
 
             accum["count"] += 1
+            accum["conf_sum"] += conf
 
         return accum
 
@@ -232,7 +241,8 @@ class SentimentAggregator:
         result = PublicSentimentResult(
             overview=SentimentOverview(
                 netScore=round(net_score, 1), volume=accum["count"],
-                coverage="medium", confidence="medium",
+                coverage=_coverage_bucket(accum["count"]),
+                confidence=_confidence_bucket(accum["conf_sum"], accum["count"]),
             ),
             distribution=SentimentDistribution(
                 strongPositive=accum["strong_pos"], mildPositive=accum["mild_pos"],
@@ -257,6 +267,39 @@ class SentimentAggregator:
             "news": {**news, "netScore": round(news_net, 1), "volume": news_total},
         }
         return result
+
+
+# --------------------------------------------------------------------------- #
+#  Coverage + confidence derivation (audit U-6)                               #
+# --------------------------------------------------------------------------- #
+
+# Overview coverage is derived from how many sentiment rows survived the bot +
+# min-confidence filters; confidence from the mean per-row model confidence.
+# Both were hardcoded "medium" before U-6. Thresholds are deliberately coarse —
+# the headline chip is a rough "how much / how sure", not a precise metric.
+_COVERAGE_LOW_MAX = 50      # < 50 sampled rows → thin coverage
+_COVERAGE_HIGH_MIN = 500    # >= 500 sampled rows → broad coverage
+_CONFIDENCE_LOW_MAX = 0.6   # mean row confidence < 0.6 → low
+_CONFIDENCE_HIGH_MIN = 0.8  # mean row confidence >= 0.8 → high
+
+
+def _coverage_bucket(volume: int) -> str:
+    if volume < _COVERAGE_LOW_MAX:
+        return "low"
+    if volume >= _COVERAGE_HIGH_MIN:
+        return "high"
+    return "medium"
+
+
+def _confidence_bucket(conf_sum: float, count: int) -> str:
+    if count <= 0:
+        return "low"
+    mean_conf = conf_sum / count
+    if mean_conf < _CONFIDENCE_LOW_MAX:
+        return "low"
+    if mean_conf >= _CONFIDENCE_HIGH_MIN:
+        return "high"
+    return "medium"
 
 
 # --------------------------------------------------------------------------- #
@@ -303,6 +346,7 @@ def _build_sample_dict(
     domain_or_subreddit: Optional[str],
     ident: Optional[str],
     text: Optional[str],
+    x_handle: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Build the dict representation of a classification sample used by
     every collector. Centralizing this avoids the 3-place duplication
@@ -318,6 +362,10 @@ def _build_sample_dict(
         elif source_type and source_type.startswith("reddit"):
             post_id = ident.replace("t3_", "").replace("t1_", "")
             url = f"https://reddit.com/r/{domain_or_subreddit or 'all'}/comments/{post_id}"
+        elif source_type == "x_post" and x_handle:
+            # Synthesize the tweet permalink so every X sample is auditable
+            # (invariant C1 / audit A-7), mirroring narrative.py's builder.
+            url = f"https://x.com/{x_handle}/status/{ident}"
     return {
         "doc_id": doc_id,
         "label": label,
@@ -375,13 +423,14 @@ def _collect_topic_sample(
     data: Dict[str, Any],
     title: Optional[str], source_type: Optional[str], published_at: Optional[float],
     domain_or_subreddit: Optional[str], ident: Optional[str], text: Optional[str],
+    x_handle: Optional[str] = None,
 ) -> None:
     if not data.get("reasoning"):
         return
     samples = topic_samples.setdefault(topic, [])
     sample = _build_sample_dict(
         doc_id, label, confidence, data, title, source_type,
-        published_at, domain_or_subreddit, ident, text,
+        published_at, domain_or_subreddit, ident, text, x_handle,
     )
     _insert_capped(samples, sample, MAX_SAMPLES_PER_TOPIC)
 
@@ -393,6 +442,7 @@ def _collect_strength_sample(
     data: Dict[str, Any],
     title: Optional[str], source_type: Optional[str], published_at: Optional[float],
     domain_or_subreddit: Optional[str], ident: Optional[str], text: Optional[str],
+    x_handle: Optional[str] = None,
 ) -> None:
     """Append a sample to one of the five STRENGTH_BUCKETS. Silently
     drops rows for unknown buckets so callers can pass the key through
@@ -402,7 +452,7 @@ def _collect_strength_sample(
         return
     sample = _build_sample_dict(
         doc_id, label, confidence, data, title, source_type,
-        published_at, domain_or_subreddit, ident, text,
+        published_at, domain_or_subreddit, ident, text, x_handle,
     )
     _insert_capped(samples, sample, MAX_DISTRIBUTION_SAMPLES_PER_BUCKET)
 
@@ -413,6 +463,7 @@ def _collect_entity_sample(
     data: Dict[str, Any],
     title: Optional[str], source_type: Optional[str], published_at: Optional[float],
     domain_or_subreddit: Optional[str], ident: Optional[str], text: Optional[str],
+    x_handle: Optional[str] = None,
 ) -> None:
     """Bump an entity bucket's counters + append a sample when there's room."""
     label_key = _LABEL_MAP.get(label, "neutral")
@@ -422,7 +473,7 @@ def _collect_entity_sample(
         return
     sample = _build_sample_dict(
         doc_id, label, confidence, data, title, source_type,
-        published_at, domain_or_subreddit, ident, text,
+        published_at, domain_or_subreddit, ident, text, x_handle,
     )
     _insert_capped(entity_accum["samples"], sample, MAX_SAMPLES_PER_ENTITY)
 
@@ -445,15 +496,24 @@ def _route_and_record(
     published_at: Any,
     ident: Optional[str],
     text: Optional[str],
+    is_official_tier: bool = False,
 ) -> Optional[str]:
     """Resolve the row's tier + entity via the shared entity_routing
     module, then bucket the row into the right per-entity accumulator
     (sentiment-specific shape).
 
+    ``is_official_tier`` carries the ingestor's x_posts_raw provenance flag
+    so a post fetched via the verified-officials timeline lands in the
+    officials tier even when its stored handle doesn't match the editorial
+    registry (audit D-4).
+
     Returns the tier label ('news' | 'officials' | 'public') for use by
     the per-topic three-way split; None for unknown source_types.
     """
-    tier, entity = resolve_entity(registry, source_type, domain_or_subreddit, x_handle)
+    tier, entity = resolve_entity(
+        registry, source_type, domain_or_subreddit, x_handle,
+        is_official_tier=is_official_tier,
+    )
     if tier is None:
         return None
 
@@ -470,8 +530,19 @@ def _route_and_record(
             kind = "catch_all"
     elif tier == "officials":
         bucket_dict = accum["by_official"]
-        # entity is always present for officials tier (resolve_entity guarantees).
-        key, profile, kind = entity.handle, entity.profile_dict(), "official"
+        if entity is not None:
+            key, profile, kind = entity.handle, entity.profile_dict(), "official"
+        else:
+            # Routed to officials purely by the is_official_tier provenance
+            # flag (verified-officials timeline pull) with no editorial entity
+            # to render — bucket into a dedicated verified-officials catch-all.
+            key = CATCH_ALL_VERIFIED_OFFICIALS
+            profile = catch_all_profile(
+                CATCH_ALL_VERIFIED_OFFICIALS, "Verified officials",
+                "X posts pulled via the verified-officials timeline whose "
+                "handle is not individually in the editorial officials registry.",
+            )
+            kind = "catch_all"
     else:  # public
         bucket_dict = accum["by_general_public"]
         if entity is not None:
@@ -494,7 +565,7 @@ def _route_and_record(
     _init_entity_bucket(bucket_dict, key, kind, profile)
     _collect_entity_sample(
         bucket_dict[key], doc_id, label, conf, data,
-        title, source_type, published_at, domain_or_subreddit, ident, text,
+        title, source_type, published_at, domain_or_subreddit, ident, text, x_handle,
     )
     return tier
 

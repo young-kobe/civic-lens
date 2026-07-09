@@ -42,6 +42,12 @@ EXCLUDE_PATTERNS = [
     r"/recipes", r"/food", r"/travel", r"/lifestyle",
 ]
 
+# ETL logic version stamped onto every docs row (invariant B1 / audit A-9).
+# Bump this whenever the filter keywords, the 30-day rule, or the extraction
+# logic below change, so docs produced by different ETL logic are
+# distinguishable. Mirrors the prompt_version constants in engine/prompts.py.
+ETL_VERSION = "etl-v1"
+
 # 30 days in seconds
 THIRTY_DAYS_SECONDS = 30 * 24 * 60 * 60
 
@@ -74,10 +80,33 @@ def is_us_political_content(text: str, title: str = "", url: str = "") -> bool:
     return False
 
 
-def is_recent(published_at: Optional[int], max_age_seconds: int = THIRTY_DAYS_SECONDS) -> bool:
-    """Check if content was published within the allowed time window."""
+def stamp_published_at(published_at: Optional[int], now: int) -> int:
+    """Resolve the timestamp a doc is stored under (audit A-8 policy).
+
+    NULL/0 published_at is stamped with the ETL time (``now``, our best proxy
+    for a continuously-crawled doc's discovery time) rather than left NULL.
+    Chosen over rejecting the doc: dropping real content because the source
+    omitted a date is its own honesty failure, and every cached aggregate
+    window filters ``published_at >= cutoff`` — a NULL satisfies no window, so
+    these docs used to be bot/sentiment/claim-scored (paid LLM calls) yet
+    appear nowhere in the UI. Stamping ETL-time keeps them visible and their
+    analysis useful. Valid timestamps are returned unchanged; obviously
+    invalid ones are rejected upstream by ``is_recent``.
+    """
     if published_at is None or published_at == 0:
-        # If no publish date, assume it's recent (to avoid filtering valid content)
+        return now
+    return published_at
+
+
+def is_recent(published_at: Optional[int], max_age_seconds: int = THIRTY_DAYS_SECONDS) -> bool:
+    """Check if content was published within the allowed time window.
+
+    NULL/0 published_at passes here (kept, then stamped with ETL-time by
+    ``stamp_published_at`` at insert so the doc lands in time windows — see
+    audit A-8). Genuinely-invalid dates (pre-2020 / future) are still rejected.
+    """
+    if published_at is None or published_at == 0:
+        # No publish date: keep it (stamped ETL-time at insert), don't drop it.
         return True
     
     now = int(time.time())
@@ -102,6 +131,11 @@ class ContentLoader:
         conn = sqlite3.connect(self.db_path, check_same_thread=False)
         conn.execute(f"PRAGMA busy_timeout = {SQLITE_BUSY_TIMEOUT_MS}")
         conn.execute("PRAGMA journal_mode = WAL")
+        # Match the Go ingestor, which opens with foreign_keys(on). sqlite3
+        # defaults FK enforcement OFF, so without this the loader's
+        # DELETE FROM docs and every FK-bearing child write run unenforced
+        # (audit D-5).
+        conn.execute("PRAGMA foreign_keys = ON")
         try:
             yield conn
         finally:
@@ -148,7 +182,10 @@ class ContentLoader:
             conn.commit()
 
         
-        logger.info(f"ETL Loaded {new_docs} new documents. Skipped: {skipped_old} old, {skipped_nonpolitical} non-political.")
+        logger.info(
+            f"ETL [{ETL_VERSION}] Loaded {new_docs} new documents. "
+            f"Skipped: {skipped_old} old, {skipped_nonpolitical} non-political."
+        )
         return new_docs
 
     def _extract_text_from_raw(self, raw_hash: str, raw_root: Path) -> Optional[str]:
@@ -189,33 +226,34 @@ class ContentLoader:
         existing_idents = {row[0] for row in cursor.fetchall()}
 
         insert_query = """
-            INSERT INTO docs (source_type, ident, domain_or_subreddit, published_at, title, raw_hash, text)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO docs (source_type, ident, domain_or_subreddit, published_at, title, raw_hash, text, etl_version)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """
         batch: List[tuple] = []
         new_docs = 0
         skipped_old = 0
         skipped_nonpolitical = 0
+        now = int(time.time())
 
         for row in articles:
             url_canon, domain, raw_hash, title, published_at = row
 
             if url_canon in existing_idents:
                 continue
-            
+
             if not is_recent(published_at):
                 skipped_old += 1
                 continue
-            
+
             text = self._extract_text_from_raw(raw_hash, raw_root)
             if not text:
                 continue
-            
+
             if not is_us_political_content(text, title or "", url_canon):
                 skipped_nonpolitical += 1
                 continue
-                
-            batch.append(("news", url_canon, domain, published_at, title, raw_hash, text))
+
+            batch.append(("news", url_canon, domain, stamp_published_at(published_at, now), title, raw_hash, text, ETL_VERSION))
             existing_idents.add(url_canon)
 
             if len(batch) >= BATCH_COMMIT_SIZE:
@@ -240,31 +278,32 @@ class ContentLoader:
         existing_idents = {row[0] for row in cursor.fetchall()}
 
         insert_query = """
-            INSERT INTO docs (source_type, ident, domain_or_subreddit, published_at, title, text, raw_hash)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO docs (source_type, ident, domain_or_subreddit, published_at, title, text, raw_hash, etl_version)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """
         batch: List[tuple] = []
         new_docs = 0
         skipped_old = 0
         skipped_nonpolitical = 0
+        now = int(time.time())
 
         for row in posts:
             fullname, subreddit, created_utc, title, body, raw_hash = row
 
             if not fullname or fullname in existing_idents:
                 continue
-            
+
             if not is_recent(created_utc):
                 skipped_old += 1
                 continue
-            
+
             text = f"{title or ''}\n\n{body or ''}".strip()
-            
+
             if not is_us_political_content(text, title or ""):
                 skipped_nonpolitical += 1
                 continue
-            
-            batch.append(("reddit_post", fullname, subreddit, created_utc, title, text, raw_hash))
+
+            batch.append(("reddit_post", fullname, subreddit, stamp_published_at(created_utc, now), title, text, raw_hash, ETL_VERSION))
             existing_idents.add(fullname)
 
             if len(batch) >= BATCH_COMMIT_SIZE:
@@ -291,13 +330,14 @@ class ContentLoader:
         existing_idents = {row[0] for row in cursor.fetchall()}
 
         insert_query = """
-            INSERT INTO docs (source_type, ident, domain_or_subreddit, published_at, text, raw_hash, metadata_json, place_country_code)
+            INSERT INTO docs (source_type, ident, domain_or_subreddit, published_at, text, raw_hash, metadata_json, etl_version)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """
         batch: List[tuple] = []
         new_docs = 0
         skipped_old = 0
         skipped_nonpolitical = 0
+        now = int(time.time())
 
         for row in x_posts:
             (tweet_id, author_id, created_at, text, lang,
@@ -328,9 +368,12 @@ class ContentLoader:
                 "user_verified_type": verified_type,
             }
 
+            # place_country_code stays in metadata_json (bot.py reads it from
+            # there for the foreign-origin flag); the dropped docs column
+            # (audit D-10) is no longer written.
             batch.append((
-                "x_post", tweet_id, "x.com", created_at, text, raw_hash,
-                json.dumps(metadata), place_country_code,
+                "x_post", tweet_id, "x.com", stamp_published_at(created_at, now), text, raw_hash,
+                json.dumps(metadata), ETL_VERSION,
             ))
             existing_idents.add(tweet_id)
 
@@ -423,7 +466,12 @@ class ContentLoader:
                          user_prompt_template, created_at)
                     VALUES (?, ?, ?, ?, strftime('%s','now'))
                     ON CONFLICT(prompt_version) DO UPDATE SET
-                        task_type = excluded.task_type,
+                        -- task_type is intentionally NOT rewritten here. Sentiment
+                        -- and favorability share one prompt_version but save with
+                        -- different task values; rewriting on every conflict made
+                        -- the audit column flip-flop twice per doc (audit A-13).
+                        -- First writer wins; the prompt text is identical so
+                        -- reconstruction is unaffected.
                         system_prompt = excluded.system_prompt,
                         user_prompt_template = COALESCE(
                             excluded.user_prompt_template,

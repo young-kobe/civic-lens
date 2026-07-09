@@ -104,3 +104,109 @@ ALTER TABLE test_table ADD COLUMN name TEXT;
 		t.Fatalf("Second Migrate shouldn't fail: %v", err)
 	}
 }
+
+// TestMigrateAtomicRollback verifies the D-6 guarantee: a migration that fails
+// partway through leaves schema_version unchanged and rolls back every
+// statement it had already run, so a corrected re-run applies cleanly instead
+// of wedging on "duplicate column name".
+func TestMigrateAtomicRollback(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "db_rollback_test")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	dbPath := filepath.Join(tmpDir, "test.db")
+	migrationsDir := filepath.Join(tmpDir, "migrations")
+	if err := os.MkdirAll(migrationsDir, 0755); err != nil {
+		t.Fatalf("Failed to create migrations dir: %v", err)
+	}
+
+	base := `
+CREATE TABLE schema_version (version INTEGER PRIMARY KEY, applied_at INTEGER NOT NULL);
+CREATE TABLE t (id INTEGER);
+INSERT OR IGNORE INTO schema_version (version, applied_at) VALUES (1, 0);
+`
+	if err := os.WriteFile(filepath.Join(migrationsDir, "001_base.sql"), []byte(base), 0644); err != nil {
+		t.Fatalf("Failed to write base migration: %v", err)
+	}
+
+	// Migration 002 adds a column (valid) then hits an invalid statement.
+	// No BEGIN/COMMIT, so the runner owns the transaction and must roll the
+	// ADD COLUMN back when the bad statement fails.
+	badSecond := `
+ALTER TABLE t ADD COLUMN a INTEGER;
+THIS IS NOT VALID SQL;
+INSERT OR IGNORE INTO schema_version (version, applied_at) VALUES (2, 0);
+`
+	secondPath := filepath.Join(migrationsDir, "002_second.sql")
+	if err := os.WriteFile(secondPath, []byte(badSecond), 0644); err != nil {
+		t.Fatalf("Failed to write bad migration: %v", err)
+	}
+
+	database, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Failed to open db: %v", err)
+	}
+	defer database.Close()
+	ctx := context.Background()
+
+	if err := database.Migrate(ctx); err == nil {
+		t.Fatal("expected Migrate to fail on the invalid statement, got nil")
+	}
+
+	// schema_version must still be 1 — migration 002 rolled back entirely.
+	var version int
+	if err := database.conn.QueryRowContext(ctx, "SELECT COALESCE(MAX(version), 0) FROM schema_version").Scan(&version); err != nil {
+		t.Fatalf("query schema_version: %v", err)
+	}
+	if version != 1 {
+		t.Fatalf("expected schema_version 1 after failed migration, got %d", version)
+	}
+
+	// The ADD COLUMN must have rolled back too — otherwise a re-run would
+	// wedge on "duplicate column name".
+	if columnExists(t, database, "t", "a") {
+		t.Fatal("column 'a' should not exist after the failed migration rolled back")
+	}
+
+	// Correct 002 and re-run: it must now apply cleanly.
+	goodSecond := `
+ALTER TABLE t ADD COLUMN a INTEGER;
+INSERT OR IGNORE INTO schema_version (version, applied_at) VALUES (2, 0);
+`
+	if err := os.WriteFile(secondPath, []byte(goodSecond), 0644); err != nil {
+		t.Fatalf("Failed to rewrite migration: %v", err)
+	}
+	if err := database.Migrate(ctx); err != nil {
+		t.Fatalf("re-run after fix should succeed, got: %v", err)
+	}
+	if err := database.conn.QueryRowContext(ctx, "SELECT COALESCE(MAX(version), 0) FROM schema_version").Scan(&version); err != nil {
+		t.Fatalf("query schema_version: %v", err)
+	}
+	if version != 2 {
+		t.Fatalf("expected schema_version 2 after re-run, got %d", version)
+	}
+	if !columnExists(t, database, "t", "a") {
+		t.Fatal("column 'a' should exist after the corrected migration applied")
+	}
+}
+
+func columnExists(t *testing.T, database *DB, table, column string) bool {
+	t.Helper()
+	rows, err := database.conn.Query("SELECT name FROM pragma_table_info(?)", table)
+	if err != nil {
+		t.Fatalf("pragma_table_info(%s): %v", table, err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			t.Fatalf("scan column name: %v", err)
+		}
+		if name == column {
+			return true
+		}
+	}
+	return false
+}
