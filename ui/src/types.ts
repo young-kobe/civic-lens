@@ -214,7 +214,7 @@ export interface BotOverview {
     suspectedAutomationRate: number;
     coordinationIndex: number;
     topClusters: string[];
-    totalFlaggedAccounts: number;
+    totalFlaggedPosts: number;
     confidence: ConfidenceLevel;
     // Three-way entity rollups — registry-matched outlets / officials /
     // subreddits (+ a catch-all per tier) with their per-entity bot rate.

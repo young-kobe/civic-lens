@@ -73,6 +73,47 @@ export function formatPct(
 }
 
 /**
+ * Format a signed net-tone / net-difference value on the -100..+100 scale
+ * as points ("pts"), e.g. "+12 pts" / "-8 pts" / "0 pts".
+ *
+ * A net difference between two shares is measured in percentage *points*,
+ * not a percentage. Rendering it with a bare "%" makes it read as a share
+ * and collides with the confidence and rate percents shown elsewhere on
+ * the same cards, so net-tone surfaces use this helper instead. Signed by
+ * default; out-of-range values return the fallback, matching formatPct's
+ * honesty policy (see the module docstring).
+ *
+ *   formatPts(12.3)              → "+12.3 pts"
+ *   formatPts(-8, {decimals: 0}) → "-8 pts"
+ *   formatPts(0)                 → "0 pts"
+ *   formatPts(null)              → "—"
+ */
+export function formatPts(
+    value: number | null | undefined,
+    opts: FormatPctOpts = {},
+): string {
+    const fallback = opts.fallback ?? '—';
+    if (value === null || value === undefined || !Number.isFinite(value)) {
+        return fallback;
+    }
+    const min = opts.min ?? -100;
+    const max = opts.max ?? 100;
+    if (value < min || value > max) {
+        if (typeof import.meta !== 'undefined' && (import.meta as ImportMeta).env?.DEV) {
+            // eslint-disable-next-line no-console
+            console.warn(
+                `formatPts: value ${value} outside [${min}, ${max}] — rendering "${fallback}".`,
+            );
+        }
+        return fallback;
+    }
+    const decimals = opts.decimals ?? 1;
+    const signed = opts.signed ?? true;
+    const sign = signed && value > 0 ? '+' : '';
+    return `${sign}${value.toFixed(decimals)} pts`;
+}
+
+/**
  * Clamp a number to a CSS width percentage — returns a plain number in
  * [0, 100]. Use when piping a backend rate straight into a
  * `style={{ width: `${x}%` }}` expression, so a buggy 197 doesn't

@@ -21,7 +21,7 @@ interface TopMetricsBlockProps {
 }
 
 export function TopMetricsBlock({
-    eyebrow = 'As of today',
+    eyebrow,
     meta,
     children,
     aux,
@@ -65,16 +65,24 @@ interface TierRowProps {
     valueColor?: string;
     /** Render a subtle zero-midpoint tick (for -100..+100 axes). */
     showZeroTick?: boolean;
+    /**
+     * Faint left/right axis-end labels so a reader knows what the dot's
+     * position means. Defaults to the tone scale ("−100" / "+100") when
+     * `showZeroTick` is set; callers on other scales (e.g. a 0–100 rate)
+     * pass their own endpoints.
+     */
+    endpoints?: [string, string];
 }
 
 export function TierRow({
-    label, value, verb, dotPct, dotColor, dots, valueColor, showZeroTick,
+    label, value, verb, dotPct, dotColor, dots, valueColor, showZeroTick, endpoints,
 }: TierRowProps) {
     const resolvedDots: TierRowDot[] = dots ?? (
         dotPct != null && dotColor
             ? [{ pct: dotPct, color: dotColor }]
             : []
     );
+    const resolvedEndpoints = endpoints ?? (showZeroTick ? ['−100', '+100'] as const : undefined);
     const valueStyle: CSSProperties | undefined = valueColor ? { color: valueColor } : undefined;
 
     return (
@@ -82,6 +90,12 @@ export function TierRow({
             <span className="tier-row-label">{label}</span>
             <div className="tier-row-axis">
                 {showZeroTick && <span className="tier-row-zero" aria-hidden />}
+                {resolvedEndpoints && (
+                    <>
+                        <span className="tier-row-endpoint tier-row-endpoint-left" aria-hidden>{resolvedEndpoints[0]}</span>
+                        <span className="tier-row-endpoint tier-row-endpoint-right" aria-hidden>{resolvedEndpoints[1]}</span>
+                    </>
+                )}
                 {resolvedDots.map((d, i) => (
                     <span
                         key={i}

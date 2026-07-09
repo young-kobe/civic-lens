@@ -20,9 +20,10 @@ export function formatTimeWindow(range: Filters['timeRange']): string {
     return WINDOW_LABEL[range] || range;
 }
 
-/** "As of last 7 days" — eyebrow text for the reads-as-today cards and the
+/** "Last 7 days" — eyebrow text for the reads-as-today cards and the
  *  TopMetricsBlock header. Standard shape across every page so the reader
  *  always knows which window the page is showing. */
 export function asOfTodayEyebrow(range: Filters['timeRange']): string {
-    return `As of ${formatTimeWindow(range)}`;
+    const label = formatTimeWindow(range);
+    return label.charAt(0).toUpperCase() + label.slice(1);
 }

@@ -48,7 +48,7 @@ export function SupportingDocsTable({ docs, whenLabel = formatRelativeDate }: Su
                         <th scope="col">Source</th>
                         <th scope="col">When</th>
                         <th scope="col">Tone</th>
-                        <th scope="col">Reasoning</th>
+                        <th scope="col">AI reasoning</th>
                         <th scope="col" aria-label="Open source"></th>
                     </tr>
                 </thead>
@@ -71,7 +71,11 @@ export function SupportingDocsTable({ docs, whenLabel = formatRelativeDate }: Su
                                         </span>
                                     ) : <span className="text-muted">—</span>}
                                     {conf != null && (
-                                        <span className="text-muted" style={{ marginLeft: 6, fontFamily: 'var(--font-mono)', fontSize: '10px' }}>
+                                        <span
+                                            className="text-muted"
+                                            style={{ marginLeft: 6, fontFamily: 'var(--font-mono)', fontSize: '10px' }}
+                                            title="Model confidence in this label"
+                                        >
                                             {conf}%
                                         </span>
                                     )}

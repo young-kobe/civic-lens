@@ -47,7 +47,8 @@ function EntityPill({ mover, onClick }: { mover: EntityToneMover; onClick?: () =
     const title =
         `${mover.displayName}: net tone moved from ${formatNet(mover.prev_net)} ` +
         `→ ${formatNet(mover.current_net)} (${formatDelta(mover.delta_pts)}) ` +
-        `vs. the previous window. Sample: ${mover.current_volume.toLocaleString()} posts now, ` +
+        `vs. the previous window, on a -100 to +100 net-tone scale. ` +
+        `Sample: ${mover.current_volume.toLocaleString()} posts now, ` +
         `${mover.prev_volume.toLocaleString()} before.`;
     return (
         <Wrapper
@@ -68,8 +69,8 @@ function EntityPill({ mover, onClick }: { mover: EntityToneMover; onClick?: () =
 function FavorabilityPill({ mover }: { mover: FavorabilityMover }) {
     const title =
         `${mover.label}: ${formatNet(mover.prev_net)} → ${formatNet(mover.current_net)} ` +
-        `(${formatDelta(mover.delta_pts)}) vs. the previous window. ` +
-        `Sample: ${mover.current_volume.toLocaleString()} posts now, ` +
+        `(${formatDelta(mover.delta_pts)}) vs. the previous window, on a -100 to +100 ` +
+        `net-tone scale. Sample: ${mover.current_volume.toLocaleString()} posts now, ` +
         `${mover.prev_volume.toLocaleString()} before.`;
     return (
         <span className="movers-item movers-item-fav" title={title}>
@@ -129,7 +130,7 @@ export function MoversTicker({ data, onEntityClick }: MoversTickerProps) {
             role="group"
             aria-label="Biggest movers in political tone and GOP favorability"
         >
-            <span className="movers-ticker-eyebrow" aria-hidden>Biggest movers</span>
+            <span className="movers-ticker-eyebrow" aria-hidden>Biggest tone shifts</span>
             <div className="movers-ticker-viewport">
                 <div className="movers-ticker-track" ref={trackRef}>
                     {rows.map((r, i) => renderRow(r, `a-${i}`))}

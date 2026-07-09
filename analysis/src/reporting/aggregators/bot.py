@@ -375,7 +375,7 @@ class BotAggregator:
                 suspectedAutomationRate=round(automation_rate, 1),
                 coordinationIndex=round(coordination_index, 2),
                 topClusters=[c[0] for c in top_clusters],
-                totalFlaggedAccounts=bot_count + suspicious_count,
+                totalFlaggedPosts=bot_count + suspicious_count,
                 confidence="medium" if total_eligible > 100 else "low",
                 by_news_outlet=rollups.get("news", []),
                 by_official=rollups.get("officials", []),

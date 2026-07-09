@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import {
     Card, CollapsibleInfo, EmptyState, EntityHeader, EntityProfileCard,
-    ErrorState, GlobalTicker, LoadingCard, Modal, SupportingDocsTable,
+    ErrorState, GlobalTicker, LoadingCard, MethodPopover, Modal, SupportingDocsTable,
     ThreeWayColumn, ThreeWayGrid,
     entityExternalUrl, entityLeanAccent,
 } from '../components/common';
@@ -9,11 +9,21 @@ import type { EntityStat, TickerItem } from '../components/common';
 import type { EntityProfile } from '../types';
 import { Sparkline } from '../components/charts';
 import { fetchNarratives, fetchSnapshotStatus, type SnapshotStatus } from '../services/api';
-import { asOfTodayEyebrow } from '../services/timeWindow';
+import { asOfTodayEyebrow, formatTimeWindow } from '../services/timeWindow';
 import { formatRefreshedAgo, getSnapshotTimestamp } from '../services/freshness';
-import { formatPct } from '../services/format';
+import { formatPts } from '../services/format';
 import { useFetch } from '../services/useFetch';
 import { COLORS } from '../theme';
+
+// Shared tooltip copy — kept here so the same definitions read identically
+// on the compact cards and inside the detail modals.
+const NET_TONE_TITLE =
+    'Positive minus negative share of this story\'s posts, from -100 (all negative) to +100 (all positive).';
+const PROP_SCORE_TITLE =
+    'Average technique-intensity score across scored posts, from 0 (none) to 1 (saturated).';
+const CITES_TITLE =
+    'Links from other posts or articles in our sample that point to posts in this story. '
+    + 'Counts only sources we track — not the whole web.';
 import type {
     AccountProfile, Filters, NarrativeSourceBreakdownItem, NarrativeSummary,
 } from '../types';
@@ -23,7 +33,7 @@ import type {
 //  Small helpers                                                              //
 // --------------------------------------------------------------------------- //
 
-function buildNarrativeTickerItems(data: NarrativeSummary[], window: string): TickerItem[] {
+function buildNarrativeTickerItems(data: NarrativeSummary[], window: Filters['timeRange']): TickerItem[] {
     const total = data.length;
     const nowSec = Date.now() / 1000;
     const dayCutoff = nowSec - 24 * 60 * 60;
@@ -48,16 +58,16 @@ function buildNarrativeTickerItems(data: NarrativeSummary[], window: string): Ti
             label: 'New (24h)', value: freshCount.toLocaleString(),
             tone: freshCount > 0 ? 'accent' : 'neutral',
         },
-        { label: 'Window', value: window },
+        { label: 'Window', value: formatTimeWindow(window) },
     ];
     if (topClaim) {
         const short = topClaim.name.length > 48
             ? topClaim.name.slice(0, 48).trimEnd() + '…'
             : topClaim.name;
         items.push({
-            label: 'Top Amplified', value: short,
+            label: 'Most repeated', value: short,
             hint: `${topClaim.supporting_doc_count.toLocaleString()} posts`,
-            ariaLabel: `Top amplified narrative: ${topClaim.name}, ${topClaim.supporting_doc_count} supporting posts`,
+            ariaLabel: `Most repeated narrative: ${topClaim.name}, ${topClaim.supporting_doc_count} supporting posts`,
         });
     }
     return items;
@@ -197,7 +207,10 @@ function NarrativeCard({ narrative, onOpen }: NarrativeCardProps) {
             title={narrative.name}
         >
             <div className="narrative-card-claim">{narrative.name || '(unnamed)'}</div>
-            <div className="narrative-card-origin">
+            <div
+                className="narrative-card-origin"
+                title="'First seen' = the earliest post we collected. The claim may have started elsewhere before we picked it up."
+            >
                 first seen {formatRelativeDate(narrative.first_seen_at)} · {firstSeenLabel(narrative)}
             </div>
             <SourceBar items={narrative.source_breakdown} showLegend />
@@ -206,16 +219,16 @@ function NarrativeCard({ narrative, onOpen }: NarrativeCardProps) {
                     <span className="narrative-card-metric-value">{narrative.supporting_doc_count}</span>
                     <span className="narrative-card-metric-label">posts</span>
                 </span>
-                <span>
+                <span title={NET_TONE_TITLE}>
                     <span className="narrative-card-metric-value" style={{ color: sentColor }}>
-                        {formatPct(narrative.net_sentiment, { min: -100, signed: true })}
+                        {formatPts(narrative.net_sentiment)}
                     </span>
-                    <span className="narrative-card-metric-label">net</span>
+                    <span className="narrative-card-metric-label">tone</span>
                 </span>
                 {narrative.inbound_citation_count > 0 && (
-                    <span>
+                    <span title={CITES_TITLE}>
                         <span className="narrative-card-metric-value">{narrative.inbound_citation_count}</span>
-                        <span className="narrative-card-metric-label">cites</span>
+                        <span className="narrative-card-metric-label">linked by</span>
                     </span>
                 )}
             </div>
@@ -229,7 +242,7 @@ function NarrativeCard({ narrative, onOpen }: NarrativeCardProps) {
                     )}
                     {botFlag && (
                         <span className="narrative-flag narrative-flag-bot"
-                            title={`${Math.round((narrative.bot_pushed_fraction ?? 0) * 100)}% of unique X authors flagged bot-pushed`}>
+                            title={`${Math.round((narrative.bot_pushed_fraction ?? 0) * 100)}% of the unique X accounts posting this claim show automated-behavior signals in our bot detector (an estimate, not proof).`}>
                             Bot-pushed {Math.round((narrative.bot_pushed_fraction ?? 0) * 100)}%
                         </span>
                     )}
@@ -283,24 +296,29 @@ function NarrativeDetailModal({ narrative, onClose, onBack, backLabel }: Narrati
                     <div className="metric-value">{narrative.supporting_doc_count}</div>
                 </div>
                 <div>
-                    <div className="eyebrow">Net sentiment</div>
+                    <div className="eyebrow" title={NET_TONE_TITLE}>Net tone</div>
                     <div className="metric-value" style={{ color: sentColor }}>
-                        {formatPct(narrative.net_sentiment, { min: -100, signed: true })}
+                        {formatPts(narrative.net_sentiment)}
                     </div>
                 </div>
                 <div>
-                    <div className="eyebrow">Inbound citations</div>
+                    <div className="eyebrow" title={CITES_TITLE}>Inbound citations</div>
                     <div className="metric-value">{narrative.inbound_citation_count}</div>
                 </div>
                 {narrative.propaganda_score != null && (
                     <div>
-                        <div className="eyebrow">Propaganda score</div>
-                        <div className="metric-value">{narrative.propaganda_score.toFixed(2)}</div>
+                        <div className="eyebrow" title={PROP_SCORE_TITLE}>Propaganda score</div>
+                        <div className="metric-value">{narrative.propaganda_score.toFixed(2)} / 1</div>
                     </div>
                 )}
                 {narrative.bot_pushed_fraction != null && (
                     <div>
-                        <div className="eyebrow">Bot-pushed</div>
+                        <div
+                            className="eyebrow"
+                            title={`${Math.round(narrative.bot_pushed_fraction * 100)}% of the unique X accounts posting this claim show automated-behavior signals in our bot detector (an estimate, not proof).`}
+                        >
+                            Bot-pushed
+                        </div>
                         <div className="metric-value">
                             {Math.round(narrative.bot_pushed_fraction * 100)}%
                         </div>
@@ -330,7 +348,7 @@ function NarrativeDetailModal({ narrative, onClose, onBack, backLabel }: Narrati
 
             {narrative.first_seen_entity_profile && (
                 <>
-                    <h3 className="card-title mt-4 mb-2">First-seen entity</h3>
+                    <h3 className="card-title mt-4 mb-2">Where we first saw it</h3>
                     <p className="text-sm">
                         <strong>{narrative.first_seen_entity_profile.displayName}</strong>
                         {narrative.first_seen_entity_profile.kind !== 'catch_all' && (
@@ -421,8 +439,9 @@ function entityStatsForNarratives(g: NarrativeEntityGroup): EntityStat[] {
         },
         {
             label: 'Avg tone',
-            value: formatPct(g.avgNetSentiment, { min: -100, signed: true }),
+            value: formatPts(g.avgNetSentiment),
             color: sentColor,
+            title: NET_TONE_TITLE,
         },
         {
             label: 'Supporting posts',
@@ -455,7 +474,7 @@ function NarrativeEntityModal({
     const sourceUrl = entityExternalUrl(profile);
 
     const subtitle = [
-        `${group.count} ${group.count === 1 ? 'story' : 'stories'} first surfaced here`,
+        `${group.count} ${group.count === 1 ? 'story' : 'stories'} first seen here in our sample`,
         group.mostRecent ? `most recent ${formatRelativeDate(group.mostRecent)}` : null,
     ].filter(Boolean).join(' · ');
 
@@ -475,9 +494,9 @@ function NarrativeEntityModal({
                     <div className="metric-value">{group.count.toLocaleString()}</div>
                 </div>
                 <div>
-                    <div className="eyebrow">Avg tone</div>
+                    <div className="eyebrow" title={NET_TONE_TITLE}>Avg tone</div>
                     <div className="metric-value" style={{ color: sentColor }}>
-                        {formatPct(group.avgNetSentiment, { min: -100, signed: true })}
+                        {formatPts(group.avgNetSentiment)}
                     </div>
                 </div>
                 <div>
@@ -542,8 +561,8 @@ function NarrativeThreeWayColumn({ header, byline, groups, onOpen, emptyCopy }: 
         >
             {visible.map((g) => {
                 const readsAs = g.count === 1
-                    ? 'One story first surfaced here.'
-                    : `${g.count} stories first surfaced here.`;
+                    ? 'One story first seen here in our sample.'
+                    : `${g.count} stories first seen here in our sample.`;
                 return (
                     <EntityProfileCard
                         key={`${g.profile.kind}:${g.profile.key}`}
@@ -551,7 +570,7 @@ function NarrativeThreeWayColumn({ header, byline, groups, onOpen, emptyCopy }: 
                         stats={entityStatsForNarratives(g)}
                         readsAs={readsAs}
                         onClick={() => onOpen(g)}
-                        emptyNote="Tracked — no stories originated here in this window."
+                        emptyNote="Tracked — no stories first seen here in this window."
                     />
                 );
             })}
@@ -602,7 +621,7 @@ function ClaimsSpreadingPanel({ narratives, onOpen }: { narratives: NarrativeSum
     if (narratives.length === 0) {
         return (
             <Card
-                title="Top political narratives"
+                title="Stories spreading across groups"
                 subtitle="No story has surfaced in more than one group yet in this window — see the per-group breakdown above for what each is talking about."
             >
                 <p className="text-muted text-sm">
@@ -615,7 +634,7 @@ function ClaimsSpreadingPanel({ narratives, onOpen }: { narratives: NarrativeSum
     const visible = narratives.slice(0, CROSS_TIER_LIMIT);
     return (
         <Card
-            title="Top political narratives"
+            title="Stories spreading across groups"
             subtitle={`${visible.length} ${visible.length === 1 ? 'story is' : 'stories are'} being repeated across more than one group — at least two of news, officials, and the public.`}
         >
             <div className="cross-tier-list">
@@ -688,7 +707,7 @@ function Narratives({ filters }: NarrativesProps) {
     // narratives array (zero clusters) is a valid state — render the frame
     // with per-column "No X-originated stories in this window" copy so
     // readers can see which axes are empty, matching Tone's behavior.
-    if (!data) return <EmptyState title="No narratives data available" />;
+    if (!data) return <EmptyState title="No stories available for this window." />;
 
     // Three-way split by first_seen_tier_group (walkthrough 058), then
     // rolled up by first_seen_entity_profile so each entity gets one card.
@@ -719,6 +738,18 @@ function Narratives({ filters }: NarrativesProps) {
                         items={tickerItems}
                         refreshed={refreshed}
                         ariaLabel="Narratives overview"
+                        legend={
+                            <MethodPopover
+                                title="How to read these numbers"
+                                description={
+                                    "A story is a claim we saw repeated across posts. 'First seen' = the "
+                                    + 'earliest post we collected carrying it, not where it started in the '
+                                    + 'world. Net tone = positive minus negative share of a story\'s posts, '
+                                    + 'in points on a -100 to +100 scale. Propaganda score = average '
+                                    + 'technique-intensity across scored posts, 0 (none) to 1 (saturated).'
+                                }
+                            />
+                        }
                     />
                 </div>
 
@@ -737,24 +768,24 @@ function Narratives({ filters }: NarrativesProps) {
                     <ThreeWayGrid>
                         <NarrativeThreeWayColumn
                             header="The News"
-                            byline="Outlets that first surfaced each story, with editorial lean"
+                            byline="Outlets where we first saw each story, with editorial lean"
                             groups={newsGroups}
                             onOpen={setActiveEntity}
-                            emptyCopy="No news-originated stories in this window."
+                            emptyCopy="No stories first seen from news sources in this window."
                         />
                         <NarrativeThreeWayColumn
                             header="Politicians & Officials"
-                            byline="Tracked officeholders whose posts first surfaced each story"
+                            byline="Tracked officeholders whose posts we first saw carrying each story"
                             groups={officialGroups}
                             onOpen={setActiveEntity}
-                            emptyCopy="No official-originated stories yet. Coverage grows as we pull more posts directly from tracked officials."
+                            emptyCopy="No stories first seen from officials yet. Coverage grows as we pull more posts directly from tracked officials."
                         />
                         <NarrativeThreeWayColumn
                             header="The Public"
-                            byline="Subreddits and X accounts that first surfaced each story"
+                            byline="Subreddits and X accounts where we first saw each story"
                             groups={publicGroups}
                             onOpen={setActiveEntity}
-                            emptyCopy="No public-originated stories in this window."
+                            emptyCopy="No stories first seen from the public in this window."
                         />
                     </ThreeWayGrid>
                 </div>
@@ -771,7 +802,7 @@ function Narratives({ filters }: NarrativesProps) {
                             A "story" here is a political claim we saw repeated across multiple posts.
                             Each one is placed in the column where we first saw it: a news outlet, a
                             verified official, or someone in the general public. "First seen" means the
-                            earliest post we've ingested — not necessarily where the claim started in the
+                            earliest post we've collected — not necessarily where the claim started in the
                             world.
                         </p>
                         <p className="text-sm">
