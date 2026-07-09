@@ -1,0 +1,16 @@
+{
+  "id": "claims-039",
+  "task": "claim_extraction",
+  "input_text": "Oh sure, the economy is doing GREAT — if you're a billionaire. Everyone else got a 3 percent rent hike and a shrug.",
+  "input_provenance": "synthetic-draft",
+  "expected_claims": [
+    {
+      "claim": "Rents increased around 3 percent",
+      "evidence_span": "a 3 percent rent hike"
+    }
+  ],
+  "review_status": "PENDING_HUMAN_REVIEW",
+  "reviewed_by": null,
+  "reviewed_at": null,
+  "notes": "Sarcasm; the sarcastic clause is not a claim but the rent figure is checkable. Borderline — reviewer may prefer empty."
+}

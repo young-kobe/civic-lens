@@ -84,11 +84,14 @@ def _validate_claim(raw: dict, source_text: str) -> Optional[ExtractedClaim]:
 class ClaimExtractor:
     """Extract claim statements from doc text via LLM."""
 
-    def __init__(self, llm_enabled: bool = False):
-        self.llm_enabled = llm_enabled
-        self._llm_client = None
-        logger.info(f"Initialized ClaimExtractor (llm_enabled={llm_enabled})")
-        if llm_enabled:
+    def __init__(self, llm_enabled: bool = False, llm_client=None):
+        # llm_client lets callers (eval harness, tests) supply a BaseLLMClient
+        # directly instead of going through the factory singleton. Production
+        # callers pass llm_enabled=True and use the configured backend.
+        self.llm_enabled = llm_enabled or llm_client is not None
+        self._llm_client = llm_client
+        logger.info(f"Initialized ClaimExtractor (llm_enabled={self.llm_enabled})")
+        if self.llm_enabled and self._llm_client is None:
             from analysis.src.llm import get_llm_client
             self._llm_client = get_llm_client()
             if not self._llm_client.is_available:

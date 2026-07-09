@@ -1,0 +1,16 @@
+{
+  "id": "claims-018",
+  "task": "claim_extraction",
+  "input_text": "Congress hasn't passed a real budget on time since 1997 and both parties keep pretending the CR circus is normal.",
+  "input_provenance": "synthetic-draft",
+  "expected_claims": [
+    {
+      "claim": "Congress has not passed a budget on time since 1997",
+      "evidence_span": "passed a real budget on time since 1997"
+    }
+  ],
+  "review_status": "PENDING_HUMAN_REVIEW",
+  "reviewed_by": null,
+  "reviewed_at": null,
+  "notes": "Checkable historical claim inside cynical both-sides commentary."
+}

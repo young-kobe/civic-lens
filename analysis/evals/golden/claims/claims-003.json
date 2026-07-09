@@ -1,0 +1,20 @@
+{
+  "id": "claims-003",
+  "task": "claim_extraction",
+  "input_text": "Governor Newsom signed an executive order Friday directing state agencies to clear homeless encampments, citing last month's Supreme Court ruling that gave cities broader enforcement power.",
+  "input_provenance": "synthetic-draft",
+  "expected_claims": [
+    {
+      "claim": "Newsom signed an executive order to clear homeless encampments",
+      "evidence_span": "signed an executive order Friday directing state agencies to clear homeless encampments"
+    },
+    {
+      "claim": "A Supreme Court ruling gave cities broader encampment enforcement power",
+      "evidence_span": "Supreme Court ruling that gave cities broader enforcement power"
+    }
+  ],
+  "review_status": "PENDING_HUMAN_REVIEW",
+  "reviewed_by": null,
+  "reviewed_at": null,
+  "notes": "Democratic-governor action plus court context; two distinct claims."
+}

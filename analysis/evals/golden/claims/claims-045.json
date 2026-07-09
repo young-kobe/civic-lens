@@ -1,0 +1,11 @@
+{
+  "id": "claims-045",
+  "task": "claim_extraction",
+  "input_text": "The town hall is at 6pm Thursday at the VFW on Route 9. Bring your questions about the water bill.",
+  "input_provenance": "synthetic-draft",
+  "expected_claims": [],
+  "review_status": "PENDING_HUMAN_REVIEW",
+  "reviewed_by": null,
+  "reviewed_at": null,
+  "notes": "Logistics announcement; arguably informational but not a trackable political claim. Reviewer call — kept empty per 'about a real entity or event' bar for discourse tracking."
+}

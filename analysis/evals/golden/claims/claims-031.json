@@ -1,0 +1,11 @@
+{
+  "id": "claims-031",
+  "task": "claim_extraction",
+  "input_text": "@PoliticsDaily @donwatch2026 #Election2026 #MAGA #Resist",
+  "input_provenance": "synthetic-draft",
+  "expected_claims": [],
+  "review_status": "PENDING_HUMAN_REVIEW",
+  "reviewed_by": null,
+  "reviewed_at": null,
+  "notes": "Mentions and hashtags only; rule 6 metadata-only input."
+}
