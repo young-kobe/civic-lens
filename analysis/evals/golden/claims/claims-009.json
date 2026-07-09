@@ -1,0 +1,20 @@
+{
+  "id": "claims-009",
+  "task": "claim_extraction",
+  "input_text": "The White House announced a 95 billion dollar aid package for Ukraine and Israel after months of congressional gridlock, with 61 Republicans joining Democrats in the final vote.",
+  "input_provenance": "synthetic-draft",
+  "expected_claims": [
+    {
+      "claim": "The White House announced a 95 billion dollar aid package for Ukraine and Israel",
+      "evidence_span": "announced a 95 billion dollar aid package for Ukraine and Israel"
+    },
+    {
+      "claim": "61 Republicans joined Democrats to pass the foreign aid package",
+      "evidence_span": "61 Republicans joining Democrats in the final vote"
+    }
+  ],
+  "review_status": "PENDING_HUMAN_REVIEW",
+  "reviewed_by": null,
+  "reviewed_at": null,
+  "notes": "Bipartisan-vote lede; tests cross-party claim."
+}

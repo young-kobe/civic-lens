@@ -1,0 +1,16 @@
+{
+  "id": "claims-016",
+  "task": "claim_extraction",
+  "input_text": "Just confirmed: the county is switching back to hand-marked paper ballots for November after the tabulator lawsuit.",
+  "input_provenance": "synthetic-draft",
+  "expected_claims": [
+    {
+      "claim": "The county is switching to hand-marked paper ballots for November",
+      "evidence_span": "switching back to hand-marked paper ballots for November"
+    }
+  ],
+  "review_status": "PENDING_HUMAN_REVIEW",
+  "reviewed_by": null,
+  "reviewed_at": null,
+  "notes": "Election-administration claim in social register."
+}

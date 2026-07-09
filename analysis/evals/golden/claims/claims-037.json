@@ -1,0 +1,11 @@
+{
+  "id": "claims-037",
+  "task": "claim_extraction",
+  "input_text": "Imagine still trusting anything these people say at this point.",
+  "input_provenance": "synthetic-draft",
+  "expected_claims": [],
+  "review_status": "PENDING_HUMAN_REVIEW",
+  "reviewed_by": null,
+  "reviewed_at": null,
+  "notes": "Vague distrust; no referent, no event."
+}

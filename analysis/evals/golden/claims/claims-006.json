@@ -1,0 +1,20 @@
+{
+  "id": "claims-006",
+  "task": "claim_extraction",
+  "input_text": "House Republicans released a report Thursday alleging the FBI suppressed evidence in the Hunter Biden probe. The bureau denied the allegation within hours, calling the report politically motivated.",
+  "input_provenance": "synthetic-draft",
+  "expected_claims": [
+    {
+      "claim": "House Republicans alleged the FBI suppressed evidence in the Hunter Biden probe",
+      "evidence_span": "alleging the FBI suppressed evidence in the Hunter Biden probe"
+    },
+    {
+      "claim": "The FBI denied suppressing evidence in the Hunter Biden probe",
+      "evidence_span": "The bureau denied the allegation within hours"
+    }
+  ],
+  "review_status": "PENDING_HUMAN_REVIEW",
+  "reviewed_by": null,
+  "reviewed_at": null,
+  "notes": "Allegation-and-denial pair; extractor should keep both as attributed claims."
+}

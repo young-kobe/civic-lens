@@ -1,0 +1,11 @@
+{
+  "id": "claims-035",
+  "task": "claim_extraction",
+  "input_text": "Just finished a 10k run and the sunrise was incredible this morning.",
+  "input_provenance": "synthetic-draft",
+  "expected_claims": [],
+  "review_status": "PENDING_HUMAN_REVIEW",
+  "reviewed_by": null,
+  "reviewed_at": null,
+  "notes": "Non-political content; extractor should return empty."
+}

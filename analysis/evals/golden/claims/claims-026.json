@@ -1,0 +1,20 @@
+{
+  "id": "claims-026",
+  "task": "claim_extraction",
+  "input_text": "Democrats spent 40 million on that special election and still lost by 12. At some point the message is the problem.",
+  "input_provenance": "synthetic-draft",
+  "expected_claims": [
+    {
+      "claim": "Democrats spent 40 million dollars on the special election",
+      "evidence_span": "spent 40 million on that special election"
+    },
+    {
+      "claim": "Democrats lost the special election by 12 points",
+      "evidence_span": "still lost by 12"
+    }
+  ],
+  "review_status": "PENDING_HUMAN_REVIEW",
+  "reviewed_by": null,
+  "reviewed_at": null,
+  "notes": "Two numeric claims inside a strategy take."
+}

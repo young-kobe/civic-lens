@@ -1,0 +1,16 @@
+{
+  "id": "claims-024",
+  "task": "claim_extraction",
+  "input_text": "Sick of hearing about unity from a party that stripped committee assignments from anyone who voted for the infrastructure deal.",
+  "input_provenance": "synthetic-draft",
+  "expected_claims": [
+    {
+      "claim": "The party stripped committee assignments from members who voted for the infrastructure deal",
+      "evidence_span": "stripped committee assignments from anyone who voted for the infrastructure deal"
+    }
+  ],
+  "review_status": "PENDING_HUMAN_REVIEW",
+  "reviewed_by": null,
+  "reviewed_at": null,
+  "notes": "Claim embedded in a complaint clause."
+}
