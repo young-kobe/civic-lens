@@ -1,0 +1,16 @@
+{
+  "id": "claims-014",
+  "task": "claim_extraction",
+  "input_text": "Reminder that the governor vetoed the school lunch funding bill twice before signing it in an election year.",
+  "input_provenance": "synthetic-draft",
+  "expected_claims": [
+    {
+      "claim": "The governor vetoed the school lunch funding bill twice before signing it",
+      "evidence_span": "vetoed the school lunch funding bill twice before signing it"
+    }
+  ],
+  "review_status": "PENDING_HUMAN_REVIEW",
+  "reviewed_by": null,
+  "reviewed_at": null,
+  "notes": "Insinuating framing around a checkable event claim."
+}

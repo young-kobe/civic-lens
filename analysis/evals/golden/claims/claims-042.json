@@ -1,0 +1,24 @@
+{
+  "id": "claims-042",
+  "task": "claim_extraction",
+  "input_text": "She won the district by 9 points in 2022, lost it by 2 in 2024, and now polls show her down double digits.",
+  "input_provenance": "synthetic-draft",
+  "expected_claims": [
+    {
+      "claim": "She won the district by 9 points in 2022",
+      "evidence_span": "won the district by 9 points in 2022"
+    },
+    {
+      "claim": "She lost the district by 2 points in 2024",
+      "evidence_span": "lost it by 2 in 2024"
+    },
+    {
+      "claim": "Polls show her down by double digits",
+      "evidence_span": "polls show her down double digits"
+    }
+  ],
+  "review_status": "PENDING_HUMAN_REVIEW",
+  "reviewed_by": null,
+  "reviewed_at": null,
+  "notes": "Three parallel numeric claims; tests the 3-claim cap boundary."
+}

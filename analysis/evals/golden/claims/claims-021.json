@@ -1,0 +1,16 @@
+{
+  "id": "claims-021",
+  "task": "claim_extraction",
+  "input_text": "Absolutely shameful that the Senate blocked the veterans dental care bill AGAIN. These people vote themselves raises but can't fund vets.",
+  "input_provenance": "synthetic-draft",
+  "expected_claims": [
+    {
+      "claim": "The Senate blocked the veterans dental care bill again",
+      "evidence_span": "the Senate blocked the veterans dental care bill"
+    }
+  ],
+  "review_status": "PENDING_HUMAN_REVIEW",
+  "reviewed_by": null,
+  "reviewed_at": null,
+  "notes": "Outrage framing; only the vote event is a claim, not the invective."
+}

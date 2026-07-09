@@ -1,0 +1,11 @@
+{
+  "id": "claims-044",
+  "task": "claim_extraction",
+  "input_text": "But what about the emails? What about the laptop? What about the classified documents in the garage? Funny how that all disappeared from the news.",
+  "input_provenance": "synthetic-draft",
+  "expected_claims": [],
+  "review_status": "PENDING_HUMAN_REVIEW",
+  "reviewed_by": null,
+  "reviewed_at": null,
+  "notes": "Whataboutism barrage phrased as questions; rule 5 excludes questions, insinuation carries no discrete claim."
+}

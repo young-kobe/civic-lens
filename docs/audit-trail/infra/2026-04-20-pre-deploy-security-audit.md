@@ -1,6 +1,6 @@
-# Civic Lens Pre-Deploy Security — Consolidated 2026-04-20
+# 2026-04-20 — Pre-deploy security audit (consolidated)
 
-Supersedes `04_19_2026_security.md` (general audit) and the per-layer re-audits run on 2026-04-20 before the first `civic-lens.info` cutover. Severity legend identical: **CRITICAL** = deploy-blocker. **HIGH** = fix before any public traffic. **MEDIUM** = fix in the first iteration after launch.
+Moved from the retired `docs/audits/` directory (2026-07-09); "audit §N" comments in the Go, Python, and CI code cite this file's section numbers. Supersedes the 2026-04-19 general/security audits and the per-layer re-audits run on 2026-04-20 before the first `civic-lens.info` cutover — those files were deleted in the same cleanup; their remediations are recorded in walkthroughs 044-047. Severity legend identical: **CRITICAL** = deploy-blocker. **HIGH** = fix before any public traffic. **MEDIUM** = fix in the first iteration after launch.
 
 ## 0. What's already landed
 

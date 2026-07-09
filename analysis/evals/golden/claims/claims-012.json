@@ -1,0 +1,16 @@
+{
+  "id": "claims-012",
+  "task": "claim_extraction",
+  "input_text": "Biden just signed the TikTok divest-or-ban bill into law. 270 days for ByteDance to sell.",
+  "input_provenance": "synthetic-draft",
+  "expected_claims": [
+    {
+      "claim": "Biden signed the TikTok divest-or-ban bill into law",
+      "evidence_span": "signed the TikTok divest-or-ban bill into law"
+    }
+  ],
+  "review_status": "PENDING_HUMAN_REVIEW",
+  "reviewed_by": null,
+  "reviewed_at": null,
+  "notes": "Short post; second sentence is detail, arguably not a separate claim."
+}
