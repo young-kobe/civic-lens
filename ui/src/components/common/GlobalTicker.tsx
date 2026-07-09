@@ -40,6 +40,13 @@ interface GlobalTickerProps {
     accentColor?: string;
     /** Accessible label for the whole strip. */
     ariaLabel?: string;
+    /**
+     * Optional trailing affordance (e.g. a MethodPopover) that explains how
+     * to read the strip's numbers. Rendered inline before the timestamp so
+     * the key travels with the ticker wherever it appears — see the Overall
+     * Tone page, which uses it to define "net tone" and "GOP stance".
+     */
+    legend?: ReactNode;
 }
 
 function toneColor(tone: TickerTone | undefined): string | undefined {
@@ -62,7 +69,7 @@ function toneColor(tone: TickerTone | undefined): string | undefined {
  * of labeled values; the ticker handles layout, dividers, and typographic
  * treatment. Keep each label terse — this is a glance, not a table.
  */
-export function GlobalTicker({ items, refreshed, accentColor, ariaLabel }: GlobalTickerProps) {
+export function GlobalTicker({ items, refreshed, accentColor, ariaLabel, legend }: GlobalTickerProps) {
     const style: CSSProperties = accentColor
         ? { borderLeftColor: accentColor }
         : {};
@@ -105,6 +112,9 @@ export function GlobalTicker({ items, refreshed, accentColor, ariaLabel }: Globa
                     </span>
                 );
             })}
+            {legend && (
+                <span className="global-ticker-legend">{legend}</span>
+            )}
             {refreshed && (
                 <span className="global-ticker-timestamp" aria-label={`Refreshed ${refreshed}`}>
                     <span className="tick-live" aria-hidden />

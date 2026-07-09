@@ -6,9 +6,7 @@ import {
     entityExternalUrl,
 } from '../components/common';
 import type { TickerItem } from '../components/common';
-import { Heatmap } from '../components/charts';
 import { fetchBotActivity, fetchSnapshotStatus, type SnapshotStatus } from '../services/api';
-import { asOfTodayEyebrow } from '../services/timeWindow';
 import { useFetch } from '../services/useFetch';
 import { formatRefreshedAgo, getSnapshotTimestamp } from '../services/freshness';
 import { formatPct } from '../services/format';
@@ -16,7 +14,7 @@ import { dedupeById } from '../services/dedupe';
 import { COLORS } from '../theme';
 import type {
     BehavioralSignals, BotData, BotEntityItem, BotOverview, ConfidenceLevel,
-    CoordinationStats, Filters, NarrativeAmplification,
+    CoordinationStats, NarrativeAmplification,
 } from '../types';
 
 // --------------------------------------------------------------------------- //
@@ -62,7 +60,7 @@ function BotThreeWayGrid({ overview }: { overview: BotOverview }) {
         <ThreeWayGrid>
             <ThreeWayColumn
                 header="The News"
-                byline="Outlets whose scanned posts classify as bot — should skew near 0%."
+                byline="Outlets ranked by the share of their scanned posts that classify as bot."
                 empty="No news posts scored for bot detection."
                 isEmpty={outlets.length === 0}
             >
@@ -78,7 +76,7 @@ function BotThreeWayGrid({ overview }: { overview: BotOverview }) {
             </ThreeWayColumn>
             <ThreeWayColumn
                 header="The Public"
-                byline="Subreddits + the broader X user catch-all — where bot amplification actually lives."
+                byline="Subreddits + the broader X user catch-all, ranked by bot-classification rate."
                 empty="No public social posts scored for bot detection."
                 isEmpty={publics.length === 0}
             >
@@ -157,18 +155,18 @@ function buildBotTickerItems(overview: BotOverview): { items: TickerItem[]; acce
         {
             label: 'Automation Rate',
             value: formatPct(rate),
-            hint: 'of accounts',
+            hint: 'of posts',
             tone: rateTone as TickerItem['tone'],
             emphasis: true,
             ariaLabel: `Suspected automation rate ${rate.toFixed(1)} percent`,
         },
         {
-            label: 'Coordination Idx',
+            label: 'Coordination',
             value: overview.coordinationIndex.toFixed(2),
-            hint: '0–1',
+            hint: '0–1 scale',
         },
         {
-            label: 'Flagged Accounts',
+            label: 'Flagged Posts',
             value: overview.totalFlaggedAccounts.toLocaleString(),
         },
         {
@@ -198,7 +196,7 @@ function BotOverviewMetrics({ data }: BotOverviewMetricsProps) {
             <MetricCard
                 label="Suspected Automation Rate"
                 value={formatPct(data.suspectedAutomationRate, { decimals: 0 })}
-                subtitle="of analyzed accounts"
+                subtitle="of analyzed posts"
                 className={data.suspectedAutomationRate > 10 ? 'border-warning' : ''}
             />
             <MetricCard
@@ -213,7 +211,7 @@ function BotOverviewMetrics({ data }: BotOverviewMetricsProps) {
                     ))}
                 </div>
                 <div className="eyebrow mt-3 num">
-                    {data.totalFlaggedAccounts.toLocaleString()} accounts flagged
+                    {data.totalFlaggedAccounts.toLocaleString()} posts flagged
                 </div>
             </Card>
         </div>
@@ -413,10 +411,6 @@ function CoordinationSummary({ data }: CoordinationSummaryProps) {
         >
             <div className="grid-2 gap-3">
                 <div className="flex flex-col gap-2">
-                    <div className="flex justify-between items-center" style={{ padding: '6px 0', borderBottom: '1px solid var(--neutral-150)' }}>
-                        <span className="text-sm">Burst timing similarity</span>
-                        <span className="num font-semibold">{formatPct(data.burstTimingSimilarity * 100, { decimals: 0 })}</span>
-                    </div>
                     <div className="flex justify-between items-center" style={{ padding: '6px 0' }}>
                         <span className="text-sm">Accounts showing reuse patterns</span>
                         <span className="num font-semibold">{data.accountReuse.toLocaleString()}</span>
@@ -482,9 +476,20 @@ function BehavioralSignalsPanel({ data }: BehavioralSignalsPanelProps) {
                             </div>
                         ))}
                     </div>
-                    <div className="card-note mt-4">
-                        Young accounts (&lt;30 days) are over-represented in suspected bot activity.
-                    </div>
+                    {(() => {
+                        // Data-derived caption — no hardcoded conclusion. State
+                        // the youngest bucket's actual share, or nothing when it
+                        // is absent, rather than asserting over-representation
+                        // regardless of what the distribution shows.
+                        const youngest = data.accountAgeDistribution.find((i) => i.range.includes('<'));
+                        if (!youngest) return null;
+                        return (
+                            <div className="card-note mt-4">
+                                {formatPct(youngest.percentage, { decimals: 0 })} of suspected-bot posts came from
+                                accounts in the {youngest.range} bucket.
+                            </div>
+                        );
+                    })()}
                 </Card>
             </div>
 
@@ -528,24 +533,12 @@ function BehavioralSignalsPanel({ data }: BehavioralSignalsPanelProps) {
                 </Card>
             </div>
 
-            {/* Row: posting cadence heatmap (8) + link domain concentration (4).
-                The 24-col matrix wants width; link domains is a short list that
-                fits the narrow slot nicely. */}
-            <div className="col-span-8">
-                <Card title="Posting Cadence Heatmap">
-                    <div className="text-xs text-muted mb-2">
-                        Rows are days of the week, columns are hours (0–23, UTC). Darker cells indicate heavier
-                        posting volume among suspected-bot accounts. Clusters in off-hours (02:00–05:00 UTC) are a
-                        red flag for automation, not proof of it.
-                    </div>
-                    <Heatmap data={data.postingCadence} cellSize={12} gap={1} />
-                    <div className="card-note mt-4">
-                        Concentrated activity during off-hours (02:00–05:00 UTC) was detected in this window.
-                    </div>
-                </Card>
-            </div>
-
-            <div className="col-span-4">
+            {/* Posting-cadence heatmap dropped: the backend emits day:0 for
+                every row and buckets by server-local hour, so the viz can't
+                honestly show the per-day UTC cadence its legend claimed.
+                Re-introduce once bot.py emits real (day, hour) UTC buckets —
+                tracked in docs/todos/ui-rework.md. */}
+            <div className="col-span-6">
                 <Card title="Link Domain Concentration">
                     <div className="flex flex-col">
                         {data.linkDomainConcentration.map((item, i) => (
@@ -601,15 +594,13 @@ function SimilarityBar({ label, value, color }: SimilarityBarProps) {
     );
 }
 
-interface BotActivityProfilerProps {
-    filters: Filters;
-}
-
-function BotActivityProfiler({ filters }: BotActivityProfilerProps) {
-    // Bot activity is not time-window filtered at the API layer (it's a
-    // snapshot cache rebuilt on each pipeline run), so `filters` doesn't
-    // influence the key. If that changes, fold the relevant filter fields
-    // into the cache key.
+function BotActivityProfiler() {
+    // Bot activity is NOT time-window filtered at the API layer (it's a
+    // snapshot cache rebuilt on each pipeline run). Rather than relabel the
+    // full sample with a window the data doesn't honor, this tab takes no
+    // `filters` prop, hides the global window pills (see App.tsx), and states
+    // "full sample" outright. Windowing the API is tracked in
+    // docs/todos/ui-rework.md.
     const { data, loading, error, refetch } = useFetch<BotData>(
         () => fetchBotActivity(),
         [],
@@ -663,7 +654,7 @@ function BotActivityProfiler({ filters }: BotActivityProfilerProps) {
             <div className="col-span-12">
                 <div className="reads-as-today">
                     <span className="eyebrow reads-as-today-eyebrow">
-                        {asOfTodayEyebrow(filters.timeRange)}
+                        Full sample &middot; all collected data, not time-windowed
                     </span>
                     <p className="lead" style={{ margin: 0 }}>{readsAsToday(data)}</p>
                 </div>

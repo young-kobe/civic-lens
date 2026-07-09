@@ -191,7 +191,7 @@ function App() {
             case 'propaganda':
                 return <Propaganda filters={filters} />;
             case 'bots':
-                return <BotActivityProfiler filters={filters} />;
+                return <BotActivityProfiler />;
             case 'review':
                 return ADMIN_MODE ? <Review /> : <Home onNavigate={setActiveTab} isAdmin={ADMIN_MODE} />;
             default:
@@ -263,6 +263,10 @@ function App() {
                 <GlobalFilters
                     filters={filters}
                     onFilterChange={setFilters}
+                    // Bot Detector serves the full, un-windowed sample; hide the
+                    // window pills there rather than let them relabel unchanged
+                    // numbers with a window the API doesn't honor (U-1).
+                    windowScoped={activeTab !== 'bots'}
                 />
             )}
 

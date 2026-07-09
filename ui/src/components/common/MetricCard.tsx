@@ -48,6 +48,9 @@ function MetricCard({
                     {subtitle && <span className="text-muted"> {subtitle}</span>}
                 </div>
             )}
+            {delta === undefined && subtitle && (
+                <div className="card-subtitle mt-2 text-muted">{subtitle}</div>
+            )}
         </div>
     );
 }

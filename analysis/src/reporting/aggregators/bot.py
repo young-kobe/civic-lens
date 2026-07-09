@@ -371,7 +371,6 @@ class BotAggregator:
             ),
             narrativeAmplification=narratives,
             coordinationStats=CoordinationStats(
-                burstTimingSimilarity=round(coordination_index, 2),
                 accountReuse=behavior["account_reuse"],
                 identicalTextPairs=identical_text_pairs,
                 avgPostsPerSuspectedAccount=behavior["avg_posts_per_suspected_account"],
