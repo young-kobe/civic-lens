@@ -1,0 +1,16 @@
+{
+  "id": "claims-028",
+  "task": "claim_extraction",
+  "input_text": "They booed him at the convention but the man still delivered the largest state pension fund surplus in two decades.",
+  "input_provenance": "synthetic-draft",
+  "expected_claims": [
+    {
+      "claim": "The official delivered the largest state pension fund surplus in two decades",
+      "evidence_span": "delivered the largest state pension fund surplus in two decades"
+    }
+  ],
+  "review_status": "PENDING_HUMAN_REVIEW",
+  "reviewed_by": null,
+  "reviewed_at": null,
+  "notes": "Backhanded praise anchoring a superlative claim."
+}

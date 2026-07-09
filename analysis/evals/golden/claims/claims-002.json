@@ -1,0 +1,24 @@
+{
+  "id": "claims-002",
+  "task": "claim_extraction",
+  "input_text": "Inflation cooled to 2.9 percent in June, the Labor Department reported, marking the first reading under 3 percent since 2021. Democrats immediately credited the administration's economic agenda.",
+  "input_provenance": "synthetic-draft",
+  "expected_claims": [
+    {
+      "claim": "Inflation fell to 2.9 percent in June",
+      "evidence_span": "Inflation cooled to 2.9 percent in June"
+    },
+    {
+      "claim": "June was the first inflation reading under 3 percent since 2021",
+      "evidence_span": "first reading under 3 percent since 2021"
+    },
+    {
+      "claim": "Democrats credited the administration's economic agenda for cooling inflation",
+      "evidence_span": "Democrats immediately credited the administration's economic agenda"
+    }
+  ],
+  "review_status": "PENDING_HUMAN_REVIEW",
+  "reviewed_by": null,
+  "reviewed_at": null,
+  "notes": "Three claims incl. a statistic; tests numeric fidelity."
+}

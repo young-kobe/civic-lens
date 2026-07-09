@@ -1,0 +1,20 @@
+{
+  "id": "claims-010",
+  "task": "claim_extraction",
+  "input_text": "Senator Manchin announced he will not seek reelection, giving Republicans a near-certain pickup in West Virginia and narrowing Democrats' path to holding the Senate.",
+  "input_provenance": "synthetic-draft",
+  "expected_claims": [
+    {
+      "claim": "Manchin will not seek reelection",
+      "evidence_span": "announced he will not seek reelection"
+    },
+    {
+      "claim": "Manchin's retirement gives Republicans a likely Senate pickup in West Virginia",
+      "evidence_span": "giving Republicans a near-certain pickup in West Virginia"
+    }
+  ],
+  "review_status": "PENDING_HUMAN_REVIEW",
+  "reviewed_by": null,
+  "reviewed_at": null,
+  "notes": "Retirement announcement plus consequence claim. Claim 1 sits at the 4-word validator floor."
+}

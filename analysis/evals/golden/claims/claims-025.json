@@ -1,0 +1,16 @@
+{
+  "id": "claims-025",
+  "task": "claim_extraction",
+  "input_text": "My red state neighbors deserve to know the new abortion law has zero exceptions for rape. Zero. Read the bill text.",
+  "input_provenance": "synthetic-draft",
+  "expected_claims": [
+    {
+      "claim": "The state's new abortion law has no exceptions for rape",
+      "evidence_span": "the new abortion law has zero exceptions for rape"
+    }
+  ],
+  "review_status": "PENDING_HUMAN_REVIEW",
+  "reviewed_by": null,
+  "reviewed_at": null,
+  "notes": "Advocacy register; statutory-content claim."
+}
