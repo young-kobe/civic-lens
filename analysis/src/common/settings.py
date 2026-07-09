@@ -50,9 +50,19 @@ class Settings(BaseSettings):
     gemini_temperature: float = 0.0
     llm_enabled: bool = True  # LLM is primary classifier; heuristics are supplemental
     
-    # LLM Backend Selection: "gemini" or "ollama"
+    # LLM Backend Selection: "gemini", "ollama", or "openai_compat"
     llm_backend: str = "ollama"
-    
+
+    # OpenAI-compatible backend (CIVIC_LLM_BACKEND=openai_compat). Speaks the
+    # /v1 REST surface, so any OpenAI-compatible server slots in behind it —
+    # LiteLLM, vLLM, a serverless GPU endpoint, or a custom token router —
+    # with no engine code changes. Unused unless llm_backend selects it.
+    llm_base_url: str = ""
+    llm_api_key: str = ""
+    llm_model: str = ""
+    llm_embedding_model: str = ""
+    llm_timeout: int = 120
+
     # Ollama Config (for local LLM on Orin Nano or other local inference)
     ollama_host: str = "http://localhost:11434"
     # ollama_model: str = "qwen2.5:0.5b"
