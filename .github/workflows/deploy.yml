@@ -25,7 +25,8 @@ jobs:
           cache-dependency-path: analysis/requirements.txt
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
+          # Keep in sync with ingest/go.mod and ingest/Dockerfile.
+          go-version: '1.24'
           cache: true
           cache-dependency-path: ingest/go.sum
       - uses: actions/setup-node@v4
@@ -56,9 +57,61 @@ jobs:
           npm run typecheck
           npm run build
 
+  images:
+    # Build + push the three runtime images. deploy.sh on the box only ever
+    # pulls — no compilation happens on the CPX21. :sha tags stay available
+    # for rollback; :latest is what docker-compose.yml tracks.
+    name: Build + push images
+    needs: gate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build + push ingest image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ingest/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/young-kobe/civic-lens-ingest:latest
+            ghcr.io/young-kobe/civic-lens-ingest:${{ github.sha }}
+          cache-from: type=gha,scope=ingest
+          cache-to: type=gha,mode=max,scope=ingest
+      - name: Build + push analysis image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: analysis/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/young-kobe/civic-lens-analysis:latest
+            ghcr.io/young-kobe/civic-lens-analysis:${{ github.sha }}
+          cache-from: type=gha,scope=analysis
+          cache-to: type=gha,mode=max,scope=analysis
+      - name: Build + push web image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/docker/Dockerfile.web
+          push: true
+          tags: |
+            ghcr.io/young-kobe/civic-lens-web:latest
+            ghcr.io/young-kobe/civic-lens-web:${{ github.sha }}
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,mode=max,scope=web
+
   deploy:
     name: Deploy to Hetzner
-    needs: gate
+    needs: [gate, images]
     runs-on: ubuntu-latest
     environment:
       name: production

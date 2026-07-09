@@ -1,0 +1,14 @@
+# Static UI baked into a Caddy image. Build context is the REPO ROOT:
+#   docker build -f deploy/docker/Dockerfile.web .
+# TLS material (origin cert/key + Cloudflare origin-pull CA) is NEVER baked
+# in — it is bind-mounted from /etc/caddy on the host (see docker-compose.yml).
+FROM node:20-slim AS ui
+WORKDIR /ui
+COPY ui/package.json ui/package-lock.json ./
+RUN npm ci
+COPY ui/ ./
+RUN npm run build
+
+FROM caddy:2.10
+COPY deploy/caddy/Caddyfile /etc/caddy/Caddyfile
+COPY --from=ui /ui/dist /srv/ui

@@ -1,0 +1,31 @@
+# Shared build-context excludes for all three images (build context = repo root).
+# Runtime data never ships in an image — it lives on the host bind mount.
+.git
+.github
+.agent
+.claude
+docs
+deploy/systemd
+deploy/caddy/Caddyfile.local*
+*.db
+*.db-wal
+*.db-shm
+civic-ingest.exe
+civic-ingest
+
+# Runtime data directories (gitignored on disk, but present in dev checkouts)
+data/raw
+data/cache
+data/test_cache_api
+data/civic_lens.db*
+
+# Language toolchain artifacts
+analysis/.venv
+.venv
+**/__pycache__
+ui/node_modules
+ui/dist
+
+# Local env + secrets
+.env
+docker-compose.override.yml

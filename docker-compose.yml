@@ -1,0 +1,110 @@
+# Civic Lens production stack (Hetzner CPX21). Local-dev overrides live in
+# docker-compose.override.example.yml — copy to docker-compose.override.yml
+# (gitignored); production never has an override file.
+#
+# Shape (mirrors docs/deployment/plan.md section 2):
+#   Always-on:  caddy (TLS + static UI + /api reverse proxy), api (uvicorn),
+#               litestream (continuous SQLite replication to R2).
+#   One-shots:  ingest + analyze under the "jobs" profile — never started by
+#               `up`, only by the systemd timers as
+#               `docker compose run --rm <service> ...` so the existing
+#               OnFailure alert plumbing keeps watching exit codes.
+#
+# Data contract: the host dir /var/lib/civic-lens is bind-mounted at the SAME
+# path inside every container, so the absolute paths in /etc/civic-lens.env
+# are valid on the host and in containers alike, and host-native tooling
+# (backup.sh, sqlite3 spot checks) keeps working. WAL SQLite over a same-host
+# bind mount is safe — the WAL hazard only exists across VM/network-fs
+# boundaries (e.g. Windows-mounted paths; see the override example).
+#
+# caddy runs with host networking: Docker-published ports bypass ufw, and the
+# firewall pins :80/:443 to Cloudflare ranges — host networking preserves
+# those semantics. The api publishes on loopback only, which caddy (being in
+# the host namespace) reaches at 127.0.0.1:8000 exactly like the systemd era.
+#
+# CIVIC_ENV_FILE exists so dev checkouts can point at a local .env; unset it
+# in production and the default /etc/civic-lens.env applies.
+
+x-app-common: &app-common
+  env_file: ${CIVIC_ENV_FILE:-/etc/civic-lens.env}
+  volumes:
+    - /var/lib/civic-lens:/var/lib/civic-lens
+  working_dir: /var/lib/civic-lens
+  logging:
+    driver: json-file
+    options:
+      max-size: 10m
+      max-file: "3"
+
+services:
+  caddy:
+    image: ghcr.io/young-kobe/civic-lens-web:latest
+    network_mode: host
+    restart: unless-stopped
+    volumes:
+      # Install-time TLS material — origin cert/key + Cloudflare origin-pull
+      # CA. Never in git, never in images (see deploy/README.md).
+      - /etc/caddy/origin.crt:/etc/caddy/origin.crt:ro
+      - /etc/caddy/origin.key:/etc/caddy/origin.key:ro
+      - /etc/caddy/cloudflare-authenticated-origin-pull.pem:/etc/caddy/cloudflare-authenticated-origin-pull.pem:ro
+      - /var/log/caddy:/var/log/caddy
+      - caddy_state:/data
+    mem_limit: 256m
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+  api:
+    <<: *app-common
+    image: ghcr.io/young-kobe/civic-lens-analysis:latest
+    # Bind 0.0.0.0 INSIDE the container (the loopback-only exposure is the
+    # published-port line below). CIVIC_API_HOST/PORT from the env file are
+    # intentionally not used here — container networking supersedes them.
+    command: uvicorn analysis.src.api.server:app --host 0.0.0.0 --port 8000 --workers 1 --access-log
+    ports:
+      - "127.0.0.1:8000:8000"
+    restart: unless-stopped
+    mem_limit: 512m
+    cpus: 0.8
+
+  litestream:
+    image: litestream/litestream:0.3
+    command: replicate -config /etc/litestream.yml
+    env_file: ${CIVIC_ENV_FILE:-/etc/civic-lens.env}
+    volumes:
+      - /var/lib/civic-lens:/var/lib/civic-lens
+      - ./deploy/litestream.yml:/etc/litestream.yml:ro
+    restart: unless-stopped
+    mem_limit: 256m
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+  # One-shots below: `docker compose run --rm ingest <subcommand> ...` /
+  # `docker compose run --rm analyze`. The "jobs" profile keeps them out of
+  # `up -d`; `compose run` activates the profile implicitly.
+  ingest:
+    <<: *app-common
+    image: ghcr.io/young-kobe/civic-lens-ingest:latest
+    profiles: [jobs]
+    mem_limit: 512m
+    cpus: 0.8
+
+  analyze:
+    <<: *app-common
+    image: ghcr.io/young-kobe/civic-lens-analysis:latest
+    profiles: [jobs]
+    command: python -m analysis.src.scheduler.job_runner
+    environment:
+      # Soft wall-clock budget — same rationale as the old systemd
+      # Environment= line; the hard ceiling stays in the timer unit.
+      CIVIC_BUDGET_SECONDS: "6900"
+    mem_limit: 1g
+    cpus: 0.9
+
+volumes:
+  caddy_state:
