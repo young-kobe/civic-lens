@@ -1,0 +1,20 @@
+{
+  "id": "claims-007",
+  "task": "claim_extraction",
+  "input_text": "A federal judge in Texas blocked the administration's student loan forgiveness plan on Monday, ruling that the Education Department exceeded its statutory authority.",
+  "input_provenance": "synthetic-draft",
+  "expected_claims": [
+    {
+      "claim": "A federal judge in Texas blocked the student loan forgiveness plan",
+      "evidence_span": "blocked the administration's student loan forgiveness plan"
+    },
+    {
+      "claim": "The judge ruled the Education Department exceeded its statutory authority",
+      "evidence_span": "ruling that the Education Department exceeded its statutory authority"
+    }
+  ],
+  "review_status": "PENDING_HUMAN_REVIEW",
+  "reviewed_by": null,
+  "reviewed_at": null,
+  "notes": "Judicial action; two claims from one sentence."
+}

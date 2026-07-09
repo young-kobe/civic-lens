@@ -1,0 +1,16 @@
+{
+  "id": "claims-013",
+  "task": "claim_extraction",
+  "input_text": "The CBO says the new tax plan adds 4.6 trillion to the deficit over ten years. Read the report yourselves people.",
+  "input_provenance": "synthetic-draft",
+  "expected_claims": [
+    {
+      "claim": "The CBO estimated the tax plan adds 4.6 trillion dollars to the deficit over ten years",
+      "evidence_span": "adds 4.6 trillion to the deficit over ten years"
+    }
+  ],
+  "review_status": "PENDING_HUMAN_REVIEW",
+  "reviewed_by": null,
+  "reviewed_at": null,
+  "notes": "Attributed statistic in casual register."
+}

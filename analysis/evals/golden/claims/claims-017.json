@@ -1,0 +1,20 @@
+{
+  "id": "claims-017",
+  "task": "claim_extraction",
+  "input_text": "The mayor's office quietly deleted the crime statistics page a week after the audit found the numbers were understated.",
+  "input_provenance": "synthetic-draft",
+  "expected_claims": [
+    {
+      "claim": "The mayor's office deleted the crime statistics page after an audit",
+      "evidence_span": "deleted the crime statistics page"
+    },
+    {
+      "claim": "An audit found the city's crime numbers were understated",
+      "evidence_span": "the audit found the numbers were understated"
+    }
+  ],
+  "review_status": "PENDING_HUMAN_REVIEW",
+  "reviewed_by": null,
+  "reviewed_at": null,
+  "notes": "Two claims wrapped in insinuating framing."
+}

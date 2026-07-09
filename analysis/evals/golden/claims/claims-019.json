@@ -1,0 +1,16 @@
+{
+  "id": "claims-019",
+  "task": "claim_extraction",
+  "input_text": "The DNC platform committee voted down the Medicare expansion amendment 98-58 tonight.",
+  "input_provenance": "synthetic-draft",
+  "expected_claims": [
+    {
+      "claim": "The DNC platform committee voted down the Medicare expansion amendment 98-58",
+      "evidence_span": "voted down the Medicare expansion amendment 98-58"
+    }
+  ],
+  "review_status": "PENDING_HUMAN_REVIEW",
+  "reviewed_by": null,
+  "reviewed_at": null,
+  "notes": "Intra-party procedural claim with vote count."
+}

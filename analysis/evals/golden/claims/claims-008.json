@@ -1,0 +1,20 @@
+{
+  "id": "claims-008",
+  "task": "claim_extraction",
+  "input_text": "Unemployment rose to 4.3 percent in July while wage growth slowed to its weakest pace in three years, complicating the Federal Reserve's September rate decision.",
+  "input_provenance": "synthetic-draft",
+  "expected_claims": [
+    {
+      "claim": "Unemployment rose to 4.3 percent in July",
+      "evidence_span": "Unemployment rose to 4.3 percent in July"
+    },
+    {
+      "claim": "July wage growth was the weakest in three years",
+      "evidence_span": "wage growth slowed to its weakest pace in three years"
+    }
+  ],
+  "review_status": "PENDING_HUMAN_REVIEW",
+  "reviewed_by": null,
+  "reviewed_at": null,
+  "notes": "Economic statistics; two numeric claims."
+}

@@ -1,0 +1,16 @@
+{
+  "id": "claims-027",
+  "task": "claim_extraction",
+  "input_text": "Notice how the border encounters number dropped 40 percent the month they finally reinstated the asylum restrictions? Almost like policy matters.",
+  "input_provenance": "synthetic-draft",
+  "expected_claims": [
+    {
+      "claim": "Border encounters dropped 40 percent after asylum restrictions were reinstated",
+      "evidence_span": "border encounters number dropped 40 percent"
+    }
+  ],
+  "review_status": "PENDING_HUMAN_REVIEW",
+  "reviewed_by": null,
+  "reviewed_at": null,
+  "notes": "Causal insinuation; the measurable drop is the claim."
+}

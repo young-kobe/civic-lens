@@ -1,0 +1,16 @@
+{
+  "id": "claims-043",
+  "task": "claim_extraction",
+  "input_text": "According to the leaked memo, the campaign plans to pull ad spending from Arizona entirely after Labor Day.",
+  "input_provenance": "synthetic-draft",
+  "expected_claims": [
+    {
+      "claim": "The campaign plans to pull Arizona ad spending after Labor Day",
+      "evidence_span": "pull ad spending from Arizona entirely after Labor Day"
+    }
+  ],
+  "review_status": "PENDING_HUMAN_REVIEW",
+  "reviewed_by": null,
+  "reviewed_at": null,
+  "notes": "Sourced-to-leak claim; attribution should not block extraction."
+}

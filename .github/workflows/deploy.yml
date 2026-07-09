@@ -41,6 +41,7 @@ jobs:
           python -m pip install -r analysis/requirements.txt pip-audit
           pip-audit --requirement analysis/requirements.txt --strict
           python -m unittest discover analysis/tests
+          python -m analysis.evals.run_eval --gate
       - name: Go tests + build
         working-directory: ingest
         run: |
