@@ -45,6 +45,7 @@ X_AUTHOR_JOIN_SQL = (
 def get_connection(db_path: str):
     """Context manager for database connections."""
     conn = sqlite3.connect(db_path)
+    conn.execute("PRAGMA foreign_keys = ON")  # match Go ingestor (audit D-5)
     try:
         yield conn
     finally:

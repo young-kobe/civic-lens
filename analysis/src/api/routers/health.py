@@ -18,6 +18,7 @@ router = APIRouter(tags=["health"])
 def _check_db(db_path: str) -> bool:
     try:
         conn = sqlite3.connect(db_path, timeout=1.0)
+        conn.execute("PRAGMA foreign_keys = ON")  # match Go ingestor (audit D-5)
         try:
             conn.execute("SELECT 1").fetchone()
         finally:

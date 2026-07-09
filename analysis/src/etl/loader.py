@@ -131,6 +131,11 @@ class ContentLoader:
         conn = sqlite3.connect(self.db_path, check_same_thread=False)
         conn.execute(f"PRAGMA busy_timeout = {SQLITE_BUSY_TIMEOUT_MS}")
         conn.execute("PRAGMA journal_mode = WAL")
+        # Match the Go ingestor, which opens with foreign_keys(on). sqlite3
+        # defaults FK enforcement OFF, so without this the loader's
+        # DELETE FROM docs and every FK-bearing child write run unenforced
+        # (audit D-5).
+        conn.execute("PRAGMA foreign_keys = ON")
         try:
             yield conn
         finally:
@@ -325,8 +330,8 @@ class ContentLoader:
         existing_idents = {row[0] for row in cursor.fetchall()}
 
         insert_query = """
-            INSERT INTO docs (source_type, ident, domain_or_subreddit, published_at, text, raw_hash, metadata_json, place_country_code, etl_version)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO docs (source_type, ident, domain_or_subreddit, published_at, text, raw_hash, metadata_json, etl_version)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """
         batch: List[tuple] = []
         new_docs = 0
@@ -363,9 +368,12 @@ class ContentLoader:
                 "user_verified_type": verified_type,
             }
 
+            # place_country_code stays in metadata_json (bot.py reads it from
+            # there for the foreign-origin flag); the dropped docs column
+            # (audit D-10) is no longer written.
             batch.append((
                 "x_post", tweet_id, "x.com", stamp_published_at(created_at, now), text, raw_hash,
-                json.dumps(metadata), place_country_code, ETL_VERSION,
+                json.dumps(metadata), ETL_VERSION,
             ))
             existing_idents.add(tweet_id)
 

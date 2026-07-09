@@ -684,10 +684,16 @@ class AnalysisJobRunner:
             self.cache.save(f"sentiment_{window}", sentiment.to_dict(), doc_count=sentiment.overview.volume)
             results[f"sentiment_{window}"] = sentiment.overview.volume
 
-        # Bot Activity (not time-windowed)
-        bot_activity = self.bot_agg.get_bot_activity()
-        self.cache.save("bot_activity", bot_activity.to_dict(), doc_count=bot_activity.overview.totalFlaggedAccounts)
-        results["bot_activity"] = 1
+        # Bot Activity — cache all time windows (audit U-1a; the endpoint now
+        # applies a published_at cutoff per window instead of relabeling the
+        # full sample with the selected pill).
+        for window in time_windows:
+            bot_activity = self.bot_agg.get_bot_activity(time_window=window)
+            self.cache.save(
+                f"bot_activity_{window}", bot_activity.to_dict(),
+                doc_count=bot_activity.overview.totalFlaggedAccounts,
+            )
+            results[f"bot_activity_{window}"] = bot_activity.overview.totalFlaggedAccounts
 
         # Narratives — cache top 100 per time window; the API slices to the
         # caller's requested limit (walkthrough 041). Previously the key was

@@ -1,13 +1,13 @@
 schema_version: 1
 dataset_name: news_outlets
 description: >
-  Editorial registry of the 20 major US-political news outlets Civic Lens
+  Editorial registry of the 21 major US-political news outlets Civic Lens
   tracks as first-class entities. Each entry pairs a canonical domain (so
   the Go ingestor and the Python aggregators can route docs to the entity)
   with a neutral 2-3 sentence blurb, a partisan-lean classification, and
   the citation for that classification.
 
-  Scope is deliberately narrow. 20 outlets cover the bulk of US political
+  Scope is deliberately narrow. 21 outlets cover the bulk of US political
   news discourse; every other outlet bucketed in the UI as "Other outlets".
   Adding an entry to this file is an editorial decision — it promotes the
   outlet to a first-class actor on the dashboard — so expansions should be
@@ -189,6 +189,20 @@ outlets:
     owner: NBCUniversal / Comcast (spinoff pending)
     founded: 1996
     circulation_note: ~1M average prime-time viewers (proxy)
+
+  - domain: cbsnews.com
+    also_domains: []
+    display_name: CBS News
+    blurb: >
+      The news division of CBS (Paramount Global), broadcasting since 1927
+      and one of the "Big Three" US network news operations. Its political
+      desk supplies a high-reach general-audience feed (a priority-10 RSS
+      seed for Civic Lens); AllSides rates the outlet Lean Left.
+    partisan_lean: center-left
+    lean_source: AllSides 2024 (Lean Left)
+    owner: Paramount Global
+    founded: 1927
+    circulation_note: Network broadcast + large free digital reach (proxy)
 
   - domain: bloomberg.com
     also_domains: []

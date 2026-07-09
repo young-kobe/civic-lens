@@ -24,7 +24,11 @@ import statistics
 from collections import Counter, defaultdict
 from typing import Any, Dict, Iterable, List, Tuple
 
-from analysis.src.reporting.aggregators.base import X_AUTHOR_JOIN_SQL, get_connection
+from analysis.src.reporting.aggregators.base import (
+    X_AUTHOR_JOIN_SQL,
+    get_connection,
+    get_time_cutoff,
+)
 from analysis.src.reporting.aggregators.narrative import (
     _build_doc_url,
     _build_source_label,
@@ -58,25 +62,33 @@ class BotAggregator:
     def __init__(self, db_path: str):
         self.db_path = db_path
 
-    def get_bot_activity(self) -> BotActivityData:
+    def get_bot_activity(self, time_window: str = "24h") -> BotActivityData:
+        """Aggregate bot metrics for the given window (24h|7d|30d|90d|all).
+
+        The window applies a ``published_at`` cutoff to every doc-joined query
+        so the Bot Detector's numbers actually match the selected pill
+        (audit U-1a). ``all`` (cutoff None) is the full sample.
+        """
+        cutoff = get_time_cutoff(time_window)
         with get_connection(self.db_path) as conn:
             cursor = conn.cursor()
-            bot_data = self._fetch_bot_detection_data(cursor)
+            bot_data = self._fetch_bot_detection_data(cursor, cutoff)
             behavior = self._fetch_behavior_signals(
                 cursor,
                 bot_data["bot_doc_ids"],
                 bot_data["bot_authors"],
             )
-            rollups = self._fetch_entity_rollups(cursor)
+            rollups = self._fetch_entity_rollups(cursor, cutoff)
         return self._format_bot_activity(bot_data, behavior, rollups)
 
     # ---------- Fetch ----------
 
-    def _fetch_bot_detection_data(self, cursor) -> Dict[str, Any]:
+    def _fetch_bot_detection_data(self, cursor, cutoff=None) -> Dict[str, Any]:
         """
         Returns counts + per-doc / per-author bookkeeping used downstream.
         Pre-excluded rows (inference_method='deterministic') are dropped from
         every count so the automation rate denominator is eligible posts only.
+        ``cutoff`` (unix seconds, or None) windows the scan by published_at.
         """
         # LEFT JOIN x_posts_raw + x_users_raw so bot-flagged x_posts
         # carry the author handle we need to synthesize an X permalink in
@@ -102,6 +114,8 @@ class BotAggregator:
             + """
             WHERE a.task_type = 'bot_detection'
             """
+            + ("" if cutoff is None else " AND d.published_at >= ?"),
+            () if cutoff is None else (cutoff,),
         )
         total_eligible = 0
         bot_count = 0
@@ -248,7 +262,7 @@ class BotAggregator:
 
     # ---------- Entity rollups (three-way Bot Detector grid) ----------
 
-    def _fetch_entity_rollups(self, cursor) -> Dict[str, List[BotEntityItem]]:
+    def _fetch_entity_rollups(self, cursor, cutoff=None) -> Dict[str, List[BotEntityItem]]:
         """Per-entity bot-classification rates for the three-way grid.
 
         Runs one joined scan of ai_outputs.task='bot_detection' rows together
@@ -269,6 +283,8 @@ class BotAggregator:
             + """
             WHERE a.task_type = 'bot_detection'
             """
+            + ("" if cutoff is None else " AND d.published_at >= ?"),
+            () if cutoff is None else (cutoff,),
         )
         # (tier, key) -> accumulator
         accum: Dict[Tuple[str, str], Dict[str, Any]] = {}
@@ -353,10 +369,6 @@ class BotAggregator:
         link_domain_concentration = _link_domain_concentration(bot_urls)
 
         narratives = _narrative_amplification(indicators_frequency, bot_data["bot_docs_data"])
-        posting_cadence = [
-            {"day": 0, "hour": hour, "value": count}
-            for hour, count in sorted(hourly_distribution.items())
-        ]
 
         return BotActivityData(
             overview=BotOverview(
@@ -377,7 +389,6 @@ class BotAggregator:
             ),
             behavioralSignals=BehavioralSignals(
                 accountAgeDistribution=behavior["account_age_distribution"],
-                postingCadence=posting_cadence,
                 copyPasteSimilarity=copy_paste_buckets,
                 linkDomainConcentration=link_domain_concentration,
             ),

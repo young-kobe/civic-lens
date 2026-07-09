@@ -70,8 +70,9 @@ x:
   # directory, not the process working directory) and pulls the
   # user-timeline for each handle (primary + alternates). Posts land with
   # x_posts_raw.is_official_tier=1 so the analysis layer can route them
-  # without re-running the LLM tier classifier. 5 tweets/handle × ~24
-  # distinct handles ≈ 120 tweets/run; fits comfortably in the $30 cap
+  # without re-running the LLM tier classifier. 5 tweets/handle × 37
+  # distinct handles (16 primaries + 21 alternates, per AllHandles()) ≈ 185
+  # tweets/run; fits within the $50 cap (monthly_budget_cents: 5000)
   # alongside the topic queries below. Leaving officials_list_path unset
   # uses the default `verified_officials.yaml` next to seeds.yaml.
   max_tweets_per_official: 5

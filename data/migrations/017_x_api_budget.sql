@@ -7,8 +7,9 @@
 --
 -- One row per calendar-month (UTC). The runner INSERTs on first call of the
 -- month and INCREMENTs on each subsequent call.
-
-BEGIN TRANSACTION;
+--
+-- No explicit transaction here: the migration runner wraps this file in one
+-- (audit D-6).
 
 CREATE TABLE x_api_budget (
     month_key       TEXT PRIMARY KEY,      -- 'YYYY-MM' UTC
@@ -18,7 +19,5 @@ CREATE TABLE x_api_budget (
     estimated_cents INTEGER NOT NULL DEFAULT 0,
     last_updated    INTEGER NOT NULL DEFAULT 0   -- unix epoch
 );
-
-COMMIT;
 
 INSERT OR IGNORE INTO schema_version (version, applied_at) VALUES (17, strftime('%s', 'now'));

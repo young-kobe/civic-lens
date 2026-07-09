@@ -103,3 +103,25 @@ field. No UI unit tests exist.
 - Expose per-narrative mean supporting-row confidence in the aggregator, then add
   the narrative-level confidence chip (R-3's one open sub-item — cannot be done
   honestly UI-side from the truncated `top_supporting_docs` sample).
+
+## Backend follow-ups landed on branch 40 (2026-07-09)
+
+These deferred backend items shipped with the data-contract remediation on
+branch `40-data-layer-audit` (see `../ingestion/2026-07-09-data-contract-remediation.md`).
+The UI surfaces they unblock stay a separate UI PR.
+
+- **U-1a**: `/api/bot-activity` takes a `window` param (24h|7d|30d|90d);
+  `BotAggregator.get_bot_activity(time_window=...)` applies a `published_at`
+  cutoff to its doc-joined queries, and `job_runner.save_snapshots()` caches
+  `bot_activity_{window}`. The Bot Detector can now re-enable its window pills.
+- **Heatmap (resolved by drop)**: the broken `postingCadence` field (day=0 for
+  every row, server-local hour) was removed from `bot.py` and
+  `BehavioralSignals` in `aggregator_models.py`. UI `types.ts`/`fixtures.ts`
+  still reference it — reconcile at the branch-41 merge.
+- **U-6**: sentiment overview `coverage`/`confidence` are now derived —
+  confidence from the mean per-row sentiment confidence, coverage from sample
+  size (thresholds documented in `sentiment.py`) — instead of hardcoded
+  "medium".
+- **R-3**: `NarrativeSummary` gains `mean_confidence` (mean sentiment-row
+  confidence across ALL supporting docs in the window, deduped by doc), so the
+  narrative-level confidence chip can ship honestly.
