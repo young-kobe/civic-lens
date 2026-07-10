@@ -72,8 +72,31 @@ class SentimentEntityRoutingTests(unittest.TestCase):
                 task_type TEXT,
                 output_json TEXT,
                 confidence REAL,
-                created_at INTEGER
+                created_at INTEGER,
+                label TEXT
             );
+            CREATE VIEW ai_outputs_latest AS
+            SELECT a.* FROM ai_outputs a
+            WHERE a.output_id = (
+                SELECT MAX(a2.output_id) FROM ai_outputs a2
+                WHERE a2.doc_id = a.doc_id AND a2.task_type = a.task_type
+            );
+
+            CREATE TABLE target_mentions (
+                mention_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                output_id INTEGER NOT NULL,
+                doc_id INTEGER NOT NULL,
+                raw_target TEXT NOT NULL,
+                entity_key TEXT,
+                entity_kind TEXT,
+                entity_party TEXT,
+                stance TEXT NOT NULL,
+                topic TEXT,
+                confidence REAL NOT NULL,
+                evidence_json TEXT,
+                created_at INTEGER NOT NULL
+            );
+
             CREATE TABLE x_posts_raw (
                 tweet_id TEXT PRIMARY KEY,
                 author_id TEXT,

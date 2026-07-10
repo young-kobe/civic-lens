@@ -6,7 +6,6 @@ Shared database connection and utility functions used by all domain aggregators.
 
 import contextlib
 import sqlite3
-import json
 import time
 from typing import Optional, Set
 
@@ -109,7 +108,7 @@ def fetch_task_rows(
     repeating inline. `select_clause` is the projection only (starts with
     ``SELECT ...``); the caller doesn't write the JOIN or WHERE chain.
     """
-    sql = f"{select_clause} FROM ai_outputs a JOIN docs d ON a.doc_id = d.doc_id {extra_joins} WHERE a.task_type = ?"
+    sql = f"{select_clause} FROM ai_outputs_latest a JOIN docs d ON a.doc_id = d.doc_id {extra_joins} WHERE a.task_type = ?"
     params: list = list(params_prefix) + [task_type]
     if min_confidence is not None:
         sql += " AND a.confidence >= ?"
@@ -167,24 +166,20 @@ def get_bot_flagged_doc_ids(db_path: str, min_confidence: float = 0.5) -> Set[in
 
         # Only flag social media docs as bots, never news articles.
         # Confidence filter avoids excluding content on a weak bot call.
+        # label='bot' only — 'suspicious' may be human. The canonical label
+        # column (migration 023) replaced the old two-key JSON check
+        # (label=='bot' OR is_bot==1); old rows were backfilled.
         cursor.execute("""
-            SELECT a.doc_id, a.output_json
-            FROM ai_outputs a
+            SELECT a.doc_id
+            FROM ai_outputs_latest a
             JOIN docs d ON a.doc_id = d.doc_id
             WHERE a.task_type = 'bot_detection'
+              AND a.label = 'bot'
               AND a.confidence >= ?
               AND d.source_type IN ('reddit_post', 'reddit_comment', 'x_post')
         """, (min_confidence,))
 
-        bot_docs = set()
-        for doc_id, output_json in cursor.fetchall():
-            try:
-                data = json.loads(output_json)
-                # Exclude if labeled as 'bot' (not 'suspicious' - those may be human)
-                if data.get('label') == 'bot' or data.get('is_bot') is True:
-                    bot_docs.add(doc_id)
-            except json.JSONDecodeError:
-                continue
+        bot_docs = {row[0] for row in cursor.fetchall()}
 
         logger.info(
             f"Found {len(bot_docs)} bot-flagged social media documents "

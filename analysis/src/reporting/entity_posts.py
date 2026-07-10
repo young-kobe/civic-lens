@@ -29,6 +29,7 @@ from analysis.src.reporting.aggregators.base import (
 from analysis.src.reporting.aggregators.sentiment import (
     CATCH_ALL_VERIFIED_OFFICIALS,
     _build_sample_dict,
+    _extract_topic,
 )
 from analysis.src.reporting.entity_registry import (
     CATCH_ALL_OUTLETS,
@@ -47,27 +48,14 @@ MAX_PAGE_SIZE = 50
 # set in Python per request.
 _BOT_EXCLUSION_SQL = """
     a.doc_id NOT IN (
-        SELECT b.doc_id FROM ai_outputs b
+        SELECT b.doc_id FROM ai_outputs_latest b
         JOIN docs bd ON bd.doc_id = b.doc_id
         WHERE b.task_type = 'bot_detection'
+          AND b.label = 'bot'
           AND b.confidence >= ?
           AND bd.source_type IN ('reddit_post', 'reddit_comment', 'x_post')
-          AND (
-              json_extract(b.output_json, '$.label') = 'bot'
-              OR json_extract(b.output_json, '$.is_bot') = 1
-          )
     )
 """
-
-# One sentiment row per doc: the latest output wins (reruns / prompt-version
-# bumps can leave multiple rows per doc).
-_LATEST_ROW_SQL = """
-    a.output_id = (
-        SELECT MAX(a2.output_id) FROM ai_outputs a2
-        WHERE a2.doc_id = a.doc_id AND a2.task_type = 'sentiment'
-    )
-"""
-
 
 def _with_www(domains: List[str]) -> List[str]:
     """Stored news domains are raw (may carry a www. prefix); match both."""
@@ -197,8 +185,10 @@ def fetch_entity_posts(
     cutoff = get_time_cutoff(window)
     entity_sql, entity_params = _entity_filter(kind, key)
 
+    # ai_outputs_latest guarantees one sentiment row per doc (reruns /
+    # prompt-version bumps append rows; only the newest counts).
     where = (
-        f"a.task_type = 'sentiment' AND a.confidence >= ? AND {_LATEST_ROW_SQL} "
+        f"a.task_type = 'sentiment' AND a.confidence >= ? "
         f"AND {_BOT_EXCLUSION_SQL} AND ({entity_sql})"
     )
     params: List[Any] = [min_conf, min_conf, *entity_params]
@@ -206,24 +196,35 @@ def fetch_entity_posts(
         where += " AND d.published_at >= ?"
         params.append(cutoff)
 
-    base = f"FROM ai_outputs a JOIN docs d ON a.doc_id = d.doc_id {X_AUTHOR_JOIN_SQL} WHERE {where}"
+    base = f"FROM ai_outputs_latest a JOIN docs d ON a.doc_id = d.doc_id {X_AUTHOR_JOIN_SQL} WHERE {where}"
 
     with get_connection(db_path) as conn:
         cursor = conn.cursor()
         cursor.execute(f"SELECT COUNT(*) {base}", tuple(params))
         total = cursor.fetchone()[0]
+        # Dominant LLM mention topic per doc (mirrors sentiment.py's
+        # _fetch_doc_topics: latest outputs only, 'Other' excluded, ties by
+        # count then alphabetically); title-keyword fallback happens below.
+        llm_topic_sql = """
+            (SELECT m.topic FROM target_mentions m
+             JOIN ai_outputs_latest la ON la.output_id = m.output_id
+             WHERE m.doc_id = a.doc_id AND m.topic IS NOT NULL
+               AND m.topic != 'Other' AND m.confidence >= ?
+             GROUP BY m.topic ORDER BY COUNT(*) DESC, m.topic LIMIT 1)
+        """
         cursor.execute(
             "SELECT a.doc_id, a.output_json, a.confidence, d.source_type, "
             "d.published_at, d.title, d.domain_or_subreddit, d.ident, d.text, "
-            f"u.username {base} ORDER BY d.published_at DESC, a.doc_id DESC LIMIT ? OFFSET ?",
-            tuple(params) + (limit, offset),
+            f"u.username, {llm_topic_sql} "
+            f"{base} ORDER BY d.published_at DESC, a.doc_id DESC LIMIT ? OFFSET ?",
+            (min_conf,) + tuple(params) + (limit, offset),
         )
         rows = cursor.fetchall()
 
     items: List[Dict[str, Any]] = []
     for (
         doc_id, output_json, confidence, source_type, published_at,
-        title, domain_or_subreddit, ident, text, x_handle,
+        title, domain_or_subreddit, ident, text, x_handle, llm_topic,
     ) in rows:
         try:
             data = json.loads(output_json)
@@ -233,7 +234,7 @@ def fetch_entity_posts(
         items.append(_build_sample_dict(
             doc_id, data.get("label", "NEUTRAL"), conf, data,
             title, source_type, published_at, domain_or_subreddit, ident, text,
-            x_handle,
+            x_handle, topic=llm_topic or _extract_topic(title),
         ))
 
     return {"items": items, "total": total, "limit": limit, "offset": offset}

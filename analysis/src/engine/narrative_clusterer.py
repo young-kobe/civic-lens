@@ -290,7 +290,7 @@ class NarrativeClusterer:
         cursor.execute(
             """
             SELECT a.output_id, a.doc_id, a.output_json, a.confidence, a.created_at
-            FROM ai_outputs a
+            FROM ai_outputs_latest a
             LEFT JOIN narrative_docs n ON n.doc_id = a.doc_id
             WHERE a.task_type = 'claims'
               AND a.created_at >= ?

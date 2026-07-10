@@ -96,7 +96,7 @@ class MoversAggregator:
             SELECT a.doc_id, a.output_json, a.confidence,
                    d.source_type, d.domain_or_subreddit,
                    u.username
-            FROM ai_outputs a
+            FROM ai_outputs_latest a
             JOIN docs d ON d.doc_id = a.doc_id
             {X_AUTHOR_JOIN_SQL}
             WHERE a.task_type = 'sentiment'
@@ -196,7 +196,7 @@ class MoversAggregator:
         """
         sql = """
             SELECT a.doc_id, a.output_json, a.confidence
-            FROM ai_outputs a
+            FROM ai_outputs_latest a
             JOIN docs d ON d.doc_id = a.doc_id
             WHERE a.task_type = 'favorability'
               AND COALESCE(a.inference_method, '') != 'deterministic'

@@ -53,7 +53,7 @@ from analysis.src.llm.prompts import (
     CLAIM_EXTRACTION_USER_PROMPT_TEMPLATE,
     PROPAGANDA_USER_PROMPT_TEMPLATE, TARGET_SENTIMENT_USER_PROMPT_TEMPLATE,
 )
-from analysis.src.reporting.entity_registry import get_registry
+from analysis.src.reporting.entity_registry import TargetResolver, get_registry
 from analysis.src.reporting.aggregators import (
     SentimentAggregator,
     BotAggregator,
@@ -224,6 +224,7 @@ class AnalysisJobRunner:
                         prompt_version=BOT_PROMPT_VERSION,
                         system_prompt=None,  # no LLM prompt used
                         inference_method="deterministic",
+                        label="human",
                     )
                     excluded_count += 1
                     logger.debug(
@@ -243,6 +244,7 @@ class AnalysisJobRunner:
                     system_prompt=BOT_SYSTEM_PROMPT,
                     user_prompt_template=BOT_USER_PROMPT_TEMPLATE,
                     inference_method=result.inference_method,
+                    label=result.label,
                 )
                 processed += 1
                 logger.debug(
@@ -257,6 +259,12 @@ class AnalysisJobRunner:
             f"Bot detection complete: {total} docs processed "
             f"({processed} scored, {excluded_count} pre-excluded)"
         )
+        if total > 0:
+            # author_bot_scores is derived entirely from bot_detection rows;
+            # recompute it whenever those rows change so a `-Tasks bot` run
+            # can't leave the rollup stale. The standalone bot_rollup task
+            # stays available (idempotent full recompute) for manual repair.
+            self.run_account_bot_rollup()
         return total
 
     def _enrich_x_metadata(
@@ -352,6 +360,7 @@ class AnalysisJobRunner:
                 system_prompt=TEXT_ANALYSIS_SYSTEM_PROMPT,
                 user_prompt_template=TEXT_ANALYSIS_USER_PROMPT_TEMPLATE,
                 inference_method=sent_result.inference_method,
+                label=sent_result.label,
             )
 
             # Save Favorability
@@ -365,6 +374,7 @@ class AnalysisJobRunner:
                 system_prompt=TEXT_ANALYSIS_SYSTEM_PROMPT,
                 user_prompt_template=TEXT_ANALYSIS_USER_PROMPT_TEMPLATE,
                 inference_method=fav_result.inference_method,
+                label=fav_result.overall_gop_stance,
             )
             
             logger.debug(
@@ -392,6 +402,17 @@ class AnalysisJobRunner:
             logger.warning("Target-sentiment extraction requires llm_enabled=true; skipping")
             return 0
 
+        # Write-time identity (migration 025): every extracted target is
+        # resolved against the registry NOW and persisted as a
+        # target_mentions row; aggregation reads the frozen resolution
+        # instead of re-resolving free text per snapshot.
+        resolver = TargetResolver(get_registry())
+        backfilled = self.loader.backfill_target_mentions(resolver.resolve)
+        if backfilled:
+            logger.info(
+                f"Target mentions materialized for {backfilled} pre-existing outputs"
+            )
+
         source_types = self._get_target_source_types()
         batch_size = limit if limit is not None else self.settings.loader_batch_size
         docs = self.loader.get_unprocessed_docs(
@@ -407,8 +428,12 @@ class AnalysisJobRunner:
         for i, doc in enumerate(docs, 1):
             result = self.target_extractor.extract(doc["text"])
             if result.extraction_failed:
-                # Transport failure — persist nothing so the doc re-queues
-                # next run instead of freezing as "no targets" (audit A-3).
+                # Transport failure — mark failed so the doc re-queues next
+                # run instead of freezing as "no targets" (audit A-3), with
+                # the attempt visible in doc_task_state.
+                self.loader.mark_task_failed(
+                    doc["doc_id"], "target_sentiment", TARGET_SENTIMENT_PROMPT_VERSION
+                )
                 skipped += 1
                 logger.warning(
                     f"[targets {i}/{total}] doc={doc['doc_id']} extraction FAILED — "
@@ -419,7 +444,7 @@ class AnalysisJobRunner:
             # pattern); aggregation filters per-target, not on this mean.
             confidences = [t.confidence for t in result.targets]
             row_confidence = sum(confidences) / len(confidences) if confidences else 0.0
-            self.loader.save_ai_output(
+            output_id = self.loader.save_ai_output(
                 doc["doc_id"],
                 "target_sentiment",
                 result.to_dict(),
@@ -429,6 +454,13 @@ class AnalysisJobRunner:
                 system_prompt=TARGET_SENTIMENT_SYSTEM_PROMPT,
                 user_prompt_template=TARGET_SENTIMENT_USER_PROMPT_TEMPLATE,
                 inference_method="llm",
+            )
+            self.loader.save_target_mentions(
+                output_id,
+                doc["doc_id"],
+                self.loader.build_target_mentions(
+                    [t.to_dict() for t in result.targets], resolver.resolve,
+                ),
             )
             logger.debug(
                 f"[targets {i}/{total}] doc={doc['doc_id']} extracted={len(result.targets)} "
@@ -487,9 +519,14 @@ class AnalysisJobRunner:
                 primary["text"], title=primary.get("title"),
             )
             if result.detection_failed:
-                # Transport failure — persist nothing for this group so the
-                # docs re-queue next run rather than freezing as a permanent
-                # "no propaganda" verdict (audit A-3).
+                # Transport failure — mark the group failed so the docs
+                # re-queue next run rather than freezing as a permanent
+                # "no propaganda" verdict (audit A-3), with attempts visible
+                # in doc_task_state.
+                for doc in group:
+                    self.loader.mark_task_failed(
+                        doc["doc_id"], "propaganda", PROPAGANDA_PROMPT_VERSION
+                    )
                 skipped_docs += len(group)
                 logger.warning(
                     f"[propaganda] hash={primary.get('raw_hash', '(none)')[:8]}… "
@@ -564,10 +601,13 @@ class AnalysisJobRunner:
         for i, doc in enumerate(docs, 1):
             result = self.claim_extractor.extract(doc["text"])
             if result.extraction_failed:
-                # Transport failure / unavailable client — do NOT write an
-                # ai_outputs row. get_unprocessed_docs re-queues the doc next
-                # run so a transient outage never freezes as a permanent
-                # "no claims" verdict (audit A-3).
+                # Transport failure / unavailable client — mark failed so the
+                # doc re-queues next run and a transient outage never freezes
+                # as a permanent "no claims" verdict (audit A-3), with the
+                # attempt visible in doc_task_state.
+                self.loader.mark_task_failed(
+                    doc["doc_id"], "claims", CLAIM_EXTRACTION_PROMPT_VERSION
+                )
                 skipped += 1
                 logger.warning(
                     f"[claims {i}/{total}] doc={doc['doc_id']} extraction FAILED — "
@@ -648,7 +688,7 @@ class AnalysisJobRunner:
                        a.output_json,
                        a.confidence,
                        a.inference_method
-                FROM ai_outputs a
+                FROM ai_outputs_latest a
                 JOIN docs d ON d.doc_id = a.doc_id
                 JOIN x_posts_raw x ON x.tweet_id = d.ident
                 WHERE a.task_type = 'bot_detection'

@@ -22,11 +22,10 @@ function Footer({ timestamp }: FooterProps) {
                     <div className="site-footer-heading">Contact</div>
                     <ul className="site-footer-list">
                         <li>
-                            <a href="mailto:kobe@pourengineering.com">
-                                kobe@pourengineering.com
+                            <a href="https://kobeyoung.net" target="_blank" rel="noreferrer">
+                                kobeyoung.net
                             </a>
                         </li>
-                        <li>Built by Kobe Young</li>
                     </ul>
                 </div>
                 <div>

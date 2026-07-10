@@ -236,7 +236,7 @@ function Home({ onNavigate, isAdmin = false }: HomeProps) {
                     color: 'var(--neutral-700)',
                     maxWidth: 820,
                 }}>
-                    Civic Lens is built by <strong>Kobe Young</strong>, an independent developer. Every output is
+                    Civic Lens is built by an independent developer. Every output is
                     traceable, confidence-scored, and labeled as a sample. Civic Lens does not claim to measure
                     national sentiment, public opinion, or causal propagation. It shows you the shape of the data
                     we collected, with the methodology visible and the evidence attached.

@@ -185,6 +185,18 @@ export interface EntitySentimentItem {
     // received is the tone of posts ABOUT the entity.
     received?: ReceivedTone | null;
     expressedAlignment?: ExpressedAlignment | null;
+    /** Topic-scoped expressed cells for this entity's OWN posts, volume-
+     *  sorted; net is null (lowSample) below the backend suppression floor.
+     *  Missing on pre-topic cached snapshots. */
+    byTopic?: EntityTopicCell[];
+}
+
+/** One topic-scoped expressed-tone cell on an entity card. */
+export interface EntityTopicCell {
+    topic: string;
+    net: number | null;
+    volume: number;
+    lowSample: boolean;
 }
 
 /** Keys of SentimentDistribution. Used as lookup keys for distributionSamples. */
@@ -215,6 +227,10 @@ export interface ClassificationSample {
     date?: string;
     full_text?: string;
     url?: string;
+    /** Doc topic attribution stamped by the backend (LLM mention topic
+     *  with title-keyword fallback). Missing on pre-topic cached
+     *  snapshots; the modal filter treats those as non-matching. */
+    topic?: string | null;
 }
 
 export interface SentimentBreakdown {

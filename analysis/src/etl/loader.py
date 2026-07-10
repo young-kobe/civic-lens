@@ -386,7 +386,11 @@ class ContentLoader:
 
     def get_unprocessed_docs(self, task_type: str, source_types: Optional[List[str]] = None, batch_size: int = 500) -> List[Dict[str, Any]]:
         """
-        Returns docs that do not have an entry in ai_outputs for the given task.
+        Returns docs whose ``doc_task_state`` row for the given task is
+        missing or 'failed'. The state table is the work queue; ai_outputs
+        row existence no longer gates processing (migration 022), so a task
+        can be reprocessed by deleting its state rows without touching the
+        append-only output log.
 
         ``raw_hash`` is included so callers can de-dup scoring at the
         content-hash level (e.g. syndicated AP wire stories reprinted by
@@ -398,8 +402,8 @@ class ContentLoader:
             SELECT d.doc_id, d.text, d.metadata_json, d.title, d.source_type,
                    d.ident, d.raw_hash
             FROM docs d
-            LEFT JOIN ai_outputs a ON d.doc_id = a.doc_id AND a.task_type = ?
-            WHERE a.output_id IS NULL AND d.text IS NOT NULL
+            LEFT JOIN doc_task_state s ON d.doc_id = s.doc_id AND s.task_type = ?
+            WHERE (s.doc_id IS NULL OR s.status = 'failed') AND d.text IS NOT NULL
         """
         params = [task_type]
         if source_types:
@@ -438,6 +442,7 @@ class ContentLoader:
         system_prompt: Optional[str] = None,
         user_prompt_template: Optional[str] = None,
         inference_method: Optional[str] = None,
+        label: Optional[str] = None,
     ):
         """Save an AI analysis output to the database.
 
@@ -453,6 +458,15 @@ class ContentLoader:
         ('heuristic') or rows from a purely deterministic engine
         ('deterministic'). None is allowed for backward compatibility; the
         column will land NULL.
+
+        ``label`` (migration 023) is the row's primary categorical verdict,
+        projected out of ``result`` so readers can filter/GROUP BY an indexed
+        column instead of parsing JSON. Pass it for tasks with a scalar
+        verdict (sentiment label, bot label, favorability stance); leave
+        None for list-shaped tasks (claims, targets, propaganda).
+
+        Returns the new row's output_id so callers can attach normalized
+        projections to it (target_mentions).
         """
         with self._get_conn() as conn:
             cursor = conn.cursor()
@@ -484,11 +498,153 @@ class ContentLoader:
                 """
                 INSERT INTO ai_outputs
                     (doc_id, task_type, output_json, confidence, model_id,
-                     prompt_version, inference_method, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, strftime('%s','now'))
+                     prompt_version, inference_method, label, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%s','now'))
                 """,
                 (doc_id, task, json.dumps(result), confidence, model_id,
-                 prompt_version, inference_method),
+                 prompt_version, inference_method, label),
             )
+            output_id = cursor.lastrowid
+            self.upsert_task_state(cursor, doc_id, task, "done", prompt_version)
             conn.commit()
+            return output_id
+
+    @staticmethod
+    def upsert_task_state(
+        cursor,
+        doc_id: int,
+        task: str,
+        status: str,
+        prompt_version: str = "",
+    ):
+        """Upsert the ``doc_task_state`` work-queue row for (doc_id, task).
+
+        The state table (migration 022) is what get_unprocessed_docs queues
+        off; ai_outputs is an append-only result log. Static so engines that
+        manage their own transaction (citation_extractor) can write the state
+        row atomically with their data writes.
+        """
+        cursor.execute(
+            """
+            INSERT INTO doc_task_state
+                (doc_id, task_type, status, prompt_version, attempts,
+                 last_attempt_at)
+            VALUES (?, ?, ?, ?, 1, strftime('%s','now'))
+            ON CONFLICT(doc_id, task_type) DO UPDATE SET
+                status = excluded.status,
+                prompt_version = excluded.prompt_version,
+                attempts = doc_task_state.attempts + 1,
+                last_attempt_at = excluded.last_attempt_at
+            """,
+            (doc_id, task, status, prompt_version),
+        )
+
+    def mark_task_failed(self, doc_id: int, task: str, prompt_version: str = ""):
+        """Record a failed attempt for (doc_id, task).
+
+        'failed' rows still re-queue in get_unprocessed_docs — this exists so
+        retries are observable (attempts, last_attempt_at) instead of the old
+        persist-nothing pattern where a doc failing every run was invisible
+        (audit A-3).
+        """
+        with self._get_conn() as conn:
+            cursor = conn.cursor()
+            self.upsert_task_state(cursor, doc_id, task, "failed", prompt_version)
+            conn.commit()
+
+    # ---- target mentions (migration 025) ----
+
+    @staticmethod
+    def build_target_mentions(targets: List[Dict[str, Any]], resolve) -> List[Dict[str, Any]]:
+        """Shape extracted target dicts into target_mentions rows, resolving
+        entity identity NOW so it is frozen as of extraction.
+
+        ``resolve`` is a callable raw_name -> (entity_key, entity_kind,
+        entity_party); the registry lives in the reporting layer, so callers
+        inject it rather than etl importing upward. Unresolved targets keep
+        a row with entity_key NULL — they must stay countable, not vanish.
+        """
+        mentions = []
+        for t in targets:
+            if not isinstance(t, dict):
+                continue
+            raw = t.get("target")
+            stance = t.get("stance")
+            if not raw or stance not in ("positive", "negative", "neutral", "mixed"):
+                continue
+            try:
+                confidence = float(t.get("confidence", 0.0))
+            except (TypeError, ValueError):
+                continue
+            entity_key, entity_kind, entity_party = resolve(raw)
+            mentions.append({
+                "raw_target": raw,
+                "entity_key": entity_key,
+                "entity_kind": entity_kind,
+                "entity_party": entity_party,
+                "stance": stance,
+                "topic": t.get("topic"),
+                "confidence": confidence,
+                "evidence_json": json.dumps(t.get("evidence_spans") or []),
+            })
+        return mentions
+
+    def save_target_mentions(self, output_id: int, doc_id: int, mentions: List[Dict[str, Any]]):
+        """Persist the normalized mention rows for one ai_outputs row."""
+        if not mentions:
+            return
+        with self._get_conn() as conn:
+            cursor = conn.cursor()
+            self._insert_target_mentions(cursor, output_id, doc_id, mentions)
+            conn.commit()
+
+    @staticmethod
+    def _insert_target_mentions(cursor, output_id: int, doc_id: int, mentions: List[Dict[str, Any]]):
+        cursor.executemany(
+            """
+            INSERT INTO target_mentions
+                (output_id, doc_id, raw_target, entity_key, entity_kind,
+                 entity_party, stance, topic, confidence, evidence_json,
+                 created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%s','now'))
+            """,
+            [
+                (output_id, doc_id, m["raw_target"], m["entity_key"],
+                 m["entity_kind"], m["entity_party"], m["stance"], m["topic"],
+                 m["confidence"], m["evidence_json"])
+                for m in mentions
+            ],
+        )
+
+    def backfill_target_mentions(self, resolve) -> int:
+        """Materialize mention rows for latest target_sentiment outputs that
+        have none — the pre-migration-025 corpus, plus any reprocessed rows.
+        Deterministic and idempotent (anti-join on existing mentions); no
+        LLM involved. Returns the number of outputs materialized.
+        """
+        with self._get_conn() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT a.output_id, a.doc_id, a.output_json
+                FROM ai_outputs_latest a
+                LEFT JOIN target_mentions m ON m.output_id = a.output_id
+                WHERE a.task_type = 'target_sentiment'
+                  AND m.mention_id IS NULL
+                  AND json_array_length(a.output_json, '$.targets') > 0
+                """
+            )
+            rows = cursor.fetchall()
+            materialized = 0
+            for output_id, doc_id, output_json in rows:
+                try:
+                    targets = (json.loads(output_json) or {}).get("targets") or []
+                except json.JSONDecodeError:
+                    continue
+                mentions = self.build_target_mentions(targets, resolve)
+                if mentions:
+                    self._insert_target_mentions(cursor, output_id, doc_id, mentions)
+                    materialized += 1
+            conn.commit()
+            return materialized
 

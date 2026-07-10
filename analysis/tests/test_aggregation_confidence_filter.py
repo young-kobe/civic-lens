@@ -49,13 +49,17 @@ def _seed_doc(conn, doc_id: int, source_type: str, ident: str,
 
 def _seed_ai_output(conn, doc_id: int, task_type: str, output: dict,
                      confidence: float):
+    # Mirror save_ai_output / migration 023: the canonical label column is a
+    # projection of the payload's scalar verdict.
+    label = output.get("label") or output.get("overall_gop_stance")
     conn.execute(
         """
         INSERT INTO ai_outputs
-            (doc_id, task_type, output_json, confidence, created_at)
-        VALUES (?, ?, ?, ?, ?)
+            (doc_id, task_type, output_json, confidence, label, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
         """,
-        (doc_id, task_type, json.dumps(output), confidence, int(time.time())),
+        (doc_id, task_type, json.dumps(output), confidence, label,
+         int(time.time())),
     )
 
 

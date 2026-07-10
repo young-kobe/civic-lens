@@ -39,9 +39,14 @@ _repo_root = Path(__file__).resolve().parents[2]
 if str(_repo_root) not in sys.path:
     sys.path.insert(0, str(_repo_root))
 
+from analysis.src.etl.loader import ContentLoader
 from analysis.src.reporting.aggregators import SentimentAggregator
 from analysis.src.reporting.aggregators.sentiment import MIN_TARGET_SAMPLE_N
-from analysis.src.reporting.entity_registry import GOP_COLLECTIVE
+from analysis.src.reporting.entity_registry import (
+    GOP_COLLECTIVE,
+    TargetResolver,
+    get_registry,
+)
 
 
 def _target_payload(*targets: dict) -> str:
@@ -79,8 +84,31 @@ class TargetToneAggregationTests(unittest.TestCase):
                 task_type TEXT,
                 output_json TEXT,
                 confidence REAL,
-                created_at INTEGER
+                created_at INTEGER,
+                label TEXT
             );
+            CREATE VIEW ai_outputs_latest AS
+            SELECT a.* FROM ai_outputs a
+            WHERE a.output_id = (
+                SELECT MAX(a2.output_id) FROM ai_outputs a2
+                WHERE a2.doc_id = a.doc_id AND a2.task_type = a.task_type
+            );
+
+            CREATE TABLE target_mentions (
+                mention_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                output_id INTEGER NOT NULL,
+                doc_id INTEGER NOT NULL,
+                raw_target TEXT NOT NULL,
+                entity_key TEXT,
+                entity_kind TEXT,
+                entity_party TEXT,
+                stance TEXT NOT NULL,
+                topic TEXT,
+                confidence REAL NOT NULL,
+                evidence_json TEXT,
+                created_at INTEGER NOT NULL
+            );
+
             CREATE TABLE x_posts_raw (
                 tweet_id TEXT PRIMARY KEY,
                 author_id TEXT,
@@ -217,6 +245,14 @@ class TargetToneAggregationTests(unittest.TestCase):
             rows,
         )
         self.conn.commit()
+
+        # Materialize target_mentions through the real write path (migration
+        # 025): identity is resolved ONCE here, exactly as the pipeline does
+        # at extraction time, and the aggregator below reads only the frozen
+        # rows — never the raw JSON.
+        ContentLoader(self.db_path).backfill_target_mentions(
+            TargetResolver(get_registry()).resolve
+        )
 
         self.result = SentimentAggregator(self.db_path).get_public_sentiment(
             time_window="7d", bot_docs={99},
