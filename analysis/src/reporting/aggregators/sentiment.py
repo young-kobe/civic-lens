@@ -185,6 +185,7 @@ class SentimentAggregator:
                 cursor, min_score=BOT_SCORE_AUTHOR_EXCLUSION,
             )
             narrative_map = _fetch_narrative_doc_map(cursor, cutoff)
+            doc_topics = _fetch_doc_topics(cursor, min_conf)
 
         # ``allowed_sources=None`` means no filter — the only path now that
         # the UI's "Filter by sources" pills have been removed. Internal
@@ -192,7 +193,9 @@ class SentimentAggregator:
         # in ``_aggregate_rows`` / ``_merge_favorability_data`` short-
         # circuits cleanly without rewriting those hot loops.
         allowed_sources = None
-        result = self._process_sentiment_data(sentiment_rows, bot_docs, allowed_sources)
+        result = self._process_sentiment_data(
+            sentiment_rows, bot_docs, allowed_sources, doc_topics,
+        )
         _merge_favorability_data(result, favorability_rows, bot_docs, allowed_sources, self.cache)
         _merge_target_tone(
             result, target_rows, bot_docs,
@@ -202,17 +205,20 @@ class SentimentAggregator:
 
     def _process_sentiment_data(
         self, rows: List[tuple], bot_docs: Set[int], allowed_sources: Optional[frozenset],
+        doc_topics: Optional[Dict[int, str]] = None,
     ) -> PublicSentimentResult:
-        accum = self._aggregate_rows(rows, bot_docs, allowed_sources)
+        accum = self._aggregate_rows(rows, bot_docs, allowed_sources, doc_topics)
         return self._build_result(accum)
 
     def _aggregate_rows(
         self, rows: List[tuple], bot_docs: Set[int], allowed_sources: Optional[frozenset],
+        doc_topics: Optional[Dict[int, str]] = None,
     ) -> Dict[str, Any]:
         """Walk each row once, fanning counts + samples into every
         accumulator the result consumer needs. Keep inline work tight —
         branchy logic lives in module-level helpers below."""
         registry = get_registry()
+        doc_topics = doc_topics or {}
         accum: Dict[str, Any] = {
             "strong_pos": 0, "mild_pos": 0, "strong_neg": 0, "mild_neg": 0,
             "neutral": 0, "mixed": 0, "count": 0, "excluded_bots": 0,
@@ -256,7 +262,11 @@ class SentimentAggregator:
                 accum["news"][label_key] += 1
 
             _increment_bucket(accum["by_platform"], category, label_key)
-            topic = _extract_topic(title)
+            # LLM-extracted topic (dominant target_mentions topic for this
+            # doc) wins; title-keyword heuristic is the fallback for docs
+            # with no resolved mention topic; "General" is the honest
+            # no-signal bucket.
+            topic = doc_topics.get(doc_id) or _extract_topic(title)
             _increment_bucket(accum["by_topic"], topic, label_key)
             _increment_bucket(accum["by_time"], _time_bucket(published_at, now), label_key)
             dow = _day_of_week(published_at)
@@ -271,7 +281,7 @@ class SentimentAggregator:
             _collect_strength_sample(
                 accum["strength_samples"], strength_key, doc_id, label, conf,
                 data, title, source_type, published_at, domain_or_subreddit, ident, text,
-                x_handle,
+                x_handle, topic=topic,
             )
 
             account = None
@@ -286,6 +296,7 @@ class SentimentAggregator:
                 doc_id, label, conf, data, title, published_at, ident, text,
                 is_official_tier=bool(is_official_tier),
                 account=account,
+                topic=topic,
             )
             if tier is not None:
                 _increment_bucket(accum["by_topic_tier"], f"{topic}\x00{tier}", label_key)
@@ -418,10 +429,15 @@ def _build_sample_dict(
     ident: Optional[str],
     text: Optional[str],
     x_handle: Optional[str] = None,
+    topic: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Build the dict representation of a classification sample used by
     every collector. Centralizing this avoids the 3-place duplication
-    that pre-split sentiment.py was carrying."""
+    that pre-split sentiment.py was carrying.
+
+    ``topic`` is the doc's topic attribution (LLM mention topic with
+    keyword fallback — see _fetch_doc_topics) so the UI can filter samples
+    exactly instead of re-guessing with client-side keyword lists."""
     date_str = (
         datetime.fromtimestamp(published_at).strftime("%b %d, %Y")
         if published_at else None
@@ -459,6 +475,7 @@ def _build_sample_dict(
         "date": date_str,
         "full_text": text or "",
         "url": url,
+        "topic": topic,
     }
 
 
@@ -478,6 +495,7 @@ def _sample_dict_to_model(s: Dict[str, Any]) -> ClassificationSample:
         date=s.get("date"),
         full_text=s.get("full_text", ""),
         url=s.get("url"),
+        topic=s.get("topic"),
     )
 
 
@@ -511,6 +529,7 @@ def _collect_topic_sample(
     sample = _build_sample_dict(
         doc_id, label, confidence, data, title, source_type,
         published_at, domain_or_subreddit, ident, text, x_handle,
+        topic=topic,
     )
     _insert_capped(samples, sample, MAX_SAMPLES_PER_TOPIC)
 
@@ -523,6 +542,7 @@ def _collect_strength_sample(
     title: Optional[str], source_type: Optional[str], published_at: Optional[float],
     domain_or_subreddit: Optional[str], ident: Optional[str], text: Optional[str],
     x_handle: Optional[str] = None,
+    topic: Optional[str] = None,
 ) -> None:
     """Append a sample to one of the five STRENGTH_BUCKETS. Silently
     drops rows for unknown buckets so callers can pass the key through
@@ -533,6 +553,7 @@ def _collect_strength_sample(
     sample = _build_sample_dict(
         doc_id, label, confidence, data, title, source_type,
         published_at, domain_or_subreddit, ident, text, x_handle,
+        topic=topic,
     )
     _insert_capped(samples, sample, MAX_DISTRIBUTION_SAMPLES_PER_BUCKET)
 
@@ -544,6 +565,7 @@ def _collect_entity_sample(
     title: Optional[str], source_type: Optional[str], published_at: Optional[float],
     domain_or_subreddit: Optional[str], ident: Optional[str], text: Optional[str],
     x_handle: Optional[str] = None,
+    topic: Optional[str] = None,
 ) -> None:
     """Bump an entity bucket's counters + append a sample when there's room."""
     label_key = _LABEL_MAP.get(label, "neutral")
@@ -554,6 +576,7 @@ def _collect_entity_sample(
     sample = _build_sample_dict(
         doc_id, label, confidence, data, title, source_type,
         published_at, domain_or_subreddit, ident, text, x_handle,
+        topic=topic,
     )
     _insert_capped(entity_accum["samples"], sample, MAX_SAMPLES_PER_ENTITY)
 
@@ -578,6 +601,7 @@ def _route_and_record(
     text: Optional[str],
     is_official_tier: bool = False,
     account: Optional[Dict[str, Any]] = None,
+    topic: Optional[str] = None,
 ) -> Optional[str]:
     """Resolve the row's tier + entity via the shared entity_routing
     module, then bucket the row into the right per-entity accumulator
@@ -681,6 +705,7 @@ def _route_and_record(
     _collect_entity_sample(
         bucket_dict[key], doc_id, label, conf, data,
         title, source_type, published_at, domain_or_subreddit, ident, text, x_handle,
+        topic=topic,
     )
     return tier
 
@@ -1116,6 +1141,40 @@ def _fetch_narrative_doc_map(cursor, cutoff: Optional[int]) -> Dict[int, List[Tu
     return out
 
 
+def _fetch_doc_topics(cursor, min_conf: float) -> Dict[int, str]:
+    """doc_id → dominant LLM-extracted topic from target_mentions.
+
+    The schema-enforced per-target topic (TARGET_TOPIC_ENUM) is the real
+    topic signal; the title-keyword heuristic (_extract_topic) is only the
+    fallback for docs with no resolved mention topic. Joined through
+    ai_outputs_latest so superseded outputs' mentions don't vote. 'Other'
+    is excluded — an all-'Other' doc falls through to the keyword fallback
+    rather than surfacing a bucket that overlaps with "General". Ties break
+    by higher mention count, then alphabetically (stable across runs).
+    Empty when the table hasn't been created (fresh/test DBs)."""
+    cursor.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='target_mentions'"
+    )
+    if not cursor.fetchone():
+        return {}
+    cursor.execute(
+        """
+        SELECT m.doc_id, m.topic, COUNT(*) AS n
+        FROM target_mentions m
+        JOIN ai_outputs_latest a ON a.output_id = m.output_id
+        WHERE m.topic IS NOT NULL AND m.topic != 'Other'
+          AND m.confidence >= ?
+        GROUP BY m.doc_id, m.topic
+        ORDER BY m.doc_id, n DESC, m.topic
+        """,
+        (min_conf,),
+    )
+    topics: Dict[int, str] = {}
+    for doc_id, topic, _n in cursor.fetchall():
+        topics.setdefault(doc_id, topic)
+    return topics
+
+
 def _speaker_tier(tier: Optional[str], ap_tier: Optional[str]) -> Optional[str]:
     """Coarse WHO-is-talking bucket for a target_sentiment row: 'officials'
     (registry match, provenance flag, or curated elected_official tier),
@@ -1361,7 +1420,7 @@ def _merge_target_tone(
             doc_id, stance.upper(), conf,
             {"reasoning": ctx["reasoning"], "evidence_spans": evidence_spans},
             title, source_type, published_at, domain_or_subreddit, ident, text,
-            x_handle,
+            x_handle, topic=topic or "Other",
         )
         _insert_capped(accum["samples"], sample, MAX_SAMPLES_PER_TARGET)
 

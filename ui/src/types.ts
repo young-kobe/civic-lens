@@ -215,6 +215,10 @@ export interface ClassificationSample {
     date?: string;
     full_text?: string;
     url?: string;
+    /** Doc topic attribution stamped by the backend (LLM mention topic
+     *  with title-keyword fallback). Missing on pre-topic cached
+     *  snapshots; the modal filter treats those as non-matching. */
+    topic?: string | null;
 }
 
 export interface SentimentBreakdown {

@@ -29,6 +29,7 @@ from analysis.src.reporting.aggregators.base import (
 from analysis.src.reporting.aggregators.sentiment import (
     CATCH_ALL_VERIFIED_OFFICIALS,
     _build_sample_dict,
+    _extract_topic,
 )
 from analysis.src.reporting.entity_registry import (
     CATCH_ALL_OUTLETS,
@@ -201,18 +202,29 @@ def fetch_entity_posts(
         cursor = conn.cursor()
         cursor.execute(f"SELECT COUNT(*) {base}", tuple(params))
         total = cursor.fetchone()[0]
+        # Dominant LLM mention topic per doc (mirrors sentiment.py's
+        # _fetch_doc_topics: latest outputs only, 'Other' excluded, ties by
+        # count then alphabetically); title-keyword fallback happens below.
+        llm_topic_sql = """
+            (SELECT m.topic FROM target_mentions m
+             JOIN ai_outputs_latest la ON la.output_id = m.output_id
+             WHERE m.doc_id = a.doc_id AND m.topic IS NOT NULL
+               AND m.topic != 'Other' AND m.confidence >= ?
+             GROUP BY m.topic ORDER BY COUNT(*) DESC, m.topic LIMIT 1)
+        """
         cursor.execute(
             "SELECT a.doc_id, a.output_json, a.confidence, d.source_type, "
             "d.published_at, d.title, d.domain_or_subreddit, d.ident, d.text, "
-            f"u.username {base} ORDER BY d.published_at DESC, a.doc_id DESC LIMIT ? OFFSET ?",
-            tuple(params) + (limit, offset),
+            f"u.username, {llm_topic_sql} "
+            f"{base} ORDER BY d.published_at DESC, a.doc_id DESC LIMIT ? OFFSET ?",
+            (min_conf,) + tuple(params) + (limit, offset),
         )
         rows = cursor.fetchall()
 
     items: List[Dict[str, Any]] = []
     for (
         doc_id, output_json, confidence, source_type, published_at,
-        title, domain_or_subreddit, ident, text, x_handle,
+        title, domain_or_subreddit, ident, text, x_handle, llm_topic,
     ) in rows:
         try:
             data = json.loads(output_json)
@@ -222,7 +234,7 @@ def fetch_entity_posts(
         items.append(_build_sample_dict(
             doc_id, data.get("label", "NEUTRAL"), conf, data,
             title, source_type, published_at, domain_or_subreddit, ident, text,
-            x_handle,
+            x_handle, topic=llm_topic or _extract_topic(title),
         ))
 
     return {"items": items, "total": total, "limit": limit, "offset": offset}

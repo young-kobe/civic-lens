@@ -65,6 +65,21 @@ class EntityPostsTests(unittest.TestCase):
                 WHERE a2.doc_id = a.doc_id AND a2.task_type = a.task_type
             );
 
+            CREATE TABLE target_mentions (
+                mention_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                output_id INTEGER NOT NULL,
+                doc_id INTEGER NOT NULL,
+                raw_target TEXT NOT NULL,
+                entity_key TEXT,
+                entity_kind TEXT,
+                entity_party TEXT,
+                stance TEXT NOT NULL,
+                topic TEXT,
+                confidence REAL NOT NULL,
+                evidence_json TEXT,
+                created_at INTEGER NOT NULL
+            );
+
             CREATE TABLE x_posts_raw (
                 tweet_id TEXT PRIMARY KEY,
                 author_id TEXT,
@@ -155,6 +170,31 @@ class EntityPostsTests(unittest.TestCase):
 
     def _fetch(self, kind, key, **kw):
         return fetch_entity_posts(self.db_path, kind, key, window="all", **kw)
+
+    def test_items_carry_topic_attribution(self):
+        """Drill-down items stamp `topic` (LLM mention topic, title-keyword
+        fallback, else General) so the modal's topic filter matches exactly
+        instead of re-guessing with client-side keyword lists."""
+        conn = sqlite3.connect(self.db_path)
+        cur = conn.cursor()
+        cur.execute(
+            "INSERT INTO ai_outputs (doc_id, task_type, output_json, confidence) "
+            "VALUES (1, 'target_sentiment', '{\"targets\": []}', 0.9)"
+        )
+        cur.execute(
+            "INSERT INTO target_mentions (output_id, doc_id, raw_target, stance, "
+            "topic, confidence, created_at) "
+            "VALUES (?, 1, 'Donald Trump', 'negative', 'Economy', 0.9, 0)",
+            (cur.lastrowid,),
+        )
+        conn.commit()
+        conn.close()
+
+        page = self._fetch("outlet", "nytimes.com", limit=10)
+        by_id = {i["doc_id"]: i for i in page["items"]}
+        self.assertEqual(by_id[1]["topic"], "Economy")
+        # No mentions and no title keyword hit → the honest General bucket.
+        self.assertEqual(by_id[2]["topic"], "General")
 
     def test_outlet_pagination_and_order(self):
         page1 = self._fetch("outlet", "nytimes.com", limit=2, offset=0)

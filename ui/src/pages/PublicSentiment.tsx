@@ -22,7 +22,7 @@ import { transformPublicSentiment } from '../services/transformers';
 import { useFetch } from '../services/useFetch';
 import { COLORS } from '../theme';
 import {
-    TOPICS, matchesTopic, topicByKey, topicFromSlug,
+    TOPICS, topicByKey, topicFromSlug,
     type Topic, type TopicKey,
 } from '../services/topics';
 import { TopicDivergencePanel } from './publicSentiment/TopicDivergencePanel';
@@ -356,14 +356,17 @@ function EntitySentimentModal({
         }
     }, [item.kind, item.key, timeWindow, loadedPosts]);
 
-    // When a topic is active, filter the visible classification samples
-    // client-side. We don't have entity-scoped-by-topic scores from the
-    // backend (API gap), so the headline net score remains the entity's
-    // global score — the topic strip is explicit about that.
+    // When a topic is active, filter the visible samples by the backend's
+    // per-sample topic attribution (LLM mention topic with keyword
+    // fallback) — an exact match, not client-side keyword guessing.
+    // Samples from pre-topic cached snapshots have no `topic` and simply
+    // don't match. Entity-scoped-by-topic SCORES still don't exist, so the
+    // headline net score remains the entity's global score — the topic
+    // strip is explicit about that.
     const allSamples: ClassificationSample[] = loadedPosts ?? classificationSamples ?? [];
     const filteredSamples = activeTopic.key === 'all'
         ? allSamples
-        : allSamples.filter(s => matchesTopic(activeTopic, s.title, s.full_text, ...s.evidence_spans));
+        : allSamples.filter(s => s.topic === activeTopic.key);
     const samplesAreFiltered = activeTopic.key !== 'all';
 
     return (
@@ -771,7 +774,11 @@ function pickDefaultTopic(byTopic: SentimentBreakdown[] | undefined): TopicKey {
     // of an arbitrary alphabetical default. Falls back to 'all' if no
     // per-topic data is available.
     if (!byTopic || byTopic.length === 0) return 'all';
-    const validTopicNames = new Set(TOPICS.filter(t => t.key !== 'all').map(t => t.key));
+    // 'General' (the unclassified bucket) usually has the largest volume
+    // but is never a substantive landing tab — exclude it from the default.
+    const validTopicNames = new Set(
+        TOPICS.filter(t => t.key !== 'all' && t.key !== 'General').map(t => t.key),
+    );
     let best: { key: TopicKey; volume: number } | null = null;
     for (const row of byTopic) {
         if (!row.topic || !validTopicNames.has(row.topic as TopicKey)) continue;
