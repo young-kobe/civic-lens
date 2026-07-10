@@ -368,6 +368,10 @@ export interface BotEntityItem {
     bot_docs: number;
     bot_rate_pct: number;
     entity_profile: EntityProfile;
+    /** Up to a handful of this entity's bot-flagged posts, confidence-
+     *  ranked — evidence for the card's drill-down modal. Missing on
+     *  pre-2026-07-10 cached snapshots. */
+    samples?: FlaggedExample[];
 }
 
 /** One bot-flagged post displayed as evidence inside the Bot Detector's

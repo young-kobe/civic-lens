@@ -28,5 +28,6 @@ export { default as CollapsibleInfo } from './CollapsibleInfo';
 export { default as TopMetricsBlock, TierRow } from './TopMetricsBlock';
 export type { TierRowDot } from './TopMetricsBlock';
 export { default as SupportingDocsTable, classificationSampleToSupportingDoc } from './SupportingDocsTable';
+export { default as FlaggedPostList } from './FlaggedPostList';
 export { default as MoversTicker } from './MoversTicker';
 export { ThreeWayGrid, ThreeWayColumn } from './ThreeWayGrid';

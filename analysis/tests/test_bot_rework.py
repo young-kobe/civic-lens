@@ -297,5 +297,129 @@ class TestBotAggregatorPreExclusionFilter(unittest.TestCase):
         self.assertEqual(data.overview.suspectedAutomationRate, 50.0)
 
 
+class TestBotAggregatorRework(unittest.TestCase):
+    """2026-07-10 Bot Detector fixes.
+
+    The business rules under test:
+      - Amplification narratives are REAL narratives (narrative_docs join),
+        never bot-indicator strings — an internal signal name is not a
+        talking point, and LLM-echoed slugs must not reach headline copy.
+      - whyFlagged humanizes slug indicators for display.
+      - The officials tier populates via the is_official_tier provenance
+        flag even when the handle isn't in the editorial registry.
+      - Entity rollups carry flagged-post samples so the card can open an
+        evidence modal instead of dead-ending at an external link.
+    """
+
+    def setUp(self):
+        fd, self.db_path = tempfile.mkstemp(suffix=".db")
+        os.close(fd)
+        _apply_migrations(self.db_path)
+        now = int(time.time())
+        conn = sqlite3.connect(self.db_path)
+        conn.executemany(
+            """
+            INSERT INTO docs (doc_id, source_type, ident, domain_or_subreddit,
+                               published_at, text, raw_hash)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (1, "x_post", "t1", "x.com", now,
+                 "The wall stops fentanyl #BorderNow", "rh-1"),
+                (2, "news", "https://cnn.com/a", "cnn.com", now,
+                 "Border wall claim spreads", "rh-2"),
+                (3, "x_post", "t3", "x.com", now, "just a human post", "rh-3"),
+            ],
+        )
+        # Doc 1's author is provenance-flagged official-tier but NOT in the
+        # editorial registry — previously this row vanished from the grid.
+        conn.execute(
+            "INSERT INTO x_posts_raw (tweet_id, author_id, is_official_tier,"
+            " created_at, fetched_at, text, raw_hash, extraction_version)"
+            " VALUES ('t1', '555', 1, ?, ?, 't', 'xh1', 'v1')",
+            (now, now),
+        )
+        conn.execute(
+            "INSERT INTO x_users_raw (user_id, username, fetched_at, raw_hash)"
+            " VALUES ('555', 'staffacct', ?, 'uh1')",
+            (now,),
+        )
+        bot_payload = json.dumps({
+            "label": "bot",
+            "indicators": ["zero_followers_following_listed"],
+        })
+        conn.executemany(
+            """
+            INSERT INTO ai_outputs
+                (doc_id, task_type, output_json, confidence, inference_method,
+                 label, created_at)
+            VALUES (?, 'bot_detection', ?, 0.9, 'llm', ?, ?)
+            """,
+            [
+                (1, bot_payload, "bot", now),
+                (2, bot_payload, "bot", now),
+                (3, json.dumps({"label": "human"}), "human", now),
+            ],
+        )
+        # Both bot docs support one real narrative.
+        conn.execute(
+            "INSERT INTO narratives (narrative_id, name, first_seen_at, created_at)"
+            " VALUES (1, 'Border wall stops fentanyl', ?, ?)", (now, now),
+        )
+        conn.executemany(
+            "INSERT INTO narrative_docs (narrative_id, doc_id, discovered_at)"
+            " VALUES (1, ?, ?)",
+            [(1, now), (2, now)],
+        )
+        # Doc 1 takes a stance toward an (unregistered) target.
+        conn.execute(
+            "INSERT INTO target_mentions (output_id, doc_id, raw_target,"
+            " entity_key, stance, topic, confidence, created_at)"
+            " VALUES (999, 1, 'Jane Doe', 'janedoe', 'negative',"
+            " 'Immigration', 0.9, 0)"
+        )
+        conn.commit()
+        conn.close()
+
+    def tearDown(self):
+        os.unlink(self.db_path)
+
+    def test_amplification_uses_real_narratives_not_indicator_slugs(self):
+        data = BotAggregator(self.db_path).get_bot_activity(time_window="7d")
+        self.assertEqual(len(data.narrativeAmplification), 1)
+        amp = data.narrativeAmplification[0]
+        self.assertEqual(amp.narrative, "Border wall stops fentanyl")
+        self.assertEqual(amp.suspectedBotVolume, 2)
+        # The slug appears only as a HUMANIZED why-flagged signal — never
+        # verbatim, and never as the narrative itself.
+        self.assertIn("Zero followers following listed", amp.whyFlagged)
+        self.assertNotIn("zero_followers_following_listed", amp.whyFlagged)
+        self.assertEqual(amp.topHashtags, ["#BorderNow"])
+        self.assertEqual(amp.targets, ["Jane Doe"])
+        self.assertTrue(amp.examplePosts)
+        self.assertTrue(amp.examplePosts[0].url)
+
+    def test_officials_tier_populates_via_provenance_flag(self):
+        data = BotAggregator(self.db_path).get_bot_activity(time_window="7d")
+        officials = data.overview.by_official
+        self.assertEqual(len(officials), 1)
+        self.assertEqual(officials[0].bot_docs, 1)
+        # Card evidence: flagged samples ride along with a source link.
+        self.assertTrue(officials[0].samples)
+        self.assertEqual(officials[0].samples[0].doc_id, 1)
+        self.assertTrue(officials[0].samples[0].url)
+        # Doc 3 (plain X user, human) lands in the public tier, not officials.
+        self.assertTrue(data.overview.by_general_public)
+
+    def test_news_entity_carries_samples(self):
+        data = BotAggregator(self.db_path).get_bot_activity(time_window="7d")
+        news = data.overview.by_news_outlet
+        self.assertTrue(news)
+        flagged = [item for item in news if item.bot_docs > 0]
+        self.assertTrue(flagged)
+        self.assertTrue(flagged[0].samples)
+        self.assertEqual(flagged[0].samples[0].doc_id, 2)
+
+
 if __name__ == "__main__":
     unittest.main()

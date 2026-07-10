@@ -31,7 +31,7 @@ function StatsBar({ stats, activeTask }: StatsBarProps) {
     if (!taskStats) {
         return (
             <div className="eyebrow" style={{ color: 'var(--neutral-500)' }}>
-                No data for {activeTask} yet
+                No data for {activeTask.replace(/_/g, ' ')} yet
             </div>
         );
     }

@@ -1,5 +1,6 @@
 import { COLORS } from '../../theme';
 import { dedupeById } from '../../services/dedupe';
+import { formatRelativeDate, sourceLabel } from '../../services/format';
 import type { ClassificationSample, SupportingDoc } from '../../types';
 
 // --------------------------------------------------------------------------- //
@@ -15,16 +16,6 @@ const SENT_LABEL_COLOR: Record<string, string> = {
     neutral:  'var(--neutral-500)',
     mixed:    COLORS.warning,
 };
-
-function formatRelativeDate(unixSeconds: number | null): string {
-    if (!unixSeconds) return '—';
-    const d = new Date(unixSeconds * 1000);
-    const days = Math.floor((Date.now() - d.getTime()) / (1000 * 60 * 60 * 24));
-    if (days === 0) return 'today';
-    if (days === 1) return '1 day ago';
-    if (days < 30) return `${days} days ago`;
-    return d.toISOString().slice(0, 10);
-}
 
 interface SupportingDocsTableProps {
     docs: SupportingDoc[];
@@ -120,13 +111,7 @@ export function classificationSampleToSupportingDoc(s: ClassificationSample): Su
     else if (raw === 'MIXED') sentiment = 'mixed';
     else if (raw === 'NEUTRAL') sentiment = 'neutral';
 
-    const st = s.source_type;
-    const name = s.source_name;
-    let sourceLabel: string;
-    if (st === 'news') sourceLabel = name ? `News · ${name}` : 'News';
-    else if (st === 'x_post') sourceLabel = name ? `X · @${name}` : 'X';
-    else if (st?.startsWith('reddit')) sourceLabel = name ? `Reddit · r/${name}` : 'Reddit';
-    else sourceLabel = st || 'unknown';
+    const label = sourceLabel(s.source_type, s.source_name);
 
     let published: number | null = null;
     if (s.date) {
@@ -156,7 +141,7 @@ export function classificationSampleToSupportingDoc(s: ClassificationSample): Su
         title: s.title || null,
         snippet,
         source_type: s.source_type || 'unknown',
-        source_label: sourceLabel,
+        source_label: label,
         url: s.url ?? null,
         published_at: published,
         sentiment_label: sentiment,

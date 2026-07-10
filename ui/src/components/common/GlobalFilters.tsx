@@ -16,32 +16,22 @@ const TIME_RANGES: TimeRange[] = [
 interface GlobalFiltersProps {
     filters: Filters;
     onFilterChange: (filters: Filters) => void;
-    /** When false, the tab ignores the time window (serves the full sample),
-     *  so we hide the pills and say so outright instead of rendering controls
-     *  that silently do nothing. Defaults to true. */
-    windowScoped?: boolean;
 }
 
 /**
  * GlobalFilters - Persistent filter bar for time range. The previous
  * "Filter by sources" pills were removed once the three-tier split
  * (news / officials / public) made source separation a built-in part
- * of every page; the filter dimension would have been redundant.
+ * of every page; the filter dimension would have been redundant. Every
+ * tab is window-scoped now that the Bot Detector fetches per-window
+ * snapshots like its siblings (the old `windowScoped` escape hatch is
+ * gone with it).
  */
 function GlobalFilters({
     filters,
     onFilterChange,
-    windowScoped = true,
 }: GlobalFiltersProps) {
     const { timeRange = '7d' } = filters;
-
-    if (!windowScoped) {
-        return (
-            <div className="filter-bar">
-                <span className="eyebrow text-muted">Showing everything we've collected — no date filter</span>
-            </div>
-        );
-    }
 
     return (
         <div className="filter-bar">
