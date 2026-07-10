@@ -1,8 +1,10 @@
 """
 Google Gemini LLM Client for Civic Lens Analysis.
 
-Provides a wrapper around the Google Generative AI SDK.
-Supports structured output via response_schema.
+Wraps the ``google-genai`` SDK — the replacement for the deprecated
+``google-generativeai`` package (Google archived it as
+deprecated-generative-ai-python; no fixes, new models land only in the new
+SDK). Supports structured output via response_schema.
 """
 
 import time
@@ -34,18 +36,20 @@ _PERMISSIVE_SAFETY_SETTINGS = [
 
 class GeminiClient(BaseLLMClient):
     """
-    Client for Google Gemini API.
-    
-    Handles prompt construction, API calls, and response parsing
-    using the Google Generative AI SDK.
-    
-    Supports structured output via response_schema in generation_config.
+    Client for the Google Gemini API (google-genai SDK).
+
+    Handles prompt construction, API calls, and response parsing.
+    Supports structured output via response_schema in the generation
+    config. Unlike the old google-generativeai wrapper, the system prompt
+    is sent as a real ``system_instruction`` role instead of being
+    concatenated into the user turn — matching how ``prompt_versions``
+    stores system and user templates separately (invariant B1).
     """
-    
+
     def __init__(
         self,
         api_key: str,
-        model: str = "gemini-2.0-flash",
+        model: str = "gemini-3.5-flash",
         temperature: float = 0.0,
         max_retries: int = 3,
     ):
@@ -54,30 +58,32 @@ class GeminiClient(BaseLLMClient):
         self.model = model
         self.temperature = temperature
         self.max_retries = max_retries
-        self._genai = None
-        
+        self._client = None
+        self._types = None
+
         if api_key:
             self._initialize_client()
-    
+
     def _initialize_client(self):
         """Initialize the Gemini client."""
         try:
-            import google.generativeai as genai
-            genai.configure(api_key=self.api_key)
-            self._genai = genai
+            from google import genai
+            from google.genai import types
+            self._client = genai.Client(api_key=self.api_key)
+            self._types = types
             logger.info(f"Initialized Gemini client with model={self.model}")
         except ImportError:
-            logger.warning("google-generativeai package not installed. LLM features disabled.")
-            self._genai = None
+            logger.warning("google-genai package not installed. LLM features disabled.")
+            self._client = None
         except Exception as e:
             logger.error(f"Failed to initialize Gemini client: {e}")
-            self._genai = None
-    
+            self._client = None
+
     @property
     def is_available(self) -> bool:
         """Check if the LLM client is properly initialized."""
-        return self._genai is not None
-    
+        return self._client is not None
+
     def complete(
         self,
         system_prompt: str,
@@ -87,54 +93,52 @@ class GeminiClient(BaseLLMClient):
     ) -> Dict[str, Any]:
         """
         Send a completion request to Gemini.
-        
+
         Args:
             system_prompt: System instructions for the model
             user_prompt: User message/query
             response_schema: JSON schema for structured output (optional)
             temperature: Override default temperature (optional)
-            
+
         Returns:
             Parsed JSON response as a dictionary
-            
+
         Raises:
-            RuntimeError: If client is not initialized
+            RuntimeError: If client is not initialized or retries exhausted
             ValueError: If response cannot be parsed as JSON
         """
         if not self.is_available:
             raise RuntimeError("Gemini client not initialized. Check API key.")
-        
-        full_prompt = f"{system_prompt}\n\n---\n\n{user_prompt}"
-        
-        # Build generation config with optional schema
-        generation_config = {
+
+        config_kwargs: Dict[str, Any] = {
+            "system_instruction": system_prompt,
             "temperature": temperature if temperature is not None else self.temperature,
             "response_mime_type": "application/json",
+            # Permissive thresholds — see _PERMISSIVE_SAFETY_SETTINGS.
+            "safety_settings": [
+                self._types.SafetySetting(**s) for s in _PERMISSIVE_SAFETY_SETTINGS
+            ],
         }
         if response_schema:
-            generation_config["response_schema"] = response_schema
-        
-        # Create model instance with config + permissive safety settings
-        # (see _PERMISSIVE_SAFETY_SETTINGS for the rationale).
-        model_instance = self._genai.GenerativeModel(
-            model_name=self.model,
-            generation_config=generation_config,
-            safety_settings=_PERMISSIVE_SAFETY_SETTINGS,
-        )
-        
+            config_kwargs["response_schema"] = response_schema
+        config = self._types.GenerateContentConfig(**config_kwargs)
+
         last_error = None
         for attempt in range(self.max_retries):
             try:
-                response = model_instance.generate_content(full_prompt)
-                
-                if hasattr(response, 'usage_metadata'):
-                    self.total_tokens_used += getattr(
-                        response.usage_metadata, 'total_token_count', 0
-                    )
-                
-                text = response.text.strip()
+                response = self._client.models.generate_content(
+                    model=self.model,
+                    contents=user_prompt,
+                    config=config,
+                )
+
+                usage = getattr(response, "usage_metadata", None)
+                if usage is not None:
+                    self.total_tokens_used += getattr(usage, "total_token_count", 0) or 0
+
+                text = (response.text or "").strip()
                 return self.parse_json_response(text, schema=response_schema)
-                
+
             except Exception as e:
                 last_error = e
                 # Don't sleep after the final attempt — there's no retry to

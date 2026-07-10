@@ -10,7 +10,7 @@ import { fetchPropaganda, fetchSnapshotStatus, type SnapshotStatus } from '../se
 import { asOfTodayEyebrow, formatTimeWindow } from '../services/timeWindow';
 import { useFetch } from '../services/useFetch';
 import { formatRefreshedAgo, getSnapshotTimestamp } from '../services/freshness';
-import { formatPct } from '../services/format';
+import { formatPct, sourceLabel } from '../services/format';
 import { dedupeById } from '../services/dedupe';
 import { COLORS } from '../theme';
 import type {
@@ -228,8 +228,7 @@ function PropagandaEntityCard({
                 { label: 'Mean score',   value: `${item.mean_score.toFixed(2)} / 1`, title: MEAN_SCORE_TITLE },
                 { label: 'Posts scored', value: item.total_docs.toLocaleString() },
             ] : []}
-            onClick={item.total_docs > 0 ? () => onOpen(item) : undefined}
-            href={item.total_docs > 0 ? undefined : entityExternalUrl(profile) ?? undefined}
+            onClick={() => onOpen(item)}
             emptyNote="Tracked — no scored posts in this window yet."
         />
     );
@@ -464,15 +463,11 @@ function NewsVsSocialCard({ splits }: { splits: PropagandaSourceSplit[] }) {
 //  Examples                                                                   //
 // --------------------------------------------------------------------------- //
 
-function friendlySourceMeta(ex: PropagandaExample): string {
-    if (ex.source_type === 'x_post') return ex.author_handle ? `X · @${ex.author_handle}` : 'X';
-    if (ex.source_type === 'news') return ex.domain ? `News · ${ex.domain}` : 'News';
-    if (ex.source_type.startsWith('reddit')) return ex.domain ? `Reddit · r/${ex.domain}` : 'Reddit';
-    return ex.domain || ex.source_type;
-}
-
 function ExampleRow({ ex }: { ex: PropagandaExample }) {
-    const sourceMeta = friendlySourceMeta(ex);
+    const sourceMeta = sourceLabel(
+        ex.source_type,
+        ex.source_type === 'x_post' ? ex.author_handle : ex.domain,
+    );
     return (
         <div className="example-row">
             <div className="example-row-head">

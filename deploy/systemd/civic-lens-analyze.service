@@ -16,6 +16,14 @@ Type=oneshot
 # UID. Resource caps (MemoryMax 1G equivalent) live on the compose service.
 WorkingDirectory=/opt/civic-lens
 EnvironmentFile=/etc/civic-lens.env
+# Apply pending migrations before every analyze run. deploy.sh migrates on
+# deploys, but manual `docker compose run analyze` invocations and image
+# pulls outside deploy.sh must never race ahead of the schema (2026-07-10:
+# 'no such table: ai_outputs_latest'). Idempotent no-op when current; a
+# migration failure aborts the unit before analysis touches the DB. The
+# in-runner schema guard (job_runner) is the belt to this suspender for
+# invocations that bypass systemd entirely.
+ExecStartPre=/bin/sh -c 'docker compose run --rm --quiet-pull ingest migrate --db "${CIVIC_DB_PATH:-/var/lib/civic-lens/data/civic_lens.db}"'
 ExecStart=/usr/bin/docker compose run --rm --quiet-pull analyze
 # Wall-clock ceiling — hard stop. Paired with the in-runner soft budget
 # (CIVIC_BUDGET_SECONDS=6900, set on the compose service) that skips LLM

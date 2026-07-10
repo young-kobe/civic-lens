@@ -42,11 +42,10 @@ class Settings(BaseSettings):
     
     # Gemini LLM Config
     gemini_api_key: str = ""
-    # gemini-2.0-flash was deprecated for new users in 2026; 2.5-flash is the
-    # current cheap+fast tier. Still a few cents per pipeline run at our
-    # volume. Override via CIVIC_GEMINI_MODEL if pricing or capability
-    # changes again.
-    gemini_model: str = "gemini-2.5-flash"
+    # 3.5-flash is the current cheap+fast tier (2.0-flash is EOL; 2.5-flash
+    # superseded). Still a few cents per pipeline run at our volume.
+    # Override via CIVIC_GEMINI_MODEL if pricing or capability changes again.
+    gemini_model: str = "gemini-3.5-flash"
     gemini_temperature: float = 0.0
     llm_enabled: bool = True  # LLM is primary classifier; heuristics are supplemental
     

@@ -33,6 +33,7 @@ project_root = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 from analysis.src.common.logger import get_logger
+from analysis.src.common.schema_guard import check_schema_current
 from analysis.src.common.settings import get_settings
 from analysis.src.common.cache import SnapshotCache
 from analysis.src.etl.loader import ContentLoader
@@ -944,6 +945,23 @@ class AnalysisJobRunner:
             "duration_seconds": 0,
             "status": "success",
         }
+
+        # Fail fast when the DB is behind this build's migrations —
+        # otherwise stages die mid-pipeline on missing tables/views with
+        # unhelpful errors (2026-07-10 prod: 'no such table:
+        # ai_outputs_latest'). Aborting BEFORE the stages/finally block is
+        # deliberate: snapshots against a stale schema fail anyway, and the
+        # failed exit code fires the systemd OnFailure alerter.
+        schema_error = check_schema_current(
+            self.settings.db_path, str(project_root / "data" / "migrations"),
+        )
+        if schema_error:
+            logger.error(f"ABORTING PIPELINE — {schema_error}")
+            summary["status"] = "failed"
+            summary["stage_status"]["schema"] = "failed"
+            summary["stage_errors"]["schema"] = schema_error
+            summary["duration_seconds"] = round(time.time() - start_time, 1)
+            return summary
 
         def _budget_allows(stage_key: str) -> tuple[bool, str | None]:
             """Return (allowed, skip-reason). Non-budgeted stages always run."""
