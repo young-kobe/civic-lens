@@ -11,7 +11,7 @@ import { Sparkline } from '../components/charts';
 import { fetchNarratives, fetchSnapshotStatus, type SnapshotStatus } from '../services/api';
 import { asOfTodayEyebrow, formatTimeWindow } from '../services/timeWindow';
 import { formatRefreshedAgo, getSnapshotTimestamp } from '../services/freshness';
-import { formatPts } from '../services/format';
+import { formatPts, formatRelativeDate, sourceLabel } from '../services/format';
 import { useFetch } from '../services/useFetch';
 import { COLORS } from '../theme';
 
@@ -85,16 +85,6 @@ function netSentimentColor(net: number): string {
     return COLORS.neutral;
 }
 
-function formatRelativeDate(unixSeconds: number): string {
-    if (!unixSeconds) return '—';
-    const d = new Date(unixSeconds * 1000);
-    const days = Math.floor((Date.now() - d.getTime()) / (1000 * 60 * 60 * 24));
-    if (days === 0) return 'today';
-    if (days === 1) return '1 day ago';
-    if (days < 30) return `${days} days ago`;
-    return d.toISOString().slice(0, 10);
-}
-
 /** Short faction-aware author label used when the first-seen author is an
  *  X account with profile metadata. */
 function authorLabel(author: AccountProfile | null): string | null {
@@ -121,9 +111,13 @@ function firstSeenLabel(n: NarrativeSummary): string {
     const authorDisp = authorLabel(n.first_seen_author);
     if (authorDisp) return authorDisp;
     if (n.first_seen_source_type) {
-        return n.first_seen_domain
-            ? `${n.first_seen_source_type} · ${n.first_seen_domain}`
-            : n.first_seen_source_type;
+        // Shared builder — never renders the raw source_type enum. X rows
+        // store the literal "x.com" as domain; without an author profile
+        // there is no handle to show, so pass null → bare "X".
+        return sourceLabel(
+            n.first_seen_source_type,
+            n.first_seen_source_type === 'x_post' ? null : n.first_seen_domain,
+        );
     }
     return 'unknown source';
 }

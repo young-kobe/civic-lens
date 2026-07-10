@@ -123,3 +123,32 @@ export function clampWidthPct(value: number | null | undefined): number {
     if (value === null || value === undefined || !Number.isFinite(value)) return 0;
     return Math.max(0, Math.min(100, value));
 }
+
+/**
+ * Canonical "News · nytimes.com" / "X · @handle" / "Reddit · r/politics"
+ * source label. THE single builder — SupportingDocsTable, Propaganda
+ * examples, and Narratives first-seen labels previously each hand-rolled
+ * this with different fallbacks, two of which leaked the raw source_type
+ * slug ("x_post") into user-facing copy.
+ */
+export function sourceLabel(
+    sourceType: string | null | undefined,
+    name: string | null | undefined,
+): string {
+    if (sourceType === 'news') return name ? `News · ${name}` : 'News';
+    if (sourceType === 'x_post') return name ? `X · @${name}` : 'X';
+    if (sourceType?.startsWith('reddit')) return name ? `Reddit · r/${name}` : 'Reddit';
+    // Never render a raw source_type enum to users.
+    return name || 'Unknown source';
+}
+
+/** "today" / "3 days ago" / ISO date for older items. */
+export function formatRelativeDate(unixSeconds: number | null): string {
+    if (!unixSeconds) return '—';
+    const d = new Date(unixSeconds * 1000);
+    const days = Math.floor((Date.now() - d.getTime()) / (1000 * 60 * 60 * 24));
+    if (days === 0) return 'today';
+    if (days === 1) return '1 day ago';
+    if (days < 30) return `${days} days ago`;
+    return d.toISOString().slice(0, 10);
+}

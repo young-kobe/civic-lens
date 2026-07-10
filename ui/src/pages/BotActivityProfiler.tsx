@@ -1,20 +1,20 @@
 import { useState } from 'react';
 import {
-    Card, CollapsibleInfo, EmptyState, EntityProfileCard, ErrorState, GlobalTicker,
+    Card, CollapsibleInfo, EmptyState, EntityHeader, EntityProfileCard, ErrorState,
+    FlaggedPostList, GlobalTicker,
     LoadingCard, MethodPopover, MetricCard, Modal,
     ThreeWayColumn, ThreeWayGrid,
-    entityExternalUrl,
+    entityExternalUrl, entityLeanAccent,
 } from '../components/common';
 import type { TickerItem } from '../components/common';
 import { fetchBotActivity, fetchSnapshotStatus, type SnapshotStatus } from '../services/api';
 import { useFetch } from '../services/useFetch';
 import { formatRefreshedAgo, getSnapshotTimestamp } from '../services/freshness';
 import { formatPct } from '../services/format';
-import { dedupeById } from '../services/dedupe';
 import { COLORS } from '../theme';
 import type {
     BehavioralSignals, BotData, BotEntityItem, BotOverview, ConfidenceLevel,
-    CoordinationStats, NarrativeAmplification,
+    CoordinationStats, Filters, NarrativeAmplification,
 } from '../types';
 
 // --------------------------------------------------------------------------- //
@@ -24,24 +24,79 @@ import type {
 const BOT_TOP_N = 12;
 
 function BotEntityCard({ item }: { item: BotEntityItem }) {
+    const [modalOpen, setModalOpen] = useState(false);
     const profile = item.entity_profile;
     const rateColor = item.bot_rate_pct > 10
         ? COLORS.negative
         : item.bot_rate_pct > 3
             ? COLORS.warning
             : 'var(--neutral-700)';
+    const sourceUrl = entityExternalUrl(profile);
 
     return (
-        <EntityProfileCard
-            profile={profile}
-            stats={item.total_docs > 0 ? [
-                { label: 'Suspected bot rate', value: formatPct(item.bot_rate_pct), color: rateColor, emphasis: true },
-                { label: 'Flagged posts',   value: item.bot_docs.toLocaleString() },
-                { label: 'Posts scanned', value: item.total_docs.toLocaleString() },
-            ] : []}
-            href={entityExternalUrl(profile) ?? undefined}
-            emptyNote="Tracked — no posts scored yet."
-        />
+        <>
+            <EntityProfileCard
+                profile={profile}
+                stats={item.total_docs > 0 ? [
+                    { label: 'Suspected bot rate', value: formatPct(item.bot_rate_pct), color: rateColor, emphasis: true },
+                    { label: 'Flagged posts',   value: item.bot_docs.toLocaleString() },
+                    { label: 'Posts scanned', value: item.total_docs.toLocaleString() },
+                ] : []}
+                onClick={() => setModalOpen(true)}
+                emptyNote="Tracked — no posts scored yet."
+            />
+            {modalOpen && (
+                <Modal
+                    isOpen
+                    onClose={() => setModalOpen(false)}
+                    title={profile.displayName}
+                    subtitle="Bot-detection drill-down"
+                    accentColor={entityLeanAccent(profile)}
+                >
+                    <EntityHeader profile={profile} />
+                    <div className="entity-modal-stats">
+                        <div>
+                            <div
+                                className="eyebrow"
+                                title="Share of this source's scored posts our detector flags as likely automated. A lead, not a verdict."
+                            >
+                                Suspected bot rate
+                            </div>
+                            <div className="metric-value" style={{ color: rateColor }}>
+                                {item.total_docs > 0 ? formatPct(item.bot_rate_pct) : '—'}
+                            </div>
+                        </div>
+                        <div>
+                            <div className="eyebrow">Flagged posts</div>
+                            <div className="metric-value">{item.bot_docs.toLocaleString()}</div>
+                        </div>
+                        <div>
+                            <div className="eyebrow">Posts scanned</div>
+                            <div className="metric-value">{item.total_docs.toLocaleString()}</div>
+                        </div>
+                    </div>
+
+                    <h3 className="card-title mt-4 mb-2">Flagged posts from this source</h3>
+                    <FlaggedPostList
+                        posts={item.samples ?? []}
+                        emptyNote={item.bot_docs > 0
+                            ? 'Flagged posts exist but their excerpts are not in this snapshot yet — they will appear on the next data refresh.'
+                            : 'No posts from this source were flagged in this window.'}
+                    />
+                    <div className="card-note mt-4">
+                        Bot flags are probabilistic leads, not verdicts. Every excerpt links
+                        back to the original post so you can judge it yourself.
+                    </div>
+                    {sourceUrl && (
+                        <div className="mt-3">
+                            <a href={sourceUrl} target="_blank" rel="noreferrer" className="example-row-link">
+                                Visit {profile.displayName} ↗
+                            </a>
+                        </div>
+                    )}
+                </Modal>
+            )}
+        </>
     );
 }
 
@@ -137,7 +192,7 @@ function readsAsToday(data: BotData): string {
     }
     if (topNarrative) {
         const count = topNarrative.suspectedBotVolume.toLocaleString();
-        parts.push(`${count} of them are pushing the same talking point: "${topNarrative.narrative}".`);
+        parts.push(`${count} of them are amplifying the same narrative: "${topNarrative.narrative}".`);
     }
     return parts.join(' ');
 }
@@ -259,7 +314,7 @@ function NarrativeAmplificationCard({ narrative }: NarrativeAmplificationCardPro
             <Card>
                 <div className="flex items-start justify-between mb-3" style={{ gap: 'var(--space-3)', flexWrap: 'wrap' }}>
                     <div style={{ minWidth: 0 }}>
-                        <h4 className="font-semibold uppercase" style={{ letterSpacing: '0.02em' }}>{narrative.narrative}</h4>
+                        <h4 className="font-semibold">{narrative.narrative}</h4>
                         <div className="flex items-center gap-2 mt-1" style={{ flexWrap: 'wrap' }}>
                             {getConfidenceBadge(narrative.confidence)}
                             <span className="eyebrow num">
@@ -299,59 +354,17 @@ function NarrativeAmplificationCard({ narrative }: NarrativeAmplificationCardPro
                     when the backend synthesized one (invariant C1). */}
                 <div className="mb-4">
                     <div className="eyebrow mb-2">Flagged Posts</div>
-                    {(() => {
-                        const uniquePosts = dedupeById(narrative.examplePosts, (ex) => ex.doc_id);
-                        if (uniquePosts.length === 0) {
-                            return (
-                                <div className="text-sm text-muted" style={{ fontStyle: 'italic' }}>
-                                    No individual posts surfaced yet for this indicator.
-                                </div>
-                            );
-                        }
-                        return (
-                        <div className="flex flex-col gap-2">
-                            {uniquePosts.map((ex) => (
-                                <div
-                                    key={ex.doc_id}
-                                    style={{
-                                        padding: 'var(--space-2) var(--space-3)',
-                                        background: 'var(--bg-inset)',
-                                        borderLeft: '2px solid var(--neutral-300)',
-                                        borderRadius: '2px',
-                                    }}
-                                >
-                                    <div
-                                        className="text-sm"
-                                        style={{ fontStyle: 'italic', marginBottom: 4 }}
-                                    >
-                                        "{ex.text}"
-                                    </div>
-                                    <div
-                                        className="text-xs text-muted"
-                                        style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'baseline' }}
-                                    >
-                                        <span>{ex.source_label}</span>
-                                        {ex.url && (
-                                            <a
-                                                href={ex.url}
-                                                target="_blank"
-                                                rel="noreferrer"
-                                                className="example-row-link"
-                                            >
-                                                View original ↗
-                                            </a>
-                                        )}
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                        );
-                    })()}
+                    <FlaggedPostList
+                        posts={narrative.examplePosts}
+                        emptyNote="No individual posts surfaced yet for this narrative."
+                    />
                 </div>
 
-                {/* Hashtags and Phrases */}
-                <div className="grid-2 gap-3 mb-4">
-                    <div>
+                {/* Derived chips — rendered only when the backend actually
+                    extracted something; an empty section header would read
+                    as broken, not as honest. */}
+                {narrative.topHashtags.length > 0 && (
+                    <div className="mb-4">
                         <div className="eyebrow mb-2">Top Hashtags</div>
                         <div className="flex flex-wrap gap-1">
                             {narrative.topHashtags.map((tag, i) => (
@@ -359,25 +372,18 @@ function NarrativeAmplificationCard({ narrative }: NarrativeAmplificationCardPro
                             ))}
                         </div>
                     </div>
-                    <div>
-                        <div className="eyebrow mb-2">Key Phrases</div>
+                )}
+
+                {narrative.targets.length > 0 && (
+                    <div className="mb-4">
+                        <div className="eyebrow mb-2">Who this narrative targets</div>
                         <div className="flex flex-wrap gap-1">
-                            {narrative.topPhrases.map((phrase, i) => (
-                                <span key={i} className="badge badge-neutral">{phrase}</span>
+                            {narrative.targets.map((target, i) => (
+                                <span key={i} className="badge badge-neutral">{target}</span>
                             ))}
                         </div>
                     </div>
-                </div>
-
-                {/* Targets */}
-                <div className="mb-4">
-                    <div className="eyebrow mb-2">Who this narrative targets</div>
-                    <div className="flex flex-wrap gap-1">
-                        {narrative.targets.map((target, i) => (
-                            <span key={i} className="badge badge-neutral">{target}</span>
-                        ))}
-                    </div>
-                </div>
+                )}
 
                 {/* Why Flagged (repeated in modal for full context) */}
                 <div>
@@ -597,17 +603,19 @@ function SimilarityBar({ label, value, color }: SimilarityBarProps) {
     );
 }
 
-function BotActivityProfiler() {
-    // Bot activity is NOT time-window filtered at the API layer (it's a
-    // snapshot cache rebuilt on each pipeline run). Rather than relabel the
-    // full sample with a window the data doesn't honor, this tab takes no
-    // `filters` prop, hides the global window pills (see App.tsx), and states
-    // "full sample" outright. Windowing the API is tracked in
-    // docs/todos/ui-rework.md.
+interface BotActivityProfilerProps {
+    filters: Filters;
+}
+
+function BotActivityProfiler({ filters }: BotActivityProfilerProps) {
+    // Windowed like every other tab: the backend pre-computes
+    // bot_activity_{window} snapshots and /bot-activity takes ?window=.
+    // (This page previously fetched the API's 24h default while labeling
+    // it "full sample, not time-windowed" — wrong on both counts.)
     const { data, loading, error, refetch } = useFetch<BotData>(
-        () => fetchBotActivity(),
-        [],
-        'bot-activity',
+        () => fetchBotActivity(filters.timeRange),
+        [filters.timeRange],
+        `bot-activity:${filters.timeRange}`,
     );
     const { data: snapshotStatus } = useFetch<SnapshotStatus>(
         () => fetchSnapshotStatus(),
@@ -641,7 +649,9 @@ function BotActivityProfiler() {
     if (!data) return <EmptyState title="No bot-activity data available" />;
 
     const { items: botTickerItems, accentColor: botAccentColor } = buildBotTickerItems(data.overview);
-    const botRefreshed = formatRefreshedAgo(getSnapshotTimestamp(snapshotStatus, 'bot_activity'));
+    const botRefreshed = formatRefreshedAgo(
+        getSnapshotTimestamp(snapshotStatus, `bot_activity_${filters.timeRange}`),
+    );
 
     return (
         <div className="dashboard-grid">
@@ -668,9 +678,6 @@ function BotActivityProfiler() {
 
             <div className="col-span-12">
                 <div className="reads-as-today">
-                    <span className="eyebrow reads-as-today-eyebrow">
-                        Full sample &middot; all collected data, not time-windowed
-                    </span>
                     <p className="lead" style={{ margin: 0 }}>{readsAsToday(data)}</p>
                 </div>
             </div>
@@ -713,6 +720,17 @@ function BotActivityProfiler() {
                     <NarrativeAmplificationCard narrative={narrative} />
                 </div>
             ))}
+            {data.narrativeAmplification.length === 0 && (
+                <div className="col-span-12">
+                    <Card>
+                        <p className="text-sm text-muted" style={{ margin: 0 }}>
+                            No flagged post in this window belongs to a tracked narrative yet.
+                            This section fills in when suspected-bot posts overlap with the
+                            recurring claims on the Narratives page.
+                        </p>
+                    </Card>
+                </div>
+            )}
 
             {/* Behavioral signals — four cards rendered as direct grid children.
                 See BehavioralSignalsPanel for per-card span decisions. */}

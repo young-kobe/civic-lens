@@ -135,12 +135,12 @@ export async function fetchEvalAccuracy(): Promise<EvalAccuracy> {
     return fetchJSON<EvalAccuracy>('/eval-accuracy');
 }
 
-export async function fetchBotActivity(): Promise<BotData> {
+export async function fetchBotActivity(window: TimeWindow = '7d'): Promise<BotData> {
     if (USE_MOCKS) {
         const { mockBotActivity } = await import('./fixtures');
         return mockBotActivity();
     }
-    return fetchJSON<BotData>('/bot-activity');
+    return fetchJSON<BotData>(`/bot-activity?window=${window}`);
 }
 
 export async function fetchNarratives(window: TimeWindow = '7d', limit: number = 20): Promise<NarrativeSummary[]> {

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Card } from '../../components/common';
 import { submitReview } from '../../services/api';
+import { sourceLabel } from '../../services/format';
 import { COLORS } from '../../theme';
 import type { ReviewQueueItem, ReviewTaskType } from '../../types';
 
@@ -121,7 +122,7 @@ export default function ReviewItemCard({ item, reviewerId, onSubmitted }: Review
 
     return (
         <Card
-            title={`Doc #${item.doc_id} · ${item.doc.source_type}`}
+            title={`Doc #${item.doc_id} · ${sourceLabel(item.doc.source_type, item.doc.domain)}`}
             subtitle={item.doc.title || item.doc.ident}
             headerActions={sourceLink}
         >

@@ -489,6 +489,10 @@ class BotEntityItem:
     bot_docs: int               # subset flagged as label='bot'
     bot_rate_pct: float         # bot_docs / total_docs * 100
     entity_profile: Dict[str, Any] = field(default_factory=dict)
+    # Up to a handful of this entity's bot-flagged posts, confidence-ranked,
+    # so the card opens an evidence modal instead of dead-ending at an
+    # external link (C1: evidence surfaces link back to originals).
+    samples: List["FlaggedExample"] = field(default_factory=list)
 
 
 @dataclass

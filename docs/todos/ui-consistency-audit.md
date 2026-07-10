@@ -20,9 +20,26 @@ Generated from the 2026-04-23 mobile-first UI audit. The P0 items and the most v
 
 ## Formatter consolidation
 
-- [ ] **Promote `formatRelativeDate` to `services/format.ts`.** Currently local in `Narratives.tsx:68–76`. Usable by any "first seen / last updated" timestamp. Same file should grow:
+- [x] **Promote `formatRelativeDate` to `services/format.ts`.** Landed 2026-07-10 alongside the shared `sourceLabel()` builder (both copies deleted; SupportingDocsTable + Narratives import it).
 - [ ] **`formatCount(n)` — wraps `toLocaleString()` with null/NaN guard.** `formatCount(null)` → `"—"`. Eliminates scattered `(value ?? 0).toLocaleString()` calls.
 - [ ] **`formatScore(n, decimals=2)` — wraps `toFixed()` with guard.** For propaganda scores, confidence values, and coordination index where the number is a 0-1 score, not a percentage.
+
+## Duplication clusters (2026-07-10 audit — deferred extractions)
+
+- [ ] **`EntityModalStats` + `EntityModalLinks`.** The eyebrow/`.metric-value`
+      stat grid and "Visit {name} ↗ / lean-rated-by / Bio ↗" links row are
+      hand-rolled in four modals now (Narratives ~534-563, Propaganda
+      ~272-302, PublicSentiment ~398-460/572-588, BotActivityProfiler's new
+      entity modal). Extract to `components/common/`.
+- [ ] **`BreakdownTable`** for PublicSentiment's three near-identical
+      received-tone tables (byTopic / bySpeakerTier / byNarrative,
+      ~467-548): same Topic/Net/n shape and low-sample branch; only the
+      header + key differ.
+- [ ] **Confidence chip** — the "NN% confidence" chip is rendered ad hoc in
+      SupportingDocsTable and Propaganda's ExampleRow; `ConfidenceBadge`
+      doesn't cover the raw-% case. One shared chip.
+- [ ] **Propaganda `ExampleRow`** — refactor onto the shared source-label /
+      link / confidence-chip primitives once the chip exists.
 
 ## Accessibility follow-ups
 
