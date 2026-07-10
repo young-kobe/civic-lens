@@ -202,7 +202,7 @@ class PropagandaAggregator:
                    a.output_json,
                    a.inference_method,
                    u.username
-            FROM ai_outputs a
+            FROM ai_outputs_latest a
             JOIN docs d ON d.doc_id = a.doc_id
             {X_AUTHOR_JOIN_SQL}
             WHERE a.task_type = 'propaganda'
@@ -230,7 +230,7 @@ class PropagandaAggregator:
                    d.published_at,
                    d.ident,
                    u.username
-            FROM ai_outputs a
+            FROM ai_outputs_latest a
             JOIN docs d ON d.doc_id = a.doc_id
             {X_AUTHOR_JOIN_SQL}
             WHERE a.task_type = 'propaganda'

@@ -55,7 +55,7 @@ class ReviewService:
                    a.model_id, a.prompt_version, a.created_at,
                    d.source_type, d.domain_or_subreddit, d.title, d.text, d.ident,
                    u.username
-            FROM ai_outputs a
+            FROM ai_outputs_latest a
             JOIN docs d ON d.doc_id = a.doc_id
             LEFT JOIN ai_output_evals e ON e.ai_output_id = a.output_id
             {X_AUTHOR_JOIN_SQL}
@@ -180,7 +180,9 @@ class ReviewService:
 
     def get_stats(self, task_type: Optional[str] = None) -> Dict[str, Any]:
         """Per-task review progress and observed accuracy."""
-        sql_total = "SELECT task_type, COUNT(*) FROM ai_outputs"
+        # Latest rows only: after a reprocess the base table holds one row
+        # per (doc, task, run) and raw COUNT(*) would deflate "% reviewed".
+        sql_total = "SELECT task_type, COUNT(*) FROM ai_outputs_latest"
         sql_eval = """
             SELECT task_type,
                    COUNT(*) AS reviewed,

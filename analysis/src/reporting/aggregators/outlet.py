@@ -27,7 +27,7 @@ class OutletAggregator:
             
             cursor.execute("""
                 SELECT d.domain_or_subreddit, a.task_type, a.output_json
-                FROM ai_outputs a
+                FROM ai_outputs_latest a
                 JOIN docs d ON a.doc_id = d.doc_id
                 WHERE a.task_type IN ('sentiment', 'bot_detection')
             """)

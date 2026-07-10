@@ -386,7 +386,11 @@ class ContentLoader:
 
     def get_unprocessed_docs(self, task_type: str, source_types: Optional[List[str]] = None, batch_size: int = 500) -> List[Dict[str, Any]]:
         """
-        Returns docs that do not have an entry in ai_outputs for the given task.
+        Returns docs whose ``doc_task_state`` row for the given task is
+        missing or 'failed'. The state table is the work queue; ai_outputs
+        row existence no longer gates processing (migration 022), so a task
+        can be reprocessed by deleting its state rows without touching the
+        append-only output log.
 
         ``raw_hash`` is included so callers can de-dup scoring at the
         content-hash level (e.g. syndicated AP wire stories reprinted by
@@ -398,8 +402,8 @@ class ContentLoader:
             SELECT d.doc_id, d.text, d.metadata_json, d.title, d.source_type,
                    d.ident, d.raw_hash
             FROM docs d
-            LEFT JOIN ai_outputs a ON d.doc_id = a.doc_id AND a.task_type = ?
-            WHERE a.output_id IS NULL AND d.text IS NOT NULL
+            LEFT JOIN doc_task_state s ON d.doc_id = s.doc_id AND s.task_type = ?
+            WHERE (s.doc_id IS NULL OR s.status = 'failed') AND d.text IS NOT NULL
         """
         params = [task_type]
         if source_types:
@@ -490,5 +494,49 @@ class ContentLoader:
                 (doc_id, task, json.dumps(result), confidence, model_id,
                  prompt_version, inference_method),
             )
+            self.upsert_task_state(cursor, doc_id, task, "done", prompt_version)
+            conn.commit()
+
+    @staticmethod
+    def upsert_task_state(
+        cursor,
+        doc_id: int,
+        task: str,
+        status: str,
+        prompt_version: str = "",
+    ):
+        """Upsert the ``doc_task_state`` work-queue row for (doc_id, task).
+
+        The state table (migration 022) is what get_unprocessed_docs queues
+        off; ai_outputs is an append-only result log. Static so engines that
+        manage their own transaction (citation_extractor) can write the state
+        row atomically with their data writes.
+        """
+        cursor.execute(
+            """
+            INSERT INTO doc_task_state
+                (doc_id, task_type, status, prompt_version, attempts,
+                 last_attempt_at)
+            VALUES (?, ?, ?, ?, 1, strftime('%s','now'))
+            ON CONFLICT(doc_id, task_type) DO UPDATE SET
+                status = excluded.status,
+                prompt_version = excluded.prompt_version,
+                attempts = doc_task_state.attempts + 1,
+                last_attempt_at = excluded.last_attempt_at
+            """,
+            (doc_id, task, status, prompt_version),
+        )
+
+    def mark_task_failed(self, doc_id: int, task: str, prompt_version: str = ""):
+        """Record a failed attempt for (doc_id, task).
+
+        'failed' rows still re-queue in get_unprocessed_docs — this exists so
+        retries are observable (attempts, last_attempt_at) instead of the old
+        persist-nothing pattern where a doc failing every run was invisible
+        (audit A-3).
+        """
+        with self._get_conn() as conn:
+            cursor = conn.cursor()
+            self.upsert_task_state(cursor, doc_id, task, "failed", prompt_version)
             conn.commit()
 

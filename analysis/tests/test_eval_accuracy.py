@@ -34,6 +34,13 @@ class EvalAccuracyTests(unittest.TestCase):
                 output_json TEXT,
                 confidence REAL
             );
+            CREATE VIEW ai_outputs_latest AS
+            SELECT a.* FROM ai_outputs a
+            WHERE a.output_id = (
+                SELECT MAX(a2.output_id) FROM ai_outputs a2
+                WHERE a2.doc_id = a.doc_id AND a2.task_type = a.task_type
+            );
+
             CREATE TABLE ai_output_evals (
                 eval_id INTEGER PRIMARY KEY AUTOINCREMENT,
                 ai_output_id INTEGER NOT NULL UNIQUE,

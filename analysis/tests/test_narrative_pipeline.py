@@ -196,16 +196,23 @@ class TestCitationExtractor(unittest.TestCase):
         self.assertIn("reply", kinds)
 
     def test_rerun_is_idempotent_via_marker(self):
-        # The job_runner path uses get_unprocessed_docs, which filters out docs
-        # already marked in ai_outputs. Simulate that marker after a first run.
+        # The job_runner path uses get_unprocessed_docs, which queues off
+        # doc_task_state (migration 022). The extractor must mark every doc
+        # done there — and must NOT write marker rows into ai_outputs, which
+        # is reserved for actual analysis results.
         extractor = CitationExtractor(self.db_path)
         extractor.extract_batch(self._docs_for_extraction())
         conn = sqlite3.connect(self.db_path)
         markers = conn.execute(
+            "SELECT COUNT(*) FROM doc_task_state "
+            "WHERE task_type='citations' AND status='done'"
+        ).fetchone()[0]
+        fake_outputs = conn.execute(
             "SELECT COUNT(*) FROM ai_outputs WHERE task_type='citations'"
         ).fetchone()[0]
         conn.close()
         self.assertEqual(markers, 4)
+        self.assertEqual(fake_outputs, 0)
 
 
 class TestNarrativeClusterer(unittest.TestCase):
