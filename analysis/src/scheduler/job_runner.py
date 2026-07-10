@@ -43,15 +43,17 @@ from analysis.src.engine.claim_extractor import ClaimExtractor
 from analysis.src.engine.narrative_clusterer import NarrativeClusterer
 from analysis.src.engine.account_classifier import AccountClassifier
 from analysis.src.engine.propaganda_detector import PropagandaDetector
+from analysis.src.engine.target_extractor import TargetSentimentExtractor
 from analysis.src.llm.prompts import (
     BOT_PROMPT_VERSION, TEXT_ANALYSIS_PROMPT_VERSION, CLAIM_EXTRACTION_PROMPT_VERSION,
-    PROPAGANDA_PROMPT_VERSION,
+    PROPAGANDA_PROMPT_VERSION, TARGET_SENTIMENT_PROMPT_VERSION,
     BOT_SYSTEM_PROMPT, TEXT_ANALYSIS_SYSTEM_PROMPT, CLAIM_EXTRACTION_SYSTEM_PROMPT,
-    PROPAGANDA_SYSTEM_PROMPT,
+    PROPAGANDA_SYSTEM_PROMPT, TARGET_SENTIMENT_SYSTEM_PROMPT,
     BOT_USER_PROMPT_TEMPLATE, TEXT_ANALYSIS_USER_PROMPT_TEMPLATE,
     CLAIM_EXTRACTION_USER_PROMPT_TEMPLATE,
-    PROPAGANDA_USER_PROMPT_TEMPLATE,
+    PROPAGANDA_USER_PROMPT_TEMPLATE, TARGET_SENTIMENT_USER_PROMPT_TEMPLATE,
 )
+from analysis.src.reporting.entity_registry import get_registry
 from analysis.src.reporting.aggregators import (
     SentimentAggregator,
     BotAggregator,
@@ -92,6 +94,10 @@ class AnalysisJobRunner:
         )
         self.citation_extractor = CitationExtractor(self.settings.db_path)
         self.claim_extractor = ClaimExtractor(llm_enabled=self.settings.llm_enabled)
+        self.target_extractor = TargetSentimentExtractor(
+            llm_enabled=self.settings.llm_enabled,
+            tracked_targets=self._tracked_target_names(),
+        )
         self.propaganda_detector = (
             PropagandaDetector(llm_enabled=True)
             if self.settings.llm_enabled else PropagandaDetector(llm_enabled=False)
@@ -128,9 +134,18 @@ class AnalysisJobRunner:
             embedding_threshold=self.settings.narrative_embedding_threshold,
         )
     
+    @staticmethod
+    def _tracked_target_names() -> list[str]:
+        """Canonical names for the TRACKED TARGETS prompt block: the 16
+        registry officials plus the two party collectives. Injected into the
+        extractor so the engine layer doesn't import the registry itself;
+        deterministic resolution at aggregation time uses the same registry."""
+        names = [o.display_name for o in get_registry().primary_officials()]
+        return names + ["Republican Party", "Democratic Party"]
+
     def run_etl(self) -> int:
         """Run ETL to load new raw content. Returns count of new docs."""
-        logger.info("Step 1/10: Running ETL...")
+        logger.info("Step 1/11: Running ETL...")
         count = self.loader.load_new_raw_content()
         logger.info(f"ETL complete: {count} new documents loaded")
         return count
@@ -159,7 +174,7 @@ class AnalysisJobRunner:
         Walkthrough 040.
         """
         import sqlite3 as _sqlite
-        logger.info(f"Step 2/10: Running bot detection (scope: {self.settings.run_analysis_on})...")
+        logger.info(f"Step 2/11: Running bot detection (scope: {self.settings.run_analysis_on})...")
         source_types = self._get_target_source_types()
         batch_size = limit if limit is not None else self.settings.loader_batch_size
         docs = self.loader.get_unprocessed_docs(
@@ -308,7 +323,7 @@ class AnalysisJobRunner:
     
     def run_text_analysis(self, limit: int | None = None) -> int:
         """Run combined sentiment and favorability analysis on unprocessed docs. Returns count processed."""
-        logger.info(f"Step 3/10: Running text analysis (sentiment + favorability) (scope: {self.settings.run_analysis_on})...")
+        logger.info(f"Step 3/11: Running text analysis (sentiment + favorability) (scope: {self.settings.run_analysis_on})...")
         source_types = self._get_target_source_types()
         
         # We look for docs that haven't been processed for sentiment
@@ -361,6 +376,70 @@ class AnalysisJobRunner:
         logger.info(f"Text analysis complete: {total} docs processed")
         return total
 
+    def run_target_extraction(self, limit: int | None = None) -> int:
+        """Extract per-target stances (task_type ``target_sentiment``) from
+        unprocessed docs. LLM-driven. Returns count of docs processed.
+
+        This is the data source for the received-tone / expressed-tone split:
+        overall sentiment scores how a doc SOUNDS; this stage records who the
+        doc takes a stance TOWARD. Keyed on its own task_type so the existing
+        get_unprocessed_docs machinery backfills the whole corpus — docs
+        already scored for sentiment re-queue here without duplicating their
+        sentiment rows.
+        """
+        logger.info(f"Step 4/11: Running target-sentiment extraction (scope: {self.settings.run_analysis_on})...")
+        if not self.settings.llm_enabled:
+            logger.warning("Target-sentiment extraction requires llm_enabled=true; skipping")
+            return 0
+
+        source_types = self._get_target_source_types()
+        batch_size = limit if limit is not None else self.settings.loader_batch_size
+        docs = self.loader.get_unprocessed_docs(
+            "target_sentiment", source_types=source_types, batch_size=batch_size
+        )
+        total = len(docs)
+        if total == 0:
+            logger.info("Target-sentiment extraction: no unprocessed docs")
+            return 0
+
+        logger.info(f"Processing {total} docs for target-sentiment extraction")
+        skipped = 0
+        for i, doc in enumerate(docs, 1):
+            result = self.target_extractor.extract(doc["text"])
+            if result.extraction_failed:
+                # Transport failure — persist nothing so the doc re-queues
+                # next run instead of freezing as "no targets" (audit A-3).
+                skipped += 1
+                logger.warning(
+                    f"[targets {i}/{total}] doc={doc['doc_id']} extraction FAILED — "
+                    "skipping (will re-queue)"
+                )
+                continue
+            # Row confidence is the mean of per-target confidences (claims
+            # pattern); aggregation filters per-target, not on this mean.
+            confidences = [t.confidence for t in result.targets]
+            row_confidence = sum(confidences) / len(confidences) if confidences else 0.0
+            self.loader.save_ai_output(
+                doc["doc_id"],
+                "target_sentiment",
+                result.to_dict(),
+                row_confidence,
+                model_id=self.model_id,
+                prompt_version=TARGET_SENTIMENT_PROMPT_VERSION,
+                system_prompt=TARGET_SENTIMENT_SYSTEM_PROMPT,
+                user_prompt_template=TARGET_SENTIMENT_USER_PROMPT_TEMPLATE,
+                inference_method="llm",
+            )
+            logger.debug(
+                f"[targets {i}/{total}] doc={doc['doc_id']} extracted={len(result.targets)} "
+                f"mean_conf={row_confidence:.2f}"
+            )
+        logger.info(
+            f"Target-sentiment extraction complete: {total - skipped} docs processed, "
+            f"{skipped} skipped on failure (will re-queue)"
+        )
+        return total - skipped
+
     def run_propaganda_detection(self, limit: int | None = None) -> int:
         """Detect propaganda techniques on unprocessed political docs (LLM-driven).
         Runs on every source type — propaganda techniques exist in news editorials
@@ -368,7 +447,7 @@ class AnalysisJobRunner:
         count of docs processed (walkthrough 042).
         """
         logger.info(
-            f"Step 4/10: Running propaganda detection (scope: {self.settings.run_analysis_on})..."
+            f"Step 5/11: Running propaganda detection (scope: {self.settings.run_analysis_on})..."
         )
         if not self.settings.llm_enabled:
             logger.warning("Propaganda detection requires llm_enabled=true; skipping")
@@ -448,7 +527,7 @@ class AnalysisJobRunner:
 
     def run_citation_extraction(self, limit: int | None = None) -> int:
         """Extract cross-source citation edges. Deterministic, no LLM. Returns count of edges written."""
-        logger.info(f"Step 5/10: Running citation extraction...")
+        logger.info(f"Step 6/11: Running citation extraction...")
         batch_size = limit if limit is not None else self.settings.loader_batch_size
         docs = self.loader.get_unprocessed_docs(
             "citations",
@@ -465,7 +544,7 @@ class AnalysisJobRunner:
 
     def run_claim_extraction(self, limit: int | None = None) -> int:
         """Extract canonical claim statements from unprocessed docs. LLM-driven. Returns count of docs processed."""
-        logger.info(f"Step 6/10: Running claim extraction (scope: {self.settings.run_analysis_on})...")
+        logger.info(f"Step 7/11: Running claim extraction (scope: {self.settings.run_analysis_on})...")
         if not self.settings.llm_enabled:
             logger.warning("Claim extraction requires llm_enabled=true; skipping")
             return 0
@@ -526,7 +605,7 @@ class AnalysisJobRunner:
 
     def run_narrative_clustering(self) -> dict:
         """Cluster unassigned claims into narratives. Returns summary dict."""
-        logger.info("Step 7/10: Running narrative clustering...")
+        logger.info("Step 8/11: Running narrative clustering...")
         return self.narrative_clusterer.run()
 
     def run_account_classification(self) -> dict:
@@ -535,7 +614,7 @@ class AnalysisJobRunner:
         identification flows through entity_registry (verified_officials.yaml)
         and authors not in the curated YAML default to general_public at
         the aggregator layer."""
-        logger.info("Step 8/10: Running account tier classification (curated)...")
+        logger.info("Step 9/11: Running account tier classification (curated)...")
         yaml_path = project_root / self.settings.known_accounts_yaml
         curated = self.account_classifier.load_curated(yaml_path)
         summary = {
@@ -554,7 +633,7 @@ class AnalysisJobRunner:
         import json as _json
         import statistics as _stats
 
-        logger.info("Step 9/10: Rolling up per-post bot scores to author level...")
+        logger.info("Step 10/11: Rolling up per-post bot scores to author level...")
         conn = _sqlite.connect(self.settings.db_path)
         try:
             conn.execute("PRAGMA busy_timeout = 5000")
@@ -662,7 +741,7 @@ class AnalysisJobRunner:
         """
         from analysis.src.reporting.aggregators.base import get_bot_flagged_doc_ids
 
-        logger.info("Step 10/10: Saving aggregation snapshots to cache...")
+        logger.info("Step 11/11: Saving aggregation snapshots to cache...")
         results = {}
 
         # Time windows to pre-compute for time-sensitive endpoints
@@ -737,7 +816,7 @@ class AnalysisJobRunner:
     # citations) + snapshots are excluded: those either finish in seconds
     # or must always run.
     _BUDGETED_LLM_STAGES = frozenset({
-        "bot", "text", "propaganda", "claims", "narratives",
+        "bot", "text", "targets", "propaganda", "claims", "narratives",
         "accounts", "bot_rollup",
     })
 
@@ -803,6 +882,7 @@ class AnalysisJobRunner:
             "etl_new_docs": 0,
             "bot_detection": 0,
             "text_analysis": 0,
+            "target_sentiment": 0,
             "propaganda": 0,
             "citations": 0,
             "claims": 0,
@@ -855,6 +935,8 @@ class AnalysisJobRunner:
                 _run_stage("bot", "bot_detection", self.run_bot_detection, limit=limit)
             if run_all or "text" in task_set:
                 _run_stage("text", "text_analysis", self.run_text_analysis, limit=limit)
+            if run_all or "targets" in task_set:
+                _run_stage("targets", "target_sentiment", self.run_target_extraction, limit=limit)
             if run_all or "propaganda" in task_set:
                 _run_stage("propaganda", "propaganda", self.run_propaganda_detection, limit=limit)
             if run_all or "citations" in task_set:
@@ -948,7 +1030,7 @@ def main():
     parser = argparse.ArgumentParser(description="Civic Lens Analysis Job Runner")
     parser.add_argument(
         "--tasks", type=str,
-        help="Comma-separated tasks to run: etl, bot, text, propaganda, "
+        help="Comma-separated tasks to run: etl, bot, text, targets, propaganda, "
              "citations, claims, narratives, accounts, bot_rollup, snapshots. "
              "Defaults to all.",
     )

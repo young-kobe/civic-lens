@@ -16,6 +16,7 @@ export {
     entityChipLabel,
     entityExternalUrl,
     entityLeanAccent,
+    officialToneStats,
     sentimentStats,
 } from './EntityProfileCard';
 export type { EntityStat } from './EntityProfileCard';

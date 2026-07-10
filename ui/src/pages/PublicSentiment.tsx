@@ -3,7 +3,8 @@ import {
     CollapsibleInfo, EmptyState, EntityHeader, EntityProfileCard,
     ErrorState, GlobalTicker, LoadingCard, MethodPopover, Modal, SupportingDocsTable,
     ThreeWayColumn, ThreeWayGrid, TierRow, TopMetricsBlock,
-    classificationSampleToSupportingDoc, entityExternalUrl, entityLeanAccent, sentimentStats,
+    classificationSampleToSupportingDoc, entityExternalUrl, entityLeanAccent,
+    officialToneStats, sentimentStats,
 } from '../components/common';
 import type { TickerItem } from '../components/common';
 import type {
@@ -246,9 +247,18 @@ function SentimentThreeWayGrid({
         <EntityProfileCard
             key={item.key}
             profile={item.entityProfile}
-            stats={item.volume > 0
-                ? sentimentStats({ netTone: item.netScore, volume: item.volume })
-                : []}
+            stats={item.kind === 'official'
+                // Officials split the metric: received tone (posts about
+                // them, the reputational signal) leads; expressed tone
+                // (their own posts) stays, explicitly labeled.
+                ? officialToneStats({
+                    received: item.received,
+                    netTone: item.netScore,
+                    volume: item.volume,
+                })
+                : item.volume > 0
+                    ? sentimentStats({ netTone: item.netScore, volume: item.volume })
+                    : []}
             onClick={() => onOpen(item)}
         />
     );
@@ -307,6 +317,9 @@ function EntitySentimentModal({
 }) {
     const { entityProfile: profile, netScore, volume, classificationSamples } = item;
     const sourceUrl = entityExternalUrl(profile);
+    const isOfficial = profile.kind === 'official';
+    const received = isOfficial ? item.received ?? null : null;
+    const alignment = isOfficial ? item.expressedAlignment ?? null : null;
 
     // When a topic is active, filter the visible classification samples
     // client-side. We don't have entity-scoped-by-topic scores from the
@@ -337,17 +350,37 @@ function EntitySentimentModal({
             <EntityHeader profile={profile} />
 
             <div className="entity-modal-stats">
+                {received && received.volume > 0 && (
+                    <div>
+                        <div
+                            className="eyebrow"
+                            title="Average tone of sampled posts that talk ABOUT this person, from -100 (all negative) to +100 (all positive). Does not include their own posts about others."
+                        >
+                            Received tone
+                        </div>
+                        <div className="metric-value">
+                            {received.net != null ? formatPts(received.net) : '—'}
+                        </div>
+                        <div className="text-xs text-muted">
+                            {received.net != null
+                                ? `across ${received.volume} sampled posts about them`
+                                : `only ${received.volume} sampled post${received.volume === 1 ? '' : 's'} about them — too few to score reliably`}
+                        </div>
+                    </div>
+                )}
                 <div>
                     <div
                         className="eyebrow"
-                        title="Positive minus negative share of this source's posts, from -100 (all negative) to +100 (all positive)."
+                        title={isOfficial
+                            ? "Average tone of this person's OWN posts, from -100 to +100. A negative value means they post negatively (often about opponents) — not that others are negative about them."
+                            : "Positive minus negative share of this source's posts, from -100 (all negative) to +100 (all positive)."}
                     >
-                        Net tone
+                        {isOfficial ? 'Expressed tone' : 'Net tone'}
                     </div>
                     <div className="metric-value">
-                        {formatPts(netScore)}
+                        {volume > 0 ? formatPts(netScore) : '—'}
                     </div>
-                    {samplesAreFiltered && (
+                    {samplesAreFiltered && volume > 0 && (
                         <div className="text-xs text-muted">
                             (across all topics — {activeTopic.label}-only score not yet available)
                         </div>
@@ -358,6 +391,51 @@ function EntitySentimentModal({
                     <div className="metric-value">{volume.toLocaleString()}</div>
                 </div>
             </div>
+
+            {received && received.byTopic.length > 0 && (
+                <>
+                    <h3 className="card-title mt-4 mb-2">
+                        Tone toward {profile.displayName} by topic
+                    </h3>
+                    <table className="table">
+                        <thead>
+                            <tr>
+                                <th>Topic</th>
+                                <th className="num">Net tone</th>
+                                <th className="num">n</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {received.byTopic.map((cell) => (
+                                <tr key={cell.topic}>
+                                    <td>{cell.topic}</td>
+                                    <td className="num">
+                                        {cell.net != null
+                                            ? formatPts(cell.net)
+                                            : <span className="text-muted">low sample</span>}
+                                    </td>
+                                    <td className="num">{cell.volume}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </>
+            )}
+
+            {alignment && (alignment.samePartyVolume > 0 || alignment.crossPartyVolume > 0) && (
+                <p className="text-xs text-muted mt-2">
+                    In their own posts about tracked figures: tone toward their own party{' '}
+                    {alignment.samePartyNet != null
+                        ? formatPts(alignment.samePartyNet)
+                        : 'low sample'}{' '}
+                    (n={alignment.samePartyVolume}), toward the other party{' '}
+                    {alignment.crossPartyNet != null
+                        ? formatPts(alignment.crossPartyNet)
+                        : 'low sample'}{' '}
+                    (n={alignment.crossPartyVolume}). Cross-party criticism is the
+                    expected baseline — deviation from it is the signal.
+                </p>
+            )}
 
             {(sourceUrl || profile.leanSource || profile.bioSource) && (
                 <div className="entity-modal-links">

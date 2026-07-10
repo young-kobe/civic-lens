@@ -153,6 +153,19 @@ class EntitySentimentItem:
     netScore: float
     entity_profile: Dict[str, Any] = field(default_factory=dict)
     classification_samples: List[ClassificationSample] = field(default_factory=list)
+    # Received tone (officials only) — how sampled posts talk ABOUT this
+    # entity, from target_sentiment fan-out. Shape:
+    #   {net: float|None, volume: int, lowSample: bool,
+    #    byTopic: [{topic, net|None, volume, lowSample}], samples: [...]}
+    # net is None (suppressed) below the aggregator's min-sample threshold.
+    # None field = no target_sentiment coverage; netScore above remains the
+    # EXPRESSED tone (this entity's own posts) — the UI labels the two.
+    received: Optional[Dict[str, Any]] = None
+    # Speaker-target alignment cells (officials only): how this official's
+    # own posts score toward same-party vs cross-party tracked targets.
+    #   {samePartyNet: float|None, samePartyVolume: int,
+    #    crossPartyNet: float|None, crossPartyVolume: int}
+    expressed_alignment: Optional[Dict[str, Any]] = None
 
 
 def _entity_item_to_dict(item: "EntitySentimentItem") -> Dict[str, Any]:
@@ -164,7 +177,7 @@ def _entity_item_to_dict(item: "EntitySentimentItem") -> Dict[str, Any]:
     an EntitySentimentItem directly (e.g. the narrative aggregator's
     per-tier entity rollups).
     """
-    return {
+    result = {
         "key": item.key,
         "kind": item.kind,
         "positive": item.positive,
@@ -188,6 +201,13 @@ def _entity_item_to_dict(item: "EntitySentimentItem") -> Dict[str, Any]:
             for s in item.classification_samples
         ],
     }
+    # Only stamped when target_sentiment coverage exists, so older cached
+    # snapshots serialize byte-identical to their pre-target shape.
+    if item.received is not None:
+        result["received"] = item.received
+    if item.expressed_alignment is not None:
+        result["expressedAlignment"] = item.expressed_alignment
+    return result
 
 
 @dataclass
@@ -218,6 +238,15 @@ class PublicSentimentResult:
     gopTrend: Optional[List[Dict[str, Any]]] = None  # Daily net favorability trend
     gopByPlatform: Optional[List[Dict[str, Any]]] = None  # Platform-level stance breakdown
     pollingVsSocial: Optional[Dict[str, Any]] = None  # Live polling comparison
+    # Target-tone metadata from the target_sentiment fan-out: suppression
+    # threshold, resolution coverage, collective-target rollups, and the
+    # global same-/cross-party alignment baselines. None until the targets
+    # stage has produced rows.
+    #   {minSampleN, resolvedMentions, unresolvedMentions,
+    #    collectives: {gop_collective: <received shape>, dem_collective: ...},
+    #    baselines: {samePartyNet|None, samePartyVolume,
+    #                crossPartyNet|None, crossPartyVolume}}
+    targetTone: Optional[Dict[str, Any]] = None
 
     def to_dict(self) -> Dict[str, Any]:
         result = {
@@ -307,6 +336,8 @@ class PublicSentimentResult:
             result["gopByPlatform"] = self.gopByPlatform
         if self.pollingVsSocial:
             result["pollingVsSocial"] = self.pollingVsSocial
+        if self.targetTone is not None:
+            result["targetTone"] = self.targetTone
         return result
 
 

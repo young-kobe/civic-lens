@@ -45,6 +45,7 @@ export function transformPublicSentiment(apiData: any): PublicSentimentData {
         gopTrend: apiData.gopTrend || null,
         gopByPlatform: apiData.gopByPlatform || null,
         pollingVsSocial: apiData.pollingVsSocial || null,
+        targetTone: apiData.targetTone || null,
     };
 }
 

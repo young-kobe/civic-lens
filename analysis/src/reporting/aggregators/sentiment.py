@@ -33,6 +33,7 @@ from analysis.src.reporting.aggregators.constants import (
 )
 from analysis.src.reporting.entity_registry import (
     CATCH_ALL_OUTLETS, CATCH_ALL_SUBREDDITS, CATCH_ALL_X_USERS,
+    DEM_COLLECTIVE, GOP_COLLECTIVE, TargetResolver,
     catch_all_profile, get_registry, resolve_entity,
 )
 from analysis.src.reporting.models import (
@@ -61,6 +62,13 @@ MAX_DISTRIBUTION_SAMPLES_PER_BUCKET = 15
 MAX_SAMPLES_PER_TOPIC = 5
 MAX_SAMPLES_PER_ENTITY = 10
 MAX_EVIDENCE_PER_SAMPLE = 5
+MAX_SAMPLES_PER_TARGET = 5
+
+# Received-tone suppression floor: a net score computed from fewer than this
+# many (doc, target) pairs is withheld (net=None, lowSample=True) — one
+# classified tweet must never render as a +100.0 headline. The volume is
+# always emitted so the UI can show the honest n.
+MIN_TARGET_SAMPLE_N = 5
 
 # Sentinel key for x_posts routed to the officials tier by the ingestor's
 # is_official_tier provenance flag alone (no editorial registry entity) — D-4.
@@ -127,6 +135,18 @@ class SentimentAggregator:
                 cutoff=cutoff,
                 min_confidence=min_conf,
             )
+            # Target-sentiment rows fan out to one record per (doc, target)
+            # in Python. Row-level confidence is a mean across targets, so
+            # the confidence floor is applied per-target during the fan-out
+            # instead of via min_confidence here.
+            target_rows = fetch_task_rows(
+                cursor,
+                "SELECT a.doc_id, a.output_json, a.confidence, d.source_type, d.published_at, d.title, d.domain_or_subreddit, d.ident, d.text, u.username, x.is_official_tier",
+                task_type="target_sentiment",
+                cutoff=cutoff,
+                min_confidence=None,
+                extra_joins=X_AUTHOR_JOIN_SQL,
+            )
 
         # ``allowed_sources=None`` means no filter — the only path now that
         # the UI's "Filter by sources" pills have been removed. Internal
@@ -136,6 +156,7 @@ class SentimentAggregator:
         allowed_sources = None
         result = self._process_sentiment_data(sentiment_rows, bot_docs, allowed_sources)
         _merge_favorability_data(result, favorability_rows, bot_docs, allowed_sources, self.cache)
+        _merge_target_tone(result, target_rows, bot_docs, min_conf)
         return result
 
     def _process_sentiment_data(
@@ -949,3 +970,233 @@ def _format_favorability_result(
             },
             "pollingData": polling_data,
         }
+
+
+# --------------------------------------------------------------------------- #
+#  Target-tone merge — received vs. expressed split                            #
+# --------------------------------------------------------------------------- #
+
+_STANCE_KEYS = ("positive", "negative", "neutral", "mixed")
+
+
+def _empty_stance_counts() -> Dict[str, int]:
+    return {k: 0 for k in _STANCE_KEYS}
+
+
+def _net_or_none(counts: Dict[str, int], min_n: int = MIN_TARGET_SAMPLE_N) -> Optional[float]:
+    """Net score for a stance-count cell, or None when below the suppression
+    floor — small-n cells report their volume but never a headline number."""
+    total = sum(counts.values())
+    if total < min_n:
+        return None
+    return round((counts["positive"] - counts["negative"]) / total * 100, 1)
+
+
+def _normalize_party(party: Optional[str]) -> Optional[str]:
+    """Collapse registry party values to the R/D axis used for alignment.
+    ``independent-dem`` caucuses with Democrats; anything else is outside
+    the two-party alignment frame and returns None."""
+    if not party:
+        return None
+    p = party.strip().lower()
+    if p == "r":
+        return "R"
+    if p in ("d", "independent-dem"):
+        return "D"
+    return None
+
+
+def _format_received(accum: Dict[str, Any]) -> Dict[str, Any]:
+    """Materialize a per-target accumulator into the wire shape stored on
+    EntitySentimentItem.received / targetTone.collectives."""
+    counts = accum["counts"]
+    volume = sum(counts.values())
+    by_topic = []
+    for topic, topic_counts in accum["by_topic"].items():
+        topic_volume = sum(topic_counts.values())
+        by_topic.append({
+            "topic": topic,
+            "net": _net_or_none(topic_counts),
+            "volume": topic_volume,
+            "lowSample": topic_volume < MIN_TARGET_SAMPLE_N,
+        })
+    by_topic.sort(key=lambda c: -c["volume"])
+    return {
+        "net": _net_or_none(counts),
+        "volume": volume,
+        "lowSample": volume < MIN_TARGET_SAMPLE_N,
+        "byTopic": by_topic,
+        "samples": accum["samples"],
+    }
+
+
+def _get_or_create_official_item(
+    result: PublicSentimentResult,
+    by_key: Dict[str, EntitySentimentItem],
+    registry,
+    key: str,
+) -> Optional[EntitySentimentItem]:
+    """Find the official's expressed-tone item, or create a zero-volume one.
+
+    An official who never posted in the window but is discussed by others
+    still needs a card — received tone is exactly the metric that exists
+    without their participation."""
+    item = by_key.get(key)
+    if item is not None:
+        return item
+    official = registry.officials.get(key)
+    if official is None:
+        return None
+    item = EntitySentimentItem(
+        key=key, kind="official",
+        positive=0, negative=0, neutral=0, volume=0, netScore=0.0,
+        entity_profile=official.profile_dict(),
+    )
+    result.byOfficial.append(item)
+    by_key[key] = item
+    return item
+
+
+def _merge_target_tone(
+    result: PublicSentimentResult,
+    target_rows: List[tuple],
+    bot_docs: Set[int],
+    min_conf: float,
+) -> None:
+    """Fan target_sentiment rows out to (doc, target) pairs and merge:
+
+    * ``received`` onto each tracked official's EntitySentimentItem — the
+      reputational signal (how sampled posts talk ABOUT them), kept separate
+      from netScore, which stays the expressed signal (their own posts).
+    * ``expressed_alignment`` per official speaker — stance toward same-party
+      vs cross-party tracked targets, the control that separates "criticizing
+      the other side" (expected) from something newsworthy.
+    * ``result.targetTone`` — suppression threshold, resolution coverage,
+      party-collective rollups, and global alignment baselines.
+
+    Per-target confidence is filtered against the aggregation floor here
+    (row-level confidence is a mean and would hide a confident target next
+    to an uncertain one). No-op when no rows exist, so pre-target snapshots
+    keep their exact shape.
+    """
+    if not target_rows:
+        return
+
+    registry = get_registry()
+    resolver = TargetResolver(registry)
+    received: Dict[str, Dict[str, Any]] = {}
+    alignment: Dict[str, Dict[str, Dict[str, int]]] = {}
+    baseline = {"same": _empty_stance_counts(), "cross": _empty_stance_counts()}
+    resolved_mentions = 0
+    unresolved_mentions = 0
+
+    for (
+        doc_id, output_json, _row_conf, source_type, published_at,
+        title, domain_or_subreddit, ident, text, x_handle, is_official_tier,
+    ) in target_rows:
+        if doc_id in bot_docs:
+            continue
+        try:
+            data = json.loads(output_json)
+        except json.JSONDecodeError:
+            continue
+        targets = data.get("targets") or []
+        if not targets:
+            continue
+        reasoning = data.get("reasoning") or ""
+
+        # Speaker resolution for the alignment control: only posts authored
+        # by a registry-matched official carry a speaker party.
+        speaker_key = None
+        speaker_party = None
+        tier, entity = resolve_entity(
+            registry, source_type, domain_or_subreddit, x_handle,
+            is_official_tier=bool(is_official_tier),
+        )
+        if tier == "officials" and entity is not None:
+            speaker_key = entity.handle
+            speaker_party = _normalize_party(entity.party)
+
+        for t in targets:
+            if not isinstance(t, dict):
+                continue
+            try:
+                conf = float(t.get("confidence", 0.0))
+            except (TypeError, ValueError):
+                continue
+            if conf < min_conf:
+                continue
+            stance = t.get("stance")
+            if stance not in _STANCE_KEYS:
+                continue
+            key, kind, party = resolver.resolve(t.get("target"))
+            if key is None:
+                unresolved_mentions += 1
+                continue
+            resolved_mentions += 1
+
+            accum = received.setdefault(key, {
+                "kind": kind,
+                "counts": _empty_stance_counts(),
+                "by_topic": {},
+                "samples": [],
+            })
+            accum["counts"][stance] += 1
+            topic = t.get("topic") or "Other"
+            accum["by_topic"].setdefault(topic, _empty_stance_counts())[stance] += 1
+            sample = _build_sample_dict(
+                doc_id, stance.upper(), conf,
+                {"reasoning": reasoning, "evidence_spans": t.get("evidence_spans") or []},
+                title, source_type, published_at, domain_or_subreddit, ident, text,
+                x_handle,
+            )
+            _insert_capped(accum["samples"], sample, MAX_SAMPLES_PER_TARGET)
+
+            # Alignment cell — self-references are excluded: "same party"
+            # means another entity on the speaker's side, not self-praise.
+            target_party = _normalize_party(party)
+            if speaker_key and speaker_party and target_party and key != speaker_key:
+                cell = "same" if speaker_party == target_party else "cross"
+                cells = alignment.setdefault(speaker_key, {
+                    "same": _empty_stance_counts(), "cross": _empty_stance_counts(),
+                })
+                cells[cell][stance] += 1
+                baseline[cell][stance] += 1
+
+    by_key = {item.key: item for item in result.byOfficial}
+    collectives: Dict[str, Dict[str, Any]] = {}
+    for key, accum in received.items():
+        formatted = _format_received(accum)
+        if key in (GOP_COLLECTIVE, DEM_COLLECTIVE):
+            collectives[key] = formatted
+            continue
+        item = _get_or_create_official_item(result, by_key, registry, key)
+        if item is not None:
+            item.received = formatted
+
+    for speaker_key, cells in alignment.items():
+        item = _get_or_create_official_item(result, by_key, registry, speaker_key)
+        if item is None:
+            continue
+        item.expressed_alignment = {
+            "samePartyNet": _net_or_none(cells["same"]),
+            "samePartyVolume": sum(cells["same"].values()),
+            "crossPartyNet": _net_or_none(cells["cross"]),
+            "crossPartyVolume": sum(cells["cross"].values()),
+        }
+
+    # Re-sort so officials created target-only slot in with the rest.
+    result.byOfficial.sort(key=lambda it: (it.kind == "catch_all", -it.volume))
+
+    result.targetTone = {
+        "minSampleN": MIN_TARGET_SAMPLE_N,
+        "resolvedMentions": resolved_mentions,
+        "unresolvedMentions": unresolved_mentions,
+        "collectives": collectives,
+        "baselines": {
+            "samePartyNet": _net_or_none(baseline["same"]),
+            "samePartyVolume": sum(baseline["same"].values()),
+            "crossPartyNet": _net_or_none(baseline["cross"]),
+            "crossPartyVolume": sum(baseline["cross"].values()),
+        },
+    }

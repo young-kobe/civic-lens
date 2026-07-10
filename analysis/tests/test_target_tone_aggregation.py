@@ -1,0 +1,239 @@
+"""
+Received-tone / expressed-tone aggregation tests.
+
+The business rule under test: an official's headline number must be able to
+separate how people talk ABOUT them (received) from how they themselves talk
+(expressed). Concretely:
+
+* target_sentiment rows fan out to (doc, target) pairs and land as
+  ``received`` on the target official's EntitySentimentItem — including
+  officials who never posted in the window (a card is created for them).
+* Small-n suppression: any received net (overall or per-topic cell) computed
+  from fewer than MIN_TARGET_SAMPLE_N pairs reports net=None + lowSample=True
+  with an honest volume, never a +/-100.0 headline off one post.
+* Alignment control: posts by a registry official about same-party vs
+  cross-party tracked targets accumulate per-speaker cells + global
+  baselines; self-references are excluded.
+* Bot-flagged docs and per-target confidences below the aggregation floor
+  never reach public numbers.
+* Party collectives roll up under targetTone.collectives, not as cards.
+"""
+
+import json
+import sqlite3
+import sys
+import time
+import unittest
+import uuid
+from pathlib import Path
+
+_repo_root = Path(__file__).resolve().parents[2]
+if str(_repo_root) not in sys.path:
+    sys.path.insert(0, str(_repo_root))
+
+from analysis.src.reporting.aggregators import SentimentAggregator
+from analysis.src.reporting.aggregators.sentiment import MIN_TARGET_SAMPLE_N
+from analysis.src.reporting.entity_registry import GOP_COLLECTIVE
+
+
+def _target_payload(*targets: dict) -> str:
+    return json.dumps({"targets": list(targets), "reasoning": "test reasoning"})
+
+
+def _t(target: str, stance: str, topic: str = "Immigration", confidence: float = 0.9) -> dict:
+    return {
+        "target": target, "topic": topic, "stance": stance,
+        "confidence": confidence,
+        "evidence_spans": ["a verbatim four word span"],
+    }
+
+
+class TargetToneAggregationTests(unittest.TestCase):
+    def setUp(self):
+        self.db_path = f"test_target_tone_{uuid.uuid4()}.db"
+        self.conn = sqlite3.connect(self.db_path)
+        cur = self.conn.cursor()
+        cur.executescript("""
+            CREATE TABLE docs (
+                doc_id INTEGER PRIMARY KEY,
+                source_type TEXT NOT NULL,
+                ident TEXT UNIQUE NOT NULL,
+                domain_or_subreddit TEXT,
+                published_at INTEGER,
+                title TEXT,
+                text TEXT,
+                raw_hash TEXT NOT NULL,
+                metadata_json TEXT DEFAULT '{}'
+            );
+            CREATE TABLE ai_outputs (
+                output_id INTEGER PRIMARY KEY,
+                doc_id INTEGER,
+                task_type TEXT,
+                output_json TEXT,
+                confidence REAL,
+                created_at INTEGER
+            );
+            CREATE TABLE x_posts_raw (
+                tweet_id TEXT PRIMARY KEY,
+                author_id TEXT,
+                is_official_tier INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE TABLE x_users_raw (
+                user_id TEXT PRIMARY KEY,
+                username TEXT
+            );
+        """)
+
+        ts = int(time.time()) - 3600  # inside every window
+
+        docs = [
+            # 6 news docs about Trump: 4 negative + 2 positive → net -33.3.
+            # Topics: 5 Immigration (n>=5, shown), 1 Other (n=1, suppressed).
+            (1, "news", "https://a.example/1", "a.example", ts, "t1", "body", "h1"),
+            (2, "news", "https://a.example/2", "a.example", ts, "t2", "body", "h2"),
+            (3, "news", "https://a.example/3", "a.example", ts, "t3", "body", "h3"),
+            (4, "news", "https://a.example/4", "a.example", ts, "t4", "body", "h4"),
+            (5, "news", "https://a.example/5", "a.example", ts, "t5", "body", "h5"),
+            (6, "news", "https://a.example/6", "a.example", ts, "t6", "body", "h6"),
+            # 2 docs about Thune (who never posts) → card created, suppressed.
+            (7, "news", "https://a.example/7", "a.example", ts, "t7", "body", "h7"),
+            (8, "news", "https://a.example/8", "a.example", ts, "t8", "body", "h8"),
+            # X post authored by @SenSchumer → alignment cells.
+            (9, "x_post", "tweet_schumer_1", "x.com", ts, None, "body", "h9"),
+            # Unresolved + below-confidence-floor targets.
+            (10, "news", "https://a.example/10", "a.example", ts, "t10", "body", "h10"),
+            # Bot-flagged doc — its targets must not count.
+            (99, "news", "https://a.example/99", "a.example", ts, "t99", "body", "h99"),
+        ]
+        cur.executemany(
+            "INSERT INTO docs (doc_id, source_type, ident, domain_or_subreddit, "
+            "published_at, title, text, raw_hash) VALUES (?,?,?,?,?,?,?,?)",
+            docs,
+        )
+        cur.execute(
+            "INSERT INTO x_posts_raw (tweet_id, author_id, is_official_tier) "
+            "VALUES ('tweet_schumer_1', '1001', 1)"
+        )
+        cur.execute(
+            "INSERT INTO x_users_raw (user_id, username) VALUES ('1001', 'SenSchumer')"
+        )
+
+        rows = [
+            (1, _target_payload(_t("Donald J. Trump", "negative"))),
+            (2, _target_payload(_t("Donald J. Trump", "negative"))),
+            (3, _target_payload(_t("Donald J. Trump", "negative"))),
+            (4, _target_payload(_t("Donald J. Trump", "negative"))),
+            (5, _target_payload(_t("Donald J. Trump", "positive"))),
+            (6, _target_payload(_t("Donald J. Trump", "positive", topic="Other"))),
+            (7, _target_payload(_t("John Thune", "positive"))),
+            (8, _target_payload(_t("John Thune", "positive"))),
+            # Schumer's own post: cross-party x2, same-party x1, self x1
+            # (self counts toward his received tone but not alignment).
+            (9, _target_payload(
+                _t("Donald J. Trump", "negative"),
+                _t("Republican Party", "negative", topic="Healthcare"),
+                _t("Hakeem Jeffries", "positive"),
+                _t("Chuck Schumer", "positive"),
+            )),
+            (10, _target_payload(
+                _t("Elon Musk", "negative"),                       # unresolved
+                _t("Donald J. Trump", "negative", confidence=0.4),  # below floor
+            )),
+            (99, _target_payload(_t("Donald J. Trump", "positive"))),
+        ]
+        cur.executemany(
+            "INSERT INTO ai_outputs (doc_id, task_type, output_json, confidence, created_at) "
+            f"VALUES (?, 'target_sentiment', ?, 0.9, {ts})",
+            rows,
+        )
+        self.conn.commit()
+
+        self.result = SentimentAggregator(self.db_path).get_public_sentiment(
+            time_window="7d", bot_docs={99},
+        )
+        self.by_official = {item.key: item for item in self.result.byOfficial}
+
+    def tearDown(self):
+        self.conn.close()
+        Path(self.db_path).unlink(missing_ok=True)
+        for suffix in ("-wal", "-shm"):
+            Path(self.db_path + suffix).unlink(missing_ok=True)
+
+    def test_received_tone_separates_about_from_by(self):
+        """Trump's received tone reflects the 6 non-bot, above-floor posts
+        ABOUT him (plus Schumer's attack = 7 pairs), not anyone's own posts."""
+        potus = self.by_official["potus"]
+        self.assertIsNotNone(potus.received)
+        # docs 1-6 + Schumer's post = 7; doc 99 (bot) + doc 10 (low conf) excluded.
+        self.assertEqual(potus.received["volume"], 7)
+        # 2 positive, 5 negative → (2-5)/7*100 = -42.9
+        self.assertAlmostEqual(potus.received["net"], -42.9, places=1)
+        self.assertFalse(potus.received["lowSample"])
+
+    def test_topic_cells_suppressed_below_threshold(self):
+        potus = self.by_official["potus"]
+        cells = {c["topic"]: c for c in potus.received["byTopic"]}
+        # Immigration: docs 1-5 + Schumer = 6 pairs → shown.
+        self.assertGreaterEqual(cells["Immigration"]["volume"], MIN_TARGET_SAMPLE_N)
+        self.assertIsNotNone(cells["Immigration"]["net"])
+        self.assertFalse(cells["Immigration"]["lowSample"])
+        # Other: 1 pair → volume shown, net suppressed.
+        self.assertEqual(cells["Other"]["volume"], 1)
+        self.assertIsNone(cells["Other"]["net"])
+        self.assertTrue(cells["Other"]["lowSample"])
+
+    def test_small_n_received_never_shows_a_headline_number(self):
+        """Thune: 2 positive mentions must NOT render +100.0 — the exact
+        failure this feature exists to prevent."""
+        thune = self.by_official.get("leaderjohnthune")
+        self.assertIsNotNone(thune, "target-only official should get a card")
+        self.assertEqual(thune.volume, 0)  # never posted (expressed side empty)
+        self.assertEqual(thune.received["volume"], 2)
+        self.assertIsNone(thune.received["net"])
+        self.assertTrue(thune.received["lowSample"])
+
+    def test_alignment_cells_exclude_self_and_split_by_party(self):
+        schumer = self.by_official["senschumer"]
+        align = schumer.expressed_alignment
+        self.assertIsNotNone(align)
+        # Trump + GOP = cross-party; Jeffries = same-party; self excluded.
+        self.assertEqual(align["crossPartyVolume"], 2)
+        self.assertEqual(align["samePartyVolume"], 1)
+        # Both cells below MIN_TARGET_SAMPLE_N → suppressed.
+        self.assertIsNone(align["crossPartyNet"])
+        self.assertIsNone(align["samePartyNet"])
+
+    def test_self_reference_counts_toward_received(self):
+        schumer = self.by_official["senschumer"]
+        self.assertEqual(schumer.received["volume"], 1)
+
+    def test_collectives_roll_up_in_target_tone_not_as_cards(self):
+        tone = self.result.targetTone
+        self.assertIsNotNone(tone)
+        self.assertIn(GOP_COLLECTIVE, tone["collectives"])
+        self.assertEqual(tone["collectives"][GOP_COLLECTIVE]["volume"], 1)
+        self.assertNotIn(GOP_COLLECTIVE, self.by_official)
+
+    def test_target_tone_metadata(self):
+        tone = self.result.targetTone
+        self.assertEqual(tone["minSampleN"], MIN_TARGET_SAMPLE_N)
+        self.assertEqual(tone["unresolvedMentions"], 1)   # Elon Musk
+        # 7 Trump + 2 Thune + GOP + Jeffries + Schumer-self = 12
+        self.assertEqual(tone["resolvedMentions"], 12)
+        self.assertEqual(tone["baselines"]["crossPartyVolume"], 2)
+        self.assertEqual(tone["baselines"]["samePartyVolume"], 1)
+
+    def test_serialization_carries_received_and_target_tone(self):
+        data = self.result.to_dict()
+        self.assertIn("targetTone", data)
+        potus_dict = next(e for e in data["byOfficial"] if e["key"] == "potus")
+        self.assertIn("received", potus_dict)
+        self.assertIn("byTopic", potus_dict["received"])
+        # Samples must be JSON-serializable plain dicts with evidence.
+        self.assertTrue(json.dumps(data))
+        self.assertTrue(potus_dict["received"]["samples"])
+        self.assertIn("evidence_spans", potus_dict["received"]["samples"][0])
+
+
+if __name__ == "__main__":
+    unittest.main()
