@@ -1,82 +1,54 @@
 #!/usr/bin/env bash
-# Idempotent build + reload. Called by the deployment user over SSH with a
-# forced-command key — never run directly by a human if you can help it, so
-# that deploys are uniformly shaped.
+# Idempotent deploy: pull images + restart the compose stack. Called by the
+# deployment user over SSH with a forced-command key — never run directly by
+# a human if you can help it, so that deploys are uniformly shaped.
 #
 # Invariants:
 #   - Never touches /etc/civic-lens.env, /etc/caddy/*, sshd config.
 #     Those are install-time concerns and live in install.sh.
-#   - Builds Go binary, Python venv, UI into /opt/civic-lens.
-#   - Runs DB migrations (idempotent by design — civic-ingest migrate).
-#   - Reloads civic-lens-api via systemd.
+#   - No compilation on the box — images are built in CI (deploy.yml `images`
+#     job) and pulled from GHCR. The git checkout exists only for
+#     docker-compose.yml, unit files, and deploy scripts.
+#   - Runs DB migrations (idempotent by design — civic-ingest migrate; the
+#     ingest image entrypoint materializes migrations beside the DB,
+#     replacing the old symlink-into-/opt mechanism).
+#   - Restarts the always-on stack; systemd timers keep owning one-shots.
 #   - Does NOT enable/disable timers — the operator owns that.
 set -euo pipefail
 
 REPO=/opt/civic-lens
 cd "$REPO"
 
-echo "[1/6] pulling main"
+echo "[1/5] pulling main"
 git fetch --prune origin
 git reset --hard origin/main
 
-echo "[2/6] go binary"
-(
-    cd ingest
-    go build -trimpath -ldflags "-s -w" -o "$REPO/civic-ingest" ./cmd/civic-ingest
-)
+echo "[2/5] pulling images"
+docker compose pull --quiet
 
-echo "[3/6] python venv"
-if [[ ! -d "$REPO/.venv" ]]; then
-    python3.12 -m venv "$REPO/.venv"
-fi
-"$REPO/.venv/bin/pip" install --upgrade pip wheel
-"$REPO/.venv/bin/pip" install --upgrade -r analysis/requirements.txt
-
-echo "[4/6] ui build"
-(
-    cd ui
-    npm ci
-    npm run build
-)
-
-echo "[5/6] migrations"
-# civic-ingest resolves migrations relative to the DB's parent directory,
-# so make sure the symlink to the in-repo migrations/ exists. Idempotent:
-# ln -sfn replaces any prior symlink or missing entry. Safe across git
-# pulls — deploy.sh chowns the repo at the end, but never touches
-# /var/lib/civic-lens, so this link survives each run.
+echo "[3/5] migrations"
+# Matches the containers' view: CIVIC_DB_PATH from /etc/civic-lens.env rides
+# in via the compose env_file; this explicit --db only needs the same default
+# the env file uses.
 DB_PATH="${CIVIC_DB_PATH:-/var/lib/civic-lens/data/civic_lens.db}"
-DB_DIR="$(dirname "$DB_PATH")"
-mkdir -p "$DB_DIR"
-ln -sfn "$REPO/data/migrations" "$DB_DIR/migrations"
+docker compose run --rm --quiet-pull ingest migrate --db "$DB_PATH"
 
-# civic-ingest migrate is a no-op when schema is already current.
-"$REPO/civic-ingest" migrate --db "$DB_PATH"
-
-# Disable the Reddit timer + service if a previous install enabled them.
-# Reddit API access was withdrawn; keeping the timer running would just log
-# failures every 2h. Idempotent: `disable --now` on a missing unit is a no-op;
-# removing the files then `daemon-reload` purges anything still referencing
-# them. If Reddit comes back, restore the unit files and rerun install.sh.
-for unit in civic-lens-reddit.timer civic-lens-reddit.service; do
+echo "[4/5] systemd units"
+# Retired units: reddit (API access withdrawn) and api (now a compose
+# service with restart: unless-stopped). Idempotent: `disable --now` on a
+# missing unit is a no-op; removing the files then `daemon-reload` purges
+# anything still referencing them.
+for unit in civic-lens-reddit.timer civic-lens-reddit.service civic-lens-api.service; do
     systemctl disable --now "$unit" 2>/dev/null || true
     rm -f "/etc/systemd/system/$unit"
 done
-
-# Sync systemd unit files from the repo. install.sh drops these once on
-# first install; deploys also need to pick up unit-level changes (timeout
-# bumps, new OnFailure wiring, new templated units like the alerter).
-# Idempotent: install overwrites with the same mode each time.
 install -m 0644 "$REPO"/deploy/systemd/*.service /etc/systemd/system/
 install -m 0644 "$REPO"/deploy/systemd/*.timer   /etc/systemd/system/
 systemctl daemon-reload
 
-echo "[6/6] chown + reload"
-chown -R civic-lens:civic-lens "$REPO"
-# civic-ingest runs as root inside deploy.sh and writes the DB file —
-# hand ownership back to the service user so civic-lens-api.service can
-# open it after the reload below. The /var/lib tree itself is left with
-# install.sh's 0750 perms on dirs + 0600 on files.
-chown civic-lens:civic-lens "$DB_DIR" "$DB_PATH" 2>/dev/null || true
-systemctl reload-or-restart civic-lens-api.service || true
+echo "[5/5] restart stack"
+docker compose up -d --remove-orphans
+# Keep /var/lib/docker bounded: drop dangling layers older than a week but
+# retain recent :sha tags for quick rollback.
+docker image prune -f --filter "until=168h" >/dev/null
 echo "deploy ok"

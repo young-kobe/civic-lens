@@ -1,0 +1,5 @@
+# Files that are COPY'd into Linux images and executed there must stay LF
+# even on Windows checkouts (core.autocrlf=true) — CRLF breaks sh/bash and
+# Dockerfile RUN continuations.
+*.sh text eol=lf
+Dockerfile* text eol=lf

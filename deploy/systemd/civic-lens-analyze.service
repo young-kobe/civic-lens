@@ -1,7 +1,8 @@
 [Unit]
 Description=Civic Lens analysis pipeline (one-shot)
-After=network-online.target
+After=network-online.target docker.service
 Wants=network-online.target
+Requires=docker.service
 # On any failure (non-zero exit, kill, timeout), spawn the alerter with
 # this unit's name as the %i template arg. The alerter emails a summary
 # + last 50 journal lines; requires CIVIC_ALERT_SMTP_* env in
@@ -11,60 +12,17 @@ OnFailure=civic-lens-alert@%n.service
 
 [Service]
 Type=oneshot
-User=civic-lens
-Group=civic-lens
-# Same WorkingDirectory rationale as civic-lens-crawl.service — keep /opt
-# read-only under ProtectSystem=strict, resolve any relative paths in the
-# job runner / aggregators under the writable data root.
-WorkingDirectory=/var/lib/civic-lens
+# Root for the docker CLI; the container runs as the unprivileged civic-lens
+# UID. Resource caps (MemoryMax 1G equivalent) live on the compose service.
+WorkingDirectory=/opt/civic-lens
 EnvironmentFile=/etc/civic-lens.env
-Environment=PYTHONPATH=/opt/civic-lens
-ExecStart=/opt/civic-lens/.venv/bin/python -m analysis.src.scheduler.job_runner
-# Wall-clock ceiling — hard stop. Paired with an in-runner soft budget
-# that skips LLM stages and jumps to snapshots when wall-clock runs short,
-# so the UI cache is always regenerated even when upstream LLM latency is
-# above average. The hard ceiling is the safety net for cases the soft
-# budget misses (hung TLS handshake, Gemini 500s that retry forever, etc).
-#
-# Historical note: the prior 45m ceiling killed otherwise-healthy runs
-# right before `snapshots` (stage 10/10), so the UI cache stayed stale on
-# days when LLM latency was above average. The soft budget below is the
-# structural fix; this ceiling exists so the hard kill is at a sensible
-# limit. See docs/audit-trail/infra/ for the full writeup.
+ExecStart=/usr/bin/docker compose run --rm --quiet-pull analyze
+# Wall-clock ceiling — hard stop. Paired with the in-runner soft budget
+# (CIVIC_BUDGET_SECONDS=6900, set on the compose service) that skips LLM
+# stages and jumps to snapshots when wall-clock runs short, so the UI cache
+# is always regenerated even when upstream LLM latency is above average.
+# The hard ceiling is the safety net for cases the soft budget misses (hung
+# TLS handshake, Gemini 500s that retry forever, etc). systemd kills the
+# `docker compose run` client; --rm plus docker's signal forwarding tears
+# down the container. See docs/audit-trail/infra/ for the budget writeup.
 TimeoutStartSec=2h
-# Soft wall-clock budget (seconds). The runner reserves the tail 120s of
-# this budget for snapshots; LLM stages skip once the remaining time drops
-# below that reserve. Set 300s shorter than TimeoutStartSec so the runner
-# always exits voluntarily before systemd has to kill it (clean exit =
-# clean summary email on partial runs).
-Environment=CIVIC_BUDGET_SECONDS=6900
-
-# Hardening (audit §1.14). The LLM client needs outbound HTTPS + DNS.
-NoNewPrivileges=yes
-ProtectSystem=strict
-ProtectHome=yes
-PrivateTmp=yes
-PrivateDevices=yes
-ProtectKernelTunables=yes
-ProtectKernelModules=yes
-ProtectControlGroups=yes
-ProtectClock=yes
-ProtectHostname=yes
-ProtectKernelLogs=yes
-RestrictNamespaces=yes
-RestrictRealtime=yes
-RestrictSUIDSGID=yes
-LockPersonality=yes
-MemoryDenyWriteExecute=yes
-CapabilityBoundingSet=
-AmbientCapabilities=
-SystemCallArchitectures=native
-SystemCallFilter=~@privileged @debug @module @mount @obsolete @reboot @swap @raw-io @cpu-emulation
-SystemCallErrorNumber=EPERM
-ReadWritePaths=/var/lib/civic-lens
-# Analysis is memory-heavier than the API: narrative clustering + embedding
-# fallback + all the aggregators. 1G is conservative for the current volumes
-# but cheap insurance.
-MemoryMax=1G
-CPUQuota=90%
-TasksMax=128

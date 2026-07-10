@@ -1,0 +1,18 @@
+[Unit]
+Description=Civic Lens compose stack (caddy + api + litestream)
+# Boot-time bring-up for the always-on services. Deploys restart the stack
+# directly via `docker compose up -d` in deploy.sh; this unit exists so a
+# reboot brings everything back without an operator.
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/civic-lens
+ExecStart=/usr/bin/docker compose up -d --remove-orphans
+ExecStop=/usr/bin/docker compose down
+
+[Install]
+WantedBy=multi-user.target

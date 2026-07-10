@@ -7,6 +7,12 @@
 *.env
 
 # ============================================
+# Docker (local-only artifacts)
+# ============================================
+docker-compose.override.yml
+.compose-data/
+
+# ============================================
 # Database Files
 # ============================================
 # SQLite databases (all locations)
