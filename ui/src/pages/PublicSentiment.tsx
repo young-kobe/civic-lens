@@ -369,6 +369,14 @@ function EntitySentimentModal({
         : allSamples.filter(s => s.topic === activeTopic.key);
     const samplesAreFiltered = activeTopic.key !== 'all';
 
+    // Topic-scoped expressed score: exact per-topic cells from the backend,
+    // net suppressed (null) below its small-n floor. An entirely missing
+    // byTopic means a pre-topic cached snapshot — keep the old
+    // "not yet available" copy for that case.
+    const topicCell = samplesAreFiltered
+        ? (item.byTopic ?? []).find(c => c.topic === activeTopic.key) ?? null
+        : null;
+
     return (
         <Modal
             isOpen
@@ -424,11 +432,24 @@ function EntitySentimentModal({
                         {isOfficial ? 'Expressed tone' : 'Net tone'}
                     </div>
                     <div className="metric-value">
-                        {volume > 0 ? formatPts(netScore) : '—'}
+                        {samplesAreFiltered
+                            ? (topicCell && topicCell.net != null ? formatPts(topicCell.net) : '—')
+                            : (volume > 0 ? formatPts(netScore) : '—')}
                     </div>
+                    {samplesAreFiltered && (
+                        <div className="text-xs text-muted">
+                            {topicCell
+                                ? (topicCell.net != null
+                                    ? `${activeTopic.label} only — across ${topicCell.volume} post${topicCell.volume === 1 ? '' : 's'}`
+                                    : `only ${topicCell.volume} ${activeTopic.label} post${topicCell.volume === 1 ? '' : 's'} — too few to score reliably`)
+                                : (item.byTopic
+                                    ? `no ${activeTopic.label} posts in this window`
+                                    : `across all topics — ${activeTopic.label}-only score not yet available`)}
+                        </div>
+                    )}
                     {samplesAreFiltered && volume > 0 && (
                         <div className="text-xs text-muted">
-                            (across all topics — {activeTopic.label}-only score not yet available)
+                            all topics: {formatPts(netScore)}
                         </div>
                     )}
                 </div>

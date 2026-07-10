@@ -20,6 +20,12 @@ client. Analysis-layer counterpart:
   now covers every scored post; the "topic-matched" caveat copy is gone.
 - `pickDefaultTopic` excludes `General` — it usually has the largest
   volume but is never a substantive landing tab.
+- Topic-scoped headline: with a topic active, the profile modal's
+  expressed/net metric shows the entity's score WITHIN that topic
+  (`item.byTopic` cells), with honest copy for each state — suppressed
+  (below the backend small-n floor), no posts in the topic, or a
+  pre-topic cached snapshot (falls back to the old "not yet available"
+  line). The global score stays visible as an "all topics" sub-line.
 
 ## Why
 

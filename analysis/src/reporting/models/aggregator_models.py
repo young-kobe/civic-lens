@@ -173,6 +173,11 @@ class EntitySentimentItem:
     #   {samePartyNet: float|None, samePartyVolume: int,
     #    crossPartyNet: float|None, crossPartyVolume: int}
     expressed_alignment: Optional[Dict[str, Any]] = None
+    # Topic-scoped expressed cells for the entity's OWN posts:
+    # [{topic, net|None, volume, lowSample}], volume-sorted, net suppressed
+    # below MIN_TARGET_SAMPLE_N. Serialized as ``byTopic`` — powers the
+    # topic-filtered headline in the profile modal.
+    expressed_by_topic: List[Dict[str, Any]] = field(default_factory=list)
 
 
 def _classification_sample_to_dict(s: "ClassificationSample") -> Dict[str, Any]:
@@ -222,6 +227,8 @@ def _entity_item_to_dict(item: "EntitySentimentItem") -> Dict[str, Any]:
         result["received"] = item.received
     if item.expressed_alignment is not None:
         result["expressedAlignment"] = item.expressed_alignment
+    if item.expressed_by_topic:
+        result["byTopic"] = item.expressed_by_topic
     return result
 
 

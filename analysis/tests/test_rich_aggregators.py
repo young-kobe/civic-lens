@@ -229,6 +229,18 @@ class TestRichAggregators(unittest.TestCase):
         self.assertTrue(econ_samples)
         self.assertEqual(econ_samples[0]["topic"], "Economy")
 
+        # Entity cards carry topic-scoped expressed cells using the SAME
+        # attribution, with nets suppressed below the small-n floor — a
+        # 1-post topic slice must report volume, never a +/-100 headline.
+        outlets = {e["key"]: e for e in sentiment["byNewsOutlet"]}
+        catch_all = outlets["other-outlets"]
+        cells = {c["topic"]: c for c in catch_all["byTopic"]}
+        self.assertEqual(set(cells), {"Economy", "Climate"})
+        for cell in cells.values():
+            self.assertEqual(cell["volume"], 1)
+            self.assertIsNone(cell["net"])
+            self.assertTrue(cell["lowSample"])
+
     def test_sentiment_favorability_merged(self):
         """Verify GOP favorability is merged into sentiment response."""
         sentiment = self.sentiment_agg.get_public_sentiment(time_window="all").to_dict()

@@ -571,6 +571,8 @@ def _collect_entity_sample(
     label_key = _LABEL_MAP.get(label, "neutral")
     entity_accum[label_key] += 1
     entity_accum["volume"] += 1
+    if topic is not None:
+        _increment_bucket(entity_accum["by_topic"], topic, label_key)
     if not data.get("reasoning"):
         return
     sample = _build_sample_dict(
@@ -723,6 +725,9 @@ def _init_entity_bucket(
         "kind": kind, "profile": profile,
         "positive": 0, "negative": 0, "neutral": 0, "volume": 0,
         "samples": [],
+        # Per-topic stance counts for the entity's own posts — powers the
+        # topic-scoped expressed score in the profile modal.
+        "by_topic": {},
     }
 
 
@@ -898,6 +903,21 @@ def _format_entity_items(bucket: Dict[str, Dict[str, Any]]) -> List[EntitySentim
         if volume == 0:
             continue
         net = (stats["positive"] - stats["negative"]) / volume * 100
+        # Topic-scoped expressed cells. Same suppression floor as received
+        # tone: a 1-post topic slice reports its volume, never a +/-100
+        # headline (net=None + lowSample instead).
+        by_topic = sorted(
+            (
+                {
+                    "topic": t,
+                    "net": _net_or_none(counts),
+                    "volume": sum(counts.values()),
+                    "lowSample": sum(counts.values()) < MIN_TARGET_SAMPLE_N,
+                }
+                for t, counts in stats["by_topic"].items()
+            ),
+            key=lambda cell: -cell["volume"],
+        )
         items.append(EntitySentimentItem(
             key=key,
             kind=stats["kind"],
@@ -908,6 +928,7 @@ def _format_entity_items(bucket: Dict[str, Dict[str, Any]]) -> List[EntitySentim
             netScore=round(net, 1),
             entity_profile=stats["profile"],
             classification_samples=[_sample_dict_to_model(s) for s in stats["samples"]],
+            expressed_by_topic=by_topic,
         ))
     items.sort(key=lambda it: (it.kind == "catch_all", -it.volume))
     return items

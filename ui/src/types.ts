@@ -185,6 +185,18 @@ export interface EntitySentimentItem {
     // received is the tone of posts ABOUT the entity.
     received?: ReceivedTone | null;
     expressedAlignment?: ExpressedAlignment | null;
+    /** Topic-scoped expressed cells for this entity's OWN posts, volume-
+     *  sorted; net is null (lowSample) below the backend suppression floor.
+     *  Missing on pre-topic cached snapshots. */
+    byTopic?: EntityTopicCell[];
+}
+
+/** One topic-scoped expressed-tone cell on an entity card. */
+export interface EntityTopicCell {
+    topic: string;
+    net: number | null;
+    volume: number;
+    lowSample: boolean;
 }
 
 /** Keys of SentimentDistribution. Used as lookup keys for distributionSamples. */

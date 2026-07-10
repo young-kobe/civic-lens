@@ -27,6 +27,13 @@ discarded by the aggregator, while `byTopic` came from `_extract_topic`
   sample serializers (entity items, byTopic, distributionSamples) are
   consolidated into `_classification_sample_to_dict` — previously a new
   sample field could reach one surface and silently miss the others.
+- Entity-scoped-by-topic expressed scores: each `EntitySentimentItem`
+  carries `byTopic` cells (`{topic, net|None, volume, lowSample}`) built
+  from per-topic stance counts in the entity accumulators, using the same
+  doc-topic attribution. Nets share the received-tone suppression floor
+  (`MIN_TARGET_SAMPLE_N`) — a 1-post topic slice reports its volume, never
+  a +/-100 headline. Stamped only when non-empty so received-only cards
+  keep their shape.
 
 ## Why
 
@@ -36,7 +43,4 @@ discarded by the aggregator, while `byTopic` came from `_extract_topic`
 
 ## Follow-ups
 
-- Entity-scoped-by-topic SCORES still don't exist — the modal filters
-  samples exactly but the headline net remains the entity's global score
-  (the UI labels this). Now a straightforward GROUP BY over
-  target_mentions if wanted.
+- None outstanding for this initiative.
