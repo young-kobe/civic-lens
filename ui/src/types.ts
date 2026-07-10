@@ -214,7 +214,7 @@ export interface BotOverview {
     suspectedAutomationRate: number;
     coordinationIndex: number;
     topClusters: string[];
-    totalFlaggedAccounts: number;
+    totalFlaggedPosts: number;
     confidence: ConfidenceLevel;
     // Three-way entity rollups — registry-matched outlets / officials /
     // subreddits (+ a catch-all per tier) with their per-entity bot rate.
@@ -355,6 +355,9 @@ export interface NarrativeTimelinePoint {
 export interface SupportingDoc {
     doc_id: number;
     title: string | null;
+    // Text preview shown in the Headline column when `title` is null (social
+    // posts have no headline). Falls back to "(untitled)" when both are empty.
+    snippet?: string | null;
     source_type: string;
     source_label: string;   // "News · nytimes.com", "X · @Schumer", "Reddit · r/politics"
     url: string | null;

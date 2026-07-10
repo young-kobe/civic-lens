@@ -33,7 +33,7 @@ function MetricCard({
     const getDeltaSymbol = (): string => {
         switch (deltaDirection) {
             case 'positive': return '+';
-            case 'negative': return '';
+            case 'negative': return '-';
             default: return '';
         }
     };

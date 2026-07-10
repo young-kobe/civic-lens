@@ -48,7 +48,7 @@ export function SupportingDocsTable({ docs, whenLabel = formatRelativeDate }: Su
                         <th scope="col">Source</th>
                         <th scope="col">When</th>
                         <th scope="col">Tone</th>
-                        <th scope="col">Reasoning</th>
+                        <th scope="col">AI reasoning</th>
                         <th scope="col" aria-label="Open source"></th>
                     </tr>
                 </thead>
@@ -59,8 +59,8 @@ export function SupportingDocsTable({ docs, whenLabel = formatRelativeDate }: Su
                         const conf = d.confidence != null ? Math.round(d.confidence * 100) : null;
                         return (
                             <tr key={d.doc_id}>
-                                <td className="supporting-docs-headline" title={d.title ?? undefined}>
-                                    {d.title || <span className="text-muted">(untitled)</span>}
+                                <td className="supporting-docs-headline" title={d.title || d.snippet || undefined}>
+                                    {d.title || d.snippet || <span className="text-muted">(untitled)</span>}
                                 </td>
                                 <td className="supporting-docs-source">{d.source_label}</td>
                                 <td className="supporting-docs-when text-muted">{whenLabel(d.published_at)}</td>
@@ -71,7 +71,11 @@ export function SupportingDocsTable({ docs, whenLabel = formatRelativeDate }: Su
                                         </span>
                                     ) : <span className="text-muted">—</span>}
                                     {conf != null && (
-                                        <span className="text-muted" style={{ marginLeft: 6, fontFamily: 'var(--font-mono)', fontSize: '10px' }}>
+                                        <span
+                                            className="text-muted"
+                                            style={{ marginLeft: 6, fontFamily: 'var(--font-mono)', fontSize: '10px' }}
+                                            title="Model confidence in this label"
+                                        >
                                             {conf}%
                                         </span>
                                     )}
@@ -140,9 +144,17 @@ export function classificationSampleToSupportingDoc(s: ClassificationSample): Su
         }
     }
 
+    // Social posts have no title; surface a text preview so the Headline
+    // column shows content instead of "(untitled)". Mirrors narrative.py's
+    // server-side snippet for the narrative supporting-docs path.
+    const snippet = (!s.title && s.full_text)
+        ? textSnippet(s.full_text)
+        : null;
+
     return {
         doc_id: s.doc_id,
         title: s.title || null,
+        snippet,
         source_type: s.source_type || 'unknown',
         source_label: sourceLabel,
         url: s.url ?? null,
@@ -151,4 +163,15 @@ export function classificationSampleToSupportingDoc(s: ClassificationSample): Su
         confidence: typeof s.confidence === 'number' ? s.confidence : null,
         reasoning: s.reasoning || null,
     };
+}
+
+const SNIPPET_MAX_CHARS = 120;
+
+function textSnippet(text: string): string {
+    // Slice before collapsing: this runs per row inside render-time maps,
+    // and full_text can be an entire article body.
+    const collapsed = text.slice(0, SNIPPET_MAX_CHARS * 4).split(/\s+/).join(' ').trim();
+    return collapsed.length > SNIPPET_MAX_CHARS
+        ? collapsed.slice(0, SNIPPET_MAX_CHARS - 3).trimEnd() + '...'
+        : collapsed;
 }

@@ -23,7 +23,6 @@ export { default as Modal } from './Modal';
 export { default as LoadingState, LoadingCard, LoadingMetric, LoadingTable, LoadingChart, LoadingSkeleton } from './LoadingState';
 export { default as EmptyState } from './EmptyState';
 export { default as ErrorState } from './ErrorState';
-export { ClassificationSampleCard } from './ClassificationSampleCard';
 export { default as CollapsibleInfo } from './CollapsibleInfo';
 export { default as TopMetricsBlock, TierRow } from './TopMetricsBlock';
 export type { TierRowDot } from './TopMetricsBlock';

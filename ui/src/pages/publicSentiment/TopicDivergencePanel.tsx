@@ -5,7 +5,7 @@ import {
     classificationSampleToSupportingDoc,
 } from '../../components/common';
 import { COLORS } from '../../theme';
-import { formatPct } from '../../services/format';
+import { formatPts } from '../../services/format';
 
 interface TopicDivergencePanelProps {
     topics: SentimentBreakdown[];
@@ -41,12 +41,12 @@ export function TopicDivergencePanel({ topics }: TopicDivergencePanelProps) {
     if (rows.length === 0) {
         return (
             <Card
-                title="Topic Divergence"
+                title="What each group is saying"
                 subtitle="News, officials, and public net tone side-by-side per topic"
             >
                 <p className="text-muted text-sm">
-                    No per-topic three-way data available yet. This panel populates once
-                    the aggregator has docs in each tier for a given topic.
+                    Not enough data yet — this panel appears once we have posts from at least
+                    two groups (news, officials, public) on a topic.
                 </p>
             </Card>
         );
@@ -59,7 +59,7 @@ export function TopicDivergencePanel({ topics }: TopicDivergencePanelProps) {
                 subtitle="For each topic, where news outlets, officials, and the public land on the tone axis. The further apart the dots, the more the groups disagree."
                 headerActions={
                     <MethodPopover
-                        description="For each topic, we compute average tone separately from news docs, verified officials' posts, and everyone else (the general public). The dots on each row show where those three groups land between −100% (unfavorable) and +100% (favorable). A bigger spread between dots means more disagreement."
+                        description="For each topic, we compute average tone separately from news articles, verified officials' posts, and everyone else (the general public). The dots on each row show where those three groups land between −100 (all negative) and +100 (all positive). A bigger spread between dots means more disagreement."
                         limitations={[
                             "Averages share the same underlying sample — a group with only a handful of posts on a topic can swing sharply.",
                             "Topic assignment is keyword-based; a post that straddles two topics gets counted under the first match.",
@@ -78,6 +78,9 @@ export function TopicDivergencePanel({ topics }: TopicDivergencePanelProps) {
                             {tier.label}
                         </span>
                     ))}
+                </div>
+                <div className="topic-divergence-axis-caption" aria-hidden>
+                    more negative &larr; 0 &rarr; more positive
                 </div>
                 <div className="topic-divergence-rows">
                     {rows.map((row) => (
@@ -137,7 +140,7 @@ function TopicDivergenceRow({ row, onOpen }: TopicDivergenceRowProps) {
             <div className="topic-divergence-row-label">
                 <span className="topic-divergence-row-name">{row.topic}</span>
                 <span className="topic-divergence-row-volume">
-                    {total.toLocaleString()} docs
+                    {total.toLocaleString()} posts
                 </span>
             </div>
             <div className="topic-divergence-axis">
@@ -154,12 +157,15 @@ function TopicDivergenceRow({ row, onOpen }: TopicDivergenceRowProps) {
                                 left: `${axisPct(value)}%`,
                                 background: tier.color,
                             }}
-                            title={`${tier.label}: ${formatPct(value, { min: -100, signed: true })}`}
+                            title={`${tier.label}: ${formatPts(value)}`}
                         />
                     );
                 })}
             </div>
-            <div className="topic-divergence-row-range">
+            <div
+                className="topic-divergence-row-range"
+                title="Gap between the highest and lowest group tone"
+            >
                 {rangeText}
             </div>
         </button>
@@ -171,7 +177,7 @@ function tierTooltip(row: SentimentBreakdown): string {
     for (const tier of TIER_META) {
         const value = row[tier.key] as number | null | undefined;
         if (value == null) continue;
-        parts.push(`${tier.label} ${formatPct(value, { min: -100, signed: true })}`);
+        parts.push(`${tier.label} ${formatPts(value)}`);
     }
     return parts.join(' · ');
 }
@@ -189,11 +195,11 @@ function TopicSamplesModal({ topic, onClose }: TopicSamplesModalProps) {
             isOpen
             onClose={onClose}
             title={topic.topic || 'Topic'}
-            subtitle={`${tierTooltip(topic)} · ${topic.volume.toLocaleString()} docs`}
+            subtitle={`${tierTooltip(topic)} · ${topic.volume.toLocaleString()} posts`}
         >
             {samples.length === 0 ? (
                 <p className="text-muted text-sm">
-                    No representative classification samples stored for this topic.
+                    No example posts stored for this topic yet.
                 </p>
             ) : (
                 <SupportingDocsTable docs={samples.map(classificationSampleToSupportingDoc)} />

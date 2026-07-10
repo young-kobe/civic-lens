@@ -71,6 +71,14 @@
   --semantic-warning: #96651f;
   --semantic-warning-light: #f0e3c7;
 
+  /* Partisan-lean palette — deliberately distinct from the sentiment set
+     so a right-leaning source's chip/border is not the same red that means
+     "negative tone" elsewhere. Indigo for left, plum for right. */
+  --lean-left: #3d5a99;
+  --lean-left-light: #dfe4f2;
+  --lean-right: #9b4a6b;
+  --lean-right-light: #f0dde6;
+
   /* Chart palette — dusty primaries matching the semantic set.
      Paired dark/light stops for gradient fills that still read at low
      opacity against the paper background. */
@@ -1592,8 +1600,22 @@ code, pre {
   height: 10px;
   background: var(--neutral-100);
   border-radius: var(--radius-full);
-  overflow: hidden;
 }
+
+/* Faint scale-end labels sit just below the axis track so a reader can
+   tell what the dot's position means (e.g. -100 <-> +100 tone, or
+   0% <-> 100% rate). Absolutely positioned so they never change row height. */
+.tier-row-endpoint {
+  position: absolute;
+  top: calc(100% + 1px);
+  font-size: 9px;
+  line-height: 1;
+  color: var(--neutral-400);
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+.tier-row-endpoint-left  { left: 0; }
+.tier-row-endpoint-right { right: 0; }
 
 .tier-row-zero {
   position: absolute;
@@ -1889,6 +1911,15 @@ code, pre {
   border-radius: 50%;
   display: inline-block;
   box-shadow: 0 0 0 2px var(--bg-card);
+}
+
+.topic-divergence-axis-caption {
+  font-size: 10px;
+  color: var(--neutral-400);
+  text-align: center;
+  padding-left: calc(var(--space-3) + 180px + var(--space-3));
+  padding-right: calc(var(--space-3) + 70px + var(--space-3));
+  padding-bottom: 4px;
 }
 
 .topic-divergence-rows {
@@ -2376,8 +2407,8 @@ code, pre {
 
 /* Lean-keyed border color. Applied to .entity-card AND .lean-chip-*
    variants so both the whole card and the small chip signal direction. */
-.entity-card.lean-left    { border-left-color: var(--chart-accent); }
-.entity-card.lean-right   { border-left-color: var(--semantic-negative); }
+.entity-card.lean-left    { border-left-color: var(--lean-left); }
+.entity-card.lean-right   { border-left-color: var(--lean-right); }
 .entity-card.lean-center  { border-left-color: var(--neutral-400); }
 .entity-card.lean-mixed   {
   /* Hatched band for mixed-lean entities — two-tone repeating gradient
@@ -2397,8 +2428,8 @@ code, pre {
 }
 .entity-card.lean-neutral { border-left-color: var(--neutral-300); }
 
-.entity-card-chip.lean-chip-left    { color: var(--chart-accent); border-color: var(--accent-light); background: var(--accent-light); }
-.entity-card-chip.lean-chip-right   { color: var(--semantic-negative); border-color: var(--semantic-negative-light); background: var(--semantic-negative-light); }
+.entity-card-chip.lean-chip-left    { color: var(--lean-left); border-color: var(--lean-left-light); background: var(--lean-left-light); }
+.entity-card-chip.lean-chip-right   { color: var(--lean-right); border-color: var(--lean-right-light); background: var(--lean-right-light); }
 .entity-card-chip.lean-chip-mixed   { color: var(--semantic-warning); border-color: var(--semantic-warning-light); background: var(--semantic-warning-light); }
 .entity-card-chip.lean-chip-center,
 .entity-card-chip.lean-chip-neutral { color: var(--neutral-600); }

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import {
     Card, CollapsibleInfo, EmptyState, EntityHeader, EntityProfileCard,
-    ErrorState, GlobalTicker, LoadingCard, Modal,
+    ErrorState, GlobalTicker, LoadingCard, MethodPopover, Modal,
     ThreeWayColumn, ThreeWayGrid,
     TierRow, TopMetricsBlock, entityExternalUrl, entityLeanAccent,
 } from '../components/common';
@@ -32,6 +32,14 @@ const TECHNIQUE_LABEL: Record<PropagandaTechniqueName, string> = {
     whataboutism: 'Whataboutism',
     doubt_casting: 'Doubt-casting',
 };
+
+// Shared so the 0-to-1 mean-score scale reads identically everywhere it
+// appears (top metrics, ticker, entity cards, modal, source split).
+const MEAN_SCORE_TITLE =
+    'Average technique-intensity score across scored posts, from 0 (none) to 1 (saturated).';
+
+// Rate-axis endpoints for the TierRow dots, which sit on a 0-100% scale.
+const RATE_ENDPOINTS: [string, string] = ['0%', '100%'];
 
 const TECHNIQUE_BLURB: Record<PropagandaTechniqueName, string> = {
     loaded_language: 'Emotionally charged framing designed to influence rather than inform.',
@@ -95,9 +103,13 @@ function PropagandaTopMetrics({
             <TierRow
                 label="Flagged rate"
                 value={formatPct(data.propaganda_rate_pct)}
-                verb={`${data.flagged_docs.toLocaleString()} flagged · mean score ${data.mean_score.toFixed(2)}`}
-                dotPct={data.propaganda_rate_pct}
-                dotColor={flaggedDotColor}
+                verb={`${data.flagged_docs.toLocaleString()} flagged · mean score ${data.mean_score.toFixed(2)} / 1`}
+                dots={[{
+                    pct: data.propaganda_rate_pct,
+                    color: flaggedDotColor,
+                    title: `${formatPct(data.propaganda_rate_pct)} of scored posts were flagged`,
+                }]}
+                endpoints={RATE_ENDPOINTS}
             />
             <TierRow
                 label="News vs social"
@@ -106,6 +118,7 @@ function PropagandaTopMetrics({
                     ? 'no data'
                     : `${leanMoreFlagged} uses more techniques`}
                 dots={splitDots}
+                endpoints={RATE_ENDPOINTS}
             />
             <TierRow
                 label="Top technique"
@@ -115,6 +128,7 @@ function PropagandaTopMetrics({
                     : topTechLabel}
                 dotPct={topTech?.pct_of_flagged_docs}
                 dotColor={topTech ? COLORS.negative : undefined}
+                endpoints={RATE_ENDPOINTS}
             />
         </TopMetricsBlock>
     );
@@ -146,7 +160,7 @@ function buildPropagandaTickerItems(data: PropagandaOverview): TickerItem[] {
         },
         {
             label: 'Mean score',
-            value: data.mean_score.toFixed(2),
+            value: `${data.mean_score.toFixed(2)} / 1`,
         },
         {
             label: 'Top technique',
@@ -172,11 +186,11 @@ function readsAsToday(data: PropagandaOverview): string {
     if (news && social) {
         const gap = news.flagged_rate_pct - social.flagged_rate_pct;
         if (Math.abs(gap) < 2) {
-            parts.push('News and social media are leaning on these techniques at about the same rate.');
+            parts.push('News and social media are leaning on persuasion techniques (loaded language, name-calling, fear appeals) at about the same rate.');
         } else if (gap > 0) {
-            parts.push('News is leaning on these techniques more than social media right now.');
+            parts.push('News is leaning on persuasion techniques (loaded language, name-calling, fear appeals) more than social media right now.');
         } else {
-            parts.push('Social media is leaning on these techniques more than news right now.');
+            parts.push('Social media is leaning on persuasion techniques (loaded language, name-calling, fear appeals) more than news right now.');
         }
     }
     if (topTechLabel && topTech && topTech.count > 0) {
@@ -211,7 +225,7 @@ function PropagandaEntityCard({
             profile={profile}
             stats={item.total_docs > 0 ? [
                 { label: 'Flagged',      value: formatPct(item.flagged_rate_pct), color: rateColor, emphasis: true },
-                { label: 'Mean score',   value: item.mean_score.toFixed(2) },
+                { label: 'Mean score',   value: `${item.mean_score.toFixed(2)} / 1`, title: MEAN_SCORE_TITLE },
                 { label: 'Posts scored', value: item.total_docs.toLocaleString() },
             ] : []}
             onClick={item.total_docs > 0 ? () => onOpen(item) : undefined}
@@ -263,8 +277,8 @@ function PropagandaEntityModal({
                     </div>
                 </div>
                 <div>
-                    <div className="eyebrow">Mean score</div>
-                    <div className="metric-value">{item.mean_score.toFixed(2)}</div>
+                    <div className="eyebrow" title={MEAN_SCORE_TITLE}>Mean score</div>
+                    <div className="metric-value">{item.mean_score.toFixed(2)} / 1</div>
                 </div>
                 <div>
                     <div className="eyebrow">Posts scored</div>
@@ -281,7 +295,7 @@ function PropagandaEntityModal({
                     )}
                     {profile.leanSource && (
                         <span className="text-xs text-muted">
-                            Lean source: {profile.leanSource}
+                            Political lean rated by: {profile.leanSource}
                         </span>
                     )}
                 </div>
@@ -337,7 +351,7 @@ function ThreeWayEntityGrid({
             </ThreeWayColumn>
             <ThreeWayColumn
                 header="Politicians & Officials"
-                byline="Tracked officeholders, sorted by mean propaganda score"
+                byline="Tracked officeholders sorted by how heavily their posts use these techniques"
                 empty="No officials scored yet."
                 isEmpty={officials.length === 0}
             >
@@ -345,7 +359,7 @@ function ThreeWayEntityGrid({
             </ThreeWayColumn>
             <ThreeWayColumn
                 header="The Public"
-                byline="Subreddits + the broader X user catch-all"
+                byline="Political subreddits, plus X users we don't track individually"
                 empty="No social posts scored yet."
                 isEmpty={publics.length === 0}
             >
@@ -366,7 +380,7 @@ function TechniquesCard({ techniques }: { techniques: PropagandaTechniqueCount[]
     return (
         <Card
             title="Techniques being used"
-            subtitle="One post can count toward multiple techniques. Each is detected with a verbatim evidence span from the source."
+            subtitle="One post can count toward multiple techniques. Each detection is backed by a verbatim quote from the post."
         >
             <div className="technique-rows">
                 {techniques.map((t) => {
@@ -414,7 +428,7 @@ function NewsVsSocialCard({ splits }: { splits: PropagandaSourceSplit[] }) {
     return (
         <Card
             title="News vs. social media"
-            subtitle="Flagged rate and mean score by source bucket"
+            subtitle="Flagged rate and mean score for news outlets vs. social posts"
         >
             <div className="source-split-rows">
                 {splits.map((s) => (
@@ -434,8 +448,8 @@ function NewsVsSocialCard({ splits }: { splits: PropagandaSourceSplit[] }) {
                             {formatPct(s.flagged_rate_pct)}
                             <span className="source-split-row-sub">flagged</span>
                         </span>
-                        <span className="source-split-row-score">
-                            {s.mean_score.toFixed(2)}
+                        <span className="source-split-row-score" title={MEAN_SCORE_TITLE}>
+                            {s.mean_score.toFixed(2)} / 1
                             <span className="source-split-row-sub">mean score</span>
                         </span>
                     </div>
@@ -495,7 +509,10 @@ function ExampleRow({ ex }: { ex: PropagandaExample }) {
                             {TECHNIQUE_LABEL[t.technique as PropagandaTechniqueName] || t.technique}
                         </strong>
                         {' '}
-                        <span className="example-tech-conf">{formatPct(t.confidence * 100, { decimals: 0 })} conf</span>
+                        <span
+                            className="example-tech-conf"
+                            title="Model confidence that this technique is present"
+                        >{formatPct(t.confidence * 100, { decimals: 0 })} confidence</span>
                         {': '}
                         <em>"{t.evidence_span}"</em>
                     </span>
@@ -582,7 +599,7 @@ function Propaganda({ filters }: PropagandaProps) {
     // Tone and Narratives do. Hiding the frame on empty data was
     // misleading: a stalled propaganda-detection cron looked identical to
     // a clean run with nothing to flag.
-    if (!data) return <EmptyState title="No propaganda data available" />;
+    if (!data) return <EmptyState title="No rhetoric analysis available for this window." />;
 
     const windowLabel = formatTimeWindow(filters.timeRange);
     const tickerItems = buildPropagandaTickerItems(data);
@@ -598,6 +615,17 @@ function Propaganda({ filters }: PropagandaProps) {
                         items={tickerItems}
                         refreshed={refreshed}
                         ariaLabel="Propaganda overview"
+                        legend={
+                            <MethodPopover
+                                title="How to read these numbers"
+                                description={
+                                    'We flag six persuasion techniques (loaded language, name-calling, fear '
+                                    + 'appeals, ad hominem, whataboutism, doubt-casting) in political posts. A '
+                                    + "flag measures rhetorical style — not truth, intent, or whether the post is "
+                                    + "'propaganda' in the everyday sense. Mean score runs 0 (none) to 1 (saturated)."
+                                }
+                            />
+                        }
                     />
                 </div>
 
@@ -607,6 +635,10 @@ function Propaganda({ filters }: PropagandaProps) {
                             {asOfTodayEyebrow(filters.timeRange)}
                         </span>
                         <p className="lead" style={{ margin: 0 }}>{readsAsToday(data)}</p>
+                        <p className="text-xs text-muted" style={{ margin: 'var(--space-2) 0 0' }}>
+                            We flag six persuasion techniques in political posts. A flag measures rhetorical
+                            style — not truth, intent, or whether the post is "propaganda" in the everyday sense.
+                        </p>
                     </div>
                 </div>
 

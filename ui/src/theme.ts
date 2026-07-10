@@ -34,6 +34,12 @@ export const COLORS = {
     neutral:       'var(--semantic-neutral)',
     neutralLight:  'var(--semantic-neutral-light)',
 
+    // Partisan lean — distinct from the sentiment palette on purpose.
+    leanLeft:       'var(--lean-left)',
+    leanLeftLight:  'var(--lean-left-light)',
+    leanRight:      'var(--lean-right)',
+    leanRightLight: 'var(--lean-right-light)',
+
     // Accent
     accent:       'var(--accent)',
     accentHover:  'var(--accent-hover)',

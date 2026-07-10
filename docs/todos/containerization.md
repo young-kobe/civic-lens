@@ -22,7 +22,7 @@ always-on box). Revisit when sustained Gemini spend exceeds ~$50/mo.
 - [x] systemd units rewritten to `docker compose run --rm` (crawl/analyze/x),
       `civic-lens-api.service` deleted, `civic-lens-stack.service` added.
 - [x] `deploy/deploy.sh` pull-based (no on-box compiles); `deploy/install.sh`
-      installs docker, drops caddy/go/node host packages, pins UID 990.
+      installs docker, drops caddy/go/node host packages, pins UID 10001.
 - [x] Caddyfile: `trust_pool file` (Caddy 2.8+ spelling), `root * /srv/ui`.
 - [x] CI: go 1.24 everywhere; build-only image job in `ci.yml`; GHCR
       build+push `images` job in `deploy.yml` gating `deploy`.
@@ -34,9 +34,9 @@ always-on box). Revisit when sustained Gemini spend exceeds ~$50/mo.
 - [ ] Make the three GHCR packages public (or install a read-only pull token).
 - [ ] Install docker-ce/docker.io + compose plugin on the box; `git pull` in
       /opt/civic-lens; `docker compose pull`.
-- [ ] Verify `id -u civic-lens` is 990; if not: `usermod -u 990 civic-lens
-      && groupmod -g 990 civic-lens && chown -R civic-lens:civic-lens
-      /var/lib/civic-lens`.
+- [ ] Verify `id -u civic-lens` is 10001; if not: `usermod -u 10001 civic-lens
+      && groupmod -g 10001 civic-lens && chown -R civic-lens:civic-lens
+      /var/lib/civic-lens`. (10001 avoids the systemd-resolve collision at 990.)
 - [ ] Create the Litestream R2 bucket + scoped API token; add `LITESTREAM_*`
       to /etc/civic-lens.env.
 - [ ] Dry-run `docker compose run --rm ingest migrate` against a scratch

@@ -10,7 +10,7 @@ easier prompt engineering and A/B testing.
 # Prompt Version Constants (tracked in ai_outputs.prompt_version)
 # =============================================================================
 
-TEXT_ANALYSIS_PROMPT_VERSION = "text-analysis-v4"
+TEXT_ANALYSIS_PROMPT_VERSION = "text-analysis-v5"
 BOT_PROMPT_VERSION = "bot-v2"
 CLAIM_EXTRACTION_PROMPT_VERSION = "claim-extraction-v3"
 PROPAGANDA_PROMPT_VERSION = "propaganda-v1"
@@ -57,8 +57,8 @@ RULES:
    - Do NOT return placeholder text like "exact quote" as evidence. Every evidence span must come from the actual input text.
    - Do NOT repeat the same evidence span multiple times.
    - If no meaningful evidence phrases can be extracted, set sentiment_evidence_spans to an empty array and confidence < 0.5.
-   - Explain your overall emotional tone classification logic in `sentiment_reasoning`.
-   - Explain your GOP favorability stance logic independently in `favorability_reasoning`.
+   - Explain your overall emotional tone classification logic in `sentiment_reasoning`. ONE sentence maximum.
+   - Explain your GOP favorability stance logic independently in `favorability_reasoning`. ONE sentence maximum.
 6. EMPTY/TRIVIAL CONTENT:
    - Text consisting only of @-mentions, links, or hashtags with no substantive content = NEUTRAL with confidence < 0.5.
 7. If uncertain about a classification, set confidence < 0.7.

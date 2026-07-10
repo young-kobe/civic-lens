@@ -739,7 +739,7 @@ export function mockBotActivity(): BotData {
             suspectedAutomationRate: 8.4,
             coordinationIndex: 0.42,
             topClusters: ['anti-immigration amplifiers', 'pro-candidate X ring', 'climate-denial chorus'],
-            totalFlaggedAccounts: 247,
+            totalFlaggedPosts: 247,
             confidence: 'medium',
             by_news_outlet: [
                 { key: 'nytimes.com', kind: 'outlet',  total_docs: 162, bot_docs: 1, bot_rate_pct: 0.6, entity_profile: NYT_PROFILE },

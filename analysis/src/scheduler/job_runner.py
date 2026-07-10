@@ -691,9 +691,9 @@ class AnalysisJobRunner:
             bot_activity = self.bot_agg.get_bot_activity(time_window=window)
             self.cache.save(
                 f"bot_activity_{window}", bot_activity.to_dict(),
-                doc_count=bot_activity.overview.totalFlaggedAccounts,
+                doc_count=bot_activity.overview.totalFlaggedPosts,
             )
-            results[f"bot_activity_{window}"] = bot_activity.overview.totalFlaggedAccounts
+            results[f"bot_activity_{window}"] = bot_activity.overview.totalFlaggedPosts
 
         # Narratives — cache top 100 per time window; the API slices to the
         # caller's requested limit (walkthrough 041). Previously the key was

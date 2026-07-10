@@ -375,7 +375,16 @@ def _build_sample_dict(
         "sarcasm_detected": bool(data.get("sarcasm_detected", False)),
         "title": title or "",
         "source_type": source_type or "unknown",
-        "source_name": domain_or_subreddit,
+        # X rows carry the author handle as the display name (the UI renders
+        # "X · @<source_name>"); domain_or_subreddit is literally "x.com" and
+        # would render "X · @x.com". Handle-less X rows (author missing from
+        # x_users_raw — the join is a LEFT JOIN) get None so the UI degrades
+        # to a bare "X", matching narrative.py's _build_source_label.
+        # News/Reddit keep domain/subreddit.
+        "source_name": (
+            (x_handle or None) if source_type == "x_post"
+            else domain_or_subreddit
+        ),
         "date": date_str,
         "full_text": text or "",
         "url": url,

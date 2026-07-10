@@ -12,7 +12,7 @@ export interface TickerItem {
     value: ReactNode;
     /**
      * Optional trailing hint — small-caps grey text printed after the value
-     * (e.g. "docs", "of 1,203", "Positive"). Keeps the value column monospaced
+     * (e.g. "posts", "of 1,203", "Positive"). Keeps the value column monospaced
      * without fighting the unit label for typographic weight.
      */
     hint?: string;
