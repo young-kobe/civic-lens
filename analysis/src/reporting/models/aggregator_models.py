@@ -145,7 +145,7 @@ class EntitySentimentItem:
     entity registry, or a lightweight placeholder dict for catch-alls.
     """
     key: str                    # domain / handle / subreddit / sentinel like "other-outlets"
-    kind: str                   # outlet | official | subreddit | catch_all
+    kind: str                   # outlet | official | subreddit | account | catch_all
     positive: int
     negative: int
     neutral: int
@@ -156,7 +156,11 @@ class EntitySentimentItem:
     # Received tone (officials only) — how sampled posts talk ABOUT this
     # entity, from target_sentiment fan-out. Shape:
     #   {net: float|None, volume: int, lowSample: bool,
-    #    byTopic: [{topic, net|None, volume, lowSample}], samples: [...]}
+    #    engagementWeightedNet: float|None,
+    #    byTopic: [{topic, net|None, volume, lowSample}],
+    #    bySpeakerTier: [{tier, net|None, volume, lowSample}],
+    #    byNarrative: [{narrativeId, name, net|None, volume, lowSample}],
+    #    samples: [...]}
     # net is None (suppressed) below the aggregator's min-sample threshold.
     # None field = no target_sentiment coverage; netScore above remains the
     # EXPRESSED tone (this entity's own posts) — the UI labels the two.
@@ -597,6 +601,15 @@ class NarrativeSummary:
     inbound_citation_count: int
     propaganda_score: Optional[float] = None
     bot_pushed_fraction: Optional[float] = None
+    # Citation-edge semantics (2026-07-10): the flat inbound count split by
+    # link_type, outbound edges to un-ingested external URLs, and the top
+    # narratives this one cites into / is cited by. All are edges between
+    # sampled docs (or from sampled docs outward) — never origin or causal
+    # propagation claims.
+    inbound_by_link_type: Dict[str, int] = field(default_factory=dict)
+    external_citation_count: int = 0
+    # [{narrative_id, name, direction: 'cites'|'cited_by', edge_count}]
+    cross_narrative_citations: List[Dict[str, Any]] = field(default_factory=list)
     # Walkthrough 058 — three-way entity framing:
     #   first_seen_entity_profile: profile_dict()-shaped dict for the
     #     registry entity the first-seen doc maps to (outlet / official /
@@ -632,6 +645,9 @@ class NarrativeSummary:
             "timeline": self.timeline,
             "net_sentiment": self.net_sentiment,
             "inbound_citation_count": self.inbound_citation_count,
+            "inbound_by_link_type": self.inbound_by_link_type,
+            "external_citation_count": self.external_citation_count,
+            "cross_narrative_citations": self.cross_narrative_citations,
             "propaganda_score": self.propaganda_score,
             "bot_pushed_fraction": self.bot_pushed_fraction,
             "first_seen_entity_profile": self.first_seen_entity_profile,

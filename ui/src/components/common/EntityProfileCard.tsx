@@ -158,7 +158,7 @@ export function EntityAvatar({ profile }: { profile: EntityProfile }) {
             </span>
         );
     }
-    if (profile.kind === 'official' && profile.key && !profile.key.includes('-')) {
+    if ((profile.kind === 'official' || profile.kind === 'account') && profile.key && !profile.key.includes('-')) {
         return (
             <span className="entity-avatar entity-avatar-img" aria-hidden>
                 <img
@@ -179,17 +179,17 @@ export function EntityAvatar({ profile }: { profile: EntityProfile }) {
 /** External URL for the entity — outlet homepage, X profile, or subreddit. */
 export function entityExternalUrl(profile: EntityProfile): string | null {
     if (profile.kind === 'outlet' && profile.key) return `https://${profile.key}`;
-    if (profile.kind === 'official' && profile.key && !profile.key.includes('-')) {
+    if ((profile.kind === 'official' || profile.kind === 'account') && profile.key && !profile.key.includes('-')) {
         return `https://x.com/${profile.key}`;
     }
     if (profile.kind === 'subreddit' && profile.key) return `https://reddit.com/r/${profile.key}`;
     return null;
 }
 
-/** Short chip label. Officials show party letter; outlets/subreddits show lean/tilt; catch-alls none. */
+/** Short chip label. Officials/accounts show party letter; outlets/subreddits show lean/tilt; catch-alls none. */
 export function entityChipLabel(profile: EntityProfile): string | null {
     if (profile.kind === 'catch_all') return null;
-    if (profile.kind === 'official') return profile.party || null;
+    if (profile.kind === 'official' || profile.kind === 'account') return profile.party || null;
     return profile.lean || null;
 }
 
@@ -201,7 +201,7 @@ const PARTY_NAMES: Record<string, string> = {
  *  who doesn't know the shorthand can still read the card. */
 export function entityChipTitle(profile: EntityProfile): string | undefined {
     if (profile.kind === 'catch_all') return undefined;
-    if (profile.kind === 'official') {
+    if (profile.kind === 'official' || profile.kind === 'account') {
         if (!profile.party) return undefined;
         return `Party: ${PARTY_NAMES[profile.party] ?? profile.party}`;
     }

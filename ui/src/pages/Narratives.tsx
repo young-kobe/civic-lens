@@ -24,6 +24,12 @@ const PROP_SCORE_TITLE =
 const CITES_TITLE =
     'Links from other posts or articles in our sample that point to posts in this story. '
     + 'Counts only sources we track — not the whole web.';
+const LINK_TYPE_LABELS: Record<string, string> = {
+    url_citation: 'link',
+    quote: 'quote',
+    reply: 'reply',
+    retweet: 'retweet',
+};
 import type {
     AccountProfile, Filters, NarrativeSourceBreakdownItem, NarrativeSummary,
 } from '../types';
@@ -325,6 +331,43 @@ function NarrativeDetailModal({ narrative, onClose, onBack, backLabel }: Narrati
                     </div>
                 )}
             </div>
+
+            {((narrative.inbound_by_link_type && Object.keys(narrative.inbound_by_link_type).length > 0)
+                || (narrative.external_citation_count ?? 0) > 0
+                || (narrative.cross_narrative_citations?.length ?? 0) > 0) && (
+                <>
+                    <h3 className="card-title mt-4 mb-2">Citation edges</h3>
+                    {narrative.inbound_by_link_type && Object.keys(narrative.inbound_by_link_type).length > 0 && (
+                        <p className="text-sm">
+                            Inbound by type:{' '}
+                            {Object.entries(narrative.inbound_by_link_type)
+                                .map(([t, n]) => `${LINK_TYPE_LABELS[t] ?? t} ${n}`)
+                                .join(' · ')}
+                        </p>
+                    )}
+                    {(narrative.external_citation_count ?? 0) > 0 && (
+                        <p className="text-sm">
+                            Links out to {narrative.external_citation_count} source
+                            {narrative.external_citation_count === 1 ? '' : 's'} we did not ingest.
+                        </p>
+                    )}
+                    {(narrative.cross_narrative_citations?.length ?? 0) > 0 && (
+                        <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                            {narrative.cross_narrative_citations!.map((edge) => (
+                                <li key={`${edge.direction}-${edge.narrative_id}`} className="text-sm">
+                                    {edge.direction === 'cites' ? 'Cites into' : 'Cited by'}{' '}
+                                    <strong>{edge.name}</strong> ({edge.edge_count} edge{edge.edge_count === 1 ? '' : 's'})
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+                    <p className="text-xs text-muted">
+                        Citation edges connect documents we sampled — they do not
+                        establish where a narrative originated or how it spread
+                        outside our sample.
+                    </p>
+                </>
+            )}
 
             <h3 className="card-title mt-4 mb-2">Daily volume</h3>
             <Sparkline data={timeline} dataKey="value" height={80} color="var(--neutral-700)" />

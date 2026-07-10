@@ -4,7 +4,7 @@ where possible (see ``job_runner.save_snapshots``), falling back to live
 aggregation on a miss.
 """
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
 from starlette.requests import Request
 
 from analysis.src.api.cache_utils import WindowLiteral, get_cached_or_fallback
@@ -18,6 +18,7 @@ from analysis.src.reporting.aggregators import (
     PropagandaAggregator,
     SentimentAggregator,
 )
+from analysis.src.reporting.entity_posts import MAX_PAGE_SIZE, fetch_entity_posts
 
 settings = get_settings()
 cache = SnapshotCache(settings.cache_dir)
@@ -110,6 +111,33 @@ def get_propaganda(
     )
 
 
+@router.get("/entity-posts")
+@limiter.limit("30/minute")
+def get_entity_posts(
+    request: Request,
+    kind: str,
+    key: str,
+    window: WindowLiteral = "7d",
+    limit: int = Query(default=20, ge=1, le=MAX_PAGE_SIZE),
+    offset: int = Query(default=0, ge=0),
+):
+    """Paginated classified posts behind one entity card, newest first.
+
+    Live read (not snapshot-cached), like ``/movers``: the cache stores only
+    a handful of highest-confidence samples per entity, and this endpoint
+    exists precisely to show what the cache pre-truncates. It is an indexed
+    SELECT with LIMIT/OFFSET — row retrieval, not aggregation — so the
+    "no heavy aggregation at request time" rule still holds.
+    """
+    try:
+        return fetch_entity_posts(
+            settings.db_path, kind=kind, key=key,
+            window=window, limit=limit, offset=offset,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+
 @router.get("/movers")
 @limiter.limit("20/minute")
 def get_movers(request: Request, window: WindowLiteral = "7d"):
@@ -119,6 +147,22 @@ def get_movers(request: Request, window: WindowLiteral = "7d"):
     Computed live (not snapshot-cached) — it's a two-SQL-pass diff, cheap
     enough to run per-request at the rate limit configured here."""
     return movers_agg.get_movers(time_window=window).to_dict()
+
+
+@router.get("/eval-accuracy")
+def get_eval_accuracy():
+    """Per-task human-review agreement (from ai_output_evals), for the UI's
+    "human agreement" chips next to AI-derived numbers. Public and
+    aggregate-only: task-level counts and percentages, no reviewer identity
+    or per-row labels (those stay behind the admin-gated /review/stats).
+    Accuracy is suppressed server-side below the public review floor."""
+    from analysis.src.reporting.review import ReviewService
+    return get_cached_or_fallback(
+        cache,
+        "eval_accuracy",
+        lambda: ReviewService(settings.db_path).get_public_accuracy(),
+        lambda stats: stats,
+    )
 
 
 @router.get("/snapshot-status")

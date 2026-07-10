@@ -77,11 +77,26 @@ class SentimentEntityRoutingTests(unittest.TestCase):
             CREATE TABLE x_posts_raw (
                 tweet_id TEXT PRIMARY KEY,
                 author_id TEXT,
-                is_official_tier INTEGER NOT NULL DEFAULT 0
+                is_official_tier INTEGER NOT NULL DEFAULT 0,
+                retweet_count INTEGER DEFAULT 0,
+                reply_count INTEGER DEFAULT 0,
+                like_count INTEGER DEFAULT 0,
+                quote_count INTEGER DEFAULT 0
             );
             CREATE TABLE x_users_raw (
                 user_id TEXT PRIMARY KEY,
                 username TEXT
+            );
+            CREATE TABLE account_profiles (
+                profile_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                platform TEXT NOT NULL,
+                author_id TEXT NOT NULL,
+                tier TEXT NOT NULL,
+                full_name TEXT,
+                party TEXT,
+                office_title TEXT,
+                account_type TEXT,
+                UNIQUE(platform, author_id)
             );
         """)
 
@@ -112,6 +127,14 @@ class SentimentEntityRoutingTests(unittest.TestCase):
             # Reddit: unmatched subreddit → catch_all_subreddits
             (7, "reddit_post", "t3_rp2", "offbrandsub", ts, ts,
              "Immigration post", "body", "h7", "{}"),
+            # X: not in registry, but curated as 'affiliated' → named
+            # per-account card in the public column, not the catch-all.
+            (8, "x_post", "tweet_777_1", None, ts, ts,
+             "Immigration commentary", "body", "h8", "{}"),
+            # X: not in registry, curated as 'elected_official' → upgraded
+            # to the officials column as a named account card.
+            (9, "x_post", "tweet_888_1", None, ts, ts,
+             "Immigration statement from office", "body", "h9", "{}"),
         ]
         cur.executemany(
             "INSERT INTO docs (doc_id, source_type, ident, domain_or_subreddit, "
@@ -125,11 +148,25 @@ class SentimentEntityRoutingTests(unittest.TestCase):
         # registry's canonicalized form (@POTUS → potus).
         cur.executemany(
             "INSERT INTO x_posts_raw (tweet_id, author_id) VALUES (?, ?)",
-            [("tweet_42_1", "42"), ("tweet_999_1", "999")],
+            [
+                ("tweet_42_1", "42"), ("tweet_999_1", "999"),
+                ("tweet_777_1", "777"), ("tweet_888_1", "888"),
+            ],
         )
         cur.executemany(
             "INSERT INTO x_users_raw (user_id, username) VALUES (?, ?)",
-            [("42", "POTUS"), ("999", "generic_person")],
+            [
+                ("42", "POTUS"), ("999", "generic_person"),
+                ("777", "PunditJane"), ("888", "MayorSmith"),
+            ],
+        )
+        cur.executemany(
+            "INSERT INTO account_profiles (platform, author_id, tier, full_name, party, office_title) "
+            "VALUES ('x', ?, ?, ?, ?, ?)",
+            [
+                ("777", "affiliated", "Jane Pundit", "D", None),
+                ("888", "elected_official", "Mayor Smith", "R", "Mayor"),
+            ],
         )
 
         # All POSITIVE with high confidence so routing is the only variable
@@ -139,7 +176,7 @@ class SentimentEntityRoutingTests(unittest.TestCase):
             "VALUES (?, ?, ?, ?)",
             [
                 (doc_id, "sentiment", _sentiment_payload("POSITIVE", 0.9), 0.9)
-                for doc_id in range(1, 8)
+                for doc_id in range(1, 10)
             ],
         )
         self.conn.commit()
@@ -197,6 +234,29 @@ class SentimentEntityRoutingTests(unittest.TestCase):
         self.assertEqual(public[CATCH_ALL_SUBREDDITS].kind, "catch_all")
         self.assertEqual(public[CATCH_ALL_SUBREDDITS].volume, 1)
 
+    def test_affiliated_account_gets_named_card_not_catch_all(self):
+        """A curated 'affiliated' author must not vanish into "Other X
+        users" — the classified data exists, so the reader gets a named,
+        source-labeled card."""
+        public = self._by_key(self.result.byGeneralPublic)
+        self.assertIn("punditjane", public)
+        item = public["punditjane"]
+        self.assertEqual(item.kind, "account")
+        self.assertEqual(item.volume, 1)
+        self.assertEqual(item.entity_profile["displayName"], "Jane Pundit")
+        self.assertEqual(item.entity_profile["party"], "D")
+        # The catch-all still only holds the genuinely unclassified author.
+        self.assertEqual(public[CATCH_ALL_X_USERS].volume, 1)
+
+    def test_elected_official_account_upgrades_to_officials_column(self):
+        """A curated 'elected_official' author outside the editorial
+        registry belongs with officials, not the public."""
+        officials = self._by_key(self.result.byOfficial)
+        self.assertIn("mayorsmith", officials)
+        self.assertEqual(officials["mayorsmith"].kind, "account")
+        public = self._by_key(self.result.byGeneralPublic)
+        self.assertNotIn("mayorsmith", public)
+
     def test_entity_profile_attached_for_matched(self):
         """Registry-matched entities should carry the YAML-sourced profile
         payload; catch-alls get the lightweight placeholder."""
@@ -231,10 +291,12 @@ class SentimentEntityRoutingTests(unittest.TestCase):
         self.assertEqual(t.newsNet, 100.0)
         self.assertEqual(t.officialsNet, 100.0)
         self.assertEqual(t.publicNet, 100.0)
-        # Volumes: 3 news (nyt + bbc + unmatched), 1 officials, 3 public (1 X + 2 reddit).
+        # Volumes: 3 news (nyt + bbc + unmatched), 2 officials (registry
+        # @POTUS + curated elected_official upgrade), 4 public (1 catch-all
+        # X + 1 curated affiliated + 2 reddit).
         self.assertEqual(t.newsVolume, 3)
-        self.assertEqual(t.officialsVolume, 1)
-        self.assertEqual(t.publicVolume, 3)
+        self.assertEqual(t.officialsVolume, 2)
+        self.assertEqual(t.publicVolume, 4)
 
 
 if __name__ == "__main__":

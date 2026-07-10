@@ -17,9 +17,17 @@ separate how people talk ABOUT them (received) from how they themselves talk
 * Bot-flagged docs and per-target confidences below the aggregation floor
   never reach public numbers.
 * Party collectives roll up under targetTone.collectives, not as cards.
+* Account-level bot exclusion: pairs authored by an account whose
+  author_bot_scores rollup is high are withheld and counted in metadata —
+  an account farm must not be able to move an official's received tone.
+* Engagement weighting re-emphasizes within an already-sufficient sample
+  (reach proxy) but never rescues a suppressed one.
+* bySpeakerTier / byNarrative attribute WHO talks about an official and
+  WHICH recurring claims drive it, with the same per-cell suppression.
 """
 
 import json
+import math
 import sqlite3
 import sys
 import time
@@ -76,11 +84,40 @@ class TargetToneAggregationTests(unittest.TestCase):
             CREATE TABLE x_posts_raw (
                 tweet_id TEXT PRIMARY KEY,
                 author_id TEXT,
-                is_official_tier INTEGER NOT NULL DEFAULT 0
+                is_official_tier INTEGER NOT NULL DEFAULT 0,
+                retweet_count INTEGER DEFAULT 0,
+                reply_count INTEGER DEFAULT 0,
+                like_count INTEGER DEFAULT 0,
+                quote_count INTEGER DEFAULT 0
             );
             CREATE TABLE x_users_raw (
                 user_id TEXT PRIMARY KEY,
                 username TEXT
+            );
+            CREATE TABLE account_profiles (
+                profile_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                platform TEXT NOT NULL,
+                author_id TEXT NOT NULL,
+                tier TEXT NOT NULL,
+                full_name TEXT,
+                party TEXT,
+                office_title TEXT,
+                account_type TEXT,
+                UNIQUE(platform, author_id)
+            );
+            CREATE TABLE author_bot_scores (
+                platform TEXT NOT NULL,
+                author_id TEXT NOT NULL,
+                score REAL NOT NULL,
+                PRIMARY KEY (platform, author_id)
+            );
+            CREATE TABLE narratives (
+                narrative_id INTEGER PRIMARY KEY,
+                name TEXT
+            );
+            CREATE TABLE narrative_docs (
+                narrative_id INTEGER,
+                doc_id INTEGER
             );
         """)
 
@@ -102,6 +139,13 @@ class TargetToneAggregationTests(unittest.TestCase):
             (9, "x_post", "tweet_schumer_1", "x.com", ts, None, "body", "h9"),
             # Unresolved + below-confidence-floor targets.
             (10, "news", "https://a.example/10", "a.example", ts, "t10", "body", "h10"),
+            # X post by an account whose account-level bot rollup is high —
+            # its targets must be withheld and counted in metadata.
+            (11, "x_post", "tweet_farm_1", "x.com", ts, None, "body", "h11"),
+            # X post by a curated affiliated (non-registry) account — counts
+            # toward Trump's received tone under the 'affiliated' speaker
+            # tier, with heavy engagement for the weighted-net test.
+            (12, "x_post", "tweet_pundit_1", "x.com", ts, None, "body", "h12"),
             # Bot-flagged doc — its targets must not count.
             (99, "news", "https://a.example/99", "a.example", ts, "t99", "body", "h99"),
         ]
@@ -110,12 +154,31 @@ class TargetToneAggregationTests(unittest.TestCase):
             "published_at, title, text, raw_hash) VALUES (?,?,?,?,?,?,?,?)",
             docs,
         )
-        cur.execute(
-            "INSERT INTO x_posts_raw (tweet_id, author_id, is_official_tier) "
-            "VALUES ('tweet_schumer_1', '1001', 1)"
+        cur.executemany(
+            "INSERT INTO x_posts_raw (tweet_id, author_id, is_official_tier, like_count) "
+            "VALUES (?,?,?,?)",
+            [
+                ("tweet_schumer_1", "1001", 1, 0),
+                ("tweet_farm_1", "2002", 0, 0),
+                ("tweet_pundit_1", "3003", 0, 99),
+            ],
+        )
+        cur.executemany(
+            "INSERT INTO x_users_raw (user_id, username) VALUES (?,?)",
+            [("1001", "SenSchumer"), ("2002", "FarmAcct"), ("3003", "PunditJane")],
         )
         cur.execute(
-            "INSERT INTO x_users_raw (user_id, username) VALUES ('1001', 'SenSchumer')"
+            "INSERT INTO account_profiles (platform, author_id, tier, full_name, party) "
+            "VALUES ('x', '3003', 'affiliated', 'Jane Pundit', 'D')"
+        )
+        cur.execute(
+            "INSERT INTO author_bot_scores (platform, author_id, score) "
+            "VALUES ('x', '2002', 0.9)"
+        )
+        cur.execute("INSERT INTO narratives (narrative_id, name) VALUES (1, 'Border claim')")
+        cur.executemany(
+            "INSERT INTO narrative_docs (narrative_id, doc_id) VALUES (1, ?)",
+            [(1,), (2,), (3,)],
         )
 
         rows = [
@@ -139,6 +202,13 @@ class TargetToneAggregationTests(unittest.TestCase):
                 _t("Elon Musk", "negative"),                       # unresolved
                 _t("Donald J. Trump", "negative", confidence=0.4),  # below floor
             )),
+            # Account-level bot exclusion: three stances, none may count.
+            (11, _target_payload(
+                _t("Donald J. Trump", "positive"),
+                _t("Donald J. Trump", "positive"),
+                _t("John Thune", "positive"),
+            )),
+            (12, _target_payload(_t("Donald J. Trump", "negative"))),
             (99, _target_payload(_t("Donald J. Trump", "positive"))),
         ]
         cur.executemany(
@@ -160,14 +230,15 @@ class TargetToneAggregationTests(unittest.TestCase):
             Path(self.db_path + suffix).unlink(missing_ok=True)
 
     def test_received_tone_separates_about_from_by(self):
-        """Trump's received tone reflects the 6 non-bot, above-floor posts
-        ABOUT him (plus Schumer's attack = 7 pairs), not anyone's own posts."""
+        """Trump's received tone reflects the non-bot, above-floor posts
+        ABOUT him, not anyone's own posts."""
         potus = self.by_official["potus"]
         self.assertIsNotNone(potus.received)
-        # docs 1-6 + Schumer's post = 7; doc 99 (bot) + doc 10 (low conf) excluded.
-        self.assertEqual(potus.received["volume"], 7)
-        # 2 positive, 5 negative → (2-5)/7*100 = -42.9
-        self.assertAlmostEqual(potus.received["net"], -42.9, places=1)
+        # docs 1-6 + Schumer + pundit = 8; doc 99 (bot-flagged), doc 10
+        # (below floor), and doc 11 (bot-scored account) excluded.
+        self.assertEqual(potus.received["volume"], 8)
+        # 2 positive, 6 negative → (2-6)/8*100 = -50.0
+        self.assertAlmostEqual(potus.received["net"], -50.0, places=1)
         self.assertFalse(potus.received["lowSample"])
 
     def test_topic_cells_suppressed_below_threshold(self):
@@ -218,10 +289,54 @@ class TargetToneAggregationTests(unittest.TestCase):
         tone = self.result.targetTone
         self.assertEqual(tone["minSampleN"], MIN_TARGET_SAMPLE_N)
         self.assertEqual(tone["unresolvedMentions"], 1)   # Elon Musk
-        # 7 Trump + 2 Thune + GOP + Jeffries + Schumer-self = 12
-        self.assertEqual(tone["resolvedMentions"], 12)
+        # 8 Trump + 2 Thune + GOP + Jeffries + Schumer-self = 13
+        self.assertEqual(tone["resolvedMentions"], 13)
         self.assertEqual(tone["baselines"]["crossPartyVolume"], 2)
         self.assertEqual(tone["baselines"]["samePartyVolume"], 1)
+
+    def test_bot_scored_account_mentions_withheld_and_counted(self):
+        """An account farm (high author_bot_scores rollup) must not move
+        received tone — its 3 stances are withheld, visibly, in metadata."""
+        self.assertEqual(self.result.targetTone["botExcludedMentions"], 3)
+        # Thune still shows only the 2 legitimate mentions.
+        thune = self.by_official["leaderjohnthune"]
+        self.assertEqual(thune.received["volume"], 2)
+
+    def test_engagement_weighting_reemphasizes_but_never_rescues(self):
+        """The pundit's viral (99-like) attack pulls the weighted net below
+        the unweighted one; a suppressed sample stays suppressed."""
+        potus = self.by_official["potus"]
+        w_viral = 1 + math.log1p(99)
+        w_total = 7 + w_viral
+        expected = round((2 - (5 + w_viral)) / w_total * 100, 1)
+        self.assertAlmostEqual(potus.received["engagementWeightedNet"], expected, places=1)
+        self.assertLess(potus.received["engagementWeightedNet"], potus.received["net"])
+        # Thune is below the sample floor: no weighted headline either.
+        thune = self.by_official["leaderjohnthune"]
+        self.assertIsNone(thune.received["engagementWeightedNet"])
+
+    def test_speaker_tier_split(self):
+        """WHO talks about Trump: 6 news pairs (shown), 1 official + 1
+        affiliated (each suppressed but honestly counted)."""
+        potus = self.by_official["potus"]
+        tiers = {c["tier"]: c for c in potus.received["bySpeakerTier"]}
+        self.assertEqual(tiers["news"]["volume"], 6)
+        self.assertIsNotNone(tiers["news"]["net"])
+        self.assertEqual(tiers["officials"]["volume"], 1)
+        self.assertTrue(tiers["officials"]["lowSample"])
+        self.assertEqual(tiers["affiliated"]["volume"], 1)
+        self.assertTrue(tiers["affiliated"]["lowSample"])
+
+    def test_narrative_attribution(self):
+        """Mentions clustered into a narrative surface WHICH claim drives
+        the tone; per-narrative cells share the suppression floor."""
+        potus = self.by_official["potus"]
+        narratives = {c["narrativeId"]: c for c in potus.received["byNarrative"]}
+        self.assertIn(1, narratives)
+        self.assertEqual(narratives[1]["name"], "Border claim")
+        self.assertEqual(narratives[1]["volume"], 3)   # docs 1-3
+        self.assertIsNone(narratives[1]["net"])        # 3 < floor
+        self.assertTrue(narratives[1]["lowSample"])
 
     def test_serialization_carries_received_and_target_tone(self):
         data = self.result.to_dict()
