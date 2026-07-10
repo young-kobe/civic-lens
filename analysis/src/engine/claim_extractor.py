@@ -48,9 +48,10 @@ class ClaimExtractionResult:
     reasoning: Optional[str] = None
     # True when the LLM call itself failed (transport error / unavailable
     # client) rather than legitimately returning no claims. job_runner MUST
-    # skip persisting a failed result so the doc has no ai_outputs row and is
-    # re-queued next run — otherwise a transient Ollama outage would be
-    # frozen as a permanent "LLM found no claims" verdict (audit A-3).
+    # NOT persist a result row for a failed extraction — it marks the doc
+    # 'failed' in doc_task_state so it re-queues next run; otherwise a
+    # transient Ollama outage would be frozen as a permanent "LLM found no
+    # claims" verdict (audit A-3).
     extraction_failed: bool = False
     # Slugs of any reference seeds that matched the doc's text and were
     # injected into the LLM prompt. Persisted into ai_outputs.output_json

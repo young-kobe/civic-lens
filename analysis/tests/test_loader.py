@@ -84,5 +84,98 @@ class TestContentLoaderBatched(unittest.TestCase):
             self.assertEqual(cursor.fetchone()[0], 5000)
 
 
+class TestDocTaskState(unittest.TestCase):
+    """Work-queue semantics of doc_task_state (migration 022).
+
+    The state table exists so that (a) a transient LLM failure re-queues the
+    doc but leaves a visible trace instead of silently persisting nothing,
+    and (b) a task can be reprocessed under a new prompt_version by deleting
+    state rows while ai_outputs keeps every historical result row.
+    """
+
+    def setUp(self):
+        self._tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        self.db_path = self._tmp.name
+        self._tmp.close()
+        _apply_migrations(self.db_path)
+
+        now = int(time.time())
+        conn = sqlite3.connect(self.db_path)
+        conn.execute(
+            "INSERT INTO docs (doc_id, source_type, ident, domain_or_subreddit,"
+            " published_at, text, raw_hash, metadata_json)"
+            " VALUES (1, 'news', 'http://n.com/1', 'n.com', ?, 'body', 'h1', '{}')",
+            (now,),
+        )
+        conn.commit()
+        conn.close()
+        self.loader = ContentLoader(self.db_path)
+
+    def tearDown(self):
+        for suffix in ("", "-wal", "-shm"):
+            try:
+                os.remove(self.db_path + suffix)
+            except (FileNotFoundError, PermissionError):
+                pass
+
+    def _state_row(self):
+        conn = sqlite3.connect(self.db_path)
+        row = conn.execute(
+            "SELECT status, prompt_version, attempts FROM doc_task_state"
+            " WHERE doc_id = 1 AND task_type = 'claims'"
+        ).fetchone()
+        conn.close()
+        return row
+
+    def test_save_marks_done_and_dequeues(self):
+        self.assertEqual(len(self.loader.get_unprocessed_docs("claims")), 1)
+        self.loader.save_ai_output(1, "claims", {"claims": []}, 0.9,
+                                   prompt_version="v1")
+        self.assertEqual(len(self.loader.get_unprocessed_docs("claims")), 0)
+        self.assertEqual(self._state_row(), ("done", "v1", 1))
+
+    def test_failed_attempt_requeues_but_is_observable(self):
+        # A transient outage must never freeze a doc as done — but the
+        # retries must be visible, not the old persist-nothing pattern.
+        self.loader.mark_task_failed(1, "claims", "v1")
+        self.loader.mark_task_failed(1, "claims", "v1")
+        self.assertEqual(self._state_row(), ("failed", "v1", 2))
+        self.assertEqual(len(self.loader.get_unprocessed_docs("claims")), 1)
+        # A later success flips the row to done and dequeues.
+        self.loader.save_ai_output(1, "claims", {"claims": []}, 0.9,
+                                   prompt_version="v1")
+        self.assertEqual(self._state_row(), ("done", "v1", 3))
+        self.assertEqual(len(self.loader.get_unprocessed_docs("claims")), 0)
+
+    def test_reprocess_appends_and_latest_view_wins(self):
+        # Reprocessing = delete state rows. ai_outputs must keep the v1 row
+        # (append-only audit history) while every latest-per-doc reader sees
+        # only the v2 row, so aggregates never double-count a doc.
+        self.loader.save_ai_output(1, "claims", {"v": 1}, 0.9,
+                                   prompt_version="v1")
+        conn = sqlite3.connect(self.db_path)
+        conn.execute("DELETE FROM doc_task_state WHERE task_type = 'claims'")
+        conn.commit()
+        conn.close()
+
+        self.assertEqual(len(self.loader.get_unprocessed_docs("claims")), 1)
+        self.loader.save_ai_output(1, "claims", {"v": 2}, 0.9,
+                                   prompt_version="v2")
+
+        conn = sqlite3.connect(self.db_path)
+        all_rows = conn.execute(
+            "SELECT COUNT(*) FROM ai_outputs WHERE doc_id = 1"
+            " AND task_type = 'claims'"
+        ).fetchone()[0]
+        latest = conn.execute(
+            "SELECT output_json, prompt_version FROM ai_outputs_latest"
+            " WHERE doc_id = 1 AND task_type = 'claims'"
+        ).fetchall()
+        conn.close()
+        self.assertEqual(all_rows, 2)
+        self.assertEqual(len(latest), 1)
+        self.assertEqual(latest[0], ('{"v": 2}', "v2"))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -131,7 +131,8 @@ class PropagandaDetector:
             return PropagandaResult(inference_method="deterministic")
         if not self.llm_enabled or self._llm_client is None or not self._llm_client.is_available:
             # Client unavailable — a failure, not a clean verdict. Flag it so
-            # job_runner skips the doc (no ai_outputs row) and it re-queues.
+            # job_runner marks the doc 'failed' in doc_task_state and it
+            # re-queues.
             return PropagandaResult(detection_failed=True)
 
         combined = f"{title}\n\n{text}" if title else text
@@ -145,8 +146,8 @@ class PropagandaDetector:
         # techniques (the six starter techniques — loaded language,
         # name-calling, ad hominem, appeal to fear, whataboutism,
         # doubt-casting — all require loaded vocabulary to land). Short-
-        # circuit with a deterministic empty result so the doc lands in
-        # ai_outputs and isn't re-queued on the next pipeline run. Cuts
+        # circuit with a deterministic empty result so the doc is marked
+        # done and isn't re-queued on the next pipeline run. Cuts
         # LLM fan-out materially on straight-wire news coverage.
         if not _has_loaded_language(clamped):
             return PropagandaResult(inference_method="deterministic")

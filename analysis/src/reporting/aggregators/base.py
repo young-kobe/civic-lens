@@ -109,7 +109,7 @@ def fetch_task_rows(
     repeating inline. `select_clause` is the projection only (starts with
     ``SELECT ...``); the caller doesn't write the JOIN or WHERE chain.
     """
-    sql = f"{select_clause} FROM ai_outputs a JOIN docs d ON a.doc_id = d.doc_id {extra_joins} WHERE a.task_type = ?"
+    sql = f"{select_clause} FROM ai_outputs_latest a JOIN docs d ON a.doc_id = d.doc_id {extra_joins} WHERE a.task_type = ?"
     params: list = list(params_prefix) + [task_type]
     if min_confidence is not None:
         sql += " AND a.confidence >= ?"
@@ -169,7 +169,7 @@ def get_bot_flagged_doc_ids(db_path: str, min_confidence: float = 0.5) -> Set[in
         # Confidence filter avoids excluding content on a weak bot call.
         cursor.execute("""
             SELECT a.doc_id, a.output_json
-            FROM ai_outputs a
+            FROM ai_outputs_latest a
             JOIN docs d ON a.doc_id = d.doc_id
             WHERE a.task_type = 'bot_detection'
               AND a.confidence >= ?

@@ -296,7 +296,7 @@ class NarrativeAggregator:
             SELECT a.output_json, a.confidence
             FROM narrative_docs nd
             JOIN docs d ON d.doc_id = nd.doc_id
-            JOIN ai_outputs a
+            JOIN ai_outputs_latest a
                  ON a.doc_id = d.doc_id
                 AND a.task_type = 'propaganda'
             WHERE nd.narrative_id = ?
@@ -476,7 +476,7 @@ class NarrativeAggregator:
             SELECT a.output_json, a.confidence
             FROM narrative_docs nd
             JOIN docs d ON d.doc_id = nd.doc_id
-            JOIN ai_outputs a
+            JOIN ai_outputs_latest a
                  ON a.doc_id = d.doc_id
                 AND a.task_type = 'sentiment'
                 AND a.confidence >= ?
@@ -519,16 +519,15 @@ class NarrativeAggregator:
 
         Averages over ALL supporting docs that have a sentiment row — not just
         the top-N drill-down slice — so the chip reflects the whole cluster.
-        Deduped by doc_id (ai_outputs has no UNIQUE(doc_id, task_type), so a
-        LEFT JOIN can surface >1 sentiment row per doc; keep the highest, per
-        the ORDER BY) so a doc with duplicate rows isn't double-weighted.
-        Returns None when no supporting doc has a sentiment row.
+        Reads ai_outputs_latest, which guarantees one sentiment row per doc;
+        the best-per-doc pass below is retained as a cheap belt-and-braces
+        dedup. Returns None when no supporting doc has a sentiment row.
         """
         sql = """
             SELECT d.doc_id, a.confidence
             FROM narrative_docs nd
             JOIN docs d ON d.doc_id = nd.doc_id
-            JOIN ai_outputs a
+            JOIN ai_outputs_latest a
                  ON a.doc_id = d.doc_id
                 AND a.task_type = 'sentiment'
             WHERE nd.narrative_id = ?
@@ -571,7 +570,7 @@ class NarrativeAggregator:
             FROM narrative_docs nd
             JOIN docs d ON d.doc_id = nd.doc_id
             {X_AUTHOR_JOIN_SQL}
-            LEFT JOIN ai_outputs a
+            LEFT JOIN ai_outputs_latest a
                    ON a.doc_id = d.doc_id
                   AND a.task_type = 'sentiment'
             WHERE nd.narrative_id = ?

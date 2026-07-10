@@ -47,7 +47,7 @@ MAX_PAGE_SIZE = 50
 # set in Python per request.
 _BOT_EXCLUSION_SQL = """
     a.doc_id NOT IN (
-        SELECT b.doc_id FROM ai_outputs b
+        SELECT b.doc_id FROM ai_outputs_latest b
         JOIN docs bd ON bd.doc_id = b.doc_id
         WHERE b.task_type = 'bot_detection'
           AND b.confidence >= ?
@@ -58,16 +58,6 @@ _BOT_EXCLUSION_SQL = """
           )
     )
 """
-
-# One sentiment row per doc: the latest output wins (reruns / prompt-version
-# bumps can leave multiple rows per doc).
-_LATEST_ROW_SQL = """
-    a.output_id = (
-        SELECT MAX(a2.output_id) FROM ai_outputs a2
-        WHERE a2.doc_id = a.doc_id AND a2.task_type = 'sentiment'
-    )
-"""
-
 
 def _with_www(domains: List[str]) -> List[str]:
     """Stored news domains are raw (may carry a www. prefix); match both."""
@@ -197,8 +187,10 @@ def fetch_entity_posts(
     cutoff = get_time_cutoff(window)
     entity_sql, entity_params = _entity_filter(kind, key)
 
+    # ai_outputs_latest guarantees one sentiment row per doc (reruns /
+    # prompt-version bumps append rows; only the newest counts).
     where = (
-        f"a.task_type = 'sentiment' AND a.confidence >= ? AND {_LATEST_ROW_SQL} "
+        f"a.task_type = 'sentiment' AND a.confidence >= ? "
         f"AND {_BOT_EXCLUSION_SQL} AND ({entity_sql})"
     )
     params: List[Any] = [min_conf, min_conf, *entity_params]
@@ -206,7 +198,7 @@ def fetch_entity_posts(
         where += " AND d.published_at >= ?"
         params.append(cutoff)
 
-    base = f"FROM ai_outputs a JOIN docs d ON a.doc_id = d.doc_id {X_AUTHOR_JOIN_SQL} WHERE {where}"
+    base = f"FROM ai_outputs_latest a JOIN docs d ON a.doc_id = d.doc_id {X_AUTHOR_JOIN_SQL} WHERE {where}"
 
     with get_connection(db_path) as conn:
         cursor = conn.cursor()
