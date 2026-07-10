@@ -1,6 +1,5 @@
 // Common components barrel export
 export { default as Card } from './Card';
-export { default as MetricCard } from './MetricCard';
 export { default as Tabs } from './Tabs';
 export type { Tab } from './Tabs';
 export { default as ConfidenceBadge } from './ConfidenceBadge';

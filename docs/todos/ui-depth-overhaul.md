@@ -14,38 +14,38 @@ Propaganda `ExampleRow` refactor) — tick them there when the relevant box here
 
 ## Phase 1 — UI-only (data already in cache)
 
-- [ ] PostCard + PostCardList (`components/common/PostCard.tsx`): x/reddit/news
+- [x] PostCard + PostCardList (`components/common/PostCard.tsx`): x/reddit/news
       flavors, inline evidence-span highlighting with quoted fallback, confidence
       badge, reasoning disclosure, permalink out; adapters from
       ClassificationSample / SupportingDoc / FlaggedExample / PropagandaExample.
-- [ ] Replace SupportingDocsTable, FlaggedPostList, and Propaganda ExampleRow with
+- [x] Replace SupportingDocsTable, FlaggedPostList, and Propaganda ExampleRow with
       PostCardList; delete the replaced files once unreferenced.
-- [ ] Glossary (`services/glossary.ts`) + DefinitionChip (touch-accessible term
+- [x] Glossary (`services/glossary.ts`) + DefinitionChip (touch-accessible term
       popover); plain-language reframing of mean score (saturation levels) and
       coordination index (lockstep levels).
-- [ ] EntityStat mini axis bars on EntityProfileCard stats (visual anchor for
+- [x] EntityStat mini axis bars on EntityProfileCard stats (visual anchor for
       net-tone / rate numbers).
-- [ ] deepLink service (`services/deepLink.ts`) + `App.tsx` `#tab?param` parsing;
+- [x] deepLink service (`services/deepLink.ts`) + `App.tsx` `#tab?param` parsing;
       migrate Tone's `?topic=` search param to hash params with legacy fallback.
-- [ ] RankedEntityList; Propaganda + Bots grids switch to it; Narratives cards go
+- [x] RankedEntityList; Propaganda + Bots grids switch to it; Narratives cards go
       compact (no blurb); Tone keeps full profile cards.
-- [ ] Tone signature: ToneTrendPanel (gopTrend daily chart + weekday strip),
+- [x] Tone signature: ToneTrendPanel (gopTrend daily chart + weekday strip),
       TopicDivergencePanel promoted below headline, IntensityMini segments open
       distributionSamples as PostCards; officials' received-tone tables become
       bar-row lists with top-1 line surfaced on the card.
-- [ ] Narratives signature: NarrativeLifecyclePanel (top ~8 timelines as rows,
+- [x] Narratives signature: NarrativeLifecyclePanel (top ~8 timelines as rows,
       first-seen tier dot, tier chips); grid demoted; cross-narrative citations
       clickable.
-- [ ] Propaganda signature: TechniqueExplorer (select technique → its flagged
+- [x] Propaganda signature: TechniqueExplorer (select technique → its flagged
       posts with highlighted evidence).
-- [ ] Bots signature: CoordinationEvidencePanel funnel (scanned → flagged →
+- [x] Bots signature: CoordinationEvidencePanel funnel (scanned → flagged →
       coordination level → top domains), replacing BotOverviewMetrics.
-- [ ] Data Desk tab (`pages/DataDesk.tsx`): cross-signal entity matrix, movers
+- [x] Data Desk tab (`pages/DataDesk.tsx`): cross-signal entity matrix, movers
       board, small multiples, pipeline health + eval accuracy.
-- [ ] Home live digest: tier tone rows, top narratives, MoversTicker, propaganda +
+- [x] Home live digest: tier tone rows, top narratives, MoversTicker, propaganda +
       bot tiles; prose condensed.
-- [ ] ThreeWayColumn "Show all (N)" + sort toggle.
-- [ ] Fixtures extended (non-trivial gopTrend / distributionSamples / byDayOfWeek /
+- [x] ThreeWayColumn "Show all (N)" + sort toggle.
+- [x] Fixtures extended (non-trivial gopTrend / distributionSamples / byDayOfWeek /
       timeline); typecheck + build + unittest pass; dead-code sweep.
 
 ## Phase 2 — aggregator enrichment (each independent)

@@ -298,8 +298,7 @@ code, pre {
 
 /* Numeric data: tabular + monospaced */
 .num,
-.metric-value,
-.metric-delta {
+.metric-value {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   font-feature-settings: 'tnum' 1, 'zero' 1;
@@ -614,27 +613,6 @@ code, pre {
   line-height: 1;
   letter-spacing: -0.02em;
 }
-
-.metric-label {
-  font-size: var(--text-xs);
-  color: var(--neutral-500);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  margin-top: var(--space-1);
-}
-
-.metric-delta {
-  font-size: var(--text-sm);
-  font-weight: 600;
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-}
-
-.metric-delta-positive { color: var(--semantic-positive); }
-.metric-delta-negative { color: var(--semantic-negative); }
-.metric-delta-neutral { color: var(--neutral-500); }
-
 
 /* ============================================
    Buttons
