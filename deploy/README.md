@@ -23,8 +23,9 @@ The full rationale and the shape of the stack live in
   identical path in every container, so absolute paths in `/etc/civic-lens.env`
   and relative paths in `seeds.yaml` resolve the same in-container and on-host.
   Host tooling (`backup.sh`, `sqlite3` spot checks) keeps working. Containers
-  run as UID 990, matching the `civic-lens` host user, so bind-mount writes
-  need no chown.
+  run as UID 10001, matching the `civic-lens` host user, so bind-mount writes
+  need no chown. (10001 sits above the host system-UID range; the earlier 990
+  collided with `systemd-resolve` on stock Ubuntu.)
 
 ## Layout
 

@@ -40,8 +40,12 @@ plumbing keeps watching real exit codes.
   Docker-published ports bypass ufw and the firewall pins :80/:443 to
   Cloudflare ranges — host networking preserves those semantics; the API is
   loopback-published only.
-- Containers run as UID 990 (`APP_UID` build arg) matching the `civic-lens`
-  host user (`install.sh` now pins it) so bind-mount writes need no chown.
+- Containers run as UID/GID 10001 (`APP_UID`/`APP_GID` build args) matching the
+  `civic-lens` host user (`install.sh` pins it via `groupadd`/`useradd`) so
+  bind-mount writes need no chown. 10001 is deliberately above the host
+  system-UID range: the initial 990 collided with `systemd-resolve` on stock
+  Ubuntu, and `adduser --system` rejects out-of-range UIDs, hence low-level
+  `groupadd`/`useradd`.
 - Litestream sidecar (`deploy/litestream.yml`): continuous WAL replication
   of the SQLite DB to a dedicated R2 bucket (10s sync, 24h snapshots, 168h
   retention), creds via `LITESTREAM_*` in `/etc/civic-lens.env`. This is the
