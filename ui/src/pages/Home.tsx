@@ -1,5 +1,6 @@
 import { Card } from '../components/common';
 import { COLORS } from '../theme';
+import { DigestSection } from './home/DigestSection';
 
 interface HomeProps {
     onNavigate: (tabId: string) => void;
@@ -69,6 +70,9 @@ function Home({ onNavigate, isAdmin = false }: HomeProps) {
                     is a sample of what we collected. It is not a poll.
                 </p>
             </section>
+
+            {/* Live digest — this week's data, straight from the tabs. */}
+            <DigestSection />
 
             {/* Why it exists */}
             <section className="surface-panel">
@@ -187,6 +191,13 @@ function Home({ onNavigate, isAdmin = false }: HomeProps) {
                         tagline="Tab &middot; Bot Detector"
                         title="Accounts in political discourse that look automated"
                         body="Behavioral signals (posting rate, text repetition, account age, coordinated timing) scored per account across our political content sample to flag likely automation. Flagged content is excluded from sentiment aggregates by default. These are leads, not verdicts."
+                        onClick={onNavigate}
+                    />
+                    <TabCard
+                        tabId="desk"
+                        tagline="Tab &middot; Data Desk"
+                        title="Every signal, side by side"
+                        body="The numbers-forward view: a sortable matrix of every tracked entity across tone, propaganda, bot, and narrative signals, the full movers board, small-multiple trend charts, and the pipeline's own freshness and human-agreement readouts."
                         onClick={onNavigate}
                     />
                     {isAdmin && (

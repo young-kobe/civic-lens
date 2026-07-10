@@ -126,10 +126,10 @@ export function clampWidthPct(value: number | null | undefined): number {
 
 /**
  * Canonical "News · nytimes.com" / "X · @handle" / "Reddit · r/politics"
- * source label. THE single builder — SupportingDocsTable, Propaganda
- * examples, and Narratives first-seen labels previously each hand-rolled
- * this with different fallbacks, two of which leaked the raw source_type
- * slug ("x_post") into user-facing copy.
+ * source label. THE single builder — the PostCard adapters and Narratives
+ * first-seen labels previously each hand-rolled this with different
+ * fallbacks, two of which leaked the raw source_type slug ("x_post")
+ * into user-facing copy.
  */
 export function sourceLabel(
     sourceType: string | null | undefined,
@@ -140,6 +140,20 @@ export function sourceLabel(
     if (sourceType?.startsWith('reddit')) return name ? `Reddit · r/${name}` : 'Reddit';
     // Never render a raw source_type enum to users.
     return name || 'Unknown source';
+}
+
+/**
+ * Locale-formatted integer count with a null/NaN guard — "1,043", or the
+ * fallback ("—") when the value is missing or not finite. Replaces
+ * scattered `(value ?? 0).toLocaleString()` calls, which render a false
+ * "0" for missing data.
+ */
+export function formatCount(
+    value: number | null | undefined,
+    fallback = '—',
+): string {
+    if (value === null || value === undefined || !Number.isFinite(value)) return fallback;
+    return Math.round(value).toLocaleString();
 }
 
 /** "today" / "3 days ago" / ISO date for older items. */

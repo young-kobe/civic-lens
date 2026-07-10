@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import type { ClassificationSample, SentimentBreakdown } from '../../types';
 import {
-    Card, MethodPopover, Modal, SupportingDocsTable,
-    classificationSampleToSupportingDoc,
+    Card, MethodPopover, Modal, PostCardList, sampleToPostCard,
 } from '../../components/common';
 import { COLORS } from '../../theme';
 import { formatPts } from '../../services/format';
@@ -202,7 +201,10 @@ function TopicSamplesModal({ topic, onClose }: TopicSamplesModalProps) {
                     No example posts stored for this topic yet.
                 </p>
             ) : (
-                <SupportingDocsTable docs={samples.map(classificationSampleToSupportingDoc)} />
+                <PostCardList
+                    posts={samples.map(sampleToPostCard)}
+                    sampleNote="A sample of this topic's classified posts, not a complete feed. Highlighted text is the evidence the model quoted."
+                />
             )}
         </Modal>
     );
