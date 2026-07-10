@@ -45,6 +45,13 @@ interface ReviewItemCardProps {
 export default function ReviewItemCard({ item, reviewerId, onSubmitted }: ReviewItemCardProps) {
     const labelOptions = LABEL_OPTIONS_BY_TASK[item.task_type];
     const initialLabel = useMemo(() => modelLabel(item.task_type, item.model_output), [item]);
+    // Favorability's label is a stance toward the GOP (the favorability prompt
+    // scores `overall_gop_stance`). Surfacing the target keeps a reviewer from
+    // grading "favorable" against the wrong entity.
+    const isFavorability = item.task_type === 'favorability';
+    const initialLabelDisplay = isFavorability
+        ? `stance toward GOP: ${initialLabel}`
+        : initialLabel;
 
     const [isCorrect, setIsCorrect] = useState<number | null>(null);
     const [humanLabel, setHumanLabel] = useState<string>('');
@@ -157,7 +164,7 @@ export default function ReviewItemCard({ item, reviewerId, onSubmitted }: Review
                     Model output · {item.model_id || 'unknown'} · v{item.prompt_version || '?'}
                 </div>
                 <div className="flex items-baseline gap-3 mb-2">
-                    <span style={{ fontSize: 'var(--text-base)', fontWeight: 700 }}>{initialLabel}</span>
+                    <span style={{ fontSize: 'var(--text-base)', fontWeight: 700 }}>{initialLabelDisplay}</span>
                     <span className="num" style={{ color: 'var(--neutral-500)' }}>
                         confidence {item.model_confidence !== null ? item.model_confidence.toFixed(2) : '—'}
                     </span>
@@ -204,7 +211,9 @@ export default function ReviewItemCard({ item, reviewerId, onSubmitted }: Review
 
                 {isCorrect === 0 && labelOptions.length > 0 && (
                     <div className="flex items-center gap-3">
-                        <span className="eyebrow">Correct label:</span>
+                        <span className="eyebrow">
+                            {isFavorability ? 'Correct label (stance toward GOP):' : 'Correct label:'}
+                        </span>
                         <select
                             value={humanLabel}
                             onChange={(e) => setHumanLabel(e.target.value)}

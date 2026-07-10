@@ -41,7 +41,7 @@ function ConfidenceBadge({
             <span>
                 {getLabel(coverage)} coverage / {getLabel(confidence)} confidence
             </span>
-            {showTooltip && (sampleSize || sourceCount) && (
+            {showTooltip && (
                 <button
                     className="btn-ghost btn-sm"
                     onClick={() => setIsOpen(!isOpen)}

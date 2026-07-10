@@ -62,8 +62,8 @@ function Home({ onNavigate, isAdmin = false }: HomeProps) {
                     maxWidth: 680,
                 }}>
                     Most political coverage tells you how to feel about a story. Civic Lens
-                    does something different. We pull US political content from news sites
-                    and X, then score each post for sentiment, propaganda techniques,
+                    does something different. We pull US political content from news sites,
+                    Reddit, and X, then score each post for sentiment, propaganda techniques,
                     automation signals, and the claims it repeats. Every number here links
                     back to the raw text it came from, with a confidence score attached. It
                     is a sample of what we collected. It is not a poll.
@@ -81,7 +81,7 @@ function Home({ onNavigate, isAdmin = false }: HomeProps) {
                     maxWidth: 820,
                 }}>
                     News sites tell you what each story says. They rarely show you the pattern
-                    across stories: which claims keep repeating, where they were seen first,
+                    across stories: which claims keep repeating, where we first saw them in our sample,
                     who is amplifying them, how the tone differs between newsrooms and online
                     crowds. That pattern is measurable. You should not have to take a single
                     source&apos;s framing on faith when the raw data is sitting right there.
@@ -102,7 +102,7 @@ function Home({ onNavigate, isAdmin = false }: HomeProps) {
                     <li>How <strong>news tone</strong> compares to <strong>social media tone</strong> on the same political stories.</li>
                     <li>Which accounts in political discussion look <strong>automated</strong>, and what signals flagged them.</li>
                     <li>Which <strong>propaganda techniques</strong> show up in political content, quoted verbatim from the source.</li>
-                    <li>Where sampled discussion nets out on <strong>GOP stance</strong>, pulled from the same per-document analysis.</li>
+                    <li>How sampled discussion leans toward the <strong>Republican Party (GOP)</strong>, pulled from the same per-document analysis.</li>
                     <li>Every one of these is broken down by source, topic, and time window.</li>
                 </ul>
             </section>
@@ -122,7 +122,7 @@ function Home({ onNavigate, isAdmin = false }: HomeProps) {
                             01 &middot; Collect
                         </div>
                         <div style={{ marginTop: 'var(--space-1)', fontSize: 'var(--text-sm)', color: 'var(--neutral-700)', lineHeight: 'var(--leading-relaxed)' }}>
-                            We pull US political content from curated news sites and X on
+                            We pull US political content from curated news sites, Reddit, and X on
                             a loop. Every raw response is saved by its content hash so any
                             claim on the site can be audited back to what was originally seen.
                         </div>
@@ -134,8 +134,8 @@ function Home({ onNavigate, isAdmin = false }: HomeProps) {
                         <div style={{ marginTop: 'var(--space-1)', fontSize: 'var(--text-sm)', color: 'var(--neutral-700)', lineHeight: 'var(--leading-relaxed)' }}>
                             Each document is scored for sentiment, bot likelihood,
                             propaganda techniques, claim extraction, and narrative clustering.
-                            Every score carries a confidence value and a verbatim evidence
-                            span taken from the source.
+                            Every score carries a confidence value and a verbatim quote
+                            taken from the source.
                         </div>
                     </div>
                     <div>
@@ -172,14 +172,14 @@ function Home({ onNavigate, isAdmin = false }: HomeProps) {
                         tabId="narratives"
                         tagline="Tab &middot; Political Narratives"
                         title="Political claims repeating across sources"
-                        body="Each row is a political claim we saw in more than one doc, bucketed by where we first saw it: news outlets, verified officials, or the general public. Cross-tier narratives — claims that show up in more than one tier — get a dedicated panel. Amplification overlays flag claims with high propaganda density or a bot-pushed fraction."
+                        body="Each row is a political claim we saw in more than one article or post, bucketed by where we first saw it: news outlets, verified officials, or the general public. Cross-tier narratives — claims that show up in more than one tier — get a dedicated panel. Claims are also flagged when a large share of their posts contain propaganda techniques or come from likely-automated accounts."
                         onClick={onNavigate}
                     />
                     <TabCard
                         tabId="propaganda"
                         tagline="Tab &middot; Propaganda"
                         title="Propaganda techniques flagged in political content"
-                        body="An AI pass scans each doc for six specific techniques (loaded language, name-calling, ad hominem, appeal to fear, whataboutism, doubt casting). It has to quote a verbatim phrase from the source as evidence. You get a technique breakdown, a news vs social split, and examples with the quoted evidence attached."
+                        body="An AI pass scans each article or post for six specific techniques (loaded language, name-calling, ad hominem, appeal to fear, whataboutism, doubt casting). It has to quote a verbatim phrase from the source as evidence. You get a technique breakdown, a news vs social split, and examples with the quoted evidence attached."
                         onClick={onNavigate}
                     />
                     <TabCard
@@ -194,7 +194,7 @@ function Home({ onNavigate, isAdmin = false }: HomeProps) {
                             tabId="review"
                             tagline="Tab &middot; Review (admin)"
                             title="Human quality check on AI outputs"
-                            body="Internal queue for marking political-content classifications correct or incorrect. Reviewed rows can be flagged as golden, which is what we use to calibrate confidence and track accuracy over time."
+                            body="Internal queue for marking political-content classifications correct or incorrect. Reviewed rows can be flagged as reference examples used to calibrate confidence and track accuracy over time."
                             onClick={onNavigate}
                         />
                     )}
@@ -211,12 +211,12 @@ function Home({ onNavigate, isAdmin = false }: HomeProps) {
                     </li>
                     <li>
                         <strong>Confidence is visible.</strong> No classification is presented as fact. Each one
-                        carries a score, and evidence spans are verified as a verbatim substring of the source.
+                        carries a score, and each quote is verified as a verbatim substring of the source.
                     </li>
                     <li>
                         <strong>Samples are labeled as samples.</strong> &ldquo;Overall Tone&rdquo; means the
-                        tone of the docs we ingested, not the tone of the public. Reach and influence
-                        numbers are marked as proxies when they are not backed by verified audience data.
+                        tone of the posts we collected, not the tone of the public. Reach and influence
+                        numbers are estimates, and are labeled as estimates when we can't verify real audience size.
                     </li>
                     <li>
                         <strong>We delete rather than approximate.</strong> If a metric cannot be computed

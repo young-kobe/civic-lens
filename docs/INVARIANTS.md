@@ -41,11 +41,11 @@ See `docs/walkthroughs/035-goal-narrowing-and-renames.md` for the rationale behi
 - [ ] **Uncertainty**: All AI outputs include a confidence score.
 - [ ] **No Hallucination**: The API must not invent data. If a field is missing, it returns null/error, not a guess.
 
-### B3. Propaganda Detection (planned — not yet implemented)
-- [ ] **Operational Definition**: "Propaganda" is defined as the presence of measurable techniques (loaded language, ad hominem), not a subjective label.
-- [ ] **Auditability**: Flagged techniques must point to the specific text span that triggered the flag.
+### B3. Propaganda Detection
+- [ ] **Operational Definition**: "Propaganda" is the presence of measurable rhetorical techniques (loaded language, name-calling, ad hominem, appeal to fear, whataboutism, doubt-casting), not a subjective label. A flag measures rhetorical style — not truth, intent, or whether a post is "propaganda" in the everyday sense.
+- [ ] **Auditability**: Every flagged technique must point to a verbatim text span that triggered the flag. A technique whose evidence span is under four words, or is not a substring of the source text, is dropped.
 
-> **Status:** No code implements this today. The propaganda-detection pipeline is planned for walkthroughs 040 (backend) and 041 (UI). Starting taxonomy: loaded language, name calling, ad hominem, appeal to fear, whataboutism, doubt-casting. Each flagged technique will require a verbatim evidence span, validated the same way sentiment spans are today.
+> **Status:** Implemented and live. `analysis/src/engine/propaganda_detector.py` runs as a first-class pipeline stage (`job_runner.run_propaganda_detection`) writing `ai_outputs` rows with `task_type='propaganda'`, surfaced on the Propaganda tab via `PropagandaAggregator`. It is LLM-only (no deterministic fallback); when the LLM returns techniques but none validate against the source text, `overall_propaganda_score` is capped at 0.2.
 
 ## Part C: Frontend / Presentation
 

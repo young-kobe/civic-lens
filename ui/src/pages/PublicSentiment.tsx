@@ -13,7 +13,7 @@ import type {
 import { fetchSentiment, fetchSnapshotStatus, type SnapshotStatus } from '../services/api';
 import { asOfTodayEyebrow, formatTimeWindow } from '../services/timeWindow';
 import { formatRefreshedAgo, getSnapshotTimestamp } from '../services/freshness';
-import { formatPct } from '../services/format';
+import { formatPct, formatPts } from '../services/format';
 import { transformPublicSentiment } from '../services/transformers';
 import { useFetch } from '../services/useFetch';
 import { COLORS } from '../theme';
@@ -134,10 +134,10 @@ function ToneTierRow({ label, agg }: { label: string; agg: TierAggregate }) {
     return (
         <TierRow
             label={label}
-            value={hasData ? formatPct(agg.net!, { min: -100, signed: true }) : '—'}
+            value={hasData ? formatPts(agg.net!) : '—'}
             valueColor={color}
             verb={hasData
-                ? `${toneVerb(agg.net!)} · ${agg.volume.toLocaleString()} posts`
+                ? `${toneVerb(agg.net!)} · ${agg.volume.toLocaleString()} sampled posts`
                 : 'no posts on this topic'}
             showZeroTick
             dotPct={axisPct}
@@ -261,7 +261,7 @@ function SentimentThreeWayGrid({
     // remains global.
     const topicSuffix = activeTopic.key === 'all'
         ? ''
-        : ` · scores are global; click to filter evidence to ${activeTopic.label}`;
+        : ` · scores cover all topics; click a card to see its ${activeTopic.label} posts`;
 
     return (
         <ThreeWayGrid>
@@ -283,7 +283,7 @@ function SentimentThreeWayGrid({
             </ThreeWayColumn>
             <ThreeWayColumn
                 header="The Public"
-                byline={`Subreddits + the broader X user catch-all${topicSuffix}`}
+                byline={`Political subreddits, plus X users we don't track individually${topicSuffix}`}
                 empty="No social posts in this window."
                 isEmpty={pub.length === 0}
             >
@@ -338,9 +338,14 @@ function EntitySentimentModal({
 
             <div className="entity-modal-stats">
                 <div>
-                    <div className="eyebrow">How they lean</div>
+                    <div
+                        className="eyebrow"
+                        title="Positive minus negative share of this source's posts, from -100 (all negative) to +100 (all positive)."
+                    >
+                        Net tone
+                    </div>
                     <div className="metric-value">
-                        {formatPct(netScore, { min: -100, signed: true })}
+                        {formatPts(netScore)}
                     </div>
                     {samplesAreFiltered && (
                         <div className="text-xs text-muted">
@@ -363,7 +368,7 @@ function EntitySentimentModal({
                     )}
                     {profile.leanSource && (
                         <span className="text-xs text-muted">
-                            Lean source: {profile.leanSource}
+                            Political lean rated by: {profile.leanSource}
                         </span>
                     )}
                     {profile.kind === 'official' && profile.bioSource && (
@@ -450,7 +455,7 @@ function buildEntitySubtitle(profile: EntitySentimentItem['entityProfile']): str
 
 function PollingComparison({ data }: { data: PollingSocialComparison }) {
     return (
-        <CollapsibleInfo summary="Online stance vs. live polling">
+        <CollapsibleInfo summary="Online stance vs. recent polling">
             <p className="text-xs text-muted">
                 Our GOP-stance number is derived from sampled online discussion — it's not a
                 scientific poll. For reference, here's {data.pollingData?.source || 'the latest polling'}:
@@ -465,7 +470,7 @@ function PollingComparison({ data }: { data: PollingSocialComparison }) {
                 </div>
                 {data.pollingData && (
                     <div>
-                        <div className="eyebrow">Live polling</div>
+                        <div className="eyebrow">Recent polling</div>
                         <div className="text-sm">
                             favorable {formatPct(data.pollingData.favorable, { decimals: 0 })} · unfavorable {formatPct(data.pollingData.unfavorable, { decimals: 0 })}
                             {data.pollingData.date && (
@@ -488,11 +493,12 @@ function HowThisWorks() {
     return (
         <CollapsibleInfo>
             <p className="text-sm">
-                We aggregate news articles and X posts about US politics from the
-                last 30 days, then score each one for tone (positive / negative / neutral) with
-                evidence-span validation. Tracked outlets and officials each get their own
-                profile card; everything else rolls up into the general-public column or into an
-                "Other" catch-all bucket.
+                We aggregate news articles, Reddit posts, and X posts about US politics from the
+                last 30 days, then score each one for tone (positive / negative / neutral), and
+                each score must point to the exact sentence that justifies it. Tracked outlets
+                and officials each get their own profile card; everything else rolls up into the
+                general-public column or into an "Other" bucket for sources we don't track
+                individually.
             </p>
             <p className="text-sm">
                 Tone is a classification of what the post says, not what the author feels. Don't
@@ -560,7 +566,10 @@ function pickDefaultTopic(byTopic: SentimentBreakdown[] | undefined): TopicKey {
 // --------------------------------------------------------------------------- //
 
 function netToneColor(net: number): TickerItem['tone'] {
-    if (net > 10) return 'accent';
+    // Green for positive so it matches the tier-row tone color (toneColor);
+    // a blue "accent" here previously made the same positive reading render
+    // in two different hues on the same page.
+    if (net > 10) return 'positive';
     if (net < -10) return 'negative';
     return 'neutral';
 }
@@ -574,23 +583,23 @@ function buildSentimentTickerItems(data: PublicSentimentData, activeTopic: Topic
     const scopeHint = activeTopic.key === 'all' ? undefined : 'all topics';
     const items: TickerItem[] = [
         {
-            label: 'Overall tone',
-            value: formatPct(overall.netScore, { min: -100, signed: true }),
+            label: 'Net tone',
+            value: formatPts(overall.netScore),
             hint: scopeHint,
             tone: netToneColor(overall.netScore),
             emphasis: true,
-            ariaLabel: `Overall tone ${formatPct(overall.netScore, { min: -100, signed: true })}`,
+            ariaLabel: `Net tone ${formatPts(overall.netScore)}`,
         },
     ];
     if (data.gopFavorability) {
         const gopNet = data.gopFavorability.netFavorability;
         items.push({
-            label: 'GOP stance',
-            value: formatPct(gopNet, { min: -100, signed: true }),
+            label: 'Tone toward GOP',
+            value: formatPts(gopNet),
             hint: scopeHint,
             tone: netToneColor(gopNet),
             emphasis: true,
-            ariaLabel: `GOP stance ${formatPct(gopNet, { min: -100, signed: true })}`,
+            ariaLabel: `Tone toward GOP ${formatPts(gopNet)}`,
         });
     }
     items.push(
@@ -708,10 +717,10 @@ function PublicSentiment({ filters }: PublicSentimentProps) {
                             title="How to read these numbers"
                             description={
                                 'Net tone = the share of sampled posts scored positive minus the share scored '
-                                + 'negative, on a -100 to +100 scale (0 means positive and negative balance out). '
-                                + 'GOP stance = the net stance of sampled posts toward Republican-party entities, '
-                                + 'on the same scale. Both summarize the posts we collected — they are samples, '
-                                + 'not polls of the public.'
+                                + 'negative, in points on a -100 to +100 scale (0 means positive and negative '
+                                + 'balance out). Tone toward GOP = the net stance of sampled posts toward '
+                                + 'Republican-party entities, on the same scale. Both summarize the posts we '
+                                + 'collected — they are samples, not polls of the public.'
                             }
                         />
                     }

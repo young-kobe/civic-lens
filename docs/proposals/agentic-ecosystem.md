@@ -209,7 +209,7 @@ Smallest useful version:
 - New stage in `job_runner.run_full_pipeline()` after `save_snapshots`, wrapped by `_run_stage` exactly like the others.
 - New file `data/cache/anomaly_state.json` with the structured verdict.
 - New endpoint `GET /api/health/pipeline` returning the cached verdict.
-- LLM verdict-writer using the existing `get_llm_client()` factory + a new prompt-version constant in `engine/prompts.py` (per the standing rule that all LLM tasks bump prompt versions).
+- LLM verdict-writer using the existing `get_llm_client()` factory + a new prompt-version constant in `llm/prompts.py` (per the standing rule that all LLM tasks bump prompt versions).
 - Email path reuses `send_alert()`.
 - Audit trail: one entry under `docs/audit-trail/analysis/`, one under `docs/audit-trail/api/` for the new endpoint.
 

@@ -38,13 +38,14 @@ function GlobalFilters({
     if (!windowScoped) {
         return (
             <div className="filter-bar">
-                <span className="eyebrow text-muted">Full sample &middot; not time-windowed</span>
+                <span className="eyebrow text-muted">Showing everything we've collected — no date filter</span>
             </div>
         );
     }
 
     return (
         <div className="filter-bar">
+            <span className="eyebrow text-muted">Time range</span>
             <div className="flex gap-1">
                 {TIME_RANGES.map((range) => (
                     <button
@@ -62,7 +63,7 @@ function GlobalFilters({
                     className="btn btn-ghost btn-sm"
                     onClick={() => onFilterChange({ timeRange: '7d' })}
                 >
-                    Clear filters
+                    Reset to 7 days
                 </button>
             )}
         </div>

@@ -61,15 +61,26 @@ interface TopicTabProps {
 
 function TopicTab({ topic, active, volume, onClick }: TopicTabProps) {
     const hasData = volume > 0;
+    const isAll = topic.key === 'all';
     const className = [
         'topic-tab',
         active ? 'topic-tab-active' : '',
         !hasData ? 'topic-tab-empty' : '',
     ].filter(Boolean).join(' ');
 
+    // The "All Topics" count sums the per-topic volumes, so it counts only
+    // posts that matched at least one topic keyword — not every scored post.
+    // Label it "topic-matched" and say so in the tooltip so it doesn't read
+    // as disagreeing with the ticker's "Posts scored" total.
     const countLabel = hasData
-        ? `${volume.toLocaleString()} ${volume === 1 ? 'post' : 'posts'}`
+        ? isAll
+            ? `${volume.toLocaleString()} topic-matched`
+            : `${volume.toLocaleString()} ${volume === 1 ? 'post' : 'posts'}`
         : 'no posts';
+    const title = isAll
+        ? `All topics — ${volume.toLocaleString()} posts that matched a topic keyword. `
+            + 'Posts that match no topic are not counted here.'
+        : `${topic.label} — ${countLabel} in this window`;
 
     return (
         <button
@@ -78,7 +89,7 @@ function TopicTab({ topic, active, volume, onClick }: TopicTabProps) {
             aria-selected={active}
             className={className}
             onClick={onClick}
-            title={`${topic.label} — ${countLabel} in this window`}
+            title={title}
         >
             <span className="topic-tab-icon" aria-hidden>
                 <svg

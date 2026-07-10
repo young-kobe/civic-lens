@@ -31,6 +31,7 @@ import re
 from analysis.src.common.logger import get_logger
 from analysis.src.engine.constants import INTENSIFIERS, NEGATIVE_WORDS
 from analysis.src.engine.models import PropagandaResult, PropagandaTechnique
+from analysis.src.engine.text_prep import truncate_at_sentence
 from analysis.src.llm.prompts import (
     PROPAGANDA_SYSTEM_PROMPT,
     PROPAGANDA_USER_PROMPT_TEMPLATE,
@@ -134,7 +135,10 @@ class PropagandaDetector:
             return PropagandaResult(detection_failed=True)
 
         combined = f"{title}\n\n{text}" if title else text
-        clamped = combined[:PROPAGANDA_TEXT_MAX_CHARS]
+        # Sentence-boundary clamp: a mid-sentence tail invites the model to
+        # hallucinate a completion it can then "quote" — which the substring
+        # validator below rejects, wasting the call.
+        clamped = truncate_at_sentence(combined, PROPAGANDA_TEXT_MAX_CHARS)
 
         # Loaded-language pre-filter. Docs whose opening contains zero
         # negative-or-intensifier tokens almost never surface propaganda

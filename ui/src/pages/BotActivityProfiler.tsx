@@ -35,12 +35,12 @@ function BotEntityCard({ item }: { item: BotEntityItem }) {
         <EntityProfileCard
             profile={profile}
             stats={item.total_docs > 0 ? [
-                { label: 'Bot rate',    value: formatPct(item.bot_rate_pct), color: rateColor, emphasis: true },
-                { label: 'Bot posts',   value: item.bot_docs.toLocaleString() },
+                { label: 'Suspected bot rate', value: formatPct(item.bot_rate_pct), color: rateColor, emphasis: true },
+                { label: 'Flagged posts',   value: item.bot_docs.toLocaleString() },
                 { label: 'Posts scanned', value: item.total_docs.toLocaleString() },
             ] : []}
             href={entityExternalUrl(profile) ?? undefined}
-            emptyNote="Tracked — no posts classified in this window yet."
+            emptyNote="Tracked — no posts scored yet."
         />
     );
 }
@@ -60,7 +60,7 @@ function BotThreeWayGrid({ overview }: { overview: BotOverview }) {
         <ThreeWayGrid>
             <ThreeWayColumn
                 header="The News"
-                byline="Outlets ranked by the share of their scanned posts that classify as bot."
+                byline="Outlets ranked by the share of their scanned articles our detector flags as likely automated."
                 empty="No news posts scored for bot detection."
                 isEmpty={outlets.length === 0}
             >
@@ -68,7 +68,7 @@ function BotThreeWayGrid({ overview }: { overview: BotOverview }) {
             </ThreeWayColumn>
             <ThreeWayColumn
                 header="Politicians & Officials"
-                byline="Tracked officeholders on X, ranked by bot-classification rate of their posts."
+                byline="Tracked officeholders on X, ranked by the share of their X posts our detector flags as likely automated."
                 empty="No official X posts scored for bot detection."
                 isEmpty={officials.length === 0}
             >
@@ -76,7 +76,7 @@ function BotThreeWayGrid({ overview }: { overview: BotOverview }) {
             </ThreeWayColumn>
             <ThreeWayColumn
                 header="The Public"
-                byline="Subreddits + the broader X user catch-all, ranked by bot-classification rate."
+                byline="Political subreddits, plus X users we don't track individually, ranked by the share of their posts our detector flags as likely automated."
                 empty="No public social posts scored for bot detection."
                 isEmpty={publics.length === 0}
             >
@@ -153,8 +153,8 @@ function buildBotTickerItems(overview: BotOverview): { items: TickerItem[]; acce
 
     const items: TickerItem[] = [
         {
-            label: 'Automation Rate',
-            value: formatPct(rate),
+            label: 'Suspected automation',
+            value: formatPct(rate, { decimals: 0 }),
             hint: 'of posts',
             tone: rateTone as TickerItem['tone'],
             emphasis: true,
@@ -163,14 +163,14 @@ function buildBotTickerItems(overview: BotOverview): { items: TickerItem[]; acce
         {
             label: 'Coordination',
             value: overview.coordinationIndex.toFixed(2),
-            hint: '0–1 scale',
+            hint: '0 none – 1 high',
         },
         {
             label: 'Flagged Posts',
-            value: overview.totalFlaggedAccounts.toLocaleString(),
+            value: overview.totalFlaggedPosts.toLocaleString(),
         },
         {
-            label: 'Confidence',
+            label: 'Detector confidence',
             value: overview.confidence,
             tone: overview.confidence === 'high'
                 ? 'positive'
@@ -204,14 +204,17 @@ function BotOverviewMetrics({ data }: BotOverviewMetricsProps) {
                 value={data.coordinationIndex.toFixed(2)}
                 subtitle="0 = none, 1 = highly coordinated"
             />
-            <Card title="Top Amplified Clusters">
+            <Card title="Domains flagged posts link to most">
+                <div className="text-xs text-muted mb-2">
+                    Suspected-bot posts often link repeatedly to the same sites.
+                </div>
                 <div className="flex flex-wrap gap-1">
                     {data.topClusters.map((cluster, i) => (
-                        <span key={i} className="badge badge-warning">{cluster}</span>
+                        <span key={i} className="badge badge-warning">{friendlyCluster(cluster)}</span>
                     ))}
                 </div>
                 <div className="eyebrow mt-3 num">
-                    {data.totalFlaggedAccounts.toLocaleString()} posts flagged
+                    {data.totalFlaggedPosts.toLocaleString()} posts flagged
                 </div>
             </Card>
         </div>
@@ -240,9 +243,9 @@ function NarrativeAmplificationCard({ narrative }: NarrativeAmplificationCardPro
 
     const getConfidenceBadge = (confidence: ConfidenceLevel) => {
         switch (confidence) {
-            case 'high': return <span className="badge badge-negative">High likelihood</span>;
-            case 'medium': return <span className="badge badge-warning">Medium likelihood</span>;
-            case 'low': return <span className="badge badge-neutral">Low likelihood</span>;
+            case 'high': return <span className="badge badge-negative" title="High likelihood of automation">High likelihood</span>;
+            case 'medium': return <span className="badge badge-warning" title="Medium likelihood of automation">Medium likelihood</span>;
+            case 'low': return <span className="badge badge-neutral" title="Low likelihood of automation">Low likelihood</span>;
             default: return null;
         }
     };
@@ -276,7 +279,7 @@ function NarrativeAmplificationCard({ narrative }: NarrativeAmplificationCardPro
 
                 {/* Always visible: Why flagged */}
                 <div>
-                    <div className="eyebrow mb-2">Why Flagged · Coordination Indicators</div>
+                    <div className="eyebrow mb-2">Why this was flagged</div>
                     <ul style={{ margin: 0, paddingLeft: 'var(--space-5)' }} className="text-sm">
                         {whyFlagged.map((reason, i) => (
                             <li key={i} className="mb-1">{reason}</li>
@@ -368,17 +371,17 @@ function NarrativeAmplificationCard({ narrative }: NarrativeAmplificationCardPro
 
                 {/* Targets */}
                 <div className="mb-4">
-                    <div className="eyebrow mb-2">Primary Targets</div>
+                    <div className="eyebrow mb-2">Who this narrative targets</div>
                     <div className="flex flex-wrap gap-1">
                         {narrative.targets.map((target, i) => (
-                            <span key={i} className="badge badge-negative">{target}</span>
+                            <span key={i} className="badge badge-neutral">{target}</span>
                         ))}
                     </div>
                 </div>
 
                 {/* Why Flagged (repeated in modal for full context) */}
                 <div>
-                    <div className="eyebrow mb-2">Why Flagged · Coordination Indicators</div>
+                    <div className="eyebrow mb-2">Why this was flagged</div>
                     <ul style={{ margin: 0, paddingLeft: 'var(--space-5)' }} className="text-sm">
                         {whyFlagged.map((reason, i) => (
                             <li key={i} className="mb-1">{reason}</li>
@@ -412,8 +415,8 @@ function CoordinationSummary({ data }: CoordinationSummaryProps) {
             <div className="grid-2 gap-3">
                 <div className="flex flex-col gap-2">
                     <div className="flex justify-between items-center" style={{ padding: '6px 0' }}>
-                        <span className="text-sm">Accounts showing reuse patterns</span>
-                        <span className="num font-semibold">{data.accountReuse.toLocaleString()}</span>
+                        <span className="text-sm" title="Share of suspected-bot accounts that posted more than once in this sample.">Suspected accounts posting more than once</span>
+                        <span className="num font-semibold">{formatPct(data.accountReuse * 100, { decimals: 0 })}</span>
                     </div>
                 </div>
                 <div className="flex flex-col gap-2">
@@ -648,6 +651,18 @@ function BotActivityProfiler() {
                     refreshed={botRefreshed}
                     accentColor={botAccentColor}
                     ariaLabel="Bot detector overview"
+                    legend={
+                        <MethodPopover
+                            title="How to read these numbers"
+                            description={
+                                'Suspected automation = the share of scored posts our detector flags as likely '
+                                + 'automated. Coordination = a 0 (none) to 1 (high) index of timing and content '
+                                + 'overlap across suspected accounts. Detector confidence = how much to trust this '
+                                + "page's estimates overall, based on sample size and signal agreement. These are "
+                                + 'probabilistic leads, not verdicts.'
+                            }
+                        />
+                    }
                 />
             </div>
 
@@ -686,7 +701,7 @@ function BotActivityProfiler() {
                     Narratives with Suspected Bot Amplification
                 </div>
                 <div className="text-xs text-muted" style={{ lineHeight: 'var(--leading-relaxed)' }}>
-                    Each row below is a narrative whose amplifying accounts score as likely bots. Expand to see
+                    Each row below is a narrative whose amplifying accounts score as likely bots. Open View details to see
                     example posts, flagged hashtags, and the signals that triggered the flag.
                 </div>
             </div>

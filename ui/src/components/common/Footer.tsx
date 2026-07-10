@@ -15,7 +15,7 @@ function Footer({ timestamp }: FooterProps) {
                     <p>
                         Sampled political media analysis. Every metric on this site traces
                         back to the raw text it came from, with a confidence score attached.
-                        This is a sample of what we ingested, not a poll of the public.
+                        This is a sample of what we collected, not a poll of the public.
                     </p>
                 </div>
                 <div>

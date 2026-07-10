@@ -467,7 +467,7 @@ class BotOverview:
     suspectedAutomationRate: float
     coordinationIndex: float
     topClusters: List[str]
-    totalFlaggedAccounts: int
+    totalFlaggedPosts: int
     confidence: str
     # Three-way entity rollups — which outlets / officials / subreddits have
     # the highest bot-classification rate on their contributed posts. Empty
@@ -625,7 +625,7 @@ class BotActivityData:
                 "suspectedAutomationRate": self.overview.suspectedAutomationRate,
                 "coordinationIndex": self.overview.coordinationIndex,
                 "topClusters": self.overview.topClusters,
-                "totalFlaggedAccounts": self.overview.totalFlaggedAccounts,
+                "totalFlaggedPosts": self.overview.totalFlaggedPosts,
                 "confidence": self.overview.confidence,
                 "by_news_outlet": [asdict(e) for e in self.overview.by_news_outlet],
                 "by_official": [asdict(e) for e in self.overview.by_official],

@@ -14,6 +14,7 @@ from analysis.src.engine.models.engine_models import SentimentResult, Favorabili
 from analysis.src.llm.context_seeds import (
     format_seeds_block, match_seeds, matched_slugs,
 )
+from analysis.src.engine.text_prep import is_trivial_content, truncate_at_sentence
 from analysis.src.llm.prompts import TEXT_ANALYSIS_SYSTEM_PROMPT, TEXT_ANALYSIS_USER_PROMPT_TEMPLATE
 from analysis.src.llm.schemas import TEXT_ANALYSIS_SCHEMA
 from analysis.src.llm.base import normalize_confidence
@@ -22,6 +23,8 @@ logger = get_logger(__name__)
 
 # Minimum word count for a valid evidence span (matches prompt rule).
 MIN_EVIDENCE_SPAN_WORDS = 4
+# Character budget for the text the LLM sees, clamped at a sentence boundary.
+TEXT_ANALYSIS_MAX_CHARS = 2000
 # Confidence ceiling when the model returned evidence spans but none were verifiable.
 UNVERIFIED_EVIDENCE_CONFIDENCE_CAP = 0.3
 
@@ -269,6 +272,17 @@ class Analyzer:
             
         signals = self._compute_signals(text)
 
+        # Trivial content (only @-mentions, links, hashtags) is what prompt
+        # rule 6 tells the LLM to score NEUTRAL at low confidence — code can
+        # answer that without spending the call, and more consistently.
+        if is_trivial_content(text):
+            sentiment_res, favorability_res = self._heuristic_classify(signals)
+            sentiment_res.reasoning = (
+                "Trivial content (mentions/links/hashtags only); LLM call skipped."
+            )
+            favorability_res.reasoning = sentiment_res.reasoning
+            return sentiment_res, favorability_res
+
         if self.llm_enabled and self._llm_client and self._llm_client.is_available:
             gop_entities = signals.get("gop_entities", [])
             # The user-prompt template's only placeholder is {text}; the heuristic
@@ -280,7 +294,9 @@ class Analyzer:
             # docs match nothing → empty block → no token cost.
             seeded = match_seeds(text)
             seeds_block = format_seeds_block(seeded)
-            user_prompt = seeds_block + TEXT_ANALYSIS_USER_PROMPT_TEMPLATE.format(text=text[:2000])
+            user_prompt = seeds_block + TEXT_ANALYSIS_USER_PROMPT_TEMPLATE.format(
+                text=truncate_at_sentence(text, TEXT_ANALYSIS_MAX_CHARS)
+            )
             
             try:
                 response = self._llm_client.complete(

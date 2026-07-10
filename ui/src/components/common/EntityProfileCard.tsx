@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import type { EntityProfile } from '../../types';
 import { COLORS, leanClass } from '../../theme';
-import { formatPct } from '../../services/format';
+import { formatPts } from '../../services/format';
 
 /** One stat cell in the card's stats row. */
 export interface EntityStat {
@@ -11,6 +11,8 @@ export interface EntityStat {
     color?: string;
     /** Sort this stat visually prominent; at most one per card. */
     emphasis?: boolean;
+    /** Optional hover tooltip on the stat (e.g. the net-tone definition). */
+    title?: string;
 }
 
 interface EntityProfileCardProps {
@@ -73,7 +75,12 @@ export function EntityProfileCard({
                 <div className="entity-card-head-text">
                     <h4 className="entity-card-name">{profile.displayName}</h4>
                     {chipLabel && (
-                        <span className={`entity-card-chip lean-chip-${lean}`}>{chipLabel}</span>
+                        <span
+                            className={`entity-card-chip lean-chip-${lean}`}
+                            title={entityChipTitle(profile)}
+                        >
+                            {chipLabel}
+                        </span>
                     )}
                 </div>
             </div>
@@ -83,7 +90,7 @@ export function EntityProfileCard({
             {hasStats ? (
                 <div className="entity-card-stats">
                     {stats.map((s) => (
-                        <span key={s.label} className="entity-card-stat">
+                        <span key={s.label} className="entity-card-stat" title={s.title}>
                             <span
                                 className="entity-card-stat-value"
                                 style={s.color ? { color: s.color } : undefined}
@@ -186,12 +193,30 @@ export function entityChipLabel(profile: EntityProfile): string | null {
     return profile.lean || null;
 }
 
+const PARTY_NAMES: Record<string, string> = {
+    D: 'Democrat', R: 'Republican', I: 'Independent', L: 'Libertarian', G: 'Green',
+};
+
+/** Hover tooltip that spells out the bare "R" / "left" chip so a reader
+ *  who doesn't know the shorthand can still read the card. */
+export function entityChipTitle(profile: EntityProfile): string | undefined {
+    if (profile.kind === 'catch_all') return undefined;
+    if (profile.kind === 'official') {
+        if (!profile.party) return undefined;
+        return `Party: ${PARTY_NAMES[profile.party] ?? profile.party}`;
+    }
+    if (!profile.lean) return undefined;
+    const noun = profile.kind === 'subreddit' ? 'community' : 'outlet';
+    const base = `Typical editorial lean of this ${noun}: ${profile.lean}`;
+    return profile.leanSource ? `${base} (per ${profile.leanSource})` : base;
+}
+
 /** Accent color for this entity's lean — matches the `.lean-*` CSS rules. */
 export function entityLeanAccent(profile: EntityProfile): string {
     const l = leanClass(profile);
     switch (l) {
-        case 'left':    return COLORS.chartAccent;
-        case 'right':   return COLORS.negative;
+        case 'left':    return COLORS.leanLeft;
+        case 'right':   return COLORS.leanRight;
         case 'mixed':   return COLORS.warning;
         case 'neutral': return 'var(--neutral-400)';
         case 'center':
@@ -219,7 +244,13 @@ export function sentimentStats({
         : netTone < -10 ? COLORS.negative
         : 'var(--neutral-500)';
     return [
-        { label: 'How they lean', value: formatPct(netTone, { min: -100, signed: true }), color, emphasis: true },
+        {
+            label: 'Net tone',
+            value: formatPts(netTone),
+            color,
+            emphasis: true,
+            title: "Positive minus negative share of this source's posts, from -100 (all negative) to +100 (all positive).",
+        },
         { label: 'Posts', value: volume.toLocaleString() },
     ];
 }

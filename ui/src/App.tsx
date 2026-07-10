@@ -241,9 +241,6 @@ function App() {
                             title={refreshedTitle}
                             aria-label={refreshedTitle}
                         >
-                            <span className="tick-live" aria-hidden />
-                            <span>LIVE</span>
-                            <span className="sep" aria-hidden />
                             <span>Refreshed {refreshedAgo}</span>
                         </span>
                         <span
@@ -251,7 +248,7 @@ function App() {
                             title={refreshedTitle}
                             aria-label={refreshedTitle}
                         >
-                            <span className="tick-live" aria-hidden />
+                            <span>{refreshedAgo}</span>
                         </span>
                     </div>
                 </div>
