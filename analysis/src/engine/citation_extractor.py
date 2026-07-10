@@ -19,8 +19,11 @@ What this module does NOT capture (by design, not bug):
   - Blockquotes of external content.
   - Any edge from content we don't host to content we don't host.
 
-Per-doc idempotency is tracked via an ``ai_outputs`` row with
-``task_type='citations'``, so re-running the job skips already-processed docs.
+Per-doc idempotency is tracked via a ``doc_task_state`` row with
+``task_type='citations'`` (migration 022), so re-running the job skips
+already-processed docs. No ai_outputs row is written — this stage's real
+output lives in ``narrative_citations``; the old marker rows were work-queue
+state masquerading as analysis results.
 """
 
 import re
@@ -30,6 +33,7 @@ from typing import List, Optional, Set, Tuple
 from urllib.parse import urlparse, urlunparse
 
 from analysis.src.common.logger import get_logger
+from analysis.src.etl.loader import ContentLoader
 
 logger = get_logger(__name__)
 
@@ -48,7 +52,6 @@ _X_REFERENCE_LINK_TYPE = {
 _URL_TRAILING_PUNCT = ".,;:!?"
 
 CITATION_MARKER_PROMPT_VERSION = "citation-v1"
-CITATION_MODEL_ID = "citation-extractor"
 
 
 def canonicalize_url(url: str) -> str:
@@ -87,21 +90,11 @@ class CitationExtractor:
             cursor = conn.cursor()
             for i, doc in enumerate(docs, 1):
                 edges = self._extract_single(cursor, doc, now)
-                # Write the per-doc processed marker so we skip on next run.
-                cursor.execute(
-                    """
-                    INSERT INTO ai_outputs
-                        (doc_id, task_type, output_json, confidence, model_id,
-                         prompt_version, inference_method, created_at)
-                    VALUES (?, 'citations', ?, 1.0, ?, ?, 'deterministic',
-                            strftime('%s','now'))
-                    """,
-                    (
-                        doc["doc_id"],
-                        f'{{"edges_written": {edges}}}',
-                        CITATION_MODEL_ID,
-                        CITATION_MARKER_PROMPT_VERSION,
-                    ),
+                # Mark processed in the work-queue table so we skip on next
+                # run; same transaction as the edge writes.
+                ContentLoader.upsert_task_state(
+                    cursor, doc["doc_id"], "citations", "done",
+                    CITATION_MARKER_PROMPT_VERSION,
                 )
                 total_edges += edges
                 logger.debug(

@@ -224,6 +224,7 @@ class AnalysisJobRunner:
                         prompt_version=BOT_PROMPT_VERSION,
                         system_prompt=None,  # no LLM prompt used
                         inference_method="deterministic",
+                        label="human",
                     )
                     excluded_count += 1
                     logger.debug(
@@ -243,6 +244,7 @@ class AnalysisJobRunner:
                     system_prompt=BOT_SYSTEM_PROMPT,
                     user_prompt_template=BOT_USER_PROMPT_TEMPLATE,
                     inference_method=result.inference_method,
+                    label=result.label,
                 )
                 processed += 1
                 logger.debug(
@@ -257,6 +259,12 @@ class AnalysisJobRunner:
             f"Bot detection complete: {total} docs processed "
             f"({processed} scored, {excluded_count} pre-excluded)"
         )
+        if total > 0:
+            # author_bot_scores is derived entirely from bot_detection rows;
+            # recompute it whenever those rows change so a `-Tasks bot` run
+            # can't leave the rollup stale. The standalone bot_rollup task
+            # stays available (idempotent full recompute) for manual repair.
+            self.run_account_bot_rollup()
         return total
 
     def _enrich_x_metadata(
@@ -352,6 +360,7 @@ class AnalysisJobRunner:
                 system_prompt=TEXT_ANALYSIS_SYSTEM_PROMPT,
                 user_prompt_template=TEXT_ANALYSIS_USER_PROMPT_TEMPLATE,
                 inference_method=sent_result.inference_method,
+                label=sent_result.label,
             )
 
             # Save Favorability
@@ -365,6 +374,7 @@ class AnalysisJobRunner:
                 system_prompt=TEXT_ANALYSIS_SYSTEM_PROMPT,
                 user_prompt_template=TEXT_ANALYSIS_USER_PROMPT_TEMPLATE,
                 inference_method=fav_result.inference_method,
+                label=fav_result.overall_gop_stance,
             )
             
             logger.debug(
@@ -407,8 +417,12 @@ class AnalysisJobRunner:
         for i, doc in enumerate(docs, 1):
             result = self.target_extractor.extract(doc["text"])
             if result.extraction_failed:
-                # Transport failure — persist nothing so the doc re-queues
-                # next run instead of freezing as "no targets" (audit A-3).
+                # Transport failure — mark failed so the doc re-queues next
+                # run instead of freezing as "no targets" (audit A-3), with
+                # the attempt visible in doc_task_state.
+                self.loader.mark_task_failed(
+                    doc["doc_id"], "target_sentiment", TARGET_SENTIMENT_PROMPT_VERSION
+                )
                 skipped += 1
                 logger.warning(
                     f"[targets {i}/{total}] doc={doc['doc_id']} extraction FAILED — "
@@ -487,9 +501,14 @@ class AnalysisJobRunner:
                 primary["text"], title=primary.get("title"),
             )
             if result.detection_failed:
-                # Transport failure — persist nothing for this group so the
-                # docs re-queue next run rather than freezing as a permanent
-                # "no propaganda" verdict (audit A-3).
+                # Transport failure — mark the group failed so the docs
+                # re-queue next run rather than freezing as a permanent
+                # "no propaganda" verdict (audit A-3), with attempts visible
+                # in doc_task_state.
+                for doc in group:
+                    self.loader.mark_task_failed(
+                        doc["doc_id"], "propaganda", PROPAGANDA_PROMPT_VERSION
+                    )
                 skipped_docs += len(group)
                 logger.warning(
                     f"[propaganda] hash={primary.get('raw_hash', '(none)')[:8]}… "
@@ -564,10 +583,13 @@ class AnalysisJobRunner:
         for i, doc in enumerate(docs, 1):
             result = self.claim_extractor.extract(doc["text"])
             if result.extraction_failed:
-                # Transport failure / unavailable client — do NOT write an
-                # ai_outputs row. get_unprocessed_docs re-queues the doc next
-                # run so a transient outage never freezes as a permanent
-                # "no claims" verdict (audit A-3).
+                # Transport failure / unavailable client — mark failed so the
+                # doc re-queues next run and a transient outage never freezes
+                # as a permanent "no claims" verdict (audit A-3), with the
+                # attempt visible in doc_task_state.
+                self.loader.mark_task_failed(
+                    doc["doc_id"], "claims", CLAIM_EXTRACTION_PROMPT_VERSION
+                )
                 skipped += 1
                 logger.warning(
                     f"[claims {i}/{total}] doc={doc['doc_id']} extraction FAILED — "
@@ -648,7 +670,7 @@ class AnalysisJobRunner:
                        a.output_json,
                        a.confidence,
                        a.inference_method
-                FROM ai_outputs a
+                FROM ai_outputs_latest a
                 JOIN docs d ON d.doc_id = a.doc_id
                 JOIN x_posts_raw x ON x.tweet_id = d.ident
                 WHERE a.task_type = 'bot_detection'

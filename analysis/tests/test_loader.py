@@ -84,5 +84,196 @@ class TestContentLoaderBatched(unittest.TestCase):
             self.assertEqual(cursor.fetchone()[0], 5000)
 
 
+class TestDocTaskState(unittest.TestCase):
+    """Work-queue semantics of doc_task_state (migration 022).
+
+    The state table exists so that (a) a transient LLM failure re-queues the
+    doc but leaves a visible trace instead of silently persisting nothing,
+    and (b) a task can be reprocessed under a new prompt_version by deleting
+    state rows while ai_outputs keeps every historical result row.
+    """
+
+    def setUp(self):
+        self._tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        self.db_path = self._tmp.name
+        self._tmp.close()
+        _apply_migrations(self.db_path)
+
+        now = int(time.time())
+        conn = sqlite3.connect(self.db_path)
+        conn.execute(
+            "INSERT INTO docs (doc_id, source_type, ident, domain_or_subreddit,"
+            " published_at, text, raw_hash, metadata_json)"
+            " VALUES (1, 'news', 'http://n.com/1', 'n.com', ?, 'body', 'h1', '{}')",
+            (now,),
+        )
+        conn.commit()
+        conn.close()
+        self.loader = ContentLoader(self.db_path)
+
+    def tearDown(self):
+        for suffix in ("", "-wal", "-shm"):
+            try:
+                os.remove(self.db_path + suffix)
+            except (FileNotFoundError, PermissionError):
+                pass
+
+    def _state_row(self):
+        conn = sqlite3.connect(self.db_path)
+        row = conn.execute(
+            "SELECT status, prompt_version, attempts FROM doc_task_state"
+            " WHERE doc_id = 1 AND task_type = 'claims'"
+        ).fetchone()
+        conn.close()
+        return row
+
+    def test_save_marks_done_and_dequeues(self):
+        self.assertEqual(len(self.loader.get_unprocessed_docs("claims")), 1)
+        self.loader.save_ai_output(1, "claims", {"claims": []}, 0.9,
+                                   prompt_version="v1")
+        self.assertEqual(len(self.loader.get_unprocessed_docs("claims")), 0)
+        self.assertEqual(self._state_row(), ("done", "v1", 1))
+
+    def test_failed_attempt_requeues_but_is_observable(self):
+        # A transient outage must never freeze a doc as done — but the
+        # retries must be visible, not the old persist-nothing pattern.
+        self.loader.mark_task_failed(1, "claims", "v1")
+        self.loader.mark_task_failed(1, "claims", "v1")
+        self.assertEqual(self._state_row(), ("failed", "v1", 2))
+        self.assertEqual(len(self.loader.get_unprocessed_docs("claims")), 1)
+        # A later success flips the row to done and dequeues.
+        self.loader.save_ai_output(1, "claims", {"claims": []}, 0.9,
+                                   prompt_version="v1")
+        self.assertEqual(self._state_row(), ("done", "v1", 3))
+        self.assertEqual(len(self.loader.get_unprocessed_docs("claims")), 0)
+
+    def test_reprocess_appends_and_latest_view_wins(self):
+        # Reprocessing = delete state rows. ai_outputs must keep the v1 row
+        # (append-only audit history) while every latest-per-doc reader sees
+        # only the v2 row, so aggregates never double-count a doc.
+        self.loader.save_ai_output(1, "claims", {"v": 1}, 0.9,
+                                   prompt_version="v1")
+        conn = sqlite3.connect(self.db_path)
+        conn.execute("DELETE FROM doc_task_state WHERE task_type = 'claims'")
+        conn.commit()
+        conn.close()
+
+        self.assertEqual(len(self.loader.get_unprocessed_docs("claims")), 1)
+        self.loader.save_ai_output(1, "claims", {"v": 2}, 0.9,
+                                   prompt_version="v2")
+
+        conn = sqlite3.connect(self.db_path)
+        all_rows = conn.execute(
+            "SELECT COUNT(*) FROM ai_outputs WHERE doc_id = 1"
+            " AND task_type = 'claims'"
+        ).fetchone()[0]
+        latest = conn.execute(
+            "SELECT output_json, prompt_version FROM ai_outputs_latest"
+            " WHERE doc_id = 1 AND task_type = 'claims'"
+        ).fetchall()
+        conn.close()
+        self.assertEqual(all_rows, 2)
+        self.assertEqual(len(latest), 1)
+        self.assertEqual(latest[0], ('{"v": 2}', "v2"))
+
+
+class TestLabelColumn(unittest.TestCase):
+    """Canonical label column (migration 023).
+
+    The verdict of a row used to live only inside output_json — and for
+    bot_detection under TWO keys (label / is_bot), so every reader carried a
+    two-key defensive check. The column is the single encoding readers
+    filter on; these tests pin the backfill of both legacy encodings and
+    the write path.
+    """
+
+    def setUp(self):
+        self._tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        self.db_path = self._tmp.name
+        self._tmp.close()
+
+    def tearDown(self):
+        for suffix in ("", "-wal", "-shm"):
+            try:
+                os.remove(self.db_path + suffix)
+            except (FileNotFoundError, PermissionError):
+                pass
+
+    def _apply_up_to(self, conn, stop_before: str):
+        for m_file in sorted(os.listdir(MIGRATIONS_DIR)):
+            if m_file >= stop_before:
+                break
+            if m_file.endswith(".sql"):
+                with open(os.path.join(MIGRATIONS_DIR, m_file)) as f:
+                    conn.executescript(f.read())
+
+    def test_backfill_normalizes_both_legacy_bot_encodings(self):
+        conn = sqlite3.connect(self.db_path)
+        self._apply_up_to(conn, "023")
+        conn.execute(
+            "INSERT INTO docs (doc_id, source_type, ident, raw_hash)"
+            " VALUES (1, 'news', 'u1', 'h1')"
+        )
+        rows = [
+            (1, "bot_detection", '{"is_bot": 1}'),          # boolean-only era
+            (1, "bot_detection", '{"is_bot": 0}'),
+            (1, "bot_detection", '{"label": "suspicious"}'),  # label era
+            (1, "sentiment", '{"label": "POSITIVE"}'),
+            (1, "favorability", '{"overall_gop_stance": "favorable"}'),
+            (1, "claims", '{"claims": []}'),                  # no scalar verdict
+        ]
+        conn.executemany(
+            "INSERT INTO ai_outputs (doc_id, task_type, output_json, confidence)"
+            " VALUES (?, ?, ?, 0.9)",
+            rows,
+        )
+        # Apply 023 (and everything after) on the pre-column corpus.
+        for m_file in sorted(os.listdir(MIGRATIONS_DIR)):
+            if m_file >= "023" and m_file.endswith(".sql"):
+                with open(os.path.join(MIGRATIONS_DIR, m_file)) as f:
+                    conn.executescript(f.read())
+
+        labels = conn.execute(
+            "SELECT task_type, output_json, label FROM ai_outputs ORDER BY output_id"
+        ).fetchall()
+        by_json = {json_: label for _, json_, label in labels}
+        self.assertEqual(by_json['{"is_bot": 1}'], "bot")
+        self.assertEqual(by_json['{"is_bot": 0}'], "human")
+        self.assertEqual(by_json['{"label": "suspicious"}'], "suspicious")
+        self.assertEqual(by_json['{"label": "POSITIVE"}'], "POSITIVE")
+        self.assertEqual(by_json['{"overall_gop_stance": "favorable"}'], "favorable")
+        self.assertIsNone(by_json['{"claims": []}'])
+
+        # The recreated latest view must expose the new column.
+        view_label = conn.execute(
+            "SELECT label FROM ai_outputs_latest"
+            " WHERE task_type = 'sentiment'"
+        ).fetchone()[0]
+        self.assertEqual(view_label, "POSITIVE")
+        conn.close()
+
+    def test_save_ai_output_writes_label(self):
+        _apply_migrations(self.db_path)
+        conn = sqlite3.connect(self.db_path)
+        conn.execute(
+            "INSERT INTO docs (doc_id, source_type, ident, raw_hash)"
+            " VALUES (1, 'news', 'u1', 'h1')"
+        )
+        conn.commit()
+        conn.close()
+
+        loader = ContentLoader(self.db_path)
+        loader.save_ai_output(
+            1, "bot_detection", {"label": "bot", "is_bot": True}, 0.9,
+            prompt_version="v1", label="bot",
+        )
+        conn = sqlite3.connect(self.db_path)
+        stored = conn.execute(
+            "SELECT label FROM ai_outputs WHERE doc_id = 1"
+        ).fetchone()[0]
+        conn.close()
+        self.assertEqual(stored, "bot")
+
+
 if __name__ == "__main__":
     unittest.main()

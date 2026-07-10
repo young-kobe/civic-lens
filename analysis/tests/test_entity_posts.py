@@ -55,8 +55,16 @@ class EntityPostsTests(unittest.TestCase):
                 doc_id INTEGER,
                 task_type TEXT,
                 output_json TEXT,
-                confidence REAL
+                confidence REAL,
+                label TEXT
             );
+            CREATE VIEW ai_outputs_latest AS
+            SELECT a.* FROM ai_outputs a
+            WHERE a.output_id = (
+                SELECT MAX(a2.output_id) FROM ai_outputs a2
+                WHERE a2.doc_id = a.doc_id AND a2.task_type = a.task_type
+            );
+
             CREATE TABLE x_posts_raw (
                 tweet_id TEXT PRIMARY KEY,
                 author_id TEXT,
@@ -132,10 +140,11 @@ class EntityPostsTests(unittest.TestCase):
             "VALUES (1, 'sentiment', ?, 0.9)",
             (_sentiment("NEGATIVE"),),
         )
-        # Doc 9 is bot-flagged → excluded everywhere.
+        # Doc 9 is bot-flagged → excluded everywhere. The exclusion filter
+        # reads the canonical label column (migration 023), not the JSON.
         cur.execute(
-            "INSERT INTO ai_outputs (doc_id, task_type, output_json, confidence) "
-            "VALUES (9, 'bot_detection', ?, 0.9)",
+            "INSERT INTO ai_outputs (doc_id, task_type, output_json, confidence, label) "
+            "VALUES (9, 'bot_detection', ?, 0.9, 'bot')",
             (json.dumps({"label": "bot"}),),
         )
         conn.commit()

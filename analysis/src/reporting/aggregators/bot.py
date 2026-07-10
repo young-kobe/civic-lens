@@ -107,7 +107,7 @@ class BotAggregator:
                    d.text,
                    d.ident,
                    u.username
-            FROM ai_outputs a
+            FROM ai_outputs_latest a
             JOIN docs d ON a.doc_id = d.doc_id
             """
             + X_AUTHOR_JOIN_SQL
@@ -276,7 +276,7 @@ class BotAggregator:
             SELECT a.output_json, a.inference_method,
                    d.source_type, d.domain_or_subreddit,
                    u.username
-            FROM ai_outputs a
+            FROM ai_outputs_latest a
             JOIN docs d ON d.doc_id = a.doc_id
             """
             + X_AUTHOR_JOIN_SQL

@@ -47,8 +47,16 @@ class TestRichAggregators(unittest.TestCase):
                 task_type TEXT,
                 output_json TEXT,
                 confidence REAL,
-                created_at INTEGER
+                created_at INTEGER,
+                label TEXT
             );
+            CREATE VIEW ai_outputs_latest AS
+            SELECT a.* FROM ai_outputs a
+            WHERE a.output_id = (
+                SELECT MAX(a2.output_id) FROM ai_outputs a2
+                WHERE a2.doc_id = a.doc_id AND a2.task_type = a.task_type
+            );
+
 
             CREATE TABLE x_posts_raw (
                 tweet_id TEXT PRIMARY KEY,
@@ -127,9 +135,13 @@ class TestRichAggregators(unittest.TestCase):
             (4, "sentiment", sentiment_bot, 0.9),
         ]
         for doc_id, task, output, conf in outputs:
+            # Mirror save_ai_output / migration 023: label column projects
+            # the payload's scalar verdict.
+            payload = json.loads(output)
+            label = payload.get("label") or payload.get("overall_gop_stance")
             self.cursor.execute(
-                "INSERT INTO ai_outputs (doc_id, task_type, output_json, confidence, created_at) VALUES (?,?,?,?,?)",
-                (doc_id, task, output, conf, 1700000000),
+                "INSERT INTO ai_outputs (doc_id, task_type, output_json, confidence, label, created_at) VALUES (?,?,?,?,?,?)",
+                (doc_id, task, output, conf, label, 1700000000),
             )
 
         self.conn.commit()

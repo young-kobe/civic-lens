@@ -58,8 +58,9 @@ class TargetSentimentResult:
     reasoning: Optional[str] = None
     # True when the LLM call itself failed (transport error / unavailable
     # client) rather than legitimately finding no targets. job_runner MUST
-    # skip persisting a failed result so the doc has no ai_outputs row and
-    # is re-queued next run (same contract as claims — audit A-3).
+    # NOT persist a result row for a failed extraction — it marks the doc
+    # 'failed' in doc_task_state so it re-queues next run (same contract as
+    # claims — audit A-3).
     extraction_failed: bool = False
 
     def to_dict(self) -> dict:
