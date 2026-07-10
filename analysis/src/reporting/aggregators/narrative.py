@@ -42,6 +42,22 @@ _SOURCE_LABELS = {
 TOP_SUPPORTING_DOCS_LIMIT = 6
 
 
+_SNIPPET_MAX_CHARS = 120
+
+
+def _text_snippet(text: Optional[str], limit: int = _SNIPPET_MAX_CHARS) -> Optional[str]:
+    """One-line preview of a doc's body, used as the Headline-column fallback
+    for social posts that have no title. Collapses whitespace and truncates."""
+    if not text:
+        return None
+    collapsed = " ".join(text.split())
+    if not collapsed:
+        return None
+    if len(collapsed) > limit:
+        return collapsed[: limit - 3].rstrip() + "..."
+    return collapsed
+
+
 def _build_source_label(
     source_type: Optional[str],
     domain: Optional[str],
@@ -541,7 +557,9 @@ class NarrativeAggregator:
         "Reddit · r/politics" — so the UI doesn't have to re-derive it.
         """
         sql = f"""
-            SELECT d.doc_id, d.title, d.source_type, d.domain_or_subreddit,
+            SELECT d.doc_id, d.title,
+                   substr(d.text, 1, {_SNIPPET_MAX_CHARS * 4}) AS text_head,
+                   d.source_type, d.domain_or_subreddit,
                    d.ident, d.published_at, u.username,
                    a.output_json, a.confidence
             FROM narrative_docs nd
@@ -566,7 +584,7 @@ class NarrativeAggregator:
         rows = []
         seen_doc_ids: set = set()
         for (
-            doc_id, title, source_type, domain, ident, published_at,
+            doc_id, title, text, source_type, domain, ident, published_at,
             x_handle, output_json, confidence,
         ) in cursor.fetchall():
             # Dedupe by doc_id: ai_outputs has no UNIQUE(doc_id, task_type),
@@ -601,6 +619,9 @@ class NarrativeAggregator:
             rows.append({
                 "doc_id": doc_id,
                 "title": title or None,
+                # Social posts (X, Reddit) have no headline; give the UI a text
+                # snippet to show in the Headline column instead of "(untitled)".
+                "snippet": _text_snippet(text) if not title else None,
                 "source_type": source_type or "unknown",
                 "source_label": source_label,
                 "url": url,
