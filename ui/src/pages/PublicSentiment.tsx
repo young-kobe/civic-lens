@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-    CollapsibleInfo, EmptyState, EntityHeader, EntityProfileCard,
+    CollapsibleInfo, EmptyState, EntityHeader, EntityHubLinks, EntityProfileCard,
     ErrorState, GlobalTicker, LoadingCard, MethodPopover, Modal, PostCardList,
     ThreeWayColumn, ThreeWayGrid, TierRow, TopMetricsBlock,
     entityExternalUrl, entityLeanAccent,
-    officialToneStats, sampleToPostCard, sentimentStats,
+    officialToneStats, parseEntityParam, sampleToPostCard, sentimentStats,
 } from '../components/common';
 import type { ColumnSorter, TickerItem } from '../components/common';
 import type {
@@ -26,7 +26,7 @@ import {
     TOPICS, topicByKey, topicFromSlug,
     type Topic, type TopicKey,
 } from '../services/topics';
-import { readHashParam, writeHashParam } from '../services/deepLink';
+import { readHashParam, useDeepLinkParam, writeHashParam } from '../services/deepLink';
 import { OutletSignalsPanel } from './publicSentiment/OutletSignalsPanel';
 import { TopicDivergencePanel } from './publicSentiment/TopicDivergencePanel';
 import { TopicTabBar } from './publicSentiment/TopicTabBar';
@@ -660,6 +660,8 @@ function EntitySentimentModal({
                 </div>
             )}
 
+            <EntityHubLinks profile={profile} currentTab="sentiment" />
+
             {filteredSamples.length > 0 ? (
                 <>
                     <h3 className="card-title mt-4 mb-2">
@@ -812,7 +814,51 @@ function PollingComparison({ data }: { data: PollingSocialComparison }) {
 //  How-this-works collapsible                                                  //
 // --------------------------------------------------------------------------- //
 
-function HowThisWorks() {
+// Age buckets ship oldest-last from the aggregator; the strip renders in
+// that order with a light-to-dark ramp (darker = fresher).
+const FRESHNESS_SHADE: Record<string, string> = {
+    '24 hours': 'var(--chart-accent)',
+    '7 days': 'var(--chart-accent-soft)',
+    '30 days': 'var(--neutral-300)',
+    '90+ days': 'var(--neutral-200)',
+    'Unknown': 'var(--neutral-150)',
+};
+
+function FreshnessStrip({ byTimeWindow }: { byTimeWindow: SentimentBreakdown[] }) {
+    const rows = byTimeWindow.filter((w) => w.window && w.volume > 0);
+    const total = rows.reduce((s, w) => s + w.volume, 0);
+    if (total === 0) return null;
+    const summary = rows
+        .map((w) => `${Math.round((w.volume / total) * 100)}% ${w.window} old`)
+        .join(' · ');
+    return (
+        <div className="freshness-strip">
+            <div className="eyebrow" style={{ marginBottom: 'var(--space-1)' }}>
+                How old is what we scored
+            </div>
+            <div
+                className="freshness-strip-bar"
+                role="img"
+                aria-label={`Age mix of the ${total.toLocaleString()} scored posts: ${summary}`}
+                title={`Age of the ${total.toLocaleString()} scored posts at analysis time: ${summary}.`}
+            >
+                {rows.map((w) => (
+                    <span
+                        key={w.window}
+                        style={{
+                            width: `${(w.volume / total) * 100}%`,
+                            background: FRESHNESS_SHADE[w.window!] ?? 'var(--neutral-200)',
+                        }}
+                        title={`${w.window}: ${w.volume.toLocaleString()} posts (${Math.round((w.volume / total) * 100)}%)`}
+                    />
+                ))}
+            </div>
+            <div className="freshness-strip-legend text-xs text-muted">{summary}</div>
+        </div>
+    );
+}
+
+function HowThisWorks({ byTimeWindow }: { byTimeWindow: SentimentBreakdown[] }) {
     return (
         <CollapsibleInfo>
             <p className="text-sm">
@@ -828,6 +874,7 @@ function HowThisWorks() {
                 read it as opinion polling. Sarcasm and irony are flagged when the model detects
                 them but can still be misclassified.
             </p>
+            <FreshnessStrip byTimeWindow={byTimeWindow} />
         </CollapsibleInfo>
     );
 }
@@ -976,6 +1023,9 @@ function PublicSentiment({ filters }: PublicSentimentProps) {
         writeTopicToUrl(key);
     };
 
+    // Cross-page entity deep link ("#sentiment?entity=official:SenSchumer").
+    const [entityParam, setEntityParam] = useDeepLinkParam('entity');
+
     const { data, loading, error, refetch } = useFetch<PublicSentimentData>(
         async () => transformPublicSentiment(await fetchSentiment(filters.timeRange)),
         [filters.timeRange],
@@ -997,6 +1047,27 @@ function PublicSentiment({ filters }: PublicSentimentProps) {
     const sentimentAgreement = evalAccuracy?.perTask.find(
         (t) => t.taskType === 'sentiment' && !t.lowSample && t.accuracyPct != null,
     ) ?? null;
+
+    // Resolve the entity= param once data lands: search all three tier
+    // lists for the kind:key. Unknown entities (or ones with no data in
+    // this window) clear the param instead of erroring.
+    useEffect(() => {
+        if (!data || !entityParam) return;
+        const target = parseEntityParam(entityParam);
+        if (target) {
+            const lists = [data.byNewsOutlet, data.byOfficial, data.byGeneralPublic];
+            for (const list of lists) {
+                const item = (list ?? []).find(
+                    (it) => it.kind === target.kind && it.key === target.key,
+                );
+                if (item) {
+                    setActiveEntity(item);
+                    return;
+                }
+            }
+        }
+        setEntityParam(null);
+    }, [data, entityParam, setEntityParam]);
 
     // Pick the most-discussed topic as the default once data lands, but
     // only if the user hasn't already chosen something (URL or click).
@@ -1121,7 +1192,16 @@ function PublicSentiment({ filters }: PublicSentimentProps) {
                 groups disagree. Promoted above the entity grid; it was
                 previously last on the page where few readers reached it. */}
             <div className="col-span-12">
-                <TopicDivergencePanel topics={data.byTopic} />
+                <TopicDivergencePanel
+                    topics={data.byTopic}
+                    onFilterTopic={(topic) => {
+                        // Row topics and tab-bar keys share the backend's
+                        // topic vocabulary; unknown ones (e.g. a retired
+                        // topic in an old snapshot) just no-op.
+                        const match = TOPICS.find((t) => t.key === topic);
+                        if (match) setActiveTopicKey(match.key);
+                    }}
+                />
             </div>
 
             {/* Tone over time — per-group daily series (GOP series behind
@@ -1148,7 +1228,10 @@ function PublicSentiment({ filters }: PublicSentimentProps) {
             {activeEntity && (
                 <EntitySentimentModal
                     item={activeEntity}
-                    onClose={() => setActiveEntity(null)}
+                    onClose={() => {
+                        setActiveEntity(null);
+                        if (entityParam) setEntityParam(null);
+                    }}
                     activeTopic={activeTopic}
                     timeWindow={filters.timeRange}
                 />
@@ -1177,7 +1260,7 @@ function PublicSentiment({ filters }: PublicSentimentProps) {
 
             {/* How this page works — self-documenting content + collapsible backup. */}
             <div className="col-span-12">
-                <HowThisWorks />
+                <HowThisWorks byTimeWindow={data.byTimeWindow ?? []} />
             </div>
         </div>
     );

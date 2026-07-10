@@ -143,11 +143,15 @@ const MATRIX_COLUMNS: Array<{ key: MatrixSortKey; label: string; title: string }
 function CrossSignalMatrix({ rows }: { rows: MatrixRow[] }) {
     const [sortKey, setSortKey] = useState<MatrixSortKey>('posts');
     const [sortDir, setSortDir] = useState<1 | -1>(-1);
+    const [query, setQuery] = useState('');
 
-    const sorted = useMemo(
-        () => [...rows].sort((a, b) => compareRows(a, b, sortKey, sortDir)),
-        [rows, sortKey, sortDir],
-    );
+    const sorted = useMemo(() => {
+        const q = query.trim().toLowerCase();
+        const filtered = q
+            ? rows.filter((r) => r.name.toLowerCase().includes(q))
+            : rows;
+        return [...filtered].sort((a, b) => compareRows(a, b, sortKey, sortDir));
+    }, [rows, query, sortKey, sortDir]);
 
     const onSort = (key: MatrixSortKey) => {
         if (key === sortKey) {
@@ -177,6 +181,19 @@ function CrossSignalMatrix({ rows }: { rows: MatrixRow[] }) {
                 />
             }
         >
+            <input
+                type="search"
+                className="input desk-search"
+                placeholder="Search entities by name..."
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                aria-label="Search entities by name"
+            />
+            {sorted.length === 0 && query.trim() !== '' && (
+                <p className="text-sm text-muted">
+                    No tracked entity matches "{query.trim()}" in this window.
+                </p>
+            )}
             <div className="desk-table-wrap">
                 <table className="table desk-matrix">
                     <thead>

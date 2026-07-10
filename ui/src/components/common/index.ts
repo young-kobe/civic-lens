@@ -4,6 +4,11 @@ export { default as Tabs } from './Tabs';
 export type { Tab } from './Tabs';
 export { default as ConfidenceBadge } from './ConfidenceBadge';
 export { default as DefinitionChip } from './DefinitionChip';
+export {
+    default as EntityHubLinks,
+    entityParamValue,
+    parseEntityParam,
+} from './EntityHubLinks';
 export { default as GlobalFilters } from './GlobalFilters';
 export { default as MethodPopover } from './MethodPopover';
 export { default as Footer } from './Footer';

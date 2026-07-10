@@ -1,12 +1,14 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
     Card, CollapsibleInfo, DefinitionChip, EmptyState, EntityHeader,
-    ErrorState, GlobalTicker, LoadingCard, MethodPopover, Modal, PostCardList,
+    EntityHubLinks, ErrorState, GlobalTicker, LoadingCard, MethodPopover,
+    Modal, PostCardList,
     RankedEntityList, ThreeWayColumn, ThreeWayGrid,
     TierRow, TopMetricsBlock, entityExternalUrl, entityLeanAccent,
-    propagandaExampleToPostCard,
+    parseEntityParam, propagandaExampleToPostCard,
 } from '../components/common';
 import type { ColumnSorter, RankedEntity, TickerItem, TierRowDot } from '../components/common';
+import { useDeepLinkParam } from '../services/deepLink';
 import { saturationLevel } from '../services/glossary';
 import { TechniqueExplorer } from './propaganda/TechniqueExplorer';
 import { fetchPropaganda, fetchSnapshotStatus, type SnapshotStatus } from '../services/api';
@@ -292,6 +294,8 @@ function PropagandaEntityModal({
                 </div>
             )}
 
+            <EntityHubLinks profile={profile} currentTab="propaganda" />
+
             <h3 className="card-title mt-4 mb-2">
                 {matching.length === 0 ? 'No flagged examples in this window'
                     : matching.length === 1 ? 'Flagged example'
@@ -440,6 +444,8 @@ interface PropagandaProps {
 
 function Propaganda({ filters }: PropagandaProps) {
     const [activeEntity, setActiveEntity] = useState<PropagandaEntityItem | null>(null);
+    // Cross-page entity deep link ("#propaganda?entity=outlet:nypost.com").
+    const [entityParam, setEntityParam] = useDeepLinkParam('entity');
     const { data, loading, error, refetch } = useFetch<PropagandaOverview>(
         () => fetchPropaganda(filters.timeRange),
         [filters.timeRange],
@@ -450,6 +456,25 @@ function Propaganda({ filters }: PropagandaProps) {
         [],
         'snapshot-status',
     );
+
+    // Resolve entity= once data lands; unknown entities clear the param.
+    useEffect(() => {
+        if (!data || !entityParam) return;
+        const target = parseEntityParam(entityParam);
+        if (target) {
+            const lists = [data.by_news_outlet, data.by_official, data.by_general_public];
+            for (const list of lists) {
+                const item = (list ?? []).find(
+                    (it) => it.kind === target.kind && it.key === target.key,
+                );
+                if (item) {
+                    setActiveEntity(item);
+                    return;
+                }
+            }
+        }
+        setEntityParam(null);
+    }, [data, entityParam, setEntityParam]);
 
     if (error) return <ErrorState message={error.message} onRetry={refetch} />;
     if (loading) {
@@ -542,7 +567,10 @@ function Propaganda({ filters }: PropagandaProps) {
                 <PropagandaEntityModal
                     item={activeEntity}
                     examplesByEntity={data.examples_by_entity ?? {}}
-                    onClose={() => setActiveEntity(null)}
+                    onClose={() => {
+                        setActiveEntity(null);
+                        if (entityParam) setEntityParam(null);
+                    }}
                 />
             )}
         </>

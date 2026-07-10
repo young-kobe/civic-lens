@@ -8,6 +8,10 @@ import { formatPts } from '../../services/format';
 
 interface TopicDivergencePanelProps {
     topics: SentimentBreakdown[];
+    /** Scopes the whole page to a topic (the tab bar's setter). Rendered
+     *  as a "Filter the page" action in the samples modal when provided
+     *  and the row's topic exists in the tab bar's topic set. */
+    onFilterTopic?: (topic: string) => void;
 }
 
 const TIER_META = [
@@ -29,7 +33,7 @@ const TIER_META = [
  * samples — the UI the Sentiment by Topic card used to provide, now
  * attached per-topic rather than as a separate drawer.
  */
-export function TopicDivergencePanel({ topics }: TopicDivergencePanelProps) {
+export function TopicDivergencePanel({ topics, onFilterTopic }: TopicDivergencePanelProps) {
     const [activeTopic, setActiveTopic] = useState<SentimentBreakdown | null>(null);
 
     const rows = topics
@@ -95,6 +99,12 @@ export function TopicDivergencePanel({ topics }: TopicDivergencePanelProps) {
                 <TopicSamplesModal
                     topic={activeTopic}
                     onClose={() => setActiveTopic(null)}
+                    onFilterTopic={onFilterTopic
+                        ? () => {
+                            onFilterTopic(activeTopic.topic || '');
+                            setActiveTopic(null);
+                        }
+                        : undefined}
                 />
             )}
         </>
@@ -184,9 +194,11 @@ function tierTooltip(row: SentimentBreakdown): string {
 interface TopicSamplesModalProps {
     topic: SentimentBreakdown;
     onClose: () => void;
+    /** Closes the modal and scopes the whole page to this topic. */
+    onFilterTopic?: () => void;
 }
 
-function TopicSamplesModal({ topic, onClose }: TopicSamplesModalProps) {
+function TopicSamplesModal({ topic, onClose, onFilterTopic }: TopicSamplesModalProps) {
     const samples: ClassificationSample[] = topic.classificationSamples ?? [];
 
     return (
@@ -196,6 +208,16 @@ function TopicSamplesModal({ topic, onClose }: TopicSamplesModalProps) {
             title={topic.topic || 'Topic'}
             subtitle={`${tierTooltip(topic)} · ${topic.volume.toLocaleString()} posts`}
         >
+            {onFilterTopic && (
+                <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={onFilterTopic}
+                    style={{ marginBottom: 'var(--space-3)' }}
+                >
+                    Filter the whole page to {topic.topic}
+                </button>
+            )}
             {samples.length === 0 ? (
                 <p className="text-muted text-sm">
                     No example posts stored for this topic yet.

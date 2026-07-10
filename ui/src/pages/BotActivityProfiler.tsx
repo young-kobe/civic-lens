@@ -1,12 +1,14 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
-    Card, CollapsibleInfo, DefinitionChip, EmptyState, EntityHeader, ErrorState,
+    Card, CollapsibleInfo, DefinitionChip, EmptyState, EntityHeader,
+    EntityHubLinks, ErrorState,
     GlobalTicker,
     LoadingCard, MethodPopover, Modal, PostCardList,
     RankedEntityList, ThreeWayColumn, ThreeWayGrid,
     entityExternalUrl, entityLeanAccent, flaggedExampleToPostCard,
+    parseEntityParam,
 } from '../components/common';
-import { deepLinkHref } from '../services/deepLink';
+import { deepLinkHref, useDeepLinkParam } from '../services/deepLink';
 import { coordinationLevel } from '../services/glossary';
 import { CoordinationEvidencePanel } from './bots/CoordinationEvidencePanel';
 import type { ColumnSorter, TickerItem } from '../components/common';
@@ -87,6 +89,7 @@ function BotEntityModal({ item, onClose }: { item: BotEntityItem; onClose: () =>
                     </a>
                 </div>
             )}
+            <EntityHubLinks profile={profile} currentTab="bots" />
         </Modal>
     );
 }
@@ -97,11 +100,15 @@ const BOT_SORTERS: ColumnSorter<BotEntityItem>[] = [
     { label: 'name', compare: (a, b) => a.entity_profile.displayName.localeCompare(b.entity_profile.displayName) },
 ];
 
-function BotThreeWayGrid({ overview }: { overview: BotOverview }) {
+function BotThreeWayGrid({
+    overview, onOpen,
+}: {
+    overview: BotOverview;
+    onOpen: (item: BotEntityItem) => void;
+}) {
     // Always render the three-way frame when we have an overview, even if
     // individual tiers are empty — per-column empty copy is more honest
     // ("no official X posts scored") than hiding the grid entirely.
-    const [activeItem, setActiveItem] = useState<BotEntityItem | null>(null);
     const ranked = (label: string) => (items: BotEntityItem[]) => (
         <RankedEntityList
             items={items.map((it) => ({
@@ -110,15 +117,14 @@ function BotThreeWayGrid({ overview }: { overview: BotOverview }) {
                 ratePct: it.bot_rate_pct,
                 rateColor: botRateColor(it.bot_rate_pct),
                 detail: `${it.bot_docs.toLocaleString()} of ${it.total_docs.toLocaleString()} flagged`,
-                onClick: () => setActiveItem(it),
+                onClick: () => onOpen(it),
             }))}
             ariaLabel={label}
         />
     );
 
     return (
-        <>
-            <ThreeWayGrid>
+        <ThreeWayGrid>
                 <ThreeWayColumn
                     header="The News"
                     byline="Outlets ranked by the share of their scanned articles our detector flags as likely automated."
@@ -143,11 +149,7 @@ function BotThreeWayGrid({ overview }: { overview: BotOverview }) {
                     renderItems={ranked('Public sources by suspected bot rate')}
                     sorters={BOT_SORTERS}
                 />
-            </ThreeWayGrid>
-            {activeItem && (
-                <BotEntityModal item={activeItem} onClose={() => setActiveItem(null)} />
-            )}
-        </>
+        </ThreeWayGrid>
     );
 }
 
@@ -592,6 +594,9 @@ function BotActivityProfiler({ filters }: BotActivityProfilerProps) {
     // bot_activity_{window} snapshots and /bot-activity takes ?window=.
     // (This page previously fetched the API's 24h default while labeling
     // it "full sample, not time-windowed" — wrong on both counts.)
+    const [activeItem, setActiveItem] = useState<BotEntityItem | null>(null);
+    // Cross-page entity deep link ("#bots?entity=subreddit:politics").
+    const [entityParam, setEntityParam] = useDeepLinkParam('entity');
     const { data, loading, error, refetch } = useFetch<BotData>(
         () => fetchBotActivity(filters.timeRange),
         [filters.timeRange],
@@ -602,6 +607,29 @@ function BotActivityProfiler({ filters }: BotActivityProfilerProps) {
         [],
         'snapshot-status',
     );
+
+    // Resolve entity= once data lands; unknown entities clear the param.
+    useEffect(() => {
+        if (!data || !entityParam) return;
+        const target = parseEntityParam(entityParam);
+        if (target) {
+            const lists = [
+                data.overview.by_news_outlet,
+                data.overview.by_official,
+                data.overview.by_general_public,
+            ];
+            for (const list of lists) {
+                const item = (list ?? []).find(
+                    (it) => it.kind === target.kind && it.key === target.key,
+                );
+                if (item) {
+                    setActiveItem(item);
+                    return;
+                }
+            }
+        }
+        setEntityParam(null);
+    }, [data, entityParam, setEntityParam]);
 
     if (error) {
         return <ErrorState message={error.message} onRetry={refetch} />;
@@ -682,8 +710,18 @@ function BotActivityProfiler({ filters }: BotActivityProfilerProps) {
             </div>
 
             <div className="col-span-12">
-                <BotThreeWayGrid overview={data.overview} />
+                <BotThreeWayGrid overview={data.overview} onOpen={setActiveItem} />
             </div>
+
+            {activeItem && (
+                <BotEntityModal
+                    item={activeItem}
+                    onClose={() => {
+                        setActiveItem(null);
+                        if (entityParam) setEntityParam(null);
+                    }}
+                />
+            )}
 
             {/* Row: coordination summary (5) + narrative amplification section label (7).
                 Coord is a compact 4-stat card; the amplification section headline pairs
