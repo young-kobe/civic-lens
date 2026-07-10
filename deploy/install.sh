@@ -36,13 +36,19 @@ apt-get install -y --no-install-recommends \
 systemctl enable --now docker
 
 echo "[2/9] users + directories"
+# UID/GID 10001 is baked into the GHCR images (APP_UID/APP_GID build args) so
+# container writes to the bind-mounted /var/lib/civic-lens need no chown. 10001
+# sits above the host system-UID range on purpose: 990 (the old value) collides
+# with systemd-resolve on stock Ubuntu. We use low-level groupadd/useradd rather
+# than `adduser --system` because that rejects a UID outside the system range.
+# If this box carries a civic-lens user at a different UID, migrate it:
+#   usermod -u 10001 civic-lens && groupmod -g 10001 civic-lens \
+#     && chown -R civic-lens:civic-lens /var/lib/civic-lens
+if ! getent group civic-lens &>/dev/null; then
+    groupadd -r -g 10001 civic-lens
+fi
 if ! id civic-lens &>/dev/null; then
-    # UID 990 is baked into the GHCR images (APP_UID build arg) so container
-    # writes to the bind-mounted /var/lib/civic-lens need no chown. If this
-    # box predates containers and civic-lens has a different UID, migrate it:
-    #   usermod -u 990 civic-lens && groupmod -g 990 civic-lens \
-    #     && chown -R civic-lens:civic-lens /var/lib/civic-lens
-    adduser --system --group --uid 990 --home "$REPO" --shell /usr/sbin/nologin civic-lens
+    useradd -r -u 10001 -g civic-lens --home-dir "$REPO" --shell /usr/sbin/nologin civic-lens
 fi
 if ! id deployment &>/dev/null; then
     adduser --disabled-password --gecos "" deployment

@@ -3,7 +3,8 @@
 # Build context is the REPO ROOT (the image needs data/), so build with:
 #   docker build -f analysis/Dockerfile .
 FROM python:3.12-slim
-ARG APP_UID=990
+ARG APP_UID=10001
+ARG APP_GID=10001
 WORKDIR /app
 COPY analysis/requirements.txt analysis/requirements.txt
 RUN pip install --no-cache-dir --upgrade pip wheel \
@@ -14,7 +15,8 @@ COPY analysis/ analysis/
 # analysis/ under /app. Runtime data is excluded via .dockerignore.
 COPY data/ data/
 ENV PYTHONPATH=/app
-RUN useradd --uid ${APP_UID} --no-create-home civic-lens
+RUN groupadd --gid ${APP_GID} civic-lens \
+    && useradd --uid ${APP_UID} --gid ${APP_GID} --no-create-home civic-lens
 USER civic-lens
 # No ENTRYPOINT/CMD — each compose service sets its own command
 # (uvicorn for api, job_runner for analyze).

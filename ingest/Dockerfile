@@ -10,8 +10,10 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /out/civic-ingest ./cmd
 FROM alpine:3.20
 # Must match the host `civic-lens` UID so writes to the bind-mounted
 # /var/lib/civic-lens need no chown (check with `id -u civic-lens` on the box).
-ARG APP_UID=990
-RUN adduser -D -u ${APP_UID} civic-lens
+ARG APP_UID=10001
+ARG APP_GID=10001
+RUN addgroup -g ${APP_GID} civic-lens \
+    && adduser -D -u ${APP_UID} -G civic-lens civic-lens
 COPY --from=build /out/civic-ingest /app/civic-ingest
 # Committed config (seeds, officials, account lists) + migrations. Runtime
 # data (db, raw, cache) is excluded via .dockerignore and bind-mounted.
