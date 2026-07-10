@@ -26,14 +26,23 @@ if [[ ! -d "$REPO/.git" ]]; then
 fi
 
 echo "[1/9] system packages"
+# No language toolchains or host caddy — everything that used to be built on
+# the box now ships as GHCR images (see docker-compose.yml). python3 stays
+# for the stdlib-only failure alerter; sqlite3/rclone/age for backup.sh.
 apt-get update
 apt-get install -y --no-install-recommends \
-    git caddy python3.12 python3.12-venv python3-pip golang-go \
-    nodejs npm sqlite3 ufw fail2ban rclone age curl ca-certificates
+    git docker.io docker-compose-v2 python3 \
+    sqlite3 ufw fail2ban rclone age curl ca-certificates
+systemctl enable --now docker
 
 echo "[2/9] users + directories"
 if ! id civic-lens &>/dev/null; then
-    adduser --system --group --home "$REPO" --shell /usr/sbin/nologin civic-lens
+    # UID 990 is baked into the GHCR images (APP_UID build arg) so container
+    # writes to the bind-mounted /var/lib/civic-lens need no chown. If this
+    # box predates containers and civic-lens has a different UID, migrate it:
+    #   usermod -u 990 civic-lens && groupmod -g 990 civic-lens \
+    #     && chown -R civic-lens:civic-lens /var/lib/civic-lens
+    adduser --system --group --uid 990 --home "$REPO" --shell /usr/sbin/nologin civic-lens
 fi
 if ! id deployment &>/dev/null; then
     adduser --disabled-password --gecos "" deployment
@@ -41,11 +50,14 @@ if ! id deployment &>/dev/null; then
 fi
 install -d -m 0750 -o civic-lens -g civic-lens /var/lib/civic-lens /var/lib/civic-lens/data /var/lib/civic-lens/backups
 install -d -m 0700 -o civic-lens -g civic-lens /var/lib/civic-lens/data/cache
-install -d -m 0755 /etc/civic-lens /var/log/caddy
-# civic-ingest resolves migrations relative to the DB's directory; symlink
-# the in-repo migrations dir so `civic-ingest migrate` finds them and
-# `git pull` picks up new SQL files automatically.
-ln -sfn "$REPO/data/migrations" /var/lib/civic-lens/data/migrations
+install -d -m 0755 /etc/civic-lens /etc/caddy /var/log/caddy
+# civic-ingest resolves migrations relative to the DB's directory. The ingest
+# image entrypoint materializes them beside the DB on every run — no symlink.
+# If a symlink from a pre-container install exists, remove it so the
+# entrypoint can create a real directory.
+if [[ -L /var/lib/civic-lens/data/migrations ]]; then
+    rm /var/lib/civic-lens/data/migrations
+fi
 
 echo "[3/9] env file"
 if [[ ! -f /etc/civic-lens.env ]]; then
@@ -62,10 +74,12 @@ install -m 0644 "$REPO/deploy/fail2ban.local" /etc/fail2ban/jail.d/civic-lens.lo
 systemctl restart ssh.socket
 systemctl enable --now fail2ban
 
-echo "[5/9] caddy"
-install -m 0644 "$REPO/deploy/caddy/Caddyfile" /etc/caddy/Caddyfile
+echo "[5/9] caddy TLS material"
+# The Caddyfile is baked into the web image (deploy/docker/Dockerfile.web);
+# only the TLS material lives on the host, bind-mounted read-only into the
+# caddy container.
 echo "  NOTE: /etc/caddy/origin.crt + origin.key + cloudflare-authenticated-origin-pull.pem must exist"
-echo "  before caddy will start. See deploy/README.md Cloudflare APO section."
+echo "  before the caddy container will start. See deploy/README.md Cloudflare APO section."
 
 echo "[6/9] systemd units"
 install -m 0644 "$REPO"/deploy/systemd/*.service /etc/systemd/system/
@@ -94,12 +108,14 @@ echo "[9/9] timer enable"
 systemctl enable civic-lens-crawl.timer \
     civic-lens-x.timer civic-lens-analyze.timer \
     civic-lens-backup.timer civic-lens-firewall-refresh.timer
-# API service stays disabled until /etc/civic-lens.env is filled in.
+# civic-lens-stack.service (compose up at boot) stays disabled until
+# /etc/civic-lens.env is filled in.
 
 echo
 echo "install.sh complete. NEXT STEPS (see deploy/README.md):"
-echo "  1. fill in /etc/civic-lens.env (especially CIVIC_ADMIN_TOKEN + CIVIC_GEMINI_API_KEY)"
+echo "  1. fill in /etc/civic-lens.env (especially CIVIC_ADMIN_TOKEN + CIVIC_GEMINI_API_KEY,"
+echo "     and the LITESTREAM_* R2 replication settings)"
 echo "  2. install Cloudflare origin cert + key + CF origin-pull CA cert in /etc/caddy/"
 echo "  3. add the deployment SSH key to /home/deployment/.ssh/authorized_keys with the forced command"
-echo "  4. bash /opt/civic-lens/deploy/deploy.sh   # first code build + migration"
-echo "  5. systemctl enable --now civic-lens-api caddy"
+echo "  4. bash /opt/civic-lens/deploy/deploy.sh   # pulls images + migrates + starts the stack"
+echo "  5. systemctl enable --now civic-lens-stack.service"
