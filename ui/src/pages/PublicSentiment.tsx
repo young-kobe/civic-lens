@@ -27,6 +27,7 @@ import {
     type Topic, type TopicKey,
 } from '../services/topics';
 import { readHashParam, writeHashParam } from '../services/deepLink';
+import { OutletSignalsPanel } from './publicSentiment/OutletSignalsPanel';
 import { TopicDivergencePanel } from './publicSentiment/TopicDivergencePanel';
 import { TopicTabBar } from './publicSentiment/TopicTabBar';
 import { ToneTrendPanel } from './publicSentiment/ToneTrendPanel';
@@ -1123,9 +1124,11 @@ function PublicSentiment({ filters }: PublicSentimentProps) {
                 <TopicDivergencePanel topics={data.byTopic} />
             </div>
 
-            {/* Tone over time — daily GOP trend + weekday rhythm. */}
+            {/* Tone over time — per-group daily series (GOP series behind
+                the toggle) + weekday rhythm. */}
             <div className="col-span-12">
                 <ToneTrendPanel
+                    toneTrend={data.toneTrend}
                     gopTrend={data.gopTrend}
                     byDayOfWeek={data.byDayOfWeek}
                 />
@@ -1158,6 +1161,12 @@ function PublicSentiment({ filters }: PublicSentimentProps) {
                     onClose={() => setActiveSegment(null)}
                 />
             )}
+
+            {/* Per-domain tone x bot-rate cross-signal table (bots included
+                by design — see the panel's method note). */}
+            <div className="col-span-12">
+                <OutletSignalsPanel window={filters.timeRange} />
+            </div>
 
             {/* Polling-vs-online collapsible (optional). */}
             {data.pollingVsSocial && (

@@ -108,7 +108,17 @@ class SentimentEntityRoutingTests(unittest.TestCase):
             );
             CREATE TABLE x_users_raw (
                 user_id TEXT PRIMARY KEY,
-                username TEXT
+                username TEXT,
+                name TEXT,
+                profile_image_url TEXT,
+                verified_type TEXT,
+                followers_count INTEGER DEFAULT 0,
+                created_at INTEGER
+            );
+            CREATE TABLE reddit_posts_raw (
+                fullname TEXT PRIMARY KEY,
+                score INTEGER,
+                num_comments INTEGER
             );
             CREATE TABLE account_profiles (
                 profile_id INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -50,17 +50,17 @@ Propaganda `ExampleRow` refactor) — tick them there when the relevant box here
 
 ## Phase 2 — aggregator enrichment (each independent)
 
-- [ ] `toneTrend[]` per-tier daily series in `sentiment_{window}` (nulls below
+- [x] `toneTrend[]` per-tier daily series in `sentiment_{window}` (nulls below
       sample floor render as gaps).
-- [ ] Engagement counts on samples (x likes/retweets/replies/quotes; reddit
+- [x] Engagement counts on samples (x likes/retweets/replies/quotes; reddit
       score/num_comments) in sentiment + narrative samples and /entity-posts.
-- [ ] X author enrichment on samples (avatar_url, verified_type, followers_count,
+- [x] X author enrichment on samples (avatar_url, verified_type, followers_count,
       account_created_at); reddit author stays null — never fabricate.
-- [ ] Per-example bot evidence (confidence, sanitized indicators, reasoning) on
+- [x] Per-example bot evidence (confidence, sanitized indicators, reasoning) on
       FlaggedExample.
-- [ ] Outlet profiles wiring: window support in `outlet.py`, `outlet_profiles`
+- [x] Outlet profiles wiring: window support in `outlet.py`, `outlet_profiles`
       snapshot key, `GET /outlet-profiles`, Tone-page tone-by-bot-rate panel.
-- [ ] Backend tests for each new field; fixtures updated; stale-cache tolerance
+- [x] Backend tests for each new field; fixtures updated; stale-cache tolerance
       (all new fields optional).
 
 ## Phase 3 — cross-links + polish

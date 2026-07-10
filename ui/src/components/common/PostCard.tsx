@@ -416,6 +416,8 @@ export function sampleToPostCard(s: ClassificationSample): PostCardData {
         reasoning: s.reasoning || null,
         evidenceSpans: s.evidence_spans ?? [],
         sarcasm: s.sarcasm_detected,
+        engagement: s.engagement ?? null,
+        author: s.author ?? null,
         handle: s.source_type === 'x_post' ? (s.source_name ?? null) : null,
         domain: s.source_type === 'news' ? (s.source_name ?? null) : null,
     };
@@ -435,6 +437,8 @@ export function supportingDocToPostCard(d: SupportingDoc): PostCardData {
         labelKind: 'tone',
         confidence: d.confidence,
         reasoning: d.reasoning,
+        engagement: d.engagement ?? null,
+        author: d.author ?? null,
         ...hints,
     };
 }
@@ -451,6 +455,15 @@ export function flaggedExampleToPostCard(ex: FlaggedExample): PostCardData {
         url: ex.url,
         label: 'Suspected automation',
         labelKind: 'bot',
+        confidence: ex.confidence ?? null,
+        // Transition filter mirroring BotActivityProfiler's isNoiseLabel:
+        // pre-sanitization ai_outputs rows can leak raw signal-field
+        // artifacts ("account_age=None days") until they age out of the
+        // aggregation windows.
+        botIndicators: (ex.indicators ?? []).filter(
+            (i) => i.trim() && !/=\s*(None|null|undefined|0)?\s*$/i.test(i),
+        ),
+        reasoning: ex.reasoning ?? null,
         ...hints,
     };
 }

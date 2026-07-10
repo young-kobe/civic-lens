@@ -7,7 +7,7 @@ Shared database connection and utility functions used by all domain aggregators.
 import contextlib
 import sqlite3
 import time
-from typing import Optional, Set
+from typing import Any, Dict, Optional, Set
 
 from analysis.src.common.logger import get_logger
 
@@ -48,6 +48,84 @@ ACCOUNT_PROFILE_JOIN_SQL = (
     "LEFT JOIN account_profiles ap "
     "ON ap.platform = 'x' AND ap.author_id = x.author_id"
 )
+
+# Reddit engagement join — picks up score / num_comments for reddit POSTS so
+# samples can carry engagement counts (Phase 2b of the UI depth overhaul).
+# LEFT join keyed on source_type so news/X rows pass through with NULLs.
+# reddit_comment docs get no engagement: reddit_comments_raw was dropped in
+# migration 005 (comment ingestion stores no raw rows), so there is nothing
+# stored to surface — absent beats fabricated.
+REDDIT_ENGAGEMENT_JOIN_SQL = (
+    "LEFT JOIN reddit_posts_raw rp "
+    "ON d.source_type = 'reddit_post' AND rp.fullname = d.ident"
+)
+
+# Projection fragment for the per-sample enrichment columns (Phase 2b/2c).
+# Callers append this to their SELECT clause after the joins above; the
+# resulting 11 row fields feed build_sample_engagement / build_sample_author.
+SAMPLE_ENRICHMENT_SELECT = (
+    "x.retweet_count, x.reply_count, x.like_count, x.quote_count, "
+    "u.name, u.profile_image_url, u.verified_type, u.followers_count, "
+    "u.created_at, "
+    "rp.score, rp.num_comments"
+)
+
+
+def build_sample_engagement(
+    source_type: Optional[str],
+    retweets: Any, replies: Any, likes: Any, quotes: Any,
+    reddit_score: Any, reddit_comments: Any,
+) -> Optional[Dict[str, int]]:
+    """Engagement counts for one sampled doc, or None when the source has
+    none stored (news, or an X/Reddit row whose raw record is missing).
+
+    Counts are as-at-collection-time — a reach proxy, not verified reach;
+    the UI labels them accordingly. News docs always return None: we do
+    not fabricate an engagement shape for sources that have no counts.
+    """
+    if source_type == "x_post":
+        counts = (retweets, replies, likes, quotes)
+        if all(c is None for c in counts):
+            return None
+        return {
+            "retweets": int(retweets or 0),
+            "replies": int(replies or 0),
+            "likes": int(likes or 0),
+            "quotes": int(quotes or 0),
+        }
+    if source_type == "reddit_post":
+        if reddit_score is None and reddit_comments is None:
+            return None
+        out: Dict[str, int] = {"score": int(reddit_score or 0)}
+        if reddit_comments is not None:
+            out["num_comments"] = int(reddit_comments)
+        return out
+    # reddit_comment: no raw engagement stored (migration 005) — None.
+    return None
+
+
+def build_sample_author(
+    source_type: Optional[str],
+    handle: Optional[str],
+    display_name: Optional[str],
+    avatar_url: Optional[str],
+    verified_type: Optional[str],
+    followers_count: Any,
+    created_at: Any,
+) -> Optional[Dict[str, Any]]:
+    """Author enrichment for an X sample, from x_users_raw. None for
+    non-X docs (Reddit stores no author at ingest — never fabricate one)
+    and for X rows whose author record is missing."""
+    if source_type != "x_post" or not handle:
+        return None
+    return {
+        "handle": handle,
+        "display_name": display_name,
+        "avatar_url": avatar_url,
+        "verified_type": verified_type,
+        "followers_count": int(followers_count) if followers_count is not None else None,
+        "account_created_at": int(created_at) if created_at is not None else None,
+    }
 
 @contextlib.contextmanager
 def get_connection(db_path: str):

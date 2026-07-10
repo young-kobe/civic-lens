@@ -15,18 +15,23 @@ from typing import Any, Dict, List, Optional
 
 @dataclass
 class OutletProfile:
-    """Profile metrics for a news outlet or subreddit."""
-    outlet: str
-    avg_sentiment: float
-    bot_rate: float
-    volume: int
-    total_scanned: int
+    """Cross-signal profile for one domain/subreddit: net tone (same
+    -100..+100 points scale as every other tone surface) next to the
+    share of its scanned posts flagged bot-or-suspicious. Includes
+    bot-flagged content by design — see outlet.py's module docstring."""
+    outlet: str                 # domain or subreddit as stored on docs
+    source_type: str            # news | reddit_post | reddit_comment | x_post
+    net_tone: Optional[float]   # points; None never emitted today (volume floor)
+    bot_rate_pct: float         # 0-100 share of scanned posts flagged
+    volume: int                 # sentiment-scored posts
+    total_scanned: int          # bot-detection-scored posts
 
     def to_dict(self) -> Dict[str, Any]:
         return {
             "outlet": self.outlet,
-            "avg_sentiment": self.avg_sentiment,
-            "bot_rate": self.bot_rate,
+            "source_type": self.source_type,
+            "net_tone": self.net_tone,
+            "bot_rate_pct": self.bot_rate_pct,
             "volume": self.volume,
             "total_scanned": self.total_scanned,
         }
@@ -83,6 +88,14 @@ class ClassificationSample:
     # Doc topic attribution (LLM mention topic, keyword fallback) — lets the
     # UI filter samples exactly instead of client-side keyword re-guessing.
     topic: Optional[str] = None
+    # Phase 2b/2c enrichment. ``engagement`` = counts at collection time
+    # (X: retweets/replies/likes/quotes; Reddit: score/num_comments) — a
+    # reach proxy, not verified reach; None when the source stores none.
+    # ``author`` = X author metadata from x_users_raw (handle, display_name,
+    # avatar_url, verified_type, followers_count, account_created_at); None
+    # for non-X docs — Reddit stores no author at ingest, never fabricated.
+    engagement: Optional[Dict[str, int]] = None
+    author: Optional[Dict[str, Any]] = None
 
 
 @dataclass
@@ -195,6 +208,8 @@ def _classification_sample_to_dict(s: "ClassificationSample") -> Dict[str, Any]:
         "full_text": s.full_text,
         "url": s.url,
         "topic": s.topic,
+        "engagement": s.engagement,
+        "author": s.author,
     }
 
 
@@ -255,6 +270,15 @@ class PublicSentimentResult:
     # UI can open a bucket and audit the actual classifications.
     distributionSamples: Dict[str, List[ClassificationSample]] = field(default_factory=dict)
     socialVsNews: Optional[Dict[str, Any]] = None  # Social vs News comparison
+    # Per-day, per-tier tone series (Phase 2a of the UI depth overhaul):
+    #   [{date: 'YYYY-MM-DD',
+    #     news:      {net: float|None, volume: int},
+    #     officials: {net: float|None, volume: int},
+    #     public:    {net: float|None, volume: int}}]
+    # Dates ascend; net is None (suppressed) when a tier's day has fewer
+    # than the sample floor — the UI renders a gap, never a zero. None on
+    # older cached snapshots.
+    toneTrend: Optional[List[Dict[str, Any]]] = None
     # Merged GOP favorability data
     gopFavorability: Optional[Dict[str, Any]] = None  # Stance breakdown (favorable/unfavorable/neutral %)
     gopTrend: Optional[List[Dict[str, Any]]] = None  # Daily net favorability trend
@@ -327,6 +351,8 @@ class PublicSentimentResult:
         }
         if self.socialVsNews:
             result["socialVsNews"] = self.socialVsNews
+        if self.toneTrend is not None:
+            result["toneTrend"] = self.toneTrend
         if self.gopFavorability:
             result["gopFavorability"] = self.gopFavorability
         if self.gopTrend is not None:
@@ -515,11 +541,20 @@ class BotOverview:
 class FlaggedExample:
     """One bot-flagged post displayed as evidence on the Bot Detector.
     Every instance must carry a URL back to the original when one can be
-    synthesized — invariant C1 (source links on evidence)."""
+    synthesized — invariant C1 (source links on evidence).
+
+    ``confidence`` / ``indicators`` / ``reasoning`` (Phase 2d) surface the
+    per-doc WHY from the bot detector's ai_outputs row: model confidence in
+    the flag, the humanized behavioral indicators that triggered it, and
+    the model's reasoning. Optional so pre-2d cached snapshots keep shape.
+    """
     doc_id: int
     text: str
     source_label: str          # "News · foo.com" / "X · @handle" / "Reddit · r/politics"
     url: Optional[str]         # null when ingest metadata wasn't enough to synthesize
+    confidence: Optional[float] = None
+    indicators: List[str] = field(default_factory=list)
+    reasoning: Optional[str] = None
 
 
 @dataclass

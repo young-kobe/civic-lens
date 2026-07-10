@@ -1,5 +1,5 @@
 import {
-    PublicSentimentData, BotData, NarrativeSummary,
+    PublicSentimentData, BotData, NarrativeSummary, OutletProfilesResult,
     PropagandaOverview, MoversResult, ClassificationSample, EntitySentimentItem,
     EvalAccuracy, ReviewQueueItem, ReviewSubmission, ReviewStats, ReviewTaskType,
 } from '../types';
@@ -159,6 +159,18 @@ export async function fetchPropaganda(
         return mockPropaganda();
     }
     return fetchJSON<PropagandaOverview>(`/propaganda?window=${window}`);
+}
+
+/** Per-domain cross-signal profiles (net tone x bot rate). Includes
+ *  bot-flagged content on purpose — the payload carries the disclaimer. */
+export async function fetchOutletProfiles(
+    window: TimeWindow = '7d',
+): Promise<OutletProfilesResult> {
+    if (USE_MOCKS) {
+        const { mockOutletProfiles } = await import('./fixtures');
+        return mockOutletProfiles();
+    }
+    return fetchJSON<OutletProfilesResult>(`/outlet-profiles?window=${window}`);
 }
 
 export async function fetchMovers(window: TimeWindow = '7d'): Promise<MoversResult> {

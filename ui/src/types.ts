@@ -59,6 +59,10 @@ export interface PublicSentimentData {
         lastUpdated: string;
     } | null;
     gopTrend?: TrendPoint[] | null;
+    /** Per-day per-tier tone series (Phase 2a). Dates ascend; a tier's
+     *  net is null (suppressed) on low-sample days — render a gap, never
+     *  a zero. Absent on pre-2a cached snapshots. */
+    toneTrend?: ToneTrendPoint[] | null;
     gopByPlatform?: DemographicBreakdown[] | null;
     pollingVsSocial?: PollingSocialComparison | null;
     // Target-tone metadata from the target_sentiment fan-out: suppression
@@ -214,6 +218,29 @@ export interface SentimentOverview {
     confidence: ConfidenceLevel;
 }
 
+/** Engagement counts at collection time — a reach proxy, not verified
+ *  reach. X posts carry retweets/replies/likes/quotes; reddit carries
+ *  score (+ num_comments for posts). Null/absent = source stores none. */
+export interface SampleEngagement {
+    retweets?: number;
+    replies?: number;
+    likes?: number;
+    quotes?: number;
+    score?: number;
+    num_comments?: number;
+}
+
+/** X author metadata from the ingest store. Null/absent for non-X docs —
+ *  Reddit stores no author at ingest, and we never fabricate one. */
+export interface SampleAuthor {
+    handle: string | null;
+    display_name: string | null;
+    avatar_url: string | null;
+    verified_type: string | null;
+    followers_count: number | null;
+    account_created_at: number | null;
+}
+
 export interface ClassificationSample {
     doc_id: number;
     label: string;
@@ -231,6 +258,9 @@ export interface ClassificationSample {
      *  with title-keyword fallback). Missing on pre-topic cached
      *  snapshots; the modal filter treats those as non-matching. */
     topic?: string | null;
+    // Phase 2b/2c enrichment. Absent on pre-enrichment cached snapshots.
+    engagement?: SampleEngagement | null;
+    author?: SampleAuthor | null;
 }
 
 export interface SentimentBreakdown {
@@ -279,6 +309,37 @@ export interface FavorabilityOverall {
 export interface TrendPoint extends ChartDataPoint {
     date: string;
     value: number;
+}
+
+/** One tier cell of the toneTrend daily series. */
+export interface ToneTrendCell {
+    net: number | null;
+    volume: number;
+}
+
+export interface ToneTrendPoint {
+    date: string;
+    news: ToneTrendCell;
+    officials: ToneTrendCell;
+    public: ToneTrendCell;
+}
+
+/** One row of GET /outlet-profiles — per-domain net tone x bot rate.
+ *  Includes bot-flagged content on purpose (the bot rate is the signal);
+ *  net tone therefore differs from the bot-excluded Overall Tone rollups. */
+export interface OutletProfileItem {
+    outlet: string;
+    source_type: string;
+    net_tone: number | null;
+    bot_rate_pct: number;
+    volume: number;
+    total_scanned: number;
+}
+
+export interface OutletProfilesResult {
+    window: string;
+    disclaimer: string;
+    outlets: OutletProfileItem[];
 }
 
 export interface TrendAnnotation {
@@ -382,6 +443,12 @@ export interface FlaggedExample {
     text: string;
     source_label: string;   // "News · foo.com", "X · @handle", "Reddit · r/politics"
     url: string | null;
+    // Per-example bot evidence (Phase 2d): flag confidence (0..1), the
+    // humanized behavioral indicators that triggered it, and the model's
+    // reasoning. Absent on pre-2d cached snapshots.
+    confidence?: number | null;
+    indicators?: string[];
+    reasoning?: string | null;
 }
 
 export interface NarrativeAmplification {
@@ -467,6 +534,9 @@ export interface SupportingDoc {
     sentiment_label: 'positive' | 'negative' | 'neutral' | 'mixed' | null;
     confidence: number | null;
     reasoning: string | null;
+    // Phase 2b/2c enrichment. Absent on pre-enrichment cached snapshots.
+    engagement?: SampleEngagement | null;
+    author?: SampleAuthor | null;
 }
 
 

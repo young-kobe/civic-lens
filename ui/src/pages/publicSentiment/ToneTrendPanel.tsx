@@ -1,29 +1,38 @@
-import { useId } from 'react';
+import { useId, useState } from 'react';
 import {
-    Area, AreaChart, Bar, BarChart, Cell, ReferenceLine, ResponsiveContainer,
-    Tooltip, XAxis, YAxis,
+    Area, AreaChart, Bar, BarChart, Cell, Legend, Line, LineChart,
+    ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
 import type { TooltipProps } from 'recharts';
 import { Card, MethodPopover } from '../../components/common';
 import { formatPts } from '../../services/format';
 import { COLORS } from '../../theme';
-import type { SentimentBreakdown, TrendPoint } from '../../types';
+import type { SentimentBreakdown, ToneTrendPoint, TrendPoint } from '../../types';
 
 // --------------------------------------------------------------------------- //
 //  ToneTrendPanel — the Tone page's time dimension.                           //
 //                                                                             //
-//  Renders the daily GOP net-favorability series (gopTrend) as a page-scale   //
-//  area chart with a zero reference line, plus a weekday-rhythm bar strip     //
-//  from byDayOfWeek. Both series were computed by the aggregator all along    //
-//  and sat unrendered in the snapshot; this panel is UI-only. When the        //
-//  backend ships per-tier daily tone (toneTrend), it lands here as the        //
-//  primary series and gopTrend becomes a toggle.                              //
+//  Primary series (when the snapshot carries it): the per-day per-tier       //
+//  toneTrend — news vs officials vs public net tone, day by day, with        //
+//  low-sample days rendered as gaps. The daily GOP net-favorability series   //
+//  is the second view behind a toggle. A weekday-rhythm bar strip from       //
+//  byDayOfWeek sits below. On pre-toneTrend cached snapshots the GOP series  //
+//  renders alone, exactly as it did before Phase 2a.                         //
 // --------------------------------------------------------------------------- //
 
 interface ToneTrendPanelProps {
+    toneTrend: ToneTrendPoint[] | null | undefined;
     gopTrend: TrendPoint[] | null | undefined;
     byDayOfWeek: SentimentBreakdown[] | undefined;
 }
+
+// Same tier colors as the divergence panel's dots so the two visuals read
+// as one system (news = neutral gray, officials = ink blue, public = ochre).
+const TIER_SERIES = [
+    { key: 'news', label: 'News', color: COLORS.neutral },
+    { key: 'officials', label: 'Officials', color: COLORS.accent },
+    { key: 'public', label: 'Public', color: COLORS.warning },
+] as const;
 
 function trendTooltip({ payload, label }: TooltipProps<number, string>) {
     if (!payload || payload.length === 0) return null;
@@ -42,6 +51,108 @@ function shortDate(iso: string): string {
     if (!m) return iso;
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     return `${months[Number(m[1]) - 1]} ${Number(m[2])}`;
+}
+
+// Flat row shape recharts can key directly: {date, news: net|null, ...}
+// plus volumes for the tooltip.
+interface TierTrendRow {
+    date: string;
+    news: number | null;
+    officials: number | null;
+    public: number | null;
+    volumes: Record<string, number>;
+}
+
+function toTierRows(trend: ToneTrendPoint[]): TierTrendRow[] {
+    return trend.map((p) => ({
+        date: p.date,
+        news: p.news.net,
+        officials: p.officials.net,
+        public: p.public.net,
+        volumes: {
+            news: p.news.volume,
+            officials: p.officials.volume,
+            public: p.public.volume,
+        },
+    }));
+}
+
+function tierTooltip({ payload, label }: TooltipProps<number, string>) {
+    if (!payload || payload.length === 0) return null;
+    const row = payload[0].payload as TierTrendRow;
+    return (
+        <div className="chart-tooltip">
+            <div className="chart-tooltip-label">{String(label ?? '')}</div>
+            {TIER_SERIES.map((tier) => {
+                const net = row[tier.key];
+                const volume = row.volumes[tier.key];
+                return (
+                    <div key={tier.key} className="chart-tooltip-value" style={{ color: tier.color }}>
+                        {tier.label}: {net != null
+                            ? `${formatPts(net)} · ${volume} posts`
+                            : `low sample (${volume} post${volume === 1 ? '' : 's'})`}
+                    </div>
+                );
+            })}
+        </div>
+    );
+}
+
+function TierTrendChart({ trend }: { trend: ToneTrendPoint[] }) {
+    const rows = toTierRows(trend);
+    return (
+        <div
+            role="img"
+            aria-label={`Daily net tone by group (news, officials, public), ${rows.length} days`}
+        >
+            <ResponsiveContainer width="100%" height={220}>
+                <LineChart data={rows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                    <XAxis
+                        dataKey="date"
+                        tickFormatter={shortDate}
+                        tick={{ fontSize: 10, fill: 'var(--neutral-500)', fontFamily: 'var(--font-mono)' }}
+                        axisLine={{ stroke: 'var(--chart-grid)' }}
+                        tickLine={false}
+                        minTickGap={24}
+                    />
+                    <YAxis
+                        domain={[-100, 100]}
+                        ticks={[-100, -50, 0, 50, 100]}
+                        tick={{ fontSize: 10, fill: 'var(--neutral-500)', fontFamily: 'var(--font-mono)' }}
+                        axisLine={false}
+                        tickLine={false}
+                        width={36}
+                    />
+                    <ReferenceLine y={0} stroke="var(--neutral-300)" strokeDasharray="3 3" />
+                    {TIER_SERIES.map((tier) => (
+                        <Line
+                            key={tier.key}
+                            type="monotone"
+                            dataKey={tier.key}
+                            name={tier.label}
+                            stroke={tier.color}
+                            strokeWidth={2}
+                            dot={false}
+                            activeDot={{ r: 4, fill: tier.color, strokeWidth: 0 }}
+                            // Low-sample days arrive as null — draw a gap, not a
+                            // bridge, so suppressed readings never fake a line.
+                            connectNulls={false}
+                            isAnimationActive={false}
+                        />
+                    ))}
+                    <Legend
+                        wrapperStyle={{ fontSize: 11 }}
+                        iconType="plainline"
+                        iconSize={14}
+                    />
+                    <Tooltip
+                        content={tierTooltip}
+                        cursor={{ stroke: 'var(--neutral-300)', strokeDasharray: '2 2' }}
+                    />
+                </LineChart>
+            </ResponsiveContainer>
+        </div>
+    );
 }
 
 function DailyTrendChart({ trend }: { trend: TrendPoint[] }) {
@@ -171,33 +282,69 @@ function WeekdayStrip({ rows }: { rows: WeekdayRow[] }) {
 //  Panel                                                                      //
 // --------------------------------------------------------------------------- //
 
-export function ToneTrendPanel({ gopTrend, byDayOfWeek }: ToneTrendPanelProps) {
-    const trend = (gopTrend ?? []).filter((p) => Number.isFinite(p.value));
+export function ToneTrendPanel({ toneTrend, gopTrend, byDayOfWeek }: ToneTrendPanelProps) {
+    const tierTrend = (toneTrend ?? []).filter((p) => !!p.date);
+    const gop = (gopTrend ?? []).filter((p) => Number.isFinite(p.value));
     const weekdays = weekdayRows(byDayOfWeek ?? []);
-    if (trend.length < 2 && weekdays.length === 0) return null;
+    const hasTiers = tierTrend.length >= 2;
+    const hasGop = gop.length >= 2;
+    const [view, setView] = useState<'tiers' | 'gop'>('tiers');
+    if (!hasTiers && !hasGop && weekdays.length === 0) return null;
+
+    // Pre-2a cached snapshots carry no toneTrend — the GOP series renders
+    // alone with no toggle, exactly the Phase 1 behavior.
+    const activeView = hasTiers ? (view === 'gop' && hasGop ? 'gop' : 'tiers') : 'gop';
 
     return (
         <Card
             title="Tone over time"
-            subtitle="Daily net tone of sampled posts toward the GOP, with the weekday rhythm of the whole sample."
+            subtitle={activeView === 'tiers'
+                ? 'Daily net tone of sampled posts, split by who is talking: news outlets, officials, the public. Gaps are low-sample days we refuse to score.'
+                : 'Daily net tone of sampled posts toward the GOP.'}
             headerActions={
-                <MethodPopover
-                    description={
-                        'The line tracks the net stance of sampled posts toward Republican-party '
-                        + 'entities, day by day, on a -100 to +100 scale — 0 means positive and '
-                        + 'negative mentions balance out. The weekday bars show net tone of ALL '
-                        + 'sampled posts by day of week. Both summarize the posts we collected — '
-                        + 'samples, not polls.'
-                    }
-                    limitations={[
-                        'Days with few posts swing harder — the line is not volume-weighted.',
-                        'Per-group daily tone (news vs officials vs public) is not computed yet; this is the one daily series the pipeline produces today.',
-                    ]}
-                />
+                <>
+                    {hasTiers && hasGop && (
+                        <div className="trend-view-toggle" role="tablist" aria-label="Trend series">
+                            <button
+                                type="button"
+                                role="tab"
+                                aria-selected={activeView === 'tiers'}
+                                className={activeView === 'tiers' ? 'trend-view-btn trend-view-btn-active' : 'trend-view-btn'}
+                                onClick={() => setView('tiers')}
+                            >
+                                By group
+                            </button>
+                            <button
+                                type="button"
+                                role="tab"
+                                aria-selected={activeView === 'gop'}
+                                className={activeView === 'gop' ? 'trend-view-btn trend-view-btn-active' : 'trend-view-btn'}
+                                onClick={() => setView('gop')}
+                            >
+                                Toward GOP
+                            </button>
+                        </div>
+                    )}
+                    <MethodPopover
+                        description={
+                            '"By group" tracks the net tone of each group\'s own sampled posts per '
+                            + 'day on a -100 to +100 scale; a day with too few posts from a group is '
+                            + 'suppressed and drawn as a gap, never a zero. "Toward GOP" tracks the '
+                            + 'net stance of sampled posts toward Republican-party entities. The '
+                            + 'weekday bars show net tone of ALL sampled posts by day of week. All '
+                            + 'summarize the posts we collected — samples, not polls.'
+                        }
+                        limitations={[
+                            'Days with few posts swing harder — the lines are not volume-weighted.',
+                        ]}
+                    />
+                </>
             }
         >
-            {trend.length >= 2 ? (
-                <DailyTrendChart trend={trend} />
+            {activeView === 'tiers' && hasTiers ? (
+                <TierTrendChart trend={tierTrend} />
+            ) : hasGop ? (
+                <DailyTrendChart trend={gop} />
             ) : (
                 <p className="text-sm text-muted">
                     Not enough daily readings in this window to draw a trend yet.
