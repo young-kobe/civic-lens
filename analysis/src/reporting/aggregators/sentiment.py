@@ -36,7 +36,7 @@ from analysis.src.reporting.aggregators.constants import (
 )
 from analysis.src.reporting.entity_registry import (
     CATCH_ALL_OUTLETS, CATCH_ALL_SUBREDDITS, CATCH_ALL_X_USERS,
-    DEM_COLLECTIVE, GOP_COLLECTIVE, TargetResolver,
+    DEM_COLLECTIVE, GOP_COLLECTIVE,
     account_profile_dict, canonicalize_handle, catch_all_profile,
     get_registry, resolve_entity,
 )
@@ -151,26 +151,41 @@ class SentimentAggregator:
                 cutoff=cutoff,
                 min_confidence=min_conf,
             )
-            # Target-sentiment rows fan out to one record per (doc, target)
-            # in Python. Row-level confidence is a mean across targets, so
-            # the confidence floor is applied per-target during the fan-out
-            # instead of via min_confidence here. The engagement sum is a
+            # Target mentions: one row per (doc, target) with entity
+            # identity resolved at WRITE time (migration 025) — no free-text
+            # re-resolution per snapshot. Joined through ai_outputs_latest so
+            # a reprocessed doc's superseded mentions drop out; a.output_json
+            # rides along only for the doc-level reasoning shown in samples.
+            # The per-target confidence floor is SQL-side (row-level mean
+            # confidence is deliberately ignored). The engagement sum is a
             # reach proxy for the weighted received-tone variant; NULL
             # counts (non-X docs) coalesce to 0 → weight 1.
-            target_rows = fetch_task_rows(
-                cursor,
-                "SELECT a.doc_id, a.output_json, a.confidence, d.source_type, d.published_at, d.title, d.domain_or_subreddit, d.ident, d.text, u.username, x.is_official_tier, "
-                "x.author_id, ap.tier, "
-                "COALESCE(x.retweet_count, 0) + COALESCE(x.reply_count, 0) + COALESCE(x.like_count, 0) + COALESCE(x.quote_count, 0)",
-                task_type="target_sentiment",
-                cutoff=cutoff,
-                min_confidence=None,
-                extra_joins=f"{X_AUTHOR_JOIN_SQL} {ACCOUNT_PROFILE_JOIN_SQL}",
-            )
+            target_sql = f"""
+                SELECT m.doc_id, m.entity_key, m.entity_kind, m.entity_party,
+                       m.stance, m.topic, m.confidence, m.evidence_json,
+                       a.output_json,
+                       d.source_type, d.published_at, d.title,
+                       d.domain_or_subreddit, d.ident, d.text,
+                       u.username, x.is_official_tier, x.author_id, ap.tier,
+                       COALESCE(x.retweet_count, 0) + COALESCE(x.reply_count, 0)
+                       + COALESCE(x.like_count, 0) + COALESCE(x.quote_count, 0)
+                FROM target_mentions m
+                JOIN ai_outputs_latest a ON a.output_id = m.output_id
+                JOIN docs d ON d.doc_id = m.doc_id
+                {X_AUTHOR_JOIN_SQL} {ACCOUNT_PROFILE_JOIN_SQL}
+                WHERE m.confidence >= ?
+            """
+            target_params: List[Any] = [min_conf]
+            if cutoff is not None:
+                target_sql += " AND d.published_at >= ?"
+                target_params.append(cutoff)
+            cursor.execute(target_sql, target_params)
+            target_rows = cursor.fetchall()
             bot_score_authors = get_high_bot_score_author_ids(
                 cursor, min_score=BOT_SCORE_AUTHOR_EXCLUSION,
             )
             narrative_map = _fetch_narrative_doc_map(cursor, cutoff)
+            doc_topics = _fetch_doc_topics(cursor, min_conf)
 
         # ``allowed_sources=None`` means no filter — the only path now that
         # the UI's "Filter by sources" pills have been removed. Internal
@@ -178,27 +193,32 @@ class SentimentAggregator:
         # in ``_aggregate_rows`` / ``_merge_favorability_data`` short-
         # circuits cleanly without rewriting those hot loops.
         allowed_sources = None
-        result = self._process_sentiment_data(sentiment_rows, bot_docs, allowed_sources)
+        result = self._process_sentiment_data(
+            sentiment_rows, bot_docs, allowed_sources, doc_topics,
+        )
         _merge_favorability_data(result, favorability_rows, bot_docs, allowed_sources, self.cache)
         _merge_target_tone(
-            result, target_rows, bot_docs, min_conf,
+            result, target_rows, bot_docs,
             bot_score_authors=bot_score_authors, narrative_map=narrative_map,
         )
         return result
 
     def _process_sentiment_data(
         self, rows: List[tuple], bot_docs: Set[int], allowed_sources: Optional[frozenset],
+        doc_topics: Optional[Dict[int, str]] = None,
     ) -> PublicSentimentResult:
-        accum = self._aggregate_rows(rows, bot_docs, allowed_sources)
+        accum = self._aggregate_rows(rows, bot_docs, allowed_sources, doc_topics)
         return self._build_result(accum)
 
     def _aggregate_rows(
         self, rows: List[tuple], bot_docs: Set[int], allowed_sources: Optional[frozenset],
+        doc_topics: Optional[Dict[int, str]] = None,
     ) -> Dict[str, Any]:
         """Walk each row once, fanning counts + samples into every
         accumulator the result consumer needs. Keep inline work tight —
         branchy logic lives in module-level helpers below."""
         registry = get_registry()
+        doc_topics = doc_topics or {}
         accum: Dict[str, Any] = {
             "strong_pos": 0, "mild_pos": 0, "strong_neg": 0, "mild_neg": 0,
             "neutral": 0, "mixed": 0, "count": 0, "excluded_bots": 0,
@@ -242,7 +262,11 @@ class SentimentAggregator:
                 accum["news"][label_key] += 1
 
             _increment_bucket(accum["by_platform"], category, label_key)
-            topic = _extract_topic(title)
+            # LLM-extracted topic (dominant target_mentions topic for this
+            # doc) wins; title-keyword heuristic is the fallback for docs
+            # with no resolved mention topic; "General" is the honest
+            # no-signal bucket.
+            topic = doc_topics.get(doc_id) or _extract_topic(title)
             _increment_bucket(accum["by_topic"], topic, label_key)
             _increment_bucket(accum["by_time"], _time_bucket(published_at, now), label_key)
             dow = _day_of_week(published_at)
@@ -257,7 +281,7 @@ class SentimentAggregator:
             _collect_strength_sample(
                 accum["strength_samples"], strength_key, doc_id, label, conf,
                 data, title, source_type, published_at, domain_or_subreddit, ident, text,
-                x_handle,
+                x_handle, topic=topic,
             )
 
             account = None
@@ -272,6 +296,7 @@ class SentimentAggregator:
                 doc_id, label, conf, data, title, published_at, ident, text,
                 is_official_tier=bool(is_official_tier),
                 account=account,
+                topic=topic,
             )
             if tier is not None:
                 _increment_bucket(accum["by_topic_tier"], f"{topic}\x00{tier}", label_key)
@@ -404,10 +429,15 @@ def _build_sample_dict(
     ident: Optional[str],
     text: Optional[str],
     x_handle: Optional[str] = None,
+    topic: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Build the dict representation of a classification sample used by
     every collector. Centralizing this avoids the 3-place duplication
-    that pre-split sentiment.py was carrying."""
+    that pre-split sentiment.py was carrying.
+
+    ``topic`` is the doc's topic attribution (LLM mention topic with
+    keyword fallback — see _fetch_doc_topics) so the UI can filter samples
+    exactly instead of re-guessing with client-side keyword lists."""
     date_str = (
         datetime.fromtimestamp(published_at).strftime("%b %d, %Y")
         if published_at else None
@@ -445,6 +475,7 @@ def _build_sample_dict(
         "date": date_str,
         "full_text": text or "",
         "url": url,
+        "topic": topic,
     }
 
 
@@ -464,6 +495,7 @@ def _sample_dict_to_model(s: Dict[str, Any]) -> ClassificationSample:
         date=s.get("date"),
         full_text=s.get("full_text", ""),
         url=s.get("url"),
+        topic=s.get("topic"),
     )
 
 
@@ -497,6 +529,7 @@ def _collect_topic_sample(
     sample = _build_sample_dict(
         doc_id, label, confidence, data, title, source_type,
         published_at, domain_or_subreddit, ident, text, x_handle,
+        topic=topic,
     )
     _insert_capped(samples, sample, MAX_SAMPLES_PER_TOPIC)
 
@@ -509,6 +542,7 @@ def _collect_strength_sample(
     title: Optional[str], source_type: Optional[str], published_at: Optional[float],
     domain_or_subreddit: Optional[str], ident: Optional[str], text: Optional[str],
     x_handle: Optional[str] = None,
+    topic: Optional[str] = None,
 ) -> None:
     """Append a sample to one of the five STRENGTH_BUCKETS. Silently
     drops rows for unknown buckets so callers can pass the key through
@@ -519,6 +553,7 @@ def _collect_strength_sample(
     sample = _build_sample_dict(
         doc_id, label, confidence, data, title, source_type,
         published_at, domain_or_subreddit, ident, text, x_handle,
+        topic=topic,
     )
     _insert_capped(samples, sample, MAX_DISTRIBUTION_SAMPLES_PER_BUCKET)
 
@@ -530,16 +565,20 @@ def _collect_entity_sample(
     title: Optional[str], source_type: Optional[str], published_at: Optional[float],
     domain_or_subreddit: Optional[str], ident: Optional[str], text: Optional[str],
     x_handle: Optional[str] = None,
+    topic: Optional[str] = None,
 ) -> None:
     """Bump an entity bucket's counters + append a sample when there's room."""
     label_key = _LABEL_MAP.get(label, "neutral")
     entity_accum[label_key] += 1
     entity_accum["volume"] += 1
+    if topic is not None:
+        _increment_bucket(entity_accum["by_topic"], topic, label_key)
     if not data.get("reasoning"):
         return
     sample = _build_sample_dict(
         doc_id, label, confidence, data, title, source_type,
         published_at, domain_or_subreddit, ident, text, x_handle,
+        topic=topic,
     )
     _insert_capped(entity_accum["samples"], sample, MAX_SAMPLES_PER_ENTITY)
 
@@ -564,6 +603,7 @@ def _route_and_record(
     text: Optional[str],
     is_official_tier: bool = False,
     account: Optional[Dict[str, Any]] = None,
+    topic: Optional[str] = None,
 ) -> Optional[str]:
     """Resolve the row's tier + entity via the shared entity_routing
     module, then bucket the row into the right per-entity accumulator
@@ -667,6 +707,7 @@ def _route_and_record(
     _collect_entity_sample(
         bucket_dict[key], doc_id, label, conf, data,
         title, source_type, published_at, domain_or_subreddit, ident, text, x_handle,
+        topic=topic,
     )
     return tier
 
@@ -684,6 +725,9 @@ def _init_entity_bucket(
         "kind": kind, "profile": profile,
         "positive": 0, "negative": 0, "neutral": 0, "volume": 0,
         "samples": [],
+        # Per-topic stance counts for the entity's own posts — powers the
+        # topic-scoped expressed score in the profile modal.
+        "by_topic": {},
     }
 
 
@@ -859,6 +903,21 @@ def _format_entity_items(bucket: Dict[str, Dict[str, Any]]) -> List[EntitySentim
         if volume == 0:
             continue
         net = (stats["positive"] - stats["negative"]) / volume * 100
+        # Topic-scoped expressed cells. Same suppression floor as received
+        # tone: a 1-post topic slice reports its volume, never a +/-100
+        # headline (net=None + lowSample instead).
+        by_topic = sorted(
+            (
+                {
+                    "topic": t,
+                    "net": _net_or_none(counts),
+                    "volume": sum(counts.values()),
+                    "lowSample": sum(counts.values()) < MIN_TARGET_SAMPLE_N,
+                }
+                for t, counts in stats["by_topic"].items()
+            ),
+            key=lambda cell: -cell["volume"],
+        )
         items.append(EntitySentimentItem(
             key=key,
             kind=stats["kind"],
@@ -869,6 +928,7 @@ def _format_entity_items(bucket: Dict[str, Dict[str, Any]]) -> List[EntitySentim
             netScore=round(net, 1),
             entity_profile=stats["profile"],
             classification_samples=[_sample_dict_to_model(s) for s in stats["samples"]],
+            expressed_by_topic=by_topic,
         ))
     items.sort(key=lambda it: (it.kind == "catch_all", -it.volume))
     return items
@@ -1102,6 +1162,40 @@ def _fetch_narrative_doc_map(cursor, cutoff: Optional[int]) -> Dict[int, List[Tu
     return out
 
 
+def _fetch_doc_topics(cursor, min_conf: float) -> Dict[int, str]:
+    """doc_id → dominant LLM-extracted topic from target_mentions.
+
+    The schema-enforced per-target topic (TARGET_TOPIC_ENUM) is the real
+    topic signal; the title-keyword heuristic (_extract_topic) is only the
+    fallback for docs with no resolved mention topic. Joined through
+    ai_outputs_latest so superseded outputs' mentions don't vote. 'Other'
+    is excluded — an all-'Other' doc falls through to the keyword fallback
+    rather than surfacing a bucket that overlaps with "General". Ties break
+    by higher mention count, then alphabetically (stable across runs).
+    Empty when the table hasn't been created (fresh/test DBs)."""
+    cursor.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='target_mentions'"
+    )
+    if not cursor.fetchone():
+        return {}
+    cursor.execute(
+        """
+        SELECT m.doc_id, m.topic, COUNT(*) AS n
+        FROM target_mentions m
+        JOIN ai_outputs_latest a ON a.output_id = m.output_id
+        WHERE m.topic IS NOT NULL AND m.topic != 'Other'
+          AND m.confidence >= ?
+        GROUP BY m.doc_id, m.topic
+        ORDER BY m.doc_id, n DESC, m.topic
+        """,
+        (min_conf,),
+    )
+    topics: Dict[int, str] = {}
+    for doc_id, topic, _n in cursor.fetchall():
+        topics.setdefault(doc_id, topic)
+    return topics
+
+
 def _speaker_tier(tier: Optional[str], ap_tier: Optional[str]) -> Optional[str]:
     """Coarse WHO-is-talking bucket for a target_sentiment row: 'officials'
     (registry match, provenance flag, or curated elected_official tier),
@@ -1217,11 +1311,11 @@ def _merge_target_tone(
     result: PublicSentimentResult,
     target_rows: List[tuple],
     bot_docs: Set[int],
-    min_conf: float,
     bot_score_authors: Optional[Set[str]] = None,
     narrative_map: Optional[Dict[int, List[Tuple[int, str]]]] = None,
 ) -> None:
-    """Fan target_sentiment rows out to (doc, target) pairs and merge:
+    """Merge pre-resolved target_mentions rows (one per (doc, target),
+    identity frozen at write time — migration 025) into the result:
 
     * ``received`` onto each tracked official's EntitySentimentItem — the
       reputational signal (how sampled posts talk ABOUT them), kept separate
@@ -1237,10 +1331,11 @@ def _merge_target_tone(
       mentions excluded because their author's account-level bot score is
       high (``bot_score_authors``, from author_bot_scores).
 
-    Per-target confidence is filtered against the aggregation floor here
-    (row-level confidence is a mean and would hide a confident target next
-    to an uncertain one). No-op when no rows exist, so pre-target snapshots
-    keep their exact shape.
+    The per-mention confidence floor is applied by the SQL fetch (row-level
+    confidence is a mean and would hide a confident target next to an
+    uncertain one). Unresolved mentions arrive as rows with a NULL
+    entity_key — persisted, counted, never silently dropped. No-op when no
+    rows exist, so pre-target snapshots keep their exact shape.
     """
     if not target_rows:
         return
@@ -1248,7 +1343,6 @@ def _merge_target_tone(
     narrative_map = narrative_map or {}
 
     registry = get_registry()
-    resolver = TargetResolver(registry)
     received: Dict[str, Dict[str, Any]] = {}
     alignment: Dict[str, Dict[str, Dict[str, int]]] = {}
     baseline = {"same": _empty_stance_counts(), "cross": _empty_stance_counts()}
@@ -1256,105 +1350,112 @@ def _merge_target_tone(
     unresolved_mentions = 0
     bot_excluded_mentions = 0
 
+    # Per-doc context cache: speaker resolution, engagement weight, doc
+    # narratives, and the doc-level reasoning are identical for every
+    # mention of the same doc.
+    doc_ctx: Dict[int, Dict[str, Any]] = {}
+
     for (
-        doc_id, output_json, _row_conf, source_type, published_at,
-        title, domain_or_subreddit, ident, text, x_handle, is_official_tier,
-        author_id, ap_tier, engagement,
+        doc_id, key, kind, party, stance, topic, conf, evidence_json,
+        output_json, source_type, published_at, title, domain_or_subreddit,
+        ident, text, x_handle, is_official_tier, author_id, ap_tier,
+        engagement,
     ) in target_rows:
         if doc_id in bot_docs:
-            continue
-        try:
-            data = json.loads(output_json)
-        except json.JSONDecodeError:
-            continue
-        targets = data.get("targets") or []
-        if not targets:
             continue
         if author_id and author_id in bot_score_authors:
             # Account-level exclusion: the author's cross-post bot rollup is
             # high, so none of their stances count toward received tone. The
             # count keeps the exclusion auditable.
-            bot_excluded_mentions += sum(1 for t in targets if isinstance(t, dict))
+            bot_excluded_mentions += 1
             continue
-        reasoning = data.get("reasoning") or ""
-        weight = _engagement_weight(engagement)
-        doc_narratives = narrative_map.get(doc_id, [])
+        if stance not in _STANCE_KEYS:
+            continue
 
-        # Speaker resolution for the alignment control: only posts authored
-        # by a registry-matched official carry a speaker party.
-        speaker_key = None
-        speaker_party = None
-        tier, entity = resolve_entity(
-            registry, source_type, domain_or_subreddit, x_handle,
-            is_official_tier=bool(is_official_tier),
-        )
-        if tier == "officials" and entity is not None:
-            speaker_key = entity.handle
-            speaker_party = _normalize_party(entity.party)
-        speaker_tier = _speaker_tier(tier, ap_tier)
-
-        for t in targets:
-            if not isinstance(t, dict):
-                continue
+        ctx = doc_ctx.get(doc_id)
+        if ctx is None:
             try:
-                conf = float(t.get("confidence", 0.0))
-            except (TypeError, ValueError):
-                continue
-            if conf < min_conf:
-                continue
-            stance = t.get("stance")
-            if stance not in _STANCE_KEYS:
-                continue
-            key, kind, party = resolver.resolve(t.get("target"))
-            if key is None:
-                unresolved_mentions += 1
-                continue
-            resolved_mentions += 1
-
-            accum = received.setdefault(key, {
-                "kind": kind,
-                "counts": _empty_stance_counts(),
-                "by_topic": {},
-                "by_speaker": {},
-                "by_narrative": {},
-                "w_pos": 0.0, "w_neg": 0.0, "w_total": 0.0,
-                "samples": [],
-            })
-            accum["counts"][stance] += 1
-            topic = t.get("topic") or "Other"
-            accum["by_topic"].setdefault(topic, _empty_stance_counts())[stance] += 1
-            if speaker_tier is not None:
-                accum["by_speaker"].setdefault(
-                    speaker_tier, _empty_stance_counts()
-                )[stance] += 1
-            for nid, n_name in doc_narratives:
-                cell = accum["by_narrative"].setdefault(
-                    nid, {"name": n_name, "counts": _empty_stance_counts()},
-                )
-                cell["counts"][stance] += 1
-            accum["w_total"] += weight
-            if stance == "positive":
-                accum["w_pos"] += weight
-            elif stance == "negative":
-                accum["w_neg"] += weight
-            sample = _build_sample_dict(
-                doc_id, stance.upper(), conf,
-                {"reasoning": reasoning, "evidence_spans": t.get("evidence_spans") or []},
-                title, source_type, published_at, domain_or_subreddit, ident, text,
-                x_handle,
+                reasoning = (json.loads(output_json) or {}).get("reasoning") or ""
+            except json.JSONDecodeError:
+                reasoning = ""
+            # Speaker resolution for the alignment control: only posts
+            # authored by a registry-matched official carry a speaker party.
+            speaker_key = None
+            speaker_party = None
+            tier, entity = resolve_entity(
+                registry, source_type, domain_or_subreddit, x_handle,
+                is_official_tier=bool(is_official_tier),
             )
-            _insert_capped(accum["samples"], sample, MAX_SAMPLES_PER_TARGET)
+            if tier == "officials" and entity is not None:
+                speaker_key = entity.handle
+                speaker_party = _normalize_party(entity.party)
+            ctx = {
+                "reasoning": reasoning,
+                "weight": _engagement_weight(engagement),
+                "narratives": narrative_map.get(doc_id, []),
+                "speaker_key": speaker_key,
+                "speaker_party": speaker_party,
+                "speaker_tier": _speaker_tier(tier, ap_tier),
+            }
+            doc_ctx[doc_id] = ctx
 
-            # Alignment cell — self-references are excluded: "same party"
-            # means another entity on the speaker's side, not self-praise.
-            target_party = _normalize_party(party)
-            if speaker_key and speaker_party and target_party and key != speaker_key:
-                cell = "same" if speaker_party == target_party else "cross"
-                cells = alignment.setdefault(speaker_key, {
-                    "same": _empty_stance_counts(), "cross": _empty_stance_counts(),
-                })
-                cells[cell][stance] += 1
-                baseline[cell][stance] += 1
+        if key is None:
+            unresolved_mentions += 1
+            continue
+        resolved_mentions += 1
+        weight = ctx["weight"]
+
+        accum = received.setdefault(key, {
+            "kind": kind,
+            "counts": _empty_stance_counts(),
+            "by_topic": {},
+            "by_speaker": {},
+            "by_narrative": {},
+            "w_pos": 0.0, "w_neg": 0.0, "w_total": 0.0,
+            "samples": [],
+        })
+        accum["counts"][stance] += 1
+        accum["by_topic"].setdefault(
+            topic or "Other", _empty_stance_counts()
+        )[stance] += 1
+        if ctx["speaker_tier"] is not None:
+            accum["by_speaker"].setdefault(
+                ctx["speaker_tier"], _empty_stance_counts()
+            )[stance] += 1
+        for nid, n_name in ctx["narratives"]:
+            cell = accum["by_narrative"].setdefault(
+                nid, {"name": n_name, "counts": _empty_stance_counts()},
+            )
+            cell["counts"][stance] += 1
+        accum["w_total"] += weight
+        if stance == "positive":
+            accum["w_pos"] += weight
+        elif stance == "negative":
+            accum["w_neg"] += weight
+
+        try:
+            evidence_spans = json.loads(evidence_json) if evidence_json else []
+        except json.JSONDecodeError:
+            evidence_spans = []
+        sample = _build_sample_dict(
+            doc_id, stance.upper(), conf,
+            {"reasoning": ctx["reasoning"], "evidence_spans": evidence_spans},
+            title, source_type, published_at, domain_or_subreddit, ident, text,
+            x_handle, topic=topic or "Other",
+        )
+        _insert_capped(accum["samples"], sample, MAX_SAMPLES_PER_TARGET)
+
+        # Alignment cell — self-references are excluded: "same party"
+        # means another entity on the speaker's side, not self-praise.
+        target_party = _normalize_party(party)
+        if (ctx["speaker_key"] and ctx["speaker_party"] and target_party
+                and key != ctx["speaker_key"]):
+            cell = "same" if ctx["speaker_party"] == target_party else "cross"
+            cells = alignment.setdefault(ctx["speaker_key"], {
+                "same": _empty_stance_counts(), "cross": _empty_stance_counts(),
+            })
+            cells[cell][stance] += 1
+            baseline[cell][stance] += 1
 
     by_key = {item.key: item for item in result.byOfficial}
     collectives: Dict[str, Dict[str, Any]] = {}

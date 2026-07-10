@@ -53,7 +53,7 @@ from analysis.src.llm.prompts import (
     CLAIM_EXTRACTION_USER_PROMPT_TEMPLATE,
     PROPAGANDA_USER_PROMPT_TEMPLATE, TARGET_SENTIMENT_USER_PROMPT_TEMPLATE,
 )
-from analysis.src.reporting.entity_registry import get_registry
+from analysis.src.reporting.entity_registry import TargetResolver, get_registry
 from analysis.src.reporting.aggregators import (
     SentimentAggregator,
     BotAggregator,
@@ -402,6 +402,17 @@ class AnalysisJobRunner:
             logger.warning("Target-sentiment extraction requires llm_enabled=true; skipping")
             return 0
 
+        # Write-time identity (migration 025): every extracted target is
+        # resolved against the registry NOW and persisted as a
+        # target_mentions row; aggregation reads the frozen resolution
+        # instead of re-resolving free text per snapshot.
+        resolver = TargetResolver(get_registry())
+        backfilled = self.loader.backfill_target_mentions(resolver.resolve)
+        if backfilled:
+            logger.info(
+                f"Target mentions materialized for {backfilled} pre-existing outputs"
+            )
+
         source_types = self._get_target_source_types()
         batch_size = limit if limit is not None else self.settings.loader_batch_size
         docs = self.loader.get_unprocessed_docs(
@@ -433,7 +444,7 @@ class AnalysisJobRunner:
             # pattern); aggregation filters per-target, not on this mean.
             confidences = [t.confidence for t in result.targets]
             row_confidence = sum(confidences) / len(confidences) if confidences else 0.0
-            self.loader.save_ai_output(
+            output_id = self.loader.save_ai_output(
                 doc["doc_id"],
                 "target_sentiment",
                 result.to_dict(),
@@ -443,6 +454,13 @@ class AnalysisJobRunner:
                 system_prompt=TARGET_SENTIMENT_SYSTEM_PROMPT,
                 user_prompt_template=TARGET_SENTIMENT_USER_PROMPT_TEMPLATE,
                 inference_method="llm",
+            )
+            self.loader.save_target_mentions(
+                output_id,
+                doc["doc_id"],
+                self.loader.build_target_mentions(
+                    [t.to_dict() for t in result.targets], resolver.resolve,
+                ),
             )
             logger.debug(
                 f"[targets {i}/{total}] doc={doc['doc_id']} extracted={len(result.targets)} "

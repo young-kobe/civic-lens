@@ -68,18 +68,15 @@ function TopicTab({ topic, active, volume, onClick }: TopicTabProps) {
         !hasData ? 'topic-tab-empty' : '',
     ].filter(Boolean).join(' ');
 
-    // The "All Topics" count sums the per-topic volumes, so it counts only
-    // posts that matched at least one topic keyword — not every scored post.
-    // Label it "topic-matched" and say so in the tooltip so it doesn't read
-    // as disagreeing with the ticker's "Posts scored" total.
+    // "All Topics" sums the per-topic volumes, and since 'General' (the
+    // unclassified bucket) is a real tab, that sum now covers every scored
+    // post in the window — no more "topic-matched" caveat.
     const countLabel = hasData
-        ? isAll
-            ? `${volume.toLocaleString()} topic-matched`
-            : `${volume.toLocaleString()} ${volume === 1 ? 'post' : 'posts'}`
+        ? `${volume.toLocaleString()} ${volume === 1 ? 'post' : 'posts'}`
         : 'no posts';
     const title = isAll
-        ? `All topics — ${volume.toLocaleString()} posts that matched a topic keyword. `
-            + 'Posts that match no topic are not counted here.'
+        ? `All topics — every scored post in this window, including posts `
+            + `with no topic signal (General).`
         : `${topic.label} — ${countLabel} in this window`;
 
     return (

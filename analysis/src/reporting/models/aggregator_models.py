@@ -80,6 +80,9 @@ class ClassificationSample:
     source_name: Optional[str] = None
     full_text: str = ""
     url: Optional[str] = None
+    # Doc topic attribution (LLM mention topic, keyword fallback) — lets the
+    # UI filter samples exactly instead of client-side keyword re-guessing.
+    topic: Optional[str] = None
 
 
 @dataclass
@@ -170,6 +173,29 @@ class EntitySentimentItem:
     #   {samePartyNet: float|None, samePartyVolume: int,
     #    crossPartyNet: float|None, crossPartyVolume: int}
     expressed_alignment: Optional[Dict[str, Any]] = None
+    # Topic-scoped expressed cells for the entity's OWN posts:
+    # [{topic, net|None, volume, lowSample}], volume-sorted, net suppressed
+    # below MIN_TARGET_SAMPLE_N. Serialized as ``byTopic`` — powers the
+    # topic-filtered headline in the profile modal.
+    expressed_by_topic: List[Dict[str, Any]] = field(default_factory=list)
+
+
+def _classification_sample_to_dict(s: "ClassificationSample") -> Dict[str, Any]:
+    """Single wire shape for a classification sample — previously inlined
+    three times (entity items, byTopic, distributionSamples), which is how
+    a new field could reach one surface and silently miss the others."""
+    return {
+        "doc_id": s.doc_id, "label": s.label,
+        "confidence": s.confidence, "reasoning": s.reasoning,
+        "evidence_spans": s.evidence_spans,
+        "sarcasm_detected": s.sarcasm_detected,
+        "title": s.title or "", "source_type": s.source_type,
+        "source_name": s.source_name,
+        "date": s.date,
+        "full_text": s.full_text,
+        "url": s.url,
+        "topic": s.topic,
+    }
 
 
 def _entity_item_to_dict(item: "EntitySentimentItem") -> Dict[str, Any]:
@@ -191,17 +217,7 @@ def _entity_item_to_dict(item: "EntitySentimentItem") -> Dict[str, Any]:
         "netScore": item.netScore,
         "entityProfile": item.entity_profile,
         "classificationSamples": [
-            {
-                "doc_id": s.doc_id, "label": s.label,
-                "confidence": s.confidence, "reasoning": s.reasoning,
-                "evidence_spans": s.evidence_spans,
-                "sarcasm_detected": s.sarcasm_detected,
-                "title": s.title or "", "source_type": s.source_type,
-                "source_name": s.source_name,
-                "date": s.date,
-                "full_text": s.full_text,
-                "url": s.url,
-            }
+            _classification_sample_to_dict(s)
             for s in item.classification_samples
         ],
     }
@@ -211,6 +227,8 @@ def _entity_item_to_dict(item: "EntitySentimentItem") -> Dict[str, Any]:
         result["received"] = item.received
     if item.expressed_alignment is not None:
         result["expressedAlignment"] = item.expressed_alignment
+    if item.expressed_by_topic:
+        result["byTopic"] = item.expressed_by_topic
     return result
 
 
@@ -283,17 +301,7 @@ class PublicSentimentResult:
                     "officialsVolume": t.officialsVolume,
                     "publicVolume": t.publicVolume,
                     "classificationSamples": [
-                        {
-                            "doc_id": s.doc_id, "label": s.label,
-                            "confidence": s.confidence, "reasoning": s.reasoning,
-                            "evidence_spans": s.evidence_spans,
-                            "sarcasm_detected": s.sarcasm_detected,
-                            "title": s.title or "", "source_type": s.source_type,
-                            "source_name": s.source_name,
-                            "date": s.date,
-                            "full_text": s.full_text,
-                            "url": s.url,
-                        }
+                        _classification_sample_to_dict(s)
                         for s in t.classification_samples
                     ],
                 }
@@ -311,20 +319,7 @@ class PublicSentimentResult:
                 for d in self.byDayOfWeek
             ],
             "distributionSamples": {
-                bucket: [
-                    {
-                        "doc_id": s.doc_id, "label": s.label,
-                        "confidence": s.confidence, "reasoning": s.reasoning,
-                        "evidence_spans": s.evidence_spans,
-                        "sarcasm_detected": s.sarcasm_detected,
-                        "title": s.title or "", "source_type": s.source_type,
-                        "source_name": s.source_name,
-                        "date": s.date,
-                        "full_text": s.full_text,
-                        "url": s.url,
-                    }
-                    for s in samples
-                ]
+                bucket: [_classification_sample_to_dict(s) for s in samples]
                 for bucket, samples in self.distributionSamples.items()
             },
             "disclaimer": self.disclaimer,

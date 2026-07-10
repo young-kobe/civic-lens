@@ -464,6 +464,9 @@ class ContentLoader:
         column instead of parsing JSON. Pass it for tasks with a scalar
         verdict (sentiment label, bot label, favorability stance); leave
         None for list-shaped tasks (claims, targets, propaganda).
+
+        Returns the new row's output_id so callers can attach normalized
+        projections to it (target_mentions).
         """
         with self._get_conn() as conn:
             cursor = conn.cursor()
@@ -501,8 +504,10 @@ class ContentLoader:
                 (doc_id, task, json.dumps(result), confidence, model_id,
                  prompt_version, inference_method, label),
             )
+            output_id = cursor.lastrowid
             self.upsert_task_state(cursor, doc_id, task, "done", prompt_version)
             conn.commit()
+            return output_id
 
     @staticmethod
     def upsert_task_state(
@@ -546,4 +551,100 @@ class ContentLoader:
             cursor = conn.cursor()
             self.upsert_task_state(cursor, doc_id, task, "failed", prompt_version)
             conn.commit()
+
+    # ---- target mentions (migration 025) ----
+
+    @staticmethod
+    def build_target_mentions(targets: List[Dict[str, Any]], resolve) -> List[Dict[str, Any]]:
+        """Shape extracted target dicts into target_mentions rows, resolving
+        entity identity NOW so it is frozen as of extraction.
+
+        ``resolve`` is a callable raw_name -> (entity_key, entity_kind,
+        entity_party); the registry lives in the reporting layer, so callers
+        inject it rather than etl importing upward. Unresolved targets keep
+        a row with entity_key NULL — they must stay countable, not vanish.
+        """
+        mentions = []
+        for t in targets:
+            if not isinstance(t, dict):
+                continue
+            raw = t.get("target")
+            stance = t.get("stance")
+            if not raw or stance not in ("positive", "negative", "neutral", "mixed"):
+                continue
+            try:
+                confidence = float(t.get("confidence", 0.0))
+            except (TypeError, ValueError):
+                continue
+            entity_key, entity_kind, entity_party = resolve(raw)
+            mentions.append({
+                "raw_target": raw,
+                "entity_key": entity_key,
+                "entity_kind": entity_kind,
+                "entity_party": entity_party,
+                "stance": stance,
+                "topic": t.get("topic"),
+                "confidence": confidence,
+                "evidence_json": json.dumps(t.get("evidence_spans") or []),
+            })
+        return mentions
+
+    def save_target_mentions(self, output_id: int, doc_id: int, mentions: List[Dict[str, Any]]):
+        """Persist the normalized mention rows for one ai_outputs row."""
+        if not mentions:
+            return
+        with self._get_conn() as conn:
+            cursor = conn.cursor()
+            self._insert_target_mentions(cursor, output_id, doc_id, mentions)
+            conn.commit()
+
+    @staticmethod
+    def _insert_target_mentions(cursor, output_id: int, doc_id: int, mentions: List[Dict[str, Any]]):
+        cursor.executemany(
+            """
+            INSERT INTO target_mentions
+                (output_id, doc_id, raw_target, entity_key, entity_kind,
+                 entity_party, stance, topic, confidence, evidence_json,
+                 created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%s','now'))
+            """,
+            [
+                (output_id, doc_id, m["raw_target"], m["entity_key"],
+                 m["entity_kind"], m["entity_party"], m["stance"], m["topic"],
+                 m["confidence"], m["evidence_json"])
+                for m in mentions
+            ],
+        )
+
+    def backfill_target_mentions(self, resolve) -> int:
+        """Materialize mention rows for latest target_sentiment outputs that
+        have none — the pre-migration-025 corpus, plus any reprocessed rows.
+        Deterministic and idempotent (anti-join on existing mentions); no
+        LLM involved. Returns the number of outputs materialized.
+        """
+        with self._get_conn() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT a.output_id, a.doc_id, a.output_json
+                FROM ai_outputs_latest a
+                LEFT JOIN target_mentions m ON m.output_id = a.output_id
+                WHERE a.task_type = 'target_sentiment'
+                  AND m.mention_id IS NULL
+                  AND json_array_length(a.output_json, '$.targets') > 0
+                """
+            )
+            rows = cursor.fetchall()
+            materialized = 0
+            for output_id, doc_id, output_json in rows:
+                try:
+                    targets = (json.loads(output_json) or {}).get("targets") or []
+                except json.JSONDecodeError:
+                    continue
+                mentions = self.build_target_mentions(targets, resolve)
+                if mentions:
+                    self._insert_target_mentions(cursor, output_id, doc_id, mentions)
+                    materialized += 1
+            conn.commit()
+            return materialized
 

@@ -57,6 +57,21 @@ class TestRichAggregators(unittest.TestCase):
                 WHERE a2.doc_id = a.doc_id AND a2.task_type = a.task_type
             );
 
+            CREATE TABLE target_mentions (
+                mention_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                output_id INTEGER NOT NULL,
+                doc_id INTEGER NOT NULL,
+                raw_target TEXT NOT NULL,
+                entity_key TEXT,
+                entity_kind TEXT,
+                entity_party TEXT,
+                stance TEXT NOT NULL,
+                topic TEXT,
+                confidence REAL NOT NULL,
+                evidence_json TEXT,
+                created_at INTEGER NOT NULL
+            );
+
 
             CREATE TABLE x_posts_raw (
                 tweet_id TEXT PRIMARY KEY,
@@ -178,6 +193,53 @@ class TestRichAggregators(unittest.TestCase):
                 self.assertIn('reasoning', sample)
                 self.assertIn('evidence_spans', sample)
                 self.assertIn('sarcasm_detected', sample)
+
+    def test_llm_mention_topic_overrides_title_keywords(self):
+        """byTopic's attribution source of truth is the schema-enforced LLM
+        mention topic (target_mentions); the title-keyword heuristic is only
+        the fallback for docs with no resolved mention topic. Before this
+        wiring the LLM topic was fetched and discarded, so a doc titled
+        'Immigration...' about the economy bucketed under Immigration."""
+        conn = sqlite3.connect(self.db_path)
+        cur = conn.cursor()
+        cur.execute(
+            "INSERT INTO ai_outputs (doc_id, task_type, output_json, confidence, created_at) "
+            "VALUES (1, 'target_sentiment', '{\"targets\": []}', 0.9, 1700000000)"
+        )
+        cur.execute(
+            "INSERT INTO target_mentions (output_id, doc_id, raw_target, entity_key, "
+            "stance, topic, confidence, created_at) "
+            "VALUES (?, 1, 'Donald Trump', 'realDonaldTrump', 'negative', 'Economy', 0.9, 0)",
+            (cur.lastrowid,),
+        )
+        conn.commit()
+        conn.close()
+
+        sentiment = SentimentAggregator(self.db_path).get_public_sentiment(
+            time_window="all"
+        ).to_dict()
+        topics = {t["topic"]: t for t in sentiment["byTopic"]}
+        # Doc 1 (title keyword: Immigration) follows its LLM mention topic.
+        self.assertIn("Economy", topics)
+        self.assertNotIn("Immigration", topics)
+        # Doc 2 has no mentions — keyword fallback (Climate) still applies.
+        self.assertIn("Climate", topics)
+        # Samples carry the attribution so the UI can filter exactly.
+        econ_samples = topics["Economy"]["classificationSamples"]
+        self.assertTrue(econ_samples)
+        self.assertEqual(econ_samples[0]["topic"], "Economy")
+
+        # Entity cards carry topic-scoped expressed cells using the SAME
+        # attribution, with nets suppressed below the small-n floor — a
+        # 1-post topic slice must report volume, never a +/-100 headline.
+        outlets = {e["key"]: e for e in sentiment["byNewsOutlet"]}
+        catch_all = outlets["other-outlets"]
+        cells = {c["topic"]: c for c in catch_all["byTopic"]}
+        self.assertEqual(set(cells), {"Economy", "Climate"})
+        for cell in cells.values():
+            self.assertEqual(cell["volume"], 1)
+            self.assertIsNone(cell["net"])
+            self.assertTrue(cell["lowSample"])
 
     def test_sentiment_favorability_merged(self):
         """Verify GOP favorability is merged into sentiment response."""
