@@ -45,7 +45,7 @@ All orchestration goes through `run.ps1` (PowerShell, Windows). It auto-creates 
 .\run.ps1 dev                       # API + UI in separate windows
 ```
 
-Valid `-Tasks` values: `etl, bot, text, citations, claims, narratives, snapshots`.
+Valid `-Tasks` values: `etl, bot, text, targets, propaganda, citations, claims, narratives, accounts, bot_rollup, snapshots`.
 
 ### Tests and typecheck
 

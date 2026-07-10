@@ -61,6 +61,51 @@ export interface PublicSentimentData {
     gopTrend?: TrendPoint[] | null;
     gopByPlatform?: DemographicBreakdown[] | null;
     pollingVsSocial?: PollingSocialComparison | null;
+    // Target-tone metadata from the target_sentiment fan-out: suppression
+    // threshold, resolution coverage, party-collective rollups, alignment
+    // baselines. Absent until the targets stage has produced rows.
+    targetTone?: TargetToneMeta | null;
+}
+
+/** One per-topic received-tone cell. net is null (suppressed) when the
+ *  cell's volume is below the aggregator's minSampleN. */
+export interface TargetTopicCell {
+    topic: string;
+    net: number | null;
+    volume: number;
+    lowSample: boolean;
+}
+
+/** How sampled posts talk ABOUT an entity (the reputational signal),
+ *  as opposed to netScore, which scores the entity's own posts. */
+export interface ReceivedTone {
+    net: number | null;
+    volume: number;
+    lowSample: boolean;
+    byTopic: TargetTopicCell[];
+    samples?: ClassificationSample[];
+}
+
+/** How an official's own posts score toward same-party vs cross-party
+ *  tracked targets. Nets are suppressed (null) below minSampleN. */
+export interface ExpressedAlignment {
+    samePartyNet: number | null;
+    samePartyVolume: number;
+    crossPartyNet: number | null;
+    crossPartyVolume: number;
+}
+
+export interface TargetToneMeta {
+    minSampleN: number;
+    resolvedMentions: number;
+    unresolvedMentions: number;
+    collectives: Record<string, ReceivedTone>;
+    baselines: {
+        samePartyNet: number | null;
+        samePartyVolume: number;
+        crossPartyNet: number | null;
+        crossPartyVolume: number;
+    };
 }
 
 /**
@@ -103,6 +148,11 @@ export interface EntitySentimentItem {
     netScore: number;
     entityProfile: EntityProfile;
     classificationSamples?: ClassificationSample[];
+    // Officials only, and only once target_sentiment coverage exists.
+    // netScore above is the EXPRESSED tone (this entity's own posts);
+    // received is the tone of posts ABOUT the entity.
+    received?: ReceivedTone | null;
+    expressedAlignment?: ExpressedAlignment | null;
 }
 
 /** Keys of SentimentDistribution. Used as lookup keys for distributionSamples. */

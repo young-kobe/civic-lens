@@ -14,6 +14,7 @@ TEXT_ANALYSIS_PROMPT_VERSION = "text-analysis-v5"
 BOT_PROMPT_VERSION = "bot-v2"
 CLAIM_EXTRACTION_PROMPT_VERSION = "claim-extraction-v3"
 PROPAGANDA_PROMPT_VERSION = "propaganda-v1"
+TARGET_SENTIMENT_PROMPT_VERSION = "target-sentiment-v1"
 
 # Shared system-prompt addendum used by stages that accept a REFERENCE
 # CONTEXT block (text analysis + claim extraction). The block is ONLY
@@ -85,6 +86,68 @@ OUTPUT SCHEMA:
 }""" + REFERENCE_CONTEXT_ADDENDUM
 
 TEXT_ANALYSIS_USER_PROMPT_TEMPLATE = """Analyze sentiment and favorability in this text:
+
+<text>
+{text}
+</text>"""
+
+
+# =============================================================================
+# Target Sentiment Prompts
+#
+# Extracts WHO a text takes a stance toward, separately from the text's
+# overall tone. Overall sentiment collapses speaker and subject: a senator
+# attacking a rival scores NEGATIVE, which says nothing about how anyone
+# feels toward the senator. This task extracts the target side of that
+# relationship so aggregation can split "received tone" (posts about X)
+# from "expressed tone" (posts by X).
+#
+# Target names are resolved against the entity registry deterministically at
+# aggregation time (reporting/entity_registry.py::TargetResolver) — the LLM
+# is nudged toward canonical names via a TRACKED TARGETS block prepended to
+# the user prompt, but resolution never depends on the model.
+# =============================================================================
+
+TARGET_SENTIMENT_SYSTEM_PROMPT = """You identify which political entities a US-political text expresses a stance TOWARD, and score that stance per entity.
+
+This is different from overall tone. A post angrily attacking a rival has NEGATIVE overall tone, but the stance is negative toward the RIVAL — extract the target side of that relationship.
+
+RULES:
+1. Return ONLY valid JSON matching the schema below.
+2. TARGETS:
+   - A target is a political person, party, or institution the text takes an evaluative position on (praise, criticism, support, blame).
+   - Extract at most 4 targets. If the text takes no evaluative position toward any political entity (pure factual reporting, questions, trivial content), return an empty array.
+   - Do NOT list an entity merely because it is mentioned — the text must express or clearly imply a stance toward it.
+   - If a TRACKED TARGETS block precedes the text, use the exact name from that list when the target matches one of its entries; otherwise use a short canonical name (e.g. "Gavin Newsom").
+   - Use "Republican Party" / "Democratic Party" for collective partisan targets ("the GOP", "Democrats", "Republicans in Congress").
+3. STANCE (scored toward the target, per target):
+   - positive: the text praises, defends, or supports the target.
+   - negative: the text criticizes, blames, or attacks the target.
+   - neutral: the target is evaluated but the position is balanced or unclear.
+   - mixed: the text contains both genuine praise and genuine criticism of the target.
+   - Score the stance TOWARD THE TARGET, not the text's emotional tone. Anger about something done TO the target is a positive/defensive stance toward the target.
+4. TOPIC (per target): what the stance is about, from the topic list in the schema. Use "Other" when none fits.
+5. EVIDENCE:
+   - Each target's evidence_spans are phrases of 4+ words taken VERBATIM from the input text that show the stance.
+   - Do NOT paraphrase, invent placeholder text, or repeat the same span.
+   - If no verbatim evidence phrase exists for a target, set that target's confidence below 0.5.
+6. All confidence values MUST be decimals in [0.0, 1.0] — NEVER a percentage. Example: use `0.85`, not `85` or `"85%"`.
+
+OUTPUT SCHEMA:
+{
+  "targets": [
+    {
+      "target": "<canonical entity name>",
+      "topic": "Immigration" | "Economy" | "Healthcare" | "Climate" | "Foreign Policy" | "Gun Policy" | "Abortion" | "Education" | "Justice" | "Technology" | "Social Issues" | "Democracy" | "Housing" | "National Security" | "Other",
+      "stance": "positive" | "negative" | "neutral" | "mixed",
+      "confidence": 0.0-1.0,
+      "evidence_spans": ["<verbatim phrase from text>"]
+    }
+  ],
+  "reasoning": "One sentence on how the targets were identified"
+}"""
+
+TARGET_SENTIMENT_USER_PROMPT_TEMPLATE = """Identify stance targets in this text:
 
 <text>
 {text}
