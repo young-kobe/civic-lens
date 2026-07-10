@@ -49,7 +49,7 @@ class GeminiClient(BaseLLMClient):
     def __init__(
         self,
         api_key: str,
-        model: str = "gemini-2.5-flash",
+        model: str = "gemini-3.5-flash",
         temperature: float = 0.0,
         max_retries: int = 3,
     ):

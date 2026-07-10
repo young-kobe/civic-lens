@@ -72,12 +72,12 @@ class TestGeminiClient(unittest.TestCase):
     def test_system_role_schema_and_safety_reach_the_config(self):
         modules, api_client = _fake_sdk([_response()])
         with patch.dict(sys.modules, modules):
-            client = GeminiClient(api_key="k", model="gemini-2.5-flash")
+            client = GeminiClient(api_key="k", model="gemini-3.5-flash")
             result = client.complete("SYS PROMPT", "USER PROMPT", response_schema=_SCHEMA)
 
         self.assertEqual(result, {"label": "NEUTRAL"})
         call = api_client.models.generate_content.call_args
-        self.assertEqual(call.kwargs["model"], "gemini-2.5-flash")
+        self.assertEqual(call.kwargs["model"], "gemini-3.5-flash")
         # User prompt is the contents; system prompt is a REAL system role,
         # not concatenated into the user turn like the old SDK wrapper did.
         self.assertEqual(call.kwargs["contents"], "USER PROMPT")

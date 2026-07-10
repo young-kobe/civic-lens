@@ -20,6 +20,10 @@ schemas in ``llm/schemas.py``.
   token accounting all carry over unchanged.
 - `analysis/requirements.txt`: ``google-genai>=1.0.0,<2`` replaces
   ``google-generativeai``.
+- Model pins aligned to ``gemini-3.5-flash`` everywhere (what prod
+  already runs via env): ``settings.py`` default, ``.env.example``
+  (which still said the EOL ``gemini-2.0-flash`` — closes that
+  deploy-cleanup item), and the client signature default.
 - `tests/test_gemini_client.py`: first direct client coverage (the SDK is
   mocked via sys.modules, so the suite runs without the package): system
   role split, schema + safety config pass-through, retry-then-succeed,
