@@ -217,6 +217,9 @@ CIVIC_LLM_BACKEND=gemini
 CIVIC_LLM_ENABLED=true
 CIVIC_GEMINI_API_KEY=<new_key>
 CIVIC_NARRATIVE_SIMILARITY_MODE=jaccard
+# Without this, the setting defaults to "social_media" and news docs are
+# never analyzed -> the dashboard's news column stays empty.
+CIVIC_RUN_ANALYSIS_ON=all
 X_BEARER_TOKEN=<new_token>
 CIVIC_API_HOST=127.0.0.1
 CIVIC_API_PORT=8000

@@ -61,6 +61,81 @@ export interface PublicSentimentData {
     gopTrend?: TrendPoint[] | null;
     gopByPlatform?: DemographicBreakdown[] | null;
     pollingVsSocial?: PollingSocialComparison | null;
+    // Target-tone metadata from the target_sentiment fan-out: suppression
+    // threshold, resolution coverage, party-collective rollups, alignment
+    // baselines. Absent until the targets stage has produced rows.
+    targetTone?: TargetToneMeta | null;
+}
+
+/** One per-topic received-tone cell. net is null (suppressed) when the
+ *  cell's volume is below the aggregator's minSampleN. */
+export interface TargetTopicCell {
+    topic: string;
+    net: number | null;
+    volume: number;
+    lowSample: boolean;
+}
+
+/** One by-speaker-tier received-tone cell: WHO is talking about the
+ *  entity (news / officials / affiliated / public). */
+export interface TargetSpeakerTierCell {
+    tier: string;
+    net: number | null;
+    volume: number;
+    lowSample: boolean;
+}
+
+/** One by-narrative received-tone cell: WHICH recurring claim drives
+ *  the mentions of the entity. */
+export interface TargetNarrativeCell {
+    narrativeId: number;
+    name: string;
+    net: number | null;
+    volume: number;
+    lowSample: boolean;
+}
+
+/** How sampled posts talk ABOUT an entity (the reputational signal),
+ *  as opposed to netScore, which scores the entity's own posts. */
+export interface ReceivedTone {
+    net: number | null;
+    volume: number;
+    lowSample: boolean;
+    /** Reach-proxy variant: each sampled post weighted by
+     *  1 + ln(1 + engagement counts). Null when suppressed (shares the
+     *  same sample floor as `net`) or on older snapshots. */
+    engagementWeightedNet?: number | null;
+    byTopic: TargetTopicCell[];
+    bySpeakerTier?: TargetSpeakerTierCell[];
+    byNarrative?: TargetNarrativeCell[];
+    samples?: ClassificationSample[];
+}
+
+/** How an official's own posts score toward same-party vs cross-party
+ *  tracked targets. Nets are suppressed (null) below minSampleN. */
+export interface ExpressedAlignment {
+    samePartyNet: number | null;
+    samePartyVolume: number;
+    crossPartyNet: number | null;
+    crossPartyVolume: number;
+}
+
+export interface TargetToneMeta {
+    minSampleN: number;
+    resolvedMentions: number;
+    unresolvedMentions: number;
+    /** Mentions withheld because the author's account-level bot rollup
+     *  (author_bot_scores) is high. Absent on older snapshots. */
+    botExcludedMentions?: number;
+    /** Human-readable definition of the engagement weighting formula. */
+    engagementWeight?: string;
+    collectives: Record<string, ReceivedTone>;
+    baselines: {
+        samePartyNet: number | null;
+        samePartyVolume: number;
+        crossPartyNet: number | null;
+        crossPartyVolume: number;
+    };
 }
 
 /**
@@ -70,7 +145,7 @@ export interface PublicSentimentData {
  * blurb and no partisan-lean fields.
  */
 export interface EntityProfile {
-    kind: 'outlet' | 'official' | 'subreddit' | 'catch_all';
+    kind: 'outlet' | 'official' | 'subreddit' | 'account' | 'catch_all';
     key: string;
     displayName: string;
     blurb: string;
@@ -90,12 +165,14 @@ export interface EntityProfile {
     bioSource?: string;
     // Subreddit-only.
     subscriberCountProxy?: string | null;
+    // Account-only (curated political-accounts list, kind='account').
+    accountType?: string | null;
 }
 
 /** Per-entity sentiment card on the three-way dashboard frame. */
 export interface EntitySentimentItem {
     key: string;
-    kind: 'outlet' | 'official' | 'subreddit' | 'catch_all';
+    kind: 'outlet' | 'official' | 'subreddit' | 'account' | 'catch_all';
     positive: number;
     negative: number;
     neutral: number;
@@ -103,6 +180,11 @@ export interface EntitySentimentItem {
     netScore: number;
     entityProfile: EntityProfile;
     classificationSamples?: ClassificationSample[];
+    // Officials only, and only once target_sentiment coverage exists.
+    // netScore above is the EXPRESSED tone (this entity's own posts);
+    // received is the tone of posts ABOUT the entity.
+    received?: ReceivedTone | null;
+    expressedAlignment?: ExpressedAlignment | null;
 }
 
 /** Keys of SentimentDistribution. Used as lookup keys for distributionSamples. */
@@ -265,7 +347,7 @@ export interface MoversResult {
  *  grid. Sort by `bot_rate_pct` desc. */
 export interface BotEntityItem {
     key: string;
-    kind: 'outlet' | 'official' | 'subreddit' | 'catch_all';
+    kind: 'outlet' | 'official' | 'subreddit' | 'account' | 'catch_all';
     total_docs: number;
     bot_docs: number;
     bot_rate_pct: number;
@@ -385,6 +467,16 @@ export interface AccountProfile {
     account_type: string | null;          // 'official' | 'personal' | 'institutional' | ...
 }
 
+/** One cross-narrative citation edge rollup: this narrative's docs cite
+ *  into (or are cited by) another narrative's docs. Edges between sampled
+ *  documents only — never an origin/propagation claim. */
+export interface CrossNarrativeCitation {
+    narrative_id: number;
+    name: string;
+    direction: 'cites' | 'cited_by';
+    edge_count: number;
+}
+
 export interface NarrativeSummary {
     narrative_id: number;
     name: string;
@@ -402,6 +494,10 @@ export interface NarrativeSummary {
     timeline: NarrativeTimelinePoint[];
     net_sentiment: number;
     inbound_citation_count: number;
+    // Citation-edge semantics (2026-07-10). Optional on older snapshots.
+    inbound_by_link_type?: Record<string, number>;
+    external_citation_count?: number;
+    cross_narrative_citations?: CrossNarrativeCitation[];
     // Walkthrough 043 overlays — null when no data.
     propaganda_score: number | null;       // 0..1 mean across supporting docs
     bot_pushed_fraction: number | null;    // 0..1 over unique X supporting authors
@@ -467,7 +563,7 @@ export interface PropagandaExample {
  */
 export interface PropagandaEntityItem {
     key: string;
-    kind: 'outlet' | 'official' | 'subreddit' | 'catch_all';
+    kind: 'outlet' | 'official' | 'subreddit' | 'account' | 'catch_all';
     total_docs: number;
     flagged_docs: number;
     flagged_rate_pct: number;
@@ -544,4 +640,21 @@ export interface ReviewTaskStats {
 
 export interface ReviewStats {
     per_task: ReviewTaskStats[];
+}
+
+/** Public human-agreement overlay (GET /eval-accuracy). Aggregate-only:
+ *  per-task counts and percentages, with accuracy suppressed server-side
+ *  below `minReviewN` scored reviews. */
+export interface EvalAccuracyTask {
+    taskType: string;
+    reviewed: number;
+    scored: number;
+    golden: number;
+    accuracyPct: number | null;
+    lowSample: boolean;
+}
+
+export interface EvalAccuracy {
+    perTask: EvalAccuracyTask[];
+    minReviewN: number;
 }

@@ -149,6 +149,35 @@ class ReviewService:
             conn.commit()
         return {"ai_output_id": ai_output_id, "reviewed_at": now}
 
+    # Public-overlay suppression floor: below this many scored (correct /
+    # incorrect) reviews, a task's accuracy is withheld — 3 reviews reading
+    # "100% accurate" would be the review-queue version of the +100.0
+    # single-tweet headline the target-tone floor exists to prevent.
+    MIN_PUBLIC_REVIEW_N = 20
+
+    def get_public_accuracy(self) -> Dict[str, Any]:
+        """Public-facing human-agreement overlay derived from get_stats().
+
+        The review queue writes ai_output_evals; until now nothing read them
+        back into the public UI. This shapes per-task agreement (n reviewed,
+        % marked correct) for display next to AI-derived numbers, with
+        accuracy suppressed (None + lowSample) below MIN_PUBLIC_REVIEW_N
+        scored reviews. Reviewer identity and per-row labels stay private.
+        """
+        per_task = []
+        for row in self.get_stats()["per_task"]:
+            scored = row["correct"] + row["incorrect"]
+            low = scored < self.MIN_PUBLIC_REVIEW_N
+            per_task.append({
+                "taskType": row["task_type"],
+                "reviewed": row["reviewed"],
+                "scored": scored,
+                "golden": row["golden"],
+                "accuracyPct": None if low else row["accuracy_pct"],
+                "lowSample": low,
+            })
+        return {"perTask": per_task, "minReviewN": self.MIN_PUBLIC_REVIEW_N}
+
     def get_stats(self, task_type: Optional[str] = None) -> Dict[str, Any]:
         """Per-task review progress and observed accuracy."""
         sql_total = "SELECT task_type, COUNT(*) FROM ai_outputs"

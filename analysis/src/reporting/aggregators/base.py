@@ -41,6 +41,15 @@ X_AUTHOR_JOIN_SQL = (
     "LEFT JOIN x_users_raw u ON u.user_id = x.author_id"
 )
 
+# Companion fragment layering the curated account classification onto the X
+# author join (requires X_AUTHOR_JOIN_SQL's `x` alias). LEFT so unclassified
+# authors pass through with NULL ap.* — absence from account_profiles means
+# "general_public" by contract (migration 010).
+ACCOUNT_PROFILE_JOIN_SQL = (
+    "LEFT JOIN account_profiles ap "
+    "ON ap.platform = 'x' AND ap.author_id = x.author_id"
+)
+
 @contextlib.contextmanager
 def get_connection(db_path: str):
     """Context manager for database connections."""
@@ -112,6 +121,24 @@ def fetch_task_rows(
         sql += f" AND ({extra_where})"
     cursor.execute(sql, tuple(params))
     return cursor.fetchall()
+
+
+def get_high_bot_score_author_ids(cursor, min_score: float = 0.5) -> Set[str]:
+    """X author_ids whose account-level bot rollup (`author_bot_scores.score`,
+    mean of post-level scores) meets ``min_score``. Complements the per-doc
+    bot exclusion: a doc can individually pass bot detection while its author's
+    posting pattern as a whole scores bot-like. Returns empty when the rollup
+    table hasn't been created (fresh/test DBs)."""
+    cursor.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='author_bot_scores'"
+    )
+    if not cursor.fetchone():
+        return set()
+    cursor.execute(
+        "SELECT author_id FROM author_bot_scores WHERE platform = 'x' AND score >= ?",
+        (min_score,),
+    )
+    return {row[0] for row in cursor.fetchall() if row[0]}
 
 
 def get_bot_flagged_doc_ids(db_path: str, min_confidence: float = 0.5) -> Set[int]:

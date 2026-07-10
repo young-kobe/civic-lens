@@ -1,7 +1,7 @@
 import {
     PublicSentimentData, BotData, NarrativeSummary,
-    PropagandaOverview, MoversResult,
-    ReviewQueueItem, ReviewSubmission, ReviewStats, ReviewTaskType,
+    PropagandaOverview, MoversResult, ClassificationSample, EntitySentimentItem,
+    EvalAccuracy, ReviewQueueItem, ReviewSubmission, ReviewStats, ReviewTaskType,
 } from '../types';
 
 const API_BASE = '/api/v1';
@@ -101,6 +101,38 @@ export async function fetchSentiment(
         return mockSentiment();
     }
     return fetchJSON<PublicSentimentData>(`/sentiment?window=${window}`);
+}
+
+/** One page of the live entity drill-down (GET /entity-posts). */
+export interface EntityPostsPage {
+    items: ClassificationSample[];
+    total: number;
+    limit: number;
+    offset: number;
+}
+
+/**
+ * Full, paginated list of classified posts behind one entity card —
+ * the live read path behind "Show all posts" in the entity modal. The
+ * snapshot cache only carries ~10 highest-confidence samples per entity;
+ * this endpoint serves everything the card's numbers counted.
+ */
+export async function fetchEntityPosts(
+    kind: EntitySentimentItem['kind'],
+    key: string,
+    window: TimeWindow = '7d',
+    limit: number = 50,
+    offset: number = 0,
+): Promise<EntityPostsPage> {
+    const params = new URLSearchParams({
+        kind, key, window, limit: String(limit), offset: String(offset),
+    });
+    return fetchJSON<EntityPostsPage>(`/entity-posts?${params.toString()}`);
+}
+
+/** Per-task human-review agreement for the public "human agreement" chips. */
+export async function fetchEvalAccuracy(): Promise<EvalAccuracy> {
+    return fetchJSON<EvalAccuracy>('/eval-accuracy');
 }
 
 export async function fetchBotActivity(): Promise<BotData> {

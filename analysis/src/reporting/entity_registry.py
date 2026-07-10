@@ -330,6 +330,142 @@ def catch_all_profile(key: str, display_name: str, blurb: str) -> Dict[str, Any]
     }
 
 
+_ACCOUNT_TIER_DESCRIPTORS = {
+    "elected_official": "Elected official or institutional government account",
+    "affiliated": "Politically affiliated account",
+}
+
+
+def account_profile_dict(
+    handle: str,
+    tier: str,
+    full_name: Optional[str] = None,
+    party: Optional[str] = None,
+    office_title: Optional[str] = None,
+    account_type: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Profile for an X account classified by the curated political-accounts
+    list (``account_profiles``) but not in the editorial officials registry.
+    Shape mirrors ``*Entity.profile_dict()`` with ``kind='account'`` so the
+    UI renders a named card instead of folding the author into a catch-all.
+    The blurb names the classification source (labeling discipline)."""
+    descriptor = office_title or _ACCOUNT_TIER_DESCRIPTORS.get(
+        tier, "Classified political account"
+    )
+    return {
+        "kind": "account",
+        "key": handle,
+        "displayName": full_name or f"@{handle}",
+        "blurb": (
+            f"{descriptor} on X, classified via the curated political-accounts "
+            "list. Not individually tracked in the editorial registry."
+        ),
+        "lean": None,
+        "leanSource": None,
+        "party": party,
+        "office": office_title or "",
+        "accountType": account_type,
+    }
+
+
+# --------------------------------------------------------------------------- #
+#  Target-name resolution (received-tone / expressed-tone split)               #
+# --------------------------------------------------------------------------- #
+
+# Sentinel keys for collective partisan targets. Party attribution powers the
+# speaker-target alignment cells in the sentiment aggregator.
+GOP_COLLECTIVE = "gop_collective"
+DEM_COLLECTIVE = "dem_collective"
+
+_GOP_TARGET_ALIASES = frozenset({
+    "gop", "republican party", "republicans", "republican", "rnc",
+    "house republicans", "senate republicans", "congressional republicans",
+})
+_DEM_TARGET_ALIASES = frozenset({
+    "democratic party", "democrats", "democrat", "dems", "dnc",
+    "house democrats", "senate democrats", "congressional democrats",
+})
+
+# Leading title tokens stripped before lookup ("President Trump" → "trump").
+_TARGET_TITLE_PREFIXES = (
+    "president", "vice president", "vp", "senator", "sen.", "sen",
+    "rep.", "rep", "representative", "speaker", "secretary", "sec.", "sec",
+    "leader", "majority leader", "minority leader", "governor", "gov.", "gov",
+    "attorney general", "director", "chairman", "chair", "dr.", "dr",
+)
+
+# Generational suffixes ignored when deriving a last-name alias
+# ("Robert F. Kennedy Jr." → "kennedy").
+_NAME_SUFFIXES = frozenset({"jr", "jr.", "sr", "sr.", "ii", "iii", "iv"})
+
+
+def normalize_target_name(raw: Optional[str]) -> Optional[str]:
+    """Canonicalize an LLM-emitted target name for alias lookup:
+    lowercase, strip @/possessives/punctuation, drop a leading article and
+    leading title tokens."""
+    if not raw:
+        return None
+    s = raw.strip().lower().lstrip("@")
+    s = s.rstrip(".,:;!?")
+    if s.endswith("'s") or s.endswith("’s"):
+        s = s[:-2]
+    if s.startswith("the "):
+        s = s[4:]
+    for prefix in _TARGET_TITLE_PREFIXES:
+        if s.startswith(prefix + " "):
+            s = s[len(prefix) + 1:]
+            break
+    s = " ".join(s.split())
+    return s or None
+
+
+class TargetResolver:
+    """Resolve raw target names to registry officials or party collectives.
+
+    Alias index per official: canonical handle + also_handles + full display
+    name + "<first> <last>" + bare last name (last-name alias dropped when two
+    officials share it). Collectives resolve via the static alias sets above.
+
+    ``resolve()`` returns ``(key, kind, party)``:
+      * official   → (handle, "official", party)
+      * collective → (GOP_COLLECTIVE|DEM_COLLECTIVE, "collective", "R"|"D")
+      * no match   → (None, None, None)
+    """
+
+    def __init__(self, registry: EntityRegistry):
+        self._index: Dict[str, Tuple[str, str]] = {}   # alias → (handle, party)
+        last_name_owners: Dict[str, set] = {}
+        for official in registry.primary_officials():
+            aliases = {official.handle, *official.also_handles}
+            display = normalize_target_name(official.display_name)
+            if display:
+                aliases.add(display)
+                tokens = [t for t in display.split() if t not in _NAME_SUFFIXES]
+                if len(tokens) >= 2:
+                    aliases.add(f"{tokens[0]} {tokens[-1]}")
+                    last_name_owners.setdefault(tokens[-1], set()).add(official.handle)
+            for alias in aliases:
+                self._index[alias] = (official.handle, official.party)
+        # Bare last names are only safe when unambiguous.
+        for last, owners in last_name_owners.items():
+            if len(owners) == 1:
+                handle = next(iter(owners))
+                self._index.setdefault(last, (handle, registry.officials[handle].party))
+
+    def resolve(self, raw_name: Optional[str]) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+        key = normalize_target_name(raw_name)
+        if not key:
+            return None, None, None
+        if key in _GOP_TARGET_ALIASES:
+            return GOP_COLLECTIVE, "collective", "R"
+        if key in _DEM_TARGET_ALIASES:
+            return DEM_COLLECTIVE, "collective", "D"
+        hit = self._index.get(key)
+        if hit is not None:
+            return hit[0], "official", hit[1]
+        return None, None, None
+
+
 def resolve_entity(
     registry: EntityRegistry,
     source_type: Optional[str],

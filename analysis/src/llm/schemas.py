@@ -71,6 +71,48 @@ TEXT_ANALYSIS_SCHEMA = {
     ]
 }
 
+# Target Sentiment Schema (received vs. expressed tone split)
+#
+# Topic values mirror reporting/aggregators/constants.py::TOPIC_KEYWORDS keys
+# plus "Other". Kept as a literal here (rather than importing from the
+# reporting layer) so the llm package stays below reporting in the layering;
+# test_target_extractor asserts the two stay in sync.
+TARGET_TOPIC_ENUM = [
+    "Immigration", "Economy", "Healthcare", "Climate", "Foreign Policy",
+    "Gun Policy", "Abortion", "Education", "Justice", "Technology",
+    "Social Issues", "Democracy", "Housing", "National Security", "Other",
+]
+
+TARGET_STANCE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "target": {"type": "string"},
+        "topic": {"type": "string", "enum": TARGET_TOPIC_ENUM},
+        "stance": {
+            "type": "string",
+            "enum": ["positive", "negative", "neutral", "mixed"],
+        },
+        "confidence": {"type": "number"},
+        "evidence_spans": {
+            "type": "array",
+            "items": {"type": "string"},
+        },
+    },
+    "required": ["target", "topic", "stance", "confidence"],
+}
+
+TARGET_SENTIMENT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "targets": {
+            "type": "array",
+            "items": TARGET_STANCE_SCHEMA,
+        },
+        "reasoning": {"type": "string"},
+    },
+    "required": ["targets"],
+}
+
 # Claim Extraction Schema
 CLAIM_SCHEMA = {
     "type": "object",

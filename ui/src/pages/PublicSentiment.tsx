@@ -1,16 +1,20 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
     CollapsibleInfo, EmptyState, EntityHeader, EntityProfileCard,
     ErrorState, GlobalTicker, LoadingCard, MethodPopover, Modal, SupportingDocsTable,
     ThreeWayColumn, ThreeWayGrid, TierRow, TopMetricsBlock,
-    classificationSampleToSupportingDoc, entityExternalUrl, entityLeanAccent, sentimentStats,
+    classificationSampleToSupportingDoc, entityExternalUrl, entityLeanAccent,
+    officialToneStats, sentimentStats,
 } from '../components/common';
 import type { TickerItem } from '../components/common';
 import type {
     ClassificationSample, EntitySentimentItem, Filters,
     PollingSocialComparison, PublicSentimentData, SentimentBreakdown, SentimentDistribution,
 } from '../types';
-import { fetchSentiment, fetchSnapshotStatus, type SnapshotStatus } from '../services/api';
+import {
+    fetchEntityPosts, fetchEvalAccuracy, fetchSentiment, fetchSnapshotStatus,
+    type SnapshotStatus, type TimeWindow,
+} from '../services/api';
 import { asOfTodayEyebrow, formatTimeWindow } from '../services/timeWindow';
 import { formatRefreshedAgo, getSnapshotTimestamp } from '../services/freshness';
 import { formatPct, formatPts } from '../services/format';
@@ -246,9 +250,18 @@ function SentimentThreeWayGrid({
         <EntityProfileCard
             key={item.key}
             profile={item.entityProfile}
-            stats={item.volume > 0
-                ? sentimentStats({ netTone: item.netScore, volume: item.volume })
-                : []}
+            stats={item.kind === 'official'
+                // Officials split the metric: received tone (posts about
+                // them, the reputational signal) leads; expressed tone
+                // (their own posts) stays, explicitly labeled.
+                ? officialToneStats({
+                    received: item.received,
+                    netTone: item.netScore,
+                    volume: item.volume,
+                })
+                : item.volume > 0
+                    ? sentimentStats({ netTone: item.netScore, volume: item.volume })
+                    : []}
             onClick={() => onOpen(item)}
         />
     );
@@ -283,7 +296,7 @@ function SentimentThreeWayGrid({
             </ThreeWayColumn>
             <ThreeWayColumn
                 header="The Public"
-                byline={`Political subreddits, plus X users we don't track individually${topicSuffix}`}
+                byline={`Political subreddits, curated political accounts, and X users we don't track individually${topicSuffix}`}
                 empty="No social posts in this window."
                 isEmpty={pub.length === 0}
             >
@@ -298,21 +311,56 @@ function SentimentThreeWayGrid({
 //  Entity detail modal (sentiment page)                                        //
 // --------------------------------------------------------------------------- //
 
+const SPEAKER_TIER_LABELS: Record<string, string> = {
+    news: 'News outlets',
+    officials: 'Officials',
+    affiliated: 'Politically affiliated accounts',
+    public: 'General public',
+};
+
 function EntitySentimentModal({
-    item, onClose, activeTopic,
+    item, onClose, activeTopic, timeWindow,
 }: {
     item: EntitySentimentItem;
     onClose: () => void;
     activeTopic: Topic;
+    timeWindow: TimeWindow;
 }) {
     const { entityProfile: profile, netScore, volume, classificationSamples } = item;
     const sourceUrl = entityExternalUrl(profile);
+    const isOfficial = profile.kind === 'official';
+    const received = isOfficial ? item.received ?? null : null;
+    const alignment = isOfficial ? item.expressedAlignment ?? null : null;
+
+    // Live drill-down: the cached snapshot carries only ~10 highest-
+    // confidence samples; "Show all posts" pages the full list from the
+    // /entity-posts read path.
+    const [loadedPosts, setLoadedPosts] = useState<ClassificationSample[] | null>(null);
+    const [loadedTotal, setLoadedTotal] = useState<number>(0);
+    const [postsLoading, setPostsLoading] = useState(false);
+    const [postsError, setPostsError] = useState<string | null>(null);
+
+    const loadMorePosts = useCallback(async () => {
+        setPostsLoading(true);
+        setPostsError(null);
+        try {
+            const page = await fetchEntityPosts(
+                item.kind, item.key, timeWindow, 50, loadedPosts?.length ?? 0,
+            );
+            setLoadedPosts([...(loadedPosts ?? []), ...page.items]);
+            setLoadedTotal(page.total);
+        } catch (e) {
+            setPostsError(e instanceof Error ? e.message : 'Failed to load posts');
+        } finally {
+            setPostsLoading(false);
+        }
+    }, [item.kind, item.key, timeWindow, loadedPosts]);
 
     // When a topic is active, filter the visible classification samples
     // client-side. We don't have entity-scoped-by-topic scores from the
     // backend (API gap), so the headline net score remains the entity's
     // global score — the topic strip is explicit about that.
-    const allSamples: ClassificationSample[] = classificationSamples ?? [];
+    const allSamples: ClassificationSample[] = loadedPosts ?? classificationSamples ?? [];
     const filteredSamples = activeTopic.key === 'all'
         ? allSamples
         : allSamples.filter(s => matchesTopic(activeTopic, s.title, s.full_text, ...s.evidence_spans));
@@ -337,17 +385,45 @@ function EntitySentimentModal({
             <EntityHeader profile={profile} />
 
             <div className="entity-modal-stats">
+                {received && received.volume > 0 && (
+                    <div>
+                        <div
+                            className="eyebrow"
+                            title="Average tone of sampled posts that talk ABOUT this person, from -100 (all negative) to +100 (all positive). Does not include their own posts about others."
+                        >
+                            Received tone
+                        </div>
+                        <div className="metric-value">
+                            {received.net != null ? formatPts(received.net) : '—'}
+                        </div>
+                        <div className="text-xs text-muted">
+                            {received.net != null
+                                ? `across ${received.volume} sampled posts about them`
+                                : `only ${received.volume} sampled post${received.volume === 1 ? '' : 's'} about them — too few to score reliably`}
+                        </div>
+                        {received.engagementWeightedNet != null && (
+                            <div
+                                className="text-xs text-muted"
+                                title="Same posts, each weighted by 1 + ln(1 + retweets + replies + likes + quotes). Engagement counts are a reach proxy, not verified reach."
+                            >
+                                weighted by engagement: {formatPts(received.engagementWeightedNet)}
+                            </div>
+                        )}
+                    </div>
+                )}
                 <div>
                     <div
                         className="eyebrow"
-                        title="Positive minus negative share of this source's posts, from -100 (all negative) to +100 (all positive)."
+                        title={isOfficial
+                            ? "Average tone of this person's OWN posts, from -100 to +100. A negative value means they post negatively (often about opponents) — not that others are negative about them."
+                            : "Positive minus negative share of this source's posts, from -100 (all negative) to +100 (all positive)."}
                     >
-                        Net tone
+                        {isOfficial ? 'Expressed tone' : 'Net tone'}
                     </div>
                     <div className="metric-value">
-                        {formatPts(netScore)}
+                        {volume > 0 ? formatPts(netScore) : '—'}
                     </div>
-                    {samplesAreFiltered && (
+                    {samplesAreFiltered && volume > 0 && (
                         <div className="text-xs text-muted">
                             (across all topics — {activeTopic.label}-only score not yet available)
                         </div>
@@ -358,6 +434,116 @@ function EntitySentimentModal({
                     <div className="metric-value">{volume.toLocaleString()}</div>
                 </div>
             </div>
+
+            {received && received.byTopic.length > 0 && (
+                <>
+                    <h3 className="card-title mt-4 mb-2">
+                        Tone toward {profile.displayName} by topic
+                    </h3>
+                    <table className="table">
+                        <thead>
+                            <tr>
+                                <th>Topic</th>
+                                <th className="num">Net tone</th>
+                                <th className="num">n</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {received.byTopic.map((cell) => (
+                                <tr key={cell.topic}>
+                                    <td>{cell.topic}</td>
+                                    <td className="num">
+                                        {cell.net != null
+                                            ? formatPts(cell.net)
+                                            : <span className="text-muted">low sample</span>}
+                                    </td>
+                                    <td className="num">{cell.volume}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </>
+            )}
+
+            {received && (received.bySpeakerTier?.length ?? 0) > 0 && (
+                <>
+                    <h3 className="card-title mt-4 mb-2">
+                        Who is talking about {profile.displayName}
+                    </h3>
+                    <table className="table">
+                        <thead>
+                            <tr>
+                                <th>Speaker group</th>
+                                <th className="num">Net tone</th>
+                                <th className="num">n</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {received.bySpeakerTier!.map((cell) => (
+                                <tr key={cell.tier}>
+                                    <td>{SPEAKER_TIER_LABELS[cell.tier] ?? cell.tier}</td>
+                                    <td className="num">
+                                        {cell.net != null
+                                            ? formatPts(cell.net)
+                                            : <span className="text-muted">low sample</span>}
+                                    </td>
+                                    <td className="num">{cell.volume}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </>
+            )}
+
+            {received && (received.byNarrative?.length ?? 0) > 0 && (
+                <>
+                    <h3 className="card-title mt-4 mb-2">
+                        Narratives driving these mentions
+                    </h3>
+                    <table className="table">
+                        <thead>
+                            <tr>
+                                <th>Narrative</th>
+                                <th className="num">Net tone</th>
+                                <th className="num">n</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {received.byNarrative!.map((cell) => (
+                                <tr key={cell.narrativeId}>
+                                    <td>{cell.name}</td>
+                                    <td className="num">
+                                        {cell.net != null
+                                            ? formatPts(cell.net)
+                                            : <span className="text-muted">low sample</span>}
+                                    </td>
+                                    <td className="num">{cell.volume}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                    <p className="text-xs text-muted">
+                        Narrative labels come from claim clustering over the posts we
+                        sampled — an association between ingested documents, not a
+                        claim about where the narrative originated.
+                    </p>
+                </>
+            )}
+
+            {alignment && (alignment.samePartyVolume > 0 || alignment.crossPartyVolume > 0) && (
+                <p className="text-xs text-muted mt-2">
+                    In their own posts about tracked figures: tone toward their own party{' '}
+                    {alignment.samePartyNet != null
+                        ? formatPts(alignment.samePartyNet)
+                        : 'low sample'}{' '}
+                    (n={alignment.samePartyVolume}), toward the other party{' '}
+                    {alignment.crossPartyNet != null
+                        ? formatPts(alignment.crossPartyNet)
+                        : 'low sample'}{' '}
+                    (n={alignment.crossPartyVolume}). Cross-party criticism is the
+                    expected baseline — deviation from it is the signal.
+                </p>
+            )}
 
             {(sourceUrl || profile.leanSource || profile.bioSource) && (
                 <div className="entity-modal-links">
@@ -380,9 +566,13 @@ function EntitySentimentModal({
             {filteredSamples.length > 0 ? (
                 <>
                     <h3 className="card-title mt-4 mb-2">
-                        {samplesAreFiltered
-                            ? `Recent posts matching ${activeTopic.label}`
-                            : 'Recent classified posts'}
+                        {loadedPosts != null
+                            ? (samplesAreFiltered
+                                ? `Classified posts matching ${activeTopic.label} (newest first)`
+                                : 'Classified posts (newest first)')
+                            : (samplesAreFiltered
+                                ? `Highest-confidence posts matching ${activeTopic.label}`
+                                : 'Highest-confidence classified posts')}
                     </h3>
                     <SupportingDocsTable
                         docs={filteredSamples.map(classificationSampleToSupportingDoc)}
@@ -393,6 +583,35 @@ function EntitySentimentModal({
                     None of this entity's recent classified posts match {activeTopic.label}.
                 </p>
             ) : null}
+
+            {volume > (classificationSamples?.length ?? 0) && (
+                <div className="mt-2">
+                    {(loadedPosts == null || loadedPosts.length < loadedTotal) && (
+                        <button
+                            type="button"
+                            className="btn btn-secondary"
+                            onClick={loadMorePosts}
+                            disabled={postsLoading}
+                        >
+                            {postsLoading
+                                ? 'Loading…'
+                                : loadedPosts == null
+                                    ? `Show all ${volume.toLocaleString()} classified posts`
+                                    : `Load more (${loadedPosts.length} of ${loadedTotal})`}
+                        </button>
+                    )}
+                    {loadedPosts != null && loadedPosts.length >= loadedTotal && (
+                        <p className="text-xs text-muted">
+                            Showing all {loadedTotal.toLocaleString()} classified posts in this window.
+                        </p>
+                    )}
+                    {postsError && (
+                        <p className="text-xs text-muted">
+                            Could not load posts: {postsError}
+                        </p>
+                    )}
+                </div>
+            )}
         </Modal>
     );
 }
@@ -444,6 +663,10 @@ function buildEntitySubtitle(profile: EntitySentimentItem['entityProfile']): str
     }
     if (profile.kind === 'subreddit') {
         return [profile.subscriberCountProxy, profile.lean].filter(Boolean).join(' · ');
+    }
+    if (profile.kind === 'account') {
+        return [profile.office, profile.party, profile.accountType]
+            .filter(Boolean).join(' · ') || undefined;
     }
     return undefined;
 }
@@ -652,6 +875,17 @@ function PublicSentiment({ filters }: PublicSentimentProps) {
         [],
         'snapshot-status',
     );
+    // Human-agreement chip: how often reviewers marked our tone
+    // classifications correct. Renders only when the server publishes a
+    // percentage (enough scored reviews); silent otherwise.
+    const { data: evalAccuracy } = useFetch(
+        () => fetchEvalAccuracy(),
+        [],
+        'eval-accuracy',
+    );
+    const sentimentAgreement = evalAccuracy?.perTask.find(
+        (t) => t.taskType === 'sentiment' && !t.lowSample && t.accuracyPct != null,
+    ) ?? null;
 
     // Pick the most-discussed topic as the default once data lands, but
     // only if the user hasn't already chosen something (URL or click).
@@ -725,6 +959,15 @@ function PublicSentiment({ filters }: PublicSentimentProps) {
                         />
                     }
                 />
+                {sentimentAgreement && (
+                    <p
+                        className="text-xs text-muted"
+                        title="Share of human-reviewed tone classifications marked correct in our review queue. Reviews cover a sample of outputs, not all of them."
+                    >
+                        Human review agreement on tone classifications:{' '}
+                        {sentimentAgreement.accuracyPct}% across {sentimentAgreement.scored} reviewed outputs.
+                    </p>
+                )}
             </div>
 
             {/* Topic tab bar — visual anchor of the page (spec A2). */}
@@ -772,6 +1015,7 @@ function PublicSentiment({ filters }: PublicSentimentProps) {
                     item={activeEntity}
                     onClose={() => setActiveEntity(null)}
                     activeTopic={activeTopic}
+                    timeWindow={filters.timeRange}
                 />
             )}
 

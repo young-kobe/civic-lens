@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import type { EntityProfile } from '../../types';
+import type { EntityProfile, ReceivedTone } from '../../types';
 import { COLORS, leanClass } from '../../theme';
 import { formatPts } from '../../services/format';
 
@@ -158,7 +158,7 @@ export function EntityAvatar({ profile }: { profile: EntityProfile }) {
             </span>
         );
     }
-    if (profile.kind === 'official' && profile.key && !profile.key.includes('-')) {
+    if ((profile.kind === 'official' || profile.kind === 'account') && profile.key && !profile.key.includes('-')) {
         return (
             <span className="entity-avatar entity-avatar-img" aria-hidden>
                 <img
@@ -179,17 +179,17 @@ export function EntityAvatar({ profile }: { profile: EntityProfile }) {
 /** External URL for the entity — outlet homepage, X profile, or subreddit. */
 export function entityExternalUrl(profile: EntityProfile): string | null {
     if (profile.kind === 'outlet' && profile.key) return `https://${profile.key}`;
-    if (profile.kind === 'official' && profile.key && !profile.key.includes('-')) {
+    if ((profile.kind === 'official' || profile.kind === 'account') && profile.key && !profile.key.includes('-')) {
         return `https://x.com/${profile.key}`;
     }
     if (profile.kind === 'subreddit' && profile.key) return `https://reddit.com/r/${profile.key}`;
     return null;
 }
 
-/** Short chip label. Officials show party letter; outlets/subreddits show lean/tilt; catch-alls none. */
+/** Short chip label. Officials/accounts show party letter; outlets/subreddits show lean/tilt; catch-alls none. */
 export function entityChipLabel(profile: EntityProfile): string | null {
     if (profile.kind === 'catch_all') return null;
-    if (profile.kind === 'official') return profile.party || null;
+    if (profile.kind === 'official' || profile.kind === 'account') return profile.party || null;
     return profile.lean || null;
 }
 
@@ -201,7 +201,7 @@ const PARTY_NAMES: Record<string, string> = {
  *  who doesn't know the shorthand can still read the card. */
 export function entityChipTitle(profile: EntityProfile): string | undefined {
     if (profile.kind === 'catch_all') return undefined;
-    if (profile.kind === 'official') {
+    if (profile.kind === 'official' || profile.kind === 'account') {
         if (!profile.party) return undefined;
         return `Party: ${PARTY_NAMES[profile.party] ?? profile.party}`;
     }
@@ -253,6 +253,59 @@ export function sentimentStats({
         },
         { label: 'Posts', value: volume.toLocaleString() },
     ];
+}
+
+const RECEIVED_TONE_TITLE =
+    'Average tone of sampled posts that talk ABOUT this person, from -100 '
+    + '(all negative) to +100 (all positive). This is the reputational '
+    + 'signal — it does not include their own posts about others.';
+const EXPRESSED_TONE_TITLE =
+    "Average tone of this person's OWN posts, from -100 to +100. A very "
+    + 'negative value means they post negatively (often about opponents) — '
+    + 'it says nothing about how others talk about them.';
+
+function toneStatColor(net: number): string {
+    return net > 10 ? COLORS.positive
+        : net < -10 ? COLORS.negative
+        : 'var(--neutral-500)';
+}
+
+/** Stats trio for officials cards. Received tone (posts about them) is the
+ *  emphasis stat when available; expressed tone (their own posts) is kept
+ *  but explicitly labeled. Received nets below the aggregator's sample
+ *  floor arrive as null and render as a low-sample note, never a number —
+ *  one classified tweet must not read as +100.0. */
+export function officialToneStats({
+    received, netTone, volume,
+}: {
+    received?: ReceivedTone | null;
+    netTone: number;
+    volume: number;
+}): EntityStat[] {
+    const stats: EntityStat[] = [];
+    if (received && received.volume > 0) {
+        stats.push({
+            label: `Received tone (n=${received.volume})`,
+            value: received.net != null ? formatPts(received.net) : 'low sample',
+            color: received.net != null ? toneStatColor(received.net) : 'var(--neutral-500)',
+            emphasis: true,
+            title: received.net != null
+                ? RECEIVED_TONE_TITLE
+                : `Only ${received.volume} classified post${received.volume === 1 ? '' : 's'} `
+                  + 'mention this person in this window — too few to score reliably.',
+        });
+    }
+    if (volume > 0) {
+        stats.push({
+            label: 'Expressed tone',
+            value: formatPts(netTone),
+            color: toneStatColor(netTone),
+            emphasis: stats.length === 0,
+            title: EXPRESSED_TONE_TITLE,
+        });
+        stats.push({ label: 'Posts', value: volume.toLocaleString() });
+    }
+    return stats;
 }
 
 

@@ -63,11 +63,26 @@ class OfficialTierProvenanceRoutingTests(unittest.TestCase):
             CREATE TABLE x_posts_raw (
                 tweet_id TEXT PRIMARY KEY,
                 author_id TEXT,
-                is_official_tier INTEGER NOT NULL DEFAULT 0
+                is_official_tier INTEGER NOT NULL DEFAULT 0,
+                retweet_count INTEGER DEFAULT 0,
+                reply_count INTEGER DEFAULT 0,
+                like_count INTEGER DEFAULT 0,
+                quote_count INTEGER DEFAULT 0
             );
             CREATE TABLE x_users_raw (
                 user_id TEXT PRIMARY KEY,
                 username TEXT
+            );
+            CREATE TABLE account_profiles (
+                profile_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                platform TEXT NOT NULL,
+                author_id TEXT NOT NULL,
+                tier TEXT NOT NULL,
+                full_name TEXT,
+                party TEXT,
+                office_title TEXT,
+                account_type TEXT,
+                UNIQUE(platform, author_id)
             );
         """)
         ts = 1_735_000_000
