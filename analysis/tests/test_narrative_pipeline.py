@@ -305,6 +305,26 @@ class TestNarrativeClusterer(unittest.TestCase):
         self.assertEqual(second["claims_considered"], 0)
         self.assertEqual(second["assignments"], 0)
 
+    def test_clustering_provenance_surfaced_in_aggregator(self):
+        # Migration 015 added clustering_mode/threshold/embedding_model as
+        # audit columns, but nothing read them back — write-only audit data
+        # is no audit at all. The narratives payload now carries them so a
+        # reader can see HOW a cluster was formed next to the cluster itself.
+        from analysis.src.reporting.aggregators.narrative import NarrativeAggregator
+
+        clusterer = NarrativeClusterer(self.db_path)
+        clusterer.run()
+        summaries = NarrativeAggregator(self.db_path).get_top_narratives(
+            time_window="all"
+        )
+        self.assertTrue(summaries)
+        clustering = summaries[0].clustering
+        self.assertIsNotNone(clustering)
+        self.assertEqual(clustering["mode"], "jaccard")
+        self.assertIsInstance(clustering["threshold"], float)
+        self.assertIsNone(clustering["embedding_model"])
+        self.assertEqual(summaries[0].to_dict()["clustering"], clustering)
+
 
 class _FakeEmbeddingClient:
     """Tiny embedding client that maps fixed phrases to fixed vectors.
@@ -430,6 +450,51 @@ class TestCosine(unittest.TestCase):
 
     def test_mismatched_length(self):
         self.assertEqual(cosine([1, 2], [1, 2, 3]), 0.0)
+
+
+class TestNarrativeCitationsXor(unittest.TestCase):
+    """The citation graph's honesty depends on every edge pointing at exactly
+    one target — an ingested doc OR an external URL. A both-set row would be
+    counted twice by the citation-detail split (owned + external). Migration
+    024 moves that XOR from writer discipline into a schema CHECK."""
+
+    def setUp(self):
+        tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        self.db_path = tmp.name
+        tmp.close()
+        _apply_migrations(self.db_path)
+        conn = sqlite3.connect(self.db_path)
+        conn.execute(
+            "INSERT INTO docs (doc_id, source_type, ident, raw_hash)"
+            " VALUES (1, 'news', 'a', 'h1'), (2, 'news', 'b', 'h2')"
+        )
+        conn.commit()
+        conn.close()
+
+    def tearDown(self):
+        for suffix in ("", "-wal", "-shm"):
+            try:
+                os.remove(self.db_path + suffix)
+            except (FileNotFoundError, PermissionError):
+                pass
+
+    def _insert(self, conn, target_doc_id, target_url):
+        conn.execute(
+            "INSERT INTO narrative_citations"
+            " (source_doc_id, target_doc_id, target_url, link_type, discovered_at)"
+            " VALUES (1, ?, ?, 'url_citation', 0)",
+            (target_doc_id, target_url),
+        )
+
+    def test_exactly_one_target_enforced(self):
+        conn = sqlite3.connect(self.db_path)
+        self._insert(conn, 2, None)                  # owned-doc edge: fine
+        self._insert(conn, None, "http://ex.com/a")  # external edge: fine
+        with self.assertRaises(sqlite3.IntegrityError):
+            self._insert(conn, 2, "http://ex.com/a")  # both set: rejected
+        with self.assertRaises(sqlite3.IntegrityError):
+            self._insert(conn, None, None)            # neither set: rejected
+        conn.close()
 
 
 if __name__ == "__main__":

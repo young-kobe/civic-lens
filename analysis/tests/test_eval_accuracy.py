@@ -32,7 +32,8 @@ class EvalAccuracyTests(unittest.TestCase):
                 doc_id INTEGER,
                 task_type TEXT,
                 output_json TEXT,
-                confidence REAL
+                confidence REAL,
+                label TEXT
             );
             CREATE VIEW ai_outputs_latest AS
             SELECT a.* FROM ai_outputs a

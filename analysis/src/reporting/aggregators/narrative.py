@@ -135,6 +135,7 @@ class NarrativeAggregator:
         for the top narratives in the window, ordered by support_count desc."""
         sql = """
             SELECT n.narrative_id, n.name, n.first_seen_at, n.first_seen_doc_id,
+                   n.clustering_mode, n.clustering_threshold, n.embedding_model,
                    COUNT(DISTINCT nd.doc_id) AS support_count
             FROM narratives n
             JOIN narrative_docs nd ON nd.narrative_id = n.narrative_id
@@ -145,7 +146,8 @@ class NarrativeAggregator:
             sql += " WHERE d.published_at >= ?"
             params.append(cutoff)
         sql += """
-            GROUP BY n.narrative_id, n.name, n.first_seen_at, n.first_seen_doc_id
+            GROUP BY n.narrative_id, n.name, n.first_seen_at, n.first_seen_doc_id,
+                     n.clustering_mode, n.clustering_threshold, n.embedding_model
             ORDER BY support_count DESC, n.first_seen_at DESC
             LIMIT ?
         """
@@ -156,7 +158,19 @@ class NarrativeAggregator:
     def _build_summary(
         self, cursor, row: tuple, cutoff: Optional[int],
     ) -> NarrativeSummary:
-        narrative_id, name, first_seen_at, first_seen_doc_id, support_count = row
+        (narrative_id, name, first_seen_at, first_seen_doc_id,
+         clustering_mode, clustering_threshold, embedding_model,
+         support_count) = row
+
+        # Clustering audit provenance (migration 015): how this cluster was
+        # formed. embedding_model is null for jaccard-mode narratives.
+        clustering = None
+        if clustering_mode is not None:
+            clustering = {
+                "mode": clustering_mode,
+                "threshold": clustering_threshold,
+                "embedding_model": embedding_model,
+            }
 
         (first_seen_source_type, first_seen_domain, first_seen_tier,
          first_seen_author, first_seen_handle) = self._first_seen_info(
@@ -212,6 +226,7 @@ class NarrativeAggregator:
             cross_tier=cross_tier,
             top_supporting_docs=top_supporting,
             mean_confidence=mean_confidence,
+            clustering=clustering,
         )
 
     @staticmethod

@@ -224,6 +224,7 @@ class AnalysisJobRunner:
                         prompt_version=BOT_PROMPT_VERSION,
                         system_prompt=None,  # no LLM prompt used
                         inference_method="deterministic",
+                        label="human",
                     )
                     excluded_count += 1
                     logger.debug(
@@ -243,6 +244,7 @@ class AnalysisJobRunner:
                     system_prompt=BOT_SYSTEM_PROMPT,
                     user_prompt_template=BOT_USER_PROMPT_TEMPLATE,
                     inference_method=result.inference_method,
+                    label=result.label,
                 )
                 processed += 1
                 logger.debug(
@@ -257,6 +259,12 @@ class AnalysisJobRunner:
             f"Bot detection complete: {total} docs processed "
             f"({processed} scored, {excluded_count} pre-excluded)"
         )
+        if total > 0:
+            # author_bot_scores is derived entirely from bot_detection rows;
+            # recompute it whenever those rows change so a `-Tasks bot` run
+            # can't leave the rollup stale. The standalone bot_rollup task
+            # stays available (idempotent full recompute) for manual repair.
+            self.run_account_bot_rollup()
         return total
 
     def _enrich_x_metadata(
@@ -352,6 +360,7 @@ class AnalysisJobRunner:
                 system_prompt=TEXT_ANALYSIS_SYSTEM_PROMPT,
                 user_prompt_template=TEXT_ANALYSIS_USER_PROMPT_TEMPLATE,
                 inference_method=sent_result.inference_method,
+                label=sent_result.label,
             )
 
             # Save Favorability
@@ -365,6 +374,7 @@ class AnalysisJobRunner:
                 system_prompt=TEXT_ANALYSIS_SYSTEM_PROMPT,
                 user_prompt_template=TEXT_ANALYSIS_USER_PROMPT_TEMPLATE,
                 inference_method=fav_result.inference_method,
+                label=fav_result.overall_gop_stance,
             )
             
             logger.debug(

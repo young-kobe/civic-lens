@@ -629,6 +629,10 @@ class NarrativeSummary:
     # lets the UI show a narrative-level confidence chip (audit R-3). None when
     # no supporting doc has a sentiment row.
     mean_confidence: Optional[float] = None
+    # Clustering audit provenance (migration 015, surfaced 2026-07-10):
+    # {mode: 'jaccard'|'embedding', threshold: float, embedding_model:
+    # str|None}. None for narratives created before the audit columns.
+    clustering: Optional[Dict[str, Any]] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -655,6 +659,7 @@ class NarrativeSummary:
             "cross_tier": self.cross_tier,
             "top_supporting_docs": self.top_supporting_docs,
             "mean_confidence": self.mean_confidence,
+            "clustering": self.clustering,
         }
 
 

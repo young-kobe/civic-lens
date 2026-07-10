@@ -442,6 +442,7 @@ class ContentLoader:
         system_prompt: Optional[str] = None,
         user_prompt_template: Optional[str] = None,
         inference_method: Optional[str] = None,
+        label: Optional[str] = None,
     ):
         """Save an AI analysis output to the database.
 
@@ -457,6 +458,12 @@ class ContentLoader:
         ('heuristic') or rows from a purely deterministic engine
         ('deterministic'). None is allowed for backward compatibility; the
         column will land NULL.
+
+        ``label`` (migration 023) is the row's primary categorical verdict,
+        projected out of ``result`` so readers can filter/GROUP BY an indexed
+        column instead of parsing JSON. Pass it for tasks with a scalar
+        verdict (sentiment label, bot label, favorability stance); leave
+        None for list-shaped tasks (claims, targets, propaganda).
         """
         with self._get_conn() as conn:
             cursor = conn.cursor()
@@ -488,11 +495,11 @@ class ContentLoader:
                 """
                 INSERT INTO ai_outputs
                     (doc_id, task_type, output_json, confidence, model_id,
-                     prompt_version, inference_method, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, strftime('%s','now'))
+                     prompt_version, inference_method, label, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%s','now'))
                 """,
                 (doc_id, task, json.dumps(result), confidence, model_id,
-                 prompt_version, inference_method),
+                 prompt_version, inference_method, label),
             )
             self.upsert_task_state(cursor, doc_id, task, "done", prompt_version)
             conn.commit()

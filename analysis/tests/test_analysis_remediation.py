@@ -287,11 +287,14 @@ def _seed_doc(conn, doc_id, source_type, ident, published_at, domain=None, text=
 
 
 def _seed_output(conn, doc_id, task, payload, confidence, inference_method="llm", created_at=None):
+    # Mirror save_ai_output / migration 023: the canonical label column is a
+    # projection of the payload's scalar verdict.
+    label = payload.get("label") or payload.get("overall_gop_stance")
     conn.execute(
         "INSERT INTO ai_outputs (doc_id, task_type, output_json, confidence, "
-        "inference_method, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+        "inference_method, label, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
         (doc_id, task, json.dumps(payload), confidence, inference_method,
-         created_at or int(time.time())),
+         label, created_at or int(time.time())),
     )
 
 

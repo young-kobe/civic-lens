@@ -72,7 +72,8 @@ class SentimentEntityRoutingTests(unittest.TestCase):
                 task_type TEXT,
                 output_json TEXT,
                 confidence REAL,
-                created_at INTEGER
+                created_at INTEGER,
+                label TEXT
             );
             CREATE VIEW ai_outputs_latest AS
             SELECT a.* FROM ai_outputs a

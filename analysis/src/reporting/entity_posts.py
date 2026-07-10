@@ -50,12 +50,9 @@ _BOT_EXCLUSION_SQL = """
         SELECT b.doc_id FROM ai_outputs_latest b
         JOIN docs bd ON bd.doc_id = b.doc_id
         WHERE b.task_type = 'bot_detection'
+          AND b.label = 'bot'
           AND b.confidence >= ?
           AND bd.source_type IN ('reddit_post', 'reddit_comment', 'x_post')
-          AND (
-              json_extract(b.output_json, '$.label') = 'bot'
-              OR json_extract(b.output_json, '$.is_bot') = 1
-          )
     )
 """
 
