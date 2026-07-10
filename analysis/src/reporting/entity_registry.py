@@ -330,6 +330,44 @@ def catch_all_profile(key: str, display_name: str, blurb: str) -> Dict[str, Any]
     }
 
 
+_ACCOUNT_TIER_DESCRIPTORS = {
+    "elected_official": "Elected official or institutional government account",
+    "affiliated": "Politically affiliated account",
+}
+
+
+def account_profile_dict(
+    handle: str,
+    tier: str,
+    full_name: Optional[str] = None,
+    party: Optional[str] = None,
+    office_title: Optional[str] = None,
+    account_type: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Profile for an X account classified by the curated political-accounts
+    list (``account_profiles``) but not in the editorial officials registry.
+    Shape mirrors ``*Entity.profile_dict()`` with ``kind='account'`` so the
+    UI renders a named card instead of folding the author into a catch-all.
+    The blurb names the classification source (labeling discipline)."""
+    descriptor = office_title or _ACCOUNT_TIER_DESCRIPTORS.get(
+        tier, "Classified political account"
+    )
+    return {
+        "kind": "account",
+        "key": handle,
+        "displayName": full_name or f"@{handle}",
+        "blurb": (
+            f"{descriptor} on X, classified via the curated political-accounts "
+            "list. Not individually tracked in the editorial registry."
+        ),
+        "lean": None,
+        "leanSource": None,
+        "party": party,
+        "office": office_title or "",
+        "accountType": account_type,
+    }
+
+
 # --------------------------------------------------------------------------- #
 #  Target-name resolution (received-tone / expressed-tone split)               #
 # --------------------------------------------------------------------------- #

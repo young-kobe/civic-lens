@@ -797,6 +797,15 @@ class AnalysisJobRunner:
             )
             results[f"propaganda_{window}"] = propaganda.flagged_docs
 
+        # Human-review agreement overlay — per-task accuracy from
+        # ai_output_evals, suppressed below the public floor. Not windowed:
+        # evals accumulate slowly and describe the models, not the window.
+        from analysis.src.reporting.review import ReviewService
+        eval_accuracy = ReviewService(self.settings.db_path).get_public_accuracy()
+        reviewed_total = sum(r["reviewed"] for r in eval_accuracy["perTask"])
+        self.cache.save("eval_accuracy", eval_accuracy, doc_count=reviewed_total)
+        results["eval_accuracy"] = reviewed_total
+
         # Polling Data (fetched live from RealClearPolling)
         if self.polling_scraper:
             try:

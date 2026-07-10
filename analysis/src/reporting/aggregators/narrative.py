@@ -179,6 +179,9 @@ class NarrativeAggregator:
         timeline = self._timeline(cursor, narrative_id, cutoff)
         net_sentiment = self._net_sentiment(cursor, narrative_id, cutoff)
         inbound = self._inbound_citations(cursor, narrative_id, cutoff)
+        inbound_by_link_type, external_citations, cross_narrative = (
+            self._citation_detail(cursor, narrative_id, cutoff)
+        )
         propaganda_score = self._propaganda_score(cursor, narrative_id, cutoff)
         bot_pushed_fraction = self._bot_pushed_fraction(cursor, narrative_id, cutoff)
         cross_tier = self._is_cross_tier(cursor, narrative_id, cutoff)
@@ -199,6 +202,9 @@ class NarrativeAggregator:
             timeline=timeline,
             net_sentiment=net_sentiment,
             inbound_citation_count=inbound,
+            inbound_by_link_type=inbound_by_link_type,
+            external_citation_count=external_citations,
+            cross_narrative_citations=cross_narrative,
             propaganda_score=propaganda_score,
             bot_pushed_fraction=bot_pushed_fraction,
             first_seen_entity_profile=entity_profile,
@@ -649,3 +655,82 @@ class NarrativeAggregator:
             params.append(cutoff)
         cursor.execute(sql, params)
         return cursor.fetchone()[0] or 0
+
+    _MAX_CROSS_NARRATIVE_EDGES = 5
+
+    def _citation_detail(
+        self, cursor, narrative_id: int, cutoff: Optional[int],
+    ) -> tuple:
+        """(inbound_by_link_type, external_count, cross_narrative) — the
+        citation-edge semantics the flat inbound count collapses away.
+
+        * ``inbound_by_link_type``: the inbound count split by edge kind
+          (url_citation / quote / reply / retweet) — a quote-heavy narrative
+          spreads differently than a link-dropped one.
+        * ``external_count``: outbound edges from supporting docs to URLs we
+          never ingested (target_url set, target_doc_id null) — what the
+          narrative points AT outside our sample.
+        * ``cross_narrative``: top narratives this one cites into / is cited
+          by, each ``{narrative_id, name, direction, edge_count}``. These are
+          edges between sampled docs only — never a claim about origin or
+          causal propagation (walkthrough 035 scoping).
+        """
+        time_filter = " AND c.discovered_at >= ?" if cutoff is not None else ""
+        time_params: List[Any] = [cutoff] if cutoff is not None else []
+
+        cursor.execute(
+            f"""
+            SELECT c.link_type, COUNT(*)
+            FROM narrative_citations c
+            JOIN narrative_docs nd ON nd.doc_id = c.target_doc_id
+            WHERE nd.narrative_id = ? AND c.target_doc_id IS NOT NULL{time_filter}
+            GROUP BY c.link_type
+            """,
+            [narrative_id, *time_params],
+        )
+        by_link_type = {lt or "unknown": n for lt, n in cursor.fetchall()}
+
+        cursor.execute(
+            f"""
+            SELECT COUNT(*)
+            FROM narrative_citations c
+            JOIN narrative_docs nd ON nd.doc_id = c.source_doc_id
+            WHERE nd.narrative_id = ? AND c.target_doc_id IS NULL
+              AND c.target_url IS NOT NULL{time_filter}
+            """,
+            [narrative_id, *time_params],
+        )
+        external_count = cursor.fetchone()[0] or 0
+
+        cross: List[Dict[str, Any]] = []
+        for direction, src_col, dst_col in (
+            ("cites", "source_doc_id", "target_doc_id"),
+            ("cited_by", "target_doc_id", "source_doc_id"),
+        ):
+            cursor.execute(
+                f"""
+                SELECT other.narrative_id, n2.name, COUNT(*) AS edge_count
+                FROM narrative_citations c
+                JOIN narrative_docs mine ON mine.doc_id = c.{src_col}
+                     AND mine.narrative_id = ?
+                JOIN narrative_docs other ON other.doc_id = c.{dst_col}
+                     AND other.narrative_id != ?
+                JOIN narratives n2 ON n2.narrative_id = other.narrative_id
+                WHERE c.target_doc_id IS NOT NULL{time_filter}
+                GROUP BY other.narrative_id, n2.name
+                ORDER BY edge_count DESC
+                LIMIT ?
+                """,
+                [narrative_id, narrative_id, *time_params, self._MAX_CROSS_NARRATIVE_EDGES],
+            )
+            cross.extend(
+                {
+                    "narrative_id": other_id,
+                    "name": other_name or "",
+                    "direction": direction,
+                    "edge_count": edge_count,
+                }
+                for other_id, other_name, edge_count in cursor.fetchall()
+            )
+        cross.sort(key=lambda e: -e["edge_count"])
+        return by_link_type, external_count, cross[: self._MAX_CROSS_NARRATIVE_EDGES]
