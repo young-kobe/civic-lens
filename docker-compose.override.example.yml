@@ -1,0 +1,49 @@
+# Local-dev overrides for docker-compose.yml. To use:
+#
+#   cp docker-compose.override.example.yml docker-compose.override.yml
+#   export CIVIC_ENV_FILE=.env          # or put CIVIC_ENV_FILE=.env in ./.env
+#   mkdir -p .compose-data/data
+#   docker compose up -d api
+#
+# docker-compose.override.yml is gitignored; docker compose merges it over
+# the base file automatically. Production hosts must never carry one.
+#
+# Windows/WSL2 note: keep the data directory on the Linux filesystem (inside
+# WSL2, e.g. ~/civic-lens/.compose-data). SQLite WAL over a Windows-mounted
+# path (/mnt/c/...) is unsafe — this is the one real WAL-corruption case.
+# The native Windows dev path remains run.ps1, unchanged.
+
+services:
+  # TLS, Cloudflare origin pulls, and the static UI don't apply in dev —
+  # run the Vite dev server (`.\run.ps1 ui` / `npm run dev`) against the api
+  # below instead. The unknown profile name keeps the service inert.
+  caddy:
+    profiles: [disabled-in-dev]
+
+  # Litestream needs R2 credentials; dev durability is just your local file.
+  litestream:
+    profiles: [disabled-in-dev]
+
+  api:
+    build:
+      context: .
+      dockerfile: analysis/Dockerfile
+    # Same-target volume entries override the base bind mount.
+    volumes:
+      - ./.compose-data:/var/lib/civic-lens
+    ports:
+      - "8000:8000"
+
+  ingest:
+    build:
+      context: .
+      dockerfile: ingest/Dockerfile
+    volumes:
+      - ./.compose-data:/var/lib/civic-lens
+
+  analyze:
+    build:
+      context: .
+      dockerfile: analysis/Dockerfile
+    volumes:
+      - ./.compose-data:/var/lib/civic-lens
