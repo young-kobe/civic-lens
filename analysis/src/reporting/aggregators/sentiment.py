@@ -24,7 +24,11 @@ from analysis.src.common.cache import SnapshotCache
 from analysis.src.common.settings import get_settings
 from analysis.src.reporting.aggregators.base import (
     ACCOUNT_PROFILE_JOIN_SQL,
+    REDDIT_ENGAGEMENT_JOIN_SQL,
+    SAMPLE_ENRICHMENT_SELECT,
     X_AUTHOR_JOIN_SQL,
+    build_sample_author,
+    build_sample_engagement,
     fetch_task_rows,
     get_bot_flagged_doc_ids,
     get_connection,
@@ -138,11 +142,15 @@ class SentimentAggregator:
             sentiment_rows = fetch_task_rows(
                 cursor,
                 "SELECT a.doc_id, a.output_json, a.confidence, d.source_type, d.published_at, d.title, d.domain_or_subreddit, d.ident, d.text, u.username, x.is_official_tier, "
-                "ap.tier, ap.full_name, ap.party, ap.office_title, ap.account_type",
+                "ap.tier, ap.full_name, ap.party, ap.office_title, ap.account_type, "
+                f"{SAMPLE_ENRICHMENT_SELECT}",
                 task_type="sentiment",
                 cutoff=cutoff,
                 min_confidence=min_conf,
-                extra_joins=f"{X_AUTHOR_JOIN_SQL} {ACCOUNT_PROFILE_JOIN_SQL}",
+                extra_joins=(
+                    f"{X_AUTHOR_JOIN_SQL} {ACCOUNT_PROFILE_JOIN_SQL} "
+                    f"{REDDIT_ENGAGEMENT_JOIN_SQL}"
+                ),
             )
             favorability_rows = fetch_task_rows(
                 cursor,
@@ -231,6 +239,8 @@ class SentimentAggregator:
             # Three-way entity rollups + per-topic tier split (walkthrough 057).
             "by_news_outlet": {}, "by_official": {}, "by_general_public": {},
             "by_topic_tier": {},
+            # Per-day per-tier stance counts → the toneTrend daily series.
+            "by_day_tier": {},
         }
         now = datetime.now()
 
@@ -238,6 +248,9 @@ class SentimentAggregator:
             doc_id, output_json, confidence, source_type, published_at,
             title, domain_or_subreddit, ident, text, x_handle, is_official_tier,
             ap_tier, ap_full_name, ap_party, ap_office_title, ap_account_type,
+            x_retweets, x_replies, x_likes, x_quotes,
+            u_name, u_avatar, u_verified_type, u_followers, u_created_at,
+            reddit_score, reddit_comments,
         ) in rows:
             if doc_id in bot_docs:
                 accum["excluded_bots"] += 1
@@ -248,6 +261,15 @@ class SentimentAggregator:
                 data = json.loads(output_json)
             except json.JSONDecodeError:
                 continue
+
+            engagement = build_sample_engagement(
+                source_type, x_retweets, x_replies, x_likes, x_quotes,
+                reddit_score, reddit_comments,
+            )
+            author = build_sample_author(
+                source_type, x_handle, u_name, u_avatar, u_verified_type,
+                u_followers, u_created_at,
+            )
 
             label = data.get("label", "NEUTRAL")
             conf = float(data.get("confidence", confidence or 0.5))
@@ -276,12 +298,12 @@ class SentimentAggregator:
             _collect_topic_sample(
                 accum["topic_samples"], topic, doc_id, label, conf,
                 data, title, source_type, published_at, domain_or_subreddit, ident, text,
-                x_handle,
+                x_handle, engagement=engagement, author=author,
             )
             _collect_strength_sample(
                 accum["strength_samples"], strength_key, doc_id, label, conf,
                 data, title, source_type, published_at, domain_or_subreddit, ident, text,
-                x_handle, topic=topic,
+                x_handle, topic=topic, engagement=engagement, author=author,
             )
 
             account = None
@@ -297,9 +319,14 @@ class SentimentAggregator:
                 is_official_tier=bool(is_official_tier),
                 account=account,
                 topic=topic,
+                engagement=engagement,
+                author=author,
             )
             if tier is not None:
                 _increment_bucket(accum["by_topic_tier"], f"{topic}\x00{tier}", label_key)
+                day = _day_key(published_at)
+                if day is not None:
+                    _increment_bucket(accum["by_day_tier"], f"{day}\x00{tier}", label_key)
 
             accum["count"] += 1
             accum["conf_sum"] += conf
@@ -348,6 +375,9 @@ class SentimentAggregator:
             "social": {**social, "netScore": round(social_net, 1), "volume": social_total},
             "news": {**news, "netScore": round(news_net, 1), "volume": news_total},
         }
+        tone_trend = _format_tone_trend(accum["by_day_tier"])
+        if tone_trend:
+            result.toneTrend = tone_trend
         return result
 
 
@@ -430,6 +460,8 @@ def _build_sample_dict(
     text: Optional[str],
     x_handle: Optional[str] = None,
     topic: Optional[str] = None,
+    engagement: Optional[Dict[str, int]] = None,
+    author: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Build the dict representation of a classification sample used by
     every collector. Centralizing this avoids the 3-place duplication
@@ -437,7 +469,12 @@ def _build_sample_dict(
 
     ``topic`` is the doc's topic attribution (LLM mention topic with
     keyword fallback — see _fetch_doc_topics) so the UI can filter samples
-    exactly instead of re-guessing with client-side keyword lists."""
+    exactly instead of re-guessing with client-side keyword lists.
+
+    ``engagement`` / ``author`` are the Phase 2b/2c enrichments
+    (base.build_sample_engagement / build_sample_author); None when the
+    source has none stored — the wire shape omits nothing, the UI treats
+    null as "not available"."""
     date_str = (
         datetime.fromtimestamp(published_at).strftime("%b %d, %Y")
         if published_at else None
@@ -476,6 +513,8 @@ def _build_sample_dict(
         "full_text": text or "",
         "url": url,
         "topic": topic,
+        "engagement": engagement,
+        "author": author,
     }
 
 
@@ -496,6 +535,8 @@ def _sample_dict_to_model(s: Dict[str, Any]) -> ClassificationSample:
         full_text=s.get("full_text", ""),
         url=s.get("url"),
         topic=s.get("topic"),
+        engagement=s.get("engagement"),
+        author=s.get("author"),
     )
 
 
@@ -522,6 +563,8 @@ def _collect_topic_sample(
     title: Optional[str], source_type: Optional[str], published_at: Optional[float],
     domain_or_subreddit: Optional[str], ident: Optional[str], text: Optional[str],
     x_handle: Optional[str] = None,
+    engagement: Optional[Dict[str, int]] = None,
+    author: Optional[Dict[str, Any]] = None,
 ) -> None:
     if not data.get("reasoning"):
         return
@@ -529,7 +572,7 @@ def _collect_topic_sample(
     sample = _build_sample_dict(
         doc_id, label, confidence, data, title, source_type,
         published_at, domain_or_subreddit, ident, text, x_handle,
-        topic=topic,
+        topic=topic, engagement=engagement, author=author,
     )
     _insert_capped(samples, sample, MAX_SAMPLES_PER_TOPIC)
 
@@ -543,6 +586,8 @@ def _collect_strength_sample(
     domain_or_subreddit: Optional[str], ident: Optional[str], text: Optional[str],
     x_handle: Optional[str] = None,
     topic: Optional[str] = None,
+    engagement: Optional[Dict[str, int]] = None,
+    author: Optional[Dict[str, Any]] = None,
 ) -> None:
     """Append a sample to one of the five STRENGTH_BUCKETS. Silently
     drops rows for unknown buckets so callers can pass the key through
@@ -553,7 +598,7 @@ def _collect_strength_sample(
     sample = _build_sample_dict(
         doc_id, label, confidence, data, title, source_type,
         published_at, domain_or_subreddit, ident, text, x_handle,
-        topic=topic,
+        topic=topic, engagement=engagement, author=author,
     )
     _insert_capped(samples, sample, MAX_DISTRIBUTION_SAMPLES_PER_BUCKET)
 
@@ -566,6 +611,8 @@ def _collect_entity_sample(
     domain_or_subreddit: Optional[str], ident: Optional[str], text: Optional[str],
     x_handle: Optional[str] = None,
     topic: Optional[str] = None,
+    engagement: Optional[Dict[str, int]] = None,
+    author: Optional[Dict[str, Any]] = None,
 ) -> None:
     """Bump an entity bucket's counters + append a sample when there's room."""
     label_key = _LABEL_MAP.get(label, "neutral")
@@ -578,7 +625,7 @@ def _collect_entity_sample(
     sample = _build_sample_dict(
         doc_id, label, confidence, data, title, source_type,
         published_at, domain_or_subreddit, ident, text, x_handle,
-        topic=topic,
+        topic=topic, engagement=engagement, author=author,
     )
     _insert_capped(entity_accum["samples"], sample, MAX_SAMPLES_PER_ENTITY)
 
@@ -604,6 +651,8 @@ def _route_and_record(
     is_official_tier: bool = False,
     account: Optional[Dict[str, Any]] = None,
     topic: Optional[str] = None,
+    engagement: Optional[Dict[str, int]] = None,
+    author: Optional[Dict[str, Any]] = None,
 ) -> Optional[str]:
     """Resolve the row's tier + entity via the shared entity_routing
     module, then bucket the row into the right per-entity accumulator
@@ -707,7 +756,7 @@ def _route_and_record(
     _collect_entity_sample(
         bucket_dict[key], doc_id, label, conf, data,
         title, source_type, published_at, domain_or_subreddit, ident, text, x_handle,
-        topic=topic,
+        topic=topic, engagement=engagement, author=author,
     )
     return tier
 
@@ -759,6 +808,16 @@ def _day_of_week(published_at: Any) -> Optional[str]:
     if dt is None:
         return None
     return _DOW_LABELS[dt.weekday()]
+
+
+def _day_key(published_at: Any) -> Optional[str]:
+    """Calendar-day bucket key ('YYYY-MM-DD') for the toneTrend series, or
+    None when the timestamp is unparseable. Same local-time convention as
+    the GOP daily trend (_track_daily_favorability)."""
+    dt = _parse_published_at(published_at)
+    if dt is None:
+        return None
+    return dt.strftime("%Y-%m-%d")
 
 
 def _time_bucket(published_at: Any, now: datetime) -> str:
@@ -892,6 +951,42 @@ def _net_from_tier(counts: Optional[Dict[str, int]]):
         return None, 0
     net = (counts.get("positive", 0) - counts.get("negative", 0)) / total * 100
     return round(net, 1), total
+
+
+_TONE_TREND_TIERS = ("news", "officials", "public")
+_TONE_TREND_MAX_DAYS = 30
+
+
+def _format_tone_trend(
+    by_day_tier: Dict[str, Dict[str, int]],
+) -> List[Dict[str, Any]]:
+    """Materialize the per-day per-tier stance counts into the toneTrend
+    series: dates ascending, one {net, volume} cell per tier per day.
+
+    A tier's net is suppressed (None) below MIN_TARGET_SAMPLE_N — a
+    three-post day must not draw a +100 spike; the UI renders a gap. The
+    volume is always emitted so the honest n stays visible. Capped to the
+    trailing _TONE_TREND_MAX_DAYS to bound payload size, matching gopTrend.
+    """
+    days: Dict[str, Dict[str, Dict[str, int]]] = {}
+    for composite, counts in by_day_tier.items():
+        if "\x00" not in composite:
+            continue
+        day, tier = composite.split("\x00", 1)
+        days.setdefault(day, {})[tier] = counts
+
+    series: List[Dict[str, Any]] = []
+    for day in sorted(days)[-_TONE_TREND_MAX_DAYS:]:
+        row: Dict[str, Any] = {"date": day}
+        for tier in _TONE_TREND_TIERS:
+            counts = days[day].get(tier)
+            volume = sum(counts.values()) if counts else 0
+            row[tier] = {
+                "net": _net_or_none(counts) if counts else None,
+                "volume": volume,
+            }
+        series.append(row)
+    return series
 
 
 def _format_entity_items(bucket: Dict[str, Dict[str, Any]]) -> List[EntitySentimentItem]:

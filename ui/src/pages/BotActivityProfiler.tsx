@@ -1,12 +1,17 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
-    Card, CollapsibleInfo, EmptyState, EntityHeader, EntityProfileCard, ErrorState,
-    FlaggedPostList, GlobalTicker,
-    LoadingCard, MethodPopover, MetricCard, Modal,
-    ThreeWayColumn, ThreeWayGrid,
-    entityExternalUrl, entityLeanAccent,
+    Card, CollapsibleInfo, DefinitionChip, EmptyState, EntityHeader,
+    EntityHubLinks, ErrorState,
+    GlobalTicker,
+    LoadingCard, MethodPopover, Modal, PostCardList,
+    RankedEntityList, ThreeWayColumn, ThreeWayGrid,
+    entityExternalUrl, entityLeanAccent, flaggedExampleToPostCard,
+    parseEntityParam,
 } from '../components/common';
-import type { TickerItem } from '../components/common';
+import { deepLinkHref, useDeepLinkParam } from '../services/deepLink';
+import { coordinationLevel } from '../services/glossary';
+import { CoordinationEvidencePanel } from './bots/CoordinationEvidencePanel';
+import type { ColumnSorter, TickerItem } from '../components/common';
 import { fetchBotActivity, fetchSnapshotStatus, type SnapshotStatus } from '../services/api';
 import { useFetch } from '../services/useFetch';
 import { formatRefreshedAgo, getSnapshotTimestamp } from '../services/freshness';
@@ -21,122 +26,129 @@ import type {
 //  Amplification by tier — three-way entity grid                              //
 // --------------------------------------------------------------------------- //
 
-const BOT_TOP_N = 12;
-
-function BotEntityCard({ item }: { item: BotEntityItem }) {
-    const [modalOpen, setModalOpen] = useState(false);
-    const profile = item.entity_profile;
-    const rateColor = item.bot_rate_pct > 10
+function botRateColor(ratePct: number): string {
+    return ratePct > 10
         ? COLORS.negative
-        : item.bot_rate_pct > 3
+        : ratePct > 3
             ? COLORS.warning
             : 'var(--neutral-700)';
+}
+
+function BotEntityModal({ item, onClose }: { item: BotEntityItem; onClose: () => void }) {
+    const profile = item.entity_profile;
+    const rateColor = botRateColor(item.bot_rate_pct);
     const sourceUrl = entityExternalUrl(profile);
 
     return (
-        <>
-            <EntityProfileCard
-                profile={profile}
-                stats={item.total_docs > 0 ? [
-                    { label: 'Suspected bot rate', value: formatPct(item.bot_rate_pct), color: rateColor, emphasis: true },
-                    { label: 'Flagged posts',   value: item.bot_docs.toLocaleString() },
-                    { label: 'Posts scanned', value: item.total_docs.toLocaleString() },
-                ] : []}
-                onClick={() => setModalOpen(true)}
-                emptyNote="Tracked — no posts scored yet."
-            />
-            {modalOpen && (
-                <Modal
-                    isOpen
-                    onClose={() => setModalOpen(false)}
-                    title={profile.displayName}
-                    subtitle="Bot-detection drill-down"
-                    accentColor={entityLeanAccent(profile)}
-                >
-                    <EntityHeader profile={profile} />
-                    <div className="entity-modal-stats">
-                        <div>
-                            <div
-                                className="eyebrow"
-                                title="Share of this source's scored posts our detector flags as likely automated. A lead, not a verdict."
-                            >
-                                Suspected bot rate
-                            </div>
-                            <div className="metric-value" style={{ color: rateColor }}>
-                                {item.total_docs > 0 ? formatPct(item.bot_rate_pct) : '—'}
-                            </div>
-                        </div>
-                        <div>
-                            <div className="eyebrow">Flagged posts</div>
-                            <div className="metric-value">{item.bot_docs.toLocaleString()}</div>
-                        </div>
-                        <div>
-                            <div className="eyebrow">Posts scanned</div>
-                            <div className="metric-value">{item.total_docs.toLocaleString()}</div>
-                        </div>
+        <Modal
+            isOpen
+            onClose={onClose}
+            title={profile.displayName}
+            subtitle="Bot-detection drill-down"
+            accentColor={entityLeanAccent(profile)}
+        >
+            <EntityHeader profile={profile} />
+            <div className="entity-modal-stats">
+                <div>
+                    <div
+                        className="eyebrow"
+                        title="Share of this source's scored posts our detector flags as likely automated. A lead, not a verdict."
+                    >
+                        Suspected bot rate
                     </div>
+                    <div className="metric-value" style={{ color: rateColor }}>
+                        {item.total_docs > 0 ? formatPct(item.bot_rate_pct) : '—'}
+                    </div>
+                </div>
+                <div>
+                    <div className="eyebrow">Flagged posts</div>
+                    <div className="metric-value">{item.bot_docs.toLocaleString()}</div>
+                </div>
+                <div>
+                    <div className="eyebrow">Posts scanned</div>
+                    <div className="metric-value">{item.total_docs.toLocaleString()}</div>
+                </div>
+            </div>
 
-                    <h3 className="card-title mt-4 mb-2">Flagged posts from this source</h3>
-                    <FlaggedPostList
-                        posts={item.samples ?? []}
-                        emptyNote={item.bot_docs > 0
-                            ? 'Flagged posts exist but their excerpts are not in this snapshot yet — they will appear on the next data refresh.'
-                            : 'No posts from this source were flagged in this window.'}
-                    />
-                    <div className="card-note mt-4">
-                        Bot flags are probabilistic leads, not verdicts. Every excerpt links
-                        back to the original post so you can judge it yourself.
-                    </div>
-                    {sourceUrl && (
-                        <div className="mt-3">
-                            <a href={sourceUrl} target="_blank" rel="noreferrer" className="example-row-link">
-                                Visit {profile.displayName} ↗
-                            </a>
-                        </div>
-                    )}
-                </Modal>
+            <h3 className="card-title mt-4 mb-2">Flagged posts from this source</h3>
+            <PostCardList
+                posts={(item.samples ?? []).map(flaggedExampleToPostCard)}
+                sampleNote="The highest-confidence flagged posts from this source — a sample, not every flag."
+                emptyNote={item.bot_docs > 0
+                    ? 'Flagged posts exist but their excerpts are not in this snapshot yet — they will appear on the next data refresh.'
+                    : 'No posts from this source were flagged in this window.'}
+            />
+            <div className="card-note mt-4">
+                Bot flags are probabilistic leads, not verdicts. Every excerpt links
+                back to the original post so you can judge it yourself.
+            </div>
+            {sourceUrl && (
+                <div className="mt-3">
+                    <a href={sourceUrl} target="_blank" rel="noreferrer" className="example-row-link">
+                        Visit {profile.displayName} ↗
+                    </a>
+                </div>
             )}
-        </>
+            <EntityHubLinks profile={profile} currentTab="bots" />
+        </Modal>
     );
 }
 
-function BotThreeWayGrid({ overview }: { overview: BotOverview }) {
+const BOT_SORTERS: ColumnSorter<BotEntityItem>[] = [
+    { label: 'bot rate', compare: (a, b) => b.bot_rate_pct - a.bot_rate_pct },
+    { label: 'posts scanned', compare: (a, b) => b.total_docs - a.total_docs },
+    { label: 'name', compare: (a, b) => a.entity_profile.displayName.localeCompare(b.entity_profile.displayName) },
+];
+
+function BotThreeWayGrid({
+    overview, onOpen,
+}: {
+    overview: BotOverview;
+    onOpen: (item: BotEntityItem) => void;
+}) {
     // Always render the three-way frame when we have an overview, even if
     // individual tiers are empty — per-column empty copy is more honest
     // ("no official X posts scored") than hiding the grid entirely.
-    const outlets = (overview.by_news_outlet ?? []).slice(0, BOT_TOP_N);
-    const officials = (overview.by_official ?? []).slice(0, BOT_TOP_N);
-    const publics = (overview.by_general_public ?? []).slice(0, BOT_TOP_N);
-    const renderCard = (it: BotEntityItem) => (
-        <BotEntityCard key={`${it.kind}:${it.key}`} item={it} />
+    const ranked = (label: string) => (items: BotEntityItem[]) => (
+        <RankedEntityList
+            items={items.map((it) => ({
+                profile: it.entity_profile,
+                rateValue: it.total_docs > 0 ? formatPct(it.bot_rate_pct) : '—',
+                ratePct: it.bot_rate_pct,
+                rateColor: botRateColor(it.bot_rate_pct),
+                detail: `${it.bot_docs.toLocaleString()} of ${it.total_docs.toLocaleString()} flagged`,
+                onClick: () => onOpen(it),
+            }))}
+            ariaLabel={label}
+        />
     );
 
     return (
         <ThreeWayGrid>
-            <ThreeWayColumn
-                header="The News"
-                byline="Outlets ranked by the share of their scanned articles our detector flags as likely automated."
-                empty="No news posts scored for bot detection."
-                isEmpty={outlets.length === 0}
-            >
-                {outlets.map(renderCard)}
-            </ThreeWayColumn>
-            <ThreeWayColumn
-                header="Politicians & Officials"
-                byline="Tracked officeholders on X, ranked by the share of their X posts our detector flags as likely automated."
-                empty="No official X posts scored for bot detection."
-                isEmpty={officials.length === 0}
-            >
-                {officials.map(renderCard)}
-            </ThreeWayColumn>
-            <ThreeWayColumn
-                header="The Public"
-                byline="Political subreddits, plus X users we don't track individually, ranked by the share of their posts our detector flags as likely automated."
-                empty="No public social posts scored for bot detection."
-                isEmpty={publics.length === 0}
-            >
-                {publics.map(renderCard)}
-            </ThreeWayColumn>
+                <ThreeWayColumn
+                    header="The News"
+                    byline="Outlets ranked by the share of their scanned articles our detector flags as likely automated."
+                    empty="No news posts scored for bot detection."
+                    items={overview.by_news_outlet ?? []}
+                    renderItems={ranked('News outlets by suspected bot rate')}
+                    sorters={BOT_SORTERS}
+                />
+                <ThreeWayColumn
+                    header="Politicians & Officials"
+                    byline="Tracked officeholders on X, ranked by the share of their X posts our detector flags as likely automated."
+                    empty="No official X posts scored for bot detection."
+                    items={overview.by_official ?? []}
+                    renderItems={ranked('Officials by suspected bot rate')}
+                    sorters={BOT_SORTERS}
+                />
+                <ThreeWayColumn
+                    header="The Public"
+                    byline="Political subreddits, plus X users we don't track individually, ranked by the share of their posts our detector flags as likely automated."
+                    empty="No public social posts scored for bot detection."
+                    items={overview.by_general_public ?? []}
+                    renderItems={ranked('Public sources by suspected bot rate')}
+                    sorters={BOT_SORTERS}
+                />
         </ThreeWayGrid>
     );
 }
@@ -217,8 +229,8 @@ function buildBotTickerItems(overview: BotOverview): { items: TickerItem[]; acce
         },
         {
             label: 'Coordination',
-            value: overview.coordinationIndex.toFixed(2),
-            hint: '0 none – 1 high',
+            value: coordinationLevel(overview.coordinationIndex),
+            hint: `${overview.coordinationIndex.toFixed(2)} / 1`,
         },
         {
             label: 'Flagged Posts',
@@ -235,45 +247,6 @@ function buildBotTickerItems(overview: BotOverview): { items: TickerItem[]; acce
         },
     ];
     return { items, accentColor };
-}
-
-interface BotOverviewMetricsProps {
-    data: BotOverview;
-}
-
-function BotOverviewMetrics({ data }: BotOverviewMetricsProps) {
-    // mb-4 removed — the parent `dashboard-grid` already supplies row gap.
-    // On mobile (grid-3 collapses to 1-col) the extra 16px margin doubled
-    // the spacing between this block and the one below, breaking the
-    // otherwise-consistent rhythm.
-    return (
-        <div className="grid-3">
-            <MetricCard
-                label="Suspected Automation Rate"
-                value={formatPct(data.suspectedAutomationRate, { decimals: 0 })}
-                subtitle="of analyzed posts"
-                className={data.suspectedAutomationRate > 10 ? 'border-warning' : ''}
-            />
-            <MetricCard
-                label="Coordination Index"
-                value={data.coordinationIndex.toFixed(2)}
-                subtitle="0 = none, 1 = highly coordinated"
-            />
-            <Card title="Domains flagged posts link to most">
-                <div className="text-xs text-muted mb-2">
-                    Suspected-bot posts often link repeatedly to the same sites.
-                </div>
-                <div className="flex flex-wrap gap-1">
-                    {data.topClusters.map((cluster, i) => (
-                        <span key={i} className="badge badge-warning">{friendlyCluster(cluster)}</span>
-                    ))}
-                </div>
-                <div className="eyebrow mt-3 num">
-                    {data.totalFlaggedPosts.toLocaleString()} posts flagged
-                </div>
-            </Card>
-        </div>
-    );
 }
 
 interface NarrativeAmplificationCardProps {
@@ -320,6 +293,13 @@ function NarrativeAmplificationCard({ narrative }: NarrativeAmplificationCardPro
                             <span className="eyebrow num">
                                 {narrative.suspectedBotVolume.toLocaleString()} suspected bot posts
                             </span>
+                            <a
+                                href={deepLinkHref('narratives', { open: String(narrative.id) })}
+                                className="example-row-link"
+                                title="Open this story on the Political Narratives page"
+                            >
+                                See the full story ↗
+                            </a>
                         </div>
                     </div>
                     <button
@@ -354,8 +334,9 @@ function NarrativeAmplificationCard({ narrative }: NarrativeAmplificationCardPro
                     when the backend synthesized one (invariant C1). */}
                 <div className="mb-4">
                     <div className="eyebrow mb-2">Flagged Posts</div>
-                    <FlaggedPostList
-                        posts={narrative.examplePosts}
+                    <PostCardList
+                        posts={narrative.examplePosts.map(flaggedExampleToPostCard)}
+                        sampleNote="Example flagged posts amplifying this narrative — a sample, not every flag."
                         emptyNote="No individual posts surfaced yet for this narrative."
                     />
                 </div>
@@ -407,6 +388,7 @@ function CoordinationSummary({ data }: CoordinationSummaryProps) {
     return (
         <Card
             title="Coordination Indicators"
+            subtitle={<DefinitionChip entry="coordination" label="What counts as coordination?" />}
             headerActions={
                 <MethodPopover
                     description="Coordination is detected through behavioral analysis including timing patterns, text similarity, and network analysis."
@@ -612,6 +594,9 @@ function BotActivityProfiler({ filters }: BotActivityProfilerProps) {
     // bot_activity_{window} snapshots and /bot-activity takes ?window=.
     // (This page previously fetched the API's 24h default while labeling
     // it "full sample, not time-windowed" — wrong on both counts.)
+    const [activeItem, setActiveItem] = useState<BotEntityItem | null>(null);
+    // Cross-page entity deep link ("#bots?entity=subreddit:politics").
+    const [entityParam, setEntityParam] = useDeepLinkParam('entity');
     const { data, loading, error, refetch } = useFetch<BotData>(
         () => fetchBotActivity(filters.timeRange),
         [filters.timeRange],
@@ -622,6 +607,29 @@ function BotActivityProfiler({ filters }: BotActivityProfilerProps) {
         [],
         'snapshot-status',
     );
+
+    // Resolve entity= once data lands; unknown entities clear the param.
+    useEffect(() => {
+        if (!data || !entityParam) return;
+        const target = parseEntityParam(entityParam);
+        if (target) {
+            const lists = [
+                data.overview.by_news_outlet,
+                data.overview.by_official,
+                data.overview.by_general_public,
+            ];
+            for (const list of lists) {
+                const item = (list ?? []).find(
+                    (it) => it.kind === target.kind && it.key === target.key,
+                );
+                if (item) {
+                    setActiveItem(item);
+                    return;
+                }
+            }
+        }
+        setEntityParam(null);
+    }, [data, entityParam, setEntityParam]);
 
     if (error) {
         return <ErrorState message={error.message} onRetry={refetch} />;
@@ -652,6 +660,17 @@ function BotActivityProfiler({ filters }: BotActivityProfilerProps) {
     const botRefreshed = formatRefreshedAgo(
         getSnapshotTimestamp(snapshotStatus, `bot_activity_${filters.timeRange}`),
     );
+    // Funnel stage 1: total scanned across the per-entity rollups (the
+    // catch-all buckets are included, so this covers every scored doc).
+    // Null on pre-rollup snapshots — the funnel renders an em dash.
+    const entityLists = [
+        data.overview.by_news_outlet,
+        data.overview.by_official,
+        data.overview.by_general_public,
+    ];
+    const totalScanned = entityLists.some((l) => (l?.length ?? 0) > 0)
+        ? entityLists.flatMap((l) => l ?? []).reduce((s, it) => s + it.total_docs, 0)
+        : null;
 
     return (
         <div className="dashboard-grid">
@@ -682,16 +701,27 @@ function BotActivityProfiler({ filters }: BotActivityProfilerProps) {
                 </div>
             </div>
 
+            {/* The chain of evidence — the page's signature strip. */}
             <div className="col-span-12">
-                <BotThreeWayGrid overview={data.overview} />
+                <CoordinationEvidencePanel
+                    overview={data.overview}
+                    totalScanned={totalScanned}
+                />
             </div>
 
-            {/* Row: overview metrics — BotOverviewMetrics already renders 3
-                items; wrap full-width and let its internal grid-3 handle the
-                column layout so we don't double-nest grids. */}
             <div className="col-span-12">
-                <BotOverviewMetrics data={data.overview} />
+                <BotThreeWayGrid overview={data.overview} onOpen={setActiveItem} />
             </div>
+
+            {activeItem && (
+                <BotEntityModal
+                    item={activeItem}
+                    onClose={() => {
+                        setActiveItem(null);
+                        if (entityParam) setEntityParam(null);
+                    }}
+                />
+            )}
 
             {/* Row: coordination summary (5) + narrative amplification section label (7).
                 Coord is a compact 4-stat card; the amplification section headline pairs

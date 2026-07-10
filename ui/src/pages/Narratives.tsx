@@ -1,11 +1,12 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
-    Card, CollapsibleInfo, EmptyState, EntityHeader, EntityProfileCard,
-    ErrorState, GlobalTicker, LoadingCard, MethodPopover, Modal, SupportingDocsTable,
+    Card, CollapsibleInfo, EmptyState, EntityHeader, EntityHubLinks,
+    EntityProfileCard,
+    ErrorState, GlobalTicker, LoadingCard, MethodPopover, Modal, PostCardList,
     ThreeWayColumn, ThreeWayGrid,
-    entityExternalUrl, entityLeanAccent,
+    entityExternalUrl, entityLeanAccent, supportingDocToPostCard,
 } from '../components/common';
-import type { EntityStat, TickerItem } from '../components/common';
+import type { ColumnSorter, EntityStat, TickerItem } from '../components/common';
 import type { EntityProfile } from '../types';
 import { Sparkline } from '../components/charts';
 import { fetchNarratives, fetchSnapshotStatus, type SnapshotStatus } from '../services/api';
@@ -14,6 +15,8 @@ import { formatRefreshedAgo, getSnapshotTimestamp } from '../services/freshness'
 import { formatPts, formatRelativeDate, sourceLabel } from '../services/format';
 import { useFetch } from '../services/useFetch';
 import { COLORS } from '../theme';
+import { useDeepLinkParam } from '../services/deepLink';
+import { NarrativeLifecyclePanel } from './narratives/NarrativeLifecyclePanel';
 
 // Shared tooltip copy — kept here so the same definitions read identically
 // on the compact cards and inside the detail modals.
@@ -269,9 +272,14 @@ interface NarrativeDetailModalProps {
     /** When set, shows a ← arrow returning to the parent (entity) modal. */
     onBack?: () => void;
     backLabel?: string;
+    /** Jump to another narrative by id (cross-narrative citation links).
+     *  Unknown ids no-op — the target may be outside the loaded window. */
+    onOpenNarrativeId?: (narrativeId: number) => void;
 }
 
-function NarrativeDetailModal({ narrative, onClose, onBack, backLabel }: NarrativeDetailModalProps) {
+function NarrativeDetailModal({
+    narrative, onClose, onBack, backLabel, onOpenNarrativeId,
+}: NarrativeDetailModalProps) {
     const timeline = useMemo(
         () => narrative.timeline.map((t) => ({ date: t.date, value: t.count })),
         [narrative.timeline],
@@ -350,7 +358,19 @@ function NarrativeDetailModal({ narrative, onClose, onBack, backLabel }: Narrati
                             {narrative.cross_narrative_citations!.map((edge) => (
                                 <li key={`${edge.direction}-${edge.narrative_id}`} className="text-sm">
                                     {edge.direction === 'cites' ? 'Cites into' : 'Cited by'}{' '}
-                                    <strong>{edge.name}</strong> ({edge.edge_count} edge{edge.edge_count === 1 ? '' : 's'})
+                                    {onOpenNarrativeId ? (
+                                        <button
+                                            type="button"
+                                            className="link-button"
+                                            onClick={() => onOpenNarrativeId(edge.narrative_id)}
+                                            title="Open this story's details"
+                                        >
+                                            {edge.name}
+                                        </button>
+                                    ) : (
+                                        <strong>{edge.name}</strong>
+                                    )}
+                                    {' '}({edge.edge_count} edge{edge.edge_count === 1 ? '' : 's'})
                                 </li>
                             ))}
                         </ul>
@@ -398,7 +418,10 @@ function NarrativeDetailModal({ narrative, onClose, onBack, backLabel }: Narrati
             {supportingDocs.length > 0 && (
                 <>
                     <h3 className="card-title mt-4 mb-2">Top supporting posts</h3>
-                    <SupportingDocsTable docs={supportingDocs} />
+                    <PostCardList
+                        posts={supportingDocs.map(supportingDocToPostCard)}
+                        sampleNote="The strongest posts carrying this story in our sample — not every post that repeats it."
+                    />
                 </>
             )}
         </Modal>
@@ -556,6 +579,8 @@ function NarrativeEntityModal({
                 </div>
             )}
 
+            <EntityHubLinks profile={profile} currentTab="narratives" />
+
             <h3 className="card-title mt-4 mb-2">
                 {group.count === 1 ? 'The story' : 'The stories'}
             </h3>
@@ -577,7 +602,11 @@ function NarrativeEntityModal({
 //  Three-way grid — entity-profile split, mirrors Overall Tone layout         //
 // --------------------------------------------------------------------------- //
 
-const TOP_N = 12;
+const NARRATIVE_GROUP_SORTERS: ColumnSorter<NarrativeEntityGroup>[] = [
+    { label: 'stories', compare: (a, b) => b.count - a.count || b.totalDocs - a.totalDocs },
+    { label: 'posts', compare: (a, b) => b.totalDocs - a.totalDocs },
+    { label: 'name', compare: (a, b) => a.profile.displayName.localeCompare(b.profile.displayName) },
+];
 
 interface NarrativeColumnProps {
     header: string;
@@ -588,15 +617,14 @@ interface NarrativeColumnProps {
 }
 
 function NarrativeThreeWayColumn({ header, byline, groups, onOpen, emptyCopy }: NarrativeColumnProps) {
-    const visible = groups.slice(0, TOP_N);
     return (
         <ThreeWayColumn
             header={header}
             byline={byline}
             empty={emptyCopy}
-            isEmpty={visible.length === 0}
-        >
-            {visible.map((g) => {
+            items={groups}
+            sorters={NARRATIVE_GROUP_SORTERS}
+            renderItem={(g) => {
                 const readsAs = g.count === 1
                     ? 'One story first seen here in our sample.'
                     : `${g.count} stories first seen here in our sample.`;
@@ -608,10 +636,11 @@ function NarrativeThreeWayColumn({ header, byline, groups, onOpen, emptyCopy }: 
                         readsAs={readsAs}
                         onClick={() => onOpen(g)}
                         emptyNote="Tracked — no stories first seen here in this window."
+                        variant="compact"
                     />
                 );
-            })}
-        </ThreeWayColumn>
+            }}
+        />
     );
 }
 
@@ -719,6 +748,10 @@ interface NarrativesProps {
 function Narratives({ filters }: NarrativesProps) {
     const [activeNarrative, setActiveNarrative] = useState<NarrativeSummary | null>(null);
     const [activeEntity, setActiveEntity] = useState<NarrativeEntityGroup | null>(null);
+    const [query, setQuery] = useState('');
+    // Deep-link target ("#narratives?open=<id>") — set by cross-page links
+    // (Bot Detector amplification cards, Home digest, tone modals).
+    const [openParam, setOpenParam] = useDeepLinkParam('open');
 
     const { data, loading, error, refetch } = useFetch<NarrativeSummary[]>(
         () => fetchNarratives(filters.timeRange),
@@ -730,6 +763,27 @@ function Narratives({ filters }: NarrativesProps) {
         [],
         'snapshot-status',
     );
+
+    // Resolve the open= param once data lands. Unknown ids (outside the
+    // loaded window/top-N) clear the param instead of erroring.
+    useEffect(() => {
+        if (!data || !openParam) return;
+        const target = data.find((n) => String(n.narrative_id) === openParam);
+        if (target) {
+            setActiveNarrative(target);
+        } else {
+            setOpenParam(null);
+        }
+    }, [data, openParam, setOpenParam]);
+
+    /** Jump between narratives by id (cross-narrative citation links). */
+    const openNarrativeById = (narrativeId: number) => {
+        const target = data?.find((n) => n.narrative_id === narrativeId);
+        if (target) {
+            setActiveEntity(null);
+            setActiveNarrative(target);
+        }
+    };
 
     if (error) return <ErrorState message={error.message} onRetry={refetch} />;
     if (loading) {
@@ -746,20 +800,28 @@ function Narratives({ filters }: NarrativesProps) {
     // readers can see which axes are empty, matching Tone's behavior.
     if (!data) return <EmptyState title="No stories available for this window." />;
 
+    // Client-side claim search — filters every surface below (lifecycle
+    // strip, three-way grid, cross-group panel) by name substring. The
+    // data is already in the loaded payload; no request round-trip.
+    const q = query.trim().toLowerCase();
+    const visible = q
+        ? data.filter((n) => (n.name || '').toLowerCase().includes(q))
+        : data;
+
     // Three-way split by first_seen_tier_group (walkthrough 058), then
     // rolled up by first_seen_entity_profile so each entity gets one card.
     // The three-tier split (news / officials / public) is the source
     // separation now — the global "Filter by sources" pills were removed.
     const newsGroups = groupNarrativesByEntity(
-        data.filter((n) => n.first_seen_tier_group === 'news'),
+        visible.filter((n) => n.first_seen_tier_group === 'news'),
     );
     const officialGroups = groupNarrativesByEntity(
-        data.filter((n) => n.first_seen_tier_group === 'officials'),
+        visible.filter((n) => n.first_seen_tier_group === 'officials'),
     );
     const publicGroups = groupNarrativesByEntity(
-        data.filter((n) => n.first_seen_tier_group === 'public'),
+        visible.filter((n) => n.first_seen_tier_group === 'public'),
     );
-    const crossTier = data.filter((n) => n.cross_tier);
+    const crossTier = visible.filter((n) => n.cross_tier);
 
     const tickerItems = buildNarrativeTickerItems(data, filters.timeRange);
     const refreshed = formatRefreshedAgo(
@@ -798,6 +860,34 @@ function Narratives({ filters }: NarrativesProps) {
                         </span>
                         <p className="lead" style={{ margin: 0 }}>{readsAsToday(data)}</p>
                     </div>
+                </div>
+
+                {/* Claim search — filters every panel below. */}
+                <div className="col-span-12">
+                    <input
+                        type="search"
+                        className="input narrative-search"
+                        placeholder="Search claims..."
+                        value={query}
+                        onChange={(e) => setQuery(e.target.value)}
+                        aria-label="Search claims by name"
+                    />
+                    {q !== '' && (
+                        <p className="text-xs text-muted" style={{ margin: 'var(--space-1) 0 0' }}>
+                            {visible.length === 0
+                                ? `No claim in this window matches "${query.trim()}".`
+                                : `${visible.length} of ${data.length} claims match.`}
+                        </p>
+                    )}
+                </div>
+
+                {/* Story lifecycles — the page's signature read. */}
+                <div className="col-span-12">
+                    <NarrativeLifecyclePanel
+                        narratives={visible}
+                        onOpen={setActiveNarrative}
+                        tiersFor={tierChipsForNarrative}
+                    />
                 </div>
 
                 {/* Three-way grid — one profile card per first-seen entity. */}
@@ -863,14 +953,17 @@ function Narratives({ filters }: NarrativesProps) {
                     narrative={activeNarrative}
                     onClose={() => {
                         // Close the whole drill-down chain when exiting the
-                        // narrative modal via the X / backdrop / Esc.
+                        // narrative modal via the X / backdrop / Esc, and
+                        // clear the deep-link param so the URL stays honest.
                         setActiveNarrative(null);
                         setActiveEntity(null);
+                        if (openParam) setOpenParam(null);
                     }}
                     onBack={activeEntity
                         ? () => setActiveNarrative(null)
                         : undefined}
                     backLabel={activeEntity?.profile.displayName}
+                    onOpenNarrativeId={openNarrativeById}
                 />
             )}
         </>

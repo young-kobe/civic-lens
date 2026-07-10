@@ -59,6 +59,7 @@ from analysis.src.reporting.aggregators import (
     SentimentAggregator,
     BotAggregator,
     NarrativeAggregator,
+    OutletAggregator,
     PropagandaAggregator,
 )
 from analysis.src.etl.polling import PollingDataScraper, PollingDataError
@@ -81,6 +82,7 @@ class AnalysisJobRunner:
         self.bot_agg = BotAggregator(self.settings.db_path)
         self.narrative_agg = NarrativeAggregator(self.settings.db_path)
         self.propaganda_agg = PropagandaAggregator(self.settings.db_path)
+        self.outlet_agg = OutletAggregator(self.settings.db_path)
 
         # Resolve model_id for DB tracking
         if self.settings.llm_backend.lower() == "ollama":
@@ -837,6 +839,17 @@ class AnalysisJobRunner:
                 doc_count=propaganda.total_eligible_docs,
             )
             results[f"propaganda_{window}"] = propaganda.flagged_docs
+
+        # Outlet profiles — per-domain net tone x bot rate (Phase 2e).
+        # Includes bot-flagged content on purpose; see outlet.py.
+        for window in time_windows:
+            outlet_profiles = self.outlet_agg.get_outlet_profiles(time_window=window)
+            self.cache.save(
+                f"outlet_profiles_{window}",
+                outlet_profiles,
+                doc_count=len(outlet_profiles["outlets"]),
+            )
+            results[f"outlet_profiles_{window}"] = len(outlet_profiles["outlets"])
 
         # Human-review agreement overlay — per-task accuracy from
         # ai_output_evals, suppressed below the public floor. Not windowed:

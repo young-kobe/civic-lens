@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-    CollapsibleInfo, EmptyState, EntityHeader, EntityProfileCard,
-    ErrorState, GlobalTicker, LoadingCard, MethodPopover, Modal, SupportingDocsTable,
+    CollapsibleInfo, EmptyState, EntityHeader, EntityHubLinks, EntityProfileCard,
+    ErrorState, GlobalTicker, LoadingCard, MethodPopover, Modal, PostCardList,
     ThreeWayColumn, ThreeWayGrid, TierRow, TopMetricsBlock,
-    classificationSampleToSupportingDoc, entityExternalUrl, entityLeanAccent,
-    officialToneStats, sentimentStats,
+    entityExternalUrl, entityLeanAccent,
+    officialToneStats, parseEntityParam, sampleToPostCard, sentimentStats,
 } from '../components/common';
-import type { TickerItem } from '../components/common';
+import type { ColumnSorter, TickerItem } from '../components/common';
 import type {
     ClassificationSample, EntitySentimentItem, Filters,
-    PollingSocialComparison, PublicSentimentData, SentimentBreakdown, SentimentDistribution,
+    PollingSocialComparison, PublicSentimentData, SentimentBreakdown,
+    SentimentDistribution, SentimentSegmentKey,
 } from '../types';
 import {
     fetchEntityPosts, fetchEvalAccuracy, fetchSentiment, fetchSnapshotStatus,
@@ -25,8 +26,11 @@ import {
     TOPICS, topicByKey, topicFromSlug,
     type Topic, type TopicKey,
 } from '../services/topics';
+import { readHashParam, useDeepLinkParam, writeHashParam } from '../services/deepLink';
+import { OutletSignalsPanel } from './publicSentiment/OutletSignalsPanel';
 import { TopicDivergencePanel } from './publicSentiment/TopicDivergencePanel';
 import { TopicTabBar } from './publicSentiment/TopicTabBar';
+import { ToneTrendPanel } from './publicSentiment/ToneTrendPanel';
 
 
 // --------------------------------------------------------------------------- //
@@ -90,9 +94,11 @@ interface TopMetricsProps {
      *  'all'. Pre-resolved by the parent so TopMetrics doesn't repeat the
      *  lookup. */
     topicRow: SentimentBreakdown | null;
+    /** Opens the per-intensity samples modal for a distribution segment. */
+    onSegmentClick?: (segment: SentimentSegmentKey) => void;
 }
 
-function TopMetrics({ data, windowLabel, activeTopic, topicRow }: TopMetricsProps) {
+function TopMetrics({ data, windowLabel, activeTopic, topicRow, onSegmentClick }: TopMetricsProps) {
     const isFiltered = activeTopic.key !== 'all';
 
     // When filtered: tier rows derive from the per-topic three-way row in
@@ -121,7 +127,13 @@ function TopMetrics({ data, windowLabel, activeTopic, topicRow }: TopMetricsProp
         <TopMetricsBlock
             eyebrow={eyebrow}
             meta={meta}
-            aux={<IntensityMini distribution={data.distribution} allTopics={isFiltered} />}
+            aux={(
+                <IntensityMini
+                    distribution={data.distribution}
+                    allTopics={isFiltered}
+                    onSegmentClick={onSegmentClick}
+                />
+            )}
         >
             <ToneTierRow label="News articles are" agg={news} />
             <ToneTierRow label="Officials are" agg={officials} />
@@ -150,7 +162,13 @@ function ToneTierRow({ label, agg }: { label: string; agg: TierAggregate }) {
     );
 }
 
-function IntensityMini({ distribution, allTopics = false }: { distribution: SentimentDistribution; allTopics?: boolean }) {
+function IntensityMini({
+    distribution, allTopics = false, onSegmentClick,
+}: {
+    distribution: SentimentDistribution;
+    allTopics?: boolean;
+    onSegmentClick?: (segment: SentimentSegmentKey) => void;
+}) {
     // The distribution is a site-wide rollup, not topic-scoped. Inside a
     // topic filter, mark the label "all topics" so it isn't misread as the
     // filtered topic's intensity (R-2).
@@ -175,26 +193,29 @@ function IntensityMini({ distribution, allTopics = false }: { distribution: Sent
     }
 
     const pct = (n: number) => (n / total) * 100;
-    const buckets: Array<[string, number, string]> = [
-        ['strongly positive', distribution.strongPositive, 'Strong +'],
-        ['mild positive',     distribution.mildPositive,   'Mild +'],
-        ['neutral',           distribution.neutral,        'Neutral'],
-        ['mild negative',     distribution.mildNegative,   'Mild −'],
-        ['strongly negative', distribution.strongNegative, 'Strong −'],
+    interface Bucket {
+        key: SentimentSegmentKey;
+        name: string;
+        count: number;
+        barClass: string;
+    }
+    const buckets: Bucket[] = [
+        { key: 'strongPositive', name: 'strongly positive', count: distribution.strongPositive, barClass: 'mini-bar-strongpos' },
+        { key: 'mildPositive',   name: 'mild positive',     count: distribution.mildPositive,   barClass: 'mini-bar-mildpos' },
+        { key: 'neutral',        name: 'neutral',           count: distribution.neutral,        barClass: 'mini-bar-neu' },
+        { key: 'mildNegative',   name: 'mild negative',     count: distribution.mildNegative,   barClass: 'mini-bar-mildneg' },
+        { key: 'strongNegative', name: 'strongly negative', count: distribution.strongNegative, barClass: 'mini-bar-strongneg' },
     ];
-    const biggest = buckets.reduce((a, b) => (a[1] >= b[1] ? a : b));
-    const biggestPct = (biggest[1] / total) * 100;
+    const biggest = buckets.reduce((a, b) => (a.count >= b.count ? a : b));
+    const biggestPct = (biggest.count / total) * 100;
 
     const sampleSize = total.toLocaleString();
     const barTitle =
         `Tone intensity across ${sampleSize} sampled posts: ` +
-        `${pct(distribution.strongPositive).toFixed(0)}% strong + · ` +
-        `${pct(distribution.mildPositive).toFixed(0)}% mild + · ` +
-        `${pct(distribution.neutral).toFixed(0)}% neutral · ` +
-        `${pct(distribution.mildNegative).toFixed(0)}% mild − · ` +
-        `${pct(distribution.strongNegative).toFixed(0)}% strong −.`;
+        buckets.map((b) => `${pct(b.count).toFixed(0)}% ${b.name}`).join(' · ') +
+        (onSegmentClick ? '. Click a segment to read its posts.' : '.');
     const hintTitle =
-        `${formatPct(biggestPct, { decimals: 0 })} of ${sampleSize} posts fall in the "${biggest[0]}" bucket.`;
+        `${formatPct(biggestPct, { decimals: 0 })} of ${sampleSize} posts fall in the "${biggest.name}" bucket.`;
 
     return (
         <div
@@ -203,7 +224,7 @@ function IntensityMini({ distribution, allTopics = false }: { distribution: Sent
         >
             <span className="mini-metric-label">{label}</span>
             <span className="mini-metric-value">
-                most {biggest[0]}
+                most {biggest.name}
             </span>
             <span className="mini-metric-visual">
                 <span
@@ -211,11 +232,19 @@ function IntensityMini({ distribution, allTopics = false }: { distribution: Sent
                     aria-label={barTitle}
                     title={barTitle}
                 >
-                    <span className="mini-bar-strongpos" style={{ width: `${pct(distribution.strongPositive)}%` }} />
-                    <span className="mini-bar-mildpos"   style={{ width: `${pct(distribution.mildPositive)}%` }} />
-                    <span className="mini-bar-neu"       style={{ width: `${pct(distribution.neutral)}%` }} />
-                    <span className="mini-bar-mildneg"   style={{ width: `${pct(distribution.mildNegative)}%` }} />
-                    <span className="mini-bar-strongneg" style={{ width: `${pct(distribution.strongNegative)}%` }} />
+                    {buckets.map((b) => onSegmentClick ? (
+                        <button
+                            key={b.key}
+                            type="button"
+                            className={`${b.barClass} mini-bar-segment-btn`}
+                            style={{ width: `${pct(b.count)}%` }}
+                            onClick={() => onSegmentClick(b.key)}
+                            aria-label={`${b.name}: ${pct(b.count).toFixed(0)}% of posts. Read example posts.`}
+                            title={`${b.name}: ${pct(b.count).toFixed(0)}% — click to read example posts`}
+                        />
+                    ) : (
+                        <span key={b.key} className={b.barClass} style={{ width: `${pct(b.count)}%` }} />
+                    ))}
                 </span>
                 <span className="mini-metric-hint" title={hintTitle}>
                     {formatPct(biggestPct, { decimals: 0 })} of posts
@@ -225,12 +254,47 @@ function IntensityMini({ distribution, allTopics = false }: { distribution: Sent
     );
 }
 
+// --------------------------------------------------------------------------- //
+//  Intensity-segment samples modal — reads the distributionSamples bucket     //
+//  the aggregator has always written but the UI never rendered.               //
+// --------------------------------------------------------------------------- //
+
+const SEGMENT_TITLES: Record<SentimentSegmentKey, string> = {
+    strongPositive: 'Strongly positive posts',
+    mildPositive: 'Mildly positive posts',
+    neutral: 'Neutral posts',
+    mildNegative: 'Mildly negative posts',
+    strongNegative: 'Strongly negative posts',
+};
+
+function SegmentSamplesModal({
+    segment, samples, onClose,
+}: {
+    segment: SentimentSegmentKey;
+    samples: ClassificationSample[];
+    onClose: () => void;
+}) {
+    return (
+        <Modal isOpen onClose={onClose} title={SEGMENT_TITLES[segment]}>
+            {samples.length > 0 ? (
+                <PostCardList
+                    posts={samples.map(sampleToPostCard)}
+                    sampleNote="The highest-confidence posts in this intensity bucket — a sample, not the full list. Highlighted text is the evidence the model quoted."
+                />
+            ) : (
+                <p className="text-sm text-muted">
+                    No example posts stored for this bucket in the current snapshot.
+                    Buckets fill in on the next data refresh.
+                </p>
+            )}
+        </Modal>
+    );
+}
+
 
 // --------------------------------------------------------------------------- //
 //  Three-way grid                                                             //
 // --------------------------------------------------------------------------- //
-
-const TOP_N = 12;
 
 interface ThreeWayGridProps {
     newsOutlets: EntitySentimentItem[];
@@ -240,16 +304,29 @@ interface ThreeWayGridProps {
     activeTopic: Topic;
 }
 
+const SENTIMENT_SORTERS: ColumnSorter<EntitySentimentItem>[] = [
+    { label: 'posts', compare: (a, b) => b.volume - a.volume },
+    { label: 'net tone', compare: (a, b) => b.netScore - a.netScore },
+    { label: 'name', compare: (a, b) => a.entityProfile.displayName.localeCompare(b.entityProfile.displayName) },
+];
+
 function SentimentThreeWayGrid({
     newsOutlets, officials, generalPublic, onOpen, activeTopic,
 }: ThreeWayGridProps) {
-    const news = newsOutlets.slice(0, TOP_N);
-    const offs = officials.slice(0, TOP_N);
-    const pub = generalPublic.slice(0, TOP_N);
+    // Surface the modal's top received-tone topic on the card itself so
+    // the most-read insight doesn't require a click to discover.
+    const officialReadsAs = (item: EntitySentimentItem): string | undefined => {
+        if (item.kind !== 'official') return undefined;
+        const cells = (item.received?.byTopic ?? []).filter((c) => c.net != null);
+        if (cells.length === 0) return undefined;
+        const top = cells.reduce((a, b) => (b.volume > a.volume ? b : a));
+        return `Mentioned mostly about ${top.topic} — ${toneVerb(top.net!)}.`;
+    };
     const renderCard = (item: EntitySentimentItem) => (
         <EntityProfileCard
             key={item.key}
             profile={item.entityProfile}
+            readsAs={officialReadsAs(item)}
             stats={item.kind === 'official'
                 // Officials split the metric: received tone (posts about
                 // them, the reputational signal) leads; expressed tone
@@ -282,26 +359,26 @@ function SentimentThreeWayGrid({
                 header="The News"
                 byline={`Top outlets by coverage volume, with their editorial lean${topicSuffix}`}
                 empty="No news articles in this window."
-                isEmpty={news.length === 0}
-            >
-                {news.map(renderCard)}
-            </ThreeWayColumn>
+                items={newsOutlets}
+                renderItem={renderCard}
+                sorters={SENTIMENT_SORTERS}
+            />
             <ThreeWayColumn
                 header="Politicians & Officials"
                 byline={`Tracked officeholders posting on X${topicSuffix}`}
                 empty="No officials have posted in this window yet."
-                isEmpty={offs.length === 0}
-            >
-                {offs.map(renderCard)}
-            </ThreeWayColumn>
+                items={officials}
+                renderItem={renderCard}
+                sorters={SENTIMENT_SORTERS}
+            />
             <ThreeWayColumn
                 header="The Public"
                 byline={`Political subreddits, curated political accounts, and X users we don't track individually${topicSuffix}`}
                 empty="No social posts in this window."
-                isEmpty={pub.length === 0}
-            >
-                {pub.map(renderCard)}
-            </ThreeWayColumn>
+                items={generalPublic}
+                renderItem={renderCard}
+                sorters={SENTIMENT_SORTERS}
+            />
         </ThreeWayGrid>
     );
 }
@@ -317,6 +394,50 @@ const SPEAKER_TIER_LABELS: Record<string, string> = {
     affiliated: 'Politically affiliated accounts',
     public: 'General public',
 };
+
+// --------------------------------------------------------------------------- //
+//  Tone bar rows — the modal's received-tone breakdowns as dot-on-axis        //
+//  rows instead of bare tables, matching the divergence panel's visual        //
+//  language. Suppressed nets ("low sample") stay words, never numbers.        //
+// --------------------------------------------------------------------------- //
+
+interface ToneBarRow {
+    key: string | number;
+    label: string;
+    net: number | null;
+    volume: number;
+}
+
+function ToneBarRows({ rows }: { rows: ToneBarRow[] }) {
+    return (
+        <div className="tone-bar-rows">
+            {rows.map((row) => (
+                <div key={row.key} className="tone-bar-row" title={row.net != null
+                    ? `${row.label}: ${formatPts(row.net)} across ${row.volume} posts`
+                    : `${row.label}: only ${row.volume} post${row.volume === 1 ? '' : 's'} — too few to score reliably`}
+                >
+                    <span className="tone-bar-row-label">{row.label}</span>
+                    <span className="tone-bar-row-axis" aria-hidden>
+                        <span className="tone-bar-row-zero" />
+                        {row.net != null && (
+                            <span
+                                className="tone-bar-row-dot"
+                                style={{
+                                    left: `${((Math.max(-100, Math.min(100, row.net)) + 100) / 200) * 100}%`,
+                                    background: toneColor(row.net),
+                                }}
+                            />
+                        )}
+                    </span>
+                    <span className="tone-bar-row-value" style={row.net != null ? { color: toneColor(row.net) } : undefined}>
+                        {row.net != null ? formatPts(row.net) : 'low sample'}
+                    </span>
+                    <span className="tone-bar-row-n">n={row.volume}</span>
+                </div>
+            ))}
+        </div>
+    );
+}
 
 function EntitySentimentModal({
     item, onClose, activeTopic, timeWindow,
@@ -464,28 +585,11 @@ function EntitySentimentModal({
                     <h3 className="card-title mt-4 mb-2">
                         Tone toward {profile.displayName} by topic
                     </h3>
-                    <table className="table">
-                        <thead>
-                            <tr>
-                                <th>Topic</th>
-                                <th className="num">Net tone</th>
-                                <th className="num">n</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {received.byTopic.map((cell) => (
-                                <tr key={cell.topic}>
-                                    <td>{cell.topic}</td>
-                                    <td className="num">
-                                        {cell.net != null
-                                            ? formatPts(cell.net)
-                                            : <span className="text-muted">low sample</span>}
-                                    </td>
-                                    <td className="num">{cell.volume}</td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                    <ToneBarRows
+                        rows={received.byTopic.map((cell) => ({
+                            key: cell.topic, label: cell.topic, net: cell.net, volume: cell.volume,
+                        }))}
+                    />
                 </>
             )}
 
@@ -494,28 +598,14 @@ function EntitySentimentModal({
                     <h3 className="card-title mt-4 mb-2">
                         Who is talking about {profile.displayName}
                     </h3>
-                    <table className="table">
-                        <thead>
-                            <tr>
-                                <th>Speaker group</th>
-                                <th className="num">Net tone</th>
-                                <th className="num">n</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {received.bySpeakerTier!.map((cell) => (
-                                <tr key={cell.tier}>
-                                    <td>{SPEAKER_TIER_LABELS[cell.tier] ?? cell.tier}</td>
-                                    <td className="num">
-                                        {cell.net != null
-                                            ? formatPts(cell.net)
-                                            : <span className="text-muted">low sample</span>}
-                                    </td>
-                                    <td className="num">{cell.volume}</td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                    <ToneBarRows
+                        rows={received.bySpeakerTier!.map((cell) => ({
+                            key: cell.tier,
+                            label: SPEAKER_TIER_LABELS[cell.tier] ?? cell.tier,
+                            net: cell.net,
+                            volume: cell.volume,
+                        }))}
+                    />
                 </>
             )}
 
@@ -524,28 +614,11 @@ function EntitySentimentModal({
                     <h3 className="card-title mt-4 mb-2">
                         Narratives driving these mentions
                     </h3>
-                    <table className="table">
-                        <thead>
-                            <tr>
-                                <th>Narrative</th>
-                                <th className="num">Net tone</th>
-                                <th className="num">n</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {received.byNarrative!.map((cell) => (
-                                <tr key={cell.narrativeId}>
-                                    <td>{cell.name}</td>
-                                    <td className="num">
-                                        {cell.net != null
-                                            ? formatPts(cell.net)
-                                            : <span className="text-muted">low sample</span>}
-                                    </td>
-                                    <td className="num">{cell.volume}</td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                    <ToneBarRows
+                        rows={received.byNarrative!.map((cell) => ({
+                            key: cell.narrativeId, label: cell.name, net: cell.net, volume: cell.volume,
+                        }))}
+                    />
                     <p className="text-xs text-muted">
                         Narrative labels come from claim clustering over the posts we
                         sampled — an association between ingested documents, not a
@@ -587,6 +660,8 @@ function EntitySentimentModal({
                 </div>
             )}
 
+            <EntityHubLinks profile={profile} currentTab="sentiment" />
+
             {filteredSamples.length > 0 ? (
                 <>
                     <h3 className="card-title mt-4 mb-2">
@@ -598,8 +673,11 @@ function EntitySentimentModal({
                                 ? `Highest-confidence posts matching ${activeTopic.label}`
                                 : 'Highest-confidence classified posts')}
                     </h3>
-                    <SupportingDocsTable
-                        docs={filteredSamples.map(classificationSampleToSupportingDoc)}
+                    <PostCardList
+                        posts={filteredSamples.map(sampleToPostCard)}
+                        sampleNote={loadedPosts != null
+                            ? 'Every classified post in this window, with the evidence each label rests on.'
+                            : 'A sample of this window’s classified posts, not a complete feed. Highlighted text is the evidence the model quoted.'}
                     />
                 </>
             ) : samplesAreFiltered ? (
@@ -736,7 +814,51 @@ function PollingComparison({ data }: { data: PollingSocialComparison }) {
 //  How-this-works collapsible                                                  //
 // --------------------------------------------------------------------------- //
 
-function HowThisWorks() {
+// Age buckets ship oldest-last from the aggregator; the strip renders in
+// that order with a light-to-dark ramp (darker = fresher).
+const FRESHNESS_SHADE: Record<string, string> = {
+    '24 hours': 'var(--chart-accent)',
+    '7 days': 'var(--chart-accent-soft)',
+    '30 days': 'var(--neutral-300)',
+    '90+ days': 'var(--neutral-200)',
+    'Unknown': 'var(--neutral-150)',
+};
+
+function FreshnessStrip({ byTimeWindow }: { byTimeWindow: SentimentBreakdown[] }) {
+    const rows = byTimeWindow.filter((w) => w.window && w.volume > 0);
+    const total = rows.reduce((s, w) => s + w.volume, 0);
+    if (total === 0) return null;
+    const summary = rows
+        .map((w) => `${Math.round((w.volume / total) * 100)}% ${w.window} old`)
+        .join(' · ');
+    return (
+        <div className="freshness-strip">
+            <div className="eyebrow" style={{ marginBottom: 'var(--space-1)' }}>
+                How old is what we scored
+            </div>
+            <div
+                className="freshness-strip-bar"
+                role="img"
+                aria-label={`Age mix of the ${total.toLocaleString()} scored posts: ${summary}`}
+                title={`Age of the ${total.toLocaleString()} scored posts at analysis time: ${summary}.`}
+            >
+                {rows.map((w) => (
+                    <span
+                        key={w.window}
+                        style={{
+                            width: `${(w.volume / total) * 100}%`,
+                            background: FRESHNESS_SHADE[w.window!] ?? 'var(--neutral-200)',
+                        }}
+                        title={`${w.window}: ${w.volume.toLocaleString()} posts (${Math.round((w.volume / total) * 100)}%)`}
+                    />
+                ))}
+            </div>
+            <div className="freshness-strip-legend text-xs text-muted">{summary}</div>
+        </div>
+    );
+}
+
+function HowThisWorks({ byTimeWindow }: { byTimeWindow: SentimentBreakdown[] }) {
     return (
         <CollapsibleInfo>
             <p className="text-sm">
@@ -752,6 +874,7 @@ function HowThisWorks() {
                 read it as opinion polling. Sarcasm and irony are flagged when the model detects
                 them but can still be misclassified.
             </p>
+            <FreshnessStrip byTimeWindow={byTimeWindow} />
         </CollapsibleInfo>
     );
 }
@@ -765,8 +888,12 @@ const TOPIC_QS_KEY = 'topic';
 
 function readTopicFromUrl(): TopicKey {
     try {
-        const params = new URLSearchParams(window.location.search);
-        const slug = params.get(TOPIC_QS_KEY);
+        // Canonical location is the hash route ("#sentiment?topic=economy",
+        // see services/deepLink). Old links used a real search param
+        // ("?topic=economy#sentiment") — keep reading those so they still
+        // land on the right topic; the next write migrates them.
+        const slug = readHashParam(TOPIC_QS_KEY)
+            ?? new URLSearchParams(window.location.search).get(TOPIC_QS_KEY);
         return topicFromSlug(slug).key;
     } catch {
         return 'all';
@@ -776,16 +903,18 @@ function readTopicFromUrl(): TopicKey {
 function writeTopicToUrl(key: TopicKey): void {
     try {
         const topic = topicByKey(key);
-        const params = new URLSearchParams(window.location.search);
-        if (topic.key === 'all') {
-            params.delete(TOPIC_QS_KEY);
-        } else {
-            params.set(TOPIC_QS_KEY, topic.slug);
+        // Drop the legacy search param if a pre-migration link carried one —
+        // otherwise the URL would hold two topic values that can disagree.
+        const search = new URLSearchParams(window.location.search);
+        if (search.has(TOPIC_QS_KEY)) {
+            search.delete(TOPIC_QS_KEY);
+            const qs = search.toString();
+            window.history.replaceState(
+                {}, '',
+                window.location.pathname + (qs ? `?${qs}` : '') + window.location.hash,
+            );
         }
-        const qs = params.toString();
-        const url =
-            window.location.pathname + (qs ? `?${qs}` : '') + window.location.hash;
-        window.history.replaceState({}, '', url);
+        writeHashParam(TOPIC_QS_KEY, topic.key === 'all' ? null : topic.slug);
     } catch { /* noop — older browsers / sandboxed contexts */ }
 }
 
@@ -879,6 +1008,7 @@ interface PublicSentimentProps {
 
 function PublicSentiment({ filters }: PublicSentimentProps) {
     const [activeEntity, setActiveEntity] = useState<EntitySentimentItem | null>(null);
+    const [activeSegment, setActiveSegment] = useState<SentimentSegmentKey | null>(null);
     const [activeTopicKey, setActiveTopicKeyState] = useState<TopicKey>(() => readTopicFromUrl());
     // Tracks whether the current activeTopicKey came from the URL (or
     // explicit user click) vs. the implicit default. We only auto-pick a
@@ -892,6 +1022,9 @@ function PublicSentiment({ filters }: PublicSentimentProps) {
         setPickedDefault(true);
         writeTopicToUrl(key);
     };
+
+    // Cross-page entity deep link ("#sentiment?entity=official:SenSchumer").
+    const [entityParam, setEntityParam] = useDeepLinkParam('entity');
 
     const { data, loading, error, refetch } = useFetch<PublicSentimentData>(
         async () => transformPublicSentiment(await fetchSentiment(filters.timeRange)),
@@ -915,6 +1048,27 @@ function PublicSentiment({ filters }: PublicSentimentProps) {
         (t) => t.taskType === 'sentiment' && !t.lowSample && t.accuracyPct != null,
     ) ?? null;
 
+    // Resolve the entity= param once data lands: search all three tier
+    // lists for the kind:key. Unknown entities (or ones with no data in
+    // this window) clear the param instead of erroring.
+    useEffect(() => {
+        if (!data || !entityParam) return;
+        const target = parseEntityParam(entityParam);
+        if (target) {
+            const lists = [data.byNewsOutlet, data.byOfficial, data.byGeneralPublic];
+            for (const list of lists) {
+                const item = (list ?? []).find(
+                    (it) => it.kind === target.kind && it.key === target.key,
+                );
+                if (item) {
+                    setActiveEntity(item);
+                    return;
+                }
+            }
+        }
+        setEntityParam(null);
+    }, [data, entityParam, setEntityParam]);
+
     // Pick the most-discussed topic as the default once data lands, but
     // only if the user hasn't already chosen something (URL or click).
     useEffect(() => {
@@ -928,16 +1082,22 @@ function PublicSentiment({ filters }: PublicSentimentProps) {
         }
     }, [data, pickedDefault]);
 
-    // Sync state from popstate/back-forward navigation that mutates the
-    // ?topic= query param while staying on the page.
+    // Sync state from back/forward navigation or an incoming deep link
+    // ("#sentiment?topic=economy") that mutates the topic param while the
+    // page stays mounted. hashchange covers deep links + back/forward on
+    // the hash; popstate covers legacy search-param history entries.
     useEffect(() => {
-        const onPop = () => {
+        const onUrlChange = () => {
             const next = readTopicFromUrl();
             setActiveTopicKeyState(next);
             setPickedDefault(next !== 'all');
         };
-        window.addEventListener('popstate', onPop);
-        return () => window.removeEventListener('popstate', onPop);
+        window.addEventListener('popstate', onUrlChange);
+        window.addEventListener('hashchange', onUrlChange);
+        return () => {
+            window.removeEventListener('popstate', onUrlChange);
+            window.removeEventListener('hashchange', onUrlChange);
+        };
     }, []);
 
     const activeTopic = topicByKey(activeTopicKey);
@@ -1024,6 +1184,33 @@ function PublicSentiment({ filters }: PublicSentimentProps) {
                     windowLabel={formatTimeWindow(filters.timeRange)}
                     activeTopic={activeTopic}
                     topicRow={topicRow}
+                    onSegmentClick={setActiveSegment}
+                />
+            </div>
+
+            {/* Topic divergence — the page's signature read: where the three
+                groups disagree. Promoted above the entity grid; it was
+                previously last on the page where few readers reached it. */}
+            <div className="col-span-12">
+                <TopicDivergencePanel
+                    topics={data.byTopic}
+                    onFilterTopic={(topic) => {
+                        // Row topics and tab-bar keys share the backend's
+                        // topic vocabulary; unknown ones (e.g. a retired
+                        // topic in an old snapshot) just no-op.
+                        const match = TOPICS.find((t) => t.key === topic);
+                        if (match) setActiveTopicKey(match.key);
+                    }}
+                />
+            </div>
+
+            {/* Tone over time — per-group daily series (GOP series behind
+                the toggle) + weekday rhythm. */}
+            <div className="col-span-12">
+                <ToneTrendPanel
+                    toneTrend={data.toneTrend}
+                    gopTrend={data.gopTrend}
+                    byDayOfWeek={data.byDayOfWeek}
                 />
             </div>
 
@@ -1041,15 +1228,27 @@ function PublicSentiment({ filters }: PublicSentimentProps) {
             {activeEntity && (
                 <EntitySentimentModal
                     item={activeEntity}
-                    onClose={() => setActiveEntity(null)}
+                    onClose={() => {
+                        setActiveEntity(null);
+                        if (entityParam) setEntityParam(null);
+                    }}
                     activeTopic={activeTopic}
                     timeWindow={filters.timeRange}
                 />
             )}
 
-            {/* Topic divergence panel. */}
+            {activeSegment && (
+                <SegmentSamplesModal
+                    segment={activeSegment}
+                    samples={data.distributionSamples?.[activeSegment] ?? []}
+                    onClose={() => setActiveSegment(null)}
+                />
+            )}
+
+            {/* Per-domain tone x bot-rate cross-signal table (bots included
+                by design — see the panel's method note). */}
             <div className="col-span-12">
-                <TopicDivergencePanel topics={data.byTopic} />
+                <OutletSignalsPanel window={filters.timeRange} />
             </div>
 
             {/* Polling-vs-online collapsible (optional). */}
@@ -1061,7 +1260,7 @@ function PublicSentiment({ filters }: PublicSentimentProps) {
 
             {/* How this page works — self-documenting content + collapsible backup. */}
             <div className="col-span-12">
-                <HowThisWorks />
+                <HowThisWorks byTimeWindow={data.byTimeWindow ?? []} />
             </div>
         </div>
     );

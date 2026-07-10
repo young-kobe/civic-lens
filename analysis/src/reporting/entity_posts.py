@@ -22,7 +22,11 @@ from typing import Any, Dict, List, Tuple
 
 from analysis.src.common.settings import get_settings
 from analysis.src.reporting.aggregators.base import (
+    REDDIT_ENGAGEMENT_JOIN_SQL,
+    SAMPLE_ENRICHMENT_SELECT,
     X_AUTHOR_JOIN_SQL,
+    build_sample_author,
+    build_sample_engagement,
     get_connection,
     get_time_cutoff,
 )
@@ -196,7 +200,10 @@ def fetch_entity_posts(
         where += " AND d.published_at >= ?"
         params.append(cutoff)
 
-    base = f"FROM ai_outputs_latest a JOIN docs d ON a.doc_id = d.doc_id {X_AUTHOR_JOIN_SQL} WHERE {where}"
+    base = (
+        f"FROM ai_outputs_latest a JOIN docs d ON a.doc_id = d.doc_id "
+        f"{X_AUTHOR_JOIN_SQL} {REDDIT_ENGAGEMENT_JOIN_SQL} WHERE {where}"
+    )
 
     with get_connection(db_path) as conn:
         cursor = conn.cursor()
@@ -215,7 +222,7 @@ def fetch_entity_posts(
         cursor.execute(
             "SELECT a.doc_id, a.output_json, a.confidence, d.source_type, "
             "d.published_at, d.title, d.domain_or_subreddit, d.ident, d.text, "
-            f"u.username, {llm_topic_sql} "
+            f"u.username, {llm_topic_sql}, {SAMPLE_ENRICHMENT_SELECT} "
             f"{base} ORDER BY d.published_at DESC, a.doc_id DESC LIMIT ? OFFSET ?",
             (min_conf,) + tuple(params) + (limit, offset),
         )
@@ -225,6 +232,9 @@ def fetch_entity_posts(
     for (
         doc_id, output_json, confidence, source_type, published_at,
         title, domain_or_subreddit, ident, text, x_handle, llm_topic,
+        x_retweets, x_replies, x_likes, x_quotes,
+        u_name, u_avatar, u_verified_type, u_followers, u_created_at,
+        reddit_score, reddit_comments,
     ) in rows:
         try:
             data = json.loads(output_json)
@@ -235,6 +245,14 @@ def fetch_entity_posts(
             doc_id, data.get("label", "NEUTRAL"), conf, data,
             title, source_type, published_at, domain_or_subreddit, ident, text,
             x_handle, topic=llm_topic or _extract_topic(title),
+            engagement=build_sample_engagement(
+                source_type, x_retweets, x_replies, x_likes, x_quotes,
+                reddit_score, reddit_comments,
+            ),
+            author=build_sample_author(
+                source_type, x_handle, u_name, u_avatar, u_verified_type,
+                u_followers, u_created_at,
+            ),
         ))
 
     return {"items": items, "total": total, "limit": limit, "offset": offset}
