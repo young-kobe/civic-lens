@@ -19,9 +19,13 @@ runs the analysis engines, and pre-computes the JSON snapshot caches the API ser
   - `account_classifier.py`: account-tier classification.
   - `text_prep.py`: shared deterministic pre-LLM gates (sentence-boundary truncation,
     trivial-content short-circuit).
-- **LLM (`src/llm/`)**: Gemini + Ollama clients behind `factory.get_llm_client()`,
-  selected by `CIVIC_LLM_BACKEND`. Structured output enforced via JSON schemas in
-  `schemas.py`; prompts + version constants in `prompts.py`.
+- **LLM (`src/llm/`)**: Gemini, Ollama, and OpenAI-compatible clients behind
+  `factory.get_llm_client()`, selected by `CIVIC_LLM_BACKEND` (`gemini` | `ollama` |
+  `openai_compat`). The `openai_compat` client speaks the `/v1` REST surface
+  (`CIVIC_LLM_BASE_URL` + `CIVIC_LLM_API_KEY`), so any OpenAI-compatible server — a local
+  inference runtime or a hosted endpoint — slots in with no engine changes. Structured
+  output is enforced via JSON schemas in `schemas.py`; prompts + version constants in
+  `prompts.py`.
 - **Reporting (`src/reporting/`)**: `aggregators/` pre-compute dashboard data into the
   snapshot cache (`data/cache/*.json`) at multiple time windows; `review.py` serves the
   human-in-loop review queue and writes `ai_output_evals`.
