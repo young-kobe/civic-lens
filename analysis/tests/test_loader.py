@@ -1,3 +1,4 @@
+import json
 import os
 import sqlite3
 import sys
@@ -252,6 +253,22 @@ class TestLabelColumn(unittest.TestCase):
         self.assertEqual(view_label, "POSITIVE")
         conn.close()
 
+    def test_save_ai_output_returns_output_id(self):
+        _apply_migrations(self.db_path)
+        conn = sqlite3.connect(self.db_path)
+        conn.execute(
+            "INSERT INTO docs (doc_id, source_type, ident, raw_hash)"
+            " VALUES (1, 'news', 'u1', 'h1')"
+        )
+        conn.commit()
+        conn.close()
+
+        loader = ContentLoader(self.db_path)
+        first = loader.save_ai_output(1, "sentiment", {"label": "NEUTRAL"}, 0.5)
+        second = loader.save_ai_output(1, "claims", {"claims": []}, 0.5)
+        self.assertIsInstance(first, int)
+        self.assertEqual(second, first + 1)
+
     def test_save_ai_output_writes_label(self):
         _apply_migrations(self.db_path)
         conn = sqlite3.connect(self.db_path)
@@ -273,6 +290,104 @@ class TestLabelColumn(unittest.TestCase):
         ).fetchone()[0]
         conn.close()
         self.assertEqual(stored, "bot")
+
+
+def _resolve_senx(raw):
+    """Test resolver: only 'Senator X' is a known entity."""
+    if raw == "Senator X":
+        return "SenX", "official", "R"
+    return None, None, None
+
+
+class TestTargetMentions(unittest.TestCase):
+    """Write-time identity for extracted targets (migration 025).
+
+    Why: target identity used to be re-resolved from free text on every
+    aggregation, so a registry edit silently remapped history and
+    unresolved mentions vanished (only a counter survived). These tests
+    pin: unresolved targets persist as NULL-entity rows, the backfill is
+    idempotent, and a later, different resolver does NOT alter stored rows.
+    """
+
+    _TARGETS = [
+        {"target": "Senator X", "topic": "Economy", "stance": "negative",
+         "confidence": 0.9, "evidence_spans": ["a span"]},
+        {"target": "Unknown Pundit", "topic": "Other", "stance": "positive",
+         "confidence": 0.8},
+    ]
+
+    def setUp(self):
+        self._tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        self.db_path = self._tmp.name
+        self._tmp.close()
+        _apply_migrations(self.db_path)
+        conn = sqlite3.connect(self.db_path)
+        conn.execute(
+            "INSERT INTO docs (doc_id, source_type, ident, raw_hash)"
+            " VALUES (1, 'news', 'u1', 'h1')"
+        )
+        conn.commit()
+        conn.close()
+        self.loader = ContentLoader(self.db_path)
+
+    def tearDown(self):
+        for suffix in ("", "-wal", "-shm"):
+            try:
+                os.remove(self.db_path + suffix)
+            except (FileNotFoundError, PermissionError):
+                pass
+
+    def _rows(self):
+        conn = sqlite3.connect(self.db_path)
+        rows = conn.execute(
+            "SELECT raw_target, entity_key, entity_kind, entity_party, stance,"
+            " topic, confidence FROM target_mentions ORDER BY mention_id"
+        ).fetchall()
+        conn.close()
+        return rows
+
+    def test_unresolved_mentions_persist_and_identity_freezes(self):
+        output_id = self.loader.save_ai_output(
+            1, "target_sentiment",
+            {"targets": self._TARGETS, "reasoning": "r"}, 0.85,
+            prompt_version="v1",
+        )
+        self.loader.save_target_mentions(
+            output_id, 1,
+            self.loader.build_target_mentions(self._TARGETS, _resolve_senx),
+        )
+        self.assertEqual(self._rows(), [
+            ("Senator X", "SenX", "official", "R", "negative", "Economy", 0.9),
+            ("Unknown Pundit", None, None, None, "positive", "Other", 0.8),
+        ])
+
+        # Registry drift: a resolver that now matches everything must NOT
+        # remap the stored rows — backfill only fills gaps, never rewrites.
+        remapped = self.loader.backfill_target_mentions(
+            lambda raw: ("SomeoneElse", "official", "D")
+        )
+        self.assertEqual(remapped, 0)
+        self.assertEqual(self._rows()[0][1], "SenX")
+        self.assertEqual(self._rows()[1][1], None)
+
+    def test_backfill_materializes_json_only_outputs_idempotently(self):
+        # A pre-migration-025 output row: JSON only, no mention rows.
+        conn = sqlite3.connect(self.db_path)
+        conn.execute(
+            "INSERT INTO ai_outputs (doc_id, task_type, output_json, confidence)"
+            " VALUES (1, 'target_sentiment', ?, 0.85)",
+            (json.dumps({"targets": self._TARGETS, "reasoning": "r"}),),
+        )
+        conn.commit()
+        conn.close()
+
+        self.assertEqual(
+            self.loader.backfill_target_mentions(_resolve_senx), 1)
+        self.assertEqual(len(self._rows()), 2)
+        # Second run: nothing left to materialize, nothing duplicated.
+        self.assertEqual(
+            self.loader.backfill_target_mentions(_resolve_senx), 0)
+        self.assertEqual(len(self._rows()), 2)
 
 
 if __name__ == "__main__":
