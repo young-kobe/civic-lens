@@ -5,13 +5,9 @@ interface ModalProps {
     isOpen: boolean;
     onClose: () => void;
     title: string;
-    /** Small uppercase category line above the title (e.g. "Narrative").
-     *  Takes the accent color; the title itself stays ink for legibility. */
+    /** Small uppercase category line above the title (e.g. "Narrative"). */
     kicker?: string;
     subtitle?: string;
-    /** Optional accent color applied to the left border + title — used by
-     *  callers that want to signal which bucket / segment the modal belongs to. */
-    accentColor?: string;
     /** Control maximum width; defaults to 860px so a docs table can breathe. */
     maxWidth?: number;
     /** When provided, renders a ← arrow in the header that invokes this handler
@@ -45,7 +41,6 @@ export function Modal({
     title,
     kicker,
     subtitle,
-    accentColor,
     maxWidth = 860,
     onBack,
     backLabel,
@@ -86,10 +81,7 @@ export function Modal({
                 aria-labelledby={titleId}
                 aria-describedby={subtitleId}
                 onClick={(e) => e.stopPropagation()}
-                style={{
-                    maxWidth,
-                    borderLeftColor: accentColor ?? 'transparent',
-                }}
+                style={{ maxWidth }}
             >
                 <header className="modal-header">
                     {onBack && (
@@ -107,7 +99,7 @@ export function Modal({
                     )}
                     <div style={{ minWidth: 0, flex: 1 }}>
                         {kicker && (
-                            <div className="modal-kicker" style={{ color: accentColor ?? 'var(--neutral-500)' }}>
+                            <div className="modal-kicker">
                                 {kicker}
                             </div>
                         )}

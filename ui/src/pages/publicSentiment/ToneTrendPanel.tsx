@@ -1,13 +1,15 @@
-import { useId, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import {
-    Area, AreaChart, Bar, BarChart, Cell, Legend, Line, LineChart,
+    Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Line, LineChart,
     ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
 import type { TooltipProps } from 'recharts';
 import { Card, MethodPopover } from '../../components/common';
 import { formatPts } from '../../services/format';
 import { COLORS } from '../../theme';
-import type { SentimentBreakdown, ToneTrendPoint, TrendPoint } from '../../types';
+import type {
+    EntitySentimentItem, SentimentBreakdown, ToneTrendPoint, TrendPoint,
+} from '../../types';
 
 // --------------------------------------------------------------------------- //
 //  ToneTrendPanel — the Tone page's time dimension.                           //
@@ -20,19 +22,48 @@ import type { SentimentBreakdown, ToneTrendPoint, TrendPoint } from '../../types
 //  renders alone, exactly as it did before Phase 2a.                         //
 // --------------------------------------------------------------------------- //
 
+type TierKey = 'news' | 'officials' | 'public';
+
 interface ToneTrendPanelProps {
     toneTrend: ToneTrendPoint[] | null | undefined;
     gopTrend: TrendPoint[] | null | undefined;
     byDayOfWeek: SentimentBreakdown[] | undefined;
+    /** Per-tier entity items (each carrying dailyTone) for the drill-down. */
+    entitiesByTier?: Record<TierKey, EntitySentimentItem[]>;
+    /** Opens the shared entity modal (live classified evidence) on click. */
+    onOpenEntity?: (item: EntitySentimentItem) => void;
 }
 
-// Same tier colors as the divergence panel's dots so the two visuals read
-// as one system (news = neutral gray, officials = ink blue, public = ochre).
-const TIER_SERIES = [
-    { key: 'news', label: 'News', color: COLORS.neutral },
-    { key: 'officials', label: 'Officials', color: COLORS.accent },
-    { key: 'public', label: 'Public', color: COLORS.warning },
-] as const;
+// High-contrast speaker-tier hues, shared with the top-metrics tier
+// sparklines so the two visuals read as one system
+// (news = slate, officials = teal, public = amber).
+const TIER_SERIES: { key: TierKey; label: string; color: string }[] = [
+    { key: 'news', label: 'News', color: COLORS.tierNews },
+    { key: 'officials', label: 'Officials', color: COLORS.tierOfficials },
+    { key: 'public', label: 'Public', color: COLORS.tierPublic },
+];
+
+const TIER_EXPLAIN: Record<TierKey, string> = {
+    news: "Net tone of news outlets' own sampled posts, day by day. Click to break out the individual outlets driving it.",
+    officials: "Net tone of tracked officials' own posts. Click to break out individual officials.",
+    public: 'Net tone of subreddits and public X accounts. Click to break out individual voices.',
+};
+
+// Ordered categorical hues for the per-entity drill-down lines, drawn from the
+// existing token set (accent / tier teal + amber / lean plum / slate / brick).
+// Capped at 6 lines — beyond that a tier's chart stops reading as divergence.
+const ENTITY_SERIES_COLORS = [
+    'var(--accent)', 'var(--tier-officials)', 'var(--tier-public)',
+    'var(--lean-right)', 'var(--tier-news)', 'var(--source-reddit)',
+];
+const ENTITY_MAX = 6;
+
+interface SeriesDef { key: string; label: string; color: string; }
+interface LineRow {
+    date: string;
+    volumes: Record<string, number>;
+    [seriesKey: string]: number | null | string | Record<string, number>;
+}
 
 function trendTooltip({ payload, label }: TooltipProps<number, string>) {
     if (!payload || payload.length === 0) return null;
@@ -53,60 +84,82 @@ function shortDate(iso: string): string {
     return `${months[Number(m[1]) - 1]} ${Number(m[2])}`;
 }
 
-// Flat row shape recharts can key directly: {date, news: net|null, ...}
-// plus volumes for the tooltip.
-interface TierTrendRow {
-    date: string;
-    news: number | null;
-    officials: number | null;
-    public: number | null;
-    volumes: Record<string, number>;
-}
-
-function toTierRows(trend: ToneTrendPoint[]): TierTrendRow[] {
+// Flat rows recharts keys directly: {date, <seriesKey>: net|null, ..., volumes}.
+function toTierRows(trend: ToneTrendPoint[]): LineRow[] {
     return trend.map((p) => ({
         date: p.date,
         news: p.news.net,
         officials: p.officials.net,
         public: p.public.net,
-        volumes: {
-            news: p.news.volume,
-            officials: p.officials.volume,
-            public: p.public.volume,
-        },
+        volumes: { news: p.news.volume, officials: p.officials.volume, public: p.public.volume },
     }));
 }
 
-function tierTooltip({ payload, label }: TooltipProps<number, string>) {
-    if (!payload || payload.length === 0) return null;
-    const row = payload[0].payload as TierTrendRow;
-    return (
-        <div className="chart-tooltip">
-            <div className="chart-tooltip-label">{String(label ?? '')}</div>
-            {TIER_SERIES.map((tier) => {
-                const net = row[tier.key];
-                const volume = row.volumes[tier.key];
-                return (
-                    <div key={tier.key} className="chart-tooltip-value" style={{ color: tier.color }}>
-                        {tier.label}: {net != null
-                            ? `${formatPts(net)} · ${volume} posts`
-                            : `low sample (${volume} post${volume === 1 ? '' : 's'})`}
-                    </div>
-                );
-            })}
-        </div>
-    );
+/** Merge each entity's dailyTone into date-keyed rows; one series per entity,
+ *  top ENTITY_MAX by volume (beyond that the chart stops reading). */
+function toEntityRows(entities: EntitySentimentItem[]): { rows: LineRow[]; series: SeriesDef[] } {
+    const top = entities
+        .filter((e) => (e.dailyTone?.length ?? 0) > 0)
+        .sort((a, b) => b.volume - a.volume)
+        .slice(0, ENTITY_MAX);
+    const series: SeriesDef[] = top.map((e, i) => ({
+        key: e.key,
+        label: e.entityProfile.displayName,
+        color: ENTITY_SERIES_COLORS[i % ENTITY_SERIES_COLORS.length],
+    }));
+    const byDate = new Map<string, LineRow>();
+    for (const e of top) {
+        for (const pt of e.dailyTone ?? []) {
+            let row = byDate.get(pt.date);
+            if (!row) { row = { date: pt.date, volumes: {} }; byDate.set(pt.date, row); }
+            row[e.key] = pt.net;
+            (row.volumes as Record<string, number>)[e.key] = pt.volume;
+        }
+    }
+    const rows = [...byDate.values()].sort((a, b) => (a.date < b.date ? -1 : 1));
+    return { rows, series };
 }
 
-function TierTrendChart({ trend }: { trend: ToneTrendPoint[] }) {
-    const rows = toTierRows(trend);
+function multiTooltip(series: SeriesDef[]) {
+    return function MultiTooltip({ payload, label }: TooltipProps<number, string>) {
+        if (!payload || payload.length === 0) return null;
+        const row = payload[0].payload as LineRow;
+        const vols = row.volumes as Record<string, number>;
+        return (
+            <div className="chart-tooltip">
+                <div className="chart-tooltip-label">{String(label ?? '')}</div>
+                {series.map((s) => {
+                    const net = row[s.key] as number | null | undefined;
+                    const volume = vols[s.key] ?? 0;
+                    if (net == null && volume === 0) return null;
+                    return (
+                        <div key={s.key} className="chart-tooltip-value" style={{ color: s.color }}>
+                            {s.label}: {net != null
+                                ? `${formatPts(net)} · ${volume} posts`
+                                : `low sample (${volume})`}
+                        </div>
+                    );
+                })}
+            </div>
+        );
+    };
+}
+
+/** Shared overlaid-line chart. `highlightKey` dims the other lines so hovering
+ *  a legend item isolates one series. */
+function MultiLineChart({
+    rows, series, highlightKey, ariaLabel,
+}: {
+    rows: LineRow[];
+    series: SeriesDef[];
+    highlightKey: string | null;
+    ariaLabel: string;
+}) {
     return (
-        <div
-            role="img"
-            aria-label={`Daily net tone by group (news, officials, public), ${rows.length} days`}
-        >
-            <ResponsiveContainer width="100%" height={220}>
+        <div role="img" aria-label={ariaLabel}>
+            <ResponsiveContainer width="100%" height={240}>
                 <LineChart data={rows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                    <CartesianGrid vertical={false} stroke="var(--chart-grid)" strokeDasharray="2 4" />
                     <XAxis
                         dataKey="date"
                         tickFormatter={shortDate}
@@ -124,33 +177,70 @@ function TierTrendChart({ trend }: { trend: ToneTrendPoint[] }) {
                         width={36}
                     />
                     <ReferenceLine y={0} stroke="var(--neutral-300)" strokeDasharray="3 3" />
-                    {TIER_SERIES.map((tier) => (
-                        <Line
-                            key={tier.key}
-                            type="monotone"
-                            dataKey={tier.key}
-                            name={tier.label}
-                            stroke={tier.color}
-                            strokeWidth={2}
-                            dot={false}
-                            activeDot={{ r: 4, fill: tier.color, strokeWidth: 0 }}
-                            // Low-sample days arrive as null — draw a gap, not a
-                            // bridge, so suppressed readings never fake a line.
-                            connectNulls={false}
-                            isAnimationActive={false}
-                        />
-                    ))}
-                    <Legend
-                        wrapperStyle={{ fontSize: 11 }}
-                        iconType="plainline"
-                        iconSize={14}
-                    />
+                    {series.map((s) => {
+                        const dim = highlightKey != null && highlightKey !== s.key;
+                        return (
+                            <Line
+                                key={s.key}
+                                type="monotone"
+                                dataKey={s.key}
+                                name={s.label}
+                                stroke={s.color}
+                                strokeWidth={dim ? 1 : 2}
+                                strokeOpacity={dim ? 0.2 : 1}
+                                dot={false}
+                                activeDot={{ r: 4, fill: s.color, strokeWidth: 0 }}
+                                // Low-sample days arrive as null — draw a gap, not a
+                                // bridge, so suppressed readings never fake a line.
+                                connectNulls={false}
+                                isAnimationActive={false}
+                            />
+                        );
+                    })}
                     <Tooltip
-                        content={tierTooltip}
+                        content={multiTooltip(series)}
                         cursor={{ stroke: 'var(--neutral-300)', strokeDasharray: '2 2' }}
                     />
                 </LineChart>
             </ResponsiveContainer>
+        </div>
+    );
+}
+
+interface LegendItem {
+    key: string;
+    label: string;
+    color: string;
+    title: string;
+    onClick?: () => void;
+}
+
+/** Color-coded legend: each item explains itself on hover (title) and is
+ *  clickable — tiers drill into their entities, entities open evidence. */
+function ToneLegend({
+    items, onHover,
+}: {
+    items: LegendItem[];
+    onHover: (key: string | null) => void;
+}) {
+    return (
+        <div className="tone-legend">
+            {items.map((it) => (
+                <button
+                    key={it.key}
+                    type="button"
+                    className={`tone-legend-item${it.onClick ? '' : ' tone-legend-item-static'}`}
+                    title={it.title}
+                    onClick={it.onClick}
+                    onMouseEnter={() => onHover(it.key)}
+                    onMouseLeave={() => onHover(null)}
+                    onFocus={() => onHover(it.key)}
+                    onBlur={() => onHover(null)}
+                >
+                    <span className="tone-legend-swatch" style={{ background: it.color }} aria-hidden />
+                    {it.label}
+                </button>
+            ))}
         </div>
     );
 }
@@ -168,10 +258,11 @@ function DailyTrendChart({ trend }: { trend: TrendPoint[] }) {
                 <AreaChart data={trend} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                     <defs>
                         <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor={COLORS.chartAccent} stopOpacity={0.25} />
-                            <stop offset="100%" stopColor={COLORS.chartAccent} stopOpacity={0} />
+                            <stop offset="0%" stopColor={COLORS.chartAccent} stopOpacity={0.3} />
+                            <stop offset="100%" stopColor={COLORS.chartAccent} stopOpacity={0.02} />
                         </linearGradient>
                     </defs>
+                    <CartesianGrid vertical={false} stroke="var(--chart-grid)" strokeDasharray="2 4" />
                     <XAxis
                         dataKey="date"
                         tickFormatter={shortDate}
@@ -252,6 +343,7 @@ function WeekdayStrip({ rows }: { rows: WeekdayRow[] }) {
         <div role="img" aria-label={`Net tone by weekday across ${rows.length} weekdays`}>
             <ResponsiveContainer width="100%" height={96}>
                 <BarChart data={rows} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                    <CartesianGrid vertical={false} stroke="var(--chart-grid)" strokeDasharray="2 4" />
                     <XAxis
                         dataKey="day"
                         tick={{ fontSize: 11, fill: 'var(--neutral-500)', fontFamily: 'var(--font-mono)' }}
@@ -264,7 +356,7 @@ function WeekdayStrip({ rows }: { rows: WeekdayRow[] }) {
                         {rows.map((row) => (
                             <Cell
                                 key={row.day}
-                                fill={row.net >= 0 ? COLORS.chartPositive : COLORS.chartNegative}
+                                fill={row.net >= 0 ? COLORS.positive : COLORS.negative}
                             />
                         ))}
                     </Bar>
@@ -282,27 +374,87 @@ function WeekdayStrip({ rows }: { rows: WeekdayRow[] }) {
 //  Panel                                                                      //
 // --------------------------------------------------------------------------- //
 
-export function ToneTrendPanel({ toneTrend, gopTrend, byDayOfWeek }: ToneTrendPanelProps) {
+export function ToneTrendPanel({
+    toneTrend, gopTrend, byDayOfWeek, entitiesByTier, onOpenEntity,
+}: ToneTrendPanelProps) {
     const tierTrend = (toneTrend ?? []).filter((p) => !!p.date);
     const gop = (gopTrend ?? []).filter((p) => Number.isFinite(p.value));
     const weekdays = weekdayRows(byDayOfWeek ?? []);
     const hasTiers = tierTrend.length >= 2;
     const hasGop = gop.length >= 2;
     const [view, setView] = useState<'tiers' | 'gop'>('tiers');
+    // Which tier the chart is drilled into (null = the 3-tier overview).
+    const [drillTier, setDrillTier] = useState<TierKey | null>(null);
+    const [highlightKey, setHighlightKey] = useState<string | null>(null);
+
+    // A tier can be drilled only if we have its entity series (post-dailyTone).
+    const canDrill = (tier: TierKey): boolean =>
+        (entitiesByTier?.[tier] ?? []).some((e) => (e.dailyTone?.length ?? 0) > 0);
+
+    const tierRows = useMemo(() => toTierRows(tierTrend), [tierTrend]);
+    const drill = useMemo(
+        () => (drillTier ? toEntityRows(entitiesByTier?.[drillTier] ?? []) : null),
+        [drillTier, entitiesByTier],
+    );
+    const entityByKey = useMemo(() => {
+        const m = new Map<string, EntitySentimentItem>();
+        if (drillTier) for (const e of entitiesByTier?.[drillTier] ?? []) m.set(e.key, e);
+        return m;
+    }, [drillTier, entitiesByTier]);
+
     if (!hasTiers && !hasGop && weekdays.length === 0) return null;
 
     // Pre-2a cached snapshots carry no toneTrend — the GOP series renders
     // alone with no toggle, exactly the Phase 1 behavior.
     const activeView = hasTiers ? (view === 'gop' && hasGop ? 'gop' : 'tiers') : 'gop';
+    const inDrill = activeView === 'tiers' && drillTier != null && !!drill && drill.series.length > 0;
+
+    const tierLabel = (t: TierKey) => TIER_SERIES.find((s) => s.key === t)?.label ?? t;
+
+    const subtitle = activeView !== 'tiers'
+        ? 'Daily net tone of sampled posts toward the GOP.'
+        : inDrill
+            ? `Daily net tone of individual ${tierLabel(drillTier!).toLowerCase()} — click a name to read its classified posts.`
+            : 'Daily net tone by group: news, officials, the public. Click a group in the legend to break out who is driving it.';
+
+    const tierLegend: LegendItem[] = TIER_SERIES.map((s) => ({
+        key: s.key,
+        label: s.label,
+        color: s.color,
+        title: canDrill(s.key)
+            ? TIER_EXPLAIN[s.key]
+            : `${TIER_EXPLAIN[s.key].split('.')[0]}. (No per-entity breakout in this window.)`,
+        onClick: canDrill(s.key) ? () => { setDrillTier(s.key); setHighlightKey(null); } : undefined,
+    }));
+
+    const entityLegend: LegendItem[] = (drill?.series ?? []).map((s) => {
+        const item = entityByKey.get(s.key);
+        return {
+            key: s.key,
+            label: s.label,
+            color: s.color,
+            title: item?.entityProfile.blurb
+                ? `${item.entityProfile.blurb} — click to read its classified posts.`
+                : 'Click to read its classified posts.',
+            onClick: item && onOpenEntity ? () => onOpenEntity(item) : undefined,
+        };
+    });
 
     return (
         <Card
             title="Tone over time"
-            subtitle={activeView === 'tiers'
-                ? 'Daily net tone of sampled posts, split by who is talking: news outlets, officials, the public. Gaps are low-sample days we refuse to score.'
-                : 'Daily net tone of sampled posts toward the GOP.'}
+            subtitle={subtitle}
             headerActions={
                 <>
+                    {activeView === 'tiers' && inDrill && (
+                        <button
+                            type="button"
+                            className="trend-view-btn"
+                            onClick={() => { setDrillTier(null); setHighlightKey(null); }}
+                        >
+                            &larr; All groups
+                        </button>
+                    )}
                     {hasTiers && hasGop && (
                         <div className="trend-view-toggle" role="tablist" aria-label="Trend series">
                             <button
@@ -310,7 +462,7 @@ export function ToneTrendPanel({ toneTrend, gopTrend, byDayOfWeek }: ToneTrendPa
                                 role="tab"
                                 aria-selected={activeView === 'tiers'}
                                 className={activeView === 'tiers' ? 'trend-view-btn trend-view-btn-active' : 'trend-view-btn'}
-                                onClick={() => setView('tiers')}
+                                onClick={() => { setView('tiers'); }}
                             >
                                 By group
                             </button>
@@ -329,10 +481,11 @@ export function ToneTrendPanel({ toneTrend, gopTrend, byDayOfWeek }: ToneTrendPa
                         description={
                             '"By group" tracks the net tone of each group\'s own sampled posts per '
                             + 'day on a -100 to +100 scale; a day with too few posts from a group is '
-                            + 'suppressed and drawn as a gap, never a zero. "Toward GOP" tracks the '
-                            + 'net stance of sampled posts toward Republican-party entities. The '
-                            + 'weekday bars show net tone of ALL sampled posts by day of week. All '
-                            + 'summarize the posts we collected — samples, not polls.'
+                            + 'suppressed and drawn as a gap, never a zero. Click a group to break it '
+                            + 'into its individual outlets/officials/accounts, then click one to read '
+                            + 'its classified posts. "Toward GOP" tracks the net stance of sampled '
+                            + 'posts toward Republican-party entities. All summarize the posts we '
+                            + 'collected — samples, not polls.'
                         }
                         limitations={[
                             'Days with few posts swing harder — the lines are not volume-weighted.',
@@ -342,7 +495,27 @@ export function ToneTrendPanel({ toneTrend, gopTrend, byDayOfWeek }: ToneTrendPa
             }
         >
             {activeView === 'tiers' && hasTiers ? (
-                <TierTrendChart trend={tierTrend} />
+                <>
+                    {inDrill ? (
+                        <MultiLineChart
+                            rows={drill!.rows}
+                            series={drill!.series}
+                            highlightKey={highlightKey}
+                            ariaLabel={`Daily net tone of individual ${tierLabel(drillTier!)}, ${drill!.rows.length} days`}
+                        />
+                    ) : (
+                        <MultiLineChart
+                            rows={tierRows}
+                            series={TIER_SERIES}
+                            highlightKey={highlightKey}
+                            ariaLabel={`Daily net tone by group (news, officials, public), ${tierRows.length} days`}
+                        />
+                    )}
+                    <ToneLegend
+                        items={inDrill ? entityLegend : tierLegend}
+                        onHover={setHighlightKey}
+                    />
+                </>
             ) : hasGop ? (
                 <DailyTrendChart trend={gop} />
             ) : (

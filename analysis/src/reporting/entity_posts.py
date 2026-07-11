@@ -31,7 +31,6 @@ from analysis.src.reporting.aggregators.base import (
     get_time_cutoff,
 )
 from analysis.src.reporting.aggregators.sentiment import (
-    CATCH_ALL_VERIFIED_OFFICIALS,
     _build_doc_targets,
     _build_sample_dict,
     _extract_topic,
@@ -39,6 +38,7 @@ from analysis.src.reporting.aggregators.sentiment import (
 from analysis.src.reporting.entity_registry import (
     CATCH_ALL_OUTLETS,
     CATCH_ALL_SUBREDDITS,
+    CATCH_ALL_VERIFIED_OFFICIALS,
     CATCH_ALL_X_USERS,
     canonicalize_handle,
     canonicalize_news_domain,

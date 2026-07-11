@@ -140,11 +140,13 @@ Cloudflare Access adds a `Cf-Access-Jwt-Assertion` header on every forwarded req
 - First admin API call (e.g. `/api/review/queue`) -> Cloudflare intercepts, prompts Google SSO, sets session cookie, forwards to origin. Origin also verifies `X-Admin-Token`. Both must pass.
 - Non-admin users never hit an Access rule because they never call admin endpoints.
 
-## 6. Replacing `run.ps1` on Linux
+## 6. Dev vs production entry points on Linux
 
-`run.ps1` is a dev convenience. In production:
-- **Systemd units** for always-on API (`.service`) and scheduled pipeline jobs (`.service` + `.timer`).
-- **`scripts/run.sh`** as the Linux analogue of `run.ps1` — a bash case-statement that dispatches to `civic-ingest` subcommands or the Python job runner. Don't run PowerShell Core on Linux; no upside.
+`run.sh` (repo root) is the dev convenience — a bash case-statement that dispatches
+to `civic-ingest` subcommands or the Python job runner (it replaced the old
+`run.ps1`). In production:
+- **Systemd units** for always-on API (`.service`) and scheduled pipeline jobs (`.service` + `.timer`) — not `run.sh`/cron.
+- `run.sh` stays useful for one-off manual operations on the box (`./run.sh migrate`, `./run.sh analyze`).
 
 Representative unit:
 ```ini

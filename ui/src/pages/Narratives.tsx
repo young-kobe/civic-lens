@@ -4,7 +4,7 @@ import {
     EntityProfileCard,
     ErrorState, GlobalTicker, LoadingCard, MethodPopover, Modal, PostCardList,
     ThreeWayColumn, ThreeWayGrid,
-    entityExternalUrl, entityLeanAccent, supportingDocToPostCard,
+    entityExternalUrl, supportingDocToPostCard,
 } from '../components/common';
 import type { ColumnSorter, EntityStat, TickerItem } from '../components/common';
 import type { EntityProfile } from '../types';
@@ -230,7 +230,6 @@ function NarrativeDetailModal({
             kicker="Narrative"
             title={narrative.name || '(unnamed narrative)'}
             subtitle={`First seen ${formatRelativeDate(narrative.first_seen_at)} · ${firstSeenLabel(narrative)}`}
-            accentColor={sentColor}
             maxWidth={1040}
         >
             <div className="narrative-modal-stats">
@@ -484,7 +483,6 @@ function NarrativeEntityModal({
             onClose={onClose}
             title={profile.displayName}
             subtitle={subtitle}
-            accentColor={entityLeanAccent(profile)}
         >
             <EntityHeader profile={profile} />
 
@@ -705,7 +703,6 @@ interface NarrativesProps {
 function Narratives({ filters }: NarrativesProps) {
     const [activeNarrative, setActiveNarrative] = useState<NarrativeSummary | null>(null);
     const [activeEntity, setActiveEntity] = useState<NarrativeEntityGroup | null>(null);
-    const [query, setQuery] = useState('');
     // Deep-link target ("#narratives?open=<id>") — set by cross-page links
     // (Bot Detector amplification cards, Home digest, tone modals).
     const [openParam, setOpenParam] = useDeepLinkParam('open');
@@ -757,13 +754,7 @@ function Narratives({ filters }: NarrativesProps) {
     // readers can see which axes are empty, matching Tone's behavior.
     if (!data) return <EmptyState title="No stories available for this window." />;
 
-    // Client-side claim search — filters every surface below (lifecycle
-    // strip, three-way grid, cross-group panel) by name substring. The
-    // data is already in the loaded payload; no request round-trip.
-    const q = query.trim().toLowerCase();
-    const visible = q
-        ? data.filter((n) => (n.name || '').toLowerCase().includes(q))
-        : data;
+    const visible = data;
 
     // Three-way split by first_seen_tier_group (walkthrough 058), then
     // rolled up by first_seen_entity_profile so each entity gets one card.
@@ -819,32 +810,17 @@ function Narratives({ filters }: NarrativesProps) {
                     </div>
                 </div>
 
-                {/* Claim search — filters every panel below. */}
-                <div className="col-span-12">
-                    <input
-                        type="search"
-                        className="input narrative-search"
-                        placeholder="Search claims..."
-                        value={query}
-                        onChange={(e) => setQuery(e.target.value)}
-                        aria-label="Search claims by name"
-                    />
-                    {q !== '' && (
-                        <p className="text-xs text-muted" style={{ margin: 'var(--space-1) 0 0' }}>
-                            {visible.length === 0
-                                ? `No claim in this window matches "${query.trim()}".`
-                                : `${visible.length} of ${data.length} claims match.`}
-                        </p>
-                    )}
-                </div>
-
-                {/* Story lifecycles — the page's signature read. */}
-                <div className="col-span-12">
+                {/* Story lifecycles + Stories-spreading share a row (both capped
+                    at 5). */}
+                <div className="col-span-6">
                     <NarrativeLifecyclePanel
                         narratives={visible}
                         onOpen={setActiveNarrative}
                         tiersFor={tierChipsForNarrative}
                     />
+                </div>
+                <div className="col-span-6">
+                    <ClaimsSpreadingPanel narratives={crossTier} onOpen={setActiveNarrative} />
                 </div>
 
                 {/* Three-way grid — one profile card per first-seen entity. */}
@@ -872,11 +848,6 @@ function Narratives({ filters }: NarrativesProps) {
                             emptyCopy="No stories first seen from the public in this window."
                         />
                     </ThreeWayGrid>
-                </div>
-
-                {/* Claims spreading between groups (was "Cross-tier narratives"). */}
-                <div className="col-span-12">
-                    <ClaimsSpreadingPanel narratives={crossTier} onOpen={setActiveNarrative} />
                 </div>
 
                 {/* How this page works — self-documenting content + collapsible backup. */}

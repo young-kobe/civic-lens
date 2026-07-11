@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
 import {
-    Card, CollapsibleInfo, DefinitionChip, EmptyState, EntityHeader,
+    CollapsibleInfo, DefinitionChip, EmptyState, EntityHeader,
     EntityHubLinks, ErrorState, GlobalTicker, LoadingCard, MethodPopover,
     Modal, PostCardList,
     RankedEntityList, ThreeWayColumn, ThreeWayGrid,
-    TierRow, TopMetricsBlock, entityExternalUrl, entityLeanAccent,
+    TierRow, TopMetricsBlock, entityExternalUrl,
     parseEntityParam, propagandaExampleToPostCard,
 } from '../components/common';
 import type { ColumnSorter, RankedEntity, TickerItem, TierRowDot } from '../components/common';
@@ -20,7 +20,7 @@ import { dedupeById } from '../services/dedupe';
 import { COLORS } from '../theme';
 import type {
     Filters, PropagandaEntityItem, PropagandaExample,
-    PropagandaOverview, PropagandaSourceSplit,
+    PropagandaOverview,
     PropagandaTechniqueName,
 } from '../types';
 
@@ -81,7 +81,7 @@ function PropagandaTopMetrics({
     const splitDots: TierRowDot[] = [];
     if (newsSplit) splitDots.push({
         pct: newsSplit.flagged_rate_pct,
-        color: 'var(--neutral-600)',
+        color: 'var(--neutral-500)',
         title: `News ${formatPct(newsSplit.flagged_rate_pct)}`,
     });
     if (socialSplit) splitDots.push({
@@ -94,6 +94,7 @@ function PropagandaTopMetrics({
         <TopMetricsBlock
             eyebrow={`As of ${windowLabel}`}
             meta={`${data.total_eligible_docs.toLocaleString()} scored posts`}
+            rowsClassName="propaganda-tier-rows"
         >
             <TierRow
                 label="Flagged rate"
@@ -144,7 +145,7 @@ function buildPropagandaTickerItems(data: PropagandaOverview): TickerItem[] {
         {
             label: 'Flagged rate',
             value: formatPct(rate),
-            tone: rate > 20 ? 'negative' : rate > 10 ? 'accent' : 'positive',
+            tone: rate > 20 ? 'negative' : rate > 10 ? 'warning' : 'positive',
             emphasis: true,
             ariaLabel: `Flagged rate ${rate.toFixed(1)} percent`,
         },
@@ -253,7 +254,6 @@ function PropagandaEntityModal({
             onClose={onClose}
             title={profile.displayName}
             subtitle={`${item.flagged_docs.toLocaleString()} flagged · ${item.total_docs.toLocaleString()} scored`}
-            accentColor={entityLeanAccent(profile)}
         >
             <EntityHeader profile={profile} />
 
@@ -361,53 +361,6 @@ function ThreeWayEntityGrid({
                 sorters={PROPAGANDA_SORTERS}
             />
         </ThreeWayGrid>
-    );
-}
-
-
-// --------------------------------------------------------------------------- //
-//  News vs Social split                                                       //
-// --------------------------------------------------------------------------- //
-
-const SPLIT_DOT_COLOR: Record<string, string> = {
-    'News':         'var(--neutral-600)',
-    'Social Media': COLORS.warning,
-};
-
-function NewsVsSocialCard({ splits }: { splits: PropagandaSourceSplit[] }) {
-    return (
-        <Card
-            title="News vs. social media"
-            subtitle="Flagged rate and mean score for news outlets vs. social posts"
-        >
-            <div className="source-split-rows">
-                {splits.map((s) => (
-                    <div key={s.label} className="source-split-row">
-                        <span className="source-split-row-label">
-                            <span
-                                className="source-split-dot"
-                                style={{ background: SPLIT_DOT_COLOR[s.label] ?? 'var(--neutral-500)' }}
-                                aria-hidden
-                            />
-                            {s.label}
-                        </span>
-                        <span className="source-split-row-total">
-                            {s.total_docs.toLocaleString()} posts
-                        </span>
-                        <span className="source-split-row-rate">
-                            {formatPct(s.flagged_rate_pct)}
-                            <span className="source-split-row-sub">flagged</span>
-                        </span>
-                        <span className="source-split-row-score" title={MEAN_SCORE_TITLE}>
-                            {saturationLevel(s.mean_score)}
-                            <span className="source-split-row-sub">
-                                saturation · {s.mean_score.toFixed(2)} / 1
-                            </span>
-                        </span>
-                    </div>
-                ))}
-            </div>
-        </Card>
     );
 }
 
@@ -534,8 +487,19 @@ function Propaganda({ filters }: PropagandaProps) {
                     </div>
                 </div>
 
-                <div className="col-span-12">
+                {/* One row: the "As of last N days" top-metrics block beside the
+                    technique bar graphic. Both read from the same windowed
+                    `data`, so they filter in step; pairing them condenses two
+                    full-width rows into one. Hover a technique bar for what it
+                    means, click to open its flagged posts. */}
+                <div className="col-span-5">
                     <PropagandaTopMetrics data={data} windowLabel={windowLabel} />
+                </div>
+                <div className="col-span-7">
+                    <TechniqueExplorer
+                        techniques={data.by_technique}
+                        examples={data.examples}
+                    />
                 </div>
 
                 {/* Always render the three-way frame, even when every tier is
@@ -545,19 +509,9 @@ function Propaganda({ filters }: PropagandaProps) {
                     <ThreeWayEntityGrid data={data} onOpen={setActiveEntity} />
                 </div>
 
-                {/* Technique explorer — the page's signature interaction:
-                    pick a technique, read its evidence. */}
-                <div className="col-span-12">
-                    <TechniqueExplorer
-                        techniques={data.by_technique}
-                        examples={data.examples}
-                    />
-                </div>
-
-                <div className="col-span-12">
-                    <NewsVsSocialCard splits={data.by_source} />
-                </div>
-
+                {/* News-vs-social removed (its numbers already appear in the
+                    top-metrics "News vs social" tier row + the reads-as-today
+                    line); How-this-works spans full width so nothing is stranded. */}
                 <div className="col-span-12">
                     <HowThisWorks />
                 </div>

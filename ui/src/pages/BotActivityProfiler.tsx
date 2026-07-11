@@ -5,7 +5,7 @@ import {
     GlobalTicker,
     LoadingCard, MethodPopover, Modal, PostCardList,
     RankedEntityList, ThreeWayColumn, TwoWayGrid,
-    entityExternalUrl, entityLeanAccent, flaggedExampleToPostCard,
+    entityExternalUrl, flaggedExampleToPostCard,
     parseEntityParam,
 } from '../components/common';
 import { deepLinkHref, useDeepLinkParam } from '../services/deepLink';
@@ -45,7 +45,6 @@ function BotEntityModal({ item, onClose }: { item: BotEntityItem; onClose: () =>
             onClose={onClose}
             title={profile.displayName}
             subtitle="Bot-detection drill-down"
-            accentColor={entityLeanAccent(profile)}
         >
             <EntityHeader profile={profile} />
             <div className="entity-modal-stats">
@@ -202,14 +201,9 @@ function readsAsToday(data: BotData): string {
     return parts.join(' ');
 }
 
-function buildBotTickerItems(overview: BotOverview): { items: TickerItem[]; accentColor: string } {
+function buildBotTickerItems(overview: BotOverview): TickerItem[] {
     const rate = overview.suspectedAutomationRate;
     const rateTone = rate > 10 ? 'warning' : rate > 3 ? 'neutral' : 'positive';
-    const accentColor = rateTone === 'warning'
-        ? COLORS.warning
-        : rateTone === 'positive'
-            ? COLORS.positive
-            : 'var(--neutral-400)';
 
     const items: TickerItem[] = [
         {
@@ -239,7 +233,7 @@ function buildBotTickerItems(overview: BotOverview): { items: TickerItem[]; acce
                     : 'neutral',
         },
     ];
-    return { items, accentColor };
+    return items;
 }
 
 interface NarrativeAmplificationCardProps {
@@ -270,10 +264,6 @@ function NarrativeAmplificationCard({ narrative }: NarrativeAmplificationCardPro
             default: return null;
         }
     };
-
-    const accentColor = narrative.confidence === 'high' ? COLORS.negative
-        : narrative.confidence === 'medium' ? COLORS.warning
-        : 'var(--neutral-500)';
 
     return (
         <>
@@ -329,7 +319,6 @@ function NarrativeAmplificationCard({ narrative }: NarrativeAmplificationCardPro
                 kicker="Narrative amplification"
                 title={narrative.narrative}
                 subtitle={`${narrative.suspectedBotVolume.toLocaleString()} suspected bot posts · ${narrative.confidence} likelihood`}
-                accentColor={accentColor}
             >
                 <h3 className="card-title mb-2">Why this was flagged</h3>
                 <ul style={{ margin: '0 0 var(--space-4)', paddingLeft: 'var(--space-5)' }} className="text-sm">
@@ -436,34 +425,51 @@ interface BehavioralSignalsPanelProps {
 function BehavioralSignalsPanel({ data }: BehavioralSignalsPanelProps) {
     return (
         <>
-            {/* Row: account age (6) + text similarity (6) — both compact bar lists */}
-            <div className="col-span-6">
+            {/* Row: three compact bar-list distributions as a 3-up dense band. */}
+            <div className="col-span-4">
                 <Card title="Account Age Distribution">
                     <div className="flex flex-col gap-2">
-                        {data.accountAgeDistribution.map((item, i) => (
-                            <div key={i}>
-                                <div className="flex justify-between text-sm mb-1">
-                                    <span>{item.range}</span>
-                                    <span className="num text-muted">{formatPct(item.percentage, { decimals: 0 })}</span>
-                                </div>
+                        {data.accountAgeDistribution.map((item, i) => {
+                            const isNewest = item.range.includes('<');
+                            return (
                                 <div
-                                    style={{
-                                        height: '6px',
-                                        background: 'var(--neutral-100)',
-                                        borderRadius: '1px',
-                                        overflow: 'hidden',
-                                    }}
+                                    key={i}
+                                    title={isNewest
+                                        ? `Newest-account bucket (${item.range}) — highlighted because freshly created accounts skew toward automation. ${formatPct(item.percentage, { decimals: 0 })} of suspected-bot posts.`
+                                        : `Established-account bucket (${item.range}) — ${formatPct(item.percentage, { decimals: 0 })} of suspected-bot posts.`}
                                 >
+                                    <div className="flex justify-between text-sm mb-1">
+                                        <span>{item.range}</span>
+                                        <span className="num text-muted">{formatPct(item.percentage, { decimals: 0 })}</span>
+                                    </div>
                                     <div
                                         style={{
-                                            width: `${item.percentage}%`,
-                                            height: '100%',
-                                            background: item.range.includes('<') ? COLORS.warning : COLORS.accent,
+                                            height: '6px',
+                                            background: 'var(--neutral-100)',
+                                            overflow: 'hidden',
                                         }}
-                                    />
+                                    >
+                                        <div
+                                            style={{
+                                                width: `${item.percentage}%`,
+                                                height: '100%',
+                                                background: isNewest ? COLORS.warning : COLORS.chartAccent,
+                                            }}
+                                        />
+                                    </div>
                                 </div>
-                            </div>
-                        ))}
+                            );
+                        })}
+                    </div>
+                    <div className="chart-swatch-legend" aria-hidden>
+                        <span className="chart-swatch-item">
+                            <span className="chart-swatch" style={{ background: COLORS.warning }} />
+                            Newest accounts
+                        </span>
+                        <span className="chart-swatch-item">
+                            <span className="chart-swatch" style={{ background: COLORS.chartAccent }} />
+                            Older accounts
+                        </span>
                     </div>
                     {(() => {
                         // Data-derived caption — no hardcoded conclusion. State
@@ -482,7 +488,7 @@ function BehavioralSignalsPanel({ data }: BehavioralSignalsPanelProps) {
                 </Card>
             </div>
 
-            <div className="col-span-6">
+            <div className="col-span-4">
                 <Card title="Text Similarity Distribution">
                     <div className="text-xs text-muted mb-3">
                         Pairwise text similarity across suspected-bot posts. Natural discourse typically sits in the
@@ -514,7 +520,7 @@ function BehavioralSignalsPanel({ data }: BehavioralSignalsPanelProps) {
                                 <SimilarityBar
                                     label="Low similarity (<50%)"
                                     value={pct(low)}
-                                    color="var(--accent)"
+                                    color="var(--chart-accent)"
                                 />
                             </div>
                         );
@@ -527,7 +533,7 @@ function BehavioralSignalsPanel({ data }: BehavioralSignalsPanelProps) {
                 honestly show the per-day UTC cadence its legend claimed.
                 Re-introduce once bot.py emits real (day, hour) UTC buckets —
                 tracked in docs/todos/ui-rework.md. */}
-            <div className="col-span-6">
+            <div className="col-span-4">
                 <Card title="Link Domain Concentration">
                     <div className="flex flex-col">
                         {data.linkDomainConcentration.map((item, i) => (
@@ -573,7 +579,6 @@ function SimilarityBar({ label, value, color }: SimilarityBarProps) {
                 style={{
                     height: '8px',
                     background: 'var(--neutral-100)',
-                    borderRadius: '1px',
                     overflow: 'hidden',
                 }}
             >
@@ -654,7 +659,7 @@ function BotActivityProfiler({ filters }: BotActivityProfilerProps) {
     // "nothing to flag" run indistinguishable from a broken pipeline.
     if (!data) return <EmptyState title="No bot-activity data available" />;
 
-    const { items: botTickerItems, accentColor: botAccentColor } = buildBotTickerItems(data.overview);
+    const botTickerItems = buildBotTickerItems(data.overview);
     const botRefreshed = formatRefreshedAgo(
         getSnapshotTimestamp(snapshotStatus, `bot_activity_${filters.timeRange}`),
     );
@@ -676,7 +681,6 @@ function BotActivityProfiler({ filters }: BotActivityProfilerProps) {
                 <GlobalTicker
                     items={botTickerItems}
                     refreshed={botRefreshed}
-                    accentColor={botAccentColor}
                     ariaLabel="Bot detector overview"
                     legend={
                         <MethodPopover
@@ -726,17 +730,15 @@ function BotActivityProfiler({ filters }: BotActivityProfilerProps) {
                 />
             )}
 
-            {/* Row: coordination summary (5) + narrative amplification section label (7).
-                Coord is a compact 4-stat card; the amplification section headline pairs
-                with it so the narrative-detail cards below get a clean section start. */}
-            <div className="col-span-5">
+            {/* Coordination summary spans the full width — its internal stat
+                grid fills the row, so it no longer pairs a tall card with a
+                short section-label band (which stranded empty space beside it). */}
+            <div className="col-span-12">
                 <CoordinationSummary data={data.coordinationStats} />
             </div>
-            {/* Section-label band. Kept styling light on purpose so it
-                reads as a header, not a card — on mobile this would
-                otherwise stack as a bordered panel between two real
-                Cards and look like an orphan. */}
-            <div className="col-span-7 bot-section-label">
+
+            {/* Full-width section header above the amplification cards. */}
+            <div className="col-span-12 bot-section-label">
                 <div className="eyebrow" style={{ marginBottom: 'var(--space-1)' }}>
                     Narratives with Suspected Bot Amplification
                 </div>
@@ -746,10 +748,11 @@ function BotActivityProfiler({ filters }: BotActivityProfilerProps) {
                 </div>
             </div>
 
-            {/* Narrative amplification cards — each full-width so their
-                expanded state has room for the example post grid. */}
+            {/* Narrative amplification cards tile 2-up — the in-grid card holds
+                only title/badge/bullets/buttons (all wrap); the heavy example
+                grid lives in a modal, so the narrower width is safe. */}
             {data.narrativeAmplification.map((narrative) => (
-                <div key={narrative.id} className="col-span-12">
+                <div key={narrative.id} className="col-span-6">
                     <NarrativeAmplificationCard narrative={narrative} />
                 </div>
             ))}

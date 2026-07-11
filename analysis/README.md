@@ -36,7 +36,7 @@ runs the analysis engines, and pre-computes the JSON snapshot caches the API ser
 
 ## Workflows
 
-The canonical entry point for everything below is `run.ps1` at the repo root (see the
+The canonical entry point for everything below is `run.sh` at the repo root (see the
 top-level README). The commands here are the underlying invocations.
 
 ### 1. Setup
@@ -50,7 +50,7 @@ pip install -r requirements.txt
 `src/main.py` boots the FastAPI app (Uvicorn) defined in `api/server.py`:
 
 ```bash
-python -m analysis.src.main   # or: .\run.ps1 api
+python -m analysis.src.main   # or: ./run.sh api
 ```
 
 Server runs at `http://localhost:8000`; health at `/health`, data under `/api/v1`.
@@ -58,8 +58,8 @@ Server runs at `http://localhost:8000`; health at `/health`, data under `/api/v1
 ### 3. Running the pipeline
 
 ```bash
-.\run.ps1 analyze                    # full pipeline
-.\run.ps1 analyze -Tasks bot,text    # specific stages
+./run.sh analyze                     # full pipeline
+./run.sh analyze --tasks bot,text    # specific stages
 ```
 
 ### 4. Testing

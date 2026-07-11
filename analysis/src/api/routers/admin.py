@@ -49,7 +49,7 @@ def run_etl(request: Request):
 def run_full_pipeline(request: Request, background_tasks: BackgroundTasks):
     """Run the full analysis pipeline in background.
 
-    For synchronous execution use ``.\\run.ps1 analyze``.
+    For synchronous execution use ``./run.sh analyze``.
     """
     enforce_trigger_cooldown("run/full-pipeline")
     from analysis.src.scheduler.job_runner import AnalysisJobRunner

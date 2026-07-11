@@ -77,12 +77,12 @@ States: `QUEUED(0) -> INFLIGHT(1) -> DONE(2)` or `QUEUED -> INFLIGHT -> QUEUED(b
 
 ## Commands
 
-```powershell
+```bash
 # Build
-.\run.ps1 build
+./run.sh build
 
 # Run crawler
-.\run.ps1 crawl
+./run.sh crawl
 ```
 
 ## Acceptance Criteria

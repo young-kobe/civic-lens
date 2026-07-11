@@ -203,6 +203,16 @@ class EntitySentimentItem:
     # below MIN_TARGET_SAMPLE_N. Serialized as ``byTopic`` — powers the
     # topic-filtered headline in the profile modal.
     expressed_by_topic: List[Dict[str, Any]] = field(default_factory=list)
+    # Summed engagement (likes + reposts + replies + quotes) across the
+    # entity's posts in the window. Serialized as ``engagementTotal`` when
+    # non-zero — powers the officials column's engagement-weighted sort.
+    # 0 for news outlets (articles carry no engagement signal).
+    engagement_total: int = 0
+    # Per-day net-tone series for this entity's own posts:
+    # [{date, net|None, volume, lowSample}], dates ascending, net suppressed
+    # below the sample floor. Serialized as ``dailyTone`` when present —
+    # powers the Tone-over-time chart's tier→entity drill-down.
+    daily_tone: List[Dict[str, Any]] = field(default_factory=list)
 
 
 def _classification_sample_to_dict(s: "ClassificationSample") -> Dict[str, Any]:
@@ -259,6 +269,10 @@ def _entity_item_to_dict(item: "EntitySentimentItem") -> Dict[str, Any]:
         result["outbound"] = item.outbound
     if item.expressed_by_topic:
         result["byTopic"] = item.expressed_by_topic
+    if item.engagement_total:
+        result["engagementTotal"] = item.engagement_total
+    if item.daily_tone:
+        result["dailyTone"] = item.daily_tone
     return result
 
 

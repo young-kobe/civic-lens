@@ -19,44 +19,47 @@ See `docs/INVARIANTS.md` for data-integrity invariants and `docs/ARCHITECTURE_DI
 
 ## Quick Start
 
-```powershell
+```bash
 # 1. Apply DB migrations
-.\run.ps1 migrate
+./run.sh migrate
 
 # 2. Build and run the crawler (news + Reddit + X)
-.\run.ps1 crawl
+./run.sh crawl
 
 # 3. Run the analysis pipeline (ETL + AI + caching)
-.\run.ps1 analyze
+./run.sh analyze
 
 # 4. Start API + UI
-.\run.ps1 dev
+./run.sh dev
 ```
 
-The API serves pre-computed data from `data/cache/`. Run `.\run.ps1 analyze` periodically (or via the scheduled task) to refresh.
+The API serves pre-computed data from `data/cache/`. Run `./run.sh analyze` periodically (or via cron) to refresh.
 
 ## Commands
 
 | Command | Description |
 |---------|-------------|
-| `.\run.ps1 build` | Build Go ingestion binary |
-| `.\run.ps1 migrate` | Apply pending DB migrations |
-| `.\run.ps1 crawl` | Run the web crawler (news via RSS/HTML) |
-| `.\run.ps1 reddit` | Fetch Reddit posts/comments |
-| `.\run.ps1 x` | Fetch X/Twitter posts |
-| `.\run.ps1 analyze` | Full analysis pipeline (ETL + bot + text + citations + claims + narratives + snapshots) |
-| `.\run.ps1 analyze -Tasks bot,text` | Run specific pipeline stages |
-| `.\run.ps1 api` | Start FastAPI server |
-| `.\run.ps1 ui` | Start React dev server |
-| `.\run.ps1 dev` | Start both API and UI |
+| `./run.sh build` | Build Go ingestion binary |
+| `./run.sh migrate` | Apply pending DB migrations |
+| `./run.sh crawl` | Run the web crawler (news via RSS/HTML) |
+| `./run.sh reddit` | Fetch Reddit posts/comments |
+| `./run.sh x` | Fetch X/Twitter posts |
+| `./run.sh analyze` | Full analysis pipeline (ETL + bot + text + citations + claims + narratives + snapshots) |
+| `./run.sh analyze --tasks bot,text` | Run specific pipeline stages |
+| `./run.sh api` | Start FastAPI server |
+| `./run.sh ui` | Start React dev server |
+| `./run.sh dev` | Start both API and UI |
 
 ## Scheduled Analysis
 
-```powershell
-.\setup-scheduled-task.ps1              # Default: every 6 hours
-.\setup-scheduled-task.ps1 -RunsPerDay 4  # Customize frequency
-.\setup-scheduled-task.ps1 -Remove        # Remove the task
+```bash
+./setup-cron.sh                    # Default: every 6 hours (4 runs/day)
+./setup-cron.sh --runs-per-day 8   # Customize frequency
+./setup-cron.sh --remove           # Remove the cron entry
 ```
+
+For production, use the systemd timer installed by `deploy/install.sh` instead
+of cron.
 
 ## Data Storage
 - **Database**: `data/civic_lens.db` (SQLite, WAL mode)

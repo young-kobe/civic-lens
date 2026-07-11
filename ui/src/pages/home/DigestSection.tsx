@@ -48,6 +48,64 @@ function toneColor(net: number): string {
     return 'var(--neutral-500)';
 }
 
+// Richer at-a-glance headline numbers for "this week in the sample" — the
+// volume + overall tone + coverage the per-tier/signal blocks below don't state
+// outright. All from the same 7d snapshots.
+function HeadlineStats({
+    sentiment, narratives,
+}: {
+    sentiment: PublicSentimentData | null;
+    narratives: NarrativeSummary[] | null;
+}) {
+    const kpis: Array<{ label: string; value: string; detail: string; color?: string }> = [];
+    if (sentiment) {
+        kpis.push({
+            label: 'Sampled posts',
+            value: formatCount(sentiment.overview.volume),
+            detail: 'scored in the last 7 days',
+        });
+        const net = sentiment.overview.netScore;
+        kpis.push({
+            label: 'Overall tone',
+            value: formatPts(net),
+            detail: toneVerb(net),
+            color: toneColor(net),
+        });
+    }
+    if (narratives) {
+        kpis.push({
+            label: 'Stories tracked',
+            value: formatCount(narratives.length),
+            detail: 'recurring claims',
+        });
+    }
+    if (sentiment && sentiment.byTopic.length > 0) {
+        const top = [...sentiment.byTopic].sort((a, b) => b.volume - a.volume)[0];
+        kpis.push({
+            label: 'Topics covered',
+            value: formatCount(sentiment.byTopic.length),
+            detail: top.topic ? `most on ${top.topic}` : 'across the sample',
+        });
+    }
+    if (kpis.length === 0) return null;
+    return (
+        <div className="digest-kpis">
+            {kpis.map((k) => (
+                <div key={k.label} className="digest-kpi">
+                    <span className="eyebrow">{k.label}</span>
+                    <span
+                        className="digest-kpi-value"
+                        style={k.color ? { color: k.color } : undefined}
+                    >
+                        {k.value}
+                    </span>
+                    <span className="digest-kpi-detail">{k.detail}</span>
+                </div>
+            ))}
+        </div>
+    );
+}
+
 function ToneDigest({ data }: { data: PublicSentimentData }) {
     const tiers = [
         { label: 'News articles are', agg: aggregateTier(data.byNewsOutlet) },
@@ -90,6 +148,33 @@ const SOURCE_DOT_COLOR: Record<string, string> = {
     x_post: 'var(--source-x)',
 };
 
+const SOURCE_LABEL: Record<string, string> = {
+    news: 'News',
+    reddit_post: 'Reddit post',
+    reddit_comment: 'Reddit comment',
+    x_post: 'X post',
+};
+
+/** Legend keying the source-mix bar's colors — the bar carries no inline
+ *  labels, so the color is the sole encoding without this. */
+function SourceMixLegend() {
+    const entries: Array<[string, string]> = [
+        ['News', 'var(--source-news)'],
+        ['Reddit', 'var(--source-reddit)'],
+        ['X', 'var(--source-x)'],
+    ];
+    return (
+        <div className="chart-swatch-legend" aria-hidden>
+            {entries.map(([label, color]) => (
+                <span key={label} className="chart-swatch-item">
+                    <span className="chart-swatch" style={{ background: color }} />
+                    {label}
+                </span>
+            ))}
+        </div>
+    );
+}
+
 function StoriesDigest({ narratives }: { narratives: NarrativeSummary[] }) {
     const top = [...narratives]
         .sort((a, b) => b.supporting_doc_count - a.supporting_doc_count)
@@ -115,10 +200,17 @@ function StoriesDigest({ narratives }: { narratives: NarrativeSummary[] }) {
                             >
                                 <span className="digest-story-name">{n.name || '(unnamed)'}</span>
                                 {barTotal > 0 && (
-                                    <span className="digest-story-bar" aria-hidden>
+                                    <span
+                                        className="digest-story-bar"
+                                        role="img"
+                                        aria-label={`Source mix: ${n.source_breakdown
+                                            .map((it) => `${Math.round((it.count / barTotal) * 100)}% ${SOURCE_LABEL[it.source_type] || it.source_type}`)
+                                            .join(', ')}`}
+                                    >
                                         {n.source_breakdown.map((it) => (
                                             <span
                                                 key={it.source_type}
+                                                title={`${SOURCE_LABEL[it.source_type] || it.source_type} — ${it.count} of ${barTotal} posts (${Math.round((it.count / barTotal) * 100)}%)`}
                                                 style={{
                                                     width: `${(it.count / barTotal) * 100}%`,
                                                     background: SOURCE_DOT_COLOR[it.source_type] || 'var(--neutral-400)',
@@ -135,6 +227,7 @@ function StoriesDigest({ narratives }: { narratives: NarrativeSummary[] }) {
                     );
                 })}
             </ul>
+            <SourceMixLegend />
         </div>
     );
 }
@@ -214,6 +307,7 @@ export function DigestSection() {
                     }
                 />
             </div>
+            <HeadlineStats sentiment={sentiment} narratives={narratives} />
             {movers && <MoversTicker data={movers} />}
             <div className="digest-grid">
                 {sentiment && <ToneDigest data={sentiment} />}

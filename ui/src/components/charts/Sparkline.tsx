@@ -1,5 +1,7 @@
 import { useId } from 'react';
-import { AreaChart, Area, XAxis, ResponsiveContainer, Tooltip, TooltipProps } from 'recharts';
+import {
+    AreaChart, Area, CartesianGrid, XAxis, YAxis, ResponsiveContainer, Tooltip, TooltipProps,
+} from 'recharts';
 import { COLORS } from '../../theme';
 import type { ChartDataPoint } from '../../types';
 
@@ -80,10 +82,22 @@ function Sparkline({
                 <AreaChart data={data} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
                     <defs>
                         <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor={color} stopOpacity={0.3} />
-                            <stop offset="100%" stopColor={color} stopOpacity={0} />
+                            <stop offset="0%" stopColor={color} stopOpacity={0.35} />
+                            <stop offset="100%" stopColor={color} stopOpacity={0.02} />
                         </linearGradient>
                     </defs>
+                    {/* Back gridlines (Grafana register) only on full-size charts —
+                        on a 40px sparkline they'd be noise. */}
+                    {showXAxis && (
+                        <>
+                            <CartesianGrid
+                                vertical={false}
+                                stroke="var(--chart-grid)"
+                                strokeDasharray="2 4"
+                            />
+                            <YAxis hide domain={['auto', 'auto']} />
+                        </>
+                    )}
                     {hasXKey && (
                         <XAxis
                             dataKey={xKey}

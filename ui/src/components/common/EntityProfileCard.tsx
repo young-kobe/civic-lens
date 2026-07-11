@@ -237,20 +237,6 @@ export function entityChipTitle(profile: EntityProfile): string | undefined {
     return profile.leanSource ? `${base} (per ${profile.leanSource})` : base;
 }
 
-/** Accent color for this entity's lean — matches the `.lean-*` CSS rules. */
-export function entityLeanAccent(profile: EntityProfile): string {
-    const l = leanClass(profile);
-    switch (l) {
-        case 'left':    return COLORS.leanLeft;
-        case 'right':   return COLORS.leanRight;
-        case 'mixed':   return COLORS.warning;
-        case 'neutral': return 'var(--neutral-400)';
-        case 'center':
-        default:        return 'var(--neutral-500)';
-    }
-}
-
-
 // --------------------------------------------------------------------------- //
 //  Reusable helpers for callers that own a detail modal                        //
 // --------------------------------------------------------------------------- //

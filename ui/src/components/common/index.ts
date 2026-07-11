@@ -20,7 +20,6 @@ export {
     EntityHeader,
     entityChipLabel,
     entityExternalUrl,
-    entityLeanAccent,
     officialToneStats,
     sentimentStats,
 } from './EntityProfileCard';
@@ -44,5 +43,5 @@ export {
 } from './PostCard';
 export type { PostCardData } from './PostCard';
 export { default as MoversTicker } from './MoversTicker';
-export { ThreeWayGrid, TwoWayGrid, ThreeWayColumn } from './ThreeWayGrid';
-export type { ColumnSorter } from './ThreeWayGrid';
+export { ThreeWayGrid, TwoWayGrid, ThreeWayColumn, ThreeWayToolbar, matchesLeanFilter } from './ThreeWayGrid';
+export type { ColumnSorter, LeanFilter } from './ThreeWayGrid';

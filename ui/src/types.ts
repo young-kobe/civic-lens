@@ -53,6 +53,11 @@ export interface PublicSentimentData {
         favorable: number;
         unfavorable: number;
         neutral: number;
+        // 'mixed' = both genuine praise and criticism of the GOP. Kept distinct
+        // from 'neutral' (no stance): the four buckets sum to ~100. netFavorability
+        // counts mixed in the denominator with zero net contribution. Optional so
+        // pre-mixed cached snapshots keep parsing.
+        mixed?: number;
         netFavorability: number;
         sampleSize: number;
         sourceCount: number;
@@ -196,6 +201,24 @@ export interface EntitySentimentItem {
     /** Public tier only — WHO this bucket's posts talk about (the inverse
      *  of received). Missing on pre-outbound cached snapshots. */
     outbound?: OutboundTargets | null;
+    /** Summed engagement (likes + reposts + replies + quotes) across this
+     *  entity's posts in the window. Absent (treat as 0) for news outlets and
+     *  on pre-engagement cached snapshots — powers the officials column's
+     *  engagement-weighted default sort. */
+    engagementTotal?: number;
+    /** Per-day net-tone series for this entity's own posts, dates ascending;
+     *  net is null (lowSample) below the suppression floor. Powers the
+     *  Tone-over-time chart's tier→entity drill-down. Absent on pre-dailyTone
+     *  snapshots. */
+    dailyTone?: EntityDailyTonePoint[];
+}
+
+/** One day in an entity's daily net-tone series. */
+export interface EntityDailyTonePoint {
+    date: string;
+    net: number | null;
+    volume: number;
+    lowSample: boolean;
 }
 
 /** Outbound-target rollup on a public-tier entity card. */
@@ -386,10 +409,13 @@ export interface DemographicBreakdown {
     favorable: number;
     unfavorable: number;
     neutral: number;
+    // 'mixed' (both praise and criticism) — distinct from neutral. Optional so
+    // pre-mixed cached snapshots keep parsing.
+    mixed?: number;
 }
 
 export interface PollingSocialComparison {
-    onlineSentiment: { favorable: number; unfavorable: number; neutral: number };
+    onlineSentiment: { favorable: number; unfavorable: number; neutral: number; mixed?: number };
     pollingData: { favorable: number; unfavorable: number; neutral: number; source?: string; date?: string } | null;
 }
 

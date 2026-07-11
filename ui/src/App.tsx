@@ -283,7 +283,7 @@ function App() {
                 />
             )}
 
-            <main style={{ paddingTop: 'var(--space-4)', paddingBottom: 'var(--space-10)' }}>
+            <main style={{ paddingTop: 'var(--space-3)', paddingBottom: 'var(--space-6)' }}>
                 {renderPage()}
             </main>
 
