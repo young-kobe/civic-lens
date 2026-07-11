@@ -1301,6 +1301,31 @@ code, pre {
   z-index: 1;
 }
 
+/* Shared swatch legend — maps a bar/segment color to what it encodes, for the
+   color-only charts that carry no inline segment labels (account-age
+   distribution, the digest source-mix bar). One key per chart; keep the labels
+   terse. */
+.chart-swatch-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+  margin-top: var(--space-2);
+}
+.chart-swatch-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--text-xs);
+  color: var(--neutral-500);
+  white-space: nowrap;
+}
+.chart-swatch {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
 /* Skew direction chip (used on distribution card) */
 .chip {
   display: inline-flex;

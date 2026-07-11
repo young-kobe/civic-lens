@@ -429,30 +429,48 @@ function BehavioralSignalsPanel({ data }: BehavioralSignalsPanelProps) {
             <div className="col-span-4">
                 <Card title="Account Age Distribution">
                     <div className="flex flex-col gap-2">
-                        {data.accountAgeDistribution.map((item, i) => (
-                            <div key={i}>
-                                <div className="flex justify-between text-sm mb-1">
-                                    <span>{item.range}</span>
-                                    <span className="num text-muted">{formatPct(item.percentage, { decimals: 0 })}</span>
-                                </div>
+                        {data.accountAgeDistribution.map((item, i) => {
+                            const isNewest = item.range.includes('<');
+                            return (
                                 <div
-                                    style={{
-                                        height: '6px',
-                                        background: 'var(--neutral-100)',
-                                        borderRadius: '1px',
-                                        overflow: 'hidden',
-                                    }}
+                                    key={i}
+                                    title={isNewest
+                                        ? `Newest-account bucket (${item.range}) — highlighted because freshly created accounts skew toward automation. ${formatPct(item.percentage, { decimals: 0 })} of suspected-bot posts.`
+                                        : `Established-account bucket (${item.range}) — ${formatPct(item.percentage, { decimals: 0 })} of suspected-bot posts.`}
                                 >
+                                    <div className="flex justify-between text-sm mb-1">
+                                        <span>{item.range}</span>
+                                        <span className="num text-muted">{formatPct(item.percentage, { decimals: 0 })}</span>
+                                    </div>
                                     <div
                                         style={{
-                                            width: `${item.percentage}%`,
-                                            height: '100%',
-                                            background: item.range.includes('<') ? COLORS.warning : COLORS.chartAccent,
+                                            height: '6px',
+                                            background: 'var(--neutral-100)',
+                                            borderRadius: '1px',
+                                            overflow: 'hidden',
                                         }}
-                                    />
+                                    >
+                                        <div
+                                            style={{
+                                                width: `${item.percentage}%`,
+                                                height: '100%',
+                                                background: isNewest ? COLORS.warning : COLORS.chartAccent,
+                                            }}
+                                        />
+                                    </div>
                                 </div>
-                            </div>
-                        ))}
+                            );
+                        })}
+                    </div>
+                    <div className="chart-swatch-legend" aria-hidden>
+                        <span className="chart-swatch-item">
+                            <span className="chart-swatch" style={{ background: COLORS.warning }} />
+                            Newest accounts
+                        </span>
+                        <span className="chart-swatch-item">
+                            <span className="chart-swatch" style={{ background: COLORS.chartAccent }} />
+                            Older accounts
+                        </span>
                     </div>
                     {(() => {
                         // Data-derived caption — no hardcoded conclusion. State
