@@ -22,10 +22,15 @@ const TIER_LABEL: Record<string, string> = {
     public: 'Public',
 };
 
+// Canonical speaker-tier palette (news / officials / public = blue / teal /
+// amber) — the same trio the tone-trend lines and cross-tier chips use, so the
+// origin line color and the tier chips beside it always agree. (Previously this
+// borrowed source colors, which made officials render as the chrome accent and
+// public reuse reddit-orange.)
 const TIER_COLOR: Record<string, string> = {
-    news: 'var(--source-news)',
-    officials: 'var(--accent)',
-    public: 'var(--source-reddit)',
+    news: 'var(--tier-news)',
+    officials: 'var(--tier-officials)',
+    public: 'var(--tier-public)',
 };
 
 interface NarrativeLifecyclePanelProps {

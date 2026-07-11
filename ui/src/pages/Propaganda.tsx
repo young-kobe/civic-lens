@@ -81,7 +81,7 @@ function PropagandaTopMetrics({
     const splitDots: TierRowDot[] = [];
     if (newsSplit) splitDots.push({
         pct: newsSplit.flagged_rate_pct,
-        color: 'var(--neutral-600)',
+        color: 'var(--neutral-500)',
         title: `News ${formatPct(newsSplit.flagged_rate_pct)}`,
     });
     if (socialSplit) splitDots.push({
@@ -94,6 +94,7 @@ function PropagandaTopMetrics({
         <TopMetricsBlock
             eyebrow={`As of ${windowLabel}`}
             meta={`${data.total_eligible_docs.toLocaleString()} scored posts`}
+            rowsClassName="propaganda-tier-rows"
         >
             <TierRow
                 label="Flagged rate"
@@ -486,8 +487,19 @@ function Propaganda({ filters }: PropagandaProps) {
                     </div>
                 </div>
 
-                <div className="col-span-12">
+                {/* One row: the "As of last N days" top-metrics block beside the
+                    technique bar graphic. Both read from the same windowed
+                    `data`, so they filter in step; pairing them condenses two
+                    full-width rows into one. Hover a technique bar for what it
+                    means, click to open its flagged posts. */}
+                <div className="col-span-5">
                     <PropagandaTopMetrics data={data} windowLabel={windowLabel} />
+                </div>
+                <div className="col-span-7">
+                    <TechniqueExplorer
+                        techniques={data.by_technique}
+                        examples={data.examples}
+                    />
                 </div>
 
                 {/* Always render the three-way frame, even when every tier is
@@ -495,15 +507,6 @@ function Propaganda({ filters }: PropagandaProps) {
                     the honest shape — matches Tone/Narratives/Bot. */}
                 <div className="col-span-12">
                     <ThreeWayEntityGrid data={data} onOpen={setActiveEntity} />
-                </div>
-
-                {/* Technique explorer — the page's signature interaction:
-                    pick a technique, read its evidence. */}
-                <div className="col-span-12">
-                    <TechniqueExplorer
-                        techniques={data.by_technique}
-                        examples={data.examples}
-                    />
                 </div>
 
                 {/* News-vs-social removed (its numbers already appear in the

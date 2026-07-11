@@ -446,7 +446,6 @@ function BehavioralSignalsPanel({ data }: BehavioralSignalsPanelProps) {
                                         style={{
                                             height: '6px',
                                             background: 'var(--neutral-100)',
-                                            borderRadius: '1px',
                                             overflow: 'hidden',
                                         }}
                                     >
@@ -580,7 +579,6 @@ function SimilarityBar({ label, value, color }: SimilarityBarProps) {
                 style={{
                     height: '8px',
                     background: 'var(--neutral-100)',
-                    borderRadius: '1px',
                     overflow: 'hidden',
                 }}
             >

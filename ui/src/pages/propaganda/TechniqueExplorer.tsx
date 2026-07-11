@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
-    Card, MethodPopover, PostCardList, propagandaExampleToPostCard,
+    Card, MethodPopover, Modal, PostCardList, propagandaExampleToPostCard,
 } from '../../components/common';
 import { dedupeById } from '../../services/dedupe';
 import { formatPct } from '../../services/format';
@@ -12,10 +12,11 @@ import type {
 // --------------------------------------------------------------------------- //
 //  TechniqueExplorer — the Propaganda page's signature interaction.           //
 //                                                                             //
-//  Merges the old TechniquesCard bar list with the flat examples feed:        //
-//  selecting a technique on the left shows its flagged posts on the right,    //
-//  each with THAT technique's evidence span highlighted inline. Deep-        //
-//  linkable via #propaganda?technique=<name>.                                 //
+//  A horizontal bar graphic: one bar per rhetorical technique, sized by how   //
+//  many flagged posts carry it. Hovering a bar surfaces a plain-language      //
+//  explanation of the technique; clicking opens a modal of the flagged posts  //
+//  carrying it, each with THAT technique's evidence span highlighted inline.  //
+//  Deep-linkable via #propaganda?technique=<name> (opens the modal).          //
 // --------------------------------------------------------------------------- //
 
 const TECHNIQUE_LABEL: Record<PropagandaTechniqueName, string> = {
@@ -47,29 +48,28 @@ function isTechniqueName(value: string): value is PropagandaTechniqueName {
 
 export function TechniqueExplorer({ techniques, examples }: TechniqueExplorerProps) {
     const [techParam, setTechParam] = useDeepLinkParam('technique');
-    const defaultTechnique = techniques[0]?.technique ?? null;
+    // The opened technique (modal). Null = no modal. A deep link opens it on
+    // load; otherwise it stays closed until the reader clicks a bar.
     const [selected, setSelected] = useState<PropagandaTechniqueName | null>(() =>
         techParam && isTechniqueName(techParam) ? techParam : null);
 
-    // Land on the top technique once data arrives, unless a deep link or a
-    // click already chose one.
-    useEffect(() => {
-        if (selected === null && defaultTechnique) {
-            setSelected(defaultTechnique as PropagandaTechniqueName);
-        }
-    }, [selected, defaultTechnique]);
-
     // Follow incoming deep-link changes (e.g. back/forward).
     useEffect(() => {
-        if (techParam && isTechniqueName(techParam) && techParam !== selected) {
+        if (techParam && isTechniqueName(techParam)) {
             setSelected(techParam);
+        } else if (!techParam) {
+            setSelected(null);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [techParam]);
 
-    const select = (name: PropagandaTechniqueName) => {
+    const open = (name: PropagandaTechniqueName) => {
         setSelected(name);
         setTechParam(name);
+    };
+    const close = () => {
+        setSelected(null);
+        setTechParam(null);
     };
 
     const maxCount = techniques.reduce((m, t) => Math.max(m, t.count), 0);
@@ -80,8 +80,8 @@ export function TechniqueExplorer({ techniques, examples }: TechniqueExplorerPro
         )
         : [];
 
-    // Highlight ONLY the selected technique's spans so the reader connects
-    // the highlighted words to the technique they picked.
+    // Highlight ONLY the opened technique's spans so the reader connects the
+    // highlighted words to the technique they picked.
     const cards = matching.map((ex) => ({
         ...propagandaExampleToPostCard(ex),
         techniques: ex.techniques.filter((t) => t.technique === selected),
@@ -90,7 +90,7 @@ export function TechniqueExplorer({ techniques, examples }: TechniqueExplorerPro
     return (
         <Card
             title="Techniques being used"
-            subtitle="Pick a technique to read the flagged posts carrying it — highlighted text is the verbatim evidence. One post can count toward multiple techniques."
+            subtitle="Each bar is a rhetorical technique, sized by how many flagged posts carry it. Hover a bar for what it means; click to read the flagged posts carrying it. One post can count toward multiple techniques."
             headerActions={
                 <MethodPopover
                     description={
@@ -102,50 +102,57 @@ export function TechniqueExplorer({ techniques, examples }: TechniqueExplorerPro
                 />
             }
         >
-            <div className="technique-explorer">
-                <div className="technique-explorer-list" role="tablist" aria-label="Propaganda techniques">
-                    {techniques.map((t) => {
-                        const name = t.technique as PropagandaTechniqueName;
-                        const label = TECHNIQUE_LABEL[name] || t.technique;
-                        const active = name === selected;
-                        const widthPct = maxCount > 0 ? (t.count / maxCount) * 100 : 0;
-                        return (
-                            <button
-                                key={t.technique}
-                                type="button"
-                                role="tab"
-                                aria-selected={active}
-                                className={`technique-explorer-row${active ? ' technique-explorer-row-active' : ''}`}
-                                onClick={() => select(name)}
-                                title={TECHNIQUE_BLURB[name] || undefined}
-                            >
-                                <span className="technique-explorer-row-name">{label}</span>
-                                <span className="technique-explorer-row-bar" aria-hidden>
-                                    <span
-                                        className="technique-explorer-row-fill"
-                                        style={{ width: `${widthPct}%` }}
-                                    />
-                                </span>
-                                <span className="technique-explorer-row-count">
-                                    {t.count.toLocaleString()}
-                                </span>
-                                <span className="technique-explorer-row-pct">
-                                    {formatPct(t.pct_of_flagged_docs, { decimals: 0 })}
-                                </span>
-                            </button>
-                        );
-                    })}
-                </div>
-                <div className="technique-explorer-examples">
-                    {selected && (
-                        <PostCardList
-                            posts={cards}
-                            sampleNote={`Flagged posts carrying ${TECHNIQUE_LABEL[selected]} — a sample, not a complete feed.`}
-                            emptyNote={`No stored examples carry ${TECHNIQUE_LABEL[selected]} in this window. Examples are a capped sample; the counts on the left cover all flagged posts.`}
-                        />
-                    )}
-                </div>
+            <div className="technique-explorer-list" role="list" aria-label="Propaganda techniques">
+                {techniques.map((t) => {
+                    const name = t.technique as PropagandaTechniqueName;
+                    const label = TECHNIQUE_LABEL[name] || t.technique;
+                    const blurb = TECHNIQUE_BLURB[name];
+                    const widthPct = maxCount > 0 ? (t.count / maxCount) * 100 : 0;
+                    return (
+                        <button
+                            key={t.technique}
+                            type="button"
+                            role="listitem"
+                            className="technique-explorer-row"
+                            onClick={() => open(name)}
+                            title={blurb || undefined}
+                            aria-label={`${label}: ${t.count.toLocaleString()} flagged posts, ${formatPct(t.pct_of_flagged_docs, { decimals: 0 })}. ${blurb ?? ''} Open the flagged posts.`}
+                        >
+                            <span className="technique-explorer-row-name">{label}</span>
+                            <span className="technique-explorer-row-bar" aria-hidden>
+                                <span
+                                    className="technique-explorer-row-fill"
+                                    style={{ width: `${widthPct}%` }}
+                                />
+                            </span>
+                            <span className="technique-explorer-row-count">
+                                {t.count.toLocaleString()}
+                            </span>
+                            <span className="technique-explorer-row-pct">
+                                {formatPct(t.pct_of_flagged_docs, { decimals: 0 })}
+                            </span>
+                        </button>
+                    );
+                })}
             </div>
+
+            <Modal
+                isOpen={selected !== null}
+                onClose={close}
+                kicker="Propaganda technique"
+                title={selected ? (TECHNIQUE_LABEL[selected] || selected) : ''}
+                subtitle={selected ? TECHNIQUE_BLURB[selected] : undefined}
+            >
+                <PostCardList
+                    posts={cards}
+                    sampleNote={selected
+                        ? `Flagged posts carrying ${TECHNIQUE_LABEL[selected]} — a sample, not a complete feed.`
+                        : ''}
+                    emptyNote={selected
+                        ? `No stored examples carry ${TECHNIQUE_LABEL[selected]} in this window. Examples are a capped sample; the counts on the bars cover all flagged posts.`
+                        : ''}
+                />
+            </Modal>
         </Card>
     );
 }

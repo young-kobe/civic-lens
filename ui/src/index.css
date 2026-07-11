@@ -80,17 +80,17 @@
      Every group below is CVD-validated as a set.
      ============================================================ */
 
-  /* Semantic colors — targeted high-contrast diverging system (2026-07-10
-     retheme, replacing the deep-ink monochrome). Vivid blue = positive/
-     favorable, vivid red = negative/alert, vivid amber = warning/mixed.
-     These color the tone/rate BARS in the top-metrics graph, so they must
-     read at a glance. UI chrome (header, borders, brand) is monochrome.
-     Validated (dataviz validate_palette.js on #fcfcfb): pos/neg pair CVD
-     dE 98.3, all >= 3:1 contrast, chroma floor clears. pos/neg/warning
-     trio: amber↔red deutan dE 10.7 (8–12 floor band) — relieved by the
-     numeric value + label carried on every row (never color-alone). */
-  --semantic-positive: #1a5fd0;
-  --semantic-positive-light: #dce4f0;
+  /* Semantic colors — targeted high-contrast diverging system. Grafana
+     register: vivid GREEN = positive tone, vivid RED = negative tone, vivid
+     amber = warning/mixed. Green/red (not blue/red) so the split reads as
+     "good vs bad tone" and never as a partisan blue-vs-red framing — lean has
+     its own indigo/plum palette. These color the tone/rate BARS in the
+     top-metrics graph, so they must read at a glance; UI chrome stays
+     monochrome. CAVEAT: green/red is a red-green-CVD-risk pair — mitigated
+     because every tone mark carries its numeric value + sign/label (color is
+     never the sole encoding). */
+  --semantic-positive: #1a8a3d;
+  --semantic-positive-light: #d6ecdd;
   --semantic-negative: #d0261a;
   --semantic-negative-light: #f0dcd7;
   --semantic-neutral: #4f5560;
@@ -136,14 +136,15 @@
      mini-bar. Standardized 2026-07-11 onto the site's vivid semantic pair
      (poles = --semantic-negative/-positive) with lighter mild tints and a
      neutral gray midpoint, so the bar matches the tier-row tone colors instead
-     of the muted chart ramp it used before. Validated (dataviz): worst
-     adjacent CVD dE 24.9; gray midpoint intentional; segment % labels relieve
-     the light-tint contrast. */
-  --tone-strong-neg: #d0261a;   /* = --semantic-negative */
+     of the muted chart ramp it used before. Now a green↔red diverging ramp
+     (poles follow --semantic-positive/-negative); gray midpoint intentional;
+     segment % labels relieve both the light-tint contrast and the red-green
+     CVD risk (never color-alone). */
+  --tone-strong-neg: var(--semantic-negative);   /* red pole */
   --tone-mild-neg:   #e07a63;
   --tone-neu-solid:  #9aa0ab;
-  --tone-mild-pos:   #6b8fd4;
-  --tone-strong-pos: #1a5fd0;   /* = --semantic-positive */
+  --tone-mild-pos:   #79c090;                     /* soft green */
+  --tone-strong-pos: var(--semantic-positive);    /* green pole */
 
   /* Review admin — banner + card backgrounds. Monochrome chrome (was a
      tinted blue banner; neutralized 2026-07-11). */
@@ -175,11 +176,13 @@
   --shadow-lg: 0 2px 6px rgba(13, 14, 18, 0.08), 0 12px 28px rgba(13, 14, 18, 0.12);
   --shadow-inset: inset 0 1px 0 rgba(13, 14, 18, 0.03);
 
-  /* Radius. Modules are square (angular Bloomberg register, 2026-07-11):
-     --radius-md/lg/xl were used only by module surfaces (cards, modals,
-     post/tab/digest panels), so they are 0. --radius-sm stays for small
-     interactive controls (buttons, inputs) and --radius-full for pills. */
-  --radius-sm: 3px;
+  /* Radius. Fully angular Bloomberg register — no rounded corners anywhere
+     (modules, controls, bars are all square). --radius-sm was the last soft
+     corner on small controls (buttons, inputs, badges); zeroed 2026-07-11 so
+     the whole UI is cornered. --radius-full stays ONLY for genuinely circular
+     elements (avatars, stadium filter pills, status dots), which are round by
+     shape, not rounded-cornered. */
+  --radius-sm: 0;
   --radius-md: 0;
   --radius-lg: 0;
   --radius-xl: 0;
@@ -1322,7 +1325,6 @@ code, pre {
 .chart-swatch {
   width: 9px;
   height: 9px;
-  border-radius: 2px;
   flex-shrink: 0;
 }
 
@@ -1356,19 +1358,8 @@ code, pre {
    All row-based for density; share the Overall-Tone top-metrics layout.
    ============================================ */
 
-/* Technique explorer — selectable technique list (left) + that
-   technique's flagged posts with inline evidence highlights (right). */
-.technique-explorer {
-  display: grid;
-  grid-template-columns: minmax(220px, 4fr) minmax(0, 8fr);
-  gap: var(--space-4);
-  align-items: start;
-}
-
-@media (max-width: 900px) {
-  .technique-explorer { grid-template-columns: 1fr; }
-}
-
+/* Technique explorer — a full-width bar graphic; each row opens a modal of
+   that technique's flagged posts (evidence highlighted inline). */
 .technique-explorer-list {
   display: flex;
   flex-direction: column;
@@ -1399,11 +1390,6 @@ code, pre {
 .technique-explorer-row:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
-}
-
-.technique-explorer-row-active {
-  background: var(--bg-panel);
-  border-left-color: var(--semantic-negative);
 }
 
 .technique-explorer-row-name {
@@ -1440,7 +1426,6 @@ code, pre {
 .technique-explorer-row-bar {
   height: 6px;
   background: var(--neutral-100);
-  border-radius: 3px;
   overflow: hidden;
 }
 
@@ -1448,16 +1433,6 @@ code, pre {
   display: block;
   height: 100%;
   background: var(--semantic-negative);
-  border-radius: 3px;
-}
-
-/* Bound the examples column so a long feed doesn't stretch the card to a
-   towering height and leave the short 6-item technique list beside it in a
-   huge empty track. The examples scroll internally instead. */
-.technique-explorer-examples {
-  min-width: 0;
-  max-height: min(70vh, 620px);
-  overflow-y: auto;
 }
 
 /* Small outbound "View original" link — used by modal footers and the
@@ -1809,7 +1784,6 @@ code, pre {
   top: 1px;
   bottom: 1px;
   min-width: 3px;
-  border-radius: var(--radius-full);
 }
 
 /* Fallback marker for multi-value rows (e.g. news vs social) — enlarged and
@@ -1839,6 +1813,34 @@ code, pre {
   color: var(--neutral-500);
   font-style: italic;
 }
+
+/* Propaganda "As of last N days" variant — stacked and roomy so each metric
+   reads on its own: label + value(%) on top (value right-aligned), the
+   magnitude bar stretched full width beneath, and the explanation wrapped
+   below that. Rows are generously spaced. Endpoints hide (they'd collide with
+   the wrapped verb under the bar). */
+.top-metrics-rows.propaganda-tier-rows { gap: var(--space-2); }
+.propaganda-tier-rows .tier-row {
+  grid-template-columns: 1fr auto;
+  grid-template-areas:
+    "label value"
+    "axis  axis"
+    "verb  verb";
+  align-items: baseline;
+  row-gap: var(--space-2);
+  padding: var(--space-3) 0;
+}
+.top-metrics-rows.propaganda-tier-rows > .tier-row + .tier-row { padding-top: var(--space-3); }
+.propaganda-tier-rows .tier-row-label { grid-area: label; }
+.propaganda-tier-rows .tier-row-value { grid-area: value; text-align: right; width: auto; }
+.propaganda-tier-rows .tier-row-axis { grid-area: axis; margin: 2px 0; }
+.propaganda-tier-rows .tier-row-verb {
+  grid-area: verb;
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
+  font-style: normal;
+}
+.propaganda-tier-rows .tier-row-endpoint { display: none; }
 
 /* Aux row — GOP mini + Tone intensity mini side-by-side. */
 .top-metrics-aux {
@@ -1949,7 +1951,6 @@ code, pre {
   display: flex;
   width: 120px;
   height: 8px;
-  border-radius: 4px;
   overflow: hidden;
   background: var(--neutral-100);
   grid-column: 2;
@@ -3460,9 +3461,13 @@ span.ranked-entity-row { cursor: default; }
   background: var(--bg-panel);
   color: var(--neutral-700);
 }
-.cross-tier-chip-news      { background: var(--accent-light);            color: var(--accent);            border-color: var(--accent-light); }
-.cross-tier-chip-officials { background: var(--semantic-positive-light); color: var(--semantic-positive); border-color: var(--semantic-positive-light); }
-.cross-tier-chip-public    { background: var(--semantic-warning-light);  color: var(--semantic-warning);  border-color: var(--semantic-warning-light); }
+/* Tier chips share the canonical speaker-tier palette with the lifecycle line
+   (news/officials/public = blue/teal/amber). Text is a darkened shade of the
+   same hue so the chip stays legible while reading as the same color as its
+   line. */
+.cross-tier-chip-news      { color: color-mix(in srgb, var(--tier-news) 68%, black);      background: color-mix(in srgb, var(--tier-news) 13%, var(--bg-card));      border-color: color-mix(in srgb, var(--tier-news) 30%, var(--bg-card)); }
+.cross-tier-chip-officials { color: color-mix(in srgb, var(--tier-officials) 70%, black); background: color-mix(in srgb, var(--tier-officials) 13%, var(--bg-card)); border-color: color-mix(in srgb, var(--tier-officials) 30%, var(--bg-card)); }
+.cross-tier-chip-public    { color: color-mix(in srgb, var(--tier-public) 72%, black);    background: color-mix(in srgb, var(--tier-public) 13%, var(--bg-card));    border-color: color-mix(in srgb, var(--tier-public) 30%, var(--bg-card)); }
 
 .cross-tier-row-docs {
   display: inline-flex;
@@ -3781,7 +3786,6 @@ a.digest-block-cta:hover { color: var(--accent-hover); }
 .digest-story-bar {
   display: flex;
   height: 6px;
-  border-radius: 3px;
   overflow: hidden;
   background: var(--neutral-100);
 }
