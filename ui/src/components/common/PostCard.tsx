@@ -5,7 +5,7 @@ import {
 } from '../../services/format';
 import type {
     ClassificationSample, FlaggedExample, PropagandaExample,
-    PropagandaTechniqueSpan, SupportingDoc,
+    PropagandaTechniqueSpan, SampleTarget, SupportingDoc,
 } from '../../types';
 
 // --------------------------------------------------------------------------- //
@@ -61,6 +61,8 @@ export interface PostCardData {
     engagement?: PostCardEngagement | null;
     author?: PostCardAuthor | null;
     botIndicators?: string[] | null;
+    /** Who the post's sentiment is directed at ("about Trump — negative"). */
+    targets?: SampleTarget[] | null;
     // Avatar hints when no author payload exists (parsed by the adapters).
     domain?: string | null;          // news favicon
     handle?: string | null;          // x avatar via unavatar
@@ -280,11 +282,21 @@ export function PostCard({ post }: { post: PostCardData }) {
 
             {post.engagement && <EngagementRow engagement={post.engagement} flavor={flavor} />}
 
-            {(post.label || (post.techniques?.length ?? 0) > 0 || post.sarcasm || post.meta) && (
+            {(post.label || (post.techniques?.length ?? 0) > 0 || post.sarcasm || post.meta
+                || (post.targets?.length ?? 0) > 0) && (
                 <div className="post-card-analysis">
                     {post.labelKind === 'tone' && post.label && (
                         <span className={`badge ${toneBadgeClass}`}>{post.label.toLowerCase()}</span>
                     )}
+                    {(post.targets ?? []).map((t, i) => (
+                        <span
+                            key={i}
+                            className={`badge ${TONE_BADGE_CLASS[t.stance] ?? 'badge-neutral'}`}
+                            title="Who the post's sentiment is directed at, per the model's target extraction"
+                        >
+                            about {t.label} · {t.stance}
+                        </span>
+                    ))}
                     {post.labelKind === 'bot' && post.label && (
                         <span
                             className="badge badge-warning"
@@ -418,6 +430,7 @@ export function sampleToPostCard(s: ClassificationSample): PostCardData {
         sarcasm: s.sarcasm_detected,
         engagement: s.engagement ?? null,
         author: s.author ?? null,
+        targets: s.targets ?? null,
         handle: s.source_type === 'x_post' ? (s.source_name ?? null) : null,
         domain: s.source_type === 'news' ? (s.source_name ?? null) : null,
     };

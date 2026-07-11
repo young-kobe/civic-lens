@@ -23,6 +23,15 @@ export function ThreeWayGrid({ children }: { children: ReactNode }) {
     return <div className="three-way-grid">{children}</div>;
 }
 
+/**
+ * Two-tier variant for pages where one tier is not measured — the Bot
+ * Detector scores social accounts only (news articles are not accounts).
+ * Columns are the same ThreeWayColumn.
+ */
+export function TwoWayGrid({ children }: { children: ReactNode }) {
+    return <div className="two-way-grid">{children}</div>;
+}
+
 export interface ColumnSorter<T> {
     /** Short toggle label, e.g. "volume", "net", "name". */
     label: string;

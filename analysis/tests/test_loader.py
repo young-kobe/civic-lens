@@ -12,9 +12,60 @@ project_root = os.path.dirname(os.path.dirname(current_dir))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-from analysis.src.etl.loader import ContentLoader
+from analysis.src.etl.loader import ContentLoader, is_index_page
 
 MIGRATIONS_DIR = os.path.join(project_root, "data", "migrations")
+
+# Real-world junk shapes from the 2026-07-11 prod incident: trafilatura output
+# for the CBS and NPR homepages, which passed the political-keyword filter
+# (menus name political topics) and were then bot-scored as "articles".
+CBS_HOMEPAGE_JUNK = (
+    "Latest U.S. Iran War World Cup Trump Administration Immigration Capitol "
+    "Assault Crime Sports Essentials Local News Baltimore Bay Area Boston "
+    "Chicago Colorado Detroit Los Angeles Miami Minnesota New York "
+    "Philadelphia Pittsburgh Sacramento Texas Live CBS News 24/7 Baltimore "
+    "Bay Area Boston Chicago Colorado Detroit Los Angeles Miami Minnesota "
+    "New York Philadelphia Pittsburgh Sacramento Texas Shows 60 Minutes "
+    "48 Hours CBS Evening News CBS Mornings Face the Nation Sunday Morning "
+    "The Takeout with Major Garrett Brand Studio Live Local More Latest "
+    "Video Photos Podcasts In Depth CBS News Team Executive Team Brand "
+    "Studio Paramount Shop RSS Feeds Newsletters Download Our App Watch CBS News"
+)
+
+NPR_HOMEPAGE_JUNK = (
+    "Accessibility links Skip to main content Keyboard shortcuts for audio "
+    "player Open Navigation Menu NPR Shop Newsletters Sign In NPR Shop Home "
+    "News Expand/collapse submenu for News National World Politics Business "
+    "Health Science Climate Race Culture Expand/collapse submenu for Culture "
+    "Books Movies Television Pop Culture Food Art & Design Performing Arts "
+    "Music Expand/collapse submenu for Music All Songs Considered Tiny Desk "
+    "New Music Friday Music Features Live Sessions Podcasts & Shows "
+    "Expand/collapse submenu for Podcasts & Shows Daily Morning Edition "
+    "Weekend Edition Saturday Weekend Edition Sunday All Things Considered "
+    "Fresh Air Up First Featured Embedded The NPR Politics Podcast "
+    "Throughline Trump's Terms More Podcasts & Shows Search Newsletters NPR Shop"
+)
+
+REAL_ARTICLE_TEXT = (
+    "WASHINGTON — The Senate on Tuesday narrowly approved a sweeping budget "
+    "package that would extend federal tax cuts and raise the debt ceiling, "
+    "sending the measure back to the House for a final vote. The 51-49 tally "
+    "followed a marathon overnight session in which lawmakers rejected dozens "
+    "of amendments. Democrats argued the bill would balloon the deficit, "
+    "citing a Congressional Budget Office estimate released last week. "
+    "Republicans countered that the cuts would spur economic growth. "
+    "President Trump praised the vote in a post on social media, calling it "
+    "a win for American workers. The House is expected to take up the "
+    "measure as soon as Thursday, though a handful of conservative holdouts "
+    "have signaled they may withhold support over the spending levels."
+)
+
+REAL_BRIEF_TEXT = (
+    "The governor signed the election reform bill into law on Friday. The "
+    "measure expands early voting by six days and requires counties to "
+    "publish ballot-count audits. Opponents said they plan to challenge the "
+    "law in federal court next week."
+)
 
 
 def _apply_migrations(db_path: str) -> None:
@@ -83,6 +134,102 @@ class TestContentLoaderBatched(unittest.TestCase):
             self.assertEqual(cursor.fetchone()[0].lower(), "wal")
             cursor.execute("PRAGMA busy_timeout;")
             self.assertEqual(cursor.fetchone()[0], 5000)
+
+
+class TestIndexPageDetector(unittest.TestCase):
+    """is_index_page separates nav-menu scrapes from real articles.
+
+    WHY: index pages passed the political-keyword filter (menus name
+    political topics) and then polluted tone, narratives, and bot metrics
+    while burning LLM budget. The detector must be aggressive on menu text
+    but must NEVER drop a genuine article — a false positive here silently
+    censors real coverage, which is the worse failure.
+    """
+
+    def test_cbs_homepage_junk_is_flagged(self):
+        self.assertTrue(is_index_page(CBS_HOMEPAGE_JUNK, "https://www.cbsnews.com/"))
+
+    def test_npr_homepage_junk_is_flagged(self):
+        self.assertTrue(is_index_page(NPR_HOMEPAGE_JUNK, "https://www.npr.org/"))
+
+    def test_junk_text_flagged_even_at_deep_url(self):
+        # The crawler sometimes stores hub content under odd canonical URLs;
+        # the text shape alone must be enough.
+        self.assertTrue(is_index_page(CBS_HOMEPAGE_JUNK, "https://www.cbsnews.com/live-updates/today/"))
+        self.assertTrue(is_index_page(NPR_HOMEPAGE_JUNK, ""))
+
+    def test_section_front_url_with_menu_text_is_flagged(self):
+        self.assertTrue(is_index_page(CBS_HOMEPAGE_JUNK, "https://www.cbsnews.com/politics/"))
+
+    def test_real_article_is_never_flagged(self):
+        self.assertFalse(is_index_page(
+            REAL_ARTICLE_TEXT,
+            "https://www.example.com/politics/senate-approves-budget-package-2026/",
+        ))
+
+    def test_short_real_brief_is_never_flagged(self):
+        self.assertFalse(is_index_page(
+            REAL_BRIEF_TEXT,
+            "https://www.example.com/news/governor-signs-election-reform-bill/",
+        ))
+
+    def test_empty_text_is_not_the_detectors_call(self):
+        # Empty extraction is skipped by the loader's existing guard, not
+        # misreported as an index page.
+        self.assertFalse(is_index_page("", "https://www.cbsnews.com/"))
+
+
+class TestIndexPageFilterWiring(unittest.TestCase):
+    """The ETL drops index pages before the political filter and counts them."""
+
+    def setUp(self):
+        self._tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        self.db_path = self._tmp.name
+        self._tmp.close()
+        _apply_migrations(self.db_path)
+
+        now = int(time.time())
+        conn = sqlite3.connect(self.db_path)
+        conn.executemany(
+            "INSERT INTO articles_raw (url_canon, domain, fetched_at, published_at, title, raw_hash, extraction_version) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            [
+                ("https://www.cbsnews.com/", "cbsnews.com", now, now,
+                 "CBS News | Breaking news", "junkhash", "v1"),
+                ("https://www.example.com/politics/senate-approves-budget-2026/",
+                 "example.com", now, now,
+                 "Senate approves budget package", "articlehash", "v1"),
+            ],
+        )
+        conn.commit()
+        conn.close()
+
+        self.loader = ContentLoader(self.db_path)
+        # Bypass trafilatura/raw files: return the prod junk for the hub row
+        # and real prose for the article row.
+        self.loader._extract_text_from_raw = lambda raw_hash, raw_root: (
+            CBS_HOMEPAGE_JUNK if raw_hash == "junkhash" else REAL_ARTICLE_TEXT
+        )
+
+    def tearDown(self):
+        for suffix in ("", "-wal", "-shm"):
+            try:
+                os.remove(self.db_path + suffix)
+            except (FileNotFoundError, PermissionError):
+                pass
+
+    def test_index_page_skipped_article_loaded(self):
+        count = self.loader.load_new_raw_content()
+        self.assertEqual(count, 1)
+
+        with sqlite3.connect(self.db_path) as conn:
+            idents = [r[0] for r in conn.execute(
+                "SELECT ident FROM docs WHERE source_type='news'"
+            ).fetchall()]
+        self.assertEqual(
+            idents,
+            ["https://www.example.com/politics/senate-approves-budget-2026/"],
+            "The homepage scrape must be dropped and the real article kept",
+        )
 
 
 class TestDocTaskState(unittest.TestCase):

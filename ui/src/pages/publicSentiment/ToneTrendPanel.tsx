@@ -110,7 +110,7 @@ function TierTrendChart({ trend }: { trend: ToneTrendPoint[] }) {
                     <XAxis
                         dataKey="date"
                         tickFormatter={shortDate}
-                        tick={{ fontSize: 10, fill: 'var(--neutral-500)', fontFamily: 'var(--font-mono)' }}
+                        tick={{ fontSize: 11, fill: 'var(--neutral-500)', fontFamily: 'var(--font-mono)' }}
                         axisLine={{ stroke: 'var(--chart-grid)' }}
                         tickLine={false}
                         minTickGap={24}
@@ -118,7 +118,7 @@ function TierTrendChart({ trend }: { trend: ToneTrendPoint[] }) {
                     <YAxis
                         domain={[-100, 100]}
                         ticks={[-100, -50, 0, 50, 100]}
-                        tick={{ fontSize: 10, fill: 'var(--neutral-500)', fontFamily: 'var(--font-mono)' }}
+                        tick={{ fontSize: 11, fill: 'var(--neutral-500)', fontFamily: 'var(--font-mono)' }}
                         axisLine={false}
                         tickLine={false}
                         width={36}
@@ -175,7 +175,7 @@ function DailyTrendChart({ trend }: { trend: TrendPoint[] }) {
                     <XAxis
                         dataKey="date"
                         tickFormatter={shortDate}
-                        tick={{ fontSize: 10, fill: 'var(--neutral-500)', fontFamily: 'var(--font-mono)' }}
+                        tick={{ fontSize: 11, fill: 'var(--neutral-500)', fontFamily: 'var(--font-mono)' }}
                         axisLine={{ stroke: 'var(--chart-grid)' }}
                         tickLine={false}
                         minTickGap={24}
@@ -183,7 +183,7 @@ function DailyTrendChart({ trend }: { trend: TrendPoint[] }) {
                     <YAxis
                         domain={[-100, 100]}
                         ticks={[-100, -50, 0, 50, 100]}
-                        tick={{ fontSize: 10, fill: 'var(--neutral-500)', fontFamily: 'var(--font-mono)' }}
+                        tick={{ fontSize: 11, fill: 'var(--neutral-500)', fontFamily: 'var(--font-mono)' }}
                         axisLine={false}
                         tickLine={false}
                         width={36}
@@ -240,7 +240,7 @@ function weekdayTooltip({ payload }: TooltipProps<number, string>) {
         <div className="chart-tooltip">
             <div className="chart-tooltip-label">{row.day}</div>
             <div className="chart-tooltip-value">{formatPts(row.net)}</div>
-            <div className="chart-tooltip-value" style={{ fontSize: 10, color: 'var(--neutral-500)' }}>
+            <div className="chart-tooltip-value" style={{ fontSize: 11, color: 'var(--neutral-500)' }}>
                 {row.volume.toLocaleString()} posts
             </div>
         </div>
@@ -254,7 +254,7 @@ function WeekdayStrip({ rows }: { rows: WeekdayRow[] }) {
                 <BarChart data={rows} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
                     <XAxis
                         dataKey="day"
-                        tick={{ fontSize: 10, fill: 'var(--neutral-500)', fontFamily: 'var(--font-mono)' }}
+                        tick={{ fontSize: 11, fill: 'var(--neutral-500)', fontFamily: 'var(--font-mono)' }}
                         axisLine={{ stroke: 'var(--chart-grid)' }}
                         tickLine={false}
                     />

@@ -94,8 +94,9 @@ function buildMatrix(
         }
     }
 
-    const botTiers: Array<[BotData['overview']['by_news_outlet'], MatrixRow['group']]> = [
-        [bots?.overview.by_news_outlet, 'News'],
+    // News is not bot-scored (articles are not accounts) — news rows keep
+    // botRate null and render an em dash in the Bot rate column.
+    const botTiers: Array<[BotData['overview']['by_official'], MatrixRow['group']]> = [
         [bots?.overview.by_official, 'Officials'],
         [bots?.overview.by_general_public, 'Public'],
     ];
@@ -135,7 +136,7 @@ const MATRIX_COLUMNS: Array<{ key: MatrixSortKey; label: string; title: string }
     { key: 'name', label: 'Entity', title: 'Tracked outlet, official, or community' },
     { key: 'netTone', label: 'Net tone', title: 'Positive minus negative share of their posts, -100..+100' },
     { key: 'flaggedRate', label: 'Propaganda', title: 'Share of their scored posts flagged for persuasion techniques' },
-    { key: 'botRate', label: 'Bot rate', title: 'Share of their scored posts our detector flags as likely automated' },
+    { key: 'botRate', label: 'Bot rate', title: 'Share of their scored posts our detector flags as likely automated. News is not bot-scored (articles are not accounts).' },
     { key: 'stories', label: 'Stories', title: 'Recurring claims first seen at this source in our sample' },
     { key: 'posts', label: 'Posts', title: 'Posts scored for tone in this window' },
 ];

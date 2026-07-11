@@ -66,6 +66,9 @@ from analysis.src.etl.polling import PollingDataScraper, PollingDataError
 
 logger = get_logger("job_runner")
 
+# Bot detection is an account-level signal; news articles are not accounts.
+_BOT_DETECTION_SOURCE_TYPES = ["reddit_post", "reddit_comment", "x_post"]
+
 
 class AnalysisJobRunner:
     """
@@ -160,6 +163,20 @@ class AnalysisJobRunner:
         elif self.settings.run_analysis_on == "x":
             return ["x_post"]
         return None  # "all" or any other value means no filter
+
+    def _get_bot_detection_source_types(self) -> list[str]:
+        """Bot detection runs on social docs only, regardless of scope.
+
+        News articles are not accounts; "automation rate of an outlet's
+        articles" is not a real metric (2026-07-11 decision, see
+        docs/audit-trail/analysis/). ``get_bot_flagged_doc_ids`` already
+        treats news as human-authored by contract — this stops the scoring
+        itself, saving the LLM calls.
+        """
+        scope = self._get_target_source_types()
+        if scope is None:
+            return _BOT_DETECTION_SOURCE_TYPES
+        return [t for t in scope if t in _BOT_DETECTION_SOURCE_TYPES]
     
     def run_bot_detection(self, limit: int | None = None) -> int:
         """Run bot detection on unprocessed docs scoped by configuration.
@@ -177,8 +194,8 @@ class AnalysisJobRunner:
         Walkthrough 040.
         """
         import sqlite3 as _sqlite
-        logger.info(f"Step 2/11: Running bot detection (scope: {self.settings.run_analysis_on})...")
-        source_types = self._get_target_source_types()
+        logger.info(f"Step 2/11: Running bot detection (scope: {self.settings.run_analysis_on}, social only)...")
+        source_types = self._get_bot_detection_source_types()
         batch_size = limit if limit is not None else self.settings.loader_batch_size
         docs = self.loader.get_unprocessed_docs(
             "bot_detection",

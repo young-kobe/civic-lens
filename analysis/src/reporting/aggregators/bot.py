@@ -36,7 +36,6 @@ from analysis.src.reporting.aggregators.narrative import (
 from analysis.src.reporting.aggregators.sentiment import CATCH_ALL_VERIFIED_OFFICIALS
 from analysis.src.reporting.entity_registry import (
     catch_all_profile,
-    CATCH_ALL_OUTLETS,
     CATCH_ALL_SUBREDDITS,
     CATCH_ALL_X_USERS,
     get_registry,
@@ -117,6 +116,7 @@ class BotAggregator:
             + X_AUTHOR_JOIN_SQL
             + """
             WHERE a.task_type = 'bot_detection'
+              AND d.source_type != 'news'
             """
             + ("" if cutoff is None else " AND d.published_at >= ?"),
             () if cutoff is None else (cutoff,),
@@ -268,11 +268,11 @@ class BotAggregator:
     # ---------- Entity rollups (three-way Bot Detector grid) ----------
 
     def _fetch_entity_rollups(self, cursor, cutoff=None) -> Dict[str, List[BotEntityItem]]:
-        """Per-entity bot-classification rates for the three-way grid.
+        """Per-entity bot-classification rates for the two-way grid.
 
         Runs one joined scan of ai_outputs.task='bot_detection' rows together
-        with x author-handle lookup, then buckets each row into news /
-        officials / public via ``resolve_entity`` — including the ingestor's
+        with x author-handle lookup, then buckets each row into officials /
+        public via ``resolve_entity`` — including the ingestor's
         ``is_official_tier`` provenance flag, so posts pulled via the
         verified-officials timeline land in the officials column even when
         the stored handle doesn't match the editorial registry (audit D-4;
@@ -280,6 +280,11 @@ class BotAggregator:
         entity also collects up to ``_SAMPLES_PER_ENTITY`` of its
         bot-flagged posts, confidence-ranked, so the card can open an
         evidence modal instead of dead-ending at an external link.
+
+        News is excluded by contract (2026-07-11): articles are not
+        accounts, so "automation rate of an outlet's articles" is not a
+        real metric. ``by_news_outlet`` stays in the payload, permanently
+        empty, so stale caches and older UI builds keep parsing.
         """
         cursor.execute(
             """
@@ -292,6 +297,7 @@ class BotAggregator:
             + X_AUTHOR_JOIN_SQL
             + """
             WHERE a.task_type = 'bot_detection'
+              AND d.source_type != 'news'
             """
             + ("" if cutoff is None else " AND d.published_at >= ?"),
             () if cutoff is None else (cutoff,),
@@ -317,11 +323,6 @@ class BotAggregator:
                 continue
             if entity is not None:
                 profile = entity.profile_dict()
-            elif tier == "news":
-                profile = catch_all_profile(
-                    CATCH_ALL_OUTLETS, "Other news outlets",
-                    "News doc whose domain is not in the tracked outlet registry.",
-                )
             elif tier == "officials":
                 # Provenance-flagged officials post with no editorial
                 # registry entity — same bucket sentiment uses.

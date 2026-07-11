@@ -112,7 +112,8 @@ export function TopicDivergencePanel({ topics, onFilterTopic }: TopicDivergenceP
 }
 
 /** The divergence (range) between the extreme tier scores; null when
- *  fewer than two tiers have data. */
+ *  fewer than two tiers have data. Stays the sort key — the per-pair
+ *  deltas below are the display. */
 function divergenceRange(t: SentimentBreakdown): number | null {
     const values: number[] = [];
     if (t.newsNet != null) values.push(t.newsNet);
@@ -120,6 +121,23 @@ function divergenceRange(t: SentimentBreakdown): number | null {
     if (t.publicNet != null) values.push(t.publicNet);
     if (values.length < 2) return null;
     return Math.max(...values) - Math.min(...values);
+}
+
+/** The three group pairs, in reading order. Dot colors reuse TIER_META so
+ *  the pair rows read against the legend without their own labels. */
+const PAIR_META = [
+    { a: TIER_META[0], b: TIER_META[2], label: 'News vs Public' },
+    { a: TIER_META[0], b: TIER_META[1], label: 'News vs Officials' },
+    { a: TIER_META[1], b: TIER_META[2], label: 'Officials vs Public' },
+] as const;
+
+/** Signed pair delta (a − b); null when either tier is suppressed —
+ *  a low-sample tier has no number, so neither does its pair. */
+function pairDelta(row: SentimentBreakdown, pair: (typeof PAIR_META)[number]): number | null {
+    const a = row[pair.a.key] as number | null | undefined;
+    const b = row[pair.b.key] as number | null | undefined;
+    if (a == null || b == null) return null;
+    return a - b;
 }
 
 interface TopicDivergenceRowProps {
@@ -135,7 +153,6 @@ function axisPct(net: number): number {
 
 function TopicDivergenceRow({ row, onOpen }: TopicDivergenceRowProps) {
     const total = (row.newsVolume ?? 0) + (row.officialsVolume ?? 0) + (row.publicVolume ?? 0);
-    const rangeText = row._range !== null ? `${row._range.toFixed(1)} pts` : '—';
     const tooltip = tierTooltip(row);
 
     return (
@@ -171,11 +188,37 @@ function TopicDivergenceRow({ row, onOpen }: TopicDivergenceRowProps) {
                     );
                 })}
             </div>
-            <div
-                className="topic-divergence-row-range"
-                title="Gap between the highest and lowest group tone"
-            >
-                {rangeText}
+            <div className="topic-divergence-row-range">
+                {PAIR_META.map((pair) => {
+                    // Deltas span -200..+200 (two -100..+100 scales apart).
+                    const delta = pairDelta(row, pair);
+                    const deltaText = delta != null
+                        ? formatPts(delta, { min: -200, max: 200, decimals: 0 })
+                        : '—';
+                    return (
+                        <span
+                            key={pair.label}
+                            className="topic-divergence-pair"
+                            title={delta != null
+                                ? `${pair.label}: ${deltaText} apart on this topic`
+                                : `${pair.label}: one group has too few posts on this topic to score`}
+                        >
+                            <span className="topic-divergence-pair-dots" aria-hidden>
+                                <span
+                                    className="topic-divergence-legend-dot"
+                                    style={{ background: pair.a.color }}
+                                />
+                                <span
+                                    className="topic-divergence-legend-dot"
+                                    style={{ background: pair.b.color }}
+                                />
+                            </span>
+                            <span className="topic-divergence-pair-value">
+                                {deltaText}
+                            </span>
+                        </span>
+                    );
+                })}
             </div>
         </button>
     );

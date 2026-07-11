@@ -4,7 +4,7 @@ import {
     EntityHubLinks, ErrorState,
     GlobalTicker,
     LoadingCard, MethodPopover, Modal, PostCardList,
-    RankedEntityList, ThreeWayColumn, ThreeWayGrid,
+    RankedEntityList, ThreeWayColumn, TwoWayGrid,
     entityExternalUrl, entityLeanAccent, flaggedExampleToPostCard,
     parseEntityParam,
 } from '../components/common';
@@ -106,8 +106,9 @@ function BotThreeWayGrid({
     overview: BotOverview;
     onOpen: (item: BotEntityItem) => void;
 }) {
-    // Always render the three-way frame when we have an overview, even if
-    // individual tiers are empty — per-column empty copy is more honest
+    // Two tiers only: news is not bot-scored (articles are not accounts).
+    // Always render the frame when we have an overview, even if individual
+    // tiers are empty — per-column empty copy is more honest
     // ("no official X posts scored") than hiding the grid entirely.
     const ranked = (label: string) => (items: BotEntityItem[]) => (
         <RankedEntityList
@@ -124,15 +125,7 @@ function BotThreeWayGrid({
     );
 
     return (
-        <ThreeWayGrid>
-                <ThreeWayColumn
-                    header="The News"
-                    byline="Outlets ranked by the share of their scanned articles our detector flags as likely automated."
-                    empty="No news posts scored for bot detection."
-                    items={overview.by_news_outlet ?? []}
-                    renderItems={ranked('News outlets by suspected bot rate')}
-                    sorters={BOT_SORTERS}
-                />
+        <TwoWayGrid>
                 <ThreeWayColumn
                     header="Politicians & Officials"
                     byline="Tracked officeholders on X, ranked by the share of their X posts our detector flags as likely automated."
@@ -149,7 +142,7 @@ function BotThreeWayGrid({
                     renderItems={ranked('Public sources by suspected bot rate')}
                     sorters={BOT_SORTERS}
                 />
-        </ThreeWayGrid>
+        </TwoWayGrid>
     );
 }
 
@@ -312,41 +305,45 @@ function NarrativeAmplificationCard({ narrative }: NarrativeAmplificationCardPro
                     </button>
                 </div>
 
-                {/* Always visible: Why flagged */}
+                {/* Card shows the top signals only; the modal carries the
+                    full list — repeating everything in both places made
+                    "View details" a re-read. */}
                 <div>
                     <div className="eyebrow mb-2">Why this was flagged</div>
                     <ul style={{ margin: 0, paddingLeft: 'var(--space-5)' }} className="text-sm">
-                        {whyFlagged.map((reason, i) => (
+                        {whyFlagged.slice(0, 2).map((reason, i) => (
                             <li key={i} className="mb-1">{reason}</li>
                         ))}
                     </ul>
+                    {whyFlagged.length > 2 && (
+                        <p className="text-xs text-muted" style={{ margin: '2px 0 0' }}>
+                            +{whyFlagged.length - 2} more signal{whyFlagged.length - 2 === 1 ? '' : 's'} in the details
+                        </p>
+                    )}
                 </div>
             </Card>
 
             <Modal
                 isOpen={modalOpen}
                 onClose={() => setModalOpen(false)}
+                kicker="Narrative amplification"
                 title={narrative.narrative}
                 subtitle={`${narrative.suspectedBotVolume.toLocaleString()} suspected bot posts · ${narrative.confidence} likelihood`}
                 accentColor={accentColor}
             >
-                {/* Example Posts — every row carries an outbound source link
-                    when the backend synthesized one (invariant C1). */}
-                <div className="mb-4">
-                    <div className="eyebrow mb-2">Flagged Posts</div>
-                    <PostCardList
-                        posts={narrative.examplePosts.map(flaggedExampleToPostCard)}
-                        sampleNote="Example flagged posts amplifying this narrative — a sample, not every flag."
-                        emptyNote="No individual posts surfaced yet for this narrative."
-                    />
-                </div>
+                <h3 className="card-title mb-2">Why this was flagged</h3>
+                <ul style={{ margin: '0 0 var(--space-4)', paddingLeft: 'var(--space-5)' }} className="text-sm">
+                    {whyFlagged.map((reason, i) => (
+                        <li key={i} className="mb-1">{reason}</li>
+                    ))}
+                </ul>
 
                 {/* Derived chips — rendered only when the backend actually
                     extracted something; an empty section header would read
                     as broken, not as honest. */}
                 {narrative.topHashtags.length > 0 && (
                     <div className="mb-4">
-                        <div className="eyebrow mb-2">Top Hashtags</div>
+                        <h3 className="card-title mb-2">Top hashtags</h3>
                         <div className="flex flex-wrap gap-1">
                             {narrative.topHashtags.map((tag, i) => (
                                 <span key={i} className="badge badge-accent">{tag}</span>
@@ -357,7 +354,7 @@ function NarrativeAmplificationCard({ narrative }: NarrativeAmplificationCardPro
 
                 {narrative.targets.length > 0 && (
                     <div className="mb-4">
-                        <div className="eyebrow mb-2">Who this narrative targets</div>
+                        <h3 className="card-title mb-2">Who this narrative targets</h3>
                         <div className="flex flex-wrap gap-1">
                             {narrative.targets.map((target, i) => (
                                 <span key={i} className="badge badge-neutral">{target}</span>
@@ -366,14 +363,15 @@ function NarrativeAmplificationCard({ narrative }: NarrativeAmplificationCardPro
                     </div>
                 )}
 
-                {/* Why Flagged (repeated in modal for full context) */}
+                {/* Example Posts — every row carries an outbound source link
+                    when the backend synthesized one (invariant C1). */}
                 <div>
-                    <div className="eyebrow mb-2">Why this was flagged</div>
-                    <ul style={{ margin: 0, paddingLeft: 'var(--space-5)' }} className="text-sm">
-                        {whyFlagged.map((reason, i) => (
-                            <li key={i} className="mb-1">{reason}</li>
-                        ))}
-                    </ul>
+                    <h3 className="card-title mb-2">Flagged posts</h3>
+                    <PostCardList
+                        posts={narrative.examplePosts.map(flaggedExampleToPostCard)}
+                        sampleNote="Example flagged posts amplifying this narrative — a sample, not every flag."
+                        emptyNote="No individual posts surfaced yet for this narrative."
+                    />
                 </div>
             </Modal>
         </>
@@ -711,6 +709,11 @@ function BotActivityProfiler({ filters }: BotActivityProfilerProps) {
 
             <div className="col-span-12">
                 <BotThreeWayGrid overview={data.overview} onOpen={setActiveItem} />
+                <p className="card-note">
+                    News articles are not bot-scored: articles are not accounts, so
+                    an outlet has no automation rate. Bot detection covers social
+                    posts only.
+                </p>
             </div>
 
             {activeItem && (
