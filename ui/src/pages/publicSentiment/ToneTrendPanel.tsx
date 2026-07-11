@@ -26,12 +26,13 @@ interface ToneTrendPanelProps {
     byDayOfWeek: SentimentBreakdown[] | undefined;
 }
 
-// Same tier colors as the divergence panel's dots so the two visuals read
-// as one system (news = neutral gray, officials = ink blue, public = ochre).
+// High-contrast speaker-tier hues, shared with the top-metrics tier
+// sparklines so the two visuals read as one system
+// (news = slate, officials = teal, public = amber).
 const TIER_SERIES = [
-    { key: 'news', label: 'News', color: COLORS.neutral },
-    { key: 'officials', label: 'Officials', color: COLORS.accent },
-    { key: 'public', label: 'Public', color: COLORS.warning },
+    { key: 'news', label: 'News', color: COLORS.tierNews },
+    { key: 'officials', label: 'Officials', color: COLORS.tierOfficials },
+    { key: 'public', label: 'Public', color: COLORS.tierPublic },
 ] as const;
 
 function trendTooltip({ payload, label }: TooltipProps<number, string>) {

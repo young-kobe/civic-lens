@@ -436,8 +436,8 @@ interface BehavioralSignalsPanelProps {
 function BehavioralSignalsPanel({ data }: BehavioralSignalsPanelProps) {
     return (
         <>
-            {/* Row: account age (6) + text similarity (6) — both compact bar lists */}
-            <div className="col-span-6">
+            {/* Row: three compact bar-list distributions as a 3-up dense band. */}
+            <div className="col-span-4">
                 <Card title="Account Age Distribution">
                     <div className="flex flex-col gap-2">
                         {data.accountAgeDistribution.map((item, i) => (
@@ -482,7 +482,7 @@ function BehavioralSignalsPanel({ data }: BehavioralSignalsPanelProps) {
                 </Card>
             </div>
 
-            <div className="col-span-6">
+            <div className="col-span-4">
                 <Card title="Text Similarity Distribution">
                     <div className="text-xs text-muted mb-3">
                         Pairwise text similarity across suspected-bot posts. Natural discourse typically sits in the
@@ -527,7 +527,7 @@ function BehavioralSignalsPanel({ data }: BehavioralSignalsPanelProps) {
                 honestly show the per-day UTC cadence its legend claimed.
                 Re-introduce once bot.py emits real (day, hour) UTC buckets —
                 tracked in docs/todos/ui-rework.md. */}
-            <div className="col-span-6">
+            <div className="col-span-4">
                 <Card title="Link Domain Concentration">
                     <div className="flex flex-col">
                         {data.linkDomainConcentration.map((item, i) => (

@@ -499,12 +499,14 @@ function DataDesk({ filters }: DataDeskProps) {
                     <CrossSignalMatrix rows={matrix} />
                 </div>
             )}
+            {/* Movers board (a compact table) shares a row with the small
+                multiples grid — two content-sized reads side by side. */}
             {moversFetch.data && (
-                <div className="col-span-12">
+                <div className="col-span-5">
                     <MoversBoard movers={moversFetch.data} />
                 </div>
             )}
-            <div className="col-span-12">
+            <div className={moversFetch.data ? 'col-span-7' : 'col-span-12'}>
                 <SmallMultiples
                     sentiment={sentimentFetch.data}
                     narratives={narrativesFetch.data}
