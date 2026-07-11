@@ -51,6 +51,19 @@ orphaned outlet cross-signal rollup. API + UI entries:
   contract; five test schemas extended with the enrichment columns +
   reddit_posts_raw.
 
+- **Sampled-author cards** (added 2026-07-11, while Reddit ingestion is
+  offline and the Public column held a single catch-all): unmatched
+  public-tier X authors clearing BOTH floors — `MIN_SAMPLED_AUTHOR_POSTS`
+  (3) and `MIN_SAMPLED_AUTHOR_FOLLOWERS` (1,000) — get their own
+  `kind='account'` card (capped at 12 by volume), built from their public
+  X profile via `entity_registry.sampled_account_profile` (name, bio,
+  follower count; no lean, no party — we know nothing editorial about
+  them). Everyone below the floors folds back into "Other X users" via
+  `sentiment.py::_consolidate_sampled_authors` — pooled, never dropped.
+  The follower floor keeps small personal accounts out of ranked cards.
+  `u.description` joined into `SAMPLE_ENRICHMENT_SELECT` (author.bio on
+  samples) to power the card blurbs.
+
 ## Why
 
 - The Phase 1 UI ships PostCards and trend panels shaped to display

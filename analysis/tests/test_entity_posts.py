@@ -96,7 +96,8 @@ class EntityPostsTests(unittest.TestCase):
                 profile_image_url TEXT,
                 verified_type TEXT,
                 followers_count INTEGER DEFAULT 0,
-                created_at INTEGER
+                created_at INTEGER,
+                description TEXT
             );
             CREATE TABLE reddit_posts_raw (
                 fullname TEXT PRIMARY KEY,
