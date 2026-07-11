@@ -53,6 +53,11 @@ export interface PublicSentimentData {
         favorable: number;
         unfavorable: number;
         neutral: number;
+        // 'mixed' = both genuine praise and criticism of the GOP. Kept distinct
+        // from 'neutral' (no stance): the four buckets sum to ~100. netFavorability
+        // counts mixed in the denominator with zero net contribution. Optional so
+        // pre-mixed cached snapshots keep parsing.
+        mixed?: number;
         netFavorability: number;
         sampleSize: number;
         sourceCount: number;
@@ -386,10 +391,13 @@ export interface DemographicBreakdown {
     favorable: number;
     unfavorable: number;
     neutral: number;
+    // 'mixed' (both praise and criticism) — distinct from neutral. Optional so
+    // pre-mixed cached snapshots keep parsing.
+    mixed?: number;
 }
 
 export interface PollingSocialComparison {
-    onlineSentiment: { favorable: number; unfavorable: number; neutral: number };
+    onlineSentiment: { favorable: number; unfavorable: number; neutral: number; mixed?: number };
     pollingData: { favorable: number; unfavorable: number; neutral: number; source?: string; date?: string } | null;
 }
 

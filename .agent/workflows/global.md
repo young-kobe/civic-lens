@@ -27,18 +27,18 @@ RSS/Reddit -> Go Crawler -> SQLite -> Python ETL -> AI Analysis -> Cache -> Fast
 
 ## Common Commands
 
-```powershell
+```bash
 # Build Go ingestion binary
-.\run.ps1 build
+./run.sh build
 
 # Run web crawler (news + Reddit)
-.\run.ps1 crawl
+./run.sh crawl
 
 # Run analysis pipeline (ETL + AI + caching)
-.\run.ps1 analyze
+./run.sh analyze
 
 # Start API + UI for development
-.\run.ps1 dev
+./run.sh dev
 ```
 
 ## Layer Boundaries
@@ -50,7 +50,7 @@ RSS/Reddit -> Go Crawler -> SQLite -> Python ETL -> AI Analysis -> Cache -> Fast
 
 ## Key Files
 
-- `run.ps1` - Main command runner
+- `run.sh` - Main command runner
 - `data/seeds.yaml` - RSS feeds, Reddit subreddits, API config
 - `data/civic_lens.db` - SQLite database
 - `data/cache/*.json` - Pre-computed analysis snapshots

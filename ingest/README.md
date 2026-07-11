@@ -23,7 +23,7 @@ crash-resumable Go crawler that writes raw HTML/JSON to content-addressed storag
 ### 1. Build
 
 ```bash
-go build -o civic-ingest ./cmd/civic-ingest   # or: .\run.ps1 build
+go build -o civic-ingest ./cmd/civic-ingest   # or: ./run.sh build
 ```
 
 ### 2. Commands

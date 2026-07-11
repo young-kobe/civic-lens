@@ -67,7 +67,7 @@ SQLite -> ETL (loader.py) -> Engine (AI analysis) -> Aggregators -> Cache (JSON)
 ### Cache Architecture
 - All dashboard data is pre-computed and stored in `data/cache/`
 - FastAPI serves cached JSON directly (stateless)
-- Cache is refreshed by running `.\run.ps1 analyze`
+- Cache is refreshed by running `./run.sh analyze`
 
 ## Data Model
 
@@ -96,18 +96,18 @@ SQLite -> ETL (loader.py) -> Engine (AI analysis) -> Aggregators -> Cache (JSON)
 
 ## Commands
 
-```powershell
+```bash
 # Run full analysis pipeline
-.\run.ps1 analyze
+./run.sh analyze
 
 # Start FastAPI server only
-.\run.ps1 api
+./run.sh api
 
 # Start React dev server
-.\run.ps1 ui
+./run.sh ui
 
 # Start both API + UI
-.\run.ps1 dev
+./run.sh dev
 ```
 
 ## API Endpoints
@@ -145,7 +145,7 @@ Avoid universal language about national sentiment.
 
 ## Acceptance Criteria
 
-1. Can run end-to-end: `.\run.ps1 analyze` populates cache, `.\run.ps1 dev` serves data
+1. Can run end-to-end: `./run.sh analyze` populates cache, `./run.sh dev` serves data
 2. Dashboard shows sentiment, favorability, bot activity, narratives, and the global heatmap
 3. Every data point is traceable to raw sources
 4. Reach and sentiment are clearly labeled as proxies/samples
