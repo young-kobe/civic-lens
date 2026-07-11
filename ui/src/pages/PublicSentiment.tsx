@@ -29,7 +29,6 @@ import {
 } from '../services/topics';
 import { readHashParam, useDeepLinkParam, writeHashParam } from '../services/deepLink';
 import { OutletSignalsPanel } from './publicSentiment/OutletSignalsPanel';
-import { TopicDivergencePanel } from './publicSentiment/TopicDivergencePanel';
 import { TopicTabBar } from './publicSentiment/TopicTabBar';
 import { ToneTrendPanel } from './publicSentiment/ToneTrendPanel';
 
@@ -151,9 +150,9 @@ function TopMetrics({ data, windowLabel, activeTopic, topicRow, onSegmentClick }
                 />
             )}
         >
-            <ToneTierRow label="News articles are" agg={news} trend={tierTrend('news')} trendColor={COLORS.neutral} />
-            <ToneTierRow label="Officials are" agg={officials} trend={tierTrend('officials')} trendColor={COLORS.accent} />
-            <ToneTierRow label="The public is" agg={pub} trend={tierTrend('public')} trendColor={COLORS.warning} />
+            <ToneTierRow label="News articles are" agg={news} trend={tierTrend('news')} trendColor={COLORS.tierNews} />
+            <ToneTierRow label="Officials are" agg={officials} trend={tierTrend('officials')} trendColor={COLORS.tierOfficials} />
+            <ToneTierRow label="The public is" agg={pub} trend={tierTrend('public')} trendColor={COLORS.tierPublic} />
         </TopMetricsBlock>
     );
 }
@@ -1264,30 +1263,19 @@ function PublicSentiment({ filters }: PublicSentimentProps) {
                 />
             </div>
 
-            {/* Topic divergence — the page's signature read: where the three
-                groups disagree. Promoted above the entity grid; it was
-                previously last on the page where few readers reached it. */}
-            <div className="col-span-12">
-                <TopicDivergencePanel
-                    topics={data.byTopic}
-                    onFilterTopic={(topic) => {
-                        // Row topics and tab-bar keys share the backend's
-                        // topic vocabulary; unknown ones (e.g. a retired
-                        // topic in an old snapshot) just no-op.
-                        const match = TOPICS.find((t) => t.key === topic);
-                        if (match) setActiveTopicKey(match.key);
-                    }}
-                />
-            </div>
-
-            {/* Tone over time — per-group daily series (GOP series behind
-                the toggle) + weekday rhythm. */}
-            <div className="col-span-12">
+            {/* Tone over time (left) + Source signals (right) share a row —
+                two wide-but-bounded reads side by side instead of stacked
+                full-bleed. Balanced 6/6 so neither the trend chart nor the
+                5-column table is cramped. */}
+            <div className="col-span-6">
                 <ToneTrendPanel
                     toneTrend={data.toneTrend}
                     gopTrend={data.gopTrend}
                     byDayOfWeek={data.byDayOfWeek}
                 />
+            </div>
+            <div className="col-span-6">
+                <OutletSignalsPanel window={filters.timeRange} />
             </div>
 
             {/* Three-way grid: News / Officials / Public. */}
@@ -1320,12 +1308,6 @@ function PublicSentiment({ filters }: PublicSentimentProps) {
                     onClose={() => setActiveSegment(null)}
                 />
             )}
-
-            {/* Per-domain tone x bot-rate cross-signal table (bots included
-                by design — see the panel's method note). */}
-            <div className="col-span-12">
-                <OutletSignalsPanel window={filters.timeRange} />
-            </div>
 
             {/* Polling-vs-online collapsible (optional). */}
             {data.pollingVsSocial && (

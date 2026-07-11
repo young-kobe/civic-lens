@@ -34,6 +34,12 @@ export const COLORS = {
     neutral:       'var(--semantic-neutral)',
     neutralLight:  'var(--semantic-neutral-light)',
 
+    // Speaker-tier identity — News / Officials / Public. High-contrast and
+    // CVD-distinct; used for the tier trend sparklines and tier-coded marks.
+    tierNews:      'var(--tier-news)',
+    tierOfficials: 'var(--tier-officials)',
+    tierPublic:    'var(--tier-public)',
+
     // Partisan lean — distinct from the sentiment palette on purpose.
     leanLeft:       'var(--lean-left)',
     leanLeftLight:  'var(--lean-left-light)',

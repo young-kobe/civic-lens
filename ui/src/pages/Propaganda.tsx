@@ -554,11 +554,13 @@ function Propaganda({ filters }: PropagandaProps) {
                     />
                 </div>
 
-                <div className="col-span-12">
+                {/* News-vs-social is a 2-row mini table — pair it with the
+                    How-this-works panel instead of two stacked full-bleed rows. */}
+                <div className="col-span-5">
                     <NewsVsSocialCard splits={data.by_source} />
                 </div>
 
-                <div className="col-span-12">
+                <div className="col-span-7">
                     <HowThisWorks />
                 </div>
             </div>

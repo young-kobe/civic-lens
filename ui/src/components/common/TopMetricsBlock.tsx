@@ -99,17 +99,44 @@ export function TierRow({
                         <span className="tier-row-endpoint tier-row-endpoint-right" aria-hidden>{resolvedEndpoints[1]}</span>
                     </>
                 )}
-                {resolvedDots.map((d, i) => (
-                    <span
-                        key={i}
-                        className="tier-row-dot"
-                        title={d.title}
-                        style={{
-                            left: `${Math.max(0, Math.min(100, d.pct))}%`,
-                            background: d.color,
-                        }}
-                    />
-                ))}
+                {resolvedDots.length === 1 ? (
+                    // Single value → a filled bar (far more legible than a dot).
+                    // Tone axis (showZeroTick): grows from the 50% zero baseline
+                    // out to the value. Rate axis: fills from the left edge.
+                    (() => {
+                        const pct = Math.max(0, Math.min(100, resolvedDots[0].pct));
+                        const bar = showZeroTick
+                            ? (pct >= 50
+                                ? { left: 50, width: pct - 50 }
+                                : { left: pct, width: 50 - pct })
+                            : { left: 0, width: pct };
+                        return (
+                            <span
+                                className="tier-row-bar"
+                                title={resolvedDots[0].title}
+                                style={{
+                                    left: `${bar.left}%`,
+                                    width: `${bar.width}%`,
+                                    background: resolvedDots[0].color,
+                                }}
+                            />
+                        );
+                    })()
+                ) : (
+                    // Multiple values on one axis (e.g. news vs social) can't be a
+                    // single bar — keep enlarged high-contrast markers.
+                    resolvedDots.map((d, i) => (
+                        <span
+                            key={i}
+                            className="tier-row-dot"
+                            title={d.title}
+                            style={{
+                                left: `${Math.max(0, Math.min(100, d.pct))}%`,
+                                background: d.color,
+                            }}
+                        />
+                    ))
+                )}
             </div>
             <span className="tier-row-value" style={valueStyle}>{value}</span>
             {verb != null && <span className="tier-row-verb">{verb}</span>}
