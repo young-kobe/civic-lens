@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react';
+import { leanClass } from '../../theme';
 
 /**
  * Three-way entity frame shared across every data page: News Outlets /
@@ -11,9 +12,14 @@ import { useState, type ReactNode } from 'react';
  * `items` + `renderItem` (or pre-rendered `children` for static columns).
  *
  * Columns own two client-side controls when `items` is supplied:
- *  - a "Show all (N)" expander past `collapsedCount` (the payload already
- *    carries every row; only the default view is capped), and
- *  - an optional sort toggle cycling the caller's `sorters`.
+ *  - a sort toggle in the column header cycling the caller's `sorters`, and
+ *  - an internal scroll region past `collapsedCount` cards, so a long tier
+ *    scrolls inside its own column instead of pushing page height (the whole
+ *    payload is always rendered — only the visible band is bounded).
+ *
+ * A page-level `ThreeWayToolbar` sits above the grid for cross-column
+ * controls (lean/party filter, entity search); the pages own that state and
+ * pass already-filtered `items` down.
  *
  * The CSS classes `.three-way-grid` and `.three-way-column*` live in
  * `index.css`.
@@ -38,6 +44,96 @@ export interface ColumnSorter<T> {
     compare: (a: T, b: T) => number;
 }
 
+// --------------------------------------------------------------------------- //
+//  Lean / party filter — shared by the toolbar and the pages' item filter    //
+// --------------------------------------------------------------------------- //
+
+/** Political-lean filter buckets. 'all' is the no-op default. */
+export type LeanFilter = 'all' | 'left' | 'center' | 'right';
+
+const LEAN_FILTER_OPTIONS: Array<{ key: LeanFilter; label: string }> = [
+    { key: 'all', label: 'All' },
+    { key: 'left', label: 'Left' },
+    { key: 'center', label: 'Center' },
+    { key: 'right', label: 'Right' },
+];
+
+/**
+ * True when a profile passes the active lean filter. Unifies outlet/subreddit
+ * `lean` and official/account `party` through the shared `leanClass` map, so
+ * "Left" catches both left-leaning outlets and Democratic officials. The
+ * "Center" pill also admits mixed/neutral so no card silently vanishes under
+ * a specific pill (only "All" shows literally everything).
+ */
+export function matchesLeanFilter(
+    profile: { kind: string; party?: string; lean?: string | null } | undefined | null,
+    filter: LeanFilter,
+): boolean {
+    if (filter === 'all') return true;
+    if (!profile) return filter === 'center';
+    const cls = leanClass(profile);
+    if (filter === 'center') return cls === 'center' || cls === 'mixed' || cls === 'neutral';
+    return cls === filter;
+}
+
+interface ThreeWayToolbarProps {
+    /** Lean filter state; omit the pair to hide the lean pills. */
+    leanFilter?: LeanFilter;
+    onLeanFilterChange?: (f: LeanFilter) => void;
+    /** Search box state; omit the pair to hide the search input. */
+    search?: string;
+    onSearchChange?: (s: string) => void;
+    searchPlaceholder?: string;
+}
+
+/**
+ * Cross-column control bar rendered ABOVE the three-way grid. Hosts the
+ * lean/party filter and an entity search box. Both are optional — a page
+ * renders only the controls it wires. Returns null when neither is supplied
+ * so it never leaves an empty bar.
+ */
+export function ThreeWayToolbar({
+    leanFilter, onLeanFilterChange, search, onSearchChange, searchPlaceholder,
+}: ThreeWayToolbarProps) {
+    const showLean = leanFilter !== undefined && !!onLeanFilterChange;
+    const showSearch = search !== undefined && !!onSearchChange;
+    if (!showLean && !showSearch) return null;
+    return (
+        <div className="three-way-toolbar">
+            {showLean && (
+                <div
+                    className="three-way-toolbar-filter"
+                    role="group"
+                    aria-label="Filter by political lean or party"
+                >
+                    <span className="eyebrow three-way-toolbar-label">Lean</span>
+                    {LEAN_FILTER_OPTIONS.map((opt) => (
+                        <button
+                            key={opt.key}
+                            type="button"
+                            className={`filter-pill ${leanFilter === opt.key ? 'filter-pill-active' : ''}`}
+                            onClick={() => onLeanFilterChange!(opt.key)}
+                            aria-pressed={leanFilter === opt.key}
+                        >
+                            {opt.label}
+                        </button>
+                    ))}
+                </div>
+            )}
+            {showSearch && (
+                <input
+                    type="search"
+                    className="input three-way-toolbar-search"
+                    placeholder={searchPlaceholder ?? 'Search...'}
+                    value={search}
+                    onChange={(e) => onSearchChange!(e.target.value)}
+                    aria-label={searchPlaceholder ?? 'Search'}
+                />
+            )}
+        </div>
+    );
+}
+
 interface ThreeWayColumnProps<T> {
     /** Short uppercase column heading, e.g. "The News". */
     header: string;
@@ -53,79 +149,73 @@ interface ThreeWayColumnProps<T> {
     /** When true, renders `empty` instead of items/children. Derived from
      *  `items` automatically when items are supplied. */
     isEmpty?: boolean;
-    /** Full item list — the column caps the default view itself. */
+    /** Full item list — the column renders all of it and scrolls internally
+     *  past `collapsedCount`. */
     items?: T[];
     renderItem?: (item: T) => ReactNode;
     /** Batch renderer for list-shaped content (e.g. RankedEntityList),
      *  which needs the whole visible slice at once to number its rows.
      *  Takes precedence over renderItem. */
     renderItems?: (items: T[]) => ReactNode;
-    /** Sort options; the first is the default order. Omit to keep the
-     *  caller's order with no toggle. */
+    /** Sort options; the first is the default order unless `defaultSortIdx`
+     *  is set. Omit to keep the caller's order with no toggle. */
     sorters?: Array<ColumnSorter<T>>;
-    /** Rows shown before the "Show all" expander. */
+    /** Which sorter to start on (e.g. officials default to engagement). */
+    defaultSortIdx?: number;
+    /** Cards shown before the column body starts scrolling internally. */
     collapsedCount?: number;
-    /** Pre-rendered content (legacy path; no expand/sort controls). */
+    /** Rendered at the bottom of the column, after the cards — used to fill
+     *  a thin tier (e.g. the public column's "who they're talking about"). */
+    footer?: ReactNode;
+    /** Pre-rendered content (legacy path; no sort control or scroll). */
     children?: ReactNode;
 }
 
-const DEFAULT_COLLAPSED_COUNT = 12;
+const DEFAULT_COLLAPSED_COUNT = 10;
 
 export function ThreeWayColumn<T>({
     header, byline, empty, isEmpty, items, renderItem, renderItems, sorters,
-    collapsedCount = DEFAULT_COLLAPSED_COUNT, children,
+    defaultSortIdx = 0, collapsedCount = DEFAULT_COLLAPSED_COUNT, footer, children,
 }: ThreeWayColumnProps<T>) {
-    const [expanded, setExpanded] = useState(false);
-    const [sortIdx, setSortIdx] = useState(0);
+    const [sortIdx, setSortIdx] = useState(defaultSortIdx);
 
     const empty_ = isEmpty ?? (items ? items.length === 0 : false);
 
     let body: ReactNode = children;
-    let controls: ReactNode = null;
+    let sortControl: ReactNode = null;
+    let overflow = false;
     if (items && (renderItem || renderItems) && !empty_) {
-        const sorted = sorters && sorters.length > 0
-            ? [...items].sort(sorters[Math.min(sortIdx, sorters.length - 1)].compare)
-            : items;
-        const visible = expanded ? sorted : sorted.slice(0, collapsedCount);
-        body = renderItems ? renderItems(visible) : visible.map(renderItem!);
         const activeSorter = sorters && sorters.length > 0
             ? sorters[Math.min(sortIdx, sorters.length - 1)]
             : null;
-        // A sort toggle under a single card is noise, not control — and an
-        // empty controls row is dead whitespace.
+        const sorted = activeSorter ? [...items].sort(activeSorter.compare) : items;
+        // The whole list is always rendered; past the cap the body becomes a
+        // fixed-height scroll region so a long tier can't stretch page height.
+        overflow = items.length > collapsedCount;
+        body = renderItems ? renderItems(sorted) : sorted.map(renderItem!);
+        // A sort toggle under a single card is noise, not control.
         const showSort = !!(sorters && sorters.length > 1 && activeSorter && items.length > 1);
-        const showExpand = items.length > collapsedCount;
-        controls = (showSort || showExpand) ? (
-            <div className="three-way-column-controls">
-                {showSort && activeSorter && (
-                    <button
-                        type="button"
-                        className="three-way-column-control"
-                        onClick={() => setSortIdx((i) => (i + 1) % sorters!.length)}
-                        title="Cycle sort order"
-                        aria-label={`Sorted by ${activeSorter.label}. Change sort order.`}
-                    >
-                        sorted by {activeSorter.label}
-                    </button>
-                )}
-                {showExpand && (
-                    <button
-                        type="button"
-                        className="three-way-column-control"
-                        onClick={() => setExpanded((v) => !v)}
-                    >
-                        {expanded ? 'Show fewer' : `Show all (${items.length})`}
-                    </button>
-                )}
-            </div>
+        sortControl = showSort && activeSorter ? (
+            <button
+                type="button"
+                className="three-way-column-control"
+                onClick={() => setSortIdx((i) => (i + 1) % sorters!.length)}
+                title="Cycle sort order"
+                aria-label={`Sorted by ${activeSorter.label}. Change sort order.`}
+            >
+                sorted by {activeSorter.label}
+            </button>
         ) : null;
     }
 
     return (
         <div className="three-way-column">
-            <div>
-                <div className="three-way-column-header">{header}</div>
-                <div className="three-way-column-byline">{byline}</div>
+            <div className="three-way-column-head">
+                <div className="three-way-column-headings">
+                    <div className="three-way-column-header">{header}</div>
+                    <div className="three-way-column-byline">{byline}</div>
+                </div>
+                {sortControl}
             </div>
             {empty_ ? (
                 <p className="text-xs text-muted" style={{ padding: 'var(--space-3)' }}>
@@ -133,8 +223,10 @@ export function ThreeWayColumn<T>({
                 </p>
             ) : (
                 <>
-                    {body}
-                    {controls}
+                    {overflow
+                        ? <div className="three-way-column-scroll">{body}</div>
+                        : body}
+                    {footer}
                 </>
             )}
         </div>

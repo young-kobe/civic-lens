@@ -642,6 +642,7 @@ def _format_entity_items(bucket: Dict[str, Dict[str, Any]]) -> List[EntitySentim
             entity_profile=stats["profile"],
             classification_samples=[_sample_dict_to_model(s) for s in stats["samples"]],
             expressed_by_topic=by_topic,
+            engagement_total=stats.get("engagement_total", 0),
         ))
     items.sort(key=lambda it: (it.kind == "catch_all", -it.volume))
     return items

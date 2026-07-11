@@ -340,6 +340,7 @@ function catchAll(key: string, displayName: string, blurb: string): EntityProfil
 function entityItem(
     profile: EntityProfile,
     counts: { positive: number; negative: number; neutral: number },
+    engagementTotal?: number,
 ): EntitySentimentItem {
     const volume = counts.positive + counts.negative + counts.neutral;
     const net = volume > 0 ? ((counts.positive - counts.negative) / volume) * 100 : 0;
@@ -351,6 +352,7 @@ function entityItem(
         netScore: Math.round(net * 10) / 10,
         entityProfile: profile,
         classificationSamples: [],
+        ...(engagementTotal != null ? { engagementTotal } : {}),
     };
 }
 
@@ -382,20 +384,26 @@ function mockOutletSentiment(): EntitySentimentItem[] {
 
 function mockOfficialSentiment(): EntitySentimentItem[] {
     return [
+        // engagementTotal is set distinct from volume order (Trump leads by
+        // volume; Schumer leads by engagement) so the officials column's
+        // engagement-weighted default sort is visibly different from "posts".
         entityItem(
             officialProfile('potus', 'Donald J. Trump', 'President of the United States', 'R',
                 '47th President; high-volume X poster driving news cycles.'),
             { positive: 58, negative: 22, neutral: 30 },
+            320_400,
         ),
         entityItem(
             officialProfile('senschumer', 'Chuck Schumer', 'Senate Minority Leader', 'D',
                 'Senior Democratic senator from New York; Senate minority leader since Jan 2025.'),
             { positive: 18, negative: 44, neutral: 12 },
+            481_900,
         ),
         entityItem(
             officialProfile('speakerjohnson', 'Mike Johnson', 'Speaker of the House', 'R',
                 'Speaker of the US House since October 2023.'),
             { positive: 30, negative: 15, neutral: 18 },
+            94_800,
         ),
     ];
 }

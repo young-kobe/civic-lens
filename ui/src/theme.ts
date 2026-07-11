@@ -60,11 +60,7 @@ export const COLORS = {
 
     // Chart ramp
     chartPositive:       'var(--chart-positive)',
-    chartPositiveStrong: 'var(--chart-positive-strong)',
-    chartPositiveSoft:   'var(--chart-positive-soft)',
     chartNegative:       'var(--chart-negative)',
-    chartNegativeStrong: 'var(--chart-negative-strong)',
-    chartNegativeSoft:   'var(--chart-negative-soft)',
     chartNeutral:        'var(--chart-neutral)',
     chartNeutralSoft:    'var(--chart-neutral-soft)',
     chartAccent:         'var(--chart-accent)',
@@ -74,19 +70,6 @@ export const COLORS = {
     gradNeutral:         'var(--chart-gradient-neutral)',
     gradAccent:          'var(--chart-gradient-accent)',
     chartGrid:           'var(--chart-grid)',
-
-    // Tone-intensity palette (5-way distribution)
-    toneStrongNeg: 'var(--tone-strong-neg)',
-    toneMildNeg:   'var(--tone-mild-neg)',
-    toneNeu:       'var(--tone-neu-solid)',
-    toneNeuText:   'var(--tone-neu-text)',
-    toneMildPos:   'var(--tone-mild-pos)',
-    toneStrongPos: 'var(--tone-strong-pos)',
-    toneGradStrongNeg: 'var(--tone-grad-strong-neg)',
-    toneGradMildNeg:   'var(--tone-grad-mild-neg)',
-    toneGradNeu:       'var(--tone-grad-neu)',
-    toneGradMildPos:   'var(--tone-grad-mild-pos)',
-    toneGradStrongPos: 'var(--tone-grad-strong-pos)',
 
     // Political-stance palette
     stanceSupportive:      'var(--stance-supportive-solid)',

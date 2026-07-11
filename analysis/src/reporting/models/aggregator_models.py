@@ -203,6 +203,11 @@ class EntitySentimentItem:
     # below MIN_TARGET_SAMPLE_N. Serialized as ``byTopic`` — powers the
     # topic-filtered headline in the profile modal.
     expressed_by_topic: List[Dict[str, Any]] = field(default_factory=list)
+    # Summed engagement (likes + reposts + replies + quotes) across the
+    # entity's posts in the window. Serialized as ``engagementTotal`` when
+    # non-zero — powers the officials column's engagement-weighted sort.
+    # 0 for news outlets (articles carry no engagement signal).
+    engagement_total: int = 0
 
 
 def _classification_sample_to_dict(s: "ClassificationSample") -> Dict[str, Any]:
@@ -259,6 +264,8 @@ def _entity_item_to_dict(item: "EntitySentimentItem") -> Dict[str, Any]:
         result["outbound"] = item.outbound
     if item.expressed_by_topic:
         result["byTopic"] = item.expressed_by_topic
+    if item.engagement_total:
+        result["engagementTotal"] = item.engagement_total
     return result
 
 

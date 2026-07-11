@@ -231,6 +231,7 @@ def _consolidate_sampled_authors(bucket: Dict[str, Dict[str, Any]]) -> None:
         for label_key in ("positive", "negative", "neutral"):
             catch[label_key] += stats[label_key]
         catch["volume"] += stats["volume"]
+        catch["engagement_total"] += stats.get("engagement_total", 0)
         for topic, counts in stats["by_topic"].items():
             target = catch["by_topic"].setdefault(
                 topic, {"positive": 0, "negative": 0, "neutral": 0, "mixed": 0},
@@ -255,6 +256,10 @@ def _init_entity_bucket(
         "kind": kind, "profile": profile,
         "positive": 0, "negative": 0, "neutral": 0, "volume": 0,
         "samples": [],
+        # Summed engagement (likes + reposts + replies + quotes) across ALL
+        # of the entity's posts in the window — powers the officials column's
+        # engagement-weighted default sort. 0 for news (no engagement signal).
+        "engagement_total": 0,
         # Per-topic stance counts for the entity's own posts — powers the
         # topic-scoped expressed score in the profile modal.
         "by_topic": {},

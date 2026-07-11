@@ -201,6 +201,11 @@ export interface EntitySentimentItem {
     /** Public tier only — WHO this bucket's posts talk about (the inverse
      *  of received). Missing on pre-outbound cached snapshots. */
     outbound?: OutboundTargets | null;
+    /** Summed engagement (likes + reposts + replies + quotes) across this
+     *  entity's posts in the window. Absent (treat as 0) for news outlets and
+     *  on pre-engagement cached snapshots — powers the officials column's
+     *  engagement-weighted default sort. */
+    engagementTotal?: number;
 }
 
 /** Outbound-target rollup on a public-tier entity card. */

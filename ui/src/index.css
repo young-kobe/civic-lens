@@ -13,8 +13,12 @@
      --font-lead: standfirst / "reads as today" intro prose (larger serif, relaxed).
      --font-mono: numeric / timestamps / tabular data. */
   --font-family: 'Inter', 'IBM Plex Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --font-display: 'Source Serif 4', 'Source Serif Pro', Georgia, 'Times New Roman', serif;
-  --font-lead: 'Source Serif 4', 'Source Serif Pro', Georgia, 'Times New Roman', serif;
+  /* Serifs removed (2026-07-11): the Source Serif display/lead stacks read as
+     mismatched against the Inter data UI. --font-display and --font-lead now
+     point at the sans stack so the ~15 selectors that reference them de-serify
+     without per-selector edits; token names kept for semantic intent. */
+  --font-display: 'Inter', 'IBM Plex Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-lead: 'Inter', 'IBM Plex Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-mono: 'JetBrains Mono', 'IBM Plex Mono', 'Fira Code', ui-monospace, Menlo, Consolas, monospace;
 
   --text-xs: 0.6875rem;
@@ -96,12 +100,8 @@
   /* Chart palette — monochromatic ink-blue ramp for magnitude/identity;
      brick reserved for negative. Paired dark/light stops for gradient
      fills that still read at low opacity. */
-  --chart-positive-strong: #0f2a52;
   --chart-positive: #2a4d80;
-  --chart-positive-soft: #7d95bb;
-  --chart-negative-strong: #701c0f;
   --chart-negative: #8f2314;
-  --chart-negative-soft: #b96f61;
   --chart-neutral: #838a97;
   --chart-neutral-soft: #c0c4cd;
   --chart-accent: #1a3a6b;
@@ -118,19 +118,18 @@
   --source-reddit: #a34a1f;
   --source-x: #101013;
 
-  /* Tone-intensity palette — 5-way distribution on the blue/brick
-     diverging axis (SentimentDistributionCard + top-metrics mini-bar). */
-  --tone-strong-neg: #701c0f;
-  --tone-mild-neg:   #b05a45;
-  --tone-neu-solid:  #838a97;
-  --tone-neu-text:   #383d47;
-  --tone-mild-pos:   #5f7cab;
-  --tone-strong-pos: #0f2a52;
-  --tone-grad-strong-neg: linear-gradient(135deg, #4f1309 0%, #8f2314 100%);
-  --tone-grad-mild-neg:   linear-gradient(135deg, #8f2314 0%, #b96f61 100%);
-  --tone-grad-neu:        linear-gradient(135deg, #838a97 0%, #c0c4cd 100%);
-  --tone-grad-mild-pos:   linear-gradient(135deg, #7d95bb 0%, #2a4d80 100%);
-  --tone-grad-strong-pos: linear-gradient(135deg, #2a4d80 0%, #0f2a52 100%);
+  /* Tone-intensity palette — 5-way diverging distribution for the top-metrics
+     mini-bar. Standardized 2026-07-11 onto the site's vivid semantic pair
+     (poles = --semantic-negative/-positive) with lighter mild tints and a
+     neutral gray midpoint, so the bar matches the tier-row tone colors instead
+     of the muted chart ramp it used before. Validated (dataviz): worst
+     adjacent CVD dE 24.9; gray midpoint intentional; segment % labels relieve
+     the light-tint contrast. */
+  --tone-strong-neg: #d0261a;   /* = --semantic-negative */
+  --tone-mild-neg:   #e07a63;
+  --tone-neu-solid:  #9aa0ab;
+  --tone-mild-pos:   #6b8fd4;
+  --tone-strong-pos: #1a5fd0;   /* = --semantic-positive */
 
   /* Political-stance palette (SentimentBar colorScheme="political") —
      blue vs red framing used for GOP Party Stance rather than tone. */
@@ -180,11 +179,14 @@
   --shadow-lg: 0 2px 6px rgba(13, 14, 18, 0.08), 0 12px 28px rgba(13, 14, 18, 0.12);
   --shadow-inset: inset 0 1px 0 rgba(13, 14, 18, 0.03);
 
-  /* Radius — sharper on dense data, softer on cards */
+  /* Radius. Modules are square (angular Bloomberg register, 2026-07-11):
+     --radius-md/lg/xl were used only by module surfaces (cards, modals,
+     post/tab/digest panels), so they are 0. --radius-sm stays for small
+     interactive controls (buttons, inputs) and --radius-full for pills. */
   --radius-sm: 3px;
-  --radius-md: 6px;
-  --radius-lg: 10px;
-  --radius-xl: 14px;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --radius-xl: 0;
   --radius-full: 9999px;
 
   /* Transitions */
@@ -386,8 +388,8 @@ code, pre {
    large empty bands (e.g. Data Desk "Human review agreement" beside the long
    snapshot table; Bot Detector's similarity/domain panels). Density pass
    2026-07-11. */
-.grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--space-3); align-items: start; }
-.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-3); align-items: start; }
+.grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--space-2); align-items: start; }
+.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-2); align-items: start; }
 .grid-auto { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: var(--space-3); }
 
 /* Newspaper-style 12-col dashboard grid.
@@ -396,21 +398,17 @@ code, pre {
    identical full-bleed rows. Each child picks its own span based on
    content density.
 
-   Cards paired in a row stretch to match the tallest sibling so there are
-   no jagged bottom edges between neighbors. Wrappers use flex-column +
-   flex:1 on their child so the Card (or banner) inside inflates to fill
-   the allotted row height.
+   Cards hug their own content (align-items: start) — a short card next to a
+   tall one stays short, so there is no stretched dead space. Ragged bottoms
+   between neighbors are intentional and read as clean because each module is
+   a crisp hairline-bounded box (the Bloomberg masonry register).
 
    Collapses to single-column below 1024px (tablet / phone) so no card is
    forced into a too-narrow slot. */
 .dashboard-grid {
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
-  gap: var(--space-3);
-  /* align-items: start — cards hug their own content instead of stretching
-     to the tallest sibling in the row. This is the Bloomberg-density move:
-     a short card next to a tall one no longer inflates to match, so there
-     is no dead whitespace. Rows can have ragged bottoms by design. */
+  gap: var(--space-2);
   align-items: start;
 }
 
@@ -421,8 +419,9 @@ code, pre {
 .col-span-5  { grid-column: span 5; }
 .col-span-4  { grid-column: span 4; }
 
-/* Each grid cell becomes a flex column so its child (usually a .card)
-   stretches to the row's height instead of hugging its natural content. */
+/* Each grid cell is a flex column (min-width:0 so long content can shrink
+   instead of forcing horizontal overflow); the cell hugs its content height
+   via the grid's align-items: start. */
 .dashboard-grid > [class*="col-span-"] {
   display: flex;
   flex-direction: column;
@@ -506,15 +505,13 @@ code, pre {
 
 .card {
   background: var(--bg-card);
-  border-radius: var(--radius-md);
+  /* Square, shadowless modules (2026-07-11): a single 1px hairline border is
+     the only delineation — the Bloomberg "contained angular box" register.
+     Rounded corners and drop shadows removed site-wide. */
+  border-radius: 0;
   padding: var(--space-3);
-  /* Two-layer shadow (iteration 3) — cards lift off the paper-feel
-     background rather than sitting flush on it. */
-  box-shadow:
-    0 1px 2px rgba(15, 20, 35, 0.06),
-    0 6px 16px rgba(15, 20, 35, 0.08);
   border: 1px solid var(--neutral-200);
-  transition: box-shadow var(--transition-base), border-color var(--transition-base);
+  transition: border-color var(--transition-base);
 }
 
 .card-header {
@@ -522,8 +519,6 @@ code, pre {
   padding: var(--space-2) var(--space-3);
   border-bottom: 1px solid var(--neutral-200);
   background: var(--bg-panel);
-  border-top-left-radius: var(--radius-md);
-  border-top-right-radius: var(--radius-md);
 }
 
 /* Editorial card title — restrained serif, sized to sit above data.
@@ -558,7 +553,6 @@ code, pre {
   padding: var(--space-2) var(--space-3);
   background: var(--bg-inset);
   border-left: 2px solid var(--accent-muted);
-  border-radius: var(--radius-sm);
 }
 
 /* Hero surface for landing / splash areas */
@@ -569,7 +563,7 @@ code, pre {
     radial-gradient(120% 140% at 0% 0%, rgba(26, 58, 107, 0.07) 0%, transparent 55%),
     radial-gradient(80% 100% at 100% 0%, rgba(15, 42, 82, 0.05) 0%, transparent 50%),
     linear-gradient(180deg, var(--bg-card) 0%, var(--neutral-75) 100%);
-  border-radius: var(--radius-lg);
+  border-radius: 0;
   border: 1px solid var(--neutral-200);
   overflow: hidden;
 }
@@ -1740,11 +1734,8 @@ code, pre {
 .top-metrics {
   background: var(--bg-card);
   border: 1px solid var(--neutral-200);
-  border-radius: var(--radius-sm);
+  border-radius: 0;
   padding: var(--space-2) var(--space-3);
-  box-shadow:
-    0 1px 2px rgba(15, 20, 35, 0.06),
-    0 6px 16px rgba(15, 20, 35, 0.08);
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
@@ -2006,11 +1997,11 @@ code, pre {
 .mini-bar-neutral     { background: var(--neutral-300); }
 .mini-bar-unfavorable { background: var(--semantic-negative); }
 
-.mini-bar-strongpos { background: var(--chart-positive-strong); }
-.mini-bar-mildpos   { background: var(--chart-positive-soft); }
-.mini-bar-neu       { background: var(--neutral-300); }
-.mini-bar-mildneg   { background: var(--chart-negative-soft); }
-.mini-bar-strongneg { background: var(--chart-negative-strong); }
+.mini-bar-strongpos { background: var(--tone-strong-pos); }
+.mini-bar-mildpos   { background: var(--tone-mild-pos); }
+.mini-bar-neu       { background: var(--tone-neu-solid); }
+.mini-bar-mildneg   { background: var(--tone-mild-neg); }
+.mini-bar-strongneg { background: var(--tone-strong-neg); }
 
 /* Clickable intensity segments — same paint as the static spans, plus
    button reset + hover/focus affordance for the samples drill-down. */
@@ -2200,11 +2191,8 @@ code, pre {
   font-size: var(--text-sm);
   background: var(--bg-card);
   border: 1px solid var(--neutral-200);
-  border-radius: var(--radius-sm);
+  border-radius: 0;
   padding: var(--space-2) var(--space-3);
-  box-shadow:
-    0 1px 2px rgba(15, 20, 35, 0.04),
-    0 2px 6px rgba(15, 20, 35, 0.04);
 }
 
 .how-this-works > summary {
@@ -2304,7 +2292,7 @@ code, pre {
   padding: var(--space-3) var(--space-4);
   background: var(--bg-panel);
   border: 1px solid var(--neutral-200);
-  border-radius: var(--radius-md);
+  border-radius: 0;
 }
 
 @media (max-width: 1024px) {
@@ -2328,7 +2316,6 @@ code, pre {
   background: var(--bg-card);
   border: 1px solid var(--neutral-200);
   border-left: 3px solid var(--accent);
-  border-radius: var(--radius-sm);
 }
 
 .reads-as-today-eyebrow {
@@ -2354,10 +2341,9 @@ code, pre {
 .three-way-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--space-3);
-  /* align-items: start — a short tier (e.g. 3 officials) must hug its own
-     content instead of stretching to the tallest column's height, which
-     left a large empty band below it (density pass 2026-07-11). Mirrors
+  gap: var(--space-2);
+  /* align-items: start — a short tier (e.g. 3 officials) hugs its own content
+     instead of stretching to the tallest column's height. Mirrors
      .dashboard-grid. */
   align-items: start;
 }
@@ -2366,7 +2352,7 @@ code, pre {
 .two-way-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-3);
+  gap: var(--space-2);
   align-items: start;
 }
 
@@ -2397,6 +2383,77 @@ code, pre {
   padding-bottom: 4px;
 }
 
+/* Header row: headings on the left, the sort toggle pushed to the right so
+   the sort control reads as a per-column setting at the TOP of the column
+   (was a footer control below the cards). */
+.three-way-column-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
+.three-way-column-headings {
+  flex: 1;
+  min-width: 0;
+}
+
+.three-way-column-head .three-way-column-control {
+  flex: none;
+  white-space: nowrap;
+}
+
+/* Past the card cap the column body scrolls internally instead of growing
+   the page — bounds a long tier to ~10 cards tall, keeping the three-column
+   geometry stable regardless of how many rows a tier carries. */
+.three-way-column-scroll {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: min(78vh, 900px);
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+/* Cross-column control bar above the grid: lean/party filter + entity search. */
+.three-way-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-2);
+}
+
+.three-way-toolbar-filter {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex-wrap: wrap;
+}
+
+.three-way-toolbar-label {
+  margin-right: var(--space-1);
+}
+
+.three-way-toolbar-search {
+  margin-left: auto;
+  max-width: 260px;
+  flex: 1 1 180px;
+}
+
+/* "Who the public is talking about" — target-sentiment rows that fill the
+   public column, which otherwise often carries a single pooled card. */
+.three-way-column-targets {
+  margin-top: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--neutral-200);
+}
+
+.three-way-column-targets-title {
+  display: block;
+  margin-bottom: var(--space-1);
+}
+
 @media (max-width: 1024px) {
   .three-way-grid,
   .two-way-grid { grid-template-columns: 1fr; }
@@ -2420,28 +2477,20 @@ code, pre {
   background: var(--bg-card);
   border: 1px solid var(--neutral-200);
   border-left: 3px solid var(--neutral-400);
-  border-radius: var(--radius-sm);
+  border-radius: 0;
   padding: 10px 12px;
-  /* Rest state: card hovers above the paper background with a subtle
-     two-layer shadow (iteration 3). Close layer gives the crisp edge;
-     far layer gives the soft drop. */
-  box-shadow:
-    0 1px 2px rgba(15, 20, 35, 0.06),
-    0 4px 12px rgba(15, 20, 35, 0.07);
+  /* Flat, angular module: hairline border only, hover reads via border +
+     background, not a shadow lift (2026-07-11 angular pass). */
   transition:
     border-color var(--transition-fast),
-    box-shadow var(--transition-base),
-    transform var(--transition-fast);
+    background var(--transition-fast);
   font-family: var(--font-family);
   color: inherit;
 }
 
 .entity-card:hover {
   border-color: var(--neutral-400);
-  box-shadow:
-    0 2px 4px rgba(15, 20, 35, 0.08),
-    0 12px 28px rgba(15, 20, 35, 0.14);
-  transform: translateY(-2px);
+  background: var(--bg-panel);
 }
 
 .entity-card:focus-visible {
