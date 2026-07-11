@@ -82,20 +82,24 @@ export function ThreeWayColumn<T>({
         const activeSorter = sorters && sorters.length > 0
             ? sorters[Math.min(sortIdx, sorters.length - 1)]
             : null;
-        controls = (
+        // A sort toggle under a single card is noise, not control — and an
+        // empty controls row is dead whitespace.
+        const showSort = !!(sorters && sorters.length > 1 && activeSorter && items.length > 1);
+        const showExpand = items.length > collapsedCount;
+        controls = (showSort || showExpand) ? (
             <div className="three-way-column-controls">
-                {sorters && sorters.length > 1 && activeSorter && (
+                {showSort && activeSorter && (
                     <button
                         type="button"
                         className="three-way-column-control"
-                        onClick={() => setSortIdx((i) => (i + 1) % sorters.length)}
+                        onClick={() => setSortIdx((i) => (i + 1) % sorters!.length)}
                         title="Cycle sort order"
                         aria-label={`Sorted by ${activeSorter.label}. Change sort order.`}
                     >
                         sorted by {activeSorter.label}
                     </button>
                 )}
-                {items.length > collapsedCount && (
+                {showExpand && (
                     <button
                         type="button"
                         className="three-way-column-control"
@@ -105,7 +109,7 @@ export function ThreeWayColumn<T>({
                     </button>
                 )}
             </div>
-        );
+        ) : null;
     }
 
     return (

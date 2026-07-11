@@ -239,6 +239,8 @@ export interface SampleAuthor {
     verified_type: string | null;
     followers_count: number | null;
     account_created_at: number | null;
+    /** The account's own X bio, verbatim. Absent on pre-bio snapshots. */
+    bio?: string | null;
 }
 
 export interface ClassificationSample {

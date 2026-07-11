@@ -368,6 +368,43 @@ def account_profile_dict(
     }
 
 
+_SAMPLED_BIO_MAX_CHARS = 140
+
+
+def sampled_account_profile(
+    handle: str,
+    display_name: Optional[str] = None,
+    bio: Optional[str] = None,
+    followers_count: Optional[int] = None,
+) -> Dict[str, Any]:
+    """Profile for an unmatched-but-active X author promoted out of the
+    "Other X users" catch-all (>= post + follower floors, see sentiment.py).
+    Built entirely from the author's own public X profile (x_users_raw);
+    we know nothing editorial about them, so there is no lean, no party —
+    the blurb says exactly where the card came from."""
+    clean_bio = " ".join((bio or "").split())
+    if len(clean_bio) > _SAMPLED_BIO_MAX_CHARS:
+        clean_bio = clean_bio[:_SAMPLED_BIO_MAX_CHARS - 1].rstrip() + "…"
+    followers = (
+        f"{followers_count:,} followers · " if followers_count else ""
+    )
+    return {
+        "kind": "account",
+        "key": handle,
+        "displayName": display_name or f"@{handle}",
+        "blurb": (
+            (clean_bio + " — " if clean_bio else "")
+            + f"{followers}one of the most active X accounts in our political "
+            "sample. Not in our tracked registries; bio is their own."
+        ),
+        "lean": None,
+        "leanSource": None,
+        "party": None,
+        "office": "",
+        "accountType": "sampled",
+    }
+
+
 # --------------------------------------------------------------------------- #
 #  Target-name resolution (received-tone / expressed-tone split)               #
 # --------------------------------------------------------------------------- #
