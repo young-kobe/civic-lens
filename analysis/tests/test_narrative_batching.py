@@ -141,7 +141,10 @@ def _run_and_count(db_path: str, limit: int) -> int:
     finally:
         agg_mod.get_connection = original
 
-    assert len(results) == limit, f"expected {limit} narratives, got {len(results)}"
+    # Explicit raise (not assert) so the invariant holds even under python -O,
+    # which strips assert statements.
+    if len(results) != limit:
+        raise AssertionError(f"expected {limit} narratives, got {len(results)}")
     return holder["conn"].execute_count
 
 

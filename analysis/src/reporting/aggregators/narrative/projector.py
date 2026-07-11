@@ -29,6 +29,7 @@ from analysis.src.reporting.entity_registry import (
     CATCH_ALL_SUBREDDITS,
     CATCH_ALL_X_USERS,
     get_registry,
+    resolve_entity,
     route_reporting_entity,
 )
 from analysis.src.reporting.models import NarrativeSummary
@@ -119,21 +120,22 @@ def net_sentiment(rows: List[Tuple[Optional[str], Optional[float]]]) -> float:
 def is_cross_tier(rows: List[Tuple[Optional[str], Optional[str]]]) -> bool:
     """True when supporting docs span >1 of {news, officials, public}.
 
-    Tier assignment here is coarse and matches resolve_entity:
+    Tier assignment is delegated to the canonical ``resolve_entity`` so
+    narrative tiering can never drift from the sentiment / bot dashboards:
       * news → 'news'
-      * x_post authored by a verified official → 'officials'
+      * x_post authored by a registry official → 'officials'
       * x_post by anyone else → 'public'
       * reddit_post / reddit_comment → 'public'
+    (Provenance / account upgrades are intentionally not applied here — this
+    is the coarse registry-only frame, matching the prior behavior; the handle
+    is already lowercased, which ``resolve_entity`` canonicalizes identically.)
     """
-    officials_handles = set(get_registry().officials.keys())
+    registry = get_registry()
     tiers: set = set()
     for source_type, handle in rows:
-        if source_type == "news":
-            tiers.add("news")
-        elif source_type == "x_post":
-            tiers.add("officials" if handle in officials_handles else "public")
-        elif source_type in ("reddit_post", "reddit_comment"):
-            tiers.add("public")
+        tier, _ = resolve_entity(registry, source_type, None, handle)
+        if tier is not None:
+            tiers.add(tier)
         if len(tiers) >= 2:
             return True
     return False

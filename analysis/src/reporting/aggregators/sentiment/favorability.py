@@ -17,6 +17,12 @@ from analysis.src.common.cache import SnapshotCache
 from analysis.src.reporting.models import PublicSentimentResult
 
 
+# Stable display labels for the gopByPlatform ``group`` field. The parse pass
+# collapses reddit_post/reddit_comment to ``reddit``; the remaining keys are
+# raw source_types whose bare ``.capitalize()`` reads awkwardly (``X_post``).
+_PLATFORM_LABELS = {"x_post": "X", "reddit": "Reddit", "news": "News"}
+
+
 def _merge_favorability_data(
     result: PublicSentimentResult,
     fav_rows: List[tuple],
@@ -41,7 +47,7 @@ def _parse_favorability_rows(
     bot_docs: Set[int],
     allowed_sources: Optional[frozenset],
 ) -> tuple:
-    distribution = {"favorable": 0, "unfavorable": 0, "neutral": 0, "mixed": 0}
+    distribution = {"favorable": 0, "unfavorable": 0, "neutral": 0}
     by_platform: Dict[str, Dict[str, int]] = {}
     daily_net: Dict[str, Dict[str, Any]] = {}
     count = 0
@@ -56,8 +62,14 @@ def _parse_favorability_rows(
         except json.JSONDecodeError:
             continue
 
-        stance = data.get("overall_gop_stance", "neutral")
-        if stance not in distribution:
+        # Normalize case (the LLM/backend can emit an off-enum casing despite
+        # the schema, matching the defensive str().lower() in movers), then
+        # fold ``mixed`` and any out-of-enum value into neutral: the UI's
+        # favorability surface is a three-bucket shape and ``mixed`` is
+        # non-directional — it belongs in the denominator with zero net, exactly
+        # how the movers favorability path treats it.
+        stance = str(data.get("overall_gop_stance", "neutral")).lower()
+        if stance not in ("favorable", "unfavorable"):
             stance = "neutral"
         distribution[stance] += 1
 
@@ -65,8 +77,7 @@ def _parse_favorability_rows(
         if platform in ("reddit_post", "reddit_comment"):
             platform = "reddit"
         by_platform.setdefault(platform, {"favorable": 0, "unfavorable": 0, "neutral": 0})
-        if stance in by_platform[platform]:
-            by_platform[platform][stance] += 1
+        by_platform[platform][stance] += 1
 
         if pub_at:
             _track_daily_favorability(daily_net, pub_at, stance)
@@ -121,7 +132,7 @@ def _format_favorability_result(
 
     result.gopByPlatform = [
         {
-            "group": platform.capitalize(),
+            "group": _PLATFORM_LABELS.get(platform, platform.capitalize()),
             "favorable": stats["favorable"],
             "unfavorable": stats["unfavorable"],
             "neutral": stats["neutral"],

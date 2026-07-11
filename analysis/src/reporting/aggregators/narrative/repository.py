@@ -35,7 +35,7 @@ TOP_SUPPORTING_DOCS_LIMIT = 6
 
 # Cap on cross-narrative citation edges surfaced per narrative (both directions
 # combined). Applied per direction in SQL, then again after the two directions
-# are merged in the projector — matching the pre-batch behaviour.
+# are merged (in get_citation_details below) — matching the pre-batch behaviour.
 _MAX_CROSS_NARRATIVE_EDGES = 5
 
 
@@ -371,8 +371,8 @@ class NarrativeRepository:
         }
 
         # Cross-narrative edges, both directions. Insertion order per narrative
-        # is cites-first then cited_by, each descending by edge_count — the
-        # projector merges + re-caps to _MAX_CROSS_NARRATIVE_EDGES.
+        # is cites-first then cited_by, each descending by edge_count; the two
+        # directions are merged + re-capped to _MAX_CROSS_NARRATIVE_EDGES below.
         cross: Dict[int, List[Dict[str, Any]]] = {}
         for direction, src_col, dst_col in (
             ("cites", "source_doc_id", "target_doc_id"),

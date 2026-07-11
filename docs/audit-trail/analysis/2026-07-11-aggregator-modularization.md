@@ -46,7 +46,12 @@ unit/regression tests.
   ...)` windows for the per-narrative top-N caps; the projector assembles
   `NarrativeSummary` purely from those fact maps. Query count is now constant in
   the number of narratives (was `~1 + 13N`). Guarded by
-  `tests/test_narrative_batching.py`.
+  `tests/test_narrative_batching.py`. `is_cross_tier` now delegates tier
+  assignment to the canonical `resolve_entity` (was a hand-rolled
+  `LOWER(username) IN officials_handles` check) so narrative tiering cannot
+  drift from the sentiment/bot dashboards — byte-identical, since `officials`
+  keys already include alias handles and `resolve_entity` canonicalizes the
+  lowercased handle identically.
 - **`sentiment/` package** (`aggregator.py` / `samples.py` / `favorability.py` /
   `target_tone.py` / `entities.py`): the ~1810-line file split into a thin
   orchestrator plus cohesive modules for sample building, GOP favorability,
@@ -87,12 +92,31 @@ unit/regression tests.
   unchanged, so `job_runner.save_snapshots()` and `api/routers/data.py` needed
   no changes.
 
+## Review fixes (GOP favorability)
+
+Post-refactor review surfaced pre-existing bugs in the favorability path
+(`sentiment/favorability.py`), now fixed — these DO change the favorability
+JSON, unlike the rest of this pass:
+
+- `overall_gop_stance` is normalized with `str(...).lower()` (the four-value
+  enum can arrive off-enum-cased; movers already did this) and `mixed` is folded
+  into `neutral`. Previously a `mixed` row landed in `total` but in no exported
+  bucket and was dropped from `by_platform` entirely, so `favorable + unfavorable
+  + neutral` under-summed 100 and per-platform counts silently lost mixed rows.
+  `mixed` is now non-directional-but-counted (in the denominator, zero net),
+  matching the movers favorability treatment; `netFavorability` is unchanged.
+- `gopByPlatform.group` uses a stable label map (`x_post -> X`, `reddit ->
+  Reddit`, `news -> News`) instead of `platform.capitalize()`, which produced
+  `X_post`.
+- Covered by `tests/test_favorability_stance.py`.
+
+Also fixed two stale comments in `narrative/repository.py` that claimed the
+projector merges/re-caps cross-narrative edges (it is `get_citation_details`
+that does), and converted a bare `assert` in `test_narrative_batching.py` to an
+explicit `raise` (survives `python -O`).
+
 ## Follow-ups
 
-- `narrative._is_cross_tier` still classifies an x_post as officials via a
-  raw `LOWER(username) IN officials_handles` check rather than the shared
-  `route_reporting_entity`; kept behavior-identical here, but reconciling it
-  with the canonical router (so tiering cannot drift) is a small follow-up.
 - The plain news/X/subreddit catch-all display copy is intentionally duplicated
   across aggregators (singular vs plural wording). Unifying that copy is a
   deliberate behavior change (it alters `entityProfile.blurb` bytes) and was
