@@ -212,7 +212,7 @@ function IntensityMini({
             <div className="mini-metric">
                 <span className="mini-metric-label">{label}</span>
                 <span className="mini-metric-value mini-metric-value-muted">—</span>
-                <span className="mini-metric-visual">
+                <span className="mini-metric-visual is-intensity">
                     <span
                         className="mini-metric-bar mini-intensity mini-metric-bar-empty"
                         aria-label="No tone distribution in this filter"
@@ -257,7 +257,7 @@ function IntensityMini({
             <span className="mini-metric-value">
                 most {biggest.name}
             </span>
-            <span className="mini-metric-visual">
+            <span className="mini-metric-visual is-intensity">
                 <span
                     className="mini-metric-bar mini-intensity"
                     aria-label={barTitle}

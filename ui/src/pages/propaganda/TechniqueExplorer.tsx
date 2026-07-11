@@ -117,24 +117,20 @@ export function TechniqueExplorer({ techniques, examples }: TechniqueExplorerPro
                                 aria-selected={active}
                                 className={`technique-explorer-row${active ? ' technique-explorer-row-active' : ''}`}
                                 onClick={() => select(name)}
+                                title={TECHNIQUE_BLURB[name] || undefined}
                             >
-                                <span className="technique-explorer-row-head">
-                                    <span className="technique-explorer-row-name">{label}</span>
-                                    <span className="technique-explorer-row-count">
-                                        {t.count.toLocaleString()}
-                                        <span className="technique-explorer-row-pct">
-                                            {formatPct(t.pct_of_flagged_docs, { decimals: 0 })} of flagged
-                                        </span>
-                                    </span>
-                                </span>
+                                <span className="technique-explorer-row-name">{label}</span>
                                 <span className="technique-explorer-row-bar" aria-hidden>
                                     <span
                                         className="technique-explorer-row-fill"
                                         style={{ width: `${widthPct}%` }}
                                     />
                                 </span>
-                                <span className="technique-explorer-row-blurb">
-                                    {TECHNIQUE_BLURB[name] || ''}
+                                <span className="technique-explorer-row-count">
+                                    {t.count.toLocaleString()}
+                                </span>
+                                <span className="technique-explorer-row-pct">
+                                    {formatPct(t.pct_of_flagged_docs, { decimals: 0 })}
                                 </span>
                             </button>
                         );

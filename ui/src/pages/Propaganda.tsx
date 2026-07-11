@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
-    Card, CollapsibleInfo, DefinitionChip, EmptyState, EntityHeader,
+    CollapsibleInfo, DefinitionChip, EmptyState, EntityHeader,
     EntityHubLinks, ErrorState, GlobalTicker, LoadingCard, MethodPopover,
     Modal, PostCardList,
     RankedEntityList, ThreeWayColumn, ThreeWayGrid,
@@ -20,7 +20,7 @@ import { dedupeById } from '../services/dedupe';
 import { COLORS } from '../theme';
 import type {
     Filters, PropagandaEntityItem, PropagandaExample,
-    PropagandaOverview, PropagandaSourceSplit,
+    PropagandaOverview,
     PropagandaTechniqueName,
 } from '../types';
 
@@ -366,53 +366,6 @@ function ThreeWayEntityGrid({
 
 
 // --------------------------------------------------------------------------- //
-//  News vs Social split                                                       //
-// --------------------------------------------------------------------------- //
-
-const SPLIT_DOT_COLOR: Record<string, string> = {
-    'News':         'var(--neutral-600)',
-    'Social Media': COLORS.warning,
-};
-
-function NewsVsSocialCard({ splits }: { splits: PropagandaSourceSplit[] }) {
-    return (
-        <Card
-            title="News vs. social media"
-            subtitle="Flagged rate and mean score for news outlets vs. social posts"
-        >
-            <div className="source-split-rows">
-                {splits.map((s) => (
-                    <div key={s.label} className="source-split-row">
-                        <span className="source-split-row-label">
-                            <span
-                                className="source-split-dot"
-                                style={{ background: SPLIT_DOT_COLOR[s.label] ?? 'var(--neutral-500)' }}
-                                aria-hidden
-                            />
-                            {s.label}
-                        </span>
-                        <span className="source-split-row-total">
-                            {s.total_docs.toLocaleString()} posts
-                        </span>
-                        <span className="source-split-row-rate">
-                            {formatPct(s.flagged_rate_pct)}
-                            <span className="source-split-row-sub">flagged</span>
-                        </span>
-                        <span className="source-split-row-score" title={MEAN_SCORE_TITLE}>
-                            {saturationLevel(s.mean_score)}
-                            <span className="source-split-row-sub">
-                                saturation · {s.mean_score.toFixed(2)} / 1
-                            </span>
-                        </span>
-                    </div>
-                ))}
-            </div>
-        </Card>
-    );
-}
-
-
-// --------------------------------------------------------------------------- //
 //  How this works                                                             //
 // --------------------------------------------------------------------------- //
 
@@ -554,13 +507,10 @@ function Propaganda({ filters }: PropagandaProps) {
                     />
                 </div>
 
-                {/* News-vs-social is a 2-row mini table — pair it with the
-                    How-this-works panel instead of two stacked full-bleed rows. */}
-                <div className="col-span-5">
-                    <NewsVsSocialCard splits={data.by_source} />
-                </div>
-
-                <div className="col-span-7">
+                {/* News-vs-social removed (its numbers already appear in the
+                    top-metrics "News vs social" tier row + the reads-as-today
+                    line); How-this-works spans full width so nothing is stranded. */}
+                <div className="col-span-12">
                     <HowThisWorks />
                 </div>
             </div>

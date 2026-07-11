@@ -726,17 +726,15 @@ function BotActivityProfiler({ filters }: BotActivityProfilerProps) {
                 />
             )}
 
-            {/* Row: coordination summary (5) + narrative amplification section label (7).
-                Coord is a compact 4-stat card; the amplification section headline pairs
-                with it so the narrative-detail cards below get a clean section start. */}
-            <div className="col-span-5">
+            {/* Coordination summary spans the full width — its internal stat
+                grid fills the row, so it no longer pairs a tall card with a
+                short section-label band (which stranded empty space beside it). */}
+            <div className="col-span-12">
                 <CoordinationSummary data={data.coordinationStats} />
             </div>
-            {/* Section-label band. Kept styling light on purpose so it
-                reads as a header, not a card — on mobile this would
-                otherwise stack as a bordered panel between two real
-                Cards and look like an orphan. */}
-            <div className="col-span-7 bot-section-label">
+
+            {/* Full-width section header above the amplification cards. */}
+            <div className="col-span-12 bot-section-label">
                 <div className="eyebrow" style={{ marginBottom: 'var(--space-1)' }}>
                     Narratives with Suspected Bot Amplification
                 </div>
@@ -746,10 +744,11 @@ function BotActivityProfiler({ filters }: BotActivityProfilerProps) {
                 </div>
             </div>
 
-            {/* Narrative amplification cards — each full-width so their
-                expanded state has room for the example post grid. */}
+            {/* Narrative amplification cards tile 2-up — the in-grid card holds
+                only title/badge/bullets/buttons (all wrap); the heavy example
+                grid lives in a modal, so the narrower width is safe. */}
             {data.narrativeAmplification.map((narrative) => (
-                <div key={narrative.id} className="col-span-12">
+                <div key={narrative.id} className="col-span-6">
                     <NarrativeAmplificationCard narrative={narrative} />
                 </div>
             ))}
