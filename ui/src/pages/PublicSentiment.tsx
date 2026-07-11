@@ -2,11 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
     CollapsibleInfo, EmptyState, EntityHeader, EntityHubLinks, EntityProfileCard,
     ErrorState, GlobalTicker, LoadingCard, MethodPopover, Modal, PostCardList,
-    ThreeWayColumn, ThreeWayGrid, TierRow, TopMetricsBlock,
-    entityExternalUrl, entityLeanAccent,
+    ThreeWayColumn, ThreeWayGrid, ThreeWayToolbar, TierRow, TopMetricsBlock,
+    entityExternalUrl, matchesLeanFilter,
     officialToneStats, parseEntityParam, sampleToPostCard, sentimentStats,
 } from '../components/common';
-import type { ColumnSorter, TickerItem } from '../components/common';
+import type { ColumnSorter, LeanFilter, TickerItem } from '../components/common';
 import type {
     ChartDataPoint, ClassificationSample, EntitySentimentItem, Filters,
     PollingSocialComparison, PublicSentimentData, SentimentBreakdown,
@@ -212,7 +212,7 @@ function IntensityMini({
             <div className="mini-metric">
                 <span className="mini-metric-label">{label}</span>
                 <span className="mini-metric-value mini-metric-value-muted">—</span>
-                <span className="mini-metric-visual">
+                <span className="mini-metric-visual is-intensity">
                     <span
                         className="mini-metric-bar mini-intensity mini-metric-bar-empty"
                         aria-label="No tone distribution in this filter"
@@ -257,7 +257,7 @@ function IntensityMini({
             <span className="mini-metric-value">
                 most {biggest.name}
             </span>
-            <span className="mini-metric-visual">
+            <span className="mini-metric-visual is-intensity">
                 <span
                     className="mini-metric-bar mini-intensity"
                     aria-label={barTitle}
@@ -350,9 +350,37 @@ const SENTIMENT_SORTERS: ColumnSorter<EntitySentimentItem>[] = [
     { label: 'name', compare: (a, b) => a.entityProfile.displayName.localeCompare(b.entityProfile.displayName) },
 ];
 
+// Officials lead with engagement-weighted volume so the highest-reach voices
+// surface first; the remaining orders match the other columns. engagementTotal
+// is absent on pre-engagement cached snapshots (treated as 0), in which case
+// the toggle is a no-op over the backend's volume order until the next rebuild.
+const OFFICIAL_SORTERS: ColumnSorter<EntitySentimentItem>[] = [
+    { label: 'engagement', compare: (a, b) => (b.engagementTotal ?? 0) - (a.engagementTotal ?? 0) },
+    ...SENTIMENT_SORTERS,
+];
+
+/** Top targets of the highest-volume public bucket ("who the public is
+ *  talking about") — used to fill the public column, which otherwise often
+ *  shows a single pooled "Other X users" card. */
+function publicOutboundTargets(items: EntitySentimentItem[]): EntitySentimentItem['outbound'] | null {
+    const withTargets = items.filter((it) => it.outbound && it.outbound.targets.length > 0);
+    if (withTargets.length === 0) return null;
+    return withTargets.reduce((a, b) => ((b.outbound!.volume) > (a.outbound!.volume) ? b : a)).outbound ?? null;
+}
+
 function SentimentThreeWayGrid({
     newsOutlets, officials, generalPublic, onOpen, activeTopic,
 }: ThreeWayGridProps) {
+    // Lean/party filter (owned here; ThreeWayColumn receives filtered items).
+    const [leanFilter, setLeanFilter] = useState<LeanFilter>('all');
+
+    const byLean = (it: EntitySentimentItem) => matchesLeanFilter(it.entityProfile, leanFilter);
+    const filteredNews = newsOutlets.filter(byLean);
+    const filteredOfficials = officials.filter(byLean);
+    const filteredPublic = generalPublic.filter(byLean);
+    // Targets are computed from the unfiltered public tier — they describe who
+    // the public talks ABOUT, independent of the entities' own lean.
+    const publicTargets = publicOutboundTargets(generalPublic);
     // Surface the modal's top received-tone topic on the card itself so
     // the most-read insight doesn't require a click to discover.
     const officialReadsAs = (item: EntitySentimentItem): string | undefined => {
@@ -393,32 +421,60 @@ function SentimentThreeWayGrid({
         ? ''
         : ` · scores cover all topics; click a card to see its ${activeTopic.label} posts`;
 
+    const publicTargetsFooter = publicTargets && publicTargets.targets.length > 0 ? (
+        <div className="three-way-column-targets">
+            <div className="eyebrow three-way-column-targets-title">
+                Who the public is talking about
+            </div>
+            <ToneBarRows
+                rows={publicTargets.targets.slice(0, 8).map((cell, i) => ({
+                    key: cell.entityKey ?? `${cell.kind}-${i}`,
+                    label: cell.label,
+                    net: cell.net,
+                    volume: cell.volume,
+                }))}
+            />
+            <p className="text-xs text-muted" style={{ margin: 'var(--space-1) 0 0' }}>
+                Targets extracted per post from this tier's sampled posts. Net tone
+                is toward each target; one-off mentions pool into "Other targets".
+            </p>
+        </div>
+    ) : null;
+
     return (
-        <ThreeWayGrid>
-            <ThreeWayColumn
-                header="The News"
-                byline={`Top outlets by coverage volume, with their editorial lean${topicSuffix}`}
-                empty="No news articles in this window."
-                items={newsOutlets}
-                renderItem={renderCard}
-                sorters={SENTIMENT_SORTERS}
-            />
-            <ThreeWayColumn
-                header="Politicians & Officials"
-                byline={`Tracked officeholders posting on X${topicSuffix}`}
-                empty="No officials have posted in this window yet."
-                items={officials}
-                renderItem={renderCard}
-                sorters={SENTIMENT_SORTERS}
-            />
-            <ThreeWayColumn
-                header="The Public"
-                byline={`Political subreddits, curated political accounts, and the most active X voices in our sample${topicSuffix}`}
-                empty="No social posts in this window."
-                items={generalPublic}
-                renderItem={renderCard}
-                sorters={SENTIMENT_SORTERS}
-            />
+        <ThreeWayGrid
+            toolbar={
+                <ThreeWayToolbar
+                    leanFilter={leanFilter}
+                    onLeanFilterChange={setLeanFilter}
+                />
+            }
+        >
+                <ThreeWayColumn
+                    header="The News"
+                    byline={`Top outlets by coverage volume, with their editorial lean${topicSuffix}`}
+                    empty="No news articles match this filter in this window."
+                    items={filteredNews}
+                    renderItem={renderCard}
+                    sorters={SENTIMENT_SORTERS}
+                />
+                <ThreeWayColumn
+                    header="Politicians & Officials"
+                    byline={`Tracked officeholders posting on X${topicSuffix}`}
+                    empty="No officials match this filter in this window."
+                    items={filteredOfficials}
+                    renderItem={renderCard}
+                    sorters={OFFICIAL_SORTERS}
+                />
+                <ThreeWayColumn
+                    header="The Public"
+                    byline={`Political subreddits, curated political accounts, and the most active X voices in our sample${topicSuffix}`}
+                    empty="No social posts match this filter in this window."
+                    items={filteredPublic}
+                    renderItem={renderCard}
+                    sorters={SENTIMENT_SORTERS}
+                    footer={publicTargetsFooter}
+                />
         </ThreeWayGrid>
     );
 }
@@ -546,7 +602,6 @@ function EntitySentimentModal({
             onClose={onClose}
             title={profile.displayName}
             subtitle={buildEntitySubtitle(profile)}
-            accentColor={entityLeanAccent(profile)}
         >
             {samplesAreFiltered && (
                 <TopicScopeStrip
@@ -893,7 +948,7 @@ function PollingComparison({ data }: { data: PollingSocialComparison }) {
 // that order with a light-to-dark ramp (darker = fresher).
 const FRESHNESS_SHADE: Record<string, string> = {
     '24 hours': 'var(--chart-accent)',
-    '7 days': 'var(--chart-accent-soft)',
+    '7 days': 'var(--accent-muted)',
     '30 days': 'var(--neutral-300)',
     '90+ days': 'var(--neutral-200)',
     'Unknown': 'var(--neutral-150)',
@@ -1272,6 +1327,12 @@ function PublicSentiment({ filters }: PublicSentimentProps) {
                     toneTrend={data.toneTrend}
                     gopTrend={data.gopTrend}
                     byDayOfWeek={data.byDayOfWeek}
+                    entitiesByTier={{
+                        news: data.byNewsOutlet ?? [],
+                        officials: data.byOfficial ?? [],
+                        public: data.byGeneralPublic ?? [],
+                    }}
+                    onOpenEntity={setActiveEntity}
                 />
             </div>
             <div className="col-span-6">

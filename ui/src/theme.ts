@@ -30,7 +30,6 @@ export const COLORS = {
     negative:      'var(--semantic-negative)',
     negativeLight: 'var(--semantic-negative-light)',
     warning:       'var(--semantic-warning)',
-    warningLight:  'var(--semantic-warning-light)',
     neutral:       'var(--semantic-neutral)',
     neutralLight:  'var(--semantic-neutral-light)',
 
@@ -40,69 +39,16 @@ export const COLORS = {
     tierOfficials: 'var(--tier-officials)',
     tierPublic:    'var(--tier-public)',
 
-    // Partisan lean — distinct from the sentiment palette on purpose.
+    // Partisan lean — the colored lean chips (a data legend).
     leanLeft:       'var(--lean-left)',
-    leanLeftLight:  'var(--lean-left-light)',
     leanRight:      'var(--lean-right)',
-    leanRightLight: 'var(--lean-right-light)',
 
-    // Accent
+    // Interactive-chrome accent (monochrome — resolves to a dark neutral).
     accent:       'var(--accent)',
-    accentHover:  'var(--accent-hover)',
-    accentMuted:  'var(--accent-muted)',
-    accentLight:  'var(--accent-light)',
 
-    // Surfaces
-    bgApp:   'var(--bg-app)',
-    bgCard:  'var(--bg-card)',
-    bgPanel: 'var(--bg-panel)',
-    bgInset: 'var(--bg-inset)',
-
-    // Chart ramp
-    chartPositive:       'var(--chart-positive)',
-    chartPositiveStrong: 'var(--chart-positive-strong)',
-    chartPositiveSoft:   'var(--chart-positive-soft)',
-    chartNegative:       'var(--chart-negative)',
-    chartNegativeStrong: 'var(--chart-negative-strong)',
-    chartNegativeSoft:   'var(--chart-negative-soft)',
-    chartNeutral:        'var(--chart-neutral)',
-    chartNeutralSoft:    'var(--chart-neutral-soft)',
+    // Chart ramp. Only chartAccent is consumed in JS; --chart-grid is used
+    // directly via var() in the chart components.
     chartAccent:         'var(--chart-accent)',
-    chartAccentSoft:     'var(--chart-accent-soft)',
-    gradPositive:        'var(--chart-gradient-positive)',
-    gradNegative:        'var(--chart-gradient-negative)',
-    gradNeutral:         'var(--chart-gradient-neutral)',
-    gradAccent:          'var(--chart-gradient-accent)',
-    chartGrid:           'var(--chart-grid)',
-
-    // Tone-intensity palette (5-way distribution)
-    toneStrongNeg: 'var(--tone-strong-neg)',
-    toneMildNeg:   'var(--tone-mild-neg)',
-    toneNeu:       'var(--tone-neu-solid)',
-    toneNeuText:   'var(--tone-neu-text)',
-    toneMildPos:   'var(--tone-mild-pos)',
-    toneStrongPos: 'var(--tone-strong-pos)',
-    toneGradStrongNeg: 'var(--tone-grad-strong-neg)',
-    toneGradMildNeg:   'var(--tone-grad-mild-neg)',
-    toneGradNeu:       'var(--tone-grad-neu)',
-    toneGradMildPos:   'var(--tone-grad-mild-pos)',
-    toneGradStrongPos: 'var(--tone-grad-strong-pos)',
-
-    // Political-stance palette
-    stanceSupportive:      'var(--stance-supportive-solid)',
-    stanceOpposed:         'var(--stance-opposed-solid)',
-    stanceNeutral:         'var(--stance-neutral-solid)',
-    stanceGradSupportive:  'var(--stance-grad-supportive)',
-    stanceGradOpposed:     'var(--stance-grad-opposed)',
-    stanceGradNeutral:     'var(--stance-grad-neutral)',
-
-    // Favorability badge trio
-    favSolid:   'var(--sent-favorable-solid)',
-    favBg:      'var(--sent-favorable-bg)',
-    favText:    'var(--sent-favorable-text)',
-    unfavSolid: 'var(--sent-unfavorable-solid)',
-    unfavBg:    'var(--sent-unfavorable-bg)',
-    unfavText:  'var(--sent-unfavorable-text)',
 
     // Source-type
     sourceNews:   'var(--source-news)',

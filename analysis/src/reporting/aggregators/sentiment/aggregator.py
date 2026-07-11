@@ -301,6 +301,7 @@ class SentimentAggregator:
                     "party": r.ap_party, "office_title": r.ap_office_title,
                     "account_type": r.ap_account_type,
                 }
+            day = _day_key(r.published_at)
             tier = _route_and_record(
                 accum, registry, r.source_type, r.domain_or_subreddit, r.x_handle,
                 r.doc_id, label, conf, data, r.title, r.published_at, r.ident, r.text,
@@ -309,10 +310,10 @@ class SentimentAggregator:
                 topic=topic,
                 engagement=engagement,
                 author=author,
+                day=day,
             )
             if tier is not None:
                 _increment_bucket(accum["by_topic_tier"], f"{topic}\x00{tier}", label_key)
-                day = _day_key(r.published_at)
                 if day is not None:
                     _increment_bucket(accum["by_day_tier"], f"{day}\x00{tier}", label_key)
 
@@ -631,6 +632,18 @@ def _format_entity_items(bucket: Dict[str, Dict[str, Any]]) -> List[EntitySentim
             ),
             key=lambda cell: -cell["volume"],
         )
+        # Per-entity daily net-tone series (trailing window), suppressed below
+        # the sample floor per day so a 1-post day never draws a spike. Powers
+        # the Tone-over-time chart's tier→entity drill-down.
+        daily_tone = [
+            {
+                "date": d,
+                "net": _net_or_none(counts),
+                "volume": sum(counts.values()),
+                "lowSample": sum(counts.values()) < MIN_TARGET_SAMPLE_N,
+            }
+            for d, counts in sorted(stats.get("by_day", {}).items())[-_TONE_TREND_MAX_DAYS:]
+        ]
         items.append(EntitySentimentItem(
             key=key,
             kind=stats["kind"],
@@ -642,6 +655,8 @@ def _format_entity_items(bucket: Dict[str, Dict[str, Any]]) -> List[EntitySentim
             entity_profile=stats["profile"],
             classification_samples=[_sample_dict_to_model(s) for s in stats["samples"]],
             expressed_by_topic=by_topic,
+            engagement_total=stats.get("engagement_total", 0),
+            daily_tone=daily_tone,
         ))
     items.sort(key=lambda it: (it.kind == "catch_all", -it.volume))
     return items

@@ -32,12 +32,6 @@ interface GlobalTickerProps {
      * the page has no single timestamp to show.
      */
     refreshed?: string;
-    /**
-     * Optional left-border accent color (CSS var reference or hex). Draws a
-     * 3px color band on the left edge of the strip — used on Overall Tone
-     * to signal the window's net direction.
-     */
-    accentColor?: string;
     /** Accessible label for the whole strip. */
     ariaLabel?: string;
     /**
@@ -53,7 +47,7 @@ function toneColor(tone: TickerTone | undefined): string | undefined {
     switch (tone) {
         case 'positive': return COLORS.positive;
         case 'negative': return COLORS.negative;
-        case 'accent':   return COLORS.accent;
+        case 'accent':   return COLORS.chartAccent;
         case 'warning':  return COLORS.warning;
         case 'neutral':
         default:
@@ -69,20 +63,12 @@ function toneColor(tone: TickerTone | undefined): string | undefined {
  * of labeled values; the ticker handles layout, dividers, and typographic
  * treatment. Keep each label terse — this is a glance, not a table.
  */
-export function GlobalTicker({ items, refreshed, accentColor, ariaLabel, legend }: GlobalTickerProps) {
-    const style: CSSProperties = accentColor
-        ? { borderLeftColor: accentColor }
-        : {};
-    const className = accentColor
-        ? 'global-ticker global-ticker-accent'
-        : 'global-ticker';
-
+export function GlobalTicker({ items, refreshed, ariaLabel, legend }: GlobalTickerProps) {
     return (
         <div
-            className={className}
+            className="global-ticker"
             role="group"
             aria-label={ariaLabel ?? 'Overview ticker'}
-            style={style}
         >
             {items.map((item, i) => {
                 const color = toneColor(item.tone);

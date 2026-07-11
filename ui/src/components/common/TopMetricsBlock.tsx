@@ -18,6 +18,10 @@ interface TopMetricsBlockProps {
     children: ReactNode;
     /** Optional mini-metric tiles rendered below the rows. */
     aux?: ReactNode;
+    /** Extra class on the rows container to opt into a stacked layout variant
+     *  (e.g. "propaganda-tier-rows" — full-width bar, value right, verb wrapped
+     *  below, roomy spacing). */
+    rowsClassName?: string;
 }
 
 export function TopMetricsBlock({
@@ -25,6 +29,7 @@ export function TopMetricsBlock({
     meta,
     children,
     aux,
+    rowsClassName,
 }: TopMetricsBlockProps) {
     return (
         <div className="top-metrics">
@@ -33,7 +38,9 @@ export function TopMetricsBlock({
                 {meta && <span className="top-metrics-meta">{meta}</span>}
             </div>
 
-            <div className="top-metrics-rows">{children}</div>
+            <div className={rowsClassName ? `top-metrics-rows ${rowsClassName}` : 'top-metrics-rows'}>
+                {children}
+            </div>
 
             {aux && <div className="top-metrics-aux">{aux}</div>}
         </div>

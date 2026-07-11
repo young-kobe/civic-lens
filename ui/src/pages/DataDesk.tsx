@@ -331,8 +331,8 @@ function SmallMultiples({
                     </div>
                 )}
                 {topStories.map((n) => (
-                    <div key={n.narrative_id} className="desk-multiple">
-                        <div className="desk-multiple-label" title={n.name}>{n.name}</div>
+                    <div key={n.narrative_id} className="desk-multiple" title={n.name}>
+                        <div className="desk-multiple-label">{n.name}</div>
                         <Sparkline
                             data={n.timeline.map((t) => ({ date: t.date, value: t.count }))}
                             height={48}
@@ -350,81 +350,79 @@ function SmallMultiples({
 //  Pipeline health — the audit ethos as a visible dashboard.                  //
 // --------------------------------------------------------------------------- //
 
-function PipelineHealth({
-    status, evalAccuracy,
-}: {
-    status: SnapshotStatus | null;
-    evalAccuracy: EvalAccuracy | null;
-}) {
+/* Split out of the old PipelineHealth grid-2 so each table can take its own
+   dashboard-grid slot (walkthrough: 2026-07-11 data-desk reflow). Snapshot
+   freshness is the ~21-row tall one, so its body scrolls internally rather
+   than towering over its row-mate. */
+function SnapshotFreshnessCard({ status }: { status: SnapshotStatus | null }) {
     const snapshots = status?.snapshots ?? [];
-    const tasks = evalAccuracy?.perTask ?? [];
-    if (snapshots.length === 0 && tasks.length === 0) return null;
-
+    if (snapshots.length === 0) return null;
     return (
-        <div className="grid-2">
-            {snapshots.length > 0 && (
-                <Card
-                    title="Snapshot freshness"
-                    subtitle="When each cached aggregation was last rebuilt, and over how many documents."
-                >
-                    <div className="desk-table-wrap">
-                        <table className="table">
-                            <thead>
-                                <tr>
-                                    <th>Snapshot</th>
-                                    <th className="num">Refreshed</th>
-                                    <th className="num">Docs</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {snapshots.map((s) => (
-                                    <tr key={s.key}>
-                                        <td style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)' }}>
-                                            {s.key}
-                                        </td>
-                                        <td className="num">{formatRefreshedAgo(s.generated_at)}</td>
-                                        <td className="num">{formatCount(s.doc_count)}</td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                </Card>
-            )}
-            {tasks.length > 0 && (
-                <Card
-                    title="Human review agreement"
-                    subtitle="How often human reviewers marked each classifier's outputs correct. Reviews cover a sample of outputs; accuracy is withheld below the minimum review count."
-                >
-                    <div className="desk-table-wrap">
-                        <table className="table">
-                            <thead>
-                                <tr>
-                                    <th>Classifier</th>
-                                    <th className="num">Reviewed</th>
-                                    <th className="num">Agreement</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {tasks.map((t) => (
-                                    <tr key={t.taskType}>
-                                        <td style={{ textTransform: 'capitalize' }}>
-                                            {t.taskType.replace(/_/g, ' ')}
-                                        </td>
-                                        <td className="num">{formatCount(t.scored)}</td>
-                                        <td className="num">
-                                            {t.accuracyPct != null && !t.lowSample
-                                                ? formatPct(t.accuracyPct, { decimals: 0 })
-                                                : 'low sample'}
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                </Card>
-            )}
-        </div>
+        <Card
+            title="Snapshot freshness"
+            subtitle="When each cached aggregation was last rebuilt, and over how many documents."
+        >
+            <div className="desk-table-wrap desk-table-scroll">
+                <table className="table">
+                    <thead>
+                        <tr>
+                            <th>Snapshot</th>
+                            <th className="num">Refreshed</th>
+                            <th className="num">Docs</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {snapshots.map((s) => (
+                            <tr key={s.key}>
+                                <td style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)' }}>
+                                    {s.key}
+                                </td>
+                                <td className="num">{formatRefreshedAgo(s.generated_at)}</td>
+                                <td className="num">{formatCount(s.doc_count)}</td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        </Card>
+    );
+}
+
+function HumanReviewCard({ evalAccuracy }: { evalAccuracy: EvalAccuracy | null }) {
+    const tasks = evalAccuracy?.perTask ?? [];
+    if (tasks.length === 0) return null;
+    return (
+        <Card
+            title="Human review agreement"
+            subtitle="How often human reviewers marked each classifier's outputs correct. Reviews cover a sample of outputs; accuracy is withheld below the minimum review count."
+        >
+            <div className="desk-table-wrap">
+                <table className="table">
+                    <thead>
+                        <tr>
+                            <th>Classifier</th>
+                            <th className="num">Reviewed</th>
+                            <th className="num">Agreement</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {tasks.map((t) => (
+                            <tr key={t.taskType}>
+                                <td style={{ textTransform: 'capitalize' }}>
+                                    {t.taskType.replace(/_/g, ' ')}
+                                </td>
+                                <td className="num">{formatCount(t.scored)}</td>
+                                <td className="num">
+                                    {t.accuracyPct != null && !t.lowSample
+                                        ? formatPct(t.accuracyPct, { decimals: 0 })
+                                        : 'low sample'}
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        </Card>
     );
 }
 
@@ -492,6 +490,10 @@ function DataDesk({ filters }: DataDeskProps) {
         return <EmptyState title="No signals available for this window yet." />;
     }
 
+    const hasSnapshots = (snapshotStatus?.snapshots?.length ?? 0) > 0;
+    const hasReview = (evalAccuracy?.perTask?.length ?? 0) > 0;
+    const hasLeftColumn = hasSnapshots || hasReview;
+
     return (
         <div className="dashboard-grid">
             {matrix.length > 0 && (
@@ -499,21 +501,22 @@ function DataDesk({ filters }: DataDeskProps) {
                     <CrossSignalMatrix rows={matrix} />
                 </div>
             )}
-            {/* Movers board (a compact table) shares a row with the small
-                multiples grid — two content-sized reads side by side. */}
-            {moversFetch.data && (
+            {/* Two-column module block. Left column stacks the audit tables
+                (snapshot freshness + human review); right column stacks the
+                small multiples with the Movers board directly beneath them —
+                Movers fills the area that was empty below the multiples grid. */}
+            {hasLeftColumn && (
                 <div className="col-span-5">
-                    <MoversBoard movers={moversFetch.data} />
+                    {hasSnapshots && <SnapshotFreshnessCard status={snapshotStatus} />}
+                    {hasReview && <HumanReviewCard evalAccuracy={evalAccuracy} />}
                 </div>
             )}
-            <div className={moversFetch.data ? 'col-span-7' : 'col-span-12'}>
+            <div className={hasLeftColumn ? 'col-span-7' : 'col-span-12'}>
                 <SmallMultiples
                     sentiment={sentimentFetch.data}
                     narratives={narrativesFetch.data}
                 />
-            </div>
-            <div className="col-span-12">
-                <PipelineHealth status={snapshotStatus} evalAccuracy={evalAccuracy} />
+                {moversFetch.data && <MoversBoard movers={moversFetch.data} />}
             </div>
         </div>
     );

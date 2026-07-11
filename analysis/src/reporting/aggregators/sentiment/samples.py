@@ -228,13 +228,22 @@ def _collect_entity_sample(
     topic: Optional[str] = None,
     engagement: Optional[Dict[str, int]] = None,
     author: Optional[Dict[str, Any]] = None,
+    day: Optional[str] = None,
 ) -> None:
     """Bump an entity bucket's counters + append a sample when there's room."""
     label_key = _LABEL_MAP.get(label, "neutral")
     entity_accum[label_key] += 1
     entity_accum["volume"] += 1
+    # Sum engagement across every post (not just the capped samples) so the
+    # officials column can rank by engagement-weighted volume.
+    if engagement:
+        entity_accum["engagement_total"] = (
+            entity_accum.get("engagement_total", 0) + sum(engagement.values())
+        )
     if topic is not None:
         _increment_bucket(entity_accum["by_topic"], topic, label_key)
+    if day is not None:
+        _increment_bucket(entity_accum["by_day"], day, label_key)
     if not data.get("reasoning"):
         return
     sample = _build_sample_dict(
