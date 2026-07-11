@@ -85,7 +85,18 @@ class TestRichAggregators(unittest.TestCase):
 
             CREATE TABLE x_users_raw (
                 user_id TEXT PRIMARY KEY,
-                username TEXT
+                username TEXT,
+                name TEXT,
+                profile_image_url TEXT,
+                verified_type TEXT,
+                followers_count INTEGER DEFAULT 0,
+                created_at INTEGER,
+                description TEXT
+            );
+            CREATE TABLE reddit_posts_raw (
+                fullname TEXT PRIMARY KEY,
+                score INTEGER,
+                num_comments INTEGER
             );
             CREATE TABLE account_profiles (
                 profile_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -250,12 +261,48 @@ class TestRichAggregators(unittest.TestCase):
         self.assertIn('netFavorability', fav)
 
     def test_get_outlet_profiles_rich(self):
-        profiles_dc = self.outlet_agg.get_outlet_profiles()
-        profiles = [p.to_dict() for p in profiles_dc]
-        outlets = {p['outlet']: p for p in profiles}
+        # Business rule: the outlet surface shows the bot rate WITH flagged
+        # content included (the rate is the signal), tone on the same
+        # -100..+100 points scale as everything else, and folds out domains
+        # below the volume floor so a 2-post "outlet" never ranks.
+        # Seed enough per-domain sentiment rows to clear MIN_PROFILE_VOLUME.
+        conn = sqlite3.connect(self.db_path)
+        cur = conn.cursor()
+        seed_sent = json.dumps({"label": "POSITIVE", "confidence": 0.9})
+        next_doc = 100
+        for domain, source_type, ident_prefix in (
+            ("a.com", "news", "http://a.com/pad"),
+            ("x.com", "x_post", "tweet_pad"),
+        ):
+            for i in range(5):
+                cur.execute(
+                    """INSERT INTO docs (doc_id, source_type, ident, domain_or_subreddit,
+                       published_at, fetched_at, title, text, raw_hash, metadata_json)
+                       VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                    (next_doc, source_type, f"{ident_prefix}/{i}", domain,
+                     1700000000, 1700000000, "pad", "pad", f"hash-pad-{next_doc}", "{}"),
+                )
+                cur.execute(
+                    "INSERT INTO ai_outputs (doc_id, task_type, output_json, confidence, label, created_at) VALUES (?,?,?,?,?,?)",
+                    (next_doc, "sentiment", seed_sent, 0.9, "POSITIVE", 1700000000),
+                )
+                next_doc += 1
+        conn.commit()
+        conn.close()
+
+        result = self.outlet_agg.get_outlet_profiles(time_window="all")
+        self.assertEqual(result["window"], "all")
+        self.assertTrue(result["disclaimer"])
+        outlets = {p['outlet']: p for p in result["outlets"]}
         self.assertIn('x.com', outlets)
-        self.assertEqual(outlets['x.com']['bot_rate'], 1.0)
-        self.assertEqual(outlets['a.com']['bot_rate'], 0.0)
+        # x.com: 1 bot-labeled of 1 scanned → 100%. a.com: nothing scanned → 0.
+        self.assertEqual(outlets['x.com']['bot_rate_pct'], 100.0)
+        self.assertEqual(outlets['a.com']['bot_rate_pct'], 0.0)
+        # Net tone on the points scale: a.com = 5 pad POS + 1 POS + 0 NEG of 6.
+        self.assertEqual(outlets['a.com']['net_tone'], 100.0)
+        self.assertEqual(outlets['a.com']['volume'], 6)
+        # b.com has only 1 sentiment row — below the volume floor, folded out.
+        self.assertNotIn('b.com', outlets)
 
 
 if __name__ == '__main__':

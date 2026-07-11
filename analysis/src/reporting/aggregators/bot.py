@@ -36,7 +36,6 @@ from analysis.src.reporting.aggregators.narrative import (
 from analysis.src.reporting.aggregators.sentiment import CATCH_ALL_VERIFIED_OFFICIALS
 from analysis.src.reporting.entity_registry import (
     catch_all_profile,
-    CATCH_ALL_OUTLETS,
     CATCH_ALL_SUBREDDITS,
     CATCH_ALL_X_USERS,
     get_registry,
@@ -117,6 +116,7 @@ class BotAggregator:
             + X_AUTHOR_JOIN_SQL
             + """
             WHERE a.task_type = 'bot_detection'
+              AND d.source_type != 'news'
             """
             + ("" if cutoff is None else " AND d.published_at >= ?"),
             () if cutoff is None else (cutoff,),
@@ -150,6 +150,7 @@ class BotAggregator:
                 bot_docs_data.append({
                     "doc_id": doc_id,
                     "data": data,
+                    "confidence": confidence,
                     "source_type": source_type,
                     "domain": domain,
                     "ident": ident,
@@ -267,11 +268,11 @@ class BotAggregator:
     # ---------- Entity rollups (three-way Bot Detector grid) ----------
 
     def _fetch_entity_rollups(self, cursor, cutoff=None) -> Dict[str, List[BotEntityItem]]:
-        """Per-entity bot-classification rates for the three-way grid.
+        """Per-entity bot-classification rates for the two-way grid.
 
         Runs one joined scan of ai_outputs.task='bot_detection' rows together
-        with x author-handle lookup, then buckets each row into news /
-        officials / public via ``resolve_entity`` — including the ingestor's
+        with x author-handle lookup, then buckets each row into officials /
+        public via ``resolve_entity`` — including the ingestor's
         ``is_official_tier`` provenance flag, so posts pulled via the
         verified-officials timeline land in the officials column even when
         the stored handle doesn't match the editorial registry (audit D-4;
@@ -279,6 +280,11 @@ class BotAggregator:
         entity also collects up to ``_SAMPLES_PER_ENTITY`` of its
         bot-flagged posts, confidence-ranked, so the card can open an
         evidence modal instead of dead-ending at an external link.
+
+        News is excluded by contract (2026-07-11): articles are not
+        accounts, so "automation rate of an outlet's articles" is not a
+        real metric. ``by_news_outlet`` stays in the payload, permanently
+        empty, so stale caches and older UI builds keep parsing.
         """
         cursor.execute(
             """
@@ -291,6 +297,7 @@ class BotAggregator:
             + X_AUTHOR_JOIN_SQL
             + """
             WHERE a.task_type = 'bot_detection'
+              AND d.source_type != 'news'
             """
             + ("" if cutoff is None else " AND d.published_at >= ?"),
             () if cutoff is None else (cutoff,),
@@ -316,11 +323,6 @@ class BotAggregator:
                 continue
             if entity is not None:
                 profile = entity.profile_dict()
-            elif tier == "news":
-                profile = catch_all_profile(
-                    CATCH_ALL_OUTLETS, "Other news outlets",
-                    "News doc whose domain is not in the tracked outlet registry.",
-                )
             elif tier == "officials":
                 # Provenance-flagged officials post with no editorial
                 # registry entity — same bucket sentiment uses.
@@ -350,7 +352,10 @@ class BotAggregator:
                 slot["bot"] += 1
                 slot["flagged"].append((
                     float(confidence or 0.0),
-                    _flagged_example(doc_id, text, source_type, domain, handle, ident),
+                    _flagged_example(
+                        doc_id, text, source_type, domain, handle, ident,
+                        data=data, confidence=confidence,
+                    ),
                 ))
 
         rollups: Dict[str, List[BotEntityItem]] = {
@@ -452,6 +457,10 @@ _EXAMPLE_TEXT_CHARS = 220
 _MAX_HASHTAGS = 5
 _MAX_TARGETS = 5
 _MAX_WHY_FLAGGED = 3
+# Per-example evidence caps (Phase 2d) — indicator chips + reasoning shown
+# on each flagged post card.
+_MAX_INDICATORS_PER_EXAMPLE = 4
+_EXAMPLE_REASONING_CHARS = 240
 
 _HASHTAG_RE = re.compile(r"#(\w{2,})")
 _SLUG_RE = re.compile(r"^[a-z0-9_]+$")
@@ -475,21 +484,46 @@ def _flagged_example(
     domain: Any,
     x_handle: Any,
     ident: Any,
+    data: Optional[Dict[str, Any]] = None,
+    confidence: Optional[float] = None,
 ) -> FlaggedExample | None:
     """Shape one bot-flagged doc into evidence-excerpt form, or None when
     there is no text to excerpt. Permalink via the shared _build_doc_url
     helper — C1 invariant: every evidence surface links back to the
-    original."""
+    original.
+
+    ``data`` (the parsed bot_detection output_json) and ``confidence``
+    carry the per-doc WHY onto the example (Phase 2d): humanized
+    indicators + truncated reasoning + flag confidence. Indicators pass
+    through _humanize_indicator so LLM-echoed snake_case slugs never
+    render raw; noise entries from pre-sanitization rows are still
+    filtered display-side until those age out of the window."""
     excerpt = (text or "").strip()
     if not excerpt:
         return None
     if len(excerpt) > _EXAMPLE_TEXT_CHARS:
         excerpt = excerpt[:_EXAMPLE_TEXT_CHARS].rstrip() + "…"
+
+    indicators: List[str] = []
+    reasoning: Optional[str] = None
+    if data:
+        indicators = [
+            _humanize_indicator(i)
+            for i in data.get("indicators", [])[:_MAX_INDICATORS_PER_EXAMPLE]
+            if isinstance(i, str) and i.strip()
+        ]
+        reasoning = data.get("reasoning") or None
+        if reasoning and len(reasoning) > _EXAMPLE_REASONING_CHARS:
+            reasoning = reasoning[:_EXAMPLE_REASONING_CHARS - 3].rstrip() + "..."
+
     return FlaggedExample(
         doc_id=doc_id,
         text=excerpt,
         source_label=_build_source_label(source_type, domain, x_handle),
         url=_build_doc_url(source_type, domain, ident, x_handle=x_handle),
+        confidence=round(float(confidence), 3) if confidence is not None else None,
+        indicators=indicators,
+        reasoning=reasoning,
     )
 
 
@@ -532,18 +566,22 @@ def _fetch_narrative_amplification(
     )
     groups: Dict[int, Dict[str, Any]] = {}
     for doc_id, narrative_id, name in cursor.fetchall():
-        group = groups.setdefault(narrative_id, {"name": name, "doc_ids": []})
+        group = groups.setdefault(
+            narrative_id,
+            {"narrative_id": narrative_id, "name": name, "doc_ids": []},
+        )
         group["doc_ids"].append(doc_id)
 
     top = sorted(groups.values(), key=lambda g: -len(g["doc_ids"]))[:3]
     out: List[NarrativeAmplification] = []
-    for idx, group in enumerate(top):
+    for group in top:
         rows = [by_doc[d] for d in group["doc_ids"]]
         examples = []
         for row in rows:
             ex = _flagged_example(
                 row["doc_id"], row.get("text"), row.get("source_type"),
                 row.get("domain"), row.get("x_handle"), row.get("ident"),
+                data=row.get("data"), confidence=row.get("confidence"),
             )
             if ex is not None:
                 examples.append(ex)
@@ -559,7 +597,11 @@ def _fetch_narrative_amplification(
                 hashtag_counts[f"#{tag}"] += 1
 
         out.append(NarrativeAmplification(
-            id=idx + 1,
+            # The REAL narrative_id — the UI deep-links
+            # "#narratives?open=<id>" from the amplification card, which
+            # only resolves when this matches the Narratives payload.
+            # (Was a synthetic 1..3 index before 2026-07-10.)
+            id=group["narrative_id"],
             narrative=group["name"] or "",
             confidence="medium" if len(rows) > 5 else "low",
             examplePosts=examples,

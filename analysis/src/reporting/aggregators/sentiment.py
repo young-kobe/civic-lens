@@ -18,13 +18,17 @@ import json
 import math
 import re
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 from analysis.src.common.cache import SnapshotCache
 from analysis.src.common.settings import get_settings
 from analysis.src.reporting.aggregators.base import (
     ACCOUNT_PROFILE_JOIN_SQL,
+    REDDIT_ENGAGEMENT_JOIN_SQL,
+    SAMPLE_ENRICHMENT_SELECT,
     X_AUTHOR_JOIN_SQL,
+    build_sample_author,
+    build_sample_engagement,
     fetch_task_rows,
     get_bot_flagged_doc_ids,
     get_connection,
@@ -38,7 +42,7 @@ from analysis.src.reporting.entity_registry import (
     CATCH_ALL_OUTLETS, CATCH_ALL_SUBREDDITS, CATCH_ALL_X_USERS,
     DEM_COLLECTIVE, GOP_COLLECTIVE,
     account_profile_dict, canonicalize_handle, catch_all_profile,
-    get_registry, resolve_entity,
+    get_registry, resolve_entity, sampled_account_profile,
 )
 from analysis.src.reporting.models import (
     ClassificationSample,
@@ -86,6 +90,24 @@ MIN_TARGET_SAMPLE_N = 5
 # Sentinel key for x_posts routed to the officials tier by the ingestor's
 # is_official_tier provenance flag alone (no editorial registry entity) — D-4.
 CATCH_ALL_VERIFIED_OFFICIALS = "verified-officials-provenance"
+
+# Floors for promoting an unmatched public-tier X author out of the
+# "Other X users" catch-all into their own named card. Both must hold:
+# enough posts in the window to be a real voice in the sample, and enough
+# followers that the card highlights an account with an audience rather
+# than a private citizen. Everything below the floors (and beyond the card
+# cap) stays pooled in the catch-all — counted, never dropped.
+MIN_SAMPLED_AUTHOR_POSTS = 3
+MIN_SAMPLED_AUTHOR_FOLLOWERS = 1000
+MAX_SAMPLED_AUTHOR_CARDS = 12
+
+# Outbound-target rollup on public-tier entities ("who they're talking
+# about"). Named rows are capped; unresolved raw targets need to recur
+# before earning a row — a one-off free-text target is grouped into
+# "Other targets" rather than rendered as if it were an identified entity.
+MAX_OUTBOUND_TARGETS = 8
+MIN_OUTBOUND_RAW_RECURRENCE = 2
+OUTBOUND_OTHER_LABEL = "Other targets"
 
 _DOW_LABELS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 _LABEL_MAP = {
@@ -138,11 +160,15 @@ class SentimentAggregator:
             sentiment_rows = fetch_task_rows(
                 cursor,
                 "SELECT a.doc_id, a.output_json, a.confidence, d.source_type, d.published_at, d.title, d.domain_or_subreddit, d.ident, d.text, u.username, x.is_official_tier, "
-                "ap.tier, ap.full_name, ap.party, ap.office_title, ap.account_type",
+                "ap.tier, ap.full_name, ap.party, ap.office_title, ap.account_type, "
+                f"{SAMPLE_ENRICHMENT_SELECT}",
                 task_type="sentiment",
                 cutoff=cutoff,
                 min_confidence=min_conf,
-                extra_joins=f"{X_AUTHOR_JOIN_SQL} {ACCOUNT_PROFILE_JOIN_SQL}",
+                extra_joins=(
+                    f"{X_AUTHOR_JOIN_SQL} {ACCOUNT_PROFILE_JOIN_SQL} "
+                    f"{REDDIT_ENGAGEMENT_JOIN_SQL}"
+                ),
             )
             favorability_rows = fetch_task_rows(
                 cursor,
@@ -168,7 +194,8 @@ class SentimentAggregator:
                        d.domain_or_subreddit, d.ident, d.text,
                        u.username, x.is_official_tier, x.author_id, ap.tier,
                        COALESCE(x.retweet_count, 0) + COALESCE(x.reply_count, 0)
-                       + COALESCE(x.like_count, 0) + COALESCE(x.quote_count, 0)
+                       + COALESCE(x.like_count, 0) + COALESCE(x.quote_count, 0),
+                       m.raw_target
                 FROM target_mentions m
                 JOIN ai_outputs_latest a ON a.output_id = m.output_id
                 JOIN docs d ON d.doc_id = m.doc_id
@@ -201,6 +228,12 @@ class SentimentAggregator:
             result, target_rows, bot_docs,
             bot_score_authors=bot_score_authors, narrative_map=narrative_map,
         )
+        _merge_outbound_targets(
+            result, target_rows, bot_docs, bot_score_authors=bot_score_authors,
+        )
+        _attach_sample_targets(result, _build_doc_targets(
+            (r[0], r[1], r[4], r[20]) for r in target_rows
+        ))
         return result
 
     def _process_sentiment_data(
@@ -231,6 +264,8 @@ class SentimentAggregator:
             # Three-way entity rollups + per-topic tier split (walkthrough 057).
             "by_news_outlet": {}, "by_official": {}, "by_general_public": {},
             "by_topic_tier": {},
+            # Per-day per-tier stance counts → the toneTrend daily series.
+            "by_day_tier": {},
         }
         now = datetime.now()
 
@@ -238,6 +273,9 @@ class SentimentAggregator:
             doc_id, output_json, confidence, source_type, published_at,
             title, domain_or_subreddit, ident, text, x_handle, is_official_tier,
             ap_tier, ap_full_name, ap_party, ap_office_title, ap_account_type,
+            x_retweets, x_replies, x_likes, x_quotes,
+            u_name, u_avatar, u_verified_type, u_followers, u_created_at,
+            u_bio, reddit_score, reddit_comments,
         ) in rows:
             if doc_id in bot_docs:
                 accum["excluded_bots"] += 1
@@ -248,6 +286,15 @@ class SentimentAggregator:
                 data = json.loads(output_json)
             except json.JSONDecodeError:
                 continue
+
+            engagement = build_sample_engagement(
+                source_type, x_retweets, x_replies, x_likes, x_quotes,
+                reddit_score, reddit_comments,
+            )
+            author = build_sample_author(
+                source_type, x_handle, u_name, u_avatar, u_verified_type,
+                u_followers, u_created_at, bio=u_bio,
+            )
 
             label = data.get("label", "NEUTRAL")
             conf = float(data.get("confidence", confidence or 0.5))
@@ -276,12 +323,12 @@ class SentimentAggregator:
             _collect_topic_sample(
                 accum["topic_samples"], topic, doc_id, label, conf,
                 data, title, source_type, published_at, domain_or_subreddit, ident, text,
-                x_handle,
+                x_handle, engagement=engagement, author=author,
             )
             _collect_strength_sample(
                 accum["strength_samples"], strength_key, doc_id, label, conf,
                 data, title, source_type, published_at, domain_or_subreddit, ident, text,
-                x_handle, topic=topic,
+                x_handle, topic=topic, engagement=engagement, author=author,
             )
 
             account = None
@@ -297,13 +344,19 @@ class SentimentAggregator:
                 is_official_tier=bool(is_official_tier),
                 account=account,
                 topic=topic,
+                engagement=engagement,
+                author=author,
             )
             if tier is not None:
                 _increment_bucket(accum["by_topic_tier"], f"{topic}\x00{tier}", label_key)
+                day = _day_key(published_at)
+                if day is not None:
+                    _increment_bucket(accum["by_day_tier"], f"{day}\x00{tier}", label_key)
 
             accum["count"] += 1
             accum["conf_sum"] += conf
 
+        _consolidate_sampled_authors(accum["by_general_public"])
         return accum
 
     def _build_result(self, accum: Dict[str, Any]) -> PublicSentimentResult:
@@ -348,6 +401,9 @@ class SentimentAggregator:
             "social": {**social, "netScore": round(social_net, 1), "volume": social_total},
             "news": {**news, "netScore": round(news_net, 1), "volume": news_total},
         }
+        tone_trend = _format_tone_trend(accum["by_day_tier"])
+        if tone_trend:
+            result.toneTrend = tone_trend
         return result
 
 
@@ -430,6 +486,8 @@ def _build_sample_dict(
     text: Optional[str],
     x_handle: Optional[str] = None,
     topic: Optional[str] = None,
+    engagement: Optional[Dict[str, int]] = None,
+    author: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Build the dict representation of a classification sample used by
     every collector. Centralizing this avoids the 3-place duplication
@@ -437,7 +495,12 @@ def _build_sample_dict(
 
     ``topic`` is the doc's topic attribution (LLM mention topic with
     keyword fallback — see _fetch_doc_topics) so the UI can filter samples
-    exactly instead of re-guessing with client-side keyword lists."""
+    exactly instead of re-guessing with client-side keyword lists.
+
+    ``engagement`` / ``author`` are the Phase 2b/2c enrichments
+    (base.build_sample_engagement / build_sample_author); None when the
+    source has none stored — the wire shape omits nothing, the UI treats
+    null as "not available"."""
     date_str = (
         datetime.fromtimestamp(published_at).strftime("%b %d, %Y")
         if published_at else None
@@ -476,6 +539,11 @@ def _build_sample_dict(
         "full_text": text or "",
         "url": url,
         "topic": topic,
+        "engagement": engagement,
+        "author": author,
+        # Stamped after aggregation (_attach_sample_targets) or by
+        # entity_posts' per-page fetch; None = no target coverage.
+        "targets": None,
     }
 
 
@@ -496,6 +564,9 @@ def _sample_dict_to_model(s: Dict[str, Any]) -> ClassificationSample:
         full_text=s.get("full_text", ""),
         url=s.get("url"),
         topic=s.get("topic"),
+        engagement=s.get("engagement"),
+        author=s.get("author"),
+        targets=s.get("targets"),
     )
 
 
@@ -522,6 +593,8 @@ def _collect_topic_sample(
     title: Optional[str], source_type: Optional[str], published_at: Optional[float],
     domain_or_subreddit: Optional[str], ident: Optional[str], text: Optional[str],
     x_handle: Optional[str] = None,
+    engagement: Optional[Dict[str, int]] = None,
+    author: Optional[Dict[str, Any]] = None,
 ) -> None:
     if not data.get("reasoning"):
         return
@@ -529,7 +602,7 @@ def _collect_topic_sample(
     sample = _build_sample_dict(
         doc_id, label, confidence, data, title, source_type,
         published_at, domain_or_subreddit, ident, text, x_handle,
-        topic=topic,
+        topic=topic, engagement=engagement, author=author,
     )
     _insert_capped(samples, sample, MAX_SAMPLES_PER_TOPIC)
 
@@ -543,6 +616,8 @@ def _collect_strength_sample(
     domain_or_subreddit: Optional[str], ident: Optional[str], text: Optional[str],
     x_handle: Optional[str] = None,
     topic: Optional[str] = None,
+    engagement: Optional[Dict[str, int]] = None,
+    author: Optional[Dict[str, Any]] = None,
 ) -> None:
     """Append a sample to one of the five STRENGTH_BUCKETS. Silently
     drops rows for unknown buckets so callers can pass the key through
@@ -553,7 +628,7 @@ def _collect_strength_sample(
     sample = _build_sample_dict(
         doc_id, label, confidence, data, title, source_type,
         published_at, domain_or_subreddit, ident, text, x_handle,
-        topic=topic,
+        topic=topic, engagement=engagement, author=author,
     )
     _insert_capped(samples, sample, MAX_DISTRIBUTION_SAMPLES_PER_BUCKET)
 
@@ -566,6 +641,8 @@ def _collect_entity_sample(
     domain_or_subreddit: Optional[str], ident: Optional[str], text: Optional[str],
     x_handle: Optional[str] = None,
     topic: Optional[str] = None,
+    engagement: Optional[Dict[str, int]] = None,
+    author: Optional[Dict[str, Any]] = None,
 ) -> None:
     """Bump an entity bucket's counters + append a sample when there's room."""
     label_key = _LABEL_MAP.get(label, "neutral")
@@ -578,7 +655,7 @@ def _collect_entity_sample(
     sample = _build_sample_dict(
         doc_id, label, confidence, data, title, source_type,
         published_at, domain_or_subreddit, ident, text, x_handle,
-        topic=topic,
+        topic=topic, engagement=engagement, author=author,
     )
     _insert_capped(entity_accum["samples"], sample, MAX_SAMPLES_PER_ENTITY)
 
@@ -604,6 +681,8 @@ def _route_and_record(
     is_official_tier: bool = False,
     account: Optional[Dict[str, Any]] = None,
     topic: Optional[str] = None,
+    engagement: Optional[Dict[str, int]] = None,
+    author: Optional[Dict[str, Any]] = None,
 ) -> Optional[str]:
     """Resolve the row's tier + entity via the shared entity_routing
     module, then bucket the row into the right per-entity accumulator
@@ -687,13 +766,22 @@ def _route_and_record(
                 account.get("account_type"),
             )
             kind = "account"
+        elif source_type == "x_post" and author and x_handle:
+            # Unmatched author with a stored profile: bucket per handle so
+            # active-enough voices become named cards. The consolidation
+            # pass (_consolidate_sampled_authors) folds everyone below the
+            # post/follower floors back into the catch-all.
+            key = canonicalize_handle(x_handle) or x_handle.lower()
+            profile = sampled_account_profile(
+                key,
+                display_name=author.get("display_name"),
+                bio=author.get("bio"),
+                followers_count=author.get("followers_count"),
+            )
+            kind = "account"
         elif source_type == "x_post":
             key = CATCH_ALL_X_USERS
-            profile = catch_all_profile(
-                CATCH_ALL_X_USERS, "Other X users",
-                "X posts whose author is not in the tracked officials registry "
-                "or the curated political-accounts list.",
-            )
+            profile = _other_x_users_profile()
             kind = "catch_all"
         else:
             key = CATCH_ALL_SUBREDDITS
@@ -704,12 +792,76 @@ def _route_and_record(
             kind = "catch_all"
 
     _init_entity_bucket(bucket_dict, key, kind, profile)
+    if kind == "account" and profile.get("accountType") == "sampled":
+        # Mark for the consolidation pass and track the follower floor.
+        bucket_dict[key]["sampled"] = True
+        followers = (author or {}).get("followers_count") or 0
+        bucket_dict[key]["followers"] = max(
+            bucket_dict[key].get("followers", 0), followers,
+        )
     _collect_entity_sample(
         bucket_dict[key], doc_id, label, conf, data,
         title, source_type, published_at, domain_or_subreddit, ident, text, x_handle,
-        topic=topic,
+        topic=topic, engagement=engagement, author=author,
     )
     return tier
+
+
+def _other_x_users_profile() -> Dict[str, Any]:
+    """The public-tier X catch-all profile — shared by the routing branch
+    and the consolidation pass so the blurb can't drift between them."""
+    return catch_all_profile(
+        CATCH_ALL_X_USERS, "Other X users",
+        "X posts whose author is not in the tracked officials registry, the "
+        "curated political-accounts list, or active enough in this window "
+        "for an individual card.",
+    )
+
+
+def _consolidate_sampled_authors(bucket: Dict[str, Dict[str, Any]]) -> None:
+    """Fold sub-floor sampled-author buckets back into the catch-all.
+
+    During the row pass every unmatched public-tier X author gets a
+    per-handle bucket (we can't know their window totals mid-stream).
+    Afterwards, only authors clearing BOTH floors — MIN_SAMPLED_AUTHOR_POSTS
+    and MIN_SAMPLED_AUTHOR_FOLLOWERS — keep a named card, capped at
+    MAX_SAMPLED_AUTHOR_CARDS by volume. Everyone else's counts, per-topic
+    cells, and samples merge into "Other X users": pooled, never dropped.
+    """
+    sampled = [(k, v) for k, v in bucket.items() if v.get("sampled")]
+    if not sampled:
+        return
+    qualifying = sorted(
+        (
+            (k, v) for k, v in sampled
+            if v["volume"] >= MIN_SAMPLED_AUTHOR_POSTS
+            and v.get("followers", 0) >= MIN_SAMPLED_AUTHOR_FOLLOWERS
+        ),
+        key=lambda kv: -kv[1]["volume"],
+    )
+    keep = {k for k, _ in qualifying[:MAX_SAMPLED_AUTHOR_CARDS]}
+    demoted = [(k, v) for k, v in sampled if k not in keep]
+    if not demoted:
+        return
+
+    if CATCH_ALL_X_USERS not in bucket:
+        _init_entity_bucket(
+            bucket, CATCH_ALL_X_USERS, "catch_all", _other_x_users_profile(),
+        )
+    catch = bucket[CATCH_ALL_X_USERS]
+    for key, stats in demoted:
+        for label_key in ("positive", "negative", "neutral"):
+            catch[label_key] += stats[label_key]
+        catch["volume"] += stats["volume"]
+        for topic, counts in stats["by_topic"].items():
+            target = catch["by_topic"].setdefault(
+                topic, {"positive": 0, "negative": 0, "neutral": 0, "mixed": 0},
+            )
+            for label_key, n in counts.items():
+                target[label_key] = target.get(label_key, 0) + n
+        for sample in stats["samples"]:
+            _insert_capped(catch["samples"], sample, MAX_SAMPLES_PER_ENTITY)
+        del bucket[key]
 
 
 def _init_entity_bucket(
@@ -759,6 +911,16 @@ def _day_of_week(published_at: Any) -> Optional[str]:
     if dt is None:
         return None
     return _DOW_LABELS[dt.weekday()]
+
+
+def _day_key(published_at: Any) -> Optional[str]:
+    """Calendar-day bucket key ('YYYY-MM-DD') for the toneTrend series, or
+    None when the timestamp is unparseable. Same local-time convention as
+    the GOP daily trend (_track_daily_favorability)."""
+    dt = _parse_published_at(published_at)
+    if dt is None:
+        return None
+    return dt.strftime("%Y-%m-%d")
 
 
 def _time_bucket(published_at: Any, now: datetime) -> str:
@@ -892,6 +1054,42 @@ def _net_from_tier(counts: Optional[Dict[str, int]]):
         return None, 0
     net = (counts.get("positive", 0) - counts.get("negative", 0)) / total * 100
     return round(net, 1), total
+
+
+_TONE_TREND_TIERS = ("news", "officials", "public")
+_TONE_TREND_MAX_DAYS = 30
+
+
+def _format_tone_trend(
+    by_day_tier: Dict[str, Dict[str, int]],
+) -> List[Dict[str, Any]]:
+    """Materialize the per-day per-tier stance counts into the toneTrend
+    series: dates ascending, one {net, volume} cell per tier per day.
+
+    A tier's net is suppressed (None) below MIN_TARGET_SAMPLE_N — a
+    three-post day must not draw a +100 spike; the UI renders a gap. The
+    volume is always emitted so the honest n stays visible. Capped to the
+    trailing _TONE_TREND_MAX_DAYS to bound payload size, matching gopTrend.
+    """
+    days: Dict[str, Dict[str, Dict[str, int]]] = {}
+    for composite, counts in by_day_tier.items():
+        if "\x00" not in composite:
+            continue
+        day, tier = composite.split("\x00", 1)
+        days.setdefault(day, {})[tier] = counts
+
+    series: List[Dict[str, Any]] = []
+    for day in sorted(days)[-_TONE_TREND_MAX_DAYS:]:
+        row: Dict[str, Any] = {"date": day}
+        for tier in _TONE_TREND_TIERS:
+            counts = days[day].get(tier)
+            volume = sum(counts.values()) if counts else 0
+            row[tier] = {
+                "net": _net_or_none(counts) if counts else None,
+                "volume": volume,
+            }
+        series.append(row)
+    return series
 
 
 def _format_entity_items(bucket: Dict[str, Dict[str, Any]]) -> List[EntitySentimentItem]:
@@ -1359,7 +1557,7 @@ def _merge_target_tone(
         doc_id, key, kind, party, stance, topic, conf, evidence_json,
         output_json, source_type, published_at, title, domain_or_subreddit,
         ident, text, x_handle, is_official_tier, author_id, ap_tier,
-        engagement,
+        engagement, _raw_target,
     ) in target_rows:
         if doc_id in bot_docs:
             continue
@@ -1499,3 +1697,236 @@ def _merge_target_tone(
             "crossPartyVolume": sum(baseline["cross"].values()),
         },
     }
+
+
+_COLLECTIVE_LABELS = {
+    GOP_COLLECTIVE: "Republicans (party)",
+    DEM_COLLECTIVE: "Democrats (party)",
+}
+
+# Chips per sample stay small — the card answers "who is this about",
+# not the full fan-out.
+MAX_TARGETS_PER_SAMPLE = 2
+
+
+def _target_display_label(key: Optional[str], raw_target: Optional[str], registry) -> Optional[str]:
+    """Display label for one target_mentions row: registry name for
+    resolved officials, fixed label for party collectives, the verbatim
+    raw string otherwise (shown as free text, never dressed up as an
+    identified entity)."""
+    if key is not None:
+        if key in _COLLECTIVE_LABELS:
+            return _COLLECTIVE_LABELS[key]
+        official = registry.officials.get(key)
+        if official is not None:
+            return official.profile_dict().get("displayName") or key
+        return key
+    raw = (raw_target or "").strip()
+    return raw or None
+
+
+def _build_doc_targets(
+    mention_rows: Iterable[Tuple[int, Optional[str], str, Optional[str]]],
+) -> Dict[int, List[Dict[str, str]]]:
+    """doc_id → [{label, stance}] chips, resolved targets first, capped at
+    MAX_TARGETS_PER_SAMPLE. Rows are (doc_id, entity_key, stance,
+    raw_target) slices of the frozen target_mentions rows — the same
+    source the tone merges read."""
+    registry = get_registry()
+    resolved: Dict[int, List[Dict[str, str]]] = {}
+    raw: Dict[int, List[Dict[str, str]]] = {}
+    for doc_id, key, stance, raw_target in mention_rows:
+        if stance not in _STANCE_KEYS:
+            continue
+        label = _target_display_label(key, raw_target, registry)
+        if label is None:
+            continue
+        chip = {"label": label, "stance": stance}
+        bucket = resolved if key is not None else raw
+        chips = bucket.setdefault(doc_id, [])
+        if not any(c["label"] == label for c in chips):
+            chips.append(chip)
+    out: Dict[int, List[Dict[str, str]]] = {}
+    for doc_id in resolved.keys() | raw.keys():
+        chips = resolved.get(doc_id, []) + raw.get(doc_id, [])
+        out[doc_id] = chips[:MAX_TARGETS_PER_SAMPLE]
+    return out
+
+
+def _attach_sample_targets(
+    result: PublicSentimentResult,
+    doc_targets: Dict[int, List[Dict[str, str]]],
+) -> None:
+    """Stamp target chips onto every classification-sample surface.
+
+    A display-only post-pass (targets never affect bucketing, unlike
+    doc_topics), so it runs once here instead of threading another
+    parameter through every collector. Received-tone samples are skipped —
+    on the target's own card the chip would restate the card."""
+    if not doc_targets:
+        return
+
+    def visit(samples: List[ClassificationSample]) -> None:
+        for s in samples:
+            chips = doc_targets.get(s.doc_id)
+            if chips:
+                s.targets = chips
+
+    for topic_row in result.byTopic:
+        visit(topic_row.classification_samples)
+    for bucket_samples in result.distributionSamples.values():
+        visit(bucket_samples)
+    for items in (result.byNewsOutlet, result.byOfficial, result.byGeneralPublic):
+        for item in items:
+            visit(item.classification_samples)
+
+
+def _merge_outbound_targets(
+    result: PublicSentimentResult,
+    target_rows: List[tuple],
+    bot_docs: Set[int],
+    bot_score_authors: Optional[Set[str]] = None,
+) -> None:
+    """Attach "who they're talking about" to public-tier entities.
+
+    The inverse of ``received``: target_mentions rows grouped by the
+    AUTHORING public bucket (subreddit / sampled author / catch-all)
+    instead of the mentioned target. Answers the question the Other X
+    users modal couldn't — who the bucket's sentiment is directed at.
+
+    Bucket keys mirror the final ``byGeneralPublic`` items: an author whose
+    per-handle bucket was consolidated below the card floors folds into the
+    "Other X users" catch-all here too, so the rollup always lands on a
+    card that actually renders. Resolved targets show their registry name;
+    party collectives their fixed label; unresolved raw targets earn a row
+    only when they recur (``MIN_OUTBOUND_RAW_RECURRENCE``), otherwise they
+    pool into "Other targets" — identity is never fabricated from one
+    free-text string. Nets share the MIN_TARGET_SAMPLE_N suppression floor.
+    """
+    if not target_rows:
+        return
+    bot_score_authors = bot_score_authors or set()
+    registry = get_registry()
+    public_items = {item.key: item for item in result.byGeneralPublic}
+    if not public_items:
+        return
+
+    # bucket_key -> target_group_key -> {label, kind, entityKey, counts}
+    accum: Dict[str, Dict[str, Dict[str, Any]]] = {}
+
+    for (
+        doc_id, key, kind, party, stance, topic, conf, evidence_json,
+        output_json, source_type, published_at, title, domain_or_subreddit,
+        ident, text, x_handle, is_official_tier, author_id, ap_tier,
+        engagement, raw_target,
+    ) in target_rows:
+        if doc_id in bot_docs:
+            continue
+        if author_id and author_id in bot_score_authors:
+            continue
+        if stance not in _STANCE_KEYS:
+            continue
+
+        tier, entity = resolve_entity(
+            registry, source_type, domain_or_subreddit, x_handle,
+            is_official_tier=bool(is_official_tier),
+        )
+        # Public tier only; curated elected officials route to the officials
+        # column even without a registry entity (mirrors _route_and_record).
+        if tier != "public" or ap_tier == "elected_official":
+            continue
+
+        if entity is not None:
+            bucket_key = entity.subreddit
+        elif source_type == "x_post" and x_handle:
+            bucket_key = canonicalize_handle(x_handle) or x_handle.lower()
+        elif source_type == "x_post":
+            bucket_key = CATCH_ALL_X_USERS
+        else:
+            bucket_key = CATCH_ALL_SUBREDDITS
+        if bucket_key not in public_items:
+            # Consolidated sampled author (or a bucket with no sentiment
+            # card) — fold into the tier's catch-all, matching the card the
+            # reader actually sees.
+            bucket_key = (
+                CATCH_ALL_X_USERS if source_type == "x_post"
+                else CATCH_ALL_SUBREDDITS
+            )
+            if bucket_key not in public_items:
+                continue
+
+        if key is not None:
+            if key in _COLLECTIVE_LABELS:
+                group_key = key
+                label = _COLLECTIVE_LABELS[key]
+                target_kind = "collective"
+            else:
+                group_key = key
+                official = registry.officials.get(key)
+                label = (
+                    official.profile_dict().get("displayName") if official
+                    else key
+                )
+                target_kind = "official"
+        else:
+            raw = (raw_target or "").strip()
+            if not raw:
+                continue
+            group_key = f"raw:{raw.lower()}"
+            label = raw
+            target_kind = "raw"
+
+        bucket = accum.setdefault(bucket_key, {})
+        cell = bucket.setdefault(group_key, {
+            "label": label, "kind": target_kind,
+            "entityKey": key,
+            "counts": _empty_stance_counts(),
+        })
+        cell["counts"][stance] += 1
+
+    for bucket_key, groups in accum.items():
+        item = public_items.get(bucket_key)
+        if item is None:
+            continue
+        named: List[Dict[str, Any]] = []
+        other = _empty_stance_counts()
+        for cell in groups.values():
+            volume = sum(cell["counts"].values())
+            if cell["kind"] == "raw" and volume < MIN_OUTBOUND_RAW_RECURRENCE:
+                for stance_key, n in cell["counts"].items():
+                    other[stance_key] += n
+                continue
+            named.append(cell)
+        named.sort(key=lambda c: -sum(c["counts"].values()))
+        for cell in named[MAX_OUTBOUND_TARGETS:]:
+            for stance_key, n in cell["counts"].items():
+                other[stance_key] += n
+        named = named[:MAX_OUTBOUND_TARGETS]
+
+        targets = [
+            {
+                "label": cell["label"],
+                "entityKey": cell["entityKey"],
+                "kind": cell["kind"],
+                "net": _net_or_none(cell["counts"]),
+                "volume": sum(cell["counts"].values()),
+                "lowSample": sum(cell["counts"].values()) < MIN_TARGET_SAMPLE_N,
+            }
+            for cell in named
+        ]
+        other_volume = sum(other.values())
+        if other_volume:
+            targets.append({
+                "label": OUTBOUND_OTHER_LABEL,
+                "entityKey": None,
+                "kind": "other",
+                "net": _net_or_none(other),
+                "volume": other_volume,
+                "lowSample": other_volume < MIN_TARGET_SAMPLE_N,
+            })
+        if targets:
+            item.outbound = {
+                "minSampleN": MIN_TARGET_SAMPLE_N,
+                "volume": sum(t["volume"] for t in targets),
+                "targets": targets,
+            }

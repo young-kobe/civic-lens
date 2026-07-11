@@ -24,7 +24,11 @@ git fetch --prune origin
 git reset --hard origin/main
 
 echo "[2/5] pulling images"
-docker compose pull --quiet
+# --profile jobs: plain `compose pull` skips profile-gated services, which
+# left the ingest image (and its baked-in migrations) stale on the box while
+# the api service kept refreshing the analysis image — the schema guard then
+# correctly aborted analyze at "version 21, expects 25" (2026-07-11 incident).
+docker compose --profile jobs pull --quiet
 
 echo "[3/5] migrations"
 # Matches the containers' view: CIVIC_DB_PATH from /etc/civic-lens.env rides

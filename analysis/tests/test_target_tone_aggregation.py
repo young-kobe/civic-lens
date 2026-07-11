@@ -61,12 +61,8 @@ def _t(target: str, stance: str, topic: str = "Immigration", confidence: float =
     }
 
 
-class TargetToneAggregationTests(unittest.TestCase):
-    def setUp(self):
-        self.db_path = f"test_target_tone_{uuid.uuid4()}.db"
-        self.conn = sqlite3.connect(self.db_path)
-        cur = self.conn.cursor()
-        cur.executescript("""
+# Shared minimal schema for target-tone fixtures (both test classes below).
+_SCHEMA_SQL = """
             CREATE TABLE docs (
                 doc_id INTEGER PRIMARY KEY,
                 source_type TEXT NOT NULL,
@@ -120,7 +116,18 @@ class TargetToneAggregationTests(unittest.TestCase):
             );
             CREATE TABLE x_users_raw (
                 user_id TEXT PRIMARY KEY,
-                username TEXT
+                username TEXT,
+                name TEXT,
+                profile_image_url TEXT,
+                verified_type TEXT,
+                followers_count INTEGER DEFAULT 0,
+                created_at INTEGER,
+                description TEXT
+            );
+            CREATE TABLE reddit_posts_raw (
+                fullname TEXT PRIMARY KEY,
+                score INTEGER,
+                num_comments INTEGER
             );
             CREATE TABLE account_profiles (
                 profile_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -147,7 +154,15 @@ class TargetToneAggregationTests(unittest.TestCase):
                 narrative_id INTEGER,
                 doc_id INTEGER
             );
-        """)
+"""
+
+
+class TargetToneAggregationTests(unittest.TestCase):
+    def setUp(self):
+        self.db_path = f"test_target_tone_{uuid.uuid4()}.db"
+        self.conn = sqlite3.connect(self.db_path)
+        cur = self.conn.cursor()
+        cur.executescript(_SCHEMA_SQL)
 
         ts = int(time.time()) - 3600  # inside every window
 
@@ -384,6 +399,162 @@ class TargetToneAggregationTests(unittest.TestCase):
         self.assertTrue(json.dumps(data))
         self.assertTrue(potus_dict["received"]["samples"])
         self.assertIn("evidence_spans", potus_dict["received"]["samples"][0])
+
+
+class OutboundTargetsTests(unittest.TestCase):
+    """Outbound targets: WHO a public bucket's posts talk about.
+
+    The business rule: the Public column's cards (named sampled authors and
+    the catch-alls) must be able to answer "who is this sentiment directed
+    at" from the same frozen target_mentions rows that power received tone
+    — attributed to the AUTHORING bucket, with the same suppression floor,
+    and without ever minting an identity from a one-off free-text target.
+    """
+
+    def setUp(self):
+        self.db_path = f"test_outbound_targets_{uuid.uuid4()}.db"
+        self.conn = sqlite3.connect(self.db_path)
+        cur = self.conn.cursor()
+        cur.executescript(_SCHEMA_SQL)
+
+        ts = int(time.time()) - 3600
+
+        # BigVoice: 4 posts + 50k followers → clears both sampled-author
+        # floors and keeps a named card. SmallFry: 1 post, 12 followers →
+        # consolidated into "Other X users".
+        docs = [
+            (21, "x_post", "tw_big_1", "x.com", ts, None, "post body", "h21"),
+            (22, "x_post", "tw_big_2", "x.com", ts, None, "post body", "h22"),
+            (23, "x_post", "tw_big_3", "x.com", ts, None, "post body", "h23"),
+            (24, "x_post", "tw_big_4", "x.com", ts, None, "post body", "h24"),
+            (25, "x_post", "tw_small_1", "x.com", ts, None, "post body", "h25"),
+        ]
+        cur.executemany(
+            "INSERT INTO docs (doc_id, source_type, ident, domain_or_subreddit, "
+            "published_at, title, text, raw_hash) VALUES (?,?,?,?,?,?,?,?)",
+            docs,
+        )
+        cur.executemany(
+            "INSERT INTO x_posts_raw (tweet_id, author_id, is_official_tier) VALUES (?,?,0)",
+            [("tw_big_1", "5001"), ("tw_big_2", "5001"), ("tw_big_3", "5001"),
+             ("tw_big_4", "5001"), ("tw_small_1", "5002")],
+        )
+        cur.executemany(
+            "INSERT INTO x_users_raw (user_id, username, name, followers_count) "
+            "VALUES (?,?,?,?)",
+            [("5001", "BigVoice", "Big Voice", 50000),
+             ("5002", "SmallFry", "Small Fry", 12)],
+        )
+        # Sentiment rows create the public-tier buckets the rollup lands on.
+        cur.executemany(
+            "INSERT INTO ai_outputs (doc_id, task_type, output_json, confidence, created_at) "
+            f"VALUES (?, 'sentiment', ?, 0.9, {ts})",
+            [(d, json.dumps({"label": "NEGATIVE", "confidence": 0.9,
+                             "reasoning": "test reasoning"}))
+             for d in (21, 22, 23, 24, 25)],
+        )
+        cur.executemany(
+            "INSERT INTO ai_outputs (doc_id, task_type, output_json, confidence, created_at) "
+            f"VALUES (?, 'target_sentiment', ?, 0.9, {ts})",
+            [
+                # BigVoice → Trump: 4 negative + 1 positive = net -60.0 over
+                # 5 pairs (clears the floor).
+                (21, _target_payload(
+                    _t("Donald J. Trump", "negative"),
+                    _t("Donald J. Trump", "negative"),
+                    _t("The Media", "negative"),          # unresolved, recurs
+                )),
+                (22, _target_payload(
+                    _t("Donald J. Trump", "negative"),
+                    _t("Donald J. Trump", "negative"),
+                )),
+                (23, _target_payload(_t("Donald J. Trump", "positive"))),
+                (24, _target_payload(
+                    _t("The Media", "negative"),
+                    _t("Some Random Blogger", "negative"),  # one-off raw
+                )),
+                # SmallFry (consolidated) → attributed to Other X users.
+                (25, _target_payload(_t("John Thune", "positive"))),
+            ],
+        )
+        self.conn.commit()
+
+        ContentLoader(self.db_path).backfill_target_mentions(
+            TargetResolver(get_registry()).resolve
+        )
+        self.result = SentimentAggregator(self.db_path).get_public_sentiment(
+            time_window="7d", bot_docs=set(),
+        )
+        self.by_public = {item.key: item for item in self.result.byGeneralPublic}
+
+    def tearDown(self):
+        self.conn.close()
+        Path(self.db_path).unlink(missing_ok=True)
+        for suffix in ("-wal", "-shm"):
+            Path(self.db_path + suffix).unlink(missing_ok=True)
+
+    def test_named_author_gets_outbound_rollup(self):
+        big = self.by_public["bigvoice"]
+        self.assertIsNotNone(big.outbound)
+        trump = big.outbound["targets"][0]
+        expected_label = get_registry().officials["potus"].profile_dict()["displayName"]
+        self.assertEqual(trump["label"], expected_label)
+        self.assertEqual(trump["entityKey"], "potus")
+        self.assertEqual(trump["kind"], "official")
+        self.assertEqual(trump["volume"], 5)
+        self.assertAlmostEqual(trump["net"], -60.0, places=1)
+        self.assertFalse(trump["lowSample"])
+
+    def test_recurring_raw_target_named_but_suppressed(self):
+        """'The Media' recurs (2 pairs) → named row; net stays suppressed
+        below the floor — a free-text target never gets a headline number
+        off thin evidence."""
+        big = self.by_public["bigvoice"]
+        media = next(t for t in big.outbound["targets"] if t["label"] == "The Media")
+        self.assertEqual(media["kind"], "raw")
+        self.assertEqual(media["volume"], 2)
+        self.assertIsNone(media["net"])
+        self.assertTrue(media["lowSample"])
+
+    def test_oneoff_raw_target_folds_into_other(self):
+        """A single free-text mention must not mint an identity row."""
+        big = self.by_public["bigvoice"]
+        labels = [t["label"] for t in big.outbound["targets"]]
+        self.assertNotIn("Some Random Blogger", labels)
+        other = next(t for t in big.outbound["targets"] if t["kind"] == "other")
+        self.assertEqual(other["volume"], 1)
+
+    def test_consolidated_author_attributes_to_catch_all(self):
+        """SmallFry's bucket folded into Other X users, so their mention
+        lands on the card the reader actually sees."""
+        catch = self.by_public["other-x-users"]
+        self.assertIsNotNone(catch.outbound)
+        thune = catch.outbound["targets"][0]
+        self.assertEqual(thune["entityKey"], "leaderjohnthune")
+        self.assertEqual(thune["volume"], 1)
+        self.assertTrue(thune["lowSample"])
+
+    def test_samples_carry_target_chips(self):
+        """Each sampled post says WHO it's about: resolved targets first,
+        deduped by label, capped at two chips."""
+        big = self.by_public["bigvoice"]
+        sample = next(s for s in big.classification_samples if s.doc_id == 21)
+        self.assertIsNotNone(sample.targets)
+        expected_label = get_registry().officials["potus"].profile_dict()["displayName"]
+        self.assertEqual(sample.targets[0]["label"], expected_label)
+        self.assertEqual(sample.targets[0]["stance"], "negative")
+        self.assertEqual(sample.targets[1]["label"], "The Media")
+        self.assertEqual(len(sample.targets), 2)  # 2 Trump pairs dedupe to 1 chip
+
+    def test_outbound_serializes_only_when_present(self):
+        data = self.result.to_dict()
+        big_dict = next(e for e in data["byGeneralPublic"] if e["key"] == "bigvoice")
+        self.assertIn("outbound", big_dict)
+        self.assertEqual(big_dict["outbound"]["minSampleN"], MIN_TARGET_SAMPLE_N)
+        self.assertTrue(json.dumps(data))
+        # Officials' cards carry received, never outbound (public-tier only).
+        for e in data["byOfficial"]:
+            self.assertNotIn("outbound", e)
 
 
 if __name__ == "__main__":

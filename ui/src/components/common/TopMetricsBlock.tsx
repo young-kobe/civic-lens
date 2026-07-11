@@ -72,10 +72,13 @@ interface TierRowProps {
      * pass their own endpoints.
      */
     endpoints?: [string, string];
+    /** Optional trailing visual (e.g. a per-tier trend sparkline). Hidden
+     *  below the 900px breakpoint. */
+    trail?: ReactNode;
 }
 
 export function TierRow({
-    label, value, verb, dotPct, dotColor, dots, valueColor, showZeroTick, endpoints,
+    label, value, verb, dotPct, dotColor, dots, valueColor, showZeroTick, endpoints, trail,
 }: TierRowProps) {
     const resolvedDots: TierRowDot[] = dots ?? (
         dotPct != null && dotColor
@@ -86,7 +89,7 @@ export function TierRow({
     const valueStyle: CSSProperties | undefined = valueColor ? { color: valueColor } : undefined;
 
     return (
-        <div className="tier-row">
+        <div className={trail != null ? 'tier-row tier-row-has-trail' : 'tier-row'}>
             <span className="tier-row-label">{label}</span>
             <div className="tier-row-axis">
                 {showZeroTick && <span className="tier-row-zero" aria-hidden />}
@@ -110,6 +113,7 @@ export function TierRow({
             </div>
             <span className="tier-row-value" style={valueStyle}>{value}</span>
             {verb != null && <span className="tier-row-verb">{verb}</span>}
+            {trail != null && <span className="tier-row-trail">{trail}</span>}
         </div>
     );
 }

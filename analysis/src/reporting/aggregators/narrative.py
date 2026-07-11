@@ -15,7 +15,11 @@ from typing import Any, Dict, List, Optional
 
 from analysis.src.common.logger import get_logger
 from analysis.src.reporting.aggregators.base import (
+    REDDIT_ENGAGEMENT_JOIN_SQL,
+    SAMPLE_ENRICHMENT_SELECT,
     X_AUTHOR_JOIN_SQL,
+    build_sample_author,
+    build_sample_engagement,
     get_connection,
     get_time_cutoff,
 )
@@ -581,10 +585,12 @@ class NarrativeAggregator:
                    substr(d.text, 1, {_SNIPPET_MAX_CHARS * 4}) AS text_head,
                    d.source_type, d.domain_or_subreddit,
                    d.ident, d.published_at, u.username,
-                   a.output_json, a.confidence
+                   a.output_json, a.confidence,
+                   {SAMPLE_ENRICHMENT_SELECT}
             FROM narrative_docs nd
             JOIN docs d ON d.doc_id = nd.doc_id
             {X_AUTHOR_JOIN_SQL}
+            {REDDIT_ENGAGEMENT_JOIN_SQL}
             LEFT JOIN ai_outputs_latest a
                    ON a.doc_id = d.doc_id
                   AND a.task_type = 'sentiment'
@@ -606,6 +612,9 @@ class NarrativeAggregator:
         for (
             doc_id, title, text, source_type, domain, ident, published_at,
             x_handle, output_json, confidence,
+            x_retweets, x_replies, x_likes, x_quotes,
+            u_name, u_avatar, u_verified_type, u_followers, u_created_at,
+            u_bio, reddit_score, reddit_comments,
         ) in cursor.fetchall():
             # Dedupe by doc_id: ai_outputs has no UNIQUE(doc_id, task_type),
             # so concurrent cron + admin runs can leave >1 sentiment row per
@@ -649,6 +658,14 @@ class NarrativeAggregator:
                 "sentiment_label": sentiment_label,
                 "confidence": float(confidence) if confidence is not None else None,
                 "reasoning": reasoning,
+                "engagement": build_sample_engagement(
+                    source_type, x_retweets, x_replies, x_likes, x_quotes,
+                    reddit_score, reddit_comments,
+                ),
+                "author": build_sample_author(
+                    source_type, x_handle, u_name, u_avatar, u_verified_type,
+                    u_followers, u_created_at, bio=u_bio,
+                ),
             })
         return rows
 

@@ -5,6 +5,7 @@ import time
 import re
 from contextlib import contextmanager
 from pathlib import Path
+from urllib.parse import urlparse
 import trafilatura
 from analysis.src.common.logger import get_logger
 
@@ -42,11 +43,78 @@ EXCLUDE_PATTERNS = [
     r"/recipes", r"/food", r"/travel", r"/lifestyle",
 ]
 
+# Section-index / hub pages (site homepages, "/politics/" fronts) leak through
+# the crawler as if they were articles: trafilatura returns the nav-menu text,
+# which then passes the political-keyword filter because menus name political
+# topics ("Immigration", "Trump Administration"). Menu text is detectable
+# without an LLM: near-zero sentence punctuation, dominated by Title Case
+# fragments, root/section URLs, and recurring site-chrome vocabulary.
+INDEX_CHROME_TERMS = (
+    "skip to main content",
+    "open navigation menu",
+    "close navigation menu",
+    "keyboard shortcuts for audio player",
+    "expand/collapse submenu",
+    "brand studio",
+    "newsletters",
+    "download our app",
+    "watch cbs news",
+    "npr shop",
+    "terms of use",
+    "privacy policy",
+    "your privacy choices",
+)
+
+# Site root or one short all-alpha segment ("/", "/politics/", "/us"). Article
+# URLs carry dated or hyphenated slugs and never match.
+_HUB_URL_RE = re.compile(r"^/(?:[a-z]{1,20}/?)?$")
+
+
+def is_index_page(text: str, url: str = "") -> bool:
+    """Detect a section-index / hub page masquerading as an article.
+
+    Deterministic by design (invariant: code answers when code can answer).
+    Signals are combined so that no single noisy one drops a real article:
+    real articles have sentence punctuation every few words and mostly
+    lowercase prose, so they clear every rule below.
+    """
+    words = text.split()
+    n = len(words)
+    if n == 0:
+        return False  # empty text is handled (skipped) separately
+
+    lowered = text.lower()
+    chrome_hits = sum(term in lowered for term in INDEX_CHROME_TERMS)
+
+    # Sentence enders per 100 words. Abbreviations ("U.S.") inflate this
+    # slightly, which is why thresholds below stay a few points apart from
+    # real-article density (~5+ per 100 words).
+    punct = len(re.findall(r"[.!?](?:\s|$)", text))
+    punct_per_100 = punct / n * 100
+
+    alpha_words = [w for w in words if w[:1].isalpha()]
+    titlecase_share = (
+        sum(w[0].isupper() for w in alpha_words) / len(alpha_words)
+        if alpha_words else 0.0
+    )
+
+    path = urlparse(url).path or "/"
+    hub_url = bool(_HUB_URL_RE.match(path))
+
+    if hub_url and (punct_per_100 < 4.0 or chrome_hits >= 2):
+        return True
+    if n >= 30 and punct_per_100 < 1.0:
+        return True
+    if n >= 30 and titlecase_share >= 0.65 and punct_per_100 < 4.0:
+        return True
+    return chrome_hits >= 3
+
 # ETL logic version stamped onto every docs row (invariant B1 / audit A-9).
 # Bump this whenever the filter keywords, the 30-day rule, or the extraction
 # logic below change, so docs produced by different ETL logic are
 # distinguishable. Mirrors the prompt_version constants in engine/prompts.py.
-ETL_VERSION = "etl-v1"
+# v2: index/hub-page filter for news (is_index_page).
+ETL_VERSION = "etl-v2"
 
 # 30 days in seconds
 THIRTY_DAYS_SECONDS = 30 * 24 * 60 * 60
@@ -153,20 +221,22 @@ class ContentLoader:
         new_docs = 0
         skipped_old = 0
         skipped_nonpolitical = 0
-        
+        skipped_index = 0
+
         with self._get_conn() as conn:
             cursor = conn.cursor()
-            
+
             # Cleanup empty text docs to allow reprocessing
             cursor.execute("DELETE FROM docs WHERE source_type='news' AND text IS NULL")
-            
+
             # Calculate raw directory path relative to DB
             raw_root = Path(self.db_path).parent / "raw" / "sha256"
-            
-            news_count, s_old, s_np = self._load_news_batch(cursor, raw_root)
+
+            news_count, s_old, s_np, s_idx = self._load_news_batch(cursor, raw_root)
             new_docs += news_count
             skipped_old += s_old
             skipped_nonpolitical += s_np
+            skipped_index += s_idx
             conn.commit()
             
             reddit_count, s_old, s_np = self._load_reddit_batch(cursor)
@@ -184,7 +254,8 @@ class ContentLoader:
         
         logger.info(
             f"ETL [{ETL_VERSION}] Loaded {new_docs} new documents. "
-            f"Skipped: {skipped_old} old, {skipped_nonpolitical} non-political."
+            f"Skipped: {skipped_old} old, {skipped_nonpolitical} non-political, "
+            f"{skipped_index} index pages."
         )
         return new_docs
 
@@ -233,6 +304,7 @@ class ContentLoader:
         new_docs = 0
         skipped_old = 0
         skipped_nonpolitical = 0
+        skipped_index = 0
         now = int(time.time())
 
         for row in articles:
@@ -249,6 +321,12 @@ class ContentLoader:
             if not text:
                 continue
 
+            # Before the political filter: nav menus name political topics,
+            # so index pages would otherwise pass the keyword gate.
+            if is_index_page(text, url_canon):
+                skipped_index += 1
+                continue
+
             if not is_us_political_content(text, title or "", url_canon):
                 skipped_nonpolitical += 1
                 continue
@@ -261,7 +339,7 @@ class ContentLoader:
                 batch.clear()
 
         new_docs += self._flush_batch(cursor, insert_query, batch)
-        return new_docs, skipped_old, skipped_nonpolitical
+        return new_docs, skipped_old, skipped_nonpolitical, skipped_index
 
     def _load_reddit_batch(self, cursor: sqlite3.Cursor) -> tuple:
         """Load Reddit posts from reddit_posts_raw into docs using batched inserts."""

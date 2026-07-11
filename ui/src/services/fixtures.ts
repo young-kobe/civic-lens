@@ -21,7 +21,9 @@ import type {
     MoversResult,
     NarrativeSourceBreakdownItem,
     NarrativeSummary,
+    OutletProfilesResult,
     SupportingDoc,
+    ToneTrendPoint,
     PropagandaEntityItem,
     PropagandaOverview,
     PublicSentimentData,
@@ -124,6 +126,7 @@ export function mockSentiment(): PublicSentimentData {
             { date: isoDay(0), value: -14.7 },
         ],
         gopByPlatform: null,
+        toneTrend: mockToneTrend(),
         pollingVsSocial: {
             onlineSentiment: { favorable: 780, unfavorable: 1210, neutral: 950 },
             pollingData: {
@@ -135,6 +138,45 @@ export function mockSentiment(): PublicSentimentData {
             },
         },
     };
+}
+
+/* ---------- Outlet cross-signal profiles (Phase 2e) ---------- */
+
+export function mockOutletProfiles(): OutletProfilesResult {
+    return {
+        window: '7d',
+        disclaimer:
+            'Includes bot-flagged content on purpose — the bot rate IS the signal. '
+            + 'Net tone therefore differs from the Overall Tone page, which excludes '
+            + 'flagged posts. Sampled discourse, not a media-bias rating.',
+        outlets: [
+            { outlet: 'x.com', source_type: 'x_post', net_tone: -22.4, bot_rate_pct: 14.2, volume: 812, total_scanned: 845 },
+            { outlet: 'conservative', source_type: 'reddit_post', net_tone: -9.8, bot_rate_pct: 11.8, volume: 102, total_scanned: 102 },
+            { outlet: 'politics', source_type: 'reddit_post', net_tone: -26.3, bot_rate_pct: 9.7, volume: 186, total_scanned: 186 },
+            { outlet: 'nypost.com', source_type: 'news', net_tone: -31.2, bot_rate_pct: 0.0, volume: 84, total_scanned: 0 },
+            { outlet: 'nytimes.com', source_type: 'news', net_tone: -18.6, bot_rate_pct: 0.0, volume: 118, total_scanned: 0 },
+            { outlet: 'reuters.com', source_type: 'news', net_tone: -4.1, bot_rate_pct: 0.0, volume: 96, total_scanned: 0 },
+        ],
+    };
+}
+
+/* ---------- Per-day per-tier tone series (Phase 2a) ---------- */
+
+function mockToneTrend(): ToneTrendPoint[] {
+    // 14 days: news drifts negative, officials sparse (several suppressed
+    // low-sample days → chart gaps), public volatile.
+    const newsNet = [-6.2, -7.8, -5.1, -9.4, -11.2, -10.6, -8.9, -12.3, -13.8, -12.1, -14.5, -15.2, -13.9, -13.4];
+    const pubNet = [-18.4, -12.1, -21.9, -15.3, -24.6, -19.8, -14.2, -22.7, -26.1, -17.9, -20.4, -25.8, -19.3, -21.6];
+    const offNet: Array<number | null> = [-4.2, null, 8.1, null, null, -6.3, 2.4, null, -9.8, -3.1, null, 5.2, -7.4, -5.9];
+    return newsNet.map((news, i) => ({
+        date: isoDay(13 - i),
+        news: { net: news, volume: 140 + ((i * 37) % 60) },
+        officials: {
+            net: offNet[i],
+            volume: offNet[i] == null ? 1 + (i % 3) : 8 + ((i * 13) % 12),
+        },
+        public: { net: pubNet[i], volume: 380 + ((i * 71) % 180) },
+    }));
 }
 
 /* ---------- Distribution drill-down samples ---------- */
@@ -175,6 +217,13 @@ function mockDistributionSamples(): Partial<Record<SentimentSegmentKey, Classifi
                 source_type: 'x_post', source_name: '@politics_pundit', date: isoDay(2),
                 url: 'https://twitter.com/politics_pundit/status/123',
                 full_text: 'They are literally destroying this country in real time. Nothing subtle about it.',
+                engagement: { retweets: 412, replies: 188, likes: 2340, quotes: 57 },
+                author: {
+                    handle: 'politics_pundit', display_name: 'The Politics Pundit',
+                    avatar_url: null, verified_type: 'blue',
+                    followers_count: 48200, account_created_at: 1580000000,
+                },
+                targets: [{ label: 'Donald J. Trump', stance: 'negative' }],
                 reasoning: 'Absolute terms ("literally destroying"), present-tense accusation.',
                 evidence: ['literally destroying this country', 'Nothing subtle about it'],
             }, 90884),
@@ -364,11 +413,24 @@ function mockGeneralPublicSentiment(): EntitySentimentItem[] {
                 '~1.3M-subscriber subreddit; sidebar positions it as a "safe space for conservatives".'),
             { positive: 180, negative: 60, neutral: 95 },
         ),
-        entityItem(
-            catchAll('other-x-users', 'Other X users',
-                'X posts whose author is not in the tracked officials registry.'),
-            { positive: 220, negative: 360, neutral: 140 },
-        ),
+        {
+            ...entityItem(
+                catchAll('other-x-users', 'Other X users',
+                    'X posts whose author is not in the tracked officials registry.'),
+                { positive: 220, negative: 360, neutral: 140 },
+            ),
+            outbound: {
+                minSampleN: 5,
+                volume: 96,
+                targets: [
+                    { label: 'Donald J. Trump', entityKey: 'potus', kind: 'official', net: -46.2, volume: 52, lowSample: false },
+                    { label: 'Republicans (party)', entityKey: 'gop_collective', kind: 'collective', net: -18.0, volume: 20, lowSample: false },
+                    { label: 'Chuck Schumer', entityKey: 'senschumer', kind: 'official', net: 12.5, volume: 16, lowSample: false },
+                    { label: 'The Media', entityKey: null, kind: 'raw', net: null, volume: 4, lowSample: true },
+                    { label: 'Other targets', entityKey: null, kind: 'other', net: null, volume: 4, lowSample: true },
+                ],
+            },
+        },
     ];
 }
 
@@ -741,17 +803,10 @@ export function mockBotActivity(): BotData {
             topClusters: ['anti-immigration amplifiers', 'pro-candidate X ring', 'climate-denial chorus'],
             totalFlaggedPosts: 247,
             confidence: 'medium',
-            by_news_outlet: [
-                { key: 'nytimes.com', kind: 'outlet',  total_docs: 162, bot_docs: 1, bot_rate_pct: 0.6, entity_profile: NYT_PROFILE },
-                { key: 'foxnews.com', kind: 'outlet',  total_docs: 128, bot_docs: 3, bot_rate_pct: 2.3, entity_profile: FOX_PROFILE },
-                { key: 'bbc.com',     kind: 'outlet',  total_docs:  94, bot_docs: 0, bot_rate_pct: 0.0, entity_profile: BBC_PROFILE },
-                {
-                    key: 'other-outlets', kind: 'catch_all',
-                    total_docs: 240, bot_docs: 4, bot_rate_pct: 1.7,
-                    entity_profile: catchAll('other-outlets', 'Other news outlets',
-                        'News docs whose domain is not in the tracked outlet registry.'),
-                },
-            ],
+            // Permanently empty by contract (2026-07-11): news is not
+            // bot-scored — articles are not accounts. Key kept so stale
+            // caches parse.
+            by_news_outlet: [],
             by_official: [
                 { key: 'potus',          kind: 'official', total_docs: 82, bot_docs: 0, bot_rate_pct: 0.0, entity_profile: POTUS_PROFILE },
                 { key: 'senschumer',     kind: 'official', total_docs: 31, bot_docs: 0, bot_rate_pct: 0.0, entity_profile: SCHUMER_PROFILE },
@@ -787,12 +842,18 @@ export function mockBotActivity(): BotData {
                         text: 'They are BURYING every story about X, wake up people.',
                         source_label: 'X · @liberty_patriot_88',
                         url: 'https://x.com/liberty_patriot_88/status/1781234500001',
+                        confidence: 0.87,
+                        indicators: ['New account (34 days)', 'Posting rate far above human baseline'],
+                        reasoning: 'Account posts near-identical wording to 12 other accounts within minutes, at a sustained rate incompatible with manual posting.',
                     },
                     {
                         doc_id: 91002,
                         text: 'Same script, same timing, same accounts — coincidence?',
                         source_label: 'X · @real_truth_seeker',
                         url: 'https://x.com/real_truth_seeker/status/1781234500002',
+                        confidence: 0.74,
+                        indicators: ['Near-duplicate text across accounts'],
+                        reasoning: 'Text matches a phrase cluster shared by a burst of accounts created the same week.',
                     },
                 ],
                 topHashtags: ['#shadowban', '#censorship', '#bigtech'],

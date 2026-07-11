@@ -22,12 +22,17 @@ from typing import Any, Dict, List, Tuple
 
 from analysis.src.common.settings import get_settings
 from analysis.src.reporting.aggregators.base import (
+    REDDIT_ENGAGEMENT_JOIN_SQL,
+    SAMPLE_ENRICHMENT_SELECT,
     X_AUTHOR_JOIN_SQL,
+    build_sample_author,
+    build_sample_engagement,
     get_connection,
     get_time_cutoff,
 )
 from analysis.src.reporting.aggregators.sentiment import (
     CATCH_ALL_VERIFIED_OFFICIALS,
+    _build_doc_targets,
     _build_sample_dict,
     _extract_topic,
 )
@@ -196,7 +201,10 @@ def fetch_entity_posts(
         where += " AND d.published_at >= ?"
         params.append(cutoff)
 
-    base = f"FROM ai_outputs_latest a JOIN docs d ON a.doc_id = d.doc_id {X_AUTHOR_JOIN_SQL} WHERE {where}"
+    base = (
+        f"FROM ai_outputs_latest a JOIN docs d ON a.doc_id = d.doc_id "
+        f"{X_AUTHOR_JOIN_SQL} {REDDIT_ENGAGEMENT_JOIN_SQL} WHERE {where}"
+    )
 
     with get_connection(db_path) as conn:
         cursor = conn.cursor()
@@ -215,26 +223,53 @@ def fetch_entity_posts(
         cursor.execute(
             "SELECT a.doc_id, a.output_json, a.confidence, d.source_type, "
             "d.published_at, d.title, d.domain_or_subreddit, d.ident, d.text, "
-            f"u.username, {llm_topic_sql} "
+            f"u.username, {llm_topic_sql}, {SAMPLE_ENRICHMENT_SELECT} "
             f"{base} ORDER BY d.published_at DESC, a.doc_id DESC LIMIT ? OFFSET ?",
             (min_conf,) + tuple(params) + (limit, offset),
         )
         rows = cursor.fetchall()
 
+        # Target chips for this page's docs, same rules as the snapshot
+        # samples (_attach_sample_targets): frozen mentions, floor applied.
+        doc_targets: Dict[int, List[Dict[str, str]]] = {}
+        page_doc_ids = [r[0] for r in rows]
+        if page_doc_ids:
+            cursor.execute(
+                "SELECT m.doc_id, m.entity_key, m.stance, m.raw_target "
+                "FROM target_mentions m "
+                "JOIN ai_outputs_latest la ON la.output_id = m.output_id "
+                f"WHERE m.confidence >= ? AND m.doc_id IN ({','.join('?' for _ in page_doc_ids)})",
+                (min_conf, *page_doc_ids),
+            )
+            doc_targets = _build_doc_targets(cursor.fetchall())
+
     items: List[Dict[str, Any]] = []
     for (
         doc_id, output_json, confidence, source_type, published_at,
         title, domain_or_subreddit, ident, text, x_handle, llm_topic,
+        x_retweets, x_replies, x_likes, x_quotes,
+        u_name, u_avatar, u_verified_type, u_followers, u_created_at,
+        u_bio, reddit_score, reddit_comments,
     ) in rows:
         try:
             data = json.loads(output_json)
         except json.JSONDecodeError:
             continue
         conf = float(data.get("confidence", confidence or 0.5))
-        items.append(_build_sample_dict(
+        sample = _build_sample_dict(
             doc_id, data.get("label", "NEUTRAL"), conf, data,
             title, source_type, published_at, domain_or_subreddit, ident, text,
             x_handle, topic=llm_topic or _extract_topic(title),
-        ))
+            engagement=build_sample_engagement(
+                source_type, x_retweets, x_replies, x_likes, x_quotes,
+                reddit_score, reddit_comments,
+            ),
+            author=build_sample_author(
+                source_type, x_handle, u_name, u_avatar, u_verified_type,
+                u_followers, u_created_at, bio=u_bio,
+            ),
+        )
+        sample["targets"] = doc_targets.get(doc_id)
+        items.append(sample)
 
     return {"items": items, "total": total, "limit": limit, "offset": offset}

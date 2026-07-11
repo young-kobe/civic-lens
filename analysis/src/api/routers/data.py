@@ -15,6 +15,7 @@ from analysis.src.reporting.aggregators import (
     BotAggregator,
     MoversAggregator,
     NarrativeAggregator,
+    OutletAggregator,
     PropagandaAggregator,
     SentimentAggregator,
 )
@@ -27,6 +28,7 @@ bot_agg = BotAggregator(settings.db_path)
 narrative_agg = NarrativeAggregator(settings.db_path)
 propaganda_agg = PropagandaAggregator(settings.db_path)
 movers_agg = MoversAggregator(settings.db_path)
+outlet_agg = OutletAggregator(settings.db_path)
 
 router = APIRouter(tags=["data"])
 
@@ -136,6 +138,21 @@ def get_entity_posts(
         )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
+
+
+@router.get("/outlet-profiles")
+def get_outlet_profiles(window: WindowLiteral = "7d"):
+    """Per-domain cross-signal profiles (net tone x bot rate) for the window.
+
+    Unlike every other public aggregate, bot-flagged content is INCLUDED —
+    the bot rate is the signal being surfaced; the payload carries the
+    disclaimer. Served from the ``outlet_profiles_{window}`` snapshot."""
+    return get_cached_or_fallback(
+        cache,
+        f"outlet_profiles_{window}",
+        lambda: outlet_agg.get_outlet_profiles(time_window=window),
+        lambda p: p,
+    )
 
 
 @router.get("/movers")

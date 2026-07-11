@@ -10,6 +10,10 @@ interface SparklineProps {
     color?: string;
     height?: number;
     showTooltip?: boolean;
+    /** Render a readable date axis (first/last + a few ticks). Off by
+     *  default — sparklines are usually context, but a page-scale chart
+     *  (e.g. the narrative timeline) needs real dates. */
+    showXAxis?: boolean;
     ariaLabel?: string;
 }
 
@@ -24,6 +28,7 @@ function Sparkline({
     color = COLORS.chartAccent,
     height = 40,
     showTooltip = true,
+    showXAxis = false,
     ariaLabel,
 }: SparklineProps) {
     const gradientId = `spark-${useId().replace(/:/g, '')}`;
@@ -62,7 +67,7 @@ function Sparkline({
             <div className="chart-tooltip">
                 {label != null && label !== '' && <div className="chart-tooltip-label">{String(label)}</div>}
                 <div className="chart-tooltip-value">{value}</div>
-                <div className={`chart-tooltip-value ${deltaClass}`} style={{ fontSize: 10 }}>
+                <div className={`chart-tooltip-value ${deltaClass}`} style={{ fontSize: 11 }}>
                     {deltaSign}{delta.toFixed(2)} vs. start
                 </div>
             </div>
@@ -80,7 +85,14 @@ function Sparkline({
                         </linearGradient>
                     </defs>
                     {hasXKey && (
-                        <XAxis dataKey={xKey} hide />
+                        <XAxis
+                            dataKey={xKey}
+                            hide={!showXAxis}
+                            tick={{ fontSize: 11, fill: 'var(--neutral-500)' }}
+                            tickLine={false}
+                            axisLine={{ stroke: 'var(--chart-grid)' }}
+                            minTickGap={48}
+                        />
                     )}
                     <Area
                         type="monotone"
