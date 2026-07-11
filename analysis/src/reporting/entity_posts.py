@@ -234,7 +234,7 @@ def fetch_entity_posts(
         title, domain_or_subreddit, ident, text, x_handle, llm_topic,
         x_retweets, x_replies, x_likes, x_quotes,
         u_name, u_avatar, u_verified_type, u_followers, u_created_at,
-        reddit_score, reddit_comments,
+        u_bio, reddit_score, reddit_comments,
     ) in rows:
         try:
             data = json.loads(output_json)
@@ -251,7 +251,7 @@ def fetch_entity_posts(
             ),
             author=build_sample_author(
                 source_type, x_handle, u_name, u_avatar, u_verified_type,
-                u_followers, u_created_at,
+                u_followers, u_created_at, bio=u_bio,
             ),
         ))
 

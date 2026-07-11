@@ -42,7 +42,7 @@ from analysis.src.reporting.entity_registry import (
     CATCH_ALL_OUTLETS, CATCH_ALL_SUBREDDITS, CATCH_ALL_X_USERS,
     DEM_COLLECTIVE, GOP_COLLECTIVE,
     account_profile_dict, canonicalize_handle, catch_all_profile,
-    get_registry, resolve_entity,
+    get_registry, resolve_entity, sampled_account_profile,
 )
 from analysis.src.reporting.models import (
     ClassificationSample,
@@ -90,6 +90,16 @@ MIN_TARGET_SAMPLE_N = 5
 # Sentinel key for x_posts routed to the officials tier by the ingestor's
 # is_official_tier provenance flag alone (no editorial registry entity) — D-4.
 CATCH_ALL_VERIFIED_OFFICIALS = "verified-officials-provenance"
+
+# Floors for promoting an unmatched public-tier X author out of the
+# "Other X users" catch-all into their own named card. Both must hold:
+# enough posts in the window to be a real voice in the sample, and enough
+# followers that the card highlights an account with an audience rather
+# than a private citizen. Everything below the floors (and beyond the card
+# cap) stays pooled in the catch-all — counted, never dropped.
+MIN_SAMPLED_AUTHOR_POSTS = 3
+MIN_SAMPLED_AUTHOR_FOLLOWERS = 1000
+MAX_SAMPLED_AUTHOR_CARDS = 12
 
 _DOW_LABELS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 _LABEL_MAP = {
@@ -250,7 +260,7 @@ class SentimentAggregator:
             ap_tier, ap_full_name, ap_party, ap_office_title, ap_account_type,
             x_retweets, x_replies, x_likes, x_quotes,
             u_name, u_avatar, u_verified_type, u_followers, u_created_at,
-            reddit_score, reddit_comments,
+            u_bio, reddit_score, reddit_comments,
         ) in rows:
             if doc_id in bot_docs:
                 accum["excluded_bots"] += 1
@@ -268,7 +278,7 @@ class SentimentAggregator:
             )
             author = build_sample_author(
                 source_type, x_handle, u_name, u_avatar, u_verified_type,
-                u_followers, u_created_at,
+                u_followers, u_created_at, bio=u_bio,
             )
 
             label = data.get("label", "NEUTRAL")
@@ -331,6 +341,7 @@ class SentimentAggregator:
             accum["count"] += 1
             accum["conf_sum"] += conf
 
+        _consolidate_sampled_authors(accum["by_general_public"])
         return accum
 
     def _build_result(self, accum: Dict[str, Any]) -> PublicSentimentResult:
@@ -736,13 +747,22 @@ def _route_and_record(
                 account.get("account_type"),
             )
             kind = "account"
+        elif source_type == "x_post" and author and x_handle:
+            # Unmatched author with a stored profile: bucket per handle so
+            # active-enough voices become named cards. The consolidation
+            # pass (_consolidate_sampled_authors) folds everyone below the
+            # post/follower floors back into the catch-all.
+            key = canonicalize_handle(x_handle) or x_handle.lower()
+            profile = sampled_account_profile(
+                key,
+                display_name=author.get("display_name"),
+                bio=author.get("bio"),
+                followers_count=author.get("followers_count"),
+            )
+            kind = "account"
         elif source_type == "x_post":
             key = CATCH_ALL_X_USERS
-            profile = catch_all_profile(
-                CATCH_ALL_X_USERS, "Other X users",
-                "X posts whose author is not in the tracked officials registry "
-                "or the curated political-accounts list.",
-            )
+            profile = _other_x_users_profile()
             kind = "catch_all"
         else:
             key = CATCH_ALL_SUBREDDITS
@@ -753,12 +773,76 @@ def _route_and_record(
             kind = "catch_all"
 
     _init_entity_bucket(bucket_dict, key, kind, profile)
+    if kind == "account" and profile.get("accountType") == "sampled":
+        # Mark for the consolidation pass and track the follower floor.
+        bucket_dict[key]["sampled"] = True
+        followers = (author or {}).get("followers_count") or 0
+        bucket_dict[key]["followers"] = max(
+            bucket_dict[key].get("followers", 0), followers,
+        )
     _collect_entity_sample(
         bucket_dict[key], doc_id, label, conf, data,
         title, source_type, published_at, domain_or_subreddit, ident, text, x_handle,
         topic=topic, engagement=engagement, author=author,
     )
     return tier
+
+
+def _other_x_users_profile() -> Dict[str, Any]:
+    """The public-tier X catch-all profile — shared by the routing branch
+    and the consolidation pass so the blurb can't drift between them."""
+    return catch_all_profile(
+        CATCH_ALL_X_USERS, "Other X users",
+        "X posts whose author is not in the tracked officials registry, the "
+        "curated political-accounts list, or active enough in this window "
+        "for an individual card.",
+    )
+
+
+def _consolidate_sampled_authors(bucket: Dict[str, Dict[str, Any]]) -> None:
+    """Fold sub-floor sampled-author buckets back into the catch-all.
+
+    During the row pass every unmatched public-tier X author gets a
+    per-handle bucket (we can't know their window totals mid-stream).
+    Afterwards, only authors clearing BOTH floors — MIN_SAMPLED_AUTHOR_POSTS
+    and MIN_SAMPLED_AUTHOR_FOLLOWERS — keep a named card, capped at
+    MAX_SAMPLED_AUTHOR_CARDS by volume. Everyone else's counts, per-topic
+    cells, and samples merge into "Other X users": pooled, never dropped.
+    """
+    sampled = [(k, v) for k, v in bucket.items() if v.get("sampled")]
+    if not sampled:
+        return
+    qualifying = sorted(
+        (
+            (k, v) for k, v in sampled
+            if v["volume"] >= MIN_SAMPLED_AUTHOR_POSTS
+            and v.get("followers", 0) >= MIN_SAMPLED_AUTHOR_FOLLOWERS
+        ),
+        key=lambda kv: -kv[1]["volume"],
+    )
+    keep = {k for k, _ in qualifying[:MAX_SAMPLED_AUTHOR_CARDS]}
+    demoted = [(k, v) for k, v in sampled if k not in keep]
+    if not demoted:
+        return
+
+    if CATCH_ALL_X_USERS not in bucket:
+        _init_entity_bucket(
+            bucket, CATCH_ALL_X_USERS, "catch_all", _other_x_users_profile(),
+        )
+    catch = bucket[CATCH_ALL_X_USERS]
+    for key, stats in demoted:
+        for label_key in ("positive", "negative", "neutral"):
+            catch[label_key] += stats[label_key]
+        catch["volume"] += stats["volume"]
+        for topic, counts in stats["by_topic"].items():
+            target = catch["by_topic"].setdefault(
+                topic, {"positive": 0, "negative": 0, "neutral": 0, "mixed": 0},
+            )
+            for label_key, n in counts.items():
+                target[label_key] = target.get(label_key, 0) + n
+        for sample in stats["samples"]:
+            _insert_capped(catch["samples"], sample, MAX_SAMPLES_PER_ENTITY)
+        del bucket[key]
 
 
 def _init_entity_bucket(

@@ -614,7 +614,7 @@ class NarrativeAggregator:
             x_handle, output_json, confidence,
             x_retweets, x_replies, x_likes, x_quotes,
             u_name, u_avatar, u_verified_type, u_followers, u_created_at,
-            reddit_score, reddit_comments,
+            u_bio, reddit_score, reddit_comments,
         ) in cursor.fetchall():
             # Dedupe by doc_id: ai_outputs has no UNIQUE(doc_id, task_type),
             # so concurrent cron + admin runs can leave >1 sentiment row per
@@ -664,7 +664,7 @@ class NarrativeAggregator:
                 ),
                 "author": build_sample_author(
                     source_type, x_handle, u_name, u_avatar, u_verified_type,
-                    u_followers, u_created_at,
+                    u_followers, u_created_at, bio=u_bio,
                 ),
             })
         return rows

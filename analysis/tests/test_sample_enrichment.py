@@ -72,7 +72,7 @@ class SampleEnrichmentTests(unittest.TestCase):
             CREATE TABLE x_users_raw (
                 user_id TEXT PRIMARY KEY, username TEXT, name TEXT,
                 profile_image_url TEXT, verified_type TEXT,
-                followers_count INTEGER, created_at INTEGER
+                followers_count INTEGER, created_at INTEGER, description TEXT
             );
             CREATE TABLE reddit_posts_raw (
                 fullname TEXT PRIMARY KEY, score INTEGER, num_comments INTEGER
@@ -118,7 +118,7 @@ class SampleEnrichmentTests(unittest.TestCase):
         cur.execute(
             "INSERT INTO x_posts_raw VALUES ('111','u1',0,10,2,50,1)")
         cur.execute(
-            "INSERT INTO x_users_raw VALUES ('u1','someuser','Some User','https://img/x.png','blue',1234,?)",
+            "INSERT INTO x_users_raw VALUES ('u1','someuser','Some User','https://img/x.png','blue',1234,?,'Political commentary all day')",
             (NOW - 86400 * 400,),
         )
         cur.execute(
@@ -265,6 +265,63 @@ class SampleEnrichmentTests(unittest.TestCase):
         self.assertTrue(amps)
         self.assertEqual(amps[0]["id"], 742)
         self.assertEqual(amps[0]["narrative"], "A recurring claim")
+
+    # ---------- sampled-author promotion ----------
+
+    def _seed_author_posts(self, user_id, handle, followers, n_posts, start_doc_id, bio=""):
+        conn = sqlite3.connect(self.db_path)
+        cur = conn.cursor()
+        cur.execute(
+            "INSERT INTO x_users_raw VALUES (?,?,?,?,?,?,?,?)",
+            (user_id, handle, handle.title(), None, None, followers,
+             NOW - 86400 * 500, bio),
+        )
+        for i in range(n_posts):
+            doc_id = start_doc_id + i
+            tweet_id = f"tw_{handle}_{i}"
+            cur.execute(
+                "INSERT INTO docs VALUES (?,?,?,?,?,?,?)",
+                (doc_id, "x_post", tweet_id, "x.com", NOW - 3600, "t", "text"),
+            )
+            cur.execute(
+                "INSERT INTO x_posts_raw VALUES (?,?,0,1,1,1,1)",
+                (tweet_id, user_id),
+            )
+            cur.execute(
+                "INSERT INTO ai_outputs (doc_id, task_type, output_json, confidence, label, inference_method) VALUES (?,'sentiment',?,0.9,'NEGATIVE','llm')",
+                (doc_id, _sentiment("NEGATIVE")),
+            )
+        conn.commit()
+        conn.close()
+
+    def test_active_author_with_audience_gets_named_card(self):
+        # Business rule: an unmatched public-tier X author clears BOTH
+        # floors (>=3 posts, >=1000 followers) → their own kind='account'
+        # card; sub-floor authors stay pooled in "Other X users" — counted,
+        # never dropped.
+        self._seed_author_posts("u_big", "bigvoice", 50_000, 4, 500,
+                                bio="Politics poster")
+        self._seed_author_posts("u_small", "smallfry", 12, 4, 600)
+        self._seed_author_posts("u_rare", "rarevoice", 90_000, 1, 700)
+
+        result = self._sentiment_result()
+        pub = {it["key"]: it for it in result["byGeneralPublic"]}
+
+        big = pub.get("bigvoice")
+        self.assertIsNotNone(big)
+        self.assertEqual(big["kind"], "account")
+        self.assertEqual(big["volume"], 4)
+        self.assertIn("Politics poster", big["entityProfile"]["blurb"])
+        self.assertIsNone(big["entityProfile"]["lean"])
+
+        # Sub-floor authors: no named cards, pooled in the catch-all.
+        self.assertNotIn("smallfry", pub)
+        self.assertNotIn("rarevoice", pub)
+        catch = pub.get("other-x-users")
+        self.assertIsNotNone(catch)
+        # smallfry 4 + rarevoice 1 + the setUp x post (someuser, 1 post,
+        # 1234 followers — active-enough? 1 post < floor → pooled too).
+        self.assertEqual(catch["volume"], 6)
 
 
 if __name__ == "__main__":

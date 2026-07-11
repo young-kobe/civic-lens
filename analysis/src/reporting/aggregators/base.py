@@ -62,11 +62,11 @@ REDDIT_ENGAGEMENT_JOIN_SQL = (
 
 # Projection fragment for the per-sample enrichment columns (Phase 2b/2c).
 # Callers append this to their SELECT clause after the joins above; the
-# resulting 11 row fields feed build_sample_engagement / build_sample_author.
+# resulting 12 row fields feed build_sample_engagement / build_sample_author.
 SAMPLE_ENRICHMENT_SELECT = (
     "x.retweet_count, x.reply_count, x.like_count, x.quote_count, "
     "u.name, u.profile_image_url, u.verified_type, u.followers_count, "
-    "u.created_at, "
+    "u.created_at, u.description, "
     "rp.score, rp.num_comments"
 )
 
@@ -112,6 +112,7 @@ def build_sample_author(
     verified_type: Optional[str],
     followers_count: Any,
     created_at: Any,
+    bio: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
     """Author enrichment for an X sample, from x_users_raw. None for
     non-X docs (Reddit stores no author at ingest — never fabricate one)
@@ -125,6 +126,7 @@ def build_sample_author(
         "verified_type": verified_type,
         "followers_count": int(followers_count) if followers_count is not None else None,
         "account_created_at": int(created_at) if created_at is not None else None,
+        "bio": bio or None,
     }
 
 @contextlib.contextmanager

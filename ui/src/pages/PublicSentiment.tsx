@@ -373,7 +373,7 @@ function SentimentThreeWayGrid({
             />
             <ThreeWayColumn
                 header="The Public"
-                byline={`Political subreddits, curated political accounts, and X users we don't track individually${topicSuffix}`}
+                byline={`Political subreddits, curated political accounts, and the most active X voices in our sample${topicSuffix}`}
                 empty="No social posts in this window."
                 items={generalPublic}
                 renderItem={renderCard}
