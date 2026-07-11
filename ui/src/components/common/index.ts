@@ -44,5 +44,5 @@ export {
 } from './PostCard';
 export type { PostCardData } from './PostCard';
 export { default as MoversTicker } from './MoversTicker';
-export { ThreeWayGrid, ThreeWayColumn } from './ThreeWayGrid';
+export { ThreeWayGrid, TwoWayGrid, ThreeWayColumn } from './ThreeWayGrid';
 export type { ColumnSorter } from './ThreeWayGrid';

@@ -8,10 +8,11 @@ import {
 } from '../components/common';
 import type { ColumnSorter, TickerItem } from '../components/common';
 import type {
-    ClassificationSample, EntitySentimentItem, Filters,
+    ChartDataPoint, ClassificationSample, EntitySentimentItem, Filters,
     PollingSocialComparison, PublicSentimentData, SentimentBreakdown,
     SentimentDistribution, SentimentSegmentKey,
 } from '../types';
+import Sparkline from '../components/charts/Sparkline';
 import {
     fetchEntityPosts, fetchEvalAccuracy, fetchSentiment, fetchSnapshotStatus,
     type SnapshotStatus, type TimeWindow,
@@ -123,6 +124,21 @@ function TopMetrics({ data, windowLabel, activeTopic, topicRow, onSegmentClick }
         ? `${filteredVolume.toLocaleString()} posts on ${activeTopic.label}`
         : `${data.overview.volume.toLocaleString()} posts`;
 
+    // Per-tier daily trend from the snapshot's toneTrend series. Global,
+    // not topic-scoped — so the trails render only in the unfiltered view
+    // (a site-wide trend next to topic-scoped numbers would misread).
+    // Suppressed days (net=null below the sample floor) draw as gaps.
+    const tierTrend = (tier: 'news' | 'officials' | 'public') => {
+        if (isFiltered) return undefined;
+        const points = (data.toneTrend ?? []).map((p) => ({
+            date: p.date,
+            value: p[tier].net,
+        }));
+        return points.some((p) => p.value != null)
+            ? (points as ChartDataPoint[])
+            : undefined;
+    };
+
     return (
         <TopMetricsBlock
             eyebrow={eyebrow}
@@ -135,14 +151,22 @@ function TopMetrics({ data, windowLabel, activeTopic, topicRow, onSegmentClick }
                 />
             )}
         >
-            <ToneTierRow label="News articles are" agg={news} />
-            <ToneTierRow label="Officials are" agg={officials} />
-            <ToneTierRow label="The public is" agg={pub} />
+            <ToneTierRow label="News articles are" agg={news} trend={tierTrend('news')} trendColor={COLORS.neutral} />
+            <ToneTierRow label="Officials are" agg={officials} trend={tierTrend('officials')} trendColor={COLORS.accent} />
+            <ToneTierRow label="The public is" agg={pub} trend={tierTrend('public')} trendColor={COLORS.warning} />
         </TopMetricsBlock>
     );
 }
 
-function ToneTierRow({ label, agg }: { label: string; agg: TierAggregate }) {
+function ToneTierRow({
+    label, agg, trend, trendColor,
+}: {
+    label: string;
+    agg: TierAggregate;
+    /** Daily net-tone series for this tier; undefined renders no trail. */
+    trend?: ChartDataPoint[];
+    trendColor?: string;
+}) {
     const hasData = agg.net !== null;
     const color = hasData ? toneColor(agg.net!) : 'var(--neutral-500)';
     const axisPct = hasData ? ((agg.net! + 100) / 200) * 100 : undefined;
@@ -158,6 +182,14 @@ function ToneTierRow({ label, agg }: { label: string; agg: TierAggregate }) {
             showZeroTick
             dotPct={axisPct}
             dotColor={hasData ? color : undefined}
+            trail={trend && (
+                <Sparkline
+                    data={trend}
+                    color={trendColor}
+                    height={26}
+                    ariaLabel={`${label} daily net tone, last ${trend.length} days. Gaps are low-sample days.`}
+                />
+            )}
         />
     );
 }
@@ -246,8 +278,17 @@ function IntensityMini({
                         <span key={b.key} className={b.barClass} style={{ width: `${pct(b.count)}%` }} />
                     ))}
                 </span>
-                <span className="mini-metric-hint" title={hintTitle}>
-                    {formatPct(biggestPct, { decimals: 0 })} of posts
+                <span className="mini-intensity-legend" title={hintTitle}>
+                    {buckets.map((b) => (
+                        <span
+                            key={b.key}
+                            className="mini-intensity-legend-item"
+                            title={`${b.name}: ${b.count.toLocaleString()} of ${sampleSize} posts`}
+                        >
+                            <span className={`mini-intensity-legend-dot ${b.barClass}`} aria-hidden />
+                            {formatPct(pct(b.count), { decimals: 0 })}
+                        </span>
+                    ))}
                 </span>
             </span>
         </div>
@@ -416,7 +457,9 @@ function ToneBarRows({ rows }: { rows: ToneBarRow[] }) {
                     ? `${row.label}: ${formatPts(row.net)} across ${row.volume} posts`
                     : `${row.label}: only ${row.volume} post${row.volume === 1 ? '' : 's'} — too few to score reliably`}
                 >
-                    <span className="tone-bar-row-label">{row.label}</span>
+                    {/* title repeats the label so an ellipsized narrative/topic
+                        name is still readable on hover. */}
+                    <span className="tone-bar-row-label" title={row.label}>{row.label}</span>
                     <span className="tone-bar-row-axis" aria-hidden>
                         <span className="tone-bar-row-zero" />
                         {row.net != null && (
@@ -528,19 +571,19 @@ function EntitySentimentModal({
                         <div className="metric-value">
                             {received.net != null ? formatPts(received.net) : '—'}
                         </div>
-                        <div className="text-xs text-muted">
+                        <div
+                            className="text-xs text-muted"
+                            title={received.engagementWeightedNet != null
+                                ? 'The weighted figure re-scores the same posts by 1 + ln(1 + retweets + replies + likes + quotes). Engagement counts are a reach proxy, not verified reach.'
+                                : undefined}
+                        >
                             {received.net != null
-                                ? `across ${received.volume} sampled posts about them`
+                                ? `across ${received.volume} posts about them`
+                                    + (received.engagementWeightedNet != null
+                                        ? ` · engagement-weighted ${formatPts(received.engagementWeightedNet)}`
+                                        : '')
                                 : `only ${received.volume} sampled post${received.volume === 1 ? '' : 's'} about them — too few to score reliably`}
                         </div>
-                        {received.engagementWeightedNet != null && (
-                            <div
-                                className="text-xs text-muted"
-                                title="Same posts, each weighted by 1 + ln(1 + retweets + replies + likes + quotes). Engagement counts are a reach proxy, not verified reach."
-                            >
-                                weighted by engagement: {formatPts(received.engagementWeightedNet)}
-                            </div>
-                        )}
                     </div>
                 )}
                 <div>
@@ -580,11 +623,36 @@ function EntitySentimentModal({
                 </div>
             </div>
 
+            {item.outbound && item.outbound.targets.length > 0 && (
+                <>
+                    <h3 className="card-title mt-4 mb-2">
+                        Who they're talking about
+                    </h3>
+                    <ToneBarRows
+                        rows={item.outbound.targets.map((cell, i) => ({
+                            key: cell.entityKey ?? `${cell.kind}-${i}`,
+                            label: cell.label,
+                            net: cell.net,
+                            volume: cell.volume,
+                        }))}
+                    />
+                    <p className="text-xs text-muted">
+                        Targets extracted per post by the model from this group's
+                        sampled posts. Free-text targets that don't match a tracked
+                        figure appear verbatim; one-off mentions pool into "Other
+                        targets".
+                    </p>
+                </>
+            )}
+
             {received && received.byTopic.length > 0 && (
                 <>
                     <h3 className="card-title mt-4 mb-2">
                         Tone toward {profile.displayName} by topic
                     </h3>
+                    <p className="modal-section-lede">
+                        WHAT the mentions are about — each row is one topic.
+                    </p>
                     <ToneBarRows
                         rows={received.byTopic.map((cell) => ({
                             key: cell.topic, label: cell.topic, net: cell.net, volume: cell.volume,
@@ -598,6 +666,9 @@ function EntitySentimentModal({
                     <h3 className="card-title mt-4 mb-2">
                         Who is talking about {profile.displayName}
                     </h3>
+                    <p className="modal-section-lede">
+                        WHO the mentions come from — news, officials, or the public.
+                    </p>
                     <ToneBarRows
                         rows={received.bySpeakerTier!.map((cell) => ({
                             key: cell.tier,
@@ -614,16 +685,15 @@ function EntitySentimentModal({
                     <h3 className="card-title mt-4 mb-2">
                         Narratives driving these mentions
                     </h3>
+                    <p className="modal-section-lede">
+                        WHICH recurring claims the mentions ride on — an association
+                        within our sample, not a claim about origin.
+                    </p>
                     <ToneBarRows
                         rows={received.byNarrative!.map((cell) => ({
                             key: cell.narrativeId, label: cell.name, net: cell.net, volume: cell.volume,
                         }))}
                     />
-                    <p className="text-xs text-muted">
-                        Narrative labels come from claim clustering over the posts we
-                        sampled — an association between ingested documents, not a
-                        claim about where the narrative originated.
-                    </p>
                 </>
             )}
 
@@ -672,6 +742,12 @@ function EntitySentimentModal({
                             : (samplesAreFiltered
                                 ? `Highest-confidence posts matching ${activeTopic.label}`
                                 : 'Highest-confidence classified posts')}
+                        {' '}
+                        <span className="modal-section-count">
+                            {loadedPosts != null
+                                ? `${filteredSamples.length.toLocaleString()} of ${loadedTotal.toLocaleString()}`
+                                : `${filteredSamples.length.toLocaleString()} shown`}
+                        </span>
                     </h3>
                     <PostCardList
                         posts={filteredSamples.map(sampleToPostCard)}

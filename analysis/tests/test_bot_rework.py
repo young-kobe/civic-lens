@@ -389,7 +389,9 @@ class TestBotAggregatorRework(unittest.TestCase):
         self.assertEqual(len(data.narrativeAmplification), 1)
         amp = data.narrativeAmplification[0]
         self.assertEqual(amp.narrative, "Border wall stops fentanyl")
-        self.assertEqual(amp.suspectedBotVolume, 2)
+        # Doc 2 is a news doc with a legacy bot row: it no longer counts —
+        # only the social doc (1) contributes to amplification volume.
+        self.assertEqual(amp.suspectedBotVolume, 1)
         # The slug appears only as a HUMANIZED why-flagged signal — never
         # verbatim, and never as the narrative itself.
         self.assertIn("Zero followers following listed", amp.whyFlagged)
@@ -411,14 +413,50 @@ class TestBotAggregatorRework(unittest.TestCase):
         # Doc 3 (plain X user, human) lands in the public tier, not officials.
         self.assertTrue(data.overview.by_general_public)
 
-    def test_news_entity_carries_samples(self):
+    def test_news_rollup_permanently_empty(self):
+        """News is never bot-scored: articles are not accounts (2026-07-11).
+
+        Doc 2 is a news doc that STILL HAS a legacy bot_detection row in
+        ai_outputs — the aggregator must ignore it everywhere: the
+        by_news_outlet rollup stays empty (the key survives for stale-cache
+        tolerance) and the doc is out of the automation-rate denominator.
+        """
         data = BotAggregator(self.db_path).get_bot_activity(time_window="7d")
-        news = data.overview.by_news_outlet
-        self.assertTrue(news)
-        flagged = [item for item in news if item.bot_docs > 0]
-        self.assertTrue(flagged)
-        self.assertTrue(flagged[0].samples)
-        self.assertEqual(flagged[0].samples[0].doc_id, 2)
+        self.assertEqual(data.overview.by_news_outlet, [])
+        # Denominator = docs 1 (bot) + 3 (human); the news row is excluded.
+        self.assertEqual(data.overview.suspectedAutomationRate, 50.0)
+
+
+class TestBotDetectionQueueScope(unittest.TestCase):
+    """Bot detection never queues news docs, whatever the analysis scope.
+
+    Articles are not accounts; scoring them wasted LLM calls and produced
+    the nonsense "outlet automation rate" the 2026-07-11 change deleted.
+    """
+
+    class _Stub:
+        # Borrow the real methods; only settings state is stubbed.
+        from analysis.src.scheduler.job_runner import AnalysisJobRunner as _R
+        _get_target_source_types = _R._get_target_source_types
+        _get_bot_detection_source_types = _R._get_bot_detection_source_types
+
+        def __init__(self, scope):
+            import types as _types
+            self.settings = _types.SimpleNamespace(run_analysis_on=scope)
+
+    def test_all_scope_still_excludes_news(self):
+        self.assertEqual(
+            self._Stub("all")._get_bot_detection_source_types(),
+            ["reddit_post", "reddit_comment", "x_post"],
+        )
+
+    def test_narrower_scopes_intersect(self):
+        self.assertEqual(
+            self._Stub("x")._get_bot_detection_source_types(), ["x_post"])
+        self.assertEqual(
+            self._Stub("social_media")._get_bot_detection_source_types(),
+            ["reddit_post", "reddit_comment", "x_post"],
+        )
 
 
 if __name__ == "__main__":

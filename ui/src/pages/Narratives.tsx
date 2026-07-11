@@ -191,75 +191,9 @@ function readsAsToday(_narratives: NarrativeSummary[]): string {
 //  Compact narrative card (used in the three-way grid + cross-tier panel)     //
 // --------------------------------------------------------------------------- //
 
-interface NarrativeCardProps {
-    narrative: NarrativeSummary;
-    onOpen: (n: NarrativeSummary) => void;
-}
-
-function NarrativeCard({ narrative, onOpen }: NarrativeCardProps) {
-    const sentColor = netSentimentColor(narrative.net_sentiment);
-    const propFlag = narrative.propaganda_score != null && narrative.propaganda_score >= 0.4;
-    const botFlag = narrative.bot_pushed_fraction != null && narrative.bot_pushed_fraction >= 0.3;
-
-    return (
-        <button
-            type="button"
-            className="narrative-card"
-            onClick={() => onOpen(narrative)}
-            aria-label={`${narrative.name}. ${narrative.supporting_doc_count} posts, net sentiment ${narrative.net_sentiment.toFixed(1)}%. Open details.`}
-            title={narrative.name}
-        >
-            <div className="narrative-card-claim">{narrative.name || '(unnamed)'}</div>
-            <div
-                className="narrative-card-origin"
-                title="'First seen' = the earliest post we collected. The claim may have started elsewhere before we picked it up."
-            >
-                first seen {formatRelativeDate(narrative.first_seen_at)} · {firstSeenLabel(narrative)}
-            </div>
-            <SourceBar items={narrative.source_breakdown} showLegend />
-            <div className="narrative-card-metrics">
-                <span>
-                    <span className="narrative-card-metric-value">{narrative.supporting_doc_count}</span>
-                    <span className="narrative-card-metric-label">posts</span>
-                </span>
-                <span title={NET_TONE_TITLE}>
-                    <span className="narrative-card-metric-value" style={{ color: sentColor }}>
-                        {formatPts(narrative.net_sentiment)}
-                    </span>
-                    <span className="narrative-card-metric-label">tone</span>
-                </span>
-                {narrative.inbound_citation_count > 0 && (
-                    <span title={CITES_TITLE}>
-                        <span className="narrative-card-metric-value">{narrative.inbound_citation_count}</span>
-                        <span className="narrative-card-metric-label">linked by</span>
-                    </span>
-                )}
-            </div>
-            {(propFlag || botFlag || narrative.cross_tier) && (
-                <div className="narrative-card-flags">
-                    {propFlag && (
-                        <span className="narrative-flag narrative-flag-prop"
-                            title={`Mean propaganda score ${narrative.propaganda_score?.toFixed(2)} on a 0-to-1 scale`}>
-                            Propaganda {narrative.propaganda_score?.toFixed(2)} / 1
-                        </span>
-                    )}
-                    {botFlag && (
-                        <span className="narrative-flag narrative-flag-bot"
-                            title={`${Math.round((narrative.bot_pushed_fraction ?? 0) * 100)}% of the unique X accounts posting this claim show automated-behavior signals in our bot detector (an estimate, not proof).`}>
-                            Bot-pushed {Math.round((narrative.bot_pushed_fraction ?? 0) * 100)}%
-                        </span>
-                    )}
-                    {narrative.cross_tier && (
-                        <span className="narrative-flag narrative-flag-cross"
-                            title="Supporting posts span two or more groups (news, officials, public)">
-                            Cross-group
-                        </span>
-                    )}
-                </div>
-            )}
-        </button>
-    );
-}
+// NarrativeCard was deleted 2026-07-11: its last consumer (the entity
+// modal's story stack) now renders compact .narrative-entity-row rows;
+// the page-level grid was already the lifecycle strip + claims panel.
 
 
 // --------------------------------------------------------------------------- //
@@ -293,6 +227,7 @@ function NarrativeDetailModal({
             onClose={onClose}
             onBack={onBack}
             backLabel={backLabel}
+            kicker="Narrative"
             title={narrative.name || '(unnamed narrative)'}
             subtitle={`First seen ${formatRelativeDate(narrative.first_seen_at)} · ${firstSeenLabel(narrative)}`}
             accentColor={sentColor}
@@ -357,7 +292,9 @@ function NarrativeDetailModal({
                         <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
                             {narrative.cross_narrative_citations!.map((edge) => (
                                 <li key={`${edge.direction}-${edge.narrative_id}`} className="text-sm">
-                                    {edge.direction === 'cites' ? 'Cites into' : 'Cited by'}{' '}
+                                    {edge.direction === 'cites'
+                                        ? 'Posts carrying this story link out to'
+                                        : 'This story is linked to by posts carrying'}{' '}
                                     {onOpenNarrativeId ? (
                                         <button
                                             type="button"
@@ -370,7 +307,7 @@ function NarrativeDetailModal({
                                     ) : (
                                         <strong>{edge.name}</strong>
                                     )}
-                                    {' '}({edge.edge_count} edge{edge.edge_count === 1 ? '' : 's'})
+                                    {' '}({edge.edge_count} link{edge.edge_count === 1 ? '' : 's'} between them)
                                 </li>
                             ))}
                         </ul>
@@ -384,24 +321,27 @@ function NarrativeDetailModal({
             )}
 
             <h3 className="card-title mt-4 mb-2">Daily volume</h3>
-            <Sparkline data={timeline} dataKey="value" height={80} color="var(--neutral-700)" />
+            {timeline.length >= 2 ? (
+                <Sparkline
+                    data={timeline}
+                    dataKey="value"
+                    height={200}
+                    showXAxis
+                    color="var(--neutral-700)"
+                    ariaLabel={`Daily post volume for this narrative, ${timeline.length} days`}
+                />
+            ) : (
+                /* A one-day-old story has a single point — an area chart
+                   draws nothing. Say what we know instead of 200px of air. */
+                <p className="text-sm text-muted">
+                    {timeline.length === 1
+                        ? `Collected on one day so far — ${timeline[0].value.toLocaleString()} post${timeline[0].value === 1 ? '' : 's'} on ${timeline[0].date}. The trend chart appears once there is a second day.`
+                        : 'No daily volume recorded yet for this story.'}
+                </p>
+            )}
 
             <h3 className="card-title mt-4 mb-2">Source mix</h3>
-            <SourceBar items={narrative.source_breakdown} />
-            <ul style={{ listStyle: 'none', padding: 0, marginTop: 'var(--space-2)', display: 'flex', gap: 'var(--space-3)', flexWrap: 'wrap' }}>
-                {narrative.source_breakdown.map((item) => (
-                    <li key={item.source_type} className="text-xs text-muted">
-                        <span
-                            style={{
-                                display: 'inline-block', width: 10, height: 10, borderRadius: '50%',
-                                background: SOURCE_DOT_COLOR[item.source_type] || 'var(--neutral-400)',
-                                marginRight: 6, verticalAlign: 'middle',
-                            }}
-                        />
-                        {item.label}: {item.count}
-                    </li>
-                ))}
-            </ul>
+            <SourceBar items={narrative.source_breakdown} showLegend />
 
             {narrative.first_seen_entity_profile && (
                 <>
@@ -584,13 +524,30 @@ function NarrativeEntityModal({
             <h3 className="card-title mt-4 mb-2">
                 {group.count === 1 ? 'The story' : 'The stories'}
             </h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+            {/* Compact rows, not full NarrativeCards — the reader just came
+                from the grid; repeating whole cards inside the modal made it
+                a duplicate of the page. Each row opens the detail modal. */}
+            <div className="narrative-entity-rows">
                 {group.narratives.map((n) => (
-                    <NarrativeCard
+                    <button
                         key={n.narrative_id}
-                        narrative={n}
-                        onOpen={onOpenNarrative}
-                    />
+                        type="button"
+                        className="narrative-entity-row"
+                        onClick={() => onOpenNarrative(n)}
+                        title="Open this story's details"
+                    >
+                        <span className="narrative-entity-row-name">{n.name}</span>
+                        <span
+                            className="narrative-entity-row-tone"
+                            style={{ color: netSentimentColor(n.net_sentiment) }}
+                        >
+                            {formatPts(n.net_sentiment)}
+                        </span>
+                        <span className="narrative-entity-row-docs">
+                            {n.supporting_doc_count.toLocaleString()} posts
+                        </span>
+                        <span className="narrative-entity-row-chevron" aria-hidden>&rsaquo;</span>
+                    </button>
                 ))}
             </div>
         </Modal>

@@ -223,6 +223,7 @@ function mockDistributionSamples(): Partial<Record<SentimentSegmentKey, Classifi
                     avatar_url: null, verified_type: 'blue',
                     followers_count: 48200, account_created_at: 1580000000,
                 },
+                targets: [{ label: 'Donald J. Trump', stance: 'negative' }],
                 reasoning: 'Absolute terms ("literally destroying"), present-tense accusation.',
                 evidence: ['literally destroying this country', 'Nothing subtle about it'],
             }, 90884),
@@ -412,11 +413,24 @@ function mockGeneralPublicSentiment(): EntitySentimentItem[] {
                 '~1.3M-subscriber subreddit; sidebar positions it as a "safe space for conservatives".'),
             { positive: 180, negative: 60, neutral: 95 },
         ),
-        entityItem(
-            catchAll('other-x-users', 'Other X users',
-                'X posts whose author is not in the tracked officials registry.'),
-            { positive: 220, negative: 360, neutral: 140 },
-        ),
+        {
+            ...entityItem(
+                catchAll('other-x-users', 'Other X users',
+                    'X posts whose author is not in the tracked officials registry.'),
+                { positive: 220, negative: 360, neutral: 140 },
+            ),
+            outbound: {
+                minSampleN: 5,
+                volume: 96,
+                targets: [
+                    { label: 'Donald J. Trump', entityKey: 'potus', kind: 'official', net: -46.2, volume: 52, lowSample: false },
+                    { label: 'Republicans (party)', entityKey: 'gop_collective', kind: 'collective', net: -18.0, volume: 20, lowSample: false },
+                    { label: 'Chuck Schumer', entityKey: 'senschumer', kind: 'official', net: 12.5, volume: 16, lowSample: false },
+                    { label: 'The Media', entityKey: null, kind: 'raw', net: null, volume: 4, lowSample: true },
+                    { label: 'Other targets', entityKey: null, kind: 'other', net: null, volume: 4, lowSample: true },
+                ],
+            },
+        },
     ];
 }
 
@@ -789,17 +803,10 @@ export function mockBotActivity(): BotData {
             topClusters: ['anti-immigration amplifiers', 'pro-candidate X ring', 'climate-denial chorus'],
             totalFlaggedPosts: 247,
             confidence: 'medium',
-            by_news_outlet: [
-                { key: 'nytimes.com', kind: 'outlet',  total_docs: 162, bot_docs: 1, bot_rate_pct: 0.6, entity_profile: NYT_PROFILE },
-                { key: 'foxnews.com', kind: 'outlet',  total_docs: 128, bot_docs: 3, bot_rate_pct: 2.3, entity_profile: FOX_PROFILE },
-                { key: 'bbc.com',     kind: 'outlet',  total_docs:  94, bot_docs: 0, bot_rate_pct: 0.0, entity_profile: BBC_PROFILE },
-                {
-                    key: 'other-outlets', kind: 'catch_all',
-                    total_docs: 240, bot_docs: 4, bot_rate_pct: 1.7,
-                    entity_profile: catchAll('other-outlets', 'Other news outlets',
-                        'News docs whose domain is not in the tracked outlet registry.'),
-                },
-            ],
+            // Permanently empty by contract (2026-07-11): news is not
+            // bot-scored — articles are not accounts. Key kept so stale
+            // caches parse.
+            by_news_outlet: [],
             by_official: [
                 { key: 'potus',          kind: 'official', total_docs: 82, bot_docs: 0, bot_rate_pct: 0.0, entity_profile: POTUS_PROFILE },
                 { key: 'senschumer',     kind: 'official', total_docs: 31, bot_docs: 0, bot_rate_pct: 0.0, entity_profile: SCHUMER_PROFILE },

@@ -193,6 +193,27 @@ export interface EntitySentimentItem {
      *  sorted; net is null (lowSample) below the backend suppression floor.
      *  Missing on pre-topic cached snapshots. */
     byTopic?: EntityTopicCell[];
+    /** Public tier only — WHO this bucket's posts talk about (the inverse
+     *  of received). Missing on pre-outbound cached snapshots. */
+    outbound?: OutboundTargets | null;
+}
+
+/** Outbound-target rollup on a public-tier entity card. */
+export interface OutboundTargets {
+    minSampleN: number;
+    volume: number;
+    targets: OutboundTargetCell[];
+}
+
+/** One "who they're talking about" row. kind 'raw' = unresolved free-text
+ *  target that recurred; 'other' = pooled one-offs and overflow. */
+export interface OutboundTargetCell {
+    label: string;
+    entityKey: string | null;
+    kind: 'official' | 'collective' | 'raw' | 'other';
+    net: number | null;
+    volume: number;
+    lowSample: boolean;
 }
 
 /** One topic-scoped expressed-tone cell on an entity card. */
@@ -263,6 +284,15 @@ export interface ClassificationSample {
     // Phase 2b/2c enrichment. Absent on pre-enrichment cached snapshots.
     engagement?: SampleEngagement | null;
     author?: SampleAuthor | null;
+    /** Who this post's sentiment is directed at (frozen target_mentions):
+     *  resolved targets first, capped small. Absent on older snapshots. */
+    targets?: SampleTarget[] | null;
+}
+
+/** One "about X — negative" chip on a sampled post. */
+export interface SampleTarget {
+    label: string;
+    stance: 'positive' | 'negative' | 'neutral' | 'mixed';
 }
 
 export interface SentimentBreakdown {

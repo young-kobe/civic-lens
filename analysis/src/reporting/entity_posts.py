@@ -32,6 +32,7 @@ from analysis.src.reporting.aggregators.base import (
 )
 from analysis.src.reporting.aggregators.sentiment import (
     CATCH_ALL_VERIFIED_OFFICIALS,
+    _build_doc_targets,
     _build_sample_dict,
     _extract_topic,
 )
@@ -228,6 +229,20 @@ def fetch_entity_posts(
         )
         rows = cursor.fetchall()
 
+        # Target chips for this page's docs, same rules as the snapshot
+        # samples (_attach_sample_targets): frozen mentions, floor applied.
+        doc_targets: Dict[int, List[Dict[str, str]]] = {}
+        page_doc_ids = [r[0] for r in rows]
+        if page_doc_ids:
+            cursor.execute(
+                "SELECT m.doc_id, m.entity_key, m.stance, m.raw_target "
+                "FROM target_mentions m "
+                "JOIN ai_outputs_latest la ON la.output_id = m.output_id "
+                f"WHERE m.confidence >= ? AND m.doc_id IN ({','.join('?' for _ in page_doc_ids)})",
+                (min_conf, *page_doc_ids),
+            )
+            doc_targets = _build_doc_targets(cursor.fetchall())
+
     items: List[Dict[str, Any]] = []
     for (
         doc_id, output_json, confidence, source_type, published_at,
@@ -241,7 +256,7 @@ def fetch_entity_posts(
         except json.JSONDecodeError:
             continue
         conf = float(data.get("confidence", confidence or 0.5))
-        items.append(_build_sample_dict(
+        sample = _build_sample_dict(
             doc_id, data.get("label", "NEUTRAL"), conf, data,
             title, source_type, published_at, domain_or_subreddit, ident, text,
             x_handle, topic=llm_topic or _extract_topic(title),
@@ -253,6 +268,8 @@ def fetch_entity_posts(
                 source_type, x_handle, u_name, u_avatar, u_verified_type,
                 u_followers, u_created_at, bio=u_bio,
             ),
-        ))
+        )
+        sample["targets"] = doc_targets.get(doc_id)
+        items.append(sample)
 
     return {"items": items, "total": total, "limit": limit, "offset": offset}
