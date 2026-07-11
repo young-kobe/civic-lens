@@ -331,8 +331,8 @@ function SmallMultiples({
                     </div>
                 )}
                 {topStories.map((n) => (
-                    <div key={n.narrative_id} className="desk-multiple">
-                        <div className="desk-multiple-label" title={n.name}>{n.name}</div>
+                    <div key={n.narrative_id} className="desk-multiple" title={n.name}>
+                        <div className="desk-multiple-label">{n.name}</div>
                         <Sparkline
                             data={n.timeline.map((t) => ({ date: t.date, value: t.count }))}
                             height={48}
@@ -492,6 +492,7 @@ function DataDesk({ filters }: DataDeskProps) {
 
     const hasSnapshots = (snapshotStatus?.snapshots?.length ?? 0) > 0;
     const hasReview = (evalAccuracy?.perTask?.length ?? 0) > 0;
+    const hasLeftColumn = hasSnapshots || hasReview;
 
     return (
         <div className="dashboard-grid">
@@ -500,32 +501,23 @@ function DataDesk({ filters }: DataDeskProps) {
                     <CrossSignalMatrix rows={matrix} />
                 </div>
             )}
-            {/* Row 1: snapshot freshness (left) + small multiples. Snapshot
-                takes the slot Movers used to; Movers moves down to fill the
-                area that was empty beside the short small-multiples grid. */}
-            {hasSnapshots && (
+            {/* Two-column module block. Left column stacks the audit tables
+                (snapshot freshness + human review); right column stacks the
+                small multiples with the Movers board directly beneath them —
+                Movers fills the area that was empty below the multiples grid. */}
+            {hasLeftColumn && (
                 <div className="col-span-5">
-                    <SnapshotFreshnessCard status={snapshotStatus} />
+                    {hasSnapshots && <SnapshotFreshnessCard status={snapshotStatus} />}
+                    {hasReview && <HumanReviewCard evalAccuracy={evalAccuracy} />}
                 </div>
             )}
-            <div className={hasSnapshots ? 'col-span-7' : 'col-span-12'}>
+            <div className={hasLeftColumn ? 'col-span-7' : 'col-span-12'}>
                 <SmallMultiples
                     sentiment={sentimentFetch.data}
                     narratives={narrativesFetch.data}
                 />
+                {moversFetch.data && <MoversBoard movers={moversFetch.data} />}
             </div>
-
-            {/* Row 2: human review agreement + movers board. */}
-            {hasReview && (
-                <div className={moversFetch.data ? 'col-span-5' : 'col-span-12'}>
-                    <HumanReviewCard evalAccuracy={evalAccuracy} />
-                </div>
-            )}
-            {moversFetch.data && (
-                <div className={hasReview ? 'col-span-7' : 'col-span-12'}>
-                    <MoversBoard movers={moversFetch.data} />
-                </div>
-            )}
         </div>
     );
 }

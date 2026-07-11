@@ -371,16 +371,12 @@ function publicOutboundTargets(items: EntitySentimentItem[]): EntitySentimentIte
 function SentimentThreeWayGrid({
     newsOutlets, officials, generalPublic, onOpen, activeTopic,
 }: ThreeWayGridProps) {
-    // Cross-column controls (owned here; ThreeWayColumn receives filtered items).
+    // Lean/party filter (owned here; ThreeWayColumn receives filtered items).
     const [leanFilter, setLeanFilter] = useState<LeanFilter>('all');
-    const [officialSearch, setOfficialSearch] = useState('');
 
     const byLean = (it: EntitySentimentItem) => matchesLeanFilter(it.entityProfile, leanFilter);
     const filteredNews = newsOutlets.filter(byLean);
-    const query = officialSearch.trim().toLowerCase();
-    const filteredOfficials = officials
-        .filter(byLean)
-        .filter((it) => query === '' || it.entityProfile.displayName.toLowerCase().includes(query));
+    const filteredOfficials = officials.filter(byLean);
     const filteredPublic = generalPublic.filter(byLean);
     // Targets are computed from the unfiltered public tier — they describe who
     // the public talks ABOUT, independent of the entities' own lean.
@@ -446,15 +442,14 @@ function SentimentThreeWayGrid({
     ) : null;
 
     return (
-        <>
-            <ThreeWayToolbar
-                leanFilter={leanFilter}
-                onLeanFilterChange={setLeanFilter}
-                search={officialSearch}
-                onSearchChange={setOfficialSearch}
-                searchPlaceholder="Search officials by name..."
-            />
-            <ThreeWayGrid>
+        <ThreeWayGrid
+            toolbar={
+                <ThreeWayToolbar
+                    leanFilter={leanFilter}
+                    onLeanFilterChange={setLeanFilter}
+                />
+            }
+        >
                 <ThreeWayColumn
                     header="The News"
                     byline={`Top outlets by coverage volume, with their editorial lean${topicSuffix}`}
@@ -480,8 +475,7 @@ function SentimentThreeWayGrid({
                     sorters={SENTIMENT_SORTERS}
                     footer={publicTargetsFooter}
                 />
-            </ThreeWayGrid>
-        </>
+        </ThreeWayGrid>
     );
 }
 
@@ -955,7 +949,7 @@ function PollingComparison({ data }: { data: PollingSocialComparison }) {
 // that order with a light-to-dark ramp (darker = fresher).
 const FRESHNESS_SHADE: Record<string, string> = {
     '24 hours': 'var(--chart-accent)',
-    '7 days': 'var(--chart-accent-soft)',
+    '7 days': 'var(--accent-muted)',
     '30 days': 'var(--neutral-300)',
     '90+ days': 'var(--neutral-200)',
     'Unknown': 'var(--neutral-150)',
@@ -1334,6 +1328,12 @@ function PublicSentiment({ filters }: PublicSentimentProps) {
                     toneTrend={data.toneTrend}
                     gopTrend={data.gopTrend}
                     byDayOfWeek={data.byDayOfWeek}
+                    entitiesByTier={{
+                        news: data.byNewsOutlet ?? [],
+                        officials: data.byOfficial ?? [],
+                        public: data.byGeneralPublic ?? [],
+                    }}
+                    onOpenEntity={setActiveEntity}
                 />
             </div>
             <div className="col-span-6">

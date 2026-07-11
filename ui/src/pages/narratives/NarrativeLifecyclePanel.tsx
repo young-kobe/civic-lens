@@ -13,7 +13,8 @@ import type { NarrativeSummary } from '../../types';
 //  the groups carrying it, and post count. Click opens the detail modal.      //
 // --------------------------------------------------------------------------- //
 
-const LIFECYCLE_TOP_N = 8;
+// 5 to match the "Stories spreading across groups" panel it now shares a row with.
+const LIFECYCLE_TOP_N = 5;
 
 const TIER_LABEL: Record<string, string> = {
     news: 'News',

@@ -206,6 +206,19 @@ export interface EntitySentimentItem {
      *  on pre-engagement cached snapshots — powers the officials column's
      *  engagement-weighted default sort. */
     engagementTotal?: number;
+    /** Per-day net-tone series for this entity's own posts, dates ascending;
+     *  net is null (lowSample) below the suppression floor. Powers the
+     *  Tone-over-time chart's tier→entity drill-down. Absent on pre-dailyTone
+     *  snapshots. */
+    dailyTone?: EntityDailyTonePoint[];
+}
+
+/** One day in an entity's daily net-tone series. */
+export interface EntityDailyTonePoint {
+    date: string;
+    net: number | null;
+    volume: number;
+    lowSample: boolean;
 }
 
 /** Outbound-target rollup on a public-tier entity card. */

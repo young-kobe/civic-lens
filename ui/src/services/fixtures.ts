@@ -337,10 +337,22 @@ function catchAll(key: string, displayName: string, blurb: string): EntityProfil
     return { kind: 'catch_all', key, displayName, blurb, lean: null, leanSource: null };
 }
 
+// Deterministic ~10-day net-tone series around a base, so the Tone-over-time
+// tier→entity drill-down shows divergence in mock mode. seed varies the wobble.
+function mockDailyTone(baseNet: number, seed: number) {
+    const days = 10;
+    return Array.from({ length: days }, (_, i) => {
+        const wobble = Math.round((((i * 7 + seed * 13) % 21) - 10) * 10) / 10;
+        const net = Math.max(-100, Math.min(100, Math.round((baseNet + wobble) * 10) / 10));
+        return { date: isoDay(days - 1 - i), net, volume: 8 + ((i * 5 + seed) % 14), lowSample: false };
+    });
+}
+
 function entityItem(
     profile: EntityProfile,
     counts: { positive: number; negative: number; neutral: number },
     engagementTotal?: number,
+    dailyTone?: EntitySentimentItem['dailyTone'],
 ): EntitySentimentItem {
     const volume = counts.positive + counts.negative + counts.neutral;
     const net = volume > 0 ? ((counts.positive - counts.negative) / volume) * 100 : 0;
@@ -353,6 +365,7 @@ function entityItem(
         entityProfile: profile,
         classificationSamples: [],
         ...(engagementTotal != null ? { engagementTotal } : {}),
+        ...(dailyTone ? { dailyTone } : {}),
     };
 }
 
@@ -362,22 +375,22 @@ function mockOutletSentiment(): EntitySentimentItem[] {
             outletProfile('nytimes.com', 'The New York Times', 'center-left',
                 'AllSides 2024 (Lean Left)',
                 'A general-interest daily of record and the largest US paper by paid digital subscriptions.'),
-            { positive: 140, negative: 220, neutral: 320 },
+            { positive: 140, negative: 220, neutral: 320 }, undefined, mockDailyTone(-11.8, 1),
         ),
         entityItem(
             outletProfile('foxnews.com', 'Fox News', 'right', 'AllSides 2024 (Right)',
                 'The most-watched US cable news network and the dominant conservative TV voice.'),
-            { positive: 95, negative: 310, neutral: 180 },
+            { positive: 95, negative: 310, neutral: 180 }, undefined, mockDailyTone(-36.8, 4),
         ),
         entityItem(
             outletProfile('bbc.com', 'BBC', 'center', 'AllSides 2024 (Center)',
                 'UK public broadcaster; one of the most-read non-US outlets covering American politics.'),
-            { positive: 130, negative: 160, neutral: 310 },
+            { positive: 130, negative: 160, neutral: 310 }, undefined, mockDailyTone(-5.0, 7),
         ),
         entityItem(
             catchAll('other-outlets', 'Other news outlets',
                 'News docs whose domain is not in the tracked outlet registry.'),
-            { positive: 115, negative: 180, neutral: 240 },
+            { positive: 115, negative: 180, neutral: 240 }, undefined, mockDailyTone(-12.1, 2),
         ),
     ];
 }
@@ -391,19 +404,19 @@ function mockOfficialSentiment(): EntitySentimentItem[] {
             officialProfile('potus', 'Donald J. Trump', 'President of the United States', 'R',
                 '47th President; high-volume X poster driving news cycles.'),
             { positive: 58, negative: 22, neutral: 30 },
-            320_400,
+            320_400, mockDailyTone(32.7, 3),
         ),
         entityItem(
             officialProfile('senschumer', 'Chuck Schumer', 'Senate Minority Leader', 'D',
                 'Senior Democratic senator from New York; Senate minority leader since Jan 2025.'),
             { positive: 18, negative: 44, neutral: 12 },
-            481_900,
+            481_900, mockDailyTone(-35.1, 6),
         ),
         entityItem(
             officialProfile('speakerjohnson', 'Mike Johnson', 'Speaker of the House', 'R',
                 'Speaker of the US House since October 2023.'),
             { positive: 30, negative: 15, neutral: 18 },
-            94_800,
+            94_800, mockDailyTone(23.8, 9),
         ),
     ];
 }
@@ -414,19 +427,19 @@ function mockGeneralPublicSentiment(): EntitySentimentItem[] {
             subredditProfile('politics', 'r/politics', 'left',
                 'Community sidebar + widely documented liberal skew',
                 'The largest general US-politics subreddit; ~8M subscribers with a strong liberal skew.'),
-            { positive: 110, negative: 380, neutral: 210 },
+            { positive: 110, negative: 380, neutral: 210 }, undefined, mockDailyTone(-38.6, 5),
         ),
         entityItem(
             subredditProfile('conservative', 'r/Conservative', 'right',
                 'Community sidebar + flair-gated participation',
                 '~1.3M-subscriber subreddit; sidebar positions it as a "safe space for conservatives".'),
-            { positive: 180, negative: 60, neutral: 95 },
+            { positive: 180, negative: 60, neutral: 95 }, undefined, mockDailyTone(35.8, 8),
         ),
         {
             ...entityItem(
                 catchAll('other-x-users', 'Other X users',
                     'X posts whose author is not in the tracked officials registry.'),
-                { positive: 220, negative: 360, neutral: 140 },
+                { positive: 220, negative: 360, neutral: 140 }, undefined, mockDailyTone(-19.4, 0),
             ),
             outbound: {
                 minSampleN: 5,

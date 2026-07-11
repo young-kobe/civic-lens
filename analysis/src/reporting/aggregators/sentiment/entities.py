@@ -65,6 +65,7 @@ def _route_and_record(
     topic: Optional[str] = None,
     engagement: Optional[Dict[str, int]] = None,
     author: Optional[Dict[str, Any]] = None,
+    day: Optional[str] = None,
 ) -> Optional[str]:
     """Resolve the row's tier + entity via the shared entity_routing
     module, then bucket the row into the right per-entity accumulator
@@ -180,7 +181,7 @@ def _route_and_record(
     _collect_entity_sample(
         bucket_dict[key], doc_id, label, conf, data,
         title, source_type, published_at, domain_or_subreddit, ident, text, x_handle,
-        topic=topic, engagement=engagement, author=author,
+        topic=topic, engagement=engagement, author=author, day=day,
     )
     return tier
 
@@ -238,6 +239,12 @@ def _consolidate_sampled_authors(bucket: Dict[str, Dict[str, Any]]) -> None:
             )
             for label_key, n in counts.items():
                 target[label_key] = target.get(label_key, 0) + n
+        for day, counts in stats.get("by_day", {}).items():
+            target = catch["by_day"].setdefault(
+                day, {"positive": 0, "negative": 0, "neutral": 0, "mixed": 0},
+            )
+            for label_key, n in counts.items():
+                target[label_key] = target.get(label_key, 0) + n
         for sample in stats["samples"]:
             _insert_capped(catch["samples"], sample, MAX_SAMPLES_PER_ENTITY)
         del bucket[key]
@@ -263,4 +270,8 @@ def _init_entity_bucket(
         # Per-topic stance counts for the entity's own posts — powers the
         # topic-scoped expressed score in the profile modal.
         "by_topic": {},
+        # Per-day stance counts for this entity's own posts — powers the
+        # per-entity daily tone series (dailyTone) the Tone-over-time chart
+        # drills into when a tier is expanded.
+        "by_day": {},
     }

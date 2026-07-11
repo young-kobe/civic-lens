@@ -85,9 +85,11 @@
      News / Officials / Public (the trend sparklines + any tier-coded mark).
      Validated as a categorical trio: worst adjacent CVD dE 45+, all >= 3:1,
      chroma floor clears. Distinct from the pos/neg tone colors above. */
-  --tier-news: #4a6fc0;
-  --tier-officials: #009e8b;
-  --tier-public: #c27a10;
+  /* Brightened 2026-07-11 for higher-contrast, Grafana-style chart lines
+     (blue / teal / amber stays a CVD-safe categorical trio). */
+  --tier-news: #2f6fe8;
+  --tier-officials: #12b3a0;
+  --tier-public: #ea8800;
 
   /* Partisan-lean palette — deliberately distinct from the sentiment set
      so a right-leaning source's chip/border is not the same red that means
@@ -97,26 +99,21 @@
   --lean-right: #8f3f60;
   --lean-right-light: #f0dde6;
 
-  /* Chart palette — monochromatic ink-blue ramp for magnitude/identity;
-     brick reserved for negative. Paired dark/light stops for gradient
-     fills that still read at low opacity. */
-  --chart-positive: #2a4d80;
-  --chart-negative: #8f2314;
-  --chart-neutral: #838a97;
-  --chart-neutral-soft: #c0c4cd;
-  --chart-accent: #1a3a6b;
-  --chart-accent-soft: #5f7cab;
-  --chart-grid: rgba(13, 14, 18, 0.07);
-  --chart-gradient-positive: linear-gradient(135deg, #0f2a52 0%, #7d95bb 100%);
-  --chart-gradient-negative: linear-gradient(135deg, #701c0f 0%, #b96f61 100%);
-  --chart-gradient-neutral:  linear-gradient(135deg, #838a97 0%, #c0c4cd 100%);
-  --chart-gradient-accent:   linear-gradient(135deg, #1a3a6b 0%, #5f7cab 100%);
+  /* Chart palette — a bright accent line for area/line charts + a gridline
+     tint. (The old positive/negative/neutral/gradient ramp was unused and
+     removed 2026-07-11.) */
+  --chart-accent: #2563eb;
+  /* Slightly stronger so back gridlines read (Grafana register). */
+  --chart-grid: rgba(13, 14, 18, 0.10);
 
   /* Source-type colors — narrative mix bar + reference elsewhere.
      (Trio CVD-validated: worst adjacent dE 50.1.) */
-  --source-news: #142f45;
-  --source-reddit: #a34a1f;
-  --source-x: #101013;
+  /* Source-type trio — bright, high-contrast Grafana register (2026-07-11,
+     replacing the dark navy / rust / near-black set). Blue / orange / purple
+     stay a CVD-distinct categorical trio. */
+  --source-news: #3b82f6;
+  --source-reddit: #f97316;
+  --source-x: #a855f7;
 
   /* Tone-intensity palette — 5-way diverging distribution for the top-metrics
      mini-bar. Standardized 2026-07-11 onto the site's vivid semantic pair
@@ -347,6 +344,13 @@ code, pre {
   max-width: var(--max-content-width);
   margin: 0 auto;
   padding: 0 var(--space-5);
+  /* Continuous page frame (Bloomberg): hairline rails down both edges contain
+     the whole content column. min-height so the rails run the full viewport
+     even on short pages. */
+  border-left: 1px solid var(--neutral-200);
+  border-right: 1px solid var(--neutral-200);
+  min-height: 100vh;
+  min-height: 100dvh;
 }
 
 /* Page header sticks to the top and compresses on scroll. */
@@ -388,9 +392,9 @@ code, pre {
    large empty bands (e.g. Data Desk "Human review agreement" beside the long
    snapshot table; Bot Detector's similarity/domain panels). Density pass
    2026-07-11. */
-.grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--space-2); align-items: start; }
-.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-2); align-items: start; }
-.grid-auto { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: var(--space-2); }
+.grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--space-3); align-items: start; }
+.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-3); align-items: start; }
+.grid-auto { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: var(--space-3); }
 
 /* Newspaper-style 12-col dashboard grid.
    Lets us pair narrow cards (e.g. a 3-stat summary at col-span-5) next to
@@ -408,7 +412,10 @@ code, pre {
 .dashboard-grid {
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
-  gap: var(--space-2);
+  /* Modules are spaced (not touching): the page-level frame on .app-container
+     supplies the continuous outer border; between modules a small gap keeps
+     them readable. Bumped for readability 2026-07-11. */
+  gap: var(--space-3);
   align-items: start;
 }
 
@@ -430,6 +437,11 @@ code, pre {
 
 .dashboard-grid > [class*="col-span-"] > * {
   min-height: 0;
+}
+/* Stacked modules inside one cell (e.g. Data Desk's left/right columns) get a
+   small vertical gap so they read as separate modules. */
+.dashboard-grid > [class*="col-span-"] > * + * {
+  margin-top: var(--space-3);
 }
 
 @media (max-width: 1024px) {
@@ -2293,22 +2305,32 @@ code, pre {
    Collapses to single-column below 1024px.
    ============================================ */
 
+/* The three-way frame is one wireframe box: an outer border (via
+   .three-way-frame) encapsulates all columns, and a vertical hairline divides
+   each column. Cards inside keep their normal spacing. */
+.three-way-frame {
+  border: 1px solid var(--neutral-200);
+  background: var(--bg-card);
+}
+
 .three-way-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--space-2);
-  /* align-items: start — a short tier (e.g. 3 officials) hugs its own content
-     instead of stretching to the tallest column's height. Mirrors
-     .dashboard-grid. */
-  align-items: start;
+  gap: 0;
+  align-items: stretch;
+}
+/* Vertical dividers between columns (not after the last). */
+.three-way-grid > .three-way-column:not(:last-child),
+.two-way-grid > .three-way-column:not(:last-child) {
+  border-right: 1px solid var(--neutral-200);
 }
 
 /* Bot Detector: news is not bot-scored, so its grid has two tiers. */
 .two-way-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-2);
-  align-items: start;
+  gap: 0;
+  align-items: stretch;
 }
 
 .three-way-column {
@@ -2316,7 +2338,10 @@ code, pre {
   flex-direction: column;
   gap: 6px;
   min-width: 0;
+  /* Padding keeps the cards off the frame border and column dividers. */
+  padding: var(--space-2);
 }
+.three-way-column-head { margin-bottom: var(--space-1); }
 
 .three-way-column-header {
   font-family: var(--font-display);
@@ -2338,23 +2363,16 @@ code, pre {
   padding-bottom: 4px;
 }
 
-/* Header row: headings on the left, the sort toggle pushed to the right so
-   the sort control reads as a per-column setting at the TOP of the column
-   (was a footer control below the cards). */
+/* Header block: the title takes the full column width (its underline runs edge
+   to edge so it reads as a clean section rule), then the byline, then the sort
+   control on its own line beneath — not competing with the title's row. */
 .three-way-column-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: var(--space-2);
-}
-
-.three-way-column-headings {
-  flex: 1;
-  min-width: 0;
+  display: block;
 }
 
 .three-way-column-head .three-way-column-control {
-  flex: none;
+  display: block;
+  margin-top: var(--space-1);
   white-space: nowrap;
 }
 
@@ -2367,16 +2385,20 @@ code, pre {
   gap: 6px;
   max-height: min(78vh, 900px);
   overflow-y: auto;
-  padding-right: 2px;
 }
 
 /* Cross-column control bar above the grid: lean/party filter + entity search. */
+/* Filter bar — the header band of the three-way frame. The frame supplies the
+   outer border; the band just needs a bottom rule to divide it from the
+   columns. Boxed inside the frame so it can't overflow the page. */
 .three-way-toolbar {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: var(--space-2) var(--space-3);
-  margin-bottom: var(--space-2);
+  gap: var(--space-2) var(--space-4);
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--neutral-200);
 }
 
 .three-way-toolbar-filter {
@@ -2388,12 +2410,7 @@ code, pre {
 
 .three-way-toolbar-label {
   margin-right: var(--space-1);
-}
-
-.three-way-toolbar-search {
-  margin-left: auto;
-  max-width: 260px;
-  flex: 1 1 180px;
+  color: var(--neutral-500);
 }
 
 /* "Who the public is talking about" — target-sentiment rows that fill the
@@ -3535,12 +3552,43 @@ span.ranked-entity-row { cursor: default; }
   color: var(--neutral-900);
 }
 
-/* Column footer controls — sort toggle + show-all expander. */
-.three-way-column-controls {
+/* Color-coded interactive legend under the Tone-over-time chart. Each item is
+   a button: hover explains it + isolates its line, click drills a tier into
+   its entities (or opens an entity's classified-evidence modal). */
+.tone-legend {
   display: flex;
-  justify-content: space-between;
-  gap: var(--space-2);
-  padding-top: var(--space-2);
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+  margin-top: var(--space-2);
+}
+
+.tone-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--neutral-700);
+  background: none;
+  border: none;
+  padding: 2px 0;
+  cursor: pointer;
+  transition: color var(--transition-fast);
+}
+.tone-legend-item:hover { color: var(--accent); }
+.tone-legend-item-static { cursor: default; }
+.tone-legend-item-static:hover { color: var(--neutral-700); }
+.tone-legend-item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.tone-legend-swatch {
+  width: 12px;
+  height: 3px;
+  border-radius: var(--radius-full);
+  flex: none;
 }
 
 .three-way-column-control {
@@ -3582,6 +3630,37 @@ span.ranked-entity-row { cursor: default; }
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
   gap: var(--space-3);
   margin-top: var(--space-3);
+}
+
+/* Headline KPI strip at the top of the weekly digest. */
+.digest-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+.digest-kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-3);
+  background: var(--bg-card);
+  border: 1px solid var(--neutral-200);
+}
+.digest-kpi-value {
+  font-family: var(--font-mono);
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  color: var(--neutral-900);
+  font-variant-numeric: tabular-nums;
+  line-height: var(--leading-tight);
+}
+.digest-kpi-detail {
+  font-size: var(--text-xs);
+  color: var(--neutral-500);
+}
+@media (max-width: 640px) {
+  .digest-kpis { grid-template-columns: repeat(2, 1fr); }
 }
 
 .digest-block {
@@ -3628,8 +3707,28 @@ a.digest-block-cta:hover { color: var(--accent-hover); }
 .digest-tier-rows {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-1);
 }
+
+/* The digest block is ~300px wide — too narrow for the top-metrics tier row's
+   single-line label|axis|value|verb (the max-content verb overflowed and
+   squished the axis). Stack it: label + value on top, axis bar full-width, verb
+   beneath; drop the ±100 endpoint labels here to keep it clean. */
+.digest-tier-rows .tier-row {
+  grid-template-columns: 1fr auto;
+  grid-template-areas:
+    "label value"
+    "axis  axis"
+    "verb  verb";
+  align-items: baseline;
+  row-gap: 3px;
+  padding: var(--space-1) 0;
+}
+.digest-tier-rows .tier-row-label { grid-area: label; }
+.digest-tier-rows .tier-row-value { grid-area: value; text-align: right; width: auto; }
+.digest-tier-rows .tier-row-axis { grid-area: axis; margin: 2px 0; }
+.digest-tier-rows .tier-row-verb { grid-area: verb; }
+.digest-tier-rows .tier-row-endpoint { display: none; }
 
 .digest-story-list {
   list-style: none;
@@ -3758,7 +3857,6 @@ a.digest-block-cta:hover { color: var(--accent-hover); }
   margin-bottom: var(--space-3);
 }
 
-.narrative-search { max-width: 380px; }
 
 /* Freshness strip — age mix of scored posts, inside the Tone page's
    how-this-works collapsible. Darker = fresher. */

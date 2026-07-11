@@ -58,18 +58,9 @@ export const COLORS = {
     bgPanel: 'var(--bg-panel)',
     bgInset: 'var(--bg-inset)',
 
-    // Chart ramp
-    chartPositive:       'var(--chart-positive)',
-    chartNegative:       'var(--chart-negative)',
-    chartNeutral:        'var(--chart-neutral)',
-    chartNeutralSoft:    'var(--chart-neutral-soft)',
+    // Chart ramp. Only chartAccent is consumed in JS; --chart-grid is used
+    // directly via var() in the chart components.
     chartAccent:         'var(--chart-accent)',
-    chartAccentSoft:     'var(--chart-accent-soft)',
-    gradPositive:        'var(--chart-gradient-positive)',
-    gradNegative:        'var(--chart-gradient-negative)',
-    gradNeutral:         'var(--chart-gradient-neutral)',
-    gradAccent:          'var(--chart-gradient-accent)',
-    chartGrid:           'var(--chart-grid)',
 
     // Political-stance palette
     stanceSupportive:      'var(--stance-supportive-solid)',

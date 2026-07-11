@@ -25,8 +25,18 @@ import { leanClass } from '../../theme';
  * `index.css`.
  */
 
-export function ThreeWayGrid({ children }: { children: ReactNode }) {
-    return <div className="three-way-grid">{children}</div>;
+/**
+ * A single wireframe box: an outer border encapsulates the columns, an optional
+ * `toolbar` renders as a header band above them, and vertical hairlines divide
+ * the columns (CSS). Every page's three-way grid reads as one contained module.
+ */
+export function ThreeWayGrid({ children, toolbar }: { children: ReactNode; toolbar?: ReactNode }) {
+    return (
+        <div className="three-way-frame">
+            {toolbar}
+            <div className="three-way-grid">{children}</div>
+        </div>
+    );
 }
 
 /**
@@ -34,8 +44,13 @@ export function ThreeWayGrid({ children }: { children: ReactNode }) {
  * Detector scores social accounts only (news articles are not accounts).
  * Columns are the same ThreeWayColumn.
  */
-export function TwoWayGrid({ children }: { children: ReactNode }) {
-    return <div className="two-way-grid">{children}</div>;
+export function TwoWayGrid({ children, toolbar }: { children: ReactNode; toolbar?: ReactNode }) {
+    return (
+        <div className="three-way-frame">
+            {toolbar}
+            <div className="two-way-grid">{children}</div>
+        </div>
+    );
 }
 
 export interface ColumnSorter<T> {
@@ -80,56 +95,35 @@ interface ThreeWayToolbarProps {
     /** Lean filter state; omit the pair to hide the lean pills. */
     leanFilter?: LeanFilter;
     onLeanFilterChange?: (f: LeanFilter) => void;
-    /** Search box state; omit the pair to hide the search input. */
-    search?: string;
-    onSearchChange?: (s: string) => void;
-    searchPlaceholder?: string;
 }
 
 /**
- * Cross-column control bar rendered ABOVE the three-way grid. Hosts the
- * lean/party filter and an entity search box. Both are optional — a page
- * renders only the controls it wires. Returns null when neither is supplied
- * so it never leaves an empty bar.
+ * Header band of the three-way frame — hosts the lean/party filter. Returns
+ * null when the filter isn't wired so the frame has no empty band.
  */
-export function ThreeWayToolbar({
-    leanFilter, onLeanFilterChange, search, onSearchChange, searchPlaceholder,
-}: ThreeWayToolbarProps) {
+export function ThreeWayToolbar({ leanFilter, onLeanFilterChange }: ThreeWayToolbarProps) {
     const showLean = leanFilter !== undefined && !!onLeanFilterChange;
-    const showSearch = search !== undefined && !!onSearchChange;
-    if (!showLean && !showSearch) return null;
+    if (!showLean) return null;
     return (
         <div className="three-way-toolbar">
-            {showLean && (
-                <div
-                    className="three-way-toolbar-filter"
-                    role="group"
-                    aria-label="Filter by political lean or party"
-                >
-                    <span className="eyebrow three-way-toolbar-label">Lean</span>
-                    {LEAN_FILTER_OPTIONS.map((opt) => (
-                        <button
-                            key={opt.key}
-                            type="button"
-                            className={`filter-pill ${leanFilter === opt.key ? 'filter-pill-active' : ''}`}
-                            onClick={() => onLeanFilterChange!(opt.key)}
-                            aria-pressed={leanFilter === opt.key}
-                        >
-                            {opt.label}
-                        </button>
-                    ))}
-                </div>
-            )}
-            {showSearch && (
-                <input
-                    type="search"
-                    className="input three-way-toolbar-search"
-                    placeholder={searchPlaceholder ?? 'Search...'}
-                    value={search}
-                    onChange={(e) => onSearchChange!(e.target.value)}
-                    aria-label={searchPlaceholder ?? 'Search'}
-                />
-            )}
+            <div
+                className="three-way-toolbar-filter"
+                role="group"
+                aria-label="Filter by political lean or party"
+            >
+                <span className="eyebrow three-way-toolbar-label">Lean</span>
+                {LEAN_FILTER_OPTIONS.map((opt) => (
+                    <button
+                        key={opt.key}
+                        type="button"
+                        className={`filter-pill ${leanFilter === opt.key ? 'filter-pill-active' : ''}`}
+                        onClick={() => onLeanFilterChange!(opt.key)}
+                        aria-pressed={leanFilter === opt.key}
+                    >
+                        {opt.label}
+                    </button>
+                ))}
+            </div>
         </div>
     );
 }
@@ -211,10 +205,8 @@ export function ThreeWayColumn<T>({
     return (
         <div className="three-way-column">
             <div className="three-way-column-head">
-                <div className="three-way-column-headings">
-                    <div className="three-way-column-header">{header}</div>
-                    <div className="three-way-column-byline">{byline}</div>
-                </div>
+                <div className="three-way-column-header">{header}</div>
+                <div className="three-way-column-byline">{byline}</div>
                 {sortControl}
             </div>
             {empty_ ? (

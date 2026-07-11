@@ -228,6 +228,7 @@ def _collect_entity_sample(
     topic: Optional[str] = None,
     engagement: Optional[Dict[str, int]] = None,
     author: Optional[Dict[str, Any]] = None,
+    day: Optional[str] = None,
 ) -> None:
     """Bump an entity bucket's counters + append a sample when there's room."""
     label_key = _LABEL_MAP.get(label, "neutral")
@@ -241,6 +242,8 @@ def _collect_entity_sample(
         )
     if topic is not None:
         _increment_bucket(entity_accum["by_topic"], topic, label_key)
+    if day is not None:
+        _increment_bucket(entity_accum["by_day"], day, label_key)
     if not data.get("reasoning"):
         return
     sample = _build_sample_dict(

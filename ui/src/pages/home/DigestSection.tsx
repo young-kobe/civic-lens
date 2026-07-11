@@ -48,6 +48,64 @@ function toneColor(net: number): string {
     return 'var(--neutral-500)';
 }
 
+// Richer at-a-glance headline numbers for "this week in the sample" — the
+// volume + overall tone + coverage the per-tier/signal blocks below don't state
+// outright. All from the same 7d snapshots.
+function HeadlineStats({
+    sentiment, narratives,
+}: {
+    sentiment: PublicSentimentData | null;
+    narratives: NarrativeSummary[] | null;
+}) {
+    const kpis: Array<{ label: string; value: string; detail: string; color?: string }> = [];
+    if (sentiment) {
+        kpis.push({
+            label: 'Sampled posts',
+            value: formatCount(sentiment.overview.volume),
+            detail: 'scored in the last 7 days',
+        });
+        const net = sentiment.overview.netScore;
+        kpis.push({
+            label: 'Overall tone',
+            value: formatPts(net),
+            detail: toneVerb(net),
+            color: toneColor(net),
+        });
+    }
+    if (narratives) {
+        kpis.push({
+            label: 'Stories tracked',
+            value: formatCount(narratives.length),
+            detail: 'recurring claims',
+        });
+    }
+    if (sentiment && sentiment.byTopic.length > 0) {
+        const top = [...sentiment.byTopic].sort((a, b) => b.volume - a.volume)[0];
+        kpis.push({
+            label: 'Topics covered',
+            value: formatCount(sentiment.byTopic.length),
+            detail: top.topic ? `most on ${top.topic}` : 'across the sample',
+        });
+    }
+    if (kpis.length === 0) return null;
+    return (
+        <div className="digest-kpis">
+            {kpis.map((k) => (
+                <div key={k.label} className="digest-kpi">
+                    <span className="eyebrow">{k.label}</span>
+                    <span
+                        className="digest-kpi-value"
+                        style={k.color ? { color: k.color } : undefined}
+                    >
+                        {k.value}
+                    </span>
+                    <span className="digest-kpi-detail">{k.detail}</span>
+                </div>
+            ))}
+        </div>
+    );
+}
+
 function ToneDigest({ data }: { data: PublicSentimentData }) {
     const tiers = [
         { label: 'News articles are', agg: aggregateTier(data.byNewsOutlet) },
@@ -214,6 +272,7 @@ export function DigestSection() {
                     }
                 />
             </div>
+            <HeadlineStats sentiment={sentiment} narratives={narratives} />
             {movers && <MoversTicker data={movers} />}
             <div className="digest-grid">
                 {sentiment && <ToneDigest data={sentiment} />}
