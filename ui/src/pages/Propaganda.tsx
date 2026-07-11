@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
-    CollapsibleInfo, DefinitionChip, EmptyState, EntityHeader,
+    Card, CollapsibleInfo, DefinitionChip, EmptyState, EntityHeader,
     EntityHubLinks, ErrorState, GlobalTicker, LoadingCard, MethodPopover,
     Modal, PostCardList,
     RankedEntityList, ThreeWayColumn, ThreeWayGrid,
@@ -19,7 +19,7 @@ import { formatPct } from '../services/format';
 import { dedupeById } from '../services/dedupe';
 import { COLORS } from '../theme';
 import type {
-    Filters, PropagandaEntityItem, PropagandaExample,
+    Filters, PartyPropaganda, PropagandaEntityItem, PropagandaExample,
     PropagandaOverview,
     PropagandaTechniqueName,
 } from '../types';
@@ -388,6 +388,63 @@ function HowThisWorks() {
 
 
 // --------------------------------------------------------------------------- //
+//  By-party rollup (Phase 4) — which partisan side leans harder on techniques //
+// --------------------------------------------------------------------------- //
+
+// Party -> lean accent. This is a legitimate data legend (the bar is labeled
+// with the party), so it keeps the partisan hue while chrome stays monochrome.
+const PARTY_ACCENT: Record<string, string> = {
+    R: COLORS.leanRight,
+    D: COLORS.leanLeft,
+};
+
+function ByPartyCard({ parties }: { parties: PartyPropaganda[] }) {
+    if (parties.length === 0) return null;
+    const maxRate = parties.reduce((m, p) => Math.max(m, p.flagged_rate_pct), 0) || 1;
+    return (
+        <Card
+            title="Persuasion techniques by party"
+            subtitle="Share of the tracked officials' scored posts flagged for persuasion techniques, grouped by the official's party. A measure of technique density, not intent — and only the officials we track."
+            headerActions={
+                <MethodPopover
+                    description={
+                        'Each tracked official is routed to their party; the bar is that party\'s '
+                        + 'flagged rate (flagged posts / scored posts) across all its officials in '
+                        + 'the window. Officials with no party affiliation are excluded rather than '
+                        + 'shown as a side.'
+                    }
+                />
+            }
+        >
+            <div className="party-bars">
+                {parties.map((p) => {
+                    const accent = PARTY_ACCENT[p.party] ?? 'var(--neutral-500)';
+                    const officials = `${p.official_count} official${p.official_count === 1 ? '' : 's'}`;
+                    return (
+                        <div
+                            key={p.party}
+                            className="party-bar-row"
+                            title={`${p.flagged_docs.toLocaleString()} of ${p.total_docs.toLocaleString()} scored posts flagged across ${officials} · mean score ${p.mean_score.toFixed(2)} / 1`}
+                        >
+                            <span className="party-bar-label">{p.party_label}</span>
+                            <span className="party-bar-track" aria-hidden>
+                                <span
+                                    className="party-bar-fill"
+                                    style={{ width: `${(p.flagged_rate_pct / maxRate) * 100}%`, background: accent }}
+                                />
+                            </span>
+                            <span className="party-bar-value">{formatPct(p.flagged_rate_pct)}</span>
+                            <span className="party-bar-meta">{officials}</span>
+                        </div>
+                    );
+                })}
+            </div>
+        </Card>
+    );
+}
+
+
+// --------------------------------------------------------------------------- //
 //  Page                                                                       //
 // --------------------------------------------------------------------------- //
 
@@ -508,6 +565,12 @@ function Propaganda({ filters }: PropagandaProps) {
                 <div className="col-span-12">
                     <ThreeWayEntityGrid data={data} onOpen={setActiveEntity} />
                 </div>
+
+                {(data.by_party?.length ?? 0) > 0 && (
+                    <div className="col-span-12">
+                        <ByPartyCard parties={data.by_party ?? []} />
+                    </div>
+                )}
 
                 {/* News-vs-social removed (its numbers already appear in the
                     top-metrics "News vs social" tier row + the reads-as-today

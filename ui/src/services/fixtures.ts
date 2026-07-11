@@ -513,10 +513,14 @@ function supDoc(n: {
     sentiment: 'positive' | 'negative' | 'neutral';
     confidence: number;
     reasoning: string;
+    // Body preview: for news it renders as the dek under the headline; social
+    // posts (no title) show it in place of the headline.
+    snippet?: string;
 }): SupportingDoc {
     return {
         doc_id: n.id,
         title: n.title,
+        snippet: n.snippet ?? null,
         source_type: n.sourceType,
         source_label: n.sourceLabel,
         url: n.url,
@@ -590,6 +594,7 @@ export function mockNarratives(): NarrativeSummary[] {
                     sourceType: 'news', sourceLabel: 'News · nytimes.com', daysAgo: 12,
                     url: 'https://www.nytimes.com/2026/04/10/us/politics/border-crossings-record.html',
                     sentiment: 'negative', confidence: 0.92,
+                    snippet: 'Federal data shows April crossings exceeded every prior monthly record, with processing centers past capacity and agents describing conditions as untenable.',
                     reasoning: 'Reports unprecedented crossing numbers and quotes officials calling response "inadequate".',
                 }),
                 supDoc({
@@ -597,6 +602,7 @@ export function mockNarratives(): NarrativeSummary[] {
                     sourceType: 'news', sourceLabel: 'News · washingtonpost.com', daysAgo: 11,
                     url: 'https://www.washingtonpost.com/politics/2026/04/11/dhs-april-surge',
                     sentiment: 'negative', confidence: 0.88,
+                    snippet: 'In testimony to a House panel, the deputy secretary conceded staffing and shelter capacity had not kept pace with arrivals since March.',
                     reasoning: 'Direct admission of agency incapacity; tone critical of executive handling.',
                 }),
                 supDoc({
@@ -604,6 +610,7 @@ export function mockNarratives(): NarrativeSummary[] {
                     sourceType: 'news', sourceLabel: 'News · foxnews.com', daysAgo: 10,
                     url: 'https://www.foxnews.com/politics/administration-no-plan-border',
                     sentiment: 'negative', confidence: 0.79,
+                    snippet: 'Panelists argued the administration has offered "slogans, not staffing," pointing to unfilled positions along the busiest sectors.',
                     reasoning: 'Opinion panel harshly critical; loaded language flagged but not propaganda-level.',
                 }),
                 supDoc({
@@ -625,6 +632,7 @@ export function mockNarratives(): NarrativeSummary[] {
                     sourceType: 'news', sourceLabel: 'News · apnews.com', daysAgo: 6,
                     url: 'https://apnews.com/article/border-sheriffs-resources-910016',
                     sentiment: 'negative', confidence: 0.86,
+                    snippet: 'County officials along the Rio Grande say overtime budgets are exhausted and detention transfers are backing up into local jails.',
                     reasoning: 'Straight reporting of local-official concerns; reinforces the "insufficient response" framing.',
                 }),
             ],
@@ -675,6 +683,7 @@ export function mockNarratives(): NarrativeSummary[] {
                     sourceType: 'news', sourceLabel: 'News · reuters.com', daysAgo: 5,
                     url: 'https://www.reuters.com/markets/us/reciprocal-tariff-framework-920012',
                     sentiment: 'neutral', confidence: 0.90,
+                    snippet: 'The framework sets country-by-country duties matched to each partner\'s average applied rate, with a 90-day consultation window before enforcement.',
                     reasoning: 'Straight policy reporting without editorialization.',
                 }),
                 supDoc({
@@ -682,6 +691,7 @@ export function mockNarratives(): NarrativeSummary[] {
                     sourceType: 'news', sourceLabel: 'News · wsj.com', daysAgo: 4,
                     url: 'https://www.wsj.com/articles/reciprocal-tariffs-inflation-920013',
                     sentiment: 'negative', confidence: 0.85,
+                    snippet: 'The board warns that matching tariffs dollar-for-dollar would raise input costs for domestic manufacturers and feed through to consumer prices.',
                     reasoning: 'Opinion piece critical of tariff approach on economic grounds.',
                 }),
                 supDoc({
@@ -1079,6 +1089,20 @@ export function mockPropaganda(): PropagandaOverview {
                     'X posts whose author is not in the tracked officials registry.'),
                 { total: 204, flagged: 44, mean: 0.29 },
             ),
+        ],
+        // Phase 4 — party rollup over the by_official entries above
+        // (R: POTUS 88/34 + Johnson 22/3; D: Schumer 34/6).
+        by_party: [
+            {
+                party: 'R', party_label: 'Republican',
+                total_docs: 110, flagged_docs: 37, flagged_rate_pct: 33.6,
+                mean_score: 0.36, official_count: 2,
+            },
+            {
+                party: 'D', party_label: 'Democratic',
+                total_docs: 34, flagged_docs: 6, flagged_rate_pct: 17.6,
+                mean_score: 0.19, official_count: 1,
+            },
         ],
     };
 }

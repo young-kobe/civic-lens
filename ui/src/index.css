@@ -1435,6 +1435,60 @@ code, pre {
   background: var(--semantic-negative);
 }
 
+/* By-party propaganda rollup (Phase 4) — one labeled bar per party. The bar
+   color is the partisan lean hue (a legitimate data legend; chrome stays
+   monochrome). Angular, like every bar. */
+.party-bars {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.party-bar-row {
+  display: grid;
+  grid-template-columns: 116px minmax(0, 1fr) 60px auto;
+  align-items: center;
+  gap: var(--space-3);
+}
+.party-bar-label {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--neutral-800);
+}
+.party-bar-track {
+  height: 12px;
+  background: var(--neutral-100);
+  overflow: hidden;
+}
+.party-bar-fill {
+  display: block;
+  height: 100%;
+  min-width: 3px;
+}
+.party-bar-value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  text-align: right;
+  color: var(--neutral-800);
+}
+.party-bar-meta {
+  font-size: var(--text-xs);
+  color: var(--neutral-500);
+  white-space: nowrap;
+}
+@media (max-width: 560px) {
+  .party-bar-row {
+    grid-template-columns: 1fr auto;
+    grid-template-areas: "label value" "track track" "meta meta";
+    row-gap: var(--space-1);
+  }
+  .party-bar-label { grid-area: label; }
+  .party-bar-value { grid-area: value; }
+  .party-bar-track { grid-area: track; }
+  .party-bar-meta  { grid-area: meta; }
+}
+
 /* Small outbound "View original" link — used by modal footers and the
    Review page. The old example-row block it belonged to was replaced by
    PostCard; the link treatment survives as a standalone utility. */
