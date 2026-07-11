@@ -47,7 +47,7 @@ def _parse_favorability_rows(
     bot_docs: Set[int],
     allowed_sources: Optional[frozenset],
 ) -> tuple:
-    distribution = {"favorable": 0, "unfavorable": 0, "neutral": 0}
+    distribution = {"favorable": 0, "unfavorable": 0, "neutral": 0, "mixed": 0}
     by_platform: Dict[str, Dict[str, int]] = {}
     daily_net: Dict[str, Dict[str, Any]] = {}
     count = 0
@@ -62,21 +62,24 @@ def _parse_favorability_rows(
         except json.JSONDecodeError:
             continue
 
-        # Normalize case (the LLM/backend can emit an off-enum casing despite
-        # the schema, matching the defensive str().lower() in movers), then
-        # fold ``mixed`` and any out-of-enum value into neutral: the UI's
-        # favorability surface is a three-bucket shape and ``mixed`` is
-        # non-directional — it belongs in the denominator with zero net, exactly
-        # how the movers favorability path treats it.
+        # Normalize case first — the LLM/backend can emit an off-enum casing
+        # despite the schema, matching the defensive str().lower() in movers.
+        # ``mixed`` (both genuine praise AND criticism, per the favorability
+        # prompt) is kept as its own bucket, NOT folded into neutral: neutral
+        # means "no stance", mixed means "both stances", and collapsing them
+        # would overstate indifference on any surface that renders the buckets.
+        # Any truly out-of-enum value degrades to neutral.
         stance = str(data.get("overall_gop_stance", "neutral")).lower()
-        if stance not in ("favorable", "unfavorable"):
+        if stance not in distribution:
             stance = "neutral"
         distribution[stance] += 1
 
         platform = source_type or "unknown"
         if platform in ("reddit_post", "reddit_comment"):
             platform = "reddit"
-        by_platform.setdefault(platform, {"favorable": 0, "unfavorable": 0, "neutral": 0})
+        by_platform.setdefault(
+            platform, {"favorable": 0, "unfavorable": 0, "neutral": 0, "mixed": 0},
+        )
         by_platform[platform][stance] += 1
 
         if pub_at:
@@ -116,6 +119,7 @@ def _format_favorability_result(
         "favorable": round((distribution["favorable"] / total) * 100, 1) if total else 0,
         "unfavorable": round((distribution["unfavorable"] / total) * 100, 1) if total else 0,
         "neutral": round((distribution["neutral"] / total) * 100, 1) if total else 0,
+        "mixed": round((distribution["mixed"] / total) * 100, 1) if total else 0,
         "netFavorability": round(net_favorability, 1),
         "sampleSize": count,
         "sourceCount": len(by_platform),
@@ -136,6 +140,7 @@ def _format_favorability_result(
             "favorable": stats["favorable"],
             "unfavorable": stats["unfavorable"],
             "neutral": stats["neutral"],
+            "mixed": stats["mixed"],
         }
         for platform, stats in by_platform.items()
     ]
@@ -147,6 +152,7 @@ def _format_favorability_result(
                 "favorable": result.gopFavorability["favorable"],
                 "unfavorable": result.gopFavorability["unfavorable"],
                 "neutral": result.gopFavorability["neutral"],
+                "mixed": result.gopFavorability["mixed"],
             },
             "pollingData": polling_data,
         }

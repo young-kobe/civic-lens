@@ -103,7 +103,8 @@ export function mockSentiment(): PublicSentimentData {
         gopFavorability: {
             favorable: 780,
             unfavorable: 1210,
-            neutral: 950,
+            neutral: 700,
+            mixed: 250,
             netFavorability: -14.7,
             sampleSize: 2940,
             sourceCount: 3,

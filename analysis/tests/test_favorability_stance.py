@@ -3,12 +3,13 @@ Unit tests for GOP favorability stance handling
 (``analysis.src.reporting.aggregators.sentiment.favorability``).
 
 WHY these matter: ``overall_gop_stance`` is a four-value enum
-(favorable / unfavorable / neutral / mixed), but the UI's favorability surface
-is a THREE-bucket shape whose percentages must sum to 100, and the field can
-arrive with off-enum casing. The aggregator must therefore normalize case and
-fold ``mixed`` into neutral (non-directional: counted in the denominator, zero
-net) exactly like the movers favorability path — otherwise mixed/uppercase rows
-silently skew every percentage and vanish from the per-platform counts.
+(favorable / unfavorable / neutral / mixed), and ``mixed`` (both genuine praise
+AND criticism) is semantically distinct from ``neutral`` (no stance). The
+aggregator must normalize off-enum casing (like movers' defensive str().lower())
+AND keep ``mixed`` as its own bucket rather than folding it into neutral —
+folding would overstate indifference and drop mixed rows from the per-platform
+counts. ``mixed`` counts in the denominator with zero net contribution (so
+netFavorability is unaffected), and all four buckets sum to ~100.
 """
 
 import json
@@ -50,24 +51,24 @@ def _row(doc_id, stance, source_type="x_post", pub_at=None):
 
 
 class ParseStanceTests(unittest.TestCase):
-    def test_mixed_and_uppercase_fold_into_neutral(self):
+    def test_case_normalized_and_mixed_kept_distinct(self):
         rows = [
             _row(1, "favorable"),
             _row(2, "unfavorable"),
             _row(3, "neutral"),
-            _row(4, "mixed"),        # non-directional -> neutral
+            _row(4, "mixed"),        # its own bucket, NOT folded into neutral
             _row(5, "FAVORABLE"),    # off-enum casing -> favorable
-            _row(6, "Mixed"),        # cased mixed -> neutral
+            _row(6, "Mixed"),        # cased mixed -> mixed
+            _row(7, "bogus"),        # truly out-of-enum -> neutral
         ]
-        distribution, by_platform, _daily, count = _parse_favorability_rows(
+        distribution, _by_platform, _daily, count = _parse_favorability_rows(
             rows, bot_docs=set(), allowed_sources=None,
         )
-        self.assertEqual(count, 6)
-        # No separate mixed bucket; mixed + neutral collapse together.
-        self.assertNotIn("mixed", distribution)
-        self.assertEqual(distribution["favorable"], 2)   # favorable + FAVORABLE
+        self.assertEqual(count, 7)
+        self.assertEqual(distribution["favorable"], 2)    # favorable + FAVORABLE
         self.assertEqual(distribution["unfavorable"], 1)
-        self.assertEqual(distribution["neutral"], 3)      # neutral + mixed + Mixed
+        self.assertEqual(distribution["neutral"], 2)      # neutral + bogus
+        self.assertEqual(distribution["mixed"], 2)        # mixed + Mixed
 
     def test_mixed_rows_counted_in_per_platform(self):
         rows = [_row(1, "mixed", "x_post"), _row(2, "favorable", "x_post")]
@@ -75,7 +76,7 @@ class ParseStanceTests(unittest.TestCase):
             rows, bot_docs=set(), allowed_sources=None,
         )
         # The mixed row must not vanish from the platform split.
-        self.assertEqual(by_platform["x_post"]["neutral"], 1)
+        self.assertEqual(by_platform["x_post"]["mixed"], 1)
         self.assertEqual(by_platform["x_post"]["favorable"], 1)
 
 
@@ -89,27 +90,32 @@ class FormatStanceTests(unittest.TestCase):
         )
         return result
 
-    def test_percentages_sum_to_100_with_folded_mixed(self):
-        # 2 favorable, 1 unfavorable, 3 neutral (incl. former mixed) = 6 total.
-        distribution = {"favorable": 2, "unfavorable": 1, "neutral": 3}
-        by_platform = {"x_post": {"favorable": 2, "unfavorable": 1, "neutral": 3}}
+    def test_four_buckets_sum_to_100_and_net_ignores_mixed(self):
+        # 2 favorable, 1 unfavorable, 1 neutral, 2 mixed = 6 total.
+        distribution = {"favorable": 2, "unfavorable": 1, "neutral": 1, "mixed": 2}
+        by_platform = {"x_post": {"favorable": 2, "unfavorable": 1, "neutral": 1, "mixed": 2}}
         fav = self._result(distribution, by_platform).gopFavorability
+        # mixed is its own visible bucket; the four sum to ~100.
         self.assertAlmostEqual(
-            fav["favorable"] + fav["unfavorable"] + fav["neutral"], 100.0, places=1,
+            fav["favorable"] + fav["unfavorable"] + fav["neutral"] + fav["mixed"],
+            100.0, places=1,
         )
-        # net = (fav - unfav) / total, denominator includes the folded neutral.
+        # net = (fav - unfav) / total; mixed sits in the denominator, zero net.
         self.assertAlmostEqual(fav["netFavorability"], round((2 - 1) / 6 * 100, 1), places=1)
 
-    def test_platform_group_labels_are_stable(self):
-        distribution = {"favorable": 1, "unfavorable": 0, "neutral": 0}
+    def test_per_platform_carries_mixed_and_stable_labels(self):
+        distribution = {"favorable": 1, "unfavorable": 0, "neutral": 0, "mixed": 1}
         by_platform = {
-            "x_post": {"favorable": 1, "unfavorable": 0, "neutral": 0},
-            "reddit": {"favorable": 0, "unfavorable": 0, "neutral": 0},
-            "news": {"favorable": 0, "unfavorable": 0, "neutral": 0},
+            "x_post": {"favorable": 1, "unfavorable": 0, "neutral": 0, "mixed": 1},
+            "reddit": {"favorable": 0, "unfavorable": 0, "neutral": 0, "mixed": 0},
+            "news": {"favorable": 0, "unfavorable": 0, "neutral": 0, "mixed": 0},
         }
-        groups = {p["group"] for p in self._result(distribution, by_platform).gopByPlatform}
+        by_plat = self._result(distribution, by_platform).gopByPlatform
+        groups = {p["group"] for p in by_plat}
         self.assertEqual(groups, {"X", "Reddit", "News"})
         self.assertNotIn("X_post", groups)
+        x_row = next(p for p in by_plat if p["group"] == "X")
+        self.assertEqual(x_row["mixed"], 1)
 
 
 class _NoCache:
