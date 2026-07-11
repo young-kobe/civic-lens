@@ -56,18 +56,35 @@
   --bg-panel: #f2f3f6;
   --bg-inset: #eaecf0;
 
-  /* Signature accent — deepened ink blue (Bloomberg.com/FT register). */
-  --accent: #1a3a6b;
-  --accent-hover: #12294d;
-  --accent-muted: #3f5c8a;
-  --accent-light: #dbe2ee;
-  --accent-gradient: linear-gradient(135deg, #1a3a6b 0%, #3f5c8a 60%, #7d95bb 100%);
+  /* ============================================================
+     CHROME tokens — monochromatic only. Links, tabs, focus rings,
+     brand marks, borders: all neutral. The theme is monochromatic
+     tech (Bloomberg register); color is reserved exclusively for
+     data-viz (see the DATA-VIZ block below). To retheme the chrome,
+     change only the --neutral-* ramp above.
+     ============================================================ */
+
+  /* Interactive-chrome accent — a near-black neutral for links, the
+     active nav tab, and focus outlines. (Was an ink blue; monochromed
+     2026-07-11 so no chrome carries hue.) */
+  --accent: var(--neutral-800);
+  --accent-hover: var(--neutral-900);
+  --accent-muted: var(--neutral-500);
+  --accent-light: var(--neutral-150);
+  --accent-gradient: linear-gradient(135deg, var(--neutral-700) 0%, var(--neutral-500) 60%, var(--neutral-400) 100%);
+
+  /* ============================================================
+     DATA-VIZ tokens — the ONLY place hue is allowed. High-contrast
+     Grafana register: these color chart series, bars, dots, legends,
+     and value marks. Never used for chrome (borders, links, tabs).
+     Every group below is CVD-validated as a set.
+     ============================================================ */
 
   /* Semantic colors — targeted high-contrast diverging system (2026-07-10
      retheme, replacing the deep-ink monochrome). Vivid blue = positive/
      favorable, vivid red = negative/alert, vivid amber = warning/mixed.
      These color the tone/rate BARS in the top-metrics graph, so they must
-     read at a glance. UI chrome (header, borders, brand) stays ink-blue.
+     read at a glance. UI chrome (header, borders, brand) is monochrome.
      Validated (dataviz validate_palette.js on #fcfcfb): pos/neg pair CVD
      dE 98.3, all >= 3:1 contrast, chroma floor clears. pos/neg/warning
      trio: amber↔red deutan dE 10.7 (8–12 floor band) — relieved by the
@@ -128,30 +145,12 @@
   --tone-mild-pos:   #6b8fd4;
   --tone-strong-pos: #1a5fd0;   /* = --semantic-positive */
 
-  /* Political-stance palette (SentimentBar colorScheme="political") —
-     blue vs red framing used for GOP Party Stance rather than tone. */
-  --stance-supportive-solid: #1a3a6b;
-  --stance-opposed-solid:    #8f2314;
-  --stance-neutral-solid:    #959ba7;
-  --stance-grad-supportive: linear-gradient(135deg, #12294d 0%, #5f7cab 100%);
-  --stance-grad-opposed:    linear-gradient(135deg, #701c0f 0%, #b96f61 100%);
-  --stance-grad-neutral:    linear-gradient(135deg, #838a97 0%, #c0c4cd 100%);
-
-  /* Sentiment-favorability palette — used by the GOP-stance intensity
-     card's badges, the SentimentDistributionCard, and a few spots that
-     need bg + text + solid variants together. */
-  --sent-favorable-solid: #1e4176;
-  --sent-favorable-bg:    #dce4f0;
-  --sent-favorable-text:  #16345e;
-  --sent-unfavorable-solid: #8f2314;
-  --sent-unfavorable-bg:    #f0dcd7;
-  --sent-unfavorable-text:  #701c0f;
-
-  /* Review admin — banner + card backgrounds. */
-  --admin-banner-bg:     #e3e9f2;
-  --admin-banner-border: #7f9cc0;
-  --admin-banner-text:   #1a3a6b;
-  --admin-card-bg:       #f5f6f2;
+  /* Review admin — banner + card backgrounds. Monochrome chrome (was a
+     tinted blue banner; neutralized 2026-07-11). */
+  --admin-banner-bg:     var(--neutral-100);
+  --admin-banner-border: var(--neutral-300);
+  --admin-banner-text:   var(--neutral-700);
+  --admin-card-bg:       var(--neutral-75);
 
   /* Spacing — the large end (8/10/12/16) was tightened in the density pass
      (2026-07-11) so section chrome, heroes, and empty-state padding read as
@@ -1128,7 +1127,6 @@ code, pre {
   width: 100%;
   background: var(--bg-card);
   border: 1px solid var(--neutral-200);
-  border-left: 3px solid transparent;
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
   display: flex;
@@ -1179,6 +1177,7 @@ code, pre {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   margin-bottom: 2px;
+  color: var(--neutral-500);
 }
 
 /* Compact story rows inside the narrative entity modal — each opens the
@@ -1483,9 +1482,11 @@ code, pre {
   min-width: 0;
 }
 
-.post-card-x      { border-left-color: var(--source-x); }
-.post-card-reddit { border-left-color: var(--source-reddit); }
-.post-card-news   { border-left-color: var(--source-news); }
+/* Post-card left border is monochrome chrome; the source is named by the
+   card's platform label/avatar, not by a colored rail. */
+.post-card-x,
+.post-card-reddit,
+.post-card-news   { border-left-color: var(--neutral-300); }
 
 .post-card-head {
   display: flex;
@@ -2776,29 +2777,17 @@ span.ranked-entity-row { cursor: default; }
   border-top: 1px dashed var(--neutral-150);
 }
 
-/* Lean-keyed border color. Applied to .entity-card AND .lean-chip-*
-   variants so both the whole card and the small chip signal direction. */
-.entity-card.lean-left    { border-left-color: var(--lean-left); }
-.entity-card.lean-right   { border-left-color: var(--lean-right); }
-.entity-card.lean-center  { border-left-color: var(--neutral-400); }
-.entity-card.lean-mixed   {
-  /* Hatched band for mixed-lean entities — two-tone repeating gradient
-     on the left border simulates editorial ambivalence without picking
-     a color. The extra-wide border keeps the stripes legible. */
-  border-left: 4px solid transparent;
-  background-image: linear-gradient(var(--bg-card), var(--bg-card)),
-    repeating-linear-gradient(
-      45deg,
-      var(--semantic-warning) 0,
-      var(--semantic-warning) 3px,
-      var(--neutral-300) 3px,
-      var(--neutral-300) 6px
-    );
-  background-origin: border-box;
-  background-clip: padding-box, border-box;
-}
+/* Card left-border is monochrome chrome — the entity's lean is carried by the
+   colored .lean-chip-* legend below, so the border itself stays neutral (the
+   theme reserves hue for data marks, not card chrome). */
+.entity-card.lean-left,
+.entity-card.lean-right,
+.entity-card.lean-center,
+.entity-card.lean-mixed,
 .entity-card.lean-neutral { border-left-color: var(--neutral-300); }
 
+/* Lean chips ARE a data legend — they name the measured lean, so they keep
+   the partisan hues. */
 .entity-card-chip.lean-chip-left    { color: var(--lean-left); border-color: var(--lean-left-light); background: var(--lean-left-light); }
 .entity-card-chip.lean-chip-right   { color: var(--lean-right); border-color: var(--lean-right-light); background: var(--lean-right-light); }
 .entity-card-chip.lean-chip-mixed   { color: var(--semantic-warning); border-color: var(--semantic-warning-light); background: var(--semantic-warning-light); }
@@ -2834,11 +2823,6 @@ span.ranked-entity-row { cursor: default; }
   font-size: var(--text-xs);
   flex-wrap: wrap;
   min-height: 40px;
-}
-
-.global-ticker-accent {
-  border-left-width: 3px;
-  border-left-style: solid;
 }
 
 .global-ticker-item {

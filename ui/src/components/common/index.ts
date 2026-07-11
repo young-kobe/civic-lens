@@ -20,7 +20,6 @@ export {
     EntityHeader,
     entityChipLabel,
     entityExternalUrl,
-    entityLeanAccent,
     officialToneStats,
     sentimentStats,
 } from './EntityProfileCard';

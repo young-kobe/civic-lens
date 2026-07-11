@@ -5,7 +5,7 @@ import {
     GlobalTicker,
     LoadingCard, MethodPopover, Modal, PostCardList,
     RankedEntityList, ThreeWayColumn, TwoWayGrid,
-    entityExternalUrl, entityLeanAccent, flaggedExampleToPostCard,
+    entityExternalUrl, flaggedExampleToPostCard,
     parseEntityParam,
 } from '../components/common';
 import { deepLinkHref, useDeepLinkParam } from '../services/deepLink';
@@ -45,7 +45,6 @@ function BotEntityModal({ item, onClose }: { item: BotEntityItem; onClose: () =>
             onClose={onClose}
             title={profile.displayName}
             subtitle="Bot-detection drill-down"
-            accentColor={entityLeanAccent(profile)}
         >
             <EntityHeader profile={profile} />
             <div className="entity-modal-stats">
@@ -202,14 +201,9 @@ function readsAsToday(data: BotData): string {
     return parts.join(' ');
 }
 
-function buildBotTickerItems(overview: BotOverview): { items: TickerItem[]; accentColor: string } {
+function buildBotTickerItems(overview: BotOverview): TickerItem[] {
     const rate = overview.suspectedAutomationRate;
     const rateTone = rate > 10 ? 'warning' : rate > 3 ? 'neutral' : 'positive';
-    const accentColor = rateTone === 'warning'
-        ? COLORS.warning
-        : rateTone === 'positive'
-            ? COLORS.positive
-            : 'var(--neutral-400)';
 
     const items: TickerItem[] = [
         {
@@ -239,7 +233,7 @@ function buildBotTickerItems(overview: BotOverview): { items: TickerItem[]; acce
                     : 'neutral',
         },
     ];
-    return { items, accentColor };
+    return items;
 }
 
 interface NarrativeAmplificationCardProps {
@@ -270,10 +264,6 @@ function NarrativeAmplificationCard({ narrative }: NarrativeAmplificationCardPro
             default: return null;
         }
     };
-
-    const accentColor = narrative.confidence === 'high' ? COLORS.negative
-        : narrative.confidence === 'medium' ? COLORS.warning
-        : 'var(--neutral-500)';
 
     return (
         <>
@@ -329,7 +319,6 @@ function NarrativeAmplificationCard({ narrative }: NarrativeAmplificationCardPro
                 kicker="Narrative amplification"
                 title={narrative.narrative}
                 subtitle={`${narrative.suspectedBotVolume.toLocaleString()} suspected bot posts · ${narrative.confidence} likelihood`}
-                accentColor={accentColor}
             >
                 <h3 className="card-title mb-2">Why this was flagged</h3>
                 <ul style={{ margin: '0 0 var(--space-4)', paddingLeft: 'var(--space-5)' }} className="text-sm">
@@ -458,7 +447,7 @@ function BehavioralSignalsPanel({ data }: BehavioralSignalsPanelProps) {
                                         style={{
                                             width: `${item.percentage}%`,
                                             height: '100%',
-                                            background: item.range.includes('<') ? COLORS.warning : COLORS.accent,
+                                            background: item.range.includes('<') ? COLORS.warning : COLORS.chartAccent,
                                         }}
                                     />
                                 </div>
@@ -514,7 +503,7 @@ function BehavioralSignalsPanel({ data }: BehavioralSignalsPanelProps) {
                                 <SimilarityBar
                                     label="Low similarity (<50%)"
                                     value={pct(low)}
-                                    color="var(--accent)"
+                                    color="var(--chart-accent)"
                                 />
                             </div>
                         );
@@ -654,7 +643,7 @@ function BotActivityProfiler({ filters }: BotActivityProfilerProps) {
     // "nothing to flag" run indistinguishable from a broken pipeline.
     if (!data) return <EmptyState title="No bot-activity data available" />;
 
-    const { items: botTickerItems, accentColor: botAccentColor } = buildBotTickerItems(data.overview);
+    const botTickerItems = buildBotTickerItems(data.overview);
     const botRefreshed = formatRefreshedAgo(
         getSnapshotTimestamp(snapshotStatus, `bot_activity_${filters.timeRange}`),
     );
@@ -676,7 +665,6 @@ function BotActivityProfiler({ filters }: BotActivityProfilerProps) {
                 <GlobalTicker
                     items={botTickerItems}
                     refreshed={botRefreshed}
-                    accentColor={botAccentColor}
                     ariaLabel="Bot detector overview"
                     legend={
                         <MethodPopover

@@ -3,7 +3,7 @@ import {
     CollapsibleInfo, EmptyState, EntityHeader, EntityHubLinks, EntityProfileCard,
     ErrorState, GlobalTicker, LoadingCard, MethodPopover, Modal, PostCardList,
     ThreeWayColumn, ThreeWayGrid, ThreeWayToolbar, TierRow, TopMetricsBlock,
-    entityExternalUrl, entityLeanAccent, matchesLeanFilter,
+    entityExternalUrl, matchesLeanFilter,
     officialToneStats, parseEntityParam, sampleToPostCard, sentimentStats,
 } from '../components/common';
 import type { ColumnSorter, LeanFilter, TickerItem } from '../components/common';
@@ -602,7 +602,6 @@ function EntitySentimentModal({
             onClose={onClose}
             title={profile.displayName}
             subtitle={buildEntitySubtitle(profile)}
-            accentColor={entityLeanAccent(profile)}
         >
             {samplesAreFiltered && (
                 <TopicScopeStrip

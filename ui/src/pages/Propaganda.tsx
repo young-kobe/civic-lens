@@ -4,7 +4,7 @@ import {
     EntityHubLinks, ErrorState, GlobalTicker, LoadingCard, MethodPopover,
     Modal, PostCardList,
     RankedEntityList, ThreeWayColumn, ThreeWayGrid,
-    TierRow, TopMetricsBlock, entityExternalUrl, entityLeanAccent,
+    TierRow, TopMetricsBlock, entityExternalUrl,
     parseEntityParam, propagandaExampleToPostCard,
 } from '../components/common';
 import type { ColumnSorter, RankedEntity, TickerItem, TierRowDot } from '../components/common';
@@ -144,7 +144,7 @@ function buildPropagandaTickerItems(data: PropagandaOverview): TickerItem[] {
         {
             label: 'Flagged rate',
             value: formatPct(rate),
-            tone: rate > 20 ? 'negative' : rate > 10 ? 'accent' : 'positive',
+            tone: rate > 20 ? 'negative' : rate > 10 ? 'warning' : 'positive',
             emphasis: true,
             ariaLabel: `Flagged rate ${rate.toFixed(1)} percent`,
         },
@@ -253,7 +253,6 @@ function PropagandaEntityModal({
             onClose={onClose}
             title={profile.displayName}
             subtitle={`${item.flagged_docs.toLocaleString()} flagged · ${item.total_docs.toLocaleString()} scored`}
-            accentColor={entityLeanAccent(profile)}
         >
             <EntityHeader profile={profile} />
 

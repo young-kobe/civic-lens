@@ -4,7 +4,7 @@ import {
     EntityProfileCard,
     ErrorState, GlobalTicker, LoadingCard, MethodPopover, Modal, PostCardList,
     ThreeWayColumn, ThreeWayGrid,
-    entityExternalUrl, entityLeanAccent, supportingDocToPostCard,
+    entityExternalUrl, supportingDocToPostCard,
 } from '../components/common';
 import type { ColumnSorter, EntityStat, TickerItem } from '../components/common';
 import type { EntityProfile } from '../types';
@@ -230,7 +230,6 @@ function NarrativeDetailModal({
             kicker="Narrative"
             title={narrative.name || '(unnamed narrative)'}
             subtitle={`First seen ${formatRelativeDate(narrative.first_seen_at)} · ${firstSeenLabel(narrative)}`}
-            accentColor={sentColor}
             maxWidth={1040}
         >
             <div className="narrative-modal-stats">
@@ -484,7 +483,6 @@ function NarrativeEntityModal({
             onClose={onClose}
             title={profile.displayName}
             subtitle={subtitle}
-            accentColor={entityLeanAccent(profile)}
         >
             <EntityHeader profile={profile} />
 
