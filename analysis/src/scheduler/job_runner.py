@@ -11,8 +11,8 @@ Usage:
     python -m analysis.src.scheduler.job_runner
 
 Can be scheduled via:
-- Manual: .\run.ps1 analyze
-- Cron/Task Scheduler: Run this script on a schedule
+- Manual: ./run.sh analyze
+- Cron (dev): ./setup-cron.sh; systemd timer (prod): deploy/install.sh
 """
 
 import sys
@@ -26,9 +26,9 @@ from typing import Any, Dict, List
 
 # Ensure project root is in path. job_runner lives at
 # <repo>/analysis/src/scheduler/job_runner.py, so four parents up is the repo.
-# (The previous five-parent value landed on C:\Users\kobey and only worked
-# because run.ps1 sets PYTHONPATH separately. Any code joining project_root to
-# a data-file path — like known_accounts.yaml — would miss the repo.)
+# (A previous five-parent value overshot the repo root and only worked because
+# run.sh sets PYTHONPATH separately. Any code joining project_root to a
+# data-file path — like known_accounts.yaml — would miss the repo.)
 project_root = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(project_root))
 

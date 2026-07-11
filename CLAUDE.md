@@ -29,32 +29,32 @@ The cache is the contract between analysis and API: to make new data appear in t
 
 ## Commands
 
-All orchestration goes through `run.ps1` (PowerShell, Windows). It auto-creates `analysis/.venv`, loads `.env`, and resolves Go/Node paths.
+All orchestration goes through `run.sh` (bash, Linux/WSL). It auto-creates `analysis/.venv`, loads `.env`, and resolves Go/Node paths.
 
-```powershell
-.\run.ps1 build                     # Build civic-ingest.exe
-.\run.ps1 migrate                   # Apply DB migrations
-.\run.ps1 crawl                     # Run web crawler (default 10m)
-.\run.ps1 reddit                    # Fetch Reddit posts/comments
-.\run.ps1 x                         # Fetch X/Twitter posts
-.\run.ps1 analyze                   # Full pipeline: ETL + AI + caching
-.\run.ps1 analyze -Tasks bot,text   # Run specific stages only
-.\run.ps1 analyze -Limit 50         # Cap docs processed per stage (dev)
-.\run.ps1 api                       # FastAPI on :8000
-.\run.ps1 ui                        # Vite dev server on :5173
-.\run.ps1 dev                       # API + UI in separate windows
+```bash
+./run.sh build                      # Build civic-ingest (Go binary at repo root)
+./run.sh migrate                    # Apply DB migrations
+./run.sh crawl                      # Run web crawler (default 10m; --duration 5m)
+./run.sh reddit                     # Fetch Reddit posts/comments
+./run.sh x                          # Fetch X/Twitter posts
+./run.sh analyze                    # Full pipeline: ETL + AI + caching
+./run.sh analyze --tasks bot,text   # Run specific stages only
+./run.sh analyze --limit 50         # Cap docs processed per stage (dev)
+./run.sh api                        # FastAPI on :8000
+./run.sh ui                         # Vite dev server on :5173
+./run.sh dev                        # API + UI together (Ctrl-C stops both)
 ```
 
-Valid `-Tasks` values: `etl, bot, text, targets, propaganda, citations, claims, narratives, accounts, bot_rollup, snapshots`.
+Valid `--tasks` values: `etl, bot, text, targets, propaganda, citations, claims, narratives, accounts, bot_rollup, snapshots`.
 
 ### Tests and typecheck
 
-```powershell
-# Python tests — run from repo root with PYTHONPATH set so `analysis.src.*` imports resolve
-$Env:PYTHONPATH = $PWD
-.\analysis\.venv\Scripts\python.exe -m unittest analysis.tests.test_engines
-.\analysis\.venv\Scripts\python.exe -m unittest analysis.tests.test_engines.TestEngines.test_bot_detector  # single test
-.\analysis\.venv\Scripts\python.exe -m unittest discover analysis/tests                                    # all
+```bash
+# Python tests — run from repo root with PYTHONPATH set so `analysis.src.*` imports resolve.
+# The venv python is analysis/.venv/bin/python; a system python3 with the deps also works.
+PYTHONPATH=$PWD analysis/.venv/bin/python -m unittest analysis.tests.test_engines
+PYTHONPATH=$PWD analysis/.venv/bin/python -m unittest analysis.tests.test_engines.TestEngines.test_bot_detector  # single test
+PYTHONPATH=$PWD analysis/.venv/bin/python -m unittest discover analysis/tests                                    # all
 
 # Go tests
 cd ingest && go test ./...
@@ -67,7 +67,7 @@ cd ui && npm run build   # tsc + vite build
 
 ## Configuration
 
-All Python settings use the `CIVIC_` env prefix and are defined in `analysis/src/common/settings.py` (pydantic-settings). `.env` is loaded automatically by `run.ps1` and by pydantic. Key switches:
+All Python settings use the `CIVIC_` env prefix and are defined in `analysis/src/common/settings.py` (pydantic-settings). `.env` is loaded automatically by `run.sh` and by pydantic. Key switches:
 
 - `CIVIC_LLM_BACKEND` = `gemini` | `ollama`
 - `CIVIC_LLM_ENABLED` = `true` | `false`
@@ -94,4 +94,4 @@ All Python settings use the `CIVIC_` env prefix and are defined in `analysis/src
 
 ## Platform Notes
 
-Primary dev environment is Windows with PowerShell. The `bash` shell available in this session is for tool invocation — use Unix paths (`/dev/null`, forward slashes) in bash, but the canonical entry point is `run.ps1`. Go produces `civic-ingest.exe` at repo root.
+Dev environment is Linux/WSL with bash. The canonical entry point is `run.sh` (see Commands); `./setup-cron.sh` schedules the analysis pipeline via cron for dev, while production uses the systemd timer from `deploy/install.sh`. Go produces the `civic-ingest` binary (no extension) at repo root.

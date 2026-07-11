@@ -37,14 +37,14 @@ from analysis.src.reporting.aggregators.constants import (
     SOCIAL_PLATFORMS,
     NEWS_PLATFORMS,
 )
-from analysis.src.reporting.aggregators.narrative import _build_doc_url
+from analysis.src.reporting.aggregators.evidence import build_doc_url
 from analysis.src.reporting.entity_registry import (
     catch_all_profile,
     CATCH_ALL_OUTLETS,
     CATCH_ALL_SUBREDDITS,
     CATCH_ALL_X_USERS,
     get_registry,
-    resolve_entity,
+    route_reporting_entity,
 )
 
 logger = get_logger(__name__)
@@ -386,7 +386,7 @@ class PropagandaAggregator:
                 techniques=techs_clean,
                 text_preview=preview,
                 author_handle=author_handle,
-                url=_build_doc_url(source_type, domain, ident, author_handle),
+                url=build_doc_url(source_type, domain, ident, author_handle),
             )
             example_pool.append(example)
 
@@ -431,35 +431,24 @@ def _accumulate_entity(
     """Fan a propaganda row into the right per-entity bucket.
     Catch-all sentinels catch unmatched docs so every tier has full
     denominator coverage."""
-    tier, entity = resolve_entity(registry, source_type, domain, x_handle)
-    if tier is None:
+    route = route_reporting_entity(registry, source_type, domain, x_handle)
+    if route is None:
         return
-
-    if tier == "news":
-        target = by_outlet
-        if entity is not None:
-            key, kind, profile = entity.domain, "outlet", entity.profile_dict()
-        else:
-            key, kind = CATCH_ALL_OUTLETS, "catch_all"
+    target = {"news": by_outlet, "officials": by_official}.get(route.tier, by_public)
+    key, kind, profile = route.key, route.kind, route.entity_profile
+    if profile is None:
+        # Plain catch-all: propaganda keeps its own (plural) display copy.
+        if key == CATCH_ALL_OUTLETS:
             profile = catch_all_profile(
                 CATCH_ALL_OUTLETS, "Other news outlets",
                 "News docs whose domain is not in the tracked outlet registry.",
             )
-    elif tier == "officials":
-        target = by_official
-        key, kind, profile = entity.handle, "official", entity.profile_dict()
-    else:  # public
-        target = by_public
-        if entity is not None:
-            key, kind, profile = entity.subreddit, "subreddit", entity.profile_dict()
-        elif source_type == "x_post":
-            key, kind = CATCH_ALL_X_USERS, "catch_all"
+        elif key == CATCH_ALL_X_USERS:
             profile = catch_all_profile(
                 CATCH_ALL_X_USERS, "Other X users",
                 "X posts whose author is not in the tracked officials registry.",
             )
         else:
-            key, kind = CATCH_ALL_SUBREDDITS, "catch_all"
             profile = catch_all_profile(
                 CATCH_ALL_SUBREDDITS, "Other subreddits",
                 "Reddit posts whose subreddit is not in the tracked subreddit registry.",
@@ -486,19 +475,8 @@ def _resolve_entity_key(
     the ``by_news_outlet`` / ``by_official`` / ``by_general_public`` keys
     the UI gets in ``PropagandaEntityItem.key`` — without that alignment
     the modal would always read empty."""
-    tier, entity = resolve_entity(registry, source_type, domain, x_handle)
-    if tier is None:
-        return None
-    if tier == "news":
-        return entity.domain if entity is not None else CATCH_ALL_OUTLETS
-    if tier == "officials":
-        return entity.handle if entity is not None else None
-    # public
-    if entity is not None:
-        return entity.subreddit
-    if source_type == "x_post":
-        return CATCH_ALL_X_USERS
-    return CATCH_ALL_SUBREDDITS
+    route = route_reporting_entity(registry, source_type, domain, x_handle)
+    return route.key if route is not None else None
 
 
 def _finalize_entity_items(

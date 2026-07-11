@@ -60,7 +60,7 @@ def check_schema_current(db_path: str, migrations_dir: str) -> Optional[str]:
     if actual < expected:
         return (
             f"database schema is at version {actual} but this build expects "
-            f"{expected}. Apply migrations first — dev: `.\\run.ps1 migrate`; "
+            f"{expected}. Apply migrations first — dev: `./run.sh migrate`; "
             "prod: `docker compose run --rm ingest migrate --db "
             "/var/lib/civic-lens/data/civic_lens.db`."
         )
