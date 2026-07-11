@@ -13,7 +13,7 @@ The cross-tier flag is computed in `analysis/src/reporting/aggregators/narrative
 
 ## Reproduction
 
-1. `.\run.ps1 analyze -Tasks narratives` to re-cluster, then `.\run.ps1 analyze -Tasks snapshots` to refresh the cache.
+1. `./run.sh analyze --tasks narratives` to re-cluster, then `./run.sh analyze --tasks snapshots` to refresh the cache.
 2. Hit `/narratives?window=7d&limit=100` and count rows with `cross_tier: true`.
 3. Repeat with `CIVIC_NARRATIVE_SIMILARITY_MODE=embedding` for comparison.
 

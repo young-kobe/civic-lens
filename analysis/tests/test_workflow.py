@@ -54,7 +54,7 @@ def test_database_connection():
     
     if missing:
         log(f"Missing core ingestion tables: {missing}", "ERROR")
-        log("Run: .\\civic-ingest.exe migrate", "INFO")
+        log("Run: ./civic-ingest migrate", "INFO")
         conn.close()
         return False
     
