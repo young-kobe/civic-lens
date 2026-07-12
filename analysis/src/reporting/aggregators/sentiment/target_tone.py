@@ -28,7 +28,8 @@ from analysis.src.reporting.aggregators.sentiment.samples import (
     _insert_capped,
 )
 from analysis.src.reporting.entity_registry import (
-    CATCH_ALL_SUBREDDITS, CATCH_ALL_X_USERS, DEM_COLLECTIVE, GOP_COLLECTIVE,
+    CATCH_ALL_OUTLETS, CATCH_ALL_SUBREDDITS, CATCH_ALL_X_USERS,
+    DEM_COLLECTIVE, GOP_COLLECTIVE,
     canonicalize_handle, get_registry, resolve_entity,
 )
 from analysis.src.reporting.models import (
@@ -506,16 +507,16 @@ def _merge_outbound_targets(
     bot_docs: Set[int],
     bot_score_authors: Optional[Set[str]] = None,
 ) -> None:
-    """Attach "who they're talking about" to public-tier entities.
+    """Attach "who they're talking about" to PUBLIC and NEWS entities.
 
     The inverse of ``received``: target_mentions rows grouped by the
-    AUTHORING public bucket (subreddit / sampled author / catch-all)
-    instead of the mentioned target. Answers the question the Other X
-    users modal couldn't — who the bucket's sentiment is directed at.
+    AUTHORING bucket (news outlet / subreddit / sampled author / catch-all)
+    instead of the mentioned target. Answers who a bucket's sentiment is
+    directed at — e.g. a news outlet's expressed stance toward each party.
 
-    Bucket keys mirror the final ``byGeneralPublic`` items: an author whose
-    per-handle bucket was consolidated below the card floors folds into the
-    "Other X users" catch-all here too, so the rollup always lands on a
+    Bucket keys mirror the final ``byGeneralPublic`` / ``byNewsOutlet`` items:
+    an author whose per-handle bucket was consolidated below the card floors
+    folds into the tier's catch-all here too, so the rollup always lands on a
     card that actually renders. Resolved targets show their registry name;
     party collectives their fixed label; unresolved raw targets earn a row
     only when they recur (``MIN_OUTBOUND_RAW_RECURRENCE``), otherwise they
@@ -527,11 +528,12 @@ def _merge_outbound_targets(
     bot_score_authors = bot_score_authors or set()
     registry = get_registry()
     public_items = {item.key: item for item in result.byGeneralPublic}
-    if not public_items:
+    news_items = {item.key: item for item in result.byNewsOutlet}
+    if not public_items and not news_items:
         return
 
-    # bucket_key -> target_group_key -> {label, kind, entityKey, counts}
-    accum: Dict[str, Dict[str, Dict[str, Any]]] = {}
+    # (tier, bucket_key) -> target_group_key -> {label, kind, entityKey, counts}
+    accum: Dict[Tuple[str, str], Dict[str, Dict[str, Any]]] = {}
 
     for raw_row in target_rows:
         m = TargetMentionRow.from_row(raw_row)
@@ -551,29 +553,37 @@ def _merge_outbound_targets(
             registry, source_type, domain_or_subreddit, x_handle,
             is_official_tier=bool(is_official_tier),
         )
-        # Public tier only; curated elected officials route to the officials
-        # column even without a registry entity (mirrors _route_and_record).
-        if tier != "public" or ap_tier == "elected_official":
-            continue
 
-        if entity is not None:
-            bucket_key = entity.subreddit
-        elif source_type == "x_post" and x_handle:
-            bucket_key = canonicalize_handle(x_handle) or x_handle.lower()
-        elif source_type == "x_post":
-            bucket_key = CATCH_ALL_X_USERS
-        else:
-            bucket_key = CATCH_ALL_SUBREDDITS
-        if bucket_key not in public_items:
-            # Consolidated sampled author (or a bucket with no sentiment
-            # card) — fold into the tier's catch-all, matching the card the
-            # reader actually sees.
-            bucket_key = (
-                CATCH_ALL_X_USERS if source_type == "x_post"
-                else CATCH_ALL_SUBREDDITS
-            )
-            if bucket_key not in public_items:
+        # Route to the news or public bucket that authored the mention. Curated
+        # elected officials route to the officials column (handled by received),
+        # not here. (Officials expressing tone about others is expressed_
+        # alignment; this surface is news + public.)
+        if tier == "news":
+            bucket_key = entity.domain if entity is not None else CATCH_ALL_OUTLETS
+            if bucket_key not in news_items:
                 continue
+            tkey = "news"
+        elif tier == "public" and ap_tier != "elected_official":
+            if entity is not None:
+                bucket_key = entity.subreddit
+            elif source_type == "x_post" and x_handle:
+                bucket_key = canonicalize_handle(x_handle) or x_handle.lower()
+            elif source_type == "x_post":
+                bucket_key = CATCH_ALL_X_USERS
+            else:
+                bucket_key = CATCH_ALL_SUBREDDITS
+            if bucket_key not in public_items:
+                # Consolidated sampled author (or a bucket with no sentiment
+                # card) — fold into the tier's catch-all.
+                bucket_key = (
+                    CATCH_ALL_X_USERS if source_type == "x_post"
+                    else CATCH_ALL_SUBREDDITS
+                )
+                if bucket_key not in public_items:
+                    continue
+            tkey = "public"
+        else:
+            continue
 
         if key is not None:
             if key in _COLLECTIVE_LABELS:
@@ -596,7 +606,7 @@ def _merge_outbound_targets(
             label = raw
             target_kind = "raw"
 
-        bucket = accum.setdefault(bucket_key, {})
+        bucket = accum.setdefault((tkey, bucket_key), {})
         cell = bucket.setdefault(group_key, {
             "label": label, "kind": target_kind,
             "entityKey": key,
@@ -604,8 +614,8 @@ def _merge_outbound_targets(
         })
         cell["counts"][stance] += 1
 
-    for bucket_key, groups in accum.items():
-        item = public_items.get(bucket_key)
+    for (tkey, bucket_key), groups in accum.items():
+        item = (news_items if tkey == "news" else public_items).get(bucket_key)
         if item is None:
             continue
         named: List[Dict[str, Any]] = []

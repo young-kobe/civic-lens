@@ -4,10 +4,10 @@ import {
     EntityHubLinks, ErrorState, GlobalTicker, LoadingCard, MethodPopover,
     Modal, PostCardList,
     RankedEntityList, ThreeWayColumn, ThreeWayGrid,
-    TierRow, TopMetricsBlock, entityExternalUrl,
+    entityExternalUrl,
     parseEntityParam, propagandaExampleToPostCard,
 } from '../components/common';
-import type { ColumnSorter, RankedEntity, TickerItem, TierRowDot } from '../components/common';
+import type { ColumnSorter, RankedEntity, TickerItem } from '../components/common';
 import { useDeepLinkParam } from '../services/deepLink';
 import { saturationLevel } from '../services/glossary';
 import { TechniqueExplorer } from './propaganda/TechniqueExplorer';
@@ -19,7 +19,7 @@ import { formatPct } from '../services/format';
 import { dedupeById } from '../services/dedupe';
 import { COLORS } from '../theme';
 import type {
-    Filters, PartyPropaganda, PropagandaEntityItem, PropagandaExample,
+    Filters, PropagandaEntityItem, PropagandaExample,
     PropagandaOverview,
     PropagandaTechniqueName,
 } from '../types';
@@ -42,94 +42,6 @@ const TECHNIQUE_LABEL: Record<PropagandaTechniqueName, string> = {
 // appears (top metrics, ticker, entity cards, modal, source split).
 const MEAN_SCORE_TITLE =
     'Average technique-intensity score across scored posts, from 0 (none) to 1 (saturated).';
-
-// Rate-axis endpoints for the TierRow dots, which sit on a 0-100% scale.
-const RATE_ENDPOINTS: [string, string] = ['0%', '100%'];
-
-// --------------------------------------------------------------------------- //
-//  Top metrics block — compact Bloomberg-style                                //
-// --------------------------------------------------------------------------- //
-
-function PropagandaTopMetrics({
-    data,
-    windowLabel,
-}: {
-    data: PropagandaOverview;
-    windowLabel: string;
-}) {
-    const newsSplit = data.by_source.find((s) => s.label === 'News');
-    const socialSplit = data.by_source.find((s) => s.label === 'Social Media');
-    const gapPct = newsSplit && socialSplit
-        ? Math.abs(newsSplit.flagged_rate_pct - socialSplit.flagged_rate_pct)
-        : 0;
-    const leanMoreFlagged = !newsSplit || !socialSplit
-        ? 'neither'
-        : newsSplit.flagged_rate_pct > socialSplit.flagged_rate_pct
-            ? 'news'
-            : 'social media';
-    const topTech = data.by_technique[0];
-    const topTechLabel = topTech
-        ? (TECHNIQUE_LABEL[topTech.technique as PropagandaTechniqueName] || topTech.technique)
-        : '—';
-
-    const flaggedDotColor = data.propaganda_rate_pct > 20
-        ? COLORS.negative
-        : data.propaganda_rate_pct > 10
-            ? COLORS.warning
-            : COLORS.positive;
-
-    const splitDots: TierRowDot[] = [];
-    if (newsSplit) splitDots.push({
-        pct: newsSplit.flagged_rate_pct,
-        color: 'var(--neutral-500)',
-        title: `News ${formatPct(newsSplit.flagged_rate_pct)}`,
-    });
-    if (socialSplit) splitDots.push({
-        pct: socialSplit.flagged_rate_pct,
-        color: COLORS.warning,
-        title: `Social ${formatPct(socialSplit.flagged_rate_pct)}`,
-    });
-
-    return (
-        <TopMetricsBlock
-            eyebrow={`As of ${windowLabel}`}
-            meta={`${data.total_eligible_docs.toLocaleString()} scored posts`}
-            rowsClassName="propaganda-tier-rows"
-        >
-            <TierRow
-                label="Flagged rate"
-                value={formatPct(data.propaganda_rate_pct)}
-                verb={`${data.flagged_docs.toLocaleString()} flagged · ${saturationLevel(data.mean_score)} technique saturation`}
-                dots={[{
-                    pct: data.propaganda_rate_pct,
-                    color: flaggedDotColor,
-                    title: `${formatPct(data.propaganda_rate_pct)} of scored posts were flagged`,
-                }]}
-                endpoints={RATE_ENDPOINTS}
-            />
-            <TierRow
-                label="News vs social"
-                value={gapPct > 0 ? `${gapPct.toFixed(1)} pts` : '—'}
-                verb={leanMoreFlagged === 'neither'
-                    ? 'no data'
-                    : `${leanMoreFlagged} uses more techniques`}
-                dots={splitDots}
-                endpoints={RATE_ENDPOINTS}
-            />
-            <TierRow
-                label="Top technique"
-                value={topTech ? formatPct(topTech.pct_of_flagged_docs, { decimals: 0 }) : '—'}
-                verb={topTech
-                    ? `${topTechLabel} · in ${topTech.count.toLocaleString()} flagged posts`
-                    : topTechLabel}
-                dotPct={topTech?.pct_of_flagged_docs}
-                dotColor={topTech ? COLORS.negative : undefined}
-                endpoints={RATE_ENDPOINTS}
-            />
-        </TopMetricsBlock>
-    );
-}
-
 
 // --------------------------------------------------------------------------- //
 //  Ticker + reads-as-today                                                    //
@@ -226,6 +138,91 @@ function toRankedEntity(
         detail: `${item.total_docs.toLocaleString()} scored`,
         onClick: () => onOpen(item),
     };
+}
+
+// Sources below this many scored posts can't rank as an "offender" — a lone
+// flagged post would otherwise read as a 100% rate at the top of the board.
+const MIN_OFFENDER_VOLUME = 10;
+
+/** The 3 highest flagged-rate sources across ALL tiers in the window (catch-all
+ *  buckets + sub-floor sources excluded). */
+function topFlaggedOffenders(data: PropagandaOverview): PropagandaEntityItem[] {
+    return [
+        ...(data.by_news_outlet ?? []),
+        ...(data.by_official ?? []),
+        ...(data.by_general_public ?? []),
+    ]
+        .filter((it) => it.kind !== 'catch_all' && it.total_docs >= MIN_OFFENDER_VOLUME)
+        .sort((a, b) => (b.flagged_rate_pct - a.flagged_rate_pct)
+            || (b.flagged_docs - a.flagged_docs))
+        .slice(0, 3);
+}
+
+const OFFENDER_BLURB_MAX = 96;
+
+/** Leaderboard row with an under-name explanation: who they are (blurb) and why
+ *  they rank (flagged count + technique saturation). */
+function toOffenderRow(
+    item: PropagandaEntityItem,
+    onOpen: (item: PropagandaEntityItem) => void,
+): RankedEntity {
+    const blurb = item.entity_profile.blurb;
+    const clamped = blurb && blurb.length > OFFENDER_BLURB_MAX
+        ? `${blurb.slice(0, OFFENDER_BLURB_MAX).trimEnd()}…`
+        : blurb;
+    return {
+        ...toRankedEntity(item, onOpen),
+        detail: undefined,
+        description: (
+            <>
+                {clamped && <span className="ranked-entity-blurb">{clamped}</span>}
+                <span className="ranked-entity-why">
+                    {item.flagged_docs.toLocaleString()} of {item.total_docs.toLocaleString()} posts
+                    {' '}flagged · {saturationLevel(item.mean_score)} technique saturation
+                </span>
+            </>
+        ),
+    };
+}
+
+/** Top-3 flagged-rate leaderboard — same ranked row-card as the three-way
+ *  columns. Replaces the "As of last N" top-metrics block, scoped to the date
+ *  range selector (the payload is fetched per window). */
+function TopFlaggedLeaderboard({
+    data, windowLabel, onOpen,
+}: {
+    data: PropagandaOverview;
+    windowLabel: string;
+    onOpen: (item: PropagandaEntityItem) => void;
+}) {
+    const top = topFlaggedOffenders(data);
+    return (
+        <Card
+            title="Top flagged offenders"
+            subtitle={`The highest flagged-rate sources across news, officials, and the public · as of ${windowLabel}`}
+            headerActions={
+                <MethodPopover
+                    description={
+                        'The three sources with the highest flagged rate (flagged posts / scored '
+                        + 'posts) in the selected window, across all tiers. Catch-all buckets and '
+                        + `sources with fewer than ${MIN_OFFENDER_VOLUME} scored posts are excluded so `
+                        + "a one-off flag can't top the board. A density measure, not intent."
+                    }
+                />
+            }
+        >
+            {top.length > 0 ? (
+                <RankedEntityList
+                    items={top.map((it) => toOffenderRow(it, onOpen))}
+                    ariaLabel="Top flagged-rate offenders across all sources"
+                />
+            ) : (
+                <p className="text-sm text-muted">
+                    No sources cleared the minimum volume to rank in this window.
+                </p>
+            )}
+        </Card>
+    );
 }
 
 
@@ -388,63 +385,6 @@ function HowThisWorks() {
 
 
 // --------------------------------------------------------------------------- //
-//  By-party rollup (Phase 4) — which partisan side leans harder on techniques //
-// --------------------------------------------------------------------------- //
-
-// Party -> lean accent. This is a legitimate data legend (the bar is labeled
-// with the party), so it keeps the partisan hue while chrome stays monochrome.
-const PARTY_ACCENT: Record<string, string> = {
-    R: COLORS.leanRight,
-    D: COLORS.leanLeft,
-};
-
-function ByPartyCard({ parties }: { parties: PartyPropaganda[] }) {
-    if (parties.length === 0) return null;
-    const maxRate = parties.reduce((m, p) => Math.max(m, p.flagged_rate_pct), 0) || 1;
-    return (
-        <Card
-            title="Persuasion techniques by party"
-            subtitle="Share of the tracked officials' scored posts flagged for persuasion techniques, grouped by the official's party. A measure of technique density, not intent — and only the officials we track."
-            headerActions={
-                <MethodPopover
-                    description={
-                        'Each tracked official is routed to their party; the bar is that party\'s '
-                        + 'flagged rate (flagged posts / scored posts) across all its officials in '
-                        + 'the window. Officials with no party affiliation are excluded rather than '
-                        + 'shown as a side.'
-                    }
-                />
-            }
-        >
-            <div className="party-bars">
-                {parties.map((p) => {
-                    const accent = PARTY_ACCENT[p.party] ?? 'var(--neutral-500)';
-                    const officials = `${p.official_count} official${p.official_count === 1 ? '' : 's'}`;
-                    return (
-                        <div
-                            key={p.party}
-                            className="party-bar-row"
-                            title={`${p.flagged_docs.toLocaleString()} of ${p.total_docs.toLocaleString()} scored posts flagged across ${officials} · mean score ${p.mean_score.toFixed(2)} / 1`}
-                        >
-                            <span className="party-bar-label">{p.party_label}</span>
-                            <span className="party-bar-track" aria-hidden>
-                                <span
-                                    className="party-bar-fill"
-                                    style={{ width: `${(p.flagged_rate_pct / maxRate) * 100}%`, background: accent }}
-                                />
-                            </span>
-                            <span className="party-bar-value">{formatPct(p.flagged_rate_pct)}</span>
-                            <span className="party-bar-meta">{officials}</span>
-                        </div>
-                    );
-                })}
-            </div>
-        </Card>
-    );
-}
-
-
-// --------------------------------------------------------------------------- //
 //  Page                                                                       //
 // --------------------------------------------------------------------------- //
 
@@ -550,12 +490,13 @@ function Propaganda({ filters }: PropagandaProps) {
                     full-width rows into one. Hover a technique bar for what it
                     means, click to open its flagged posts. */}
                 <div className="col-span-5">
-                    <PropagandaTopMetrics data={data} windowLabel={windowLabel} />
+                    <TopFlaggedLeaderboard data={data} windowLabel={windowLabel} onOpen={setActiveEntity} />
                 </div>
                 <div className="col-span-7">
                     <TechniqueExplorer
                         techniques={data.by_technique}
                         examples={data.examples}
+                        parties={data.by_party ?? []}
                     />
                 </div>
 
@@ -565,12 +506,6 @@ function Propaganda({ filters }: PropagandaProps) {
                 <div className="col-span-12">
                     <ThreeWayEntityGrid data={data} onOpen={setActiveEntity} />
                 </div>
-
-                {(data.by_party?.length ?? 0) > 0 && (
-                    <div className="col-span-12">
-                        <ByPartyCard parties={data.by_party ?? []} />
-                    </div>
-                )}
 
                 {/* News-vs-social removed (its numbers already appear in the
                     top-metrics "News vs social" tier row + the reads-as-today

@@ -421,6 +421,7 @@ function entityItem(
     engagementTotal?: number,
     dailyTone?: EntitySentimentItem['dailyTone'],
     received?: EntitySentimentItem['received'],
+    outbound?: EntitySentimentItem['outbound'],
 ): EntitySentimentItem {
     const volume = counts.positive + counts.negative + counts.neutral;
     const net = volume > 0 ? ((counts.positive - counts.negative) / volume) * 100 : 0;
@@ -435,6 +436,20 @@ function entityItem(
         ...(engagementTotal != null ? { engagementTotal } : {}),
         ...(dailyTone ? { dailyTone } : {}),
         ...(received ? { received } : {}),
+        ...(outbound ? { outbound } : {}),
+    };
+}
+
+// Mock OUTBOUND targets (who an entity talks about): the two party collectives
+// with a stance each, so news cards show "about Democrats (party) · <stance>".
+function mockOutbound(demNet: number, repNet: number): EntitySentimentItem['outbound'] {
+    return {
+        minSampleN: 5,
+        volume: 40,
+        targets: [
+            { label: 'Democrats (party)', entityKey: 'dem_collective', kind: 'collective', net: demNet, volume: 22, lowSample: false },
+            { label: 'Republicans (party)', entityKey: 'gop_collective', kind: 'collective', net: repNet, volume: 18, lowSample: false },
+        ],
     };
 }
 
@@ -464,11 +479,13 @@ function mockOutletSentiment(): EntitySentimentItem[] {
                 'AllSides 2024 (Lean Left)',
                 'A general-interest daily of record and the largest US paper by paid digital subscriptions.'),
             { positive: 140, negative: 220, neutral: 320 }, undefined, mockDailyTone(-11.8, 1),
+            undefined, mockOutbound(6.4, -28.1),
         ),
         entityItem(
             outletProfile('foxnews.com', 'Fox News', 'right', 'AllSides 2024 (Right)',
                 'The most-watched US cable news network and the dominant conservative TV voice.'),
             { positive: 95, negative: 310, neutral: 180 }, undefined, mockDailyTone(-36.8, 4),
+            undefined, mockOutbound(-33.5, 9.2),
         ),
         entityItem(
             outletProfile('bbc.com', 'BBC', 'center', 'AllSides 2024 (Center)',

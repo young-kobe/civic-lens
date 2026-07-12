@@ -80,6 +80,14 @@ function toneVerb(net: number): string {
     return 'roughly neutral';
 }
 
+/** Plain positive/negative/neutral for the "about X (party) · <stance>"
+ *  expressed-target labels. */
+function stanceWord(net: number): string {
+    if (net > 5) return 'positive';
+    if (net < -5) return 'negative';
+    return 'neutral';
+}
+
 function toneColor(net: number): string {
     if (net > 10) return COLORS.positive;
     if (net < -10) return COLORS.negative;
@@ -509,11 +517,27 @@ function SentimentThreeWayGrid({
         const top = cells.reduce((a, b) => (b.volume > a.volume ? b : a));
         return `Mentioned mostly about ${top.topic} — ${toneVerb(top.net!)}.`;
     };
+    // News outlets carry their EXPRESSED stance toward each party collective,
+    // e.g. "about Democrats (party) · negative · about Republicans (party) ·
+    // positive" — the outbound-target read the public cards already show.
+    const newsReadsAs = (item: EntitySentimentItem): string | undefined => {
+        if (item.kind !== 'outlet') return undefined;
+        const parties = (item.outbound?.targets ?? [])
+            .filter((t) => t.kind === 'collective' && t.net != null);
+        if (parties.length === 0) return undefined;
+        return parties
+            .map((t) => `about ${t.label} · ${stanceWord(t.net!)}`)
+            .join(' · ');
+    };
+    const readsAsFor = (item: EntitySentimentItem): string | undefined =>
+        item.kind === 'official' ? officialReadsAs(item)
+            : item.kind === 'outlet' ? newsReadsAs(item)
+                : undefined;
     const renderCard = (item: EntitySentimentItem) => (
         <EntityProfileCard
             key={item.key}
             profile={item.entityProfile}
-            readsAs={officialReadsAs(item)}
+            readsAs={readsAsFor(item)}
             stats={item.kind === 'official'
                 // Officials split the metric: received tone (posts about
                 // them, the reputational signal) leads; expressed tone
