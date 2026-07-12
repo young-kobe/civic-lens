@@ -84,7 +84,7 @@ function BotEntityModal({ item, onClose }: { item: BotEntityItem; onClose: () =>
             {sourceUrl && (
                 <div className="mt-3">
                     <a href={sourceUrl} target="_blank" rel="noreferrer" className="example-row-link">
-                        Visit {profile.displayName} ↗
+                        Visit {profile.displayName}
                     </a>
                 </div>
             )}
@@ -281,7 +281,7 @@ function NarrativeAmplificationCard({ narrative }: NarrativeAmplificationCardPro
                                 className="example-row-link"
                                 title="Open this story on the Political Narratives page"
                             >
-                                See the full story ↗
+                                See the full story
                             </a>
                         </div>
                     </div>

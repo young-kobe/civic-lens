@@ -1,6 +1,6 @@
 import { useId, useMemo, useState } from 'react';
 import {
-    Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Line, LineChart,
+    Area, AreaChart, CartesianGrid, Line, LineChart,
     ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
 import type { TooltipProps } from 'recharts';
@@ -8,7 +8,7 @@ import { Card, MethodPopover } from '../../components/common';
 import { formatPts } from '../../services/format';
 import { COLORS } from '../../theme';
 import type {
-    EntitySentimentItem, SentimentBreakdown, ToneTrendPoint, TrendPoint,
+    EntitySentimentItem, ToneTrendPoint, TrendPoint,
 } from '../../types';
 
 // --------------------------------------------------------------------------- //
@@ -17,9 +17,9 @@ import type {
 //  Primary series (when the snapshot carries it): the per-day per-tier       //
 //  toneTrend — news vs officials vs public net tone, day by day, with        //
 //  low-sample days rendered as gaps. The daily GOP net-favorability series   //
-//  is the second view behind a toggle. A weekday-rhythm bar strip from       //
-//  byDayOfWeek sits below. On pre-toneTrend cached snapshots the GOP series  //
-//  renders alone, exactly as it did before Phase 2a.                         //
+//  is the second view behind a toggle. The whole chart is scoped to the      //
+//  page's time-range filter (the snapshot is fetched per window). Clicking    //
+//  a point opens that day's sampled posts.                                    //
 // --------------------------------------------------------------------------- //
 
 type TierKey = 'news' | 'officials' | 'public';
@@ -27,11 +27,13 @@ type TierKey = 'news' | 'officials' | 'public';
 interface ToneTrendPanelProps {
     toneTrend: ToneTrendPoint[] | null | undefined;
     gopTrend: TrendPoint[] | null | undefined;
-    byDayOfWeek: SentimentBreakdown[] | undefined;
     /** Per-tier entity items (each carrying dailyTone) for the drill-down. */
     entitiesByTier?: Record<TierKey, EntitySentimentItem[]>;
     /** Opens the shared entity modal (live classified evidence) on click. */
     onOpenEntity?: (item: EntitySentimentItem) => void;
+    /** Opens a modal of that calendar day's sampled posts when a chart point
+     *  is clicked (mirrors the tone-intensity segment drill-down). */
+    onDateClick?: (date: string) => void;
 }
 
 // High-contrast speaker-tier hues, shared with the top-metrics tier
@@ -148,17 +150,25 @@ function multiTooltip(series: SeriesDef[]) {
 /** Shared overlaid-line chart. `highlightKey` dims the other lines so hovering
  *  a legend item isolates one series. */
 function MultiLineChart({
-    rows, series, highlightKey, ariaLabel,
+    rows, series, highlightKey, ariaLabel, onDateClick,
 }: {
     rows: LineRow[];
     series: SeriesDef[];
     highlightKey: string | null;
     ariaLabel: string;
+    onDateClick?: (date: string) => void;
 }) {
     return (
         <div role="img" aria-label={ariaLabel}>
             <ResponsiveContainer width="100%" height={240}>
-                <LineChart data={rows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                <LineChart
+                    data={rows}
+                    margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
+                    onClick={onDateClick
+                        ? (s: { activeLabel?: string | number }) => { if (s?.activeLabel) onDateClick(String(s.activeLabel)); }
+                        : undefined}
+                    style={onDateClick ? { cursor: 'pointer' } : undefined}
+                >
                     <CartesianGrid vertical={false} stroke="var(--chart-grid)" strokeDasharray="2 4" />
                     <XAxis
                         dataKey="date"
@@ -245,7 +255,7 @@ function ToneLegend({
     );
 }
 
-function DailyTrendChart({ trend }: { trend: TrendPoint[] }) {
+function DailyTrendChart({ trend, onDateClick }: { trend: TrendPoint[]; onDateClick?: (date: string) => void }) {
     const gradientId = `tone-trend-${useId().replace(/:/g, '')}`;
     const last = trend[trend.length - 1];
 
@@ -255,7 +265,14 @@ function DailyTrendChart({ trend }: { trend: TrendPoint[] }) {
             aria-label={`Daily net tone toward the GOP, ${trend.length} days, latest ${formatPts(last?.value ?? null)}`}
         >
             <ResponsiveContainer width="100%" height={200}>
-                <AreaChart data={trend} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                <AreaChart
+                    data={trend}
+                    margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
+                    onClick={onDateClick
+                        ? (s: { activeLabel?: string | number }) => { if (s?.activeLabel) onDateClick(String(s.activeLabel)); }
+                        : undefined}
+                    style={onDateClick ? { cursor: 'pointer' } : undefined}
+                >
                     <defs>
                         <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
                             <stop offset="0%" stopColor={COLORS.chartAccent} stopOpacity={0.3} />
@@ -300,86 +317,14 @@ function DailyTrendChart({ trend }: { trend: TrendPoint[] }) {
 }
 
 // --------------------------------------------------------------------------- //
-//  Weekday rhythm strip                                                       //
-// --------------------------------------------------------------------------- //
-
-interface WeekdayRow {
-    day: string;
-    net: number;
-    volume: number;
-}
-
-function weekdayRows(byDayOfWeek: SentimentBreakdown[]): WeekdayRow[] {
-    const rows: WeekdayRow[] = [];
-    for (const row of byDayOfWeek) {
-        if (!row.day) continue;
-        const total = row.positive + row.negative + row.neutral;
-        if (total === 0) continue;
-        rows.push({
-            day: row.day,
-            net: Math.round(((row.positive - row.negative) / total) * 1000) / 10,
-            volume: row.volume,
-        });
-    }
-    return rows;
-}
-
-function weekdayTooltip({ payload }: TooltipProps<number, string>) {
-    if (!payload || payload.length === 0) return null;
-    const row = payload[0].payload as WeekdayRow;
-    return (
-        <div className="chart-tooltip">
-            <div className="chart-tooltip-label">{row.day}</div>
-            <div className="chart-tooltip-value">{formatPts(row.net)}</div>
-            <div className="chart-tooltip-value" style={{ fontSize: 11, color: 'var(--neutral-500)' }}>
-                {row.volume.toLocaleString()} posts
-            </div>
-        </div>
-    );
-}
-
-function WeekdayStrip({ rows }: { rows: WeekdayRow[] }) {
-    return (
-        <div role="img" aria-label={`Net tone by weekday across ${rows.length} weekdays`}>
-            <ResponsiveContainer width="100%" height={96}>
-                <BarChart data={rows} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-                    <CartesianGrid vertical={false} stroke="var(--chart-grid)" strokeDasharray="2 4" />
-                    <XAxis
-                        dataKey="day"
-                        tick={{ fontSize: 11, fill: 'var(--neutral-500)', fontFamily: 'var(--font-mono)' }}
-                        axisLine={{ stroke: 'var(--chart-grid)' }}
-                        tickLine={false}
-                    />
-                    <YAxis hide domain={['auto', 'auto']} />
-                    <ReferenceLine y={0} stroke="var(--neutral-300)" />
-                    <Bar dataKey="net" radius={[3, 3, 0, 0]} isAnimationActive={false} maxBarSize={36}>
-                        {rows.map((row) => (
-                            <Cell
-                                key={row.day}
-                                fill={row.net >= 0 ? COLORS.positive : COLORS.negative}
-                            />
-                        ))}
-                    </Bar>
-                    <Tooltip
-                        content={weekdayTooltip}
-                        cursor={{ fill: 'var(--bg-inset)' }}
-                    />
-                </BarChart>
-            </ResponsiveContainer>
-        </div>
-    );
-}
-
-// --------------------------------------------------------------------------- //
 //  Panel                                                                      //
 // --------------------------------------------------------------------------- //
 
 export function ToneTrendPanel({
-    toneTrend, gopTrend, byDayOfWeek, entitiesByTier, onOpenEntity,
+    toneTrend, gopTrend, entitiesByTier, onOpenEntity, onDateClick,
 }: ToneTrendPanelProps) {
     const tierTrend = (toneTrend ?? []).filter((p) => !!p.date);
     const gop = (gopTrend ?? []).filter((p) => Number.isFinite(p.value));
-    const weekdays = weekdayRows(byDayOfWeek ?? []);
     const hasTiers = tierTrend.length >= 2;
     const hasGop = gop.length >= 2;
     const [view, setView] = useState<'tiers' | 'gop'>('tiers');
@@ -402,7 +347,7 @@ export function ToneTrendPanel({
         return m;
     }, [drillTier, entitiesByTier]);
 
-    if (!hasTiers && !hasGop && weekdays.length === 0) return null;
+    if (!hasTiers && !hasGop) return null;
 
     // Pre-2a cached snapshots carry no toneTrend — the GOP series renders
     // alone with no toggle, exactly the Phase 1 behavior.
@@ -411,11 +356,13 @@ export function ToneTrendPanel({
 
     const tierLabel = (t: TierKey) => TIER_SERIES.find((s) => s.key === t)?.label ?? t;
 
-    const subtitle = activeView !== 'tiers'
+    const clickHint = onDateClick ? " Click a point to read that day's posts." : '';
+    const subtitle = (activeView !== 'tiers'
         ? 'Daily net tone of sampled posts toward the GOP.'
         : inDrill
             ? `Daily net tone of individual ${tierLabel(drillTier!).toLowerCase()} — click a name to read its classified posts.`
-            : 'Daily net tone by group: news, officials, the public. Click a group in the legend to break out who is driving it.';
+            : 'Daily net tone by group: news, officials, the public. Click a group in the legend to break out who is driving it.')
+        + clickHint;
 
     const tierLegend: LegendItem[] = TIER_SERIES.map((s) => ({
         key: s.key,
@@ -502,6 +449,7 @@ export function ToneTrendPanel({
                             series={drill!.series}
                             highlightKey={highlightKey}
                             ariaLabel={`Daily net tone of individual ${tierLabel(drillTier!)}, ${drill!.rows.length} days`}
+                            onDateClick={onDateClick}
                         />
                     ) : (
                         <MultiLineChart
@@ -509,6 +457,7 @@ export function ToneTrendPanel({
                             series={TIER_SERIES}
                             highlightKey={highlightKey}
                             ariaLabel={`Daily net tone by group (news, officials, public), ${tierRows.length} days`}
+                            onDateClick={onDateClick}
                         />
                     )}
                     <ToneLegend
@@ -517,19 +466,11 @@ export function ToneTrendPanel({
                     />
                 </>
             ) : hasGop ? (
-                <DailyTrendChart trend={gop} />
+                <DailyTrendChart trend={gop} onDateClick={onDateClick} />
             ) : (
                 <p className="text-sm text-muted">
                     Not enough daily readings in this window to draw a trend yet.
                 </p>
-            )}
-            {weekdays.length > 0 && (
-                <>
-                    <div className="eyebrow" style={{ margin: 'var(--space-3) 0 var(--space-1)' }}>
-                        Weekday rhythm · all sampled posts
-                    </div>
-                    <WeekdayStrip rows={weekdays} />
-                </>
             )}
         </Card>
     );

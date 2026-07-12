@@ -1,9 +1,10 @@
-import { Card, MethodPopover } from '../../components/common';
+import { useState } from 'react';
+import { Card, MethodPopover, Modal, PostCardList, sampleToPostCard } from '../../components/common';
 import { fetchOutletProfiles, type TimeWindow } from '../../services/api';
 import { formatCount, formatPct, formatPts } from '../../services/format';
 import { useFetch } from '../../services/useFetch';
 import { COLORS } from '../../theme';
-import type { OutletProfilesResult } from '../../types';
+import type { ClassificationSample, OutletProfileItem, OutletProfilesResult } from '../../types';
 
 // --------------------------------------------------------------------------- //
 //  OutletSignalsPanel — per-domain net tone x bot rate side by side.          //
@@ -15,7 +16,7 @@ import type { OutletProfilesResult } from '../../types';
 //  snapshot, wired in Phase 2e).                                             //
 // --------------------------------------------------------------------------- //
 
-const MAX_ROWS = 15;
+const MAX_ROWS = 9;
 
 const SOURCE_LABEL: Record<string, string> = {
     news: 'News',
@@ -36,19 +37,72 @@ function botColor(ratePct: number): string {
     return 'var(--neutral-600)';
 }
 
+/** Distinct narratives among a source's samples, most-frequent first — the
+ *  recurring stories driving its net tone. */
+function narrativeBreakdown(samples: ClassificationSample[]): { name: string; count: number }[] {
+    const counts = new Map<string, number>();
+    for (const s of samples) {
+        if (s.narrative) counts.set(s.narrative, (counts.get(s.narrative) ?? 0) + 1);
+    }
+    return [...counts.entries()]
+        .map(([name, count]) => ({ name, count }))
+        .sort((a, b) => b.count - a.count);
+}
+
+/** Ties a source's net-tone number to the stories + posts behind it. */
+function OutletSamplesModal({ outlet, onClose }: { outlet: OutletProfileItem; onClose: () => void }) {
+    const samples = outlet.samples ?? [];
+    const stories = narrativeBreakdown(samples);
+    return (
+        <Modal
+            isOpen
+            onClose={onClose}
+            kicker="Source signals"
+            title={outlet.outlet}
+            subtitle={`${outlet.net_tone != null ? formatPts(outlet.net_tone) : '—'} net tone · ${formatCount(outlet.volume)} scored posts, bots included`}
+        >
+            {stories.length > 0 && (
+                <div className="outlet-stories">
+                    <div className="eyebrow">Stories driving this tone</div>
+                    <ul className="outlet-stories-list">
+                        {stories.map((s) => (
+                            <li key={s.name}>
+                                <span className="outlet-story-count">{s.count}</span>
+                                {s.name}
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            )}
+            {samples.length > 0 ? (
+                <PostCardList
+                    posts={samples.map(sampleToPostCard)}
+                    sampleNote="This source's highest-confidence scored posts — the articles and events behind the number. Highlighted text is the evidence the model quoted."
+                />
+            ) : (
+                <p className="text-sm text-muted">
+                    No stored example posts for this source in the current snapshot.
+                    They fill in on the next data refresh.
+                </p>
+            )}
+        </Modal>
+    );
+}
+
 export function OutletSignalsPanel({ window }: { window: TimeWindow }) {
     const { data } = useFetch<OutletProfilesResult>(
         () => fetchOutletProfiles(window),
         [window],
         `outlet-profiles:${window}`,
     );
+    const [active, setActive] = useState<OutletProfileItem | null>(null);
     if (!data || data.outlets.length === 0) return null;
     const rows = data.outlets.slice(0, MAX_ROWS);
 
     return (
         <Card
             title="Source signals, side by side"
-            subtitle="Per-domain net tone next to the share of its scanned posts our detector flags. Sorted by flagged share."
+            subtitle="Per-domain net tone next to the share of its scanned posts our detector flags. Click a source to see the stories driving its tone. Sorted by flagged share."
             headerActions={
                 <MethodPopover
                     description={
@@ -81,7 +135,12 @@ export function OutletSignalsPanel({ window }: { window: TimeWindow }) {
                     </thead>
                     <tbody>
                         {rows.map((o) => (
-                            <tr key={o.outlet}>
+                            <tr
+                                key={o.outlet}
+                                className="outlet-signal-row"
+                                onClick={() => setActive(o)}
+                                title={`See the stories and posts driving ${o.outlet}'s tone`}
+                            >
                                 <td style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)' }}>
                                     {o.outlet}
                                 </td>
@@ -99,6 +158,7 @@ export function OutletSignalsPanel({ window }: { window: TimeWindow }) {
                 </table>
             </div>
             <p className="card-note" style={{ marginTop: 'var(--space-2)' }}>{data.disclaimer}</p>
+            {active && <OutletSamplesModal outlet={active} onClose={() => setActive(null)} />}
         </Card>
     );
 }

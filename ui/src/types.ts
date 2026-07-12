@@ -41,6 +41,10 @@ export interface PublicSentimentData {
     // SentimentDistribution. Each list is confidence-sorted desc and capped
     // server-side (~15 per bucket). Absent on older snapshots.
     distributionSamples?: Partial<Record<SentimentSegmentKey, ClassificationSample[]>>;
+    // Per-calendar-day (YYYY-MM-DD) drill-down samples, keyed by the toneTrend
+    // point dates — clicking a point on the Tone-over-time chart opens that
+    // day's posts. Absent on older snapshots.
+    daySamples?: Record<string, ClassificationSample[]>;
     socialVsNews?: SocialVsNewsSentiment | null;
     // Three-way entity rollups (walkthrough 057/058). Lists the dashboard
     // renders as the News Outlets / Verified Officials / General Public
@@ -310,6 +314,10 @@ export interface ClassificationSample {
     /** Who this post's sentiment is directed at (frozen target_mentions):
      *  resolved targets first, capped small. Absent on older snapshots. */
     targets?: SampleTarget[] | null;
+    /** Recurring narrative (story) this post belongs to, when clustered — used
+     *  by the Source-signals drill-down to tie tone to the driving stories.
+     *  Null when unclustered; absent on older snapshots. */
+    narrative?: string | null;
 }
 
 /** One "about X — negative" chip on a sampled post. */
@@ -389,6 +397,9 @@ export interface OutletProfileItem {
     bot_rate_pct: number;
     volume: number;
     total_scanned: number;
+    /** Narrative-tagged sample posts driving this source's net tone, for the
+     *  drill-down modal. Absent on older snapshots. */
+    samples?: ClassificationSample[];
 }
 
 export interface OutletProfilesResult {

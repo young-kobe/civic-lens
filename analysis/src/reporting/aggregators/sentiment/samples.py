@@ -218,6 +218,32 @@ def _collect_strength_sample(
     _insert_capped(samples, sample, MAX_DISTRIBUTION_SAMPLES_PER_BUCKET)
 
 
+def _collect_day_sample(
+    day_samples: Dict[str, List[Dict[str, Any]]],
+    day: str,
+    doc_id: int, label: str, confidence: float,
+    data: Dict[str, Any],
+    title: Optional[str], source_type: Optional[str], published_at: Optional[float],
+    domain_or_subreddit: Optional[str], ident: Optional[str], text: Optional[str],
+    x_handle: Optional[str] = None,
+    topic: Optional[str] = None,
+    engagement: Optional[Dict[str, int]] = None,
+    author: Optional[Dict[str, Any]] = None,
+) -> None:
+    """Append a sample to a calendar-day bucket (YYYY-MM-DD) so clicking a point
+    on the Tone-over-time line chart can open a modal of that day's sampled
+    posts, mirroring the intensity-distribution drill-down."""
+    if not data.get("reasoning"):
+        return
+    samples = day_samples.setdefault(day, [])
+    sample = _build_sample_dict(
+        doc_id, label, confidence, data, title, source_type,
+        published_at, domain_or_subreddit, ident, text, x_handle,
+        topic=topic, engagement=engagement, author=author,
+    )
+    _insert_capped(samples, sample, MAX_DISTRIBUTION_SAMPLES_PER_BUCKET)
+
+
 def _collect_entity_sample(
     entity_accum: Dict[str, Any],
     doc_id: int, label: str, confidence: float,

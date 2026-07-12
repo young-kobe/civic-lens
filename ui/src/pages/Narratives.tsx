@@ -512,7 +512,7 @@ function NarrativeEntityModal({
             {sourceUrl && (
                 <div className="entity-modal-links">
                     <a href={sourceUrl} target="_blank" rel="noreferrer">
-                        Visit {profile.displayName} ↗
+                        Visit {profile.displayName}
                     </a>
                 </div>
             )}

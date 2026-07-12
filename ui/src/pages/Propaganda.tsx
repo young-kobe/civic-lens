@@ -283,7 +283,7 @@ function PropagandaEntityModal({
                 <div className="entity-modal-links">
                     {sourceUrl && (
                         <a href={sourceUrl} target="_blank" rel="noreferrer">
-                            Visit {profile.displayName} ↗
+                            Visit {profile.displayName}
                         </a>
                     )}
                     {profile.leanSource && (

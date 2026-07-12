@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import math
+from datetime import datetime
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from analysis.src.reporting.aggregators.rows import TargetMentionRow
@@ -55,6 +56,25 @@ BOT_SCORE_AUTHOR_EXCLUSION = 0.5
 # classified tweet must never render as a +100.0 headline. The volume is
 # always emitted so the UI can show the honest n.
 MIN_TARGET_SAMPLE_N = 5
+
+# Trailing-day cap for the received-tone daily series (received.dailyTone),
+# mirroring the expressed toneTrend cap so the two overlay on the same chart at
+# the same resolution and payload bound.
+_RECEIVED_TREND_MAX_DAYS = 30
+
+
+def _received_day_key(published_at: Any) -> Optional[str]:
+    """Calendar-day bucket ('YYYY-MM-DD') for a mention, or None when the
+    timestamp is unparseable. Local-time, matching the expressed toneTrend
+    (aggregator._day_key) so received and expressed series align by day.
+    Defined locally to avoid importing from the aggregator (which imports this
+    module — a cycle)."""
+    if published_at is None:
+        return None
+    try:
+        return datetime.fromtimestamp(float(published_at)).strftime("%Y-%m-%d")
+    except (TypeError, ValueError, OSError, OverflowError):
+        return None
 
 # Outbound-target rollup on public-tier entities ("who they're talking
 # about"). Named rows are capped; unresolved raw targets need to recur
@@ -223,6 +243,19 @@ def _format_received(accum: Dict[str, Any]) -> Dict[str, Any]:
             (accum["w_pos"] - accum["w_neg"]) / accum["w_total"] * 100, 1
         )
 
+    # Received-tone daily series (trailing window), suppressed below the sample
+    # floor per day so a 1-mention day never draws a spike. Powers overlaying an
+    # official's "tone directed at them" on the Tone-over-time chart.
+    daily_tone = [
+        {
+            "date": d,
+            "net": _net_or_none(day_counts),
+            "volume": sum(day_counts.values()),
+            "lowSample": sum(day_counts.values()) < MIN_TARGET_SAMPLE_N,
+        }
+        for d, day_counts in sorted(accum.get("by_day", {}).items())[-_RECEIVED_TREND_MAX_DAYS:]
+    ]
+
     return {
         "net": _net_or_none(counts),
         "volume": volume,
@@ -231,6 +264,7 @@ def _format_received(accum: Dict[str, Any]) -> Dict[str, Any]:
         "byTopic": by_topic,
         "bySpeakerTier": by_speaker_tier,
         "byNarrative": by_narrative,
+        "dailyTone": daily_tone,
         "samples": accum["samples"],
     }
 
@@ -355,6 +389,7 @@ def _merge_target_tone(
                 "speaker_key": speaker_key,
                 "speaker_party": speaker_party,
                 "speaker_tier": _speaker_tier(tier, ap_tier),
+                "day": _received_day_key(published_at),
             }
             doc_ctx[doc_id] = ctx
 
@@ -370,10 +405,15 @@ def _merge_target_tone(
             "by_topic": {},
             "by_speaker": {},
             "by_narrative": {},
+            "by_day": {},
             "w_pos": 0.0, "w_neg": 0.0, "w_total": 0.0,
             "samples": [],
         })
         accum["counts"][stance] += 1
+        if ctx["day"] is not None:
+            accum["by_day"].setdefault(
+                ctx["day"], _empty_stance_counts()
+            )[stance] += 1
         accum["by_topic"].setdefault(
             topic or "Other", _empty_stance_counts()
         )[stance] += 1
