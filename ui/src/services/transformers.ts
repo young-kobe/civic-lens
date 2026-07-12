@@ -31,6 +31,7 @@ export function transformPublicSentiment(apiData: any): PublicSentimentData {
             strongNegative: 0,
         },
         distributionSamples: apiData.distributionSamples || {},
+        daySamples: apiData.daySamples || {},
         // Three-way entity rollups — passed through verbatim. The aggregator
         // already shapes each row to match `EntitySentimentItem`; whitelisting
         // here previously silently dropped the entire field and emptied the

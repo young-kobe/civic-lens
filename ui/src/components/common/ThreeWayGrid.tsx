@@ -156,8 +156,6 @@ interface ThreeWayColumnProps<T> {
     sorters?: Array<ColumnSorter<T>>;
     /** Which sorter to start on (e.g. officials default to engagement). */
     defaultSortIdx?: number;
-    /** Cards shown before the column body starts scrolling internally. */
-    collapsedCount?: number;
     /** Rendered at the bottom of the column, after the cards — used to fill
      *  a thin tier (e.g. the public column's "who they're talking about"). */
     footer?: ReactNode;
@@ -165,11 +163,9 @@ interface ThreeWayColumnProps<T> {
     children?: ReactNode;
 }
 
-const DEFAULT_COLLAPSED_COUNT = 10;
-
 export function ThreeWayColumn<T>({
     header, byline, empty, isEmpty, items, renderItem, renderItems, sorters,
-    defaultSortIdx = 0, collapsedCount = DEFAULT_COLLAPSED_COUNT, footer, children,
+    defaultSortIdx = 0, footer, children,
 }: ThreeWayColumnProps<T>) {
     const [sortIdx, setSortIdx] = useState(defaultSortIdx);
 
@@ -177,15 +173,11 @@ export function ThreeWayColumn<T>({
 
     let body: ReactNode = children;
     let sortControl: ReactNode = null;
-    let overflow = false;
     if (items && (renderItem || renderItems) && !empty_) {
         const activeSorter = sorters && sorters.length > 0
             ? sorters[Math.min(sortIdx, sorters.length - 1)]
             : null;
         const sorted = activeSorter ? [...items].sort(activeSorter.compare) : items;
-        // The whole list is always rendered; past the cap the body becomes a
-        // fixed-height scroll region so a long tier can't stretch page height.
-        overflow = items.length > collapsedCount;
         body = renderItems ? renderItems(sorted) : sorted.map(renderItem!);
         // A sort toggle under a single card is noise, not control.
         const showSort = !!(sorters && sorters.length > 1 && activeSorter && items.length > 1);
@@ -215,9 +207,11 @@ export function ThreeWayColumn<T>({
                 </p>
             ) : (
                 <>
-                    {overflow
-                        ? <div className="three-way-column-scroll">{body}</div>
-                        : body}
+                    {/* Every column's body is a bounded, flex-filling scroll
+                        region so all three tiers cap to the same height and
+                        align at the bottom — a short tier no longer strands
+                        dead space beside a tall one. */}
+                    <div className="three-way-column-scroll">{body}</div>
                     {footer}
                 </>
             )}

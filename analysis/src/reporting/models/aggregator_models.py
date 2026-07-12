@@ -25,6 +25,10 @@ class OutletProfile:
     bot_rate_pct: float         # 0-100 share of scanned posts flagged
     volume: int                 # sentiment-scored posts
     total_scanned: int          # bot-detection-scored posts
+    # Narrative-tagged sample posts for the drill-down modal (each a serialized
+    # ClassificationSample with an extra ``narrative`` name, null when the doc
+    # isn't clustered). Empty on older snapshots.
+    samples: List[Dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -34,6 +38,7 @@ class OutletProfile:
             "bot_rate_pct": self.bot_rate_pct,
             "volume": self.volume,
             "total_scanned": self.total_scanned,
+            "samples": self.samples,
         }
 
 
@@ -298,6 +303,9 @@ class PublicSentimentResult:
     # DISTRIBUTION_SAMPLES_PER_BUCKET docs, confidence-sorted descending, so the
     # UI can open a bucket and audit the actual classifications.
     distributionSamples: Dict[str, List[ClassificationSample]] = field(default_factory=dict)
+    # Calendar day (YYYY-MM-DD) -> sampled posts, for the Tone-over-time line
+    # chart's point drill-down.
+    daySamples: Dict[str, List[ClassificationSample]] = field(default_factory=dict)
     socialVsNews: Optional[Dict[str, Any]] = None  # Social vs News comparison
     # Per-day, per-tier tone series (Phase 2a of the UI depth overhaul):
     #   [{date: 'YYYY-MM-DD',
@@ -374,6 +382,10 @@ class PublicSentimentResult:
             "distributionSamples": {
                 bucket: [_classification_sample_to_dict(s) for s in samples]
                 for bucket, samples in self.distributionSamples.items()
+            },
+            "daySamples": {
+                day: [_classification_sample_to_dict(s) for s in samples]
+                for day, samples in self.daySamples.items()
             },
             "disclaimer": self.disclaimer,
             "excluded_bot_content": self.excluded_bot_content,

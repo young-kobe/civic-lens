@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-    CollapsibleInfo, EmptyState, EntityHeader, EntityHubLinks, EntityProfileCard,
+    Card, CollapsibleInfo, EmptyState, EntityHeader, EntityHubLinks, EntityProfileCard,
     ErrorState, GlobalTicker, LoadingCard, MethodPopover, Modal, PostCardList,
     ThreeWayColumn, ThreeWayGrid, ThreeWayToolbar, TierRow, TopMetricsBlock,
     entityExternalUrl, matchesLeanFilter,
@@ -78,6 +78,14 @@ function toneVerb(net: number): string {
     if (net < -15) return 'clearly negative';
     if (net < -5)  return 'slightly negative';
     return 'roughly neutral';
+}
+
+/** Plain positive/negative/neutral for the "about X (party) · <stance>"
+ *  expressed-target labels. */
+function stanceWord(net: number): string {
+    if (net > 5) return 'positive';
+    if (net < -5) return 'negative';
+    return 'neutral';
 }
 
 function toneColor(net: number): string {
@@ -331,6 +339,125 @@ function SegmentSamplesModal({
     );
 }
 
+/** "2026-07-04" → "Friday, Jul 4, 2026" for the day modal title. */
+function formatDayTitle(iso: string): string {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+    if (!m) return iso;
+    const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    return d.toLocaleDateString(undefined, {
+        weekday: 'long', month: 'short', day: 'numeric', year: 'numeric',
+    });
+}
+
+/** Net tone of an officials subset filtered by party ('D' | 'R'), summed from
+ *  the per-official rollups (which carry each official's party). */
+function aggregateOfficialsByParty(
+    items: EntitySentimentItem[] | undefined, party: string,
+): TierAggregate {
+    if (!items) return { net: null, volume: 0 };
+    let pos = 0, neg = 0, neu = 0;
+    for (const it of items) {
+        if (it.entityProfile.party !== party) continue;
+        pos += it.positive; neg += it.negative; neu += it.neutral;
+    }
+    const total = pos + neg + neu;
+    if (total === 0) return { net: null, volume: 0 };
+    return { net: Math.round(((pos - neg) / total) * 1000) / 10, volume: total };
+}
+
+/** Divergence graphic — how far News and each party's officials sit from the
+ *  PUBLIC's net tone (the baseline). Bars diverge from a center zero: right =
+ *  warmer than the public, left = harsher. Fills the space beside Source
+ *  signals and makes the news/officials-vs-public gap scannable. */
+function ToneDivergenceCard({ data }: { data: PublicSentimentData }) {
+    const publicAgg = aggregateTier(data.byGeneralPublic);
+    if (publicAgg.net === null) return null; // no baseline to compare against
+    const base = publicAgg.net;
+
+    const rows = [
+        { key: 'news', label: 'News', color: COLORS.tierNews, agg: aggregateTier(data.byNewsOutlet) },
+        { key: 'dem', label: 'Dem officials', color: COLORS.leanLeft, agg: aggregateOfficialsByParty(data.byOfficial, 'D') },
+        { key: 'gop', label: 'GOP officials', color: COLORS.leanRight, agg: aggregateOfficialsByParty(data.byOfficial, 'R') },
+    ]
+        .filter((r) => r.agg.net !== null)
+        .map((r) => ({ ...r, div: Math.round((r.agg.net! - base) * 10) / 10 }));
+    if (rows.length === 0) return null;
+    const maxAbs = Math.max(1, ...rows.map((r) => Math.abs(r.div)));
+
+    return (
+        <Card
+            title="Divergence from the public"
+            subtitle={`How far each group's net tone sits from the public's ${formatPts(base)} baseline. Right = warmer than the public, left = harsher. Officials split by party.`}
+            headerActions={
+                <MethodPopover
+                    description={
+                        'The public tier (subreddits + untracked social accounts) is the baseline. '
+                        + "Each bar is a group's net tone minus the public's, in points, so you can "
+                        + 'see whether news and each party\'s officials talk warmer or harsher than the '
+                        + 'crowd. Officials are grouped by their registry party. Scores cover all '
+                        + 'topics; a sample of collected posts, not a poll.'
+                    }
+                />
+            }
+        >
+            <div className="tone-divergence">
+                {rows.map((r) => {
+                    const half = (Math.abs(r.div) / maxAbs) * 50;
+                    const left = r.div >= 0 ? 50 : 50 - half;
+                    return (
+                        <div
+                            key={r.key}
+                            className="tone-divergence-row"
+                            title={`${r.label}: ${formatPts(r.agg.net)} net vs the public's ${formatPts(base)} — ${r.div >= 0 ? '+' : ''}${r.div.toFixed(1)} pts`}
+                        >
+                            <span className="tone-divergence-label">{r.label}</span>
+                            <span className="tone-divergence-track" aria-hidden>
+                                <span className="tone-divergence-zero" />
+                                <span
+                                    className="tone-divergence-fill"
+                                    style={{ left: `${left}%`, width: `${half}%`, background: r.color }}
+                                />
+                            </span>
+                            <span className="tone-divergence-value">
+                                {r.div >= 0 ? '+' : ''}{r.div.toFixed(1)}
+                            </span>
+                        </div>
+                    );
+                })}
+            </div>
+            <p className="card-note" style={{ marginTop: 'var(--space-2)' }}>
+                Baseline: the public at {formatPts(base)} net tone.
+            </p>
+        </Card>
+    );
+}
+
+/** Sampled posts for one calendar day — opened by clicking a point on the
+ *  Tone-over-time chart, mirroring the intensity-segment drill-down. */
+function DaySamplesModal({
+    date, samples, onClose,
+}: {
+    date: string;
+    samples: ClassificationSample[];
+    onClose: () => void;
+}) {
+    return (
+        <Modal isOpen onClose={onClose} kicker="Tone over time" title={`Posts sampled on ${formatDayTitle(date)}`}>
+            {samples.length > 0 ? (
+                <PostCardList
+                    posts={samples.map(sampleToPostCard)}
+                    sampleNote="The highest-confidence posts published on this day — a sample, not the full list. Highlighted text is the evidence the model quoted."
+                />
+            ) : (
+                <p className="text-sm text-muted">
+                    No example posts stored for this day in the current snapshot.
+                    They fill in on the next data refresh.
+                </p>
+            )}
+        </Modal>
+    );
+}
+
 
 // --------------------------------------------------------------------------- //
 //  Three-way grid                                                             //
@@ -390,11 +517,27 @@ function SentimentThreeWayGrid({
         const top = cells.reduce((a, b) => (b.volume > a.volume ? b : a));
         return `Mentioned mostly about ${top.topic} — ${toneVerb(top.net!)}.`;
     };
+    // News outlets carry their EXPRESSED stance toward each party collective,
+    // e.g. "about Democrats (party) · negative · about Republicans (party) ·
+    // positive" — the outbound-target read the public cards already show.
+    const newsReadsAs = (item: EntitySentimentItem): string | undefined => {
+        if (item.kind !== 'outlet') return undefined;
+        const parties = (item.outbound?.targets ?? [])
+            .filter((t) => t.kind === 'collective' && t.net != null);
+        if (parties.length === 0) return undefined;
+        return parties
+            .map((t) => `about ${t.label} · ${stanceWord(t.net!)}`)
+            .join(' · ');
+    };
+    const readsAsFor = (item: EntitySentimentItem): string | undefined =>
+        item.kind === 'official' ? officialReadsAs(item)
+            : item.kind === 'outlet' ? newsReadsAs(item)
+                : undefined;
     const renderCard = (item: EntitySentimentItem) => (
         <EntityProfileCard
             key={item.key}
             profile={item.entityProfile}
-            readsAs={officialReadsAs(item)}
+            readsAs={readsAsFor(item)}
             stats={item.kind === 'official'
                 // Officials split the metric: received tone (posts about
                 // them, the reputational signal) leads; expressed tone
@@ -770,7 +913,7 @@ function EntitySentimentModal({
                 <div className="entity-modal-links">
                     {sourceUrl && (
                         <a href={sourceUrl} target="_blank" rel="noreferrer">
-                            Visit {profile.displayName} ↗
+                            Visit {profile.displayName}
                         </a>
                     )}
                     {profile.leanSource && (
@@ -779,7 +922,7 @@ function EntitySentimentModal({
                         </span>
                     )}
                     {profile.kind === 'official' && profile.bioSource && (
-                        <a href={profile.bioSource} target="_blank" rel="noreferrer">Bio ↗</a>
+                        <a href={profile.bioSource} target="_blank" rel="noreferrer">Bio</a>
                     )}
                 </div>
             )}
@@ -1084,21 +1227,29 @@ function netToneColor(net: number): TickerItem['tone'] {
     return 'neutral';
 }
 
-function buildSentimentTickerItems(data: PublicSentimentData, activeTopic: Topic): TickerItem[] {
+function buildSentimentTickerItems(
+    data: PublicSentimentData, activeTopic: Topic, topicRow: SentimentBreakdown | null,
+): TickerItem[] {
     const overall = data.overview;
-    // The ticker always reads the site-wide sentiment rollup; the backend
-    // doesn't expose these figures scoped to a single topic. When a topic
-    // filter is active we mark each item "all topics" so a reader inside a
-    // filtered view doesn't read a global number as a topic number (R-2).
-    const scopeHint = activeTopic.key === 'all' ? undefined : 'all topics';
+    // Net tone + posts are scoped to the selected topic (from the per-topic
+    // byTopic row) when one is active; the topic name rides along as the hint.
+    // GOP favorability isn't exposed per topic, so it stays all-topics (hinted).
+    const filtered = activeTopic.key !== 'all' && topicRow != null;
+    const netScore = filtered && topicRow!.volume > 0
+        ? Math.round(((topicRow!.positive - topicRow!.negative) / topicRow!.volume) * 1000) / 10
+        : overall.netScore;
+    const volume = filtered ? topicRow!.volume : overall.volume;
+    const topicHint = filtered ? activeTopic.label : undefined;
+    const gopHint = activeTopic.key === 'all' ? undefined : 'all topics';
+
     const items: TickerItem[] = [
         {
             label: 'Net tone',
-            value: formatPts(overall.netScore),
-            hint: scopeHint,
-            tone: netToneColor(overall.netScore),
+            value: formatPts(netScore),
+            hint: topicHint,
+            tone: netToneColor(netScore),
             emphasis: true,
-            ariaLabel: `Net tone ${formatPts(overall.netScore)}`,
+            ariaLabel: `Net tone ${formatPts(netScore)}`,
         },
     ];
     if (data.gopFavorability) {
@@ -1106,14 +1257,14 @@ function buildSentimentTickerItems(data: PublicSentimentData, activeTopic: Topic
         items.push({
             label: 'Tone toward GOP',
             value: formatPts(gopNet),
-            hint: scopeHint,
+            hint: gopHint,
             tone: netToneColor(gopNet),
             emphasis: true,
             ariaLabel: `Tone toward GOP ${formatPts(gopNet)}`,
         });
     }
     items.push(
-        { label: 'Posts scored', value: overall.volume.toLocaleString(), hint: scopeHint },
+        { label: 'Posts scored', value: volume.toLocaleString(), hint: topicHint },
     );
     return items;
 }
@@ -1139,6 +1290,7 @@ interface PublicSentimentProps {
 function PublicSentiment({ filters }: PublicSentimentProps) {
     const [activeEntity, setActiveEntity] = useState<EntitySentimentItem | null>(null);
     const [activeSegment, setActiveSegment] = useState<SentimentSegmentKey | null>(null);
+    const [activeDate, setActiveDate] = useState<string | null>(null);
     const [activeTopicKey, setActiveTopicKeyState] = useState<TopicKey>(() => readTopicFromUrl());
     // Tracks whether the current activeTopicKey came from the URL (or
     // explicit user click) vs. the implicit default. We only auto-pick a
@@ -1252,7 +1404,7 @@ function PublicSentiment({ filters }: PublicSentimentProps) {
 
     if (!data) return <EmptyState title="No tone data available" />;
 
-    const tickerItems = buildSentimentTickerItems(data, activeTopic);
+    const tickerItems = buildSentimentTickerItems(data, activeTopic, topicRow);
     const refreshed = formatRefreshedAgo(
         getSnapshotTimestamp(snapshotStatus, `sentiment_${filters.timeRange}`),
     );
@@ -1326,14 +1478,15 @@ function PublicSentiment({ filters }: PublicSentimentProps) {
                 <ToneTrendPanel
                     toneTrend={data.toneTrend}
                     gopTrend={data.gopTrend}
-                    byDayOfWeek={data.byDayOfWeek}
                     entitiesByTier={{
                         news: data.byNewsOutlet ?? [],
                         officials: data.byOfficial ?? [],
                         public: data.byGeneralPublic ?? [],
                     }}
                     onOpenEntity={setActiveEntity}
+                    onDateClick={setActiveDate}
                 />
+                <ToneDivergenceCard data={data} />
             </div>
             <div className="col-span-6">
                 <OutletSignalsPanel window={filters.timeRange} />
@@ -1367,6 +1520,14 @@ function PublicSentiment({ filters }: PublicSentimentProps) {
                     segment={activeSegment}
                     samples={data.distributionSamples?.[activeSegment] ?? []}
                     onClose={() => setActiveSegment(null)}
+                />
+            )}
+
+            {activeDate && (
+                <DaySamplesModal
+                    date={activeDate}
+                    samples={data.daySamples?.[activeDate] ?? []}
+                    onClose={() => setActiveDate(null)}
                 />
             )}
 

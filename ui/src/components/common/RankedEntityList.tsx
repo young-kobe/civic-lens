@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import type { EntityProfile } from '../../types';
 import { clampWidthPct } from '../../services/format';
 import { EntityAvatar, entityChipLabel, entityChipTitle } from './EntityProfileCard';
@@ -13,6 +14,9 @@ export interface RankedEntity {
     rateColor?: string;
     /** Small mono annotation after the rate (e.g. "1,204 scanned"). */
     detail?: string;
+    /** Optional explanatory content rendered UNDER the name (who they are /
+     *  why they rank). Omit for the compact one-line form. */
+    description?: ReactNode;
     onClick?: () => void;
 }
 
@@ -39,15 +43,20 @@ export function RankedEntityList({ items, ariaLabel }: RankedEntityListProps) {
                     <>
                         <span className="ranked-entity-rank" aria-hidden>{i + 1}</span>
                         <EntityAvatar profile={item.profile} />
-                        <span className="ranked-entity-name-wrap">
-                            <span className="ranked-entity-name">{item.profile.displayName}</span>
-                            {chip && (
-                                <span
-                                    className={`entity-card-chip lean-chip-${lean}`}
-                                    title={entityChipTitle(item.profile)}
-                                >
-                                    {chip}
-                                </span>
+                        <span className="ranked-entity-main">
+                            <span className="ranked-entity-name-wrap">
+                                <span className="ranked-entity-name">{item.profile.displayName}</span>
+                                {chip && (
+                                    <span
+                                        className={`entity-card-chip lean-chip-${lean}`}
+                                        title={entityChipTitle(item.profile)}
+                                    >
+                                        {chip}
+                                    </span>
+                                )}
+                            </span>
+                            {item.description && (
+                                <span className="ranked-entity-desc">{item.description}</span>
                             )}
                         </span>
                         <span className="ranked-entity-rate">

@@ -168,6 +168,22 @@ class SampleEnrichmentTests(unittest.TestCase):
         for bucket in result.get("distributionSamples", {}).values():
             yield from bucket
 
+    # ---------- per-day drill-down ----------
+
+    def test_day_samples_populated_and_keyed_by_date(self):
+        """Clicking a point on the Tone-over-time chart opens that day's posts,
+        so the aggregator emits per-calendar-day samples keyed by YYYY-MM-DD,
+        carrying the same evidence/reasoning enrichment as every other sample."""
+        result = self._sentiment_result()
+        days = result.get("daySamples", {})
+        self.assertTrue(days, "daySamples should be populated")
+        for key in days:
+            self.assertRegex(key, r"^\d{4}-\d{2}-\d{2}$")
+        first = next(iter(days.values()))
+        self.assertTrue(first, "a day bucket should carry samples")
+        self.assertIn("reasoning", first[0])
+        self.assertIn("evidence_spans", first[0])
+
     # ---------- toneTrend ----------
 
     def test_tone_trend_suppresses_low_sample_tiers(self):
