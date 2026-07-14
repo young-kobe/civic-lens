@@ -2887,6 +2887,10 @@ span.ranked-entity-row { cursor: default; }
   color: var(--neutral-600);
   font-variant-numeric: tabular-nums;
 }
+.ranked-entity-lowsample {
+  color: var(--semantic-warning);
+  font-weight: 600;
+}
 
 .ranked-entity-name {
   font-size: var(--text-sm);
