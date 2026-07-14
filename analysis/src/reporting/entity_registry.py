@@ -315,6 +315,12 @@ CATCH_ALL_OUTLETS = "other-outlets"
 CATCH_ALL_X_USERS = "other-x-users"
 CATCH_ALL_SUBREDDITS = "other-subreddits"
 
+# Sentinel key for x_posts routed to the officials tier by the ingestor's
+# is_official_tier provenance flag alone (no editorial registry entity) — D-4.
+# Lives in the entity layer (not an aggregator) so bot / sentiment / entity_posts
+# all source it from one place instead of importing it from each other.
+CATCH_ALL_VERIFIED_OFFICIALS = "verified-officials-provenance"
+
 
 def catch_all_profile(key: str, display_name: str, blurb: str) -> Dict[str, Any]:
     """Lightweight profile matching ``*Entity.profile_dict()``'s shape
@@ -365,6 +371,43 @@ def account_profile_dict(
         "party": party,
         "office": office_title or "",
         "accountType": account_type,
+    }
+
+
+_SAMPLED_BIO_MAX_CHARS = 140
+
+
+def sampled_account_profile(
+    handle: str,
+    display_name: Optional[str] = None,
+    bio: Optional[str] = None,
+    followers_count: Optional[int] = None,
+) -> Dict[str, Any]:
+    """Profile for an unmatched-but-active X author promoted out of the
+    "Other X users" catch-all (>= post + follower floors, see sentiment.py).
+    Built entirely from the author's own public X profile (x_users_raw);
+    we know nothing editorial about them, so there is no lean, no party —
+    the blurb says exactly where the card came from."""
+    clean_bio = " ".join((bio or "").split())
+    if len(clean_bio) > _SAMPLED_BIO_MAX_CHARS:
+        clean_bio = clean_bio[:_SAMPLED_BIO_MAX_CHARS - 1].rstrip() + "…"
+    followers = (
+        f"{followers_count:,} followers · " if followers_count else ""
+    )
+    return {
+        "kind": "account",
+        "key": handle,
+        "displayName": display_name or f"@{handle}",
+        "blurb": (
+            (clean_bio + " — " if clean_bio else "")
+            + f"{followers}one of the most active X accounts in our political "
+            "sample. Not in our tracked registries; bio is their own."
+        ),
+        "lean": None,
+        "leanSource": None,
+        "party": None,
+        "office": "",
+        "accountType": "sampled",
     }
 
 
@@ -503,3 +546,98 @@ def resolve_entity(
     if source_type in ("reddit_post", "reddit_comment"):
         return "public", registry.get_subreddit(domain_or_subreddit)
     return None, None
+
+
+def verified_officials_profile() -> Dict[str, Any]:
+    """Catch-all profile for x_posts routed to the officials tier by the
+    is_official_tier provenance flag alone (no editorial registry entity).
+    Shared by the sentiment and bot aggregators, which previously built this
+    identical card inline — one source keeps the copy from drifting."""
+    return catch_all_profile(
+        CATCH_ALL_VERIFIED_OFFICIALS, "Verified officials",
+        "X posts pulled via the verified-officials timeline whose "
+        "handle is not individually in the editorial officials registry.",
+    )
+
+
+@dataclass(frozen=True)
+class EntityRoute:
+    """Canonical routing decision for one document into the three-way
+    dashboard frame. ``entity_profile`` is populated for a matched registry
+    entity, a curated account-profile card, or the shared verified-officials
+    catch-all — all identical across aggregators. It is ``None`` for the plain
+    news / X / subreddit catch-alls, whose display copy each aggregator owns
+    (the wording deliberately differs per surface); callers build those with
+    ``catch_all_profile`` keyed by ``key``.
+    """
+    tier: Tier                       # "news" | "officials" | "public"
+    key: str                         # entity key or catch-all sentinel
+    kind: str                        # outlet|official|subreddit|account|catch_all
+    entity_profile: Optional[Dict[str, Any]]
+
+
+def route_reporting_entity(
+    registry: EntityRegistry,
+    source_type: Optional[str],
+    domain_or_subreddit: Optional[str],
+    x_handle: Optional[str],
+    *,
+    is_official_tier: bool = False,
+    account: Optional[Dict[str, Any]] = None,
+) -> Optional[EntityRoute]:
+    """Resolve a document to its (tier, key, kind, profile) for per-entity
+    rollups. Consolidates the catch-all key selection + verified-official
+    fallback + curated-account upgrade that the sentiment / bot / propaganda /
+    narrative aggregators each re-implemented (a tier-drift risk). Returns
+    ``None`` for unclassifiable source_types.
+
+    ``account`` is the author's ``account_profiles`` classification
+    (tier / full_name / party / office_title / account_type) or None. An
+    ``elected_official`` account upgrades the row to the officials tier; an
+    ``affiliated`` account earns a named per-account card in its resolved tier.
+    Callers without curated-account data pass ``account=None``.
+    """
+    tier, entity = resolve_entity(
+        registry, source_type, domain_or_subreddit, x_handle,
+        is_official_tier=is_official_tier,
+    )
+    if tier is None:
+        return None
+
+    account_key = None
+    if (
+        source_type == "x_post" and entity is None and account is not None
+        and x_handle and account.get("tier") in ("elected_official", "affiliated")
+    ):
+        account_key = canonicalize_handle(x_handle)
+        if account["tier"] == "elected_official":
+            tier = "officials"
+
+    def _account_route(t: Tier) -> EntityRoute:
+        return EntityRoute(t, account_key, "account", account_profile_dict(
+            account_key, account["tier"], account.get("full_name"),
+            account.get("party"), account.get("office_title"),
+            account.get("account_type"),
+        ))
+
+    if tier == "news":
+        if entity is not None:
+            return EntityRoute("news", entity.domain, "outlet", entity.profile_dict())
+        return EntityRoute("news", CATCH_ALL_OUTLETS, "catch_all", None)
+    if tier == "officials":
+        if entity is not None:
+            return EntityRoute("officials", entity.handle, "official", entity.profile_dict())
+        if account_key is not None:
+            return _account_route("officials")
+        return EntityRoute(
+            "officials", CATCH_ALL_VERIFIED_OFFICIALS, "catch_all",
+            verified_officials_profile(),
+        )
+    # public
+    if entity is not None:
+        return EntityRoute("public", entity.subreddit, "subreddit", entity.profile_dict())
+    if account_key is not None:
+        return _account_route("public")
+    if source_type == "x_post":
+        return EntityRoute("public", CATCH_ALL_X_USERS, "catch_all", None)
+    return EntityRoute("public", CATCH_ALL_SUBREDDITS, "catch_all", None)

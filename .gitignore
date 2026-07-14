@@ -33,6 +33,8 @@ docker-compose.override.yml
 *.dll
 *.so
 *.dylib
+# Go ingestor binary built by run.sh (Linux has no extension)
+/civic-ingest
 
 # C++ / CMake
 ingestion-cpp/build/
@@ -155,3 +157,6 @@ data/cache/*
 clear_ai_outputs.py
 
 docs/evidence/*
+
+*.png
+**.png 

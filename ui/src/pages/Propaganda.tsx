@@ -1,21 +1,26 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
-    Card, CollapsibleInfo, EmptyState, EntityHeader, EntityProfileCard,
-    ErrorState, GlobalTicker, LoadingCard, MethodPopover, Modal,
-    ThreeWayColumn, ThreeWayGrid,
-    TierRow, TopMetricsBlock, entityExternalUrl, entityLeanAccent,
+    Card, CollapsibleInfo, DefinitionChip, EmptyState, EntityHeader,
+    EntityHubLinks, ErrorState, GlobalTicker, LoadingCard, MethodPopover,
+    Modal, PostCardList,
+    RankedEntityList, ThreeWayColumn, ThreeWayGrid,
+    entityExternalUrl,
+    parseEntityParam, propagandaExampleToPostCard,
 } from '../components/common';
-import type { TickerItem, TierRowDot } from '../components/common';
+import type { ColumnSorter, RankedEntity, TickerItem } from '../components/common';
+import { useDeepLinkParam } from '../services/deepLink';
+import { saturationLevel } from '../services/glossary';
+import { TechniqueExplorer } from './propaganda/TechniqueExplorer';
 import { fetchPropaganda, fetchSnapshotStatus, type SnapshotStatus } from '../services/api';
 import { asOfTodayEyebrow, formatTimeWindow } from '../services/timeWindow';
 import { useFetch } from '../services/useFetch';
 import { formatRefreshedAgo, getSnapshotTimestamp } from '../services/freshness';
-import { formatPct, sourceLabel } from '../services/format';
+import { formatPct } from '../services/format';
 import { dedupeById } from '../services/dedupe';
 import { COLORS } from '../theme';
 import type {
     Filters, PropagandaEntityItem, PropagandaExample,
-    PropagandaOverview, PropagandaSourceSplit, PropagandaTechniqueCount,
+    PropagandaOverview,
     PropagandaTechniqueName,
 } from '../types';
 
@@ -38,103 +43,6 @@ const TECHNIQUE_LABEL: Record<PropagandaTechniqueName, string> = {
 const MEAN_SCORE_TITLE =
     'Average technique-intensity score across scored posts, from 0 (none) to 1 (saturated).';
 
-// Rate-axis endpoints for the TierRow dots, which sit on a 0-100% scale.
-const RATE_ENDPOINTS: [string, string] = ['0%', '100%'];
-
-const TECHNIQUE_BLURB: Record<PropagandaTechniqueName, string> = {
-    loaded_language: 'Emotionally charged framing designed to influence rather than inform.',
-    name_calling: 'Dismissive labels applied to a person or group instead of engaging their argument.',
-    ad_hominem: "Attacks on the speaker's character rather than the substance of what they said.",
-    appeal_to_fear: 'Fear or catastrophic imagery used to bypass reasoning.',
-    whataboutism: 'Deflecting criticism by pointing at an unrelated alleged misconduct by the other side.',
-    doubt_casting: 'Insinuation of wrongdoing or unreliability without offering evidence.',
-};
-
-
-// --------------------------------------------------------------------------- //
-//  Top metrics block — compact Bloomberg-style                                //
-// --------------------------------------------------------------------------- //
-
-function PropagandaTopMetrics({
-    data,
-    windowLabel,
-}: {
-    data: PropagandaOverview;
-    windowLabel: string;
-}) {
-    const newsSplit = data.by_source.find((s) => s.label === 'News');
-    const socialSplit = data.by_source.find((s) => s.label === 'Social Media');
-    const gapPct = newsSplit && socialSplit
-        ? Math.abs(newsSplit.flagged_rate_pct - socialSplit.flagged_rate_pct)
-        : 0;
-    const leanMoreFlagged = !newsSplit || !socialSplit
-        ? 'neither'
-        : newsSplit.flagged_rate_pct > socialSplit.flagged_rate_pct
-            ? 'news'
-            : 'social media';
-    const topTech = data.by_technique[0];
-    const topTechLabel = topTech
-        ? (TECHNIQUE_LABEL[topTech.technique as PropagandaTechniqueName] || topTech.technique)
-        : '—';
-
-    const flaggedDotColor = data.propaganda_rate_pct > 20
-        ? COLORS.negative
-        : data.propaganda_rate_pct > 10
-            ? COLORS.warning
-            : COLORS.positive;
-
-    const splitDots: TierRowDot[] = [];
-    if (newsSplit) splitDots.push({
-        pct: newsSplit.flagged_rate_pct,
-        color: 'var(--neutral-600)',
-        title: `News ${formatPct(newsSplit.flagged_rate_pct)}`,
-    });
-    if (socialSplit) splitDots.push({
-        pct: socialSplit.flagged_rate_pct,
-        color: COLORS.warning,
-        title: `Social ${formatPct(socialSplit.flagged_rate_pct)}`,
-    });
-
-    return (
-        <TopMetricsBlock
-            eyebrow={`As of ${windowLabel}`}
-            meta={`${data.total_eligible_docs.toLocaleString()} scored posts`}
-        >
-            <TierRow
-                label="Flagged rate"
-                value={formatPct(data.propaganda_rate_pct)}
-                verb={`${data.flagged_docs.toLocaleString()} flagged · mean score ${data.mean_score.toFixed(2)} / 1`}
-                dots={[{
-                    pct: data.propaganda_rate_pct,
-                    color: flaggedDotColor,
-                    title: `${formatPct(data.propaganda_rate_pct)} of scored posts were flagged`,
-                }]}
-                endpoints={RATE_ENDPOINTS}
-            />
-            <TierRow
-                label="News vs social"
-                value={gapPct > 0 ? `${gapPct.toFixed(1)} pts` : '—'}
-                verb={leanMoreFlagged === 'neither'
-                    ? 'no data'
-                    : `${leanMoreFlagged} uses more techniques`}
-                dots={splitDots}
-                endpoints={RATE_ENDPOINTS}
-            />
-            <TierRow
-                label="Top technique"
-                value={topTech ? formatPct(topTech.pct_of_flagged_docs, { decimals: 0 }) : '—'}
-                verb={topTech
-                    ? `${topTechLabel} · in ${topTech.count.toLocaleString()} flagged posts`
-                    : topTechLabel}
-                dotPct={topTech?.pct_of_flagged_docs}
-                dotColor={topTech ? COLORS.negative : undefined}
-                endpoints={RATE_ENDPOINTS}
-            />
-        </TopMetricsBlock>
-    );
-}
-
-
 // --------------------------------------------------------------------------- //
 //  Ticker + reads-as-today                                                    //
 // --------------------------------------------------------------------------- //
@@ -149,7 +57,7 @@ function buildPropagandaTickerItems(data: PropagandaOverview): TickerItem[] {
         {
             label: 'Flagged rate',
             value: formatPct(rate),
-            tone: rate > 20 ? 'negative' : rate > 10 ? 'accent' : 'positive',
+            tone: rate > 20 ? 'negative' : rate > 10 ? 'warning' : 'positive',
             emphasis: true,
             ariaLabel: `Flagged rate ${rate.toFixed(1)} percent`,
         },
@@ -159,8 +67,9 @@ function buildPropagandaTickerItems(data: PropagandaOverview): TickerItem[] {
             hint: `of ${data.total_eligible_docs.toLocaleString()}`,
         },
         {
-            label: 'Mean score',
-            value: `${data.mean_score.toFixed(2)} / 1`,
+            label: 'Saturation',
+            value: saturationLevel(data.mean_score),
+            hint: `${data.mean_score.toFixed(2)} / 1`,
         },
         {
             label: 'Top technique',
@@ -203,34 +112,116 @@ function readsAsToday(data: PropagandaOverview): string {
 
 
 // --------------------------------------------------------------------------- //
-//  Propaganda entity card — wraps the shared EntityProfileCard with            //
-//  propaganda-specific stats (flagged rate / mean score / posts scored).      //
+//  Propaganda leaderboard row — the grid form for this page is a ranked       //
+//  list, not profile cards: rates sort naturally, and "who leans hardest"     //
+//  reads faster as a leaderboard. Profile depth stays in the modal.           //
 // --------------------------------------------------------------------------- //
 
-function PropagandaEntityCard({
-    item, onOpen,
-}: {
-    item: PropagandaEntityItem;
-    onOpen: (item: PropagandaEntityItem) => void;
-}) {
-    const profile = item.entity_profile;
-    const rateColor = item.flagged_rate_pct > 25
+function propagandaRateColor(ratePct: number): string {
+    return ratePct > 25
         ? COLORS.negative
-        : item.flagged_rate_pct > 10
+        : ratePct > 10
             ? COLORS.warning
             : 'var(--neutral-700)';
+}
 
+function toRankedEntity(
+    item: PropagandaEntityItem,
+    onOpen: (item: PropagandaEntityItem) => void,
+): RankedEntity {
+    const rateColor = propagandaRateColor(item.flagged_rate_pct);
+    return {
+        profile: item.entity_profile,
+        rateValue: formatPct(item.flagged_rate_pct),
+        ratePct: item.flagged_rate_pct,
+        rateColor,
+        detail: `${item.total_docs.toLocaleString()} scored`,
+        onClick: () => onOpen(item),
+    };
+}
+
+// Sources below this many scored posts can't rank as an "offender" — a lone
+// flagged post would otherwise read as a 100% rate at the top of the board.
+const MIN_OFFENDER_VOLUME = 10;
+
+/** The 3 highest flagged-rate sources across ALL tiers in the window (catch-all
+ *  buckets + sub-floor sources excluded). */
+function topFlaggedOffenders(data: PropagandaOverview): PropagandaEntityItem[] {
+    return [
+        ...(data.by_news_outlet ?? []),
+        ...(data.by_official ?? []),
+        ...(data.by_general_public ?? []),
+    ]
+        .filter((it) => it.kind !== 'catch_all' && it.total_docs >= MIN_OFFENDER_VOLUME)
+        .sort((a, b) => (b.flagged_rate_pct - a.flagged_rate_pct)
+            || (b.flagged_docs - a.flagged_docs))
+        .slice(0, 3);
+}
+
+const OFFENDER_BLURB_MAX = 96;
+
+/** Leaderboard row with an under-name explanation: who they are (blurb) and why
+ *  they rank (flagged count + technique saturation). */
+function toOffenderRow(
+    item: PropagandaEntityItem,
+    onOpen: (item: PropagandaEntityItem) => void,
+): RankedEntity {
+    const blurb = item.entity_profile.blurb;
+    const clamped = blurb && blurb.length > OFFENDER_BLURB_MAX
+        ? `${blurb.slice(0, OFFENDER_BLURB_MAX).trimEnd()}…`
+        : blurb;
+    return {
+        ...toRankedEntity(item, onOpen),
+        detail: undefined,
+        description: (
+            <>
+                {clamped && <span className="ranked-entity-blurb">{clamped}</span>}
+                <span className="ranked-entity-why">
+                    {item.flagged_docs.toLocaleString()} of {item.total_docs.toLocaleString()} posts
+                    {' '}flagged · {saturationLevel(item.mean_score)} technique saturation
+                </span>
+            </>
+        ),
+    };
+}
+
+/** Top-3 flagged-rate leaderboard — same ranked row-card as the three-way
+ *  columns. Replaces the "As of last N" top-metrics block, scoped to the date
+ *  range selector (the payload is fetched per window). */
+function TopFlaggedLeaderboard({
+    data, windowLabel, onOpen,
+}: {
+    data: PropagandaOverview;
+    windowLabel: string;
+    onOpen: (item: PropagandaEntityItem) => void;
+}) {
+    const top = topFlaggedOffenders(data);
     return (
-        <EntityProfileCard
-            profile={profile}
-            stats={item.total_docs > 0 ? [
-                { label: 'Flagged',      value: formatPct(item.flagged_rate_pct), color: rateColor, emphasis: true },
-                { label: 'Mean score',   value: `${item.mean_score.toFixed(2)} / 1`, title: MEAN_SCORE_TITLE },
-                { label: 'Posts scored', value: item.total_docs.toLocaleString() },
-            ] : []}
-            onClick={() => onOpen(item)}
-            emptyNote="Tracked — no scored posts in this window yet."
-        />
+        <Card
+            title="Top flagged offenders"
+            subtitle={`The highest flagged-rate sources across news, officials, and the public · as of ${windowLabel}`}
+            headerActions={
+                <MethodPopover
+                    description={
+                        'The three sources with the highest flagged rate (flagged posts / scored '
+                        + 'posts) in the selected window, across all tiers. Catch-all buckets and '
+                        + `sources with fewer than ${MIN_OFFENDER_VOLUME} scored posts are excluded so `
+                        + "a one-off flag can't top the board. A density measure, not intent."
+                    }
+                />
+            }
+        >
+            {top.length > 0 ? (
+                <RankedEntityList
+                    items={top.map((it) => toOffenderRow(it, onOpen))}
+                    ariaLabel="Top flagged-rate offenders across all sources"
+                />
+            ) : (
+                <p className="text-sm text-muted">
+                    No sources cleared the minimum volume to rank in this window.
+                </p>
+            )}
+        </Card>
     );
 }
 
@@ -250,11 +241,7 @@ function PropagandaEntityModal({
     onClose: () => void;
 }) {
     const profile = item.entity_profile;
-    const rateColor = item.flagged_rate_pct > 25
-        ? COLORS.negative
-        : item.flagged_rate_pct > 10
-            ? COLORS.warning
-            : 'var(--neutral-700)';
+    const rateColor = propagandaRateColor(item.flagged_rate_pct);
     const sourceUrl = entityExternalUrl(profile);
     const matching = dedupeById(examplesByEntity[item.key] ?? [], (ex) => ex.doc_id);
 
@@ -264,7 +251,6 @@ function PropagandaEntityModal({
             onClose={onClose}
             title={profile.displayName}
             subtitle={`${item.flagged_docs.toLocaleString()} flagged · ${item.total_docs.toLocaleString()} scored`}
-            accentColor={entityLeanAccent(profile)}
         >
             <EntityHeader profile={profile} />
 
@@ -276,8 +262,13 @@ function PropagandaEntityModal({
                     </div>
                 </div>
                 <div>
-                    <div className="eyebrow" title={MEAN_SCORE_TITLE}>Mean score</div>
-                    <div className="metric-value">{item.mean_score.toFixed(2)} / 1</div>
+                    <div className="eyebrow">
+                        <DefinitionChip entry="mean_score" label="Saturation" />
+                    </div>
+                    <div className="metric-value">{saturationLevel(item.mean_score)}</div>
+                    <div className="text-xs text-muted" title={MEAN_SCORE_TITLE}>
+                        {item.mean_score.toFixed(2)} on a 0-to-1 scale
+                    </div>
                 </div>
                 <div>
                     <div className="eyebrow">Posts scored</div>
@@ -289,7 +280,7 @@ function PropagandaEntityModal({
                 <div className="entity-modal-links">
                     {sourceUrl && (
                         <a href={sourceUrl} target="_blank" rel="noreferrer">
-                            Visit {profile.displayName} ↗
+                            Visit {profile.displayName}
                         </a>
                     )}
                     {profile.leanSource && (
@@ -300,20 +291,18 @@ function PropagandaEntityModal({
                 </div>
             )}
 
+            <EntityHubLinks profile={profile} currentTab="propaganda" />
+
             <h3 className="card-title mt-4 mb-2">
                 {matching.length === 0 ? 'No flagged examples in this window'
                     : matching.length === 1 ? 'Flagged example'
                     : `Flagged examples (${matching.length})`}
             </h3>
-            {matching.length === 0 ? (
-                <p className="text-muted text-sm">
-                    No flagged examples available for this entity in the current window.
-                </p>
-            ) : (
-                <div className="example-rows">
-                    {matching.map((ex) => <ExampleRow key={ex.doc_id} ex={ex} />)}
-                </div>
-            )}
+            <PostCardList
+                posts={matching.map(propagandaExampleToPostCard)}
+                sampleNote="Highlighted text is the verbatim evidence behind each technique flag."
+                emptyNote="No flagged examples available for this entity in the current window."
+            />
         </Modal>
     );
 }
@@ -323,7 +312,11 @@ function PropagandaEntityModal({
 //  Three-way grid — uses the by_news_outlet / by_official / by_general_public //
 // --------------------------------------------------------------------------- //
 
-const TOP_N = 12;
+const PROPAGANDA_SORTERS: ColumnSorter<PropagandaEntityItem>[] = [
+    { label: 'flagged rate', compare: (a, b) => b.flagged_rate_pct - a.flagged_rate_pct },
+    { label: 'posts scored', compare: (a, b) => b.total_docs - a.total_docs },
+    { label: 'name', compare: (a, b) => a.entity_profile.displayName.localeCompare(b.entity_profile.displayName) },
+];
 
 function ThreeWayEntityGrid({
     data, onOpen,
@@ -331,207 +324,40 @@ function ThreeWayEntityGrid({
     data: PropagandaOverview;
     onOpen: (item: PropagandaEntityItem) => void;
 }) {
-    const outlets = (data.by_news_outlet ?? []).slice(0, TOP_N);
-    const officials = (data.by_official ?? []).slice(0, TOP_N);
-    const publics = (data.by_general_public ?? []).slice(0, TOP_N);
-    const renderCard = (it: PropagandaEntityItem) => (
-        <PropagandaEntityCard key={it.key} item={it} onOpen={onOpen} />
+    const ranked = (label: string) => (items: PropagandaEntityItem[]) => (
+        <RankedEntityList
+            items={items.map((it) => toRankedEntity(it, onOpen))}
+            ariaLabel={label}
+        />
     );
 
     return (
         <ThreeWayGrid>
             <ThreeWayColumn
                 header="The News"
-                byline="News outlets sorted by how heavily their posts use these techniques"
+                byline="News outlets ranked by the share of their posts flagged for these techniques"
                 empty="No news articles scored yet."
-                isEmpty={outlets.length === 0}
-            >
-                {outlets.map(renderCard)}
-            </ThreeWayColumn>
+                items={data.by_news_outlet ?? []}
+                renderItems={ranked('News outlets by flagged rate')}
+                sorters={PROPAGANDA_SORTERS}
+            />
             <ThreeWayColumn
                 header="Politicians & Officials"
-                byline="Tracked officeholders sorted by how heavily their posts use these techniques"
+                byline="Tracked officeholders ranked by the share of their posts flagged for these techniques"
                 empty="No officials scored yet."
-                isEmpty={officials.length === 0}
-            >
-                {officials.map(renderCard)}
-            </ThreeWayColumn>
+                items={data.by_official ?? []}
+                renderItems={ranked('Officials by flagged rate')}
+                sorters={PROPAGANDA_SORTERS}
+            />
             <ThreeWayColumn
                 header="The Public"
-                byline="Political subreddits, plus X users we don't track individually"
+                byline="Political subreddits, plus X users we don't track individually, ranked by flagged share"
                 empty="No social posts scored yet."
-                isEmpty={publics.length === 0}
-            >
-                {publics.map(renderCard)}
-            </ThreeWayColumn>
+                items={data.by_general_public ?? []}
+                renderItems={ranked('Public sources by flagged rate')}
+                sorters={PROPAGANDA_SORTERS}
+            />
         </ThreeWayGrid>
-    );
-}
-
-
-// --------------------------------------------------------------------------- //
-//  Techniques Used                                                            //
-// --------------------------------------------------------------------------- //
-
-function TechniquesCard({ techniques }: { techniques: PropagandaTechniqueCount[] }) {
-    const maxCount = techniques.reduce((m, t) => Math.max(m, t.count), 0);
-
-    return (
-        <Card
-            title="Techniques being used"
-            subtitle="One post can count toward multiple techniques. Each detection is backed by a verbatim quote from the post."
-        >
-            <div className="technique-rows">
-                {techniques.map((t) => {
-                    const name = t.technique as PropagandaTechniqueName;
-                    const label = TECHNIQUE_LABEL[name] || name;
-                    const blurb = TECHNIQUE_BLURB[name] || '';
-                    const widthPct = maxCount > 0 ? (t.count / maxCount) * 100 : 0;
-                    return (
-                        <div key={t.technique} className="technique-row">
-                            <div className="technique-row-label">
-                                <div className="technique-row-name">{label}</div>
-                                <div className="technique-row-blurb">{blurb}</div>
-                            </div>
-                            <div className="technique-row-bar">
-                                <div
-                                    className="technique-row-bar-fill"
-                                    style={{ width: `${widthPct}%` }}
-                                />
-                            </div>
-                            <div className="technique-row-count">
-                                {t.count.toLocaleString()}
-                                <span className="technique-row-count-pct">
-                                    {formatPct(t.pct_of_flagged_docs, { decimals: 0 })} of flagged
-                                </span>
-                            </div>
-                        </div>
-                    );
-                })}
-            </div>
-        </Card>
-    );
-}
-
-
-// --------------------------------------------------------------------------- //
-//  News vs Social split                                                       //
-// --------------------------------------------------------------------------- //
-
-const SPLIT_DOT_COLOR: Record<string, string> = {
-    'News':         'var(--neutral-600)',
-    'Social Media': COLORS.warning,
-};
-
-function NewsVsSocialCard({ splits }: { splits: PropagandaSourceSplit[] }) {
-    return (
-        <Card
-            title="News vs. social media"
-            subtitle="Flagged rate and mean score for news outlets vs. social posts"
-        >
-            <div className="source-split-rows">
-                {splits.map((s) => (
-                    <div key={s.label} className="source-split-row">
-                        <span className="source-split-row-label">
-                            <span
-                                className="source-split-dot"
-                                style={{ background: SPLIT_DOT_COLOR[s.label] ?? 'var(--neutral-500)' }}
-                                aria-hidden
-                            />
-                            {s.label}
-                        </span>
-                        <span className="source-split-row-total">
-                            {s.total_docs.toLocaleString()} posts
-                        </span>
-                        <span className="source-split-row-rate">
-                            {formatPct(s.flagged_rate_pct)}
-                            <span className="source-split-row-sub">flagged</span>
-                        </span>
-                        <span className="source-split-row-score" title={MEAN_SCORE_TITLE}>
-                            {s.mean_score.toFixed(2)} / 1
-                            <span className="source-split-row-sub">mean score</span>
-                        </span>
-                    </div>
-                ))}
-            </div>
-        </Card>
-    );
-}
-
-
-// --------------------------------------------------------------------------- //
-//  Examples                                                                   //
-// --------------------------------------------------------------------------- //
-
-function ExampleRow({ ex }: { ex: PropagandaExample }) {
-    const sourceMeta = sourceLabel(
-        ex.source_type,
-        ex.source_type === 'x_post' ? ex.author_handle : ex.domain,
-    );
-    return (
-        <div className="example-row">
-            <div className="example-row-head">
-                <span className="example-row-meta">
-                    {sourceMeta}
-                </span>
-                <span className="example-row-score">
-                    score {ex.overall_score.toFixed(2)} / 1
-                </span>
-                {ex.url && (
-                    <a
-                        href={ex.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="example-row-link"
-                        aria-label={`Open source for doc ${ex.doc_id} in new tab`}
-                    >
-                        View original ↗
-                    </a>
-                )}
-            </div>
-            {ex.title && <div className="example-row-title">{ex.title}</div>}
-            <div className="example-row-preview">
-                {ex.text_preview}
-                {ex.text_preview.length >= 240 ? '…' : ''}
-            </div>
-            <div className="example-row-techs">
-                {ex.techniques.map((t, i) => (
-                    <span
-                        key={i}
-                        className="example-tech"
-                    >
-                        <strong>
-                            {TECHNIQUE_LABEL[t.technique as PropagandaTechniqueName] || t.technique}
-                        </strong>
-                        {' '}
-                        <span
-                            className="example-tech-conf"
-                            title="Model confidence that this technique is present"
-                        >{formatPct(t.confidence * 100, { decimals: 0 })} confidence</span>
-                        {': '}
-                        <em>"{t.evidence_span}"</em>
-                    </span>
-                ))}
-            </div>
-        </div>
-    );
-}
-
-function ExamplesCard({ examples }: { examples: PropagandaExample[] }) {
-    // Defensive dedupe: the SQL pulling examples joins ``ai_outputs`` to
-    // ``docs`` and a doc with multiple propaganda rows (stale prompt
-    // versions, re-runs) would otherwise render the same tweet 10 times.
-    const unique = dedupeById(examples, (ex) => ex.doc_id);
-    if (unique.length === 0) return null;
-    return (
-        <Card
-            title="Recent flagged posts"
-            subtitle="Each flag comes with a verbatim evidence quote from the source."
-        >
-            <div className="example-rows">
-                {unique.map((ex) => <ExampleRow key={ex.doc_id} ex={ex} />)}
-            </div>
-        </Card>
     );
 }
 
@@ -568,6 +394,8 @@ interface PropagandaProps {
 
 function Propaganda({ filters }: PropagandaProps) {
     const [activeEntity, setActiveEntity] = useState<PropagandaEntityItem | null>(null);
+    // Cross-page entity deep link ("#propaganda?entity=outlet:nypost.com").
+    const [entityParam, setEntityParam] = useDeepLinkParam('entity');
     const { data, loading, error, refetch } = useFetch<PropagandaOverview>(
         () => fetchPropaganda(filters.timeRange),
         [filters.timeRange],
@@ -578,6 +406,25 @@ function Propaganda({ filters }: PropagandaProps) {
         [],
         'snapshot-status',
     );
+
+    // Resolve entity= once data lands; unknown entities clear the param.
+    useEffect(() => {
+        if (!data || !entityParam) return;
+        const target = parseEntityParam(entityParam);
+        if (target) {
+            const lists = [data.by_news_outlet, data.by_official, data.by_general_public];
+            for (const list of lists) {
+                const item = (list ?? []).find(
+                    (it) => it.kind === target.kind && it.key === target.key,
+                );
+                if (item) {
+                    setActiveEntity(item);
+                    return;
+                }
+            }
+        }
+        setEntityParam(null);
+    }, [data, entityParam, setEntityParam]);
 
     if (error) return <ErrorState message={error.message} onRetry={refetch} />;
     if (loading) {
@@ -637,8 +484,20 @@ function Propaganda({ filters }: PropagandaProps) {
                     </div>
                 </div>
 
-                <div className="col-span-12">
-                    <PropagandaTopMetrics data={data} windowLabel={windowLabel} />
+                {/* One row: the "As of last N days" top-metrics block beside the
+                    technique bar graphic. Both read from the same windowed
+                    `data`, so they filter in step; pairing them condenses two
+                    full-width rows into one. Hover a technique bar for what it
+                    means, click to open its flagged posts. */}
+                <div className="col-span-5">
+                    <TopFlaggedLeaderboard data={data} windowLabel={windowLabel} onOpen={setActiveEntity} />
+                </div>
+                <div className="col-span-7">
+                    <TechniqueExplorer
+                        techniques={data.by_technique}
+                        examples={data.examples}
+                        parties={data.by_party ?? []}
+                    />
                 </div>
 
                 {/* Always render the three-way frame, even when every tier is
@@ -648,18 +507,9 @@ function Propaganda({ filters }: PropagandaProps) {
                     <ThreeWayEntityGrid data={data} onOpen={setActiveEntity} />
                 </div>
 
-                <div className="col-span-7">
-                    <TechniquesCard techniques={data.by_technique} />
-                </div>
-
-                <div className="col-span-5">
-                    <NewsVsSocialCard splits={data.by_source} />
-                </div>
-
-                <div className="col-span-12">
-                    <ExamplesCard examples={data.examples} />
-                </div>
-
+                {/* News-vs-social removed (its numbers already appear in the
+                    top-metrics "News vs social" tier row + the reads-as-today
+                    line); How-this-works spans full width so nothing is stranded. */}
                 <div className="col-span-12">
                     <HowThisWorks />
                 </div>
@@ -669,7 +519,10 @@ function Propaganda({ filters }: PropagandaProps) {
                 <PropagandaEntityModal
                     item={activeEntity}
                     examplesByEntity={data.examples_by_entity ?? {}}
-                    onClose={() => setActiveEntity(null)}
+                    onClose={() => {
+                        setActiveEntity(null);
+                        if (entityParam) setEntityParam(null);
+                    }}
                 />
             )}
         </>

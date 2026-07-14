@@ -37,14 +37,14 @@ from analysis.src.reporting.aggregators.constants import (
     SOCIAL_PLATFORMS,
     NEWS_PLATFORMS,
 )
-from analysis.src.reporting.aggregators.narrative import _build_doc_url
+from analysis.src.reporting.aggregators.evidence import build_doc_url
 from analysis.src.reporting.entity_registry import (
     catch_all_profile,
     CATCH_ALL_OUTLETS,
     CATCH_ALL_SUBREDDITS,
     CATCH_ALL_X_USERS,
     get_registry,
-    resolve_entity,
+    route_reporting_entity,
 )
 
 logger = get_logger(__name__)
@@ -100,6 +100,36 @@ class PropagandaExample:
     # Reddit post link. Null when we can't synthesize one (rare — reddit
     # comments without a parent id).
     url: Optional[str] = None
+    # Party of the author when they are a tracked official ('R' | 'D' | ...);
+    # null for news, unaffiliated public posts, and untracked handles. Lets the
+    # UI tie an example to the by-party rollup.
+    party: Optional[str] = None
+
+
+@dataclass
+class PartyPropaganda:
+    """Per-party propaganda rollup — the tracked officials' flagged rate and
+    mean score grouped by the official's party, so the page can show which
+    partisan side leaned harder on these techniques. Officials with no party
+    (catch-alls, unaffiliated) are excluded rather than bucketed as 'unknown',
+    which would read as a real side."""
+    party: str                  # 'R' | 'D' | 'I' | 'L' | 'G'
+    party_label: str            # 'Republican' | 'Democratic' | ...
+    total_docs: int             # scored docs authored by this party's officials
+    flagged_docs: int
+    flagged_rate_pct: float
+    mean_score: float
+    official_count: int         # distinct tracked officials in this party
+
+
+# Party code -> reader-facing label for the by-party rollup.
+PARTY_LABELS = {
+    "R": "Republican",
+    "D": "Democratic",
+    "I": "Independent",
+    "L": "Libertarian",
+    "G": "Green",
+}
 
 
 @dataclass
@@ -134,6 +164,10 @@ class PropagandaOverview:
     by_news_outlet: List[PropagandaEntityItem] = field(default_factory=list)
     by_official: List[PropagandaEntityItem] = field(default_factory=list)
     by_general_public: List[PropagandaEntityItem] = field(default_factory=list)
+    # Per-party rollup over the tracked officials — which partisan side leaned
+    # harder on these techniques. Sorted by flagged_rate_pct desc; empty when
+    # no party-tagged officials are in the window.
+    by_party: List[PartyPropaganda] = field(default_factory=list)
     # Per-entity flagged-example bucket (walkthrough fix: per-entity drill
     # down modals were filtering the global ``examples`` list and almost
     # always finding zero matches because that list is capped at 10).
@@ -155,6 +189,7 @@ class PropagandaOverview:
             "by_news_outlet": [asdict(e) for e in self.by_news_outlet],
             "by_official": [asdict(e) for e in self.by_official],
             "by_general_public": [asdict(e) for e in self.by_general_public],
+            "by_party": [asdict(p) for p in self.by_party],
             "examples_by_entity": {
                 key: [asdict(e) for e in exs]
                 for key, exs in self.examples_by_entity.items()
@@ -377,6 +412,16 @@ class PropagandaAggregator:
                     "evidence_span": t.get("evidence_span"),
                 })
             preview = (text or "")[:TEXT_PREVIEW_CHARS]
+            # One route resolution feeds both the example's party tag and its
+            # entity bucket key, keeping ``examples_by_entity`` in lockstep with
+            # the ``by_*`` entity lists (a mismatch would empty the drill-down).
+            route = route_reporting_entity(
+                registry, source_type, domain, author_handle,
+            )
+            party = None
+            if route is not None and route.kind in ("official", "account"):
+                party = (route.entity_profile or {}).get("party") or None
+
             example = PropagandaExample(
                 doc_id=doc_id,
                 source_type=source_type or "unknown",
@@ -386,13 +431,12 @@ class PropagandaAggregator:
                 techniques=techs_clean,
                 text_preview=preview,
                 author_handle=author_handle,
-                url=_build_doc_url(source_type, domain, ident, author_handle),
+                url=build_doc_url(source_type, domain, ident, author_handle),
+                party=party,
             )
             example_pool.append(example)
 
-            entity_key = _resolve_entity_key(
-                registry, source_type, domain, author_handle,
-            )
+            entity_key = route.key if route is not None else None
             if entity_key is not None:
                 bucket = examples_by_entity.setdefault(entity_key, [])
                 if len(bucket) < EXAMPLES_PER_ENTITY:
@@ -413,6 +457,7 @@ class PropagandaAggregator:
             by_news_outlet=_finalize_entity_items(by_outlet),
             by_official=_finalize_entity_items(by_official),
             by_general_public=_finalize_entity_items(by_public),
+            by_party=_rollup_by_party(by_official),
             examples_by_entity=examples_by_entity,
         )
 
@@ -431,35 +476,24 @@ def _accumulate_entity(
     """Fan a propaganda row into the right per-entity bucket.
     Catch-all sentinels catch unmatched docs so every tier has full
     denominator coverage."""
-    tier, entity = resolve_entity(registry, source_type, domain, x_handle)
-    if tier is None:
+    route = route_reporting_entity(registry, source_type, domain, x_handle)
+    if route is None:
         return
-
-    if tier == "news":
-        target = by_outlet
-        if entity is not None:
-            key, kind, profile = entity.domain, "outlet", entity.profile_dict()
-        else:
-            key, kind = CATCH_ALL_OUTLETS, "catch_all"
+    target = {"news": by_outlet, "officials": by_official}.get(route.tier, by_public)
+    key, kind, profile = route.key, route.kind, route.entity_profile
+    if profile is None:
+        # Plain catch-all: propaganda keeps its own (plural) display copy.
+        if key == CATCH_ALL_OUTLETS:
             profile = catch_all_profile(
                 CATCH_ALL_OUTLETS, "Other news outlets",
                 "News docs whose domain is not in the tracked outlet registry.",
             )
-    elif tier == "officials":
-        target = by_official
-        key, kind, profile = entity.handle, "official", entity.profile_dict()
-    else:  # public
-        target = by_public
-        if entity is not None:
-            key, kind, profile = entity.subreddit, "subreddit", entity.profile_dict()
-        elif source_type == "x_post":
-            key, kind = CATCH_ALL_X_USERS, "catch_all"
+        elif key == CATCH_ALL_X_USERS:
             profile = catch_all_profile(
                 CATCH_ALL_X_USERS, "Other X users",
                 "X posts whose author is not in the tracked officials registry.",
             )
         else:
-            key, kind = CATCH_ALL_SUBREDDITS, "catch_all"
             profile = catch_all_profile(
                 CATCH_ALL_SUBREDDITS, "Other subreddits",
                 "Reddit posts whose subreddit is not in the tracked subreddit registry.",
@@ -475,30 +509,42 @@ def _accumulate_entity(
         bucket["flagged"] += 1
 
 
-def _resolve_entity_key(
-    registry,
-    source_type: Optional[str],
-    domain: Optional[str],
-    x_handle: Optional[str],
-) -> Optional[str]:
-    """Resolve a doc to the same key ``_accumulate_entity`` uses for its
-    entity bucket. Keeps ``examples_by_entity`` lookups in lockstep with
-    the ``by_news_outlet`` / ``by_official`` / ``by_general_public`` keys
-    the UI gets in ``PropagandaEntityItem.key`` — without that alignment
-    the modal would always read empty."""
-    tier, entity = resolve_entity(registry, source_type, domain, x_handle)
-    if tier is None:
-        return None
-    if tier == "news":
-        return entity.domain if entity is not None else CATCH_ALL_OUTLETS
-    if tier == "officials":
-        return entity.handle if entity is not None else None
-    # public
-    if entity is not None:
-        return entity.subreddit
-    if source_type == "x_post":
-        return CATCH_ALL_X_USERS
-    return CATCH_ALL_SUBREDDITS
+def _rollup_by_party(
+    by_official: Dict[str, Dict[str, Any]],
+) -> List[PartyPropaganda]:
+    """Aggregate the per-official propaganda buckets by the official's party.
+    Officials with no party (the verified-officials catch-all, unaffiliated
+    accounts) are skipped so the rollup only reports real partisan sides."""
+    agg: Dict[str, Dict[str, Any]] = {}
+    for stats in by_official.values():
+        profile = stats.get("profile") or {}
+        party = profile.get("party")
+        if not party:
+            continue
+        a = agg.setdefault(
+            party, {"total": 0, "flagged": 0, "score_sum": 0.0, "officials": 0},
+        )
+        a["total"] += stats["total"]
+        a["flagged"] += stats["flagged"]
+        a["score_sum"] += stats["score_sum"]
+        a["officials"] += 1
+
+    out: List[PartyPropaganda] = []
+    for party, a in agg.items():
+        total = a["total"]
+        if total == 0:
+            continue
+        out.append(PartyPropaganda(
+            party=party,
+            party_label=PARTY_LABELS.get(party, party),
+            total_docs=total,
+            flagged_docs=a["flagged"],
+            flagged_rate_pct=round(a["flagged"] / total * 100, 1),
+            mean_score=round(a["score_sum"] / total, 3),
+            official_count=a["officials"],
+        ))
+    out.sort(key=lambda p: -p.flagged_rate_pct)
+    return out
 
 
 def _finalize_entity_items(

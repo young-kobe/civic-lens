@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Tabs, GlobalFilters, Footer, type Tab } from './components/common';
-import { Home, PublicSentiment, BotActivityProfiler, Narratives, Propaganda, Review } from './pages';
+import { Home, PublicSentiment, BotActivityProfiler, Narratives, Propaganda, DataDesk, Review } from './pages';
 import type { Filters } from './types';
 import { fetchSnapshotStatus, type SnapshotStatus } from './services/api';
 import { useFetch } from './services/useFetch';
 import { formatRefreshedAgo, latestSnapshotTimestamp } from './services/freshness';
 import { useMediaQuery, BREAKPOINTS } from './services/useMediaQuery';
+import { parseRoute } from './services/deepLink';
 
 /* Admin mode is token-based. Visit once with ?admin=<CIVIC_ADMIN_TOKEN> to persist it;
    ?admin=0 clears it. The token is sent as X-Admin-Token on every admin-endpoint
@@ -92,6 +93,16 @@ const BASE_TABS: Tab[] = [
             </svg>
         ),
     },
+    {
+        id: 'desk',
+        label: 'Data Desk',
+        shortLabel: 'Desk',
+        icon: (
+            <svg {...iconProps}>
+                <path d="M4 19V10M9 19V5M14 19v-7M19 19V8" />
+            </svg>
+        ),
+    },
 ];
 
 const ADMIN_TABS: Tab[] = [
@@ -122,12 +133,14 @@ function getTabs(isAdmin: boolean, isCompactNav: boolean): Tab[] {
 // Valid tab ids — kept in sync with TABS + the 'home' landing. Used to
 // validate the URL hash before we trust it as a tab.
 const TAB_IDS: ReadonlySet<string> = new Set([
-    'home', 'sentiment', 'narratives', 'propaganda', 'bots', 'review',
+    'home', 'sentiment', 'narratives', 'propaganda', 'bots', 'desk', 'review',
 ]);
 
 function readTabFromHash(): string {
-    const raw = window.location.hash.replace(/^#/, '');
-    return TAB_IDS.has(raw) ? raw : 'home';
+    // Hash tokens may carry page params after a '?' (see services/deepLink):
+    // "#narratives?open=142" — only the tab segment is validated here.
+    const { tab } = parseRoute(window.location.hash);
+    return TAB_IDS.has(tab) ? tab : 'home';
 }
 
 function useScrolled(threshold = 4) {
@@ -166,7 +179,12 @@ function App() {
     }, [isCompactNav, activeTab]);
 
     useEffect(() => {
-        const current = window.location.hash.replace(/^#/, '');
+        // Compare the parsed TAB segment, not the raw hash — the hash may
+        // carry page params ("#sentiment?topic=economy") that pages own.
+        // Rewriting on every param change would strip them; rewriting only
+        // on a real tab switch also intentionally clears the previous
+        // page's params.
+        const current = parseRoute(window.location.hash).tab;
         if (current !== activeTab) {
             const hash = activeTab === 'home' ? '' : `#${activeTab}`;
             const url = `${window.location.pathname}${window.location.search}${hash}`;
@@ -192,6 +210,8 @@ function App() {
                 return <Propaganda filters={filters} />;
             case 'bots':
                 return <BotActivityProfiler filters={filters} />;
+            case 'desk':
+                return <DataDesk filters={filters} />;
             case 'review':
                 return ADMIN_MODE ? <Review /> : <Home onNavigate={setActiveTab} isAdmin={ADMIN_MODE} />;
             default:
@@ -263,7 +283,7 @@ function App() {
                 />
             )}
 
-            <main style={{ paddingTop: 'var(--space-4)', paddingBottom: 'var(--space-10)' }}>
+            <main style={{ paddingTop: 'var(--space-3)', paddingBottom: 'var(--space-6)' }}>
                 {renderPage()}
             </main>
 

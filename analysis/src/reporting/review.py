@@ -18,7 +18,7 @@ from typing import Any, Dict, List, Optional
 
 from analysis.src.common.logger import get_logger
 from analysis.src.reporting.aggregators.base import X_AUTHOR_JOIN_SQL, get_connection
-from analysis.src.reporting.aggregators.narrative import _build_doc_url
+from analysis.src.reporting.aggregators.evidence import build_doc_url
 
 logger = get_logger(__name__)
 
@@ -100,7 +100,7 @@ class ReviewService:
                     "domain": domain,
                     "title": title,
                     "ident": ident,
-                    "url": _build_doc_url(src, domain, ident, x_handle=x_handle),
+                    "url": build_doc_url(src, domain, ident, x_handle=x_handle),
                     "text_preview": text[:_TEXT_PREVIEW_CHARS],
                     "text_truncated": len(text) > _TEXT_PREVIEW_CHARS,
                 },

@@ -11,8 +11,8 @@ Usage:
     python -m analysis.src.scheduler.job_runner
 
 Can be scheduled via:
-- Manual: .\run.ps1 analyze
-- Cron/Task Scheduler: Run this script on a schedule
+- Manual: ./run.sh analyze
+- Cron (dev): ./setup-cron.sh; systemd timer (prod): deploy/install.sh
 """
 
 import sys
@@ -26,9 +26,9 @@ from typing import Any, Dict, List
 
 # Ensure project root is in path. job_runner lives at
 # <repo>/analysis/src/scheduler/job_runner.py, so four parents up is the repo.
-# (The previous five-parent value landed on C:\Users\kobey and only worked
-# because run.ps1 sets PYTHONPATH separately. Any code joining project_root to
-# a data-file path — like known_accounts.yaml — would miss the repo.)
+# (A previous five-parent value overshot the repo root and only worked because
+# run.sh sets PYTHONPATH separately. Any code joining project_root to a
+# data-file path — like known_accounts.yaml — would miss the repo.)
 project_root = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(project_root))
 
@@ -59,11 +59,15 @@ from analysis.src.reporting.aggregators import (
     SentimentAggregator,
     BotAggregator,
     NarrativeAggregator,
+    OutletAggregator,
     PropagandaAggregator,
 )
 from analysis.src.etl.polling import PollingDataScraper, PollingDataError
 
 logger = get_logger("job_runner")
+
+# Bot detection is an account-level signal; news articles are not accounts.
+_BOT_DETECTION_SOURCE_TYPES = ["reddit_post", "reddit_comment", "x_post"]
 
 
 class AnalysisJobRunner:
@@ -81,6 +85,7 @@ class AnalysisJobRunner:
         self.bot_agg = BotAggregator(self.settings.db_path)
         self.narrative_agg = NarrativeAggregator(self.settings.db_path)
         self.propaganda_agg = PropagandaAggregator(self.settings.db_path)
+        self.outlet_agg = OutletAggregator(self.settings.db_path)
 
         # Resolve model_id for DB tracking
         if self.settings.llm_backend.lower() == "ollama":
@@ -158,6 +163,20 @@ class AnalysisJobRunner:
         elif self.settings.run_analysis_on == "x":
             return ["x_post"]
         return None  # "all" or any other value means no filter
+
+    def _get_bot_detection_source_types(self) -> list[str]:
+        """Bot detection runs on social docs only, regardless of scope.
+
+        News articles are not accounts; "automation rate of an outlet's
+        articles" is not a real metric (2026-07-11 decision, see
+        docs/audit-trail/analysis/). ``get_bot_flagged_doc_ids`` already
+        treats news as human-authored by contract — this stops the scoring
+        itself, saving the LLM calls.
+        """
+        scope = self._get_target_source_types()
+        if scope is None:
+            return _BOT_DETECTION_SOURCE_TYPES
+        return [t for t in scope if t in _BOT_DETECTION_SOURCE_TYPES]
     
     def run_bot_detection(self, limit: int | None = None) -> int:
         """Run bot detection on unprocessed docs scoped by configuration.
@@ -175,8 +194,8 @@ class AnalysisJobRunner:
         Walkthrough 040.
         """
         import sqlite3 as _sqlite
-        logger.info(f"Step 2/11: Running bot detection (scope: {self.settings.run_analysis_on})...")
-        source_types = self._get_target_source_types()
+        logger.info(f"Step 2/11: Running bot detection (scope: {self.settings.run_analysis_on}, social only)...")
+        source_types = self._get_bot_detection_source_types()
         batch_size = limit if limit is not None else self.settings.loader_batch_size
         docs = self.loader.get_unprocessed_docs(
             "bot_detection",
@@ -837,6 +856,17 @@ class AnalysisJobRunner:
                 doc_count=propaganda.total_eligible_docs,
             )
             results[f"propaganda_{window}"] = propaganda.flagged_docs
+
+        # Outlet profiles — per-domain net tone x bot rate (Phase 2e).
+        # Includes bot-flagged content on purpose; see outlet.py.
+        for window in time_windows:
+            outlet_profiles = self.outlet_agg.get_outlet_profiles(time_window=window)
+            self.cache.save(
+                f"outlet_profiles_{window}",
+                outlet_profiles,
+                doc_count=len(outlet_profiles["outlets"]),
+            )
+            results[f"outlet_profiles_{window}"] = len(outlet_profiles["outlets"])
 
         # Human-review agreement overlay — per-task accuracy from
         # ai_output_evals, suppressed below the public floor. Not windowed:

@@ -15,20 +15,30 @@ from typing import Any, Dict, List, Optional
 
 @dataclass
 class OutletProfile:
-    """Profile metrics for a news outlet or subreddit."""
-    outlet: str
-    avg_sentiment: float
-    bot_rate: float
-    volume: int
-    total_scanned: int
+    """Cross-signal profile for one domain/subreddit: net tone (same
+    -100..+100 points scale as every other tone surface) next to the
+    share of its scanned posts flagged bot-or-suspicious. Includes
+    bot-flagged content by design — see outlet.py's module docstring."""
+    outlet: str                 # domain or subreddit as stored on docs
+    source_type: str            # news | reddit_post | reddit_comment | x_post
+    net_tone: Optional[float]   # points; None never emitted today (volume floor)
+    bot_rate_pct: float         # 0-100 share of scanned posts flagged
+    volume: int                 # sentiment-scored posts
+    total_scanned: int          # bot-detection-scored posts
+    # Narrative-tagged sample posts for the drill-down modal (each a serialized
+    # ClassificationSample with an extra ``narrative`` name, null when the doc
+    # isn't clustered). Empty on older snapshots.
+    samples: List[Dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
             "outlet": self.outlet,
-            "avg_sentiment": self.avg_sentiment,
-            "bot_rate": self.bot_rate,
+            "source_type": self.source_type,
+            "net_tone": self.net_tone,
+            "bot_rate_pct": self.bot_rate_pct,
             "volume": self.volume,
             "total_scanned": self.total_scanned,
+            "samples": self.samples,
         }
 
 
@@ -83,6 +93,18 @@ class ClassificationSample:
     # Doc topic attribution (LLM mention topic, keyword fallback) — lets the
     # UI filter samples exactly instead of client-side keyword re-guessing.
     topic: Optional[str] = None
+    # Phase 2b/2c enrichment. ``engagement`` = counts at collection time
+    # (X: retweets/replies/likes/quotes; Reddit: score/num_comments) — a
+    # reach proxy, not verified reach; None when the source stores none.
+    # ``author`` = X author metadata from x_users_raw (handle, display_name,
+    # avatar_url, verified_type, followers_count, account_created_at); None
+    # for non-X docs — Reddit stores no author at ingest, never fabricated.
+    engagement: Optional[Dict[str, int]] = None
+    author: Optional[Dict[str, Any]] = None
+    # Who this post's sentiment is directed at, from the doc's frozen
+    # target_mentions rows: [{label, stance}], resolved targets first,
+    # capped small. None = no target coverage for the doc.
+    targets: Optional[List[Dict[str, str]]] = None
 
 
 @dataclass
@@ -173,11 +195,29 @@ class EntitySentimentItem:
     #   {samePartyNet: float|None, samePartyVolume: int,
     #    crossPartyNet: float|None, crossPartyVolume: int}
     expressed_alignment: Optional[Dict[str, Any]] = None
+    # Outbound targets (public tier only) — WHO this bucket's posts talk
+    # about, the inverse of ``received``. Shape:
+    #   {minSampleN: int, volume: int,
+    #    targets: [{label, entityKey|None, kind: official|collective|raw|other,
+    #               net: float|None, volume, lowSample}]}
+    # net is suppressed below MIN_TARGET_SAMPLE_N; unresolved raw targets
+    # only get a named row when they recur. None = no target coverage.
+    outbound: Optional[Dict[str, Any]] = None
     # Topic-scoped expressed cells for the entity's OWN posts:
     # [{topic, net|None, volume, lowSample}], volume-sorted, net suppressed
     # below MIN_TARGET_SAMPLE_N. Serialized as ``byTopic`` — powers the
     # topic-filtered headline in the profile modal.
     expressed_by_topic: List[Dict[str, Any]] = field(default_factory=list)
+    # Summed engagement (likes + reposts + replies + quotes) across the
+    # entity's posts in the window. Serialized as ``engagementTotal`` when
+    # non-zero — powers the officials column's engagement-weighted sort.
+    # 0 for news outlets (articles carry no engagement signal).
+    engagement_total: int = 0
+    # Per-day net-tone series for this entity's own posts:
+    # [{date, net|None, volume, lowSample}], dates ascending, net suppressed
+    # below the sample floor. Serialized as ``dailyTone`` when present —
+    # powers the Tone-over-time chart's tier→entity drill-down.
+    daily_tone: List[Dict[str, Any]] = field(default_factory=list)
 
 
 def _classification_sample_to_dict(s: "ClassificationSample") -> Dict[str, Any]:
@@ -195,6 +235,9 @@ def _classification_sample_to_dict(s: "ClassificationSample") -> Dict[str, Any]:
         "full_text": s.full_text,
         "url": s.url,
         "topic": s.topic,
+        "engagement": s.engagement,
+        "author": s.author,
+        "targets": s.targets,
     }
 
 
@@ -227,8 +270,14 @@ def _entity_item_to_dict(item: "EntitySentimentItem") -> Dict[str, Any]:
         result["received"] = item.received
     if item.expressed_alignment is not None:
         result["expressedAlignment"] = item.expressed_alignment
+    if item.outbound is not None:
+        result["outbound"] = item.outbound
     if item.expressed_by_topic:
         result["byTopic"] = item.expressed_by_topic
+    if item.engagement_total:
+        result["engagementTotal"] = item.engagement_total
+    if item.daily_tone:
+        result["dailyTone"] = item.daily_tone
     return result
 
 
@@ -254,7 +303,19 @@ class PublicSentimentResult:
     # DISTRIBUTION_SAMPLES_PER_BUCKET docs, confidence-sorted descending, so the
     # UI can open a bucket and audit the actual classifications.
     distributionSamples: Dict[str, List[ClassificationSample]] = field(default_factory=dict)
+    # Calendar day (YYYY-MM-DD) -> sampled posts, for the Tone-over-time line
+    # chart's point drill-down.
+    daySamples: Dict[str, List[ClassificationSample]] = field(default_factory=dict)
     socialVsNews: Optional[Dict[str, Any]] = None  # Social vs News comparison
+    # Per-day, per-tier tone series (Phase 2a of the UI depth overhaul):
+    #   [{date: 'YYYY-MM-DD',
+    #     news:      {net: float|None, volume: int},
+    #     officials: {net: float|None, volume: int},
+    #     public:    {net: float|None, volume: int}}]
+    # Dates ascend; net is None (suppressed) when a tier's day has fewer
+    # than the sample floor — the UI renders a gap, never a zero. None on
+    # older cached snapshots.
+    toneTrend: Optional[List[Dict[str, Any]]] = None
     # Merged GOP favorability data
     gopFavorability: Optional[Dict[str, Any]] = None  # Stance breakdown (favorable/unfavorable/neutral %)
     gopTrend: Optional[List[Dict[str, Any]]] = None  # Daily net favorability trend
@@ -322,11 +383,17 @@ class PublicSentimentResult:
                 bucket: [_classification_sample_to_dict(s) for s in samples]
                 for bucket, samples in self.distributionSamples.items()
             },
+            "daySamples": {
+                day: [_classification_sample_to_dict(s) for s in samples]
+                for day, samples in self.daySamples.items()
+            },
             "disclaimer": self.disclaimer,
             "excluded_bot_content": self.excluded_bot_content,
         }
         if self.socialVsNews:
             result["socialVsNews"] = self.socialVsNews
+        if self.toneTrend is not None:
+            result["toneTrend"] = self.toneTrend
         if self.gopFavorability:
             result["gopFavorability"] = self.gopFavorability
         if self.gopTrend is not None:
@@ -515,11 +582,20 @@ class BotOverview:
 class FlaggedExample:
     """One bot-flagged post displayed as evidence on the Bot Detector.
     Every instance must carry a URL back to the original when one can be
-    synthesized — invariant C1 (source links on evidence)."""
+    synthesized — invariant C1 (source links on evidence).
+
+    ``confidence`` / ``indicators`` / ``reasoning`` (Phase 2d) surface the
+    per-doc WHY from the bot detector's ai_outputs row: model confidence in
+    the flag, the humanized behavioral indicators that triggered it, and
+    the model's reasoning. Optional so pre-2d cached snapshots keep shape.
+    """
     doc_id: int
     text: str
     source_label: str          # "News · foo.com" / "X · @handle" / "Reddit · r/politics"
     url: Optional[str]         # null when ingest metadata wasn't enough to synthesize
+    confidence: Optional[float] = None
+    indicators: List[str] = field(default_factory=list)
+    reasoning: Optional[str] = None
 
 
 @dataclass

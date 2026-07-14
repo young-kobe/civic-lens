@@ -13,6 +13,16 @@ export interface EntityStat {
     emphasis?: boolean;
     /** Optional hover tooltip on the stat (e.g. the net-tone definition). */
     title?: string;
+    /** Optional mini axis bar under the value — a visual anchor so a bare
+     *  number like "-12.3 pts" reads at a glance. Mirrors TierRow's dot-
+     *  on-axis language. */
+    bar?: {
+        /** Dot position, 0-100 along the axis. */
+        pct: number;
+        color?: string;
+        /** Render a midpoint tick (for -100..+100 tone axes). */
+        zeroTick?: boolean;
+    };
 }
 
 interface EntityProfileCardProps {
@@ -31,6 +41,9 @@ interface EntityProfileCardProps {
     title?: string;
     /** Optional empty-state note when `stats` is empty. Defaults to tracked-not-yet copy. */
     emptyNote?: string;
+    /** 'compact' drops the blurb — for grids where entity identity is
+     *  secondary to the page's own signal (e.g. Narratives). */
+    variant?: 'full' | 'compact';
 }
 
 const BLURB_MAX_CHARS = 120;
@@ -54,6 +67,7 @@ export function EntityProfileCard({
     ariaLabel,
     title,
     emptyNote = 'Tracked — no coverage in this window yet.',
+    variant = 'full',
 }: EntityProfileCardProps) {
     const lean = leanClass(profile);
     const hasStats = stats.length > 0;
@@ -85,7 +99,7 @@ export function EntityProfileCard({
                 </div>
             </div>
 
-            {clamped && <p className="entity-card-blurb">{clamped}</p>}
+            {variant === 'full' && clamped && <p className="entity-card-blurb">{clamped}</p>}
 
             {hasStats ? (
                 <div className="entity-card-stats">
@@ -97,6 +111,18 @@ export function EntityProfileCard({
                             >
                                 {s.value}
                             </span>
+                            {s.bar && (
+                                <span className="entity-card-stat-bar" aria-hidden>
+                                    {s.bar.zeroTick && <span className="entity-card-stat-bar-zero" />}
+                                    <span
+                                        className="entity-card-stat-bar-dot"
+                                        style={{
+                                            left: `${Math.max(0, Math.min(100, s.bar.pct))}%`,
+                                            background: s.bar.color ?? 'var(--neutral-500)',
+                                        }}
+                                    />
+                                </span>
+                            )}
                             <span className="entity-card-stat-label">{s.label}</span>
                         </span>
                     ))}
@@ -211,20 +237,6 @@ export function entityChipTitle(profile: EntityProfile): string | undefined {
     return profile.leanSource ? `${base} (per ${profile.leanSource})` : base;
 }
 
-/** Accent color for this entity's lean — matches the `.lean-*` CSS rules. */
-export function entityLeanAccent(profile: EntityProfile): string {
-    const l = leanClass(profile);
-    switch (l) {
-        case 'left':    return COLORS.leanLeft;
-        case 'right':   return COLORS.leanRight;
-        case 'mixed':   return COLORS.warning;
-        case 'neutral': return 'var(--neutral-400)';
-        case 'center':
-        default:        return 'var(--neutral-500)';
-    }
-}
-
-
 // --------------------------------------------------------------------------- //
 //  Reusable helpers for callers that own a detail modal                        //
 // --------------------------------------------------------------------------- //
@@ -235,6 +247,15 @@ export function entityLeanAccent(profile: EntityProfile): string {
  *  currently hardcodes a single "medium" value, so surfacing it per-entity
  *  read as a live, computed trust signal it isn't. It returns once the
  *  aggregator derives real per-entity confidence. */
+/** Map a -100..+100 net score onto the 0..100 mini-bar axis. */
+function toneBar(net: number): NonNullable<EntityStat['bar']> {
+    return {
+        pct: ((Math.max(-100, Math.min(100, net)) + 100) / 200) * 100,
+        color: toneStatColor(net),
+        zeroTick: true,
+    };
+}
+
 export function sentimentStats({
     netTone, volume,
 }: {
@@ -250,6 +271,7 @@ export function sentimentStats({
             color,
             emphasis: true,
             title: "Positive minus negative share of this source's posts, from -100 (all negative) to +100 (all positive).",
+            bar: toneBar(netTone),
         },
         { label: 'Posts', value: volume.toLocaleString() },
     ];
@@ -293,6 +315,7 @@ export function officialToneStats({
                 ? RECEIVED_TONE_TITLE
                 : `Only ${received.volume} classified post${received.volume === 1 ? '' : 's'} `
                   + 'mention this person in this window — too few to score reliably.',
+            bar: received.net != null ? toneBar(received.net) : undefined,
         });
     }
     if (volume > 0) {
@@ -302,6 +325,7 @@ export function officialToneStats({
             color: toneStatColor(netTone),
             emphasis: stats.length === 0,
             title: EXPRESSED_TONE_TITLE,
+            bar: toneBar(netTone),
         });
         stats.push({ label: 'Posts', value: volume.toLocaleString() });
     }

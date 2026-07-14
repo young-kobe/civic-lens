@@ -41,6 +41,10 @@ export interface PublicSentimentData {
     // SentimentDistribution. Each list is confidence-sorted desc and capped
     // server-side (~15 per bucket). Absent on older snapshots.
     distributionSamples?: Partial<Record<SentimentSegmentKey, ClassificationSample[]>>;
+    // Per-calendar-day (YYYY-MM-DD) drill-down samples, keyed by the toneTrend
+    // point dates — clicking a point on the Tone-over-time chart opens that
+    // day's posts. Absent on older snapshots.
+    daySamples?: Record<string, ClassificationSample[]>;
     socialVsNews?: SocialVsNewsSentiment | null;
     // Three-way entity rollups (walkthrough 057/058). Lists the dashboard
     // renders as the News Outlets / Verified Officials / General Public
@@ -53,12 +57,21 @@ export interface PublicSentimentData {
         favorable: number;
         unfavorable: number;
         neutral: number;
+        // 'mixed' = both genuine praise and criticism of the GOP. Kept distinct
+        // from 'neutral' (no stance): the four buckets sum to ~100. netFavorability
+        // counts mixed in the denominator with zero net contribution. Optional so
+        // pre-mixed cached snapshots keep parsing.
+        mixed?: number;
         netFavorability: number;
         sampleSize: number;
         sourceCount: number;
         lastUpdated: string;
     } | null;
     gopTrend?: TrendPoint[] | null;
+    /** Per-day per-tier tone series (Phase 2a). Dates ascend; a tier's
+     *  net is null (suppressed) on low-sample days — render a gap, never
+     *  a zero. Absent on pre-2a cached snapshots. */
+    toneTrend?: ToneTrendPoint[] | null;
     gopByPlatform?: DemographicBreakdown[] | null;
     pollingVsSocial?: PollingSocialComparison | null;
     // Target-tone metadata from the target_sentiment fan-out: suppression
@@ -189,6 +202,45 @@ export interface EntitySentimentItem {
      *  sorted; net is null (lowSample) below the backend suppression floor.
      *  Missing on pre-topic cached snapshots. */
     byTopic?: EntityTopicCell[];
+    /** Public tier only — WHO this bucket's posts talk about (the inverse
+     *  of received). Missing on pre-outbound cached snapshots. */
+    outbound?: OutboundTargets | null;
+    /** Summed engagement (likes + reposts + replies + quotes) across this
+     *  entity's posts in the window. Absent (treat as 0) for news outlets and
+     *  on pre-engagement cached snapshots — powers the officials column's
+     *  engagement-weighted default sort. */
+    engagementTotal?: number;
+    /** Per-day net-tone series for this entity's own posts, dates ascending;
+     *  net is null (lowSample) below the suppression floor. Powers the
+     *  Tone-over-time chart's tier→entity drill-down. Absent on pre-dailyTone
+     *  snapshots. */
+    dailyTone?: EntityDailyTonePoint[];
+}
+
+/** One day in an entity's daily net-tone series. */
+export interface EntityDailyTonePoint {
+    date: string;
+    net: number | null;
+    volume: number;
+    lowSample: boolean;
+}
+
+/** Outbound-target rollup on a public-tier entity card. */
+export interface OutboundTargets {
+    minSampleN: number;
+    volume: number;
+    targets: OutboundTargetCell[];
+}
+
+/** One "who they're talking about" row. kind 'raw' = unresolved free-text
+ *  target that recurred; 'other' = pooled one-offs and overflow. */
+export interface OutboundTargetCell {
+    label: string;
+    entityKey: string | null;
+    kind: 'official' | 'collective' | 'raw' | 'other';
+    net: number | null;
+    volume: number;
+    lowSample: boolean;
 }
 
 /** One topic-scoped expressed-tone cell on an entity card. */
@@ -214,6 +266,31 @@ export interface SentimentOverview {
     confidence: ConfidenceLevel;
 }
 
+/** Engagement counts at collection time — a reach proxy, not verified
+ *  reach. X posts carry retweets/replies/likes/quotes; reddit carries
+ *  score (+ num_comments for posts). Null/absent = source stores none. */
+export interface SampleEngagement {
+    retweets?: number;
+    replies?: number;
+    likes?: number;
+    quotes?: number;
+    score?: number;
+    num_comments?: number;
+}
+
+/** X author metadata from the ingest store. Null/absent for non-X docs —
+ *  Reddit stores no author at ingest, and we never fabricate one. */
+export interface SampleAuthor {
+    handle: string | null;
+    display_name: string | null;
+    avatar_url: string | null;
+    verified_type: string | null;
+    followers_count: number | null;
+    account_created_at: number | null;
+    /** The account's own X bio, verbatim. Absent on pre-bio snapshots. */
+    bio?: string | null;
+}
+
 export interface ClassificationSample {
     doc_id: number;
     label: string;
@@ -231,6 +308,22 @@ export interface ClassificationSample {
      *  with title-keyword fallback). Missing on pre-topic cached
      *  snapshots; the modal filter treats those as non-matching. */
     topic?: string | null;
+    // Phase 2b/2c enrichment. Absent on pre-enrichment cached snapshots.
+    engagement?: SampleEngagement | null;
+    author?: SampleAuthor | null;
+    /** Who this post's sentiment is directed at (frozen target_mentions):
+     *  resolved targets first, capped small. Absent on older snapshots. */
+    targets?: SampleTarget[] | null;
+    /** Recurring narrative (story) this post belongs to, when clustered — used
+     *  by the Source-signals drill-down to tie tone to the driving stories.
+     *  Null when unclustered; absent on older snapshots. */
+    narrative?: string | null;
+}
+
+/** One "about X — negative" chip on a sampled post. */
+export interface SampleTarget {
+    label: string;
+    stance: 'positive' | 'negative' | 'neutral' | 'mixed';
 }
 
 export interface SentimentBreakdown {
@@ -281,6 +374,40 @@ export interface TrendPoint extends ChartDataPoint {
     value: number;
 }
 
+/** One tier cell of the toneTrend daily series. */
+export interface ToneTrendCell {
+    net: number | null;
+    volume: number;
+}
+
+export interface ToneTrendPoint {
+    date: string;
+    news: ToneTrendCell;
+    officials: ToneTrendCell;
+    public: ToneTrendCell;
+}
+
+/** One row of GET /outlet-profiles — per-domain net tone x bot rate.
+ *  Includes bot-flagged content on purpose (the bot rate is the signal);
+ *  net tone therefore differs from the bot-excluded Overall Tone rollups. */
+export interface OutletProfileItem {
+    outlet: string;
+    source_type: string;
+    net_tone: number | null;
+    bot_rate_pct: number;
+    volume: number;
+    total_scanned: number;
+    /** Narrative-tagged sample posts driving this source's net tone, for the
+     *  drill-down modal. Absent on older snapshots. */
+    samples?: ClassificationSample[];
+}
+
+export interface OutletProfilesResult {
+    window: string;
+    disclaimer: string;
+    outlets: OutletProfileItem[];
+}
+
 export interface TrendAnnotation {
     x: string;
     label: string;
@@ -293,10 +420,13 @@ export interface DemographicBreakdown {
     favorable: number;
     unfavorable: number;
     neutral: number;
+    // 'mixed' (both praise and criticism) — distinct from neutral. Optional so
+    // pre-mixed cached snapshots keep parsing.
+    mixed?: number;
 }
 
 export interface PollingSocialComparison {
-    onlineSentiment: { favorable: number; unfavorable: number; neutral: number };
+    onlineSentiment: { favorable: number; unfavorable: number; neutral: number; mixed?: number };
     pollingData: { favorable: number; unfavorable: number; neutral: number; source?: string; date?: string } | null;
 }
 
@@ -382,6 +512,12 @@ export interface FlaggedExample {
     text: string;
     source_label: string;   // "News · foo.com", "X · @handle", "Reddit · r/politics"
     url: string | null;
+    // Per-example bot evidence (Phase 2d): flag confidence (0..1), the
+    // humanized behavioral indicators that triggered it, and the model's
+    // reasoning. Absent on pre-2d cached snapshots.
+    confidence?: number | null;
+    indicators?: string[];
+    reasoning?: string | null;
 }
 
 export interface NarrativeAmplification {
@@ -457,8 +593,9 @@ export interface NarrativeTimelinePoint {
 export interface SupportingDoc {
     doc_id: number;
     title: string | null;
-    // Text preview shown in the Headline column when `title` is null (social
-    // posts have no headline). Falls back to "(untitled)" when both are empty.
+    // One-line body preview. For social posts (no headline) it shows in place
+    // of the title; for news it's the dek rendered under the headline. Falls
+    // back to "(untitled)" when both are empty.
     snippet?: string | null;
     source_type: string;
     source_label: string;   // "News · nytimes.com", "X · @Schumer", "Reddit · r/politics"
@@ -467,6 +604,9 @@ export interface SupportingDoc {
     sentiment_label: 'positive' | 'negative' | 'neutral' | 'mixed' | null;
     confidence: number | null;
     reasoning: string | null;
+    // Phase 2b/2c enrichment. Absent on pre-enrichment cached snapshots.
+    engagement?: SampleEngagement | null;
+    author?: SampleAuthor | null;
 }
 
 
@@ -574,6 +714,24 @@ export interface PropagandaExample {
     author_handle?: string | null;
     // External source URL — news story, X permalink, or Reddit post link.
     url?: string | null;
+    // Party of the author when a tracked official ('R' | 'D' | ...); null for
+    // news, unaffiliated public posts, and untracked handles.
+    party?: string | null;
+}
+
+/**
+ * Per-party propaganda rollup — the tracked officials' flagged rate and mean
+ * score grouped by party, so the page can show which partisan side leaned
+ * harder on persuasion techniques. Party-less officials are excluded.
+ */
+export interface PartyPropaganda {
+    party: string;              // 'R' | 'D' | 'I' | 'L' | 'G'
+    party_label: string;        // 'Republican' | 'Democratic' | ...
+    total_docs: number;
+    flagged_docs: number;
+    flagged_rate_pct: number;
+    mean_score: number;
+    official_count: number;
 }
 
 /**
@@ -605,6 +763,9 @@ export interface PropagandaOverview {
     by_news_outlet?: PropagandaEntityItem[];
     by_official?: PropagandaEntityItem[];
     by_general_public?: PropagandaEntityItem[];
+    // Phase 4 — per-party rollup over tracked officials. Sorted by flagged rate
+    // desc; empty on older snapshots or when no party-tagged officials appear.
+    by_party?: PartyPropaganda[];
     // Per-entity flagged-example bucket. Keyed by the same key used in
     // PropagandaEntityItem.key (outlet domain, official handle, subreddit
     // name, or catch-all sentinel). The drill-down modal reads from this

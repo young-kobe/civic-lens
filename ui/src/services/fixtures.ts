@@ -21,7 +21,9 @@ import type {
     MoversResult,
     NarrativeSourceBreakdownItem,
     NarrativeSummary,
+    OutletProfilesResult,
     SupportingDoc,
+    ToneTrendPoint,
     PropagandaEntityItem,
     PropagandaOverview,
     PublicSentimentData,
@@ -91,6 +93,7 @@ export function mockSentiment(): PublicSentimentData {
         ],
         distribution,
         distributionSamples: mockDistributionSamples(),
+        daySamples: mockDaySamples(),
         socialVsNews: {
             social: { positive: 630, negative: 1068, neutral: 369, netScore: -21.2, volume: 2067 },
             news: { positive: 480, negative: 520, neutral: 1120, netScore: -1.9, volume: 2120 },
@@ -101,7 +104,8 @@ export function mockSentiment(): PublicSentimentData {
         gopFavorability: {
             favorable: 780,
             unfavorable: 1210,
-            neutral: 950,
+            neutral: 700,
+            mixed: 250,
             netFavorability: -14.7,
             sampleSize: 2940,
             sourceCount: 3,
@@ -124,6 +128,7 @@ export function mockSentiment(): PublicSentimentData {
             { date: isoDay(0), value: -14.7 },
         ],
         gopByPlatform: null,
+        toneTrend: mockToneTrend(),
         pollingVsSocial: {
             onlineSentiment: { favorable: 780, unfavorable: 1210, neutral: 950 },
             pollingData: {
@@ -135,6 +140,81 @@ export function mockSentiment(): PublicSentimentData {
             },
         },
     };
+}
+
+/* ---------- Outlet cross-signal profiles (Phase 2e) ---------- */
+
+// One narrative-tagged sample post for a source's drill-down modal.
+function outletSample(n: {
+    label: 'POSITIVE' | 'NEGATIVE' | 'NEUTRAL';
+    conf: number; title: string; sourceType: string; sourceName: string;
+    text: string; narrative: string;
+}, docId: number): ClassificationSample {
+    return sample({
+        label: n.label, confidence: n.conf, title: n.title,
+        source_type: n.sourceType, source_name: n.sourceName, date: isoDay(1),
+        url: `https://example.com/${docId}`, full_text: n.text,
+        reasoning: 'Representative fixture sample for the source drill-down.',
+        evidence: [n.text.split(' ').slice(0, 4).join(' ')],
+        narrative: n.narrative,
+    }, docId);
+}
+
+const BORDER_NARRATIVE = 'Border crossings hit record high; federal response insufficient';
+const TARIFF_NARRATIVE = 'Reciprocal tariffs on every country that has tariffed us';
+
+export function mockOutletProfiles(): OutletProfilesResult {
+    return {
+        window: '7d',
+        disclaimer:
+            'Includes bot-flagged content on purpose — the bot rate IS the signal. '
+            + 'Net tone therefore differs from the Overall Tone page, which excludes '
+            + 'flagged posts. Sampled discourse, not a media-bias rating.',
+        outlets: [
+            {
+                outlet: 'x.com', source_type: 'x_post', net_tone: -22.4, bot_rate_pct: 14.2, volume: 812, total_scanned: 845,
+                samples: [
+                    outletSample({ label: 'NEGATIVE', conf: 0.9, title: '', sourceType: 'x_post', sourceName: '@politics_pundit', text: 'The border response is a total failure and everyone can see it.', narrative: BORDER_NARRATIVE }, 981001),
+                    outletSample({ label: 'NEGATIVE', conf: 0.85, title: '', sourceType: 'x_post', sourceName: '@markets_watch', text: 'These reciprocal tariffs will wreck the economy, full stop.', narrative: TARIFF_NARRATIVE }, 981002),
+                    outletSample({ label: 'POSITIVE', conf: 0.8, title: '', sourceType: 'x_post', sourceName: '@america_first', text: 'Finally a president standing up on trade — tariffs are long overdue.', narrative: TARIFF_NARRATIVE }, 981003),
+                ],
+            },
+            { outlet: 'conservative', source_type: 'reddit_post', net_tone: -9.8, bot_rate_pct: 11.8, volume: 102, total_scanned: 102 },
+            { outlet: 'politics', source_type: 'reddit_post', net_tone: -26.3, bot_rate_pct: 9.7, volume: 186, total_scanned: 186 },
+            { outlet: 'nypost.com', source_type: 'news', net_tone: -31.2, bot_rate_pct: 0.0, volume: 84, total_scanned: 0 },
+            {
+                outlet: 'nytimes.com', source_type: 'news', net_tone: -18.6, bot_rate_pct: 0.0, volume: 118, total_scanned: 0,
+                samples: [
+                    outletSample({ label: 'NEGATIVE', conf: 0.92, title: 'Border Crossings Surge to Record Levels, Straining Federal Response', sourceType: 'news', sourceName: 'nytimes.com', text: 'Federal data shows April crossings exceeded every prior monthly record.', narrative: BORDER_NARRATIVE }, 982001),
+                    outletSample({ label: 'NEGATIVE', conf: 0.86, title: 'Economists Warn Reciprocal Tariffs Could Reignite Inflation', sourceType: 'news', sourceName: 'nytimes.com', text: 'Matching tariffs dollar-for-dollar would raise input costs, analysts say.', narrative: TARIFF_NARRATIVE }, 982002),
+                ],
+            },
+            { outlet: 'reuters.com', source_type: 'news', net_tone: -4.1, bot_rate_pct: 0.0, volume: 96, total_scanned: 0 },
+            { outlet: 'foxnews.com', source_type: 'news', net_tone: -28.7, bot_rate_pct: 0.0, volume: 141, total_scanned: 0 },
+            { outlet: 'apnews.com', source_type: 'news', net_tone: -6.9, bot_rate_pct: 0.0, volume: 73, total_scanned: 0 },
+            { outlet: 'Conservative', source_type: 'reddit_post', net_tone: -14.2, bot_rate_pct: 8.4, volume: 64, total_scanned: 64 },
+            { outlet: 'washingtonpost.com', source_type: 'news', net_tone: -12.5, bot_rate_pct: 0.0, volume: 109, total_scanned: 0 },
+        ],
+    };
+}
+
+/* ---------- Per-day per-tier tone series (Phase 2a) ---------- */
+
+function mockToneTrend(): ToneTrendPoint[] {
+    // 14 days: news drifts negative, officials sparse (several suppressed
+    // low-sample days → chart gaps), public volatile.
+    const newsNet = [-6.2, -7.8, -5.1, -9.4, -11.2, -10.6, -8.9, -12.3, -13.8, -12.1, -14.5, -15.2, -13.9, -13.4];
+    const pubNet = [-18.4, -12.1, -21.9, -15.3, -24.6, -19.8, -14.2, -22.7, -26.1, -17.9, -20.4, -25.8, -19.3, -21.6];
+    const offNet: Array<number | null> = [-4.2, null, 8.1, null, null, -6.3, 2.4, null, -9.8, -3.1, null, 5.2, -7.4, -5.9];
+    return newsNet.map((news, i) => ({
+        date: isoDay(13 - i),
+        news: { net: news, volume: 140 + ((i * 37) % 60) },
+        officials: {
+            net: offNet[i],
+            volume: offNet[i] == null ? 1 + (i % 3) : 8 + ((i * 13) % 12),
+        },
+        public: { net: pubNet[i], volume: 380 + ((i * 71) % 180) },
+    }));
 }
 
 /* ---------- Distribution drill-down samples ---------- */
@@ -157,6 +237,36 @@ function sample(
     };
 }
 
+// Two sampled posts per day, keyed by the same isoDay dates as mockToneTrend,
+// so clicking a point on the Tone-over-time chart opens that day's posts.
+function mockDaySamples(): Record<string, ClassificationSample[]> {
+    const out: Record<string, ClassificationSample[]> = {};
+    for (let i = 0; i <= 13; i++) {
+        const date = isoDay(i);
+        out[date] = [
+            sample({
+                label: i % 2 === 0 ? 'NEGATIVE' : 'POSITIVE', confidence: 0.9 - (i % 5) * 0.02,
+                title: `Coverage of the day's top political story (${date})`,
+                source_type: 'news', source_name: 'reuters.com', date,
+                url: `https://example.com/${date}-news`,
+                full_text: 'A representative article from the sampled window, reporting federal policy and its reception.',
+                reasoning: 'Representative fixture sample for the per-day drill-down.',
+                evidence: ['federal policy'],
+            }, 970000 + i * 10 + 1),
+            sample({
+                label: i % 3 === 0 ? 'POSITIVE' : 'NEGATIVE', confidence: 0.82 - (i % 5) * 0.015,
+                title: `r/politics reaction thread (${date})`,
+                source_type: 'reddit_post', source_name: 'r/politics', date,
+                url: `https://reddit.com/r/politics/${date}`,
+                full_text: "A community thread reacting to the day's news — mixed, leaning critical.",
+                reasoning: 'Representative fixture sample for the per-day drill-down.',
+                evidence: ['leaning critical'],
+            }, 970000 + i * 10 + 2),
+        ];
+    }
+    return out;
+}
+
 function mockDistributionSamples(): Partial<Record<SentimentSegmentKey, ClassificationSample[]>> {
     return {
         strongNegative: [
@@ -175,6 +285,13 @@ function mockDistributionSamples(): Partial<Record<SentimentSegmentKey, Classifi
                 source_type: 'x_post', source_name: '@politics_pundit', date: isoDay(2),
                 url: 'https://twitter.com/politics_pundit/status/123',
                 full_text: 'They are literally destroying this country in real time. Nothing subtle about it.',
+                engagement: { retweets: 412, replies: 188, likes: 2340, quotes: 57 },
+                author: {
+                    handle: 'politics_pundit', display_name: 'The Politics Pundit',
+                    avatar_url: null, verified_type: 'blue',
+                    followers_count: 48200, account_created_at: 1580000000,
+                },
+                targets: [{ label: 'Donald J. Trump', stance: 'negative' }],
                 reasoning: 'Absolute terms ("literally destroying"), present-tense accusation.',
                 evidence: ['literally destroying this country', 'Nothing subtle about it'],
             }, 90884),
@@ -287,9 +404,24 @@ function catchAll(key: string, displayName: string, blurb: string): EntityProfil
     return { kind: 'catch_all', key, displayName, blurb, lean: null, leanSource: null };
 }
 
+// Deterministic ~10-day net-tone series around a base, so the Tone-over-time
+// tier→entity drill-down shows divergence in mock mode. seed varies the wobble.
+function mockDailyTone(baseNet: number, seed: number) {
+    const days = 10;
+    return Array.from({ length: days }, (_, i) => {
+        const wobble = Math.round((((i * 7 + seed * 13) % 21) - 10) * 10) / 10;
+        const net = Math.max(-100, Math.min(100, Math.round((baseNet + wobble) * 10) / 10));
+        return { date: isoDay(days - 1 - i), net, volume: 8 + ((i * 5 + seed) % 14), lowSample: false };
+    });
+}
+
 function entityItem(
     profile: EntityProfile,
     counts: { positive: number; negative: number; neutral: number },
+    engagementTotal?: number,
+    dailyTone?: EntitySentimentItem['dailyTone'],
+    received?: EntitySentimentItem['received'],
+    outbound?: EntitySentimentItem['outbound'],
 ): EntitySentimentItem {
     const volume = counts.positive + counts.negative + counts.neutral;
     const net = volume > 0 ? ((counts.positive - counts.negative) / volume) * 100 : 0;
@@ -301,6 +433,42 @@ function entityItem(
         netScore: Math.round(net * 10) / 10,
         entityProfile: profile,
         classificationSamples: [],
+        ...(engagementTotal != null ? { engagementTotal } : {}),
+        ...(dailyTone ? { dailyTone } : {}),
+        ...(received ? { received } : {}),
+        ...(outbound ? { outbound } : {}),
+    };
+}
+
+// Mock OUTBOUND targets (who an entity talks about): the two party collectives
+// with a stance each, so news cards show "about Democrats (party) · <stance>".
+function mockOutbound(demNet: number, repNet: number): EntitySentimentItem['outbound'] {
+    return {
+        minSampleN: 5,
+        volume: 40,
+        targets: [
+            { label: 'Democrats (party)', entityKey: 'dem_collective', kind: 'collective', net: demNet, volume: 22, lowSample: false },
+            { label: 'Republicans (party)', entityKey: 'gop_collective', kind: 'collective', net: repNet, volume: 18, lowSample: false },
+        ],
+    };
+}
+
+// Mock RECEIVED tone (how others talk about an official): an overall net plus a
+// news/public speaker-tier split, so the officials column/modal show received
+// tone in fixtures.
+function mockReceived(
+    net: number, seed: number, newsNet: number, publicNet: number,
+): EntitySentimentItem['received'] {
+    const volume = 48 + ((seed * 11) % 40);
+    return {
+        net,
+        volume,
+        lowSample: false,
+        byTopic: [],
+        bySpeakerTier: [
+            { tier: 'news', net: newsNet, volume: Math.round(volume * 0.5), lowSample: false },
+            { tier: 'public', net: publicNet, volume: Math.round(volume * 0.4), lowSample: false },
+        ],
     };
 }
 
@@ -310,42 +478,56 @@ function mockOutletSentiment(): EntitySentimentItem[] {
             outletProfile('nytimes.com', 'The New York Times', 'center-left',
                 'AllSides 2024 (Lean Left)',
                 'A general-interest daily of record and the largest US paper by paid digital subscriptions.'),
-            { positive: 140, negative: 220, neutral: 320 },
+            { positive: 140, negative: 220, neutral: 320 }, undefined, mockDailyTone(-11.8, 1),
+            undefined, mockOutbound(6.4, -28.1),
         ),
         entityItem(
             outletProfile('foxnews.com', 'Fox News', 'right', 'AllSides 2024 (Right)',
                 'The most-watched US cable news network and the dominant conservative TV voice.'),
-            { positive: 95, negative: 310, neutral: 180 },
+            { positive: 95, negative: 310, neutral: 180 }, undefined, mockDailyTone(-36.8, 4),
+            undefined, mockOutbound(-33.5, 9.2),
         ),
         entityItem(
             outletProfile('bbc.com', 'BBC', 'center', 'AllSides 2024 (Center)',
                 'UK public broadcaster; one of the most-read non-US outlets covering American politics.'),
-            { positive: 130, negative: 160, neutral: 310 },
+            { positive: 130, negative: 160, neutral: 310 }, undefined, mockDailyTone(-5.0, 7),
         ),
         entityItem(
             catchAll('other-outlets', 'Other news outlets',
                 'News docs whose domain is not in the tracked outlet registry.'),
-            { positive: 115, negative: 180, neutral: 240 },
+            { positive: 115, negative: 180, neutral: 240 }, undefined, mockDailyTone(-12.1, 2),
         ),
     ];
 }
 
 function mockOfficialSentiment(): EntitySentimentItem[] {
     return [
+        // engagementTotal is set distinct from volume order (Trump leads by
+        // volume; Schumer leads by engagement) so the officials column's
+        // engagement-weighted default sort is visibly different from "posts".
         entityItem(
             officialProfile('potus', 'Donald J. Trump', 'President of the United States', 'R',
                 '47th President; high-volume X poster driving news cycles.'),
             { positive: 58, negative: 22, neutral: 30 },
+            320_400, mockDailyTone(32.7, 3),
+            // Received tone (how others talk about him) is sharply negative —
+            // the most-criticized official in the mock window.
+            mockReceived(-34.2, 3, -41.0, -27.5),
         ),
         entityItem(
             officialProfile('senschumer', 'Chuck Schumer', 'Senate Minority Leader', 'D',
                 'Senior Democratic senator from New York; Senate minority leader since Jan 2025.'),
             { positive: 18, negative: 44, neutral: 12 },
+            481_900, mockDailyTone(-35.1, 6),
+            mockReceived(-15.8, 6, -21.0, -9.4),
         ),
         entityItem(
             officialProfile('speakerjohnson', 'Mike Johnson', 'Speaker of the House', 'R',
                 'Speaker of the US House since October 2023.'),
             { positive: 30, negative: 15, neutral: 18 },
+            94_800, mockDailyTone(23.8, 9),
+            // Warmest reception in the mock window — the most-praised official.
+            mockReceived(14.6, 9, 8.2, 20.1),
         ),
     ];
 }
@@ -356,19 +538,32 @@ function mockGeneralPublicSentiment(): EntitySentimentItem[] {
             subredditProfile('politics', 'r/politics', 'left',
                 'Community sidebar + widely documented liberal skew',
                 'The largest general US-politics subreddit; ~8M subscribers with a strong liberal skew.'),
-            { positive: 110, negative: 380, neutral: 210 },
+            { positive: 110, negative: 380, neutral: 210 }, undefined, mockDailyTone(-38.6, 5),
         ),
         entityItem(
             subredditProfile('conservative', 'r/Conservative', 'right',
                 'Community sidebar + flair-gated participation',
                 '~1.3M-subscriber subreddit; sidebar positions it as a "safe space for conservatives".'),
-            { positive: 180, negative: 60, neutral: 95 },
+            { positive: 180, negative: 60, neutral: 95 }, undefined, mockDailyTone(35.8, 8),
         ),
-        entityItem(
-            catchAll('other-x-users', 'Other X users',
-                'X posts whose author is not in the tracked officials registry.'),
-            { positive: 220, negative: 360, neutral: 140 },
-        ),
+        {
+            ...entityItem(
+                catchAll('other-x-users', 'Other X users',
+                    'X posts whose author is not in the tracked officials registry.'),
+                { positive: 220, negative: 360, neutral: 140 }, undefined, mockDailyTone(-19.4, 0),
+            ),
+            outbound: {
+                minSampleN: 5,
+                volume: 96,
+                targets: [
+                    { label: 'Donald J. Trump', entityKey: 'potus', kind: 'official', net: -46.2, volume: 52, lowSample: false },
+                    { label: 'Republicans (party)', entityKey: 'gop_collective', kind: 'collective', net: -18.0, volume: 20, lowSample: false },
+                    { label: 'Chuck Schumer', entityKey: 'senschumer', kind: 'official', net: 12.5, volume: 16, lowSample: false },
+                    { label: 'The Media', entityKey: null, kind: 'raw', net: null, volume: 4, lowSample: true },
+                    { label: 'Other targets', entityKey: null, kind: 'other', net: null, volume: 4, lowSample: true },
+                ],
+            },
+        },
     ];
 }
 
@@ -429,10 +624,14 @@ function supDoc(n: {
     sentiment: 'positive' | 'negative' | 'neutral';
     confidence: number;
     reasoning: string;
+    // Body preview: for news it renders as the dek under the headline; social
+    // posts (no title) show it in place of the headline.
+    snippet?: string;
 }): SupportingDoc {
     return {
         doc_id: n.id,
         title: n.title,
+        snippet: n.snippet ?? null,
         source_type: n.sourceType,
         source_label: n.sourceLabel,
         url: n.url,
@@ -506,6 +705,7 @@ export function mockNarratives(): NarrativeSummary[] {
                     sourceType: 'news', sourceLabel: 'News · nytimes.com', daysAgo: 12,
                     url: 'https://www.nytimes.com/2026/04/10/us/politics/border-crossings-record.html',
                     sentiment: 'negative', confidence: 0.92,
+                    snippet: 'Federal data shows April crossings exceeded every prior monthly record, with processing centers past capacity and agents describing conditions as untenable.',
                     reasoning: 'Reports unprecedented crossing numbers and quotes officials calling response "inadequate".',
                 }),
                 supDoc({
@@ -513,6 +713,7 @@ export function mockNarratives(): NarrativeSummary[] {
                     sourceType: 'news', sourceLabel: 'News · washingtonpost.com', daysAgo: 11,
                     url: 'https://www.washingtonpost.com/politics/2026/04/11/dhs-april-surge',
                     sentiment: 'negative', confidence: 0.88,
+                    snippet: 'In testimony to a House panel, the deputy secretary conceded staffing and shelter capacity had not kept pace with arrivals since March.',
                     reasoning: 'Direct admission of agency incapacity; tone critical of executive handling.',
                 }),
                 supDoc({
@@ -520,6 +721,7 @@ export function mockNarratives(): NarrativeSummary[] {
                     sourceType: 'news', sourceLabel: 'News · foxnews.com', daysAgo: 10,
                     url: 'https://www.foxnews.com/politics/administration-no-plan-border',
                     sentiment: 'negative', confidence: 0.79,
+                    snippet: 'Panelists argued the administration has offered "slogans, not staffing," pointing to unfilled positions along the busiest sectors.',
                     reasoning: 'Opinion panel harshly critical; loaded language flagged but not propaganda-level.',
                 }),
                 supDoc({
@@ -541,6 +743,7 @@ export function mockNarratives(): NarrativeSummary[] {
                     sourceType: 'news', sourceLabel: 'News · apnews.com', daysAgo: 6,
                     url: 'https://apnews.com/article/border-sheriffs-resources-910016',
                     sentiment: 'negative', confidence: 0.86,
+                    snippet: 'County officials along the Rio Grande say overtime budgets are exhausted and detention transfers are backing up into local jails.',
                     reasoning: 'Straight reporting of local-official concerns; reinforces the "insufficient response" framing.',
                 }),
             ],
@@ -591,6 +794,7 @@ export function mockNarratives(): NarrativeSummary[] {
                     sourceType: 'news', sourceLabel: 'News · reuters.com', daysAgo: 5,
                     url: 'https://www.reuters.com/markets/us/reciprocal-tariff-framework-920012',
                     sentiment: 'neutral', confidence: 0.90,
+                    snippet: 'The framework sets country-by-country duties matched to each partner\'s average applied rate, with a 90-day consultation window before enforcement.',
                     reasoning: 'Straight policy reporting without editorialization.',
                 }),
                 supDoc({
@@ -598,6 +802,7 @@ export function mockNarratives(): NarrativeSummary[] {
                     sourceType: 'news', sourceLabel: 'News · wsj.com', daysAgo: 4,
                     url: 'https://www.wsj.com/articles/reciprocal-tariffs-inflation-920013',
                     sentiment: 'negative', confidence: 0.85,
+                    snippet: 'The board warns that matching tariffs dollar-for-dollar would raise input costs for domestic manufacturers and feed through to consumer prices.',
                     reasoning: 'Opinion piece critical of tariff approach on economic grounds.',
                 }),
                 supDoc({
@@ -741,17 +946,10 @@ export function mockBotActivity(): BotData {
             topClusters: ['anti-immigration amplifiers', 'pro-candidate X ring', 'climate-denial chorus'],
             totalFlaggedPosts: 247,
             confidence: 'medium',
-            by_news_outlet: [
-                { key: 'nytimes.com', kind: 'outlet',  total_docs: 162, bot_docs: 1, bot_rate_pct: 0.6, entity_profile: NYT_PROFILE },
-                { key: 'foxnews.com', kind: 'outlet',  total_docs: 128, bot_docs: 3, bot_rate_pct: 2.3, entity_profile: FOX_PROFILE },
-                { key: 'bbc.com',     kind: 'outlet',  total_docs:  94, bot_docs: 0, bot_rate_pct: 0.0, entity_profile: BBC_PROFILE },
-                {
-                    key: 'other-outlets', kind: 'catch_all',
-                    total_docs: 240, bot_docs: 4, bot_rate_pct: 1.7,
-                    entity_profile: catchAll('other-outlets', 'Other news outlets',
-                        'News docs whose domain is not in the tracked outlet registry.'),
-                },
-            ],
+            // Permanently empty by contract (2026-07-11): news is not
+            // bot-scored — articles are not accounts. Key kept so stale
+            // caches parse.
+            by_news_outlet: [],
             by_official: [
                 { key: 'potus',          kind: 'official', total_docs: 82, bot_docs: 0, bot_rate_pct: 0.0, entity_profile: POTUS_PROFILE },
                 { key: 'senschumer',     kind: 'official', total_docs: 31, bot_docs: 0, bot_rate_pct: 0.0, entity_profile: SCHUMER_PROFILE },
@@ -787,12 +985,18 @@ export function mockBotActivity(): BotData {
                         text: 'They are BURYING every story about X, wake up people.',
                         source_label: 'X · @liberty_patriot_88',
                         url: 'https://x.com/liberty_patriot_88/status/1781234500001',
+                        confidence: 0.87,
+                        indicators: ['New account (34 days)', 'Posting rate far above human baseline'],
+                        reasoning: 'Account posts near-identical wording to 12 other accounts within minutes, at a sustained rate incompatible with manual posting.',
                     },
                     {
                         doc_id: 91002,
                         text: 'Same script, same timing, same accounts — coincidence?',
                         source_label: 'X · @real_truth_seeker',
                         url: 'https://x.com/real_truth_seeker/status/1781234500002',
+                        confidence: 0.74,
+                        indicators: ['Near-duplicate text across accounts'],
+                        reasoning: 'Text matches a phrase cluster shared by a burst of accounts created the same week.',
                     },
                 ],
                 topHashtags: ['#shadowban', '#censorship', '#bigtech'],
@@ -996,6 +1200,20 @@ export function mockPropaganda(): PropagandaOverview {
                     'X posts whose author is not in the tracked officials registry.'),
                 { total: 204, flagged: 44, mean: 0.29 },
             ),
+        ],
+        // Phase 4 — party rollup over the by_official entries above
+        // (R: POTUS 88/34 + Johnson 22/3; D: Schumer 34/6).
+        by_party: [
+            {
+                party: 'R', party_label: 'Republican',
+                total_docs: 110, flagged_docs: 37, flagged_rate_pct: 33.6,
+                mean_score: 0.36, official_count: 2,
+            },
+            {
+                party: 'D', party_label: 'Democratic',
+                total_docs: 34, flagged_docs: 6, flagged_rate_pct: 17.6,
+                mean_score: 0.19, official_count: 1,
+            },
         ],
     };
 }

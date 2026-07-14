@@ -5,10 +5,9 @@ interface ModalProps {
     isOpen: boolean;
     onClose: () => void;
     title: string;
+    /** Small uppercase category line above the title (e.g. "Narrative"). */
+    kicker?: string;
     subtitle?: string;
-    /** Optional accent color applied to the left border + title — used by
-     *  callers that want to signal which bucket / segment the modal belongs to. */
-    accentColor?: string;
     /** Control maximum width; defaults to 860px so a docs table can breathe. */
     maxWidth?: number;
     /** When provided, renders a ← arrow in the header that invokes this handler
@@ -25,9 +24,14 @@ interface ModalProps {
  * Centered dialog rendered into a portal. Escape and backdrop click both
  * close it; body scroll is locked while open so the page doesn't shift.
  *
+ * The title is a real h2 at display scale — the dialog's own name must
+ * outrank the h3 section headers inside it (the pre-2026-07-11 shell set
+ * the title in an 11px grey eyebrow, which inverted the hierarchy on
+ * every modal in the app).
+ *
  * Accessibility notes:
  * - role="dialog" + aria-modal="true" on the surface
- * - aria-labelledby points at the title; aria-describedby at the subtitle
+ * - aria-labelledby points at the h2 title; aria-describedby at the subtitle
  * - Initial focus lands on the close button so keyboard users have an
  *   obvious exit; content inside remains tab-navigable.
  */
@@ -35,8 +39,8 @@ export function Modal({
     isOpen,
     onClose,
     title,
+    kicker,
     subtitle,
-    accentColor,
     maxWidth = 860,
     onBack,
     backLabel,
@@ -77,10 +81,7 @@ export function Modal({
                 aria-labelledby={titleId}
                 aria-describedby={subtitleId}
                 onClick={(e) => e.stopPropagation()}
-                style={{
-                    maxWidth,
-                    borderLeftColor: accentColor ?? 'transparent',
-                }}
+                style={{ maxWidth }}
             >
                 <header className="modal-header">
                     {onBack && (
@@ -97,9 +98,14 @@ export function Modal({
                         </button>
                     )}
                     <div style={{ minWidth: 0, flex: 1 }}>
-                        <div className="eyebrow" style={{ color: accentColor ?? 'var(--neutral-500)' }} id={titleId}>
+                        {kicker && (
+                            <div className="modal-kicker">
+                                {kicker}
+                            </div>
+                        )}
+                        <h2 className="modal-title" id={titleId}>
                             {title}
-                        </div>
+                        </h2>
                         {subtitle && (
                             <div
                                 id={subtitleId}

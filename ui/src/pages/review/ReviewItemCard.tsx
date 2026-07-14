@@ -116,7 +116,7 @@ export default function ReviewItemCard({ item, reviewerId, onSubmitted }: Review
             className="example-row-link"
             style={{ fontSize: 'var(--text-xs)' }}
         >
-            View original ↗
+            View original
         </a>
     ) : null;
 

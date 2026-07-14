@@ -1,5 +1,7 @@
 import { useId } from 'react';
-import { AreaChart, Area, XAxis, ResponsiveContainer, Tooltip, TooltipProps } from 'recharts';
+import {
+    AreaChart, Area, CartesianGrid, XAxis, YAxis, ResponsiveContainer, Tooltip, TooltipProps,
+} from 'recharts';
 import { COLORS } from '../../theme';
 import type { ChartDataPoint } from '../../types';
 
@@ -10,6 +12,10 @@ interface SparklineProps {
     color?: string;
     height?: number;
     showTooltip?: boolean;
+    /** Render a readable date axis (first/last + a few ticks). Off by
+     *  default — sparklines are usually context, but a page-scale chart
+     *  (e.g. the narrative timeline) needs real dates. */
+    showXAxis?: boolean;
     ariaLabel?: string;
 }
 
@@ -24,6 +30,7 @@ function Sparkline({
     color = COLORS.chartAccent,
     height = 40,
     showTooltip = true,
+    showXAxis = false,
     ariaLabel,
 }: SparklineProps) {
     const gradientId = `spark-${useId().replace(/:/g, '')}`;
@@ -62,7 +69,7 @@ function Sparkline({
             <div className="chart-tooltip">
                 {label != null && label !== '' && <div className="chart-tooltip-label">{String(label)}</div>}
                 <div className="chart-tooltip-value">{value}</div>
-                <div className={`chart-tooltip-value ${deltaClass}`} style={{ fontSize: 10 }}>
+                <div className={`chart-tooltip-value ${deltaClass}`} style={{ fontSize: 11 }}>
                     {deltaSign}{delta.toFixed(2)} vs. start
                 </div>
             </div>
@@ -75,12 +82,31 @@ function Sparkline({
                 <AreaChart data={data} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
                     <defs>
                         <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor={color} stopOpacity={0.3} />
-                            <stop offset="100%" stopColor={color} stopOpacity={0} />
+                            <stop offset="0%" stopColor={color} stopOpacity={0.35} />
+                            <stop offset="100%" stopColor={color} stopOpacity={0.02} />
                         </linearGradient>
                     </defs>
+                    {/* Back gridlines (Grafana register) only on full-size charts —
+                        on a 40px sparkline they'd be noise. */}
+                    {showXAxis && (
+                        <>
+                            <CartesianGrid
+                                vertical={false}
+                                stroke="var(--chart-grid)"
+                                strokeDasharray="2 4"
+                            />
+                            <YAxis hide domain={['auto', 'auto']} />
+                        </>
+                    )}
                     {hasXKey && (
-                        <XAxis dataKey={xKey} hide />
+                        <XAxis
+                            dataKey={xKey}
+                            hide={!showXAxis}
+                            tick={{ fontSize: 11, fill: 'var(--neutral-500)' }}
+                            tickLine={false}
+                            axisLine={{ stroke: 'var(--chart-grid)' }}
+                            minTickGap={48}
+                        />
                     )}
                     <Area
                         type="monotone"

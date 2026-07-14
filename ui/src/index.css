@@ -13,8 +13,12 @@
      --font-lead: standfirst / "reads as today" intro prose (larger serif, relaxed).
      --font-mono: numeric / timestamps / tabular data. */
   --font-family: 'Inter', 'IBM Plex Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --font-display: 'Source Serif 4', 'Source Serif Pro', Georgia, 'Times New Roman', serif;
-  --font-lead: 'Source Serif 4', 'Source Serif Pro', Georgia, 'Times New Roman', serif;
+  /* Serifs removed (2026-07-11): the Source Serif display/lead stacks read as
+     mismatched against the Inter data UI. --font-display and --font-lead now
+     point at the sans stack so the ~15 selectors that reference them de-serify
+     without per-selector edits; token names kept for semantic intent. */
+  --font-display: 'Inter', 'IBM Plex Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-lead: 'Inter', 'IBM Plex Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-mono: 'JetBrains Mono', 'IBM Plex Mono', 'Fira Code', ui-monospace, Menlo, Consolas, monospace;
 
   --text-xs: 0.6875rem;
@@ -30,119 +34,129 @@
   --leading-normal: 1.35;
   --leading-relaxed: 1.55;
 
-  /* Neutral palette — slight cool cast for a modern, technical feel */
+  /* Neutral palette — cool cast, inks deepened to near-black for the
+     deep-ink monochrome register (2026-07-11 retheme). */
   --neutral-50: #ffffff;
   --neutral-75: #fafbfc;
   --neutral-100: #f4f5f7;
   --neutral-150: #eceef2;
   --neutral-200: #d9dce3;
   --neutral-300: #bec2cc;
-  --neutral-400: #8b909c;
-  --neutral-500: #5e6370;
-  --neutral-600: #42464f;
-  --neutral-700: #2c2f36;
-  --neutral-800: #191b20;
-  --neutral-900: #0a0b0f;
+  --neutral-400: #7d828e;
+  --neutral-500: #4f5560;
+  --neutral-600: #383d47;
+  --neutral-700: #23262e;
+  --neutral-800: #14161c;
+  --neutral-900: #0d0e12;
 
-  /* Surfaces — warmed toward a paper register (iteration 3).
-     --bg-app previously #fafbfc (cool); now a touch warmer so the page
-     doesn't read as sterile under the lifted cards. */
-  --bg-app: #f7f5f1;
+  /* Surfaces — crisp cool near-white (deep-ink retheme; replaced the
+     warm-paper register). Panels/insets are cool greys, not creams. */
+  --bg-app: #fbfbfc;
   --bg-card: #ffffff;
-  --bg-panel: #f1ede6;
-  --bg-inset: #ece8e0;
+  --bg-panel: #f2f3f6;
+  --bg-inset: #eaecf0;
 
-  /* Signature accent — ink blue. Toned down from #0047b3 for a more
-     organic editorial register. */
-  --accent: #23508a;
-  --accent-hover: #173b6a;
-  --accent-muted: #4e6f9c;
-  --accent-light: #dce3ee;
-  --accent-gradient: linear-gradient(135deg, #23508a 0%, #4e6f9c 60%, #6d8ab8 100%);
+  /* ============================================================
+     CHROME tokens — monochromatic only. Links, tabs, focus rings,
+     brand marks, borders: all neutral. The theme is monochromatic
+     tech (Bloomberg register); color is reserved exclusively for
+     data-viz (see the DATA-VIZ block below). To retheme the chrome,
+     change only the --neutral-* ramp above.
+     ============================================================ */
 
-  /* Semantic colors — toned down from bright RGB primaries toward
-     editorial / dusty / earth hues. Forest green, brick red, ochre. */
-  --semantic-positive: #2d7042;
-  --semantic-positive-light: #d9e8dc;
-  --semantic-negative: #a63a2a;
-  --semantic-negative-light: #f0dcd5;
-  --semantic-neutral: #5e6370;
-  --semantic-neutral-light: #f1ede6;
-  --semantic-warning: #96651f;
-  --semantic-warning-light: #f0e3c7;
+  /* Interactive-chrome accent — a near-black neutral for links, the
+     active nav tab, and focus outlines. (Was an ink blue; monochromed
+     2026-07-11 so no chrome carries hue.) */
+  --accent: var(--neutral-800);
+  --accent-hover: var(--neutral-900);
+  --accent-muted: var(--neutral-500);
+  --accent-light: var(--neutral-150);
+  --accent-gradient: linear-gradient(135deg, var(--neutral-700) 0%, var(--neutral-500) 60%, var(--neutral-400) 100%);
+
+  /* ============================================================
+     DATA-VIZ tokens — the ONLY place hue is allowed. High-contrast
+     Grafana register: these color chart series, bars, dots, legends,
+     and value marks. Never used for chrome (borders, links, tabs).
+     Every group below is CVD-validated as a set.
+     ============================================================ */
+
+  /* Semantic colors — targeted high-contrast diverging system. Grafana
+     register: vivid GREEN = positive tone, vivid RED = negative tone, vivid
+     amber = warning/mixed. Green/red (not blue/red) so the split reads as
+     "good vs bad tone" and never as a partisan blue-vs-red framing — lean has
+     its own indigo/plum palette. These color the tone/rate BARS in the
+     top-metrics graph, so they must read at a glance; UI chrome stays
+     monochrome. CAVEAT: green/red is a red-green-CVD-risk pair — mitigated
+     because every tone mark carries its numeric value + sign/label (color is
+     never the sole encoding). */
+  --semantic-positive: #1a8a3d;
+  --semantic-positive-light: #d6ecdd;
+  --semantic-negative: #d0261a;
+  --semantic-negative-light: #f0dcd7;
+  --semantic-neutral: #4f5560;
+  --semantic-neutral-light: #f2f3f6;
+  --semantic-warning: #c2740a;
+  --semantic-warning-light: #efe4cb;
+
+  /* Speaker-tier hues — three high-contrast, CVD-distinct identities for
+     News / Officials / Public (the trend sparklines + any tier-coded mark).
+     Validated as a categorical trio: worst adjacent CVD dE 45+, all >= 3:1,
+     chroma floor clears. Distinct from the pos/neg tone colors above. */
+  /* Brightened 2026-07-11 for higher-contrast, Grafana-style chart lines
+     (blue / teal / amber stays a CVD-safe categorical trio). */
+  --tier-news: #2f6fe8;
+  --tier-officials: #12b3a0;
+  --tier-public: #ea8800;
 
   /* Partisan-lean palette — deliberately distinct from the sentiment set
      so a right-leaning source's chip/border is not the same red that means
      "negative tone" elsewhere. Indigo for left, plum for right. */
-  --lean-left: #3d5a99;
+  --lean-left: #31497f;
   --lean-left-light: #dfe4f2;
-  --lean-right: #9b4a6b;
+  --lean-right: #8f3f60;
   --lean-right-light: #f0dde6;
 
-  /* Chart palette — dusty primaries matching the semantic set.
-     Paired dark/light stops for gradient fills that still read at low
-     opacity against the paper background. */
-  --chart-positive-strong: #245a35;
-  --chart-positive: #3d8451;
-  --chart-positive-soft: #6da678;
-  --chart-negative-strong: #7a2015;
-  --chart-negative: #a63a2a;
-  --chart-negative-soft: #c97869;
-  --chart-neutral: #8b919e;
-  --chart-neutral-soft: #c0c4cd;
-  --chart-accent: #23508a;
-  --chart-accent-soft: #5d82bf;
-  --chart-grid: rgba(15, 20, 35, 0.06);
-  --chart-gradient-positive: linear-gradient(135deg, #245a35 0%, #6da678 100%);
-  --chart-gradient-negative: linear-gradient(135deg, #7a2015 0%, #c97869 100%);
-  --chart-gradient-neutral:  linear-gradient(135deg, #8b919e 0%, #c0c4cd 100%);
-  --chart-gradient-accent:   linear-gradient(135deg, #23508a 0%, #5d82bf 100%);
+  /* Chart palette — a bright accent line for area/line charts + a gridline
+     tint. (The old positive/negative/neutral/gradient ramp was unused and
+     removed 2026-07-11.) */
+  --chart-accent: #2563eb;
+  /* Slightly stronger so back gridlines read (Grafana register). */
+  --chart-grid: rgba(13, 14, 18, 0.10);
 
-  /* Source-type colors — narrative-card mix bar + reference elsewhere. */
-  --source-news: #1a3e5a;
-  --source-reddit: #b85525;
-  --source-x: #1d1d1f;
+  /* Source-type colors — narrative mix bar + reference elsewhere.
+     (Trio CVD-validated: worst adjacent dE 50.1.) */
+  /* Source-type trio — bright, high-contrast Grafana register (2026-07-11,
+     replacing the dark navy / rust / near-black set). Blue / orange / purple
+     stay a CVD-distinct categorical trio. */
+  --source-news: #3b82f6;
+  --source-reddit: #f97316;
+  --source-x: #a855f7;
 
-  /* Tone-intensity palette — 5-way distribution (SentimentDistributionCard
-     + top-metrics mini-bar). Dusty siblings of the chart ramps. */
-  --tone-strong-neg: #7a2015;
-  --tone-mild-neg:   #a63a2a;
-  --tone-neu-solid:  #8b919e;
-  --tone-neu-text:   #45454d;
-  --tone-mild-pos:   #6da678;
-  --tone-strong-pos: #245a35;
-  --tone-grad-strong-neg: linear-gradient(135deg, #5a1509 0%, #962a1e 100%);
-  --tone-grad-mild-neg:   linear-gradient(135deg, #962a1e 0%, #c97869 100%);
-  --tone-grad-neu:        linear-gradient(135deg, #8b919e 0%, #c0c4cd 100%);
-  --tone-grad-mild-pos:   linear-gradient(135deg, #6da678 0%, #3d8451 100%);
-  --tone-grad-strong-pos: linear-gradient(135deg, #3d8451 0%, #1a4a2a 100%);
+  /* Tone-intensity palette — 5-way diverging distribution for the top-metrics
+     mini-bar. Standardized 2026-07-11 onto the site's vivid semantic pair
+     (poles = --semantic-negative/-positive) with lighter mild tints and a
+     neutral gray midpoint, so the bar matches the tier-row tone colors instead
+     of the muted chart ramp it used before. Now a green↔red diverging ramp
+     (poles follow --semantic-positive/-negative); gray midpoint intentional;
+     segment % labels relieve both the light-tint contrast and the red-green
+     CVD risk (never color-alone). */
+  --tone-strong-neg: var(--semantic-negative);   /* red pole */
+  --tone-mild-neg:   #e07a63;
+  --tone-neu-solid:  #9aa0ab;
+  --tone-mild-pos:   #79c090;                     /* soft green */
+  --tone-strong-pos: var(--semantic-positive);    /* green pole */
 
-  /* Political-stance palette (SentimentBar colorScheme="political") —
-     blue vs red framing used for GOP Party Stance rather than tone. */
-  --stance-supportive-solid: #23508a;
-  --stance-opposed-solid:    #a63a2a;
-  --stance-neutral-solid:    #9ca3af;
-  --stance-grad-supportive: linear-gradient(135deg, #1a3e6c 0%, #5d82bf 100%);
-  --stance-grad-opposed:    linear-gradient(135deg, #7a2015 0%, #c97869 100%);
-  --stance-grad-neutral:    linear-gradient(135deg, #8b919e 0%, #c0c4cd 100%);
+  /* Review admin — banner + card backgrounds. Monochrome chrome (was a
+     tinted blue banner; neutralized 2026-07-11). */
+  --admin-banner-bg:     var(--neutral-100);
+  --admin-banner-border: var(--neutral-300);
+  --admin-banner-text:   var(--neutral-700);
+  --admin-card-bg:       var(--neutral-75);
 
-  /* Sentiment-favorability palette — used by the GOP-stance intensity
-     card's badges, the SentimentDistributionCard, and a few spots that
-     need bg + text + solid variants together. */
-  --sent-favorable-solid: #2d7042;
-  --sent-favorable-bg:    #d9e8dc;
-  --sent-favorable-text:  #245a35;
-  --sent-unfavorable-solid: #a63a2a;
-  --sent-unfavorable-bg:    #f0dcd5;
-  --sent-unfavorable-text:  #7a2015;
-
-  /* Review admin — banner + card backgrounds. */
-  --admin-banner-bg:     #e4ecf3;
-  --admin-banner-border: #8aa4c2;
-  --admin-banner-text:   #23508a;
-  --admin-card-bg:       #f7f4ea;
-
-  /* Spacing */
+  /* Spacing — the large end (8/10/12/16) was tightened in the density pass
+     (2026-07-11) so section chrome, heroes, and empty-state padding read as
+     grouped modules rather than loose stacks. The 0–6 fine-grain steps are
+     unchanged: they drive dense inner layouts where further shrinking crowds. */
   --space-0: 0;
   --space-1: 0.25rem;
   --space-2: 0.5rem;
@@ -150,24 +164,28 @@
   --space-4: 1rem;
   --space-5: 1.25rem;
   --space-6: 1.5rem;
-  --space-8: 2rem;
-  --space-10: 2.5rem;
-  --space-12: 3rem;
-  --space-16: 4rem;
+  --space-8: 1.5rem;
+  --space-10: 1.75rem;
+  --space-12: 2.25rem;
+  --space-16: 3rem;
 
-  /* Shadows — iteration 3 bumped to "hovering above paper" registers.
-     Each token is a two-layer shadow: a 1-2px close layer for the crisp
-     edge + a wider soft layer that sells the elevation. */
-  --shadow-sm: 0 1px 2px rgba(15, 20, 35, 0.05), 0 2px 6px rgba(15, 20, 35, 0.05);
-  --shadow-md: 0 2px 4px rgba(15, 20, 35, 0.07), 0 6px 16px rgba(15, 20, 35, 0.09);
-  --shadow-lg: 0 4px 8px rgba(15, 20, 35, 0.10), 0 16px 40px rgba(15, 20, 35, 0.16);
-  --shadow-inset: inset 0 1px 0 rgba(15, 20, 35, 0.03);
+  /* Shadows — minimal, crisp (deep-ink retheme): hairline borders carry
+     the structure; shadows only whisper elevation. */
+  --shadow-sm: 0 1px 2px rgba(13, 14, 18, 0.05);
+  --shadow-md: 0 1px 2px rgba(13, 14, 18, 0.06), 0 4px 10px rgba(13, 14, 18, 0.06);
+  --shadow-lg: 0 2px 6px rgba(13, 14, 18, 0.08), 0 12px 28px rgba(13, 14, 18, 0.12);
+  --shadow-inset: inset 0 1px 0 rgba(13, 14, 18, 0.03);
 
-  /* Radius — sharper on dense data, softer on cards */
-  --radius-sm: 3px;
-  --radius-md: 6px;
-  --radius-lg: 10px;
-  --radius-xl: 14px;
+  /* Radius. Fully angular Bloomberg register — no rounded corners anywhere
+     (modules, controls, bars are all square). --radius-sm was the last soft
+     corner on small controls (buttons, inputs, badges); zeroed 2026-07-11 so
+     the whole UI is cornered. --radius-full stays ONLY for genuinely circular
+     elements (avatars, stadium filter pills, status dots), which are round by
+     shape, not rounded-cornered. */
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --radius-xl: 0;
   --radius-full: 9999px;
 
   /* Transitions */
@@ -210,17 +228,8 @@ body {
   line-height: var(--leading-normal);
   color: var(--neutral-800);
   background-color: var(--bg-app);
-  /* Paper-grain overlay (iteration 3). SVG noise data-URI at very low
-     opacity gives the app background a subtle tactile feel without
-     introducing a real image asset.
-     NOTE: `background-attachment: fixed` was removed 2026-04-23. On iOS
-     Safari, combining it with `overflow-x: hidden` on body creates a
-     scroll-containing block that breaks `position: fixed` on descendants
-     — specifically, the bottom nav bar on phones would drift off-screen
-     or clip mid-row depending on the page. The overlay still renders
-     correctly as a non-repeating static pattern; tactile effect is
-     visually indistinguishable to a reader. */
-  background-image: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 140 140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.12 0 0 0 0 0.10 0 0 0 0 0.07 0 0 0 0.07 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  /* Paper-grain overlay removed 2026-07-11 with the deep-ink retheme —
+     the crisp cool surface IS the register; texture read as warmth. */
   min-height: 100vh;
   min-height: 100dvh;
   font-feature-settings: 'cv11', 'ss01';
@@ -298,8 +307,7 @@ code, pre {
 
 /* Numeric data: tabular + monospaced */
 .num,
-.metric-value,
-.metric-delta {
+.metric-value {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   font-feature-settings: 'tnum' 1, 'zero' 1;
@@ -338,6 +346,13 @@ code, pre {
   max-width: var(--max-content-width);
   margin: 0 auto;
   padding: 0 var(--space-5);
+  /* Continuous page frame (Bloomberg): hairline rails down both edges contain
+     the whole content column. min-height so the rails run the full viewport
+     even on short pages. */
+  border-left: 1px solid var(--neutral-200);
+  border-right: 1px solid var(--neutral-200);
+  min-height: 100vh;
+  min-height: 100dvh;
 }
 
 /* Page header sticks to the top and compresses on scroll. */
@@ -351,7 +366,7 @@ code, pre {
   -webkit-backdrop-filter: saturate(1.4) blur(8px);
   border-bottom: 1px solid transparent;
   transition: border-color var(--transition-base), padding var(--transition-base);
-  margin-bottom: var(--space-4);
+  margin-bottom: var(--space-3);
 }
 
 .page-header.is-scrolled {
@@ -374,8 +389,13 @@ code, pre {
   margin-top: 2px;
 }
 
-.grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--space-3); }
-.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-3); }
+/* align-items: start so a short card in a paired/triple row hugs its own
+   content instead of stretching to the tallest sibling's height, which left
+   large empty bands (e.g. Data Desk "Human review agreement" beside the long
+   snapshot table; Bot Detector's similarity/domain panels). Density pass
+   2026-07-11. */
+.grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--space-3); align-items: start; }
+.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-3); align-items: start; }
 .grid-auto { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: var(--space-3); }
 
 /* Newspaper-style 12-col dashboard grid.
@@ -384,19 +404,21 @@ code, pre {
    identical full-bleed rows. Each child picks its own span based on
    content density.
 
-   Cards paired in a row stretch to match the tallest sibling so there are
-   no jagged bottom edges between neighbors. Wrappers use flex-column +
-   flex:1 on their child so the Card (or banner) inside inflates to fill
-   the allotted row height.
+   Cards hug their own content (align-items: start) — a short card next to a
+   tall one stays short, so there is no stretched dead space. Ragged bottoms
+   between neighbors are intentional and read as clean because each module is
+   a crisp hairline-bounded box (the Bloomberg masonry register).
 
    Collapses to single-column below 1024px (tablet / phone) so no card is
    forced into a too-narrow slot. */
 .dashboard-grid {
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
+  /* Modules are spaced (not touching): the page-level frame on .app-container
+     supplies the continuous outer border; between modules a small gap keeps
+     them readable. Bumped for readability 2026-07-11. */
   gap: var(--space-3);
-  /* align-items defaults to stretch — equal-height cards per row.
-     Walkthrough 061 tightened from space-4 → space-3 for FT-style density. */
+  align-items: start;
 }
 
 .col-span-12 { grid-column: span 12; }
@@ -406,8 +428,9 @@ code, pre {
 .col-span-5  { grid-column: span 5; }
 .col-span-4  { grid-column: span 4; }
 
-/* Each grid cell becomes a flex column so its child (usually a .card)
-   stretches to the row's height instead of hugging its natural content. */
+/* Each grid cell is a flex column (min-width:0 so long content can shrink
+   instead of forcing horizontal overflow); the cell hugs its content height
+   via the grid's align-items: start. */
 .dashboard-grid > [class*="col-span-"] {
   display: flex;
   flex-direction: column;
@@ -415,18 +438,12 @@ code, pre {
 }
 
 .dashboard-grid > [class*="col-span-"] > * {
-  flex: 1 1 auto;
   min-height: 0;
 }
-
-/* Cards fill their flex parent vertically so background + border reach
-   the full row height; their internal content stays top-aligned, which
-   reads as "this card's data ends here" rather than "the card is short". */
-.dashboard-grid > [class*="col-span-"] > .card,
-.dashboard-grid > [class*="col-span-"] > .surface-card,
-.dashboard-grid > [class*="col-span-"] > .surface-panel,
-.dashboard-grid > [class*="col-span-"] > .surface-hero {
-  height: 100%;
+/* Stacked modules inside one cell (e.g. Data Desk's left/right columns) get a
+   small vertical gap so they read as separate modules. */
+.dashboard-grid > [class*="col-span-"] > * + * {
+  margin-top: var(--space-3);
 }
 
 @media (max-width: 1024px) {
@@ -502,24 +519,20 @@ code, pre {
 
 .card {
   background: var(--bg-card);
-  border-radius: var(--radius-md);
-  padding: var(--space-4);
-  /* Two-layer shadow (iteration 3) — cards lift off the paper-feel
-     background rather than sitting flush on it. */
-  box-shadow:
-    0 1px 2px rgba(15, 20, 35, 0.06),
-    0 6px 16px rgba(15, 20, 35, 0.08);
+  /* Square, shadowless modules (2026-07-11): a single 1px hairline border is
+     the only delineation — the Bloomberg "contained angular box" register.
+     Rounded corners and drop shadows removed site-wide. */
+  border-radius: 0;
+  padding: var(--space-3);
   border: 1px solid var(--neutral-200);
-  transition: box-shadow var(--transition-base), border-color var(--transition-base);
+  transition: border-color var(--transition-base);
 }
 
 .card-header {
-  margin: calc(-1 * var(--space-4)) calc(-1 * var(--space-4)) var(--space-3);
-  padding: var(--space-2) var(--space-4);
+  margin: calc(-1 * var(--space-3)) calc(-1 * var(--space-3)) var(--space-3);
+  padding: var(--space-2) var(--space-3);
   border-bottom: 1px solid var(--neutral-200);
   background: var(--bg-panel);
-  border-top-left-radius: var(--radius-md);
-  border-top-right-radius: var(--radius-md);
 }
 
 /* Editorial card title — restrained serif, sized to sit above data.
@@ -527,21 +540,21 @@ code, pre {
    is now reserved for section labels and metric labels, so card titles
    can reclaim a headline role without fighting them. */
 .card-title {
-  font-family: var(--font-display);
+  font-family: var(--font-family);
   font-size: var(--text-lg);
-  font-weight: 600;
+  font-weight: 700;
   color: var(--neutral-900);
-  letter-spacing: -0.005em;
+  letter-spacing: -0.02em;
   font-optical-sizing: auto;
   line-height: var(--leading-tight);
 }
 
-/* Deck-style subtitle: grey serif italic, one notch larger than the old
-   uppercase eyebrow. Reads as a standfirst under the headline. */
+/* Deck-style subtitle: grey sans standfirst under the bold sans headline.
+   Dropped the serif italic (read as "typewriter") for the Bloomberg register. */
 .card-subtitle {
-  font-family: var(--font-display);
+  font-family: var(--font-family);
   font-size: var(--text-sm);
-  font-style: italic;
+  font-style: normal;
   color: var(--neutral-500);
   margin-top: 2px;
   line-height: var(--leading-normal);
@@ -554,18 +567,17 @@ code, pre {
   padding: var(--space-2) var(--space-3);
   background: var(--bg-inset);
   border-left: 2px solid var(--accent-muted);
-  border-radius: var(--radius-sm);
 }
 
 /* Hero surface for landing / splash areas */
 .surface-hero {
   position: relative;
-  padding: var(--space-8) var(--space-6);
+  padding: var(--space-6) var(--space-5);
   background:
-    radial-gradient(120% 140% at 0% 0%, rgba(36, 99, 209, 0.08) 0%, transparent 55%),
-    radial-gradient(80% 100% at 100% 0%, rgba(0, 71, 179, 0.05) 0%, transparent 50%),
-    linear-gradient(180deg, #ffffff 0%, #fafbfc 100%);
-  border-radius: var(--radius-lg);
+    radial-gradient(120% 140% at 0% 0%, rgba(26, 58, 107, 0.07) 0%, transparent 55%),
+    radial-gradient(80% 100% at 100% 0%, rgba(15, 42, 82, 0.05) 0%, transparent 50%),
+    linear-gradient(180deg, var(--bg-card) 0%, var(--neutral-75) 100%);
+  border-radius: 0;
   border: 1px solid var(--neutral-200);
   overflow: hidden;
 }
@@ -615,27 +627,6 @@ code, pre {
   letter-spacing: -0.02em;
 }
 
-.metric-label {
-  font-size: var(--text-xs);
-  color: var(--neutral-500);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  margin-top: var(--space-1);
-}
-
-.metric-delta {
-  font-size: var(--text-sm);
-  font-weight: 600;
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-}
-
-.metric-delta-positive { color: var(--semantic-positive); }
-.metric-delta-negative { color: var(--semantic-negative); }
-.metric-delta-neutral { color: var(--neutral-500); }
-
-
 /* ============================================
    Buttons
    ============================================ */
@@ -676,7 +667,7 @@ code, pre {
 .btn-ghost { background: transparent; color: var(--neutral-600); }
 .btn-ghost:hover { background: var(--bg-inset); color: var(--neutral-800); }
 
-.btn-sm { padding: 4px var(--space-2); font-size: 10px; min-height: 28px; }
+.btn-sm { padding: 4px var(--space-2); font-size: 11px; min-height: 28px; }
 
 /* Mobile upsizes .btn-sm to meet the 44px WCAG tap-target minimum.
    Keeps the compact look on desktop where mouse precision is fine. */
@@ -982,6 +973,51 @@ code, pre {
   margin-bottom: var(--space-2);
 }
 
+/* DefinitionChip — dotted-underline term that opens its glossary entry on
+   click/tap. The touch-visible replacement for title= hover definitions. */
+.definition-chip {
+  position: relative;
+  display: inline-flex;
+}
+
+.definition-chip-term {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline dotted var(--neutral-400);
+  text-underline-offset: 3px;
+}
+.definition-chip-term:hover { text-decoration-color: var(--accent); color: var(--accent); }
+.definition-chip-term:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.definition-chip-popover {
+  top: 100%;
+  left: 0;
+  margin-top: 6px;
+  min-width: 240px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.definition-chip-definition {
+  color: var(--neutral-700);
+  line-height: 1.5;
+}
+
+.definition-chip-scale {
+  color: var(--neutral-500);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
 
 /* ============================================
    Charts (Recharts overrides)
@@ -994,7 +1030,7 @@ code, pre {
 
 .recharts-text {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 11px;
   fill: var(--neutral-500);
 }
 
@@ -1094,7 +1130,6 @@ code, pre {
   width: 100%;
   background: var(--bg-card);
   border: 1px solid var(--neutral-200);
-  border-left: 3px solid transparent;
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
   display: flex;
@@ -1113,13 +1148,93 @@ code, pre {
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
-  padding: var(--space-2) var(--space-4);
+  padding: var(--space-3) var(--space-4);
   border-bottom: 1px solid var(--neutral-150);
   position: sticky;
   top: 0;
   background: var(--bg-card);
   border-top-left-radius: var(--radius-lg);
   border-top-right-radius: var(--radius-lg);
+}
+
+/* The dialog's own name must outrank the h3 (.card-title, 16px) section
+   headers inside the body — display serif at text-xl, ink, tight leading.
+   Long titles (a narrative's full claim sentence) wrap up to 3 lines. */
+.modal-title {
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  font-weight: 700;
+  line-height: var(--leading-tight);
+  color: var(--neutral-800);
+  letter-spacing: -0.01em;
+  margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.modal-kicker {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 2px;
+  color: var(--neutral-500);
+}
+
+/* Compact story rows inside the narrative entity modal — each opens the
+   full detail modal instead of repeating a whole NarrativeCard. */
+.narrative-entity-rows {
+  display: flex;
+  flex-direction: column;
+}
+
+.narrative-entity-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 72px 84px 16px;
+  gap: var(--space-3);
+  align-items: center;
+  padding: 8px var(--space-2);
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--neutral-150);
+  width: 100%;
+  cursor: pointer;
+  text-align: left;
+  transition: background var(--transition-fast);
+}
+
+.narrative-entity-row:last-child { border-bottom: none; }
+.narrative-entity-row:hover { background: var(--bg-inset); }
+.narrative-entity-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.narrative-entity-row-name {
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--neutral-800);
+  line-height: var(--leading-tight);
+}
+
+.narrative-entity-row-tone,
+.narrative-entity-row-docs {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-xs);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.narrative-entity-row-docs { color: var(--neutral-500); }
+
+.narrative-entity-row-chevron {
+  color: var(--neutral-400);
+  font-size: var(--text-lg);
+  line-height: 1;
 }
 
 .modal-close {
@@ -1189,6 +1304,30 @@ code, pre {
   z-index: 1;
 }
 
+/* Shared swatch legend — maps a bar/segment color to what it encodes, for the
+   color-only charts that carry no inline segment labels (account-age
+   distribution, the digest source-mix bar). One key per chart; keep the labels
+   terse. */
+.chart-swatch-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+  margin-top: var(--space-2);
+}
+.chart-swatch-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--text-xs);
+  color: var(--neutral-500);
+  white-space: nowrap;
+}
+.chart-swatch {
+  width: 9px;
+  height: 9px;
+  flex-shrink: 0;
+}
+
 /* Skew direction chip (used on distribution card) */
 .chip {
   display: inline-flex;
@@ -1209,256 +1348,245 @@ code, pre {
 .chip-accent { border-color: var(--accent-light); background: var(--accent-light); color: var(--accent); }
 
 
-/* ============================================
-   Paper-texture overlay — applied broadly so the whole UI has the
-   same printed register. Two intensities:
-     .paper-strong — on colored bars/chips/filled areas (opacity 0.45)
-     .paper-subtle — on white/near-white surfaces like cards + modals
-                     (opacity 0.14, barely there)
-   Both use the same data-URI noise + mix-blend-mode: multiply so the
-   underlying color/gradient stays dominant.
-   Small elements (10px dots, sparkline strokes) excluded — noise
-   doesn't render meaningfully at that scale.
-   ============================================ */
-
-/* Strong overlay: colored bars, segments, chips, flags. */
-.seg,
-.mini-metric-bar > span,
-.technique-row-bar-fill,
-.narrative-source-bar > div,
-.entity-card-chip,
-.narrative-flag,
-.cross-tier-chip,
-.example-tech,
-.badge,
-.badge-negative,
-.badge-warning,
-.badge-accent,
-.badge-neutral {
-  position: relative;
-  isolation: isolate;
-}
-
-.seg::after,
-.mini-metric-bar > span::after,
-.technique-row-bar-fill::after,
-.narrative-source-bar > div::after,
-.entity-card-chip::after,
-.narrative-flag::after,
-.cross-tier-chip::after,
-.example-tech::after,
-.badge::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background-image: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 80'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.3' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.5 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-  mix-blend-mode: multiply;
-  opacity: 0.45;
-  pointer-events: none;
-  border-radius: inherit;
-}
-
-/* Subtle overlay: cards, modals, surfaces — white backgrounds get
-   a faint grain so they feel printed, not LCD-flat. */
-.card,
-.entity-card,
-.narrative-card,
-.surface-card,
-.surface-panel,
-.surface-hero,
-.modal-surface,
-.top-metrics,
-.how-this-works {
-  position: relative;
-  isolation: isolate;
-}
-
-.card::after,
-.entity-card::after,
-.narrative-card::after,
-.surface-card::after,
-.surface-panel::after,
-.surface-hero::after,
-.modal-surface::after,
-.top-metrics::after,
-.how-this-works::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background-image: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.95' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.14 0 0 0 0 0.12 0 0 0 0 0.09 0 0 0 0.45 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-  mix-blend-mode: multiply;
-  opacity: 0.18;
-  pointer-events: none;
-  border-radius: inherit;
-}
-
-/* Children of textured cards need to sit above the ::after overlay so
-   they stay crisp and clickable. Most cards are already flex/grid which
-   creates a stacking context, but buttons / links inside benefit from
-   an explicit z-index. */
-.card > *,
-.entity-card > *,
-.narrative-card > *,
-.surface-card > *,
-.surface-panel > *,
-.surface-hero > *,
-.modal-surface > *,
-.top-metrics > *,
-.how-this-works > * {
-  position: relative;
-  z-index: 1;
-}
-
-/* Recharts SVG chart surfaces — Sparkline + TrendStrip area fills.
-   We wrap Recharts area fills in a named pattern rather than a
-   post-process filter because SVG <feTurbulence> + blend on a gradient
-   fill is expensive per-repaint; the data-URI approach is static. */
-
+/* Paper-texture overlays (bars/chips grain + card grain + the child
+   z-index scaffolding they required) were removed 2026-07-11 with the
+   deep-ink retheme: crisp cool surfaces and hairline borders carry the
+   register; the printed-noise effect read as warmth. */
 
 /* ============================================
    Propaganda page — techniques + source split + examples rows.
    All row-based for density; share the Overall-Tone top-metrics layout.
    ============================================ */
 
-.technique-rows,
-.source-split-rows,
-.example-rows {
+/* Technique explorer — a full-width bar graphic; each row opens a modal of
+   that technique's flagged posts (evidence highlighted inline). */
+.technique-explorer-list {
   display: flex;
   flex-direction: column;
-  gap: 2px;
 }
 
-.technique-row {
+/* Compact single-line technique rows (2026-07-11): name · inline bar ·
+   count · pct. The old stacked layout (name/count → bar → italic blurb) made
+   the 6-item list tall and heavy; the blurb now rides a button `title`. */
+.technique-explorer-row {
   display: grid;
-  grid-template-columns: 200px 1fr 80px;
-  gap: var(--space-3);
+  grid-template-columns: minmax(90px, auto) minmax(36px, 1fr) auto auto;
   align-items: center;
-  padding: 6px 0;
+  gap: var(--space-2);
+  width: 100%;
+  padding: 6px var(--space-2);
+  background: none;
+  border: none;
+  border-left: 3px solid transparent;
   border-bottom: 1px solid var(--neutral-150);
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
 }
-.technique-row:last-child { border-bottom: none; }
+.technique-explorer-list .technique-explorer-row:last-child { border-bottom: none; }
+.technique-explorer-row:hover { background: var(--bg-inset); }
+.technique-explorer-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
 
-.technique-row-name {
-  font-family: var(--font-display);
+.technique-explorer-row-name {
   font-size: var(--text-sm);
   font-weight: 600;
   color: var(--neutral-900);
-  letter-spacing: -0.005em;
-}
-
-.technique-row-blurb {
-  font-size: 11px;
-  color: var(--neutral-500);
-  font-style: italic;
-  line-height: 1.3;
-}
-
-.technique-row-bar {
-  height: 8px;
-  background: var(--neutral-100);
-  border-radius: 4px;
+  white-space: nowrap;
   overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.technique-row-bar-fill {
-  height: 100%;
-  background: var(--semantic-negative);
-  border-radius: 4px;
-}
-
-.technique-row-count {
-  text-align: right;
+.technique-explorer-row-count {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   font-size: var(--text-sm);
   font-weight: 700;
   color: var(--neutral-800);
-}
-
-.technique-row-count-pct {
-  display: block;
-  font-size: 10px;
-  font-weight: 600;
-  color: var(--neutral-500);
-  font-family: var(--font-family);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  margin-top: 2px;
-}
-
-.source-split-row {
-  display: grid;
-  grid-template-columns: 120px 1fr 1fr 1fr;
-  gap: var(--space-3);
-  align-items: baseline;
-  padding: 8px 0;
-  border-bottom: 1px solid var(--neutral-150);
-}
-.source-split-row:last-child { border-bottom: none; }
-
-.source-split-row-label {
-  font-weight: 600;
-  font-size: var(--text-sm);
-  color: var(--neutral-900);
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.source-split-dot {
-  display: inline-block;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.source-split-row-total {
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-  font-size: 11px;
-  color: var(--neutral-500);
-}
-
-.source-split-row-rate,
-.source-split-row-score {
-  display: flex;
-  flex-direction: column;
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-  font-weight: 700;
-  color: var(--neutral-900);
   text-align: right;
-  font-size: var(--text-base);
+  white-space: nowrap;
 }
 
-.source-split-row-sub {
+.technique-explorer-row-pct {
   font-size: 9px;
   font-weight: 600;
   color: var(--neutral-500);
   font-family: var(--font-family);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
-  margin-top: 2px;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  min-width: 34px;
+  text-align: right;
 }
 
-/* Example rows — compact, evidence-span heavy. */
-.example-row {
-  padding: 8px 0;
-  border-bottom: 1px solid var(--neutral-150);
+.technique-explorer-row-bar {
+  height: 6px;
+  background: var(--neutral-100);
+  overflow: hidden;
+}
+
+.technique-explorer-row-fill {
+  display: block;
+  height: 100%;
+  background: var(--semantic-negative);
+}
+
+/* By-party propaganda rollup (Phase 4) — one labeled bar per party. The bar
+   color is the partisan lean hue (a legitimate data legend; chrome stays
+   monochrome). Angular, like every bar. */
+/* Divergence-from-the-public bars — News / Dem officials / GOP officials, each
+   diverging from a center zero (the public baseline). Angular; group-colored
+   data marks. Fills the space beside Source signals on the Tone page. */
+.tone-divergence {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-2);
 }
-.example-row:last-child { border-bottom: none; }
+.tone-divergence-row {
+  display: grid;
+  grid-template-columns: 104px minmax(0, 1fr) 52px;
+  align-items: center;
+  gap: var(--space-3);
+}
+.tone-divergence-label {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--neutral-800);
+}
+.tone-divergence-track {
+  position: relative;
+  height: 12px;
+  background: var(--neutral-100);
+  overflow: hidden;
+}
+.tone-divergence-zero {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--neutral-400);
+  z-index: 1;
+}
+.tone-divergence-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  min-width: 2px;
+}
+.tone-divergence-value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--neutral-800);
+  text-align: right;
+}
 
-.example-row-head {
+/* Clickable Source-signals rows → the narrative drill-down modal. */
+.outlet-signal-row { cursor: pointer; transition: background var(--transition-fast); }
+.outlet-signal-row:hover { background: var(--bg-inset); }
+
+/* "Stories driving this tone" list in the Source-signals modal. */
+.outlet-stories {
+  margin-bottom: var(--space-4);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--neutral-150);
+}
+.outlet-stories-list {
+  list-style: none;
+  margin: var(--space-2) 0 0;
+  padding: 0;
   display: flex;
-  justify-content: space-between;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.outlet-stories-list li {
+  display: flex;
   align-items: baseline;
   gap: var(--space-2);
-  flex-wrap: wrap;
+  font-size: var(--text-sm);
+  color: var(--neutral-800);
+}
+.outlet-story-count {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: var(--neutral-500);
+  min-width: 20px;
+  text-align: right;
 }
 
+/* "By party" section folded under the technique bars in the same card. */
+.technique-by-party {
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--neutral-150);
+}
+.technique-by-party-title {
+  display: block;
+  margin-bottom: var(--space-2);
+  cursor: help;
+}
+
+.party-bars {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.party-bar-row {
+  display: grid;
+  grid-template-columns: 116px minmax(0, 1fr) 60px auto;
+  align-items: center;
+  gap: var(--space-3);
+}
+.party-bar-label {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--neutral-800);
+}
+.party-bar-track {
+  height: 12px;
+  background: var(--neutral-100);
+  overflow: hidden;
+}
+.party-bar-fill {
+  display: block;
+  height: 100%;
+  min-width: 3px;
+}
+.party-bar-value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  text-align: right;
+  color: var(--neutral-800);
+}
+.party-bar-meta {
+  font-size: var(--text-xs);
+  color: var(--neutral-500);
+  white-space: nowrap;
+}
+@media (max-width: 560px) {
+  .party-bar-row {
+    grid-template-columns: 1fr auto;
+    grid-template-areas: "label value" "track track" "meta meta";
+    row-gap: var(--space-1);
+  }
+  .party-bar-label { grid-area: label; }
+  .party-bar-value { grid-area: value; }
+  .party-bar-track { grid-area: track; }
+  .party-bar-meta  { grid-area: meta; }
+}
+
+/* Small outbound "View original" link — used by modal footers and the
+   Review page. The old example-row block it belonged to was replaced by
+   PostCard; the link treatment survives as a standalone utility. */
 .example-row-link {
   font-size: 11px;
   color: var(--accent);
@@ -1468,70 +1596,226 @@ code, pre {
 }
 .example-row-link:hover { color: var(--accent-hover); }
 
-.example-row-meta {
-  font-size: 10px;
+
+/* ============================================
+   PostCard — the one way a sampled post renders anywhere.
+   Three flavors (x / reddit / news) share one frame: a clipping lifted
+   from its source, pinned to the page, with the analyst's highlighter
+   pass (evidence marks) visible on the text. Left rail takes the
+   source-type color so cards read against the narrative source bars.
+   ============================================ */
+
+.post-card-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.post-card-list-note {
+  margin: 0;
+  font-size: var(--text-xs);
   color: var(--neutral-500);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
+  font-style: italic;
 }
 
-.example-row-score {
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-  font-weight: 700;
-  color: var(--semantic-negative);
-  font-size: var(--text-sm);
+.post-card {
+  background: var(--bg-card);
+  border: 1px solid var(--neutral-200);
+  border-left-width: 3px;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  padding: var(--space-3) var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
 }
 
-.example-row-title {
+/* Post-card left border is monochrome chrome; the source is named by the
+   card's platform label/avatar, not by a colored rail. */
+.post-card-x,
+.post-card-reddit,
+.post-card-news   { border-left-color: var(--neutral-300); }
+
+.post-card-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.post-card-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-full);
+  flex-shrink: 0;
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-inset);
+}
+
+.post-card-news .post-card-avatar { border-radius: var(--radius-sm); }
+
+.post-card-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.post-card-avatar-mono {
   font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--neutral-500);
+}
+
+.post-card-head-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.post-card-author {
   font-size: var(--text-sm);
   font-weight: 600;
   color: var(--neutral-900);
-  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.example-row-preview {
+.post-card-source {
+  font-family: var(--font-mono);
   font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--neutral-500);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.post-card-when {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--neutral-400);
+  white-space: nowrap;
+}
+
+.post-card-permalink {
+  font-size: 11px;
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.post-card-permalink:hover { color: var(--accent-hover); }
+
+.post-card-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-base);
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--neutral-900);
+}
+
+.post-card-body {
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: var(--leading-relaxed);
+  color: var(--neutral-700);
+  overflow-wrap: anywhere;
+}
+
+/* The highlighter pass: evidence the model quoted verbatim. Warm ochre
+   wash + a firmer baseline stroke so it reads as a human highlighter,
+   not a syntax-error squiggle. */
+.post-card-evidence {
+  background: var(--semantic-warning-light);
+  border-bottom: 2px solid var(--semantic-warning);
+  border-radius: 2px;
+  padding: 0 2px;
+  color: var(--neutral-800);
+}
+
+.post-card-evidence-fallback {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.post-card-evidence-quote {
+  font-size: var(--text-xs);
   color: var(--neutral-600);
   line-height: 1.5;
-  font-style: italic;
 }
 
-.example-row-techs {
+.post-card-evidence-quote-label {
+  font-weight: 700;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--neutral-500);
+}
+
+.post-card-engagement {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  color: var(--neutral-500);
+}
+
+.post-card-analysis {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 6px;
-  padding-top: 2px;
+  padding-top: var(--space-1);
+  border-top: 1px dashed var(--neutral-150);
 }
 
-.example-tech {
-  font-size: 11px;
-  padding: 2px 6px;
-  border: 1px solid var(--semantic-negative-light);
-  background: var(--semantic-negative-light);
-  color: var(--semantic-negative);
-  border-radius: 3px;
-  line-height: 1.3;
-}
-
-.example-tech em {
-  color: var(--neutral-800);
-  font-style: italic;
-}
-
-/* Visible per-technique model confidence — replaces the hover-only title
-   attribute so touch users see it too (R-4). */
-.example-tech-conf {
+.post-card-confidence {
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+  font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  opacity: 0.75;
+  color: var(--neutral-500);
 }
+
+.post-card-indicators {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.post-card-reasoning summary {
+  cursor: pointer;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--accent);
+  user-select: none;
+}
+.post-card-reasoning summary:hover { color: var(--accent-hover); }
+.post-card-reasoning summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.post-card-reasoning p {
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-xs);
+  line-height: var(--leading-relaxed);
+  color: var(--neutral-600);
+}
+
+.badge-positive { background: var(--semantic-positive-light); color: var(--semantic-positive); }
 
 
 /* ============================================
@@ -1543,11 +1827,8 @@ code, pre {
 .top-metrics {
   background: var(--bg-card);
   border: 1px solid var(--neutral-200);
-  border-radius: var(--radius-sm);
-  padding: var(--space-3) var(--space-4);
-  box-shadow:
-    0 1px 2px rgba(15, 20, 35, 0.06),
-    0 6px 16px rgba(15, 20, 35, 0.08);
+  border-radius: 0;
+  padding: var(--space-2) var(--space-3);
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
@@ -1578,14 +1859,31 @@ code, pre {
   gap: 4px;
 }
 
-/* Per-tier "News articles are +X.X%" row with inline tone-axis visual. */
+/* Hairline dividers so the tier rows read as one instrument. */
+.top-metrics-rows > .tier-row + .tier-row {
+  border-top: 1px solid var(--neutral-100);
+  padding-top: 6px;
+}
+
+/* Per-tier "News articles are +X.X%" row with inline tone-axis visual.
+   The verb column is content-sized (was a trailing 1fr that left a wide empty
+   band right of the short verb text) so the axis bar absorbs the slack — a
+   bigger, more legible tone bar and no dead space. The has-trail variant keeps
+   its own template. */
 .tier-row {
   display: grid;
-  grid-template-columns: 160px 1fr 72px 1fr;
+  grid-template-columns: 160px minmax(0, 1fr) 72px max-content;
   gap: var(--space-3);
   align-items: center;
   padding: 3px 0;
 }
+
+/* Variant with a trailing per-tier trend sparkline. */
+.tier-row-has-trail {
+  grid-template-columns: 160px 1fr 72px minmax(0, 1fr) 128px;
+}
+
+.tier-row-trail { min-width: 0; }
 
 .tier-row-label {
   font-family: var(--font-display);
@@ -1619,21 +1917,35 @@ code, pre {
 
 .tier-row-zero {
   position: absolute;
-  top: 0;
-  bottom: 0;
+  top: -1px;
+  bottom: -1px;
   left: 50%;
   width: 1px;
-  background: var(--neutral-300);
+  background: var(--neutral-400);
+  z-index: 1;
 }
 
+/* Filled magnitude bar — the primary marker. Sits inside the track; its
+   left/width are set inline (from zero baseline on the tone axis, from the
+   left edge on a rate axis). min-width keeps tiny nonzero values visible. */
+.tier-row-bar {
+  position: absolute;
+  top: 1px;
+  bottom: 1px;
+  min-width: 3px;
+}
+
+/* Fallback marker for multi-value rows (e.g. news vs social) — enlarged and
+   ringed so two points on one track stay legible. */
 .tier-row-dot {
   position: absolute;
   top: 50%;
   transform: translate(-50%, -50%);
-  width: 9px;
-  height: 9px;
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
-  box-shadow: 0 0 0 2px var(--bg-card);
+  box-shadow: 0 0 0 2px var(--bg-card), 0 0 0 3px rgba(13, 14, 18, 0.18);
+  z-index: 2;
 }
 
 .tier-row-value {
@@ -1760,12 +2072,31 @@ code, pre {
   display: flex;
   width: 120px;
   height: 8px;
-  border-radius: 4px;
   overflow: hidden;
   background: var(--neutral-100);
   grid-column: 2;
 }
 .mini-metric-bar > span { display: block; height: 100%; }
+
+/* Tone-intensity variant: the shared 4-col grid left the bar tiny (120px)
+   with an empty 60px trend slot + trailing 1fr pad. Flex layout instead — the
+   bar grows to fill and reads clearly, the legend sits right after it, no dead
+   columns. (2026-07-11 top-metrics pass.) */
+.mini-metric-visual.is-intensity {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  min-width: 0;
+}
+.mini-metric-visual.is-intensity .mini-metric-bar {
+  grid-column: auto;
+  width: auto;
+  flex: 1 1 auto;
+  min-width: 110px;
+  max-width: 300px;
+  height: 11px;
+}
 
 .mini-metric-hint { grid-column: 3; }
 
@@ -1781,26 +2112,157 @@ code, pre {
 .mini-bar-neutral     { background: var(--neutral-300); }
 .mini-bar-unfavorable { background: var(--semantic-negative); }
 
-.mini-bar-strongpos { background: var(--chart-positive-strong); }
-.mini-bar-mildpos   { background: var(--chart-positive-soft); }
-.mini-bar-neu       { background: var(--neutral-300); }
-.mini-bar-mildneg   { background: var(--chart-negative-soft); }
-.mini-bar-strongneg { background: var(--chart-negative-strong); }
+.mini-bar-strongpos { background: var(--tone-strong-pos); }
+.mini-bar-mildpos   { background: var(--tone-mild-pos); }
+.mini-bar-neu       { background: var(--tone-neu-solid); }
+.mini-bar-mildneg   { background: var(--tone-mild-neg); }
+.mini-bar-strongneg { background: var(--tone-strong-neg); }
+
+/* Clickable intensity segments — same paint as the static spans, plus
+   button reset + hover/focus affordance for the samples drill-down. */
+.mini-bar-segment-btn {
+  display: block;
+  height: 100%;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  transition: filter var(--transition-fast);
+}
+.mini-bar-segment-btn:hover { filter: brightness(1.2); }
+.mini-bar-segment-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* Tone bar rows — the entity modal's received-tone breakdowns as
+   dot-on-axis rows (same visual language as the divergence panel). */
+.tone-bar-rows {
+  display: flex;
+  flex-direction: column;
+}
+
+.tone-bar-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) minmax(80px, 160px) 72px 48px;
+  gap: var(--space-2);
+  align-items: center;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--neutral-150);
+}
+.tone-bar-row:last-child { border-bottom: none; }
+
+.tone-bar-row-label {
+  font-size: var(--text-sm);
+  color: var(--neutral-800);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tone-bar-row-axis {
+  position: relative;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--neutral-100);
+}
+
+.tone-bar-row-zero {
+  position: absolute;
+  left: 50%;
+  top: -2px;
+  bottom: -2px;
+  width: 1px;
+  background: var(--neutral-300);
+}
+
+.tone-bar-row-dot {
+  position: absolute;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 0 1.5px var(--bg-card);
+}
+
+.tone-bar-row-value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  text-align: right;
+  color: var(--neutral-600);
+  white-space: nowrap;
+}
+
+.tone-bar-row-n {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  color: var(--neutral-500);
+  text-align: right;
+}
+
+/* One-line muted lead-in under a modal section's h3 — gives the three
+   look-alike ToneBarRows tables distinct framing. */
+.modal-section-lede {
+  font-size: var(--text-xs);
+  color: var(--neutral-500);
+  margin: -4px 0 var(--space-2);
+}
+
+/* Mono count annotation beside a modal section header ("140 of 3,212"). */
+.modal-section-count {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-xs);
+  font-weight: 400;
+  color: var(--neutral-500);
+}
 
 .mini-metric-hint {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--neutral-500);
   white-space: nowrap;
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
 }
 
+/* Five-way share readout under the intensity bar — one item per bucket,
+   colored to match its bar segment (classes reuse .mini-bar-*). */
+.mini-intensity-legend {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 11px;
+  color: var(--neutral-500);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.mini-intensity-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.mini-intensity-legend-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: none;
+}
+
 @media (max-width: 900px) {
-  .tier-row {
+  .tier-row,
+  .tier-row-has-trail {
     grid-template-columns: 140px 1fr 60px;
     row-gap: 4px;
   }
   .tier-row-verb { grid-column: 1 / -1; }
+  .tier-row-trail { display: none; }
   .top-metrics-aux { grid-template-columns: 1fr; }
 }
 
@@ -1844,11 +2306,8 @@ code, pre {
   font-size: var(--text-sm);
   background: var(--bg-card);
   border: 1px solid var(--neutral-200);
-  border-radius: var(--radius-sm);
+  border-radius: 0;
   padding: var(--space-2) var(--space-3);
-  box-shadow:
-    0 1px 2px rgba(15, 20, 35, 0.04),
-    0 2px 6px rgba(15, 20, 35, 0.04);
 }
 
 .how-this-works > summary {
@@ -1877,156 +2336,6 @@ code, pre {
   grid-template-columns: 1fr 1fr;
   gap: var(--space-3);
   padding-top: var(--space-2);
-}
-
-
-/* ============================================
-   Topic Divergence panel (walkthrough 060) — one row per topic, three
-   dots on a −100..+100 axis showing news / officials / public net
-   tone. Replaces the standalone Sentiment-by-Topic card.
-   ============================================ */
-
-.topic-divergence-legend {
-  display: flex;
-  gap: var(--space-4);
-  margin-bottom: var(--space-3);
-  padding: var(--space-2) 0;
-  border-bottom: 1px solid var(--neutral-150);
-  font-size: var(--text-xs);
-  color: var(--neutral-600);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  font-weight: 600;
-}
-
-.topic-divergence-legend-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.topic-divergence-legend-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  display: inline-block;
-  box-shadow: 0 0 0 2px var(--bg-card);
-}
-
-.topic-divergence-axis-caption {
-  font-size: 10px;
-  color: var(--neutral-400);
-  text-align: center;
-  padding-left: calc(var(--space-3) + 180px + var(--space-3));
-  padding-right: calc(var(--space-3) + 70px + var(--space-3));
-  padding-bottom: 4px;
-}
-
-.topic-divergence-rows {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-
-.topic-divergence-row {
-  display: grid;
-  grid-template-columns: 180px 1fr 70px;
-  gap: var(--space-3);
-  align-items: center;
-  padding: 6px var(--space-3);
-  background: transparent;
-  border: none;
-  border-bottom: 1px solid var(--neutral-150);
-  border-radius: 0;
-  width: 100%;
-  cursor: pointer;
-  text-align: left;
-  transition: background var(--transition-fast);
-}
-.topic-divergence-row:last-child { border-bottom: none; }
-
-.topic-divergence-row:hover { background: var(--bg-inset); }
-.topic-divergence-row:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-.topic-divergence-row-label {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-
-.topic-divergence-row-name {
-  font-size: var(--text-sm);
-  font-weight: 600;
-  color: var(--neutral-900);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.topic-divergence-row-volume {
-  font-size: 10px;
-  color: var(--neutral-500);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-}
-
-/* Axis line with the three tier dots. Drawn as a thin neutral bar that
-   shows a dashed vertical at the zero position (mid-axis). */
-.topic-divergence-axis {
-  position: relative;
-  height: 18px;
-  background: var(--neutral-100);
-  border-radius: var(--radius-full);
-  overflow: hidden;
-}
-
-.topic-divergence-zero {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 50%;
-  width: 1px;
-  background: repeating-linear-gradient(
-    to bottom,
-    var(--neutral-300) 0 3px,
-    transparent 3px 6px
-  );
-}
-
-.topic-divergence-dot {
-  position: absolute;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  width: 11px;
-  height: 11px;
-  border-radius: 50%;
-  box-shadow: 0 0 0 2px var(--bg-card);
-}
-
-.topic-divergence-row-range {
-  text-align: right;
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-  font-size: var(--text-sm);
-  font-weight: 600;
-  color: var(--neutral-700);
-}
-
-@media (max-width: 640px) {
-  .topic-divergence-row {
-    grid-template-columns: 1fr 60px;
-    grid-template-rows: auto auto;
-    row-gap: var(--space-1);
-  }
-  .topic-divergence-row-label { grid-column: 1 / 2; }
-  .topic-divergence-row-range { grid-column: 2 / 3; }
-  .topic-divergence-axis { grid-column: 1 / 3; }
 }
 
 
@@ -2098,7 +2407,7 @@ code, pre {
   padding: var(--space-3) var(--space-4);
   background: var(--bg-panel);
   border: 1px solid var(--neutral-200);
-  border-radius: var(--radius-md);
+  border-radius: 0;
 }
 
 @media (max-width: 1024px) {
@@ -2118,11 +2427,10 @@ code, pre {
    ============================================ */
 
 .reads-as-today {
-  padding: var(--space-3) var(--space-4);
+  padding: var(--space-2) var(--space-3);
   background: var(--bg-card);
   border: 1px solid var(--neutral-200);
   border-left: 3px solid var(--accent);
-  border-radius: var(--radius-sm);
 }
 
 .reads-as-today-eyebrow {
@@ -2145,10 +2453,32 @@ code, pre {
    Collapses to single-column below 1024px.
    ============================================ */
 
+/* The three-way frame is one wireframe box: an outer border (via
+   .three-way-frame) encapsulates all columns, and a vertical hairline divides
+   each column. Cards inside keep their normal spacing. */
+.three-way-frame {
+  border: 1px solid var(--neutral-200);
+  background: var(--bg-card);
+}
+
 .three-way-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--space-3);
+  gap: 0;
+  align-items: stretch;
+}
+/* Vertical dividers between columns (not after the last). */
+.three-way-grid > .three-way-column:not(:last-child),
+.two-way-grid > .three-way-column:not(:last-child) {
+  border-right: 1px solid var(--neutral-200);
+}
+
+/* Bot Detector: news is not bot-scored, so its grid has two tiers. */
+.two-way-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0;
+  align-items: stretch;
 }
 
 .three-way-column {
@@ -2156,7 +2486,10 @@ code, pre {
   flex-direction: column;
   gap: 6px;
   min-width: 0;
+  /* Padding keeps the cards off the frame border and column dividers. */
+  padding: var(--space-2);
 }
+.three-way-column-head { margin-bottom: var(--space-1); }
 
 .three-way-column-header {
   font-family: var(--font-display);
@@ -2178,8 +2511,75 @@ code, pre {
   padding-bottom: 4px;
 }
 
+/* Header block: the title takes the full column width (its underline runs edge
+   to edge so it reads as a clean section rule), then the byline, then the sort
+   control on its own line beneath — not competing with the title's row. */
+.three-way-column-head {
+  display: block;
+}
+
+.three-way-column-head .three-way-column-control {
+  display: block;
+  margin-top: var(--space-1);
+  white-space: nowrap;
+}
+
+/* Every column's card body is a bounded, flex-filling scroll region: it grows
+   to fill the column (so all three tiers, stretched to equal height, align at
+   the bottom instead of a short tier stranding dead space) and caps at a shared
+   max-height, scrolling internally past it so a long tier can't grow the page. */
+.three-way-column-scroll {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: min(72vh, 760px);
+  overflow-y: auto;
+}
+
+/* Cross-column control bar above the grid: lean/party filter + entity search. */
+/* Filter bar — the header band of the three-way frame. The frame supplies the
+   outer border; the band just needs a bottom rule to divide it from the
+   columns. Boxed inside the frame so it can't overflow the page. */
+.three-way-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--neutral-200);
+}
+
+.three-way-toolbar-filter {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex-wrap: wrap;
+}
+
+.three-way-toolbar-label {
+  margin-right: var(--space-1);
+  color: var(--neutral-500);
+}
+
+/* "Who the public is talking about" — target-sentiment rows that fill the
+   public column, which otherwise often carries a single pooled card. */
+.three-way-column-targets {
+  margin-top: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--neutral-200);
+}
+
+.three-way-column-targets-title {
+  display: block;
+  margin-bottom: var(--space-1);
+}
+
 @media (max-width: 1024px) {
-  .three-way-grid { grid-template-columns: 1fr; }
+  .three-way-grid,
+  .two-way-grid { grid-template-columns: 1fr; }
 }
 
 
@@ -2200,28 +2600,20 @@ code, pre {
   background: var(--bg-card);
   border: 1px solid var(--neutral-200);
   border-left: 3px solid var(--neutral-400);
-  border-radius: var(--radius-sm);
+  border-radius: 0;
   padding: 10px 12px;
-  /* Rest state: card hovers above the paper background with a subtle
-     two-layer shadow (iteration 3). Close layer gives the crisp edge;
-     far layer gives the soft drop. */
-  box-shadow:
-    0 1px 2px rgba(15, 20, 35, 0.06),
-    0 4px 12px rgba(15, 20, 35, 0.07);
+  /* Flat, angular module: hairline border only, hover reads via border +
+     background, not a shadow lift (2026-07-11 angular pass). */
   transition:
     border-color var(--transition-fast),
-    box-shadow var(--transition-base),
-    transform var(--transition-fast);
+    background var(--transition-fast);
   font-family: var(--font-family);
   color: inherit;
 }
 
 .entity-card:hover {
   border-color: var(--neutral-400);
-  box-shadow:
-    0 2px 4px rgba(15, 20, 35, 0.08),
-    0 12px 28px rgba(15, 20, 35, 0.14);
-  transform: translateY(-2px);
+  background: var(--bg-panel);
 }
 
 .entity-card:focus-visible {
@@ -2378,6 +2770,38 @@ code, pre {
   color: var(--neutral-500);
 }
 
+/* Mini axis bar — a visual anchor next to a bare stat number. Same
+   dot-on-axis language as TierRow, shrunk to card scale. */
+.entity-card-stat-bar {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--neutral-150);
+  align-self: center;
+  flex-shrink: 0;
+}
+
+.entity-card-stat-bar-zero {
+  position: absolute;
+  left: 50%;
+  top: -2px;
+  bottom: -2px;
+  width: 1px;
+  background: var(--neutral-300);
+}
+
+.entity-card-stat-bar-dot {
+  position: absolute;
+  top: 50%;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 0 1.5px var(--bg-card);
+}
+
 .entity-card-reads-as {
   font-size: 11px;
   color: var(--neutral-600);
@@ -2385,6 +2809,129 @@ code, pre {
   padding-top: 4px;
   border-top: 1px dashed var(--neutral-150);
   line-height: 1.4;
+}
+
+/* RankedEntityList — leaderboard rows for rate-driven columns (Propaganda,
+   Bots). Rank number + avatar + name + rate bar; profile depth stays in
+   the modal. Denser sibling of the entity card, same lean-chip language. */
+.ranked-entity-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.ranked-entity-row {
+  display: grid;
+  grid-template-columns: 22px 32px minmax(0, 1fr) 108px;
+  gap: var(--space-2);
+  align-items: start;
+  width: 100%;
+  padding: var(--space-2);
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--neutral-150);
+  border-radius: var(--radius-sm);
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+.ranked-entity-list li:last-child .ranked-entity-row { border-bottom: none; }
+.ranked-entity-row:hover { background: var(--bg-inset); }
+.ranked-entity-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+span.ranked-entity-row { cursor: default; }
+
+.ranked-entity-rank {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  color: var(--neutral-400);
+  text-align: right;
+}
+
+/* Name column: name + chip on top, optional explanatory description beneath. */
+.ranked-entity-main {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.ranked-entity-name-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* Under-name explanation (who they are / why they rank). */
+.ranked-entity-desc {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.ranked-entity-blurb {
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
+  color: var(--neutral-500);
+}
+.ranked-entity-why {
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
+  color: var(--neutral-600);
+  font-variant-numeric: tabular-nums;
+}
+
+.ranked-entity-name {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--neutral-900);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ranked-entity-rate {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.ranked-entity-rate-value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--neutral-800);
+  text-align: right;
+}
+
+.ranked-entity-rate-bar {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--neutral-100);
+  overflow: hidden;
+}
+
+.ranked-entity-rate-fill {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+}
+
+.ranked-entity-detail {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--neutral-500);
+  text-align: right;
+  white-space: nowrap;
 }
 
 /* Empty-state card — rendered when a registry entity has no aggregator
@@ -2405,29 +2952,17 @@ code, pre {
   border-top: 1px dashed var(--neutral-150);
 }
 
-/* Lean-keyed border color. Applied to .entity-card AND .lean-chip-*
-   variants so both the whole card and the small chip signal direction. */
-.entity-card.lean-left    { border-left-color: var(--lean-left); }
-.entity-card.lean-right   { border-left-color: var(--lean-right); }
-.entity-card.lean-center  { border-left-color: var(--neutral-400); }
-.entity-card.lean-mixed   {
-  /* Hatched band for mixed-lean entities — two-tone repeating gradient
-     on the left border simulates editorial ambivalence without picking
-     a color. The extra-wide border keeps the stripes legible. */
-  border-left: 4px solid transparent;
-  background-image: linear-gradient(var(--bg-card), var(--bg-card)),
-    repeating-linear-gradient(
-      45deg,
-      var(--semantic-warning) 0,
-      var(--semantic-warning) 3px,
-      var(--neutral-300) 3px,
-      var(--neutral-300) 6px
-    );
-  background-origin: border-box;
-  background-clip: padding-box, border-box;
-}
+/* Card left-border is monochrome chrome — the entity's lean is carried by the
+   colored .lean-chip-* legend below, so the border itself stays neutral (the
+   theme reserves hue for data marks, not card chrome). */
+.entity-card.lean-left,
+.entity-card.lean-right,
+.entity-card.lean-center,
+.entity-card.lean-mixed,
 .entity-card.lean-neutral { border-left-color: var(--neutral-300); }
 
+/* Lean chips ARE a data legend — they name the measured lean, so they keep
+   the partisan hues. */
 .entity-card-chip.lean-chip-left    { color: var(--lean-left); border-color: var(--lean-left-light); background: var(--lean-left-light); }
 .entity-card-chip.lean-chip-right   { color: var(--lean-right); border-color: var(--lean-right-light); background: var(--lean-right-light); }
 .entity-card-chip.lean-chip-mixed   { color: var(--semantic-warning); border-color: var(--semantic-warning-light); background: var(--semantic-warning-light); }
@@ -2463,11 +2998,6 @@ code, pre {
   font-size: var(--text-xs);
   flex-wrap: wrap;
   min-height: 40px;
-}
-
-.global-ticker-accent {
-  border-left-width: 3px;
-  border-left-style: solid;
 }
 
 .global-ticker-item {
@@ -2694,7 +3224,7 @@ code, pre {
   background: var(--neutral-900);
   color: var(--neutral-100);
   border-radius: var(--radius-sm);
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1;
 }
 
@@ -2822,63 +3352,10 @@ code, pre {
    Replaces the prior 5-column .narrative-row layout.
    ============================================ */
 
-.narrative-card {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  width: 100%;
-  text-align: left;
-  cursor: pointer;
-  background: var(--bg-card);
-  border: 1px solid var(--neutral-200);
-  border-radius: var(--radius-sm);
-  padding: 10px 12px;
-  box-shadow:
-    0 1px 2px rgba(15, 20, 35, 0.06),
-    0 4px 12px rgba(15, 20, 35, 0.07);
-  font-family: var(--font-family);
-  color: inherit;
-  transition:
-    border-color var(--transition-fast),
-    box-shadow var(--transition-base),
-    transform var(--transition-fast);
-}
-
-.narrative-card:hover {
-  border-color: var(--neutral-400);
-  box-shadow:
-    0 2px 4px rgba(15, 20, 35, 0.08),
-    0 12px 28px rgba(15, 20, 35, 0.14);
-  transform: translateY(-2px);
-}
-
-.narrative-card:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-.narrative-card-claim {
-  font-family: var(--font-display);
-  font-size: var(--text-sm);
-  font-weight: 600;
-  color: var(--neutral-900);
-  line-height: 1.25;
-  letter-spacing: -0.005em;
-  /* Two-line clamp keeps the grid tidy. */
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-.narrative-card-origin {
-  font-size: 10px;
-  color: var(--neutral-500);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  font-family: var(--font-family);
-  line-height: 1.3;
-}
+/* .narrative-card* card styles were deleted 2026-07-11 with the dead
+   NarrativeCard component (entity modal now uses .narrative-entity-row).
+   .narrative-source-bar and .narrative-card-sources survive — SourceBar
+   still renders them in the lifecycle strip + detail modal. */
 
 .narrative-source-bar {
   display: flex;
@@ -2892,58 +3369,6 @@ code, pre {
   margin-top: var(--space-1);
   line-height: var(--leading-snug);
 }
-
-.narrative-card-metrics {
-  display: flex;
-  gap: var(--space-3);
-  flex-wrap: wrap;
-}
-
-.narrative-card-metrics > span {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 3px;
-}
-
-.narrative-card-metric-value {
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-  font-size: var(--text-sm);
-  font-weight: 600;
-  color: var(--neutral-900);
-}
-
-.narrative-card-metric-label {
-  font-size: 9px;
-  color: var(--neutral-500);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  font-weight: 700;
-}
-
-.narrative-card-flags {
-  display: flex;
-  gap: 4px;
-  flex-wrap: wrap;
-  padding-top: 4px;
-  border-top: 1px dashed var(--neutral-150);
-}
-
-.narrative-flag {
-  font-size: 9px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  padding: 1px 5px;
-  border-radius: 2px;
-  border: 1px solid var(--neutral-200);
-  background: var(--bg-panel);
-  color: var(--neutral-700);
-}
-
-.narrative-flag-prop   { background: var(--semantic-negative-light); border-color: var(--semantic-negative-light); color: var(--semantic-negative); }
-.narrative-flag-bot    { background: var(--semantic-warning-light);  border-color: var(--semantic-warning-light);  color: var(--semantic-warning); }
-.narrative-flag-cross  { background: var(--accent-light);            border-color: var(--accent-light);            color: var(--accent); }
 
 /* Cross-tier panel — dense list with tier chips per row. */
 .cross-tier-list {
@@ -2988,6 +3413,192 @@ code, pre {
   flex-wrap: wrap;
 }
 
+/* Evidence funnel — the Bot Detector's chain-of-evidence strip:
+   scanned → flagged → coordination level → linked domains, connected
+   by arrows. Wraps to a vertical stack on phones. */
+.evidence-funnel {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.evidence-funnel-stage {
+  flex: 1 1 140px;
+  min-width: 130px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-panel);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--neutral-150);
+}
+
+.evidence-funnel-value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-xl);
+  font-weight: 700;
+  color: var(--neutral-900);
+  letter-spacing: -0.01em;
+}
+
+.evidence-funnel-label {
+  font-size: var(--text-xs);
+  color: var(--neutral-500);
+  line-height: 1.4;
+}
+
+.evidence-funnel-arrow {
+  align-self: center;
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  background: currentColor;
+  color: var(--neutral-400);
+  clip-path: polygon(0 25%, 55% 25%, 55% 0, 100% 50%, 55% 100%, 55% 75%, 0 75%);
+}
+
+.evidence-funnel-domains {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+@media (max-width: 700px) {
+  .evidence-funnel { flex-direction: column; }
+  .evidence-funnel-arrow { transform: rotate(90deg); }
+  .evidence-funnel-stage { flex-basis: auto; }
+}
+
+/* Inline text link rendered as a button (cross-narrative citation jumps). */
+.link-button {
+  font: inherit;
+  font-weight: 600;
+  color: var(--accent);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline dotted var(--neutral-400);
+  text-underline-offset: 3px;
+}
+.link-button:hover { color: var(--accent-hover); text-decoration-color: var(--accent-hover); }
+.link-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* Narrative lifecycle strip — one row per story: name, daily-volume
+   sparkline (colored by first-seen group), group chips, post count. */
+.lifecycle-rows {
+  display: flex;
+  flex-direction: column;
+}
+
+.lifecycle-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 2fr) minmax(140px, 1.4fr) auto 64px;
+  gap: var(--space-3);
+  align-items: center;
+  width: 100%;
+  padding: var(--space-2);
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--neutral-150);
+  border-radius: var(--radius-sm);
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+.lifecycle-rows .lifecycle-row:last-child { border-bottom: none; }
+.lifecycle-row:hover { background: var(--bg-inset); }
+.lifecycle-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.lifecycle-row-name-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.lifecycle-row-name {
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--neutral-900);
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.lifecycle-row-meta {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--neutral-500);
+}
+
+.lifecycle-row-spark { min-width: 0; }
+
+.lifecycle-row-flat {
+  display: block;
+  height: 36px;
+  position: relative;
+}
+.lifecycle-row-flat::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  border-top: 1px dashed var(--neutral-300);
+}
+
+.lifecycle-row-tiers {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.lifecycle-row-count {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--neutral-800);
+  text-align: right;
+  display: flex;
+  flex-direction: column;
+}
+
+.lifecycle-row-count-label {
+  font-family: var(--font-family);
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--neutral-500);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+@media (max-width: 700px) {
+  .lifecycle-row {
+    grid-template-columns: minmax(0, 1fr) 88px;
+    row-gap: var(--space-1);
+  }
+  .lifecycle-row-spark { grid-column: 1 / -1; }
+  .lifecycle-row-tiers { grid-row: 1; grid-column: 2; justify-content: flex-end; }
+  .lifecycle-row-count { display: none; }
+}
+
 .cross-tier-chip {
   font-size: 10px;
   font-weight: 700;
@@ -2999,9 +3610,13 @@ code, pre {
   background: var(--bg-panel);
   color: var(--neutral-700);
 }
-.cross-tier-chip-news      { background: var(--accent-light);            color: var(--accent);            border-color: var(--accent-light); }
-.cross-tier-chip-officials { background: var(--semantic-positive-light); color: var(--semantic-positive); border-color: var(--semantic-positive-light); }
-.cross-tier-chip-public    { background: var(--semantic-warning-light);  color: var(--semantic-warning);  border-color: var(--semantic-warning-light); }
+/* Tier chips share the canonical speaker-tier palette with the lifecycle line
+   (news/officials/public = blue/teal/amber). Text is a darkened shade of the
+   same hue so the chip stays legible while reading as the same color as its
+   line. */
+.cross-tier-chip-news      { color: color-mix(in srgb, var(--tier-news) 68%, black);      background: color-mix(in srgb, var(--tier-news) 13%, var(--bg-card));      border-color: color-mix(in srgb, var(--tier-news) 30%, var(--bg-card)); }
+.cross-tier-chip-officials { color: color-mix(in srgb, var(--tier-officials) 70%, black); background: color-mix(in srgb, var(--tier-officials) 13%, var(--bg-card)); border-color: color-mix(in srgb, var(--tier-officials) 30%, var(--bg-card)); }
+.cross-tier-chip-public    { color: color-mix(in srgb, var(--tier-public) 72%, black);    background: color-mix(in srgb, var(--tier-public) 13%, var(--bg-card));    border-color: color-mix(in srgb, var(--tier-public) 30%, var(--bg-card)); }
 
 .cross-tier-row-docs {
   display: inline-flex;
@@ -3015,7 +3630,7 @@ code, pre {
 }
 
 .cross-tier-row-docs-label {
-  font-size: 10px;
+  font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--neutral-500);
@@ -3034,78 +3649,442 @@ code, pre {
   margin-bottom: var(--space-4);
 }
 
-/* Top supporting documents — editorial table used in NarrativeDetailModal.
-   Matches the paper-feel aesthetic: hairline rules, serif-adjacent spacing,
-   mono numerics. Keeps horizontal scroll on narrow screens. */
-.supporting-docs-table-wrap {
+/* Entity hub — "See this entity on: ..." cross-page row in entity modals. */
+.entity-hub-links {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin-top: var(--space-3);
+  padding-top: var(--space-2);
+  border-top: 1px dashed var(--neutral-150);
+}
+
+.entity-hub-links-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--neutral-500);
+}
+
+.entity-hub-link {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.entity-hub-link:hover { color: var(--accent-hover); }
+.entity-hub-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* Trend-series toggle — small segmented control in the panel header. */
+.trend-view-toggle {
+  display: inline-flex;
+  border: 1px solid var(--neutral-200);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.trend-view-btn {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--neutral-500);
+  background: var(--bg-card);
+  border: none;
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+.trend-view-btn + .trend-view-btn { border-left: 1px solid var(--neutral-200); }
+.trend-view-btn:hover { color: var(--accent); }
+.trend-view-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.trend-view-btn-active {
+  background: var(--bg-panel);
+  color: var(--neutral-900);
+}
+
+/* Color-coded interactive legend under the Tone-over-time chart. Each item is
+   a button: hover explains it + isolates its line, click drills a tier into
+   its entities (or opens an entity's classified-evidence modal). */
+.tone-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+  margin-top: var(--space-2);
+}
+
+.tone-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--neutral-700);
+  background: none;
+  border: none;
+  padding: 2px 0;
+  cursor: pointer;
+  transition: color var(--transition-fast);
+}
+.tone-legend-item:hover { color: var(--accent); }
+.tone-legend-item-static { cursor: default; }
+.tone-legend-item-static:hover { color: var(--neutral-700); }
+.tone-legend-item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.tone-legend-swatch {
+  width: 12px;
+  height: 3px;
+  border-radius: var(--radius-full);
+  flex: none;
+}
+
+.three-way-column-control {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+  background: none;
+  border: none;
+  padding: 2px 0;
+  cursor: pointer;
+}
+.three-way-column-control:hover { color: var(--accent-hover); }
+.three-way-column-control:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+
+/* ============================================
+   Home digest — the live front page. Blocks are big click targets that
+   deep-link into their tabs; the whole section reads as a news-agency
+   "wire" summary above the prose.
+   ============================================ */
+
+.digest-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.digest-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+
+/* Headline KPI strip at the top of the weekly digest. */
+.digest-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+.digest-kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-3);
+  background: var(--bg-card);
+  border: 1px solid var(--neutral-200);
+}
+.digest-kpi-value {
+  font-family: var(--font-mono);
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  color: var(--neutral-900);
+  font-variant-numeric: tabular-nums;
+  line-height: var(--leading-tight);
+}
+.digest-kpi-detail {
+  font-size: var(--text-xs);
+  color: var(--neutral-500);
+}
+@media (max-width: 640px) {
+  .digest-kpis { grid-template-columns: repeat(2, 1fr); }
+}
+
+.digest-block {
+  display: block;
+  padding: var(--space-3) var(--space-4);
+  background: var(--bg-card);
+  border: 1px solid var(--neutral-200);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  color: inherit;
+  text-decoration: none;
+  transition: box-shadow var(--transition-fast), transform var(--transition-fast);
+  min-width: 0;
+}
+
+a.digest-block:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+a.digest-block:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.digest-block-static { cursor: default; }
+
+.digest-block-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.digest-block-cta {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--accent);
+  white-space: nowrap;
+  text-decoration: none;
+}
+a.digest-block-cta:hover { color: var(--accent-hover); }
+
+.digest-tier-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+/* The digest block is ~300px wide — too narrow for the top-metrics tier row's
+   single-line label|axis|value|verb (the max-content verb overflowed and
+   squished the axis). Stack it: label + value on top, axis bar full-width, verb
+   beneath; drop the ±100 endpoint labels here to keep it clean. */
+.digest-tier-rows .tier-row {
+  grid-template-columns: 1fr auto;
+  grid-template-areas:
+    "label value"
+    "axis  axis"
+    "verb  verb";
+  align-items: baseline;
+  row-gap: 3px;
+  padding: var(--space-1) 0;
+}
+.digest-tier-rows .tier-row-label { grid-area: label; }
+.digest-tier-rows .tier-row-value { grid-area: value; text-align: right; width: auto; }
+.digest-tier-rows .tier-row-axis { grid-area: axis; margin: 2px 0; }
+.digest-tier-rows .tier-row-verb { grid-area: verb; }
+.digest-tier-rows .tier-row-endpoint { display: none; }
+
+.digest-story-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.digest-story-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 72px 72px;
+  gap: var(--space-2);
+  align-items: center;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--neutral-150);
+  color: inherit;
+  text-decoration: none;
+}
+.digest-story-list li:last-child .digest-story-row { border-bottom: none; }
+.digest-story-row:hover .digest-story-name { color: var(--accent); }
+.digest-story-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  border-radius: var(--radius-sm);
+}
+
+.digest-story-name {
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--neutral-900);
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  transition: color var(--transition-fast);
+}
+
+.digest-story-bar {
+  display: flex;
+  height: 6px;
+  overflow: hidden;
+  background: var(--neutral-100);
+}
+.digest-story-bar > span { display: block; height: 100%; }
+
+.digest-story-count {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  color: var(--neutral-500);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.digest-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+
+.digest-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: var(--space-3) var(--space-4);
+  background: var(--bg-card);
+  border: 1px solid var(--neutral-200);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  color: inherit;
+  text-decoration: none;
+  transition: box-shadow var(--transition-fast), transform var(--transition-fast);
+}
+.digest-tile:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+.digest-tile:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.digest-tile-value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  color: var(--neutral-900);
+  letter-spacing: -0.01em;
+}
+
+.digest-tile-detail {
+  font-size: var(--text-xs);
+  color: var(--neutral-500);
+}
+
+
+/* ============================================
+   Data Desk — the numbers-forward page. Terminal density: mono-heavy
+   sortable tables, small multiples. Same tokens, tighter layout.
+   ============================================ */
+
+.desk-table-wrap {
   width: 100%;
   overflow-x: auto;
   border: 1px solid var(--neutral-150);
   border-radius: var(--radius-sm);
-  background: var(--bg-card);
 }
-.supporting-docs-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 12px;
-  line-height: 1.4;
-}
-.supporting-docs-table thead th {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--neutral-500);
-  font-weight: 600;
-  text-align: left;
-  padding: var(--space-2) var(--space-3);
-  background: var(--bg-inset);
-  border-bottom: 1px solid var(--neutral-200);
-  white-space: nowrap;
-}
-.supporting-docs-table tbody td {
-  padding: var(--space-2) var(--space-3);
-  border-bottom: 1px solid var(--neutral-100);
-  vertical-align: top;
-}
-.supporting-docs-table tbody tr:last-child td { border-bottom: none; }
-.supporting-docs-table tbody tr:hover { background: var(--bg-inset); }
 
-.supporting-docs-headline {
-  font-weight: 500;
-  color: var(--neutral-900);
-  min-width: 220px;
-  max-width: 420px;
-  word-wrap: break-word;
-  overflow-wrap: break-word;
+/* Snapshot-freshness table is ~21 rows; cap its height and scroll internally
+   so it doesn't tower over its row-mate (data-desk 2×2 reflow 2026-07-11). */
+.desk-table-scroll {
+  max-height: 320px;
+  overflow-y: auto;
 }
-.supporting-docs-source {
-  color: var(--neutral-700);
+
+.desk-matrix { font-size: var(--text-xs); }
+
+.desk-search {
+  max-width: 320px;
+  margin-bottom: var(--space-3);
+}
+
+
+/* Freshness strip — age mix of scored posts, inside the Tone page's
+   how-this-works collapsible. Darker = fresher. */
+.freshness-strip { margin-top: var(--space-3); }
+
+.freshness-strip-bar {
+  display: flex;
+  height: 8px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--neutral-100);
+}
+.freshness-strip-bar > span { display: block; height: 100%; }
+
+.freshness-strip-legend { margin-top: var(--space-1); }
+
+.desk-matrix-group {
   font-family: var(--font-mono);
   font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--neutral-500);
   white-space: nowrap;
 }
-.supporting-docs-when {
+
+.desk-sort-btn {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  white-space: nowrap;
+}
+.desk-sort-btn:hover { color: var(--accent); }
+.desk-sort-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.desk-multiples {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--space-4);
+}
+
+.desk-multiple {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.desk-multiple-label {
   font-family: var(--font-mono);
   font-size: 11px;
-  font-variant-numeric: tabular-nums;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--neutral-500);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.supporting-docs-tone { white-space: nowrap; }
-.supporting-docs-reasoning {
-  color: var(--neutral-700);
-  min-width: 240px;
-  max-width: 460px;
-  word-wrap: break-word;
-  overflow-wrap: break-word;
-}
-.supporting-docs-link a {
-  color: var(--accent);
-  text-decoration: none;
-  font-size: 14px;
-  padding: 0 var(--space-1);
-}
-.supporting-docs-link a:hover { color: var(--accent-hover); }
 
 
 /* ============================================
@@ -3431,7 +4410,7 @@ code, pre {
 }
 
 .topic-tab-count {
-  font-size: 10px;
+  font-size: 11px;
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   color: var(--neutral-500);

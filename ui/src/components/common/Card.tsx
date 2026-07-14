@@ -2,7 +2,8 @@ import React, { ReactNode } from 'react';
 
 interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
     title?: string;
-    subtitle?: string;
+    /** Plain string or a node (e.g. a DefinitionChip inside the deck). */
+    subtitle?: ReactNode;
     children: ReactNode;
     note?: string;
     className?: string;

@@ -83,7 +83,7 @@ That produces two failure modes:
   `analyze` + `snapshots` pipeline rebuilds the cache past 2026-05-23
   (30 days after the sanitizer landed) — this filter becomes a
   no-op and should be removed along with the `isNoiseLabel()` helper.
-  To accelerate: run `./run.ps1 analyze` (or `systemctl start
+  To accelerate: run `./run.sh analyze` (or `systemctl start
   civic-lens-analyze`) against a DB whose narratives/indicators
   frequency-maps have dropped below the noise threshold, then delete
   the filter in the same PR.

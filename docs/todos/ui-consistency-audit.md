@@ -35,11 +35,13 @@ Generated from the 2026-04-23 mobile-first UI audit. The P0 items and the most v
       received-tone tables (byTopic / bySpeakerTier / byNarrative,
       ~467-548): same Topic/Net/n shape and low-sample branch; only the
       header + key differ.
-- [ ] **Confidence chip** — the "NN% confidence" chip is rendered ad hoc in
-      SupportingDocsTable and Propaganda's ExampleRow; `ConfidenceBadge`
-      doesn't cover the raw-% case. One shared chip.
-- [ ] **Propaganda `ExampleRow`** — refactor onto the shared source-label /
-      link / confidence-chip primitives once the chip exists.
+- [x] **Confidence chip** — DONE 2026-07-10 via PostCard: SupportingDocsTable
+      and Propaganda's ExampleRow were both replaced by
+      `components/common/PostCard.tsx`, which renders the raw-% confidence in
+      one place (`.post-card-confidence` / technique badges).
+- [x] **Propaganda `ExampleRow`** — DONE 2026-07-10: deleted; propaganda
+      examples render through the shared PostCard adapters
+      (`propagandaExampleToPostCard`).
 
 ## Accessibility follow-ups
 
