@@ -202,9 +202,12 @@ def build_supporting_docs(
         out.append({
             "doc_id": r.doc_id,
             "title": r.title or None,
-            # Social posts (X, Reddit) have no headline; give the UI a text
-            # snippet to show in the Headline column instead of "(untitled)".
-            "snippet": text_snippet(r.text) if not r.title else None,
+            # A one-line body preview for every doc. Social posts (X, Reddit)
+            # have no headline, so the UI shows this in place of the title;
+            # news posts show it as the dek UNDER the headline (PostCard leads
+            # with the title, then the body). Previously nulled for news, which
+            # left news drill-down cards as a bare headline with no context.
+            "snippet": text_snippet(r.text),
             "source_type": r.source_type or "unknown",
             "source_label": build_source_label(
                 r.source_type, r.domain_or_subreddit, r.x_handle,

@@ -5,8 +5,9 @@ import {
 import { dedupeById } from '../../services/dedupe';
 import { formatPct } from '../../services/format';
 import { useDeepLinkParam } from '../../services/deepLink';
+import { COLORS } from '../../theme';
 import type {
-    PropagandaExample, PropagandaTechniqueCount, PropagandaTechniqueName,
+    PartyPropaganda, PropagandaExample, PropagandaTechniqueCount, PropagandaTechniqueName,
 } from '../../types';
 
 // --------------------------------------------------------------------------- //
@@ -40,13 +41,84 @@ const TECHNIQUE_BLURB: Record<PropagandaTechniqueName, string> = {
 interface TechniqueExplorerProps {
     techniques: PropagandaTechniqueCount[];
     examples: PropagandaExample[];
+    /** Per-party flagged-rate rollup, rendered as a "By party" section under
+     *  the technique bars. An overall any-technique rate — not a breakdown of
+     *  the technique bars above it. */
+    parties?: PartyPropaganda[];
 }
 
 function isTechniqueName(value: string): value is PropagandaTechniqueName {
     return value in TECHNIQUE_LABEL;
 }
 
-export function TechniqueExplorer({ techniques, examples }: TechniqueExplorerProps) {
+// Party -> lean accent (a legitimate data legend; the bar is labeled with the
+// party, so it keeps the partisan hue while chrome stays monochrome).
+const PARTY_ACCENT: Record<string, string> = {
+    R: COLORS.leanRight,
+    D: COLORS.leanLeft,
+};
+
+// Below this many scored posts, a party's pooled rate can swing on one or
+// two posts — the section shows a visible low-sample caveat for that party
+// instead of implying a stable rate.
+const LOW_SAMPLE_DOCS = 30;
+
+/** "By party" bars — the share of each party's tracked officials' scored
+ *  posts flagged for any technique. An overall rate, not a breakdown of the
+ *  technique bars above. Bars are on an absolute 0-100% scale so a small gap
+ *  between parties reads as small. */
+function ByPartySection({ parties }: { parties: PartyPropaganda[] }) {
+    if (parties.length === 0) return null;
+    const lowSample = parties.filter((p) => p.total_docs < LOW_SAMPLE_DOCS);
+    return (
+        <div className="technique-by-party">
+            <div
+                className="eyebrow technique-by-party-title"
+                title="A density measure, not intent; only the officials we track."
+            >
+                By party · tracked officials
+            </div>
+            <p className="text-xs text-muted" style={{ margin: '0 0 var(--space-2)' }}>
+                Share of each party's officials' scored posts flagged for any technique —
+                an overall rate, not a breakdown of the techniques above.
+            </p>
+            <div className="party-bars">
+                {parties.map((p) => {
+                    const accent = PARTY_ACCENT[p.party] ?? 'var(--neutral-500)';
+                    const officials = `${p.official_count} official${p.official_count === 1 ? '' : 's'}`;
+                    return (
+                        <div
+                            key={p.party}
+                            className="party-bar-row"
+                            title={`Mean propaganda score ${p.mean_score.toFixed(2)} / 1 across ${officials}`}
+                        >
+                            <span className="party-bar-label">{p.party_label}</span>
+                            <span className="party-bar-track" aria-hidden>
+                                <span
+                                    className="party-bar-fill"
+                                    style={{ width: `${p.flagged_rate_pct}%`, background: accent }}
+                                />
+                            </span>
+                            <span className="party-bar-value">{formatPct(p.flagged_rate_pct)}</span>
+                            <span className="party-bar-meta">
+                                {p.flagged_docs.toLocaleString()} of {p.total_docs.toLocaleString()} posts · {officials}
+                            </span>
+                        </div>
+                    );
+                })}
+            </div>
+            {lowSample.length > 0 && (
+                <p className="text-xs text-muted" style={{ margin: 'var(--space-2) 0 0' }}>
+                    Low sample: {lowSample.map((p) =>
+                        `${p.party_label} has only ${p.total_docs.toLocaleString()} scored posts`,
+                    ).join('; ')} — one or two posts can move the rate.
+                </p>
+            )}
+        </div>
+    );
+}
+
+export function TechniqueExplorer({ techniques, examples, parties = [] }: TechniqueExplorerProps) {
     const [techParam, setTechParam] = useDeepLinkParam('technique');
     // The opened technique (modal). Null = no modal. A deep link opens it on
     // load; otherwise it stays closed until the reader clicks a bar.
@@ -90,7 +162,7 @@ export function TechniqueExplorer({ techniques, examples }: TechniqueExplorerPro
     return (
         <Card
             title="Techniques being used"
-            subtitle="Each bar is a rhetorical technique, sized by how many flagged posts carry it. Hover a bar for what it means; click to read the flagged posts carrying it. One post can count toward multiple techniques."
+            subtitle="Each bar is a rhetorical technique, sized by how many flagged posts carry it. Hover a bar for what it means; click to read the flagged posts carrying it. Below, the share of each party's tracked officials' posts flagged for any technique."
             headerActions={
                 <MethodPopover
                     description={
@@ -135,6 +207,8 @@ export function TechniqueExplorer({ techniques, examples }: TechniqueExplorerPro
                     );
                 })}
             </div>
+
+            <ByPartySection parties={parties} />
 
             <Modal
                 isOpen={selected !== null}

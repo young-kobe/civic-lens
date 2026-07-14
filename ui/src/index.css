@@ -1435,6 +1435,155 @@ code, pre {
   background: var(--semantic-negative);
 }
 
+/* By-party propaganda rollup (Phase 4) — one labeled bar per party. The bar
+   color is the partisan lean hue (a legitimate data legend; chrome stays
+   monochrome). Angular, like every bar. */
+/* Divergence-from-the-public bars — News / Dem officials / GOP officials, each
+   diverging from a center zero (the public baseline). Angular; group-colored
+   data marks. Fills the space beside Source signals on the Tone page. */
+.tone-divergence {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.tone-divergence-row {
+  display: grid;
+  grid-template-columns: 104px minmax(0, 1fr) 52px;
+  align-items: center;
+  gap: var(--space-3);
+}
+.tone-divergence-label {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--neutral-800);
+}
+.tone-divergence-track {
+  position: relative;
+  height: 12px;
+  background: var(--neutral-100);
+  overflow: hidden;
+}
+.tone-divergence-zero {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--neutral-400);
+  z-index: 1;
+}
+.tone-divergence-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  min-width: 2px;
+}
+.tone-divergence-value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--neutral-800);
+  text-align: right;
+}
+
+/* Clickable Source-signals rows → the narrative drill-down modal. */
+.outlet-signal-row { cursor: pointer; transition: background var(--transition-fast); }
+.outlet-signal-row:hover { background: var(--bg-inset); }
+
+/* "Stories driving this tone" list in the Source-signals modal. */
+.outlet-stories {
+  margin-bottom: var(--space-4);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--neutral-150);
+}
+.outlet-stories-list {
+  list-style: none;
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.outlet-stories-list li {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--neutral-800);
+}
+.outlet-story-count {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: var(--neutral-500);
+  min-width: 20px;
+  text-align: right;
+}
+
+/* "By party" section folded under the technique bars in the same card. */
+.technique-by-party {
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--neutral-150);
+}
+.technique-by-party-title {
+  display: block;
+  margin-bottom: var(--space-2);
+  cursor: help;
+}
+
+.party-bars {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.party-bar-row {
+  display: grid;
+  grid-template-columns: 116px minmax(0, 1fr) 60px auto;
+  align-items: center;
+  gap: var(--space-3);
+}
+.party-bar-label {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--neutral-800);
+}
+.party-bar-track {
+  height: 12px;
+  background: var(--neutral-100);
+  overflow: hidden;
+}
+.party-bar-fill {
+  display: block;
+  height: 100%;
+  min-width: 3px;
+}
+.party-bar-value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  text-align: right;
+  color: var(--neutral-800);
+}
+.party-bar-meta {
+  font-size: var(--text-xs);
+  color: var(--neutral-500);
+  white-space: nowrap;
+}
+@media (max-width: 560px) {
+  .party-bar-row {
+    grid-template-columns: 1fr auto;
+    grid-template-areas: "label value" "track track" "meta meta";
+    row-gap: var(--space-1);
+  }
+  .party-bar-label { grid-area: label; }
+  .party-bar-value { grid-area: value; }
+  .party-bar-track { grid-area: track; }
+  .party-bar-meta  { grid-area: meta; }
+}
+
 /* Small outbound "View original" link — used by modal footers and the
    Review page. The old example-row block it belonged to was replaced by
    PostCard; the link treatment survives as a standalone utility. */
@@ -1813,34 +1962,6 @@ code, pre {
   color: var(--neutral-500);
   font-style: italic;
 }
-
-/* Propaganda "As of last N days" variant — stacked and roomy so each metric
-   reads on its own: label + value(%) on top (value right-aligned), the
-   magnitude bar stretched full width beneath, and the explanation wrapped
-   below that. Rows are generously spaced. Endpoints hide (they'd collide with
-   the wrapped verb under the bar). */
-.top-metrics-rows.propaganda-tier-rows { gap: var(--space-2); }
-.propaganda-tier-rows .tier-row {
-  grid-template-columns: 1fr auto;
-  grid-template-areas:
-    "label value"
-    "axis  axis"
-    "verb  verb";
-  align-items: baseline;
-  row-gap: var(--space-2);
-  padding: var(--space-3) 0;
-}
-.top-metrics-rows.propaganda-tier-rows > .tier-row + .tier-row { padding-top: var(--space-3); }
-.propaganda-tier-rows .tier-row-label { grid-area: label; }
-.propaganda-tier-rows .tier-row-value { grid-area: value; text-align: right; width: auto; }
-.propaganda-tier-rows .tier-row-axis { grid-area: axis; margin: 2px 0; }
-.propaganda-tier-rows .tier-row-verb {
-  grid-area: verb;
-  font-size: var(--text-xs);
-  line-height: var(--leading-normal);
-  font-style: normal;
-}
-.propaganda-tier-rows .tier-row-endpoint { display: none; }
 
 /* Aux row — GOP mini + Tone intensity mini side-by-side. */
 .top-metrics-aux {
@@ -2403,14 +2524,17 @@ code, pre {
   white-space: nowrap;
 }
 
-/* Past the card cap the column body scrolls internally instead of growing
-   the page — bounds a long tier to ~10 cards tall, keeping the three-column
-   geometry stable regardless of how many rows a tier carries. */
+/* Every column's card body is a bounded, flex-filling scroll region: it grows
+   to fill the column (so all three tiers, stretched to equal height, align at
+   the bottom instead of a short tier stranding dead space) and caps at a shared
+   max-height, scrolling internally past it so a long tier can't grow the page. */
 .three-way-column-scroll {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  max-height: min(78vh, 900px);
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: min(72vh, 760px);
   overflow-y: auto;
 }
 
@@ -2702,7 +2826,7 @@ code, pre {
   display: grid;
   grid-template-columns: 22px 32px minmax(0, 1fr) 108px;
   gap: var(--space-2);
-  align-items: center;
+  align-items: start;
   width: 100%;
   padding: var(--space-2);
   background: none;
@@ -2732,11 +2856,36 @@ span.ranked-entity-row { cursor: default; }
   text-align: right;
 }
 
+/* Name column: name + chip on top, optional explanatory description beneath. */
+.ranked-entity-main {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
 .ranked-entity-name-wrap {
   display: flex;
   align-items: center;
   gap: 6px;
   min-width: 0;
+}
+
+/* Under-name explanation (who they are / why they rank). */
+.ranked-entity-desc {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.ranked-entity-blurb {
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
+  color: var(--neutral-500);
+}
+.ranked-entity-why {
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
+  color: var(--neutral-600);
+  font-variant-numeric: tabular-nums;
 }
 
 .ranked-entity-name {

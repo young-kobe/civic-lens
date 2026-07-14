@@ -51,6 +51,7 @@ from analysis.src.reporting.aggregators.sentiment.samples import (
     _LABEL_MAP,
     _attach_sample_targets,
     _build_doc_targets,
+    _collect_day_sample,
     _collect_strength_sample,
     _collect_topic_sample,
     _increment_bucket,
@@ -228,10 +229,14 @@ class SentimentAggregator:
             "social": {"positive": 0, "negative": 0, "neutral": 0, "mixed": 0},
             "news": {"positive": 0, "negative": 0, "neutral": 0, "mixed": 0},
             "by_platform": {}, "by_topic": {}, "by_time": {}, "by_dow": {},
+            "day_samples": {},
             "topic_samples": {},
             "strength_samples": {b: [] for b in STRENGTH_BUCKETS},
             # Three-way entity rollups + per-topic tier split (walkthrough 057).
             "by_news_outlet": {}, "by_official": {}, "by_general_public": {},
+            # Per-tier stance counts (news/officials/public) for the balanced
+            # headline net, so a high-volume tier can't skew "overall tone".
+            "by_tier": {},
             "by_topic_tier": {},
             # Per-day per-tier stance counts → the toneTrend daily series.
             "by_day_tier": {},
@@ -302,6 +307,13 @@ class SentimentAggregator:
                     "account_type": r.ap_account_type,
                 }
             day = _day_key(r.published_at)
+            if day is not None:
+                _collect_day_sample(
+                    accum["day_samples"], day, r.doc_id, label, conf,
+                    data, r.title, r.source_type, r.published_at,
+                    r.domain_or_subreddit, r.ident, r.text, r.x_handle,
+                    topic=topic, engagement=engagement, author=author,
+                )
             tier = _route_and_record(
                 accum, registry, r.source_type, r.domain_or_subreddit, r.x_handle,
                 r.doc_id, label, conf, data, r.title, r.published_at, r.ident, r.text,
@@ -313,6 +325,7 @@ class SentimentAggregator:
                 day=day,
             )
             if tier is not None:
+                _increment_bucket(accum["by_tier"], tier, label_key)
                 _increment_bucket(accum["by_topic_tier"], f"{topic}\x00{tier}", label_key)
                 if day is not None:
                     _increment_bucket(accum["by_day_tier"], f"{day}\x00{tier}", label_key)
@@ -325,10 +338,16 @@ class SentimentAggregator:
 
     def _build_result(self, accum: Dict[str, Any]) -> PublicSentimentResult:
         """Assemble PublicSentimentResult from the aggregation accumulator."""
+        # Headline net tone weights each speaker tier (news/officials/public)
+        # EQUALLY (mean of the per-tier nets) so a high-volume tier (e.g. ~900
+        # news posts vs ~100 public) can't skew "overall tone" toward whichever
+        # group we happened to sample most. Falls back to the pooled net when no
+        # tier has data.
         total_pos = accum["strong_pos"] + accum["mild_pos"]
         total_neg = accum["strong_neg"] + accum["mild_neg"]
         total = total_pos + total_neg + accum["neutral"] + accum["mixed"]
-        net_score = ((total_pos - total_neg) / total * 100) if total > 0 else 0
+        pooled_net = ((total_pos - total_neg) / total * 100) if total > 0 else 0
+        net_score = _balanced_net(accum["by_tier"], pooled_net)
 
         social = accum["social"]
         news = accum["news"]
@@ -355,6 +374,7 @@ class SentimentAggregator:
             byTimeWindow=_format_time_window(accum["by_time"]),
             byDayOfWeek=_format_day_of_week(accum["by_dow"]),
             distributionSamples=_format_distribution_samples(accum["strength_samples"]),
+            daySamples=_format_day_samples(accum["day_samples"]),
             byNewsOutlet=_format_entity_items(accum["by_news_outlet"]),
             byOfficial=_format_entity_items(accum["by_official"]),
             byGeneralPublic=_format_entity_items(accum["by_general_public"]),
@@ -576,6 +596,18 @@ _TONE_TREND_TIERS = ("news", "officials", "public")
 _TONE_TREND_MAX_DAYS = 30
 
 
+def _balanced_net(by_tier: Dict[str, Dict[str, int]], fallback: float) -> float:
+    """Mean of the per-tier nets (news/officials/public) so a high-volume tier
+    can't skew the headline "overall tone". Tiers with no posts drop out of the
+    mean; returns ``fallback`` (the pooled net) when no tier has any posts."""
+    nets = []
+    for tier in _TONE_TREND_TIERS:
+        net, _volume = _net_from_tier(by_tier.get(tier))
+        if net is not None:
+            nets.append(net)
+    return (sum(nets) / len(nets)) if nets else fallback
+
+
 def _format_tone_trend(
     by_day_tier: Dict[str, Dict[str, int]],
 ) -> List[Dict[str, Any]]:
@@ -699,5 +731,17 @@ def _format_distribution_samples(
     return {
         bucket: [_sample_dict_to_model(s) for s in raw_samples]
         for bucket, raw_samples in strength_samples.items()
+        if raw_samples
+    }
+
+
+def _format_day_samples(
+    day_samples: Dict[str, List[Dict[str, Any]]],
+) -> Dict[str, List[ClassificationSample]]:
+    """Calendar day (YYYY-MM-DD) -> sampled posts, for the Tone-over-time
+    line-chart point drill-down. Empty days are dropped."""
+    return {
+        day: [_sample_dict_to_model(s) for s in raw_samples]
+        for day, raw_samples in day_samples.items()
         if raw_samples
     }

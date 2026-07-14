@@ -41,6 +41,10 @@ export interface PublicSentimentData {
     // SentimentDistribution. Each list is confidence-sorted desc and capped
     // server-side (~15 per bucket). Absent on older snapshots.
     distributionSamples?: Partial<Record<SentimentSegmentKey, ClassificationSample[]>>;
+    // Per-calendar-day (YYYY-MM-DD) drill-down samples, keyed by the toneTrend
+    // point dates — clicking a point on the Tone-over-time chart opens that
+    // day's posts. Absent on older snapshots.
+    daySamples?: Record<string, ClassificationSample[]>;
     socialVsNews?: SocialVsNewsSentiment | null;
     // Three-way entity rollups (walkthrough 057/058). Lists the dashboard
     // renders as the News Outlets / Verified Officials / General Public
@@ -310,6 +314,10 @@ export interface ClassificationSample {
     /** Who this post's sentiment is directed at (frozen target_mentions):
      *  resolved targets first, capped small. Absent on older snapshots. */
     targets?: SampleTarget[] | null;
+    /** Recurring narrative (story) this post belongs to, when clustered — used
+     *  by the Source-signals drill-down to tie tone to the driving stories.
+     *  Null when unclustered; absent on older snapshots. */
+    narrative?: string | null;
 }
 
 /** One "about X — negative" chip on a sampled post. */
@@ -389,6 +397,9 @@ export interface OutletProfileItem {
     bot_rate_pct: number;
     volume: number;
     total_scanned: number;
+    /** Narrative-tagged sample posts driving this source's net tone, for the
+     *  drill-down modal. Absent on older snapshots. */
+    samples?: ClassificationSample[];
 }
 
 export interface OutletProfilesResult {
@@ -582,8 +593,9 @@ export interface NarrativeTimelinePoint {
 export interface SupportingDoc {
     doc_id: number;
     title: string | null;
-    // Text preview shown in the Headline column when `title` is null (social
-    // posts have no headline). Falls back to "(untitled)" when both are empty.
+    // One-line body preview. For social posts (no headline) it shows in place
+    // of the title; for news it's the dek rendered under the headline. Falls
+    // back to "(untitled)" when both are empty.
     snippet?: string | null;
     source_type: string;
     source_label: string;   // "News · nytimes.com", "X · @Schumer", "Reddit · r/politics"
@@ -702,6 +714,24 @@ export interface PropagandaExample {
     author_handle?: string | null;
     // External source URL — news story, X permalink, or Reddit post link.
     url?: string | null;
+    // Party of the author when a tracked official ('R' | 'D' | ...); null for
+    // news, unaffiliated public posts, and untracked handles.
+    party?: string | null;
+}
+
+/**
+ * Per-party propaganda rollup — the tracked officials' flagged rate and mean
+ * score grouped by party, so the page can show which partisan side leaned
+ * harder on persuasion techniques. Party-less officials are excluded.
+ */
+export interface PartyPropaganda {
+    party: string;              // 'R' | 'D' | 'I' | 'L' | 'G'
+    party_label: string;        // 'Republican' | 'Democratic' | ...
+    total_docs: number;
+    flagged_docs: number;
+    flagged_rate_pct: number;
+    mean_score: number;
+    official_count: number;
 }
 
 /**
@@ -733,6 +763,9 @@ export interface PropagandaOverview {
     by_news_outlet?: PropagandaEntityItem[];
     by_official?: PropagandaEntityItem[];
     by_general_public?: PropagandaEntityItem[];
+    // Phase 4 — per-party rollup over tracked officials. Sorted by flagged rate
+    // desc; empty on older snapshots or when no party-tagged officials appear.
+    by_party?: PartyPropaganda[];
     // Per-entity flagged-example bucket. Keyed by the same key used in
     // PropagandaEntityItem.key (outlet domain, official handle, subreddit
     // name, or catch-all sentinel). The drill-down modal reads from this

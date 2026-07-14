@@ -246,7 +246,7 @@ export function PostCard({ post }: { post: PostCardData }) {
                         aria-label="Open the original post in a new tab"
                         title="Open the original in a new tab"
                     >
-                        View original ↗
+                        View original
                     </a>
                 )}
             </header>
