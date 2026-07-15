@@ -48,7 +48,12 @@ class Settings(BaseSettings):
     gemini_model: str = "gemini-3.5-flash"
     gemini_temperature: float = 0.0
     llm_enabled: bool = True  # LLM is primary classifier; heuristics are supplemental
-    
+    # Max concurrent LLM calls per analysis stage. The stages are network-bound
+    # (~10s/call), so a bounded thread pool cuts wall-clock roughly linearly.
+    # DB writes stay serial regardless — see job_runner._map_llm_concurrent.
+    # Keep at/under the backend's rate limit (Gemini AFC caps remote calls ~10).
+    llm_concurrency: int = 5
+
     # LLM Backend Selection: "gemini", "ollama", or "openai_compat"
     llm_backend: str = "ollama"
 
