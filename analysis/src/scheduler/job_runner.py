@@ -20,6 +20,7 @@ import os
 import time
 import argparse
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List
@@ -349,6 +350,42 @@ class AnalysisJobRunner:
             enriched["user_created_at"] = user_created
         return enriched, None
     
+    def _map_llm_concurrent(self, items, call):
+        """Run ``call(item)`` for every item with bounded concurrency, returning
+        ``[(item, result, error), ...]`` in the SAME order as ``items``.
+
+        The LLM calls are network-bound and independent, so they run in a
+        thread pool sized by ``CIVIC_LLM_CONCURRENCY`` (the engines are pure
+        per-call and share one thread-safe client). The caller MUST write
+        results serially on the main thread: concurrent DB writes would
+        reintroduce the SQLite lock contention fixed 2026-07-15. A call that
+        raises is captured as ``error`` (result None) so one failure never
+        aborts the batch; the caller re-queues it via ``mark_task_failed``.
+        """
+        items = list(items)
+        workers = max(1, self.settings.llm_concurrency)
+        if workers == 1 or len(items) <= 1:
+            # Serial path: identical behavior with no thread overhead when
+            # concurrency is disabled or there's nothing to parallelize.
+            out = []
+            for it in items:
+                try:
+                    out.append((it, call(it), None))
+                except Exception as exc:  # noqa: BLE001 - captured per-item
+                    out.append((it, None, exc))
+            return out
+
+        results: List = [None] * len(items)
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            future_to_idx = {pool.submit(call, it): idx for idx, it in enumerate(items)}
+            for fut in as_completed(future_to_idx):
+                idx = future_to_idx[fut]
+                try:
+                    results[idx] = (items[idx], fut.result(), None)
+                except Exception as exc:  # noqa: BLE001 - captured per-item
+                    results[idx] = (items[idx], None, exc)
+        return results
+
     def run_text_analysis(self, limit: int | None = None) -> int:
         """Run combined sentiment and favorability analysis on unprocessed docs. Returns count processed."""
         logger.info(f"Step 3/11: Running text analysis (sentiment + favorability) (scope: {self.settings.run_analysis_on})...")
@@ -365,46 +402,74 @@ class AnalysisJobRunner:
         
         total = len(docs)
         logger.info(f"Processing {total} docs for unified text analysis")
-        
-        for i, doc in enumerate(docs, 1):
-            sent_result, fav_result = self.analyzer.analyze_full(doc['text'])
 
-            # Save Sentiment
-            self.loader.save_ai_output(
-                doc['doc_id'],
-                "sentiment",
-                sent_result.to_dict(),
-                sent_result.confidence,
-                model_id=self.model_id,
-                prompt_version=TEXT_ANALYSIS_PROMPT_VERSION,
-                system_prompt=TEXT_ANALYSIS_SYSTEM_PROMPT,
-                user_prompt_template=TEXT_ANALYSIS_USER_PROMPT_TEMPLATE,
-                inference_method=sent_result.inference_method,
-                label=sent_result.label,
-            )
+        # LLM calls run concurrently (network-bound); writes stay serial on the
+        # main thread to preserve the SQLite single-writer discipline.
+        failed = 0
+        llm_results = self._map_llm_concurrent(docs, lambda d: self.analyzer.analyze_full(d['text']))
+        for i, (doc, res, err) in enumerate(llm_results, 1):
+            # Per-doc isolation: an LLM error OR a write failure (e.g. SQLite
+            # "database is locked" under Litestream/crawler contention) marks
+            # the doc failed so it re-queues next run instead of aborting the
+            # batch (audit A-3). save_ai_output writes output + 'done' state in
+            # one transaction, so a failure rolls both back cleanly.
+            if err is not None:
+                failed += 1
+                self.loader.mark_task_failed(doc['doc_id'], "sentiment", TEXT_ANALYSIS_PROMPT_VERSION)
+                self.loader.mark_task_failed(doc['doc_id'], "favorability", TEXT_ANALYSIS_PROMPT_VERSION)
+                logger.warning(
+                    f"[text-analysis {i}/{total}] doc={doc['doc_id']} ANALYZE FAILED "
+                    f"({type(err).__name__}: {err}) — marked for re-queue"
+                )
+                continue
 
-            # Save Favorability
-            self.loader.save_ai_output(
-                doc['doc_id'],
-                "favorability",
-                fav_result.to_dict(),
-                fav_result.overall_confidence,
-                model_id=self.model_id,
-                prompt_version=TEXT_ANALYSIS_PROMPT_VERSION,
-                system_prompt=TEXT_ANALYSIS_SYSTEM_PROMPT,
-                user_prompt_template=TEXT_ANALYSIS_USER_PROMPT_TEMPLATE,
-                inference_method=fav_result.inference_method,
-                label=fav_result.overall_gop_stance,
-            )
-            
+            sent_result, fav_result = res
+            try:
+                # Save Sentiment
+                self.loader.save_ai_output(
+                    doc['doc_id'],
+                    "sentiment",
+                    sent_result.to_dict(),
+                    sent_result.confidence,
+                    model_id=self.model_id,
+                    prompt_version=TEXT_ANALYSIS_PROMPT_VERSION,
+                    system_prompt=TEXT_ANALYSIS_SYSTEM_PROMPT,
+                    user_prompt_template=TEXT_ANALYSIS_USER_PROMPT_TEMPLATE,
+                    inference_method=sent_result.inference_method,
+                    label=sent_result.label,
+                )
+
+                # Save Favorability
+                self.loader.save_ai_output(
+                    doc['doc_id'],
+                    "favorability",
+                    fav_result.to_dict(),
+                    fav_result.overall_confidence,
+                    model_id=self.model_id,
+                    prompt_version=TEXT_ANALYSIS_PROMPT_VERSION,
+                    system_prompt=TEXT_ANALYSIS_SYSTEM_PROMPT,
+                    user_prompt_template=TEXT_ANALYSIS_USER_PROMPT_TEMPLATE,
+                    inference_method=fav_result.inference_method,
+                    label=fav_result.overall_gop_stance,
+                )
+            except Exception as exc:
+                failed += 1
+                self.loader.mark_task_failed(doc['doc_id'], "sentiment", TEXT_ANALYSIS_PROMPT_VERSION)
+                self.loader.mark_task_failed(doc['doc_id'], "favorability", TEXT_ANALYSIS_PROMPT_VERSION)
+                logger.warning(
+                    f"[text-analysis {i}/{total}] doc={doc['doc_id']} SAVE FAILED "
+                    f"({type(exc).__name__}: {exc}) — marked for re-queue"
+                )
+                continue
+
             logger.debug(
                 f"[text-analysis {i}/{total}] doc={doc['doc_id']} type={doc.get('source_type', 'unknown')} "
                 f"sent={sent_result.label}({sent_result.confidence:.2f}) "
                 f"fav={fav_result.overall_gop_stance}({fav_result.overall_confidence:.2f})"
             )
-        
-        logger.info(f"Text analysis complete: {total} docs processed")
-        return total
+
+        logger.info(f"Text analysis complete: {total - failed}/{total} docs processed ({failed} re-queued)")
+        return total - failed
 
     def run_target_extraction(self, limit: int | None = None) -> int:
         """Extract per-target stances (task_type ``target_sentiment``) from
@@ -445,18 +510,20 @@ class AnalysisJobRunner:
 
         logger.info(f"Processing {total} docs for target-sentiment extraction")
         skipped = 0
-        for i, doc in enumerate(docs, 1):
-            result = self.target_extractor.extract(doc["text"])
-            if result.extraction_failed:
-                # Transport failure — mark failed so the doc re-queues next
+        # LLM extraction runs concurrently; writes stay serial below.
+        llm_results = self._map_llm_concurrent(docs, lambda d: self.target_extractor.extract(d["text"]))
+        for i, (doc, result, err) in enumerate(llm_results, 1):
+            if err is not None or result.extraction_failed:
+                # Transport/LLM failure — mark failed so the doc re-queues next
                 # run instead of freezing as "no targets" (audit A-3), with
                 # the attempt visible in doc_task_state.
                 self.loader.mark_task_failed(
                     doc["doc_id"], "target_sentiment", TARGET_SENTIMENT_PROMPT_VERSION
                 )
                 skipped += 1
+                reason = f"{type(err).__name__}: {err}" if err is not None else "extraction failed"
                 logger.warning(
-                    f"[targets {i}/{total}] doc={doc['doc_id']} extraction FAILED — "
+                    f"[targets {i}/{total}] doc={doc['doc_id']} FAILED ({reason}) — "
                     "skipping (will re-queue)"
                 )
                 continue
@@ -464,24 +531,38 @@ class AnalysisJobRunner:
             # pattern); aggregation filters per-target, not on this mean.
             confidences = [t.confidence for t in result.targets]
             row_confidence = sum(confidences) / len(confidences) if confidences else 0.0
-            output_id = self.loader.save_ai_output(
-                doc["doc_id"],
-                "target_sentiment",
-                result.to_dict(),
-                row_confidence,
-                model_id=self.model_id,
-                prompt_version=TARGET_SENTIMENT_PROMPT_VERSION,
-                system_prompt=TARGET_SENTIMENT_SYSTEM_PROMPT,
-                user_prompt_template=TARGET_SENTIMENT_USER_PROMPT_TEMPLATE,
-                inference_method="llm",
-            )
-            self.loader.save_target_mentions(
-                output_id,
-                doc["doc_id"],
-                self.loader.build_target_mentions(
-                    [t.to_dict() for t in result.targets], resolver.resolve,
-                ),
-            )
+            # Per-doc isolation: a write failure (e.g. "database is locked"
+            # under Litestream/crawler contention) must re-queue the doc, not
+            # abort the batch (audit A-3).
+            try:
+                output_id = self.loader.save_ai_output(
+                    doc["doc_id"],
+                    "target_sentiment",
+                    result.to_dict(),
+                    row_confidence,
+                    model_id=self.model_id,
+                    prompt_version=TARGET_SENTIMENT_PROMPT_VERSION,
+                    system_prompt=TARGET_SENTIMENT_SYSTEM_PROMPT,
+                    user_prompt_template=TARGET_SENTIMENT_USER_PROMPT_TEMPLATE,
+                    inference_method="llm",
+                )
+                self.loader.save_target_mentions(
+                    output_id,
+                    doc["doc_id"],
+                    self.loader.build_target_mentions(
+                        [t.to_dict() for t in result.targets], resolver.resolve,
+                    ),
+                )
+            except Exception as exc:
+                self.loader.mark_task_failed(
+                    doc["doc_id"], "target_sentiment", TARGET_SENTIMENT_PROMPT_VERSION
+                )
+                skipped += 1
+                logger.warning(
+                    f"[targets {i}/{total}] doc={doc['doc_id']} SAVE FAILED "
+                    f"({type(exc).__name__}: {exc}) — marked for re-queue"
+                )
+                continue
             logger.debug(
                 f"[targets {i}/{total}] doc={doc['doc_id']} extracted={len(result.targets)} "
                 f"mean_conf={row_confidence:.2f}"
@@ -533,13 +614,16 @@ class AnalysisJobRunner:
             f"Processing {total} docs for propaganda detection "
             f"({len(groups)} unique content hashes)"
         )
-        for group in groups.values():
+        # Detect concurrently across content-hash groups (one LLM call per
+        # group); writes stay serial below.
+        llm_results = self._map_llm_concurrent(
+            list(groups.values()),
+            lambda g: self.propaganda_detector.detect(g[0]["text"], title=g[0].get("title")),
+        )
+        for group, result, err in llm_results:
             primary = group[0]
-            result = self.propaganda_detector.detect(
-                primary["text"], title=primary.get("title"),
-            )
-            if result.detection_failed:
-                # Transport failure — mark the group failed so the docs
+            if err is not None or result.detection_failed:
+                # Transport/LLM failure — mark the group failed so the docs
                 # re-queue next run rather than freezing as a permanent
                 # "no propaganda" verdict (audit A-3), with attempts visible
                 # in doc_task_state.
@@ -548,24 +632,41 @@ class AnalysisJobRunner:
                         doc["doc_id"], "propaganda", PROPAGANDA_PROMPT_VERSION
                     )
                 skipped_docs += len(group)
+                reason = f"{type(err).__name__}: {err}" if err is not None else "detection failed"
                 logger.warning(
                     f"[propaganda] hash={primary.get('raw_hash', '(none)')[:8]}… "
-                    f"detection FAILED — skipping {len(group)} doc(s) (will re-queue)"
+                    f"FAILED ({reason}) — skipping {len(group)} doc(s) (will re-queue)"
                 )
                 continue
             payload = result.to_dict()
-            for doc in group:
-                self.loader.save_ai_output(
-                    doc["doc_id"],
-                    "propaganda",
-                    payload,
-                    result.overall_propaganda_score,
-                    model_id=self.model_id,
-                    prompt_version=PROPAGANDA_PROMPT_VERSION,
-                    system_prompt=PROPAGANDA_SYSTEM_PROMPT,
-                    user_prompt_template=PROPAGANDA_USER_PROMPT_TEMPLATE,
-                    inference_method=result.inference_method,
+            # Per-group isolation: a write failure (e.g. "database is locked"
+            # under Litestream/crawler contention) re-queues the whole group
+            # rather than aborting the batch (audit A-3).
+            try:
+                for doc in group:
+                    self.loader.save_ai_output(
+                        doc["doc_id"],
+                        "propaganda",
+                        payload,
+                        result.overall_propaganda_score,
+                        model_id=self.model_id,
+                        prompt_version=PROPAGANDA_PROMPT_VERSION,
+                        system_prompt=PROPAGANDA_SYSTEM_PROMPT,
+                        user_prompt_template=PROPAGANDA_USER_PROMPT_TEMPLATE,
+                        inference_method=result.inference_method,
+                    )
+            except Exception as exc:
+                for doc in group:
+                    self.loader.mark_task_failed(
+                        doc["doc_id"], "propaganda", PROPAGANDA_PROMPT_VERSION
+                    )
+                skipped_docs += len(group)
+                logger.warning(
+                    f"[propaganda] hash={primary.get('raw_hash', '(none)')[:8]}… "
+                    f"SAVE FAILED ({type(exc).__name__}: {exc}) — "
+                    f"re-queuing {len(group)} doc(s)"
                 )
+                continue
             scored_groups += 1
             duplicates_fanned += len(group) - 1
             logger.debug(
@@ -618,19 +719,21 @@ class AnalysisJobRunner:
 
         logger.info(f"Processing {total} docs for claim extraction")
         skipped = 0
-        for i, doc in enumerate(docs, 1):
-            result = self.claim_extractor.extract(doc["text"])
-            if result.extraction_failed:
-                # Transport failure / unavailable client — mark failed so the
-                # doc re-queues next run and a transient outage never freezes
-                # as a permanent "no claims" verdict (audit A-3), with the
-                # attempt visible in doc_task_state.
+        # LLM extraction runs concurrently; writes stay serial below.
+        llm_results = self._map_llm_concurrent(docs, lambda d: self.claim_extractor.extract(d["text"]))
+        for i, (doc, result, err) in enumerate(llm_results, 1):
+            if err is not None or result.extraction_failed:
+                # Transport/LLM failure / unavailable client — mark failed so
+                # the doc re-queues next run and a transient outage never
+                # freezes as a permanent "no claims" verdict (audit A-3), with
+                # the attempt visible in doc_task_state.
                 self.loader.mark_task_failed(
                     doc["doc_id"], "claims", CLAIM_EXTRACTION_PROMPT_VERSION
                 )
                 skipped += 1
+                reason = f"{type(err).__name__}: {err}" if err is not None else "extraction failed"
                 logger.warning(
-                    f"[claims {i}/{total}] doc={doc['doc_id']} extraction FAILED — "
+                    f"[claims {i}/{total}] doc={doc['doc_id']} FAILED ({reason}) — "
                     "skipping (will re-queue)"
                 )
                 continue
@@ -642,17 +745,31 @@ class AnalysisJobRunner:
             # output_json as the source of truth.
             confidences = [c.confidence for c in result.claims]
             row_confidence = sum(confidences) / len(confidences) if confidences else 0.0
-            self.loader.save_ai_output(
-                doc["doc_id"],
-                "claims",
-                result.to_dict(),
-                row_confidence,
-                model_id=self.model_id,
-                prompt_version=CLAIM_EXTRACTION_PROMPT_VERSION,
-                system_prompt=CLAIM_EXTRACTION_SYSTEM_PROMPT,
-                user_prompt_template=CLAIM_EXTRACTION_USER_PROMPT_TEMPLATE,
-                inference_method="llm",
-            )
+            # Per-doc isolation: a write failure (e.g. "database is locked"
+            # under Litestream/crawler contention) re-queues the doc rather
+            # than aborting the batch (audit A-3).
+            try:
+                self.loader.save_ai_output(
+                    doc["doc_id"],
+                    "claims",
+                    result.to_dict(),
+                    row_confidence,
+                    model_id=self.model_id,
+                    prompt_version=CLAIM_EXTRACTION_PROMPT_VERSION,
+                    system_prompt=CLAIM_EXTRACTION_SYSTEM_PROMPT,
+                    user_prompt_template=CLAIM_EXTRACTION_USER_PROMPT_TEMPLATE,
+                    inference_method="llm",
+                )
+            except Exception as exc:
+                self.loader.mark_task_failed(
+                    doc["doc_id"], "claims", CLAIM_EXTRACTION_PROMPT_VERSION
+                )
+                skipped += 1
+                logger.warning(
+                    f"[claims {i}/{total}] doc={doc['doc_id']} SAVE FAILED "
+                    f"({type(exc).__name__}: {exc}) — marked for re-queue"
+                )
+                continue
             logger.debug(
                 f"[claims {i}/{total}] doc={doc['doc_id']} extracted={len(result.claims)} "
                 f"mean_conf={row_confidence:.2f}"

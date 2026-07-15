@@ -140,19 +140,30 @@ function toRankedEntity(
     };
 }
 
-// Sources below this many scored posts can't rank as an "offender" — a lone
-// flagged post would otherwise read as a 100% rate at the top of the board.
-const MIN_OFFENDER_VOLUME = 10;
+// A source needs at least this many FLAGGED posts to rank as an "offender" — a
+// lone flagged post would otherwise read as a 100% rate at the top of the
+// board. This is the only hard gate: a genuine small-sample offender (e.g. an
+// official with 8 scored posts) still ranks by its true rate, but carries the
+// low-sample caveat below so it isn't read as a stable rate. Previously a flat
+// 10-scored-post floor hid these entirely, which made the card contradict the
+// per-tier columns underneath it (they show sub-10 sources sorted by rate).
+const MIN_OFFENDER_FLAGGED = 2;
+
+// Below this many scored posts, a source's flagged rate can swing on one or two
+// posts, so ranking rows at/under it show a visible "low sample" caveat. Mirrors
+// the "N scored" context already shown on the detail columns.
+const LOW_SAMPLE_OFFENDER_DOCS = 10;
 
 /** The 3 highest flagged-rate sources across ALL tiers in the window (catch-all
- *  buckets + sub-floor sources excluded). */
+ *  buckets and single-flag sources excluded; low-sample sources are kept but
+ *  caveated). */
 function topFlaggedOffenders(data: PropagandaOverview): PropagandaEntityItem[] {
     return [
         ...(data.by_news_outlet ?? []),
         ...(data.by_official ?? []),
         ...(data.by_general_public ?? []),
     ]
-        .filter((it) => it.kind !== 'catch_all' && it.total_docs >= MIN_OFFENDER_VOLUME)
+        .filter((it) => it.kind !== 'catch_all' && it.flagged_docs >= MIN_OFFENDER_FLAGGED)
         .sort((a, b) => (b.flagged_rate_pct - a.flagged_rate_pct)
             || (b.flagged_docs - a.flagged_docs))
         .slice(0, 3);
@@ -170,6 +181,7 @@ function toOffenderRow(
     const clamped = blurb && blurb.length > OFFENDER_BLURB_MAX
         ? `${blurb.slice(0, OFFENDER_BLURB_MAX).trimEnd()}…`
         : blurb;
+    const lowSample = item.total_docs < LOW_SAMPLE_OFFENDER_DOCS;
     return {
         ...toRankedEntity(item, onOpen),
         detail: undefined,
@@ -179,6 +191,14 @@ function toOffenderRow(
                 <span className="ranked-entity-why">
                     {item.flagged_docs.toLocaleString()} of {item.total_docs.toLocaleString()} posts
                     {' '}flagged · {saturationLevel(item.mean_score)} technique saturation
+                    {lowSample && (
+                        <span
+                            className="ranked-entity-lowsample"
+                            title="Too few scored posts for a stable rate — one or two posts can move it."
+                        >
+                            {' · '}low sample
+                        </span>
+                    )}
                 </span>
             </>
         ),
@@ -205,8 +225,10 @@ function TopFlaggedLeaderboard({
                     description={
                         'The three sources with the highest flagged rate (flagged posts / scored '
                         + 'posts) in the selected window, across all tiers. Catch-all buckets and '
-                        + `sources with fewer than ${MIN_OFFENDER_VOLUME} scored posts are excluded so `
-                        + "a one-off flag can't top the board. A density measure, not intent."
+                        + `sources with fewer than ${MIN_OFFENDER_FLAGGED} flagged posts are excluded so `
+                        + "a one-off flag can't top the board. Sources with fewer than "
+                        + `${LOW_SAMPLE_OFFENDER_DOCS} scored posts still rank but are marked low sample. `
+                        + 'A density measure, not intent.'
                     }
                 />
             }
@@ -218,7 +240,7 @@ function TopFlaggedLeaderboard({
                 />
             ) : (
                 <p className="text-sm text-muted">
-                    No sources cleared the minimum volume to rank in this window.
+                    No source had enough flagged posts to rank in this window.
                 </p>
             )}
         </Card>

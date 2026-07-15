@@ -76,6 +76,14 @@ The full rationale and the shape of the stack live in
    - `CIVIC_CACHE_DIR=/var/lib/civic-lens/data/cache`.
    - `X_BEARER_TOKEN=` — rotated X API token.
    - `LITESTREAM_*` — R2 bucket + credentials for continuous replication.
+     `LITESTREAM_R2_ENDPOINT` is the account host ONLY
+     (`https://<ACCOUNT_ID>.r2.cloudflarestorage.com`) — the bucket goes in
+     `LITESTREAM_R2_BUCKET` and nowhere else. Putting the bucket in the
+     endpoint too doubles the path, 404s every request, and the replica's
+     local shadow WAL then grows unbounded until it fills the disk (the
+     2026-07-15 incident). Verify with `docker compose logs litestream`: the
+     `replicating to` line must print the endpoint with no bucket suffix, and
+     you should see `snapshot written` with no `monitor error` follow-ups.
    - `BACKUP_AGE_RECIPIENT=` — optional `age` public key for backup encryption;
      keep the private key off the VPS.
    - `BACKUP_RCLONE_REMOTE=` — optional, e.g. `r2:civic-lens-backups`.
