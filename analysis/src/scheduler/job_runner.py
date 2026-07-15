@@ -20,6 +20,7 @@ import os
 import time
 import argparse
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List
@@ -349,6 +350,42 @@ class AnalysisJobRunner:
             enriched["user_created_at"] = user_created
         return enriched, None
     
+    def _map_llm_concurrent(self, items, call):
+        """Run ``call(item)`` for every item with bounded concurrency, returning
+        ``[(item, result, error), ...]`` in the SAME order as ``items``.
+
+        The LLM calls are network-bound and independent, so they run in a
+        thread pool sized by ``CIVIC_LLM_CONCURRENCY`` (the engines are pure
+        per-call and share one thread-safe client). The caller MUST write
+        results serially on the main thread: concurrent DB writes would
+        reintroduce the SQLite lock contention fixed 2026-07-15. A call that
+        raises is captured as ``error`` (result None) so one failure never
+        aborts the batch; the caller re-queues it via ``mark_task_failed``.
+        """
+        items = list(items)
+        workers = max(1, self.settings.llm_concurrency)
+        if workers == 1 or len(items) <= 1:
+            # Serial path: identical behavior with no thread overhead when
+            # concurrency is disabled or there's nothing to parallelize.
+            out = []
+            for it in items:
+                try:
+                    out.append((it, call(it), None))
+                except Exception as exc:  # noqa: BLE001 - captured per-item
+                    out.append((it, None, exc))
+            return out
+
+        results: List = [None] * len(items)
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            future_to_idx = {pool.submit(call, it): idx for idx, it in enumerate(items)}
+            for fut in as_completed(future_to_idx):
+                idx = future_to_idx[fut]
+                try:
+                    results[idx] = (items[idx], fut.result(), None)
+                except Exception as exc:  # noqa: BLE001 - captured per-item
+                    results[idx] = (items[idx], None, exc)
+        return results
+
     def run_text_analysis(self, limit: int | None = None) -> int:
         """Run combined sentiment and favorability analysis on unprocessed docs. Returns count processed."""
         logger.info(f"Step 3/11: Running text analysis (sentiment + favorability) (scope: {self.settings.run_analysis_on})...")
@@ -366,17 +403,28 @@ class AnalysisJobRunner:
         total = len(docs)
         logger.info(f"Processing {total} docs for unified text analysis")
 
+        # LLM calls run concurrently (network-bound); writes stay serial on the
+        # main thread to preserve the SQLite single-writer discipline.
         failed = 0
-        for i, doc in enumerate(docs, 1):
-            # Per-doc isolation: a transient write failure (e.g. SQLite
-            # "database is locked" under Litestream/crawler contention) must
-            # not abort the whole batch. Mark the doc failed so it re-queues
-            # next run and keep going, mirroring run_target_extraction (audit
-            # A-3). save_ai_output writes output + 'done' state in one
-            # transaction, so a failure here rolls both back cleanly.
-            try:
-                sent_result, fav_result = self.analyzer.analyze_full(doc['text'])
+        llm_results = self._map_llm_concurrent(docs, lambda d: self.analyzer.analyze_full(d['text']))
+        for i, (doc, res, err) in enumerate(llm_results, 1):
+            # Per-doc isolation: an LLM error OR a write failure (e.g. SQLite
+            # "database is locked" under Litestream/crawler contention) marks
+            # the doc failed so it re-queues next run instead of aborting the
+            # batch (audit A-3). save_ai_output writes output + 'done' state in
+            # one transaction, so a failure rolls both back cleanly.
+            if err is not None:
+                failed += 1
+                self.loader.mark_task_failed(doc['doc_id'], "sentiment", TEXT_ANALYSIS_PROMPT_VERSION)
+                self.loader.mark_task_failed(doc['doc_id'], "favorability", TEXT_ANALYSIS_PROMPT_VERSION)
+                logger.warning(
+                    f"[text-analysis {i}/{total}] doc={doc['doc_id']} ANALYZE FAILED "
+                    f"({type(err).__name__}: {err}) — marked for re-queue"
+                )
+                continue
 
+            sent_result, fav_result = res
+            try:
                 # Save Sentiment
                 self.loader.save_ai_output(
                     doc['doc_id'],
@@ -409,7 +457,7 @@ class AnalysisJobRunner:
                 self.loader.mark_task_failed(doc['doc_id'], "sentiment", TEXT_ANALYSIS_PROMPT_VERSION)
                 self.loader.mark_task_failed(doc['doc_id'], "favorability", TEXT_ANALYSIS_PROMPT_VERSION)
                 logger.warning(
-                    f"[text-analysis {i}/{total}] doc={doc['doc_id']} FAILED "
+                    f"[text-analysis {i}/{total}] doc={doc['doc_id']} SAVE FAILED "
                     f"({type(exc).__name__}: {exc}) — marked for re-queue"
                 )
                 continue
@@ -462,18 +510,20 @@ class AnalysisJobRunner:
 
         logger.info(f"Processing {total} docs for target-sentiment extraction")
         skipped = 0
-        for i, doc in enumerate(docs, 1):
-            result = self.target_extractor.extract(doc["text"])
-            if result.extraction_failed:
-                # Transport failure — mark failed so the doc re-queues next
+        # LLM extraction runs concurrently; writes stay serial below.
+        llm_results = self._map_llm_concurrent(docs, lambda d: self.target_extractor.extract(d["text"]))
+        for i, (doc, result, err) in enumerate(llm_results, 1):
+            if err is not None or result.extraction_failed:
+                # Transport/LLM failure — mark failed so the doc re-queues next
                 # run instead of freezing as "no targets" (audit A-3), with
                 # the attempt visible in doc_task_state.
                 self.loader.mark_task_failed(
                     doc["doc_id"], "target_sentiment", TARGET_SENTIMENT_PROMPT_VERSION
                 )
                 skipped += 1
+                reason = f"{type(err).__name__}: {err}" if err is not None else "extraction failed"
                 logger.warning(
-                    f"[targets {i}/{total}] doc={doc['doc_id']} extraction FAILED — "
+                    f"[targets {i}/{total}] doc={doc['doc_id']} FAILED ({reason}) — "
                     "skipping (will re-queue)"
                 )
                 continue
@@ -564,13 +614,16 @@ class AnalysisJobRunner:
             f"Processing {total} docs for propaganda detection "
             f"({len(groups)} unique content hashes)"
         )
-        for group in groups.values():
+        # Detect concurrently across content-hash groups (one LLM call per
+        # group); writes stay serial below.
+        llm_results = self._map_llm_concurrent(
+            list(groups.values()),
+            lambda g: self.propaganda_detector.detect(g[0]["text"], title=g[0].get("title")),
+        )
+        for group, result, err in llm_results:
             primary = group[0]
-            result = self.propaganda_detector.detect(
-                primary["text"], title=primary.get("title"),
-            )
-            if result.detection_failed:
-                # Transport failure — mark the group failed so the docs
+            if err is not None or result.detection_failed:
+                # Transport/LLM failure — mark the group failed so the docs
                 # re-queue next run rather than freezing as a permanent
                 # "no propaganda" verdict (audit A-3), with attempts visible
                 # in doc_task_state.
@@ -579,9 +632,10 @@ class AnalysisJobRunner:
                         doc["doc_id"], "propaganda", PROPAGANDA_PROMPT_VERSION
                     )
                 skipped_docs += len(group)
+                reason = f"{type(err).__name__}: {err}" if err is not None else "detection failed"
                 logger.warning(
                     f"[propaganda] hash={primary.get('raw_hash', '(none)')[:8]}… "
-                    f"detection FAILED — skipping {len(group)} doc(s) (will re-queue)"
+                    f"FAILED ({reason}) — skipping {len(group)} doc(s) (will re-queue)"
                 )
                 continue
             payload = result.to_dict()
@@ -665,19 +719,21 @@ class AnalysisJobRunner:
 
         logger.info(f"Processing {total} docs for claim extraction")
         skipped = 0
-        for i, doc in enumerate(docs, 1):
-            result = self.claim_extractor.extract(doc["text"])
-            if result.extraction_failed:
-                # Transport failure / unavailable client — mark failed so the
-                # doc re-queues next run and a transient outage never freezes
-                # as a permanent "no claims" verdict (audit A-3), with the
-                # attempt visible in doc_task_state.
+        # LLM extraction runs concurrently; writes stay serial below.
+        llm_results = self._map_llm_concurrent(docs, lambda d: self.claim_extractor.extract(d["text"]))
+        for i, (doc, result, err) in enumerate(llm_results, 1):
+            if err is not None or result.extraction_failed:
+                # Transport/LLM failure / unavailable client — mark failed so
+                # the doc re-queues next run and a transient outage never
+                # freezes as a permanent "no claims" verdict (audit A-3), with
+                # the attempt visible in doc_task_state.
                 self.loader.mark_task_failed(
                     doc["doc_id"], "claims", CLAIM_EXTRACTION_PROMPT_VERSION
                 )
                 skipped += 1
+                reason = f"{type(err).__name__}: {err}" if err is not None else "extraction failed"
                 logger.warning(
-                    f"[claims {i}/{total}] doc={doc['doc_id']} extraction FAILED — "
+                    f"[claims {i}/{total}] doc={doc['doc_id']} FAILED ({reason}) — "
                     "skipping (will re-queue)"
                 )
                 continue
