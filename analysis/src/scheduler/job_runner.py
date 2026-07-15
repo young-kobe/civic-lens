@@ -365,46 +365,63 @@ class AnalysisJobRunner:
         
         total = len(docs)
         logger.info(f"Processing {total} docs for unified text analysis")
-        
+
+        failed = 0
         for i, doc in enumerate(docs, 1):
-            sent_result, fav_result = self.analyzer.analyze_full(doc['text'])
+            # Per-doc isolation: a transient write failure (e.g. SQLite
+            # "database is locked" under Litestream/crawler contention) must
+            # not abort the whole batch. Mark the doc failed so it re-queues
+            # next run and keep going, mirroring run_target_extraction (audit
+            # A-3). save_ai_output writes output + 'done' state in one
+            # transaction, so a failure here rolls both back cleanly.
+            try:
+                sent_result, fav_result = self.analyzer.analyze_full(doc['text'])
 
-            # Save Sentiment
-            self.loader.save_ai_output(
-                doc['doc_id'],
-                "sentiment",
-                sent_result.to_dict(),
-                sent_result.confidence,
-                model_id=self.model_id,
-                prompt_version=TEXT_ANALYSIS_PROMPT_VERSION,
-                system_prompt=TEXT_ANALYSIS_SYSTEM_PROMPT,
-                user_prompt_template=TEXT_ANALYSIS_USER_PROMPT_TEMPLATE,
-                inference_method=sent_result.inference_method,
-                label=sent_result.label,
-            )
+                # Save Sentiment
+                self.loader.save_ai_output(
+                    doc['doc_id'],
+                    "sentiment",
+                    sent_result.to_dict(),
+                    sent_result.confidence,
+                    model_id=self.model_id,
+                    prompt_version=TEXT_ANALYSIS_PROMPT_VERSION,
+                    system_prompt=TEXT_ANALYSIS_SYSTEM_PROMPT,
+                    user_prompt_template=TEXT_ANALYSIS_USER_PROMPT_TEMPLATE,
+                    inference_method=sent_result.inference_method,
+                    label=sent_result.label,
+                )
 
-            # Save Favorability
-            self.loader.save_ai_output(
-                doc['doc_id'],
-                "favorability",
-                fav_result.to_dict(),
-                fav_result.overall_confidence,
-                model_id=self.model_id,
-                prompt_version=TEXT_ANALYSIS_PROMPT_VERSION,
-                system_prompt=TEXT_ANALYSIS_SYSTEM_PROMPT,
-                user_prompt_template=TEXT_ANALYSIS_USER_PROMPT_TEMPLATE,
-                inference_method=fav_result.inference_method,
-                label=fav_result.overall_gop_stance,
-            )
-            
+                # Save Favorability
+                self.loader.save_ai_output(
+                    doc['doc_id'],
+                    "favorability",
+                    fav_result.to_dict(),
+                    fav_result.overall_confidence,
+                    model_id=self.model_id,
+                    prompt_version=TEXT_ANALYSIS_PROMPT_VERSION,
+                    system_prompt=TEXT_ANALYSIS_SYSTEM_PROMPT,
+                    user_prompt_template=TEXT_ANALYSIS_USER_PROMPT_TEMPLATE,
+                    inference_method=fav_result.inference_method,
+                    label=fav_result.overall_gop_stance,
+                )
+            except Exception as exc:
+                failed += 1
+                self.loader.mark_task_failed(doc['doc_id'], "sentiment", TEXT_ANALYSIS_PROMPT_VERSION)
+                self.loader.mark_task_failed(doc['doc_id'], "favorability", TEXT_ANALYSIS_PROMPT_VERSION)
+                logger.warning(
+                    f"[text-analysis {i}/{total}] doc={doc['doc_id']} FAILED "
+                    f"({type(exc).__name__}: {exc}) — marked for re-queue"
+                )
+                continue
+
             logger.debug(
                 f"[text-analysis {i}/{total}] doc={doc['doc_id']} type={doc.get('source_type', 'unknown')} "
                 f"sent={sent_result.label}({sent_result.confidence:.2f}) "
                 f"fav={fav_result.overall_gop_stance}({fav_result.overall_confidence:.2f})"
             )
-        
-        logger.info(f"Text analysis complete: {total} docs processed")
-        return total
+
+        logger.info(f"Text analysis complete: {total - failed}/{total} docs processed ({failed} re-queued)")
+        return total - failed
 
     def run_target_extraction(self, limit: int | None = None) -> int:
         """Extract per-target stances (task_type ``target_sentiment``) from
@@ -464,24 +481,38 @@ class AnalysisJobRunner:
             # pattern); aggregation filters per-target, not on this mean.
             confidences = [t.confidence for t in result.targets]
             row_confidence = sum(confidences) / len(confidences) if confidences else 0.0
-            output_id = self.loader.save_ai_output(
-                doc["doc_id"],
-                "target_sentiment",
-                result.to_dict(),
-                row_confidence,
-                model_id=self.model_id,
-                prompt_version=TARGET_SENTIMENT_PROMPT_VERSION,
-                system_prompt=TARGET_SENTIMENT_SYSTEM_PROMPT,
-                user_prompt_template=TARGET_SENTIMENT_USER_PROMPT_TEMPLATE,
-                inference_method="llm",
-            )
-            self.loader.save_target_mentions(
-                output_id,
-                doc["doc_id"],
-                self.loader.build_target_mentions(
-                    [t.to_dict() for t in result.targets], resolver.resolve,
-                ),
-            )
+            # Per-doc isolation: a write failure (e.g. "database is locked"
+            # under Litestream/crawler contention) must re-queue the doc, not
+            # abort the batch (audit A-3).
+            try:
+                output_id = self.loader.save_ai_output(
+                    doc["doc_id"],
+                    "target_sentiment",
+                    result.to_dict(),
+                    row_confidence,
+                    model_id=self.model_id,
+                    prompt_version=TARGET_SENTIMENT_PROMPT_VERSION,
+                    system_prompt=TARGET_SENTIMENT_SYSTEM_PROMPT,
+                    user_prompt_template=TARGET_SENTIMENT_USER_PROMPT_TEMPLATE,
+                    inference_method="llm",
+                )
+                self.loader.save_target_mentions(
+                    output_id,
+                    doc["doc_id"],
+                    self.loader.build_target_mentions(
+                        [t.to_dict() for t in result.targets], resolver.resolve,
+                    ),
+                )
+            except Exception as exc:
+                self.loader.mark_task_failed(
+                    doc["doc_id"], "target_sentiment", TARGET_SENTIMENT_PROMPT_VERSION
+                )
+                skipped += 1
+                logger.warning(
+                    f"[targets {i}/{total}] doc={doc['doc_id']} SAVE FAILED "
+                    f"({type(exc).__name__}: {exc}) — marked for re-queue"
+                )
+                continue
             logger.debug(
                 f"[targets {i}/{total}] doc={doc['doc_id']} extracted={len(result.targets)} "
                 f"mean_conf={row_confidence:.2f}"
@@ -554,18 +585,34 @@ class AnalysisJobRunner:
                 )
                 continue
             payload = result.to_dict()
-            for doc in group:
-                self.loader.save_ai_output(
-                    doc["doc_id"],
-                    "propaganda",
-                    payload,
-                    result.overall_propaganda_score,
-                    model_id=self.model_id,
-                    prompt_version=PROPAGANDA_PROMPT_VERSION,
-                    system_prompt=PROPAGANDA_SYSTEM_PROMPT,
-                    user_prompt_template=PROPAGANDA_USER_PROMPT_TEMPLATE,
-                    inference_method=result.inference_method,
+            # Per-group isolation: a write failure (e.g. "database is locked"
+            # under Litestream/crawler contention) re-queues the whole group
+            # rather than aborting the batch (audit A-3).
+            try:
+                for doc in group:
+                    self.loader.save_ai_output(
+                        doc["doc_id"],
+                        "propaganda",
+                        payload,
+                        result.overall_propaganda_score,
+                        model_id=self.model_id,
+                        prompt_version=PROPAGANDA_PROMPT_VERSION,
+                        system_prompt=PROPAGANDA_SYSTEM_PROMPT,
+                        user_prompt_template=PROPAGANDA_USER_PROMPT_TEMPLATE,
+                        inference_method=result.inference_method,
+                    )
+            except Exception as exc:
+                for doc in group:
+                    self.loader.mark_task_failed(
+                        doc["doc_id"], "propaganda", PROPAGANDA_PROMPT_VERSION
+                    )
+                skipped_docs += len(group)
+                logger.warning(
+                    f"[propaganda] hash={primary.get('raw_hash', '(none)')[:8]}… "
+                    f"SAVE FAILED ({type(exc).__name__}: {exc}) — "
+                    f"re-queuing {len(group)} doc(s)"
                 )
+                continue
             scored_groups += 1
             duplicates_fanned += len(group) - 1
             logger.debug(
@@ -642,17 +689,31 @@ class AnalysisJobRunner:
             # output_json as the source of truth.
             confidences = [c.confidence for c in result.claims]
             row_confidence = sum(confidences) / len(confidences) if confidences else 0.0
-            self.loader.save_ai_output(
-                doc["doc_id"],
-                "claims",
-                result.to_dict(),
-                row_confidence,
-                model_id=self.model_id,
-                prompt_version=CLAIM_EXTRACTION_PROMPT_VERSION,
-                system_prompt=CLAIM_EXTRACTION_SYSTEM_PROMPT,
-                user_prompt_template=CLAIM_EXTRACTION_USER_PROMPT_TEMPLATE,
-                inference_method="llm",
-            )
+            # Per-doc isolation: a write failure (e.g. "database is locked"
+            # under Litestream/crawler contention) re-queues the doc rather
+            # than aborting the batch (audit A-3).
+            try:
+                self.loader.save_ai_output(
+                    doc["doc_id"],
+                    "claims",
+                    result.to_dict(),
+                    row_confidence,
+                    model_id=self.model_id,
+                    prompt_version=CLAIM_EXTRACTION_PROMPT_VERSION,
+                    system_prompt=CLAIM_EXTRACTION_SYSTEM_PROMPT,
+                    user_prompt_template=CLAIM_EXTRACTION_USER_PROMPT_TEMPLATE,
+                    inference_method="llm",
+                )
+            except Exception as exc:
+                self.loader.mark_task_failed(
+                    doc["doc_id"], "claims", CLAIM_EXTRACTION_PROMPT_VERSION
+                )
+                skipped += 1
+                logger.warning(
+                    f"[claims {i}/{total}] doc={doc['doc_id']} SAVE FAILED "
+                    f"({type(exc).__name__}: {exc}) — marked for re-queue"
+                )
+                continue
             logger.debug(
                 f"[claims {i}/{total}] doc={doc['doc_id']} extracted={len(result.claims)} "
                 f"mean_conf={row_confidence:.2f}"

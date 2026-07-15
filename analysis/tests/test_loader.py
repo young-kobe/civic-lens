@@ -12,7 +12,7 @@ project_root = os.path.dirname(os.path.dirname(current_dir))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-from analysis.src.etl.loader import ContentLoader, is_index_page
+from analysis.src.etl.loader import ContentLoader, SQLITE_BUSY_TIMEOUT_MS, is_index_page
 
 MIGRATIONS_DIR = os.path.join(project_root, "data", "migrations")
 
@@ -127,13 +127,19 @@ class TestContentLoaderBatched(unittest.TestCase):
         self.assertEqual(doc_count, count)
 
     def test_busy_timeout_pragma(self):
-        """Verify the connection manager sets WAL mode and busy_timeout."""
+        """Verify the connection manager sets WAL mode and busy_timeout.
+
+        The 15s timeout (raised from 5s) is what lets writes ride out
+        Litestream checkpoint contention instead of throwing "database is
+        locked" mid-batch (2026-07-15); assert the actual value so a silent
+        regression to a too-short timeout is caught.
+        """
         with self.loader._get_conn() as conn:
             cursor = conn.cursor()
             cursor.execute("PRAGMA journal_mode;")
             self.assertEqual(cursor.fetchone()[0].lower(), "wal")
             cursor.execute("PRAGMA busy_timeout;")
-            self.assertEqual(cursor.fetchone()[0], 5000)
+            self.assertEqual(cursor.fetchone()[0], SQLITE_BUSY_TIMEOUT_MS)
 
 
 class TestIndexPageDetector(unittest.TestCase):

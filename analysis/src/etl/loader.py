@@ -6,10 +6,18 @@ import re
 from contextlib import contextmanager
 from pathlib import Path
 from urllib.parse import urlparse
+import logging
 import trafilatura
 from analysis.src.common.logger import get_logger
 
 logger = get_logger(__name__)
+
+# trafilatura logs one ERROR + WARNING per page it can't parse as an article
+# (index pages, paywalls, malformed HTML). Those are expected outcomes that ETL
+# already accounts for in its skip counts, but at ERROR level they flood the
+# journal (hundreds of lines per run). Silence its logger; our own skip totals
+# remain the signal.
+logging.getLogger("trafilatura").setLevel(logging.CRITICAL)
 
 # Only include content related to US politics
 # Matches both federal and state-level political topics
@@ -119,8 +127,12 @@ ETL_VERSION = "etl-v2"
 # 30 days in seconds
 THIRTY_DAYS_SECONDS = 30 * 24 * 60 * 60
 
-# SQLite connection pragmas (match Go-side busy_timeout for cross-language safety)
-SQLITE_BUSY_TIMEOUT_MS = 5000
+# SQLite connection pragmas (match Go-side busy_timeout for cross-language safety).
+# 15s, up from 5s: once Litestream began replicating the WAL continuously and the
+# Go crawler's timer can overlap an analyze run, 5s was too short to ride out
+# normal write contention and the slow (~10s/call) LLM stages threw
+# "database is locked" mid-batch (2026-07-15).
+SQLITE_BUSY_TIMEOUT_MS = 15000
 
 # Commit batch size for ETL bulk inserts
 BATCH_COMMIT_SIZE = 100
