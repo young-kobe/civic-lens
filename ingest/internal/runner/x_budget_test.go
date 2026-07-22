@@ -40,7 +40,7 @@ func TestXBudgetTracker_InitInsertsMonthRow(t *testing.T) {
 	db := newTestDB(t)
 	clock := frozenClock(time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC))
 
-	b, err := newXBudgetTracker(context.Background(), db, 2500, clock)
+	b, err := newXBudgetTracker(context.Background(), db, false, 2500, clock)
 	if err != nil {
 		t.Fatalf("init: %v", err)
 	}
@@ -60,7 +60,7 @@ func TestXBudgetTracker_InitInsertsMonthRow(t *testing.T) {
 func TestXBudgetTracker_RecordAccumulates(t *testing.T) {
 	db := newTestDB(t)
 	clock := frozenClock(time.Date(2026, 5, 15, 0, 0, 0, 0, time.UTC))
-	b, err := newXBudgetTracker(context.Background(), db, 0, clock)
+	b, err := newXBudgetTracker(context.Background(), db, false, 0, clock)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,7 +99,7 @@ func TestXBudgetTracker_OverBudgetHonoursCeiling(t *testing.T) {
 	clock := frozenClock(time.Date(2026, 5, 15, 0, 0, 0, 0, time.UTC))
 
 	// $0.40 ceiling. Zero usage: not over.
-	b, err := newXBudgetTracker(context.Background(), db, 40, clock)
+	b, err := newXBudgetTracker(context.Background(), db, false, 40, clock)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -119,7 +119,7 @@ func TestXBudgetTracker_OverBudgetHonoursCeiling(t *testing.T) {
 func TestXBudgetTracker_CeilingZeroDisables(t *testing.T) {
 	db := newTestDB(t)
 	clock := frozenClock(time.Date(2026, 5, 15, 0, 0, 0, 0, time.UTC))
-	b, err := newXBudgetTracker(context.Background(), db, 0, clock)
+	b, err := newXBudgetTracker(context.Background(), db, false, 0, clock)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -137,7 +137,7 @@ func TestXBudgetTracker_PersistsAcrossInstances(t *testing.T) {
 	db := newTestDB(t)
 	clock := frozenClock(time.Date(2026, 5, 15, 10, 0, 0, 0, time.UTC))
 
-	b1, err := newXBudgetTracker(context.Background(), db, 100, clock)
+	b1, err := newXBudgetTracker(context.Background(), db, false, 100, clock)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -147,7 +147,7 @@ func TestXBudgetTracker_PersistsAcrossInstances(t *testing.T) {
 
 	// Simulate a fresh run mid-month — the next runner invocation should
 	// pick up where the last one left off rather than restart from zero.
-	b2, err := newXBudgetTracker(context.Background(), db, 100, clock)
+	b2, err := newXBudgetTracker(context.Background(), db, false, 100, clock)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -166,12 +166,12 @@ func TestXBudgetTracker_MonthRollover(t *testing.T) {
 
 	// End of April: spend 30 cents.
 	aprClock := frozenClock(time.Date(2026, 4, 30, 23, 0, 0, 0, time.UTC))
-	bApr, _ := newXBudgetTracker(context.Background(), db, 100, aprClock)
+	bApr, _ := newXBudgetTracker(context.Background(), db, false, 100, aprClock)
 	_ = bApr.Record(context.Background(), 40, 20)
 
 	// Start of May: fresh tracker should see a fresh row at $0 used.
 	mayClock := frozenClock(time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC))
-	bMay, err := newXBudgetTracker(context.Background(), db, 100, mayClock)
+	bMay, err := newXBudgetTracker(context.Background(), db, false, 100, mayClock)
 	if err != nil {
 		t.Fatal(err)
 	}

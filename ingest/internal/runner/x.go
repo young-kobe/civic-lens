@@ -52,7 +52,7 @@ func (xr *XRunner) Run(ctx context.Context) (*XResult, error) {
 		return nil, fmt.Errorf("X bearer token not configured (set x.bearer_token in seeds.yaml or X_BEARER_TOKEN env var)")
 	}
 
-	budget, err := NewXBudgetTracker(ctx, xr.app.Database.Conn(), cfg.X.MonthlyBudgetCents)
+	budget, err := NewXBudgetTracker(ctx, xr.app.Database, cfg.X.MonthlyBudgetCents)
 	if err != nil {
 		return nil, fmt.Errorf("x budget tracker: %w", err)
 	}
@@ -182,6 +182,9 @@ func (xr *XRunner) Run(ctx context.Context) (*XResult, error) {
 }
 
 func (xr *XRunner) insertPost(ctx context.Context, post model.XPost) error {
+	if xr.app.Database.IsPostgres() {
+		return xr.insertPostPostgres(ctx, post)
+	}
 	// ON CONFLICT DO UPDATE without is_official_tier in the column list: a
 	// topic-query match on a tweet already ingested by the officials pass
 	// updates the metrics/text but leaves is_official_tier=1 intact. A brand
@@ -208,6 +211,10 @@ func (xr *XRunner) insertPost(ctx context.Context, post model.XPost) error {
 }
 
 func (xr *XRunner) insertUser(ctx context.Context, user model.XUser) error {
+	if xr.app.Database.IsPostgres() {
+		return xr.insertUserPostgres(ctx, user)
+	}
+
 	verified := 0
 	if user.Verified {
 		verified = 1

@@ -22,14 +22,14 @@ import (
 // Counters live on the struct so tests can assert per-handle call counts —
 // that's how we verify the cache prevents a redundant lookup on rerun.
 type stubXAPI struct {
-	t                  *testing.T
-	server             *httptest.Server
-	userLookupCalls    map[string]*int32 // handle (lowercase) → call count
-	timelineCalls      map[string]*int32 // user_id → call count
-	suspendedHandles   map[string]bool
-	notFoundUserIDs    map[string]bool
-	tweetsByUserID     map[string][]stubTweet
-	usernameToID       map[string]string
+	t                *testing.T
+	server           *httptest.Server
+	userLookupCalls  map[string]*int32 // handle (lowercase) → call count
+	timelineCalls    map[string]*int32 // user_id → call count
+	suspendedHandles map[string]bool
+	notFoundUserIDs  map[string]bool
+	tweetsByUserID   map[string][]stubTweet
+	usernameToID     map[string]string
 }
 
 type stubTweet struct {
@@ -107,10 +107,10 @@ func (s *stubXAPI) handleUserLookup(w http.ResponseWriter, r *http.Request) {
 	}
 	resp := map[string]any{
 		"data": map[string]any{
-			"id":          userID,
-			"username":    handle,
-			"name":        handle,
-			"verified":    true,
+			"id":            userID,
+			"username":      handle,
+			"name":          handle,
+			"verified":      true,
 			"verified_type": "government",
 		},
 	}
@@ -221,7 +221,7 @@ func newOfficialsRunnerHarness(t *testing.T, stub *stubXAPI, ceilingCents int) (
 		client: client,
 	}
 
-	budget, err := NewXBudgetTracker(context.Background(), d.Conn(), ceilingCents)
+	budget, err := NewXBudgetTracker(context.Background(), d, ceilingCents)
 	if err != nil {
 		t.Fatalf("budget: %v", err)
 	}
