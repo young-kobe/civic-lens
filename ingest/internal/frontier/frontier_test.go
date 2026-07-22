@@ -56,7 +56,7 @@ func newTestFrontier(t *testing.T, maxRetries int) (*Frontier, *db.DB, func()) {
 		os.RemoveAll(migrationsDir)
 	}
 
-	return New(database, maxRetries), database, cleanup
+	return New(database, maxRetries, nil), database, cleanup
 }
 
 func TestFrontierBasicOperations(t *testing.T) {
@@ -329,8 +329,8 @@ func TestFrontierPushLinksMalformed(t *testing.T) {
 	ctx := context.Background()
 	stats, err := f.PushLinks(ctx, []string{
 		"https://example.com/good",
-		"http://[::1:bad",          // malformed — unclosed bracket in host
-		"http://%ZZ.example.com",   // malformed — invalid percent-escape
+		"http://[::1:bad",        // malformed — unclosed bracket in host
+		"http://%ZZ.example.com", // malformed — invalid percent-escape
 	}, 0)
 	if err != nil {
 		t.Fatal(err)

@@ -2,9 +2,13 @@ package db
 
 import (
 	"context"
+	"database/sql"
+	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 // pgTestDSNEnv names the env var that opts this test into a real Postgres
@@ -14,33 +18,84 @@ import (
 // CI without a Postgres service both skip cleanly.
 const pgTestDSNEnv = "CIVIC_TEST_POSTGRES_DSN"
 
+// scratchDatabaseName returns a unique, never-before-seen database name for
+// this test run. bootstrapSchemaMigrations hardcodes the "ops" schema and
+// "ops.schema_migrations" table (by design — Postgres has exactly one ops
+// schema in production), so this test cannot isolate itself by schema or row
+// alone: its fixture migrations reuse version numbers 1 and 2, which collide
+// with the real 0001_north_star.sql bootstrap already applied to a shared
+// DSN. Isolating by whole database means this test's own bootstrap-and-drop
+// of "ops" never touches the real ops schema (in particular
+// ops.x_api_budget, read by internal/runner's gated budget test) and can
+// never record a phantom migration version against it.
+func scratchDatabaseName() string {
+	return fmt.Sprintf("civiclens_test_migrate_%d_%d", os.Getpid(), time.Now().UnixNano())
+}
+
+// withDatabase returns dsn rewritten to point at a different database name
+// on the same server, so the caller-supplied DSN's own database is only ever
+// used as an administrative connection (CREATE/DROP DATABASE), never touched
+// directly by this test.
+func withDatabase(dsn, dbName string) (string, error) {
+	u, err := url.Parse(dsn)
+	if err != nil {
+		return "", fmt.Errorf("parse dsn: %w", err)
+	}
+	u.Path = "/" + dbName
+	return u.String(), nil
+}
+
 // TestPostgresMigrate verifies the Postgres runner end to end against a real
 // server: bootstrap creates ops.schema_migrations, migrations apply in
 // numeric-prefix order and are recorded, a re-run is a no-op, and a failing
 // migration rolls back atomically (the same D-6 guarantee as SQLite) — using
 // a temp fixture directory rather than the real data/pg-migrations/, per the
 // instruction not to depend on that file's contents.
+//
+// The whole test runs inside a throwaway database (see scratchDatabaseName)
+// created and dropped on the connection identified by pgTestDSNEnv, so it is
+// safe to run alongside other packages' gated Postgres tests against one
+// shared DSN.
 func TestPostgresMigrate(t *testing.T) {
 	dsn := os.Getenv(pgTestDSNEnv)
 	if dsn == "" {
 		t.Skipf("%s not set; skipping Postgres integration test", pgTestDSNEnv)
 	}
 
-	database, err := Open(dsn)
+	adminConn, err := sql.Open("pgx", dsn)
 	if err != nil {
-		t.Fatalf("Open(%q): %v", dsn, err)
+		t.Fatalf("open admin connection %q: %v", dsn, err)
+	}
+	defer adminConn.Close()
+
+	scratchDB := scratchDatabaseName()
+	if _, err := adminConn.Exec(fmt.Sprintf("CREATE DATABASE %s", scratchDB)); err != nil {
+		t.Fatalf("create scratch database %s: %v", scratchDB, err)
+	}
+	defer func() {
+		// database.Close() (deferred below, so it runs before this per LIFO
+		// order) releases every pooled connection first; WITH (FORCE) is
+		// extra insurance against any straggler.
+		if _, err := adminConn.Exec(fmt.Sprintf("DROP DATABASE IF EXISTS %s WITH (FORCE)", scratchDB)); err != nil {
+			t.Errorf("drop scratch database %s: %v", scratchDB, err)
+		}
+	}()
+
+	scratchDSN, err := withDatabase(dsn, scratchDB)
+	if err != nil {
+		t.Fatalf("build scratch dsn: %v", err)
+	}
+
+	database, err := Open(scratchDSN)
+	if err != nil {
+		t.Fatalf("Open(%q): %v", scratchDSN, err)
 	}
 	defer database.Close()
 	if !database.isPostgres {
-		t.Fatalf("Open(%q) did not select the Postgres backend", dsn)
+		t.Fatalf("Open(%q) did not select the Postgres backend", scratchDSN)
 	}
 
 	ctx := context.Background()
-	// Start from a clean slate so re-running this test against a persistent
-	// dev instance behaves the same as a fresh container.
-	if _, err := database.conn.ExecContext(ctx, "DROP SCHEMA IF EXISTS ops CASCADE; DROP TABLE IF EXISTS fixture_t"); err != nil {
-		t.Fatalf("reset test schema: %v", err)
-	}
 
 	migrationsDir := t.TempDir()
 	writeFile(t, migrationsDir, "0001_init.sql", `

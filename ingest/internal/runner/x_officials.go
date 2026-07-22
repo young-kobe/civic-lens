@@ -171,7 +171,11 @@ func (xr *XRunner) resolveOfficialUserID(
 	handle string,
 	budget *XBudgetTracker,
 ) (string, *model.XUser, error) {
-	if cachedID, err := lookupCachedUserID(ctx, xr.app.Database.Conn(), handle); err != nil {
+	lookup := lookupCachedUserID
+	if xr.app.Database.IsPostgres() {
+		lookup = lookupCachedUserIDPostgres
+	}
+	if cachedID, err := lookup(ctx, xr.app.Database.Conn(), handle); err != nil {
 		return "", nil, fmt.Errorf("cache lookup: %w", err)
 	} else if cachedID != "" {
 		return cachedID, nil, nil
@@ -240,6 +244,9 @@ func lookupCachedUserID(ctx context.Context, conn *sql.DB, handle string) (strin
 // search-query path stays completely untouched (its callers don't even
 // know the column exists).
 func (xr *XRunner) insertOfficialPost(ctx context.Context, post model.XPost) error {
+	if xr.app.Database.IsPostgres() {
+		return xr.insertOfficialPostPostgres(ctx, post)
+	}
 	return upsertRow(ctx, xr.app.Database.Conn(), "x_posts_raw",
 		[]string{
 			"tweet_id", "author_id", "conversation_id", "created_at", "fetched_at",

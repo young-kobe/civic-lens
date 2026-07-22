@@ -11,11 +11,12 @@ import (
 
 // Config holds all ingestion configuration.
 type Config struct {
-	Database DatabaseConfig `yaml:"database"`
-	Crawl    CrawlConfig    `yaml:"crawl"`
-	Reddit   RedditConfig   `yaml:"reddit"`
-	X        XConfig        `yaml:"x"`
-	Seeds    []SeedConfig   `yaml:"seeds"`
+	Database     DatabaseConfig      `yaml:"database"`
+	Crawl        CrawlConfig         `yaml:"crawl"`
+	Reddit       RedditConfig        `yaml:"reddit"`
+	X            XConfig             `yaml:"x"`
+	Seeds        []SeedConfig        `yaml:"seeds"`
+	CrawlBalance *CrawlBalanceConfig `yaml:"crawl_balance"`
 }
 
 // DatabaseConfig holds database paths.
@@ -75,6 +76,28 @@ type SeedConfig struct {
 	Priority int    `yaml:"priority"`
 }
 
+// CrawlBalanceConfig configures optional per-domain balance quotas for the
+// Postgres frontier claim query (Postgres-redesign Phase 2, Task 2 —
+// production is heavily skewed, e.g. cbsnews 2,404 docs vs npr 65). Quotas
+// apply ONLY when the ingestor is pointed at Postgres; the SQLite path is
+// frozen production behavior and never reads this section. An absent
+// section (a nil Config.CrawlBalance) means unlimited claiming for every
+// domain — unchanged, backward-compatible behavior.
+type CrawlBalanceConfig struct {
+	// Window bounds how far back the per-domain "already fetched" count is
+	// computed (see frontier.DomainQuota). Defaults to 24h when the section
+	// is present but this key is omitted.
+	Window time.Duration `yaml:"window"`
+	// DefaultMaxPerWindow caps any domain not listed in Domains within
+	// Window. Omitted or zero means unlimited for domains without an
+	// explicit override.
+	DefaultMaxPerWindow int `yaml:"default_max_per_window"`
+	// Domains overrides DefaultMaxPerWindow per domain, keyed by the
+	// lowercased host as util.ExtractDomain produces it (e.g.
+	// "www.cbsnews.com"). An explicit cap of 0 blocks the domain outright.
+	Domains map[string]int `yaml:"domains"`
+}
+
 // Load reads configuration from a YAML file.
 func Load(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
@@ -121,6 +144,14 @@ func Load(path string) (*Config, error) {
 		cfg.X.OfficialsListPath = filepath.Join(seedsDir, "verified_officials.yaml")
 	} else if !filepath.IsAbs(cfg.X.OfficialsListPath) {
 		cfg.X.OfficialsListPath = filepath.Join(seedsDir, cfg.X.OfficialsListPath)
+	}
+
+	// A present crawl_balance section with no window key defaults to 24h
+	// (frontier.DomainQuota applies the same default independently, so a
+	// DomainQuota built without going through config.Load also behaves this
+	// way).
+	if cfg.CrawlBalance != nil && cfg.CrawlBalance.Window <= 0 {
+		cfg.CrawlBalance.Window = 24 * time.Hour
 	}
 
 	return cfg, nil
