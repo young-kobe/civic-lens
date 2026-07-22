@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 // writeSeedsYAML drops a minimal seeds.yaml in a temp dir and returns its
@@ -92,6 +93,71 @@ reddit:
 	}
 	if cfg.Crawl.RequestTimeout.String() != "30s" {
 		t.Errorf("request_timeout = %v, want 30s", cfg.Crawl.RequestTimeout)
+	}
+}
+
+// TestLoad_CrawlBalanceAbsent_IsNil asserts that omitting the crawl_balance
+// section entirely leaves Config.CrawlBalance nil — the additive,
+// backward-compatible default the Postgres-redesign plan requires (no
+// section => unchanged, unlimited-claim behavior).
+func TestLoad_CrawlBalanceAbsent_IsNil(t *testing.T) {
+	path := writeSeedsYAML(t, `crawl:
+  max_concurrency: 3
+`)
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.CrawlBalance != nil {
+		t.Errorf("CrawlBalance = %+v, want nil when the section is absent", cfg.CrawlBalance)
+	}
+}
+
+// TestLoad_CrawlBalance_ParsesDomainsAndDefaultsWindow asserts the section
+// parses default_max_per_window and per-domain overrides, and that an
+// omitted window key defaults to 24h.
+func TestLoad_CrawlBalance_ParsesDomainsAndDefaultsWindow(t *testing.T) {
+	path := writeSeedsYAML(t, `crawl_balance:
+  default_max_per_window: 100
+  domains:
+    cbsnews.com: 20
+    npr.org: 0
+`)
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.CrawlBalance == nil {
+		t.Fatal("CrawlBalance = nil, want parsed section")
+	}
+	if cfg.CrawlBalance.Window != 24*time.Hour {
+		t.Errorf("Window = %v, want 24h default", cfg.CrawlBalance.Window)
+	}
+	if cfg.CrawlBalance.DefaultMaxPerWindow != 100 {
+		t.Errorf("DefaultMaxPerWindow = %d, want 100", cfg.CrawlBalance.DefaultMaxPerWindow)
+	}
+	if got := cfg.CrawlBalance.Domains["cbsnews.com"]; got != 20 {
+		t.Errorf("Domains[cbsnews.com] = %d, want 20", got)
+	}
+	// A cap of 0 is a deliberate hard block, distinct from "key absent".
+	if got, ok := cfg.CrawlBalance.Domains["npr.org"]; !ok || got != 0 {
+		t.Errorf("Domains[npr.org] = %d, ok=%v, want 0, true", got, ok)
+	}
+}
+
+// TestLoad_CrawlBalance_ExplicitWindowPreserved asserts an explicit window
+// key is not overridden by the 24h default.
+func TestLoad_CrawlBalance_ExplicitWindowPreserved(t *testing.T) {
+	path := writeSeedsYAML(t, `crawl_balance:
+  window: 1h
+  default_max_per_window: 5
+`)
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.CrawlBalance.Window != time.Hour {
+		t.Errorf("Window = %v, want 1h (explicit value preserved)", cfg.CrawlBalance.Window)
 	}
 }
 

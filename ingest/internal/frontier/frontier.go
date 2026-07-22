@@ -1,10 +1,16 @@
+// Package frontier manages the crawl queue with state machine transitions.
+// Two backends are supported from one binary, mirroring the internal/storage/db
+// split: SQLite, the live production path until the Phase 11 Postgres-redesign
+// cutover, and Postgres, the new path being built out ahead of that cutover.
+// Frontier dispatches by f.db.IsPostgres() so callers do not need to branch
+// themselves; SQLite-specific SQL lives in frontier_sqlite.go and
+// Postgres-specific SQL (including the FOR UPDATE SKIP LOCKED claim and the
+// optional per-domain balance quota) lives in frontier_postgres.go. This file
+// holds the shared surface, dispatch, and the DomainQuota config type.
 package frontier
 
 import (
 	"context"
-	"database/sql"
-	"errors"
-	"fmt"
 	"log"
 	"time"
 
@@ -19,6 +25,33 @@ import (
 type Frontier struct {
 	db         *db.DB
 	maxRetries int
+	// quota configures optional per-domain balance caps. Read only by the
+	// Postgres claim path (see frontier_postgres.go); nil on every SQLite
+	// Frontier and on any Postgres Frontier where seeds.yaml has no
+	// crawl_balance section — both mean "unlimited claiming", i.e. today's
+	// behavior.
+	quota *DomainQuota
+}
+
+// DomainQuota configures per-domain balance quotas for the Postgres claim
+// query (Postgres-redesign Phase 2, Task 2 — production is skewed, e.g.
+// cbsnews 2,404 docs vs npr 65). It is additive and Postgres-only: the
+// SQLite path never reads it, so a Frontier built with a nil DomainQuota (or
+// any SQLite Frontier) claims exactly as it always has.
+type DomainQuota struct {
+	// Window bounds how far back the per-domain "already fetched" count is
+	// computed, against raw.articles.fetched_at (see frontier_postgres.go's
+	// claimItemsPostgresQuota doc comment for why raw.articles rather than
+	// raw.pages). Zero/negative falls back to 24h.
+	Window time.Duration
+	// DefaultMaxPerWindow caps any domain not listed in PerDomain within
+	// Window. Zero or negative means unlimited for domains without an
+	// explicit override.
+	DefaultMaxPerWindow int
+	// PerDomain overrides DefaultMaxPerWindow for specific domains, keyed by
+	// the lowercased host as util.ExtractDomain produces it (e.g.
+	// "www.cbsnews.com"). An explicit cap of 0 blocks the domain outright.
+	PerDomain map[string]int
 }
 
 // PushStats categorizes the outcomes of a PushLinks call so callers/ops
@@ -29,11 +62,13 @@ type PushStats struct {
 	DBErrors  int64
 }
 
-// New creates a new Frontier.
-func New(database *db.DB, maxRetries int) *Frontier {
+// New creates a new Frontier. quota is optional (nil disables balance
+// quotas) and is only ever consulted on the Postgres path.
+func New(database *db.DB, maxRetries int, quota *DomainQuota) *Frontier {
 	return &Frontier{
 		db:         database,
 		maxRetries: maxRetries,
+		quota:      quota,
 	}
 }
 
@@ -46,21 +81,13 @@ func New(database *db.DB, maxRetries int) *Frontier {
 // operator tunes staleAge below the fetch timeout and a still-live row is
 // recovered and re-claimed, the claim guard in updatePageState makes the
 // original worker's completion a no-op error rather than a clobber, so
-// exclusivity (A3) holds regardless.
+// exclusivity (A3) holds regardless. This invariant is enforced identically
+// on both backends (see recoverStaleSQLite / recoverStalePostgres).
 func (f *Frontier) RecoverStale(ctx context.Context, staleAge time.Duration) (int64, error) {
-	cutoff := time.Now().Add(-staleAge).Unix()
-
-	result, err := f.db.Conn().ExecContext(ctx, `
-		UPDATE pages
-		SET state = ?, next_fetch_at = ?, inflight_at = 0
-		WHERE state = ? AND inflight_at < ? AND inflight_at > 0
-	`, model.StateQueued, time.Now().Unix(), model.StateInflight, cutoff)
-
-	if err != nil {
-		return 0, fmt.Errorf("recover stale: %w", err)
+	if f.db.IsPostgres() {
+		return f.recoverStalePostgres(ctx, staleAge)
 	}
-
-	return result.RowsAffected()
+	return f.recoverStaleSQLite(ctx, staleAge)
 }
 
 // EnsureRecovered runs RecoverStale and logs the result. Every runner
@@ -78,41 +105,16 @@ func (f *Frontier) EnsureRecovered(ctx context.Context, staleAge time.Duration) 
 	}
 }
 
-// ClaimItems atomically claims a batch of work items via a single
-// UPDATE ... RETURNING, moving rows from QUEUED to INFLIGHT.
+// ClaimItems atomically claims a batch of work items, moving rows from
+// QUEUED to INFLIGHT. On Postgres this is a single FOR UPDATE SKIP LOCKED
+// statement (see claimItemsPostgres) instead of the SQLite busy-timeout
+// dance; the per-domain balance quota, when configured, is applied only on
+// that path (claimItemsPostgresQuota).
 func (f *Frontier) ClaimItems(ctx context.Context, batchSize int) ([]*model.Page, error) {
-	now := time.Now().Unix()
-
-	rows, err := f.db.Conn().QueryContext(ctx, `
-		UPDATE pages
-		SET state = ?, inflight_at = ?
-		WHERE url_canon IN (
-			SELECT url_canon
-			FROM pages
-			WHERE state = ? AND next_fetch_at <= ?
-			ORDER BY priority DESC, next_fetch_at ASC
-			LIMIT ?
-		)
-		RETURNING url_canon, url_raw, domain, priority, retries
-	`, model.StateInflight, now, model.StateQueued, now, batchSize)
-	if err != nil {
-		return nil, fmt.Errorf("claim items: %w", err)
+	if f.db.IsPostgres() {
+		return f.claimItemsPostgres(ctx, batchSize)
 	}
-	defer rows.Close()
-
-	var pages []*model.Page
-	for rows.Next() {
-		p := &model.Page{State: model.StateInflight, InflightAt: now}
-		if err := rows.Scan(&p.URLCanon, &p.URLRaw, &p.Domain, &p.Priority, &p.Retries); err != nil {
-			return nil, fmt.Errorf("scan page: %w", err)
-		}
-		pages = append(pages, p)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate claimed rows: %w", err)
-	}
-
-	return pages, nil
+	return f.claimItemsSQLite(ctx, batchSize)
 }
 
 // MarkDone marks a page as successfully fetched.
@@ -145,114 +147,47 @@ func (f *Frontier) MarkFailed(ctx context.Context, page *model.Page, errMsg stri
 	})
 }
 
-// updatePageState applies a state transition plus a set of column updates
-// in a single UPDATE. `inflight_at` is always reset to 0. Values are
-// parameterized except for the "retries + 1" sentinel, which is spliced
-// as an expression so SQLite can evaluate it.
-//
+// updatePageState applies a state transition plus a set of column updates.
 // The WHERE clause guards on the claim (state = INFLIGHT AND inflight_at =
-// the timestamp this worker claimed the row at). A worker whose row was
-// recovered by RecoverStale and re-claimed by another worker will match 0
-// rows and get a "not claimed" error instead of silently clobbering the
-// new claim (A3 exclusivity). Matching 0 rows is always surfaced as an
-// error so a mismatched frontier key can never fail silently again.
+// the timestamp this worker claimed the row at), so a worker whose row was
+// recovered by RecoverStale and re-claimed by another worker matches 0 rows
+// and gets a "not claimed" error instead of silently clobbering the new
+// claim (A3 exclusivity) — enforced identically on both backends.
 func (f *Frontier) updatePageState(ctx context.Context, page *model.Page, state model.PageState, updates map[string]any) error {
-	// Build SET clauses in a stable order so prepared-statement reuse is possible.
-	args := []any{state, 0} // state, inflight_at
-	setClauses := "state = ?, inflight_at = ?"
-	for _, col := range []string{"http_status", "content_sha256", "etag", "last_modified", "last_error", "next_fetch_at", "retries"} {
-		v, ok := updates[col]
-		if !ok {
-			continue
-		}
-		if col == "retries" {
-			// Spliced expression — only "retries + 1" is accepted.
-			expr, isExpr := v.(string)
-			if !isExpr || expr != "retries + 1" {
-				return fmt.Errorf("updatePageState: invalid retries expression")
-			}
-			setClauses += ", retries = retries + 1"
-			continue
-		}
-		setClauses += ", " + col + " = ?"
-		args = append(args, v)
+	if f.db.IsPostgres() {
+		return f.updatePageStatePostgres(ctx, page, state, updates)
 	}
-	args = append(args, page.URLCanon, model.StateInflight, page.InflightAt)
-
-	query := "UPDATE pages SET " + setClauses + " WHERE url_canon = ? AND state = ? AND inflight_at = ?"
-	result, err := f.db.Conn().ExecContext(ctx, query, args...)
-	if err != nil {
-		return err
-	}
-	rows, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("updatePageState rows affected: %w", err)
-	}
-	if rows == 0 {
-		return fmt.Errorf("updatePageState: %s not updated (not INFLIGHT under this claim; re-claimed or wrong key)", page.URLCanon)
-	}
-	return nil
+	return f.updatePageStateSQLite(ctx, page, state, updates)
 }
 
-// PushLinks adds new URLs to the frontier and returns categorized
-// counts. Duplicates are ignored (INSERT OR IGNORE). Malformed URLs
-// and DB insert errors are counted separately so ops can distinguish
-// bad input from infrastructure trouble.
+// PushLinks adds new URLs to the frontier and returns categorized counts.
+// Duplicates are ignored. Malformed URLs and DB insert errors are counted
+// separately so ops can distinguish bad input from infrastructure trouble.
 func (f *Frontier) PushLinks(ctx context.Context, links []string, priority int) (*PushStats, error) {
-	stats := &PushStats{}
 	if len(links) == 0 {
-		return stats, nil
+		return &PushStats{}, nil
 	}
+	if f.db.IsPostgres() {
+		return f.pushLinksPostgres(ctx, links, priority)
+	}
+	return f.pushLinksSQLite(ctx, links, priority)
+}
 
-	stmt, err := f.db.Conn().PrepareContext(ctx, `
-		INSERT OR IGNORE INTO pages (url_canon, url_raw, domain, state, priority, next_fetch_at)
-		VALUES (?, ?, ?, ?, ?, ?)
-	`)
+// canonicalizeLink resolves a raw link to (canon, domain, ok). Shared by
+// both backends' PushLinks so the malformed-URL classification cannot drift
+// between SQLite and Postgres.
+func canonicalizeLink(link string) (canon, domain string, ok bool) {
+	c, err := util.CanonicalizeURL(link)
 	if err != nil {
-		return stats, fmt.Errorf("prepare insert: %w", err)
+		return "", "", false
 	}
-	defer stmt.Close()
-
-	now := time.Now().Unix()
-
-	for _, link := range links {
-		canon, err := util.CanonicalizeURL(link)
-		if err != nil {
-			stats.Malformed++
-			continue
-		}
-		domain := util.ExtractDomain(canon)
-
-		result, err := stmt.ExecContext(ctx, canon, link, domain, model.StateQueued, priority, now)
-		if err != nil {
-			stats.DBErrors++
-			continue
-		}
-		n, _ := result.RowsAffected()
-		stats.Added += n
-	}
-
-	if stats.DBErrors > 0 {
-		return stats, errors.New("one or more DB insert errors occurred during PushLinks")
-	}
-	return stats, nil
+	return c, util.ExtractDomain(c), true
 }
 
 // Stats returns current frontier statistics.
 func (f *Frontier) Stats(ctx context.Context) (queued, inflight, done, failed int64, err error) {
-	row := f.db.Conn().QueryRowContext(ctx, `
-		SELECT
-			SUM(CASE WHEN state = 0 THEN 1 ELSE 0 END),
-			SUM(CASE WHEN state = 1 THEN 1 ELSE 0 END),
-			SUM(CASE WHEN state = 2 THEN 1 ELSE 0 END),
-			SUM(CASE WHEN state = 3 THEN 1 ELSE 0 END)
-		FROM pages
-	`)
-
-	var q, i, d, fa sql.NullInt64
-	if err = row.Scan(&q, &i, &d, &fa); err != nil {
-		return
+	if f.db.IsPostgres() {
+		return f.statsPostgres(ctx)
 	}
-
-	return q.Int64, i.Int64, d.Int64, fa.Int64, nil
+	return f.statsSQLite(ctx)
 }

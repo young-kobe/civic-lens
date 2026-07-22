@@ -55,10 +55,19 @@ func New(ctx context.Context, opts Options) (*App, error) {
 		return nil, fmt.Errorf("migrate database: %w", err)
 	}
 
+	var quota *frontier.DomainQuota
+	if cfg.CrawlBalance != nil {
+		quota = &frontier.DomainQuota{
+			Window:              cfg.CrawlBalance.Window,
+			DefaultMaxPerWindow: cfg.CrawlBalance.DefaultMaxPerWindow,
+			PerDomain:           cfg.CrawlBalance.Domains,
+		}
+	}
+
 	app := &App{
 		Config:   cfg,
 		Database: database,
-		Frontier: frontier.New(database, cfg.Crawl.MaxRetries),
+		Frontier: frontier.New(database, cfg.Crawl.MaxRetries, quota),
 	}
 
 	if opts.RequireFetcher {
