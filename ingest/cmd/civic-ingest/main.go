@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -23,7 +24,7 @@ func main() {
 	}
 
 	rootCmd.PersistentFlags().StringVar(&cfgPath, "config", "data/seeds.yaml", "Path to config file")
-	rootCmd.PersistentFlags().StringVar(&dbPath, "db", "data/civic_lens.db", "Path to SQLite database")
+	rootCmd.PersistentFlags().StringVar(&dbPath, "db", defaultDBPath(), "Path to SQLite database, or a Postgres DSN (postgres://...)")
 
 	rootCmd.AddCommand(migrateCmd())
 	rootCmd.AddCommand(ingestCmd())
@@ -35,6 +36,17 @@ func main() {
 	if err := rootCmd.Execute(); err != nil {
 		log.Fatal(err)
 	}
+}
+
+// defaultDBPath resolves the --db default: CIVIC_DATABASE_URL when set (so
+// deploys can point the binary at Postgres via env, matching the
+// CIVIC_DATABASE_URL name already used on the Python side), falling back to
+// the SQLite path otherwise. An explicit --db flag still overrides either.
+func defaultDBPath() string {
+	if dsn := os.Getenv("CIVIC_DATABASE_URL"); dsn != "" {
+		return dsn
+	}
+	return "data/civic_lens.db"
 }
 
 func migrateCmd() *cobra.Command {

@@ -47,3 +47,13 @@ services:
       dockerfile: analysis/Dockerfile
     volumes:
       - ./.compose-data:/var/lib/civic-lens
+
+  # pg-redesign Phase 1 groundwork (not yet live — nothing reads/writes this
+  # DB yet). Bind-mount instead of the named `pgdata` volume so `rm -rf
+  # .compose-data` resets Postgres the same way it already resets the SQLite
+  # data dir. Set POSTGRES_USER/POSTGRES_PASSWORD in your .env — see
+  # .env.example; there are no defaults, so `docker compose up -d postgres`
+  # fails loud without them.
+  postgres:
+    volumes:
+      - ./.compose-data/pgdata:/var/lib/postgresql/data

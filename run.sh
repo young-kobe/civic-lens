@@ -78,6 +78,25 @@ run_x()       { ensure_ingest; status "Fetching X (Twitter) data...";    "$INGES
 run_crawl()   { ensure_ingest; status "Running crawl for ${DURATION}..."; "$INGEST_BIN" crawl --config "$SEEDS" --db "$DB" --duration "$DURATION"; }
 
 # ----------------------------------------------------------------------------- #
+#  Postgres (dev, pg-redesign Phase 1 groundwork)                              #
+# ----------------------------------------------------------------------------- #
+
+run_pg() {
+    command -v docker >/dev/null 2>&1 || die "Docker is not installed."
+    status "Starting Postgres (dev)..."
+    docker compose up -d postgres || die "Failed to start postgres"
+    status "Waiting for Postgres to become healthy..."
+    local cid tries=0
+    cid="$(docker compose ps -q postgres)"
+    until [[ "$(docker inspect -f '{{.State.Health.Status}}' "$cid" 2>/dev/null)" == "healthy" ]]; do
+        tries=$((tries + 1))
+        [[ $tries -ge 30 ]] && die "Postgres did not become healthy in time (see: docker compose logs postgres)"
+        sleep 2
+    done
+    status "Postgres is healthy at 127.0.0.1:5432."
+}
+
+# ----------------------------------------------------------------------------- #
 #  Python (venv)                                                                #
 # ----------------------------------------------------------------------------- #
 
@@ -160,6 +179,7 @@ Commands:
   crawl             Run the web crawler          [--duration <dur>, default 10m]
   reddit            Fetch Reddit posts/comments
   x                 Fetch X/Twitter posts
+  pg                Start Postgres (dev; pg-redesign Phase 1 groundwork, not yet live)
   analyze           Run analysis pipeline (ETL + AI + caching)
                                                  [--tasks <list>] [--limit <n>]
   refresh-accounts  Refresh known_political_x_accounts.yaml   [--dry-run]
@@ -207,6 +227,7 @@ case "$COMMAND" in
     crawl)            run_migrate; run_crawl ;;
     reddit)           run_migrate; run_reddit ;;
     x)                run_migrate; run_x ;;
+    pg)               run_pg ;;
     api)              run_api ;;
     analyze)          run_analyze ;;
     refresh-accounts) run_refresh_accounts ;;
