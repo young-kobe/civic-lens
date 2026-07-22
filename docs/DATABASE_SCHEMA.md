@@ -128,10 +128,16 @@ Indexes: `(username)`, `(created_at)`.
 
 ### Enums
 
-- `corpus.political_affiliation`: `democrat | republican | independent | other | unknown` —
-  **the single source of truth** for curated party/media-lean; no other
-  table stores curated affiliation. Reused by `analysis.author_leans` and
-  `analysis.narrative_leans` for the derived-lean columns.
+- `corpus.political_lean`: `democrat | republican | independent | mixed | unknown` —
+  **the single source of truth** for curated political lean, one flat
+  convention across the entire schema (owner decision, supersedes the
+  plan's original two-column party/lean sketch). One column name (`lean`)
+  everywhere this enum appears — `corpus.entities.lean`,
+  `analysis.author_leans.lean`, `analysis.narrative_leans.lean`,
+  `serving.entity_stance_rollups.lean`, `serving.narrative_rollups.lean`,
+  `serving.bot_rollups.lean` — no other table stores curated affiliation,
+  and no `party` column exists anywhere in the schema. **Never fed into an
+  LLM prompt** (bias/priming risk).
 - `corpus.source_type`: `news | reddit_post | x_post`
 - `corpus.entity_kind`: `official | collective | outlet | subreddit`
 - `corpus.author_tier`: `elected_official | affiliated | general_public`
@@ -152,19 +158,26 @@ always resolve.
 | entity_key | TEXT | UNIQUE — the YAML slug |
 | kind | corpus.entity_kind | NOT NULL |
 | display_name, blurb | TEXT | |
-| role_title, term_start, owner, source_citation | TEXT/DATE | nullable, populated per kind |
-| party | corpus.political_affiliation | curated, officials/collectives |
-| lean | corpus.political_affiliation | curated, outlets/subreddits — **see note below** |
+| role_title, term_start, owner, source_citation | TEXT/DATE | nullable, populated per kind; source_citation is the curation *citation* (bio_source / AllSides rating text) |
+| lean | corpus.political_lean | NOT NULL DEFAULT 'unknown' — curated for every kind: officials/collectives (party membership IS the lean value) and outlets/subreddits (media lean flattened onto the same 5-value enum) |
+| lean_source | TEXT | nullable, display/audit only, never a join axis — the *original pre-flattening* YAML string (e.g. `"center-left"`, `"R"`, `"independent-dem"`), distinct from source_citation |
 | active | BOOLEAN | NOT NULL DEFAULT true |
+| editorial | BOOLEAN | NOT NULL DEFAULT false — true for the 3 hand-edited registries; false for officials promoted wholesale from `known_political_x_accounts.yaml` (~549 people, one entity per person — see registry_sync.py). Partial index `idx_entities_editorial (kind) WHERE editorial` backs the UI's editorial-only filter. |
 | synced_at | TIMESTAMPTZ | NOT NULL |
 
-**Open mapping question (flagged, not resolved by the schema):** today's
-YAML lean vocabulary for outlets/subreddits is a distinct 6-point scale
+**Lean flattening (owner decision, resolved — no longer open):** the YAML
+curation vocabularies are richer than the 5-value enum
 (`left/center-left/center/center-right/right/mixed` for outlets;
-`left/center/right/mixed` for subreddits), not
-`democrat/republican/independent/other/unknown`. The north-star plan directs
-reusing `political_affiliation` for this column; the YAML->enum mapping is a
-Phase 4 `registry_sync.py` decision Kobe needs to make, not a schema change.
+`left/center/right/mixed` for subreddits; `R/D/I/independent-dem/other` for
+officials). `analysis/src/etl/registry_sync.py` flattens deterministically
+via the named constants in `analysis/src/common/registry.py`:
+`left`/`center-left` -> `democrat`, `center` -> `independent`,
+`center-right`/`right` -> `republican`, `mixed` -> `mixed`; for officials,
+`R` -> `republican`, `D` -> `democrat`, `I`/`independent-dem` -> `independent`.
+Absent or unrecognized values (including the documented-but-unbucketed
+`other` party code) map to `unknown` and are logged loudly — never guessed.
+The pre-flattening string survives in `lean_source` for audit; the flat
+`lean` value is what every join uses.
 
 ### corpus.entity_aliases
 
@@ -183,7 +196,10 @@ following_count, account_created_at, last_synced_at.
 Replaces `account_profiles`. `author_id` UNIQUE FK -> authors. `tier`
 (corpus.author_tier), `method` (corpus.classification_method), optional
 `entity_id` FK (links an account to its curated registry entity — NULL for
-unmatched general-public accounts), `classified_at`, `notes`.
+unmatched general-public accounts), `classified_at`, `notes`. Deliberately
+**has no party/lean column of its own** — an official's lean is read by
+joining `entity_id -> corpus.entities.lean`; storing it here too would
+duplicate the single source of truth.
 
 ### corpus.documents
 
@@ -213,9 +229,16 @@ Each FKs both the parent document AND its raw row — the old convention-only
 `docs.ident` join becomes an enforced FK.
 
 - **corpus.news_articles**: `doc_id` PK/FK -> documents; `url_canon` UNIQUE
-  FK -> `raw.articles`; `domain`, `extraction_version`.
+  FK -> `raw.articles`; `domain`, `extraction_version`;
+  `outlet_entity_id` nullable FK -> `corpus.entities` (`kind='outlet'`),
+  resolved at ETL time by canonicalizing `domain` the same way
+  `registry_sync.py` canonicalizes `news_outlets.yaml` domains/aliases —
+  NULL when unmatched (never blocks a doc), backfilled on a later
+  `documents.py` run once the outlet is registered.
 - **corpus.reddit_posts**: `doc_id` PK/FK -> documents; `fullname` UNIQUE FK
-  -> `raw.reddit_posts`; `subreddit`, `score`, `num_comments`.
+  -> `raw.reddit_posts`; `subreddit`, `score`, `num_comments`;
+  `subreddit_entity_id` nullable FK -> `corpus.entities` (`kind='subreddit'`),
+  same resolution/backfill contract as `outlet_entity_id`.
 - **corpus.x_posts**: `doc_id` PK/FK -> documents; `tweet_id` UNIQUE FK ->
   `raw.x_posts`; `conversation_id`, `lang`, `place_country_code`,
   `retweet_count`, `reply_count`, `like_count`, `quote_count`,
