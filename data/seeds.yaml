@@ -44,6 +44,36 @@ crawl:
 #     www.cbsnews.com: 15
 #     feeds.npr.org: 50
 
+# domain_filter (Postgres-redesign Phase 4 — analysis/src/etl/documents.py
+# only; the SQLite loader.py path never reads this). All three keys are
+# optional and additive: an absent section, or an absent key within it,
+# keeps today's unfiltered/uncapped ETL behavior.
+domain_filter:
+  # Always rejected before any content filtering — cheapest check first,
+  # and an explicit "never this domain" call is never second-guessed by a
+  # keyword match. Seeded with the 2026-07-22 known leak: comparecards.com
+  # (a credit-card comparison site, +54.2 net tone, 24 posts) passed the
+  # US-politics keyword filter — see documents.py's module docstring for
+  # the matching-semantics fix (word-boundary, not substring) that this
+  # deny entry backstops rather than replaces.
+  deny:
+    - www.comparecards.com
+  # Bypasses is_us_political_content (NOT the 30-day recency rule, and NOT
+  # is_index_page for news) for the listed domain/subreddit. Empty by
+  # default — nothing needs it today.
+  allow: []
+  # Ceiling on total corpus.documents rows per domain_or_subreddit within
+  # the current 30-day window (existing + newly admitted this run),
+  # newest-published-first when a run has more eligible candidates than
+  # remaining slots. 0/absent = uncapped (today's behavior). Applies
+  # uniformly across news domains, subreddits, and x.com (x_post rows all
+  # share the fixed domain_or_subreddit "x.com" — a nonzero cap here also
+  # throttles total X volume, not just per-outlet skew; leave at 0 if that
+  # isn't wanted, since X volume is already budget-capped separately via
+  # ops.x_api_budget). Kept at 0 here; Kobe picks a production value once
+  # per-domain composition is visible against real Postgres volume.
+  max_docs_per_domain_per_window: 0
+
 reddit:
   user_agent: "CivicLens/1.0 by u/civic-lens"
   # Subreddits balanced across left / center / right plus two structured

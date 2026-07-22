@@ -163,12 +163,17 @@ CREATE INDEX idx_x_users_created ON raw.x_users (created_at);
 -- corpus — normalized corpus + entity registry (Python ETL writer)
 -- =============================================================================
 
--- The single source of truth for curated party/media-lean. See the plan's
--- "Political affiliation" section: no other table stores curated
+-- The single source of truth for curated political lean. Owner decision
+-- (supersedes the plan's original two-column party/lean sketch): ONE flat
+-- lean convention across the entire schema, one enum, one column name
+-- ("lean") everywhere it appears. No other table stores curated
 -- affiliation; every derived lean (analysis.author_leans,
 -- analysis.narrative_leans) is computed once and joined, never re-derived.
-CREATE TYPE corpus.political_affiliation AS ENUM (
-    'democrat', 'republican', 'independent', 'other', 'unknown'
+-- Political lean is NEVER fed into an LLM prompt (bias/priming risk) — every
+-- engine that reads corpus.entities for prompt context must exclude this
+-- column and lean_source.
+CREATE TYPE corpus.political_lean AS ENUM (
+    'democrat', 'republican', 'independent', 'mixed', 'unknown'
 );
 
 CREATE TYPE corpus.source_type AS ENUM ('news', 'reddit_post', 'x_post');
@@ -183,9 +188,9 @@ CREATE TABLE corpus.entities (
     kind corpus.entity_kind NOT NULL,
     display_name TEXT NOT NULL,
     blurb TEXT,
-    -- JUDGMENT CALL: the plan specifies party/lean columns but does not
-    -- enumerate the rest of the curated registry. These four are the
-    -- curated fields that exist in data/verified_officials.yaml,
+    -- JUDGMENT CALL: the plan specifies a lean column but does not
+    -- enumerate the rest of the curated registry. These are the curated
+    -- fields that exist in data/verified_officials.yaml,
     -- data/news_outlets.yaml, and data/major_subreddits.yaml today and
     -- have nowhere else to live now that the registry is materialized
     -- into the DB. Nullable and only populated for the kind they apply to
@@ -196,21 +201,37 @@ CREATE TABLE corpus.entities (
     term_start DATE,
     owner TEXT,
     source_citation TEXT,
-    party corpus.political_affiliation,
-    lean corpus.political_affiliation,
+    -- ONE flat lean convention (owner decision, supersedes the plan's
+    -- separate party/lean sketch): for officials/collectives, party
+    -- membership IS the lean value (mapped losslessly, e.g. R -> republican,
+    -- D -> democrat, I -> independent); for outlets/subreddits, the curated
+    -- YAML lean scale flattens deterministically (see
+    -- analysis/src/common/registry.py's flattening constants). No separate
+    -- party column anywhere in the schema — this is the only stored
+    -- affiliation value.
+    lean corpus.political_lean NOT NULL DEFAULT 'unknown',
+    -- Provenance/audit only, never a join axis: the ORIGINAL pre-flattening
+    -- YAML string (e.g. "center-left", "R", "independent-dem"), preserved so
+    -- the flattening is auditable/reversible. Distinct from source_citation
+    -- above, which holds the curation citation (bio_source / AllSides
+    -- rating text) — lean_source holds the raw classification value itself.
+    lean_source TEXT,
     active BOOLEAN NOT NULL DEFAULT true,
+    -- true for the 3 hand-edited registries; false for the ~549 officials
+    -- promoted wholesale from known_political_x_accounts.yaml. See
+    -- analysis/src/etl/registry_sync.py.
+    editorial BOOLEAN NOT NULL DEFAULT false,
     synced_at TIMESTAMPTZ NOT NULL
 );
 COMMENT ON TABLE corpus.entities IS 'YAML registry (verified_officials/news_outlets/major_subreddits/known_political_x_accounts) materialized. YAML in git remains source of truth; ETL sync upserts and flips active=false for removed keys — never DELETE, so historical FKs always resolve.';
 COMMENT ON COLUMN corpus.entities.entity_key IS 'Stable slug = the YAML key (domain / handle / subreddit name).';
-COMMENT ON COLUMN corpus.entities.party IS 'Curated party for officials/collectives. THE source of truth — no other table stores curated affiliation.';
-COMMENT ON COLUMN corpus.entities.lean IS 'Curated media-lean for outlets/subreddits, reusing the political_affiliation enum per the plan.
-NOTE (flagged, not resolved here): today''s YAML lean vocabulary for outlets/subreddits is a distinct
-6-point scale (left/center-left/center/center-right/right/mixed for outlets; left/center/right/mixed
-for subreddits), not democrat/republican/independent/other/unknown. Reusing this enum for lean requires
-a Phase 4 registry_sync.py mapping decision (e.g. left+center-left -> democrat-leaning bucket) that the
-plan does not specify. Column kept exactly as the plan directs; the mapping is a call for Kobe, not made here.';
+COMMENT ON COLUMN corpus.entities.lean IS 'THE single source of truth for curated political lean (officials'' party AND outlets''/subreddits'' media lean, flattened onto the same 5-value corpus.political_lean enum). No other table stores curated affiliation; every derived lean (analysis.author_leans, analysis.narrative_leans) and every serving rollup JOINs this column rather than re-deriving it. NEVER fed into an LLM prompt (bias/priming risk).';
+COMMENT ON COLUMN corpus.entities.lean_source IS 'Display/audit only, never a join axis: the original pre-flattening YAML string (outlet partisan_lean / subreddit tilt / official party code) that registry_sync.py flattened into `lean`. Preserves the richer curated vocabulary the owner chose to collapse.';
 COMMENT ON COLUMN corpus.entities.active IS 'false = removed from YAML; row is kept (never DELETEd) so historical FKs keep resolving.';
+COMMENT ON COLUMN corpus.entities.editorial IS 'true = one of the 3 hand-edited registries. false = promoted from known_political_x_accounts.yaml. Both kinds carry a real lean/entity_id; UI dropdowns/rollups filter on this.';
+
+CREATE INDEX idx_entities_editorial ON corpus.entities (kind) WHERE editorial;
+COMMENT ON INDEX corpus.idx_entities_editorial IS 'Common filter: editorial entities by kind.';
 
 CREATE TABLE corpus.entity_aliases (
     entity_id BIGINT NOT NULL REFERENCES corpus.entities (entity_id),
@@ -247,7 +268,7 @@ CREATE TABLE corpus.author_profiles (
     classified_at TIMESTAMPTZ NOT NULL,
     notes TEXT
 );
-COMMENT ON TABLE corpus.author_profiles IS 'Replaces account_profiles. entity_id links the account to its curated registry entity when one exists (e.g. a senator''s personal handle -> the "sen-x" entity); NULL for general_public accounts with no registry match.';
+COMMENT ON TABLE corpus.author_profiles IS 'Replaces account_profiles. entity_id links the account to its curated registry entity when one exists (e.g. a senator''s personal handle -> the "sen-x" entity); NULL for general_public accounts with no registry match. Deliberately has NO party/lean column of its own: an official''s lean is read by joining entity_id -> corpus.entities.lean. Storing it here too would duplicate the single source of truth the owner decision requires.';
 
 CREATE TABLE corpus.documents (
     doc_id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -277,16 +298,24 @@ CREATE TABLE corpus.news_articles (
     doc_id BIGINT PRIMARY KEY REFERENCES corpus.documents (doc_id),
     url_canon TEXT NOT NULL UNIQUE REFERENCES raw.articles (url_canon),
     domain TEXT,
-    extraction_version TEXT
+    extraction_version TEXT,
+    outlet_entity_id BIGINT REFERENCES corpus.entities (entity_id)
 );
+COMMENT ON COLUMN corpus.news_articles.outlet_entity_id IS 'Nullable FK to corpus.entities (kind=''outlet''), resolved at ETL time (analysis/src/etl/documents.py) by canonicalizing `domain` the same way registry_sync.py canonicalizes news_outlets.yaml domains/also_domains. NULL when the outlet is not (yet) in the registry -- never blocks a doc; a later registry_sync run that adds/reactivates the outlet is backfilled on the next documents.py run.';
+
+CREATE INDEX idx_news_articles_outlet_entity ON corpus.news_articles (outlet_entity_id);
 
 CREATE TABLE corpus.reddit_posts (
     doc_id BIGINT PRIMARY KEY REFERENCES corpus.documents (doc_id),
     fullname TEXT NOT NULL UNIQUE REFERENCES raw.reddit_posts (fullname),
     subreddit TEXT,
     score INTEGER,
-    num_comments INTEGER
+    num_comments INTEGER,
+    subreddit_entity_id BIGINT REFERENCES corpus.entities (entity_id)
 );
+COMMENT ON COLUMN corpus.reddit_posts.subreddit_entity_id IS 'Nullable FK to corpus.entities (kind=''subreddit''), resolved at ETL time the same way as news_articles.outlet_entity_id (see that column''s comment) -- canonicalized via registry.canonicalize_subreddit, NULL when unmatched, backfilled on a later run once the subreddit is registered.';
+
+CREATE INDEX idx_reddit_posts_subreddit_entity ON corpus.reddit_posts (subreddit_entity_id);
 
 CREATE TABLE corpus.x_posts (
     doc_id BIGINT PRIMARY KEY REFERENCES corpus.documents (doc_id),
@@ -464,7 +493,7 @@ COMMENT ON TABLE analysis.author_bot_scores IS 'Materialized per-author rollup o
 
 CREATE TABLE analysis.author_leans (
     author_id BIGINT PRIMARY KEY REFERENCES corpus.authors (author_id),
-    lean corpus.political_affiliation NOT NULL,
+    lean corpus.political_lean NOT NULL,
     lean_share REAL NOT NULL,
     lean_confidence REAL NOT NULL,
     stance_sample_count INTEGER NOT NULL,
@@ -504,7 +533,7 @@ CREATE INDEX idx_narratives_clustering_run ON analysis.narratives (clustering_ru
 
 CREATE TABLE analysis.narrative_leans (
     narrative_id BIGINT PRIMARY KEY REFERENCES analysis.narratives (narrative_id),
-    lean corpus.political_affiliation NOT NULL,
+    lean corpus.political_lean NOT NULL,
     lean_share REAL NOT NULL,
     confidence REAL NOT NULL,
     doc_count INTEGER NOT NULL,
@@ -618,11 +647,11 @@ CREATE TABLE serving.entity_stance_rollups (
     volume INTEGER NOT NULL DEFAULT 0,
     net_score REAL,
     engagement_total INTEGER NOT NULL DEFAULT 0,
-    lean corpus.political_affiliation,
+    lean corpus.political_lean,
     lean_confidence REAL,
     computed_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-COMMENT ON TABLE serving.entity_stance_rollups IS 'EntitySentimentItem rollup (byNewsOutlet/byOfficial/byGeneralPublic). tier in (''news'',''officials'',''public''); entity_id NULL + catch_all_key set for pseudo-entities like other-outlets/general-public. lean is denormalized here (joined from entities.party/lean or author_leans at build time) — a lean-aware view is a JOIN at build time, not a new derivation, per the plan.';
+COMMENT ON TABLE serving.entity_stance_rollups IS 'EntitySentimentItem rollup (byNewsOutlet/byOfficial/byGeneralPublic). tier in (''news'',''officials'',''public''); entity_id NULL + catch_all_key set for pseudo-entities like other-outlets/general-public. lean is denormalized here (joined from entities.lean or author_leans at build time) — a lean-aware view is a JOIN at build time, not a new derivation, per the plan.';
 COMMENT ON COLUMN serving.entity_stance_rollups.entity_id IS 'NULL for catch-all buckets; see catch_all_key.';
 
 CREATE UNIQUE INDEX entity_stance_rollups_uq ON serving.entity_stance_rollups (
@@ -662,7 +691,7 @@ CREATE TABLE serving.narrative_rollups (
     bot_pushed_fraction REAL,
     mean_confidence REAL,
     first_seen_doc_id BIGINT REFERENCES corpus.documents (doc_id),
-    lean corpus.political_affiliation,
+    lean corpus.political_lean,
     lean_share REAL,
     computed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (narrative_id, win)
@@ -688,7 +717,7 @@ CREATE TABLE serving.bot_rollups (
     total_docs INTEGER NOT NULL DEFAULT 0,
     bot_docs INTEGER NOT NULL DEFAULT 0,
     bot_rate_pct REAL,
-    lean corpus.political_affiliation,
+    lean corpus.political_lean,
     computed_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 COMMENT ON TABLE serving.bot_rollups IS 'BotEntityItem rollup. lean denormalized from author_leans/entities at build time — gains the lean dimension per the plan (a bot-flagged account labeled "bot, leaning democrat" when stance mass is one-sided).';
