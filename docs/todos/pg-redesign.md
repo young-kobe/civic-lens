@@ -38,22 +38,35 @@ record.
 
 ## Phase 2 — Go ingestion port
 
-- [ ] Port `ingest/internal/storage/` to Postgres (`$1` placeholders,
-      `ON CONFLICT`, enum casts)
-- [ ] Frontier gains `FOR UPDATE SKIP LOCKED`
-- [ ] Writers target `raw.*` / `ops.x_api_budget`
-- [ ] Storage package branched by DSN scheme so one binary handles both
-      backends during the parallel period
-- [ ] Frontier prioritization gains per-domain balance quotas read from
+- [x] Port `ingest/internal/storage/` to Postgres (`$1` placeholders,
+      `ON CONFLICT`, enum casts) — see `internal/frontier/` and
+      `internal/runner/` `_postgres.go` siblings
+- [x] Frontier gains `FOR UPDATE SKIP LOCKED`
+- [x] Writers target `raw.*` / `ops.x_api_budget`
+- [x] Storage package branched by DSN scheme so one binary handles both
+      backends during the parallel period (`db.DB.IsPostgres()`)
+- [x] Frontier prioritization gains per-domain balance quotas read from
       `data/seeds.yaml` (under-represented domains scheduled first,
-      prolific domains capped)
-- [ ] Investigate and fix the empty Reddit capture (`reddit_posts_raw = 0`
-      in prod — creds/seeds/silently broken?)
+      prolific domains capped) — `CrawlBalanceConfig`, Postgres-only,
+      absent section = unchanged behavior
+- [x] Investigate the empty Reddit capture (`reddit_posts_raw = 0` in
+      prod): root cause confirmed as Reddit blocking datacenter IPs (not
+      a code/creds bug); no code fix applies — see
+      `docs/audit-trail/ingestion/2026-07-22-pg-ingestion-port.md` for the
+      disposition and the re-enablement item below
 - [ ] Deploy: new-ingest timers start writing Postgres `raw.*` +
       shared `data/raw/sha256/` (content-addressed = idempotent across
-      both stacks)
-- [ ] Tests: ported Go tests; frontier state machine + quota scheduling
-      against real Postgres
+      both stacks) — Kobe's manual action, blocked on the Phase 1 VPS
+      resize
+- [x] Tests: ported Go tests; frontier state machine + quota scheduling
+      against real Postgres (clean-room verified 2026-07-22: sequential
+      and parallel (`-p 4`) gated runs both pass against a throwaway
+      container; see audit-trail entry above for the full matrix)
+- [ ] Reddit fetcher placement at cutover: run the fetcher from a
+      residential network connection (not the VPS) writing to the
+      networked Postgres instance with owner-scoped credentials, since
+      Reddit blocks datacenter-IP source addresses — Kobe's manual
+      action at cutover
 
 ## Phase 3 — Precious-data migration script
 
