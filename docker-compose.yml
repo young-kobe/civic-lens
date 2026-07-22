@@ -84,6 +84,38 @@ services:
         max-size: 10m
         max-file: "3"
 
+  # Postgres redesign, Phase 1 (see docs/todos/pg-redesign.md): groundwork
+  # only — nothing in the stack reads/writes it yet. Runs alongside the
+  # SQLite stack untouched above; dev brings it up standalone via
+  # `./run.sh pg`. POSTGRES_USER/POSTGRES_PASSWORD have no defaults on
+  # purpose (see .env.example) so a missing credential fails `compose
+  # config` loudly instead of silently starting an insecure/trust-auth DB.
+  postgres:
+    image: postgres:17-alpine
+    env_file: ${CIVIC_ENV_FILE:-/etc/civic-lens.env}
+    environment:
+      POSTGRES_DB: civic_lens
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER must be set (see .env.example)}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set (see .env.example)}
+    command: >
+      postgres -c shared_buffers=256MB -c work_mem=16MB -c max_connections=30
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"
+    restart: unless-stopped
+    mem_limit: 768m
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d civic_lens"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
   # One-shots below: `docker compose run --rm ingest <subcommand> ...` /
   # `docker compose run --rm analyze`. The "jobs" profile keeps them out of
   # `up -d`; `compose run` activates the profile implicitly.
@@ -108,3 +140,4 @@ services:
 
 volumes:
   caddy_state:
+  pgdata:

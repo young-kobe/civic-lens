@@ -1,0 +1,28 @@
+# 2026-07-22 — Postgres redesign Phase 1: Python connection pool
+
+`analysis/src/common/db.py` adds the one Postgres connection module the plan's code-design principles call for on the Python side: a lazily-initialized psycopg3 `ConnectionPool` singleton. It is new plumbing — nothing in the pipeline imports it yet, by design. Phase 1 of plan `has-our-aggregate-method-async-frog`; checklist `docs/todos/pg-redesign.md`. Cross-linked with `docs/audit-trail/infra/2026-07-22-pg-phase1-infrastructure.md` and `docs/audit-trail/ingestion/2026-07-22-pg-migration-runner.md`.
+
+## What shipped
+
+- **`get_pool()` / `connection()` / `close_pool()`**: `get_pool()` double-checked-locks a module-level `ConnectionPool` singleton into existence on first call, sized `min_size=1` / `max_size=CIVIC_PG_POOL_MAX` (default 5 — matches the compose service's `max_connections=30`, leaving headroom for the API process and job workers on the same small box). Every connection is opened with `row_factory=dict_row`, so callers get plain dicts back, never psycopg's default tuple rows. `connection()` is a context manager delegating to the pool's own `connection()` — commits on clean exit, rolls back and returns the connection to the pool on an unhandled exception. `close_pool()` closes and discards the singleton, for tests and shutdown paths; a subsequent `get_pool()` builds a fresh pool from current settings.
+- **Fail-loud contract**: `get_pool()` raises `RuntimeError` immediately if `CIVIC_DATABASE_URL` is unset, naming the missing var and an example DSN in the message — it never falls back to guessing a default (unlike the Go side's `--db` flag, which does default to the SQLite path; the Python module has no SQLite equivalent to fall back to, so unset is always an error here). The pool itself is opened non-blocking (`open(wait=False)`) — a transiently-down database surfaces on first *use*, not at `get_pool()` time, so a flaky connection doesn't block whatever process constructed the pool.
+- **No `search_path` magic**: the module deliberately never sets a Postgres `search_path`. Every call site is expected to schema-qualify its SQL (`SELECT * FROM corpus.documents`, never `SELECT * FROM documents`) — an unqualified table name is meant to be a bug that surfaces as an error, not a convenience the module papers over. This is the Python-side twin of the plan's "no abstractions for single-use code" principle: one pool, one contract, every future call site follows it the same way.
+- **Settings additions** (`analysis/src/common/settings.py`): `database_url: str = ""` and `pg_pool_max: int = 5`, following the existing `CIVIC_`-prefixed pydantic-settings convention (`CIVIC_DATABASE_URL`, `CIVIC_PG_POOL_MAX`) — no new naming pattern introduced.
+- **Dependency**: `psycopg[binary,pool]` added to `analysis/requirements.txt` and installed into `analysis/.venv` (confirmed `psycopg 3.3.4` + `psycopg_pool` importable in this task's verification run).
+- **Guarded test pattern** (`analysis/tests/test_pg_db.py`): three unconditional unit tests (`get_pool()` fail-loud behavior including "a failed attempt does not cache a broken pool"; settings default/override reads) that always run, plus one `@unittest.skipUnless(os.environ.get("CIVIC_TEST_DATABASE_URL"), ...)`-gated integration test (`TestPoolRoundTripAgainstRealPostgres`) that only runs when a real server is reachable — skipped, never failed, in environments without one. The gated test confirms `dict_row`-shaped results and that a `TIMESTAMPTZ` value survives an actual round trip through the pool unchanged.
+
+## Why
+
+- The plan's code-design principle #1 calls for exactly one connection module per language on each side of the redesign — this is that module for Python, mirroring the Go side's single `Open(dsn)` entry point (see the ingestion entry). Every future Postgres-backed Python module (`etl/`, `results/store.py`, `serving/`, `scheduler/stages.py` in later phases) is expected to call `db.connection()` rather than open its own client.
+- Fail-loud on a missing `CIVIC_DATABASE_URL` matches the project's broader "fail loud" convention (`.agent/rules/invariants.md`) — a silently-guessed DSN in a system this data-sensitive would be worse than an immediate, clearly-worded error.
+- The guarded-test pattern (`CIVIC_TEST_DATABASE_URL`) is necessary because most dev/CI environments have no Postgres server available yet in Phase 1 — the test suite must stay green without one while still proving real-server correctness whenever one is available.
+
+## Validation performed this task
+
+- `PYTHONPATH=$PWD analysis/.venv/bin/python -m unittest analysis.tests.test_pg_db` run twice: once implicitly unguarded (gated test skips without `CIVIC_TEST_DATABASE_URL`), and explicitly with `CIVIC_TEST_DATABASE_URL` pointed at a throwaway `postgres:17-alpine` container spun up for this task (see the infra entry) — all 6 tests passed, including the previously-skipped `test_dict_row_and_timestamptz_round_trip`, which is the first time this module has been exercised against a real Postgres server.
+
+## Follow-ups
+
+- Nothing imports `common/db.py` yet outside its own tests, by design — Phase 4 (ETL rewrite) is the first consumer (`etl/registry_sync.py`, `authors.py`, `documents.py`, `queue.py`), followed by Phase 5's `results/store.py` and later `serving/`, `scheduler/stages.py`.
+- `CIVIC_DATABASE_URL` is not set in any running deployment; the module is exercised only by its own test suite and by this task's manual verification against a throwaway container.
+- Phase 1 checklist items this entry closes out are ticked in `docs/todos/pg-redesign.md`; remaining Phase 1 box (VPS resize) is Kobe's manual action, tracked there, not here.

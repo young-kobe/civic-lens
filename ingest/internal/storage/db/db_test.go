@@ -7,6 +7,29 @@ import (
 	"testing"
 )
 
+// TestIsPostgresDSN pins the DSN-scheme rule that Open()/Migrate() branch on:
+// only postgres://... and postgresql://... select the Postgres backend, so a
+// path change here is never accidental — every other string (including a
+// bare "file:" DSN) must keep taking the SQLite path.
+func TestIsPostgresDSN(t *testing.T) {
+	cases := []struct {
+		dsn  string
+		want bool
+	}{
+		{"postgres://user:pass@localhost:5432/civic_lens", true},
+		{"postgresql://user:pass@localhost:5432/civic_lens", true},
+		{"data/civic_lens.db", false},
+		{"/abs/path/civic_lens.db", false},
+		{"file:data/civic_lens.db?_pragma=busy_timeout(20000)", false},
+		{"", false},
+	}
+	for _, c := range cases {
+		if got := isPostgresDSN(c.dsn); got != c.want {
+			t.Errorf("isPostgresDSN(%q) = %v, want %v", c.dsn, got, c.want)
+		}
+	}
+}
+
 func TestDiscoverMigrations(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "migrations_test")
 	if err != nil {
