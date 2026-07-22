@@ -91,6 +91,9 @@ func (rr *RedditRunner) Run(ctx context.Context) (*RedditResult, error) {
 }
 
 func (rr *RedditRunner) insertPost(ctx context.Context, post model.RedditPost) error {
+	if rr.app.Database.IsPostgres() {
+		return rr.insertPostPostgres(ctx, post)
+	}
 	return upsertRow(ctx, rr.app.Database.Conn(), "reddit_posts_raw",
 		[]string{
 			"fullname", "subreddit", "created_utc", "fetched_at", "title",

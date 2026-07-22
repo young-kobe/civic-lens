@@ -150,12 +150,25 @@ func (w *ArticleWriter) Close() {
 	w.cancel()
 }
 
-// flush writes a batch of articles in a single transaction.
+// flush writes a batch of articles in a single transaction, dispatching to
+// the SQLite or Postgres statement text for the backend this writer's
+// database was opened against (see db.DB.IsPostgres).
 func (w *ArticleWriter) flush(ctx context.Context, batch []articleEntry) {
 	if len(batch) == 0 {
 		return
 	}
+	if w.database.IsPostgres() {
+		w.flushPostgres(ctx, batch)
+		return
+	}
+	w.flushSQLite(ctx, batch)
+}
 
+// flushSQLite writes a batch of articles in a single transaction against the
+// SQLite backend. This is the live production path — kept byte-identical
+// while the Postgres path (flushPostgres, article_writer_postgres.go) is
+// built out alongside it.
+func (w *ArticleWriter) flushSQLite(ctx context.Context, batch []articleEntry) {
 	tx, err := w.database.BeginImmediate(ctx)
 	if err != nil {
 		log.Printf("ArticleWriter: begin tx failed: %v", err)
