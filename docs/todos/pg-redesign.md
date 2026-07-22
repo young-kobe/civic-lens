@@ -70,17 +70,26 @@ record.
 
 ## Phase 3 — Precious-data migration script
 
-- [ ] `tools/migrate_sqlite_to_pg.py` (stdlib `sqlite3` + `psycopg`, no old
+- [x] `tools/migrate_sqlite_to_pg.py` (stdlib `sqlite3` + `psycopg`, no old
       code deps)
-- [ ] `--raw` mode: raw tables + `x_api_budget`; epoch -> `to_timestamp`;
+- [x] `--raw` mode: raw tables + `x_api_budget`; epoch -> `to_timestamp`;
       idempotent `ON CONFLICT` keyed on natural PKs (re-runnable at cutover
       for the delta)
-- [ ] `--archive` mode: verbatim import per the archive schema (evals only
+- [x] `--archive` mode: verbatim import per the archive schema (evals only
       if nonzero)
-- [ ] `--verify` mode: the verification battery (row counts, NULL counts,
+- [x] `--verify` mode: the verification battery (row counts, NULL counts,
       min/max/sum over key columns, random 500-row field sample, raw_hash
       -> file resolution, PK uniqueness)
-- [ ] Tested against a copy of the production DB
+- [x] Tested against a synthetic fixture DB (all 25 `data/migrations/*.sql`
+      applied, every mapped table + edge case exercised) and a throwaway
+      `postgres:17-alpine` container — see
+      `docs/audit-trail/infra/2026-07-22-sqlite-to-pg-migration-tool.md`;
+      `tools/test_migrate_sqlite_to_pg.py` (gated on
+      `CIVIC_TEST_POSTGRES_DSN`) is the repeatable form
+- [ ] Owner action: dry-run `migrate_sqlite_to_pg.py --raw`/`--archive`/
+      `--verify` against a copy of the production DB — no prod data exists
+      on this dev machine, so the synthetic fixture is the local ceiling;
+      this run is Kobe's, against a real copy, before cutover
 
 ## Phase 4 — ETL rewrite
 
