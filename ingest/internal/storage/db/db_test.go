@@ -108,6 +108,10 @@ ALTER TABLE test_table ADD COLUMN name TEXT;
 	}
 	defer database.Close()
 
+	if database.IsPostgres() {
+		t.Errorf("IsPostgres() = true for SQLite DSN %q, want false", dbPath)
+	}
+
 	ctx := context.Background()
 
 	// First pass

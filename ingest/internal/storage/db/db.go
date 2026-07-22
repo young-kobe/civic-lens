@@ -61,6 +61,13 @@ func (d *DB) Conn() *sql.DB {
 	return d.conn
 }
 
+// IsPostgres reports whether this DB was opened against a Postgres DSN.
+// Callers use it to select backend-specific SQL during the dual-backend
+// period (see the package comment).
+func (d *DB) IsPostgres() bool {
+	return d.isPostgres
+}
+
 // BeginImmediate starts a transaction with BEGIN IMMEDIATE for write operations.
 func (d *DB) BeginImmediate(ctx context.Context) (*sql.Tx, error) {
 	tx, err := d.conn.BeginTx(ctx, nil)
