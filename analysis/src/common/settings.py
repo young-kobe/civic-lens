@@ -9,6 +9,12 @@ class Settings(BaseSettings):
     
     # Database
     db_path: str = "data/civic_lens.db"
+    # Postgres redesign (Phase 1, plumbing only — nothing reads this yet).
+    # Empty by default; analysis/src/common/db.py refuses to guess a DSN.
+    database_url: str = ""
+    # Pool max size for the Postgres ConnectionPool. Small box: server-side
+    # max_connections=30, so keep this well under that per process.
+    pg_pool_max: int = 5
     
     # Cache for pre-computed analysis snapshots
     cache_dir: str = "data/cache"
