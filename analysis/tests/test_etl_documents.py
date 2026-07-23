@@ -20,6 +20,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(os.path.dirname(current_dir))
@@ -329,6 +330,17 @@ class AdmissionGateTests(unittest.TestCase):
         verdict = docs._admit_x(self.political_text, self.now, cfg, self.now)
         self.assertTrue(verdict.admitted)
 
+    def test_admit_x_official_bypasses_recency_entirely(self):
+        """_admit_x_official takes no created_at/now at all -- there is no
+        recency check to bypass in the first place, unlike _admit_x."""
+        verdict = docs._admit_x_official(self.political_text, self.cfg)
+        self.assertTrue(verdict.admitted)
+
+    def test_admit_x_official_still_rejects_nonpolitical(self):
+        verdict = docs._admit_x_official("Just watched a great movie tonight.", self.cfg)
+        self.assertFalse(verdict.admitted)
+        self.assertEqual(verdict.reason, docs.NOT_POLITICAL)
+
     def test_record_rejection_populates_named_counter_and_reasons_dict(self):
         result = docs.DocLoadResult()
         result.record_rejection(docs.NOT_POLITICAL)
@@ -437,11 +449,13 @@ class LoadNewDocumentsIntegrationTests(unittest.TestCase):
 
             with docs.db.connection() as conn:
                 row = conn.execute(
-                    "SELECT doc_id, author_id, source_url FROM corpus.documents WHERE source_type='news'"
+                    "SELECT doc_id, author_id, source_url, admission_class "
+                    "FROM corpus.documents WHERE source_type='news'"
                 ).fetchone()
                 self.assertIsNotNone(row)
                 self.assertIsNone(row["author_id"])
                 self.assertEqual(row["source_url"], "https://example.com/a1")
+                self.assertEqual(row["admission_class"], "sampled")
                 sub = conn.execute(
                     "SELECT doc_id FROM corpus.news_articles WHERE doc_id = %s", (row["doc_id"],)
                 ).fetchone()
@@ -755,9 +769,137 @@ class LoadNewDocumentsIntegrationTests(unittest.TestCase):
         self.assertEqual(result.inserted, 1)
         with docs.db.connection() as conn:
             row = conn.execute(
-                "SELECT d.author_id FROM corpus.documents d WHERE d.source_type='x_post'"
+                "SELECT d.author_id, d.admission_class FROM corpus.documents d WHERE d.source_type='x_post'"
             ).fetchone()
             self.assertIsNone(row["author_id"])
+            self.assertEqual(row["admission_class"], "sampled")
+
+    def _seed_official_entity(self, entity_key: str, *, active: bool = True) -> int:
+        """Register `entity_key` as a kind='official' corpus.entities row --
+        curation is DB-native (0002_entity_registry_seed.sql), same stand-in
+        convention as `_seed_outlet_entity`. Returns the new entity_id."""
+        with docs.db.connection() as conn:
+            row = conn.execute(
+                "INSERT INTO corpus.entities (entity_key, kind, display_name, lean, editorial, active, elected) "
+                "VALUES (%s, 'official'::corpus.entity_kind, 'Test Official', "
+                "'independent'::corpus.political_lean, true, %s, true) RETURNING entity_id",
+                (entity_key, active),
+            ).fetchone()
+            return row["entity_id"]
+
+    def _seed_x_author_with_profile(self, user_id: str, username: str, entity_id: int) -> int:
+        """Sync a raw.x_users row into corpus.authors, then link it to
+        `entity_id` via corpus.author_profiles -- stands in for what
+        engine/account_tier.py would do on a later pipeline run (see
+        documents.py's _resolve_official_author_ids docstring on stage
+        ordering). Returns the new author_id."""
+        from analysis.src.etl import authors as authors_mod
+        with docs.db.connection() as conn:
+            conn.execute(
+                "INSERT INTO raw.x_users (user_id, username, name, description, location, "
+                "profile_image_url, verified, verified_type, followers_count, following_count, "
+                "created_at, fetched_at, raw_hash) VALUES (%s, %s, %s, '', '', '', false, NULL, "
+                "0, 0, now(), now(), %s)",
+                (user_id, username, username, "p" + user_id.rjust(63, "0")[:63]),
+            )
+        authors_mod.sync_x_authors()
+        with docs.db.connection() as conn:
+            row = conn.execute(
+                "SELECT author_id FROM corpus.authors WHERE platform='x' AND platform_author_id=%s",
+                (user_id,),
+            ).fetchone()
+            author_id = row["author_id"]
+            conn.execute(
+                "INSERT INTO corpus.author_profiles (author_id, tier, method, entity_id, classified_at) "
+                "VALUES (%s, 'elected_official'::corpus.author_tier, "
+                "'curated_list'::corpus.classification_method, %s, now())",
+                (author_id, entity_id),
+            )
+        return author_id
+
+    def _insert_x_post(self, tweet_id, author_platform_id, created_at, text, raw_hash):
+        with docs.db.connection() as conn:
+            conn.execute(
+                "INSERT INTO raw.x_posts (tweet_id, author_id, created_at, fetched_at, text, "
+                "raw_hash, extraction_version) VALUES (%s, %s, %s, now(), %s, %s, 'v1')",
+                (tweet_id, author_platform_id, created_at, text, raw_hash),
+            )
+
+    def test_official_authored_x_post_bypasses_recency_and_gets_official_record(self):
+        """The single core behavior of the admission_class design: an
+        active tracked official's post older than 30 days is still
+        admitted, labeled 'official_record' instead of the default
+        'sampled'."""
+        entity_id = self._seed_official_entity("sen-test-official")
+        self._seed_x_author_with_profile("u_official1", "senofficial", entity_id)
+        old = datetime.datetime.now(UTC) - datetime.timedelta(days=100)
+        self._insert_x_post(
+            "tw_official_old", "u_official1", old,
+            "Congress must pass this immigration bill now", "o1" + "0" * 61,
+        )
+        result = docs.load_new_documents()
+        self.assertEqual(result.inserted, 1)
+        self.assertEqual(result.skipped_old, 0)
+        with docs.db.connection() as conn:
+            row = conn.execute(
+                "SELECT admission_class, author_id FROM corpus.documents WHERE natural_key='tw_official_old'"
+            ).fetchone()
+            self.assertEqual(row["admission_class"], "official_record")
+            self.assertIsNotNone(row["author_id"])
+
+    def test_general_author_same_age_post_is_not_admitted(self):
+        """Same 100-day-old post, same political content, but the author
+        has no author_profiles link at all -- the ordinary 30-day rule
+        still applies and the doc is rejected as stale."""
+        old = datetime.datetime.now(UTC) - datetime.timedelta(days=100)
+        self._insert_x_post(
+            "tw_general_old", "u_general_unsynced", old,
+            "Congress must pass this immigration bill now", "g1" + "1" * 61,
+        )
+        result = docs.load_new_documents()
+        self.assertEqual(result.inserted, 0)
+        self.assertEqual(result.skipped_old, 1)
+
+    def test_inactive_official_entity_does_not_bypass_recency(self):
+        """An entity flagged active=false must not grant the recency
+        bypass -- 'active' in the design's join condition is load-bearing,
+        not a formality."""
+        entity_id = self._seed_official_entity("rep-test-retired", active=False)
+        self._seed_x_author_with_profile("u_official2", "repretired", entity_id)
+        old = datetime.datetime.now(UTC) - datetime.timedelta(days=100)
+        self._insert_x_post(
+            "tw_inactive_old", "u_official2", old,
+            "Congress must pass this immigration bill now", "i1" + "2" * 61,
+        )
+        result = docs.load_new_documents()
+        self.assertEqual(result.inserted, 0)
+        self.assertEqual(result.skipped_old, 1)
+
+    def test_official_record_per_author_cap_drops_oldest_first(self):
+        """Patches the module cap down to 2 so the test doesn't need to
+        seed 200+ rows: 3 old official posts from the same author, only the
+        2 newest are admitted, the oldest is capped out."""
+        entity_id = self._seed_official_entity("sen-test-capped")
+        self._seed_x_author_with_profile("u_official3", "sencapped", entity_id)
+        base = datetime.datetime.now(UTC) - datetime.timedelta(days=100)
+        for i in range(3):
+            self._insert_x_post(
+                f"tw_cap{i}", "u_official3", base - datetime.timedelta(hours=i),
+                f"Congress must pass immigration bill number {i} now", f"c{i}" + str(i) * 61,
+            )
+        with mock.patch.object(docs, "OFFICIAL_RECORD_PER_AUTHOR_CAP", 2):
+            result = docs.load_new_documents()
+        self.assertEqual(result.inserted, 2)
+        self.assertEqual(result.skipped_capped, 1)
+        with docs.db.connection() as conn:
+            keys = {
+                row["natural_key"] for row in
+                conn.execute("SELECT natural_key FROM corpus.documents WHERE admission_class='official_record'")
+                .fetchall()
+            }
+            self.assertIn("tw_cap0", keys)  # newest (base - 0h)
+            self.assertIn("tw_cap1", keys)  # middle (base - 1h)
+            self.assertNotIn("tw_cap2", keys)  # oldest (base - 2h) -- capped out
 
 
 if __name__ == "__main__":

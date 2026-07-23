@@ -10,7 +10,8 @@ import datetime
 
 # Stamped onto every corpus.documents row. Bump whenever the filter
 # keywords, matching semantics, recency rule, or extraction logic change.
-ETL_VERSION = "pg-1"
+# pg-2 (2026-07-23): X admission gains the official_record recency bypass.
+ETL_VERSION = "pg-2"
 
 THIRTY_DAYS = datetime.timedelta(days=30)
 
@@ -83,3 +84,13 @@ STALE = "stale"
 INDEX_PAGE = "index_page"
 NOT_POLITICAL = "not_political"
 ADMITTED = "admitted"
+
+# corpus.documents.admission_class values (data/pg-migrations/0003_admission_class.sql).
+ADMISSION_SAMPLED = "sampled"
+ADMISSION_OFFICIAL_RECORD = "official_record"
+
+# Lifetime (not per-window) cap on official_record docs per author -- an
+# active official's public-record posts bypass the 30-day recency filter
+# entirely, so without a ceiling one prolific account could dominate the
+# corpus. Tuning knob: flagged for owner review, not derived from data.
+OFFICIAL_RECORD_PER_AUTHOR_CAP = 200

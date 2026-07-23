@@ -1,11 +1,6 @@
-"""
-analysis/src/etl/documents.py — normalizes raw.* into corpus.documents +
-subtype tables. Ports loader.py's US-politics keyword filter (word-boundary
-matched here, not substring), index-page detector, and 30-day recency rule;
-adds an additive domain_filter (deny/allow/cap) from data/seeds.yaml plus
-outlet/subreddit entity-FK backfill. Run after authors.py's
-sync_x_authors(). Full rationale:
-docs/audit-trail/analysis/2026-07-22-pg-etl-authors-documents-queue.md
+"""Normalizes raw.* into corpus.documents + subtype tables; run after
+authors.py's sync_x_authors(). Contract details: docs/audit-trail/analysis/
+2026-07-22-pg-etl-authors-documents-queue.md and 2026-07-23-admission-class.md.
 """
 
 from __future__ import annotations
@@ -25,6 +20,8 @@ from analysis.src.common import db
 from analysis.src.common.logger import get_logger
 from analysis.src.common.canonicalize import canonicalize_news_domain, canonicalize_subreddit
 from analysis.src.etl.constants import (
+    ADMISSION_OFFICIAL_RECORD,
+    ADMISSION_SAMPLED,
     ADMITTED,
     DENIED_DOMAIN,
     ETL_VERSION,
@@ -40,6 +37,7 @@ from analysis.src.etl.constants import (
     NAV_CHROME_HITS_GENERIC,
     NAV_CHROME_HITS_HUB,
     NOT_POLITICAL,
+    OFFICIAL_RECORD_PER_AUTHOR_CAP,
     STALE,
     THIRTY_DAYS,
     US_POLITICAL_KEYWORDS,
@@ -408,6 +406,15 @@ def _admit_x(
     )
 
 
+def _admit_x_official(text: str, cfg: DomainFilterConfig) -> AdmissionVerdict:
+    """Official-authored X (admission_class='official_record'): political
+    check only -- the 30-day recency gate is bypassed entirely, since a
+    tracked active official's post is public record regardless of age (see
+    data/pg-migrations/0003_admission_class.sql). No deny check, matching
+    `_admit_x` above."""
+    return _check_nonpolitical(text, "", "", X_DOMAIN_KEY, cfg) or _ADMITTED
+
+
 # ---------------------------------------------------------------------------
 # Load result + shared per-domain-count helper
 # ---------------------------------------------------------------------------
@@ -763,6 +770,18 @@ def _load_reddit(conn: Connection, cfg: DomainFilterConfig, now: datetime.dateti
 
 # ---------------------------------------------------------------------------
 # X
+#
+# admission_class (data/pg-migrations/0003_admission_class.sql): a post
+# authored by a tracked ACTIVE OFFICIAL (corpus.entities kind='official',
+# active=true, resolved through corpus.author_profiles.entity_id -- see
+# _resolve_official_author_ids) is admitted as 'official_record' regardless
+# of the 30-day recency window, capped at OFFICIAL_RECORD_PER_AUTHOR_CAP per
+# author (oldest dropped first, same select_within_domain_cap machinery as
+# the per-domain cap above, keyed by author_id instead of domain). Every
+# other X post keeps the existing recency+political gate and gets the
+# table's 'sampled' default. Author resolution happens up front in
+# _gather_x_candidates (not deferred to insert time, as it used to be)
+# because the admission decision itself now depends on it.
 # ---------------------------------------------------------------------------
 
 @dataclass
@@ -782,6 +801,49 @@ class _XCandidate:
     is_official_tier: Optional[bool]
     referenced_tweet_id: Optional[str]
     referenced_tweet_type: Optional[str]
+    author_id: Optional[int]
+    admission_class: str
+
+
+def _resolve_x_author_ids(conn: Connection, platform_author_ids: set[str]) -> dict[str, int]:
+    """Read-only lookup against corpus.authors; an unsynced author yields
+    no entry (caller treats as NULL)."""
+    if not platform_author_ids:
+        return {}
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT platform_author_id, author_id FROM corpus.authors "
+            "WHERE platform = 'x' AND platform_author_id = ANY(%s)",
+            (list(platform_author_ids),),
+        )
+        return {row["platform_author_id"]: row["author_id"] for row in cur.fetchall()}
+
+
+def _resolve_official_author_ids(conn: Connection, author_ids: set[int]) -> set[int]:
+    """Which of `author_ids` map to a currently-active kind='official'
+    corpus.entities row, via corpus.author_profiles.entity_id -- the join
+    path for admission_class='official_record' (verified against
+    data/pg-migrations/0001_north_star.sql / docs/DATABASE_SCHEMA.md, the
+    only tables carrying author<->entity linkage). An author with no
+    author_profiles row yet (account_tier.py runs later in the pipeline
+    than this ETL stage -- see job_runner.py's stage order) or a
+    profile pointing at an inactive/non-official entity is simply absent
+    from the returned set, not an error."""
+    if not author_ids:
+        return set()
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT ap.author_id
+            FROM corpus.author_profiles ap
+            JOIN corpus.entities e ON e.entity_id = ap.entity_id
+            WHERE ap.author_id = ANY(%s)
+              AND e.kind = 'official'::corpus.entity_kind
+              AND e.active = true
+            """,
+            (list(author_ids),),
+        )
+        return {row["author_id"] for row in cur.fetchall()}
 
 
 def _gather_x_candidates(
@@ -809,8 +871,16 @@ def _gather_x_candidates(
         )
         rows = cur.fetchall()
 
+    author_map = _resolve_x_author_ids(conn, {row["author_id"] for row in rows})
+    official_author_ids = _resolve_official_author_ids(conn, set(author_map.values()))
+
     for row in rows:
-        verdict = _admit_x(row["text"], row["created_at"], cfg, now)
+        author_id = author_map.get(row["author_id"])
+        is_official = author_id in official_author_ids
+        verdict = (
+            _admit_x_official(row["text"], cfg) if is_official
+            else _admit_x(row["text"], row["created_at"], cfg, now)
+        )
         if not verdict.admitted:
             result.record_rejection(verdict.reason)
             continue
@@ -823,51 +893,72 @@ def _gather_x_candidates(
             is_official_tier=row["is_official_tier"],
             referenced_tweet_id=row["referenced_tweet_id"],
             referenced_tweet_type=row["referenced_tweet_type"],
+            author_id=author_id,
+            admission_class=ADMISSION_OFFICIAL_RECORD if is_official else ADMISSION_SAMPLED,
         ))
     return candidates, result
 
 
-def _resolve_x_author_ids(conn: Connection, platform_author_ids: set[str]) -> dict[str, int]:
-    """Read-only lookup against corpus.authors; an unsynced author yields
-    no entry (caller treats as NULL)."""
-    if not platform_author_ids:
+def _existing_official_record_counts(conn: Connection, author_ids: set[int]) -> dict[str, int]:
+    """Count corpus.documents rows already admitted as official_record per
+    author, keyed as str(author_id) to match select_within_domain_cap's
+    string-keyed contract. Deliberately no time window: official_record
+    bypasses the 30-day recency rule entirely, so
+    OFFICIAL_RECORD_PER_AUTHOR_CAP is a lifetime cap, not a per-window one
+    (unlike _existing_domain_counts above)."""
+    if not author_ids:
         return {}
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT platform_author_id, author_id FROM corpus.authors "
-            "WHERE platform = 'x' AND platform_author_id = ANY(%s)",
-            (list(platform_author_ids),),
+            """
+            SELECT author_id, COUNT(*) AS n
+            FROM corpus.documents
+            WHERE source_type = 'x_post'
+              AND admission_class = 'official_record'::corpus.admission_class
+              AND author_id = ANY(%s)
+            GROUP BY author_id
+            """,
+            (list(author_ids),),
         )
-        return {row["platform_author_id"]: row["author_id"] for row in cur.fetchall()}
+        return {str(row["author_id"]): row["n"] for row in cur.fetchall()}
 
 
 def _insert_x_candidates(
     conn: Connection, candidates: list[_XCandidate], cfg: DomainFilterConfig, now: datetime.datetime
 ) -> tuple[int, int]:
-    cap = cfg.max_docs_per_domain_per_window
-    existing = _existing_domain_counts(conn, "x_post", {X_DOMAIN_KEY}, now) if cap else {}
-    admitted, capped = select_within_domain_cap(
-        [{"domain_key": X_DOMAIN_KEY, "published_at": c.created_at, "candidate": c} for c in candidates],
-        existing, cap,
-    )
-    author_map = _resolve_x_author_ids(conn, {row["candidate"].author_platform_id for row in admitted})
+    sampled = [c for c in candidates if c.admission_class == ADMISSION_SAMPLED]
+    official = [c for c in candidates if c.admission_class == ADMISSION_OFFICIAL_RECORD]
 
+    domain_cap = cfg.max_docs_per_domain_per_window
+    existing_domain = _existing_domain_counts(conn, "x_post", {X_DOMAIN_KEY}, now) if domain_cap else {}
+    admitted_sampled, capped_sampled = select_within_domain_cap(
+        [{"domain_key": X_DOMAIN_KEY, "published_at": c.created_at, "candidate": c} for c in sampled],
+        existing_domain, domain_cap,
+    )
+
+    existing_official = _existing_official_record_counts(conn, {c.author_id for c in official})
+    admitted_official, capped_official = select_within_domain_cap(
+        [{"domain_key": str(c.author_id), "published_at": c.created_at, "candidate": c} for c in official],
+        existing_official, OFFICIAL_RECORD_PER_AUTHOR_CAP,
+    )
+
+    admitted = admitted_sampled + admitted_official
     inserted = 0
     with conn.cursor() as cur:
         for row in admitted:
             c: _XCandidate = row["candidate"]
-            author_id = author_map.get(c.author_platform_id)
             source_url = _build_x_source_url(c.tweet_id)
             cur.execute(
                 """
                 INSERT INTO corpus.documents
                     (source_type, natural_key, domain_or_subreddit, author_id,
-                     published_at, title, body, source_url, raw_hash, etl_version)
-                VALUES ('x_post', %s, %s, %s, %s, NULL, %s, %s, %s, %s)
+                     published_at, title, body, source_url, raw_hash, etl_version, admission_class)
+                VALUES ('x_post', %s, %s, %s, %s, NULL, %s, %s, %s, %s, %s::corpus.admission_class)
                 ON CONFLICT (source_type, natural_key) DO NOTHING
                 RETURNING doc_id
                 """,
-                (c.tweet_id, X_DOMAIN_KEY, author_id, c.created_at, c.text, source_url, c.raw_hash, ETL_VERSION),
+                (c.tweet_id, X_DOMAIN_KEY, c.author_id, c.created_at, c.text, source_url, c.raw_hash,
+                 ETL_VERSION, c.admission_class),
             )
             doc_row = cur.fetchone()
             if doc_row is None:
@@ -886,7 +977,7 @@ def _insert_x_candidates(
                  c.referenced_tweet_id, c.referenced_tweet_type),
             )
             inserted += 1
-    return inserted, capped
+    return inserted, capped_sampled + capped_official
 
 
 def _load_x(conn: Connection, cfg: DomainFilterConfig, now: datetime.datetime) -> DocLoadResult:

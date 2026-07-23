@@ -35,6 +35,7 @@ from analysis.src.common import db as dbmod
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 MIGRATION_0001 = REPO_ROOT / "data" / "pg-migrations" / "0001_north_star.sql"
 MIGRATION_0002 = REPO_ROOT / "data" / "pg-migrations" / "0002_entity_registry_seed.sql"
+MIGRATION_0003 = REPO_ROOT / "data" / "pg-migrations" / "0003_admission_class.sql"
 
 _ALL_SCHEMAS = "raw, corpus, analysis, serving, ops, archive"
 
@@ -48,7 +49,10 @@ def reset_schema(dsn: str, *, seed: bool = False) -> None:
     Closes the shared `ConnectionPool` FIRST (see module docstring) before
     dropping. `seed=True` also applies `0002_entity_registry_seed.sql` --
     needed by modules matching against the real curated registry
-    (account_tier, narratives, targets).
+    (account_tier, narratives, targets). `0003_admission_class.sql` (the
+    corpus.documents.admission_class column) is always applied, in numeric
+    order after the optional 0002 seed -- every gated module's baseline
+    schema should track the latest migration, not just 0001.
     """
     dbmod.close_pool()
     with psycopg.connect(dsn, autocommit=True) as conn:
@@ -56,6 +60,7 @@ def reset_schema(dsn: str, *, seed: bool = False) -> None:
         conn.execute(MIGRATION_0001.read_text())
         if seed:
             conn.execute(MIGRATION_0002.read_text())
+        conn.execute(MIGRATION_0003.read_text())
 
 
 def begin_test(dsn: str) -> Optional[str]:
