@@ -239,3 +239,70 @@ TEXT_ANALYSIS_MAX_CHARS = 2000
 # short-circuit (prompt rule 6: mentions/links/hashtags only -> low
 # confidence). Matches the old analyzer.py's NEUTRAL/0.5 trivial-content value.
 TRIVIAL_CONTENT_CONFIDENCE = 0.5
+
+
+# =============================================================================
+# Wave 2 engine constants (Postgres redesign Phase 6, engine/{targets,
+# propaganda,claims}.py). Consolidated here 2026-07-23 -- each of those
+# modules originally kept these module-local to avoid concurrent edits to
+# this file while landing in parallel; now that all three are in, task-name
+# strings and the numeric budgets/caps/defaults move here per the owner's
+# constants-consolidation rule, matching the precedent set above by
+# TEXT_ANALYSIS_MAX_CHARS/TRIVIAL_CONTENT_CONFIDENCE. Private lookup/mapping
+# tables tightly coupled to one engine's own logic (targets.py's _STANCE_MAP,
+# propaganda.py's _DDL_PROPAGANDA_TECHNIQUES enum-gate frozenset) stay
+# module-local: they are read by exactly one function each, and moving them
+# here would separate a lookup table from its only reader without making it
+# any more shared. Compiled regexes and presentational strings (propaganda.py's
+# _WORD_RE, _PRE_FILTER_REASONING) stay local for the same reason -- this file
+# holds plain data constants, not implementation detail or narrative text.
+# =============================================================================
+
+TARGETS_TASK = "targets"
+PROPAGANDA_TASK = "propaganda"
+CLAIMS_TASK = "claims"
+
+# Schema instructs the LLM to extract at most 4 targets; enforced defensively
+# in engine/targets.py too (ported from old engine/target_extractor.py's
+# MAX_TARGETS).
+MAX_TARGETS = 4
+
+# Character budget for the doc text the LLM sees in engine/targets.py,
+# clamped at a sentence boundary (matches old target_extractor.py's
+# TARGET_TEXT_MAX_CHARS).
+TARGET_TEXT_MAX_CHARS = 2000
+
+# Character budget for the text engine/propaganda.py's LLM sees -- unchanged
+# from the old detector (propaganda techniques surface in the opening
+# rhetoric: headline + first 2-3 paragraphs, not paragraph 12).
+PROPAGANDA_TEXT_MAX_CHARS = 800
+
+# Schema caps engine/propaganda.py's techniques at 5; enforced defensively
+# here too.
+MAX_PROPAGANDA_TECHNIQUES = 5
+
+# engine/propaganda.py's loaded-language pre-filter, ported verbatim from the
+# old detector's _has_loaded_language: union of the negative-word and
+# intensifier lexicons. If the scored window contains none of these, the six
+# starter techniques (all of which ride on loaded vocabulary) are
+# overwhelmingly unlikely -- skip the LLM call and record a deterministic
+# zero-technique result instead of a silent skip, so the doc is marked done
+# and never re-queued for this.
+PROPAGANDA_LOADED_LEXICON = NEGATIVE_WORDS | INTENSIFIERS
+
+# Number of characters from the start of the (title + text) doc that
+# engine/propaganda.py's pre-filter scans for loaded language.
+PROPAGANDA_PRE_FILTER_SCAN_CHARS = 600
+
+# Character budget for the doc text engine/claims.py's LLM sees, clamped at a
+# sentence boundary. Matches the old claim_extractor.py's CLAIM_TEXT_MAX_CHARS.
+CLAIM_TEXT_MAX_CHARS = 2000
+
+# Prompt rule 2 caps engine/claims.py's model at 3 claims; enforced
+# defensively here too in case a backend ignores the instruction.
+MAX_CLAIMS_PER_DOC = 3
+
+# Run confidence engine/claims.py uses for a doc with zero surviving claims --
+# old convention (job_runner.py's run_claim_extraction: `sum(confidences)/
+# len(confidences) if confidences else 0.0`).
+ZERO_CLAIMS_CONFIDENCE = 0.0
