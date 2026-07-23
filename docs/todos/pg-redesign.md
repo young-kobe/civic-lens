@@ -101,6 +101,18 @@ record.
       flattening constants in `analysis/src/common/registry.py`,
       `lean_source` provenance, never fed into an LLM prompt — see
       `docs/audit-trail/analysis/2026-07-22-pg-lean-unification-registry-sync.md`.
+      **Retired same day** by owner decision: DB-native curation (source of
+      truth moves from YAML-in-git to `corpus.entities` itself, for
+      readability of hands-on curation). `registry_sync.py` and its test
+      file are deleted; `data/pg-migrations/0002_entity_registry_seed.sql`
+      is the one-time replacement (shipped — seeded 587 entities / 30
+      aliases from the final sync of the real YAMLs). `common/registry.py`
+      slimmed to only the two canonicalizers `documents.py` still needs. See
+      `docs/audit-trail/analysis/2026-07-22-db-native-entity-curation.md`.
+- [x] Freeze the four registry YAMLs (one-line header comment each,
+      2026-07-22): they stay in git, read-only, only for the old-stack's
+      `analysis/src/reporting/entity_registry.py` until it retires in Phase
+      9, at which point the YAMLs can be deleted too.
 - [x] `analysis/src/etl/authors.py` (X authors from `raw.x_users`; Reddit
       is a documented no-op — `raw.reddit_posts` carries no author column;
       news gets no synthetic author — see
@@ -118,11 +130,12 @@ record.
       / `reddit_posts.subreddit_entity_id` FKs (plan-specified, briefly
       flagged as a discrepancy against the first-landed 0001, now added to
       both the DDL and documents.py — resolved by this closure) resolve at
-      ETL time by canonicalizing `domain`/`subreddit` the same way
-      `registry_sync.py` canonicalizes the YAML primary key/alias; NULL
-      when unmatched (never blocks a doc); a `documents.py` re-run backfills
-      the FK once a later `registry_sync` run adds/reactivates the entity —
-      see the closure audit-trail entry above.
+      ETL time by canonicalizing `domain`/`subreddit` against the curated
+      `entity_key`/alias set (`analysis/src/common/registry.py`); NULL when
+      unmatched (never blocks a doc); a `documents.py` re-run backfills the
+      FK once the entity is later curated into `corpus.entities` — see the
+      closure audit-trail entry above and, for the DB-native-curation
+      reversal, `docs/audit-trail/analysis/2026-07-22-db-native-entity-curation.md`.
 - [x] `analysis/src/etl/queue.py` (seeds `ops.task_queue` per a
       job_runner.py-derived task-applicability matrix; `account_tier`
       excluded — author-scoped, not doc-scoped; `reset_stale_in_progress`
@@ -132,18 +145,22 @@ record.
       `test_etl_queue.py`, 60 tests (40 no-DB, 20 gated on
       `CIVIC_TEST_DATABASE_URL`) — FK integrity, idempotent re-run, cap
       enforcement, deny-list rejection, outlet/subreddit entity FK
-      resolution (matched/unmatched/backfill-after-later-registry-sync)
-      all live-verified against a throwaway `postgres:17-alpine` container
-      with 0001 applied. `test_registry_sync.py` (registry_sync +
-      `common/registry.py`) verified the same way, separately.
+      resolution (matched/unmatched/backfill-after-later-curation) all
+      live-verified against a throwaway `postgres:17-alpine` container with
+      0001 applied. (`test_registry_sync.py` verified `registry_sync.py` +
+      `common/registry.py` the same way at the time; both the module and
+      its test file are deleted post-retirement — see
+      `docs/audit-trail/analysis/2026-07-22-db-native-entity-curation.md`.)
 - [x] Owner decision (decided 2026-07-22): promote-all, with an editorial
       flag. Every curated account in `known_political_x_accounts.yaml`
-      (~549 unique people) is promoted to its own `corpus.entities` row
+      (549 unique people) is promoted to its own `corpus.entities` row
       (`kind='official'`), `editorial=false`; the 3 hand-edited registries
-      stay `editorial=true`. Implemented in `registry_sync.py`
-      (`_sync_promoted_officials`), `entities.editorial` column added to
-      `0001_north_star.sql` — see
-      `docs/audit-trail/analysis/2026-07-22-pg-lean-unification-registry-sync.md`.
+      stay `editorial=true`. Originally implemented in `registry_sync.py`
+      (`_sync_promoted_officials`, since deleted); `entities.editorial`
+      column added to `0001_north_star.sql`; the promoted rows themselves
+      now live in `0002_entity_registry_seed.sql` — see
+      `docs/audit-trail/analysis/2026-07-22-pg-lean-unification-registry-sync.md`
+      and `docs/audit-trail/analysis/2026-07-22-db-native-entity-curation.md`.
 - [ ] Future decision: `corpus.entity_kind` has a `'collective'` value with
       no populating YAML/logic yet (no registry loader writes
       `kind='collective'` today) — decide what populates it (e.g. parties,
