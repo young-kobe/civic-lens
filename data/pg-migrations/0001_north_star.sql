@@ -222,6 +222,12 @@ CREATE TABLE corpus.entities (
     -- promoted wholesale from known_political_x_accounts.yaml. Seeded by
     -- 0002_entity_registry_seed.sql; curated directly thereafter.
     editorial BOOLEAN NOT NULL DEFAULT false,
+    -- Curated truth for account_tier derivation (engine/account_tier.py):
+    -- TRUE = currently an elected federal officeholder, FALSE = appointed/
+    -- institutional. Nullable -- meaningful only where kind IN ('official',
+    -- 'collective'); always NULL for 'outlet'/'subreddit'. Hand-editable
+    -- like every other curated column here.
+    elected BOOLEAN,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 COMMENT ON TABLE corpus.entities IS 'Entity registry: officials, news outlets, subreddits, and promoted political accounts. Curated directly in this table; seeded once from the retired YAML registries by 0002_entity_registry_seed.sql (2026-07-22). Rows are never DELETEd, only flipped active=false, so historical FKs always resolve.';
@@ -230,6 +236,7 @@ COMMENT ON COLUMN corpus.entities.lean IS 'THE single source of truth for curate
 COMMENT ON COLUMN corpus.entities.lean_source IS 'Display/audit only, never a join axis: the original pre-flattening classification string (outlet partisan_lean / subreddit tilt / official party code). Preserves the richer curated vocabulary the owner chose to collapse.';
 COMMENT ON COLUMN corpus.entities.active IS 'false = curated inactive; row is kept (never DELETEd) so historical FKs keep resolving.';
 COMMENT ON COLUMN corpus.entities.editorial IS 'true = one of the 3 originally hand-edited registries. false = promoted from known_political_x_accounts.yaml. Both kinds carry a real lean/entity_id; UI dropdowns/rollups filter on this.';
+COMMENT ON COLUMN corpus.entities.elected IS 'Curated truth for account_tier derivation: TRUE = currently an elected federal officeholder, FALSE = appointed/institutional. Hand-editable. Meaningful only where kind IN (''official'', ''collective''); NULL for outlet/subreddit rows.';
 COMMENT ON COLUMN corpus.entities.updated_at IS 'Last curation timestamp. Seeded to a fixed value by 0002_entity_registry_seed.sql; bumped by whatever updates the row thereafter (DB-native curation, no sync process).';
 
 CREATE INDEX idx_entities_editorial ON corpus.entities (kind) WHERE editorial;
@@ -329,9 +336,12 @@ CREATE TABLE corpus.x_posts (
     reply_count INTEGER,
     like_count INTEGER,
     quote_count INTEGER,
-    is_official_tier BOOLEAN
+    is_official_tier BOOLEAN,
+    referenced_tweet_id TEXT,
+    referenced_tweet_type TEXT
 );
 COMMENT ON TABLE corpus.x_posts IS 'The convention-only docs.ident join to x_posts_raw becomes this enforced FK on tweet_id.';
+COMMENT ON COLUMN corpus.x_posts.referenced_tweet_id IS 'Snapshotted from raw.x_posts at ETL load time (analysis/src/etl/documents.py), same as the engagement counts, so analysis-layer readers (engine/citations.py) never join raw.* at analysis time.';
 
 -- =============================================================================
 -- analysis — runs + typed per-task results (analysis/src/results/store.py only writer)
@@ -441,9 +451,13 @@ CREATE INDEX idx_target_mentions_run ON analysis.target_mentions (run_id);
 CREATE TABLE analysis.propaganda_results (
     run_id BIGINT PRIMARY KEY REFERENCES analysis.runs (run_id),
     density REAL,
-    summary TEXT
+    summary TEXT,
+    techniques_validated INT NOT NULL DEFAULT 0,
+    techniques_dropped INT NOT NULL DEFAULT 0
 );
 COMMENT ON COLUMN analysis.propaganda_results.density IS 'Overall propaganda-technique density score for the doc; the narrative rollup''s propaganda_score is a mean over these.';
+COMMENT ON COLUMN analysis.propaganda_results.techniques_validated IS 'Count of LLM-flagged techniques that passed the DDL-vocabulary + evidence-span gate (== propaganda_techniques row count for this run).';
+COMMENT ON COLUMN analysis.propaganda_results.techniques_dropped IS 'Count of LLM-flagged techniques dropped for an out-of-enum vocabulary, an unverifiable evidence span, or an unparseable confidence.';
 
 CREATE TABLE analysis.propaganda_techniques (
     technique_id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -550,8 +564,16 @@ CREATE TABLE analysis.narrative_docs (
     doc_id BIGINT NOT NULL REFERENCES corpus.documents (doc_id),
     discovered_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     confidence REAL,
+    -- Run-precise extension provenance (plan `has-our-aggregate-method-
+    -- async-frog`): which clustering_runs invocation discovered this
+    -- doc<->narrative link, whether the narrative was founded this run or
+    -- extended by a later one. Nullable only for pre-existing rows written
+    -- before this column existed; narrative_clustering.py always sets it.
+    added_by_run BIGINT REFERENCES analysis.clustering_runs (clustering_run_id),
     PRIMARY KEY (narrative_id, doc_id)
 );
+COMMENT ON COLUMN analysis.narrative_docs.confidence IS 'The linked claim''s own analysis.claims.confidence (LLM extraction confidence), copied at insert time -- NOT the jaccard/cosine comparator similarity that matched the claim to this narrative (that value is computed in-memory by plan_clustering() and not persisted anywhere). Matches the old sqlite clusterer''s convention (engine/narrative_clusterer.py: `pc.confidence`).';
+COMMENT ON COLUMN analysis.narrative_docs.added_by_run IS 'clustering_runs row that discovered this link -- FK-precise, unlike the pre-2026-07-23 approximate discovered_at-vs-clustering_runs.started_at/completed_at window inference.';
 
 CREATE INDEX idx_narrative_docs_doc ON analysis.narrative_docs (doc_id);
 CREATE INDEX idx_narrative_docs_discovered ON analysis.narrative_docs (discovered_at);

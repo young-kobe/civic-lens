@@ -23,16 +23,27 @@ from psycopg import Connection
 
 from analysis.src.common import db
 from analysis.src.common.logger import get_logger
-from analysis.src.common.registry import canonicalize_news_domain, canonicalize_subreddit
+from analysis.src.common.canonicalize import canonicalize_news_domain, canonicalize_subreddit
 from analysis.src.etl.constants import (
+    ADMITTED,
+    DENIED_DOMAIN,
     ETL_VERSION,
     EXCLUDE_PATTERNS,
     FUTURE_SLOP,
+    HIGH_TITLECASE_SHARE,
     HUB_URL_PATTERN,
     INDEX_CHROME_TERMS,
+    INDEX_PAGE,
+    LOW_PUNCT_PER_100_WORDS,
     MIN_VALID_PUBLISHED_AT,
+    MIN_WORDS_FOR_LENGTH_SIGNALS,
+    NAV_CHROME_HITS_GENERIC,
+    NAV_CHROME_HITS_HUB,
+    NOT_POLITICAL,
+    STALE,
     THIRTY_DAYS,
     US_POLITICAL_KEYWORDS,
+    VERY_LOW_PUNCT_PER_100_WORDS,
     X_DOMAIN_KEY,
 )
 
@@ -71,18 +82,27 @@ def is_us_political_content(text: str, title: str = "", url: str = "") -> bool:
     return bool(_KEYWORD_PATTERN.search(combined))
 
 
-def is_index_page(text: str, url: str = "") -> bool:
-    """Detect a section-index / hub page masquerading as an article."""
+@dataclass(frozen=True)
+class _TextStats:
+    """Signals computed once from (text, url) and shared by the
+    is_index_page predicates below."""
+
+    word_count: int
+    punct_per_100_words: float
+    titlecase_share: float
+    chrome_hits: int
+    hub_url: bool
+
+
+def _compute_text_stats(text: str, url: str) -> _TextStats:
     words = text.split()
-    n = len(words)
-    if n == 0:
-        return False
+    word_count = len(words)
 
     lowered = text.lower()
     chrome_hits = sum(term in lowered for term in INDEX_CHROME_TERMS)
 
-    punct = len(re.findall(r"[.!?](?:\s|$)", text))
-    punct_per_100 = punct / n * 100
+    sentence_ends = len(re.findall(r"[.!?](?:\s|$)", text))
+    punct_per_100_words = (sentence_ends / word_count * 100) if word_count else 0.0
 
     alpha_words = [w for w in words if w[:1].isalpha()]
     titlecase_share = (
@@ -93,13 +113,60 @@ def is_index_page(text: str, url: str = "") -> bool:
     path = urlparse(url).path or "/"
     hub_url = bool(_HUB_URL_RE.match(path))
 
-    if hub_url and (punct_per_100 < 4.0 or chrome_hits >= 2):
-        return True
-    if n >= 30 and punct_per_100 < 1.0:
-        return True
-    if n >= 30 and titlecase_share >= 0.65 and punct_per_100 < 4.0:
-        return True
-    return chrome_hits >= 3
+    return _TextStats(
+        word_count=word_count,
+        punct_per_100_words=punct_per_100_words,
+        titlecase_share=titlecase_share,
+        chrome_hits=chrome_hits,
+        hub_url=hub_url,
+    )
+
+
+def _hub_url_with_thin_prose(stats: _TextStats) -> bool:
+    """URL path is just a section hub (e.g. `/politics/`) and the prose is
+    sparsely punctuated the way a list of links/headlines is."""
+    return stats.hub_url and stats.punct_per_100_words < LOW_PUNCT_PER_100_WORDS
+
+
+def _unpunctuated_link_list(stats: _TextStats) -> bool:
+    """Long enough to be a real page, but almost no sentence-ending
+    punctuation anywhere — reads as a list of links, not prose."""
+    return (
+        stats.word_count >= MIN_WORDS_FOR_LENGTH_SIGNALS
+        and stats.punct_per_100_words < VERY_LOW_PUNCT_PER_100_WORDS
+    )
+
+
+def _headline_list(stats: _TextStats) -> bool:
+    """Long enough, mostly Title Case, and light on punctuation — reads as
+    a stacked list of headlines rather than an article."""
+    return (
+        stats.word_count >= MIN_WORDS_FOR_LENGTH_SIGNALS
+        and stats.titlecase_share >= HIGH_TITLECASE_SHARE
+        and stats.punct_per_100_words < LOW_PUNCT_PER_100_WORDS
+    )
+
+
+def _nav_chrome_heavy(stats: _TextStats) -> bool:
+    """Enough site-chrome phrases (nav labels, cookie/privacy boilerplate)
+    to indicate a template shell rather than an article. The bar is lower
+    once the URL is already hub-shaped."""
+    return stats.chrome_hits >= NAV_CHROME_HITS_GENERIC or (
+        stats.hub_url and stats.chrome_hits >= NAV_CHROME_HITS_HUB
+    )
+
+
+def is_index_page(text: str, url: str = "") -> bool:
+    """Detect a section-index / hub page masquerading as an article."""
+    stats = _compute_text_stats(text, url)
+    if stats.word_count == 0:
+        return False
+    return (
+        _hub_url_with_thin_prose(stats)
+        or _unpunctuated_link_list(stats)
+        or _headline_list(stats)
+        or _nav_chrome_heavy(stats)
+    )
 
 
 def stamp_published_at(
@@ -240,6 +307,108 @@ def _build_x_source_url(tweet_id: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Admission gate — shared predicates + per-source verdict functions.
+#
+# News, reddit, and x apply different check subsets (see each admit_*
+# docstring), so this is per-source functions composing shared predicates
+# rather than one function with source flags:
+#   - news checks deny, recency, index-page, and political.
+#   - reddit checks deny, recency, and political (no index-page: reddit
+#     bodies are user text, not scraped HTML that can look like a nav hub).
+#   - x checks recency and political only; its deny check is a single
+#     up-front lookup by the caller before any row is even queried (see
+#     _gather_x_candidates), so a denied X ingestion increments no counter
+#     — that is current behavior, preserved as-is.
+# News additionally splits into a pretext gate (deny, recency — cheap,
+# no I/O) and a posttext gate (index-page, political — needs the
+# extracted article text), because text extraction is a disk read that
+# must happen strictly between those two check groups: it should not run
+# for a row already rejected on domain/recency, and it must run before the
+# content checks. Reddit/X build their candidate text from already-fetched
+# row data (no I/O), so each gets a single admit function.
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class AdmissionVerdict:
+    admitted: bool
+    reason: str
+
+
+_ADMITTED = AdmissionVerdict(True, ADMITTED)
+
+
+def _check_domain_denied(domain_key: str, cfg: DomainFilterConfig) -> Optional[AdmissionVerdict]:
+    if domain_key in cfg.deny:
+        return AdmissionVerdict(False, DENIED_DOMAIN)
+    return None
+
+
+def _check_stale(published_at: Optional[datetime.datetime], now: datetime.datetime) -> Optional[AdmissionVerdict]:
+    if not is_recent(published_at, now):
+        return AdmissionVerdict(False, STALE)
+    return None
+
+
+def _check_index_page(text: str, url: str) -> Optional[AdmissionVerdict]:
+    if is_index_page(text, url):
+        return AdmissionVerdict(False, INDEX_PAGE)
+    return None
+
+
+def _check_nonpolitical(
+    text: str, title: str, url: str, domain_key: str, cfg: DomainFilterConfig
+) -> Optional[AdmissionVerdict]:
+    if domain_key in cfg.allow:
+        return None
+    if not is_us_political_content(text, title, url):
+        return AdmissionVerdict(False, NOT_POLITICAL)
+    return None
+
+
+def _admit_news_pretext(
+    domain_key: str, published_at: Optional[datetime.datetime],
+    cfg: DomainFilterConfig, now: datetime.datetime,
+) -> AdmissionVerdict:
+    """News, phase 1 (before text extraction): deny -> recency."""
+    return _check_domain_denied(domain_key, cfg) or _check_stale(published_at, now) or _ADMITTED
+
+
+def _admit_news_posttext(
+    text: str, title: Optional[str], url: str, domain_key: str, cfg: DomainFilterConfig,
+) -> AdmissionVerdict:
+    """News, phase 2 (after text extraction succeeds): index-page -> political."""
+    return (
+        _check_index_page(text, url)
+        or _check_nonpolitical(text, title or "", url, domain_key, cfg)
+        or _ADMITTED
+    )
+
+
+def _admit_reddit(
+    title: Optional[str], text: str, domain_key: str,
+    created_utc: Optional[datetime.datetime], cfg: DomainFilterConfig, now: datetime.datetime,
+) -> AdmissionVerdict:
+    """Reddit: deny -> recency -> political."""
+    return (
+        _check_domain_denied(domain_key, cfg)
+        or _check_stale(created_utc, now)
+        or _check_nonpolitical(text, title or "", "", domain_key, cfg)
+        or _ADMITTED
+    )
+
+
+def _admit_x(
+    text: str, created_at: Optional[datetime.datetime], cfg: DomainFilterConfig, now: datetime.datetime,
+) -> AdmissionVerdict:
+    """X: recency -> political. No deny check (see module-level note above)."""
+    return (
+        _check_stale(created_at, now)
+        or _check_nonpolitical(text, "", "", X_DOMAIN_KEY, cfg)
+        or _ADMITTED
+    )
+
+
+# ---------------------------------------------------------------------------
 # Load result + shared per-domain-count helper
 # ---------------------------------------------------------------------------
 
@@ -251,8 +420,26 @@ class DocLoadResult:
     skipped_index: int = 0
     skipped_denied: int = 0
     skipped_capped: int = 0
+    rejections: dict[str, int] = field(default_factory=dict)
+
+    def record_rejection(self, reason: str) -> None:
+        """Tally an admit() rejection: increments the matching named
+        counter (unchanged, existing behavior) and the reason-keyed
+        `rejections` tally (observability addition)."""
+        if reason == DENIED_DOMAIN:
+            self.skipped_denied += 1
+        elif reason == STALE:
+            self.skipped_old += 1
+        elif reason == INDEX_PAGE:
+            self.skipped_index += 1
+        elif reason == NOT_POLITICAL:
+            self.skipped_nonpolitical += 1
+        self.rejections[reason] = self.rejections.get(reason, 0) + 1
 
     def __add__(self, other: "DocLoadResult") -> "DocLoadResult":
+        merged_rejections = dict(self.rejections)
+        for reason, count in other.rejections.items():
+            merged_rejections[reason] = merged_rejections.get(reason, 0) + count
         return DocLoadResult(
             inserted=self.inserted + other.inserted,
             skipped_old=self.skipped_old + other.skipped_old,
@@ -260,6 +447,7 @@ class DocLoadResult:
             skipped_index=self.skipped_index + other.skipped_index,
             skipped_denied=self.skipped_denied + other.skipped_denied,
             skipped_capped=self.skipped_capped + other.skipped_capped,
+            rejections=merged_rejections,
         )
 
 
@@ -397,23 +585,20 @@ def _gather_news_candidates(
 
     for row in rows:
         domain_key = (row["domain"] or "").lower()
-        if domain_key in cfg.deny:
-            result.skipped_denied += 1
+        pretext_verdict = _admit_news_pretext(domain_key, row["published_at"], cfg, now)
+        if not pretext_verdict.admitted:
+            result.record_rejection(pretext_verdict.reason)
             continue
-        if not is_recent(row["published_at"], now):
-            result.skipped_old += 1
-            continue
+
         text = _extract_text_from_raw(row["raw_hash"], raw_root)
         if not text:
+            continue  # extraction failure — not a policy rejection, not counted
+
+        posttext_verdict = _admit_news_posttext(text, row["title"], row["url_canon"], domain_key, cfg)
+        if not posttext_verdict.admitted:
+            result.record_rejection(posttext_verdict.reason)
             continue
-        if is_index_page(text, row["url_canon"]):
-            result.skipped_index += 1
-            continue
-        if domain_key not in cfg.allow and not is_us_political_content(
-            text, row["title"] or "", row["url_canon"]
-        ):
-            result.skipped_nonpolitical += 1
-            continue
+
         candidates.append(_NewsCandidate(
             url_canon=row["url_canon"], domain=row["domain"], raw_hash=row["raw_hash"],
             title=row["title"], published_at=row["published_at"],
@@ -511,15 +696,10 @@ def _gather_reddit_candidates(
 
     for row in rows:
         domain_key = (row["subreddit"] or "").lower()
-        if domain_key in cfg.deny:
-            result.skipped_denied += 1
-            continue
-        if not is_recent(row["created_utc"], now):
-            result.skipped_old += 1
-            continue
         text = f"{row['title'] or ''}\n\n{row['body'] or ''}".strip()
-        if domain_key not in cfg.allow and not is_us_political_content(text, row["title"] or ""):
-            result.skipped_nonpolitical += 1
+        verdict = _admit_reddit(row["title"], text, domain_key, row["created_utc"], cfg, now)
+        if not verdict.admitted:
+            result.record_rejection(verdict.reason)
             continue
         candidates.append(_RedditCandidate(
             fullname=row["fullname"], subreddit=row["subreddit"], created_utc=row["created_utc"],
@@ -600,6 +780,8 @@ class _XCandidate:
     like_count: Optional[int]
     quote_count: Optional[int]
     is_official_tier: Optional[bool]
+    referenced_tweet_id: Optional[str]
+    referenced_tweet_type: Optional[str]
 
 
 def _gather_x_candidates(
@@ -617,7 +799,7 @@ def _gather_x_candidates(
             SELECT p.tweet_id, p.author_id, p.created_at, p.text, p.lang,
                    p.place_country_code, p.raw_hash, p.conversation_id,
                    p.retweet_count, p.reply_count, p.like_count, p.quote_count,
-                   p.is_official_tier
+                   p.is_official_tier, p.referenced_tweet_id, p.referenced_tweet_type
             FROM raw.x_posts p
             WHERE NOT EXISTS (
                 SELECT 1 FROM corpus.documents d
@@ -628,11 +810,9 @@ def _gather_x_candidates(
         rows = cur.fetchall()
 
     for row in rows:
-        if not is_recent(row["created_at"], now):
-            result.skipped_old += 1
-            continue
-        if X_DOMAIN_KEY not in cfg.allow and not is_us_political_content(row["text"], ""):
-            result.skipped_nonpolitical += 1
+        verdict = _admit_x(row["text"], row["created_at"], cfg, now)
+        if not verdict.admitted:
+            result.record_rejection(verdict.reason)
             continue
         candidates.append(_XCandidate(
             tweet_id=row["tweet_id"], author_platform_id=row["author_id"], created_at=row["created_at"],
@@ -641,6 +821,8 @@ def _gather_x_candidates(
             retweet_count=row["retweet_count"], reply_count=row["reply_count"],
             like_count=row["like_count"], quote_count=row["quote_count"],
             is_official_tier=row["is_official_tier"],
+            referenced_tweet_id=row["referenced_tweet_id"],
+            referenced_tweet_type=row["referenced_tweet_type"],
         ))
     return candidates, result
 
@@ -694,12 +876,14 @@ def _insert_x_candidates(
                 """
                 INSERT INTO corpus.x_posts
                     (doc_id, tweet_id, conversation_id, lang, place_country_code,
-                     retweet_count, reply_count, like_count, quote_count, is_official_tier)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                     retweet_count, reply_count, like_count, quote_count, is_official_tier,
+                     referenced_tweet_id, referenced_tweet_type)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (doc_id) DO NOTHING
                 """,
                 (doc_row["doc_id"], c.tweet_id, c.conversation_id, c.lang, c.place_country_code,
-                 c.retweet_count, c.reply_count, c.like_count, c.quote_count, c.is_official_tier),
+                 c.retweet_count, c.reply_count, c.like_count, c.quote_count, c.is_official_tier,
+                 c.referenced_tweet_id, c.referenced_tweet_type),
             )
             inserted += 1
     return inserted, capped
@@ -741,6 +925,6 @@ def load_new_documents(
         f"ETL [{ETL_VERSION}] inserted={total.inserted} "
         f"skipped_old={total.skipped_old} skipped_nonpolitical={total.skipped_nonpolitical} "
         f"skipped_index={total.skipped_index} skipped_denied={total.skipped_denied} "
-        f"skipped_capped={total.skipped_capped}"
+        f"skipped_capped={total.skipped_capped} rejections={total.rejections}"
     )
     return total

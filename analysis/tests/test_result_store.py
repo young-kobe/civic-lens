@@ -18,7 +18,6 @@ import os
 import sys
 import threading
 import unittest
-from pathlib import Path
 from unittest import mock
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -27,9 +26,7 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 from analysis.src.results import store
-
-REPO_ROOT = Path(project_root)
-MIGRATION_SQL = REPO_ROOT / "data" / "pg-migrations" / "0001_north_star.sql"
+from analysis.tests import pg_fixture
 
 
 # =============================================================================
@@ -173,29 +170,18 @@ class ResultStoreIntegrationTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        import psycopg
         cls._dsn = os.environ["CIVIC_TEST_DATABASE_URL"]
-        with psycopg.connect(cls._dsn, autocommit=True) as conn:
-            conn.execute("DROP SCHEMA IF EXISTS raw, corpus, analysis, serving, ops, archive CASCADE")
-            conn.execute(MIGRATION_SQL.read_text())
+        pg_fixture.reset_schema(cls._dsn)
 
     def setUp(self):
-        from analysis.src.common import db as dbmod
-        dbmod.close_pool()
-        self._prev_url = os.environ.get("CIVIC_DATABASE_URL")
-        os.environ["CIVIC_DATABASE_URL"] = self._dsn
+        self._prev_url = pg_fixture.begin_test(self._dsn)
         self._truncate_all()
         self.doc_id = self._seed_doc("doc-1")
         self.author_id = self._seed_author("author-1")
         self.entity_id = self._seed_entity("test-entity")
 
     def tearDown(self):
-        from analysis.src.common import db as dbmod
-        dbmod.close_pool()
-        if self._prev_url is None:
-            os.environ.pop("CIVIC_DATABASE_URL", None)
-        else:
-            os.environ["CIVIC_DATABASE_URL"] = self._prev_url
+        pg_fixture.end_test(self._prev_url)
 
     def _truncate_all(self):
         import psycopg
@@ -310,7 +296,8 @@ class ResultStoreIntegrationTests(unittest.TestCase):
         handle = store.open_run("propaganda", doc_id=self.doc_id, model_id="gemini-3.5-flash",
                                  prompt_version=None, inference_method="deterministic")
         handle.save_propaganda(
-            store.PropagandaResultRow(density=0.4, summary="some loaded language"),
+            store.PropagandaResultRow(density=0.4, summary="some loaded language",
+                                       techniques_validated=1, techniques_dropped=2),
             [store.PropagandaTechniqueRow(technique="loaded_language",
                                            evidence_span="radical extremists", confidence=0.7)],
         )
@@ -324,6 +311,8 @@ class ResultStoreIntegrationTests(unittest.TestCase):
                 "SELECT * FROM analysis.propaganda_techniques WHERE run_id = %s", (run_id,)
             ).fetchall()
         self.assertEqual(result["density"], 0.4)
+        self.assertEqual(result["techniques_validated"], 1)
+        self.assertEqual(result["techniques_dropped"], 2)
         self.assertEqual(len(techniques), 1)
         self.assertEqual(techniques[0]["technique"], "loaded_language")
 

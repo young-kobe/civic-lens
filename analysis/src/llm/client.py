@@ -4,13 +4,18 @@ retry/backoff policy + single confidence-coercion pass on top of a
 transport-only backend (backend.complete_once()), replacing each engine's
 own copy-pasted retry loop. Pre-Phase-6 engines are unaffected: they keep
 calling backend.complete() via get_llm_client() until ported.
+
+`embed()` (added Phase 6 Wave 3) is a thin passthrough to the backend's own
+embed() when it supports one -- no retry/backoff wrapping, since callers
+(narrative_clustering.py) already treat a None/failed embed as a per-text
+fallback signal, not a retryable transport error.
 """
 
 import time
 from typing import Any, Dict, Optional, Protocol
 
 from analysis.src.common.logger import get_logger
-from analysis.src.llm.base import normalize_confidence
+from analysis.src.llm.base import BaseLLMClient, normalize_confidence
 from analysis.src.llm.constants import BACKOFF_BASE_SECONDS, DEFAULT_MAX_RETRIES
 
 logger = get_logger(__name__)
@@ -138,6 +143,29 @@ class LLMClient:
                     )
 
         raise RuntimeError(f"LLM call failed after {self.max_retries} retries: {last_error}")
+
+    @property
+    def supports_embedding(self) -> bool:
+        """True when the wrapped backend's class overrides
+        `BaseLLMClient.embed`'s no-op default. Every backend "has" the
+        `embed` attribute via that shared base class, so a plain `hasattr`
+        check can't tell real support (Ollama/OpenAICompat) from the
+        default no-op (Gemini) -- checked by identity against the
+        unbound base method instead."""
+        backend_embed = getattr(type(self._backend), "embed", None)
+        return backend_embed is not None and backend_embed is not BaseLLMClient.embed
+
+    def embed(self, text: str, model: Optional[str] = None) -> Optional[list]:
+        """Passthrough to the backend's embed() when it actually supports
+        embeddings (see `supports_embedding`). Raises RuntimeError naming
+        the backend when it doesn't, so a caller can distinguish "this
+        backend was never going to embed anything" (check `supports_
+        embedding` first to avoid the exception path) from "embed() ran and
+        returned None this call" (a transient per-text failure the backend
+        already handles by returning None, unaffected by this check)."""
+        if not self.supports_embedding:
+            raise RuntimeError(f"{type(self._backend).__name__} does not support embed()")
+        return self._backend.embed(text, model=model)
 
 
 _client_instance: Optional[LLMClient] = None

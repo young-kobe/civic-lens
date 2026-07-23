@@ -223,3 +223,133 @@ MIN_EVIDENCE_WORDS = 4
 UNVERIFIED_EVIDENCE_CONFIDENCE_CAP = 0.3
 MIN_CLAIM_WORDS = 4
 MAX_CLAIM_WORDS = 20
+
+
+# =============================================================================
+# Text engine constants (Postgres redesign Phase 6, engine/text.py -- the
+# unified sentiment+favorability engine). Additive section.
+# =============================================================================
+
+# Character budget for the doc text the LLM sees, clamped at a sentence
+# boundary by text_prep.truncate_at_sentence. Matches the old analyzer.py's
+# TEXT_ANALYSIS_MAX_CHARS (that module keeps its own copy; untouched, live).
+TEXT_ANALYSIS_MAX_CHARS = 2000
+
+
+# =============================================================================
+# Wave 2 engine constants (Postgres redesign Phase 6, engine/{targets,
+# propaganda,claims}.py). Consolidated here 2026-07-23 -- each of those
+# modules originally kept these module-local to avoid concurrent edits to
+# this file while landing in parallel; now that all three are in, task-name
+# strings and the numeric budgets/caps/defaults move here per the owner's
+# constants-consolidation rule, matching the precedent set above by
+# TEXT_ANALYSIS_MAX_CHARS. Private lookup/mapping
+# tables tightly coupled to one engine's own logic (targets.py's _STANCE_MAP,
+# propaganda.py's _DDL_PROPAGANDA_TECHNIQUES enum-gate frozenset) stay
+# module-local: they are read by exactly one function each, and moving them
+# here would separate a lookup table from its only reader without making it
+# any more shared. Compiled regexes and presentational strings (propaganda.py's
+# _WORD_RE, _PRE_FILTER_REASONING) stay local for the same reason -- this file
+# holds plain data constants, not implementation detail or narrative text.
+# =============================================================================
+
+TARGETS_TASK = "targets"
+PROPAGANDA_TASK = "propaganda"
+CLAIMS_TASK = "claims"
+
+# Schema instructs the LLM to extract at most 4 targets; enforced defensively
+# in engine/targets.py too (ported from old engine/target_extractor.py's
+# MAX_TARGETS).
+MAX_TARGETS = 4
+
+# Character budget for the doc text the LLM sees in engine/targets.py,
+# clamped at a sentence boundary (matches old target_extractor.py's
+# TARGET_TEXT_MAX_CHARS).
+TARGET_TEXT_MAX_CHARS = 2000
+
+# Character budget for the text engine/propaganda.py's LLM sees -- unchanged
+# from the old detector (propaganda techniques surface in the opening
+# rhetoric: headline + first 2-3 paragraphs, not paragraph 12).
+PROPAGANDA_TEXT_MAX_CHARS = 800
+
+# Schema caps engine/propaganda.py's techniques at 5; enforced defensively
+# here too.
+MAX_PROPAGANDA_TECHNIQUES = 5
+
+# engine/propaganda.py's loaded-language pre-filter, ported verbatim from the
+# old detector's _has_loaded_language: union of the negative-word and
+# intensifier lexicons. If the scored window contains none of these, the six
+# starter techniques (all of which ride on loaded vocabulary) are
+# overwhelmingly unlikely -- skip the LLM call and record a deterministic
+# zero-technique result instead of a silent skip, so the doc is marked done
+# and never re-queued for this.
+PROPAGANDA_LOADED_LEXICON = NEGATIVE_WORDS | INTENSIFIERS
+
+# Number of characters from the start of the (title + text) doc that
+# engine/propaganda.py's pre-filter scans for loaded language.
+PROPAGANDA_PRE_FILTER_SCAN_CHARS = 600
+
+# Character budget for the doc text engine/claims.py's LLM sees, clamped at a
+# sentence boundary. Matches the old claim_extractor.py's CLAIM_TEXT_MAX_CHARS.
+CLAIM_TEXT_MAX_CHARS = 2000
+
+# Prompt rule 2 caps engine/claims.py's model at 3 claims; enforced
+# defensively here too in case a backend ignores the instruction.
+MAX_CLAIMS_PER_DOC = 3
+
+# Run confidence engine/claims.py uses for a doc with zero surviving claims --
+# old convention (job_runner.py's run_claim_extraction: `sum(confidences)/
+# len(confidences) if confidences else 0.0`).
+ZERO_CLAIMS_CONFIDENCE = 0.0
+
+
+# =============================================================================
+# Wave 3 engine constants (Postgres redesign Phase 6, engine/{bot_detection,
+# account_tier,narrative_clustering}.py). Consolidated here 2026-07-23,
+# following the Wave 2 precedent above (task-identifying strings and
+# numeric budgets/caps/thresholds move; private lookup/gate values,
+# compiled patterns, and presentational strings stay module-local since
+# moving them would only separate a table from its single reader).
+#
+# Stayed local, with the rule applied: bot_detection.py's
+# _GOVERNMENT_VERIFIED_TYPE/_BUSINESS_VERIFIED_TYPE (de-bias gate values
+# read by exactly one function, _aggregate_score -- the same role
+# targets.py's _STANCE_MAP plays, just single-valued instead of a dict) and
+# its compiled _SENTENCE_SPLIT_RE/_NOISE_INDICATOR_PATTERNS; account_tier.py's
+# SQL strings (this file holds data constants, not query text);
+# narrative_clustering.py's _STOPWORDS (a private lookup table read by
+# exactly one function, tokenize_claim) and its compiled _TOKEN_RE, plus
+# the EmbedFn type alias (not a data constant of the kind this file holds).
+# =============================================================================
+
+BOT_TASK = "bot"
+
+# Prompt-input truncation -- matches old engine/bot.py's `text[:1500]` verbatim.
+BOT_PROMPT_TEXT_MAX_CHARS = 1500
+
+# Account/text thresholds from old bot.py's _compute_signals/_aggregate_score.
+NEW_ACCOUNT_AGE_DAYS = 7  # generic "new account" indicator, any platform
+X_NEW_ACCOUNT_AGE_DAYS = 90  # X-specific stricter new-account flag
+X_LOW_FOLLOWERS_THRESHOLD = 50
+FOLLOW_RATIO_ANOMALY_MIN_FOLLOWING = 1000
+FOLLOW_RATIO_ANOMALY_MAX_FOLLOWER_SHARE = 0.1
+
+# corpus.author_tier / corpus.classification_method enum values
+# engine/account_tier.py writes -- named here so a future consumer (tests,
+# serving-layer rollups) reads the same literal rather than re-typing it.
+ELECTED_OFFICIAL_TIER = "elected_official"
+AFFILIATED_TIER = "affiliated"
+CURATED_LIST_METHOD = "curated_list"
+
+# Fragmentation fix (engine/narrative_clustering.py): a narrative persists
+# only once >= this many DISTINCT docs support it.
+MIN_NARRATIVE_SUPPORT = 2
+
+# How far back narrative_clustering.py's _load_pending_claims looks (by
+# analysis.claims.created_at). Matches the old clusterer's
+# CLAIM_LOOKBACK_SECONDS (30 days).
+CLAIM_LOOKBACK_DAYS = 30
+
+# analysis.narratives.name truncation width (old clusterer used the same
+# literal for its `name` column).
+NARRATIVE_NAME_MAX_CHARS = 120

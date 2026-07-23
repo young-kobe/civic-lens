@@ -68,3 +68,18 @@ INDEX_CHROME_TERMS = (
 )
 
 HUB_URL_PATTERN = r"^/(?:[a-z]{1,20}/?)?$"
+
+# is_index_page signal thresholds (see documents.py's _TextStats predicates).
+LOW_PUNCT_PER_100_WORDS = 4.0
+VERY_LOW_PUNCT_PER_100_WORDS = 1.0
+HIGH_TITLECASE_SHARE = 0.65
+MIN_WORDS_FOR_LENGTH_SIGNALS = 30
+NAV_CHROME_HITS_GENERIC = 3  # chrome hits needed on any page
+NAV_CHROME_HITS_HUB = 2  # lower bar once the URL is already hub-shaped
+
+# AdmissionVerdict.reason values (see documents.py's admit_* gates).
+DENIED_DOMAIN = "denied_domain"
+STALE = "stale"
+INDEX_PAGE = "index_page"
+NOT_POLITICAL = "not_political"
+ADMITTED = "admitted"
