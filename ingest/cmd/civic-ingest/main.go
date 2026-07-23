@@ -31,6 +31,7 @@ func main() {
 	rootCmd.AddCommand(crawlCmd())
 	rootCmd.AddCommand(redditCmd())
 	rootCmd.AddCommand(xCmd())
+	rootCmd.AddCommand(backfillOfficialsCmd())
 	rootCmd.AddCommand(requeueStaleCmd())
 
 	if err := rootCmd.Execute(); err != nil {
@@ -199,6 +200,54 @@ func xCmd() *cobra.Command {
 			return nil
 		},
 	}
+}
+
+// backfillOfficialsCmd is a one-time (re-runnable) backfill of tracked
+// officials' historical X posts: it walks corpus.entities (kind='official',
+// active=true) and tops up raw.x_posts to each official's target so an
+// inactive official never vanishes from dashboards for lack of stored
+// history. Postgres-only — corpus.entities has no SQLite counterpart.
+func backfillOfficialsCmd() *cobra.Command {
+	var spendCapUSD float64
+
+	cmd := &cobra.Command{
+		Use:   "backfill-officials",
+		Short: "Backfill historical X posts for tracked officials up to their minimum stored-post target",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if spendCapUSD <= 0 {
+				return fmt.Errorf("--spend-cap-usd must be greater than 0")
+			}
+			ctx := cmd.Context()
+
+			a, err := app.New(ctx, app.Options{
+				ConfigPath:      cfgPath,
+				DBPath:          dbPath,
+				RequireRawStore: true,
+			})
+			if err != nil {
+				return err
+			}
+			defer a.Close()
+
+			spendCapCents := int(spendCapUSD*100 + 0.5) // round to the nearest cent
+
+			res, err := runner.NewXRunner(a).RunBackfillOfficials(ctx, spendCapCents)
+			if res != nil {
+				fmt.Printf(
+					"Backfill officials complete: %d processed, %d skipped (at target), %d posts fetched, $%.2f spent, %d errored\n",
+					res.OfficialsProcessed, res.OfficialsSkipped, res.PostsFetched,
+					float64(res.SpendCents)/100.0, res.OfficialsErrored,
+				)
+			}
+			return err
+		},
+	}
+
+	cmd.Flags().Float64Var(&spendCapUSD, "spend-cap-usd", 0, "Required: single-use USD spend cap for this invocation (independent of the monthly ops.x_api_budget ceiling)")
+	if err := cmd.MarkFlagRequired("spend-cap-usd"); err != nil {
+		panic(err) // programmer error: flag name typo, never reachable in production
+	}
+	return cmd
 }
 
 func requeueStaleCmd() *cobra.Command {
