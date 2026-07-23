@@ -1,37 +1,7 @@
 """
-Narrative clusterer (Postgres redesign Phase 6, Wave 3). Groups current
-`analysis.claims` into `analysis.narratives`, carrying forward the old
-sqlite clusterer's anchor-on-first-claim comparator (jaccard lexical /
-embedding cosine, `CIVIC_NARRATIVE_SIMILARITY_MODE`) with one behavior fix:
-a claim that matches nothing is no longer materialized as a one-doc
-narrative (see MIN_NARRATIVE_SUPPORT below) -- production data showed the
-old always-create-on-miss rule fragmenting into 8,477 near-singleton
-narratives over 7,116 docs (~1.4 docs each).
-
-`plan_clustering()` is pure (no DB, no network -- takes pre-tokenized/
-pre-embedded inputs); `run()` composes it with loading/embedding/writing.
-This module writes `analysis.clustering_runs`/`narratives`/`narrative_docs`
-directly -- a documented exception to `results/store.py` being the sole
-writer of `analysis.*` results, because store.py's `RunHandle` has no
-narrative-shaped save method and clustering is a batch job over many docs,
-not one run per doc/author.
-
-Provenance: one `clustering_runs` row per invocation (mode, threshold,
-embedding_model, doc_count). Every new narrative FKs `clustering_run_id`
-(founding run); every `narrative_docs` row FKs `added_by_run` (2026-07-23 --
-the run, founding or extending, that discovered this doc<->narrative link),
-so which *later* run extended an existing narrative is FK-precise, not
-approximated via `discovered_at` against a `clustering_runs` window.
-
-Singleton/unclustered counts have no dedicated DDL columns (checked
-`analysis.clustering_runs` -- only `doc_count`); they are logged on every
-run (see `run()`'s summary line) for Phase 8 to validate the fragmentation
-fix against real data.
-
-`first_seen_at` = earliest `published_at` among a narrative's member docs
--- "first-ingested-by-us", not claim origin in the world (CLAUDE.md scope
-note / walkthrough 035): `published_at` is the closest proxy the schema
-carries per doc, same caveat the old clusterer's first_seen_doc_id carried.
+Narrative clusterer (Postgres redesign Phase 6, Wave 3): groups current
+`analysis.claims` into `analysis.narratives` (jaccard/embedding comparator,
+deferred-materialization fragmentation fix) -- see docs/DATABASE_SCHEMA.md's "Narratives" section.
 """
 
 from __future__ import annotations

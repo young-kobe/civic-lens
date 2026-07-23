@@ -152,10 +152,11 @@ def _resolve_model_id() -> str:
     return settings.gemini_model
 
 
-def process(doc: ClaimDocInput, client: LLMClient) -> int:
+def process(doc: ClaimDocInput, client: LLMClient) -> store.RunOutcome:
     """Analyze `doc` and persist its claims under one analysis.runs
     ('claims') row. Zero surviving claims is a legitimate outcome: a
-    'done' run with no analysis.claims rows. Returns the new run_id."""
+    'done' run with no analysis.claims rows. Returns the RunOutcome from
+    store.RunHandle.finish()."""
     store.register_prompt_version(
         CLAIM_EXTRACTION_PROMPT_VERSION, CLAIMS_TASK,
         CLAIM_EXTRACTION_SYSTEM_PROMPT, CLAIM_EXTRACTION_USER_PROMPT_TEMPLATE,

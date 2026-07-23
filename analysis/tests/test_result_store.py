@@ -142,7 +142,7 @@ class FinishValidationTests(unittest.TestCase):
         only the traceability check itself is under test."""
         handle = store.open_run("text", doc_id=1, model_id="gemini-3.5-flash", inference_method="llm")
         with mock.patch.object(store.db, "connection", return_value=_FakeConnCtx()):
-            run_id = handle.finish("failed", error="timeout")
+            run_id = handle.finish("failed", error="timeout").run_id
         self.assertEqual(run_id, _FAKE_RUN_ID)
 
     def test_deterministic_run_without_prompt_version_passes_traceability_check(self):
@@ -151,8 +151,28 @@ class FinishValidationTests(unittest.TestCase):
         handle = store.open_run("citations", doc_id=1, model_id="citation_extractor_v1",
                                  inference_method="deterministic")
         with mock.patch.object(store.db, "connection", return_value=_FakeConnCtx()):
-            run_id = handle.finish("done", confidence=1.0)
+            run_id = handle.finish("done", confidence=1.0).run_id
         self.assertEqual(run_id, _FAKE_RUN_ID)
+
+    def test_finish_returns_run_outcome_with_run_id_status_and_no_error(self):
+        """The RunOutcome contract (Postgres redesign Phase 7): finish()
+        returns a structured outcome, not a bare run_id, so scheduler/
+        stages.py's claim loop can branch on status/error without a second
+        DB read."""
+        handle = store.open_run("bot", doc_id=1, model_id="m", inference_method="deterministic")
+        with mock.patch.object(store.db, "connection", return_value=_FakeConnCtx()):
+            outcome = handle.finish("done", confidence=1.0)
+        self.assertIsInstance(outcome, store.RunOutcome)
+        self.assertEqual(outcome.run_id, _FAKE_RUN_ID)
+        self.assertEqual(outcome.status, "done")
+        self.assertIsNone(outcome.error)
+
+    def test_finish_failed_returns_error_in_outcome(self):
+        handle = store.open_run("bot", doc_id=1, model_id="m", inference_method="deterministic")
+        with mock.patch.object(store.db, "connection", return_value=_FakeConnCtx()):
+            outcome = handle.finish("failed", error="boom")
+        self.assertEqual(outcome.status, "failed")
+        self.assertEqual(outcome.error, "boom")
 
 
 # =============================================================================
@@ -258,7 +278,7 @@ class ResultStoreIntegrationTests(unittest.TestCase):
             store.FavorabilityStanceRow(entity_id=self.entity_id, stance="favorable",
                                          score=0.7, evidence_spans=["praised the policy"])
         ])
-        run_id = handle.finish("done", confidence=0.85)
+        run_id = handle.finish("done", confidence=0.85).run_id
 
         with store.db.connection() as conn:
             sentiment = conn.execute(
@@ -281,7 +301,7 @@ class ResultStoreIntegrationTests(unittest.TestCase):
                                     confidence=0.6, entity_id=None, topic="economy",
                                     evidence_spans=["criticized the bill"]),
         ])
-        run_id = handle.finish("done", confidence=0.6)
+        run_id = handle.finish("done", confidence=0.6).run_id
 
         with store.db.connection() as conn:
             rows = conn.execute(
@@ -301,7 +321,7 @@ class ResultStoreIntegrationTests(unittest.TestCase):
             [store.PropagandaTechniqueRow(technique="loaded_language",
                                            evidence_span="radical extremists", confidence=0.7)],
         )
-        run_id = handle.finish("done", confidence=0.7)
+        run_id = handle.finish("done", confidence=0.7).run_id
 
         with store.db.connection() as conn:
             result = conn.execute(
@@ -321,7 +341,7 @@ class ResultStoreIntegrationTests(unittest.TestCase):
                                  prompt_version=None, inference_method="deterministic")
         handle.save_claims([store.ClaimRow(claim_text="X said Y happened", topic="policy",
                                             confidence=0.5)])
-        run_id = handle.finish("done", confidence=0.5)
+        run_id = handle.finish("done", confidence=0.5).run_id
 
         with store.db.connection() as conn:
             rows = conn.execute(
@@ -337,7 +357,7 @@ class ResultStoreIntegrationTests(unittest.TestCase):
             label="suspicious", score=0.6, llm_text_likelihood=0.9,
             burstiness=0.2, type_token_ratio=0.5, template_score=0.3,
         ))
-        run_id = handle.finish("done", confidence=0.6)
+        run_id = handle.finish("done", confidence=0.6).run_id
 
         with store.db.connection() as conn:
             row = conn.execute(
@@ -354,7 +374,7 @@ class ResultStoreIntegrationTests(unittest.TestCase):
             store.CitationRow(link_type="url_citation", target_doc_id=second_doc),
             store.CitationRow(link_type="quote", target_url="http://external.example/article"),
         ])
-        run_id = handle.finish("done", confidence=1.0)
+        run_id = handle.finish("done", confidence=1.0).run_id
 
         with store.db.connection() as conn:
             rows = conn.execute(
@@ -370,7 +390,7 @@ class ResultStoreIntegrationTests(unittest.TestCase):
     def test_author_scoped_run_round_trip(self):
         handle = store.open_run("account_tier", author_id=self.author_id, model_id="curated_list_v1",
                                  prompt_version=None, inference_method="deterministic")
-        run_id = handle.finish("done", confidence=1.0)
+        run_id = handle.finish("done", confidence=1.0).run_id
 
         with store.db.connection() as conn:
             row = conn.execute(
@@ -385,11 +405,11 @@ class ResultStoreIntegrationTests(unittest.TestCase):
     def test_second_succeeded_run_flips_predecessor_current(self):
         first = store.open_run("bot", doc_id=self.doc_id, model_id="m1",
                                 prompt_version=None, inference_method="deterministic")
-        first_id = first.finish("done", confidence=0.5)
+        first_id = first.finish("done", confidence=0.5).run_id
 
         second = store.open_run("bot", doc_id=self.doc_id, model_id="m2",
                                  prompt_version=None, inference_method="deterministic")
-        second_id = second.finish("done", confidence=0.9)
+        second_id = second.finish("done", confidence=0.9).run_id
 
         with store.db.connection() as conn:
             rows = {
@@ -410,7 +430,7 @@ class ResultStoreIntegrationTests(unittest.TestCase):
         row never persists."""
         first = store.open_run("bot", doc_id=self.doc_id, model_id="m1",
                                 prompt_version=None, inference_method="deterministic")
-        first_id = first.finish("done", confidence=0.5)
+        first_id = first.finish("done", confidence=0.5).run_id
 
         second = store.open_run("bot", doc_id=self.doc_id, model_id="m2",
                                  prompt_version=None, inference_method="deterministic")
@@ -448,7 +468,7 @@ class ResultStoreIntegrationTests(unittest.TestCase):
             handle = store.open_run("bot", doc_id=self.doc_id, model_id=model_id,
                                      prompt_version=None, inference_method="deterministic")
             try:
-                results[model_id] = handle.finish("done", confidence=confidence)
+                results[model_id] = handle.finish("done", confidence=confidence).run_id
             except Exception as exc:  # noqa: BLE001 - captured for assertion below
                 errors.append(exc)
 
@@ -476,11 +496,11 @@ class ResultStoreIntegrationTests(unittest.TestCase):
     def test_failed_run_does_not_take_over_is_current_from_succeeded_predecessor(self):
         first = store.open_run("bot", doc_id=self.doc_id, model_id="m1",
                                 prompt_version=None, inference_method="deterministic")
-        first_id = first.finish("done", confidence=0.5)
+        first_id = first.finish("done", confidence=0.5).run_id
 
         second = store.open_run("bot", doc_id=self.doc_id, model_id="m2",
                                  prompt_version=None, inference_method="deterministic")
-        second_id = second.finish("failed", error="LLM timeout")
+        second_id = second.finish("failed", error="LLM timeout").run_id
 
         self.assertEqual(self._current_run_id("bot", self.doc_id), first_id)
         with store.db.connection() as conn:
@@ -496,7 +516,7 @@ class ResultStoreIntegrationTests(unittest.TestCase):
     def test_failed_run_as_first_ever_run_leaves_no_current_row(self):
         handle = store.open_run("bot", doc_id=self.doc_id, model_id="m1",
                                  prompt_version=None, inference_method="deterministic")
-        run_id = handle.finish("failed", error="boom")
+        run_id = handle.finish("failed", error="boom").run_id
         self.assertIsNone(self._current_run_id("bot", self.doc_id))
         self.assertEqual(self._run_count("bot", doc_id=self.doc_id), 1)
         with store.db.connection() as conn:
@@ -511,7 +531,7 @@ class ResultStoreIntegrationTests(unittest.TestCase):
         must not fold one into the other (the no-mixing rule)."""
         handle = store.open_run("bot", doc_id=self.doc_id, model_id="m1",
                                  prompt_version=None, inference_method="deterministic")
-        run_id = handle.finish("failed", raw_response={"partial": "output"}, error="boom")
+        run_id = handle.finish("failed", raw_response={"partial": "output"}, error="boom").run_id
 
         with store.db.connection() as conn:
             row = conn.execute(
@@ -525,7 +545,7 @@ class ResultStoreIntegrationTests(unittest.TestCase):
         handle = store.open_run("bot", doc_id=self.doc_id, model_id="m1",
                                  prompt_version=None, inference_method="deterministic")
         handle.save_bot_signals(store.BotSignalsRow(label="bot", score=0.9))
-        run_id = handle.finish("failed", error="boom")
+        run_id = handle.finish("failed", error="boom").run_id
 
         with store.db.connection() as conn:
             row = conn.execute(

@@ -203,10 +203,10 @@ def _resolve_model_id() -> str:
     return settings.gemini_model
 
 
-def process(doc: PropagandaDocInput, client: LLMClient) -> int:
+def process(doc: PropagandaDocInput, client: LLMClient) -> store.RunOutcome:
     """Analyze `doc` and persist one `analysis.runs` ('propaganda') row plus
-    its `propaganda_results` + `propaganda_techniques` rows. Returns the new
-    run_id."""
+    its `propaganda_results` + `propaganda_techniques` rows. Returns the
+    RunOutcome from store.RunHandle.finish()."""
     store.register_prompt_version(
         PROPAGANDA_PROMPT_VERSION, PROPAGANDA_TASK,
         PROPAGANDA_SYSTEM_PROMPT, PROPAGANDA_USER_PROMPT_TEMPLATE,

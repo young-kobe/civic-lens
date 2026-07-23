@@ -432,9 +432,9 @@ def _resolve_model_id() -> str:
     return settings.gemini_model
 
 
-def process(doc: BotDocInput, client: LLMClient) -> int:
+def process(doc: BotDocInput, client: LLMClient) -> store.RunOutcome:
     """Analyze `doc` and persist its bot signal under one analysis.runs
-    ('bot') row. Returns the new run_id.
+    ('bot') row. Returns the RunOutcome from store.RunHandle.finish().
 
     An LLM failure or unavailable backend raises out of analyze(); this is
     recorded as a failed run with the error, identical to text.py's

@@ -96,6 +96,19 @@ class CitationRow:
             )
 
 
+@dataclass(frozen=True)
+class RunOutcome:
+    """`RunHandle.finish()`'s return value, threaded unchanged through every
+    engine's `process()` (Postgres redesign Phase 7). `run_id` is the new
+    `analysis.runs` row; `status`/`error` mirror the values passed to
+    `finish()` so a caller (the scheduler's queue-stage loop) can act on the
+    outcome without a second DB read."""
+
+    run_id: int
+    status: str
+    error: Optional[str]
+
+
 class RunHandle:
     """
     Accumulates one analysis run's typed results in memory. Nothing reaches
@@ -160,10 +173,10 @@ class RunHandle:
         confidence: Optional[float] = None,
         raw_response: Optional[dict] = None,
         error: Optional[str] = None,
-    ) -> int:
+    ) -> RunOutcome:
         """
         Commit this run and its accumulated results in one transaction.
-        Returns the new run_id.
+        Returns a `RunOutcome(run_id, status, error)`.
 
         Raises ValueError before touching the database if:
         - `status` is not 'done'/'failed'.
@@ -227,7 +240,7 @@ class RunHandle:
             if status == "done":
                 self._write_results(conn, run_id)
 
-        return run_id
+        return RunOutcome(run_id=run_id, status=status, error=error)
 
     def _resolve_prompt_version_id(self, conn) -> Optional[int]:
         if self.prompt_version is None:

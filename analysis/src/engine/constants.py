@@ -353,3 +353,23 @@ CLAIM_LOOKBACK_DAYS = 30
 # analysis.narratives.name truncation width (old clusterer used the same
 # literal for its `name` column).
 NARRATIVE_NAME_MAX_CHARS = 120
+
+
+# =============================================================================
+# Lean derivation constants (Postgres redesign Phase 7, engine/
+# lean_derivation.py -- the deterministic author/narrative political-lean
+# gate). See that module for the full three-way gate this feeds.
+# =============================================================================
+
+# Below this many pooled directional stance samples, lean is 'unknown'
+# (insufficient evidence) regardless of how one-sided they are.
+LEAN_MIN_SAMPLE_COUNT = 5
+
+# At/above LEAN_MIN_SAMPLE_COUNT, the majority side's share of samples must
+# reach this threshold for a decided lean ('democrat'/'republican'); below
+# it, the outcome is 'mixed' (balanced evidence is a finding, not ignorance).
+LEAN_SHARE_THRESHOLD = 0.7
+
+# Sample count at which lean_confidence stops scaling up with more evidence
+# (confidence = lean_share * min(1.0, samples / this)).
+LEAN_CONFIDENCE_SATURATION_SAMPLES = 20
