@@ -211,9 +211,19 @@ record.
       injected `LLMClient` + `EntityResolver`; no heuristic fallback, a
       failed/unavailable LLM call is a recorded failed run) — see
       `docs/audit-trail/analysis/2026-07-23-pg-engines-wave1.md`
-- [ ] `target_extractor` ported
-- [ ] `propaganda_detector` ported
-- [ ] `claim_extractor` ported
+- [x] `target_extractor` ported — landed as `analysis/src/engine/targets.py`
+      (pure `analyze()` + thin `process()`; `target_mentions.entity_id` is
+      NULLABLE, so unresolved targets are kept, not dropped, unlike
+      favorability_stances) — see
+      `docs/audit-trail/analysis/2026-07-23-pg-engines-wave2.md`
+- [x] `propaganda_detector` ported — landed as `analysis/src/engine/
+      propaganda.py` (loaded-language pre-filter as a deterministic run;
+      `propaganda_results` gains `techniques_validated`/`techniques_dropped`
+      restored end to end — DDL, store, engine, tests); see the audit-trail
+      entry above
+- [x] `claim_extractor` ported — landed as `analysis/src/engine/claims.py`
+      (evidence failure drops the claim entirely, no confidence-cap path,
+      because `claims` anchors narratives) — see the audit-trail entry above
 - [x] `citation_extractor` ported (now emits a run row) — landed as
       `analysis/src/engine/citations.py` (pure `extract()`/`resolve_candidates()`
       + thin `process()`; deterministic, confidence 1.0); reference-column
