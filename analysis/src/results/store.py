@@ -62,6 +62,8 @@ class PropagandaTechniqueRow:
 class PropagandaResultRow:
     density: Optional[float] = None
     summary: Optional[str] = None
+    techniques_validated: int = 0
+    techniques_dropped: int = 0
 
 
 @dataclass(frozen=True)
@@ -307,8 +309,13 @@ class RunHandle:
     def _write_propaganda(self, conn, run_id: int) -> None:
         result, techniques = self._propaganda
         conn.execute(
-            "INSERT INTO analysis.propaganda_results (run_id, density, summary) VALUES (%s, %s, %s)",
-            (run_id, result.density, result.summary),
+            """
+            INSERT INTO analysis.propaganda_results
+                (run_id, density, summary, techniques_validated, techniques_dropped)
+            VALUES (%s, %s, %s, %s, %s)
+            """,
+            (run_id, result.density, result.summary,
+             result.techniques_validated, result.techniques_dropped),
         )
         for t in techniques:
             conn.execute(

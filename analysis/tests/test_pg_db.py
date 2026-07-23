@@ -14,6 +14,7 @@ import unittest
 
 from analysis.src.common import db
 from analysis.src.common.settings import Settings
+from analysis.tests import pg_fixture
 
 
 class TestGetPoolFailsLoud(unittest.TestCase):
@@ -86,16 +87,10 @@ class TestPoolRoundTripAgainstRealPostgres(unittest.TestCase):
     back dict_row rows and that TIMESTAMPTZ survives a round trip."""
 
     def setUp(self):
-        db.close_pool()
-        self._prev_url = os.environ.get("CIVIC_DATABASE_URL")
-        os.environ["CIVIC_DATABASE_URL"] = os.environ["CIVIC_TEST_DATABASE_URL"]
+        self._prev_url = pg_fixture.begin_test(os.environ["CIVIC_TEST_DATABASE_URL"])
 
     def tearDown(self):
-        db.close_pool()
-        if self._prev_url is None:
-            os.environ.pop("CIVIC_DATABASE_URL", None)
-        else:
-            os.environ["CIVIC_DATABASE_URL"] = self._prev_url
+        pg_fixture.end_test(self._prev_url)
 
     def test_dict_row_and_timestamptz_round_trip(self):
         import datetime

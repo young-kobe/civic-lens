@@ -132,6 +132,53 @@ class TestLLMClientTokenAccounting(unittest.TestCase):
         self.assertEqual(client.get_token_usage(), 20)
 
 
+class FakeEmbeddingTransport(FakeTransport):
+    """A FakeTransport that overrides embed() with a real implementation --
+    the "backend supports embeddings" side of the fixture pair."""
+
+    def embed(self, text, model=None):
+        return [len(text), 0.0] if text else None
+
+
+class TestLLMClientEmbed(unittest.TestCase):
+    """LLMClient.embed()/supports_embedding must tell a real embedder
+    (overrides the no-op) apart from one that doesn't -- a plain hasattr
+    check can't, since every backend "has" embed via BaseLLMClient's
+    default. FakeTransport (no embed override) stands in for Gemini;
+    FakeEmbeddingTransport stands in for Ollama/OpenAICompat."""
+
+    def test_backend_without_embed_support_is_detected(self):
+        client = LLMClient(FakeTransport([]))
+        self.assertFalse(client.supports_embedding)
+
+    def test_embed_raises_naming_the_backend_when_unsupported(self):
+        client = LLMClient(FakeTransport([]))
+        with self.assertRaises(RuntimeError) as ctx:
+            client.embed("some text")
+        self.assertIn("FakeTransport", str(ctx.exception))
+
+    def test_backend_with_embed_support_is_detected(self):
+        client = LLMClient(FakeEmbeddingTransport([]))
+        self.assertTrue(client.supports_embedding)
+
+    def test_embed_passes_through_to_a_supporting_backend(self):
+        client = LLMClient(FakeEmbeddingTransport([]))
+        result = client.embed("hello")
+        self.assertEqual(result, [5, 0.0])
+
+    def test_embed_passes_through_model_argument(self):
+        calls = []
+
+        class RecordingEmbedTransport(FakeTransport):
+            def embed(self, text, model=None):
+                calls.append((text, model))
+                return [1.0]
+
+        client = LLMClient(RecordingEmbedTransport([]))
+        client.embed("text", model="a-model")
+        self.assertEqual(calls, [("text", "a-model")])
+
+
 class TestGetClientSingleton(unittest.TestCase):
     def tearDown(self):
         client_module.reset_client()
