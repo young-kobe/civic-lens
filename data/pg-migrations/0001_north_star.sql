@@ -36,7 +36,9 @@
 -- =============================================================================
 
 CREATE SCHEMA raw;      -- Go ingestor only. Frontier + verbatim source capture.
-CREATE SCHEMA corpus;   -- Python ETL only (etl/registry_sync.py, authors.py, documents.py).
+CREATE SCHEMA corpus;   -- Python ETL (authors.py, documents.py) plus corpus.entities/
+                        -- entity_aliases, curated directly in the database (seeded once
+                        -- by 0002_entity_registry_seed.sql).
 CREATE SCHEMA analysis; -- Python engine + results/store.py only. One writer: results/store.py.
 CREATE SCHEMA serving;  -- Python serving/ rollup builders write; FastAPI reads only.
 CREATE SCHEMA IF NOT EXISTS ops; -- Go (x_api_budget) + Python scheduler (task_queue, pipeline_runs) write.
@@ -49,7 +51,7 @@ CREATE SCHEMA archive;  -- One-time import (tools/migrate_sqlite_to_pg.py --arch
                         -- by convention thereafter — see the archive section footer.
 
 COMMENT ON SCHEMA raw IS 'Ingestion capture layer, written only by the Go crawler/fetchers. Near-1:1 port of the old SQLite raw tables — deliberately not redesigned.';
-COMMENT ON SCHEMA corpus IS 'Normalized corpus: documents, authors, and the YAML entity registry materialized. Written only by analysis/src/etl/.';
+COMMENT ON SCHEMA corpus IS 'Normalized corpus: documents and authors (written by analysis/src/etl/) plus the entity registry, curated directly in this schema and seeded once by 0002_entity_registry_seed.sql.';
 COMMENT ON SCHEMA analysis IS 'LLM/deterministic analysis runs and their typed per-task results. Written only by analysis/src/results/store.py.';
 COMMENT ON SCHEMA serving IS 'Precomputed rollups the API reads. Rebuilt per window inside one transaction (DELETE+INSERT) so the API never reads a half-built window.';
 COMMENT ON SCHEMA ops IS 'Pipeline machinery: work queue, run provenance, X API budget, migration ledger.';
@@ -205,30 +207,30 @@ CREATE TABLE corpus.entities (
     -- separate party/lean sketch): for officials/collectives, party
     -- membership IS the lean value (mapped losslessly, e.g. R -> republican,
     -- D -> democrat, I -> independent); for outlets/subreddits, the curated
-    -- YAML lean scale flattens deterministically (see
-    -- analysis/src/common/registry.py's flattening constants). No separate
-    -- party column anywhere in the schema — this is the only stored
-    -- affiliation value.
+    -- lean scale flattens onto the same 5 values. No separate party column
+    -- anywhere in the schema — this is the only stored affiliation value.
     lean corpus.political_lean NOT NULL DEFAULT 'unknown',
     -- Provenance/audit only, never a join axis: the ORIGINAL pre-flattening
-    -- YAML string (e.g. "center-left", "R", "independent-dem"), preserved so
-    -- the flattening is auditable/reversible. Distinct from source_citation
-    -- above, which holds the curation citation (bio_source / AllSides
-    -- rating text) — lean_source holds the raw classification value itself.
+    -- classification string (e.g. "center-left", "R", "independent-dem"),
+    -- preserved so the flattening is auditable/reversible. Distinct from
+    -- source_citation above, which holds the curation citation (bio_source /
+    -- AllSides rating text) — lean_source holds the raw classification
+    -- value itself.
     lean_source TEXT,
     active BOOLEAN NOT NULL DEFAULT true,
-    -- true for the 3 hand-edited registries; false for the ~549 officials
-    -- promoted wholesale from known_political_x_accounts.yaml. See
-    -- analysis/src/etl/registry_sync.py.
+    -- true for the 3 originally hand-edited registries; false for officials
+    -- promoted wholesale from known_political_x_accounts.yaml. Seeded by
+    -- 0002_entity_registry_seed.sql; curated directly thereafter.
     editorial BOOLEAN NOT NULL DEFAULT false,
-    synced_at TIMESTAMPTZ NOT NULL
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-COMMENT ON TABLE corpus.entities IS 'YAML registry (verified_officials/news_outlets/major_subreddits/known_political_x_accounts) materialized. YAML in git remains source of truth; ETL sync upserts and flips active=false for removed keys — never DELETE, so historical FKs always resolve.';
-COMMENT ON COLUMN corpus.entities.entity_key IS 'Stable slug = the YAML key (domain / handle / subreddit name).';
+COMMENT ON TABLE corpus.entities IS 'Entity registry: officials, news outlets, subreddits, and promoted political accounts. Curated directly in this table; seeded once from the retired YAML registries by 0002_entity_registry_seed.sql (2026-07-22). Rows are never DELETEd, only flipped active=false, so historical FKs always resolve.';
+COMMENT ON COLUMN corpus.entities.entity_key IS 'Stable slug (domain / handle / subreddit name), originally the YAML key, now a curated field in its own right.';
 COMMENT ON COLUMN corpus.entities.lean IS 'THE single source of truth for curated political lean (officials'' party AND outlets''/subreddits'' media lean, flattened onto the same 5-value corpus.political_lean enum). No other table stores curated affiliation; every derived lean (analysis.author_leans, analysis.narrative_leans) and every serving rollup JOINs this column rather than re-deriving it. NEVER fed into an LLM prompt (bias/priming risk).';
-COMMENT ON COLUMN corpus.entities.lean_source IS 'Display/audit only, never a join axis: the original pre-flattening YAML string (outlet partisan_lean / subreddit tilt / official party code) that registry_sync.py flattened into `lean`. Preserves the richer curated vocabulary the owner chose to collapse.';
-COMMENT ON COLUMN corpus.entities.active IS 'false = removed from YAML; row is kept (never DELETEd) so historical FKs keep resolving.';
-COMMENT ON COLUMN corpus.entities.editorial IS 'true = one of the 3 hand-edited registries. false = promoted from known_political_x_accounts.yaml. Both kinds carry a real lean/entity_id; UI dropdowns/rollups filter on this.';
+COMMENT ON COLUMN corpus.entities.lean_source IS 'Display/audit only, never a join axis: the original pre-flattening classification string (outlet partisan_lean / subreddit tilt / official party code). Preserves the richer curated vocabulary the owner chose to collapse.';
+COMMENT ON COLUMN corpus.entities.active IS 'false = curated inactive; row is kept (never DELETEd) so historical FKs keep resolving.';
+COMMENT ON COLUMN corpus.entities.editorial IS 'true = one of the 3 originally hand-edited registries. false = promoted from known_political_x_accounts.yaml. Both kinds carry a real lean/entity_id; UI dropdowns/rollups filter on this.';
+COMMENT ON COLUMN corpus.entities.updated_at IS 'Last curation timestamp. Seeded to a fixed value by 0002_entity_registry_seed.sql; bumped by whatever updates the row thereafter (DB-native curation, no sync process).';
 
 CREATE INDEX idx_entities_editorial ON corpus.entities (kind) WHERE editorial;
 COMMENT ON INDEX corpus.idx_entities_editorial IS 'Common filter: editorial entities by kind.';

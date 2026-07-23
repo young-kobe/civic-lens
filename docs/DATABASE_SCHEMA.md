@@ -146,38 +146,45 @@ Indexes: `(username)`, `(created_at)`.
 
 ### corpus.entities
 
-The YAML registry (`data/verified_officials.yaml`, `data/news_outlets.yaml`,
-`data/major_subreddits.yaml`, `data/known_political_x_accounts.yaml`)
-materialized. YAML in git remains source of truth; ETL sync upserts and
-flips `active=false` for removed keys — **never DELETE**, so historical FKs
+**Curated directly in this table** (owner decision, 2026-07-22: the entity
+registry's source of truth moved from YAML-in-git to the database itself,
+for readability of hands-on curation). Seeded once from the retired YAML
+registries (`data/verified_officials.yaml`, `data/news_outlets.yaml`,
+`data/major_subreddits.yaml`, `data/known_political_x_accounts.yaml`) by
+`data/pg-migrations/0002_entity_registry_seed.sql`; edits from here on
+happen by hand against the DB, and `pg_dump` backups are the curation
+history (not YAML diffs). The frozen YAMLs remain in git, read-only, only
+for the old SQLite-stack's `analysis/src/reporting/entity_registry.py`
+until it retires in Phase 9. Rows are **never DELETEd** — an entity that's
+no longer current is flipped `active=false` instead, so historical FKs
 always resolve.
 
 | Column | Type | Notes |
 | --- | --- | --- |
 | entity_id | BIGINT IDENTITY | PK |
-| entity_key | TEXT | UNIQUE — the YAML slug |
+| entity_key | TEXT | UNIQUE — stable slug (domain / handle / subreddit name) |
 | kind | corpus.entity_kind | NOT NULL |
 | display_name, blurb | TEXT | |
 | role_title, term_start, owner, source_citation | TEXT/DATE | nullable, populated per kind; source_citation is the curation *citation* (bio_source / AllSides rating text) |
 | lean | corpus.political_lean | NOT NULL DEFAULT 'unknown' — curated for every kind: officials/collectives (party membership IS the lean value) and outlets/subreddits (media lean flattened onto the same 5-value enum) |
-| lean_source | TEXT | nullable, display/audit only, never a join axis — the *original pre-flattening* YAML string (e.g. `"center-left"`, `"R"`, `"independent-dem"`), distinct from source_citation |
+| lean_source | TEXT | nullable, display/audit only, never a join axis — the *original pre-flattening* classification string (e.g. `"center-left"`, `"R"`, `"independent-dem"`), distinct from source_citation |
 | active | BOOLEAN | NOT NULL DEFAULT true |
-| editorial | BOOLEAN | NOT NULL DEFAULT false — true for the 3 hand-edited registries; false for officials promoted wholesale from `known_political_x_accounts.yaml` (~549 people, one entity per person — see registry_sync.py). Partial index `idx_entities_editorial (kind) WHERE editorial` backs the UI's editorial-only filter. |
-| synced_at | TIMESTAMPTZ | NOT NULL |
+| editorial | BOOLEAN | NOT NULL DEFAULT false — true for the 3 originally hand-edited registries; false for officials promoted wholesale from `known_political_x_accounts.yaml` (549 people, one entity per person). Partial index `idx_entities_editorial (kind) WHERE editorial` backs the UI's editorial-only filter. |
+| updated_at | TIMESTAMPTZ | NOT NULL DEFAULT now() — last curation timestamp; seeded to a fixed value by 0002, bumped by whatever updates the row thereafter (no sync process) |
 
-**Lean flattening (owner decision, resolved — no longer open):** the YAML
-curation vocabularies are richer than the 5-value enum
+**Lean flattening (owner decision, resolved — no longer open, historical):**
+the retired YAML curation vocabularies were richer than the 5-value enum
 (`left/center-left/center/center-right/right/mixed` for outlets;
 `left/center/right/mixed` for subreddits; `R/D/I/independent-dem/other` for
-officials). `analysis/src/etl/registry_sync.py` flattens deterministically
-via the named constants in `analysis/src/common/registry.py`:
+officials). The one-time seed migration flattened them deterministically:
 `left`/`center-left` -> `democrat`, `center` -> `independent`,
 `center-right`/`right` -> `republican`, `mixed` -> `mixed`; for officials,
 `R` -> `republican`, `D` -> `democrat`, `I`/`independent-dem` -> `independent`.
 Absent or unrecognized values (including the documented-but-unbucketed
-`other` party code) map to `unknown` and are logged loudly — never guessed.
-The pre-flattening string survives in `lean_source` for audit; the flat
-`lean` value is what every join uses.
+`other` party code) mapped to `unknown`, logged loudly at seed time — never
+guessed. The pre-flattening string survives in `lean_source` for audit; the
+flat `lean` value is what every join uses. Any lean set by curation from
+here on is entered directly as one of the 5 enum values.
 
 ### corpus.entity_aliases
 
@@ -200,6 +207,13 @@ unmatched general-public accounts), `classified_at`, `notes`. Deliberately
 **has no party/lean column of its own** — an official's lean is read by
 joining `entity_id -> corpus.entities.lean`; storing it here too would
 duplicate the single source of truth.
+
+Currently empty and unwritten: the only prior writer
+(`analysis/src/etl/registry_sync.py`) is retired, and it could never have
+populated this table from a virgin seed anyway (`author_id` is `NOT NULL`
+and `corpus.authors` is empty pre-ETL). Populating it is either a direct DB
+curation edit once an author exists, or future work for Phase 6's
+`account_classifier` — see `docs/todos/pg-redesign.md`.
 
 ### corpus.documents
 
@@ -231,10 +245,10 @@ Each FKs both the parent document AND its raw row — the old convention-only
 - **corpus.news_articles**: `doc_id` PK/FK -> documents; `url_canon` UNIQUE
   FK -> `raw.articles`; `domain`, `extraction_version`;
   `outlet_entity_id` nullable FK -> `corpus.entities` (`kind='outlet'`),
-  resolved at ETL time by canonicalizing `domain` the same way
-  `registry_sync.py` canonicalizes `news_outlets.yaml` domains/aliases —
-  NULL when unmatched (never blocks a doc), backfilled on a later
-  `documents.py` run once the outlet is registered.
+  resolved at ETL time via `analysis/src/common/registry.py`'s
+  `canonicalize_news_domain` against the curated entity/alias set — NULL
+  when unmatched (never blocks a doc), backfilled on a later
+  `documents.py` run once the outlet is curated into the registry.
 - **corpus.reddit_posts**: `doc_id` PK/FK -> documents; `fullname` UNIQUE FK
   -> `raw.reddit_posts`; `subreddit`, `score`, `num_comments`;
   `subreddit_entity_id` nullable FK -> `corpus.entities` (`kind='subreddit'`),
