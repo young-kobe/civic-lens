@@ -16,6 +16,9 @@ Two tiers:
   1. Pure mapping-function unit tests (TestMappingFunctions) — no I/O, run
      always, cover every documented edge case (0 epoch, NULL epoch, empty
      string, invalid JSON, int flags both values, page states 0-3).
+     TestSumTolerance (same tier, no I/O) covers the --verify SUM
+     tolerance's REAL-vs-double-precision split directly through
+     _compare_aggregate.
   2. Full end-to-end integration tests (TestRawArchiveVerifyIntegration) —
      gated on CIVIC_TEST_POSTGRES_DSN (distinct from the runtime CIVIC_DATABASE_URL,
      same convention as ingest/internal/storage/db/db_postgres_test.go) so
@@ -98,6 +101,62 @@ class TestMappingFunctions(unittest.TestCase):
         value, invalid = mig.best_effort_json("{not valid json")
         self.assertIsNone(value)
         self.assertTrue(invalid)
+
+
+class TestSumTolerance(unittest.TestCase):
+    """--verify's SUM check for REAL-typed (float4) archive columns (see
+    ColumnSpec.real_type / _sum_tolerance): single-precision storage
+    rounding drift alone must not fail the gate, but a genuine data error
+    must still fail it just as strictly as before. Exercised directly
+    through _compare_aggregate — the exact function check_null_and_aggregates
+    calls — with a synthetic ColumnSpec/ColumnStats/target_stats triple, no
+    DB required."""
+
+    def _run(self, real_type: bool, expected_sum: float, actual_sum: float) -> "mig.VerifyReport":
+        col = mig.ColumnSpec("confidence", "confidence", aggregatable=True, real_type=real_type)
+        spec = mig.TableSpec(
+            source_table="ai_outputs", target_schema="archive", target_table="ai_outputs",
+            columns=[col], pk_columns=["output_id"],
+        )
+        st = mig.ColumnStats(aggregatable=True, is_timestamp=False, minimum=0.1, maximum=0.99, total=expected_sum)
+        target_stats = {"confidence__min": 0.1, "confidence__max": 0.99, "confidence__sum": actual_sum}
+        report = mig.VerifyReport()
+        mig._compare_aggregate(spec, col, st, target_stats, report)
+        return report
+
+    def test_real_column_sum_passes_within_storage_precision_drift(self) -> None:
+        """A ~35,000-row-scale sum (matching production's archive.ai_outputs.
+        confidence) drifting by half the epsilon*|sum| bound must pass — this
+        is the exact magnitude that used to false-positive-fail the gate
+        before the tolerance was widened."""
+        expected_sum = 21359.0425
+        drift = mig.REAL_TYPE_RELATIVE_EPSILON * expected_sum * 0.5
+        report = self._run(real_type=True, expected_sum=expected_sum, actual_sum=expected_sum + drift)
+        self.assertEqual(report.failures, [], f"storage-precision drift must not fail: {report.failures}")
+
+    def test_real_column_sum_fails_on_actual_data_error(self) -> None:
+        """A row genuinely off by 0.5 — orders of magnitude past the
+        storage-precision bound — must still fail: the widened tolerance
+        must not mask a real data error (wrong value or missing row)."""
+        expected_sum = 21359.0425
+        report = self._run(real_type=True, expected_sum=expected_sum, actual_sum=expected_sum - 0.5)
+        self.assertTrue(
+            any("sum mismatch" in f for f in report.failures),
+            f"a genuine 0.5 data error must still fail: {report.failures}",
+        )
+
+    def test_double_precision_sum_tolerance_unchanged(self) -> None:
+        """A non-REAL (real_type=False) aggregatable column keeps exactly
+        the strict 1e-6 tolerance from before this fix."""
+        expected_sum = 21359.0425
+        passing = self._run(real_type=False, expected_sum=expected_sum, actual_sum=expected_sum + 5e-7)
+        self.assertEqual(passing.failures, [], "sub-1e-6 drift must still pass for double-precision columns")
+
+        failing = self._run(real_type=False, expected_sum=expected_sum, actual_sum=expected_sum + 5e-6)
+        self.assertTrue(
+            any("sum mismatch" in f for f in failing.failures),
+            "double-precision columns must keep the strict 1e-6 tolerance",
+        )
 
 
 def _build_sqlite_fixture(db_path: str, raw_files_dir: str) -> tuple[str, str]:
