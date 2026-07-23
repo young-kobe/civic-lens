@@ -81,6 +81,60 @@ class OpenAICompatClient(BaseLLMClient):
         """Check if the server is reachable."""
         return self._available
 
+    def complete_once(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        response_schema: Optional[Dict[str, Any]] = None,
+        temperature: Optional[float] = None,
+    ) -> Dict[str, Any]:
+        """Single-attempt request+parse — no retry, no sleep.
+
+        Shared body extracted so complete()'s retry loop and the new
+        llm/client.py transport path cannot drift apart. Raises on any
+        failure; callers decide whether to retry.
+        """
+        if not self.is_available:
+            raise RuntimeError(
+                f"OpenAI-compatible server not available at {self.base_url}"
+            )
+
+        payload: Dict[str, Any] = {
+            "model": self.model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            "temperature": temperature if temperature is not None else self.temperature,
+        }
+        if response_schema is not None:
+            payload["response_format"] = {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "response",
+                    "strict": True,
+                    "schema": response_schema,
+                },
+            }
+        else:
+            payload["response_format"] = {"type": "json_object"}
+
+        response = requests.post(
+            f"{self.base_url}/v1/chat/completions",
+            json=payload,
+            headers=self._headers(),
+            timeout=self.timeout,
+        )
+        response.raise_for_status()
+
+        result = response.json()
+
+        usage = result.get("usage") or {}
+        self.total_tokens_used += usage.get("total_tokens", 0)
+
+        response_text = result["choices"][0]["message"]["content"]
+        return self.parse_json_response(response_text, schema=response_schema)
+
     def complete(
         self,
         system_prompt: str,
@@ -109,44 +163,10 @@ class OpenAICompatClient(BaseLLMClient):
                 f"OpenAI-compatible server not available at {self.base_url}"
             )
 
-        payload: Dict[str, Any] = {
-            "model": self.model,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            "temperature": temperature if temperature is not None else self.temperature,
-        }
-        if response_schema is not None:
-            payload["response_format"] = {
-                "type": "json_schema",
-                "json_schema": {
-                    "name": "response",
-                    "strict": True,
-                    "schema": response_schema,
-                },
-            }
-        else:
-            payload["response_format"] = {"type": "json_object"}
-
         last_error = None
         for attempt in range(self.max_retries):
             try:
-                response = requests.post(
-                    f"{self.base_url}/v1/chat/completions",
-                    json=payload,
-                    headers=self._headers(),
-                    timeout=self.timeout,
-                )
-                response.raise_for_status()
-
-                result = response.json()
-
-                usage = result.get("usage") or {}
-                self.total_tokens_used += usage.get("total_tokens", 0)
-
-                response_text = result["choices"][0]["message"]["content"]
-                return self.parse_json_response(response_text, schema=response_schema)
+                return self.complete_once(system_prompt, user_prompt, response_schema, temperature)
 
             except requests.exceptions.Timeout:
                 last_error = TimeoutError(

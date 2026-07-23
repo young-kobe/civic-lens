@@ -375,6 +375,7 @@ CREATE TABLE analysis.runs (
     confidence REAL,
     is_current BOOLEAN NOT NULL DEFAULT true,
     raw_response JSONB,
+    error TEXT,
     started_at TIMESTAMPTZ,
     completed_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -382,7 +383,8 @@ CREATE TABLE analysis.runs (
 );
 COMMENT ON TABLE analysis.runs IS 'One row per analysis attempt. One run may feed multiple typed result tables (the unified text run writes sentiment_results + favorability_stances).';
 COMMENT ON COLUMN analysis.runs.is_current IS 'Latest-per-(subject,task) flag; the writer flips the predecessor to false in the same transaction that inserts the new current row. Replaces the correlated-MAX view pattern.';
-COMMENT ON COLUMN analysis.runs.raw_response IS 'Verbatim LLM output — the audit payload. NULL for pure-deterministic runs.';
+COMMENT ON COLUMN analysis.runs.raw_response IS 'Verbatim LLM output — the audit payload. NULL for pure-deterministic runs. Never holds error text (see analysis.runs.error).';
+COMMENT ON COLUMN analysis.runs.error IS 'Failure message for status=failed runs. NULL for done runs. Kept separate from raw_response so the audit payload stays purely verbatim LLM output.';
 COMMENT ON COLUMN analysis.runs.prompt_version_id IS 'Nullable: deterministic runs (citation_extractor, lean_derivation) have no prompt.';
 
 -- Latest-per-subject-per-task uniqueness, doc-scoped and author-scoped.

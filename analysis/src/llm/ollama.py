@@ -56,6 +56,50 @@ class OllamaClient(BaseLLMClient):
         """Check if the Ollama server is reachable."""
         return self._available
     
+    def complete_once(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        response_schema: Optional[Dict[str, Any]] = None,
+        temperature: Optional[float] = None,
+    ) -> Dict[str, Any]:
+        """Single-attempt request+parse — no retry, no sleep.
+
+        Shared body extracted so complete()'s retry loop and the new
+        llm/client.py transport path cannot drift apart. Raises on any
+        failure; callers decide whether to retry.
+        """
+        if not self.is_available:
+            raise RuntimeError(f"Ollama server not available at {self.host}")
+
+        full_prompt = f"{system_prompt}\n\n---\n\n{user_prompt}"
+
+        # Use schema for structured output, fall back to basic JSON mode
+        format_param = response_schema if response_schema else "json"
+
+        response = requests.post(
+            f"{self.host}/api/generate",
+            json={
+                "model": self.model,
+                "prompt": full_prompt,
+                "format": format_param,
+                "stream": False,
+                "options": {
+                    "temperature": temperature if temperature is not None else 0.0,
+                },
+            },
+            timeout=self.timeout,
+        )
+        response.raise_for_status()
+
+        result = response.json()
+
+        if "eval_count" in result:
+            self.total_tokens_used += result.get("eval_count", 0)
+
+        response_text = result.get("response", "")
+        return self.parse_json_response(response_text, schema=response_schema)
+
     def complete(
         self,
         system_prompt: str,
@@ -65,54 +109,28 @@ class OllamaClient(BaseLLMClient):
     ) -> Dict[str, Any]:
         """
         Send a completion request to Ollama.
-        
+
         Args:
             system_prompt: System instructions for the model
             user_prompt: User message/query
             response_schema: JSON schema for structured output (optional)
             temperature: Override default temperature (optional)
-            
+
         Returns:
             Parsed JSON response as a dictionary
-            
+
         Raises:
             RuntimeError: If server is not available
             ValueError: If response cannot be parsed as JSON
         """
         if not self.is_available:
             raise RuntimeError(f"Ollama server not available at {self.host}")
-        
-        full_prompt = f"{system_prompt}\n\n---\n\n{user_prompt}"
-        
-        # Use schema for structured output, fall back to basic JSON mode
-        format_param = response_schema if response_schema else "json"
-        
+
         last_error = None
         for attempt in range(self.max_retries):
             try:
-                response = requests.post(
-                    f"{self.host}/api/generate",
-                    json={
-                        "model": self.model,
-                        "prompt": full_prompt,
-                        "format": format_param,
-                        "stream": False,
-                        "options": {
-                            "temperature": temperature if temperature is not None else 0.0,
-                        },
-                    },
-                    timeout=self.timeout,
-                )
-                response.raise_for_status()
-                
-                result = response.json()
-                
-                if "eval_count" in result:
-                    self.total_tokens_used += result.get("eval_count", 0)
-                
-                response_text = result.get("response", "")
-                return self.parse_json_response(response_text, schema=response_schema)
-                
+                return self.complete_once(system_prompt, user_prompt, response_schema, temperature)
+
             except requests.exceptions.Timeout:
                 last_error = TimeoutError(f"Ollama request timed out after {self.timeout}s")
                 logger.warning(f"Ollama timeout (attempt {attempt + 1}/{self.max_retries})")

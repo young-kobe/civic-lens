@@ -1,16 +1,10 @@
 """
-Postgres connection module (Phase 1 of the Postgres redesign, walkthrough
-plan `has-our-aggregate-method-async-frog`).
-
-This is NEW plumbing that runs alongside the existing SQLite stack; nothing
-in the pipeline imports it yet except its own tests. It provides exactly one
-thing per the plan's code design principles: a single lazily-initialized
-psycopg3 `ConnectionPool` singleton, `dict_row`-shaped, that every future
-Postgres call site checks a connection out of via `connection()`.
-
-All SQL written against this pool must be schema-qualified (e.g.
-`SELECT * FROM corpus.documents`) — this module deliberately does not set
-`search_path`, so an unqualified table name is a bug, not a convenience.
+Postgres connection module (Phase 1 of the Postgres redesign, plan
+`has-our-aggregate-method-async-frog`): a single lazily-initialized
+psycopg3 `ConnectionPool` singleton, `dict_row`-shaped, that every
+Postgres call site checks a connection out of via `connection()`. No
+`search_path` is set — all SQL must be schema-qualified. See
+docs/audit-trail/analysis/2026-07-22-pg-connection-pool.md.
 """
 
 import threading

@@ -168,16 +168,32 @@ record.
 
 ## Phase 5 — Analysis plumbing
 
-- [ ] `analysis/src/llm/client.py` — single retry/backoff/schema-validation
-      wrapper; backends become transport-only
-- [ ] `analysis/src/results/store.py` — `open_run() -> RunHandle`, typed
-      per-task writers, `finish_run` flips `is_current` transactionally
-      (only module writing `analysis.*` results)
-- [ ] `analysis/src/engine/validation.py` + one constants module (evidence-
+- [x] `analysis/src/llm/client.py` — single retry/backoff/schema-validation
+      wrapper over a `complete_once()` transport hook; Gemini/Ollama/
+      OpenAICompat backends gain the hook additively (their own `complete()`
+      retry loops stay as a compatibility shim for the pre-Phase-6 engines
+      still calling them directly — full transport-only shrink lands per
+      engine as Phase 6 ports them onto `llm/client.py`)
+- [x] `analysis/src/results/store.py` — `open_run() -> RunHandle`, typed
+      per-task writers, `finish()` flips `is_current` transactionally
+      (only module writing `analysis.*` results); `analysis.runs.error`
+      restored as its own column (owner decision 2026-07-22, pgAdmin
+      readability) — see
+      `docs/audit-trail/analysis/2026-07-22-pg-analysis-plumbing.md`
+- [x] `analysis/src/engine/validation.py` + one constants module (evidence-
       span validator, ends the 3-vs-4-word / 0.2-vs-0.3-cap drift)
-- [ ] Prompt-version registration carried over into `analysis.prompt_versions`
-- [ ] Tests: retry/validation/store against real Postgres (`is_current`
-      flip, partial-unique enforcement, transactionality)
+- [x] Prompt-version registration carried over into `analysis.prompt_versions`
+      (`results/store.py::register_prompt_version`, idempotent upsert)
+- [x] Tests: retry/validation/store against real Postgres (`is_current`
+      flip, partial-unique enforcement, transactionality) — clean-room
+      verified 2026-07-22 against a throwaway `postgres:17-alpine`
+      container: full suite 598 tests / 0 skips gated on
+      `CIVIC_TEST_DATABASE_URL`, 598/37 skipped ungated, all pass; a
+      throwaway cross-component smoke script exercised `llm/client.py` +
+      `engine/validation.py` + `results/store.py` together (register
+      prompt version, open a run, save a validated sentiment row, finish,
+      confirm `is_current`, then a second run supersedes the first) — see
+      the audit-trail entry above for the full matrix
 
 ## Phase 6 — Engines
 
