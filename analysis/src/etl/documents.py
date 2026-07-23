@@ -1,13 +1,11 @@
 """
-analysis/src/etl/documents.py — normalizes raw.* into corpus.documents + subtype tables.
-
-Ports loader.py's US-politics keyword filter (word-boundary matched here,
-not substring), index-page detector, 30-day recency rule, and adds an
-additive domain_filter (deny/allow/cap) from data/seeds.yaml plus
+analysis/src/etl/documents.py — normalizes raw.* into corpus.documents +
+subtype tables. Ports loader.py's US-politics keyword filter (word-boundary
+matched here, not substring), index-page detector, and 30-day recency rule;
+adds an additive domain_filter (deny/allow/cap) from data/seeds.yaml plus
 outlet/subreddit entity-FK backfill. Run after authors.py's
-sync_x_authors(); a doc is never blocked on a missing author or entity
-match (NULL instead). Idempotent — see load_new_documents(). Full
-rationale: docs/audit-trail/analysis/2026-07-22-pg-etl-authors-documents-queue.md
+sync_x_authors(). Full rationale:
+docs/audit-trail/analysis/2026-07-22-pg-etl-authors-documents-queue.md
 """
 
 from __future__ import annotations
@@ -26,49 +24,27 @@ from psycopg import Connection
 from analysis.src.common import db
 from analysis.src.common.logger import get_logger
 from analysis.src.common.registry import canonicalize_news_domain, canonicalize_subreddit
+from analysis.src.etl.constants import (
+    ETL_VERSION,
+    EXCLUDE_PATTERNS,
+    FUTURE_SLOP,
+    HUB_URL_PATTERN,
+    INDEX_CHROME_TERMS,
+    MIN_VALID_PUBLISHED_AT,
+    THIRTY_DAYS,
+    US_POLITICAL_KEYWORDS,
+    X_DOMAIN_KEY,
+)
 
 logger = get_logger(__name__)
-
-# Stamped onto every corpus.documents row. Bump whenever the filter
-# keywords, matching semantics, recency rule, or extraction logic change.
-ETL_VERSION = "pg-1"
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 _DEFAULT_SEEDS_PATH = REPO_ROOT / "data" / "seeds.yaml"
 _DEFAULT_RAW_ROOT = REPO_ROOT / "data" / "raw" / "sha256"
 
-THIRTY_DAYS = datetime.timedelta(days=30)
-# Genuinely-invalid published_at bounds (ported from loader.py's
-# `is_recent`): before 2020 or more than a day in the future.
-_MIN_VALID_PUBLISHED_AT = datetime.datetime(2020, 1, 1, tzinfo=datetime.timezone.utc)
-_FUTURE_SLOP = datetime.timedelta(days=1)
-
 # ---------------------------------------------------------------------------
 # US-politics content filter
 # ---------------------------------------------------------------------------
-
-US_POLITICAL_KEYWORDS = frozenset([
-    # Federal government
-    "congress", "senate", "house of representatives", "president", "white house",
-    "supreme court", "federal", "administration", "cabinet", "executive order",
-    # Political parties
-    "republican", "democrat", "gop", "dnc", "rnc", "conservative", "liberal",
-    "progressive", "maga", "left-wing", "right-wing",
-    # Politicians (common references)
-    "trump", "biden", "harris", "pelosi", "mcconnell", "schumer", "desantis",
-    "newsom", "aoc", "ocasio-cortez",
-    # Political processes
-    "election", "vote", "ballot", "poll", "campaign", "primary", "caucus",
-    "midterm", "legislation", "bill", "law", "policy", "regulation",
-    # Political topics
-    "immigration", "border", "tariff", "trade war", "abortion", "gun control",
-    "healthcare", "medicare", "medicaid", "social security", "tax",
-    "stimulus", "infrastructure", "climate policy", "national guard",
-    # Governance
-    "governor", "senator", "congressman", "representative", "mayor",
-    "attorney general", "secretary of state", "veto", "impeachment",
-    "bipartisan", "partisan", "filibuster",
-])
 
 # Longest-first: regex alternation picks the first matching alternative at
 # a position, not the longest, so ordering avoids a shorter keyword shadowing
@@ -77,29 +53,7 @@ _KEYWORD_PATTERN = re.compile(
     r"\b(?:" + "|".join(re.escape(k) for k in sorted(US_POLITICAL_KEYWORDS, key=len, reverse=True)) + r")\b"
 )
 
-EXCLUDE_PATTERNS = [
-    r"/sport", r"/football", r"/basketball", r"/baseball", r"/soccer",
-    r"/music", r"/entertainment", r"/celebrity", r"/podcast",
-    r"/recipes", r"/food", r"/travel", r"/lifestyle",
-]
-
-INDEX_CHROME_TERMS = (
-    "skip to main content",
-    "open navigation menu",
-    "close navigation menu",
-    "keyboard shortcuts for audio player",
-    "expand/collapse submenu",
-    "brand studio",
-    "newsletters",
-    "download our app",
-    "watch cbs news",
-    "npr shop",
-    "terms of use",
-    "privacy policy",
-    "your privacy choices",
-)
-
-_HUB_URL_RE = re.compile(r"^/(?:[a-z]{1,20}/?)?$")
+_HUB_URL_RE = re.compile(HUB_URL_PATTERN)
 
 
 def is_us_political_content(text: str, title: str = "", url: str = "") -> bool:
@@ -171,9 +125,9 @@ def is_recent(
     if published_at is None:
         return True
     now = now or datetime.datetime.now(datetime.timezone.utc)
-    if published_at < _MIN_VALID_PUBLISHED_AT:
+    if published_at < MIN_VALID_PUBLISHED_AT:
         return False
-    if published_at > now + _FUTURE_SLOP:
+    if published_at > now + FUTURE_SLOP:
         return False
     return (now - published_at) <= max_age
 
@@ -631,9 +585,6 @@ def _load_reddit(conn: Connection, cfg: DomainFilterConfig, now: datetime.dateti
 # X
 # ---------------------------------------------------------------------------
 
-_X_DOMAIN_KEY = "x.com"
-
-
 @dataclass
 class _XCandidate:
     tweet_id: str
@@ -657,7 +608,7 @@ def _gather_x_candidates(
     result = DocLoadResult()
     candidates: list[_XCandidate] = []
 
-    if _X_DOMAIN_KEY in cfg.deny:
+    if X_DOMAIN_KEY in cfg.deny:
         return candidates, result
 
     with conn.cursor() as cur:
@@ -680,7 +631,7 @@ def _gather_x_candidates(
         if not is_recent(row["created_at"], now):
             result.skipped_old += 1
             continue
-        if _X_DOMAIN_KEY not in cfg.allow and not is_us_political_content(row["text"], ""):
+        if X_DOMAIN_KEY not in cfg.allow and not is_us_political_content(row["text"], ""):
             result.skipped_nonpolitical += 1
             continue
         candidates.append(_XCandidate(
@@ -712,9 +663,9 @@ def _insert_x_candidates(
     conn: Connection, candidates: list[_XCandidate], cfg: DomainFilterConfig, now: datetime.datetime
 ) -> tuple[int, int]:
     cap = cfg.max_docs_per_domain_per_window
-    existing = _existing_domain_counts(conn, "x_post", {_X_DOMAIN_KEY}, now) if cap else {}
+    existing = _existing_domain_counts(conn, "x_post", {X_DOMAIN_KEY}, now) if cap else {}
     admitted, capped = select_within_domain_cap(
-        [{"domain_key": _X_DOMAIN_KEY, "published_at": c.created_at, "candidate": c} for c in candidates],
+        [{"domain_key": X_DOMAIN_KEY, "published_at": c.created_at, "candidate": c} for c in candidates],
         existing, cap,
     )
     author_map = _resolve_x_author_ids(conn, {row["candidate"].author_platform_id for row in admitted})
@@ -734,7 +685,7 @@ def _insert_x_candidates(
                 ON CONFLICT (source_type, natural_key) DO NOTHING
                 RETURNING doc_id
                 """,
-                (c.tweet_id, _X_DOMAIN_KEY, author_id, c.created_at, c.text, source_url, c.raw_hash, ETL_VERSION),
+                (c.tweet_id, X_DOMAIN_KEY, author_id, c.created_at, c.text, source_url, c.raw_hash, ETL_VERSION),
             )
             doc_row = cur.fetchone()
             if doc_row is None:

@@ -210,3 +210,16 @@ COORDINATION_PATTERNS = [
     ("timing_burst", "Posted in coordination burst window"),
     ("llm_text_style", "Text style matches LLM-generated patterns"),
 ]
+
+
+# =============================================================================
+# Evidence-span validation constants (Postgres redesign Phase 5,
+# engine/validation.py — the unified validator; see that module and
+# docs/audit-trail/analysis/2026-07-22-pg-analysis-plumbing.md for the
+# majority-precedent rationale behind these specific values).
+# =============================================================================
+
+MIN_EVIDENCE_WORDS = 4
+UNVERIFIED_EVIDENCE_CONFIDENCE_CAP = 0.3
+MIN_CLAIM_WORDS = 4
+MAX_CLAIM_WORDS = 20

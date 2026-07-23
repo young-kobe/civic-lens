@@ -287,7 +287,9 @@ One row per analysis attempt. `doc_id` XOR `author_id`
 (`CHECK ((doc_id IS NULL) <> (author_id IS NULL))`). `model_id` NOT NULL;
 `prompt_version_id` nullable FK (deterministic runs have none);
 `inference_method` NOT NULL; `raw_response JSONB` = the verbatim audit
-payload; `is_current` flips transactionally when a task is reprocessed.
+payload (never holds error text); `error TEXT` = the failure message for
+`status='failed'` runs, NULL otherwise; `is_current` flips transactionally
+when a task is reprocessed.
 
 Two partial unique indexes enforce "one current run per subject per task":
 
@@ -300,6 +302,39 @@ CREATE UNIQUE INDEX runs_current_author_task_uq ON analysis.runs (author_id, tas
 
 One run may feed multiple typed result tables (the unified `text` run
 writes both `sentiment_results` and `favorability_stances`).
+
+### Result-store write semantics (`results/store.py`)
+
+`results/store.py` is the only writer of `analysis.*` result tables; engines
+call `open_run()` then `RunHandle.save_*()` then `finish()`, and nothing
+reaches Postgres before `finish()`. `finish()` commits the run row plus all
+accumulated result rows in one transaction, in this order:
+
+1. **Advisory lock**: `pg_advisory_xact_lock(hashtext(lock_key))`, keyed
+   `task:doc_id|author_id:subject_id`. Transaction-scoped (releases
+   automatically on commit or crash), so concurrent `finish()` calls for the
+   same (subject, task) serialize into ordinary sequential execution instead
+   of racing the partial unique index below.
+2. **Flip-before-insert**: for `status='done'`, the predecessor row's
+   `is_current` is UPDATEd to `false` *before* the new row is INSERTed.
+   Insert-then-flip is rejected: Postgres checks a plain (non-deferred)
+   unique index per statement, so both rows would briefly satisfy the
+   partial unique index between the two statements — a real violation, not
+   just a race.
+3. **Failed-run rule**: a `status='failed'` run is inserted with
+   `is_current=false` unconditionally, never flips a predecessor, and
+   discards all accumulated `save_*()` results (nothing is written to the
+   typed result tables). Stale-but-valid beats broken: a prior succeeded run
+   keeps serving as `is_current` until a new succeeded run replaces it.
+4. **Traceability contract**: `model_id` is required unconditionally
+   (mirrors the NOT NULL DDL constraint). `prompt_version` is required only
+   when `status='done'` and `inference_method` is `llm`/`hybrid` —
+   deterministic runs never need one, and a *failed* llm/hybrid run is
+   exempt too (it never got far enough to produce a prompted result).
+
+`error`/`raw_response` never mix: `error` is written straight to its own
+column, `raw_response` passes through untouched (see the no-mixing note
+above).
 
 ### Typed result tables
 

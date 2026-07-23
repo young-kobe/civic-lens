@@ -1,14 +1,8 @@
 """
-analysis/src/etl/authors.py — upserts corpus.authors from raw capture tables.
-
-Ordering contract: run sync_x_authors() (and sync_reddit_authors(), once
-enabled) BEFORE documents.py's load_new_documents() — documents.py resolves
-author_id via a read-only lookup and leaves it NULL when unmatched rather
-than blocking; nothing re-links a doc retroactively once its author appears.
-
-News outlets are NOT synthesized as authors here: they are corpus.entities
-rows (kind='outlet') already, joined by domain in serving rollups, so news
-documents get author_id = NULL by design. See
+analysis/src/etl/authors.py — upserts corpus.authors from raw capture
+tables. Run before documents.py's load_new_documents(), which resolves
+author_id via a read-only lookup and leaves it NULL when unmatched. Full
+rationale (including why news outlets are not synthesized as authors here):
 docs/audit-trail/analysis/2026-07-22-pg-etl-authors-documents-queue.md.
 """
 

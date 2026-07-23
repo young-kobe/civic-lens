@@ -84,6 +84,48 @@ class GeminiClient(BaseLLMClient):
         """Check if the LLM client is properly initialized."""
         return self._client is not None
 
+    def complete_once(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        response_schema: Optional[Dict[str, Any]] = None,
+        temperature: Optional[float] = None,
+    ) -> Dict[str, Any]:
+        """Single-attempt request+parse — no retry, no sleep.
+
+        Shared body extracted so complete()'s retry loop and the new
+        llm/client.py transport path cannot drift apart. Raises on any
+        failure; callers decide whether to retry.
+        """
+        if not self.is_available:
+            raise RuntimeError("Gemini client not initialized. Check API key.")
+
+        config_kwargs: Dict[str, Any] = {
+            "system_instruction": system_prompt,
+            "temperature": temperature if temperature is not None else self.temperature,
+            "response_mime_type": "application/json",
+            # Permissive thresholds — see _PERMISSIVE_SAFETY_SETTINGS.
+            "safety_settings": [
+                self._types.SafetySetting(**s) for s in _PERMISSIVE_SAFETY_SETTINGS
+            ],
+        }
+        if response_schema:
+            config_kwargs["response_schema"] = response_schema
+        config = self._types.GenerateContentConfig(**config_kwargs)
+
+        response = self._client.models.generate_content(
+            model=self.model,
+            contents=user_prompt,
+            config=config,
+        )
+
+        usage = getattr(response, "usage_metadata", None)
+        if usage is not None:
+            self.total_tokens_used += getattr(usage, "total_token_count", 0) or 0
+
+        text = (response.text or "").strip()
+        return self.parse_json_response(text, schema=response_schema)
+
     def complete(
         self,
         system_prompt: str,
@@ -110,34 +152,10 @@ class GeminiClient(BaseLLMClient):
         if not self.is_available:
             raise RuntimeError("Gemini client not initialized. Check API key.")
 
-        config_kwargs: Dict[str, Any] = {
-            "system_instruction": system_prompt,
-            "temperature": temperature if temperature is not None else self.temperature,
-            "response_mime_type": "application/json",
-            # Permissive thresholds — see _PERMISSIVE_SAFETY_SETTINGS.
-            "safety_settings": [
-                self._types.SafetySetting(**s) for s in _PERMISSIVE_SAFETY_SETTINGS
-            ],
-        }
-        if response_schema:
-            config_kwargs["response_schema"] = response_schema
-        config = self._types.GenerateContentConfig(**config_kwargs)
-
         last_error = None
         for attempt in range(self.max_retries):
             try:
-                response = self._client.models.generate_content(
-                    model=self.model,
-                    contents=user_prompt,
-                    config=config,
-                )
-
-                usage = getattr(response, "usage_metadata", None)
-                if usage is not None:
-                    self.total_tokens_used += getattr(usage, "total_token_count", 0) or 0
-
-                text = (response.text or "").strip()
-                return self.parse_json_response(text, schema=response_schema)
+                return self.complete_once(system_prompt, user_prompt, response_schema, temperature)
 
             except Exception as e:
                 last_error = e
