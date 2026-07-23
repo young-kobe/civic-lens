@@ -15,6 +15,9 @@ class Settings(BaseSettings):
     # Pool max size for the Postgres ConnectionPool. Small box: server-side
     # max_connections=30, so keep this well under that per process.
     pg_pool_max: int = 5
+    # Worker thread count for the new-stack scheduler's per-queue-stage
+    # claim loop (analysis/src/scheduler/stages.py::run_queue_stage).
+    analyze_concurrency: int = 4
     
     # Cache for pre-computed analysis snapshots
     cache_dir: str = "data/cache"

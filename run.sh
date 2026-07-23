@@ -131,6 +131,19 @@ run_analyze() {
     fi
 }
 
+run_analyze_pg() {
+    status "Running Postgres-stack analysis pipeline..."
+    ensure_venv; pip_install
+    local args=(-m analysis.src.scheduler.pipeline)
+    [[ -n "$TASKS" ]] && args+=(--tasks "$TASKS")
+    [[ -n "$LIMIT" ]] && args+=(--limit "$LIMIT")
+    if PYTHONPATH="$SCRIPT_ROOT" "$VENV_PY" "${args[@]}"; then
+        status "Analysis pipeline complete."
+    else
+        die "Analysis pipeline failed"
+    fi
+}
+
 run_refresh_accounts() {
     status "Refreshing known_political_x_accounts.yaml from UCSD libguide..."
     ensure_venv; pip_install
@@ -182,6 +195,8 @@ Commands:
   pg                Start Postgres (dev; pg-redesign Phase 1 groundwork, not yet live)
   analyze           Run analysis pipeline (ETL + AI + caching)
                                                  [--tasks <list>] [--limit <n>]
+  analyze-pg        Run the Postgres-stack pipeline (scheduler/pipeline.py)
+                                                 [--tasks <list>] [--limit <n>]
   refresh-accounts  Refresh known_political_x_accounts.yaml   [--dry-run]
   api               Start the FastAPI server (serves cached data) on :8000
   ui                Start the React frontend (Vite) on :5173
@@ -230,6 +245,7 @@ case "$COMMAND" in
     pg)               run_pg ;;
     api)              run_api ;;
     analyze)          run_analyze ;;
+    analyze-pg)       run_analyze_pg ;;
     refresh-accounts) run_refresh_accounts ;;
     ui)               run_ui ;;
     dev)              run_dev ;;
