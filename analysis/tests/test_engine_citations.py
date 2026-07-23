@@ -314,7 +314,7 @@ class ProcessIntegrationTests(unittest.TestCase):
     def test_url_citation_resolves_to_ingested_doc(self):
         run_id = citations.process(self._doc_input(
             self.doc_b, "x_post", "Discussing the story. https://news.example.com/story",
-        ))
+        )).run_id
         rows = self._citation_rows(run_id)
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["target_doc_id"], self.doc_a)
@@ -324,13 +324,13 @@ class ProcessIntegrationTests(unittest.TestCase):
     def test_url_citation_www_variant_resolves_to_same_doc(self):
         run_id = citations.process(self._doc_input(
             self.doc_d, "x_post", "Another tweet citing https://www.news.example.com/story/",
-        ))
+        )).run_id
         rows = self._citation_rows(run_id)
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["target_doc_id"], self.doc_a)
 
     def test_reply_edge_resolves_to_ingested_tweet(self):
-        run_id = citations.process(self._doc_input(self.doc_c, "x_post", "Reply thread"))
+        run_id = citations.process(self._doc_input(self.doc_c, "x_post", "Reply thread")).run_id
         rows = self._citation_rows(run_id)
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["target_doc_id"], self.doc_b)
@@ -340,7 +340,7 @@ class ProcessIntegrationTests(unittest.TestCase):
     def test_url_citation_to_un_ingested_url_keeps_target_url(self):
         run_id = citations.process(self._doc_input(
             self.doc_e, "x_post", "Check this out https://external.example/never-ingested",
-        ))
+        )).run_id
         rows = self._citation_rows(run_id)
         self.assertEqual(len(rows), 1)
         self.assertIsNone(rows[0]["target_doc_id"])
@@ -352,7 +352,7 @@ class ProcessIntegrationTests(unittest.TestCase):
         rows -- not an error, not a skipped run."""
         run_id = citations.process(self._doc_input(
             self.doc_a, "news", "Article body discussing the election.",
-        ))
+        )).run_id
         run = self._run_row(run_id)
         self.assertEqual(run["status"], "done")
         self.assertTrue(run["is_current"])
@@ -364,10 +364,10 @@ class ProcessIntegrationTests(unittest.TestCase):
     def test_reprocess_supersedes_prior_run(self):
         first_run = citations.process(self._doc_input(
             self.doc_b, "x_post", "Discussing the story. https://news.example.com/story",
-        ))
+        )).run_id
         second_run = citations.process(self._doc_input(
             self.doc_b, "x_post", "Discussing the story. https://news.example.com/story",
-        ))
+        )).run_id
         self.assertNotEqual(first_run, second_run)
         with store.db.connection() as conn:
             rows = {

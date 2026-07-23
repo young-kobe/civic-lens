@@ -198,9 +198,10 @@ def _resolve_model_id() -> str:
     return settings.gemini_model
 
 
-def process(doc: TextDocInput, client: LLMClient, resolver: EntityResolver) -> int:
+def process(doc: TextDocInput, client: LLMClient, resolver: EntityResolver) -> store.RunOutcome:
     """Analyze `doc` and persist sentiment + favorability under one
-    analysis.runs('text') row. Returns the new run_id."""
+    analysis.runs('text') row. Returns the RunOutcome from
+    store.RunHandle.finish()."""
     store.register_prompt_version(
         TEXT_ANALYSIS_PROMPT_VERSION, TEXT_TASK,
         TEXT_ANALYSIS_SYSTEM_PROMPT, TEXT_ANALYSIS_USER_PROMPT_TEMPLATE,

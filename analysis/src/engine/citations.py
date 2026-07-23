@@ -145,10 +145,11 @@ def _resolve_natural_keys(keys: set[str]) -> dict[str, int]:
     return {row["natural_key"]: row["doc_id"] for row in rows}
 
 
-def process(doc: CitationDocInput) -> int:
+def process(doc: CitationDocInput) -> store.RunOutcome:
     """Extract, resolve, and persist one deterministic citations run for
     `doc`. Zero candidates (most docs cite nothing) is a legitimate outcome:
-    a 'done' run with no analysis.citations rows. Returns the new run_id."""
+    a 'done' run with no analysis.citations rows. Returns the RunOutcome
+    from store.RunHandle.finish()."""
     candidates = extract(doc)
     keys = {_candidate_key(c) for c in candidates if _candidate_key(c) is not None}
     resolved = _resolve_natural_keys(keys)

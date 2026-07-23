@@ -260,8 +260,9 @@ record.
       provenance — see the wave 3 entry
 - [x] Bot rollup becomes a plain SQL aggregate over `bot_signals` — landed
       as `engine/bot_detection.py::refresh_author_bot_scores()` (above)
-- [ ] New deterministic `analysis/src/engine/lean_derivation.py` stage
-      (writes `analysis.author_leans` + `analysis.narrative_leans`)
+- [x] New deterministic `analysis/src/engine/lean_derivation.py` stage
+      (writes `analysis.author_leans` + `analysis.narrative_leans`) — see
+      `docs/audit-trail/analysis/2026-07-23-pg-scheduler-wave4.md`
 - [x] `analysis/src/common/entity_resolver.py` — DB-backed `EntityResolver`
       replacing YAML `entity_registry` resolution for the new stack (loads
       `corpus.entities`/`corpus.entity_aliases` once per construction into
@@ -280,11 +281,15 @@ record.
 
 ## Phase 7 — Scheduler
 
-- [ ] `analysis/src/scheduler/stages.py` (`StageSpec` dataclass, SKIP LOCKED
-      claim loop, workers write via their own pooled connections)
-- [ ] Rewritten `job_runner.py` (registry + budget guard + `pipeline_runs`
-      recording); `_map_llm_concurrent` serial-write-back machinery dies
-- [ ] Tests: claim/complete/fail/retry/stale-reclaim
+- [x] `analysis/src/scheduler/stages.py` (`StageSpec` dataclass, SKIP LOCKED
+      claim loop, workers write via their own pooled connections) — see
+      `docs/audit-trail/analysis/2026-07-23-pg-scheduler-wave4.md`
+- [x] New `analysis/src/scheduler/pipeline.py` (registry + budget guard +
+      `pipeline_runs` recording), invoked via `run.sh analyze-pg`; the old
+      `scheduler/job_runner.py` (its `_map_llm_concurrent` serial-write-back
+      machinery included) stays the live `run.sh analyze` entry point until
+      Phase 11 cutover, not rewritten in place
+- [x] Tests: claim/complete/fail/retry/stale-reclaim
 - [ ] End-to-end `--limit 20` run against Ollama on dev
 
 ## Phase 8 — Recompute run

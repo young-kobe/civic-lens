@@ -319,7 +319,7 @@ class ProcessIntegrationTests(unittest.TestCase):
         response = _response(_claim("Trump won Pennsylvania decisively", "Trump dominated in Pennsylvania", 0.85))
         client = LLMClient(FakeTransport([response]))
 
-        run_id = claims.process(_doc(self.doc_id), client)
+        run_id = claims.process(_doc(self.doc_id), client).run_id
 
         run = self._run_row(run_id)
         self.assertEqual(run["status"], "done")
@@ -338,7 +338,7 @@ class ProcessIntegrationTests(unittest.TestCase):
         client = LLMClient(FakeTransport([_response()]))
         trivial_doc = claims.ClaimDocInput(doc_id=self.doc_id, text="@someone #politics https://example.com")
 
-        run_id = claims.process(trivial_doc, client)
+        run_id = claims.process(trivial_doc, client).run_id
 
         run = self._run_row(run_id)
         self.assertEqual(run["status"], "done")
@@ -354,7 +354,7 @@ class ProcessIntegrationTests(unittest.TestCase):
         response = _response(_claim("Fabricated assertion here", "phrase not present anywhere"))
         client = LLMClient(FakeTransport([response]))
 
-        run_id = claims.process(_doc(self.doc_id), client)
+        run_id = claims.process(_doc(self.doc_id), client).run_id
 
         run = self._run_row(run_id)
         self.assertEqual(run["status"], "done")
@@ -367,11 +367,11 @@ class ProcessIntegrationTests(unittest.TestCase):
     def test_reprocess_supersedes_prior_run(self):
         first_response = _response(_claim("Trump won Pennsylvania decisively", "Trump dominated in Pennsylvania"))
         first_client = LLMClient(FakeTransport([first_response]))
-        first_run = claims.process(_doc(self.doc_id), first_client)
+        first_run = claims.process(_doc(self.doc_id), first_client).run_id
 
         second_response = _response(_claim("The DNC is scrambling now", "the DNC is scrambling for"))
         second_client = LLMClient(FakeTransport([second_response]))
-        second_run = claims.process(_doc(self.doc_id), second_client)
+        second_run = claims.process(_doc(self.doc_id), second_client).run_id
 
         self.assertNotEqual(first_run, second_run)
         from analysis.src.results import store
@@ -391,7 +391,7 @@ class ProcessIntegrationTests(unittest.TestCase):
 
     def test_failed_llm_call_records_failed_run_with_error(self):
         client = LLMClient(FakeTransport([_response()], available=False))
-        run_id = claims.process(_doc(self.doc_id), client)
+        run_id = claims.process(_doc(self.doc_id), client).run_id
 
         run = self._run_row(run_id)
         self.assertEqual(run["status"], "failed")

@@ -1,11 +1,7 @@
 """
-analysis/src/engine/account_tier.py — deterministic curated account-tier
-classifier (Postgres redesign Phase 6), closing the corpus.author_profiles
-seeding gap left when registry_sync retired (see
-docs/audit-trail/analysis/2026-07-22-db-native-entity-curation.md).
-Mirrors the retired YAML loader's own matching logic (handle vs entity_key/
-entity_aliases) exactly -- deterministic, no LLM, no analysis.runs row:
-author_profiles is a corpus table, not an analysis result.
+Deterministic curated account-tier classifier (Postgres redesign Phase 6):
+seeds `corpus.author_profiles` from `corpus.entities`. See
+docs/audit-trail/analysis/2026-07-23-pg-engines-wave3.md for the design.
 """
 
 from __future__ import annotations
