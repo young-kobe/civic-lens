@@ -67,6 +67,7 @@ record.
       networked Postgres instance with owner-scoped credentials, since
       Reddit blocks datacenter-IP source addresses — Kobe's manual
       action at cutover
+- [ ] Empty-tweet capture filter (ingestion) — owner deferred 2026-07-23
 
 ## Phase 3 — Precious-data migration script
 
@@ -205,12 +206,23 @@ record.
 
 ## Phase 6 — Engines
 
-- [ ] `bot` engine ported to `analyze(doc) -> dataclass` + store call
+- [x] `bot` engine ported to `analyze(doc) -> dataclass` + store call —
+      landed as `analysis/src/engine/bot_detection.py` (deterministic
+      stylometric/account signal battery always runs and feeds the LLM
+      prompt; a successful call is `hybrid`, no heuristic-only fallback --
+      an LLM failure or unavailable backend records a failed run,
+      identical to text.py's contract); `refresh_author_bot_scores()` is
+      the bot rollup, a plain SQL aggregate over `bot_signals` (below) —
+      see `docs/audit-trail/analysis/2026-07-23-pg-engines-wave3.md`
 - [x] `analyzer` (text -> sentiment + favorability) ported — landed as
       `analysis/src/engine/text.py` (pure `analyze()` + thin `process()`,
       injected `LLMClient` + `EntityResolver`; no heuristic fallback, a
       failed/unavailable LLM call is a recorded failed run) — see
-      `docs/audit-trail/analysis/2026-07-23-pg-engines-wave1.md`
+      `docs/audit-trail/analysis/2026-07-23-pg-engines-wave1.md`. Owner
+      decision 2026-07-23: the trivial-content short-circuit is a `done`
+      deterministic run with NO `sentiment_results` row (replacing the
+      ported neutral-at-0.5 placeholder; `TRIVIAL_CONTENT_CONFIDENCE`
+      deleted) -- unanalyzable is not neutral. See wave 3 entry.
 - [x] `target_extractor` ported — landed as `analysis/src/engine/targets.py`
       (pure `analyze()` + thin `process()`; `target_mentions.entity_id` is
       NULLABLE, so unresolved targets are kept, not dropped, unlike
@@ -229,10 +241,25 @@ record.
       + thin `process()`; deterministic, confidence 1.0); reference-column
       restoration (`corpus.x_posts.referenced_tweet_id`/`referenced_tweet_type`)
       closed the same day — see the audit-trail entry above
-- [ ] `account_classifier` ported
-- [ ] `narrative_clusterer` ported (`clustering_runs` provenance; revisit
-      fragmentation thresholds — 8,477 narratives / 7,116 docs today)
-- [ ] Bot rollup becomes a plain SQL aggregate over `bot_signals`
+- [x] `account_classifier` ported — landed as
+      `analysis/src/engine/account_tier.py`: deterministic
+      `classify_authors()`, no LLM, no `analysis.runs` row (`author_profiles`
+      is a `corpus` table, not an analysis result). Elected/affiliated fix:
+      `corpus.entities.elected` (added 2026-07-23) is the curated truth
+      the tier derives from -- TRUE -> `elected_official`, FALSE ->
+      `affiliated` (cabinet secretaries, agency heads, party chairs), NULL
+      defaults cautiously to `affiliated` with a warning log. Seeded 2026-07-23:
+      539 elected / 12 affiliated / 36 NULL (outlet/subreddit, not
+      applicable) — see `docs/audit-trail/analysis/2026-07-23-pg-engines-wave3.md`
+- [x] `narrative_clusterer` ported (`clustering_runs` provenance; revisit
+      fragmentation thresholds — 8,477 narratives / 7,116 docs today) —
+      landed as `analysis/src/engine/narrative_clustering.py`: fragmentation
+      fix (`MIN_NARRATIVE_SUPPORT = 2`, a claim matching nothing is no
+      longer materialized as a one-doc narrative); `narrative_docs.
+      added_by_run` (added 2026-07-23) gives run-precise extension
+      provenance — see the wave 3 entry
+- [x] Bot rollup becomes a plain SQL aggregate over `bot_signals` — landed
+      as `engine/bot_detection.py::refresh_author_bot_scores()` (above)
 - [ ] New deterministic `analysis/src/engine/lean_derivation.py` stage
       (writes `analysis.author_leans` + `analysis.narrative_leans`)
 - [x] `analysis/src/common/entity_resolver.py` — DB-backed `EntityResolver`
@@ -241,6 +268,15 @@ record.
       an in-memory map; `resolve()` is a pure lookup) — see
       `docs/audit-trail/analysis/2026-07-23-pg-engines-wave1.md`
 - [ ] Test fixtures moved from sqlite tempfiles to a Postgres test schema
+
+## Phase 7+ — Approved additions (not yet scheduled)
+
+- [ ] Officials backfill + admission_class workstream (approved
+      2026-07-23, see plan Addition section): `corpus.documents.
+      admission_class` enum ('sampled'/'official_record'); Go
+      `civic-ingest backfill-officials` one-time historical fetch
+      (editorial 16 -> N=100, promoted 533 -> N=25, own spend cap flag);
+      `serving.entity_profiles` all-time per-entity rollup (Phase 9).
 
 ## Phase 7 — Scheduler
 
