@@ -28,7 +28,7 @@ JSON columns).
 | --- | --- | --- |
 | `raw` | Go ingestor only | Frontier + verbatim source capture |
 | `corpus` | Python ETL only | Normalized documents, authors, entity registry |
-| `analysis` | `results/store.py` only | Analysis runs + typed per-task results |
+| `analysis` | `results/store.py` + named aggregate/derived modules | Analysis runs + typed per-task results |
 | `serving` | serving/ rollup builders | Precomputed rollups the API reads |
 | `ops` | Go + Python scheduler | Work queue, run provenance, budget, migrations |
 | `archive` | one-time import script | Verbatim old SQLite derived data, read-only by convention |
@@ -170,6 +170,7 @@ always resolve.
 | lean_source | TEXT | nullable, display/audit only, never a join axis — the *original pre-flattening* classification string (e.g. `"center-left"`, `"R"`, `"independent-dem"`), distinct from source_citation |
 | active | BOOLEAN | NOT NULL DEFAULT true |
 | editorial | BOOLEAN | NOT NULL DEFAULT false — true for the 3 originally hand-edited registries; false for officials promoted wholesale from `known_political_x_accounts.yaml` (549 people, one entity per person). Partial index `idx_entities_editorial (kind) WHERE editorial` backs the UI's editorial-only filter. |
+| elected | BOOLEAN | nullable — curated truth for `account_tier` derivation (`analysis/src/engine/account_tier.py`): TRUE = currently an elected federal officeholder, FALSE = appointed/institutional. Meaningful only where `kind IN ('official', 'collective')`; always NULL for `outlet`/`subreddit`. Hand-editable like every other curated column here; seeded by 0002 (mechanical TRUE for rank-and-file House/Senate members, explicit per-entity judgment for the President/VP/cabinet/agency-head/party-chair/chamber-leadership entries — see the migration's commented classification block). |
 | updated_at | TIMESTAMPTZ | NOT NULL DEFAULT now() — last curation timestamp; seeded to a fixed value by 0002, bumped by whatever updates the row thereafter (no sync process) |
 
 **Lean flattening (owner decision, resolved — no longer open, historical):**
@@ -265,7 +266,23 @@ Each FKs both the parent document AND its raw row — the old convention-only
 
 ## `analysis` — runs + typed per-task results
 
-Only `analysis/src/results/store.py` writes this schema.
+`analysis/src/results/store.py` owns every run-anchored typed result table
+(the tables `RunHandle.save_*()` writes: `sentiment_results`,
+`favorability_stances`, `target_mentions`, `propaganda_results` +
+`propaganda_techniques`, `claims`, `bot_signals`, `citations`) plus
+`analysis.runs`/`analysis.prompt_versions` themselves — store.py is the
+only module that ever inserts one of these, and every row traces back to
+exactly one `analysis.runs` row via `run_id`. Named aggregate/derived
+tables that are NOT run-anchored are owned by the module that computes
+them instead, each documented at its own writer: `analysis.
+author_bot_scores` (a materialized rollup recomputed wholesale, not
+written per-run) by `engine/bot_detection.py::refresh_author_bot_scores()`;
+`analysis.clustering_runs`/`narratives`/`narrative_docs` (a batch job over
+many docs per invocation, not one run per doc/author -- `results/store.py`'s
+`RunHandle` has no narrative-shaped save method) by
+`engine/narrative_clustering.py`. Both write their tables directly via
+`common/db.py`, documented as an explicit exception at their own module
+docstring.
 
 ### Enums
 
@@ -308,8 +325,11 @@ writes both `sentiment_results` and `favorability_stances`).
 
 ### Result-store write semantics (`results/store.py`)
 
-`results/store.py` is the only writer of `analysis.*` result tables; engines
-call `open_run()` then `RunHandle.save_*()` then `finish()`, and nothing
+`results/store.py` is the only writer of `analysis.*` **run-anchored typed
+result** tables (see the schema section above for the two named exceptions,
+`author_bot_scores` and the narrative tables, owned by their computing
+modules); engines call `open_run()` then `RunHandle.save_*()` then
+`finish()`, and nothing
 reaches Postgres before `finish()`. `finish()` commits the run row plus all
 accumulated result rows in one transaction, in this order:
 
@@ -366,7 +386,11 @@ above).
 - **narrative_leans**: narrative_id PK/FK; lean, lean_share, confidence,
   doc_count, computed_at — same derivation module as author_leans.
 - **narrative_docs**: composite PK `(narrative_id, doc_id)`; discovered_at,
-  confidence.
+  confidence (the linked claim's own extraction confidence, copied at
+  insert time -- NOT the jaccard/cosine comparator similarity, which is
+  never persisted), added_by_run FK -> clustering_runs (2026-07-23,
+  nullable -- run-precise extension provenance: which run, founding or
+  later-extending, discovered this doc<->narrative link).
 
 ### Evals
 
