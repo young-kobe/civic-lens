@@ -223,3 +223,19 @@ MIN_EVIDENCE_WORDS = 4
 UNVERIFIED_EVIDENCE_CONFIDENCE_CAP = 0.3
 MIN_CLAIM_WORDS = 4
 MAX_CLAIM_WORDS = 20
+
+
+# =============================================================================
+# Text engine constants (Postgres redesign Phase 6, engine/text.py -- the
+# unified sentiment+favorability engine). Additive section.
+# =============================================================================
+
+# Character budget for the doc text the LLM sees, clamped at a sentence
+# boundary by text_prep.truncate_at_sentence. Matches the old analyzer.py's
+# TEXT_ANALYSIS_MAX_CHARS (that module keeps its own copy; untouched, live).
+TEXT_ANALYSIS_MAX_CHARS = 2000
+
+# Fixed sentiment confidence for the deterministic trivial-content
+# short-circuit (prompt rule 6: mentions/links/hashtags only -> low
+# confidence). Matches the old analyzer.py's NEUTRAL/0.5 trivial-content value.
+TRIVIAL_CONTENT_CONFIDENCE = 0.5
