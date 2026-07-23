@@ -1,9 +1,7 @@
 """
 Targets engine (Postgres redesign Phase 6): per-target stance extraction,
-mirroring engine/text.py's pure analyze() + thin process() shape. Unlike
-favorability_stances, target_mentions.entity_id is NULLABLE -- unresolved
-targets are stored with entity_id NULL rather than dropped (see the
-TargetAnalysis docstring below).
+mirroring engine/text.py's pure analyze() + thin process() shape. See
+docs/audit-trail/analysis/2026-07-23-pg-engines-wave2.md.
 """
 
 from __future__ import annotations
@@ -206,9 +204,10 @@ def _resolve_model_id() -> str:
     return settings.gemini_model
 
 
-def process(doc: TargetDocInput, client: LLMClient, resolver: EntityResolver) -> int:
+def process(doc: TargetDocInput, client: LLMClient, resolver: EntityResolver) -> store.RunOutcome:
     """Analyze `doc` and persist its target mentions under one
-    analysis.runs('targets') row. Returns the new run_id."""
+    analysis.runs('targets') row. Returns the RunOutcome from
+    store.RunHandle.finish()."""
     store.register_prompt_version(
         TARGET_SENTIMENT_PROMPT_VERSION, TARGETS_TASK,
         TARGET_SENTIMENT_SYSTEM_PROMPT, TARGET_SENTIMENT_USER_PROMPT_TEMPLATE,

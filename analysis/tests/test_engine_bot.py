@@ -345,7 +345,7 @@ class ProcessIntegrationTests(unittest.TestCase):
         doc_id = self._seed_doc("doc-2", author_id=author_id)
         client = LLMClient(FakeTransport([_valid_llm_response(label="bot", confidence=0.9)]))
 
-        run_id = bot.process(bot.BotDocInput(doc_id=doc_id, source_type="x_post", text=_CASUAL_TEXT), client)
+        run_id = bot.process(bot.BotDocInput(doc_id=doc_id, source_type="x_post", text=_CASUAL_TEXT), client).run_id
 
         run = self._run_row(run_id)
         self.assertEqual(run["status"], "done")
@@ -359,7 +359,7 @@ class ProcessIntegrationTests(unittest.TestCase):
         doc_id = self._seed_doc("doc-3", author_id=author_id)
         client = LLMClient(FakeTransport([], available=False))
 
-        run_id = bot.process(bot.BotDocInput(doc_id=doc_id, source_type="x_post", text=""), client)
+        run_id = bot.process(bot.BotDocInput(doc_id=doc_id, source_type="x_post", text=""), client).run_id
 
         run = self._run_row(run_id)
         self.assertEqual(run["inference_method"], "deterministic")
@@ -376,7 +376,7 @@ class ProcessIntegrationTests(unittest.TestCase):
         doc_id = self._seed_doc("doc-4", author_id=author_id)
         client = LLMClient(FakeTransport([_valid_llm_response()], available=False))
 
-        run_id = bot.process(bot.BotDocInput(doc_id=doc_id, source_type="x_post", text=_CASUAL_TEXT), client)
+        run_id = bot.process(bot.BotDocInput(doc_id=doc_id, source_type="x_post", text=_CASUAL_TEXT), client).run_id
 
         run = self._run_row(run_id)
         self.assertEqual(run["status"], "failed")

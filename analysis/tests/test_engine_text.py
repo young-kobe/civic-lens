@@ -353,7 +353,7 @@ class ProcessIntegrationTests(unittest.TestCase):
 
     def test_valid_llm_response_persists_run_and_result_rows(self):
         client = LLMClient(FakeTransport([_valid_response()]))
-        run_id = text.process(_doc(self.doc_id), client, self.resolver)
+        run_id = text.process(_doc(self.doc_id), client, self.resolver).run_id
 
         run = self._run_row(run_id)
         self.assertEqual(run["status"], "done")
@@ -385,7 +385,7 @@ class ProcessIntegrationTests(unittest.TestCase):
             doc_id=self.doc_id, source_type="x_post", title=None,
             text="@someone #politics https://example.com",
         )
-        run_id = text.process(trivial_doc, client, self.resolver)
+        run_id = text.process(trivial_doc, client, self.resolver).run_id
 
         run = self._run_row(run_id)
         self.assertEqual(run["status"], "done")
@@ -408,10 +408,10 @@ class ProcessIntegrationTests(unittest.TestCase):
 
     def test_reprocess_supersedes_prior_run(self):
         first_client = LLMClient(FakeTransport([_valid_response()]))
-        first_run = text.process(_doc(self.doc_id), first_client, self.resolver)
+        first_run = text.process(_doc(self.doc_id), first_client, self.resolver).run_id
 
         second_client = LLMClient(FakeTransport([_valid_response(sentiment_label="POSITIVE")]))
-        second_run = text.process(_doc(self.doc_id), second_client, self.resolver)
+        second_run = text.process(_doc(self.doc_id), second_client, self.resolver).run_id
 
         self.assertNotEqual(first_run, second_run)
         from analysis.src.results import store
@@ -428,7 +428,7 @@ class ProcessIntegrationTests(unittest.TestCase):
 
     def test_failed_llm_call_records_failed_run_with_error(self):
         client = LLMClient(FakeTransport([_valid_response()], available=False))
-        run_id = text.process(_doc(self.doc_id), client, self.resolver)
+        run_id = text.process(_doc(self.doc_id), client, self.resolver).run_id
 
         run = self._run_row(run_id)
         self.assertEqual(run["status"], "failed")

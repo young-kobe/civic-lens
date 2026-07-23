@@ -295,7 +295,7 @@ class ProcessIntegrationTests(unittest.TestCase):
 
     def test_valid_llm_response_persists_parent_and_child_rows(self):
         client = LLMClient(FakeTransport([_valid_response()]))
-        run_id = propaganda.process(_doc(self.doc_id), client)
+        run_id = propaganda.process(_doc(self.doc_id), client).run_id
 
         run = self._run_row(run_id)
         self.assertEqual(run["status"], "done")
@@ -321,7 +321,7 @@ class ProcessIntegrationTests(unittest.TestCase):
     def test_pre_filter_process_is_deterministic_with_zero_techniques(self):
         client = LLMClient(FakeTransport([_valid_response()]))
         neutral_doc = _doc(self.doc_id, text_value=_NEUTRAL_TEXT)
-        run_id = propaganda.process(neutral_doc, client)
+        run_id = propaganda.process(neutral_doc, client).run_id
 
         run = self._run_row(run_id)
         self.assertEqual(run["status"], "done")
@@ -351,7 +351,7 @@ class ProcessIntegrationTests(unittest.TestCase):
             {"technique": "appeal_to_fear", "confidence": 0.85,
              "evidence_span": "corrupt politicians remained silent"},
         ])]))
-        run_id = propaganda.process(_doc(self.doc_id), client)
+        run_id = propaganda.process(_doc(self.doc_id), client).run_id
 
         from analysis.src.results import store
         with store.db.connection() as conn:
@@ -368,10 +368,10 @@ class ProcessIntegrationTests(unittest.TestCase):
 
     def test_reprocess_supersedes_prior_run(self):
         first_client = LLMClient(FakeTransport([_valid_response()]))
-        first_run = propaganda.process(_doc(self.doc_id), first_client)
+        first_run = propaganda.process(_doc(self.doc_id), first_client).run_id
 
         second_client = LLMClient(FakeTransport([_valid_response(overall_propaganda_score=0.5)]))
-        second_run = propaganda.process(_doc(self.doc_id), second_client)
+        second_run = propaganda.process(_doc(self.doc_id), second_client).run_id
 
         self.assertNotEqual(first_run, second_run)
         from analysis.src.results import store
@@ -388,7 +388,7 @@ class ProcessIntegrationTests(unittest.TestCase):
 
     def test_failed_llm_call_records_failed_run_with_error(self):
         client = LLMClient(FakeTransport([_valid_response()], available=False))
-        run_id = propaganda.process(_doc(self.doc_id), client)
+        run_id = propaganda.process(_doc(self.doc_id), client).run_id
 
         run = self._run_row(run_id)
         self.assertEqual(run["status"], "failed")
