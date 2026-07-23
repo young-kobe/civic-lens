@@ -17,6 +17,11 @@ type Config struct {
 	X            XConfig             `yaml:"x"`
 	Seeds        []SeedConfig        `yaml:"seeds"`
 	CrawlBalance *CrawlBalanceConfig `yaml:"crawl_balance"`
+	// DomainFilter is Python-ETL-only (analysis/src/etl/documents.py's
+	// DomainFilterConfig reads it directly from seeds.yaml); the Go side
+	// never acts on it. Declared here purely so KnownFields(true) strict
+	// decoding below doesn't reject seeds.yaml's domain_filter section.
+	DomainFilter map[string]any `yaml:"domain_filter"`
 }
 
 // DatabaseConfig holds database paths.

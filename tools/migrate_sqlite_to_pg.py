@@ -86,6 +86,13 @@ DEFAULT_RAW_FILES_DIR = "data/raw/sha256"
 DEFAULT_SAMPLE_SIZE = 500
 DEFAULT_SEED = 42
 
+# IEEE 754 single-precision (Postgres REAL / float4) machine epsilon: 2**-23,
+# i.e. ~7 significant decimal digits of relative precision per stored value.
+# Used only to widen the --verify SUM tolerance for REAL-typed columns (see
+# ColumnSpec.real_type and _sum_tolerance) — never for MIN/MAX, which do not
+# accumulate error across rows.
+REAL_TYPE_RELATIVE_EPSILON = 1.1920929e-07
+
 EPOCH_ZERO = datetime(1970, 1, 1, tzinfo=timezone.utc)
 
 PAGE_STATE_LABELS = {0: "queued", 1: "inflight", 2: "done", 3: "failed"}
@@ -186,7 +193,12 @@ class ColumnSpec:
     populated" for a human reading the spec. `sql_cast` appends a Postgres
     cast to the VALUES placeholder (e.g. '::jsonb', '::raw.page_state') for
     columns whose target type psycopg/PG cannot infer from an untyped text
-    parameter alone."""
+    parameter alone. `real_type` marks a column whose target Postgres type is
+    REAL (float4) rather than DOUBLE PRECISION/INTEGER/BIGINT — every
+    archive.* confidence/score column; --verify's SUM check widens its
+    tolerance for these (see _sum_tolerance) to absorb single-precision
+    storage rounding compounding across many summed rows, while MIN/MAX stay
+    at the strict tolerance since they never accumulate error."""
 
     source: str
     target: str
@@ -195,6 +207,7 @@ class ColumnSpec:
     sql_cast: str = ""
     aggregatable: bool = False
     bind_adapter: Optional[Callable[[Any], Any]] = None
+    real_type: bool = False
 
 
 @dataclass(frozen=True)
@@ -433,7 +446,7 @@ ARCHIVE_TABLES: list[TableSpec] = [
                 transform=_json_best_effort_value, problem_check=_json_best_effort_problem,
                 sql_cast="::jsonb", bind_adapter=bind_json_value,
             ),
-            ColumnSpec("confidence", "confidence", aggregatable=True),
+            ColumnSpec("confidence", "confidence", aggregatable=True, real_type=True),
             ColumnSpec("created_at", "created_at", transform=epoch_to_datetime, aggregatable=True),
             ColumnSpec("inference_method", "inference_method"),
             ColumnSpec("label", "label"),
@@ -455,7 +468,7 @@ ARCHIVE_TABLES: list[TableSpec] = [
             ColumnSpec("entity_party", "entity_party"),
             ColumnSpec("stance", "stance"),
             ColumnSpec("topic", "topic"),
-            ColumnSpec("confidence", "confidence", aggregatable=True),
+            ColumnSpec("confidence", "confidence", aggregatable=True, real_type=True),
             ColumnSpec(
                 "evidence_json", "evidence_json",
                 transform=_json_best_effort_value, problem_check=_json_best_effort_problem,
@@ -484,7 +497,7 @@ ARCHIVE_TABLES: list[TableSpec] = [
                 sql_cast="::jsonb", bind_adapter=bind_json_value,
             ),
             ColumnSpec("clustering_mode", "clustering_mode"),
-            ColumnSpec("clustering_threshold", "clustering_threshold", aggregatable=True),
+            ColumnSpec("clustering_threshold", "clustering_threshold", aggregatable=True, real_type=True),
             ColumnSpec("embedding_model", "embedding_model"),
         ],
     ),
@@ -499,7 +512,7 @@ ARCHIVE_TABLES: list[TableSpec] = [
             ColumnSpec("narrative_id", "narrative_id"),
             ColumnSpec("doc_id", "doc_id"),
             ColumnSpec("discovered_at", "discovered_at", transform=epoch_to_datetime, aggregatable=True),
-            ColumnSpec("confidence", "confidence", aggregatable=True),
+            ColumnSpec("confidence", "confidence", aggregatable=True, real_type=True),
         ],
     ),
     TableSpec(
@@ -550,12 +563,12 @@ ARCHIVE_TABLES: list[TableSpec] = [
         columns=[
             ColumnSpec("platform", "platform"),
             ColumnSpec("author_id", "author_id"),
-            ColumnSpec("score", "score", aggregatable=True),
-            ColumnSpec("variance", "variance", aggregatable=True),
+            ColumnSpec("score", "score", aggregatable=True, real_type=True),
+            ColumnSpec("variance", "variance", aggregatable=True, real_type=True),
             ColumnSpec("sample_count", "sample_count", aggregatable=True),
             ColumnSpec("bot_post_count", "bot_post_count", aggregatable=True),
             ColumnSpec("suspicious_post_count", "suspicious_post_count", aggregatable=True),
-            ColumnSpec("llm_text_likelihood_mean", "llm_text_likelihood_mean", aggregatable=True),
+            ColumnSpec("llm_text_likelihood_mean", "llm_text_likelihood_mean", aggregatable=True, real_type=True),
             ColumnSpec(
                 "stylometric_features_json", "stylometric_features_json",
                 transform=_json_best_effort_value, problem_check=_json_best_effort_problem,
@@ -596,7 +609,7 @@ AI_OUTPUT_EVALS_TABLE = TableSpec(
         ColumnSpec("doc_id", "doc_id"),
         ColumnSpec("task_type", "task_type"),
         ColumnSpec("human_label", "human_label"),
-        ColumnSpec("human_confidence", "human_confidence", aggregatable=True),
+        ColumnSpec("human_confidence", "human_confidence", aggregatable=True, real_type=True),
         ColumnSpec("is_correct", "is_correct", transform=nullable_int_flag_to_bool),
         ColumnSpec("is_golden", "is_golden", transform=int_flag_to_bool),
         ColumnSpec("reviewer_id", "reviewer_id"),
@@ -937,7 +950,12 @@ def compute_source_stats(
 def compute_target_stats(pg_conn: psycopg.Connection, spec: TableSpec) -> dict[str, dict]:
     """One SQL query per table: NULL count for every column, plus MIN/MAX/SUM
     for aggregatable ones (via EXTRACT(EPOCH FROM ...) for timestamp columns,
-    plain arithmetic otherwise)."""
+    plain arithmetic otherwise). SUM casts its operand to double precision:
+    Postgres's sum(real) aggregate accumulates in single precision, which
+    drifts from the source side's float64 running total by more than the
+    comparison tolerance once thousands of rows are summed (archive.*
+    confidence/score columns are REAL) — MIN/MAX need no such cast since
+    they do not accumulate error."""
     parts = []
     for c in spec.columns:
         parts.append(f"COUNT(*) FILTER (WHERE {c.target} IS NULL) AS \"{c.target}__null\"")
@@ -945,32 +963,52 @@ def compute_target_stats(pg_conn: psycopg.Connection, spec: TableSpec) -> dict[s
             expr = f"EXTRACT(EPOCH FROM {c.target})" if c.transform in TIMESTAMP_TRANSFORMS else c.target
             parts.append(f"MIN({expr}) AS \"{c.target}__min\"")
             parts.append(f"MAX({expr}) AS \"{c.target}__max\"")
-            parts.append(f"SUM({expr}) AS \"{c.target}__sum\"")
+            parts.append(f"SUM({expr}::double precision) AS \"{c.target}__sum\"")
     with pg_conn.cursor(row_factory=psycopg.rows.dict_row) as cur:
         cur.execute(f"SELECT {', '.join(parts)} FROM {spec.qualified_target}")
         return dict(cur.fetchone())
 
 
-def _values_match(expected: Any, actual: Any) -> bool:
+def _values_match(expected: Any, actual: Any, tolerance: float = 1e-6) -> bool:
     """Field-level equality for the sample comparison. Two narrow, documented
     exceptions to plain ==: (1) floats compare with a small tolerance for FP
-    rounding; (2) a canonical JSON value that is still raw text (only
-    raw_json_text's context_annotations column produces this — see its
-    docstring for why it is not pre-parsed) is compared against Postgres's
-    already-decoded jsonb object by parsing it first. Both sides come from
-    the same shared transform; this only accounts for the fact that
-    Postgres itself re-normalizes jsonb storage and never hands back the
-    exact text that was cast into it."""
+    rounding — the default 1e-6 suits double-precision columns; callers
+    comparing a REAL-typed SUM pass a wider `tolerance` (see
+    _sum_tolerance), everything else uses the default; (2) a canonical JSON
+    value that is still raw text (only raw_json_text's context_annotations
+    column produces this — see its docstring for why it is not pre-parsed)
+    is compared against Postgres's already-decoded jsonb object by parsing
+    it first. Both sides come from the same shared transform; this only
+    accounts for the fact that Postgres itself re-normalizes jsonb storage
+    and never hands back the exact text that was cast into it."""
     if isinstance(expected, float) or isinstance(actual, float):
         if expected is None or actual is None:
             return expected == actual
-        return abs(float(expected) - float(actual)) < 1e-6
+        return abs(float(expected) - float(actual)) < tolerance
     if isinstance(expected, str) and isinstance(actual, (dict, list)):
         try:
             return json.loads(expected) == actual
         except (json.JSONDecodeError, TypeError):
             return False
     return expected == actual
+
+
+def _sum_tolerance(col: ColumnSpec, expected: Optional[float]) -> float:
+    """Tolerance for the SUM half of _compare_aggregate: the strict 1e-6
+    default for every double-precision/integer column, widened for
+    REAL-typed (float4) columns to absorb single-precision storage rounding
+    compounding across many summed rows. REAL storage guarantees ~7
+    significant decimal digits per value (IEEE 754 single-precision
+    epsilon, REAL_TYPE_RELATIVE_EPSILON); the worst-case total rounding
+    error summing N same-signed stored values is bounded by
+    epsilon * |sum| — so the tolerance scales with the aggregate's own
+    magnitude, not with a fixed row-count factor. A genuine data error (a
+    wrong or missing row) shifts the sum by orders of magnitude more than
+    this and still fails. MIN/MAX never call this — they do not accumulate
+    error across rows, so the strict default already suits REAL there."""
+    if not col.real_type or expected is None:
+        return 1e-6
+    return max(1e-6, REAL_TYPE_RELATIVE_EPSILON * abs(expected))
 
 
 def _source_pk_columns(spec: TableSpec) -> list[str]:
@@ -1028,7 +1066,8 @@ def _compare_aggregate(
     for label, expected, actual in pairs:
         if expected is None and actual is None:
             continue
-        if expected is None or actual is None or not _values_match(float(expected), float(actual)):
+        tolerance = _sum_tolerance(col, expected) if label == "sum" else 1e-6
+        if expected is None or actual is None or not _values_match(float(expected), float(actual), tolerance):
             report.fail(
                 f"{spec.qualified_target}.{col.target}: {label} mismatch "
                 f"source={expected} target={actual}"

@@ -292,6 +292,27 @@ record.
 - [x] Tests: claim/complete/fail/retry/stale-reclaim
 - [ ] End-to-end `--limit 20` run against Ollama on dev
 
+## Phase 8 prep — Officials backfill + admission_class (2026-07-23)
+
+- [x] `civic-ingest backfill-officials --spend-cap-usd <N>` built and tested
+      (`ingest/internal/runner/backfill_officials.go` +
+      `backfill_officials_test.go` + `backfill_officials_integration_test.go`)
+      — see `docs/audit-trail/ingestion/2026-07-23-backfill-officials.md`
+- [x] `corpus.documents.admission_class` migration + ETL landed
+      (`data/pg-migrations/0003_admission_class.sql`,
+      `analysis/src/etl/documents.py`, `analysis/src/etl/constants.py`) —
+      see `docs/audit-trail/analysis/2026-07-23-admission-class.md`
+- [x] Cross-cutting fix: `ingest/internal/config/config.go` strict YAML
+      decoding now tolerates `data/seeds.yaml`'s Python-only `domain_filter`
+      section (was breaking every Go CLI command) — see the ingestion
+      entry above
+- [ ] Owner-run: actual production backfill via `civic-ingest
+      backfill-officials`, invoked once with a real `--spend-cap-usd`
+      chosen against the live X budget
+- [ ] Owner decision: tune `OFFICIAL_RECORD_PER_AUTHOR_CAP` (currently 200,
+      a placeholder) once real per-official `official_record` volume from
+      the production backfill run above is visible
+
 ## Phase 8 — Recompute run
 
 - [ ] Pilot `--limit 200` on the box: measure per-doc latency, token cost,
