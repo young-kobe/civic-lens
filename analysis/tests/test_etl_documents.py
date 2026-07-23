@@ -104,6 +104,50 @@ class IsIndexPageTests(unittest.TestCase):
         self.assertFalse(docs.is_index_page("", url="https://example.com/"))
 
 
+class IsIndexPagePredicateTests(unittest.TestCase):
+    """Direct tests of the four is_index_page signal predicates over
+    _TextStats — each isolates one signal's threshold semantics so a
+    future threshold change can't silently flip an unrelated signal."""
+
+    def _stats(self, **overrides):
+        base = dict(
+            word_count=50, punct_per_100_words=10.0, titlecase_share=0.1,
+            chrome_hits=0, hub_url=False,
+        )
+        base.update(overrides)
+        return docs._TextStats(**base)
+
+    def test_hub_url_with_thin_prose_requires_both_hub_and_thin(self):
+        self.assertTrue(docs._hub_url_with_thin_prose(
+            self._stats(hub_url=True, punct_per_100_words=1.0)))
+        self.assertFalse(docs._hub_url_with_thin_prose(
+            self._stats(hub_url=True, punct_per_100_words=5.0)))
+        self.assertFalse(docs._hub_url_with_thin_prose(
+            self._stats(hub_url=False, punct_per_100_words=1.0)))
+
+    def test_unpunctuated_link_list_requires_length_and_very_low_punct(self):
+        self.assertTrue(docs._unpunctuated_link_list(
+            self._stats(word_count=30, punct_per_100_words=0.5)))
+        self.assertFalse(docs._unpunctuated_link_list(
+            self._stats(word_count=29, punct_per_100_words=0.5)))
+        self.assertFalse(docs._unpunctuated_link_list(
+            self._stats(word_count=30, punct_per_100_words=1.0)))
+
+    def test_headline_list_requires_length_titlecase_and_low_punct(self):
+        self.assertTrue(docs._headline_list(
+            self._stats(word_count=30, titlecase_share=0.7, punct_per_100_words=2.0)))
+        self.assertFalse(docs._headline_list(
+            self._stats(word_count=30, titlecase_share=0.5, punct_per_100_words=2.0)))
+        self.assertFalse(docs._headline_list(
+            self._stats(word_count=30, titlecase_share=0.7, punct_per_100_words=5.0)))
+
+    def test_nav_chrome_heavy_bar_is_lower_on_hub_url(self):
+        self.assertTrue(docs._nav_chrome_heavy(self._stats(chrome_hits=3, hub_url=False)))
+        self.assertFalse(docs._nav_chrome_heavy(self._stats(chrome_hits=2, hub_url=False)))
+        self.assertTrue(docs._nav_chrome_heavy(self._stats(chrome_hits=2, hub_url=True)))
+        self.assertFalse(docs._nav_chrome_heavy(self._stats(chrome_hits=1, hub_url=True)))
+
+
 class RecencyTests(unittest.TestCase):
     def test_none_published_at_is_recent(self):
         self.assertTrue(docs.is_recent(None, now=_dt(2026, 7, 22)))
@@ -234,6 +278,70 @@ class SourceUrlTests(unittest.TestCase):
     def test_x_url_is_handle_independent(self):
         url = docs._build_x_source_url("999888777")
         self.assertEqual(url, "https://x.com/i/web/status/999888777")
+
+
+class AdmissionGateTests(unittest.TestCase):
+    """Direct tests of the per-source admit gates — encode the check
+    ordering and the per-source check-set differences that
+    _gather_*_candidates rely on (see documents.py's admission-gate
+    module comment for the full rationale)."""
+
+    def setUp(self):
+        self.cfg = docs.DomainFilterConfig()
+        self.now = _dt(2026, 7, 22)
+        self.political_text = "Congress passed a new immigration bill after weeks of debate."
+
+    def test_admit_news_pretext_denied_domain_takes_precedence_over_stale(self):
+        """Both checks would fail here; deny must win — it's checked first."""
+        cfg = docs.DomainFilterConfig(deny=frozenset({"denied.example"}))
+        verdict = docs._admit_news_pretext("denied.example", _dt(2019, 1, 1), cfg, self.now)
+        self.assertFalse(verdict.admitted)
+        self.assertEqual(verdict.reason, docs.DENIED_DOMAIN)
+
+    def test_admit_news_posttext_rejects_index_page_before_political(self):
+        hub_shaped_text = "Skip to main content " * 20
+        verdict = docs._admit_news_posttext(
+            hub_shaped_text, "Politics", "https://example.com/", "example.com", self.cfg
+        )
+        self.assertFalse(verdict.admitted)
+        self.assertEqual(verdict.reason, docs.INDEX_PAGE)
+
+    def test_admit_news_posttext_allow_bypasses_political_check(self):
+        cfg = docs.DomainFilterConfig(allow=frozenset({"example.com"}))
+        verdict = docs._admit_news_posttext(
+            "Nothing political here at all, just local weather.", "Weather",
+            "https://example.com/a1", "example.com", cfg,
+        )
+        self.assertTrue(verdict.admitted)
+
+    def test_admit_reddit_has_no_index_page_check(self):
+        """Reddit skips is_index_page entirely — a chrome-heavy, hub-shaped
+        body is still admitted as long as it reads as political."""
+        chrome_heavy_text = "Skip to main content newsletters " + self.political_text
+        verdict = docs._admit_reddit("title", chrome_heavy_text, "politics", self.now, self.cfg, self.now)
+        self.assertTrue(verdict.admitted)
+
+    def test_admit_x_gate_has_no_deny_check(self):
+        """The X deny check happens once in _gather_x_candidates before any
+        row is read; the gate itself only checks recency + political."""
+        cfg = docs.DomainFilterConfig(deny=frozenset({docs.X_DOMAIN_KEY}))
+        verdict = docs._admit_x(self.political_text, self.now, cfg, self.now)
+        self.assertTrue(verdict.admitted)
+
+    def test_record_rejection_populates_named_counter_and_reasons_dict(self):
+        result = docs.DocLoadResult()
+        result.record_rejection(docs.NOT_POLITICAL)
+        self.assertEqual(result.skipped_nonpolitical, 1)
+        self.assertEqual(result.rejections, {docs.NOT_POLITICAL: 1})
+
+    def test_add_merges_rejections_dicts(self):
+        a = docs.DocLoadResult()
+        a.record_rejection(docs.STALE)
+        b = docs.DocLoadResult()
+        b.record_rejection(docs.STALE)
+        b.record_rejection(docs.NOT_POLITICAL)
+        total = a + b
+        self.assertEqual(total.rejections, {docs.STALE: 2, docs.NOT_POLITICAL: 1})
 
 
 # ---------------------------------------------------------------------------
@@ -496,6 +604,29 @@ class LoadNewDocumentsIntegrationTests(unittest.TestCase):
                 "SELECT d.author_id FROM corpus.documents d WHERE d.source_type='x_post'"
             ).fetchone()
             self.assertIsNotNone(row["author_id"])
+
+    def test_x_post_copies_referenced_tweet_columns_onto_corpus(self):
+        """referenced_tweet_id/type are snapshotted from raw.x_posts onto
+        corpus.x_posts at load time (same treatment as the engagement
+        counts) so engine/citations.py never joins raw.* at analysis time."""
+        with docs.db.connection() as conn:
+            conn.execute(
+                "INSERT INTO raw.x_posts (tweet_id, author_id, created_at, fetched_at, text, "
+                "referenced_tweet_id, referenced_tweet_type, raw_hash, extraction_version) "
+                "VALUES ('t1', 'u1', now(), now(), "
+                "'Congress must pass this bill on immigration policy now', "
+                "'t0', 'replied_to', 'y'||repeat('0', 63), 'v1')"
+            )
+        result = docs.load_new_documents()
+        self.assertEqual(result.inserted, 1)
+        with docs.db.connection() as conn:
+            row = conn.execute(
+                "SELECT xp.referenced_tweet_id, xp.referenced_tweet_type "
+                "FROM corpus.x_posts xp JOIN corpus.documents d ON d.doc_id = xp.doc_id "
+                "WHERE d.source_type = 'x_post'"
+            ).fetchone()
+            self.assertEqual(row["referenced_tweet_id"], "t0")
+            self.assertEqual(row["referenced_tweet_type"], "replied_to")
 
     def test_news_doc_resolves_outlet_entity_id_when_registered(self):
         """Matched outlet -> corpus.news_articles.outlet_entity_id populated
