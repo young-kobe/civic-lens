@@ -12,7 +12,6 @@ from __future__ import annotations
 import os
 import sys
 import unittest
-from pathlib import Path
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(os.path.dirname(current_dir))
@@ -20,6 +19,7 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 from analysis.src.etl import authors
+from analysis.tests import pg_fixture
 
 
 class SyncRedditAuthorsTests(unittest.TestCase):
@@ -34,10 +34,6 @@ class SyncRedditAuthorsTests(unittest.TestCase):
                 os.environ["CIVIC_DATABASE_URL"] = prev
 
 
-REPO_ROOT = Path(project_root)
-MIGRATION_SQL = REPO_ROOT / "data" / "pg-migrations" / "0001_north_star.sql"
-
-
 @unittest.skipUnless(
     os.environ.get("CIVIC_TEST_DATABASE_URL"),
     "CIVIC_TEST_DATABASE_URL not set — no Postgres server available to test against",
@@ -45,31 +41,17 @@ MIGRATION_SQL = REPO_ROOT / "data" / "pg-migrations" / "0001_north_star.sql"
 class SyncXAuthorsIntegrationTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        import psycopg
         cls._dsn = os.environ["CIVIC_TEST_DATABASE_URL"]
-        with psycopg.connect(cls._dsn, autocommit=True) as conn:
-            # Idempotent so this class can share a running container with
-            # other Phase 4 test modules in the same `python -m unittest
-            # discover` process.
-            conn.execute("DROP SCHEMA IF EXISTS raw, corpus, analysis, serving, ops, archive CASCADE")
-            conn.execute(MIGRATION_SQL.read_text())
+        pg_fixture.reset_schema(cls._dsn)
 
     def setUp(self):
-        from analysis.src.common import db as dbmod
-        dbmod.close_pool()
-        self._prev_url = os.environ.get("CIVIC_DATABASE_URL")
-        os.environ["CIVIC_DATABASE_URL"] = self._dsn
+        self._prev_url = pg_fixture.begin_test(self._dsn)
         import psycopg
         with psycopg.connect(self._dsn, autocommit=True) as conn:
             conn.execute("TRUNCATE corpus.authors, raw.x_users CASCADE")
 
     def tearDown(self):
-        from analysis.src.common import db as dbmod
-        dbmod.close_pool()
-        if self._prev_url is None:
-            os.environ.pop("CIVIC_DATABASE_URL", None)
-        else:
-            os.environ["CIVIC_DATABASE_URL"] = self._prev_url
+        pg_fixture.end_test(self._prev_url)
 
     def _insert_x_user(self, conn, user_id, username, followers_count, verified=False):
         conn.execute(

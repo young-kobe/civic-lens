@@ -16,7 +16,6 @@ from __future__ import annotations
 import os
 import sys
 import unittest
-from pathlib import Path
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(os.path.dirname(current_dir))
@@ -28,9 +27,7 @@ from analysis.src.engine import targets
 from analysis.src.engine.constants import UNVERIFIED_EVIDENCE_CONFIDENCE_CAP
 from analysis.src.llm.base import SchemaValidationError
 from analysis.src.llm.client import LLMClient
-
-REPO_ROOT = Path(project_root)
-MIGRATION_SQL = REPO_ROOT / "data" / "pg-migrations" / "0001_north_star.sql"
+from analysis.tests import pg_fixture
 
 
 # =============================================================================
@@ -333,8 +330,6 @@ class AnalyzeLlmFailureTests(unittest.TestCase):
 # Tier 2 -- integration, gated on CIVIC_TEST_DATABASE_URL
 # =============================================================================
 
-MIGRATION_SEED_SQL = REPO_ROOT / "data" / "pg-migrations" / "0002_entity_registry_seed.sql"
-
 
 @unittest.skipUnless(
     os.environ.get("CIVIC_TEST_DATABASE_URL"),
@@ -352,20 +347,15 @@ class ProcessIntegrationTests(unittest.TestCase):
     def setUpClass(cls):
         import psycopg
         cls._dsn = os.environ["CIVIC_TEST_DATABASE_URL"]
+        pg_fixture.reset_schema(cls._dsn, seed=True)
         with psycopg.connect(cls._dsn, autocommit=True) as conn:
-            conn.execute("DROP SCHEMA IF EXISTS raw, corpus, analysis, serving, ops, archive CASCADE")
-            conn.execute(MIGRATION_SQL.read_text())
-            conn.execute(MIGRATION_SEED_SQL.read_text())
             row = conn.execute(
                 "SELECT entity_id FROM corpus.entities WHERE entity_key = 'potus'"
             ).fetchone()
             cls._trump_entity_id = row[0]
 
     def setUp(self):
-        from analysis.src.common import db as dbmod
-        dbmod.close_pool()
-        self._prev_url = os.environ.get("CIVIC_DATABASE_URL")
-        os.environ["CIVIC_DATABASE_URL"] = self._dsn
+        self._prev_url = pg_fixture.begin_test(self._dsn)
         self._truncate_mutable()
         self.doc_id = self._seed_doc("doc-1")
         self.entity_id = self._trump_entity_id
@@ -373,12 +363,7 @@ class ProcessIntegrationTests(unittest.TestCase):
         self.resolver = EntityResolver()
 
     def tearDown(self):
-        from analysis.src.common import db as dbmod
-        dbmod.close_pool()
-        if self._prev_url is None:
-            os.environ.pop("CIVIC_DATABASE_URL", None)
-        else:
-            os.environ["CIVIC_DATABASE_URL"] = self._prev_url
+        pg_fixture.end_test(self._prev_url)
 
     def _truncate_mutable(self):
         # corpus.entities/entity_aliases (the 0002 seed) are deliberately NOT
