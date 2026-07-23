@@ -159,5 +159,5 @@ clear_ai_outputs.py
 docs/evidence/*
 
 *.png
-**.png data/civic_lens.db-shm
+*.db-shm
 data/civic_lens.db-wal
