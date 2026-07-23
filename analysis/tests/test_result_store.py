@@ -310,7 +310,8 @@ class ResultStoreIntegrationTests(unittest.TestCase):
         handle = store.open_run("propaganda", doc_id=self.doc_id, model_id="gemini-3.5-flash",
                                  prompt_version=None, inference_method="deterministic")
         handle.save_propaganda(
-            store.PropagandaResultRow(density=0.4, summary="some loaded language"),
+            store.PropagandaResultRow(density=0.4, summary="some loaded language",
+                                       techniques_validated=1, techniques_dropped=2),
             [store.PropagandaTechniqueRow(technique="loaded_language",
                                            evidence_span="radical extremists", confidence=0.7)],
         )
@@ -324,6 +325,8 @@ class ResultStoreIntegrationTests(unittest.TestCase):
                 "SELECT * FROM analysis.propaganda_techniques WHERE run_id = %s", (run_id,)
             ).fetchall()
         self.assertEqual(result["density"], 0.4)
+        self.assertEqual(result["techniques_validated"], 1)
+        self.assertEqual(result["techniques_dropped"], 2)
         self.assertEqual(len(techniques), 1)
         self.assertEqual(techniques[0]["technique"], "loaded_language")
 

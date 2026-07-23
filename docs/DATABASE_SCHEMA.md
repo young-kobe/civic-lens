@@ -346,7 +346,7 @@ above).
 | `sentiment_results` | run_id PK | label, score, sarcasm_detected, evidence_spans TEXT[] |
 | `favorability_stances` | favorability_id PK | run_id + entity_id FK, stance, score, evidence_spans — one run can carry stance toward >1 entity |
 | `target_mentions` | mention_id PK | run_id, doc_id, raw_target (audit, always kept), entity_id nullable (unresolved persists), stance, topic, confidence, evidence_spans |
-| `propaganda_results` | run_id PK | density, summary |
+| `propaganda_results` | run_id PK | density, summary, techniques_validated, techniques_dropped |
 | `propaganda_techniques` | technique_id PK | run_id FK -> propaganda_results, technique enum, verbatim evidence_span, confidence |
 | `claims` | claim_id PK | run_id, doc_id, claim_text, topic, confidence |
 | `bot_signals` | run_id PK | doc_id, label, score, and typed stylometrics: llm_text_likelihood, burstiness, type_token_ratio, template_score (full detail stays in runs.raw_response) |

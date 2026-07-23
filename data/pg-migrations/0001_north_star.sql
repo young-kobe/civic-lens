@@ -444,9 +444,13 @@ CREATE INDEX idx_target_mentions_run ON analysis.target_mentions (run_id);
 CREATE TABLE analysis.propaganda_results (
     run_id BIGINT PRIMARY KEY REFERENCES analysis.runs (run_id),
     density REAL,
-    summary TEXT
+    summary TEXT,
+    techniques_validated INT NOT NULL DEFAULT 0,
+    techniques_dropped INT NOT NULL DEFAULT 0
 );
 COMMENT ON COLUMN analysis.propaganda_results.density IS 'Overall propaganda-technique density score for the doc; the narrative rollup''s propaganda_score is a mean over these.';
+COMMENT ON COLUMN analysis.propaganda_results.techniques_validated IS 'Count of LLM-flagged techniques that passed the DDL-vocabulary + evidence-span gate (== propaganda_techniques row count for this run).';
+COMMENT ON COLUMN analysis.propaganda_results.techniques_dropped IS 'Count of LLM-flagged techniques dropped for an out-of-enum vocabulary, an unverifiable evidence span, or an unparseable confidence.';
 
 CREATE TABLE analysis.propaganda_techniques (
     technique_id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
