@@ -123,6 +123,18 @@ read via `news_articles.outlet_entity_id` (this closure) — a doc-to-entity
 FK — never an author FK. This is the accepted final shape, not a deferred
 decision.
 
+## Superseded (2026-07-22): registry_sync retired
+
+Same-day owner reversal: the entity registry's source of truth moves from
+YAML-in-git to the database itself. `registry_sync.py` described throughout
+this entry is deleted; a one-time seed migration
+(`data/pg-migrations/0002_entity_registry_seed.sql`) replaces it. Everything
+below remains an accurate historical record of how the registry was
+populated up to that point (the flattening logic, dedup rules, and FK
+contracts it describes are unchanged, just no longer re-run). Full
+rationale, what replaced what, and re-verification:
+`docs/audit-trail/analysis/2026-07-22-db-native-entity-curation.md`.
+
 ## Addendum (2026-07-22): officials-promotion closed
 
 Owner decision: promote-all, with an editorial flag. Every curated account

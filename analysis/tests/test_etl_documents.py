@@ -304,36 +304,27 @@ class LoadNewDocumentsIntegrationTests(unittest.TestCase):
         html_dir.mkdir(parents=True, exist_ok=True)
         (html_dir / f"{raw_hash}.html").write_text(f"<html><body><p>{text}</p></body></html>")
 
-    def _sync_outlet_registry(self, domain: str) -> None:
-        """Register `domain` as a kind='outlet' corpus.entities row via a
-        real registry_sync.py pass over a minimal fixture YAML dir -- used
-        to test documents.py's outlet_entity_id resolution against the
-        actual canonicalization/upsert path, not a hand-inserted row."""
-        from analysis.src.etl.registry_sync import sync_registry
-
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            (root / "news_outlets.yaml").write_text(
-                "outlets:\n"
-                f"  - domain: {domain}\n"
-                "    display_name: Test Outlet\n"
-                "    partisan_lean: center\n"
+    def _seed_outlet_entity(self, domain: str) -> None:
+        """Register `domain` as a kind='outlet' corpus.entities row --
+        curation is DB-native (data/pg-migrations/0002_entity_registry_seed.sql),
+        so a direct insert stands in for what a curator would do by hand."""
+        with docs.db.connection() as conn:
+            conn.execute(
+                "INSERT INTO corpus.entities (entity_key, kind, display_name, lean, editorial) "
+                "VALUES (%s, 'outlet'::corpus.entity_kind, 'Test Outlet', "
+                "'independent'::corpus.political_lean, true)",
+                (domain,),
             )
-            sync_registry(data_dir=root)
 
-    def _sync_subreddit_registry(self, subreddit: str) -> None:
-        """Same as `_sync_outlet_registry` for a kind='subreddit' entity."""
-        from analysis.src.etl.registry_sync import sync_registry
-
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            (root / "major_subreddits.yaml").write_text(
-                "subreddits:\n"
-                f"  - subreddit: {subreddit}\n"
-                "    display_name: r/Test\n"
-                "    tilt: mixed\n"
+    def _seed_subreddit_entity(self, subreddit: str) -> None:
+        """Same as `_seed_outlet_entity` for a kind='subreddit' entity."""
+        with docs.db.connection() as conn:
+            conn.execute(
+                "INSERT INTO corpus.entities (entity_key, kind, display_name, lean, editorial) "
+                "VALUES (%s, 'subreddit'::corpus.entity_kind, 'r/Test', "
+                "'mixed'::corpus.political_lean, true)",
+                (subreddit,),
             )
-            sync_registry(data_dir=root)
 
     def test_news_doc_inserted_with_subtype_row_and_null_author(self):
         raw_hash = "aa" + "1" * 62
@@ -509,7 +500,7 @@ class LoadNewDocumentsIntegrationTests(unittest.TestCase):
     def test_news_doc_resolves_outlet_entity_id_when_registered(self):
         """Matched outlet -> corpus.news_articles.outlet_entity_id populated
         (this closure's entity-FK restoration)."""
-        self._sync_outlet_registry("registered-outlet.example")
+        self._seed_outlet_entity("registered-outlet.example")
         raw_hash = "e0" + "0" * 62
         with tempfile.TemporaryDirectory() as tmp:
             raw_root = Path(tmp)
@@ -559,10 +550,11 @@ class LoadNewDocumentsIntegrationTests(unittest.TestCase):
                 self.assertIsNotNone(row)
                 self.assertIsNone(row["outlet_entity_id"])
 
-    def test_outlet_entity_id_backfills_after_later_registry_sync(self):
+    def test_outlet_entity_id_backfills_after_later_curation(self):
         """A doc loaded before its outlet is registered gets outlet_entity_id
-        = NULL; once registry_sync adds the outlet, the NEXT documents.py run
-        backfills it without re-inserting the doc (idempotency contract)."""
+        = NULL; once the outlet is curated into corpus.entities, the NEXT
+        documents.py run backfills it without re-inserting the doc
+        (idempotency contract)."""
         raw_hash = "e2" + "2" * 62
         with tempfile.TemporaryDirectory() as tmp:
             raw_root = Path(tmp)
@@ -584,7 +576,7 @@ class LoadNewDocumentsIntegrationTests(unittest.TestCase):
                 ).fetchone()
                 self.assertIsNone(before["outlet_entity_id"])
 
-            self._sync_outlet_registry("later-registered.example")
+            self._seed_outlet_entity("later-registered.example")
             second = docs.load_new_documents(raw_root=raw_root)
             self.assertEqual(second.inserted, 0)  # doc already exists, not re-inserted
             with docs.db.connection() as conn:
@@ -597,7 +589,7 @@ class LoadNewDocumentsIntegrationTests(unittest.TestCase):
                 self.assertEqual(count, 1)  # backfill, not a re-insert
 
     def test_reddit_doc_resolves_subreddit_entity_id_when_registered(self):
-        self._sync_subreddit_registry("registeredsub")
+        self._seed_subreddit_entity("registeredsub")
         with docs.db.connection() as conn:
             conn.execute(
                 "INSERT INTO raw.reddit_posts (fullname, subreddit, created_utc, fetched_at, "

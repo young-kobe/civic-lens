@@ -333,8 +333,8 @@ def _existing_domain_counts(
 
 # ---------------------------------------------------------------------------
 # Entity FK resolution — corpus.news_articles.outlet_entity_id /
-# corpus.reddit_posts.subreddit_entity_id, backfilled post-insert so a
-# registry_sync run that adds an outlet/subreddit later still gets picked up.
+# corpus.reddit_posts.subreddit_entity_id, backfilled post-insert so an
+# outlet/subreddit curated into corpus.entities later still gets picked up.
 # ---------------------------------------------------------------------------
 
 def _load_entity_lookup(conn: Connection, kind: str) -> dict[str, int]:
