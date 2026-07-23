@@ -235,11 +235,6 @@ MAX_CLAIM_WORDS = 20
 # TEXT_ANALYSIS_MAX_CHARS (that module keeps its own copy; untouched, live).
 TEXT_ANALYSIS_MAX_CHARS = 2000
 
-# Fixed sentiment confidence for the deterministic trivial-content
-# short-circuit (prompt rule 6: mentions/links/hashtags only -> low
-# confidence). Matches the old analyzer.py's NEUTRAL/0.5 trivial-content value.
-TRIVIAL_CONTENT_CONFIDENCE = 0.5
-
 
 # =============================================================================
 # Wave 2 engine constants (Postgres redesign Phase 6, engine/{targets,
@@ -248,7 +243,7 @@ TRIVIAL_CONTENT_CONFIDENCE = 0.5
 # this file while landing in parallel; now that all three are in, task-name
 # strings and the numeric budgets/caps/defaults move here per the owner's
 # constants-consolidation rule, matching the precedent set above by
-# TEXT_ANALYSIS_MAX_CHARS/TRIVIAL_CONTENT_CONFIDENCE. Private lookup/mapping
+# TEXT_ANALYSIS_MAX_CHARS. Private lookup/mapping
 # tables tightly coupled to one engine's own logic (targets.py's _STANCE_MAP,
 # propaganda.py's _DDL_PROPAGANDA_TECHNIQUES enum-gate frozenset) stay
 # module-local: they are read by exactly one function each, and moving them
@@ -306,3 +301,55 @@ MAX_CLAIMS_PER_DOC = 3
 # old convention (job_runner.py's run_claim_extraction: `sum(confidences)/
 # len(confidences) if confidences else 0.0`).
 ZERO_CLAIMS_CONFIDENCE = 0.0
+
+
+# =============================================================================
+# Wave 3 engine constants (Postgres redesign Phase 6, engine/{bot_detection,
+# account_tier,narrative_clustering}.py). Consolidated here 2026-07-23,
+# following the Wave 2 precedent above (task-identifying strings and
+# numeric budgets/caps/thresholds move; private lookup/gate values,
+# compiled patterns, and presentational strings stay module-local since
+# moving them would only separate a table from its single reader).
+#
+# Stayed local, with the rule applied: bot_detection.py's
+# _GOVERNMENT_VERIFIED_TYPE/_BUSINESS_VERIFIED_TYPE (de-bias gate values
+# read by exactly one function, _aggregate_score -- the same role
+# targets.py's _STANCE_MAP plays, just single-valued instead of a dict) and
+# its compiled _SENTENCE_SPLIT_RE/_NOISE_INDICATOR_PATTERNS; account_tier.py's
+# SQL strings (this file holds data constants, not query text);
+# narrative_clustering.py's _STOPWORDS (a private lookup table read by
+# exactly one function, tokenize_claim) and its compiled _TOKEN_RE, plus
+# the EmbedFn type alias (not a data constant of the kind this file holds).
+# =============================================================================
+
+BOT_TASK = "bot"
+
+# Prompt-input truncation -- matches old engine/bot.py's `text[:1500]` verbatim.
+BOT_PROMPT_TEXT_MAX_CHARS = 1500
+
+# Account/text thresholds from old bot.py's _compute_signals/_aggregate_score.
+NEW_ACCOUNT_AGE_DAYS = 7  # generic "new account" indicator, any platform
+X_NEW_ACCOUNT_AGE_DAYS = 90  # X-specific stricter new-account flag
+X_LOW_FOLLOWERS_THRESHOLD = 50
+FOLLOW_RATIO_ANOMALY_MIN_FOLLOWING = 1000
+FOLLOW_RATIO_ANOMALY_MAX_FOLLOWER_SHARE = 0.1
+
+# corpus.author_tier / corpus.classification_method enum values
+# engine/account_tier.py writes -- named here so a future consumer (tests,
+# serving-layer rollups) reads the same literal rather than re-typing it.
+ELECTED_OFFICIAL_TIER = "elected_official"
+AFFILIATED_TIER = "affiliated"
+CURATED_LIST_METHOD = "curated_list"
+
+# Fragmentation fix (engine/narrative_clustering.py): a narrative persists
+# only once >= this many DISTINCT docs support it.
+MIN_NARRATIVE_SUPPORT = 2
+
+# How far back narrative_clustering.py's _load_pending_claims looks (by
+# analysis.claims.created_at). Matches the old clusterer's
+# CLAIM_LOOKBACK_SECONDS (30 days).
+CLAIM_LOOKBACK_DAYS = 30
+
+# analysis.narratives.name truncation width (old clusterer used the same
+# literal for its `name` column).
+NARRATIVE_NAME_MAX_CHARS = 120

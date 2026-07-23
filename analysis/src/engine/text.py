@@ -10,6 +10,11 @@ Deliberate behavior change from the old `engine/analyzer.py`: there is no
 heuristic GOP-keyword-proximity fallback. A failed or unavailable LLM call
 is recorded as a failed run (honest, re-queueable) rather than silently
 substituting a lower-quality deterministic guess.
+
+Owner decision (2026-07-23): the trivial-content short-circuit (prompt rule
+6 -- mentions/links/hashtags only) is a `done` deterministic run with NO
+`sentiment_results` row, replacing the old ported neutral-at-0.5 placeholder
+(`TRIVIAL_CONTENT_CONFIDENCE` deleted) -- unanalyzable is not neutral.
 """
 
 from __future__ import annotations
@@ -21,7 +26,7 @@ from analysis.src.common.entity_resolver import EntityResolver
 from analysis.src.common.logger import get_logger
 from analysis.src.common.settings import get_settings
 from analysis.src.engine import validation
-from analysis.src.engine.constants import TEXT_ANALYSIS_MAX_CHARS, TRIVIAL_CONTENT_CONFIDENCE
+from analysis.src.engine.constants import TEXT_ANALYSIS_MAX_CHARS
 from analysis.src.engine.text_prep import is_trivial_content, truncate_at_sentence
 from analysis.src.llm.client import LLMClient
 from analysis.src.llm.context_seeds import format_seeds_block, match_seeds
@@ -42,11 +47,6 @@ TEXT_TASK = "text"
 _SENTIMENT_LABEL_MAP = {
     "POSITIVE": "positive", "NEGATIVE": "negative", "NEUTRAL": "neutral", "MIXED": "mixed",
 }
-
-# Reasoning shown when the trivial-content short-circuit fires -- mirrors the
-# old analyzer.py's message for the same code path.
-_TRIVIAL_REASONING = "Trivial content (mentions/links/hashtags only); LLM call skipped."
-
 
 @dataclass(frozen=True)
 class TextDocInput:
@@ -85,9 +85,15 @@ class TextAnalysis:
     counts the rest (favorability_stances.entity_id is NOT NULL, so an
     unresolved stance cannot be stored -- unlike target_mentions in the
     targets engine, which keeps raw_target strings because that table
-    allows entity_id NULL)."""
+    allows entity_id NULL).
 
-    sentiment: SentimentOutcome
+    `sentiment` is None for the trivial-content short-circuit (owner
+    decision 2026-07-23): unanalyzable content gets no sentiment_results
+    row at all, not a placeholder neutral/low-confidence guess -- process()
+    below skips save_sentiment() and finishes the run with zero result
+    rows."""
+
+    sentiment: Optional[SentimentOutcome]
     favorability_stances: List[FavorabilityStanceOutcome]
     dropped_unresolved: int
     inference_method: str  # 'llm' | 'deterministic'
@@ -102,13 +108,7 @@ def analyze(doc: TextDocInput, client: LLMClient, resolver: EntityResolver) -> T
     below is what turns that into a recorded failed run."""
     if is_trivial_content(doc.text):
         return TextAnalysis(
-            sentiment=SentimentOutcome(
-                label="neutral",
-                confidence=TRIVIAL_CONTENT_CONFIDENCE,
-                evidence_spans=[],
-                sarcasm_detected=False,
-                reasoning=_TRIVIAL_REASONING,
-            ),
+            sentiment=None,
             favorability_stances=[],
             dropped_unresolved=0,
             inference_method="deterministic",
@@ -222,6 +222,15 @@ def process(doc: TextDocInput, client: LLMClient, resolver: EntityResolver) -> i
         TEXT_TASK, doc_id=doc.doc_id, model_id=model_id,
         prompt_version=prompt_version, inference_method=result.inference_method,
     )
+
+    if result.sentiment is None:
+        # Trivial-content short-circuit (owner decision 2026-07-23):
+        # unanalyzable is not neutral -- no sentiment_results row, no
+        # favorability_stances rows, run confidence None (nothing was
+        # measured to average). The run itself still lands 'done': the doc
+        # was correctly handled, just not analyzed.
+        return handle.finish("done", confidence=None, raw_response=None)
+
     handle.save_sentiment(store.SentimentRow(
         label=result.sentiment.label,
         score=result.sentiment.confidence,

@@ -16,7 +16,6 @@ from __future__ import annotations
 import os
 import sys
 import unittest
-from pathlib import Path
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(os.path.dirname(current_dir))
@@ -25,12 +24,10 @@ if project_root not in sys.path:
 
 from analysis.src.common.entity_resolver import EntityResolver
 from analysis.src.engine import text
-from analysis.src.engine.constants import TRIVIAL_CONTENT_CONFIDENCE, UNVERIFIED_EVIDENCE_CONFIDENCE_CAP
+from analysis.src.engine.constants import UNVERIFIED_EVIDENCE_CONFIDENCE_CAP
 from analysis.src.llm.base import SchemaValidationError
 from analysis.src.llm.client import LLMClient
-
-REPO_ROOT = Path(project_root)
-MIGRATION_SQL = REPO_ROOT / "data" / "pg-migrations" / "0001_north_star.sql"
+from analysis.tests import pg_fixture
 
 
 # =============================================================================
@@ -172,7 +169,11 @@ class AnalyzeSchemaRetryTests(unittest.TestCase):
 
 
 class AnalyzeTrivialContentTests(unittest.TestCase):
-    def test_trivial_content_skips_the_llm_call(self):
+    """Owner decision 2026-07-23: unanalyzable is not neutral -- the
+    trivial-content short-circuit yields no sentiment at all, not a
+    placeholder neutral/low-confidence guess."""
+
+    def test_trivial_content_skips_the_llm_call_and_yields_no_sentiment(self):
         backend = FakeTransport([_valid_response()])
         client = LLMClient(backend)
         resolver = _resolver_with_entity(1, "x", "X")
@@ -185,9 +186,7 @@ class AnalyzeTrivialContentTests(unittest.TestCase):
 
         self.assertEqual(backend.calls, 0)
         self.assertEqual(result.inference_method, "deterministic")
-        self.assertEqual(result.sentiment.label, "neutral")
-        self.assertEqual(result.sentiment.confidence, TRIVIAL_CONTENT_CONFIDENCE)
-        self.assertEqual(result.sentiment.evidence_spans, [])
+        self.assertIsNone(result.sentiment)
         self.assertEqual(result.favorability_stances, [])
         self.assertEqual(result.dropped_unresolved, 0)
         self.assertIsNone(result.raw_response)
@@ -296,17 +295,11 @@ class ProcessIntegrationTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        import psycopg
         cls._dsn = os.environ["CIVIC_TEST_DATABASE_URL"]
-        with psycopg.connect(cls._dsn, autocommit=True) as conn:
-            conn.execute("DROP SCHEMA IF EXISTS raw, corpus, analysis, serving, ops, archive CASCADE")
-            conn.execute(MIGRATION_SQL.read_text())
+        pg_fixture.reset_schema(cls._dsn)
 
     def setUp(self):
-        from analysis.src.common import db as dbmod
-        dbmod.close_pool()
-        self._prev_url = os.environ.get("CIVIC_DATABASE_URL")
-        os.environ["CIVIC_DATABASE_URL"] = self._dsn
+        self._prev_url = pg_fixture.begin_test(self._dsn)
         self._truncate_all()
         self.doc_id = self._seed_doc("doc-1")
         self.entity_id = self._seed_entity("trump", "Donald Trump")
@@ -314,12 +307,7 @@ class ProcessIntegrationTests(unittest.TestCase):
         self.resolver = EntityResolver()
 
     def tearDown(self):
-        from analysis.src.common import db as dbmod
-        dbmod.close_pool()
-        if self._prev_url is None:
-            os.environ.pop("CIVIC_DATABASE_URL", None)
-        else:
-            os.environ["CIVIC_DATABASE_URL"] = self._prev_url
+        pg_fixture.end_test(self._prev_url)
 
     def _truncate_all(self):
         import psycopg
@@ -387,7 +375,11 @@ class ProcessIntegrationTests(unittest.TestCase):
         self.assertEqual(stances[0]["entity_id"], self.entity_id)
         self.assertEqual(stances[0]["stance"], "favorable")
 
-    def test_trivial_content_process_is_deterministic_with_no_prompt_version(self):
+    def test_trivial_content_process_is_deterministic_with_no_sentiment_row(self):
+        """Owner decision 2026-07-23: the trivial-content run lands 'done'
+        with zero result rows -- no sentiment_results, no
+        favorability_stances, no prompt_version (deterministic, no LLM call
+        made), confidence None (nothing was measured)."""
         client = LLMClient(FakeTransport([_valid_response()]))
         trivial_doc = text.TextDocInput(
             doc_id=self.doc_id, source_type="x_post", title=None,
@@ -397,8 +389,22 @@ class ProcessIntegrationTests(unittest.TestCase):
 
         run = self._run_row(run_id)
         self.assertEqual(run["status"], "done")
+        self.assertTrue(run["is_current"])
         self.assertEqual(run["inference_method"], "deterministic")
         self.assertIsNone(run["prompt_version_id"])
+        self.assertIsNone(run["confidence"])
+        self.assertIsNone(run["raw_response"])
+
+        from analysis.src.results import store
+        with store.db.connection() as conn:
+            sentiment = conn.execute(
+                "SELECT * FROM analysis.sentiment_results WHERE run_id = %s", (run_id,)
+            ).fetchone()
+            stances = conn.execute(
+                "SELECT * FROM analysis.favorability_stances WHERE run_id = %s", (run_id,)
+            ).fetchall()
+        self.assertIsNone(sentiment)
+        self.assertEqual(stances, [])
 
     def test_reprocess_supersedes_prior_run(self):
         first_client = LLMClient(FakeTransport([_valid_response()]))
