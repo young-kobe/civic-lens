@@ -143,6 +143,8 @@ Indexes: `(username)`, `(created_at)`.
 - `corpus.author_tier`: `elected_official | affiliated | general_public`
 - `corpus.classification_method`: `curated_list | llm`
 - `corpus.platform`: `x | reddit`
+- `corpus.admission_class`: `sampled | official_record` — added by
+  `0003_admission_class.sql`; see `corpus.documents.admission_class` below.
 
 ### corpus.entities
 
@@ -235,6 +237,7 @@ idempotency key (`natural_key` = url_canon / fullname / tweet_id).
 | source_url | TEXT | NOT NULL |
 | raw_hash, etl_version | TEXT | NOT NULL |
 | created_at | TIMESTAMPTZ | NOT NULL DEFAULT now() |
+| admission_class | corpus.admission_class | NOT NULL DEFAULT 'sampled' — added by `0003_admission_class.sql`. `'official_record'` = X post authored by a tracked active official (`corpus.entities` kind='official', active=true, joined via `corpus.author_profiles.entity_id`), admitted by `analysis/src/etl/documents.py` regardless of the 30-day recency window and capped at `OFFICIAL_RECORD_PER_AUTHOR_CAP` per author. Every other doc (news, reddit, non-official X) keeps the default. |
 
 Indexes: `(published_at)`, `(author_id)`, `(domain_or_subreddit)`.
 
