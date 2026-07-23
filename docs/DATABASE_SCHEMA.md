@@ -245,7 +245,7 @@ Each FKs both the parent document AND its raw row — the old convention-only
 - **corpus.news_articles**: `doc_id` PK/FK -> documents; `url_canon` UNIQUE
   FK -> `raw.articles`; `domain`, `extraction_version`;
   `outlet_entity_id` nullable FK -> `corpus.entities` (`kind='outlet'`),
-  resolved at ETL time via `analysis/src/common/registry.py`'s
+  resolved at ETL time via `analysis/src/common/canonicalize.py`'s
   `canonicalize_news_domain` against the curated entity/alias set — NULL
   when unmatched (never blocks a doc), backfilled on a later
   `documents.py` run once the outlet is curated into the registry.
@@ -256,7 +256,10 @@ Each FKs both the parent document AND its raw row — the old convention-only
 - **corpus.x_posts**: `doc_id` PK/FK -> documents; `tweet_id` UNIQUE FK ->
   `raw.x_posts`; `conversation_id`, `lang`, `place_country_code`,
   `retweet_count`, `reply_count`, `like_count`, `quote_count`,
-  `is_official_tier`.
+  `is_official_tier`, `referenced_tweet_id`, `referenced_tweet_type` --
+  the last two snapshotted from `raw.x_posts` at ETL load time (same as the
+  engagement counts) so the citations engine reads them off `corpus.x_posts`
+  and never joins `raw.*` at analysis time.
 
 ---
 

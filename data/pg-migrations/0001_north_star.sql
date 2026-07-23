@@ -329,9 +329,12 @@ CREATE TABLE corpus.x_posts (
     reply_count INTEGER,
     like_count INTEGER,
     quote_count INTEGER,
-    is_official_tier BOOLEAN
+    is_official_tier BOOLEAN,
+    referenced_tweet_id TEXT,
+    referenced_tweet_type TEXT
 );
 COMMENT ON TABLE corpus.x_posts IS 'The convention-only docs.ident join to x_posts_raw becomes this enforced FK on tweet_id.';
+COMMENT ON COLUMN corpus.x_posts.referenced_tweet_id IS 'Snapshotted from raw.x_posts at ETL load time (analysis/src/etl/documents.py), same as the engagement counts, so analysis-layer readers (engine/citations.py) never join raw.* at analysis time.';
 
 -- =============================================================================
 -- analysis — runs + typed per-task results (analysis/src/results/store.py only writer)
