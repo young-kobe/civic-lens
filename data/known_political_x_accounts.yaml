@@ -1,3 +1,4 @@
+# frozen 2026-07-22 — superseded by data/pg-migrations/0002_entity_registry_seed.sql; edits here no longer reach the new system.
 schema_version: 1
 generated_at_utc: '2026-04-19T20:01:48Z'
 dataset_name: known_political_accounts

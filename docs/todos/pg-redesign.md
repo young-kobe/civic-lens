@@ -93,17 +93,78 @@ record.
 
 ## Phase 4 — ETL rewrite
 
-- [ ] `analysis/src/etl/registry_sync.py` (YAML -> entities/aliases/curated
-      profiles)
-- [ ] `analysis/src/etl/authors.py`
-- [ ] `analysis/src/etl/documents.py` (tightened US-politics filter —
-      comparecards-class non-political domains must fail it; 30-day rule
-      carried over; per-window per-domain doc cap for sample balance;
-      `pg-` `etl_version` stamp)
-- [ ] `analysis/src/etl/queue.py` (seeds `ops.task_queue`)
-- [ ] Retire `analysis/src/etl/loader.py` (740 lines)
-- [ ] Tests: doc counts vs old within tolerance; FK integrity; idempotent
-      re-run; filter rejects known-leak domains (e.g. comparecards.com)
+- [x] `analysis/src/etl/registry_sync.py` (YAML -> entities/aliases/curated
+      profiles). Lands with the owner's political-lean single-convention
+      decision (one flat `corpus.political_lean` enum, one `lean` column
+      everywhere, no separate `party` column anywhere in the schema —
+      supersedes the plan's original two-column party/lean sketch):
+      flattening constants in `analysis/src/common/registry.py`,
+      `lean_source` provenance, never fed into an LLM prompt — see
+      `docs/audit-trail/analysis/2026-07-22-pg-lean-unification-registry-sync.md`.
+      **Retired same day** by owner decision: DB-native curation (source of
+      truth moves from YAML-in-git to `corpus.entities` itself, for
+      readability of hands-on curation). `registry_sync.py` and its test
+      file are deleted; `data/pg-migrations/0002_entity_registry_seed.sql`
+      is the one-time replacement (shipped — seeded 587 entities / 30
+      aliases from the final sync of the real YAMLs). `common/registry.py`
+      slimmed to only the two canonicalizers `documents.py` still needs. See
+      `docs/audit-trail/analysis/2026-07-22-db-native-entity-curation.md`.
+- [x] Freeze the four registry YAMLs (one-line header comment each,
+      2026-07-22): they stay in git, read-only, only for the old-stack's
+      `analysis/src/reporting/entity_registry.py` until it retires in Phase
+      9, at which point the YAMLs can be deleted too.
+- [x] `analysis/src/etl/authors.py` (X authors from `raw.x_users`; Reddit
+      is a documented no-op — `raw.reddit_posts` carries no author column;
+      news gets no synthetic author — see
+      `docs/audit-trail/analysis/2026-07-22-pg-etl-authors-documents-queue.md`).
+      Accepted deviation: news docs carry `author_id NULL` always — outlets
+      are `corpus.entities` (`kind='outlet'`), never a synthetic per-domain
+      `corpus.authors` row; outlet identity is read via the
+      `news_articles.outlet_entity_id` FK (below), not an author join.
+- [x] `analysis/src/etl/documents.py` (tightened US-politics filter —
+      word-boundary matching closes the bill/billion-class hole,
+      `www.comparecards.com` seeded in `data/seeds.yaml`'s new
+      `domain_filter.deny`; 30-day rule carried over; per-window
+      per-domain doc cap (`max_docs_per_domain_per_window`) for sample
+      balance; `pg-1` `etl_version` stamp). `news_articles.outlet_entity_id`
+      / `reddit_posts.subreddit_entity_id` FKs (plan-specified, briefly
+      flagged as a discrepancy against the first-landed 0001, now added to
+      both the DDL and documents.py — resolved by this closure) resolve at
+      ETL time by canonicalizing `domain`/`subreddit` against the curated
+      `entity_key`/alias set (`analysis/src/common/registry.py`); NULL when
+      unmatched (never blocks a doc); a `documents.py` re-run backfills the
+      FK once the entity is later curated into `corpus.entities` — see the
+      closure audit-trail entry above and, for the DB-native-curation
+      reversal, `docs/audit-trail/analysis/2026-07-22-db-native-entity-curation.md`.
+- [x] `analysis/src/etl/queue.py` (seeds `ops.task_queue` per a
+      job_runner.py-derived task-applicability matrix; `account_tier`
+      excluded — author-scoped, not doc-scoped; `reset_stale_in_progress`
+      included for Phase 7 to call)
+- [ ] Retire `analysis/src/etl/loader.py` (740 lines) — spans Phases 4-7
+- [x] Tests: `test_etl_authors.py` / `test_etl_documents.py` /
+      `test_etl_queue.py`, 60 tests (40 no-DB, 20 gated on
+      `CIVIC_TEST_DATABASE_URL`) — FK integrity, idempotent re-run, cap
+      enforcement, deny-list rejection, outlet/subreddit entity FK
+      resolution (matched/unmatched/backfill-after-later-curation) all
+      live-verified against a throwaway `postgres:17-alpine` container with
+      0001 applied. (`test_registry_sync.py` verified `registry_sync.py` +
+      `common/registry.py` the same way at the time; both the module and
+      its test file are deleted post-retirement — see
+      `docs/audit-trail/analysis/2026-07-22-db-native-entity-curation.md`.)
+- [x] Owner decision (decided 2026-07-22): promote-all, with an editorial
+      flag. Every curated account in `known_political_x_accounts.yaml`
+      (549 unique people) is promoted to its own `corpus.entities` row
+      (`kind='official'`), `editorial=false`; the 3 hand-edited registries
+      stay `editorial=true`. Originally implemented in `registry_sync.py`
+      (`_sync_promoted_officials`, since deleted); `entities.editorial`
+      column added to `0001_north_star.sql`; the promoted rows themselves
+      now live in `0002_entity_registry_seed.sql` — see
+      `docs/audit-trail/analysis/2026-07-22-pg-lean-unification-registry-sync.md`
+      and `docs/audit-trail/analysis/2026-07-22-db-native-entity-curation.md`.
+- [ ] Future decision: `corpus.entity_kind` has a `'collective'` value with
+      no populating YAML/logic yet (no registry loader writes
+      `kind='collective'` today) — decide what populates it (e.g. parties,
+      caucuses, PACs) or drop the value if it stays unused.
 
 ## Phase 5 — Analysis plumbing
 
@@ -159,7 +220,13 @@ record.
       `reporting/aggregators/`, joins become FK joins, output becomes
       `serving.*` rows)
 - [ ] Bot/narrative/entity rollups gain lean dimensions (join
-      `author_leans` / `narrative_leans` / `entities.party,lean`)
+      `author_leans` / `narrative_leans` / `entities.lean` — one flat lean
+      column, no separate `party` column; see the Phase 4 registry_sync
+      entry)
+- [ ] Presentation invariant (owner decision 2026-07-22): fact/curated/derived
+      lean labels visually+verbally distinct; derived lean always with
+      evidence counts + continuous lean_share (no spectrum buckets); lean
+      never fed to LLM prompts; codify in `.agent/rules/media-analysis.md`
 - [ ] API endpoints query `serving.*`
 - [ ] `review.py` reads `analysis.runs` / writes `analysis.evals` +
       `analysis.golden_labels`
