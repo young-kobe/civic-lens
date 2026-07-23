@@ -140,6 +140,14 @@ record.
       job_runner.py-derived task-applicability matrix; `account_tier`
       excluded — author-scoped, not doc-scoped; `reset_stale_in_progress`
       included for Phase 7 to call)
+- [x] `analysis/src/etl/documents.py` admission-gate decomposition
+      (Phase 6 Wave 1, 2026-07-23): `is_index_page` split into a shared
+      `_TextStats` computation + four named predicate functions; per-source
+      `_admit_news_pretext`/`_admit_news_posttext`/`_admit_reddit`/`_admit_x`
+      verdict functions (`AdmissionVerdict`) replace the inline if/continue
+      chains; `DocLoadResult.rejections` adds a reason-keyed tally alongside
+      the existing named counters for rejection observability — see
+      `docs/audit-trail/analysis/2026-07-23-pg-engines-wave1.md`
 - [ ] Retire `analysis/src/etl/loader.py` (740 lines) — spans Phases 4-7
 - [x] Tests: `test_etl_authors.py` / `test_etl_documents.py` /
       `test_etl_queue.py`, 60 tests (40 no-DB, 20 gated on
@@ -198,17 +206,30 @@ record.
 ## Phase 6 — Engines
 
 - [ ] `bot` engine ported to `analyze(doc) -> dataclass` + store call
-- [ ] `analyzer` (text -> sentiment + favorability) ported
+- [x] `analyzer` (text -> sentiment + favorability) ported — landed as
+      `analysis/src/engine/text.py` (pure `analyze()` + thin `process()`,
+      injected `LLMClient` + `EntityResolver`; no heuristic fallback, a
+      failed/unavailable LLM call is a recorded failed run) — see
+      `docs/audit-trail/analysis/2026-07-23-pg-engines-wave1.md`
 - [ ] `target_extractor` ported
 - [ ] `propaganda_detector` ported
 - [ ] `claim_extractor` ported
-- [ ] `citation_extractor` ported (now emits a run row)
+- [x] `citation_extractor` ported (now emits a run row) — landed as
+      `analysis/src/engine/citations.py` (pure `extract()`/`resolve_candidates()`
+      + thin `process()`; deterministic, confidence 1.0); reference-column
+      restoration (`corpus.x_posts.referenced_tweet_id`/`referenced_tweet_type`)
+      closed the same day — see the audit-trail entry above
 - [ ] `account_classifier` ported
 - [ ] `narrative_clusterer` ported (`clustering_runs` provenance; revisit
       fragmentation thresholds — 8,477 narratives / 7,116 docs today)
 - [ ] Bot rollup becomes a plain SQL aggregate over `bot_signals`
 - [ ] New deterministic `analysis/src/engine/lean_derivation.py` stage
       (writes `analysis.author_leans` + `analysis.narrative_leans`)
+- [x] `analysis/src/common/entity_resolver.py` — DB-backed `EntityResolver`
+      replacing YAML `entity_registry` resolution for the new stack (loads
+      `corpus.entities`/`corpus.entity_aliases` once per construction into
+      an in-memory map; `resolve()` is a pure lookup) — see
+      `docs/audit-trail/analysis/2026-07-23-pg-engines-wave1.md`
 - [ ] Test fixtures moved from sqlite tempfiles to a Postgres test schema
 
 ## Phase 7 — Scheduler
