@@ -95,30 +95,23 @@ export function accuracyColor(accuracyPct: number): string {
 }
 
 /**
- * Partisan-lean "class name" for an EntityProfile — one of
- * `'left' | 'center' | 'right' | 'mixed' | 'neutral'`. Used by
- * EntityProfileCard for the left-border color and chip styling; each
+ * Partisan-lean "class name" for a `LeanLabel.value` — one of
+ * `'left' | 'center' | 'right' | 'mixed' | 'neutral'`. Used by the shared
+ * `<LeanLabel>` component and entity cards for chip/border coloring; each
  * class is paired with a `.lean-*` CSS rule in `index.css`.
  *
- * Officials derive their class from party (R → right, D → left, else
- * neutral). Outlets/subreddits use the registry's lean/tilt value
- * (left / center-left → left; right / center-right → right; mixed →
- * mixed; else center). Catch-all profiles land on neutral.
+ * `value` is always one of `corpus.political_lean`'s five words --
+ * democrat/republican/independent/mixed/unknown -- the single enum every
+ * curated AND derived lean is flattened onto (0001_north_star.sql).
+ * `null`/`undefined` (no lean row) and 'unknown' both land on neutral.
  */
-export function leanClass(profile: {
-  kind: string;
-  party?: string;
-  lean?: string | null;
-}): 'left' | 'center' | 'right' | 'mixed' | 'neutral' {
-  if (profile.kind === 'catch_all') return 'neutral';
-  if (profile.kind === 'official') {
-    if (profile.party === 'R') return 'right';
-    if (profile.party === 'D') return 'left';
-    return 'neutral';
+export function leanClass(value: string | null | undefined): 'left' | 'center' | 'right' | 'mixed' | 'neutral' {
+  if (!value) return 'neutral';
+  switch (value.toLowerCase()) {
+    case 'democrat': return 'left';
+    case 'republican': return 'right';
+    case 'independent': return 'center';
+    case 'mixed': return 'mixed';
+    default: return 'neutral';
   }
-  const l = (profile.lean || 'center').toLowerCase();
-  if (l === 'mixed') return 'mixed';
-  if (l.includes('left')) return 'left';
-  if (l.includes('right')) return 'right';
-  return 'center';
 }

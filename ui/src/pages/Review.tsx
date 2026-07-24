@@ -2,20 +2,22 @@ import { useState, useEffect, useCallback } from 'react';
 import { Card, LoadingCard, EmptyState, ErrorState } from '../components/common';
 import { COLORS } from '../theme';
 import { formatPct } from '../services/format';
-import {
-    fetchReviewQueue, fetchReviewStats,
-} from '../services/api';
+import { fetchReviewQueue, fetchReviewStats } from '../services/api';
 import ReviewItemCard from './review/ReviewItemCard';
-import type {
-    ReviewQueueItem, ReviewStats, ReviewTaskType,
-} from '../types';
+import type { ReviewQueueItem, ReviewStats, ReviewTaskType } from '../types';
 
+// Task names changed with the Phase 9 redesign (analysis.task enum,
+// data/pg-migrations/0001_north_star.sql): 'text' replaces 'sentiment',
+// 'bot' replaces 'bot_detection'. account_tier is author-scoped, so its
+// queue is always empty, but it's a syntactically valid filter value.
 const TASK_OPTIONS: Array<{ id: ReviewTaskType; label: string }> = [
-    { id: 'sentiment', label: 'Sentiment' },
-    { id: 'favorability', label: 'Favorability' },
-    { id: 'bot_detection', label: 'Bot Detection' },
-    { id: 'claims', label: 'Claim Extraction' },
+    { id: 'text', label: 'Text (sentiment)' },
+    { id: 'bot', label: 'Bot Detection' },
+    { id: 'targets', label: 'Targets' },
     { id: 'propaganda', label: 'Propaganda' },
+    { id: 'claims', label: 'Claim Extraction' },
+    { id: 'citations', label: 'Citations' },
+    { id: 'account_tier', label: 'Account Tier' },
 ];
 
 const REVIEWER_KEY = 'civic_lens_reviewer_id';
@@ -27,31 +29,21 @@ interface StatsBarProps {
 
 function StatsBar({ stats, activeTask }: StatsBarProps) {
     if (!stats) return null;
-    const taskStats = stats.per_task.find((s) => s.task_type === activeTask);
+    const taskStats = stats.per_task.find((s) => s.task === activeTask);
     if (!taskStats) {
-        return (
-            <div className="eyebrow" style={{ color: 'var(--neutral-500)' }}>
-                No data for {activeTask.replace(/_/g, ' ')} yet
-            </div>
-        );
+        return <div className="eyebrow" style={{ color: 'var(--neutral-500)' }}>No data for {activeTask.replace(/_/g, ' ')} yet</div>;
     }
-    const reviewedPct = taskStats.total_outputs
-        ? (taskStats.reviewed / taskStats.total_outputs) * 100
-        : 0;
+    const reviewedPct = taskStats.total_runs ? (taskStats.reviewed / taskStats.total_runs) * 100 : 0;
     return (
         <div
             className="review-stats-grid"
-            style={{
-                padding: 'var(--space-3) var(--space-4)',
-                background: 'var(--neutral-50)',
-                border: '1px solid var(--neutral-200)',
-                borderRadius: 'var(--radius-md)',
-            }}
+            style={{ padding: 'var(--space-3) var(--space-4)', background: 'var(--neutral-50)', border: '1px solid var(--neutral-200)', borderRadius: 'var(--radius-md)' }}
         >
-            <Stat label="Total outputs" value={taskStats.total_outputs} />
+            <Stat label="Total runs" value={taskStats.total_runs} />
             <Stat label="Reviewed" value={`${taskStats.reviewed} (${formatPct(reviewedPct, { decimals: 0 })})`} />
             <Stat label="Correct" value={taskStats.correct} color="var(--semantic-positive)" />
             <Stat label="Incorrect" value={taskStats.incorrect} color="var(--semantic-negative)" />
+            <Stat label="Uncertain" value={taskStats.uncertain} />
             <Stat
                 label="Accuracy"
                 value={formatPct(taskStats.accuracy_pct, { decimals: 0 })}
@@ -77,9 +69,8 @@ function Stat({ label, value, color }: { label: string; value: string | number; 
     );
 }
 
-
 function Review() {
-    const [task, setTask] = useState<ReviewTaskType>('sentiment');
+    const [task, setTask] = useState<ReviewTaskType>('text');
     const [confidenceMax, setConfidenceMax] = useState<number | null>(null);
     const [reviewerId, setReviewerId] = useState<string>(() => localStorage.getItem(REVIEWER_KEY) || '');
     const [queue, setQueue] = useState<ReviewQueueItem[]>([]);
@@ -87,8 +78,7 @@ function Review() {
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
     // Ids the reviewer skipped this session. A background refetch replaces
-    // the queue wholesale, so without this the same skipped rows resurface;
-    // we filter them out of every (re)fetched page.
+    // the queue wholesale, so without this the same skipped rows resurface.
     const [skippedIds, setSkippedIds] = useState<Set<number>>(() => new Set());
 
     const loadQueue = useCallback(async () => {
@@ -99,7 +89,7 @@ function Review() {
                 fetchReviewQueue({ task, confidenceMax: confidenceMax ?? undefined, limit: 20 }),
                 fetchReviewStats(),
             ]);
-            setQueue(items.filter((it) => !skippedIds.has(it.ai_output_id)));
+            setQueue(items.filter((it) => !skippedIds.has(it.run_id)));
             setStats(statsResult);
         } catch (err: any) {
             setError(err?.message ?? 'Failed to load review queue.');
@@ -108,8 +98,6 @@ function Review() {
         }
     }, [task, confidenceMax, skippedIds]);
 
-    // Switching task/confidence starts a fresh queue — clear the skip set so
-    // a different task's rows aren't hidden by ids skipped under the old one.
     useEffect(() => {
         setSkippedIds(new Set());
     }, [task, confidenceMax]);
@@ -125,20 +113,16 @@ function Review() {
     const advanceQueue = useCallback(() => {
         setQueue((prev) => {
             const next = prev.slice(1);
-            if (next.length < 5) {
-                // Background-fetch the next page so the reviewer never hits an empty card.
-                loadQueue();
-            }
+            if (next.length < 5) loadQueue();
             return next;
         });
-        // Refresh stats after each submit.
         fetchReviewStats().then(setStats).catch(() => undefined);
     }, [loadQueue]);
 
     const skip = useCallback(() => {
         setQueue((prev) => {
             const [head, ...rest] = prev;
-            if (head) setSkippedIds((s) => new Set(s).add(head.ai_output_id));
+            if (head) setSkippedIds((s) => new Set(s).add(head.run_id));
             return rest;
         });
     }, []);
@@ -147,38 +131,25 @@ function Review() {
 
     return (
         <div className="flex flex-col gap-4">
-            {/* Disclaimer */}
             <div
                 style={{
-                    padding: 'var(--space-3) var(--space-4)',
-                    background: COLORS.adminBannerBg,
-                    border: `1px solid ${COLORS.adminBannerBorder}`,
-                    borderRadius: 'var(--radius-md)',
-                    fontSize: 'var(--text-xs)',
-                    color: COLORS.adminBannerText,
+                    padding: 'var(--space-3) var(--space-4)', background: COLORS.adminBannerBg,
+                    border: `1px solid ${COLORS.adminBannerBorder}`, borderRadius: 'var(--radius-md)',
+                    fontSize: 'var(--text-xs)', color: COLORS.adminBannerText,
                 }}
             >
-                <strong>Reviews populate <code>ai_output_evals</code></strong>. Marking rows as <em>golden</em> builds the
-                benchmark set used to compute calibrated accuracy. Lowest-confidence model outputs are surfaced first because
-                those are where human review yields the most signal. Admin-gated via the <code>X-Admin-Token</code> header;
-                set a reviewer ID below for attribution.
+                <strong>Reviews populate <code>analysis.evals</code></strong>. Marking rows as <em>golden</em> mints/refreshes
+                an <code>analysis.golden_labels</code> row used to compute calibrated accuracy. Lowest-confidence
+                model outputs are surfaced first. Admin-gated via the <code>X-Admin-Token</code> header; set a
+                reviewer ID below for attribution.
             </div>
 
-            {/* Controls — layout + mobile sizing live in `.review-controls`
-                (index.css). Inputs shrink to full-width on phones and bump
-                padding so selects/text fields hit the 44px touch target. */}
             <Card>
                 <div className="review-controls">
                     <div className="review-controls-field">
                         <span className="eyebrow">Task:</span>
-                        <select
-                            value={task}
-                            onChange={(e) => setTask(e.target.value as ReviewTaskType)}
-                            className="review-controls-input"
-                        >
-                            {TASK_OPTIONS.map((t) => (
-                                <option key={t.id} value={t.id}>{t.label}</option>
-                            ))}
+                        <select value={task} onChange={(e) => setTask(e.target.value as ReviewTaskType)} className="review-controls-input">
+                            {TASK_OPTIONS.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
                         </select>
                     </div>
                     <div className="review-controls-field">
@@ -211,10 +182,8 @@ function Review() {
                 </div>
             </Card>
 
-            {/* Stats */}
             <StatsBar stats={stats} activeTask={task} />
 
-            {/* Queue */}
             {error && <ErrorState message={error} onRetry={loadQueue} />}
             {loading && !error && !current && <LoadingCard />}
             {!loading && !error && !current && (
@@ -224,11 +193,7 @@ function Review() {
                 />
             )}
             {current && (
-                <ReviewItemCard
-                    item={current}
-                    reviewerId={reviewerId}
-                    onSubmitted={advanceQueue}
-                />
+                <ReviewItemCard item={current} reviewerId={reviewerId} onSubmitted={advanceQueue} />
             )}
         </div>
     );

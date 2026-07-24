@@ -1,41 +1,21 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Card } from '../../components/common';
+import { useCallback, useEffect, useState } from 'react';
+import { AdmissionBadge, Card } from '../../components/common';
 import { submitReview } from '../../services/api';
 import { sourceLabel } from '../../services/format';
 import { COLORS } from '../../theme';
-import type { ReviewQueueItem, ReviewTaskType } from '../../types';
+import type { ReviewQueueItem } from '../../types';
 
-const LABEL_OPTIONS_BY_TASK: Record<ReviewTaskType, string[]> = {
-    sentiment: ['POSITIVE', 'NEGATIVE', 'NEUTRAL', 'MIXED'],
-    favorability: ['favorable', 'unfavorable', 'neutral', 'mixed'],
-    bot_detection: ['human', 'suspicious', 'bot'],
-    // Multi-technique tasks — reviewer judges correctness overall, no single label pick.
-    claims: [],
-    propaganda: [],
-};
-
-function modelLabel(task: ReviewTaskType, output: Record<string, any>): string {
-    switch (task) {
-        case 'sentiment':
-            return String(output.label ?? output.sentiment_label ?? '—');
-        case 'favorability':
-            return String(output.overall_gop_stance ?? output.stance ?? '—');
-        case 'bot_detection':
-            return String(output.label ?? '—');
-        case 'claims': {
-            const n = Array.isArray(output.claims) ? output.claims.length : 0;
-            return `${n} claim${n === 1 ? '' : 's'} extracted`;
-        }
-        case 'propaganda': {
-            const n = Array.isArray(output.techniques) ? output.techniques.length : 0;
-            const score = typeof output.overall_propaganda_score === 'number'
-                ? output.overall_propaganda_score.toFixed(2) : '—';
-            return `${n} technique${n === 1 ? '' : 's'} (score ${score})`;
-        }
-        default:
-            return '—';
-    }
-}
+// --------------------------------------------------------------------------- //
+//  Phase 10 adaptation note: the pre-redesign per-task label pickers          //
+//  (sentiment/favorability/bot_detection-specific dropdowns reading           //
+//  model_output.label) assumed a shape the Phase 9 review contract doesn't    //
+//  guarantee -- `raw_response` is an opaque per-task JSON blob, and the       //
+//  verdict vocabulary changed to correct/incorrect/uncertain (see             //
+//  analysis/src/api/routers/review.py). This card renders raw_response as     //
+//  formatted JSON and asks for a free-text expected_label only when the       //
+//  reviewer marks a row golden -- honest given the task-shape is no longer    //
+//  known client-side, rather than guessing at per-task fields.                //
+// --------------------------------------------------------------------------- //
 
 interface ReviewItemCardProps {
     item: ReviewQueueItem;
@@ -43,54 +23,43 @@ interface ReviewItemCardProps {
     onSubmitted: () => void;
 }
 
-export default function ReviewItemCard({ item, reviewerId, onSubmitted }: ReviewItemCardProps) {
-    const labelOptions = LABEL_OPTIONS_BY_TASK[item.task_type];
-    const initialLabel = useMemo(() => modelLabel(item.task_type, item.model_output), [item]);
-    // Favorability's label is a stance toward the GOP (the favorability prompt
-    // scores `overall_gop_stance`). Surfacing the target keeps a reviewer from
-    // grading "favorable" against the wrong entity.
-    const isFavorability = item.task_type === 'favorability';
-    const initialLabelDisplay = isFavorability
-        ? `stance toward GOP: ${initialLabel}`
-        : initialLabel;
+type Verdict = 'correct' | 'incorrect' | 'uncertain';
 
-    const [isCorrect, setIsCorrect] = useState<number | null>(null);
-    const [humanLabel, setHumanLabel] = useState<string>('');
-    const [humanConfidence, setHumanConfidence] = useState<number>(1.0);
-    const [isGolden, setIsGolden] = useState<boolean>(false);
-    const [notes, setNotes] = useState<string>('');
-    const [submitting, setSubmitting] = useState<boolean>(false);
+export default function ReviewItemCard({ item, reviewerId, onSubmitted }: ReviewItemCardProps) {
+    const [verdict, setVerdict] = useState<Verdict | null>(null);
+    const [isGolden, setIsGolden] = useState(false);
+    const [expectedLabel, setExpectedLabel] = useState('');
+    const [notes, setNotes] = useState('');
+    const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    // Reset form whenever a new item loads.
     useEffect(() => {
-        setIsCorrect(null);
-        setHumanLabel('');
-        setHumanConfidence(1.0);
+        setVerdict(null);
         setIsGolden(false);
+        setExpectedLabel('');
         setNotes('');
         setError(null);
-    }, [item.ai_output_id]);
+    }, [item.run_id]);
 
     const submit = useCallback(async () => {
-        if (isCorrect === null) {
-            setError('Mark as correct or incorrect first.');
+        if (verdict === null) {
+            setError('Pick a verdict first.');
+            return;
+        }
+        if (isGolden && !expectedLabel.trim()) {
+            setError('Marking a row golden requires an expected label.');
             return;
         }
         setSubmitting(true);
         setError(null);
         try {
             await submitReview({
-                ai_output_id: item.ai_output_id,
-                is_correct: isCorrect,
-                // If marked incorrect and a label is selected, send it. If marked
-                // correct, mirror the model's label so downstream queries don't
-                // need to special-case nulls.
-                human_label: isCorrect === 1 ? initialLabel : (humanLabel || null),
-                human_confidence: humanConfidence,
-                is_golden: isGolden,
+                run_id: item.run_id,
+                verdict,
                 reviewer_id: reviewerId || null,
                 notes: notes.trim() || null,
+                is_golden: isGolden,
+                expected_label: isGolden ? expectedLabel.trim() : null,
             });
             onSubmitted();
         } catch (err: any) {
@@ -98,192 +67,98 @@ export default function ReviewItemCard({ item, reviewerId, onSubmitted }: Review
         } finally {
             setSubmitting(false);
         }
-    }, [item, isCorrect, humanLabel, humanConfidence, isGolden, notes, reviewerId, initialLabel, onSubmitted]);
-
-    const evidenceSpans: string[] = (item.model_output.evidence_spans
-        ?? item.model_output.sentiment_evidence_spans
-        ?? []) as string[];
-
-    // Source link — invariant C1. Every evidence surface (including the admin
-    // review queue) must outbound-link to the original doc. url comes from the
-    // backend's _build_doc_url helper; null in the rare case the ingest layer
-    // didn't capture enough metadata to synthesize a permalink.
-    const sourceLink = item.doc.url ? (
-        <a
-            href={item.doc.url}
-            target="_blank"
-            rel="noreferrer"
-            className="example-row-link"
-            style={{ fontSize: 'var(--text-xs)' }}
-        >
-            View original
-        </a>
-    ) : null;
+    }, [item.run_id, verdict, isGolden, expectedLabel, notes, reviewerId, onSubmitted]);
 
     return (
         <Card
-            title={`Doc #${item.doc_id} · ${sourceLabel(item.doc.source_type, item.doc.domain)}`}
-            subtitle={item.doc.title || item.doc.ident}
-            headerActions={sourceLink}
+            title={`Doc #${item.doc_id} · run #${item.run_id}`}
+            subtitle={item.doc.title || sourceLabel(item.doc.source_type, null)}
+            headerActions={(
+                <>
+                    <AdmissionBadge admissionClass={item.doc.admission_class} />
+                    <a href={item.doc.source_url} target="_blank" rel="noreferrer" className="example-row-link" style={{ fontSize: 'var(--text-xs)' }}>
+                        View original
+                    </a>
+                </>
+            )}
         >
-            {/* Doc text */}
             <details open style={{ marginBottom: 'var(--space-4)' }}>
                 <summary className="eyebrow" style={{ cursor: 'pointer', marginBottom: 'var(--space-2)' }}>
                     Source text {item.doc.text_truncated && '(truncated)'}
                 </summary>
                 <div
                     style={{
-                        padding: 'var(--space-3)',
-                        background: 'var(--neutral-50)',
-                        borderLeft: '3px solid var(--neutral-300)',
-                        fontSize: 'var(--text-sm)',
-                        whiteSpace: 'pre-wrap',
-                        // Break long unbroken strings (URLs, concatenated
-                        // tokens) so they don't force horizontal scroll on
-                        // phones. overflowWrap handles the common case,
-                        // wordBreak catches CJK and very long URLs.
-                        overflowWrap: 'anywhere',
-                        wordBreak: 'break-word',
-                        maxHeight: 240,
-                        overflow: 'auto',
+                        padding: 'var(--space-3)', background: 'var(--neutral-50)',
+                        borderLeft: '3px solid var(--neutral-300)', fontSize: 'var(--text-sm)',
+                        whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', wordBreak: 'break-word',
+                        maxHeight: 240, overflow: 'auto',
                     }}
                 >
                     {item.doc.text_preview || '(empty)'}
                 </div>
             </details>
 
-            {/* Model output */}
             <div
                 style={{
-                    padding: 'var(--space-3)',
-                    background: COLORS.adminCardBg,
-                    border: '1px solid var(--neutral-200)',
-                    marginBottom: 'var(--space-4)',
+                    padding: 'var(--space-3)', background: COLORS.adminCardBg,
+                    border: '1px solid var(--neutral-200)', marginBottom: 'var(--space-4)',
                 }}
             >
                 <div className="eyebrow" style={{ marginBottom: 'var(--space-2)' }}>
-                    Model output · {item.model_id || 'unknown'} · v{item.prompt_version || '?'}
+                    Model output · {item.model_id} · v{item.prompt_version ?? '?'}
+                    {' · confidence '}{item.confidence != null ? item.confidence.toFixed(2) : '—'}
                 </div>
-                <div className="flex items-baseline gap-3 mb-2">
-                    <span style={{ fontSize: 'var(--text-base)', fontWeight: 700 }}>{initialLabelDisplay}</span>
-                    <span className="num" style={{ color: 'var(--neutral-500)' }}>
-                        confidence {item.model_confidence !== null ? item.model_confidence.toFixed(2) : '—'}
-                    </span>
-                </div>
-                {evidenceSpans.length > 0 && (
-                    <div className="text-xs" style={{ color: 'var(--neutral-600)' }}>
-                        Evidence: {evidenceSpans.map((e, i) => (
-                            <span key={i} style={{ marginRight: 8, fontStyle: 'italic' }}>
-                                "{e}"
-                            </span>
-                        ))}
-                    </div>
-                )}
-                {item.task_type === 'claims' && Array.isArray(item.model_output.claims) && (
-                    <ul style={{ margin: 0, paddingLeft: 'var(--space-5)', fontSize: 'var(--text-sm)' }}>
-                        {(item.model_output.claims as Array<any>).map((c, i) => (
-                            <li key={i} className="mb-1">
-                                {c.claim} <span className="num" style={{ color: 'var(--neutral-500)' }}>({(c.confidence ?? 0).toFixed(2)})</span>
-                            </li>
-                        ))}
-                    </ul>
-                )}
+                <pre style={{ margin: 0, fontSize: 'var(--text-xs)', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
+                    {JSON.stringify(item.raw_response, null, 2)}
+                </pre>
             </div>
 
-            {/* Review form */}
             <div className="flex flex-col gap-3">
                 <div className="flex items-center gap-3">
                     <span className="eyebrow">Verdict:</span>
-                    <button
-                        className={`btn btn-sm ${isCorrect === 1 ? 'btn-primary' : ''}`}
-                        onClick={() => setIsCorrect(1)}
-                        type="button"
-                    >
-                        Correct
-                    </button>
-                    <button
-                        className={`btn btn-sm ${isCorrect === 0 ? 'btn-primary' : ''}`}
-                        onClick={() => setIsCorrect(0)}
-                        type="button"
-                    >
-                        Incorrect
-                    </button>
-                </div>
-
-                {isCorrect === 0 && labelOptions.length > 0 && (
-                    <div className="flex items-center gap-3">
-                        <span className="eyebrow">
-                            {isFavorability ? 'Correct label (stance toward GOP):' : 'Correct label:'}
-                        </span>
-                        <select
-                            value={humanLabel}
-                            onChange={(e) => setHumanLabel(e.target.value)}
-                            style={{ padding: '4px 8px', border: '1px solid var(--neutral-300)' }}
+                    {(['correct', 'incorrect', 'uncertain'] as Verdict[]).map((v) => (
+                        <button
+                            key={v}
+                            className={`btn btn-sm ${verdict === v ? 'btn-primary' : ''}`}
+                            onClick={() => setVerdict(v)}
+                            type="button"
                         >
-                            <option value="">— pick one —</option>
-                            {labelOptions.map((l) => (
-                                <option key={l} value={l}>{l}</option>
-                            ))}
-                        </select>
-                    </div>
-                )}
-
-                <div className="flex items-center gap-3">
-                    <span className="eyebrow">Your confidence:</span>
-                    <input
-                        type="range"
-                        min={0}
-                        max={1}
-                        step={0.05}
-                        value={humanConfidence}
-                        onChange={(e) => setHumanConfidence(parseFloat(e.target.value))}
-                        style={{ flex: 1, maxWidth: 220 }}
-                        aria-label="Your confidence in the review"
-                    />
-                    <span className="num">{humanConfidence.toFixed(2)}</span>
+                            {v}
+                        </button>
+                    ))}
                 </div>
 
                 <label className="flex items-center gap-2">
-                    <input
-                        type="checkbox"
-                        checked={isGolden}
-                        onChange={(e) => setIsGolden(e.target.checked)}
-                    />
+                    <input type="checkbox" checked={isGolden} onChange={(e) => setIsGolden(e.target.checked)} />
                     <span className="text-sm">
-                        <strong>Add to golden set</strong>: use this row as ground truth for accuracy benchmarks
+                        <strong>Add to golden set</strong> — requires an expected label below
                     </span>
                 </label>
 
+                {isGolden && (
+                    <input
+                        placeholder="Expected label (ground truth for this run)"
+                        value={expectedLabel}
+                        onChange={(e) => setExpectedLabel(e.target.value)}
+                        style={{ padding: '6px 8px', border: '1px solid var(--neutral-300)', fontSize: 'var(--text-sm)' }}
+                    />
+                )}
+
                 <textarea
-                    placeholder="Notes (optional): why was this correct/incorrect, edge case, etc."
+                    placeholder="Notes (optional)"
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
                     rows={2}
-                    style={{
-                        padding: '6px 8px',
-                        border: '1px solid var(--neutral-300)',
-                        fontFamily: 'inherit',
-                        fontSize: 'var(--text-sm)',
-                        resize: 'vertical',
-                    }}
+                    style={{ padding: '6px 8px', border: '1px solid var(--neutral-300)', fontFamily: 'inherit', fontSize: 'var(--text-sm)', resize: 'vertical' }}
                 />
 
-                {error && (
-                    <div style={{ color: COLORS.negative, fontSize: 'var(--text-sm)' }}>
-                        {error}
-                    </div>
-                )}
+                {error && <div style={{ color: COLORS.negative, fontSize: 'var(--text-sm)' }}>{error}</div>}
 
                 <div className="flex items-center justify-between">
                     <span className="eyebrow" style={{ color: 'var(--neutral-500)' }}>
                         Reviewer: {reviewerId || '(anonymous)'}
                     </span>
-                    <button
-                        className="btn btn-primary"
-                        onClick={submit}
-                        disabled={submitting || isCorrect === null}
-                        type="button"
-                    >
+                    <button className="btn btn-primary" onClick={submit} disabled={submitting || verdict === null} type="button">
                         {submitting ? 'Saving…' : 'Submit & next'}
                     </button>
                 </div>

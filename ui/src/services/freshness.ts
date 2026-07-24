@@ -1,20 +1,20 @@
 /**
- * Freshness helpers — translate snapshot `generated_at` timestamps into
- * the editorial "refreshed 18 min ago" phrasing that the header and each
- * page's GlobalTicker render.
+ * Freshness helpers — translate the latest `ops.pipeline_runs` row (GET
+ * /snapshot-status) into the editorial "refreshed 18 min ago" phrasing the
+ * header and each page's GlobalTicker render.
  *
- * Source of truth is `/api/v1/snapshot-status` (see services/api.ts). Every
- * page calls `useFetch(fetchSnapshotStatus, [], 'snapshot-status')` and the
- * module-level cache in useFetch dedupes the request across tab switches.
+ * Phase 9 (strictly-live) retired the cache-metadata endpoint this used to
+ * read: there is no longer one freshness timestamp per panel, just the
+ * pipeline's last recorded run. Every page reads the same single value.
  */
 
-import type { SnapshotStatus } from './api';
+import type { SnapshotStatusResponse } from '../types';
 
 /**
  * Humanize an ISO timestamp into "N (unit) ago". Falls back to the absolute
- * date once the snapshot is older than a week, which means either the
- * pipeline has stopped running or the user is looking at an abandoned env —
- * either way the "days ago" phrasing would read as noise.
+ * date once the run is older than a week, which means either the pipeline
+ * has stopped running or the user is looking at an abandoned env — either
+ * way the "days ago" phrasing would read as noise.
  */
 export function formatRefreshedAgo(iso: string | null | undefined): string {
     if (!iso) return '—';
@@ -34,29 +34,11 @@ export function formatRefreshedAgo(iso: string | null | undefined): string {
     return new Date(then).toISOString().slice(0, 16).replace('T', ' ') + ' UTC';
 }
 
-export function getSnapshotTimestamp(
-    status: SnapshotStatus | null,
-    key: string,
-): string | null {
-    if (!status) return null;
-    const entry = status.snapshots.find((s) => s.key === key);
-    return entry?.generated_at ?? null;
-}
-
-/**
- * Most recent `generated_at` across all cached snapshots. Serves as the
- * "when was the pipeline last refreshed" proxy shown in the page header.
- */
-export function latestSnapshotTimestamp(status: SnapshotStatus | null): string | null {
-    if (!status || status.snapshots.length === 0) return null;
-    let latest = 0;
-    let latestIso: string | null = null;
-    for (const s of status.snapshots) {
-        const t = Date.parse(s.generated_at);
-        if (!Number.isNaN(t) && t > latest) {
-            latest = t;
-            latestIso = s.generated_at;
-        }
-    }
-    return latestIso;
+/** The pipeline run's completion time if it finished, else its start time
+ *  (a still-running or failed run has no completed_at). Null on a fresh
+ *  database with no recorded runs yet. */
+export function pipelineRunTimestamp(status: SnapshotStatusResponse | null): string | null {
+    const run = status?.pipelineRun;
+    if (!run) return null;
+    return run.completedAt ?? run.startedAt;
 }

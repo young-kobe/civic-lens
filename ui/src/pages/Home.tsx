@@ -102,11 +102,11 @@ function Home({ onNavigate, isAdmin = false }: HomeProps) {
                     lineHeight: 'var(--leading-relaxed)',
                     color: 'var(--neutral-700)',
                 }}>
-                    <li>Which political <strong>claims</strong> are repeating across sources, and which source surfaced them first in our sample.</li>
+                    <li>Which political <strong>claims</strong> are repeating across sources, and how large each story's sample is.</li>
                     <li>How <strong>news tone</strong> compares to <strong>social media tone</strong> on the same political stories.</li>
                     <li>Which accounts in political discussion look <strong>automated</strong>, and what signals flagged them.</li>
                     <li>Which <strong>propaganda techniques</strong> show up in political content, quoted verbatim from the source.</li>
-                    <li>How sampled discussion leans toward the <strong>Republican Party (GOP)</strong>, pulled from the same per-document analysis.</li>
+                    <li>Each tracked entity's <strong>political lean</strong> — stated fact for officials, curated editorial rating for outlets, or an evidence-backed estimate for accounts — never rendered without its source.</li>
                     <li>Every one of these is broken down by source, topic, and time window.</li>
                 </ul>
             </section>
@@ -147,9 +147,9 @@ function Home({ onNavigate, isAdmin = false }: HomeProps) {
                             03 &middot; Serve
                         </div>
                         <div style={{ marginTop: 'var(--space-1)', fontSize: 'var(--text-sm)', color: 'var(--neutral-700)', lineHeight: 'var(--leading-relaxed)' }}>
-                            Aggregations run on a schedule and cache to snapshots. The
-                            dashboard reads those snapshots directly. Nothing is computed at
-                            page load. What you see is a timestamped picture.
+                            Every panel aggregates the database live, on request — there is no
+                            cache to go stale. The freshness signal you see is the ingestion
+                            pipeline's own last recorded run, not a snapshot timestamp.
                         </div>
                     </div>
                 </div>
@@ -169,14 +169,14 @@ function Home({ onNavigate, isAdmin = false }: HomeProps) {
                         tabId="sentiment"
                         tagline="Tab &middot; Overall Tone"
                         title="How sources are talking about politics"
-                        body="Net tone of the political content we sampled, split three ways: news outlets, verified officials, and the general public. Each entity gets its own card with a partisan-lean chip and an editorial blurb. A divergence panel shows where the three tiers disagree most on each topic."
+                        body="Net tone of the political content we sampled, split three ways: news outlets, verified officials and collectives, and communities. Each entity gets its own card with a political-lean label — official party, curated media lean, or a derived estimate with its evidence."
                         onClick={onNavigate}
                     />
                     <TabCard
                         tabId="narratives"
                         tagline="Tab &middot; Political Narratives"
                         title="Political claims repeating across sources"
-                        body="Each row is a political claim we saw in more than one article or post, bucketed by where we first saw it: news outlets, verified officials, or the general public. Cross-tier narratives — claims that show up in more than one tier — get a dedicated panel. Claims are also flagged when a large share of their posts contain propaganda techniques or come from likely-automated accounts."
+                        body="Each row is a political claim we saw repeated across multiple articles or posts, ranked by how many posts carry it. Claims are also flagged when a large share of their posts contain propaganda techniques or come from likely-automated accounts."
                         onClick={onNavigate}
                     />
                     <TabCard
@@ -197,7 +197,7 @@ function Home({ onNavigate, isAdmin = false }: HomeProps) {
                         tabId="desk"
                         tagline="Tab &middot; Data Desk"
                         title="Every signal, side by side"
-                        body="The numbers-forward view: a sortable matrix of every tracked entity across tone, propaganda, bot, and narrative signals, the full movers board, small-multiple trend charts, and the pipeline's own freshness and human-agreement readouts."
+                        body="The numbers-forward view: a sortable matrix joining every tracked entity's tone and bot-detection rate, the full movers board, small-multiple story trend charts, and the pipeline's own health and human-agreement readouts."
                         onClick={onNavigate}
                     />
                     {isAdmin && (

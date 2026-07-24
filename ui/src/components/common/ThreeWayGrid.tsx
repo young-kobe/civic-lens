@@ -1,5 +1,4 @@
 import { useState, type ReactNode } from 'react';
-import { leanClass } from '../../theme';
 
 /**
  * Three-way entity frame shared across every data page: News Outlets /
@@ -59,74 +58,13 @@ export interface ColumnSorter<T> {
     compare: (a: T, b: T) => number;
 }
 
-// --------------------------------------------------------------------------- //
-//  Lean / party filter — shared by the toolbar and the pages' item filter    //
-// --------------------------------------------------------------------------- //
-
-/** Political-lean filter buckets. 'all' is the no-op default. */
-export type LeanFilter = 'all' | 'left' | 'center' | 'right';
-
-const LEAN_FILTER_OPTIONS: Array<{ key: LeanFilter; label: string }> = [
-    { key: 'all', label: 'All' },
-    { key: 'left', label: 'Left' },
-    { key: 'center', label: 'Center' },
-    { key: 'right', label: 'Right' },
-];
-
-/**
- * True when a profile passes the active lean filter. Unifies outlet/subreddit
- * `lean` and official/account `party` through the shared `leanClass` map, so
- * "Left" catches both left-leaning outlets and Democratic officials. The
- * "Center" pill also admits mixed/neutral so no card silently vanishes under
- * a specific pill (only "All" shows literally everything).
- */
-export function matchesLeanFilter(
-    profile: { kind: string; party?: string; lean?: string | null } | undefined | null,
-    filter: LeanFilter,
-): boolean {
-    if (filter === 'all') return true;
-    if (!profile) return filter === 'center';
-    const cls = leanClass(profile);
-    if (filter === 'center') return cls === 'center' || cls === 'mixed' || cls === 'neutral';
-    return cls === filter;
-}
-
-interface ThreeWayToolbarProps {
-    /** Lean filter state; omit the pair to hide the lean pills. */
-    leanFilter?: LeanFilter;
-    onLeanFilterChange?: (f: LeanFilter) => void;
-}
-
-/**
- * Header band of the three-way frame — hosts the lean/party filter. Returns
- * null when the filter isn't wired so the frame has no empty band.
- */
-export function ThreeWayToolbar({ leanFilter, onLeanFilterChange }: ThreeWayToolbarProps) {
-    const showLean = leanFilter !== undefined && !!onLeanFilterChange;
-    if (!showLean) return null;
-    return (
-        <div className="three-way-toolbar">
-            <div
-                className="three-way-toolbar-filter"
-                role="group"
-                aria-label="Filter by political lean or party"
-            >
-                <span className="eyebrow three-way-toolbar-label">Lean</span>
-                {LEAN_FILTER_OPTIONS.map((opt) => (
-                    <button
-                        key={opt.key}
-                        type="button"
-                        className={`filter-pill ${leanFilter === opt.key ? 'filter-pill-active' : ''}`}
-                        onClick={() => onLeanFilterChange!(opt.key)}
-                        aria-pressed={leanFilter === opt.key}
-                    >
-                        {opt.label}
-                    </button>
-                ))}
-            </div>
-        </div>
-    );
-}
+// Phase 10 note: the pre-redesign lean/party filter toolbar (ThreeWayToolbar,
+// matchesLeanFilter, LeanFilter) is retired here. It filtered on a rich
+// EntityProfile.party/lean shape the strictly-live API no longer returns
+// per-entity in every panel (see LeanLabel) -- reintroducing it would mean
+// guessing lean client-side instead of only ever showing the backend's own
+// evidence-backed LeanLabel. The `toolbar` slot below stays generic (a page
+// can still pass its own search/filter UI into it).
 
 interface ThreeWayColumnProps<T> {
     /** Short uppercase column heading, e.g. "The News". */

@@ -1,23 +1,13 @@
-import {
-    PublicSentimentData, BotData, NarrativeSummary, OutletProfilesResult,
-    PropagandaOverview, MoversResult, ClassificationSample, EntitySentimentItem,
-    EvalAccuracy, ReviewQueueItem, ReviewSubmission, ReviewStats, ReviewTaskType,
+import type {
+    BotActivityResponse, DocumentDetail, EntityPostsResponse, EntityProfileResponse,
+    EvalAccuracy, MoversResponse, NarrativesResponse, OutletProfilesResponse,
+    PropagandaOverview, ReviewQueueItem, ReviewStats, ReviewSubmission, ReviewTaskType,
+    SentimentPanelResponse, SnapshotStatusResponse, TimeWindow,
 } from '../types';
 
+export type { TimeWindow } from '../types';
+
 const API_BASE = '/api/v1';
-
-export type TimeWindow = '24h' | '7d' | '30d' | '90d' | 'all';
-
-/**
- * Dev-only mock toggle. Set VITE_USE_MOCKS=true in ui/.env.local (gitignored)
- * to render the UI against deterministic fixtures without a live backend.
- * Vite inlines import.meta.env at build time, so this branch dead-code-
- * eliminates in production builds when the flag is off.
- *
- * When you retire the fixtures, delete this constant, the three `if (USE_MOCKS)`
- * branches below, and `src/services/fixtures.ts`. No other code references them.
- */
-const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
 
 function adminHeaders(): HeadersInit {
     try {
@@ -93,41 +83,62 @@ async function fetchJSON<T>(
     return resp.json();
 }
 
-export async function fetchSentiment(
-    window: TimeWindow = '24h',
-): Promise<PublicSentimentData> {
-    if (USE_MOCKS) {
-        const { mockSentiment } = await import('./fixtures');
-        return mockSentiment();
-    }
-    return fetchJSON<PublicSentimentData>(`/sentiment?window=${window}`);
+/** Every aggregate endpoint (except movers) takes `window=24h|7d|30d|90d|all`. */
+function windowParams(window: TimeWindow): URLSearchParams {
+    return new URLSearchParams({ window });
 }
 
-/** One page of the live entity drill-down (GET /entity-posts). */
-export interface EntityPostsPage {
-    items: ClassificationSample[];
-    total: number;
-    limit: number;
-    offset: number;
+export async function fetchSentiment(window: TimeWindow = '30d'): Promise<SentimentPanelResponse> {
+    return fetchJSON<SentimentPanelResponse>(`/sentiment?${windowParams(window)}`);
 }
 
-/**
- * Full, paginated list of classified posts behind one entity card —
- * the live read path behind "Show all posts" in the entity modal. The
- * snapshot cache only carries ~10 highest-confidence samples per entity;
- * this endpoint serves everything the card's numbers counted.
- */
+export async function fetchBotActivity(window: TimeWindow = '30d'): Promise<BotActivityResponse> {
+    return fetchJSON<BotActivityResponse>(`/bot-activity?${windowParams(window)}`);
+}
+
+export async function fetchNarratives(
+    window: TimeWindow = '30d', limit: number = 20,
+): Promise<NarrativesResponse> {
+    const params = windowParams(window);
+    params.set('limit', String(limit));
+    return fetchJSON<NarrativesResponse>(`/narratives?${params}`);
+}
+
+export async function fetchPropaganda(window: TimeWindow = '30d'): Promise<PropagandaOverview> {
+    return fetchJSON<PropagandaOverview>(`/propaganda?${windowParams(window)}`);
+}
+
+/** Per-domain cross-signal profiles (net tone x bot rate). Includes
+ *  bot-flagged content on purpose — the payload carries the disclaimer. */
+export async function fetchOutletProfiles(window: TimeWindow = '30d'): Promise<OutletProfilesResponse> {
+    return fetchJSON<OutletProfilesResponse>(`/outlet-profiles?${windowParams(window)}`);
+}
+
+/** GET /movers rejects window='all' — no previous period to compare against. */
+export type MoversWindow = Exclude<TimeWindow, 'all'>;
+
+export async function fetchMovers(window: MoversWindow = '30d'): Promise<MoversResponse> {
+    return fetchJSON<MoversResponse>(`/movers?${windowParams(window)}`);
+}
+
+/** Paginated docs mentioning/authored-by entity_id. Omitting `window`
+ *  defaults server-side to all-time. */
 export async function fetchEntityPosts(
-    kind: EntitySentimentItem['kind'],
-    key: string,
-    window: TimeWindow = '7d',
-    limit: number = 50,
-    offset: number = 0,
-): Promise<EntityPostsPage> {
-    const params = new URLSearchParams({
-        kind, key, window, limit: String(limit), offset: String(offset),
-    });
-    return fetchJSON<EntityPostsPage>(`/entity-posts?${params.toString()}`);
+    entityId: number, window?: TimeWindow, page: number = 1,
+): Promise<EntityPostsResponse> {
+    const params = new URLSearchParams({ page: String(page) });
+    if (window) params.set('window', window);
+    return fetchJSON<EntityPostsResponse>(`/entity-posts?entity_id=${entityId}&${params}`);
+}
+
+/** ALL-TIME entity profile — no window param, see routers/entities.py. */
+export async function fetchEntityProfile(entityId: number): Promise<EntityProfileResponse> {
+    return fetchJSON<EntityProfileResponse>(`/entity-profile/${entityId}`);
+}
+
+/** Universal document drill-down — resolves regardless of age. */
+export async function fetchDocument(docId: number): Promise<DocumentDetail> {
+    return fetchJSON<DocumentDetail>(`/docs/${docId}`);
 }
 
 /** Per-task human-review agreement for the public "human agreement" chips. */
@@ -135,72 +146,15 @@ export async function fetchEvalAccuracy(): Promise<EvalAccuracy> {
     return fetchJSON<EvalAccuracy>('/eval-accuracy');
 }
 
-export async function fetchBotActivity(window: TimeWindow = '7d'): Promise<BotData> {
-    if (USE_MOCKS) {
-        const { mockBotActivity } = await import('./fixtures');
-        return mockBotActivity();
-    }
-    return fetchJSON<BotData>(`/bot-activity?window=${window}`);
+/** Freshness signal: the latest ops.pipeline_runs row, replacing the retired
+ *  cache-metadata endpoint now that the API is strictly-live. */
+export async function fetchSnapshotStatus(): Promise<SnapshotStatusResponse> {
+    return fetchJSON<SnapshotStatusResponse>('/snapshot-status');
 }
 
-export async function fetchNarratives(window: TimeWindow = '7d', limit: number = 20): Promise<NarrativeSummary[]> {
-    if (USE_MOCKS) {
-        const { mockNarratives } = await import('./fixtures');
-        return mockNarratives();
-    }
-    return fetchJSON<NarrativeSummary[]>(`/narratives?window=${window}&limit=${limit}`);
-}
-
-export async function fetchPropaganda(
-    window: TimeWindow = '7d',
-): Promise<PropagandaOverview> {
-    if (USE_MOCKS) {
-        const { mockPropaganda } = await import('./fixtures');
-        return mockPropaganda();
-    }
-    return fetchJSON<PropagandaOverview>(`/propaganda?window=${window}`);
-}
-
-/** Per-domain cross-signal profiles (net tone x bot rate). Includes
- *  bot-flagged content on purpose — the payload carries the disclaimer. */
-export async function fetchOutletProfiles(
-    window: TimeWindow = '7d',
-): Promise<OutletProfilesResult> {
-    if (USE_MOCKS) {
-        const { mockOutletProfiles } = await import('./fixtures');
-        return mockOutletProfiles();
-    }
-    return fetchJSON<OutletProfilesResult>(`/outlet-profiles?window=${window}`);
-}
-
-export async function fetchMovers(window: TimeWindow = '7d'): Promise<MoversResult> {
-    if (USE_MOCKS) {
-        const { mockMovers } = await import('./fixtures');
-        return mockMovers();
-    }
-    return fetchJSON<MoversResult>(`/movers?window=${window}`);
-}
-
-/** One row of /snapshot-status — the pipeline's record of when each cached
- *  aggregation was last written. Consumed by the header "LIVE · <ts>" strip
- *  and each page's GlobalTicker refreshed timestamp. */
-export interface SnapshotStatusEntry {
-    key: string;            // e.g. "sentiment_7d", "bot_activity", "narratives_24h"
-    generated_at: string;   // ISO 8601
-    doc_count: number;
-}
-
-export interface SnapshotStatus {
-    snapshots: SnapshotStatusEntry[];
-}
-
-export async function fetchSnapshotStatus(): Promise<SnapshotStatus> {
-    if (USE_MOCKS) {
-        const { mockSnapshotStatus } = await import('./fixtures');
-        return mockSnapshotStatus();
-    }
-    return fetchJSON<SnapshotStatus>(`/snapshot-status`);
-}
+// --------------------------------------------------------------------------- //
+//  Review (admin-gated)                                                       //
+// --------------------------------------------------------------------------- //
 
 export interface ReviewQueueParams {
     task: ReviewTaskType;
@@ -219,7 +173,9 @@ export async function fetchReviewQueue(params: ReviewQueueParams): Promise<Revie
     return fetchJSON<ReviewQueueItem[]>(`/review/queue?${qs}`, { admin: true });
 }
 
-export async function submitReview(submission: ReviewSubmission): Promise<{ ai_output_id: number; reviewed_at: number }> {
+export async function submitReview(
+    submission: ReviewSubmission,
+): Promise<{ eval_id: number; run_id: number; reviewed_at: string }> {
     return fetchJSON(`/review/submit`, {
         method: 'POST',
         body: JSON.stringify(submission),

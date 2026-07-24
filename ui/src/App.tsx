@@ -2,9 +2,10 @@ import { useEffect, useState } from 'react';
 import { Tabs, GlobalFilters, Footer, type Tab } from './components/common';
 import { Home, PublicSentiment, BotActivityProfiler, Narratives, Propaganda, DataDesk, Review } from './pages';
 import type { Filters } from './types';
-import { fetchSnapshotStatus, type SnapshotStatus } from './services/api';
+import { fetchSnapshotStatus } from './services/api';
+import type { SnapshotStatusResponse } from './types';
 import { useFetch } from './services/useFetch';
-import { formatRefreshedAgo, latestSnapshotTimestamp } from './services/freshness';
+import { formatRefreshedAgo, pipelineRunTimestamp } from './services/freshness';
 import { useMediaQuery, BREAKPOINTS } from './services/useMediaQuery';
 import { parseRoute } from './services/deepLink';
 
@@ -223,12 +224,12 @@ function App() {
     // "when was data last refreshed" for the header strip. Before this we
     // rendered new Date() which advertised "just now" regardless of whether
     // the pipeline had actually run recently.
-    const { data: snapshotStatus } = useFetch<SnapshotStatus>(
+    const { data: snapshotStatus } = useFetch<SnapshotStatusResponse>(
         () => fetchSnapshotStatus(),
         [],
         'snapshot-status',
     );
-    const latestIso = latestSnapshotTimestamp(snapshotStatus);
+    const latestIso = pipelineRunTimestamp(snapshotStatus);
     const refreshedAgo = formatRefreshedAgo(latestIso);
     const refreshedTitle = latestIso
         ? `Data refreshed ${refreshedAgo} (${latestIso})`

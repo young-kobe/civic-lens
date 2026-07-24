@@ -4569,3 +4569,121 @@ a.digest-block-cta:hover { color: var(--accent-hover); }
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ============================================
+   Phase 10 (2026-07-24) — strictly-live API adaptation additions:
+   LeanLabel, RangeCaption, AdmissionBadge, DocDetailModal, and the bot-
+   pushed-narrative rows on the Bot Detector page.
+   ============================================ */
+
+.lean-label {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.lean-label-evidence {
+  white-space: normal;
+}
+
+.range-caption {
+  margin: 4px 0 0;
+}
+
+.range-caption-caveat {
+  color: var(--semantic-warning);
+}
+
+.doc-detail-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-2);
+}
+
+.doc-detail-body {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.doc-analysis-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.doc-analysis-row {
+  padding: var(--space-2) var(--space-3);
+  background: var(--neutral-50);
+  border: 1px solid var(--neutral-150);
+  border-radius: var(--radius-sm);
+}
+
+.doc-analysis-row-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-1);
+}
+
+.doc-analysis-fields {
+  margin: 0;
+  font-size: var(--text-xs);
+}
+
+.doc-analysis-field {
+  display: flex;
+  gap: var(--space-2);
+  padding: 2px 0;
+}
+
+.doc-analysis-field dt {
+  color: var(--neutral-500);
+  font-family: var(--font-mono);
+  flex-shrink: 0;
+}
+
+.doc-analysis-field dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.doc-citation-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.doc-citation-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  font-size: var(--text-sm);
+}
+
+.bot-narrative-row {
+  padding: var(--space-3) 0;
+  border-top: 1px solid var(--neutral-150);
+}
+
+.bot-narrative-row:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+.technique-evidence-list {
+  margin: 0;
+  padding-left: var(--space-5);
+  font-size: var(--text-sm);
+}
+
+.technique-evidence-list li {
+  margin-bottom: var(--space-2);
+}
