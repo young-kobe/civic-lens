@@ -1,0 +1,45 @@
+{
+  "narratives": [
+    {
+      "anchorClaimText": "a contract-test claim",
+      "botPushedFraction": null,
+      "citationCount": 0,
+      "citedDocs": [],
+      "docCount": 1,
+      "lean": null,
+      "memberDocSamples": [
+        {
+          "admissionClass": "sampled",
+          "confidence": 0.9,
+          "docId": 1,
+          "publishedAt": "2026-01-15T12:00:00Z",
+          "snippet": "body",
+          "sourceUrl": "https://example.com/contract-doc"
+        }
+      ],
+      "narrativeId": 1,
+      "netSentiment": null,
+      "propagandaFlaggedFraction": null,
+      "sourceBreakdown": [
+        {
+          "docCount": 1,
+          "source": "news"
+        }
+      ],
+      "timeline": [
+        {
+          "day": "2026-01-15",
+          "docCount": 1
+        }
+      ]
+    }
+  ],
+  "range": {
+    "end": null,
+    "modelIds": [],
+    "officialRecordDocCount": 0,
+    "sampledDocCount": 1,
+    "start": null,
+    "window": "all"
+  }
+}

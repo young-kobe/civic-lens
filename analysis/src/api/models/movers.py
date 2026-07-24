@@ -1,0 +1,51 @@
+"""
+Pydantic response models for GET /movers: window-over-window tone and
+favorability shifts, each carrying its own current/previous sample sizes.
+"""
+
+from __future__ import annotations
+
+from typing import List, Optional
+
+from analysis.src.api.models.common import CamelModel, RangeMeta
+
+
+class ToneMover(CamelModel):
+    """One entity (`corpus.entities`) whose net political tone shifted
+    between the previous equal-length period and the current one.
+    `delta_pts` is signed: current_net - prev_net."""
+
+    entity_key: str
+    kind: str
+    display_name: str
+    current_net: float
+    prev_net: float
+    delta_pts: float
+    current_volume: int
+    prev_volume: int
+
+
+class FavorabilityMover(CamelModel):
+    """The single largest window-over-window favorability shift among
+    entities with `analysis.favorability_stances` coverage in both
+    periods."""
+
+    entity_key: str
+    kind: str
+    display_name: str
+    current_net: float
+    prev_net: float
+    delta_pts: float
+    current_volume: int
+    prev_volume: int
+
+
+class MoversResponse(CamelModel):
+    """GET /movers payload. `current_range`/`previous_range` are each a
+    RangeMeta (owner decision 2026-07-24) -- one per compared period, so
+    the UI can label both halves of the comparison honestly."""
+
+    current_range: RangeMeta
+    previous_range: RangeMeta
+    tone_movers: List[ToneMover] = []
+    top_favorability_mover: Optional[FavorabilityMover] = None

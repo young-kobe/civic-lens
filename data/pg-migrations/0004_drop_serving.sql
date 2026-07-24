@@ -1,0 +1,24 @@
+-- data/pg-migrations/0004_drop_serving.sql
+--
+-- Phase 9 (see docs/todos/pg-redesign.md, plan `has-our-aggregate-method-
+-- async-frog`) is going STRICTLY-LIVE (owner decision, 2026-07-24):
+-- dashboard panels aggregate `corpus.*`/`analysis.*` directly at request
+-- time -- no precomputed `serving.*` rollup tables, no per-window rebuild
+-- job. See docs/audit-trail/analysis/2026-07-24-phase9-prewave.md for the
+-- reasoning (single source of truth per number, no drift-prone copy, data
+-- only actually changes at pipeline completion, and the corpus is small
+-- enough that request-time aggregation is cheap).
+--
+-- `serving` (created by 0001_north_star.sql) has no writer -- no builder
+-- was ever shipped for it -- so this is a clean drop, not a data
+-- migration: nothing reads or writes any `serving.*` table today.
+-- Freshness now comes from `ops.pipeline_runs` (already populated by the
+-- scheduler) instead of `serving.refreshes`; `/snapshot-status` reads its
+-- latest row.
+--
+-- Not idempotent by itself -- same one-shot-apply convention as every
+-- other file in this directory (the Go migration runner tracks the
+-- applied version in ops.schema_migrations, so this file is never
+-- replayed against an already-migrated database).
+
+DROP SCHEMA serving CASCADE;
