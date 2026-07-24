@@ -1,0 +1,54 @@
+{
+  "analyzedDocCounts": {
+    "officialRecord": 1,
+    "sampled": 0
+  },
+  "displayName": "Sen. Example",
+  "entityId": 1,
+  "firstActivity": "2024-01-01T12:00:00Z",
+  "kind": "official",
+  "lastActivity": "2024-01-01T12:00:00Z",
+  "lean": {
+    "confidence": null,
+    "kind": "fact",
+    "leanShare": null,
+    "sampleCount": null,
+    "value": "democrat"
+  },
+  "monthlyActivity": [
+    {
+      "docCount": 1,
+      "month": "2024-01",
+      "officialRecordCount": 1,
+      "sampledCount": 0
+    }
+  ],
+  "propagandaAnalyzedDocs": 0,
+  "propagandaRate": null,
+  "range": {
+    "end": null,
+    "modelIds": [
+      "gemini-3.5-flash"
+    ],
+    "officialRecordDocCount": 1,
+    "sampledDocCount": 0,
+    "start": null,
+    "window": null
+  },
+  "stanceExpressed": {
+    "mixed": 0,
+    "negative": 0,
+    "netScore": null,
+    "neutral": 0,
+    "positive": 0,
+    "volume": 0
+  },
+  "stanceReceived": {
+    "mixed": 0,
+    "negative": 0,
+    "netScore": null,
+    "neutral": 0,
+    "positive": 0,
+    "volume": 0
+  }
+}
