@@ -1,15 +1,18 @@
 """
 Civic Lens Analysis API Server.
 
-Versioned routers (admin / data / review) are mounted under ``/api/v1``. The
-health router is deliberately unversioned at the app root — infra probes
-shouldn't have to track the API version.
+Versioned routers are mounted under ``/api/v1``. The health router is
+deliberately unversioned at the app root — infra probes shouldn't have to
+track the API version.
+
+Phase 9 (strictly-live): every panel aggregates ``corpus.*``/``analysis.*``
+directly at request time (``analysis/src/api/queries/``) — there is no
+cache layer for this module to wire up. ``/snapshot-status`` (routers/
+status.py) reads the latest ``ops.pipeline_runs`` row instead.
 
 When v2 arrives, keep this file as the one place that lists which versions
 are live: add a `v2_router` import, mount it at ``/api/v2``, and retire v1
-when the migration window ends. A single-line string constant didn't
-document anything the include_router line doesn't already show, so we
-inline the prefix here.
+when the migration window ends.
 """
 
 from fastapi import FastAPI
@@ -24,9 +27,17 @@ from analysis.src.api.rate_limits import limiter
 from analysis.src.api.routers import (
     admin_router,
     auth_bootstrap_router,
-    data_router,
+    bots_router,
+    docs_router,
+    entities_router,
     health_router,
+    movers_router,
+    narratives_router,
+    outlets_router,
+    propaganda_router,
     review_router,
+    sentiment_router,
+    status_router,
 )
 
 # The UI is served same-origin (Vite proxy in dev, Caddy/Cloudflare in prod),
@@ -91,11 +102,21 @@ app.add_middleware(SecurityHeadersMiddleware)
 # Unversioned infra endpoint.
 app.include_router(health_router)
 
-# v1 surface. When v2 lands, include a v2_router here alongside — keep both
-# mounted during the migration window, retire v1 when clients have moved.
+# v1 surface: panel routers (strictly-live corpus/analysis aggregation),
+# ops/admin/review routers, and the universal doc drill-down. When v2
+# lands, include a v2_router here alongside — keep both mounted during the
+# migration window, retire v1 when clients have moved.
 app.include_router(admin_router, prefix=V1_PREFIX)
-app.include_router(data_router, prefix=V1_PREFIX)
+app.include_router(bots_router, prefix=V1_PREFIX)
+app.include_router(docs_router, prefix=V1_PREFIX)
+app.include_router(entities_router, prefix=V1_PREFIX)
+app.include_router(movers_router, prefix=V1_PREFIX)
+app.include_router(narratives_router, prefix=V1_PREFIX)
+app.include_router(outlets_router, prefix=V1_PREFIX)
+app.include_router(propaganda_router, prefix=V1_PREFIX)
 app.include_router(review_router, prefix=V1_PREFIX)
+app.include_router(sentiment_router, prefix=V1_PREFIX)
+app.include_router(status_router, prefix=V1_PREFIX)
 # Mounted after review_router so the /review/* CF Access path covers it; the
 # bootstrap handler itself is not admin-token-gated (see routers/auth_bootstrap.py).
 app.include_router(auth_bootstrap_router, prefix=V1_PREFIX)

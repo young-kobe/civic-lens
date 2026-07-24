@@ -1,0 +1,117 @@
+"""
+Response models for GET /api/v1/sentiment (Phase 9 strictly-live panel):
+net tone, intensity distribution, platform/topic/time-of-day/day-of-week
+splits, the news/officials/general-public tier split, and per-entity
+stance aggregates. See queries/sentiment.py for the aggregation.
+"""
+
+from __future__ import annotations
+
+from typing import List, Literal, Optional
+
+from analysis.src.api.models.common import CamelModel, LeanLabel, RangeMeta, SampleDocModel
+
+
+class SentimentOverview(CamelModel):
+    """Headline counts for the window. ``volume`` is docs that actually
+    carry a sentiment label; ``trivial_content_docs`` is analyzed runs with
+    no sentiment_results row (never folded into a fake neutral count)."""
+
+    net_score: Optional[float]
+    volume: int
+    total_analyzed: int
+    trivial_content_docs: int
+    excluded_bot_docs: int
+    mean_confidence: Optional[float]
+
+
+class SentimentDistribution(CamelModel):
+    """Intensity buckets. MIXED folds into ``neutral``, matching the
+    pre-redesign UI convention for Tone Intensity."""
+
+    strong_positive: int
+    mild_positive: int
+    neutral: int
+    mild_negative: int
+    strong_negative: int
+
+
+class BucketSentiment(CamelModel):
+    """One row of a positive/negative/neutral/volume/net breakdown, keyed
+    by whatever dimension the caller names (platform, topic, bucket, day)."""
+
+    positive: int
+    negative: int
+    neutral: int
+    volume: int
+    net_score: Optional[float]
+
+
+class PlatformSentiment(BucketSentiment):
+    platform: str
+
+
+class TopicSentiment(BucketSentiment):
+    topic: str
+
+
+class TimeOfDaySentiment(BucketSentiment):
+    bucket: Literal["Morning", "Afternoon", "Evening", "Night"]
+
+
+class DayOfWeekSentiment(BucketSentiment):
+    day: str
+
+
+class TierSplit(BucketSentiment):
+    tier: Literal["news", "officials", "general_public"]
+
+
+class StanceCounts(CamelModel):
+    """One stance-count cell. ``net_score`` is withheld (None) below
+    MIN_TARGET_SAMPLE_N -- a low-n cell reports its volume, never a
+    +/-100 headline (``low_sample`` flags why)."""
+
+    positive: int
+    negative: int
+    neutral: int
+    mixed: int
+    volume: int
+    net_score: Optional[float]
+    low_sample: bool
+
+
+class EntityStanceAggregate(CamelModel):
+    """Per-entity stance aggregate merging analysis.favorability_stances
+    (``favorability``) and analysis.target_mentions (``target_stance``).
+    ``entity_id`` is None only for the unresolved-mentions catch-all
+    (``catch_all_key``) -- unresolved target_mentions are never dropped."""
+
+    entity_id: Optional[int]
+    catch_all_key: Optional[str]
+    display_name: str
+    kind: Optional[str]
+    lean: Optional[LeanLabel]
+    favorability: StanceCounts
+    target_stance: StanceCounts
+    samples: List[SampleDocModel]
+
+
+class SentimentPanelResponse(CamelModel):
+    """Full GET /api/v1/sentiment payload. ``range`` is the honesty block:
+    resolved bounds (a preset, 'all', or a custom from/to pair all land
+    here), the two admission-basis doc counts, and the distinct model_ids
+    behind the aggregate -- so a long range spanning a model/prompt change
+    can be labeled as such instead of presented as one comparable series."""
+
+    range: RangeMeta
+    overview: SentimentOverview
+    distribution: SentimentDistribution
+    by_platform: List[PlatformSentiment]
+    by_topic: List[TopicSentiment]
+    by_time_of_day: List[TimeOfDaySentiment]
+    by_day_of_week: List[DayOfWeekSentiment]
+    by_tier: List[TierSplit]
+    entity_stances: List[EntityStanceAggregate]
+    samples: List[SampleDocModel]
+    disclaimer: str

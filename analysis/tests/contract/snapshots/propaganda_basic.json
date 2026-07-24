@@ -1,0 +1,91 @@
+{
+  "byParty": [
+    {
+      "flaggedDocs": 1,
+      "flaggedRatePct": 100.0,
+      "meanScore": 0.7,
+      "party": "unknown",
+      "totalDocs": 1
+    }
+  ],
+  "bySource": [
+    {
+      "flaggedDocs": 1,
+      "flaggedRatePct": 100.0,
+      "meanScore": 0.7,
+      "source": "news",
+      "totalDocs": 1
+    },
+    {
+      "flaggedDocs": 0,
+      "flaggedRatePct": 0.0,
+      "meanScore": 0.0,
+      "source": "social",
+      "totalDocs": 0
+    }
+  ],
+  "byTechnique": [
+    {
+      "count": 1,
+      "pctOfFlaggedDocs": 100.0,
+      "sampleEvidence": [
+        "a vile scheme"
+      ],
+      "technique": "loaded_language"
+    },
+    {
+      "count": 0,
+      "pctOfFlaggedDocs": 0.0,
+      "sampleEvidence": [],
+      "technique": "name_calling"
+    },
+    {
+      "count": 0,
+      "pctOfFlaggedDocs": 0.0,
+      "sampleEvidence": [],
+      "technique": "ad_hominem"
+    },
+    {
+      "count": 0,
+      "pctOfFlaggedDocs": 0.0,
+      "sampleEvidence": [],
+      "technique": "appeal_to_fear"
+    },
+    {
+      "count": 0,
+      "pctOfFlaggedDocs": 0.0,
+      "sampleEvidence": [],
+      "technique": "whataboutism"
+    },
+    {
+      "count": 0,
+      "pctOfFlaggedDocs": 0.0,
+      "sampleEvidence": [],
+      "technique": "doubt_casting"
+    }
+  ],
+  "examples": [
+    {
+      "admissionClass": "sampled",
+      "confidence": 0.85,
+      "docId": 1,
+      "publishedAt": "2026-01-15T12:00:00Z",
+      "snippet": "flagged for loaded language",
+      "sourceUrl": "https://example.com/contract-doc"
+    }
+  ],
+  "flaggedDocs": 1,
+  "flaggedRatePct": 100.0,
+  "meanScore": 0.7,
+  "range": {
+    "end": null,
+    "modelIds": [
+      "propaganda-v1"
+    ],
+    "officialRecordDocCount": 0,
+    "sampledDocCount": 1,
+    "start": null,
+    "window": "all"
+  },
+  "totalEligibleDocs": 1
+}

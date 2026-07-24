@@ -49,6 +49,9 @@ load_env() {
         val="$(_trim "${line#*=}")"
         [[ -n "$key" && -z "${!key:-}" ]] && export "$key=$val"
     done < "$SCRIPT_ROOT/.env"
+    # The && guard above returns 1 when the last line's var is already
+    # exported; under set -e that would silently kill the script.
+    return 0
 }
 
 find_go() {

@@ -1,0 +1,18 @@
+{
+  "entityId": 1,
+  "items": [
+    {
+      "admissionClass": "official_record",
+      "confidence": 0.9,
+      "docId": 1,
+      "publishedAt": "2024-01-01T12:00:00Z",
+      "relation": "authored_by",
+      "snippet": "An old post",
+      "sourceUrl": "https://example.com/tweet-old"
+    }
+  ],
+  "page": 1,
+  "pageSize": 20,
+  "total": 1,
+  "window": "all"
+}

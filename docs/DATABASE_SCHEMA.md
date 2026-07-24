@@ -5,17 +5,20 @@
 > `docs/todos/pg-redesign.md`. Do not point application code at this schema
 > until the corresponding phase has landed and the todo box is checked.
 
-> **Version**: 3.0 (target)
-> **Last updated**: 2026-07-22
-> **Source of truth**: `data/pg-migrations/0001_north_star.sql` — this
-> document is regenerated from that file; when it drifts, rebuild and
-> re-diff rather than hand-editing.
+> **Version**: 3.1 (target)
+> **Last updated**: 2026-07-24
+> **Source of truth**: `data/pg-migrations/0001_north_star.sql` plus
+> `0002`-`0004` — this document is regenerated from those files; when it
+> drifts, rebuild and re-diff rather than hand-editing.
 
 ---
 
 ## Overview
 
-Six namespaced Postgres 17 schemas replace the single flat SQLite database.
+Five namespaced Postgres 17 schemas replace the single flat SQLite
+database (`0001_north_star.sql` created a sixth, `serving`, for precomputed
+rollups; `0004_drop_serving.sql` dropped it when Phase 9 went strictly-live
+— see "API query layer" below).
 Surrogate keys are `BIGINT GENERATED ALWAYS AS IDENTITY` everywhere except
 `raw.*` (natural keys — url_canon/fullname/tweet_id/user_id, kept
 byte-faithful to the crawler) and `archive.*` (imported SQLite integer IDs,
@@ -29,7 +32,6 @@ JSON columns).
 | `raw` | Go ingestor only | Frontier + verbatim source capture |
 | `corpus` | Python ETL only | Normalized documents, authors, entity registry |
 | `analysis` | `results/store.py` + named aggregate/derived modules | Analysis runs + typed per-task results |
-| `serving` | serving/ rollup builders | Precomputed rollups the API reads |
 | `ops` | Go + Python scheduler | Work queue, run provenance, budget, migrations |
 | `archive` | one-time import script | Verbatim old SQLite derived data, read-only by convention |
 
@@ -133,11 +135,11 @@ Indexes: `(username)`, `(created_at)`.
   convention across the entire schema (owner decision, supersedes the
   plan's original two-column party/lean sketch). One column name (`lean`)
   everywhere this enum appears — `corpus.entities.lean`,
-  `analysis.author_leans.lean`, `analysis.narrative_leans.lean`,
-  `serving.entity_stance_rollups.lean`, `serving.narrative_rollups.lean`,
-  `serving.bot_rollups.lean` — no other table stores curated affiliation,
-  and no `party` column exists anywhere in the schema. **Never fed into an
-  LLM prompt** (bias/priming risk).
+  `analysis.author_leans.lean`, `analysis.narrative_leans.lean` — no other
+  table stores curated affiliation, and no `party` column exists anywhere
+  in the schema. **Never fed into an LLM prompt** (bias/priming risk). The
+  strictly-live API query layer (see below) joins these columns at request
+  time rather than denormalizing them into a rollup table.
 - `corpus.source_type`: `news | reddit_post | x_post`
 - `corpus.entity_kind`: `official | collective | outlet | subreddit`
 - `corpus.author_tier`: `elected_official | affiliated | general_public`
@@ -406,29 +408,33 @@ above).
 
 ---
 
-## `serving` — the rollup seam
+## API query layer — strictly live (no `serving` schema)
 
-One table per panel family, keyed `(window, dimensions)`. Rebuilt per
-window inside one transaction (DELETE+INSERT) so the API never reads a
-half-built window. `serving.window` enum: `24h | 7d | 30d | 90d`.
+**Owner decision, 2026-07-24** (see
+`docs/audit-trail/analysis/2026-07-24-phase9-prewave.md`): Phase 9 does
+NOT precompute rollups. The `serving` schema created by
+`0001_north_star.sql` was dropped by `0004_drop_serving.sql` — it had no
+writer (no builder was ever shipped against it) and would have been a
+second, drift-prone copy of numbers `corpus.*`/`analysis.*` already hold.
+Dashboard panels aggregate `corpus.*`/`analysis.*` directly at request
+time instead: `analysis/src/api/queries/` (`base.py`) holds the read-side
+helpers every panel query shares — window-cutoff arithmetic,
+`admission_class` (sampled vs official_record) predicates, and the
+evidence-sample row builder (`source_url` + `confidence` enforced,
+invariant C1) — and `constants.py` carries the same floors/caps the old
+`reporting/aggregators/` modules used, ported verbatim so a request-time
+aggregate renders identically to the values already reviewed.
 
-Nested drill-down lists that the old `aggregator_models.py` dataclasses
-stored pre-nested (byTopic arrays, per-day series, per-sample evidence) are
-assembled by the API layer from `analysis.*`/`corpus.*` directly at read
-time via these narrow rollup rows — not stored as JSONB (JSONB is
-restricted to the three columns listed in the Overview).
+`GET /snapshot-status` reads the latest `ops.pipeline_runs` row (already
+populated by the scheduler) for its freshness signal instead of a
+`serving.refreshes` table.
 
-| Table | Key | Notes |
-| --- | --- | --- |
-| `refreshes` | (rollup_name, win) PK | computed_at, row_count, source_max_run_id watermark — the freshness contract, replaces `/snapshot-status` |
-| `sentiment_rollups` | UNIQUE(win, dimension, dimension_key) | dimension in overall/platform/topic/time_window/day_of_week; positive/negative/neutral/mixed/volume/net_score/sarcasm_rate |
-| `entity_stance_rollups` | UNIQUE(win, tier, entity_id or catch_all_key) | tier in news/officials/public; entity_id nullable for catch-alls; positive/negative/neutral/volume/net_score/engagement_total; **lean, lean_confidence** denormalized from entities/author_leans at build time |
-| `sample_docs` | sample_id PK | evidence backing every drill-down; rollup_name+bucket_key identify the panel; doc_id, run_id, label, confidence, reasoning, evidence_spans, **source_url NOT NULL** (invariant C1), rank |
-| `narrative_rollups` | (narrative_id, win) PK | supporting_doc_count, net_sentiment, inbound/external_citation_count, propaganda_score, bot_pushed_fraction, mean_confidence, first_seen_doc_id, **lean, lean_share** |
-| `propaganda_rollups` | UNIQUE(win, technique) | doc_count, mean_confidence |
-| `bot_rollups` | UNIQUE(win, tier, entity_id or catch_all_key) | total_docs, bot_docs, bot_rate_pct, **lean** denormalized |
-| `outlet_profiles` | UNIQUE(win, outlet_key, source_type) | net_tone, bot_rate_pct, volume, total_scanned — outlet_key is the raw domain/subreddit, independent of registry match |
-| `movers` | mover_id PK | window-over-window tone/favorability deltas; kind in outlet/official/subreddit/favorability |
+`api/models/` (`common.py`) holds the response-shape contract: a
+`CamelModel` base (camelCase JSON over snake_case Python) and `LeanLabel`
+— the single place the three-epistemic-kinds lean invariant is encoded
+(`kind` = `fact` | `curated` | `derived`; a `derived` lean must carry
+`lean_share`/`confidence`/`sample_count`, a `fact`/`curated` lean must
+not).
 
 ---
 

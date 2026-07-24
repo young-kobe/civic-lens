@@ -323,28 +323,58 @@ record.
 - [ ] 20-doc random traceability audit (doc -> run -> result ->
       prompt_version -> raw_hash -> file on disk)
 
-## Phase 9 — Serving + API
+## Phase 9 — Strictly-live API (serving schema dropped)
 
-- [ ] `analysis/src/serving/` rollup builders (logic ported from
-      `reporting/aggregators/`, joins become FK joins, output becomes
-      `serving.*` rows)
-- [ ] Bot/narrative/entity rollups gain lean dimensions (join
-      `author_leans` / `narrative_leans` / `entities.lean` — one flat lean
-      column, no separate `party` column; see the Phase 4 registry_sync
-      entry)
-- [ ] Presentation invariant (owner decision 2026-07-22): fact/curated/derived
+Owner decision 2026-07-24 reversed the original serving-rollup design this
+section used to describe: no `serving.*` schema, no rebuild job. Panels
+aggregate `corpus.*`/`analysis.*` directly at request time. See
+`docs/audit-trail/analysis/2026-07-24-phase9-prewave.md` for the reasoning
+and `docs/audit-trail/api/2026-07-24-phase9-wiring-review-docs.md` (plus
+its cross-linked sibling entries) for the full wave.
+
+- [x] `data/pg-migrations/0004_drop_serving.sql` — `serving` schema (never
+      had a writer) dropped
+- [x] `analysis/src/api/queries/` (`base.py`, `constants.py`) — shared
+      read-side helpers (window cutoffs, admission-class predicates,
+      evidence-sample builder) and the ported aggregation floors/caps
+- [x] `analysis/src/api/models/` (`common.py`: `CamelModel`, `LeanLabel`,
+      `RangeMeta`, `SampleDocModel`) — the response-shape contract every
+      panel model builds on
+- [x] Presentation invariant (owner decision 2026-07-22): fact/curated/derived
       lean labels visually+verbally distinct; derived lean always with
-      evidence counts + continuous lean_share (no spectrum buckets); lean
-      never fed to LLM prompts; codify in `.agent/rules/media-analysis.md`
-- [ ] API endpoints query `serving.*`
-- [ ] `review.py` reads `analysis.runs` / writes `analysis.evals` +
-      `analysis.golden_labels`
-- [ ] `/entity-posts` and drill-downs query `corpus`/`analysis` directly
-- [ ] Fresh pydantic response models
-- [ ] Retire `common/cache.py`, `api/cache_utils.py`,
-      `reporting/models/aggregator_models.py` (785 lines), `data/cache/`
-- [ ] `/snapshot-status` reads `serving.refreshes`
-- [ ] API contract snapshot tests become the new UI contract
+      `lean_share`/`confidence`/`sample_count`; lean never fed to LLM
+      prompts — codified in `.agent/rules/media-analysis.md`'s Phase 9
+      section
+- [x] Seven panel query modules + routers query `corpus`/`analysis` directly
+      (sentiment, entities, narratives, propaganda, bots, outlets, movers) —
+      no `serving.*` anywhere
+- [x] `analysis/src/review/` (`service.py`, `constants.py`) reads
+      `analysis.runs`, writes `analysis.evals` + `analysis.golden_labels`
+      (golden minted in the same transaction as the eval)
+- [x] `GET /docs/{doc_id}` universal drill-down (`api/queries/docs.py`,
+      `api/models/docs.py`, `api/routers/docs.py`) — core fields, subtype
+      extras, every current analysis result, citations in/out; no time
+      predicate, resolves regardless of document age
+- [x] `GET /snapshot-status` reads the latest `ops.pipeline_runs` row
+      (`serving.refreshes` no longer exists)
+- [x] `GET /eval-accuracy` — live aggregate via the review service, public
+      floor applied
+- [x] `api/routers/admin.py` rewritten: run-trigger endpoints call
+      `scheduler/pipeline.py`; the cache-status endpoint is replaced by
+      `GET /pipeline-runs`
+- [x] `api/routers/health.py` rewritten: Postgres pool `SELECT 1`, not
+      sqlite3
+- [x] `server.py` + `routers/__init__.py` mount every v1 router (the seven
+      panels, admin, docs, review, sentiment already listed above, status)
+      plus the unversioned health router; `api/routers/data.py` +
+      `api/cache_utils.py` deleted
+- [x] Fresh `CamelModel`-based pydantic response models throughout
+- [x] API contract snapshot tests (`analysis/tests/contract/`) are the new
+      UI contract
+- [ ] Retire `common/cache.py`, `reporting/models/aggregator_models.py`
+      (785 lines), `data/cache/` — deferred to Phase 11: the old
+      `reporting/`/`scheduler/job_runner.py` stack still reads them and
+      stays live until cutover
 
 ## Phase 10 — UI adaptation
 

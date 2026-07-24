@@ -3,11 +3,10 @@ Unversioned health endpoint. Infra probes (k8s, ELB, Cloudflare) shouldn't
 have to know or bump an API version to ask "is this process alive".
 """
 
-import os
-import sqlite3
-
+import psycopg
 from fastapi import APIRouter
 
+from analysis.src.common import db
 from analysis.src.common.logger import get_logger
 from analysis.src.common.settings import get_settings
 
@@ -15,34 +14,32 @@ logger = get_logger("api.health")
 router = APIRouter(tags=["health"])
 
 
-def _check_db(db_path: str) -> bool:
+def _check_db() -> bool:
+    # RuntimeError: CIVIC_DATABASE_URL unset (db.get_pool()'s own fail-loud
+    # guard). psycopg.Error: pool open but the server is unreachable. Both
+    # mean "not ok" here, not a 500 -- the misconfiguration is reported via
+    # the response body's degraded status, not by crashing the endpoint.
     try:
-        conn = sqlite3.connect(db_path, timeout=1.0)
-        conn.execute("PRAGMA foreign_keys = ON")  # match Go ingestor (audit D-5)
-        try:
+        with db.connection() as conn:
             conn.execute("SELECT 1").fetchone()
-        finally:
-            conn.close()
         return True
-    except sqlite3.Error as e:
+    except (RuntimeError, psycopg.Error) as e:
         logger.warning(f"Health DB check failed: {e}")
         return False
 
 
 @router.get("/health")
 def health():
-    """Exercises DB and cache directory so a misconfigured deploy fails loudly."""
+    """Exercises the Postgres pool so a misconfigured deploy fails loudly
+    (a degraded status in the response, not a raised exception)."""
     settings = get_settings()
-    db_ok = _check_db(settings.db_path)
-    cache_ok = os.path.isdir(settings.cache_dir)
-    ok = db_ok and cache_ok
+    db_ok = _check_db()
     # Import here to avoid a circular with server.py at module load.
     from analysis.src.api.server import API_VERSION
     return {
-        "status": "ok" if ok else "degraded",
+        "status": "ok" if db_ok else "degraded",
         "app_name": settings.app_name,
         "api_version": API_VERSION,
         "llm_enabled": settings.llm_enabled,
         "db_reachable": db_ok,
-        "cache_dir_exists": cache_ok,
     }
