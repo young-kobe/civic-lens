@@ -21,6 +21,14 @@ class Settings(BaseSettings):
     
     # Cache for pre-computed analysis snapshots
     cache_dir: str = "data/cache"
+
+    # Content-addressed raw HTML store written by the Go ingestor. Resolved
+    # relative to the working directory like db_path/cache_dir — repo root in
+    # dev, /var/lib/civic-lens in the prod containers (compose working_dir).
+    # Must NOT be resolved from the code tree: the analysis image excludes
+    # data/raw (.dockerignore), so a repo-root-relative default silently
+    # breaks all news text extraction in production.
+    raw_store_dir: str = "data/raw/sha256"
     
     # API Server
     api_host: str = "0.0.0.0"
