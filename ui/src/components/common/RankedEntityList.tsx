@@ -1,12 +1,11 @@
 import type { ReactNode } from 'react';
-import type { EntityProfile } from '../../types';
 import { clampWidthPct } from '../../services/format';
-import { EntityAvatar, entityChipLabel, entityChipTitle } from './EntityProfileCard';
-import { leanClass } from '../../theme';
+import { EntityAvatar, type EntityLike } from './EntityProfileCard';
+import { LeanLabel } from './LeanLabel';
 
 /** One row of a ranked leaderboard column. */
 export interface RankedEntity {
-    profile: EntityProfile;
+    entity: EntityLike;
     /** Primary rate driving the rank — rendered as number + bar. */
     rateValue: string;
     /** Bar fill 0-100. */
@@ -14,46 +13,33 @@ export interface RankedEntity {
     rateColor?: string;
     /** Small mono annotation after the rate (e.g. "1,204 scanned"). */
     detail?: string;
-    /** Optional explanatory content rendered UNDER the name (who they are /
-     *  why they rank). Omit for the compact one-line form. */
+    /** Optional explanatory content rendered UNDER the name. */
     description?: ReactNode;
     onClick?: () => void;
 }
 
 interface RankedEntityListProps {
     items: RankedEntity[];
-    /** Accessible label for the list. */
     ariaLabel?: string;
 }
 
 /**
- * RankedEntityList — leaderboard rows for rate-driven columns (Propaganda
- * flagged rate, Bot suspected-automation rate). A rank number, a small
- * avatar, the name + lean chip, and a rate bar say "who leans hardest"
- * in a fraction of the vertical space the profile-card grid used —
- * profile depth (blurb, full stats) stays in the drill-down modal.
+ * RankedEntityList — leaderboard rows for rate-driven columns (Bot Detector
+ * suspected-automation rate, entity bot rates). A rank number, a small
+ * avatar, the name + optional LeanLabel chip, and a rate bar.
  */
 export function RankedEntityList({ items, ariaLabel }: RankedEntityListProps) {
     return (
         <ol className="ranked-entity-list" aria-label={ariaLabel}>
             {items.map((item, i) => {
-                const lean = leanClass(item.profile);
-                const chip = entityChipLabel(item.profile);
                 const inner = (
                     <>
                         <span className="ranked-entity-rank" aria-hidden>{i + 1}</span>
-                        <EntityAvatar profile={item.profile} />
+                        <EntityAvatar entity={item.entity} />
                         <span className="ranked-entity-main">
                             <span className="ranked-entity-name-wrap">
-                                <span className="ranked-entity-name">{item.profile.displayName}</span>
-                                {chip && (
-                                    <span
-                                        className={`entity-card-chip lean-chip-${lean}`}
-                                        title={entityChipTitle(item.profile)}
-                                    >
-                                        {chip}
-                                    </span>
-                                )}
+                                <span className="ranked-entity-name">{item.entity.displayName}</span>
+                                {item.entity.lean && <LeanLabel lean={item.entity.lean} variant="chip" />}
                             </span>
                             {item.description && (
                                 <span className="ranked-entity-desc">{item.description}</span>
@@ -82,13 +68,13 @@ export function RankedEntityList({ items, ariaLabel }: RankedEntityListProps) {
                     </>
                 );
                 return (
-                    <li key={`${item.profile.kind}:${item.profile.key}`}>
+                    <li key={`${item.entity.kind}:${item.entity.displayName}:${i}`}>
                         {item.onClick ? (
                             <button
                                 type="button"
                                 className="ranked-entity-row"
                                 onClick={item.onClick}
-                                aria-label={`${item.profile.displayName}: ${item.rateValue}. Open details.`}
+                                aria-label={`${item.entity.displayName}: ${item.rateValue}. Open details.`}
                             >
                                 {inner}
                             </button>

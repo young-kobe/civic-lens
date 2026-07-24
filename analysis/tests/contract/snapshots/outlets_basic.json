@@ -1,0 +1,65 @@
+{
+  "disclaimer": "Includes bot-flagged content on purpose -- the bot rate IS the signal. Net tone therefore differs from panels that exclude bot-scored authors. Sampled discourse, not a media-bias rating.",
+  "outlets": [
+    {
+      "botRatePct": 0.0,
+      "netTone": 100.0,
+      "outletKey": "example.com",
+      "samples": [
+        {
+          "admissionClass": "sampled",
+          "confidence": 0.9,
+          "docId": 1,
+          "publishedAt": "2026-01-15T12:00:00Z",
+          "snippet": "body",
+          "sourceUrl": "https://example.com/0"
+        },
+        {
+          "admissionClass": "sampled",
+          "confidence": 0.9,
+          "docId": 2,
+          "publishedAt": "2026-01-15T12:00:00Z",
+          "snippet": "body",
+          "sourceUrl": "https://example.com/1"
+        },
+        {
+          "admissionClass": "sampled",
+          "confidence": 0.9,
+          "docId": 3,
+          "publishedAt": "2026-01-15T12:00:00Z",
+          "snippet": "body",
+          "sourceUrl": "https://example.com/2"
+        },
+        {
+          "admissionClass": "sampled",
+          "confidence": 0.9,
+          "docId": 4,
+          "publishedAt": "2026-01-15T12:00:00Z",
+          "snippet": "body",
+          "sourceUrl": "https://example.com/3"
+        },
+        {
+          "admissionClass": "sampled",
+          "confidence": 0.9,
+          "docId": 5,
+          "publishedAt": "2026-01-15T12:00:00Z",
+          "snippet": "body",
+          "sourceUrl": "https://example.com/4"
+        }
+      ],
+      "sourceType": "news",
+      "totalScanned": 0,
+      "volume": 5
+    }
+  ],
+  "range": {
+    "end": null,
+    "modelIds": [
+      "test-model"
+    ],
+    "officialRecordDocCount": 0,
+    "sampledDocCount": 5,
+    "start": null,
+    "window": "all"
+  }
+}

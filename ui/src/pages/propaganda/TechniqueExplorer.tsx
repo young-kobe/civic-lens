@@ -1,23 +1,20 @@
 import { useEffect, useState } from 'react';
-import {
-    Card, MethodPopover, Modal, PostCardList, propagandaExampleToPostCard,
-} from '../../components/common';
-import { dedupeById } from '../../services/dedupe';
+import { Card, MethodPopover, Modal } from '../../components/common';
 import { formatPct } from '../../services/format';
 import { useDeepLinkParam } from '../../services/deepLink';
 import { COLORS } from '../../theme';
-import type {
-    PartyPropaganda, PropagandaExample, PropagandaTechniqueCount, PropagandaTechniqueName,
-} from '../../types';
+import type { PartySplit, PropagandaTechniqueName, TechniqueCount } from '../../types';
 
 // --------------------------------------------------------------------------- //
 //  TechniqueExplorer — the Propaganda page's signature interaction.           //
 //                                                                             //
 //  A horizontal bar graphic: one bar per rhetorical technique, sized by how   //
-//  many flagged posts carry it. Hovering a bar surfaces a plain-language      //
-//  explanation of the technique; clicking opens a modal of the flagged posts  //
-//  carrying it, each with THAT technique's evidence span highlighted inline.  //
-//  Deep-linkable via #propaganda?technique=<name> (opens the modal).          //
+//  many flagged posts carry it. Clicking a bar opens a modal of that          //
+//  technique's stored evidence quotes (TechniqueCount.sampleEvidence).        //
+//  Phase 10 note: the strictly-live /propaganda response no longer ties       //
+//  evidence spans to a specific doc/example (PropagandaOverviewModel carries  //
+//  no per-example technique breakdown), so this modal shows verbatim quotes   //
+//  rather than filtered post cards.                                          //
 // --------------------------------------------------------------------------- //
 
 const TECHNIQUE_LABEL: Record<PropagandaTechniqueName, string> = {
@@ -39,69 +36,47 @@ const TECHNIQUE_BLURB: Record<PropagandaTechniqueName, string> = {
 };
 
 interface TechniqueExplorerProps {
-    techniques: PropagandaTechniqueCount[];
-    examples: PropagandaExample[];
-    /** Per-party flagged-rate rollup, rendered as a "By party" section under
-     *  the technique bars. An overall any-technique rate — not a breakdown of
-     *  the technique bars above it. */
-    parties?: PartyPropaganda[];
+    techniques: TechniqueCount[];
+    parties?: PartySplit[];
 }
 
 function isTechniqueName(value: string): value is PropagandaTechniqueName {
     return value in TECHNIQUE_LABEL;
 }
 
-// Party -> lean accent (a legitimate data legend; the bar is labeled with the
-// party, so it keeps the partisan hue while chrome stays monochrome).
-const PARTY_ACCENT: Record<string, string> = {
-    R: COLORS.leanRight,
-    D: COLORS.leanLeft,
-};
-
-// Below this many scored posts, a party's pooled rate can swing on one or
-// two posts — the section shows a visible low-sample caveat for that party
-// instead of implying a stable rate.
+const PARTY_ACCENT: Record<string, string> = { republican: COLORS.leanRight, democrat: COLORS.leanLeft };
 const LOW_SAMPLE_DOCS = 30;
 
-/** "By party" bars — the share of each party's tracked officials' scored
- *  posts flagged for any technique. An overall rate, not a breakdown of the
- *  technique bars above. Bars are on an absolute 0-100% scale so a small gap
- *  between parties reads as small. */
-function ByPartySection({ parties }: { parties: PartyPropaganda[] }) {
-    if (parties.length === 0) return null;
-    const lowSample = parties.filter((p) => p.total_docs < LOW_SAMPLE_DOCS);
+function partyLabel(party: string): string {
+    if (party === 'unknown') return 'Unknown';
+    return party.charAt(0).toUpperCase() + party.slice(1);
+}
+
+function ByPartySection({ parties }: { parties: PartySplit[] }) {
+    const known = parties.filter((p) => p.party !== 'unknown' && p.totalDocs > 0);
+    if (known.length === 0) return null;
+    const lowSample = known.filter((p) => p.totalDocs < LOW_SAMPLE_DOCS);
     return (
         <div className="technique-by-party">
-            <div
-                className="eyebrow technique-by-party-title"
-                title="A density measure, not intent; only the officials we track."
-            >
-                By party · tracked officials
+            <div className="eyebrow technique-by-party-title" title="A density measure, not intent.">
+                By party
             </div>
             <p className="text-xs text-muted" style={{ margin: '0 0 var(--space-2)' }}>
-                Share of each party's officials' scored posts flagged for any technique —
-                an overall rate, not a breakdown of the techniques above.
+                Share of each party's scored posts flagged for any technique — an overall rate, not a
+                breakdown of the techniques above.
             </p>
             <div className="party-bars">
-                {parties.map((p) => {
+                {known.map((p) => {
                     const accent = PARTY_ACCENT[p.party] ?? 'var(--neutral-500)';
-                    const officials = `${p.official_count} official${p.official_count === 1 ? '' : 's'}`;
                     return (
-                        <div
-                            key={p.party}
-                            className="party-bar-row"
-                            title={`Mean propaganda score ${p.mean_score.toFixed(2)} / 1 across ${officials}`}
-                        >
-                            <span className="party-bar-label">{p.party_label}</span>
+                        <div key={p.party} className="party-bar-row" title={`Mean score ${p.meanScore.toFixed(2)} / 1`}>
+                            <span className="party-bar-label">{partyLabel(p.party)}</span>
                             <span className="party-bar-track" aria-hidden>
-                                <span
-                                    className="party-bar-fill"
-                                    style={{ width: `${p.flagged_rate_pct}%`, background: accent }}
-                                />
+                                <span className="party-bar-fill" style={{ width: `${p.flaggedRatePct}%`, background: accent }} />
                             </span>
-                            <span className="party-bar-value">{formatPct(p.flagged_rate_pct)}</span>
+                            <span className="party-bar-value">{formatPct(p.flaggedRatePct)}</span>
                             <span className="party-bar-meta">
-                                {p.flagged_docs.toLocaleString()} of {p.total_docs.toLocaleString()} posts · {officials}
+                                {p.flaggedDocs.toLocaleString()} of {p.totalDocs.toLocaleString()} posts
                             </span>
                         </div>
                     );
@@ -109,67 +84,38 @@ function ByPartySection({ parties }: { parties: PartyPropaganda[] }) {
             </div>
             {lowSample.length > 0 && (
                 <p className="text-xs text-muted" style={{ margin: 'var(--space-2) 0 0' }}>
-                    Low sample: {lowSample.map((p) =>
-                        `${p.party_label} has only ${p.total_docs.toLocaleString()} scored posts`,
-                    ).join('; ')} — one or two posts can move the rate.
+                    Low sample: {lowSample.map((p) => `${partyLabel(p.party)} has only ${p.totalDocs.toLocaleString()} scored posts`).join('; ')}.
                 </p>
             )}
         </div>
     );
 }
 
-export function TechniqueExplorer({ techniques, examples, parties = [] }: TechniqueExplorerProps) {
+export function TechniqueExplorer({ techniques, parties = [] }: TechniqueExplorerProps) {
     const [techParam, setTechParam] = useDeepLinkParam('technique');
-    // The opened technique (modal). Null = no modal. A deep link opens it on
-    // load; otherwise it stays closed until the reader clicks a bar.
     const [selected, setSelected] = useState<PropagandaTechniqueName | null>(() =>
         techParam && isTechniqueName(techParam) ? techParam : null);
 
-    // Follow incoming deep-link changes (e.g. back/forward).
     useEffect(() => {
-        if (techParam && isTechniqueName(techParam)) {
-            setSelected(techParam);
-        } else if (!techParam) {
-            setSelected(null);
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+        if (techParam && isTechniqueName(techParam)) setSelected(techParam);
+        else if (!techParam) setSelected(null);
     }, [techParam]);
 
-    const open = (name: PropagandaTechniqueName) => {
-        setSelected(name);
-        setTechParam(name);
-    };
-    const close = () => {
-        setSelected(null);
-        setTechParam(null);
-    };
+    const open = (name: PropagandaTechniqueName) => { setSelected(name); setTechParam(name); };
+    const close = () => { setSelected(null); setTechParam(null); };
 
     const maxCount = techniques.reduce((m, t) => Math.max(m, t.count), 0);
-    const matching = selected
-        ? dedupeById(
-            examples.filter((ex) => ex.techniques.some((t) => t.technique === selected)),
-            (ex) => ex.doc_id,
-        )
-        : [];
-
-    // Highlight ONLY the opened technique's spans so the reader connects the
-    // highlighted words to the technique they picked.
-    const cards = matching.map((ex) => ({
-        ...propagandaExampleToPostCard(ex),
-        techniques: ex.techniques.filter((t) => t.technique === selected),
-    }));
+    const selectedRow = selected ? techniques.find((t) => t.technique === selected) : undefined;
 
     return (
         <Card
             title="Techniques being used"
-            subtitle="Each bar is a rhetorical technique, sized by how many flagged posts carry it. Hover a bar for what it means; click to read the flagged posts carrying it. Below, the share of each party's tracked officials' posts flagged for any technique."
+            subtitle="Each bar is a rhetorical technique, sized by how many flagged posts carry it. Click a bar to read its stored evidence quotes."
             headerActions={
                 <MethodPopover
                     description={
                         'Each post is scored for six rhetorical techniques. The model must quote '
-                        + 'a verbatim phrase from the source as evidence for every flag. A flag '
-                        + "measures rhetorical style — not truth, intent, or whether the post is "
-                        + "'propaganda' in the everyday sense."
+                        + 'a verbatim phrase from the source as evidence for every flag.'
                     }
                 />
             }
@@ -178,7 +124,6 @@ export function TechniqueExplorer({ techniques, examples, parties = [] }: Techni
                 {techniques.map((t) => {
                     const name = t.technique as PropagandaTechniqueName;
                     const label = TECHNIQUE_LABEL[name] || t.technique;
-                    const blurb = TECHNIQUE_BLURB[name];
                     const widthPct = maxCount > 0 ? (t.count / maxCount) * 100 : 0;
                     return (
                         <button
@@ -187,22 +132,14 @@ export function TechniqueExplorer({ techniques, examples, parties = [] }: Techni
                             role="listitem"
                             className="technique-explorer-row"
                             onClick={() => open(name)}
-                            title={blurb || undefined}
-                            aria-label={`${label}: ${t.count.toLocaleString()} flagged posts, ${formatPct(t.pct_of_flagged_docs, { decimals: 0 })}. ${blurb ?? ''} Open the flagged posts.`}
+                            title={TECHNIQUE_BLURB[name]}
                         >
                             <span className="technique-explorer-row-name">{label}</span>
                             <span className="technique-explorer-row-bar" aria-hidden>
-                                <span
-                                    className="technique-explorer-row-fill"
-                                    style={{ width: `${widthPct}%` }}
-                                />
+                                <span className="technique-explorer-row-fill" style={{ width: `${widthPct}%` }} />
                             </span>
-                            <span className="technique-explorer-row-count">
-                                {t.count.toLocaleString()}
-                            </span>
-                            <span className="technique-explorer-row-pct">
-                                {formatPct(t.pct_of_flagged_docs, { decimals: 0 })}
-                            </span>
+                            <span className="technique-explorer-row-count">{t.count.toLocaleString()}</span>
+                            <span className="technique-explorer-row-pct">{formatPct(t.pctOfFlaggedDocs, { decimals: 0 })}</span>
                         </button>
                     );
                 })}
@@ -217,15 +154,17 @@ export function TechniqueExplorer({ techniques, examples, parties = [] }: Techni
                 title={selected ? (TECHNIQUE_LABEL[selected] || selected) : ''}
                 subtitle={selected ? TECHNIQUE_BLURB[selected] : undefined}
             >
-                <PostCardList
-                    posts={cards}
-                    sampleNote={selected
-                        ? `Flagged posts carrying ${TECHNIQUE_LABEL[selected]} — a sample, not a complete feed.`
-                        : ''}
-                    emptyNote={selected
-                        ? `No stored examples carry ${TECHNIQUE_LABEL[selected]} in this window. Examples are a capped sample; the counts on the bars cover all flagged posts.`
-                        : ''}
-                />
+                {selectedRow && selectedRow.sampleEvidence.length > 0 ? (
+                    <ul className="technique-evidence-list">
+                        {selectedRow.sampleEvidence.map((quote, i) => (
+                            <li key={i}><em>"{quote}"</em></li>
+                        ))}
+                    </ul>
+                ) : (
+                    <p className="text-sm text-muted">
+                        No stored evidence quotes for this technique in this window.
+                    </p>
+                )}
             </Modal>
         </Card>
     );

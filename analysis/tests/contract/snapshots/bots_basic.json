@@ -1,0 +1,68 @@
+{
+  "accountAgeBuckets": [
+    {
+      "accountCount": 0,
+      "ageRange": "< 7 days"
+    },
+    {
+      "accountCount": 0,
+      "ageRange": "7-30 days"
+    },
+    {
+      "accountCount": 0,
+      "ageRange": "30-90 days"
+    },
+    {
+      "accountCount": 0,
+      "ageRange": "90-365 days"
+    },
+    {
+      "accountCount": 0,
+      "ageRange": "1-3 years"
+    },
+    {
+      "accountCount": 0,
+      "ageRange": "3+ years"
+    },
+    {
+      "accountCount": 1,
+      "ageRange": "unknown"
+    }
+  ],
+  "analyzedDocCount": 1,
+  "automationRatePct": 0.0,
+  "behavioralSignals": [
+    {
+      "avgBurstiness": 0.4000000059604645,
+      "avgLlmTextLikelihood": null,
+      "avgTemplateScore": null,
+      "avgTypeTokenRatio": null,
+      "docCount": 1,
+      "label": "bot"
+    }
+  ],
+  "botPushedNarratives": [],
+  "botScoredDocCount": 0,
+  "byEntity": [],
+  "flaggedAccounts": [],
+  "flaggedDocs": [
+    {
+      "admissionClass": "sampled",
+      "confidence": 0.9,
+      "docId": 1,
+      "publishedAt": "2026-01-15T12:00:00Z",
+      "snippet": "body",
+      "sourceUrl": "https://example.com/contract-doc"
+    }
+  ],
+  "range": {
+    "end": null,
+    "modelIds": [
+      "test-model"
+    ],
+    "officialRecordDocCount": 0,
+    "sampledDocCount": 1,
+    "start": null,
+    "window": "all"
+  }
+}

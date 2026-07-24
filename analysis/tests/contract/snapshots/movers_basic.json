@@ -1,0 +1,35 @@
+{
+  "currentRange": {
+    "end": "2026-01-15T00:00:00Z",
+    "modelIds": [
+      "test-model"
+    ],
+    "officialRecordDocCount": 0,
+    "sampledDocCount": 5,
+    "start": "2026-01-08T00:00:00Z",
+    "window": null
+  },
+  "previousRange": {
+    "end": "2026-01-08T00:00:00Z",
+    "modelIds": [
+      "test-model"
+    ],
+    "officialRecordDocCount": 0,
+    "sampledDocCount": 5,
+    "start": "2026-01-01T00:00:00Z",
+    "window": null
+  },
+  "toneMovers": [
+    {
+      "currentNet": 100.0,
+      "currentVolume": 5,
+      "deltaPts": 200.0,
+      "displayName": "Senator Contract",
+      "entityKey": "sen-contract",
+      "kind": "official",
+      "prevNet": -100.0,
+      "prevVolume": 5
+    }
+  ],
+  "topFavorabilityMover": null
+}
