@@ -1,20 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
-import type { EntityToneMover, FavorabilityMover, MoversResult } from '../../types';
+import type { MoversResponse, ToneMover, FavorabilityMover } from '../../types';
 
 interface MoversTickerProps {
-    /**
-     * Movers payload — window-over-window deltas computed by
-     * `MoversAggregator.get_movers`. Null while loading; empty-ish values
-     * (no entity movers + no favorability row) render nothing so the page
-     * doesn't carry dead whitespace.
-     */
-    data: MoversResult | null;
-    /** Optional handler fired when a user clicks an entity-mover item. */
-    onEntityClick?: (mover: EntityToneMover) => void;
+    /** Movers payload (GET /movers) — window-over-window tone/favorability
+     *  deltas. Null while loading; no tone movers + no favorability mover
+     *  renders nothing so the page doesn't carry dead whitespace. */
+    data: MoversResponse | null;
+    /** Optional handler fired when a user clicks a tone-mover item. */
+    onEntityClick?: (mover: ToneMover) => void;
 }
 
 type TickerRow =
-    | { kind: 'entity'; mover: EntityToneMover }
+    | { kind: 'tone'; mover: ToneMover }
     | { kind: 'favorability'; mover: FavorabilityMover };
 
 function formatDelta(delta: number): string {
@@ -39,58 +36,53 @@ function formatNet(net: number): string {
     return `${sign}${net.toFixed(1)}`;
 }
 
-function EntityPill({ mover, onClick }: { mover: EntityToneMover; onClick?: () => void }) {
+function moverTitle(displayName: string, mover: { prevNet: number; currentNet: number; deltaPts: number; currentVolume: number; prevVolume: number }): string {
+    return `${displayName}: net tone moved from ${formatNet(mover.prevNet)} `
+        + `→ ${formatNet(mover.currentNet)} (${formatDelta(mover.deltaPts)}) `
+        + `vs. the previous window, on a -100 to +100 net-tone scale. `
+        + `Sample: ${mover.currentVolume.toLocaleString()} posts now, `
+        + `${mover.prevVolume.toLocaleString()} before.`;
+}
+
+function ToneMoverPill({ mover, onClick }: { mover: ToneMover; onClick?: () => void }) {
     const Wrapper = onClick ? 'button' : 'span';
-    // Hover tooltip spells out what the delta represents, both window
-    // endpoints, and the sample size on each side so a reader can tell
-    // whether a big mover is driven by real shift or low-volume noise.
-    const title =
-        `${mover.displayName}: net tone moved from ${formatNet(mover.prev_net)} ` +
-        `→ ${formatNet(mover.current_net)} (${formatDelta(mover.delta_pts)}) ` +
-        `vs. the previous window, on a -100 to +100 net-tone scale. ` +
-        `Sample: ${mover.current_volume.toLocaleString()} posts now, ` +
-        `${mover.prev_volume.toLocaleString()} before.`;
     return (
         <Wrapper
             type={onClick ? 'button' : undefined}
             className={`movers-item ${onClick ? 'movers-item-clickable' : ''}`}
             onClick={onClick}
-            title={title}
+            title={moverTitle(mover.displayName, mover)}
         >
             <span className="movers-item-label">{mover.displayName}</span>
-            <span className={deltaClass(mover.delta_pts)}>
-                <span aria-hidden>{deltaGlyph(mover.delta_pts)}</span>
-                {formatDelta(mover.delta_pts)}
+            <span className={deltaClass(mover.deltaPts)}>
+                <span aria-hidden>{deltaGlyph(mover.deltaPts)}</span>
+                {formatDelta(mover.deltaPts)}
             </span>
         </Wrapper>
     );
 }
 
-function FavorabilityPill({ mover }: { mover: FavorabilityMover }) {
-    const title =
-        `${mover.label}: ${formatNet(mover.prev_net)} → ${formatNet(mover.current_net)} ` +
-        `(${formatDelta(mover.delta_pts)}) vs. the previous window, on a -100 to +100 ` +
-        `net-tone scale. Sample: ${mover.current_volume.toLocaleString()} posts now, ` +
-        `${mover.prev_volume.toLocaleString()} before.`;
+function FavorabilityMoverPill({ mover }: { mover: FavorabilityMover }) {
     return (
-        <span className="movers-item movers-item-fav" title={title}>
-            <span className="movers-item-label">{mover.label}</span>
-            <span className={deltaClass(mover.delta_pts)}>
-                <span aria-hidden>{deltaGlyph(mover.delta_pts)}</span>
-                {formatDelta(mover.delta_pts)}
+        <span className="movers-item movers-item-fav" title={moverTitle(mover.displayName, mover)}>
+            <span className="movers-item-label">{mover.displayName} (favorability)</span>
+            <span className={deltaClass(mover.deltaPts)}>
+                <span aria-hidden>{deltaGlyph(mover.deltaPts)}</span>
+                {formatDelta(mover.deltaPts)}
             </span>
         </span>
     );
 }
 
 /**
- * MoversTicker — horizontally scrolling marquee of biggest window-over-window
- * shifts in political tone (per-entity) and GOP favorability (one summary row).
+ * MoversTicker — horizontally scrolling marquee of the biggest window-over-
+ * window shifts in political tone (per-entity) and the single largest
+ * favorability shift among entities with favorability coverage in both
+ * periods.
  *
  * Looped with a CSS animation that duplicates the row list so the scroll is
  * seamless. The animation pauses on hover and is disabled entirely when the
- * user has `prefers-reduced-motion: reduce`; in that case the strip becomes a
- * regular horizontally-scrollable element.
+ * user has `prefers-reduced-motion: reduce`.
  */
 export function MoversTicker({ data, onEntityClick }: MoversTickerProps) {
     const trackRef = useRef<HTMLDivElement>(null);
@@ -107,28 +99,28 @@ export function MoversTicker({ data, onEntityClick }: MoversTickerProps) {
     if (!data) return null;
 
     const rows: TickerRow[] = [];
-    if (data.favorability_mover) {
-        rows.push({ kind: 'favorability', mover: data.favorability_mover });
+    if (data.topFavorabilityMover) {
+        rows.push({ kind: 'favorability', mover: data.topFavorabilityMover });
     }
-    for (const m of data.entity_movers) {
-        rows.push({ kind: 'entity', mover: m });
+    for (const m of data.toneMovers) {
+        rows.push({ kind: 'tone', mover: m });
     }
 
     if (rows.length === 0) return null;
 
     const renderRow = (row: TickerRow, key: string) => {
         if (row.kind === 'favorability') {
-            return <FavorabilityPill key={key} mover={row.mover} />;
+            return <FavorabilityMoverPill key={key} mover={row.mover} />;
         }
         const handler = onEntityClick ? () => onEntityClick(row.mover) : undefined;
-        return <EntityPill key={key} mover={row.mover} onClick={handler} />;
+        return <ToneMoverPill key={key} mover={row.mover} onClick={handler} />;
     };
 
     return (
         <div
             className={`movers-ticker ${reducedMotion ? 'movers-ticker-static' : ''}`}
             role="group"
-            aria-label="Biggest movers in political tone and GOP favorability"
+            aria-label="Biggest movers in political tone and favorability"
         >
             <span className="movers-ticker-eyebrow" aria-hidden>Biggest tone shifts</span>
             <div className="movers-ticker-viewport">

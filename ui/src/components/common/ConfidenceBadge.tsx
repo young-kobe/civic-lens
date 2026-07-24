@@ -1,5 +1,7 @@
 import { useState } from 'react';
-import type { ConfidenceLevel, CoverageLevel } from '../../types';
+
+type ConfidenceLevel = 'high' | 'medium' | 'low';
+type CoverageLevel = 'high' | 'medium' | 'low';
 
 interface ConfidenceBadgeProps {
     coverage?: CoverageLevel;

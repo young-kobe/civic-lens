@@ -1,352 +1,82 @@
-// Type definitions for Civic Lens UI
+// Type definitions for the Civic Lens UI — mirrors the Phase 9 strictly-live
+// API contract (analysis/src/api/models/*.py, all CamelModel -> camelCase
+// JSON keys). Every shape here should map 1:1 onto a pydantic response
+// model; when the backend changes the contract, this file changes with it.
+//
+// Two exceptions keep their pre-redesign snake_case shape because the
+// backend routes them through plain dicts, not a CamelModel: the /review/*
+// endpoints (see analysis/src/review/service.py) and /eval-accuracy's
+// perTask/lowSample fields, which the service builds by hand already in
+// camelCase for that one endpoint.
 
-// Filter types
+// --------------------------------------------------------------------------- //
+//  Filters                                                                    //
+// --------------------------------------------------------------------------- //
+
+export type TimeWindow = '24h' | '7d' | '30d' | '90d' | 'all';
+
 export interface Filters {
-    timeRange: '24h' | '7d' | '30d' | '90d' | 'all';
+    timeRange: TimeWindow;
 }
 
-// Confidence levels
-export type ConfidenceLevel = 'high' | 'medium' | 'low';
-export type CoverageLevel = 'high' | 'medium' | 'low';
+// --------------------------------------------------------------------------- //
+//  Shared contract primitives (common.py)                                     //
+// --------------------------------------------------------------------------- //
 
-// Sentiment types
-export interface SocialVsNewsSentiment {
-    social: {
-        positive: number;
-        negative: number;
-        neutral: number;
-        netScore: number;
-        volume: number;
-    };
-    news: {
-        positive: number;
-        negative: number;
-        neutral: number;
-        netScore: number;
-        volume: number;
-    };
-}
-
-export interface PublicSentimentData {
-    overview: SentimentOverview;
-    byTopic: SentimentBreakdown[];
-    byPlatform: SentimentBreakdown[];
-    byTimeWindow: SentimentBreakdown[];
-    // Per-weekday breakdown (Mon..Sun). Populated by the sentiment aggregator
-    // from each doc's published_at weekday; orthogonal to byTimeWindow's age
-    // buckets. Optional for backwards-compat with older cached snapshots.
-    byDayOfWeek?: SentimentBreakdown[];
-    distribution: SentimentDistribution;
-    // Per-intensity drill-down samples. Keys match the five fields on
-    // SentimentDistribution. Each list is confidence-sorted desc and capped
-    // server-side (~15 per bucket). Absent on older snapshots.
-    distributionSamples?: Partial<Record<SentimentSegmentKey, ClassificationSample[]>>;
-    // Per-calendar-day (YYYY-MM-DD) drill-down samples, keyed by the toneTrend
-    // point dates — clicking a point on the Tone-over-time chart opens that
-    // day's posts. Absent on older snapshots.
-    daySamples?: Record<string, ClassificationSample[]>;
-    socialVsNews?: SocialVsNewsSentiment | null;
-    // Three-way entity rollups (walkthrough 057/058). Lists the dashboard
-    // renders as the News Outlets / Verified Officials / General Public
-    // columns. Optional for pre-Phase-3b cached snapshots.
-    byNewsOutlet?: EntitySentimentItem[];
-    byOfficial?: EntitySentimentItem[];
-    byGeneralPublic?: EntitySentimentItem[];
-    // Merged GOP favorability data
-    gopFavorability?: {
-        favorable: number;
-        unfavorable: number;
-        neutral: number;
-        // 'mixed' = both genuine praise and criticism of the GOP. Kept distinct
-        // from 'neutral' (no stance): the four buckets sum to ~100. netFavorability
-        // counts mixed in the denominator with zero net contribution. Optional so
-        // pre-mixed cached snapshots keep parsing.
-        mixed?: number;
-        netFavorability: number;
-        sampleSize: number;
-        sourceCount: number;
-        lastUpdated: string;
-    } | null;
-    gopTrend?: TrendPoint[] | null;
-    /** Per-day per-tier tone series (Phase 2a). Dates ascend; a tier's
-     *  net is null (suppressed) on low-sample days — render a gap, never
-     *  a zero. Absent on pre-2a cached snapshots. */
-    toneTrend?: ToneTrendPoint[] | null;
-    gopByPlatform?: DemographicBreakdown[] | null;
-    pollingVsSocial?: PollingSocialComparison | null;
-    // Target-tone metadata from the target_sentiment fan-out: suppression
-    // threshold, resolution coverage, party-collective rollups, alignment
-    // baselines. Absent until the targets stage has produced rows.
-    targetTone?: TargetToneMeta | null;
-}
-
-/** One per-topic received-tone cell. net is null (suppressed) when the
- *  cell's volume is below the aggregator's minSampleN. */
-export interface TargetTopicCell {
-    topic: string;
-    net: number | null;
-    volume: number;
-    lowSample: boolean;
-}
-
-/** One by-speaker-tier received-tone cell: WHO is talking about the
- *  entity (news / officials / affiliated / public). */
-export interface TargetSpeakerTierCell {
-    tier: string;
-    net: number | null;
-    volume: number;
-    lowSample: boolean;
-}
-
-/** One by-narrative received-tone cell: WHICH recurring claim drives
- *  the mentions of the entity. */
-export interface TargetNarrativeCell {
-    narrativeId: number;
-    name: string;
-    net: number | null;
-    volume: number;
-    lowSample: boolean;
-}
-
-/** How sampled posts talk ABOUT an entity (the reputational signal),
- *  as opposed to netScore, which scores the entity's own posts. */
-export interface ReceivedTone {
-    net: number | null;
-    volume: number;
-    lowSample: boolean;
-    /** Reach-proxy variant: each sampled post weighted by
-     *  1 + ln(1 + engagement counts). Null when suppressed (shares the
-     *  same sample floor as `net`) or on older snapshots. */
-    engagementWeightedNet?: number | null;
-    byTopic: TargetTopicCell[];
-    bySpeakerTier?: TargetSpeakerTierCell[];
-    byNarrative?: TargetNarrativeCell[];
-    samples?: ClassificationSample[];
-}
-
-/** How an official's own posts score toward same-party vs cross-party
- *  tracked targets. Nets are suppressed (null) below minSampleN. */
-export interface ExpressedAlignment {
-    samePartyNet: number | null;
-    samePartyVolume: number;
-    crossPartyNet: number | null;
-    crossPartyVolume: number;
-}
-
-export interface TargetToneMeta {
-    minSampleN: number;
-    resolvedMentions: number;
-    unresolvedMentions: number;
-    /** Mentions withheld because the author's account-level bot rollup
-     *  (author_bot_scores) is high. Absent on older snapshots. */
-    botExcludedMentions?: number;
-    /** Human-readable definition of the engagement weighting formula. */
-    engagementWeight?: string;
-    collectives: Record<string, ReceivedTone>;
-    baselines: {
-        samePartyNet: number | null;
-        samePartyVolume: number;
-        crossPartyNet: number | null;
-        crossPartyVolume: number;
-    };
+/**
+ * The three-epistemic-kinds lean invariant (owner decision 2026-07-22):
+ * a lean is a stated FACT (official party registration), a CURATED
+ * editorial judgment (outlet/subreddit lean from the registry), or a
+ * statistically DERIVED estimate — a derived lean never renders without
+ * its evidence (leanShare, confidence, sampleCount). Always render this
+ * shape through the shared <LeanLabel> component, never as a bare string.
+ */
+export interface LeanLabel {
+    kind: 'fact' | 'curated' | 'derived';
+    value: string;
+    leanShare?: number | null;
+    confidence?: number | null;
+    sampleCount?: number | null;
 }
 
 /**
- * Editorial profile payload attached to every entity card. Shape is
- * keyed by `kind`: registry entities carry outlet/official/subreddit
- * metadata; unmatched docs get a `catch_all` placeholder with a minimal
- * blurb and no partisan-lean fields.
+ * Honesty metadata every aggregate response carries: the resolved time
+ * bounds (null = unbounded), the two admission bases counted separately,
+ * and the distinct model_ids of the runs behind the aggregate.
  */
-export interface EntityProfile {
-    kind: 'outlet' | 'official' | 'subreddit' | 'account' | 'catch_all';
-    key: string;
-    displayName: string;
-    blurb: string;
-    // Shared lean/leanSource axis across outlets + subreddits (null on
-    // officials + catch_all). Outlets use the 6-bucket partisan_lean;
-    // subreddits the 4-bucket tilt.
-    lean?: string | null;
-    leanSource?: string | null;
-    // Outlet-only.
-    owner?: string | null;
-    founded?: number | null;
-    circulationNote?: string | null;
-    // Official-only.
-    office?: string;
-    party?: string;
-    termStart?: string;
-    bioSource?: string;
-    // Subreddit-only.
-    subscriberCountProxy?: string | null;
-    // Account-only (curated political-accounts list, kind='account').
-    accountType?: string | null;
+export interface RangeMeta {
+    window: string | null;
+    start: string | null;
+    end: string | null;
+    sampledDocCount: number;
+    officialRecordDocCount: number;
+    modelIds: string[];
 }
 
-/** Per-entity sentiment card on the three-way dashboard frame. */
-export interface EntitySentimentItem {
-    key: string;
-    kind: 'outlet' | 'official' | 'subreddit' | 'account' | 'catch_all';
-    positive: number;
-    negative: number;
-    neutral: number;
-    volume: number;
-    netScore: number;
-    entityProfile: EntityProfile;
-    classificationSamples?: ClassificationSample[];
-    // Officials only, and only once target_sentiment coverage exists.
-    // netScore above is the EXPRESSED tone (this entity's own posts);
-    // received is the tone of posts ABOUT the entity.
-    received?: ReceivedTone | null;
-    expressedAlignment?: ExpressedAlignment | null;
-    /** Topic-scoped expressed cells for this entity's OWN posts, volume-
-     *  sorted; net is null (lowSample) below the backend suppression floor.
-     *  Missing on pre-topic cached snapshots. */
-    byTopic?: EntityTopicCell[];
-    /** Public tier only — WHO this bucket's posts talk about (the inverse
-     *  of received). Missing on pre-outbound cached snapshots. */
-    outbound?: OutboundTargets | null;
-    /** Summed engagement (likes + reposts + replies + quotes) across this
-     *  entity's posts in the window. Absent (treat as 0) for news outlets and
-     *  on pre-engagement cached snapshots — powers the officials column's
-     *  engagement-weighted default sort. */
-    engagementTotal?: number;
-    /** Per-day net-tone series for this entity's own posts, dates ascending;
-     *  net is null (lowSample) below the suppression floor. Powers the
-     *  Tone-over-time chart's tier→entity drill-down. Absent on pre-dailyTone
-     *  snapshots. */
-    dailyTone?: EntityDailyTonePoint[];
+export type AdmissionClass = 'sampled' | 'official_record';
+
+/** One evidence sample backing a drill-down. `sourceUrl` is always
+ *  present and non-empty (invariant C1). */
+export interface SampleDoc {
+    docId: number;
+    sourceUrl: string;
+    snippet?: string | null;
+    confidence: number;
+    admissionClass: AdmissionClass;
+    publishedAt?: string | null;
 }
 
-/** One day in an entity's daily net-tone series. */
-export interface EntityDailyTonePoint {
-    date: string;
-    net: number | null;
-    volume: number;
-    lowSample: boolean;
-}
-
-/** Outbound-target rollup on a public-tier entity card. */
-export interface OutboundTargets {
-    minSampleN: number;
-    volume: number;
-    targets: OutboundTargetCell[];
-}
-
-/** One "who they're talking about" row. kind 'raw' = unresolved free-text
- *  target that recurred; 'other' = pooled one-offs and overflow. */
-export interface OutboundTargetCell {
-    label: string;
-    entityKey: string | null;
-    kind: 'official' | 'collective' | 'raw' | 'other';
-    net: number | null;
-    volume: number;
-    lowSample: boolean;
-}
-
-/** One topic-scoped expressed-tone cell on an entity card. */
-export interface EntityTopicCell {
-    topic: string;
-    net: number | null;
-    volume: number;
-    lowSample: boolean;
-}
-
-/** Keys of SentimentDistribution. Used as lookup keys for distributionSamples. */
-export type SentimentSegmentKey =
-    | 'strongPositive'
-    | 'mildPositive'
-    | 'neutral'
-    | 'mildNegative'
-    | 'strongNegative';
+// --------------------------------------------------------------------------- //
+//  Sentiment panel (GET /sentiment)                                           //
+// --------------------------------------------------------------------------- //
 
 export interface SentimentOverview {
-    netScore: number;
+    netScore: number | null;
     volume: number;
-    coverage: CoverageLevel;
-    confidence: ConfidenceLevel;
-}
-
-/** Engagement counts at collection time — a reach proxy, not verified
- *  reach. X posts carry retweets/replies/likes/quotes; reddit carries
- *  score (+ num_comments for posts). Null/absent = source stores none. */
-export interface SampleEngagement {
-    retweets?: number;
-    replies?: number;
-    likes?: number;
-    quotes?: number;
-    score?: number;
-    num_comments?: number;
-}
-
-/** X author metadata from the ingest store. Null/absent for non-X docs —
- *  Reddit stores no author at ingest, and we never fabricate one. */
-export interface SampleAuthor {
-    handle: string | null;
-    display_name: string | null;
-    avatar_url: string | null;
-    verified_type: string | null;
-    followers_count: number | null;
-    account_created_at: number | null;
-    /** The account's own X bio, verbatim. Absent on pre-bio snapshots. */
-    bio?: string | null;
-}
-
-export interface ClassificationSample {
-    doc_id: number;
-    label: string;
-    confidence: number;
-    reasoning: string;
-    evidence_spans: string[];
-    sarcasm_detected: boolean;
-    title: string;
-    source_type: string;
-    source_name?: string;
-    date?: string;
-    full_text?: string;
-    url?: string;
-    /** Doc topic attribution stamped by the backend (LLM mention topic
-     *  with title-keyword fallback). Missing on pre-topic cached
-     *  snapshots; the modal filter treats those as non-matching. */
-    topic?: string | null;
-    // Phase 2b/2c enrichment. Absent on pre-enrichment cached snapshots.
-    engagement?: SampleEngagement | null;
-    author?: SampleAuthor | null;
-    /** Who this post's sentiment is directed at (frozen target_mentions):
-     *  resolved targets first, capped small. Absent on older snapshots. */
-    targets?: SampleTarget[] | null;
-    /** Recurring narrative (story) this post belongs to, when clustered — used
-     *  by the Source-signals drill-down to tie tone to the driving stories.
-     *  Null when unclustered; absent on older snapshots. */
-    narrative?: string | null;
-}
-
-/** One "about X — negative" chip on a sampled post. */
-export interface SampleTarget {
-    label: string;
-    stance: 'positive' | 'negative' | 'neutral' | 'mixed';
-}
-
-export interface SentimentBreakdown {
-    topic?: string;
-    platform?: string;
-    window?: string;
-    /** Weekday short label (Mon..Sun) when used for byDayOfWeek rows. */
-    day?: string;
-    positive: number;
-    negative: number;
-    neutral: number;
-    volume: number;
-    sarcasm_rate?: number;
-    classificationSamples?: ClassificationSample[];
-    // Per-topic three-way split (walkthrough 057). Only present on byTopic
-    // rows — null when a tier had zero volume on that topic so the UI can
-    // distinguish "no data" from a real zero.
-    newsNet?: number | null;
-    officialsNet?: number | null;
-    publicNet?: number | null;
-    newsVolume?: number;
-    officialsVolume?: number;
-    publicVolume?: number;
+    totalAnalyzed: number;
+    trivialContentDocs: number;
+    excludedBotDocs: number;
+    meanConfidence: number | null;
 }
 
 export interface SentimentDistribution {
@@ -357,464 +87,435 @@ export interface SentimentDistribution {
     strongNegative: number;
 }
 
-// Favorability types
-export interface FavorabilityOverall {
-    favorable: number;
-    unfavorable: number;
+export interface BucketSentiment {
+    positive: number;
+    negative: number;
     neutral: number;
-    netFavorability: number;
-    sampleSize: number;
-    sourceCount: number;
-    lastUpdated: string;
-    dateRange: string;
-}
-
-export interface TrendPoint extends ChartDataPoint {
-    date: string;
-    value: number;
-}
-
-/** One tier cell of the toneTrend daily series. */
-export interface ToneTrendCell {
-    net: number | null;
     volume: number;
+    netScore: number | null;
 }
 
-export interface ToneTrendPoint {
-    date: string;
-    news: ToneTrendCell;
-    officials: ToneTrendCell;
-    public: ToneTrendCell;
-}
+export interface PlatformSentiment extends BucketSentiment { platform: string; }
+export interface TopicSentiment extends BucketSentiment { topic: string; }
+export interface TimeOfDaySentiment extends BucketSentiment { bucket: 'Morning' | 'Afternoon' | 'Evening' | 'Night'; }
+export interface DayOfWeekSentiment extends BucketSentiment { day: string; }
+export interface TierSplit extends BucketSentiment { tier: 'news' | 'officials' | 'general_public'; }
 
-/** One row of GET /outlet-profiles — per-domain net tone x bot rate.
- *  Includes bot-flagged content on purpose (the bot rate is the signal);
- *  net tone therefore differs from the bot-excluded Overall Tone rollups. */
-export interface OutletProfileItem {
-    outlet: string;
-    source_type: string;
-    net_tone: number | null;
-    bot_rate_pct: number;
-    volume: number;
-    total_scanned: number;
-    /** Narrative-tagged sample posts driving this source's net tone, for the
-     *  drill-down modal. Absent on older snapshots. */
-    samples?: ClassificationSample[];
-}
-
-export interface OutletProfilesResult {
-    window: string;
-    disclaimer: string;
-    outlets: OutletProfileItem[];
-}
-
-export interface TrendAnnotation {
-    x: string;
-    label: string;
-}
-
-export interface DemographicBreakdown {
-    group?: string;
-    region?: string;
-    party?: string;
-    favorable: number;
-    unfavorable: number;
+export interface StanceCounts {
+    positive: number;
+    negative: number;
     neutral: number;
-    // 'mixed' (both praise and criticism) — distinct from neutral. Optional so
-    // pre-mixed cached snapshots keep parsing.
-    mixed?: number;
+    mixed: number;
+    volume: number;
+    netScore: number | null;
+    lowSample: boolean;
 }
 
-export interface PollingSocialComparison {
-    onlineSentiment: { favorable: number; unfavorable: number; neutral: number; mixed?: number };
-    pollingData: { favorable: number; unfavorable: number; neutral: number; source?: string; date?: string } | null;
-}
-
-// Bot Activity types
-export interface BotData {
-    overview: BotOverview;
-    narrativeAmplification: NarrativeAmplification[];
-    coordinationStats: CoordinationStats;
-    behavioralSignals: BehavioralSignals;
-}
-
-export interface BotOverview {
-    suspectedAutomationRate: number;
-    coordinationIndex: number;
-    topClusters: string[];
-    totalFlaggedPosts: number;
-    confidence: ConfidenceLevel;
-    // Three-way entity rollups — registry-matched outlets / officials /
-    // subreddits (+ a catch-all per tier) with their per-entity bot rate.
-    // Empty lists on older snapshots.
-    by_news_outlet?: BotEntityItem[];
-    by_official?: BotEntityItem[];
-    by_general_public?: BotEntityItem[];
-}
-
-// =============================================================================
-// Movers (window-over-window deltas)
-// =============================================================================
-
-/** One row of the political-tone movers ticker — an outlet, official, or
- *  subreddit whose net tone shifted meaningfully between the previous
- *  equivalent window and the current one. */
-export interface EntityToneMover {
-    key: string;
-    kind: 'outlet' | 'official' | 'subreddit';
+/** Per-entity stance aggregate. `entityId` is null only for the
+ *  unresolved-mentions catch-all (`catchAllKey` set instead). `kind` is
+ *  corpus.entities.kind ('official' | 'collective' | 'outlet' |
+ *  'subreddit'), null for the catch-all. */
+export interface EntityStanceAggregate {
+    entityId: number | null;
+    catchAllKey: string | null;
     displayName: string;
-    current_net: number;
-    prev_net: number;
-    delta_pts: number;     // signed: positive = climbing, negative = falling
-    current_volume: number;
-    prev_volume: number;
-    entity_profile: EntityProfile;
+    kind: string | null;
+    lean: LeanLabel | null;
+    favorability: StanceCounts;
+    targetStance: StanceCounts;
+    samples: SampleDoc[];
 }
 
-/** Window-over-window shift in overall GOP favorability — one summary row
- *  that lives alongside the entity movers in the same ticker. */
-export interface FavorabilityMover {
-    label: string;          // "GOP party stance"
-    current_net: number;
-    prev_net: number;
-    delta_pts: number;
-    current_volume: number;
-    prev_volume: number;
+export interface SentimentPanelResponse {
+    range: RangeMeta;
+    overview: SentimentOverview;
+    distribution: SentimentDistribution;
+    byPlatform: PlatformSentiment[];
+    byTopic: TopicSentiment[];
+    byTimeOfDay: TimeOfDaySentiment[];
+    byDayOfWeek: DayOfWeekSentiment[];
+    byTier: TierSplit[];
+    entityStances: EntityStanceAggregate[];
+    samples: SampleDoc[];
+    disclaimer: string;
 }
 
-export interface MoversResult {
-    window: string;
-    entity_movers: EntityToneMover[];
-    favorability_mover: FavorabilityMover | null;
-}
+// --------------------------------------------------------------------------- //
+//  Bot activity panel (GET /bot-activity)                                     //
+// --------------------------------------------------------------------------- //
 
-
-/** Per-entity bot-amplification rollup for the Bot Detector's three-way
- *  grid. Sort by `bot_rate_pct` desc. */
-export interface BotEntityItem {
-    key: string;
-    kind: 'outlet' | 'official' | 'subreddit' | 'account' | 'catch_all';
-    total_docs: number;
-    bot_docs: number;
-    bot_rate_pct: number;
-    entity_profile: EntityProfile;
-    /** Up to a handful of this entity's bot-flagged posts, confidence-
-     *  ranked — evidence for the card's drill-down modal. Missing on
-     *  pre-2026-07-10 cached snapshots. */
-    samples?: FlaggedExample[];
-}
-
-/** One bot-flagged post displayed as evidence inside the Bot Detector's
- *  amplification modal. Every row carries a URL back to the original when
- *  the backend was able to synthesize one — invariant C1. */
-export interface FlaggedExample {
-    doc_id: number;
-    text: string;
-    source_label: string;   // "News · foo.com", "X · @handle", "Reddit · r/politics"
-    url: string | null;
-    // Per-example bot evidence (Phase 2d): flag confidence (0..1), the
-    // humanized behavioral indicators that triggered it, and the model's
-    // reasoning. Absent on pre-2d cached snapshots.
-    confidence?: number | null;
-    indicators?: string[];
-    reasoning?: string | null;
-}
-
-export interface NarrativeAmplification {
-    id: number;
-    narrative: string;
-    confidence: ConfidenceLevel;
-    examplePosts: FlaggedExample[];
-    topHashtags: string[];
-    topPhrases: string[];
-    targets: string[];
-    suspectedBotVolume: number;
-    whyFlagged: string[];
-}
-
-export interface CoordinationStats {
-    accountReuse: number;
-    identicalTextPairs: number;
-    avgPostsPerSuspectedAccount: number;
-}
-
-export interface BehavioralSignals {
-    accountAgeDistribution: AccountAgeItem[];
-    postingCadence: HeatmapDataPoint[];
-    copyPasteSimilarity: {
-        high: number;
-        medium: number;
-        low: number;
-    };
-    linkDomainConcentration: DomainItem[];
-}
-
-export interface AccountAgeItem {
-    range: string;
-    count: number;
-    percentage: number;
-}
-
-export interface HeatmapDataPoint {
-    day: number;
-    hour: number;
-    value: number;
-}
-
-export interface DomainItem {
-    domain: string;
-    percentage: number;
-}
-
-// Chart data types
-export interface ChartDataPoint {
-    [key: string]: string | number;
-}
-
-// Narrative types
-export interface NarrativeSourceBreakdownItem {
-    source_type: string;
+export interface BehavioralSignalBucket {
     label: string;
-    count: number;
+    docCount: number;
+    avgLlmTextLikelihood: number | null;
+    avgBurstiness: number | null;
+    avgTypeTokenRatio: number | null;
+    avgTemplateScore: number | null;
 }
 
-export interface NarrativeTimelinePoint {
-    date: string;
-    count: number;
+export interface AccountAgeBucket {
+    ageRange: string;
+    accountCount: number;
 }
 
-/** One row of the "Supporting documents" drill-down table used on the
- *  Political Narratives and Overall Tone pages. Mirror of
- *  `NarrativeAggregator._top_supporting_docs` / `_build_source_label`
- *  output — headline / source / publish date / sentiment + confidence /
- *  LLM reasoning / link. Different shape than ClassificationSample: the
- *  narrative side synthesizes a pre-formatted `source_label`, emits unix
- *  `published_at`, and uses lowercase sentiment enum. */
-export interface SupportingDoc {
-    doc_id: number;
-    title: string | null;
-    // One-line body preview. For social posts (no headline) it shows in place
-    // of the title; for news it's the dek rendered under the headline. Falls
-    // back to "(untitled)" when both are empty.
-    snippet?: string | null;
-    source_type: string;
-    source_label: string;   // "News · nytimes.com", "X · @Schumer", "Reddit · r/politics"
-    url: string | null;
-    published_at: number | null;  // unix seconds
-    sentiment_label: 'positive' | 'negative' | 'neutral' | 'mixed' | null;
-    confidence: number | null;
-    reasoning: string | null;
-    // Phase 2b/2c enrichment. Absent on pre-enrichment cached snapshots.
-    engagement?: SampleEngagement | null;
-    author?: SampleAuthor | null;
+export interface EntityBotRate {
+    entityKey: string;
+    kind: string;
+    displayName: string;
+    totalDocs: number;
+    botDocs: number;
+    botRatePct: number;
 }
 
-
-// Account tier for X-origin narratives. See walkthrough 036.
-export type AccountTier = 'elected_official' | 'affiliated' | 'general_public';
-
-// Faction context for X-origin narratives. Populated from account_profiles
-// via curated known_political_x_accounts.yaml. Null for news/reddit source
-// types and for unclassified X accounts.
-export interface AccountProfile {
-    handle: string | null;
-    full_name: string | null;
-    party: string | null;                 // 'D' | 'R' | 'I' | 'L' | 'G' | null
-    branch: string | null;                // 'executive' | 'legislative' | 'judicial' | 'party_org' | 'pac' | 'think_tank' | ...
-    chamber: string | null;               // 'senate' | 'house' | null
-    state_or_district: string | null;     // 'NY', 'CA33', null
-    office_title: string | null;          // 'President', 'Senator', 'Representative', etc.
-    account_type: string | null;          // 'official' | 'personal' | 'institutional' | ...
-}
-
-/** One cross-narrative citation edge rollup: this narrative's docs cite
- *  into (or are cited by) another narrative's docs. Edges between sampled
- *  documents only — never an origin/propagation claim. */
-export interface CrossNarrativeCitation {
-    narrative_id: number;
+export interface BotPushedNarrative {
+    narrativeId: number;
     name: string;
-    direction: 'cites' | 'cited_by';
-    edge_count: number;
+    memberDocCount: number;
+    botAuthoredDocCount: number;
+    botFractionPct: number;
+    samples: SampleDoc[];
+}
+
+export interface FlaggedAccount {
+    authorId: number;
+    platform: string;
+    handle: string | null;
+    displayName: string | null;
+    botScore: number;
+    sampleCount: number;
+    followersCount: number | null;
+    lean: LeanLabel | null;
+    samples: SampleDoc[];
+}
+
+export interface BotActivityResponse {
+    range: RangeMeta;
+    analyzedDocCount: number;
+    botScoredDocCount: number;
+    automationRatePct: number;
+    behavioralSignals: BehavioralSignalBucket[];
+    accountAgeBuckets: AccountAgeBucket[];
+    byEntity: EntityBotRate[];
+    botPushedNarratives: BotPushedNarrative[];
+    flaggedAccounts: FlaggedAccount[];
+    flaggedDocs: SampleDoc[];
+}
+
+// --------------------------------------------------------------------------- //
+//  Narratives panel (GET /narratives)                                         //
+// --------------------------------------------------------------------------- //
+
+export interface SourceBreakdownItem {
+    source: 'news' | 'reddit' | 'x';
+    docCount: number;
+}
+
+export interface TimelinePoint {
+    day: string;
+    docCount: number;
 }
 
 export interface NarrativeSummary {
-    narrative_id: number;
-    name: string;
-    first_seen_at: number;
-    // Earliest doc WE ingested carrying this claim — not world-origin.
-    first_seen_doc_id: number | null;
-    first_seen_source_type: string | null;
-    first_seen_domain: string | null;
-    // Only set for x_post source types; null for news/reddit.
-    first_seen_tier: AccountTier | null;
-    // Faction context for x_post first-seen docs; null otherwise.
-    first_seen_author: AccountProfile | null;
-    supporting_doc_count: number;
-    source_breakdown: NarrativeSourceBreakdownItem[];
-    timeline: NarrativeTimelinePoint[];
-    net_sentiment: number;
-    inbound_citation_count: number;
-    // Citation-edge semantics (2026-07-10). Optional on older snapshots.
-    inbound_by_link_type?: Record<string, number>;
-    external_citation_count?: number;
-    cross_narrative_citations?: CrossNarrativeCitation[];
-    // Walkthrough 043 overlays — null when no data.
-    propaganda_score: number | null;       // 0..1 mean across supporting docs
-    bot_pushed_fraction: number | null;    // 0..1 over unique X supporting authors
-    // Walkthrough 058 — three-way entity framing. Optional for
-    // backwards-compat with pre-Phase-3b cached snapshots.
-    first_seen_entity_profile?: EntityProfile | null;
-    first_seen_tier_group?: 'news' | 'officials' | 'public' | null;
-    cross_tier?: boolean;
-    top_supporting_docs?: SupportingDoc[];
+    narrativeId: number;
+    anchorClaimText: string | null;
+    docCount: number;
+    sourceBreakdown: SourceBreakdownItem[];
+    timeline: TimelinePoint[];
+    netSentiment: number | null;
+    citationCount: number;
+    citedDocs: SampleDoc[];
+    propagandaFlaggedFraction: number | null;
+    botPushedFraction: number | null;
+    lean: LeanLabel | null;
+    memberDocSamples: SampleDoc[];
 }
 
-// =============================================================================
-// Propaganda Detection (walkthrough 043)
-// =============================================================================
+export interface NarrativesResponse {
+    range: RangeMeta;
+    narratives: NarrativeSummary[];
+}
+
+// --------------------------------------------------------------------------- //
+//  Propaganda panel (GET /propaganda)                                        //
+// --------------------------------------------------------------------------- //
 
 export type PropagandaTechniqueName =
-    | 'loaded_language'
-    | 'name_calling'
-    | 'ad_hominem'
-    | 'appeal_to_fear'
-    | 'whataboutism'
-    | 'doubt_casting';
+    | 'loaded_language' | 'name_calling' | 'ad_hominem'
+    | 'appeal_to_fear' | 'whataboutism' | 'doubt_casting';
 
-export interface PropagandaTechniqueSpan {
-    technique: PropagandaTechniqueName;
-    confidence: number;
-    evidence_span: string;
-}
-
-export interface PropagandaTechniqueCount {
-    technique: PropagandaTechniqueName;
+export interface TechniqueCount {
+    technique: string;
     count: number;
-    pct_of_flagged_docs: number;
+    pctOfFlaggedDocs: number;
+    sampleEvidence: string[];
 }
 
-export interface PropagandaSourceSplit {
-    label: 'News' | 'Social Media';
-    total_docs: number;
-    flagged_docs: number;
-    flagged_rate_pct: number;
-    mean_score: number;
+export interface SourceSplit {
+    source: 'news' | 'social';
+    totalDocs: number;
+    flaggedDocs: number;
+    flaggedRatePct: number;
+    meanScore: number;
 }
 
-export interface PropagandaExample {
-    doc_id: number;
-    source_type: string;
-    domain: string | null;
-    title: string | null;
-    overall_score: number;
-    techniques: PropagandaTechniqueSpan[];
-    text_preview: string;
-    // X handle for x_post examples; null for news/reddit. Used to filter the
-    // Examples list down to one entity inside PropagandaEntityModal.
-    author_handle?: string | null;
-    // External source URL — news story, X permalink, or Reddit post link.
-    url?: string | null;
-    // Party of the author when a tracked official ('R' | 'D' | ...); null for
-    // news, unaffiliated public posts, and untracked handles.
-    party?: string | null;
-}
-
-/**
- * Per-party propaganda rollup — the tracked officials' flagged rate and mean
- * score grouped by party, so the page can show which partisan side leaned
- * harder on persuasion techniques. Party-less officials are excluded.
- */
-export interface PartyPropaganda {
-    party: string;              // 'R' | 'D' | 'I' | 'L' | 'G'
-    party_label: string;        // 'Republican' | 'Democratic' | ...
-    total_docs: number;
-    flagged_docs: number;
-    flagged_rate_pct: number;
-    mean_score: number;
-    official_count: number;
-}
-
-/**
- * Per-entity propaganda rollup for the three-way dashboard frame
- * (walkthrough 058). Sort the "Top flagged entities" card by
- * ``mean_score`` desc; catch-all buckets sort to the end.
- */
-export interface PropagandaEntityItem {
-    key: string;
-    kind: 'outlet' | 'official' | 'subreddit' | 'account' | 'catch_all';
-    total_docs: number;
-    flagged_docs: number;
-    flagged_rate_pct: number;
-    mean_score: number;
-    entity_profile: EntityProfile;
+export interface PartySplit {
+    party: string;
+    totalDocs: number;
+    flaggedDocs: number;
+    flaggedRatePct: number;
+    meanScore: number;
 }
 
 export interface PropagandaOverview {
-    window: string;
-    total_eligible_docs: number;
-    flagged_docs: number;
-    propaganda_rate_pct: number;
-    mean_score: number;
-    by_technique: PropagandaTechniqueCount[];
-    by_source: PropagandaSourceSplit[];
-    examples: PropagandaExample[];
-    disclaimer: string;
-    // Walkthrough 058 — three-way entity rollups. Empty on older snapshots.
-    by_news_outlet?: PropagandaEntityItem[];
-    by_official?: PropagandaEntityItem[];
-    by_general_public?: PropagandaEntityItem[];
-    // Phase 4 — per-party rollup over tracked officials. Sorted by flagged rate
-    // desc; empty on older snapshots or when no party-tagged officials appear.
-    by_party?: PartyPropaganda[];
-    // Per-entity flagged-example bucket. Keyed by the same key used in
-    // PropagandaEntityItem.key (outlet domain, official handle, subreddit
-    // name, or catch-all sentinel). The drill-down modal reads from this
-    // — the global ``examples`` array is too small to filter by entity.
-    examples_by_entity?: Record<string, PropagandaExample[]>;
+    range: RangeMeta;
+    totalEligibleDocs: number;
+    flaggedDocs: number;
+    flaggedRatePct: number;
+    meanScore: number;
+    byTechnique: TechniqueCount[];
+    bySource: SourceSplit[];
+    byParty: PartySplit[];
+    examples: SampleDoc[];
 }
 
-// Review types
-export type ReviewTaskType = 'sentiment' | 'favorability' | 'bot_detection' | 'claims' | 'propaganda';
+// --------------------------------------------------------------------------- //
+//  Outlet profiles (GET /outlet-profiles)                                     //
+// --------------------------------------------------------------------------- //
+
+export interface OutletProfile {
+    outletKey: string;
+    sourceType: string;
+    netTone: number | null;
+    botRatePct: number;
+    volume: number;
+    totalScanned: number;
+    samples: SampleDoc[];
+}
+
+export interface OutletProfilesResponse {
+    range: RangeMeta;
+    disclaimer: string;
+    outlets: OutletProfile[];
+}
+
+// --------------------------------------------------------------------------- //
+//  Movers (GET /movers)                                                       //
+// --------------------------------------------------------------------------- //
+
+export interface ToneMover {
+    entityKey: string;
+    kind: string;
+    displayName: string;
+    currentNet: number;
+    prevNet: number;
+    deltaPts: number;
+    currentVolume: number;
+    prevVolume: number;
+}
+
+export interface FavorabilityMover {
+    entityKey: string;
+    kind: string;
+    displayName: string;
+    currentNet: number;
+    prevNet: number;
+    deltaPts: number;
+    currentVolume: number;
+    prevVolume: number;
+}
+
+export interface MoversResponse {
+    currentRange: RangeMeta;
+    previousRange: RangeMeta;
+    toneMovers: ToneMover[];
+    topFavorabilityMover: FavorabilityMover | null;
+}
+
+// --------------------------------------------------------------------------- //
+//  Entities (GET /entity-posts, GET /entity-profile/{id})                     //
+// --------------------------------------------------------------------------- //
+
+export interface EntityPostRow extends SampleDoc {
+    relation: 'mentions' | 'authored_by' | 'both';
+}
+
+export interface EntityPostsResponse {
+    entityId: number;
+    window: string | null;
+    page: number;
+    pageSize: number;
+    total: number;
+    items: EntityPostRow[];
+}
+
+export interface StanceDistribution {
+    positive: number;
+    negative: number;
+    neutral: number;
+    mixed: number;
+    volume: number;
+    netScore: number | null;
+}
+
+export interface AdmissionSplit {
+    sampled: number;
+    officialRecord: number;
+}
+
+export interface MonthlyActivity {
+    month: string;
+    docCount: number;
+    sampledCount: number;
+    officialRecordCount: number;
+}
+
+export interface EntityProfileResponse {
+    entityId: number;
+    displayName: string;
+    kind: string;
+    lean: LeanLabel | null;
+    range: RangeMeta;
+    analyzedDocCounts: AdmissionSplit;
+    stanceReceived: StanceDistribution;
+    stanceExpressed: StanceDistribution;
+    propagandaRate: number | null;
+    propagandaAnalyzedDocs: number;
+    firstActivity: string | null;
+    lastActivity: string | null;
+    monthlyActivity: MonthlyActivity[];
+}
+
+// --------------------------------------------------------------------------- //
+//  Universal doc drill-down (GET /docs/{doc_id})                              //
+// --------------------------------------------------------------------------- //
+
+export interface NewsExtras {
+    domain: string | null;
+    extractionVersion: string | null;
+    outletEntityId: number | null;
+}
+
+export interface RedditExtras {
+    subreddit: string | null;
+    score: number | null;
+    numComments: number | null;
+    subredditEntityId: number | null;
+}
+
+export interface XPostExtras {
+    tweetId: string;
+    conversationId: string | null;
+    lang: string | null;
+    placeCountryCode: string | null;
+    retweetCount: number | null;
+    replyCount: number | null;
+    likeCount: number | null;
+    quoteCount: number | null;
+    isOfficialTier: boolean | null;
+    referencedTweetId: string | null;
+    referencedTweetType: string | null;
+}
+
+/** One current run against this doc. `fields` carries task-specific
+ *  result columns — deliberately untyped since the shape varies by task. */
+export interface AnalysisResult {
+    task: string;
+    runId: number;
+    confidence: number | null;
+    modelId: string;
+    promptVersion: string | null;
+    fields: Record<string, unknown>;
+}
+
+export interface CitationEdge {
+    linkType: string;
+    docId: number | null;
+    sourceUrl: string | null;
+    publishedAt: string | null;
+    admissionClass: AdmissionClass | null;
+    targetUrl: string | null;
+}
+
+export interface DocumentDetail {
+    docId: number;
+    sourceType: 'news' | 'reddit_post' | 'x_post';
+    domainOrSubreddit: string | null;
+    authorId: number | null;
+    publishedAt: string;
+    title: string | null;
+    body: string;
+    sourceUrl: string;
+    admissionClass: AdmissionClass;
+    newsExtras: NewsExtras | null;
+    redditExtras: RedditExtras | null;
+    xPostExtras: XPostExtras | null;
+    analysisResults: AnalysisResult[];
+    citationsOut: CitationEdge[];
+    citationsIn: CitationEdge[];
+}
+
+// --------------------------------------------------------------------------- //
+//  Ops (GET /snapshot-status, GET /pipeline-runs)                             //
+// --------------------------------------------------------------------------- //
+
+export interface PipelineRun {
+    pipelineRunId: number;
+    status: string;
+    startedAt: string;
+    completedAt: string | null;
+    stageSummary: Record<string, unknown> | null;
+}
+
+export interface SnapshotStatusResponse {
+    pipelineRun: PipelineRun | null;
+}
+
+export interface PipelineRunsResponse {
+    pipelineRuns: PipelineRun[];
+}
+
+// --------------------------------------------------------------------------- //
+//  Review endpoints — plain dicts, NOT a CamelModel (snake_case on the wire;  //
+//  see analysis/src/review/service.py and the Phase 9 review contract test). //
+// --------------------------------------------------------------------------- //
+
+export type ReviewTaskType =
+    | 'bot' | 'text' | 'targets' | 'propaganda' | 'claims' | 'citations' | 'account_tier';
 
 export interface ReviewQueueItem {
-    ai_output_id: number;
+    run_id: number;
     doc_id: number;
-    task_type: ReviewTaskType;
+    confidence: number | null;
     model_id: string;
-    prompt_version: string;
-    model_confidence: number | null;
-    model_output: Record<string, any>;
-    created_at: number;
+    prompt_version: string | null;
+    raw_response: Record<string, any>;
+    completed_at: string | null;
     doc: {
         source_type: string;
-        domain: string | null;
+        admission_class: AdmissionClass;
+        source_url: string;
         title: string | null;
-        ident: string;
-        /** External permalink to the original source. Null when the ingest
-         *  layer didn't have enough metadata to synthesize one (rare).
-         *  Rendered as a clickable title in the reviewer UI — invariant C1. */
-        url: string | null;
         text_preview: string;
         text_truncated: boolean;
     };
 }
 
 export interface ReviewSubmission {
-    ai_output_id: number;
-    is_correct: number | null;
-    human_label: string | null;
-    human_confidence: number | null;
-    is_golden: boolean;
-    reviewer_id: string | null;
-    notes: string | null;
+    run_id: number;
+    verdict: 'correct' | 'incorrect' | 'uncertain';
+    reviewer_id?: string | null;
+    notes?: string | null;
+    is_golden?: boolean;
+    expected_label?: string | null;
 }
 
 export interface ReviewTaskStats {
-    task_type: string;
-    total_outputs: number;
+    task: string;
+    total_runs: number;
     reviewed: number;
     correct: number;
     incorrect: number;
+    uncertain: number;
     golden: number;
     accuracy_pct: number | null;
 }
@@ -823,9 +524,9 @@ export interface ReviewStats {
     per_task: ReviewTaskStats[];
 }
 
-/** Public human-agreement overlay (GET /eval-accuracy). Aggregate-only:
- *  per-task counts and percentages, with accuracy suppressed server-side
- *  below `minReviewN` scored reviews. */
+/** Public human-agreement overlay (GET /eval-accuracy) — the one review
+ *  surface the backend hand-builds as camelCase already (see
+ *  review/service.py::get_public_accuracy). */
 export interface EvalAccuracyTask {
     taskType: string;
     reviewed: number;
@@ -838,4 +539,12 @@ export interface EvalAccuracyTask {
 export interface EvalAccuracy {
     perTask: EvalAccuracyTask[];
     minReviewN: number;
+}
+
+// --------------------------------------------------------------------------- //
+//  Chart helper                                                               //
+// --------------------------------------------------------------------------- //
+
+export interface ChartDataPoint {
+    [key: string]: string | number | null;
 }

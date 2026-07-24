@@ -11,6 +11,11 @@ const TIME_RANGES: TimeRange[] = [
     { id: '7d', label: '7 days' },
     { id: '30d', label: '30 days' },
     { id: '90d', label: '90 days' },
+    // 'All time' is exposed on every panel except Movers (GET /movers
+    // rejects window='all' -- an unbounded range has no preceding equal-
+    // length period to compare against). Movers-consuming pages fall back
+    // to a bounded window when this is selected; see DataDesk.tsx.
+    { id: 'all', label: 'All time' },
 ];
 
 interface GlobalFiltersProps {
