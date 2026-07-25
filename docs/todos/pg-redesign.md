@@ -458,4 +458,14 @@ inventory, including the pre-redesign features removed rather than faked.
       See `docs/audit-trail/analysis/2026-07-25-llm-only-judgments.md`.
 - [ ] Rewrite CLAUDE.md data-flow + architecture docs
 - [ ] Audit-trail entries per affected layer
+- [ ] Drop `analysis.favorability_stances` (0001_north_star.sql): its writer
+      was removed 2026-07-25 (`engine/text.py` sentiment-only rewrite,
+      `results/store.py` has no `save_favorability_stances` path) and every
+      reader repointed to `analysis.target_mentions`. Deliberately NOT
+      dropped in that same change -- data loss is irreversible and the full
+      recompute + side-by-side acceptance above is still ahead. Drop it in
+      the same decommission migration as the rest of the retired surface;
+      existing rows are Republican-only (the old prompt scoped favorability
+      to GOP entities), so do not resurrect them as a general-purpose stance
+      source. See `docs/audit-trail/analysis/2026-07-25-text-sentiment-only.md`.
 - [ ] Delete this todo file when every box above is checked
