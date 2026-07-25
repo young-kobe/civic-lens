@@ -40,33 +40,22 @@ from analysis.tests import pg_fixture
 # =============================================================================
 
 class SignalForTests(unittest.TestCase):
-    """All four directional signal combinations (favorability_label and
-    sentiment_label both feed the same mapping), plus the non-directional
-    and non-partisan exclusions."""
-
-    def test_favorable_toward_democrat_is_pro_democrat(self):
-        self.assertEqual(lean_derivation._signal_for("democrat", "favorable"), "democrat")
+    """The four directional signal combinations (target_mentions'
+    sentiment_label is the only vocabulary since analysis.favorability_stances
+    retired 2026-07-25), plus the non-directional and non-partisan
+    exclusions."""
 
     def test_positive_toward_democrat_is_pro_democrat(self):
         self.assertEqual(lean_derivation._signal_for("democrat", "positive"), "democrat")
 
-    def test_favorable_toward_republican_is_pro_republican(self):
-        self.assertEqual(lean_derivation._signal_for("republican", "favorable"), "republican")
-
     def test_positive_toward_republican_is_pro_republican(self):
         self.assertEqual(lean_derivation._signal_for("republican", "positive"), "republican")
 
-    def test_unfavorable_toward_republican_is_pro_democrat(self):
+    def test_negative_toward_republican_is_pro_democrat(self):
         # The debunker-style mismatch this module must get right: criticizing
         # a Republican is pro-democrat evidence, not pro-republican -- the
         # entity's OWN lean is the anchor, stance direction flips it.
-        self.assertEqual(lean_derivation._signal_for("republican", "unfavorable"), "democrat")
-
-    def test_negative_toward_republican_is_pro_democrat(self):
         self.assertEqual(lean_derivation._signal_for("republican", "negative"), "democrat")
-
-    def test_unfavorable_toward_democrat_is_pro_republican(self):
-        self.assertEqual(lean_derivation._signal_for("democrat", "unfavorable"), "republican")
 
     def test_negative_toward_democrat_is_pro_republican(self):
         self.assertEqual(lean_derivation._signal_for("democrat", "negative"), "republican")
@@ -78,10 +67,10 @@ class SignalForTests(unittest.TestCase):
         self.assertIsNone(lean_derivation._signal_for("republican", "mixed"))
 
     def test_independent_entity_lean_is_excluded(self):
-        self.assertIsNone(lean_derivation._signal_for("independent", "favorable"))
+        self.assertIsNone(lean_derivation._signal_for("independent", "positive"))
 
     def test_curated_mixed_entity_lean_is_excluded(self):
-        self.assertIsNone(lean_derivation._signal_for("mixed", "favorable"))
+        self.assertIsNone(lean_derivation._signal_for("mixed", "positive"))
 
     def test_unknown_entity_lean_is_excluded(self):
         self.assertIsNone(lean_derivation._signal_for("unknown", "positive"))
@@ -146,16 +135,16 @@ class TallyEvidenceTests(unittest.TestCase):
 
     def test_author_evidence_groups_by_author_id(self):
         rows = [
-            {"doc_id": 1, "author_id": 10, "entity_lean": "democrat", "stance": "favorable"},
-            {"doc_id": 2, "author_id": 10, "entity_lean": "republican", "stance": "unfavorable"},
-            {"doc_id": 3, "author_id": 20, "entity_lean": "republican", "stance": "favorable"},
+            {"doc_id": 1, "author_id": 10, "entity_lean": "democrat", "stance": "positive"},
+            {"doc_id": 2, "author_id": 10, "entity_lean": "republican", "stance": "negative"},
+            {"doc_id": 3, "author_id": 20, "entity_lean": "republican", "stance": "positive"},
         ]
         tallies = lean_derivation._tally_author_evidence(rows)
         self.assertEqual(tallies[10]["democrat"], 2)  # both rows favor democrat
         self.assertEqual(tallies[20]["republican"], 1)
 
     def test_author_evidence_skips_rows_with_no_author(self):
-        rows = [{"doc_id": 1, "author_id": None, "entity_lean": "democrat", "stance": "favorable"}]
+        rows = [{"doc_id": 1, "author_id": None, "entity_lean": "democrat", "stance": "positive"}]
         tallies = lean_derivation._tally_author_evidence(rows)
         self.assertEqual(tallies, {})
 
@@ -165,7 +154,7 @@ class TallyEvidenceTests(unittest.TestCase):
         self.assertEqual(tallies, {})
 
     def test_narrative_evidence_fans_a_doc_out_to_every_member_narrative(self):
-        rows = [{"doc_id": 5, "author_id": 1, "entity_lean": "democrat", "stance": "favorable"}]
+        rows = [{"doc_id": 5, "author_id": 1, "entity_lean": "democrat", "stance": "positive"}]
         doc_to_narratives = {5: [100, 200]}
         tallies, contributing_docs = lean_derivation._tally_narrative_evidence(rows, doc_to_narratives)
         self.assertEqual(tallies[100]["democrat"], 1)
@@ -176,8 +165,8 @@ class TallyEvidenceTests(unittest.TestCase):
     def test_narrative_doc_count_counts_distinct_docs_not_samples(self):
         # Two directional samples from the SAME doc must count as doc_count=1.
         rows = [
-            {"doc_id": 5, "author_id": 1, "entity_lean": "democrat", "stance": "favorable"},
-            {"doc_id": 5, "author_id": 1, "entity_lean": "republican", "stance": "unfavorable"},
+            {"doc_id": 5, "author_id": 1, "entity_lean": "democrat", "stance": "positive"},
+            {"doc_id": 5, "author_id": 1, "entity_lean": "republican", "stance": "negative"},
         ]
         doc_to_narratives = {5: [100]}
         tallies, contributing_docs = lean_derivation._tally_narrative_evidence(rows, doc_to_narratives)
@@ -185,7 +174,7 @@ class TallyEvidenceTests(unittest.TestCase):
         self.assertEqual(len(contributing_docs[100]), 1)
 
     def test_narrative_evidence_ignores_docs_with_no_narrative_membership(self):
-        rows = [{"doc_id": 9, "author_id": 1, "entity_lean": "democrat", "stance": "favorable"}]
+        rows = [{"doc_id": 9, "author_id": 1, "entity_lean": "democrat", "stance": "positive"}]
         tallies, contributing_docs = lean_derivation._tally_narrative_evidence(rows, {})
         self.assertEqual(tallies, {})
         self.assertEqual(contributing_docs, {})
@@ -227,7 +216,7 @@ class RunIntegrationTests(unittest.TestCase):
             conn.execute(
                 "TRUNCATE analysis.author_leans, analysis.narrative_leans, "
                 "analysis.narrative_docs, analysis.narratives, analysis.clustering_runs, "
-                "analysis.target_mentions, analysis.favorability_stances, analysis.runs, "
+                "analysis.target_mentions, analysis.runs, "
                 "corpus.documents, corpus.authors, corpus.entities CASCADE"
             )
 
@@ -281,15 +270,6 @@ class RunIntegrationTests(unittest.TestCase):
             ).fetchone()
             return row["run_id"]
 
-    def _favorability(self, run_id, entity_id, stance):
-        from analysis.src.common import db as dbmod
-        with dbmod.connection() as conn:
-            conn.execute(
-                "INSERT INTO analysis.favorability_stances (run_id, entity_id, stance) "
-                "VALUES (%s, %s, %s::analysis.favorability_label)",
-                (run_id, entity_id, stance),
-            )
-
     def _target_mention(self, run_id, doc_id, entity_id, stance):
         from analysis.src.common import db as dbmod
         with dbmod.connection() as conn:
@@ -342,13 +322,13 @@ class RunIntegrationTests(unittest.TestCase):
             ).fetchone()
 
     def _seed_pro_democrat_author_samples(self, author_id, count):
-        """count directional favorable-toward-democrat favorability_stances
-        rows, each on its own doc, all attributed to author_id."""
+        """count directional positive-toward-democrat target_mentions rows,
+        each on its own doc, all attributed to author_id."""
         democrat_entity = self._entity(f"dem-{author_id}", "democrat")
         for i in range(count):
             doc_id = self._doc(f"doc-{author_id}-{i}", author_id=author_id)
-            run_id = self._run("text", doc_id)
-            self._favorability(run_id, democrat_entity, "favorable")
+            run_id = self._run("targets", doc_id)
+            self._target_mention(run_id, doc_id, democrat_entity, "positive")
 
     # -- tests ------------------------------------------------------------
 
@@ -369,8 +349,8 @@ class RunIntegrationTests(unittest.TestCase):
         for i in range(LEAN_MIN_SAMPLE_COUNT):
             doc_id = self._doc(f"narr-doc-{i}")
             self._narrative_doc(narrative_id, doc_id)
-            run_id = self._run("text", doc_id)
-            self._favorability(run_id, democrat_entity, "favorable")
+            run_id = self._run("targets", doc_id)
+            self._target_mention(run_id, doc_id, democrat_entity, "positive")
 
         result = lean_derivation.run()
         self.assertEqual(result.narratives_written, 1)
@@ -378,14 +358,14 @@ class RunIntegrationTests(unittest.TestCase):
         self.assertIn("confidence", nrow)
         self.assertNotIn("lean_confidence", nrow)
 
-    def test_unfavorable_toward_republican_writes_democrat_lean(self):
+    def test_negative_toward_republican_writes_democrat_lean(self):
         # End-to-end version of the debunker-mismatch pure test above.
         author_id = self._author("critic")
         republican_entity = self._entity("gop-figure", "republican")
         for i in range(LEAN_MIN_SAMPLE_COUNT):
             doc_id = self._doc(f"crit-doc-{i}", author_id=author_id)
-            run_id = self._run("text", doc_id)
-            self._favorability(run_id, republican_entity, "unfavorable")
+            run_id = self._run("targets", doc_id)
+            self._target_mention(run_id, doc_id, republican_entity, "negative")
 
         lean_derivation.run()
 
@@ -398,8 +378,8 @@ class RunIntegrationTests(unittest.TestCase):
         democrat_entity = self._entity("dem-neutral", "democrat")
         for stance in ("neutral", "mixed"):
             doc_id = self._doc(f"neutral-doc-{stance}", author_id=author_id)
-            run_id = self._run("text", doc_id)
-            self._favorability(run_id, democrat_entity, stance)
+            run_id = self._run("targets", doc_id)
+            self._target_mention(run_id, doc_id, democrat_entity, stance)
 
         result = lean_derivation.run()
 
@@ -421,8 +401,8 @@ class RunIntegrationTests(unittest.TestCase):
         author_id = self._author("independent-author")
         independent_entity = self._entity("indy", "independent")
         doc_id = self._doc("indy-doc", author_id=author_id)
-        run_id = self._run("text", doc_id)
-        self._favorability(run_id, independent_entity, "favorable")
+        run_id = self._run("targets", doc_id)
+        self._target_mention(run_id, doc_id, independent_entity, "positive")
 
         result = lean_derivation.run()
 
@@ -433,12 +413,12 @@ class RunIntegrationTests(unittest.TestCase):
         democrat_entity = self._entity("dem-stale", "democrat")
 
         stale_doc = self._doc("stale-doc", author_id=author_id)
-        stale_run = self._run("text", stale_doc, status="done", is_current=False)
-        self._favorability(stale_run, democrat_entity, "favorable")
+        stale_run = self._run("targets", stale_doc, status="done", is_current=False)
+        self._target_mention(stale_run, stale_doc, democrat_entity, "positive")
 
         failed_doc = self._doc("failed-doc", author_id=author_id)
-        failed_run = self._run("text", failed_doc, status="failed", is_current=False)
-        self._favorability(failed_run, democrat_entity, "favorable")
+        failed_run = self._run("targets", failed_doc, status="failed", is_current=False)
+        self._target_mention(failed_run, failed_doc, democrat_entity, "positive")
 
         result = lean_derivation.run()
 
@@ -456,12 +436,12 @@ class RunIntegrationTests(unittest.TestCase):
         rep_entity = self._entity("rep-mixed", "republican")
         for i in range(3):
             doc_id = self._doc(f"mixed-dem-doc-{i}", author_id=mixed_author)
-            run_id = self._run("text", doc_id)
-            self._favorability(run_id, dem_entity, "favorable")
+            run_id = self._run("targets", doc_id)
+            self._target_mention(run_id, doc_id, dem_entity, "positive")
         for i in range(2):
             doc_id = self._doc(f"mixed-rep-doc-{i}", author_id=mixed_author)
-            run_id = self._run("text", doc_id)
-            self._favorability(run_id, rep_entity, "favorable")
+            run_id = self._run("targets", doc_id)
+            self._target_mention(run_id, doc_id, rep_entity, "positive")
 
         # decided: at min sample count, unanimous (share 1.0 >= threshold).
         decided_author = self._author("decided-author")
@@ -486,21 +466,21 @@ class RunIntegrationTests(unittest.TestCase):
         dem_entity = self._entity("dem-doccount", "democrat")
         rep_entity = self._entity("rep-doccount", "republican")
 
-        # One doc carrying TWO directional samples (a favorability stance
-        # AND a target mention) -- doc_count must still be 1 for this doc.
+        # One doc carrying TWO directional target_mentions rows (a target
+        # task can extract multiple targets per doc) -- doc_count must still
+        # be 1 for this doc, not 2.
         doc_id = self._doc("doccount-doc")
         self._narrative_doc(narrative_id, doc_id)
-        text_run = self._run("text", doc_id)
-        self._favorability(text_run, dem_entity, "favorable")
         targets_run = self._run("targets", doc_id)
+        self._target_mention(targets_run, doc_id, dem_entity, "positive")
         self._target_mention(targets_run, doc_id, rep_entity, "negative")
 
         # Enough additional docs to clear LEAN_MIN_SAMPLE_COUNT.
         for i in range(LEAN_MIN_SAMPLE_COUNT - 2):
             extra_doc = self._doc(f"doccount-extra-{i}")
             self._narrative_doc(narrative_id, extra_doc)
-            run_id = self._run("text", extra_doc)
-            self._favorability(run_id, dem_entity, "favorable")
+            run_id = self._run("targets", extra_doc)
+            self._target_mention(run_id, extra_doc, dem_entity, "positive")
 
         lean_derivation.run()
 
@@ -540,8 +520,8 @@ class RunIntegrationTests(unittest.TestCase):
         rep_entity = self._entity("rep-shift", "republican")
         for i in range(20):
             doc_id = self._doc(f"shift-doc-{i}", author_id=author_id)
-            run_id = self._run("text", doc_id)
-            self._favorability(run_id, rep_entity, "favorable")
+            run_id = self._run("targets", doc_id)
+            self._target_mention(run_id, doc_id, rep_entity, "positive")
 
         lean_derivation.run()
         self.assertEqual(self._author_lean_row(author_id)["lean"], "republican")

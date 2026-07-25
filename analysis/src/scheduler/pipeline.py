@@ -74,7 +74,7 @@ def _leans_worker() -> Any:
 # =============================================================================
 
 def _text_worker(doc: Any, client: Any, resolver: Any) -> Any:
-    return text.process(doc, client, resolver)
+    return text.process(doc, client)
 
 
 def _targets_worker(doc: Any, client: Any, resolver: Any) -> Any:

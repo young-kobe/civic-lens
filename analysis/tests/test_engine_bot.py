@@ -65,7 +65,6 @@ class FakeTransport:
 
 def _valid_llm_response(**overrides) -> dict:
     base = {
-        "is_bot": False,
         "label": "human",
         "confidence": 0.8,
         "llm_text_likelihood": 0.2,

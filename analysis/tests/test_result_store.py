@@ -123,6 +123,19 @@ class RunHandleScopeValidationTests(unittest.TestCase):
             handle.save_citations([store.CitationRow(link_type="url_citation", target_url="http://x")])
 
 
+class FavorabilityStancesRetiredTests(unittest.TestCase):
+    """analysis.favorability_stances is retired (2026-07-25, the text
+    engine's sentiment-only rewrite): the table stays in the schema for the
+    Phase 11 decommission migration, but store.py has no writer left for
+    it -- no dataclass, no RunHandle.save_* method."""
+
+    def test_no_favorability_stance_row_dataclass(self):
+        self.assertFalse(hasattr(store, "FavorabilityStanceRow"))
+
+    def test_run_handle_has_no_favorability_writer(self):
+        self.assertFalse(hasattr(store.RunHandle, "save_favorability_stances"))
+
+
 class FinishValidationTests(unittest.TestCase):
     def test_rejects_invalid_status(self):
         handle = store.open_run("bot", doc_id=1, model_id="m", inference_method="deterministic")
@@ -198,7 +211,6 @@ class ResultStoreIntegrationTests(unittest.TestCase):
         self._truncate_all()
         self.doc_id = self._seed_doc("doc-1")
         self.author_id = self._seed_author("author-1")
-        self.entity_id = self._seed_entity("test-entity")
 
     def tearDown(self):
         pg_fixture.end_test(self._prev_url)
@@ -238,15 +250,6 @@ class ResultStoreIntegrationTests(unittest.TestCase):
             ).fetchone()
             return row["author_id"]
 
-    def _seed_entity(self, entity_key: str) -> int:
-        with store.db.connection() as conn:
-            row = conn.execute(
-                "INSERT INTO corpus.entities (entity_key, kind, display_name) "
-                "VALUES (%s, 'official', 'Test Entity') RETURNING entity_id",
-                (entity_key,),
-            ).fetchone()
-            return row["entity_id"]
-
     def _run_count(self, task: str, doc_id=None, author_id=None) -> int:
         with store.db.connection() as conn:
             row = conn.execute(
@@ -267,31 +270,21 @@ class ResultStoreIntegrationTests(unittest.TestCase):
 
     # -- per-task writer round trips -----------------------------------
 
-    def test_sentiment_and_favorability_round_trip(self):
+    def test_sentiment_round_trip(self):
         store.register_prompt_version("text_v1", "text", "system prompt")
         handle = store.open_run("text", doc_id=self.doc_id, model_id="gemini-3.5-flash",
                                  prompt_version="text_v1", inference_method="llm")
         handle.save_sentiment(store.SentimentRow(
             label="positive", score=0.8, sarcasm_detected=False, evidence_spans=["good news"]
         ))
-        handle.save_favorability_stances([
-            store.FavorabilityStanceRow(entity_id=self.entity_id, stance="favorable",
-                                         score=0.7, evidence_spans=["praised the policy"])
-        ])
         run_id = handle.finish("done", confidence=0.85).run_id
 
         with store.db.connection() as conn:
             sentiment = conn.execute(
                 "SELECT * FROM analysis.sentiment_results WHERE run_id = %s", (run_id,)
             ).fetchone()
-            stances = conn.execute(
-                "SELECT * FROM analysis.favorability_stances WHERE run_id = %s", (run_id,)
-            ).fetchall()
         self.assertEqual(sentiment["label"], "positive")
         self.assertEqual(sentiment["evidence_spans"], ["good news"])
-        self.assertEqual(len(stances), 1)
-        self.assertEqual(stances[0]["entity_id"], self.entity_id)
-        self.assertEqual(stances[0]["stance"], "favorable")
 
     def test_target_mentions_round_trip(self):
         handle = store.open_run("targets", doc_id=self.doc_id, model_id="gemini-3.5-flash",
