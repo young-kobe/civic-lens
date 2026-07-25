@@ -68,16 +68,16 @@ class ActivityBoundsTests(unittest.TestCase):
 
 
 class StanceDistributionTests(unittest.TestCase):
-    def test_favorability_labels_normalized(self):
-        rows = [{"stance": "favorable", "n": 4}, {"stance": "unfavorable", "n": 1}]
-        dist = entities._stance_distribution(rows, sentiment_labels=False)
+    def test_counts_by_sentiment_label(self):
+        rows = [{"stance": "positive", "n": 4}, {"stance": "negative", "n": 1}]
+        dist = entities._stance_distribution(rows)
         self.assertEqual(dist.positive, 4)
         self.assertEqual(dist.negative, 1)
         self.assertEqual(dist.net_score, 60.0)
 
     def test_below_floor_net_score_is_none(self):
         rows = [{"stance": "positive", "n": 2}]
-        dist = entities._stance_distribution(rows, sentiment_labels=True)
+        dist = entities._stance_distribution(rows)
         self.assertIsNone(dist.net_score)
 
 
@@ -189,14 +189,6 @@ class EntityQueriesIntegrationTests(unittest.TestCase):
                 (run_id, doc_id, raw_target, entity_id, stance, confidence),
             )
 
-    def _seed_favorability(self, run_id, entity_id, stance):
-        with self._conn() as conn:
-            conn.execute(
-                "INSERT INTO analysis.favorability_stances (run_id, entity_id, stance) "
-                "VALUES (%s, %s, %s::analysis.favorability_label)",
-                (run_id, entity_id, stance),
-            )
-
     def _seed_propaganda_run(self, doc_id, techniques_validated, model_id="gemini-3.5-flash"):
         with self._conn() as conn:
             run = conn.execute(
@@ -296,11 +288,17 @@ class EntityQueriesIntegrationTests(unittest.TestCase):
         author = self._seed_author()
         self._seed_author_profile(author, "elected_official", entity_id=official)
 
+        # stance_expressed: a target_mentions row on a doc THIS official
+        # authored, naming some other entity -- the official's own post
+        # expressing a stance toward Rep. Other.
         own_post = self._seed_document("x_post", datetime.now(timezone.utc), author_id=author)
-        text_run = self._seed_text_run(own_post)
+        self._seed_text_run(own_post)
         other_entity = self._seed_entity("official", "Rep. Other", lean="republican")
-        self._seed_favorability(text_run, other_entity, "unfavorable")
+        own_targets_run = self._seed_targets_run(own_post)
+        self._seed_target_mention(own_targets_run, own_post, "Rep. Other", other_entity, "negative")
 
+        # stance_received: a target_mentions row on someone ELSE's doc,
+        # naming this official as the target.
         other_author = self._seed_author()
         about_doc = self._seed_document("x_post", datetime.now(timezone.utc), author_id=other_author)
         self._seed_text_run(about_doc)

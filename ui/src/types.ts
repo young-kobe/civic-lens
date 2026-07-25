@@ -111,7 +111,10 @@ export interface StanceCounts {
     lowSample: boolean;
 }
 
-/** Per-entity stance aggregate. `entityId` is null only for the
+/** Per-entity stance aggregate, sourced from analysis.target_mentions alone
+ *  (the retired analysis.favorability_stances no longer contributes a
+ *  separate `favorability` count — see docs/audit-trail/api/
+ *  2026-07-25-favorability-retirement.md). `entityId` is null only for the
  *  unresolved-mentions catch-all (`catchAllKey` set instead). `kind` is
  *  corpus.entities.kind ('official' | 'collective' | 'outlet' |
  *  'subreddit'), null for the catch-all. */
@@ -121,7 +124,6 @@ export interface EntityStanceAggregate {
     displayName: string;
     kind: string | null;
     lean: LeanLabel | null;
-    favorability: StanceCounts;
     targetStance: StanceCounts;
     samples: SampleDoc[];
 }

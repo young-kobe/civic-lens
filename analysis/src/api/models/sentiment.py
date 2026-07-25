@@ -82,17 +82,18 @@ class StanceCounts(CamelModel):
 
 
 class EntityStanceAggregate(CamelModel):
-    """Per-entity stance aggregate merging analysis.favorability_stances
-    (``favorability``) and analysis.target_mentions (``target_stance``).
-    ``entity_id`` is None only for the unresolved-mentions catch-all
-    (``catch_all_key``) -- unresolved target_mentions are never dropped."""
+    """Per-entity stance aggregate from analysis.target_mentions
+    (``target_stance``) -- the sole per-entity stance source as of
+    2026-07-25 (analysis.favorability_stances is retired, no longer
+    written). ``entity_id`` is None only for the unresolved-mentions
+    catch-all (``catch_all_key``) -- unresolved target_mentions are never
+    dropped."""
 
     entity_id: Optional[int]
     catch_all_key: Optional[str]
     display_name: str
     kind: Optional[str]
     lean: Optional[LeanLabel]
-    favorability: StanceCounts
     target_stance: StanceCounts
     samples: List[SampleDocModel]
 
