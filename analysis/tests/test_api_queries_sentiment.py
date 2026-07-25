@@ -79,17 +79,6 @@ class NetScoreSuppressionTests(unittest.TestCase):
         self.assertEqual(sentiment._net_score(counts), 60.0)
 
 
-class NormalizeFavorabilityTests(unittest.TestCase):
-    def test_favorable_maps_to_positive(self):
-        self.assertEqual(sentiment._normalize_favorability("favorable"), "positive")
-
-    def test_unfavorable_maps_to_negative(self):
-        self.assertEqual(sentiment._normalize_favorability("unfavorable"), "negative")
-
-    def test_neutral_passes_through(self):
-        self.assertEqual(sentiment._normalize_favorability("neutral"), "neutral")
-
-
 class LeanLabelKindTests(unittest.TestCase):
     def test_official_is_fact(self):
         label = sentiment._lean_label("official", "republican")
@@ -209,14 +198,6 @@ class SentimentPanelIntegrationTests(unittest.TestCase):
                 )
             return run_id
 
-    def _seed_favorability(self, run_id: int, entity_id: int, stance: str) -> None:
-        with self._conn() as conn:
-            conn.execute(
-                "INSERT INTO analysis.favorability_stances (run_id, entity_id, stance) "
-                "VALUES (%s, %s, %s::analysis.favorability_label)",
-                (run_id, entity_id, stance),
-            )
-
     def _seed_targets_run(self, doc_id: int, model_id: str = "gemini-3.5-flash") -> int:
         with self._conn() as conn:
             row = conn.execute(
@@ -322,18 +303,20 @@ class SentimentPanelIntegrationTests(unittest.TestCase):
         self.assertIsNone(catch_all[0].entity_id)
         self.assertEqual(catch_all[0].target_stance.negative, 1)
 
-    def test_favorability_and_target_stance_merge_per_entity(self):
+    def test_entity_stance_surfaces_from_target_mentions_alone(self):
+        # The regression this whole change is for: analysis.favorability_stances
+        # is retired (no writer as of 2026-07-25) -- an entity with ONLY
+        # target_mentions evidence (no favorability row could ever exist) must
+        # still surface in entity_stances, sourced from target_mentions alone.
         entity = self._seed_entity("official", "Sen. Example", lean="democrat")
         author = self._seed_author()
         doc = self._seed_document("x_post", datetime.now(timezone.utc), author_id=author)
-        text_run = self._seed_text_run(doc, "neutral")
-        self._seed_favorability(text_run, entity, "favorable")
+        self._seed_text_run(doc, "neutral")
         targets_run = self._seed_targets_run(doc)
         self._seed_target_mention(targets_run, doc, "Sen. Example", entity, "positive")
 
         panel = sentiment.get_sentiment_panel(window="7d")
         cell = next(e for e in panel.entity_stances if e.entity_id == entity)
-        self.assertEqual(cell.favorability.positive, 1)
         self.assertEqual(cell.target_stance.positive, 1)
         self.assertEqual(cell.lean.kind, "fact")
         self.assertEqual(cell.lean.value, "democrat")

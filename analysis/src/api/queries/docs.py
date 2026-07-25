@@ -138,14 +138,8 @@ def _text_fields(conn, run_id: int) -> Dict[str, Any]:
         "FROM analysis.sentiment_results WHERE run_id = %(run_id)s",
         {"run_id": run_id},
     ).fetchone()
-    stances = conn.execute(
-        "SELECT entity_id, stance::text AS stance, score, evidence_spans "
-        "FROM analysis.favorability_stances WHERE run_id = %(run_id)s",
-        {"run_id": run_id},
-    ).fetchall()
     return {
         "sentiment": dict(sentiment_row) if sentiment_row else None,
-        "favorability_stances": [dict(row) for row in stances],
     }
 
 

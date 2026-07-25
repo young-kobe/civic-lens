@@ -56,8 +56,8 @@ function buildMatrix(
     for (const e of sentiment?.entityStances ?? []) {
         if (e.entityId == null) continue;
         const row = ensure(e.kind, e.displayName);
-        row.netTone = e.favorability.netScore;
-        row.posts = e.favorability.volume;
+        row.netTone = e.targetStance.netScore;
+        row.posts = e.targetStance.volume;
     }
     for (const e of bots?.byEntity ?? []) {
         const row = ensure(e.kind, e.displayName);
@@ -78,7 +78,7 @@ function compareRows(a: MatrixRow, b: MatrixRow, key: MatrixSortKey, dir: 1 | -1
 
 const MATRIX_COLUMNS: Array<{ key: MatrixSortKey; label: string; title: string }> = [
     { key: 'name', label: 'Entity', title: 'Tracked outlet, official, collective, or community' },
-    { key: 'netTone', label: 'Net tone', title: "Positive minus negative share of the entity's own posts, -100..+100" },
+    { key: 'netTone', label: 'Net tone', title: 'Positive minus negative share of stance toward this entity, -100..+100' },
     { key: 'botRate', label: 'Bot rate', title: 'Share of the entity\'s scored posts our detector flags as likely automated. News is not bot-scored.' },
     { key: 'posts', label: 'Posts', title: 'Posts scored for tone in this window' },
 ];

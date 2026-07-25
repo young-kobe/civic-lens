@@ -325,11 +325,10 @@ def _llm_analysis(text: str, signals: Dict[str, Any], client: LLMClient) -> BotA
     as prompt context. inference_method='hybrid': both the signal battery
     and the LLM's own judgment contributed to `label`/`confidence`.
 
-    posting_frequency/listed_count are hardcoded "unknown" -- BOT_USER_PROMPT_
-    TEMPLATE (llm/prompts.py, not owned by this module) still has placeholders
-    for both, but neither signal has a data source anymore (see BotDocInput's
-    docstring); always "unknown" is simpler than routing a value that is
-    always absent through _safe_prompt_value.
+    posting_frequency/listed_count are gone from BOT_USER_PROMPT_TEMPLATE
+    (llm/prompts.py, not owned by this module, 2026-07-25) -- neither signal
+    ever had a data source (see BotDocInput's docstring), so the prompt no
+    longer spends tokens reasoning about two literal "unknown" strings.
     """
     user_prompt = BOT_USER_PROMPT_TEMPLATE.format(
         text=text[:BOT_PROMPT_TEXT_MAX_CHARS],
@@ -343,10 +342,8 @@ def _llm_analysis(text: str, signals: Dict[str, Any], client: LLMClient) -> BotA
         hedge_phrase_rate=signals["hedge_phrase_rate"],
         typographic_purity_score=signals["typographic_purity_score"],
         account_age_days=_safe_prompt_value(signals.get("account_age_days")),
-        posting_frequency="unknown",
         followers=_safe_prompt_value(signals.get("followers")),
         following=_safe_prompt_value(signals.get("following")),
-        listed_count="unknown",
         verified_type=_safe_prompt_value(signals.get("verified_type")),
     )
 

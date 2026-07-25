@@ -10,8 +10,8 @@ easier prompt engineering and A/B testing.
 # Prompt Version Constants (tracked in ai_outputs.prompt_version)
 # =============================================================================
 
-TEXT_ANALYSIS_PROMPT_VERSION = "text-analysis-v5"
-BOT_PROMPT_VERSION = "bot-v2"
+TEXT_ANALYSIS_PROMPT_VERSION = "text-analysis-v6"
+BOT_PROMPT_VERSION = "bot-v3"
 CLAIM_EXTRACTION_PROMPT_VERSION = "claim-extraction-v3"
 PROPAGANDA_PROMPT_VERSION = "propaganda-v1"
 TARGET_SENTIMENT_PROMPT_VERSION = "target-sentiment-v1"
@@ -37,7 +37,7 @@ REFERENCE CONTEXT HANDLING:
 # Text Analysis Prompts
 # =============================================================================
 
-TEXT_ANALYSIS_SYSTEM_PROMPT = """You are a political text analyzer evaluating both overall sentiment and specific entity favorability.
+TEXT_ANALYSIS_SYSTEM_PROMPT = """You are a political text analyzer evaluating overall sentiment.
 
 RULES:
 1. Return ONLY valid JSON matching the schema below.
@@ -49,21 +49,17 @@ RULES:
 3. DEROGATORY & INFLAMMATORY CONTENT:
    - Text containing slurs, dehumanizing labels (e.g. "Satanists", "pedophiles", "criminals" applied to groups), conspiracy rhetoric, or vilifying language directed at ANY political group = NEGATIVE sentiment.
    - The author expressing these views confidently does NOT make the sentiment POSITIVE.
-4. FAVORABILITY (Stance Toward GOP):
-   - Analyze favorability ONLY toward the explicitly mentioned GOP entities.
-   - Distinguish between negative sentiment about an event vs unfavorable stance toward an entity (e.g., text angry about a politician being unfairly attacked represents NEGATIVE sentiment but a FAVORABLE stance toward the politician).
-5. EVIDENCE & REASONING:
-   - Cite specific, exact phrases from the <text> as evidence for both sentiment and entity stances.
+4. EVIDENCE & REASONING:
+   - Cite specific, exact phrases from the <text> as evidence for sentiment.
    - Evidence spans MUST be meaningful phrases of 4+ words taken VERBATIM from the input text. Do NOT use @-mentions, single names, single words, empty strings, or hashtags alone as evidence.
    - Do NOT return placeholder text like "exact quote" as evidence. Every evidence span must come from the actual input text.
    - Do NOT repeat the same evidence span multiple times.
    - If no meaningful evidence phrases can be extracted, set sentiment_evidence_spans to an empty array and confidence < 0.5.
    - Explain your overall emotional tone classification logic in `sentiment_reasoning`. ONE sentence maximum.
-   - Explain your GOP favorability stance logic independently in `favorability_reasoning`. ONE sentence maximum.
-6. EMPTY/TRIVIAL CONTENT:
+5. EMPTY/TRIVIAL CONTENT:
    - Text consisting only of @-mentions, links, or hashtags with no substantive content = NEUTRAL with confidence < 0.5.
-7. If uncertain about a classification, set confidence < 0.7.
-8. All confidence fields (`sentiment_confidence`, `overall_favorability_confidence`, nested `confidence` values) MUST be decimals in [0.0, 1.0] — NEVER a percentage. Example: use `0.85`, not `85` or `"85%"`. A value of `95` is WRONG; write `0.95`.
+6. If uncertain about a classification, set confidence < 0.7.
+7. `sentiment_confidence` MUST be a decimal in [0.0, 1.0] — NEVER a percentage. Example: use `0.85`, not `85` or `"85%"`. A value of `95` is WRONG; write `0.95`.
 
 OUTPUT SCHEMA:
 {
@@ -71,21 +67,10 @@ OUTPUT SCHEMA:
   "sentiment_confidence": 0.0-1.0,
   "sentiment_evidence_spans": ["<verbatim phrase from text>"],
   "sarcasm_detected": true | false,
-  "entity_stances": [
-    {
-      "entity": "name",
-      "stance": "favorable" | "unfavorable" | "neutral" | "mixed",
-      "confidence": 0.0-1.0,
-      "evidence_spans": ["<verbatim phrase from text>"]
-    }
-  ],
-  "overall_gop_stance": "favorable" | "unfavorable" | "neutral" | "mixed",
-  "overall_favorability_confidence": 0.0-1.0,
-  "sentiment_reasoning": "Explanation of sentiment logic only",
-  "favorability_reasoning": "Explanation of favorability logic only"
+  "sentiment_reasoning": "Explanation of sentiment logic only"
 }""" + REFERENCE_CONTEXT_ADDENDUM
 
-TEXT_ANALYSIS_USER_PROMPT_TEMPLATE = """Analyze sentiment and favorability in this text:
+TEXT_ANALYSIS_USER_PROMPT_TEMPLATE = """Analyze sentiment in this text:
 
 <text>
 {text}
@@ -170,9 +155,7 @@ WHAT TO LOOK FOR:
    - Acknowledge-then-counter structures without any of the personal voice markers (no typos, no slang, no emoji, no @-mentions of personal context).
 
 2. Automated-account tells:
-   - Sustained high tweet rate across the account lifetime.
    - Extreme follow-to-follower skew (following >> followers, especially on a new account).
-   - Active account with zero list memberships and generic bio.
    - Recent account (< 90 days) posting heavily about US politics.
 
 3. DE-BIAS (important — do NOT label these as bots):
@@ -182,15 +165,14 @@ WHAT TO LOOK FOR:
 
 RULES:
 1. Return ONLY valid JSON matching the schema below.
-2. If data is insufficient, set is_bot=false with low confidence and say so in reasoning.
+2. If data is insufficient, set label='human' with low confidence and say so in reasoning.
 3. Cite specific signal values in `indicators` (e.g. "hedge_phrase_rate=1.8", "sentence_length_variance=2.1").
-4. `llm_text_likelihood` is your judgment of how LLM-generated the TEXT looks, independent of account status. A government press release can have high llm_text_likelihood AND is_bot=false.
+4. `llm_text_likelihood` is your judgment of how LLM-generated the TEXT looks, independent of account status. A government press release can have high llm_text_likelihood AND label='human'.
 5. Do not assume intent — classify observable patterns only.
 6. `confidence` and `llm_text_likelihood` MUST be decimals in [0.0, 1.0] — NEVER a percentage. Example: use `0.85`, not `85` or `"85%"`. A value of `95` is WRONG; write `0.95`.
 
 OUTPUT SCHEMA:
 {
-  "is_bot": true | false,
   "label": "human" | "bot" | "suspicious",
   "confidence": 0.0-1.0,
   "llm_text_likelihood": 0.0-1.0,
@@ -212,8 +194,7 @@ BEHAVIORAL SIGNALS:
 
 ACCOUNT METADATA:
 - Account age: {account_age_days} days
-- Posting frequency: {posting_frequency} posts/day
-- Followers / Following / Listed: {followers} / {following} / {listed_count}
+- Followers / Following: {followers} / {following}
 - X verified_type: {verified_type}
 
 Assess this post:

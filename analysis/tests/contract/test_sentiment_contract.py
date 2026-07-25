@@ -78,10 +78,16 @@ class SentimentContractTests(unittest.TestCase):
                 "INSERT INTO analysis.sentiment_results (run_id, label) VALUES (%s, 'positive'::analysis.sentiment_label)",
                 (run,),
             )
+            targets_run = conn.execute(
+                "INSERT INTO analysis.runs (task, doc_id, status, model_id, inference_method, is_current) "
+                "VALUES ('targets'::analysis.task, %s, 'done'::analysis.run_status, 'gemini-3.5-flash', "
+                "'llm'::analysis.inference_method, true) RETURNING run_id",
+                (doc,),
+            ).fetchone()["run_id"]
             conn.execute(
-                "INSERT INTO analysis.favorability_stances (run_id, entity_id, stance) "
-                "VALUES (%s, %s, 'favorable'::analysis.favorability_label)",
-                (run, entity),
+                "INSERT INTO analysis.target_mentions (run_id, doc_id, raw_target, entity_id, stance, confidence) "
+                "VALUES (%s, %s, 'Sen. Example', %s, 'positive'::analysis.sentiment_label, 0.9)",
+                (targets_run, doc, entity),
             )
 
     def test_sentiment_panel_shape_snapshot(self):

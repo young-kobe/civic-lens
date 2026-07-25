@@ -2,8 +2,10 @@
 GET /api/v1/entity-posts and GET /api/v1/entity-profile/{entity_id}
 aggregation -- entity drill-down reads against corpus.entities joined to
 corpus.documents (via author_profiles/news_articles/reddit_posts) and
-analysis.target_mentions/favorability_stances/propaganda_results. See
-docs/audit-trail/api/2026-07-24-phase9-sentiment-entities.md.
+analysis.target_mentions/propaganda_results. See docs/audit-trail/api/
+2026-07-24-phase9-sentiment-entities.md and docs/audit-trail/api/
+2026-07-25-favorability-retirement.md (stance_expressed rebuilt on
+target_mentions; analysis.favorability_stances is retired).
 """
 
 from __future__ import annotations
@@ -172,14 +174,14 @@ _STANCE_RECEIVED_SQL = """
 """
 
 _STANCE_EXPRESSED_SQL = """
-    SELECT fs.stance, COUNT(*) AS n
-    FROM analysis.favorability_stances fs
-    JOIN analysis.runs r ON r.run_id = fs.run_id
-    JOIN corpus.documents d ON d.doc_id = r.doc_id
+    SELECT tm.stance, COUNT(*) AS n
+    FROM analysis.target_mentions tm
+    JOIN analysis.runs r ON r.run_id = tm.run_id
+    JOIN corpus.documents d ON d.doc_id = tm.doc_id
     LEFT JOIN corpus.author_profiles ap ON ap.author_id = d.author_id AND ap.entity_id = %(entity_id)s
     LEFT JOIN corpus.news_articles na ON na.doc_id = d.doc_id AND na.outlet_entity_id = %(entity_id)s
     LEFT JOIN corpus.reddit_posts rp ON rp.doc_id = d.doc_id AND rp.subreddit_entity_id = %(entity_id)s
-    WHERE r.is_current AND r.task = 'text' AND r.status = 'done' AND r.confidence >= %(min_conf)s
+    WHERE r.is_current AND r.task = 'targets' AND tm.confidence >= %(min_conf)s
       AND (ap.author_id IS NOT NULL OR na.doc_id IS NOT NULL OR rp.doc_id IS NOT NULL)
       AND NOT EXISTS (
           SELECT 1 FROM analysis.author_bot_scores b
@@ -187,7 +189,7 @@ _STANCE_EXPRESSED_SQL = """
           AND (b.bot_post_count + b.suspicious_post_count)::float
               / NULLIF(b.sample_count, 0) >= %(bot_floor)s
       )
-    GROUP BY fs.stance
+    GROUP BY tm.stance
 """
 
 
@@ -270,8 +272,8 @@ def get_entity_profile(entity_id: int) -> EntityProfileResponse:
             model_ids=sorted({row["model_id"] for row in model_id_rows}),
         ),
         analyzed_doc_counts=AdmissionSplit(sampled=sampled, official_record=official_record),
-        stance_received=_stance_distribution(received_rows, sentiment_labels=True),
-        stance_expressed=_stance_distribution(expressed_rows, sentiment_labels=False),
+        stance_received=_stance_distribution(received_rows),
+        stance_expressed=_stance_distribution(expressed_rows),
         propaganda_rate=propaganda_rate,
         propaganda_analyzed_docs=propaganda_analyzed,
         first_activity=first_activity,
@@ -328,21 +330,16 @@ def _monthly_activity(rows: List[Any]) -> List[MonthlyActivity]:
     ]
 
 
-def _stance_distribution(rows: List[Any], *, sentiment_labels: bool) -> StanceDistribution:
-    """``sentiment_labels=True`` reads target_mentions' sentiment_label
-    vocabulary (positive/negative/neutral/mixed) directly; False normalizes
-    favorability_stances' favorability_label (favorable -> positive,
-    unfavorable -> negative)."""
+def _stance_distribution(rows: List[Any]) -> StanceDistribution:
+    """Both stance_received and stance_expressed read target_mentions'
+    sentiment_label vocabulary (positive/negative/neutral/mixed) directly --
+    the one vocabulary since analysis.favorability_stances (favorable/
+    unfavorable) retired 2026-07-25."""
     counts = {"positive": 0, "negative": 0, "neutral": 0, "mixed": 0}
     for row in rows:
-        stance = row["stance"] if sentiment_labels else _normalize_favorability(row["stance"])
-        counts[stance] += row["n"]
+        counts[row["stance"]] += row["n"]
     volume = sum(counts.values())
     net_score = None
     if volume >= MIN_TARGET_SAMPLE_N:
         net_score = round((counts["positive"] - counts["negative"]) / volume * 100, 1)
     return StanceDistribution(**counts, volume=volume, net_score=net_score)
-
-
-def _normalize_favorability(stance: str) -> str:
-    return {"favorable": "positive", "unfavorable": "negative"}.get(stance, stance)

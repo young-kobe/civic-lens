@@ -1,10 +1,8 @@
 """
 Unified text engine (Postgres redesign Phase 6): one LLM call producing
-sentiment + favorability. `analyze()` is pure (no DB access -- entity
-resolution is a lookup against an already-loaded `EntityResolver`, not an
-I/O call); `process()` composes it with `results/store.py` to write one
-`analysis.runs` ('text') row plus its `sentiment_results` and
-`favorability_stances` rows.
+sentiment. `analyze()` is pure (no DB access); `process()` composes it with
+`results/store.py` to write one `analysis.runs` ('text') row plus its
+`sentiment_results` row.
 
 Deliberate behavior change from the old `engine/analyzer.py`: there is no
 heuristic GOP-keyword-proximity fallback. A failed or unavailable LLM call
@@ -12,9 +10,17 @@ is recorded as a failed run (honest, re-queueable) rather than silently
 substituting a lower-quality deterministic guess.
 
 Owner decision (2026-07-23): the trivial-content short-circuit (prompt rule
-6 -- mentions/links/hashtags only) is a `done` deterministic run with NO
+5 -- mentions/links/hashtags only) is a `done` deterministic run with NO
 `sentiment_results` row, replacing the old ported neutral-at-0.5 placeholder
 (`TRIVIAL_CONTENT_CONFIDENCE` deleted) -- unanalyzable is not neutral.
+
+Sentiment-only as of 2026-07-25: the favorability half (`entity_stances`,
+`overall_gop_stance`, `analysis.favorability_stances`) is gone. Per-entity
+stance is fully covered by the `targets` engine, which is party-neutral,
+topic-tagged, keeps unresolved targets, and already runs on every doc --
+favorability_stances was a one-party (GOP-only, by prompt instruction),
+topic-less subset of what targets already produces. See
+docs/audit-trail/analysis/2026-07-25-text-sentiment-only.md.
 """
 
 from __future__ import annotations
@@ -22,7 +28,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Dict, List, Optional
 
-from analysis.src.common.entity_resolver import EntityResolver
 from analysis.src.common.logger import get_logger
 from analysis.src.common.settings import get_settings
 from analysis.src.engine import validation
@@ -70,22 +75,8 @@ class SentimentOutcome:
 
 
 @dataclass(frozen=True)
-class FavorabilityStanceOutcome:
-    entity_id: int
-    raw_entity_name: str
-    stance: str  # analysis.favorability_label: favorable|unfavorable|neutral|mixed
-    confidence: float
-    evidence_spans: List[str]
-
-
-@dataclass(frozen=True)
 class TextAnalysis:
-    """The validated outcome of one `analyze()` call. `favorability_stances`
-    holds only entities EntityResolver could resolve; `dropped_unresolved`
-    counts the rest (favorability_stances.entity_id is NOT NULL, so an
-    unresolved stance cannot be stored -- unlike target_mentions in the
-    targets engine, which keeps raw_target strings because that table
-    allows entity_id NULL).
+    """The validated outcome of one `analyze()` call.
 
     `sentiment` is None for the trivial-content short-circuit (owner
     decision 2026-07-23): unanalyzable content gets no sentiment_results
@@ -94,23 +85,18 @@ class TextAnalysis:
     rows."""
 
     sentiment: Optional[SentimentOutcome]
-    favorability_stances: List[FavorabilityStanceOutcome]
-    dropped_unresolved: int
     inference_method: str  # 'llm' | 'deterministic'
     raw_response: Optional[Dict]  # verbatim LLM payload; None for the trivial short-circuit
 
 
-def analyze(doc: TextDocInput, client: LLMClient, resolver: EntityResolver) -> TextAnalysis:
-    """Sentiment + favorability for one doc. No DB access: `resolver` is an
-    already-loaded in-memory lookup, not a live query. Raises whatever
+def analyze(doc: TextDocInput, client: LLMClient) -> TextAnalysis:
+    """Sentiment for one doc. No DB access. Raises whatever
     `client.complete()` raises (RuntimeError, after retries are exhausted)
     when the LLM call fails or the backend is unavailable -- `process()`
     below is what turns that into a recorded failed run."""
     if is_trivial_content(doc.text):
         return TextAnalysis(
             sentiment=None,
-            favorability_stances=[],
-            dropped_unresolved=0,
             inference_method="deterministic",
             raw_response=None,
         )
@@ -126,17 +112,9 @@ def analyze(doc: TextDocInput, client: LLMClient, resolver: EntityResolver) -> T
     )
 
     sentiment = _build_sentiment(response, doc.text)
-    favorability_stances, dropped_unresolved = _build_favorability_stances(response, doc.text, resolver)
-    if dropped_unresolved:
-        logger.info(
-            f"text engine doc={doc.doc_id}: dropped {dropped_unresolved} "
-            "favorability stance(s) toward an unresolved entity"
-        )
 
     return TextAnalysis(
         sentiment=sentiment,
-        favorability_stances=favorability_stances,
-        dropped_unresolved=dropped_unresolved,
         inference_method="llm",
         raw_response=response,
     )
@@ -159,35 +137,6 @@ def _build_sentiment(response: dict, source_text: str) -> SentimentOutcome:
     )
 
 
-def _build_favorability_stances(
-    response: dict, source_text: str, resolver: EntityResolver,
-) -> tuple[List[FavorabilityStanceOutcome], int]:
-    stances: List[FavorabilityStanceOutcome] = []
-    dropped_unresolved = 0
-    for raw_stance in response.get("entity_stances", []) or []:
-        if not isinstance(raw_stance, dict):
-            continue
-        raw_entity_name = raw_stance.get("entity", "")
-        entity_id = resolver.resolve(raw_entity_name)
-        if entity_id is None:
-            dropped_unresolved += 1
-            continue
-        spans, had_invalid = validation.validate_spans(
-            raw_stance.get("evidence_spans", []) or [], source_text
-        )
-        confidence = validation.cap_confidence_if_unverified(
-            raw_stance.get("confidence", 0.5), verified=not had_invalid
-        )
-        stances.append(FavorabilityStanceOutcome(
-            entity_id=entity_id,
-            raw_entity_name=raw_entity_name,
-            stance=raw_stance.get("stance", "neutral"),
-            confidence=confidence,
-            evidence_spans=spans,
-        ))
-    return stances, dropped_unresolved
-
-
 def _resolve_model_id() -> str:
     """Mirrors the old job_runner's model_id resolution (settings.llm_backend
     selects gemini_model vs ollama_model). A per-engine stopgap until Phase 7
@@ -198,10 +147,9 @@ def _resolve_model_id() -> str:
     return settings.gemini_model
 
 
-def process(doc: TextDocInput, client: LLMClient, resolver: EntityResolver) -> store.RunOutcome:
-    """Analyze `doc` and persist sentiment + favorability under one
-    analysis.runs('text') row. Returns the RunOutcome from
-    store.RunHandle.finish()."""
+def process(doc: TextDocInput, client: LLMClient) -> store.RunOutcome:
+    """Analyze `doc` and persist sentiment under one analysis.runs('text')
+    row. Returns the RunOutcome from store.RunHandle.finish()."""
     store.register_prompt_version(
         TEXT_ANALYSIS_PROMPT_VERSION, TEXT_TASK,
         TEXT_ANALYSIS_SYSTEM_PROMPT, TEXT_ANALYSIS_USER_PROMPT_TEMPLATE,
@@ -209,7 +157,7 @@ def process(doc: TextDocInput, client: LLMClient, resolver: EntityResolver) -> s
     model_id = _resolve_model_id()
 
     try:
-        result = analyze(doc, client, resolver)
+        result = analyze(doc, client)
     except Exception as exc:
         logger.warning(f"text engine failed for doc={doc.doc_id}: {exc}")
         handle = store.open_run(
@@ -226,10 +174,9 @@ def process(doc: TextDocInput, client: LLMClient, resolver: EntityResolver) -> s
 
     if result.sentiment is None:
         # Trivial-content short-circuit (owner decision 2026-07-23):
-        # unanalyzable is not neutral -- no sentiment_results row, no
-        # favorability_stances rows, run confidence None (nothing was
-        # measured to average). The run itself still lands 'done': the doc
-        # was correctly handled, just not analyzed.
+        # unanalyzable is not neutral -- no sentiment_results row, run
+        # confidence None (nothing was measured). The run itself still
+        # lands 'done': the doc was correctly handled, just not analyzed.
         return handle.finish("done", confidence=None, raw_response=None)
 
     handle.save_sentiment(store.SentimentRow(
@@ -238,20 +185,5 @@ def process(doc: TextDocInput, client: LLMClient, resolver: EntityResolver) -> s
         sarcasm_detected=result.sentiment.sarcasm_detected,
         evidence_spans=result.sentiment.evidence_spans,
     ))
-    handle.save_favorability_stances([
-        store.FavorabilityStanceRow(
-            entity_id=stance.entity_id,
-            stance=stance.stance,
-            score=stance.confidence,
-            evidence_spans=stance.evidence_spans,
-        )
-        for stance in result.favorability_stances
-    ])
 
-    # Run-level confidence: mean of every result row's own confidence -- the
-    # old job_runner stored sentiment/favorability as separate ai_outputs rows
-    # each with its own confidence; this run row unifies both under one value.
-    confidences = [result.sentiment.confidence] + [s.confidence for s in result.favorability_stances]
-    run_confidence = sum(confidences) / len(confidences)
-
-    return handle.finish("done", confidence=run_confidence, raw_response=result.raw_response)
+    return handle.finish("done", confidence=result.sentiment.confidence, raw_response=result.raw_response)

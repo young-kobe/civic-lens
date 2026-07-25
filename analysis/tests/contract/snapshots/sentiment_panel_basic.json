@@ -62,15 +62,6 @@
       "catchAllKey": null,
       "displayName": "Sen. Example",
       "entityId": 1,
-      "favorability": {
-        "lowSample": true,
-        "mixed": 0,
-        "negative": 0,
-        "netScore": null,
-        "neutral": 0,
-        "positive": 1,
-        "volume": 1
-      },
       "kind": "official",
       "lean": {
         "confidence": null,
@@ -95,8 +86,8 @@
         "negative": 0,
         "netScore": null,
         "neutral": 0,
-        "positive": 0,
-        "volume": 0
+        "positive": 1,
+        "volume": 1
       }
     }
   ],

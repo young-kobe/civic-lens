@@ -27,8 +27,9 @@ class ToneMover(CamelModel):
 
 class FavorabilityMover(CamelModel):
     """The single largest window-over-window favorability shift among
-    entities with `analysis.favorability_stances` coverage in both
-    periods."""
+    entities with `analysis.target_mentions` stance coverage in both
+    periods (source swapped from the retired `analysis.favorability_stances`
+    2026-07-25; the metric and shape are unchanged)."""
 
     entity_key: str
     kind: str

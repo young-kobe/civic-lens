@@ -10,25 +10,9 @@ prompts, and the engine code clamps when it reads them — we don't bake
 range constraints into the schema here.
 """
 
-# Entity Stance Schema (nested in favorability)
-ENTITY_STANCE_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "entity": {"type": "string"},
-        "stance": {
-            "type": "string",
-            "enum": ["favorable", "unfavorable", "neutral", "mixed"]
-        },
-        "confidence": {"type": "number"},
-        "evidence_spans": {
-            "type": "array",
-            "items": {"type": "string"}
-        }
-    },
-    "required": ["entity", "stance", "confidence"]
-}
-
-# Text Analysis Schema (Sentiment and Favorability)
+# Text Analysis Schema (Sentiment only as of 2026-07-25 -- per-entity stance
+# is TARGET_SENTIMENT_SCHEMA below; see
+# docs/audit-trail/analysis/2026-07-25-text-sentiment-only.md)
 TEXT_ANALYSIS_SCHEMA = {
     "type": "object",
     "properties": {
@@ -46,28 +30,13 @@ TEXT_ANALYSIS_SCHEMA = {
         "sarcasm_detected": {
             "type": "boolean"
         },
-        "entity_stances": {
-            "type": "array",
-            "items": ENTITY_STANCE_SCHEMA
-        },
-        "overall_gop_stance": {
-            "type": "string",
-            "enum": ["favorable", "unfavorable", "neutral", "mixed"]
-        },
-        "overall_favorability_confidence": {
-            "type": "number"
-        },
         "sentiment_reasoning": {
-            "type": "string"
-        },
-        "favorability_reasoning": {
             "type": "string"
         }
     },
     "required": [
         "sentiment_label", "sentiment_confidence", "sentiment_evidence_spans",
-        "sarcasm_detected", "overall_gop_stance", "overall_favorability_confidence",
-        "sentiment_reasoning", "favorability_reasoning"
+        "sarcasm_detected", "sentiment_reasoning"
     ]
 }
 
@@ -174,13 +143,12 @@ PROPAGANDA_SCHEMA = {
 }
 
 
-# Bot Detection Schema (walkthrough 040 — added llm_text_likelihood)
+# Bot Detection Schema (walkthrough 040 — added llm_text_likelihood).
+# `is_bot` was dropped (2026-07-25): a lossy 2-value collapse of `label`
+# (human/bot/suspicious), which is what engine/bot_detection.py actually reads.
 BOT_SCHEMA = {
     "type": "object",
     "properties": {
-        "is_bot": {
-            "type": "boolean"
-        },
         "label": {
             "type": "string",
             "enum": ["human", "bot", "suspicious"]
@@ -199,5 +167,5 @@ BOT_SCHEMA = {
             "type": "string"
         }
     },
-    "required": ["is_bot", "label", "confidence", "indicators"]
+    "required": ["label", "confidence", "indicators"]
 }

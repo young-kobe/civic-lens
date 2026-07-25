@@ -49,75 +49,31 @@ Sequencing: none of this blocks Phase 11 cutover. Land it after.
       response model, then the client-side join is exact rather than a
       `(kind, displayName)` guess. Do this one first — it is the cheapest and
       it unblocks the matrix.
-- [ ] **GOP favorability rollup.** Restorable without a recompute, but from
-      JSONB rather than a typed column. `overall_gop_stance`
-      (`favorable|unfavorable|neutral|mixed`) is still a **required** field
-      in the text task's LLM schema (`analysis/src/llm/schemas.py`), and
-      `engine/text.py` persists the verbatim payload to
-      `analysis.runs.raw_response` — so
-      `raw_response->>'overall_gop_stance'` on `is_current` text runs is
-      literally the same field the retired aggregator read
-      (`reporting/aggregators/movers.py::_gop_favorability`). It does NOT
-      depend on entity resolution, which is why the absence of
-      `kind='collective'` party entities does not block it. Three caveats
-      for whoever implements it:
-      - Exclude the trivial short-circuit runs. `text.py` finishes those
-        with `raw_response=None`, so they have no stance — they must leave
-        the denominator, not count as neutral.
-      - Filter `inference_method = 'llm'` explicitly if the heuristic
-        keyword-proximity fallback (`engine/analyzer.py`) is also writing
-        stances; the old aggregator excluded deterministic rows and the
-        replacement should match rather than silently widen the base.
-      - Consider promoting the field to a typed column on
-        `analysis.sentiment_results` if it becomes a hot path — JSONB is
-        unindexed here and this is a whole-corpus scan.
-- [ ] **Decide the favorability task's future with this query (owner-run, no
-      LLM cost).** `analysis.favorability_stances` is GOP-only by prompt
-      instruction (`llm/prompts.py:52-53`) and duplicates what the symmetric
-      `targets` task already produces for the whole corpus. The cheaper fix
-      for the party asymmetry is to DELETE the favorability half of the text
-      task and derive party stance from `target_mentions` in SQL, rather than
-      adding a symmetric field and paying for a full `text` re-run. Run this
-      first — high agreement means deleting is safe; low agreement is itself
-      a model-reliability finding and means the two tasks must stay separate:
+- [x] **GOP favorability rollup — resolved by deletion, not restoration
+      (2026-07-25).** The party asymmetry was real: the text task asked for
+      `overall_gop_stance` with no Democratic counterpart, so any surface
+      built on it measured one party and could never be captioned as an
+      overall political-mood reading. Rather than add a symmetric field and
+      pay for a full `text` re-run, the favorability half of the text task
+      is gone — `entity_stances`, `overall_gop_stance`,
+      `overall_favorability_confidence`, and `favorability_reasoning` are
+      out of `TEXT_ANALYSIS_SCHEMA` (prompt version `text-analysis-v5` ->
+      `v6`), and nothing writes `analysis.favorability_stances` any more.
+      Party stance now derives from `analysis.target_mentions` joined to
+      `corpus.entities.lean`, which is symmetric across parties by
+      construction and already covers the whole corpus. See
+      `docs/audit-trail/analysis/2026-07-25-text-sentiment-only.md` and the
+      matching `api/` + `ui/` favorability-retirement entries.
 
-      ```sql
-      SELECT count(*) AS shared_pairs,
-             count(*) FILTER (WHERE agree) AS agreeing,
-             round(100.0 * count(*) FILTER (WHERE agree)
-                   / nullif(count(*), 0), 1) AS agree_pct
-      FROM (
-        SELECT CASE
-                 WHEN f.stance = 'favorable'   AND m.stance = 'positive' THEN true
-                 WHEN f.stance = 'unfavorable' AND m.stance = 'negative' THEN true
-                 WHEN f.stance = 'neutral'     AND m.stance = 'neutral'  THEN true
-                 WHEN f.stance = 'mixed'       AND m.stance = 'mixed'    THEN true
-                 ELSE false
-               END AS agree
-        FROM analysis.favorability_stances f
-        JOIN analysis.runs fr ON fr.run_id = f.run_id
-             AND fr.is_current AND fr.task = 'text' AND fr.status = 'done'
-        JOIN analysis.target_mentions m ON m.doc_id = fr.doc_id
-             AND m.entity_id = f.entity_id
-        JOIN analysis.runs tr ON tr.run_id = m.run_id
-             AND tr.is_current AND tr.task = 'targets' AND tr.status = 'done'
-      ) x;
-      ```
-
-      The two vocabularies differ (`favorable/unfavorable` versus
-      `positive/negative`), which the CASE maps; a near-empty `shared_pairs`
-      is itself the answer — it would mean the two tasks rarely resolve the
-      same entity on the same doc, and neither can substitute for the other.
-
-- [ ] **Labeling review for the GOP rollup (do before it ships).** The
-      schema asks for `overall_gop_stance` with **no Democratic
-      counterpart** — there is no `overall_dem_stance` field. Any restored
-      surface therefore measures one party only and must be captioned so it
-      cannot be read as an overall political-mood number
-      (`.agent/rules/media-analysis.md` rule 5, no universal claims about
-      national sentiment). Either caption the asymmetry explicitly or add a
-      symmetric field and re-run `text` — an owner decision, not an
-      implementation detail.
+      Two consequences worth knowing before anyone reaches for the old
+      field again:
+      - Rows written under `text-analysis-v5` still carry
+        `overall_gop_stance` inside `analysis.runs.raw_response`. It is
+        readable history, not a live signal — the set stops growing at the
+        v6 cutover, so a surface built on it silently ages out.
+      - The `analysis.favorability_stances` table is deliberately still in
+        place (no writer, no reader). Dropping it is a Phase 11 checklist
+        item in `docs/todos/pg-redesign.md`.
 
 ## Blocked — needs a decision or new computation, not a join
 
