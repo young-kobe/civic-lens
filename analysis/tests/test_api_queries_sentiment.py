@@ -30,16 +30,15 @@ from analysis.tests import pg_fixture
 # =============================================================================
 
 class TopicForRowTests(unittest.TestCase):
-    def test_resolved_topic_wins_over_title_keywords(self):
-        topic = sentiment._topic_for_row(1, "something about jobs", {1: "Healthcare"})
+    def test_resolved_topic_is_used(self):
+        topic = sentiment._topic_for_row(1, {1: "Healthcare"})
         self.assertEqual(topic, "Healthcare")
 
-    def test_falls_back_to_title_keywords(self):
-        topic = sentiment._topic_for_row(1, "new tariff plan announced", {})
-        self.assertEqual(topic, "Economy")
-
-    def test_no_title_no_topic_is_general(self):
-        self.assertEqual(sentiment._topic_for_row(1, None, {}), "General")
+    def test_unresolved_topic_is_general_never_a_keyword_guess(self):
+        # Topic classification is an LLM judgment call (analysis.target_mentions),
+        # never a title heuristic -- a doc the LLM never resolved a topic for
+        # must render as the honest "General" bucket, not a keyword-guessed one.
+        self.assertEqual(sentiment._topic_for_row(1, {}), "General")
 
 
 class TimeOfDayTests(unittest.TestCase):
@@ -165,12 +164,17 @@ class SentimentPanelIntegrationTests(unittest.TestCase):
                 (author_id, tier, entity_id),
             )
 
-    def _seed_bot_score(self, author_id: int, score: float) -> None:
+    def _seed_bot_score(self, author_id: int, flagged_share: float, *, sample_count: int = 10) -> None:
+        """Seeds a bot_post_count so bot_post_count/sample_count ==
+        flagged_share -- the label-driven share the exclusion predicate
+        reads (replacing the retired additive `score` column)."""
+        bot_post_count = round(flagged_share * sample_count)
         with self._conn() as conn:
             conn.execute(
-                "INSERT INTO analysis.author_bot_scores (author_id, score, sample_count, updated_at) "
-                "VALUES (%s, %s, 1, now())",
-                (author_id, score),
+                "INSERT INTO analysis.author_bot_scores "
+                "(author_id, bot_post_count, suspicious_post_count, sample_count, updated_at) "
+                "VALUES (%s, %s, 0, %s, now())",
+                (author_id, bot_post_count, sample_count),
             )
 
     def _seed_document(
@@ -274,6 +278,24 @@ class SentimentPanelIntegrationTests(unittest.TestCase):
         panel = sentiment.get_sentiment_panel(window="7d")
         self.assertEqual(panel.overview.total_analyzed, 0)
         self.assertEqual(panel.overview.volume, 0)
+
+    def test_doc_with_no_resolved_topic_is_general_not_keyword_guessed(self):
+        # Title is deliberately topic-suggestive ("tariff" -> the old,
+        # now-removed TOPIC_KEYWORDS fallback would have guessed "Economy").
+        # With no analysis.target_mentions row for this doc, topic
+        # classification never ran an LLM judgment on it -- the panel must
+        # report the honest "General" bucket, not a title-keyword guess.
+        author = self._seed_author()
+        doc = self._seed_document(
+            "x_post", datetime.now(timezone.utc), author_id=author, title="new tariff plan announced",
+        )
+        self._seed_text_run(doc, "positive")
+
+        panel = sentiment.get_sentiment_panel(window="7d")
+        topics = {t.topic: t for t in panel.by_topic}
+        self.assertIn("General", topics)
+        self.assertNotIn("Economy", topics)
+        self.assertEqual(topics["General"].volume, 1)
 
     def test_official_post_routes_to_officials_tier(self):
         entity = self._seed_entity("official", "Sen. Example", lean="republican")

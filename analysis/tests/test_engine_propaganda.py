@@ -55,15 +55,15 @@ class FakeTransport:
         return 0
 
 
-# Loaded-language sample: "corrupt" and "radical" are both in NEGATIVE_WORDS,
-# so this text clears the pre-filter and the LLM path is exercised.
+# Charged sample: the evidence spans in _valid_response() are quoted from it.
 _LOADED_TEXT = (
     "The radical mob attacked innocent citizens while corrupt politicians "
     "remained silent about the whole affair."
 )
 
-# No loaded-language token anywhere -- clears neither NEGATIVE_WORDS nor
-# INTENSIFIERS, so the pre-filter should short-circuit before any LLM call.
+# Flat committee prose with no charged vocabulary. Before 2026-07-25 a keyword
+# pre-filter short-circuited text like this before the LLM saw it; it now goes
+# to the model like everything else.
 _NEUTRAL_TEXT = (
     "The committee met on Tuesday to review the proposed infrastructure "
     "funding schedule for the upcoming fiscal year."
@@ -159,30 +159,36 @@ class EvidenceValidationAndCapTests(unittest.TestCase):
         self.assertEqual(result.density, 0.0)
 
 
-class PreFilterDeterministicPathTests(unittest.TestCase):
-    def test_no_loaded_language_skips_the_llm_call(self):
-        backend = FakeTransport([_valid_response()])
+class EveryDocReachesTheLLMTests(unittest.TestCase):
+    """The loaded-language keyword pre-filter was removed 2026-07-25: a word
+    list must not decide a propaganda verdict, and its `density=0.0` was
+    indistinguishable from an LLM-verified 0.0 once stored. These tests are
+    the regression guard -- a doc with no loaded vocabulary must still be
+    judged by the model, not by a lexicon."""
+
+    def test_neutral_text_still_reaches_the_llm(self):
+        backend = FakeTransport([_valid_response(
+            techniques=[], overall_propaganda_score=0.0,
+        )])
         client = LLMClient(backend)
 
         result = propaganda.analyze(_doc(text_value=_NEUTRAL_TEXT), client)
 
-        self.assertEqual(backend.calls, 0)
-        self.assertEqual(result.inference_method, "deterministic")
+        self.assertEqual(backend.calls, 1)
+        self.assertIsNotNone(result.raw_response)
         self.assertEqual(result.density, 0.0)
         self.assertEqual(result.techniques, [])
-        self.assertEqual(result.techniques_validated, 0)
-        self.assertEqual(result.techniques_dropped, 0)
-        self.assertIsNone(result.raw_response)
-        self.assertEqual(result.summary, propaganda._PRE_FILTER_REASONING)
 
-    def test_empty_text_also_skips_the_llm_call(self):
-        backend = FakeTransport([_valid_response()])
+    def test_empty_text_still_reaches_the_llm(self):
+        backend = FakeTransport([_valid_response(
+            techniques=[], overall_propaganda_score=0.0,
+        )])
         client = LLMClient(backend)
 
         result = propaganda.analyze(_doc(text_value=""), client)
 
-        self.assertEqual(backend.calls, 0)
-        self.assertEqual(result.inference_method, "deterministic")
+        self.assertEqual(backend.calls, 1)
+        self.assertIsNotNone(result.raw_response)
 
 
 class ValidatedDroppedCountingTests(unittest.TestCase):
@@ -214,7 +220,7 @@ class AnalyzeSchemaRetryTests(unittest.TestCase):
             result = propaganda.analyze(_doc(), client)
 
         self.assertEqual(backend.calls, 2)
-        self.assertEqual(result.inference_method, "llm")
+        self.assertIsNotNone(result.raw_response)
 
 
 class AnalyzeLlmFailureTests(unittest.TestCase):
@@ -293,6 +299,31 @@ class ProcessIntegrationTests(unittest.TestCase):
                 "SELECT * FROM analysis.runs WHERE run_id = %s", (run_id,)
             ).fetchone()
 
+    def test_trivial_content_declines_to_judge_without_an_llm_call(self):
+        """An @-mention-and-link-only post is unanalyzable, not clean. It
+        records a done deterministic run with NO propaganda_results row, so
+        an absent row reads as "unanalyzable" while density=0.0 keeps meaning
+        "the model looked and found nothing". Before 2026-07-25 propaganda was
+        the only LLM stage without this gate and paid a full call for every
+        such post."""
+        backend = FakeTransport([_valid_response()])
+        client = LLMClient(backend)
+        trivial_doc = _doc(self.doc_id, text_value="@someone @another https://t.co/x #tag")
+        run_id = propaganda.process(trivial_doc, client).run_id
+
+        self.assertEqual(backend.calls, 0)
+        run = self._run_row(run_id)
+        self.assertEqual(run["status"], "done")
+        self.assertEqual(run["inference_method"], "deterministic")
+        self.assertIsNone(run["prompt_version_id"])
+
+        from analysis.src.results import store
+        with store.db.connection() as conn:
+            result_row = conn.execute(
+                "SELECT * FROM analysis.propaganda_results WHERE run_id = %s", (run_id,)
+            ).fetchone()
+        self.assertIsNone(result_row)
+
     def test_valid_llm_response_persists_parent_and_child_rows(self):
         client = LLMClient(FakeTransport([_valid_response()]))
         run_id = propaganda.process(_doc(self.doc_id), client).run_id
@@ -318,16 +349,22 @@ class ProcessIntegrationTests(unittest.TestCase):
         self.assertEqual(len(technique_rows), 1)
         self.assertEqual(technique_rows[0]["technique"], "name_calling")
 
-    def test_pre_filter_process_is_deterministic_with_zero_techniques(self):
-        client = LLMClient(FakeTransport([_valid_response()]))
+    def test_neutral_doc_is_persisted_as_an_llm_run(self):
+        """A doc with no charged vocabulary is judged by the model like any
+        other. Before 2026-07-25 a keyword pre-filter stored this as a
+        `deterministic` run with a NULL prompt_version, which read as an
+        LLM-verified zero on every surface that never filtered on
+        inference_method."""
+        client = LLMClient(FakeTransport([_valid_response(
+            techniques=[], overall_propaganda_score=0.0,
+        )]))
         neutral_doc = _doc(self.doc_id, text_value=_NEUTRAL_TEXT)
         run_id = propaganda.process(neutral_doc, client).run_id
 
         run = self._run_row(run_id)
         self.assertEqual(run["status"], "done")
-        self.assertEqual(run["inference_method"], "deterministic")
-        self.assertIsNone(run["prompt_version_id"])
-        self.assertEqual(run["confidence"], 0.0)
+        self.assertEqual(run["inference_method"], "llm")
+        self.assertIsNotNone(run["prompt_version_id"])
 
         from analysis.src.results import store
         with store.db.connection() as conn:

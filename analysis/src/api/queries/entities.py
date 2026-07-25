@@ -26,7 +26,7 @@ from analysis.src.api.queries.base import (
     split_admission_counts,
 )
 from analysis.src.api.queries.constants import (
-    BOT_SCORE_AUTHOR_EXCLUSION,
+    BOT_FLAGGED_SHARE_EXCLUSION,
     MIN_TARGET_SAMPLE_N,
     SNIPPET_MAX_CHARS,
 )
@@ -49,7 +49,9 @@ _RANGE_PREDICATE = (
 _BOT_EXCLUSION_SQL = """
     NOT EXISTS (
         SELECT 1 FROM analysis.author_bot_scores b
-        WHERE b.author_id = d.author_id AND b.score >= %(bot_floor)s
+        WHERE b.author_id = d.author_id
+          AND (b.bot_post_count + b.suspicious_post_count)::float
+              / NULLIF(b.sample_count, 0) >= %(bot_floor)s
     )
 """
 
@@ -127,7 +129,9 @@ _AUTHORED_DOCS_SQL = """
     WHERE (ap.author_id IS NOT NULL OR na.doc_id IS NOT NULL OR rp.doc_id IS NOT NULL)
       AND NOT EXISTS (
           SELECT 1 FROM analysis.author_bot_scores b
-          WHERE b.author_id = d.author_id AND b.score >= %(bot_floor)s
+          WHERE b.author_id = d.author_id
+          AND (b.bot_post_count + b.suspicious_post_count)::float
+              / NULLIF(b.sample_count, 0) >= %(bot_floor)s
       )
 """
 
@@ -145,7 +149,9 @@ _AUTHORED_MODEL_IDS_SQL = """
     WHERE (ap.author_id IS NOT NULL OR na.doc_id IS NOT NULL OR rp.doc_id IS NOT NULL)
       AND NOT EXISTS (
           SELECT 1 FROM analysis.author_bot_scores b
-          WHERE b.author_id = d.author_id AND b.score >= %(bot_floor)s
+          WHERE b.author_id = d.author_id
+          AND (b.bot_post_count + b.suspicious_post_count)::float
+              / NULLIF(b.sample_count, 0) >= %(bot_floor)s
       )
 """
 
@@ -158,7 +164,9 @@ _STANCE_RECEIVED_SQL = """
       AND m.confidence >= %(min_conf)s
       AND NOT EXISTS (
           SELECT 1 FROM analysis.author_bot_scores b
-          WHERE b.author_id = d.author_id AND b.score >= %(bot_floor)s
+          WHERE b.author_id = d.author_id
+          AND (b.bot_post_count + b.suspicious_post_count)::float
+              / NULLIF(b.sample_count, 0) >= %(bot_floor)s
       )
     GROUP BY m.stance
 """
@@ -175,7 +183,9 @@ _STANCE_EXPRESSED_SQL = """
       AND (ap.author_id IS NOT NULL OR na.doc_id IS NOT NULL OR rp.doc_id IS NOT NULL)
       AND NOT EXISTS (
           SELECT 1 FROM analysis.author_bot_scores b
-          WHERE b.author_id = d.author_id AND b.score >= %(bot_floor)s
+          WHERE b.author_id = d.author_id
+          AND (b.bot_post_count + b.suspicious_post_count)::float
+              / NULLIF(b.sample_count, 0) >= %(bot_floor)s
       )
     GROUP BY fs.stance
 """
@@ -201,7 +211,7 @@ def get_entity_posts(
     min_conf = get_settings().aggregation_min_confidence
     params = {
         "entity_id": entity_id, "start": start, "end": end, "min_conf": min_conf,
-        "bot_floor": BOT_SCORE_AUTHOR_EXCLUSION,
+        "bot_floor": BOT_FLAGGED_SHARE_EXCLUSION,
     }
     page = max(1, page)
 
@@ -233,7 +243,7 @@ def get_entity_profile(entity_id: int) -> EntityProfileResponse:
     """ALL-TIME entity profile: no window cutoff anywhere in this
     function -- an inactive official's history must never vanish."""
     min_conf = get_settings().aggregation_min_confidence
-    params = {"entity_id": entity_id, "min_conf": min_conf, "bot_floor": BOT_SCORE_AUTHOR_EXCLUSION}
+    params = {"entity_id": entity_id, "min_conf": min_conf, "bot_floor": BOT_FLAGGED_SHARE_EXCLUSION}
 
     with connection() as conn:
         entity = _require_entity(conn, entity_id)

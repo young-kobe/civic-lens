@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional, Set
 from analysis.src.api.models.common import RangeMeta
 from analysis.src.api.models.movers import FavorabilityMover, MoversResponse, ToneMover
 from analysis.src.api.queries import base
-from analysis.src.api.queries.constants import BOT_SCORE_AUTHOR_EXCLUSION, MIN_TARGET_SAMPLE_N
+from analysis.src.api.queries.constants import BOT_FLAGGED_SHARE_EXCLUSION, MIN_TARGET_SAMPLE_N
 from analysis.src.common import db
 from analysis.src.common.settings import get_settings
 
@@ -49,7 +49,7 @@ def _fetch_tone_rows(conn, start, end, min_conf: float) -> List[Dict[str, Any]]:
     via reddit_posts). Bot-scored-author docs are excluded (binding rule:
     every panel but outlet-profiles excludes them from discourse
     denominators)."""
-    params: Dict[str, Any] = {"min_conf": min_conf, "bot_threshold": BOT_SCORE_AUTHOR_EXCLUSION}
+    params: Dict[str, Any] = {"min_conf": min_conf, "bot_threshold": BOT_FLAGGED_SHARE_EXCLUSION}
     time_clause = _time_filter(start, end, params)
     sql = f"""
         SELECT d.doc_id, d.admission_class::text AS admission_class, r.model_id, sr.label::text AS label,
@@ -62,7 +62,8 @@ def _fetch_tone_rows(conn, start, end, min_conf: float) -> List[Dict[str, Any]]:
         LEFT JOIN corpus.reddit_posts rp ON rp.doc_id = d.doc_id
         LEFT JOIN analysis.author_bot_scores abs ON abs.author_id = d.author_id
         WHERE r.task = 'text'::analysis.task AND r.confidence >= %(min_conf)s
-          AND (abs.score IS NULL OR abs.score < %(bot_threshold)s){time_clause}
+          AND (abs.author_id IS NULL OR (abs.bot_post_count + abs.suspicious_post_count)::float
+              / NULLIF(abs.sample_count, 0) < %(bot_threshold)s){time_clause}
     """
     return conn.execute(sql, params).fetchall()
 
@@ -70,7 +71,7 @@ def _fetch_tone_rows(conn, start, end, min_conf: float) -> List[Dict[str, Any]]:
 def _fetch_favorability_rows(conn, start, end, min_conf: float) -> List[Dict[str, Any]]:
     """One row per (run, entity) favorability stance -- entity_id is a
     direct FK here, no resolution join needed. Same bot exclusion as tone."""
-    params: Dict[str, Any] = {"min_conf": min_conf, "bot_threshold": BOT_SCORE_AUTHOR_EXCLUSION}
+    params: Dict[str, Any] = {"min_conf": min_conf, "bot_threshold": BOT_FLAGGED_SHARE_EXCLUSION}
     time_clause = _time_filter(start, end, params)
     sql = f"""
         SELECT d.doc_id, d.admission_class::text AS admission_class, r.model_id,
@@ -80,7 +81,8 @@ def _fetch_favorability_rows(conn, start, end, min_conf: float) -> List[Dict[str
         JOIN corpus.documents d ON d.doc_id = r.doc_id
         LEFT JOIN analysis.author_bot_scores abs ON abs.author_id = d.author_id
         WHERE r.task = 'text'::analysis.task AND r.confidence >= %(min_conf)s
-          AND (abs.score IS NULL OR abs.score < %(bot_threshold)s){time_clause}
+          AND (abs.author_id IS NULL OR (abs.bot_post_count + abs.suspicious_post_count)::float
+              / NULLIF(abs.sample_count, 0) < %(bot_threshold)s){time_clause}
     """
     return conn.execute(sql, params).fetchall()
 

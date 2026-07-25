@@ -4,7 +4,8 @@ Google Gemini LLM Client for Civic Lens Analysis.
 Wraps the ``google-genai`` SDK — the replacement for the deprecated
 ``google-generativeai`` package (Google archived it as
 deprecated-generative-ai-python; no fixes, new models land only in the new
-SDK). Supports structured output via response_schema.
+SDK). Supports structured output via response_schema, and embeddings via
+embed_content (see embed() below).
 """
 
 import time
@@ -32,6 +33,12 @@ _PERMISSIVE_SAFETY_SETTINGS = [
     {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
     {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
 ]
+
+# Gemini's embed_content endpoint takes its own model family, distinct from
+# the generation model above (gemini-3.5-flash cannot embed). Used only when
+# a caller doesn't pass `model` explicitly -- production always does, via
+# CIVIC_NARRATIVE_EMBEDDING_MODEL (see engine/narrative_clustering.py).
+_DEFAULT_EMBEDDING_MODEL = "text-embedding-004"
 
 
 class GeminiClient(BaseLLMClient):
@@ -174,3 +181,26 @@ class GeminiClient(BaseLLMClient):
                     )
 
         raise RuntimeError(f"Gemini API call failed after {self.max_retries} retries: {last_error}")
+
+    def embed(self, text: str, model: Optional[str] = None) -> Optional[list]:
+        """Get an embedding vector via Gemini's embed_content endpoint.
+
+        Returns None on any failure so the caller can fall back to a non-
+        embedding similarity strategy without crashing the pipeline -- same
+        convention as ollama.py/openai_compat.py's embed().
+        """
+        if not self.is_available or not text:
+            return None
+        embed_model = model or _DEFAULT_EMBEDDING_MODEL
+        try:
+            response = self._client.models.embed_content(
+                model=embed_model,
+                contents=[text[:2000]],
+            )
+            embeddings = response.embeddings or []
+            if embeddings and embeddings[0].values:
+                return list(embeddings[0].values)
+            return None
+        except Exception as e:
+            logger.warning(f"Gemini embedding call failed for model={embed_model}: {e}")
+            return None

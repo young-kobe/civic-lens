@@ -181,7 +181,7 @@ export interface FlaggedAccount {
     platform: string;
     handle: string | null;
     displayName: string | null;
-    botScore: number;
+    flaggedPostShare: number;
     sampleCount: number;
     followersCount: number | null;
     lean: LeanLabel | null;

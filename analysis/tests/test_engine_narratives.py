@@ -20,6 +20,7 @@ import os
 import sys
 import unittest
 from datetime import datetime, timedelta, timezone
+from unittest.mock import MagicMock, patch
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(os.path.dirname(current_dir))
@@ -205,6 +206,46 @@ class EmbeddingModeTests(unittest.TestCase):
         self.assertEqual(plan.existing_assignments, [])
         # Falls through to founding its own (suppressed, alone) group.
         self.assertEqual(plan.suppressed_count, 1)
+
+
+class _NoEmbedBackend:
+    """Stand-in for LLMClient with a backend whose class never overrides
+    BaseLLMClient.embed's no-op default (e.g. GeminiClient before this
+    change, or any future backend that regresses)."""
+
+    supports_embedding = False
+
+
+class MisconfiguredEmbeddingModeTests(unittest.TestCase):
+    """Regression guard for the exact bug this workstream fixes: mode=
+    'embedding' paired with a backend that cannot embed at all must fail
+    loudly, not silently cluster on jaccard while settings/logs still say
+    'embedding'. No DB is touched -- run() must raise before reaching
+    _open_clustering_run(), so this test needs no CIVIC_TEST_DATABASE_URL
+    and always runs."""
+
+    def test_unsupported_backend_raises_instead_of_silently_falling_back(self):
+        with patch(
+            "analysis.src.llm.client.get_client", return_value=_NoEmbedBackend()
+        ):
+            with self.assertRaises(RuntimeError):
+                nc.run(mode="embedding")
+
+    def test_check_is_bypassed_when_caller_injects_embed_fn_directly(self):
+        # Passing embed_fn explicitly (as tests/callers may) skips backend
+        # resolution entirely -- _resolve_embed_fn, and thus the
+        # misconfiguration check, must never be reached even against a
+        # backend that can't embed.
+        fake_get_client = MagicMock()
+        with patch("analysis.src.llm.client.get_client", fake_get_client):
+            try:
+                nc.run(mode="embedding", embed_fn=lambda text: None)
+            except Exception:
+                # Anything past the check (e.g. no test database
+                # configured) is irrelevant here -- only whether the
+                # resolver path was reached is being asserted.
+                pass
+        fake_get_client.assert_not_called()
 
 
 # =============================================================================

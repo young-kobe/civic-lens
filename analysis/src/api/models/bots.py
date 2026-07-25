@@ -69,7 +69,12 @@ class FlaggedAccount(CamelModel):
     platform: str
     handle: Optional[str] = None
     display_name: Optional[str] = None
-    bot_score: float
+    # Share (0..1) of this author's confidence-floored analyzed posts
+    # labelled bot or suspicious (bot_post_count + suspicious_post_count,
+    # over sample_count) -- owner decision 2026-07-25, replacing the
+    # retired numeric bot_score. Named for what it now IS, not what it used
+    # to be: a field called bot_score holding a share would be dishonest.
+    flagged_post_share: float
     sample_count: int
     followers_count: Optional[int] = None
     lean: Optional[LeanLabel] = None

@@ -31,7 +31,7 @@ from analysis.src.api.queries.base import (
     split_admission_counts,
 )
 from analysis.src.api.queries.constants import (
-    BOT_SCORE_AUTHOR_EXCLUSION,
+    BOT_FLAGGED_SHARE_EXCLUSION,
     MAX_DISTRIBUTION_SAMPLES_PER_BUCKET,
     MAX_SAMPLES_PER_ENTITY,
     MIN_TARGET_SAMPLE_N,
@@ -48,18 +48,6 @@ from analysis.src.common.settings import get_settings
 
 DAY_OF_WEEK_LABELS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 
-# Coarse political-topic keyword map for the title-fallback topic bucket --
-# used only when a doc has no resolved analysis.target_mentions topic.
-# Subset of reporting/aggregators/constants.py::TOPIC_KEYWORDS (that module is
-# read-only legacy reference, not imported across the analysis/api boundary).
-TOPIC_KEYWORDS: Dict[str, List[str]] = {
-    "Immigration": ["immigration", "border", "migrant", "asylum", "deportation"],
-    "Economy": ["economy", "inflation", "jobs", "unemployment", "tax", "tariff"],
-    "Healthcare": ["healthcare", "obamacare", "medicare", "insurance", "medicaid"],
-    "Foreign Policy": ["foreign", "russia", "china", "ukraine", "military", "nato"],
-    "Justice": ["justice", "supreme court", "police", "crime", "prison"],
-}
-
 DISCLAIMER = "Represents sampled platform discourse, not verified population sentiment"
 
 UNRESOLVED_CATCH_ALL_KEY = "unresolved"
@@ -75,7 +63,9 @@ _RANGE_PREDICATE = (
 _BOT_EXCLUSION_SQL = """
     NOT EXISTS (
         SELECT 1 FROM analysis.author_bot_scores b
-        WHERE b.author_id = d.author_id AND b.score >= %(bot_floor)s
+        WHERE b.author_id = d.author_id
+          AND (b.bot_post_count + b.suspicious_post_count)::float
+              / NULLIF(b.sample_count, 0) >= %(bot_floor)s
     )
 """
 
@@ -90,7 +80,7 @@ def get_sentiment_panel(
     queries/base.py::resolve_time_range."""
     start, end = resolve_time_range(window, date_from, date_to)
     min_conf = get_settings().aggregation_min_confidence
-    params = {"start": start, "end": end, "min_conf": min_conf, "bot_floor": BOT_SCORE_AUTHOR_EXCLUSION}
+    params = {"start": start, "end": end, "min_conf": min_conf, "bot_floor": BOT_FLAGGED_SHARE_EXCLUSION}
 
     with connection() as conn:
         rows = conn.execute(_SENTIMENT_ROWS_SQL, params).fetchall()
@@ -143,7 +133,9 @@ _BOT_EXCLUDED_SQL = f"""
       AND r.confidence >= %(min_conf)s AND {_RANGE_PREDICATE}
       AND EXISTS (
           SELECT 1 FROM analysis.author_bot_scores b
-          WHERE b.author_id = d.author_id AND b.score >= %(bot_floor)s
+          WHERE b.author_id = d.author_id
+          AND (b.bot_post_count + b.suspicious_post_count)::float
+              / NULLIF(b.sample_count, 0) >= %(bot_floor)s
       )
 """
 
@@ -190,7 +182,7 @@ _TARGET_ROWS_SQL = f"""
 def _fetch_doc_topics(conn, params: Dict[str, Any]) -> Dict[int, str]:
     """doc_id -> dominant resolved target_mentions topic (highest count,
     ties broken alphabetically); docs with no resolved topic are absent
-    (title-keyword fallback applies in ``_topic_for_row``)."""
+    (``_topic_for_row`` reports those as unclassified, never a guess)."""
     topics: Dict[int, str] = {}
     for row in conn.execute(_DOC_TOPICS_SQL, params).fetchall():
         topics.setdefault(row["doc_id"], row["topic"])
@@ -217,17 +209,10 @@ def _build_range_meta(
 #  Row-level helpers                                                          #
 # --------------------------------------------------------------------------- #
 
-def _topic_for_row(doc_id: int, title: Optional[str], doc_topics: Dict[int, str]) -> str:
-    resolved = doc_topics.get(doc_id)
-    if resolved:
-        return resolved
-    if not title:
-        return "General"
-    title_lower = title.lower()
-    for topic, keywords in TOPIC_KEYWORDS.items():
-        if any(kw in title_lower for kw in keywords):
-            return topic
-    return "General"
+def _topic_for_row(doc_id: int, doc_topics: Dict[int, str]) -> str:
+    """LLM-resolved topic when analysis.target_mentions has one; the
+    literal "General" otherwise -- topic is never guessed from the title."""
+    return doc_topics.get(doc_id, "General")
 
 
 def _time_of_day(dt: datetime) -> str:
@@ -290,7 +275,7 @@ def _aggregate_rows(rows: List[Any], doc_topics: Dict[int, str]) -> Dict[str, An
         label_key = "neutral" if label == "mixed" else label
         _bump_distribution(accum, label, conf)
 
-        topic = _topic_for_row(row["doc_id"], row["title"], doc_topics)
+        topic = _topic_for_row(row["doc_id"], doc_topics)
         _increment(accum["by_platform"], row["source_type"], label_key)
         _increment(accum["by_topic"], topic, label_key)
         _increment(accum["by_tod"], _time_of_day(dt), label_key)
