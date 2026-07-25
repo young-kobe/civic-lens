@@ -22,7 +22,7 @@ from analysis.src.api.models.bots import (
 from analysis.src.api.models.common import LeanLabel, RangeMeta, SampleDocModel
 from analysis.src.api.queries import base
 from analysis.src.api.queries.constants import (
-    BOT_SCORE_AUTHOR_EXCLUSION,
+    BOT_FLAGGED_SHARE_EXCLUSION,
     MAX_DISTRIBUTION_SAMPLES_PER_BUCKET,
     MAX_SAMPLED_AUTHOR_CARDS,
     MAX_SAMPLES_PER_TARGET,
@@ -105,7 +105,9 @@ def _fetch_author_bot_scores(conn, author_ids: Set[int]) -> Dict[int, Dict[str, 
     if not author_ids:
         return {}
     sql = """
-        SELECT abs.author_id, abs.score, abs.sample_count,
+        SELECT abs.author_id, abs.sample_count,
+               (abs.bot_post_count + abs.suspicious_post_count)::float
+                   / NULLIF(abs.sample_count, 0) AS flagged_share,
                a.platform::text AS platform, a.handle, a.display_name,
                a.followers_count, a.account_created_at
         FROM analysis.author_bot_scores abs
@@ -247,11 +249,11 @@ def _build_flagged_accounts(
     eligible = [
         (author_id, info) for author_id, info in bot_scores.items()
         if author_id in docs_by_author
-        and info["score"] >= BOT_SCORE_AUTHOR_EXCLUSION
+        and (info["flagged_share"] or 0.0) >= BOT_FLAGGED_SHARE_EXCLUSION
         and info["sample_count"] >= MIN_SAMPLED_AUTHOR_POSTS
         and (info["followers_count"] or 0) >= MIN_SAMPLED_AUTHOR_FOLLOWERS
     ]
-    eligible.sort(key=lambda pair: -pair[1]["score"])
+    eligible.sort(key=lambda pair: -(pair[1]["flagged_share"] or 0.0))
 
     accounts: List[FlaggedAccount] = []
     for author_id, info in eligible[:MAX_SAMPLED_AUTHOR_CARDS]:
@@ -270,7 +272,8 @@ def _build_flagged_accounts(
         )
         accounts.append(FlaggedAccount(
             author_id=author_id, platform=info["platform"], handle=info["handle"],
-            display_name=info["display_name"], bot_score=round(info["score"], 3),
+            display_name=info["display_name"],
+            flagged_post_share=round(info["flagged_share"], 3),
             sample_count=info["sample_count"], followers_count=info["followers_count"],
             lean=lean, samples=samples,
         ))
@@ -307,7 +310,8 @@ def _build_bot_pushed_narratives(
         bot_authored = [
             row for row in docs
             if row["author_id"] is not None
-            and bot_scores.get(row["author_id"], {}).get("score", 0.0) >= BOT_SCORE_AUTHOR_EXCLUSION
+            and (bot_scores.get(row["author_id"], {}).get("flagged_share") or 0.0)
+                >= BOT_FLAGGED_SHARE_EXCLUSION
         ]
         samples_source = [row for row in bot_authored if row["member_confidence"] is not None]
         samples_source.sort(key=lambda row: -row["member_confidence"])
@@ -357,7 +361,8 @@ def get_bot_activity(
     bot_scored_doc_count = sum(
         1 for row in bot_rows
         if row["author_id"] is not None
-        and bot_scores.get(row["author_id"], {}).get("score", 0.0) >= BOT_SCORE_AUTHOR_EXCLUSION
+        and (bot_scores.get(row["author_id"], {}).get("flagged_share") or 0.0)
+            >= BOT_FLAGGED_SHARE_EXCLUSION
     )
     automation_rate_pct = (
         round(bot_scored_doc_count / analyzed_doc_count * 100, 1) if analyzed_doc_count else 0.0

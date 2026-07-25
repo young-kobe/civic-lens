@@ -276,19 +276,6 @@ PROPAGANDA_TEXT_MAX_CHARS = 800
 # here too.
 MAX_PROPAGANDA_TECHNIQUES = 5
 
-# engine/propaganda.py's loaded-language pre-filter, ported verbatim from the
-# old detector's _has_loaded_language: union of the negative-word and
-# intensifier lexicons. If the scored window contains none of these, the six
-# starter techniques (all of which ride on loaded vocabulary) are
-# overwhelmingly unlikely -- skip the LLM call and record a deterministic
-# zero-technique result instead of a silent skip, so the doc is marked done
-# and never re-queued for this.
-PROPAGANDA_LOADED_LEXICON = NEGATIVE_WORDS | INTENSIFIERS
-
-# Number of characters from the start of the (title + text) doc that
-# engine/propaganda.py's pre-filter scans for loaded language.
-PROPAGANDA_PRE_FILTER_SCAN_CHARS = 600
-
 # Character budget for the doc text engine/claims.py's LLM sees, clamped at a
 # sentence boundary. Matches the old claim_extractor.py's CLAIM_TEXT_MAX_CHARS.
 CLAIM_TEXT_MAX_CHARS = 2000
@@ -327,8 +314,19 @@ BOT_TASK = "bot"
 # Prompt-input truncation -- matches old engine/bot.py's `text[:1500]` verbatim.
 BOT_PROMPT_TEXT_MAX_CHARS = 1500
 
-# Account/text thresholds from old bot.py's _compute_signals/_aggregate_score.
-NEW_ACCOUNT_AGE_DAYS = 7  # generic "new account" indicator, any platform
+# Confidence floor for a bot/suspicious LLM label to count toward
+# `analysis.author_bot_scores.bot_post_count`/`.suspicious_post_count` in
+# `bot_detection.py::refresh_author_bot_scores()` (owner decision
+# 2026-07-25 -- the label-AND-confidence half of the author-exclusion gate
+# redesign, docs/audit-trail/analysis/2026-07-25-bot-exclusion-gate.md). A
+# low-confidence "bot" guess must not silence an author from downstream
+# panels. Matches the repo-wide `aggregation_min_confidence` default
+# (common/settings.py, walkthrough 039) rather than inventing a new floor.
+BOT_LABEL_MIN_CONFIDENCE = 0.5
+
+# Account/text thresholds read by bot_detection.py's _compute_signals. The
+# generic NEW_ACCOUNT_AGE_DAYS went with _aggregate_score on 2026-07-25; only
+# the X-specific flag still has a consumer.
 X_NEW_ACCOUNT_AGE_DAYS = 90  # X-specific stricter new-account flag
 X_LOW_FOLLOWERS_THRESHOLD = 50
 FOLLOW_RATIO_ANOMALY_MIN_FOLLOWING = 1000

@@ -14,7 +14,7 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from analysis.src.api.queries.base import build_sample_doc, split_admission_counts
 from analysis.src.api.queries.constants import (
-    BOT_SCORE_AUTHOR_EXCLUSION,
+    BOT_FLAGGED_SHARE_EXCLUSION,
     MAX_EVIDENCE_PER_SAMPLE,
     SNIPPET_MAX_CHARS,
 )
@@ -138,15 +138,15 @@ def _propaganda_fraction(techniques_validated_counts: Sequence[Optional[int]]) -
     return round(flagged / len(techniques_validated_counts), 3)
 
 
-def _bot_pushed_fraction(author_bot_scores: Sequence[float]) -> Optional[float]:
-    """Fraction of member docs authored by a bot-scored author (score >=
-    BOT_SCORE_AUTHOR_EXCLUSION) -- this is the one metric the exclusion
-    threshold measures rather than filters out. None when no member doc has
-    a bot-scored author."""
-    if not author_bot_scores:
+def _bot_pushed_fraction(flagged_shares: Sequence[Optional[float]]) -> Optional[float]:
+    """Fraction of member docs authored by a bot-scored author (flagged
+    share >= BOT_FLAGGED_SHARE_EXCLUSION) -- this is the one metric the
+    exclusion threshold measures rather than filters out. None when no
+    member doc has an author_bot_scores row at all."""
+    if not flagged_shares:
         return None
-    flagged = sum(1 for score in author_bot_scores if score >= BOT_SCORE_AUTHOR_EXCLUSION)
-    return round(flagged / len(author_bot_scores), 3)
+    flagged = sum(1 for share in flagged_shares if (share or 0.0) >= BOT_FLAGGED_SHARE_EXCLUSION)
+    return round(flagged / len(flagged_shares), 3)
 
 
 def _build_lean(row: Optional[Mapping[str, Any]]) -> Optional[Dict[str, Any]]:
@@ -295,7 +295,7 @@ def _fetch_sentiment_rows(
 def _fetch_propaganda_rows(
     conn, ids: Sequence[int], start: Optional[datetime], end: Optional[datetime],
 ) -> Dict[int, List[Optional[int]]]:
-    params: Dict[str, Any] = {"ids": list(ids), "bot_exclusion": BOT_SCORE_AUTHOR_EXCLUSION}
+    params: Dict[str, Any] = {"ids": list(ids), "bot_exclusion": BOT_FLAGGED_SHARE_EXCLUSION}
     time_clause = _time_filter(start, end, params)
     sql = f"""
         SELECT nd.narrative_id AS narrative_id, pr.techniques_validated AS techniques_validated
@@ -308,7 +308,9 @@ def _fetch_propaganda_rows(
         WHERE nd.narrative_id = ANY(%(ids)s){time_clause}
           AND (d.author_id IS NULL OR NOT EXISTS (
                 SELECT 1 FROM analysis.author_bot_scores ab
-                WHERE ab.author_id = d.author_id AND ab.score >= %(bot_exclusion)s
+                WHERE ab.author_id = d.author_id
+                  AND (ab.bot_post_count + ab.suspicious_post_count)::float
+                      / NULLIF(ab.sample_count, 0) >= %(bot_exclusion)s
               ))
     """
     out: Dict[int, List[Optional[int]]] = defaultdict(list)
@@ -319,22 +321,24 @@ def _fetch_propaganda_rows(
 
 def _fetch_bot_rows(
     conn, ids: Sequence[int], start: Optional[datetime], end: Optional[datetime],
-) -> Dict[int, List[float]]:
-    """{narrative_id -> [author_bot_scores.score, ...]} for in-range member
-    docs whose author has a bot score at all -- the denominator
-    bot_pushed_fraction measures exactly."""
+) -> Dict[int, List[Optional[float]]]:
+    """{narrative_id -> [author's flagged share, ...]} for in-range member
+    docs whose author has an author_bot_scores row at all -- the
+    denominator bot_pushed_fraction measures exactly."""
     params: Dict[str, Any] = {"ids": list(ids)}
     time_clause = _time_filter(start, end, params)
     sql = f"""
-        SELECT nd.narrative_id AS narrative_id, ab.score AS score
+        SELECT nd.narrative_id AS narrative_id,
+               (ab.bot_post_count + ab.suspicious_post_count)::float
+                   / NULLIF(ab.sample_count, 0) AS flagged_share
         FROM analysis.narrative_docs nd
         JOIN corpus.documents d ON d.doc_id = nd.doc_id
         JOIN analysis.author_bot_scores ab ON ab.author_id = d.author_id
         WHERE nd.narrative_id = ANY(%(ids)s) AND d.author_id IS NOT NULL{time_clause}
     """
-    out: Dict[int, List[float]] = defaultdict(list)
+    out: Dict[int, List[Optional[float]]] = defaultdict(list)
     for row in conn.execute(sql, params).fetchall():
-        out[row["narrative_id"]].append(row["score"])
+        out[row["narrative_id"]].append(row["flagged_share"])
     return out
 
 

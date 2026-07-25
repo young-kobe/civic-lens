@@ -250,13 +250,18 @@ class GetPropagandaOverviewIntegrationTests(unittest.TestCase):
                 (run_id, technique, evidence_span, confidence),
             )
 
-    def _bot_score(self, author_id, score):
+    def _bot_score(self, author_id, flagged_share, *, sample_count=10):
+        """Seeds a bot_post_count so bot_post_count/sample_count ==
+        flagged_share -- the label-driven share the exclusion predicate
+        reads (replacing the retired additive `score` column)."""
         from analysis.src.common import db as dbmod
+        bot_post_count = round(flagged_share * sample_count)
         with dbmod.connection() as conn:
             conn.execute(
                 "INSERT INTO analysis.author_bot_scores "
-                "(author_id, score, sample_count, updated_at) VALUES (%s, %s, 1, now())",
-                (author_id, score),
+                "(author_id, bot_post_count, suspicious_post_count, sample_count, updated_at) "
+                "VALUES (%s, %s, 0, %s, now())",
+                (author_id, bot_post_count, sample_count),
             )
 
     def _flagged_doc(self, natural_key, *, density=0.5, techniques_validated=1,

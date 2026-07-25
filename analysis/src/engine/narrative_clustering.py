@@ -360,16 +360,18 @@ def _embed_pending_claims(pending: List[PendingClaim], embed_fn: EmbedFn) -> int
 def _resolve_embed_fn(embedding_model: str) -> Optional[EmbedFn]:
     """The configured backend's embed(), via the shared LLMClient (llm/
     client.py) instead of reaching for the raw backend directly. `supports_
-    embedding` is checked up front (Gemini never overrides the no-op
-    default) and turned into the same "embedding mode unavailable this run,
-    fall back to jaccard" signal run() already handles for a None return."""
+    embedding` is checked up front (true identity check against
+    BaseLLMClient.embed's no-op default -- see LLMClient.supports_embedding)
+    and a None return signals "this backend cannot embed at all"; run()
+    escalates that to a hard failure rather than silently downgrading to
+    jaccard (see run()'s misconfiguration check)."""
     from analysis.src.llm.client import get_client
 
     client = get_client()
     if not client.supports_embedding:
         logger.warning(
             f"Narrative clustering: backend has no embed() support -- "
-            "embedding mode is unavailable this run"
+            "mode='embedding' cannot proceed this run"
         )
         return None
     return lambda text: client.embed(text, model=embedding_model)
@@ -515,6 +517,14 @@ def run(
     resolves the configured backend's embed() (see `_resolve_embed_fn`).
     Settings-derived args default from `CIVIC_NARRATIVE_*` (get_settings())
     when not passed explicitly.
+
+    Raises RuntimeError if mode resolves to "embedding" and no embed_fn is
+    available (i.e. the configured backend's class never overrides
+    BaseLLMClient.embed's no-op default) -- see the misconfiguration check
+    below for why this fails loudly instead of silently clustering on
+    jaccard. This is distinct from a per-text embed() call failing mid-run
+    (a live backend returning None for one claim), which still degrades
+    that one claim to jaccard and is counted in `embedding_fallbacks`.
     """
     settings = get_settings()
     resolved_mode = mode if mode in ("jaccard", "embedding") else settings.narrative_similarity_mode
@@ -529,11 +539,32 @@ def run(
     embedding_model = embedding_model or settings.narrative_embedding_model
 
     embedding_fallbacks = 0
-    if resolved_mode == "embedding":
+    if resolved_mode == "embedding" and embed_fn is None:
+        embed_fn = _resolve_embed_fn(embedding_model)
         if embed_fn is None:
-            embed_fn = _resolve_embed_fn(embedding_model)
-        if embed_fn is None:
-            resolved_mode = "jaccard"
+            # A backend whose class never overrides embed() is a
+            # MISCONFIGURATION (CIVIC_NARRATIVE_SIMILARITY_MODE=embedding
+            # paired with a CIVIC_LLM_BACKEND that can't embed at all), not
+            # a transient failure -- unlike a live embed() call returning
+            # None for one claim (handled below, per-claim, and counted in
+            # embedding_fallbacks). Silently downgrading resolved_mode to
+            # "jaccard" here was exactly the bug this check replaces: every
+            # narrative in the DB got clustered by word overlap while
+            # settings/logs said "embedding". Raised before
+            # _open_clustering_run() so no clustering_runs/narratives rows
+            # are written for a run that should never have started -- as
+            # early as this module can fail, since narrative clustering has
+            # no separate startup/config-validation entry point of its own
+            # (see the audit-trail entry for why the check lives here).
+            raise RuntimeError(
+                "Narrative clustering is configured for mode='embedding' "
+                "(CIVIC_NARRATIVE_SIMILARITY_MODE) but the resolved LLM "
+                "backend (CIVIC_LLM_BACKEND) does not implement embed() -- "
+                "refusing to silently fall back to jaccard clustering. "
+                "Fix the backend/config, or set "
+                "CIVIC_NARRATIVE_SIMILARITY_MODE=jaccard to choose lexical "
+                "clustering deliberately."
+            )
 
     threshold = embedding_threshold if resolved_mode == "embedding" else jaccard_threshold
     clustering_run_id = _open_clustering_run(

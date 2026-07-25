@@ -354,7 +354,7 @@ class ResultStoreIntegrationTests(unittest.TestCase):
         handle = store.open_run("bot", doc_id=self.doc_id, model_id="gemini-3.5-flash",
                                  prompt_version=None, inference_method="deterministic")
         handle.save_bot_signals(store.BotSignalsRow(
-            label="suspicious", score=0.6, llm_text_likelihood=0.9,
+            label="suspicious", llm_text_likelihood=0.9,
             burstiness=0.2, type_token_ratio=0.5, template_score=0.3,
         ))
         run_id = handle.finish("done", confidence=0.6).run_id
@@ -434,7 +434,7 @@ class ResultStoreIntegrationTests(unittest.TestCase):
 
         second = store.open_run("bot", doc_id=self.doc_id, model_id="m2",
                                  prompt_version=None, inference_method="deterministic")
-        second.save_bot_signals(store.BotSignalsRow(label="bot", score=0.9))
+        second.save_bot_signals(store.BotSignalsRow(label="bot"))
         with mock.patch.object(
             store.RunHandle, "_write_results", side_effect=RuntimeError("simulated crash")
         ):
@@ -544,7 +544,7 @@ class ResultStoreIntegrationTests(unittest.TestCase):
     def test_failed_run_discards_accumulated_results(self):
         handle = store.open_run("bot", doc_id=self.doc_id, model_id="m1",
                                  prompt_version=None, inference_method="deterministic")
-        handle.save_bot_signals(store.BotSignalsRow(label="bot", score=0.9))
+        handle.save_bot_signals(store.BotSignalsRow(label="bot"))
         run_id = handle.finish("failed", error="boom").run_id
 
         with store.db.connection() as conn:

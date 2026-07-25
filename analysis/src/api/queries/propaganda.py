@@ -14,7 +14,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Mapping, Optional, Sequence
 
 from analysis.src.api.queries.base import build_sample_doc, split_admission_counts
-from analysis.src.api.queries.constants import BOT_SCORE_AUTHOR_EXCLUSION, SNIPPET_MAX_CHARS
+from analysis.src.api.queries.constants import BOT_FLAGGED_SHARE_EXCLUSION, SNIPPET_MAX_CHARS
 from analysis.src.common import db
 
 # The six analysis.propaganda_technique enum values -- rendered even at
@@ -185,12 +185,12 @@ def _fetch_eligible_docs(
     conn, start: Optional[datetime], end: Optional[datetime],
 ) -> List[Mapping[str, Any]]:
     """One row per (doc, current done propaganda run) in [start, end],
-    excluding docs whose author is bot-flagged (>= BOT_SCORE_AUTHOR_EXCLUSION)
+    excluding docs whose author is bot-flagged (>= BOT_FLAGGED_SHARE_EXCLUSION)
     -- the rate-denominator exclusion binding rule. Carries source_type,
     density, techniques_validated, party (entities.lean or 'unknown'),
     admission_class, and model_id -- everything the overview + RangeMeta need
     from a single pass."""
-    params: Dict[str, Any] = {"bot_exclusion": BOT_SCORE_AUTHOR_EXCLUSION}
+    params: Dict[str, Any] = {"bot_exclusion": BOT_FLAGGED_SHARE_EXCLUSION}
     time_clause = _time_filter(start, end, params)
     sql = f"""
         SELECT d.doc_id AS doc_id, d.source_type::text AS source_type,
@@ -208,7 +208,9 @@ def _fetch_eligible_docs(
           AND r.is_current AND r.status = 'done'::analysis.run_status
           AND (d.author_id IS NULL OR NOT EXISTS (
                 SELECT 1 FROM analysis.author_bot_scores ab
-                WHERE ab.author_id = d.author_id AND ab.score >= %(bot_exclusion)s
+                WHERE ab.author_id = d.author_id
+                  AND (ab.bot_post_count + ab.suspicious_post_count)::float
+                      / NULLIF(ab.sample_count, 0) >= %(bot_exclusion)s
               )){time_clause}
     """
     return conn.execute(sql, params).fetchall()
@@ -217,7 +219,7 @@ def _fetch_eligible_docs(
 def _fetch_technique_evidence(
     conn, start: Optional[datetime], end: Optional[datetime],
 ) -> List[Mapping[str, Any]]:
-    params: Dict[str, Any] = {"bot_exclusion": BOT_SCORE_AUTHOR_EXCLUSION}
+    params: Dict[str, Any] = {"bot_exclusion": BOT_FLAGGED_SHARE_EXCLUSION}
     time_clause = _time_filter(start, end, params)
     sql = f"""
         SELECT pt.technique::text AS technique, pt.evidence_span AS evidence_span
@@ -228,7 +230,9 @@ def _fetch_technique_evidence(
           AND r.is_current AND r.status = 'done'::analysis.run_status
           AND (d.author_id IS NULL OR NOT EXISTS (
                 SELECT 1 FROM analysis.author_bot_scores ab
-                WHERE ab.author_id = d.author_id AND ab.score >= %(bot_exclusion)s
+                WHERE ab.author_id = d.author_id
+                  AND (ab.bot_post_count + ab.suspicious_post_count)::float
+                      / NULLIF(ab.sample_count, 0) >= %(bot_exclusion)s
               )){time_clause}
         ORDER BY pt.technique_id
     """
@@ -242,7 +246,7 @@ def _fetch_flagged_samples(
     SQL (not fabricated) so every row satisfies build_sample_doc's
     contract. Snippet is the run's own summary text, truncated."""
     params: Dict[str, Any] = {
-        "bot_exclusion": BOT_SCORE_AUTHOR_EXCLUSION,
+        "bot_exclusion": BOT_FLAGGED_SHARE_EXCLUSION,
         "limit": FLAGGED_EXAMPLE_LIMIT,
         "snippet_max": SNIPPET_MAX_CHARS,
     }
@@ -260,7 +264,9 @@ def _fetch_flagged_samples(
           AND r.confidence IS NOT NULL
           AND (d.author_id IS NULL OR NOT EXISTS (
                 SELECT 1 FROM analysis.author_bot_scores ab
-                WHERE ab.author_id = d.author_id AND ab.score >= %(bot_exclusion)s
+                WHERE ab.author_id = d.author_id
+                  AND (ab.bot_post_count + ab.suspicious_post_count)::float
+                      / NULLIF(ab.sample_count, 0) >= %(bot_exclusion)s
               )){time_clause}
         ORDER BY pr.density DESC NULLS LAST, d.published_at DESC
         LIMIT %(limit)s

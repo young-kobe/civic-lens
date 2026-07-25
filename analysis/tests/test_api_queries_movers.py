@@ -24,7 +24,7 @@ import unittest
 from datetime import datetime, timedelta, timezone
 
 from analysis.src.api.queries import movers
-from analysis.src.api.queries.constants import BOT_SCORE_AUTHOR_EXCLUSION, MIN_TARGET_SAMPLE_N
+from analysis.src.api.queries.constants import BOT_FLAGGED_SHARE_EXCLUSION, MIN_TARGET_SAMPLE_N
 from analysis.tests import pg_fixture
 
 
@@ -169,13 +169,18 @@ class GetMoversIntegrationTests(unittest.TestCase):
                 (run_id, entity_id, stance),
             )
 
-    def _author_bot_score(self, author_id, score):
+    def _author_bot_score(self, author_id, flagged_share, *, sample_count=10):
+        """Seeds a bot_post_count so bot_post_count/sample_count ==
+        flagged_share -- the label-driven share the exclusion predicate
+        reads (replacing the retired additive `score` column)."""
         from analysis.src.common import db as dbmod
+        bot_post_count = round(flagged_share * sample_count)
         with dbmod.connection() as conn:
             conn.execute(
-                "INSERT INTO analysis.author_bot_scores (author_id, score, sample_count, updated_at) "
-                "VALUES (%s, %s, 5, now())",
-                (author_id, score),
+                "INSERT INTO analysis.author_bot_scores "
+                "(author_id, bot_post_count, suspicious_post_count, sample_count, updated_at) "
+                "VALUES (%s, %s, 0, %s, now())",
+                (author_id, bot_post_count, sample_count),
             )
 
     def _seed_tone_docs(self, author_id, published_at, labels):
@@ -214,7 +219,7 @@ class GetMoversIntegrationTests(unittest.TestCase):
         bot_author = self._author("bot-handle")
         self._author_profile(human_author, entity_id)
         self._author_profile(bot_author, entity_id)
-        self._author_bot_score(bot_author, BOT_SCORE_AUTHOR_EXCLUSION + 0.1)
+        self._author_bot_score(bot_author, BOT_FLAGGED_SHARE_EXCLUSION + 0.1)
         # Enough human-authored docs to clear the floor in both periods.
         self._seed_tone_docs(human_author, self._current_start + timedelta(days=1), ["positive"] * MIN_TARGET_SAMPLE_N)
         self._seed_tone_docs(human_author, self._previous_start + timedelta(days=1), ["positive"] * MIN_TARGET_SAMPLE_N)

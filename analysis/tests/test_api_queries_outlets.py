@@ -130,13 +130,18 @@ class GetOutletProfilesIntegrationTests(unittest.TestCase):
                 (run_id, doc_id, label),
             )
 
-    def _author_bot_score(self, author_id, score):
+    def _author_bot_score(self, author_id, flagged_share, *, sample_count=10):
+        """Seeds a bot_post_count so bot_post_count/sample_count ==
+        flagged_share -- the label-driven share the exclusion predicate
+        reads (replacing the retired additive `score` column)."""
         from analysis.src.common import db as dbmod
+        bot_post_count = round(flagged_share * sample_count)
         with dbmod.connection() as conn:
             conn.execute(
-                "INSERT INTO analysis.author_bot_scores (author_id, score, sample_count, updated_at) "
-                "VALUES (%s, %s, 5, now())",
-                (author_id, score),
+                "INSERT INTO analysis.author_bot_scores "
+                "(author_id, bot_post_count, suspicious_post_count, sample_count, updated_at) "
+                "VALUES (%s, %s, 0, %s, now())",
+                (author_id, bot_post_count, sample_count),
             )
 
     def _seed_outlet_at_floor(self, domain, *, labels):

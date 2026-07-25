@@ -374,8 +374,8 @@ above).
 | `propaganda_results` | run_id PK | density, summary, techniques_validated, techniques_dropped |
 | `propaganda_techniques` | technique_id PK | run_id FK -> propaganda_results, technique enum, verbatim evidence_span, confidence |
 | `claims` | claim_id PK | run_id, doc_id, claim_text, topic, confidence |
-| `bot_signals` | run_id PK | doc_id, label, score, and typed stylometrics: llm_text_likelihood, burstiness, type_token_ratio, template_score (full detail stays in runs.raw_response) |
-| `author_bot_scores` | author_id PK | materialized per-author rollup: score, variance, sample_count, bot_post_count, suspicious_post_count, llm_text_likelihood_mean, updated_at |
+| `bot_signals` | run_id PK | doc_id, label, and typed stylometrics: llm_text_likelihood, burstiness, type_token_ratio, template_score (full detail stays in runs.raw_response) |
+| `author_bot_scores` | author_id PK | materialized per-author rollup: sample_count, bot_post_count, suspicious_post_count (both confidence-floored, see `engine/constants.py::BOT_LABEL_MIN_CONFIDENCE`), llm_text_likelihood_mean, updated_at. `score`/`variance` were dropped by `0005_drop_bot_score.sql` (2026-07-25) -- the author-exclusion gate now reads a flagged-post SHARE (`(bot_post_count + suspicious_post_count) / sample_count`), see `docs/audit-trail/analysis/2026-07-25-bot-exclusion-gate.md` |
 | `author_leans` | author_id PK | lean, lean_share REAL, lean_confidence, stance_sample_count, computed_at — deterministic, from `engine/lean_derivation.py` |
 | `citations` | citation_id PK | run_id (citation_extractor now emits a run row), source_doc_id, target_doc_id XOR target_url, link_type |
 

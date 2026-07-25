@@ -41,7 +41,21 @@ MAX_SAMPLES_PER_TARGET = 5
 # (None) rather than rendered from too few data points.
 # reporting/aggregators/sentiment/target_tone.py.
 MIN_TARGET_SAMPLE_N = 5
-BOT_SCORE_AUTHOR_EXCLUSION = 0.5
+
+# Author-level bot-exclusion gate (owner decision 2026-07-25, replacing the
+# retired BOT_SCORE_AUTHOR_EXCLUSION -- see
+# docs/audit-trail/analysis/2026-07-25-bot-exclusion-gate.md). Label-driven,
+# not a numeric score: an author is excluded once at least this SHARE of
+# their confidence-floored analyzed posts
+# (analysis.author_bot_scores.bot_post_count + .suspicious_post_count,
+# over .sample_count) were labelled bot or suspicious by the LLM. 0.5 means
+# "at least half this author's analyzed posts were labelled bot or
+# suspicious" -- interpretable in a way the old additive score never was.
+# The prior threshold was calibrated against a formula that no longer
+# exists (the deleted hand-tuned _aggregate_score), so this value is a
+# fresh choice carried over as a starting point, not a re-derivation --
+# it needs validation against real data before the next acceptance pass.
+BOT_FLAGGED_SHARE_EXCLUSION = 0.5
 # reporting/aggregators/sentiment/entities.py.
 MIN_SAMPLED_AUTHOR_POSTS = 3
 MIN_SAMPLED_AUTHOR_FOLLOWERS = 1000

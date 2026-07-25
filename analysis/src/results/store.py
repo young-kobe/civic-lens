@@ -76,7 +76,6 @@ class ClaimRow:
 @dataclass(frozen=True)
 class BotSignalsRow:
     label: str  # analysis.bot_label
-    score: Optional[float] = None
     llm_text_likelihood: Optional[float] = None
     burstiness: Optional[float] = None
     type_token_ratio: Optional[float] = None
@@ -302,11 +301,11 @@ class RunHandle:
             conn.execute(
                 """
                 INSERT INTO analysis.bot_signals
-                    (run_id, doc_id, label, score, llm_text_likelihood, burstiness,
+                    (run_id, doc_id, label, llm_text_likelihood, burstiness,
                      type_token_ratio, template_score)
-                VALUES (%s, %s, %s::analysis.bot_label, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s::analysis.bot_label, %s, %s, %s, %s)
                 """,
-                (run_id, self.doc_id, r.label, r.score, r.llm_text_likelihood,
+                (run_id, self.doc_id, r.label, r.llm_text_likelihood,
                  r.burstiness, r.type_token_ratio, r.template_score),
             )
         for r in self._citations:

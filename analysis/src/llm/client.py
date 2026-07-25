@@ -16,9 +16,59 @@ from typing import Any, Dict, Optional, Protocol
 
 from analysis.src.common.logger import get_logger
 from analysis.src.llm.base import BaseLLMClient, normalize_confidence
-from analysis.src.llm.constants import BACKOFF_BASE_SECONDS, DEFAULT_MAX_RETRIES
+from analysis.src.llm.constants import (
+    AUTH_STATUS_CODES,
+    BACKOFF_BASE_SECONDS,
+    DEFAULT_MAX_RETRIES,
+    MALFORMED_REQUEST_STATUS_CODE,
+    QUOTA_MESSAGE_KEYWORDS,
+    QUOTA_STATUS_CODE,
+)
 
 logger = get_logger(__name__)
+
+
+def _status_code(exc: Exception) -> Optional[int]:
+    """Duck-type an HTTP/API status code off `exc`.
+
+    Covers the two shapes TransportBackend implementations actually raise:
+    google-genai's ``APIError`` (``.code`` -- see gemini.py's complete_once,
+    which calls straight into the google-genai SDK) and requests'
+    ``HTTPError`` (``.response.status_code`` -- raised by Ollama/
+    OpenAICompat via ``response.raise_for_status()``). Anything else
+    (network errors, timeouts) has neither attribute and returns None.
+    """
+    code = getattr(exc, "code", None)
+    if isinstance(code, int):
+        return code
+    status_code = getattr(getattr(exc, "response", None), "status_code", None)
+    if isinstance(status_code, int):
+        return status_code
+    return None
+
+
+def _non_retryable_reason(exc: Exception) -> Optional[str]:
+    """Return why `exc` cannot succeed on retry, or None if it might.
+
+    Only classifies what a status code (plus, for 429s, message content)
+    can support -- see constants.py for the codes/keywords and the 429
+    rate-limit-vs-quota rationale. Everything else, including
+    SchemaValidationError, a bare network blip, a timeout, or a 5xx, has no
+    recognizable non-retryable signal and falls through as retryable,
+    matching today's behavior.
+    """
+    status_code = _status_code(exc)
+    if status_code is None:
+        return None
+    if status_code in AUTH_STATUS_CODES:
+        return f"authentication/authorization failure (HTTP {status_code})"
+    if status_code == MALFORMED_REQUEST_STATUS_CODE:
+        return f"malformed request (HTTP {status_code})"
+    if status_code == QUOTA_STATUS_CODE:
+        message = (getattr(exc, "message", None) or str(exc)).lower()
+        if any(keyword in message for keyword in QUOTA_MESSAGE_KEYWORDS):
+            return f"quota/billing exhaustion (HTTP {status_code})"
+    return None
 
 
 class TransportBackend(Protocol):
@@ -99,7 +149,15 @@ class LLMClient:
 
         A schema-invalid response (SchemaValidationError, raised inside
         complete_once()'s parse_json_response call) is retried exactly like
-        a transport error — same loop, same attempt count.
+        a transport error — same loop, same attempt count. A re-prompt can
+        produce valid JSON, so there is no non-retryable signal for it to
+        match; the owner's cost concern is auth/quota, not schema.
+
+        An error classified by `_non_retryable_reason` (auth/authorization
+        failure, quota/billing exhaustion, or a malformed request) fails on
+        the first attempt instead: retrying burns a fully-billed call for a
+        result that cannot change until the underlying condition (bad
+        credentials, empty credits, a broken prompt) is fixed by a human.
 
         Args:
             system_prompt: System instructions for the model
@@ -127,6 +185,17 @@ class LLMClient:
                 return result
 
             except Exception as e:
+                reason = _non_retryable_reason(e)
+                if reason is not None:
+                    logger.warning(
+                        f"LLM call failed on attempt {attempt + 1}/{self.max_retries} "
+                        f"with a non-retryable error, so it was NOT retried: {reason}. "
+                        f"Original error: {e}"
+                    )
+                    raise RuntimeError(
+                        f"LLM call failed with a non-retryable error ({reason}): {e}"
+                    )
+
                 last_error = e
                 # Don't sleep after the final attempt — matches the retry
                 # semantics ported from gemini.py/ollama.py/openai_compat.py.

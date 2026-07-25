@@ -241,8 +241,8 @@ function FlaggedAccountModal({ account, onClose }: { account: FlaggedAccount; on
             <EntityHeader entity={{ kind: null, displayName: account.displayName || account.handle || 'Unknown', lean: account.lean }} />
             <div className="entity-modal-stats">
                 <div>
-                    <div className="eyebrow">Bot score</div>
-                    <div className="metric-value">{(account.botScore * 100).toFixed(0)}%</div>
+                    <div className="eyebrow">Flagged post share</div>
+                    <div className="metric-value">{(account.flaggedPostShare * 100).toFixed(0)}%</div>
                 </div>
                 <div>
                     <div className="eyebrow">Sample count</div>
@@ -288,8 +288,8 @@ function FlaggedAccountsCard({ accounts }: { accounts: FlaggedAccount[] }) {
                             <span className="ranked-entity-desc">{a.platform} · {a.sampleCount.toLocaleString()} posts</span>
                         </span>
                         <span className="ranked-entity-rate">
-                            <span className="ranked-entity-rate-value" style={{ color: botRateColor(a.botScore * 100) }}>
-                                {(a.botScore * 100).toFixed(0)}%
+                            <span className="ranked-entity-rate-value" style={{ color: botRateColor(a.flaggedPostShare * 100) }}>
+                                {(a.flaggedPostShare * 100).toFixed(0)}%
                             </span>
                         </span>
                     </button>
