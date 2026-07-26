@@ -124,19 +124,6 @@ run_api() {
 run_analyze() {
     status "Running analysis pipeline..."
     ensure_venv; pip_install
-    local args=(-m analysis.src.scheduler.job_runner)
-    [[ -n "$TASKS" ]] && args+=(--tasks "$TASKS")
-    [[ -n "$LIMIT" ]] && args+=(--limit "$LIMIT")
-    if PYTHONPATH="$SCRIPT_ROOT" "$VENV_PY" "${args[@]}"; then
-        status "Analysis pipeline complete. Cached snapshots saved to data/cache/"
-    else
-        die "Analysis pipeline failed"
-    fi
-}
-
-run_analyze_pg() {
-    status "Running Postgres-stack analysis pipeline..."
-    ensure_venv; pip_install
     local args=(-m analysis.src.scheduler.pipeline)
     [[ -n "$TASKS" ]] && args+=(--tasks "$TASKS")
     [[ -n "$LIMIT" ]] && args+=(--limit "$LIMIT")
@@ -195,10 +182,8 @@ Commands:
   crawl             Run the web crawler          [--duration <dur>, default 10m]
   reddit            Fetch Reddit posts/comments
   x                 Fetch X/Twitter posts
-  pg                Start Postgres (dev; pg-redesign Phase 1 groundwork, not yet live)
-  analyze           Run analysis pipeline (ETL + AI + caching)
-                                                 [--tasks <list>] [--limit <n>]
-  analyze-pg        Run the Postgres-stack pipeline (scheduler/pipeline.py)
+  pg                Start Postgres (dev)
+  analyze           Run analysis pipeline (ETL + AI)
                                                  [--tasks <list>] [--limit <n>]
   refresh-accounts  Refresh known_political_x_accounts.yaml   [--dry-run]
   api               Start the FastAPI server (serves cached data) on :8000
@@ -248,7 +233,6 @@ case "$COMMAND" in
     pg)               run_pg ;;
     api)              run_api ;;
     analyze)          run_analyze ;;
-    analyze-pg)       run_analyze_pg ;;
     refresh-accounts) run_refresh_accounts ;;
     ui)               run_ui ;;
     dev)              run_dev ;;

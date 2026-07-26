@@ -10,13 +10,29 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
-// pgMigrationsDir is where Postgres migrations live. Unlike the SQLite path
-// (derived from dbPath's directory below), this is a fixed convention:
-// `data/pg-migrations/` sits alongside `data/migrations/` (which stays
-// SQLite-only) and resolves relative to the process working directory, the
-// same assumption the SQLite default path ("data/civic_lens.db") already
-// makes.
+// pgMigrationsDir is where Postgres migrations live: `data/pg-migrations/`
+// sits alongside `data/migrations/` (SQLite-only). Resolution must not
+// depend on the process working directory — in the container, compose sets
+// working_dir to the data volume while the migrations ship in the image at
+// /app/data/pg-migrations, so a CWD-only lookup silently finds nothing.
 const pgMigrationsDir = "data/pg-migrations"
+
+// resolvePgMigrationsDir returns the first existing candidate: the
+// CWD-relative dir (repo checkouts, tests) or the dir beside the executable
+// (container image). Erroring when neither exists keeps `migrate` loud —
+// a missing migrations dir is always a packaging bug, never a valid no-op.
+func resolvePgMigrationsDir() (string, error) {
+	candidates := []string{pgMigrationsDir}
+	if exe, err := os.Executable(); err == nil {
+		candidates = append(candidates, filepath.Join(filepath.Dir(exe), pgMigrationsDir))
+	}
+	for _, dir := range candidates {
+		if info, err := os.Stat(dir); err == nil && info.IsDir() {
+			return dir, nil
+		}
+	}
+	return "", fmt.Errorf("postgres migrations directory not found (tried %v)", candidates)
+}
 
 // openPostgres connects via the pgx stdlib adapter and verifies connectivity
 // with a Ping — Open should fail fast on a bad DSN rather than defer the
@@ -58,6 +74,12 @@ func (d *DB) migratePostgresDir(ctx context.Context, migrationsDir string) error
 	migrations, err := discoverMigrations(migrationsDir)
 	if err != nil {
 		return fmt.Errorf("discover migrations: %w", err)
+	}
+	if len(migrations) == 0 {
+		// An empty dir means the migrations were not packaged/mounted where
+		// we looked; treating it as "nothing to do" would leave a brand-new
+		// database schemaless and fail later with confusing query errors.
+		return fmt.Errorf("no .sql migrations found in %s", migrationsDir)
 	}
 
 	for _, m := range migrations {

@@ -2,9 +2,10 @@
 # docker-compose.override.example.yml — copy to docker-compose.override.yml
 # (gitignored); production never has an override file.
 #
-# Shape (mirrors docs/deployment/plan.md section 2):
+# Shape:
 #   Always-on:  caddy (TLS + static UI + /api reverse proxy), api (uvicorn),
-#               litestream (continuous SQLite replication to R2).
+#               postgres, litestream (frozen-SQLite replication to R2 —
+#               retires once the final cold artifact is archived post-cutover).
 #   One-shots:  ingest + analyze under the "jobs" profile — never started by
 #               `up`, only by the systemd timers as
 #               `docker compose run --rm <service> ...` so the existing
@@ -12,10 +13,10 @@
 #
 # Data contract: the host dir /var/lib/civic-lens is bind-mounted at the SAME
 # path inside every container, so the absolute paths in /etc/civic-lens.env
-# are valid on the host and in containers alike, and host-native tooling
-# (backup.sh, sqlite3 spot checks) keeps working. WAL SQLite over a same-host
-# bind mount is safe — the WAL hazard only exists across VM/network-fs
-# boundaries (e.g. Windows-mounted paths; see the override example).
+# (e.g. CIVIC_RAW_STORE_DIR) are valid on the host and in containers alike.
+# Postgres reachability differs by vantage point: containers on the default
+# bridge network use the service DNS name (…@postgres:5432); host-side tools
+# (./run.sh, psql spot checks) use the loopback publish (…@127.0.0.1:5432).
 #
 # caddy runs with host networking: Docker-published ports bypass ufw, and the
 # firewall pins :80/:443 to Cloudflare ranges — host networking preserves
@@ -59,6 +60,9 @@ services:
   api:
     <<: *app-common
     image: ghcr.io/young-kobe/civic-lens-analysis:latest
+    depends_on:
+      postgres:
+        condition: service_healthy
     # Bind 0.0.0.0 INSIDE the container (the loopback-only exposure is the
     # published-port line below). CIVIC_API_HOST/PORT from the env file are
     # intentionally not used here — container networking supersedes them.
@@ -84,12 +88,10 @@ services:
         max-size: 10m
         max-file: "3"
 
-  # Postgres redesign, Phase 1 (see docs/todos/pg-redesign.md): groundwork
-  # only — nothing in the stack reads/writes it yet. Runs alongside the
-  # SQLite stack untouched above; dev brings it up standalone via
-  # `./run.sh pg`. POSTGRES_USER/POSTGRES_PASSWORD have no defaults on
-  # purpose (see .env.example) so a missing credential fails `compose
-  # config` loudly instead of silently starting an insecure/trust-auth DB.
+  # The primary datastore — every service above and below reads/writes it.
+  # POSTGRES_USER/POSTGRES_PASSWORD have no defaults on purpose (see
+  # .env.example) so a missing credential fails `compose config` loudly
+  # instead of silently starting an insecure/trust-auth DB.
   postgres:
     image: postgres:17-alpine
     env_file: ${CIVIC_ENV_FILE:-/etc/civic-lens.env}
@@ -123,6 +125,9 @@ services:
     <<: *app-common
     image: ghcr.io/young-kobe/civic-lens-ingest:latest
     profiles: [jobs]
+    depends_on:
+      postgres:
+        condition: service_healthy
     mem_limit: 512m
     cpus: 0.8
 
@@ -130,7 +135,10 @@ services:
     <<: *app-common
     image: ghcr.io/young-kobe/civic-lens-analysis:latest
     profiles: [jobs]
-    command: python -m analysis.src.scheduler.job_runner
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: python -m analysis.src.scheduler.pipeline
     environment:
       # Soft wall-clock budget — same rationale as the old systemd
       # Environment= line; the hard ceiling stays in the timer unit.

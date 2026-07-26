@@ -46,7 +46,11 @@ func Open(dsn string) (*DB, error) {
 // Postgres runner per the backend selected in Open.
 func (d *DB) Migrate(ctx context.Context) error {
 	if d.isPostgres {
-		return d.migratePostgresDir(ctx, pgMigrationsDir)
+		dir, err := resolvePgMigrationsDir()
+		if err != nil {
+			return err
+		}
+		return d.migratePostgresDir(ctx, dir)
 	}
 	return d.migrateSQLite(ctx)
 }

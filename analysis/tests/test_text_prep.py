@@ -15,8 +15,7 @@ Why these matter:
 
 import unittest
 
-from analysis.src.engine.analyzer import Analyzer
-from analysis.src.engine.claim_extractor import ClaimExtractor
+from analysis.src.engine.claims import ClaimDocInput, analyze
 from analysis.src.engine.text_prep import is_trivial_content, truncate_at_sentence
 
 
@@ -68,22 +67,15 @@ class TestIsTrivialContent(unittest.TestCase):
 
 
 class TestTrivialContentSkipsLLM(unittest.TestCase):
-    def test_analyzer_skips_llm_and_labels_heuristic(self):
-        analyzer = Analyzer(llm_enabled=False)
-        analyzer.llm_enabled = True
-        analyzer._llm_client = _ExplodingLLMClient()
-        sent, fav = analyzer.analyze_full("@someone https://example.com #tag")
-        self.assertEqual(sent.inference_method, "heuristic")
-        self.assertEqual(sent.label, "NEUTRAL")
-        self.assertEqual(fav.inference_method, "heuristic")
-
-    def test_claim_extractor_returns_clean_empty_without_call(self):
-        extractor = ClaimExtractor(llm_client=_ExplodingLLMClient())
-        result = extractor.extract("@a @b #c https://t.co/xyz")
+    def test_claims_engine_short_circuits_without_call(self):
+        result = analyze(
+            ClaimDocInput(doc_id=1, text="@a @b #c https://t.co/xyz"),
+            _ExplodingLLMClient(),
+        )
+        # Clean deterministic empty, not a failure — the doc gets a done run
+        # and never re-queues.
         self.assertEqual(result.claims, [])
-        # Clean empty, not a failure — the doc must get an ai_outputs row
-        # and never re-queue.
-        self.assertFalse(result.extraction_failed)
+        self.assertEqual(result.inference_method, "deterministic")
 
 
 if __name__ == "__main__":

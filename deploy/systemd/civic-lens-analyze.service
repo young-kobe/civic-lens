@@ -18,19 +18,17 @@ WorkingDirectory=/opt/civic-lens
 EnvironmentFile=/etc/civic-lens.env
 # Apply pending migrations before every analyze run. deploy.sh migrates on
 # deploys, but manual `docker compose run analyze` invocations and image
-# pulls outside deploy.sh must never race ahead of the schema (2026-07-10:
-# 'no such table: ai_outputs_latest'). Idempotent no-op when current; a
-# migration failure aborts the unit before analysis touches the DB. The
-# in-runner schema guard (job_runner) is the belt to this suspender for
-# invocations that bypass systemd entirely.
-ExecStartPre=/bin/sh -c 'docker compose run --rm --quiet-pull ingest migrate --db "${CIVIC_DB_PATH:-/var/lib/civic-lens/data/civic_lens.db}"'
+# pulls outside deploy.sh must never race ahead of the schema. Idempotent
+# no-op when current; a migration failure aborts the unit before analysis
+# touches the DB. No --db flag: the CLI defaults to CIVIC_DATABASE_URL from
+# the compose env_file, which selects the Postgres backend.
+ExecStartPre=/usr/bin/docker compose run --rm --quiet-pull ingest migrate
 ExecStart=/usr/bin/docker compose run --rm --quiet-pull analyze
 # Wall-clock ceiling — hard stop. Paired with the in-runner soft budget
-# (CIVIC_BUDGET_SECONDS=6900, set on the compose service) that skips LLM
-# stages and jumps to snapshots when wall-clock runs short, so the UI cache
-# is always regenerated even when upstream LLM latency is above average.
-# The hard ceiling is the safety net for cases the soft budget misses (hung
-# TLS handshake, Gemini 500s that retry forever, etc). systemd kills the
-# `docker compose run` client; --rm plus docker's signal forwarding tears
-# down the container. See docs/audit-trail/infra/ for the budget writeup.
+# (CIVIC_BUDGET_SECONDS=6900, set on the compose service): the pipeline
+# stops claiming new queue work once the soft budget is spent and lets
+# in-flight tasks finish. The hard ceiling is the safety net for cases the
+# soft budget misses (hung TLS handshake, LLM calls that retry forever).
+# systemd kills the `docker compose run` client; --rm plus docker's signal
+# forwarding tears down the container.
 TimeoutStartSec=2h
