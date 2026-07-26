@@ -259,7 +259,7 @@ CLAIM_EXTRACTION_USER_PROMPT_TEMPLATE = """Extract discrete claims from this tex
 
 
 # =============================================================================
-# Propaganda Detection Prompts (walkthrough 042)
+# Propaganda Detection Prompts
 #
 # Six starting techniques, each with a tight operational definition. The LLM
 # must return a verbatim evidence span per flagged technique — the detector

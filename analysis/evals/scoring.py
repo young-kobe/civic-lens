@@ -27,8 +27,8 @@ SPAN_IOU_THRESHOLD = 0.3
 def span_char_range(span: str, text: str) -> Optional[Tuple[int, int]]:
     """(start, end) of the first case-insensitive occurrence, or None.
 
-    Mirrors the pipeline's substring check (claim_extractor._validate_claim):
-    case-insensitive, first occurrence wins.
+    Mirrors the pipeline's substring check (engine/claims.py's
+    validate_evidence_span): case-insensitive, first occurrence wins.
     """
     if not span:
         return None

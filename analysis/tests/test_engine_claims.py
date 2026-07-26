@@ -137,10 +137,8 @@ class AnalyzeClaimLengthBoundTests(unittest.TestCase):
 
 class AnalyzeEvidenceDropTests(unittest.TestCase):
     """The drop-vs-cap finding: a claim whose evidence fails verification is
-    DROPPED ENTIRELY (not kept with confidence capped, unlike text.py's
-    sentiment/favorability spans) -- ported unchanged from the old
-    claim_extractor.py's `if evidence.lower() not in source_text.lower():
-    return None`."""
+    DROPPED ENTIRELY, not kept with confidence capped (unlike text.py's
+    sentiment spans)."""
 
     def test_fabricated_evidence_drops_the_claim(self):
         response = _response(_claim(
@@ -349,8 +347,8 @@ class ProcessIntegrationTests(unittest.TestCase):
     def test_zero_claims_from_llm_response_is_clean_done_run(self):
         """The LLM is called (not trivial content) but every proposed claim
         fails validation -- still a clean 'done' run, zero claims rows,
-        confidence 0.0 (old job_runner convention), prompt_version_id set
-        because the LLM genuinely ran."""
+        confidence 0.0, prompt_version_id set because the LLM genuinely
+        ran."""
         response = _response(_claim("Fabricated assertion here", "phrase not present anywhere"))
         client = LLMClient(FakeTransport([response]))
 

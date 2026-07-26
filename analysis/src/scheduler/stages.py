@@ -204,12 +204,11 @@ def load_bot_input(conn: Connection, doc_id: int) -> BotDocInput:
 _TARGETS_INPUT_SQL = "SELECT doc_id, source_type, body FROM corpus.documents WHERE doc_id = %(doc_id)s"
 
 # tracked_targets is the same canonical-name list for every doc in a targets
-# stage run (built once from the curated registry, not per doc) -- old
-# job_runner.py's editorial-registry-officials convention, minus the two
-# hardcoded party-collective strings (corpus.entities has no populated
-# kind='collective' rows yet; see docs/todos/pg-redesign.md Phase 4's
-# "Future decision" item -- fabricating them here would violate the
-# never-fabricate-values rule).
+# stage run (built once from the curated registry, not per doc). No
+# hardcoded party-collective strings are added (corpus.entities has no
+# populated kind='collective' rows yet; see docs/todos/pg-redesign.md
+# Phase 4's "Future decision" item -- fabricating them here would violate
+# the never-fabricate-values rule).
 _TRACKED_TARGET_NAMES_SQL = """
     SELECT display_name FROM corpus.entities
     WHERE kind = 'official' AND editorial AND active

@@ -1,5 +1,5 @@
 """
-Post-CF-Access bounce endpoint (walkthrough 050).
+Post-CF-Access bounce endpoint.
 
 When the SPA's admin fetch hits a missing or expired Cloudflare Access
 session, the browser can't follow CF's cross-origin 302 to the login page

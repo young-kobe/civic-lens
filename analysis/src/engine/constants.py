@@ -137,7 +137,7 @@ UNFAVORABLE_INDICATORS = frozenset([
 
 
 # =============================================================================
-# Bot Detection Constants (walkthrough 040 rework)
+# Bot Detection Constants
 #
 # The old SPAM_KEYWORDS list targeted 2018-era spambots ("buy now", "viagra").
 # Modern propaganda-driver accounts use LLM-generated political text that hits
@@ -258,18 +258,16 @@ PROPAGANDA_TASK = "propaganda"
 CLAIMS_TASK = "claims"
 
 # Schema instructs the LLM to extract at most 4 targets; enforced defensively
-# in engine/targets.py too (ported from old engine/target_extractor.py's
-# MAX_TARGETS).
+# in engine/targets.py too.
 MAX_TARGETS = 4
 
 # Character budget for the doc text the LLM sees in engine/targets.py,
-# clamped at a sentence boundary (matches old target_extractor.py's
-# TARGET_TEXT_MAX_CHARS).
+# clamped at a sentence boundary.
 TARGET_TEXT_MAX_CHARS = 2000
 
-# Character budget for the text engine/propaganda.py's LLM sees -- unchanged
-# from the old detector (propaganda techniques surface in the opening
-# rhetoric: headline + first 2-3 paragraphs, not paragraph 12).
+# Character budget for the text engine/propaganda.py's LLM sees --
+# propaganda techniques surface in the opening rhetoric: headline + first
+# 2-3 paragraphs, not paragraph 12.
 PROPAGANDA_TEXT_MAX_CHARS = 800
 
 # Schema caps engine/propaganda.py's techniques at 5; enforced defensively
@@ -277,16 +275,16 @@ PROPAGANDA_TEXT_MAX_CHARS = 800
 MAX_PROPAGANDA_TECHNIQUES = 5
 
 # Character budget for the doc text engine/claims.py's LLM sees, clamped at a
-# sentence boundary. Matches the old claim_extractor.py's CLAIM_TEXT_MAX_CHARS.
+# sentence boundary.
 CLAIM_TEXT_MAX_CHARS = 2000
 
 # Prompt rule 2 caps engine/claims.py's model at 3 claims; enforced
 # defensively here too in case a backend ignores the instruction.
 MAX_CLAIMS_PER_DOC = 3
 
-# Run confidence engine/claims.py uses for a doc with zero surviving claims --
-# old convention (job_runner.py's run_claim_extraction: `sum(confidences)/
-# len(confidences) if confidences else 0.0`).
+# Run confidence engine/claims.py uses for a doc with zero surviving claims:
+# a doc with zero claims is not skipped, its run is recorded at 0.0 rather
+# than a null/undefined confidence.
 ZERO_CLAIMS_CONFIDENCE = 0.0
 
 
@@ -311,17 +309,15 @@ ZERO_CLAIMS_CONFIDENCE = 0.0
 
 BOT_TASK = "bot"
 
-# Prompt-input truncation -- matches old engine/bot.py's `text[:1500]` verbatim.
+# Prompt-input truncation for the text engine/bot_detection.py's LLM sees.
 BOT_PROMPT_TEXT_MAX_CHARS = 1500
 
 # Confidence floor for a bot/suspicious LLM label to count toward
 # `analysis.author_bot_scores.bot_post_count`/`.suspicious_post_count` in
-# `bot_detection.py::refresh_author_bot_scores()` (owner decision
-# 2026-07-25 -- the label-AND-confidence half of the author-exclusion gate
-# redesign, docs/audit-trail/analysis/2026-07-25-bot-exclusion-gate.md). A
-# low-confidence "bot" guess must not silence an author from downstream
-# panels. Matches the repo-wide `aggregation_min_confidence` default
-# (common/settings.py, walkthrough 039) rather than inventing a new floor.
+# `bot_detection.py::refresh_author_bot_scores()`. A low-confidence "bot"
+# guess must not silence an author from downstream panels. Matches the
+# repo-wide `aggregation_min_confidence` default (common/settings.py) rather
+# than inventing a new floor.
 BOT_LABEL_MIN_CONFIDENCE = 0.5
 
 # Account/text thresholds read by bot_detection.py's _compute_signals. The

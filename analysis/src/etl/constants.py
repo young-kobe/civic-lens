@@ -15,8 +15,8 @@ ETL_VERSION = "pg-2"
 
 THIRTY_DAYS = datetime.timedelta(days=30)
 
-# Genuinely-invalid published_at bounds (ported from loader.py's
-# `is_recent`): before 2020 or more than a day in the future.
+# Genuinely-invalid published_at bounds: before 2020 or more than a day in
+# the future.
 MIN_VALID_PUBLISHED_AT = datetime.datetime(2020, 1, 1, tzinfo=datetime.timezone.utc)
 FUTURE_SLOP = datetime.timedelta(days=1)
 

@@ -1,14 +1,11 @@
 """
 Unit tests for the unified evidence-span validator
-(analysis.src.engine.validation), consolidated from analyzer.py,
-claim_extractor.py, propaganda_detector.py, and target_extractor.py's
-per-engine validators (Postgres redesign Phase 5).
+(analysis.src.engine.validation), shared by engine/{text,claims,propaganda,
+targets}.py.
 
 Includes a compatibility-matrix test asserting the unified functions agree
 with the majority (3-of-4) behavior on a shared fixture set, with expected
-outcomes encoded explicitly rather than by importing the old validators —
-those validators still live in the old-stack engines and are out of scope
-for this module.
+outcomes encoded explicitly.
 """
 
 import sys
@@ -199,8 +196,7 @@ class CompatibilityMatrixTests(unittest.TestCase):
         self.assertNotEqual(capped, 0.2)
 
     def test_fabricated_single_span_capped_like_analyzer_and_target(self):
-        # Mirrors analyzer._validate_evidence_spans / target_extractor.
-        # _validate_target: one fabricated span, none verified -> capped.
+        # One fabricated span, none verified -> capped.
         spans = ["completely invented quote not in source"]
         valid, had_invalid = validate_spans(spans, self.source)
         conf = cap_confidence_if_unverified(0.8, verified=not had_invalid)

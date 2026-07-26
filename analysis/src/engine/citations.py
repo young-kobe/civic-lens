@@ -1,8 +1,8 @@
 """
 Deterministic cross-source citation extractor (Postgres redesign Phase 6).
 
-Produces a *partial* link graph, not a full propagation trace (see CLAUDE.md,
-walkthrough 035): URL citations found in doc text, plus X reply/quote/retweet
+Produces a *partial* link graph, not a full propagation trace (see CLAUDE.md):
+URL citations found in doc text, plus X reply/quote/retweet
 edges from `referenced_tweet_id`/`referenced_tweet_type`. `extract()` is pure
 (no DB); `process()` resolves candidates against `corpus.documents` and writes
 one `analysis.citations` run via `results/store.py`.
@@ -33,11 +33,9 @@ from analysis.src.results import store
 
 MODEL_ID = "citation_extractor_v1"
 
-# Deterministic extraction carries no uncertainty -- the old convention this
-# ports forward (see the old engine/citation_extractor.py docstring: no
-# ai_outputs confidence was ever computed for this stage; the new run row
-# still needs a confidence value, and 1.0 is the correct "not probabilistic"
-# reading for a rule-based match).
+# Deterministic extraction carries no uncertainty, but the run row still
+# needs a confidence value -- 1.0 is the correct "not probabilistic" reading
+# for a rule-based match.
 DETERMINISTIC_CONFIDENCE = 1.0
 
 # Loose URL matcher -- canonicalize_url() is what actually decides matches.

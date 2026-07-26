@@ -220,11 +220,6 @@ def process(doc: PropagandaDocInput, client: LLMClient) -> store.RunOutcome:
         ],
     )
 
-    # Run confidence: the old job_runner passed result.overall_propaganda_score
-    # straight through as ai_outputs.confidence (run_propaganda_detection ->
-    # save_ai_output(..., result.overall_propaganda_score, ...)) -- the
-    # self-reported overall score, NOT a mean over per-technique confidences
-    # (contrast text.py's unified run, which averages sentiment+favorability
-    # because those are two independently-scored facets of one run). This
-    # run mirrors that: density IS the run confidence.
+    # Run confidence is the self-reported overall density score, NOT a mean
+    # over per-technique confidences: density IS the run confidence.
     return handle.finish("done", confidence=result.density, raw_response=result.raw_response)

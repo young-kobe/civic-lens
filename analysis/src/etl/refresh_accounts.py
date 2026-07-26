@@ -2,7 +2,7 @@
 Refresh the curated House + Senate sections of known_political_x_accounts.yaml
 from the UCSD Library's Congress Twitter guide.
 
-Primary sources (walkthrough 037):
+Primary sources:
   - Senators: https://ucsd.libguides.com/congress_twitter/senators
   - Reps:     https://ucsd.libguides.com/congress_twitter/reps
 
