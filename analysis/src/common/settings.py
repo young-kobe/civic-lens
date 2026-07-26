@@ -12,12 +12,12 @@ class Settings(BaseSettings):
     # Postgres redesign (Phase 1, plumbing only — nothing reads this yet).
     # Empty by default; analysis/src/common/db.py refuses to guess a DSN.
     database_url: str = ""
-    # Pool max size for the Postgres ConnectionPool. Small box: server-side
-    # max_connections=30, so keep this well under that per process.
-    pg_pool_max: int = 5
-    # Worker thread count for the new-stack scheduler's per-queue-stage
-    # claim loop (analysis/src/scheduler/stages.py::run_queue_stage).
-    analyze_concurrency: int = 4
+    # Postgres ConnectionPool max. Keep above analyze_concurrency: workers
+    # borrow a connection per doc. Server-side max_connections=30.
+    pg_pool_max: int = 12
+    # Worker threads per stage (scheduler/stages.py::run_queue_stage). One
+    # in-flight LLM call each; Gemini caps remote calls around 10.
+    analyze_concurrency: int = 10
     
     # Cache for pre-computed analysis snapshots
     cache_dir: str = "data/cache"

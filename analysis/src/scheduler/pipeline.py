@@ -236,9 +236,14 @@ def main() -> int:
         f"pipeline starting. tasks={tasks or 'all'} limit={args.limit or 'none'} "
         f"budget_seconds={args.budget_seconds or 'none'}"
     )
-    summary = run_pipeline(tasks=tasks, limit=args.limit, budget_seconds=args.budget_seconds)
-    logger.info(f"pipeline complete: {summary}")
-    return 0
+    try:
+        summary = run_pipeline(tasks=tasks, limit=args.limit, budget_seconds=args.budget_seconds)
+        logger.info(f"pipeline complete: {summary}")
+        return 0
+    finally:
+        # Left to __del__, the pool joins threads at interpreter shutdown
+        # and Python 3.14 raises PythonFinalizationError.
+        db.close_pool()
 
 
 if __name__ == "__main__":

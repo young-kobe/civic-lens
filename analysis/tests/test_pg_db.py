@@ -49,7 +49,11 @@ class TestSettingsReadPgEnvVars(unittest.TestCase):
     def test_defaults_when_unset(self):
         settings = Settings(_env_file=None)
         self.assertEqual(settings.database_url, "")
-        self.assertEqual(settings.pg_pool_max, 5)
+        # Every scheduler worker borrows a connection per doc, so a pool at
+        # or below the worker count makes threads queue on the pool instead
+        # of the LLM. Asserting the relationship, not the literal, so a
+        # future concurrency bump fails here rather than silently throttling.
+        self.assertGreater(settings.pg_pool_max, settings.analyze_concurrency)
 
     def test_reads_database_url_from_env(self):
         prev = os.environ.get("CIVIC_DATABASE_URL")
