@@ -1,5 +1,5 @@
 """
-Schema tests for the entity registries added in walkthrough 054
+Schema tests for the entity registries
 (Phase 2 of the UI Redesign Plan).
 
 Validates that:

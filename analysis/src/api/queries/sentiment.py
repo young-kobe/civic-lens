@@ -3,9 +3,7 @@ GET /api/v1/sentiment aggregation: net tone, intensity distribution,
 platform/topic/time-of-day/day-of-week splits, the news/officials/
 general-public tier split, and per-entity stance aggregates -- computed
 live against corpus.documents + analysis.runs/sentiment_results/
-target_mentions. See docs/audit-trail/api/2026-07-24-phase9-sentiment-entities.md
-and docs/audit-trail/api/2026-07-25-favorability-retirement.md (entity
-stance aggregates now come from target_mentions alone).
+target_mentions. See docs/audit-trail/api/2026-07-24-phase9-sentiment-entities.md.
 """
 
 from __future__ import annotations
@@ -294,11 +292,8 @@ def _increment(bucket: Dict[str, Dict[str, int]], key: str, label_key: str) -> N
 
 def _build_entity_stances(target_rows: List[Any]) -> List[EntityStanceAggregate]:
     """One aggregate per entity target_mentions names (keyed by entity_id, or
-    the unresolved-mentions catch-all). Sourced from target_mentions alone
-    as of 2026-07-25 -- analysis.favorability_stances (the text task's
-    former per-entity stance output, GOP-only by prompt instruction) is no
-    longer written; target_mentions already covered the same "stance toward
-    a mentioned entity" axis, party-neutral and topic-tagged."""
+    the unresolved-mentions catch-all). Sourced from target_mentions alone,
+    party-neutral and topic-tagged."""
     cells: Dict[Any, Dict[str, Any]] = {}
 
     def cell_for(entity_id: Optional[int], row: Any) -> Dict[str, Any]:

@@ -836,7 +836,7 @@ def _resolve_official_author_ids(conn: Connection, author_ids: set[int]) -> set[
     data/pg-migrations/0001_north_star.sql / docs/DATABASE_SCHEMA.md, the
     only tables carrying author<->entity linkage). An author with no
     author_profiles row yet (account_tier.py runs later in the pipeline
-    than this ETL stage -- see job_runner.py's stage order) or a
+    than this ETL stage -- see scheduler/constants.py's STAGE_ORDER) or a
     profile pointing at an inactive/non-official entity is simply absent
     from the returned set, not an error."""
     if not author_ids:

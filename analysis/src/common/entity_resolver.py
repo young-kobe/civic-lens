@@ -1,8 +1,7 @@
 """
-DB-backed entity resolver (Postgres redesign Phase 6) replacing the old
-YAML entity_registry for FK resolution against `corpus.entities`. Loads the
-active registry once per construction into an in-memory map; `resolve()` is
-then a pure dict lookup with no further DB access.
+DB-backed entity resolver for FK resolution against `corpus.entities`. Loads
+the active registry once per construction into an in-memory map; `resolve()`
+is then a pure dict lookup with no further DB access.
 """
 
 from __future__ import annotations
@@ -13,15 +12,13 @@ from analysis.src.common import db
 from analysis.src.common.canonicalize import canonicalize_entity_name
 
 # Generational suffixes ignored when deriving a last-name alias
-# ("Robert F. Kennedy Jr." -> "kennedy"). Ported from
-# reporting/entity_registry.py::TargetResolver (old-stack/YAML-tied, retires
-# in Phase 9 -- copied here rather than imported).
+# ("Robert F. Kennedy Jr." -> "kennedy").
 _NAME_SUFFIXES = frozenset({"jr", "jr.", "sr", "sr.", "ii", "iii", "iv"})
 
 
 class EntityResolver:
-    """Resolves free-text entity names (as emitted by an LLM, e.g. the text
-    engine's favorability `entity` field) to `corpus.entities.entity_id`.
+    """Resolves free-text entity names (as emitted by an LLM, e.g. the
+    targets engine's raw target string) to `corpus.entities.entity_id`.
 
     Constructed once per pipeline run against a connection (or nothing, in
     which case it checks one out of the shared pool via `common.db`) --
@@ -84,9 +81,8 @@ class EntityResolver:
 
     def resolve(self, raw_name: Optional[str]) -> Optional[int]:
         """Resolve a free-text entity name to its entity_id, or None when
-        unresolved. Unresolved names are never stored as a
-        favorability_stances row (entity_id is NOT NULL there) -- callers
-        count and log the drop."""
+        unresolved. Callers count and log the drop rather than fabricating
+        a match."""
         key = canonicalize_entity_name(raw_name)
         if key is None:
             return None

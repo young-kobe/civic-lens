@@ -3,9 +3,7 @@ GET /api/v1/entity-posts and GET /api/v1/entity-profile/{entity_id}
 aggregation -- entity drill-down reads against corpus.entities joined to
 corpus.documents (via author_profiles/news_articles/reddit_posts) and
 analysis.target_mentions/propaganda_results. See docs/audit-trail/api/
-2026-07-24-phase9-sentiment-entities.md and docs/audit-trail/api/
-2026-07-25-favorability-retirement.md (stance_expressed rebuilt on
-target_mentions; analysis.favorability_stances is retired).
+2026-07-24-phase9-sentiment-entities.md.
 """
 
 from __future__ import annotations
@@ -332,9 +330,7 @@ def _monthly_activity(rows: List[Any]) -> List[MonthlyActivity]:
 
 def _stance_distribution(rows: List[Any]) -> StanceDistribution:
     """Both stance_received and stance_expressed read target_mentions'
-    sentiment_label vocabulary (positive/negative/neutral/mixed) directly --
-    the one vocabulary since analysis.favorability_stances (favorable/
-    unfavorable) retired 2026-07-25."""
+    sentiment_label vocabulary (positive/negative/neutral/mixed) directly."""
     counts = {"positive": 0, "negative": 0, "neutral": 0, "mixed": 0}
     for row in rows:
         counts[row["stance"]] += row["n"]

@@ -19,10 +19,7 @@ STALE_IN_PROGRESS_MINUTES = 30
 
 # Stage names in pipeline order (pipeline.py's registry keys). Ordering
 # constraints this order must preserve: narratives after claims; leans
-# after text/targets AND after narratives; bot_rollup after bot. This
-# vocabulary intentionally differs from the old job_runner.py's task names
-# (account_tier replaces "accounts"; "snapshots" is dropped -- the new
-# stack has no cache-snapshot stage yet; "leans" is new).
+# after text/targets AND after narratives; bot_rollup after bot.
 STAGE_ORDER = (
     "etl",
     "account_tier",

@@ -42,10 +42,8 @@ TEXT_ANALYSIS_SCHEMA = {
 
 # Target Sentiment Schema (received vs. expressed tone split)
 #
-# Topic values mirror reporting/aggregators/constants.py::TOPIC_KEYWORDS keys
-# plus "Other". Kept as a literal here (rather than importing from the
-# reporting layer) so the llm package stays below reporting in the layering;
-# test_target_extractor asserts the two stay in sync.
+# Topic values must stay in sync with the literal topic list in
+# llm/prompts.py's target-extraction prompt.
 TARGET_TOPIC_ENUM = [
     "Immigration", "Economy", "Healthcare", "Climate", "Foreign Policy",
     "Gun Policy", "Abortion", "Education", "Justice", "Technology",
@@ -104,7 +102,7 @@ CLAIM_EXTRACTION_SCHEMA = {
     "required": ["claims"],
 }
 
-# Propaganda Detection Schema (walkthrough 042)
+# Propaganda Detection Schema
 PROPAGANDA_TECHNIQUE_ENUM = [
     "loaded_language",
     "name_calling",
@@ -143,7 +141,7 @@ PROPAGANDA_SCHEMA = {
 }
 
 
-# Bot Detection Schema (walkthrough 040 — added llm_text_likelihood).
+# Bot Detection Schema
 # `is_bot` was dropped (2026-07-25): a lossy 2-value collapse of `label`
 # (human/bot/suspicious), which is what engine/bot_detection.py actually reads.
 BOT_SCHEMA = {

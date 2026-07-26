@@ -479,14 +479,12 @@ _UPSERT_AUTHOR_BOT_SCORES_SQL = """
 
 
 def refresh_author_bot_scores() -> int:
-    """Full recompute of analysis.author_bot_scores from current bot runs,
-    replacing old job_runner.py's run_account_bot_rollup.
+    """Full recompute of analysis.author_bot_scores from current bot runs.
 
     Joins bot_signals -> runs (is_current) -> documents (author_id): a
     reprocess that supersedes a prior run drops that run's is_current, so
     its bot_signals row is automatically excluded here without any special
-    casing (old code's equivalent was a raw ai_outputs_latest view). Rows
-    with bs.label = 'unknown' (the empty-text case) are excluded from both
+    casing. Rows with bs.label = 'unknown' (the empty-text case) are excluded from both
     the DELETE and the UPSERT -- they carry no signal to aggregate, the same
     exclusion the pre-0005 `bs.score IS NOT NULL` guard achieved (`score` was
     NULL for, and only for, the 'unknown' label).

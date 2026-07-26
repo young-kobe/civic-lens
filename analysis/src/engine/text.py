@@ -14,13 +14,8 @@ Owner decision (2026-07-23): the trivial-content short-circuit (prompt rule
 `sentiment_results` row, replacing the old ported neutral-at-0.5 placeholder
 (`TRIVIAL_CONTENT_CONFIDENCE` deleted) -- unanalyzable is not neutral.
 
-Sentiment-only as of 2026-07-25: the favorability half (`entity_stances`,
-`overall_gop_stance`, `analysis.favorability_stances`) is gone. Per-entity
-stance is fully covered by the `targets` engine, which is party-neutral,
-topic-tagged, keeps unresolved targets, and already runs on every doc --
-favorability_stances was a one-party (GOP-only, by prompt instruction),
-topic-less subset of what targets already produces. See
-docs/audit-trail/analysis/2026-07-25-text-sentiment-only.md.
+Sentiment-only: per-entity stance is covered by the party-neutral,
+topic-tagged `targets` engine instead, so this module computes no favorability.
 """
 
 from __future__ import annotations
@@ -138,9 +133,9 @@ def _build_sentiment(response: dict, source_text: str) -> SentimentOutcome:
 
 
 def _resolve_model_id() -> str:
-    """Mirrors the old job_runner's model_id resolution (settings.llm_backend
-    selects gemini_model vs ollama_model). A per-engine stopgap until Phase 7
-    generalizes model_id resolution into the scheduler."""
+    """Resolves model_id from settings.llm_backend (gemini_model vs
+    ollama_model). A per-engine stopgap until Phase 7 generalizes model_id
+    resolution into the scheduler."""
     settings = get_settings()
     if settings.llm_backend.lower() == "ollama":
         return settings.ollama_model

@@ -1,5 +1,5 @@
 """
-Tests for analysis.src.etl.refresh_accounts (walkthrough 037).
+Tests for analysis.src.etl.refresh_accounts.
 
 All tests run offline — we feed fixture HTML directly to the parser and
 construct fake ``ScrapedMember`` lists for the merge tests. No network calls.

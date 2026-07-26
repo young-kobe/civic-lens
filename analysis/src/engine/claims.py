@@ -3,15 +3,12 @@ Claim extraction engine (Postgres redesign Phase 6, Wave 2). `analyze()` is
 pure (no DB access); `process()` composes it with `results/store.py` to
 write one `analysis.runs` ('claims') row plus its `claims` rows.
 
-Ported behavior from the old `engine/claim_extractor.py`: a claim whose
-evidence_span fails the verbatim-substring check is DROPPED ENTIRELY, not
-capped in confidence -- unlike the text engine's sentiment/favorability
-spans (which survive with confidence capped). The old code's rationale
-(module docstring: "failing the verbatim check drops the claim entirely,
-so a model that hallucinates can't silently populate the narrative layer")
-still applies now that `claims` anchors narratives via
-`analysis.narratives.anchor_claim_id`, and `analysis.claims` has no
-evidence_span column to persist a capped-but-kept row against.
+A claim whose evidence_span fails the verbatim-substring check is DROPPED
+ENTIRELY, not capped in confidence -- unlike the text engine's sentiment
+spans (which survive with confidence capped). This keeps a model that
+hallucinates from silently populating the narrative layer: `claims` anchors
+narratives via `analysis.narratives.anchor_claim_id`, and `analysis.claims`
+has no evidence_span column to persist a capped-but-kept row against.
 """
 
 from __future__ import annotations
@@ -183,9 +180,8 @@ def process(doc: ClaimDocInput, client: LLMClient) -> store.RunOutcome:
         for c in result.claims
     ])
 
-    # Run-level confidence: mean of every claim's own confidence, matching
-    # the old job_runner's row_confidence convention -- 0.0 (not skipped)
-    # when zero claims survived.
+    # Run-level confidence: mean of every claim's own confidence -- 0.0
+    # (not skipped) when zero claims survived.
     confidences = [c.confidence for c in result.claims]
     run_confidence = sum(confidences) / len(confidences) if confidences else ZERO_CLAIMS_CONFIDENCE
 

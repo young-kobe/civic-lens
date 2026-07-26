@@ -1,9 +1,7 @@
 """
-Unified evidence-span validator (Postgres redesign Phase 5, code design
-principle 3). Consolidates the four drifted per-engine validators
-(analyzer.py, claim_extractor.py, propaganda_detector.py, target_extractor.py)
-into one set of pure functions; Phase 6 ports each engine onto this module.
-Constant choices and disagreement-resolution rationale:
+Unified evidence-span validator shared by engine/{text,claims,propaganda,
+targets}.py -- one set of pure functions instead of four per-engine
+validators. Constant choices and disagreement-resolution rationale:
 docs/audit-trail/analysis/2026-07-22-pg-analysis-plumbing.md.
 """
 
@@ -56,7 +54,7 @@ def cap_confidence_if_unverified(confidence: float, verified: bool) -> float:
 
 def validate_claim_length(claim_text: str) -> bool:
     """True if claim_text's whitespace-split word count falls within
-    [MIN_CLAIM_WORDS, MAX_CLAIM_WORDS] inclusive. claim_extractor-specific;
-    the other three validators have no analogous bound."""
+    [MIN_CLAIM_WORDS, MAX_CLAIM_WORDS] inclusive. claims.py-specific; the
+    other three engines have no analogous bound."""
     word_count = len(claim_text.split())
     return MIN_CLAIM_WORDS <= word_count <= MAX_CLAIM_WORDS

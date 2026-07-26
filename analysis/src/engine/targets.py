@@ -45,9 +45,9 @@ _STANCE_MAP = {
 class TargetDocInput:
     """One doc's targets-engine input, assembled by the caller from
     corpus.documents. `tracked_targets` is the canonical-name list the
-    caller builds from the entity registry (job_runner today) -- nudges the
-    LLM to reuse an exact known name via the TRACKED TARGETS block, but
-    resolution below never depends on the model having used it."""
+    caller builds from the entity registry (`scheduler/stages.py` today) --
+    nudges the LLM to reuse an exact known name via the TRACKED TARGETS
+    block, but resolution below never depends on the model having used it."""
 
     doc_id: int
     source_type: str
@@ -73,13 +73,11 @@ class TargetMentionOutcome:
 class TargetAnalysis:
     """The validated outcome of one `analyze()` call.
 
-    KEY ASYMMETRY vs the text engine: analysis.target_mentions.entity_id is
-    NULLABLE, so an unresolved target is kept in `mentions` with
-    entity_id=None instead of being dropped (unlike TextAnalysis.
-    favorability_stances, which can only hold resolved entities because
-    favorability_stances.entity_id is NOT NULL). `dropped_unmappable_stance`
-    counts mentions dropped for a different reason entirely: a stance value
-    that doesn't map onto the DDL's sentiment_label enum.
+    `analysis.target_mentions.entity_id` is NULLABLE, so an unresolved
+    target is kept in `mentions` with entity_id=None instead of being
+    dropped. `dropped_unmappable_stance` counts mentions dropped for a
+    different reason entirely: a stance value that doesn't map onto the
+    DDL's sentiment_label enum.
     """
 
     mentions: List[TargetMentionOutcome]

@@ -36,10 +36,6 @@ def health():
     db_ok = _check_db()
     # Import here to avoid a circular with server.py at module load.
     from analysis.src.api.server import API_VERSION
-    # No llm_enabled here: no engine in the Postgres pipeline reads that
-    # setting (2026-07-25 audit), so reporting it would advertise a switch
-    # this stack does not honour. Only the retired scheduler/job_runner.py
-    # stack still consults it.
     return {
         "status": "ok" if db_ok else "degraded",
         "app_name": settings.app_name,
