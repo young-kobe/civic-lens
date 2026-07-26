@@ -20,41 +20,41 @@ until the single Phase 6 push, which is the cutover.
 
 ## Phase 1 — Deploy-surface fixes (blocking for merge)
 
-- [ ] `docker-compose.yml`: analyze command -> `scheduler.pipeline`;
+- [x] `docker-compose.yml`: analyze command -> `scheduler.pipeline`;
       `depends_on: postgres (service_healthy)` on api/analyze/ingest;
       refresh stale header comments
-- [ ] `deploy/deploy.sh`: SQLite migrate -> PG migrations (`data/pg-migrations/`)
-- [ ] `ingest/docker-entrypoint.sh` + `db_postgres.go`: pg-migrations path
+- [x] `deploy/deploy.sh`: SQLite migrate -> PG migrations (`data/pg-migrations/`)
+- [x] `ingest/docker-entrypoint.sh` + `db_postgres.go`: pg-migrations path
       CWD-independent; fail loudly when the dir is missing/empty
-- [ ] systemd units: analyze (ExecStartPre + ExecStart), crawl, x -> PG DSN
-- [ ] `.env.example`: document `@postgres:5432` (container) vs
+- [x] systemd units: analyze (ExecStartPre + ExecStart), crawl, x -> PG DSN
+- [x] `.env.example`: document `@postgres:5432` (container) vs
       `@127.0.0.1:5432` (host) DSN forms
-- [ ] `deploy/backup.sh` -> `pg_dump -Fc` + age + rclone
-- [ ] `deploy/install.sh`: timer list, drop sqlite3 apt dep
-- [ ] `run.sh`: `analyze` dispatches `scheduler.pipeline`; retire `analyze-pg` alias
-- [ ] Delete `setup-cron.sh`
-- [ ] Fix `deploy/scripts/seed-initial.sh` job_runner reference
-- [ ] Rewrite `deploy/README.md` (incl. monitoring off dead `/api/v1/cache-status`)
-- [ ] `CIVIC_BUDGET_SECONDS`: verify pipeline honors it or drop from compose/unit
-- [ ] Gate: `docker compose config` passes; `bash -n` all scripts; tests green
+- [x] `deploy/backup.sh` -> `pg_dump -Fc` + age + rclone
+- [x] `deploy/install.sh`: timer list, drop sqlite3 apt dep
+- [x] `run.sh`: `analyze` dispatches `scheduler.pipeline`; retire `analyze-pg` alias
+- [x] Delete `setup-cron.sh`
+- [x] Fix `deploy/scripts/seed-initial.sh` job_runner reference
+- [x] Rewrite `deploy/README.md` (incl. monitoring off dead `/api/v1/cache-status`)
+- [x] `CIVIC_BUDGET_SECONDS`: verify pipeline honors it or drop from compose/unit
+- [x] Gate: `docker compose config` passes; `bash -n` all scripts; tests green
 
 ## Phase 2 — Dead-code deletion
 
-- [ ] Repoint `analysis/evals/run_eval.py` + `tests/test_eval_runner.py`
+- [x] Repoint `analysis/evals/run_eval.py` + `tests/test_eval_runner.py`
       from `engine.claim_extractor` to `engine/claims.py` (CI gate)
-- [ ] Delete legacy island: `scheduler/job_runner.py`; engine
+- [x] Delete legacy island: `scheduler/job_runner.py`; engine
       {analyzer,bot,propaganda_detector,claim_extractor,citation_extractor,
       narrative_clusterer,account_classifier,target_extractor}.py +
       `engine/models/`; `etl/{loader,polling}.py`;
       `common/{cache,alerts,schema_guard}.py`; all of `src/reporting/`
-- [ ] Delete 39 legacy-only test files + `test_workflow.py`;
+- [x] Delete 39 legacy-only test files + `test_workflow.py`;
       split `test_text_prep.py` (keep trivial-content/truncation cases)
-- [ ] Delete `ingest/cmd/stats/`, `data/civic_prod_copy.db*`, `data/cache/`
-- [ ] `common/settings.py` + `.env.example`: remove `llm_enabled`,
+- [x] Delete `ingest/cmd/stats/`, `data/civic_prod_copy.db*`, `data/cache/`
+- [x] `common/settings.py` + `.env.example`: remove `llm_enabled`,
       `llm_concurrency`, `db_path`, `cache_dir`; trim comment bulk
 - [ ] Defer: Go SQLite backend, `data/migrations/*.sql`, litestream,
       `tools/migrate_sqlite_to_pg.py` (Phase 7)
-- [ ] Gate: full battery green; no stray references outside audit-trail
+- [x] Gate: full battery green; no stray references outside audit-trail
 
 ## Phase 3 — Docs consolidation
 

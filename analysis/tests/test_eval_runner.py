@@ -33,7 +33,7 @@ from analysis.evals.run_eval import (
     run_replay,
 )
 from analysis.evals.scoring import aggregate_scores, score_example
-from analysis.src.engine.claim_extractor import ClaimExtractor
+from analysis.src.engine.claims import ClaimDocInput, analyze
 
 
 def _write_example(dirpath: Path, ex_id: str, text: str, claims, status="VERIFIED"):
@@ -117,17 +117,17 @@ class TestReplay(unittest.TestCase):
         """A recorded response with a fabricated evidence span must be
         dropped by the LIVE validation code during replay — the harness
         scores the pipeline, not the raw recording."""
-        extractor = ClaimExtractor(llm_client=ReplayLLMClient({
+        client = ReplayLLMClient({
             "claims": [
                 {"claim": "The Senate passed the border bill", "confidence": 0.9,
                  "evidence_span": "The Senate passed the border bill 52-48"},
                 {"claim": "The president vetoed the farm bill", "confidence": 0.9,
                  "evidence_span": "president vetoed the farm bill"},  # not in TEXT
             ]
-        }))
-        result = extractor.extract(TEXT)
+        })
+        result = analyze(ClaimDocInput(doc_id=0, text=TEXT), client)
         self.assertEqual(len(result.claims), 1)
-        self.assertEqual(result.claims[0].claim, "The Senate passed the border bill")
+        self.assertEqual(result.claims[0].claim_text, "The Senate passed the border bill")
 
     def test_replay_is_deterministic_end_to_end(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -7,9 +7,9 @@ Covers the three observable behaviours the rest of the pipeline depends on:
     malformed files and empty-keyword entries.
   * Keyword matching is case-insensitive and word-bounded — so e.g. the
     "vac" in "vacuum" must NOT trigger the vaccines seed.
-  * The Analyzer / ClaimExtractor prepend a REFERENCE CONTEXT block above
-    the user prompt only when at least one seed matches; for unrelated
-    docs the prompt is unchanged.
+  * The claims engine prepends a REFERENCE CONTEXT block above the user
+    prompt only when at least one seed matches; for unrelated docs the
+    prompt is unchanged.
 """
 
 from __future__ import annotations
@@ -27,8 +27,7 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 from analysis.src.llm import context_seeds
-from analysis.src.engine.analyzer import Analyzer
-from analysis.src.engine.claim_extractor import ClaimExtractor
+from analysis.src.engine.claims import ClaimDocInput, analyze
 
 
 def _write_seed(dir_path: Path, slug: str, body: str) -> Path:
@@ -158,8 +157,8 @@ class TestSeedLoader(unittest.TestCase):
 
 
 # --------------------------------------------------------------------------- #
-# Engine integration: analyzer + claim extractor inject the block when seeds
-# match, and skip it cleanly when nothing matches.
+# Engine integration: the claims engine injects the block when seeds match,
+# and skips it cleanly when nothing matches.
 # --------------------------------------------------------------------------- #
 
 
@@ -183,75 +182,12 @@ def _stub_default_seeds(test_case: unittest.TestCase, seeds: list) -> None:
     """Force the module-level seed cache to a hermetic list and unwind on
     teardown so other tests in the same run aren't affected."""
     context_seeds.reset_cache()
-    original = context_seeds._cached_default_seeds  # the lru_cache wrapper
-    # Replace the wrapped function's cached output by monkey-patching get_seeds.
+    original = context_seeds.get_seeds
     test_case.addCleanup(setattr, context_seeds, "get_seeds", original)
     context_seeds.get_seeds = lambda: tuple(seeds)
 
 
-class TestAnalyzerInjectsSeedsWhenMatched(unittest.TestCase):
-    def setUp(self) -> None:
-        self._tmp = TemporaryDirectory()
-        self.addCleanup(self._tmp.cleanup)
-        self.dir = Path(self._tmp.name)
-        _write_seed(self.dir, "vaccines", """\
-            ---
-            topic: Vaccines
-            source: CDC
-            source_url: https://cdc.gov
-            last_verified: 2026-04-25
-            applies_to_keywords:
-              - vaccine
-            ---
-            CDC says vaccines are safe.
-            """)
-        seeds = context_seeds.load_seeds(self.dir)
-        _stub_default_seeds(self, seeds)
-
-    def test_matching_doc_gets_reference_block_in_prompt(self) -> None:
-        client = _RecordingLLMClient({
-            "sentiment_label": "NEUTRAL",
-            "sentiment_confidence": 0.5,
-            "sentiment_evidence_spans": [],
-            "sarcasm_detected": False,
-            "entity_stances": [],
-            "overall_gop_stance": "neutral",
-            "overall_favorability_confidence": 0.5,
-            "sentiment_reasoning": "x",
-            "favorability_reasoning": "y",
-        })
-        an = Analyzer(llm_enabled=False)  # avoid the real client init path
-        an._llm_client = client
-        an.llm_enabled = True
-
-        sent, _ = an.analyze_full("The vaccine rollout met its target this quarter.")
-        self.assertIn("REFERENCE CONTEXT", client.last_user_prompt)
-        self.assertIn("Source: CDC", client.last_user_prompt)
-        # Audit metadata stamps which seeds the model saw.
-        self.assertEqual(sent.deterministic_signals.get("reference_seeds"), ["vaccines"])
-
-    def test_unrelated_doc_gets_no_reference_block(self) -> None:
-        client = _RecordingLLMClient({
-            "sentiment_label": "NEUTRAL",
-            "sentiment_confidence": 0.5,
-            "sentiment_evidence_spans": [],
-            "sarcasm_detected": False,
-            "entity_stances": [],
-            "overall_gop_stance": "neutral",
-            "overall_favorability_confidence": 0.5,
-            "sentiment_reasoning": "x",
-            "favorability_reasoning": "y",
-        })
-        an = Analyzer(llm_enabled=False)
-        an._llm_client = client
-        an.llm_enabled = True
-
-        sent, _ = an.analyze_full("The Knicks won in overtime last night.")
-        self.assertNotIn("REFERENCE CONTEXT", client.last_user_prompt)
-        self.assertNotIn("reference_seeds", sent.deterministic_signals)
-
-
-class TestClaimExtractorInjectsSeedsWhenMatched(unittest.TestCase):
+class TestClaimsEngineSeedInjection(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = TemporaryDirectory()
         self.addCleanup(self._tmp.cleanup)
@@ -270,7 +206,7 @@ class TestClaimExtractorInjectsSeedsWhenMatched(unittest.TestCase):
         seeds = context_seeds.load_seeds(self.dir)
         _stub_default_seeds(self, seeds)
 
-    def test_claim_extractor_records_matched_seeds(self) -> None:
+    def test_injects_block_when_seeds_match(self) -> None:
         client = _RecordingLLMClient({
             "claims": [
                 {
@@ -280,18 +216,19 @@ class TestClaimExtractorInjectsSeedsWhenMatched(unittest.TestCase):
                 },
             ],
         })
-        ex = ClaimExtractor(llm_enabled=False)
-        ex._llm_client = client
-        ex.llm_enabled = True
-
         text = "The bill funds climate adaptation projects to fight climate change."
-        result = ex.extract(text)
+        result = analyze(ClaimDocInput(doc_id=1, text=text), client)
         self.assertIn("REFERENCE CONTEXT", client.last_user_prompt)
         self.assertIn("Source: IPCC", client.last_user_prompt)
-        self.assertEqual(result.reference_seeds, ["climate-change"])
-        # The metadata round-trips through to_dict() so the loader can
-        # persist it as part of ai_outputs.output_json.
-        self.assertEqual(result.to_dict().get("reference_seeds"), ["climate-change"])
+        self.assertEqual(len(result.claims), 1)
+
+    def test_prompt_unchanged_when_nothing_matches(self) -> None:
+        client = _RecordingLLMClient({"claims": []})
+        analyze(
+            ClaimDocInput(doc_id=1, text="The Knicks won in overtime last night."),
+            client,
+        )
+        self.assertNotIn("REFERENCE CONTEXT", client.last_user_prompt)
 
 
 if __name__ == "__main__":

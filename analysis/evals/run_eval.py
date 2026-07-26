@@ -11,7 +11,7 @@ Usage (from repo root, PYTHONPATH=.):
 
 Modes:
 - replay (default): feeds recorded model responses through the live
-  ClaimExtractor code path (schema validation, evidence verification,
+  claims-engine code path (schema validation, evidence verification,
   claim validation). Deterministic; runs in CI with no API keys. Catches
   regressions in everything downstream of the network call, and detects
   prompt/schema drift via the recording fingerprint.
@@ -40,7 +40,7 @@ from analysis.evals.harness import (
     claim_extraction_fingerprint,
 )
 from analysis.evals.scoring import ExampleScore, aggregate_scores, score_example
-from analysis.src.engine.claim_extractor import ClaimExtractor
+from analysis.src.engine.claims import ClaimDocInput, analyze
 from analysis.src.llm.prompts import CLAIM_EXTRACTION_PROMPT_VERSION
 
 EVALS_DIR = Path(__file__).resolve().parent
@@ -135,11 +135,16 @@ def run_replay(
         if recording.get("prompt_fingerprint") != current_fp:
             stale.append(ex.example_id)
             continue
-        extractor = ClaimExtractor(
-            llm_client=ReplayLLMClient(recording["raw_response"])
+        # doc_id=0: the engine only uses it for log lines; eval examples are
+        # identified by example_id, not corpus doc ids.
+        result = analyze(
+            ClaimDocInput(doc_id=0, text=ex.input_text),
+            ReplayLLMClient(recording["raw_response"]),
         )
-        result = extractor.extract(ex.input_text)
-        predicted = [c.to_dict() for c in result.claims]
+        predicted = [
+            {"claim": c.claim_text, "confidence": c.confidence, "evidence_span": c.evidence_span}
+            for c in result.claims
+        ]
         scores.append(
             score_example(ex.example_id, ex.input_text, predicted, ex.expected_claims)
         )
@@ -155,13 +160,15 @@ def run_live(
     from analysis.src.llm import get_llm_client
 
     recorder = RecordingLLMClient(get_llm_client())
-    extractor = ClaimExtractor(llm_client=recorder)
     fingerprint = claim_extraction_fingerprint()
     scores: List[ExampleScore] = []
     for ex in examples:
         recorder.last_response = None
-        result = extractor.extract(ex.input_text)
-        predicted = [c.to_dict() for c in result.claims]
+        result = analyze(ClaimDocInput(doc_id=0, text=ex.input_text), recorder)
+        predicted = [
+            {"claim": c.claim_text, "confidence": c.confidence, "evidence_span": c.evidence_span}
+            for c in result.claims
+        ]
         scores.append(
             score_example(ex.example_id, ex.input_text, predicted, ex.expected_claims)
         )
