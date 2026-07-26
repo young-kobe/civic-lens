@@ -94,9 +94,10 @@ class Settings(BaseSettings):
     polling_enabled: bool = True  # Feature flag for live polling
     polling_cache_ttl: int = 3600  # Cache TTL in seconds (1 hour)
 
-    # Narrative clustering is embedding-only. Empty model = let the backend
-    # pick its own default; naming one here sends it to whichever backend is
-    # configured, so an Ollama tag reaches Gemini.
+    # Narrative clustering is embedding-only and REQUIRES this. No default:
+    # a wrong name would be a backend mismatch (an Ollama tag reaching
+    # Gemini), and a blank one leaves clustering_runs unable to say which
+    # model made its vectors. run() refuses to start on blank.
     narrative_embedding_model: str = ""
     # Cosine match threshold. Tuned for nomic-embed-text and NOT portable
     # across embedding models -- recheck on a real claim sample after a swap.

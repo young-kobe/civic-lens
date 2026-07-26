@@ -489,6 +489,19 @@ def run(
     embedding_model = embedding_model or settings.narrative_embedding_model
 
     if embed_fn is None:
+        # clustering_runs.embedding_model is what says which model produced a
+        # run's vectors -- the one question that column exists to answer, and
+        # the one you need when a model swap splits the narrative table into
+        # before and after. A blank setting cannot answer it, so refuse
+        # rather than record a run nobody can account for. Callers injecting
+        # embed_fn (tests) bypass this; they are not writing prod provenance.
+        if not embedding_model:
+            raise RuntimeError(
+                "CIVIC_NARRATIVE_EMBEDDING_MODEL is unset. Narrative clustering "
+                "records the model that produced its vectors and will not run "
+                "without one. Name a model the configured CIVIC_LLM_BACKEND "
+                "serves -- see .env.example for how to list them."
+            )
         embed_fn = _resolve_embed_fn(embedding_model)
         if embed_fn is None:
             # Raised before _open_clustering_run() so no clustering_runs or

@@ -15,8 +15,9 @@ existing narrative whose anchor has no vector is skipped as a match
 target. Neither is compared by some other measure, and neither is
 fabricated.
 
-Two conditions raise `RuntimeError` instead of producing output:
+Three conditions raise `RuntimeError` instead of producing output:
 
+- `CIVIC_NARRATIVE_EMBEDDING_MODEL` is blank. See Config below.
 - The configured backend does not implement `embed()` at all. Raised
   before `_open_clustering_run()`, so no run row exists for an attempt
   that could never have worked.
@@ -69,10 +70,21 @@ count before trusting either.
 `CIVIC_NARRATIVE_SIMILARITY_MODE` and `CIVIC_NARRATIVE_JACCARD_THRESHOLD`
 are gone. Remove them from any deployed env file.
 
-`CIVIC_NARRATIVE_EMBEDDING_MODEL` now defaults to empty, which lets the
-backend choose. It previously defaulted to `nomic-embed-text` — an Ollama
-tag that reached Gemini as a 404 on every call, which is how the silent
-fallback came to be exercised in production.
+`CIVIC_NARRATIVE_EMBEDDING_MODEL` is now **required**. `run()` raises if
+it is blank, before resolving a backend or opening a run row.
+
+It previously defaulted to `nomic-embed-text` — an Ollama tag that reached
+Gemini as a 404 on every call, which is how the silent fallback came to be
+exercised in production. A blank default was the first replacement, letting
+each backend pick its own; that removed the mismatch but left
+`clustering_runs.embedding_model` recording a blank, unable to say which
+model produced a run's vectors. Requiring the value fixes both without any
+resolution plumbing: no default can mismatch a backend, and no run can be
+recorded unaccountably.
+
+The trade-off is that a fresh clone cannot run the narratives stage until
+the variable is set. It gets an error naming the variable, and tests inject
+`embed_fn` and so bypass the check.
 
 **The threshold does not travel between embedding models.**
 `narrative_embedding_threshold` is 0.65, tuned for `nomic-embed-text`.

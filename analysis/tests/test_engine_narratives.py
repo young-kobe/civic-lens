@@ -194,6 +194,25 @@ class _NoEmbedBackend:
     supports_embedding = False
 
 
+class BlankEmbeddingModelIsRefusedTests(unittest.TestCase):
+    """clustering_runs.embedding_model is what says which model produced a
+    run's vectors -- the question you need answered when a model swap
+    splits the narrative table into before and after. A blank setting
+    cannot answer it, so the stage refuses to start rather than record a
+    run nobody can account for."""
+
+    def test_blank_model_raises_before_touching_the_backend(self):
+        fake_get_client = MagicMock()
+        blank = MagicMock(narrative_embedding_model="", narrative_embedding_threshold=0.65)
+        with patch("analysis.src.engine.narrative_clustering.get_settings", return_value=blank), \
+                patch("analysis.src.llm.client.get_client", fake_get_client):
+            with self.assertRaises(RuntimeError) as ctx:
+                nc.run()
+        self.assertIn("CIVIC_NARRATIVE_EMBEDDING_MODEL", str(ctx.exception))
+        # Refused before any backend work, so nothing was spent finding out.
+        fake_get_client.assert_not_called()
+
+
 class MisconfiguredBackendTests(unittest.TestCase):
     """A backend that cannot embed must fail the stage, not produce
     narratives by another route. No DB is touched -- run() raises before
@@ -201,9 +220,12 @@ class MisconfiguredBackendTests(unittest.TestCase):
     CIVIC_TEST_DATABASE_URL and always runs."""
 
     def test_unsupported_backend_raises(self):
+        # Model named explicitly so this exercises the backend check, not
+        # the blank-model refusal that precedes it.
         with patch("analysis.src.llm.client.get_client", return_value=_NoEmbedBackend()):
-            with self.assertRaises(RuntimeError):
-                nc.run()
+            with self.assertRaises(RuntimeError) as ctx:
+                nc.run(embedding_model="some-embed-model")
+        self.assertIn("does not implement embed()", str(ctx.exception))
 
     def test_check_is_bypassed_when_caller_injects_embed_fn_directly(self):
         # Passing embed_fn explicitly (as tests/callers may) skips backend
