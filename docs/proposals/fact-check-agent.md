@@ -1,5 +1,7 @@
 # Fact-check agent — feasibility note
 
+> Draft (pre-Postgres-rewrite, 2026-04); machinery references are stale.
+
 Status: **proposal, not for implementation in this branch.** Author: pipeline team. Date: 2026-04-25.
 
 ## What it would do

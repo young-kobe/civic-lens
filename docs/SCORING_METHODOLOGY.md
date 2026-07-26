@@ -1,68 +1,32 @@
 # Civic Lens Scoring Methodology
 
-> **Version**: 2.0  
-> **Last Updated**: 2026-07-09
+> **Version**: 3.0 (Postgres redesign)
+> **Last Updated**: 2026-07-26
 
 ---
 
 ## Overview
 
-Civic Lens uses a hybrid analysis approach combining:
-1. **Deterministic Heuristics**: Fast, reproducible pattern matching
-2. **LLM Analysis (Optional)**: Enhanced interpretation when enabled
-
-All scores include confidence values and are stored with full traceability in the `ai_outputs` table.
+Every engine writes through `analysis/src/results/store.py`, the only writer of run-anchored `analysis.*` result tables. Each analysis attempt is one `analysis.runs` row: `task`, `model_id`, `prompt_version_id` (nullable for deterministic runs), `inference_method` (`llm`/`deterministic`/`hybrid`), `confidence`, `created_at`, `is_current`. All scores include confidence values and are traceable through this chain — see "Traceability" below.
 
 ---
 
 ## Bot Detection Scoring
 
-Identifies potential automated accounts or coordinated inauthentic behavior.
+Identifies potential automated accounts or coordinated inauthentic behavior. `engine/bot_detection.py`.
 
 ### Labels
 
-The `label` is derived from a blended 0-1 `score`, not from confidence:
-
-| Label | Score Range | Action |
-|-------|-----------------|--------|
-| `human` | 0.0 - 0.4 | Included in all aggregations |
-| `suspicious` | 0.4 - 0.7 | Included in aggregations, flagged for review |
-| `bot` | 0.7 - 1.0 | **Excluded** from sentiment, favorability, and narrative aggregations |
+`label` (`analysis.bot_label`: `human`/`suspicious`/`bot`/`unknown`) comes directly from the LLM's own judgment, not from a blended numeric score — the hand-tuned additive score formula was retired (`0005_drop_bot_score.sql`). `unknown` is reserved for the one deterministic case: empty doc text, no signal battery possible.
 
 ### Signals
 
-The detector blends an LLM (or heuristic) text-likelihood estimate with deterministic
-behavioral signals into a single 0-1 `score`. Rather than fixed weights, it accumulates
-human-readable indicator strings, each naming the exact signal that fired:
+A deterministic stylometric/account battery always runs first and feeds the LLM prompt as context; the LLM's own classification (`label`, `confidence`, `llm_text_likelihood`, `indicators`, `reasoning`) is what gets persisted. A successful call is `inference_method = 'hybrid'` — both the battery and the model's judgment contributed.
 
-- **Text / stylometric**: near-duplicate or templated phrasing; unnatural typographic
-  purity (smart quotes / em-dashes rare in casual social writing).
-- **Account / behavioral**: new account (< 7 days), high posting rate (> 50/day),
-  X account < 90 days old, X account with < 50 followers, non-US geo-tagged origin,
-  follow-ratio anomalies, sustained high tweet-rate over account lifetime, active account
-  with zero list memberships.
-- **De-bias**: government-verified X accounts are forced to `human` with the score
-  suppressed — an officeholder's account is not a bot in our model.
+- **Text / stylometric**: sentence-length variance (`burstiness`), unique-word ratio (`type_token_ratio`), LLM hedge-phrase rate (`template_score`), typographic-purity score, spam-keyword hits, URL/hashtag counts.
+- **Account / behavioral** (X posts only): new account (< `X_NEW_ACCOUNT_AGE_DAYS` days), low follower count (< `X_LOW_FOLLOWERS_THRESHOLD`), follow-ratio anomaly. Reddit posts carry no author snapshot yet and fall through to the text-only signal subset.
 
-### Label & Confidence
-
-The label comes from `score`; `confidence` is computed separately from signal strength and
-indicator count (it is NOT a sum of indicator weights):
-
-```python
-# Label from the blended score
-if score >= 0.7:    label = "bot"
-elif score >= 0.4:  label = "suspicious"
-else:               label = "human"
-
-# Confidence from signal strength + indicator count
-if score >= 0.7 and len(indicators) >= 2:
-    confidence = min(0.6 + 0.1 * len(indicators), 0.95)
-elif score >= 0.4:
-    confidence = 0.5 + (score - 0.4)
-else:
-    confidence = 0.7 - score
-```
+There is no government-verified-account de-bias override and no non-US-geotag signal — both were retired with the additive score formula; `verified_type` still reaches the prompt but nothing derived from it overrides the model's label.
 
 ### Output Schema
 
@@ -70,187 +34,75 @@ else:
 {
   "label": "bot",
   "confidence": 0.85,
-  "is_bot": true,
-  "indicators": ["New account (3 days)", "High posting rate (120/day)", "X account has < 50 followers"],
+  "llm_text_likelihood": 0.7,
+  "indicators": ["New account (3 days)", "High posting rate (120/day)"],
   "reasoning": "Account shows automated posting patterns",
-  "inference_method": "heuristic"
+  "inference_method": "hybrid"
 }
 ```
 
-> [!IMPORTANT]  
-> Classification is a probabilistic lead, not a verdict, and may include false positives.
-> Each indicator names the specific behavior that triggered it so a reader can audit the call.
-> Bot-flagged content is excluded from public-facing metrics but retained for audit.
+> [!IMPORTANT]
+> Classification is a probabilistic lead, not a verdict, and may include false positives. Bot/suspicious-flagged content is excluded from public aggregations above a per-author flagged-post share (`BOT_FLAGGED_SHARE_EXCLUSION = 0.5` of confidence-floored analyzed posts, `api/queries/constants.py`) but retained for audit.
 
 ---
 
 ## Sentiment Analysis Scoring
 
-Classifies content emotional tone toward topics discussed.
+Classifies content emotional tone. `engine/text.py` — sentiment-only as of 2026-07-25; the favorability half (GOP stance) was retired. `analysis.sentiment_label`: `positive`/`negative`/`neutral`/`mixed`.
 
-### Labels
-
-| Label | Numeric Mapping | Description |
-|-------|-----------------|-------------|
-| `POSITIVE` | +1 | Favorable, supportive, optimistic tone |
-| `NEGATIVE` | -1 | Critical, opposing, pessimistic tone |
-| `NEUTRAL` | 0 | Factual, balanced, no strong emotion |
-| `MIXED` | 0 | Contains both positive and negative elements |
-
-### Heuristic Method (Default)
-
-Uses lexicon-based analysis with political domain vocabulary:
-
-1. Tokenize text
-2. Match against positive/negative political lexicons
-3. Count weighted matches
-4. Apply contextual modifiers (negation, intensifiers)
-
-```python
-positive_score = sum(weights for positive_tokens_found)
-negative_score = sum(weights for negative_tokens_found)
-
-if positive_score > negative_score * 1.5:
-    label = "POSITIVE"
-elif negative_score > positive_score * 1.5:
-    label = "NEGATIVE"
-elif positive_score > 0 and negative_score > 0:
-    label = "MIXED"
-else:
-    label = "NEUTRAL"
-```
-
-### LLM-Enhanced Method (When Enabled)
-
-Prompts LLM with:
-```
-Analyze the sentiment of this political content.
-Classify as: POSITIVE, NEGATIVE, NEUTRAL, or MIXED.
-Provide confidence score.
-```
-
-### Net Score Calculation (Aggregated)
-
-```python
-net_score = ((positive_count - negative_count) / total_count) * 100
-```
-
-| Net Score | Interpretation |
-|-----------|----------------|
-| +100 | All content positive |
-| +50 to +100 | Strongly positive |
-| +10 to +50 | Slightly positive |
-| -10 to +10 | Neutral/balanced |
-| -50 to -10 | Slightly negative |
-| -100 to -50 | Strongly negative |
-| -100 | All content negative |
+One LLM call per doc. A trivial-content doc (mentions/links/hashtags only) short-circuits to a `done` deterministic run with no `sentiment_results` row — unanalyzable is not neutral. A failed or unavailable LLM call is recorded as a `failed` run; there is no heuristic fallback.
 
 ### Output Schema
 
 ```json
 {
-  "label": "NEGATIVE",
+  "label": "negative",
   "confidence": 0.78,
-  "evidence_spans": ["criticized the administration's handling of..."],
-  "reasoning": "Strongly critical framing of the policy.",
   "sarcasm_detected": false,
-  "inference_method": "heuristic"
+  "evidence_spans": ["criticized the administration's handling of..."]
 }
 ```
 
-> [!NOTE]  
-> Sentiment represents content tone, not author intent. Sarcasm is flagged when the model
-> detects it (`sarcasm_detected`) and the tone label accounts for it. Results are labeled as
-> "sampled political discourse" in the UI, and net tone is rendered in points ("pts") on a
-> -100 to +100 scale, not as a percentage.
+> [!NOTE]
+> Sentiment represents content tone, not author intent. Results are labeled "sampled political discourse" in the UI; net tone renders in points ("pts") on a -100 to +100 scale, not as a percentage.
 
 ---
 
-## GOP Favorability Scoring
+## Per-Entity Target Stance
 
-Measures content stance toward Republican Party / GOP positions.
+Party-neutral, topic-tagged stance toward named entities. `engine/targets.py` writes `analysis.target_mentions` (`raw_target` always kept for audit; `entity_id` nullable — unresolved targets persist rather than being dropped). This is the sole source of directional stance evidence: `favorability_stances` (the old GOP-only text-task output) has no writer as of 2026-07-25 and is superseded here, symmetric across parties.
 
-### Stances
+Party stance for a document, author, or narrative is read by joining `target_mentions.entity_id -> corpus.entities.lean` at request time (`api/queries/`) or by `engine/lean_derivation.py` for the author/narrative-level rollups below — never by feeding lean into an LLM prompt.
 
-| Stance | Numeric Mapping | Description |
-|--------|-----------------|-------------|
-| `favorable` | +1 | Supports GOP positions/candidates |
-| `unfavorable` | -1 | Criticizes GOP positions/candidates |
-| `neutral` | 0 | No partisan framing detected |
-| `mixed` | 0 | Contains both favorable and unfavorable elements |
+---
 
-### Detection Method
+## Political Lean Derivation
 
-1. **Entity Recognition**: Identify GOP-related entities (Republican, Trump, McConnell, etc.)
-2. **Context Analysis**: Determine sentiment toward those entities
-3. **Stance Classification**: Map entity-sentiment pairs to overall stance
+Deterministic, `engine/lean_derivation.py`. Pools directional (`positive`/`negative` stance toward a `democrat`/`republican`-leaning entity) `target_mentions` evidence per author and per narrative, full rebuild every invocation, into `analysis.author_leans`/`narrative_leans`.
 
-### Keyword Categories
+- **Minimum sample**: `LEAN_MIN_SAMPLE_COUNT = 5` directional stance samples required before a lean is computed at all.
+- **Share threshold**: `LEAN_SHARE_THRESHOLD = 0.7` — the majority lean must hold at least this share of directional samples to be assigned; below it, the subject is `mixed`.
+- **Confidence saturation**: `LEAN_CONFIDENCE_SATURATION_SAMPLES = 20` — confidence scales with sample count up to this ceiling, beyond which more samples add no further confidence.
 
-**Pro-GOP Indicators**:
-- Positive framing of Republican actions
-- Criticism of Democratic positions
-- Support for conservative policies
-
-**Anti-GOP Indicators**:
-- Criticism of Republican actions
-- Support for Democratic positions
-- Opposition to conservative policies
-
-### Net Favorability Calculation
-
-```python
-net_favorability = ((favorable - unfavorable) / total) * 100
-```
-
-### Platform Normalization
-
-Reddit source types are normalized:
-```python
-if source_type in ('reddit_post', 'reddit_comment'):
-    platform = 'reddit'
-```
-
-### Output Schema
-
-```json
-{
-  "overall_gop_stance": "unfavorable",
-  "entity_stances": {
-    "Trump": "unfavorable",
-    "Republican Party": "neutral"
-  },
-  "confidence": 0.72,
-  "evidence_spans": ["criticized the administration's..."]
-}
-```
-
-> [!WARNING]  
-> This is a **proxy metric** based on sampled media/social discourse, NOT polling data. Results represent content sentiment toward GOP, not verified population opinion.
+Curated lean (`corpus.entities.lean`) is never fed into an LLM prompt (bias/priming risk); derived lean is always accompanied by its `lean_share`/`confidence`/`stance_sample_count` so a reader can see the sample size behind the label.
 
 ---
 
 ## Propaganda Technique Detection
 
-LLM-driven classifier that flags one or more of six starter rhetorical techniques in
-political content. A flag measures rhetorical *style* — not truth, intent, or whether a post
-is "propaganda" in the everyday sense.
+LLM-driven classifier flagging one or more of six rhetorical techniques. `engine/propaganda.py`. A flag measures rhetorical *style* — not truth, intent, or whether a post is "propaganda" in the everyday sense.
 
 ### Techniques
 
-`loaded_language`, `name_calling`, `ad_hominem`, `appeal_to_fear`, `whataboutism`, `doubt_casting`.
+`loaded_language`, `name_calling`, `ad_hominem`, `appeal_to_fear`, `whataboutism`, `doubt_casting` (`analysis.propaganda_technique`).
 
 ### Method
 
-1. A cheap deterministic pre-gate short-circuits obviously plain text (no loaded-language
-   markers in the opening) so the LLM is only spent where techniques are plausible.
-2. The LLM returns candidate techniques, each with a verbatim `evidence_span`.
-3. **Validation**: a technique whose evidence span is under four words, or is not a
-   case-insensitive substring of the source text, is dropped. If the LLM returned techniques
-   but none validate, `overall_propaganda_score` is capped at 0.2.
+1. Trivial-content docs (mentions/links/hashtags only) are declined — a `done` deterministic run with no `propaganda_results` row, not a call spent on a guaranteed-empty result.
+2. Every other doc with substantive content gets one LLM call. The LLM returns candidate techniques, each with a verbatim `evidence_span`.
+3. **Validation** (`engine/validation.py`): a technique whose evidence span is under `MIN_EVIDENCE_WORDS = 4` words, or is not a case-insensitive substring of the source text, is dropped. If the LLM returned techniques but none validate, `density` is capped at `UNVERIFIED_EVIDENCE_CONFIDENCE_CAP = 0.3`. If the LLM flagged zero techniques, `density` is forced to 0.0.
 
-There is intentionally **no deterministic fallback** — a technique claim without a verifiable
-quote is not surfaced.
+There is intentionally no deterministic fallback — a technique claim without a verifiable quote is not surfaced. The run's `confidence` is `density` itself (the model's self-reported overall score), not a mean over per-technique confidences.
 
 ### Output Schema
 
@@ -259,13 +111,38 @@ quote is not surfaced.
   "techniques": [
     {"technique": "loaded_language", "confidence": 0.85, "evidence_span": "radical extremist agenda"}
   ],
-  "overall_propaganda_score": 0.62
+  "density": 0.62,
+  "summary": "..."
 }
 ```
 
-> [!NOTE]  
-> `overall_propaganda_score` runs 0 (none) to 1 (saturated) — the mean technique intensity
-> across scored posts. It is not a truth or intent score. The UI renders it as "0.62 / 1".
+> [!NOTE]
+> `density` runs 0 (none) to 1 (saturated). It is not a truth or intent score.
+
+---
+
+## Claim Extraction
+
+`engine/claims.py`. Trivial-content docs short-circuit to zero claims (deterministic, no LLM call). Otherwise one LLM call extracts candidate claims; each is validated:
+
+- Length: `MIN_CLAIM_WORDS = 4` to `MAX_CLAIM_WORDS = 20` words.
+- Evidence: the claim's `evidence_span` must be a verbatim substring of the source text (same `MIN_EVIDENCE_WORDS = 4`-word floor as propaganda).
+
+Unlike sentiment/propaganda evidence, a claim that fails the evidence check is **dropped entirely**, not confidence-capped — `analysis.claims` anchors narratives via `narratives.anchor_claim_id`, and a model that hallucinates a claim must not silently populate the narrative layer. Run-level `confidence` is the mean of every surviving claim's own confidence, or `ZERO_CLAIMS_CONFIDENCE` when none survived.
+
+---
+
+## Narrative Clustering
+
+`engine/narrative_clustering.py`. Embedding-only (the lexical Jaccard comparator was retired 2026-07-26) — groups current `analysis.claims` into `analysis.narratives` by cosine similarity of embeddings.
+
+- **Match threshold**: `CIVIC_NARRATIVE_EMBEDDING_THRESHOLD` (default 0.65) — tuned for `nomic-embed-text` and not portable across embedding models without re-checking against a real claim sample.
+- **Minimum support**: `MIN_NARRATIVE_SUPPORT = 2` distinct documents must support a provisional group before it becomes a persisted narrative; below this, matched claims stay in memory for the run and are reconsidered next run.
+- **Lookback**: `CLAIM_LOOKBACK_DAYS = 30` for pending (unclustered) claims.
+
+`CIVIC_NARRATIVE_EMBEDDING_MODEL` is required with no default — a blank value would leave `clustering_runs` unable to say which model produced its vectors, so the stage refuses to start. A claim whose `embed()` call fails is left unclustered (never measured some other way) and counted in `clustering_runs.embedding_failures`; if every embed call in a run fails, the run raises rather than writing an empty result that reads as "no narratives found".
+
+Narrative "first seen" is the earliest doc **we ingested** carrying a linked claim, not the claim's origin in the world.
 
 ---
 
@@ -280,44 +157,33 @@ All analyses include confidence scores indicating certainty.
 | 0.6 - 0.8 | High | Strong certainty |
 | 0.8 - 1.0 | Very High | Near-certain classification |
 
-### Factors Affecting Confidence
-
-- Text length (longer = more signal = higher confidence)
-- Keyword density
-- Ambiguity in language
-- Mixed signals in content
+`aggregation_min_confidence` (`CIVIC_` setting, default 0.5) is the floor below which a run is dropped from sentiment/narrative aggregations at request time.
 
 ---
 
 ## Time-Based Filtering
 
-All aggregations support filtering by time window:
+API panels support filtering by time window against `corpus.documents.published_at`:
 
-| Filter | Seconds | Use Case |
-|--------|---------|----------|
-| 24h | 86,400 | Breaking news, trending |
-| 7d | 604,800 | Weekly trends |
-| 30d | 2,592,000 | Monthly analysis (default) |
-| 90d | 7,776,000 | Quarterly trends |
+| Window | Duration |
+|--------|----------|
+| 24h | 24 hours |
+| 7d | 7 days |
+| 30d | 30 days (default) |
+| 90d | 90 days |
 
-### Implementation
-
-```python
-now = int(time.time())
-cutoff = now - seconds_for_window
-
-docs = query("SELECT * FROM docs WHERE published_at >= ?", [cutoff])
-```
+`api/queries/constants.py::WINDOWS` is the single source of truth for these four keys; there is no "all-time" fifth window — an all-time view reads `corpus.*`/`analysis.*` with no cutoff at all.
 
 ---
 
 ## Traceability
 
 All scores are traceable to:
-1. **Source Document**: `ai_outputs.doc_id` -> `docs.ident`
-2. **Model Used**: `ai_outputs.model_id`
-3. **Prompt Version**: `ai_outputs.prompt_version`
-4. **Timestamp**: `ai_outputs.created_at`
-5. **Raw Evidence**: `output_json.evidence_spans` (when available)
 
-This ensures reproducibility and audit capability per project invariants.
+1. **Source document or author**: `analysis.runs.doc_id` XOR `author_id` -> `corpus.documents`/`corpus.authors`.
+2. **Model used**: `analysis.runs.model_id`.
+3. **Prompt version**: `analysis.runs.prompt_version_id` -> `analysis.prompt_versions` (nullable for deterministic runs).
+4. **Timestamp**: `analysis.runs.created_at`.
+5. **Raw evidence**: `analysis.runs.raw_response` (verbatim LLM payload) and the typed result table's `evidence_spans`/`evidence_span` columns.
+
+This ensures reproducibility and audit capability per project invariants (`docs/INVARIANTS.md`).

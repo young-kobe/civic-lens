@@ -34,8 +34,8 @@ func NewXRunner(a *app.App) *XRunner {
 }
 
 // Run fetches posts from X using configured political queries. Aborts the
-// loop cleanly if the month-to-date budget ceiling is reached (walkthrough
-// 048); partial progress is persisted.
+// loop cleanly if the month-to-date budget ceiling is reached; partial
+// progress is persisted.
 func (xr *XRunner) Run(ctx context.Context) (*XResult, error) {
 	cfg := xr.app.Config
 

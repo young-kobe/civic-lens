@@ -1,55 +1,60 @@
 # UI consistency + mobile audit — follow-up items
 
-Generated from the 2026-04-23 mobile-first UI audit. The P0 items and the most visible P1s landed in `docs/audit-trail/ui/2026-04-23-gop-stance-layout-stability-and-mobile-fixes.md`; the rest are tracked here so none get lost.
+Originally generated from a 2026-04-23 mobile-first audit, against a UI tree that
+predates the Phase 9/10 API-contract rewrite. Most named components from that
+audit (`Heatmap.tsx`, `CoordinationSummary`, `Review.tsx::Stat`,
+`PublicSentiment.tsx::ToneTierRow`, the old `Home.tsx::TabCard` inline-hover
+styling) no longer exist or were already resolved by the rewrite — `<TierRow>`
+(`components/common/TopMetricsBlock.tsx`) is now the one stat-row renderer,
+used by `pages/home/DigestSection.tsx` and `PublicSentiment.tsx`, and
+`Home.tsx::TabCard` already moved hover/focus/active styling into the
+`.tab-card` CSS class. This file keeps only the items that verifiably still
+apply against the current `ui/src` tree.
 
-## Mobile fit (remaining)
-
-- [ ] **Review controls row wraps poorly 320–480px.** `ui/src/pages/Review.tsx:155–196`. `flex items-center gap-4 flex-wrap` with no flex-basis on the pill cluster leaves the "Only conf ≤" label + select pair on one line when space is tight. The reviewer-ID input is fixed `width: 140px` — ~23% of viewport at 640px. Give the inputs flex-basis / mobile-specific full-width behavior.
-- [ ] **Heatmap cellSize responsive.** `ui/src/components/charts/Heatmap.tsx`. The scroll fix landed today aligns labels and cells, but a 12px cell size still forces horizontal scroll at <480px. Consider shrinking to 8–10px cells at `max-width: 640px` so the full 24h matrix fits without scroll.
-- [ ] **Select dropdowns in Review** (`Review.tsx:156–179`). Inline `padding: 4px 8px` — feels cramped on phones. Add a mobile-specific rule bumping padding + height.
-
-## Single-source-of-truth refactors
-
-- [ ] **Unify stat-row renderers.** Three implementations doing the same visual job:
-  - `Review.tsx::Stat` (ad-hoc div with `.num` class)
-  - `BotActivityProfiler.tsx::CoordinationSummary` row (flex with inline borderBottom)
-  - `PublicSentiment.tsx::ToneTierRow` (uses the shared `<TierRow>`)
-  Migrate the first two onto `<TierRow>`. Extend `<TierRow>`'s API if needed (it already supports label + value + color; CoordinationSummary needs a denser variant).
-- [ ] **Generalize `.bot-section-label` or remove it.** Currently a one-off on the Bot page. If the pattern (section label band that sits next to a Card on desktop, flattens on mobile) is worth keeping, promote to a shared `<SectionHeader>` in `components/common/` and use across pages. Otherwise delete and let the bot page use the same inline eyebrow + text pattern as Narratives / Propaganda.
-- [ ] **`Home.tsx::TabCard` inline styles.** `ui/src/pages/Home.tsx:17–62`. Hand-rolled button-as-card with `onMouseEnter` / `onMouseLeave` for border + shadow + transform. Extract to `<CardButton>` in `components/common/` or add an `onClick` + hover-shadow variant to `<Card>`. Home is the only consumer today but the pattern will recur.
+**A fresh mobile-fit audit is needed post-Phase-10** — the page layouts
+(`Review.tsx`, `BotActivityProfiler.tsx`, `PublicSentiment.tsx`) were
+substantially rewritten and the 2026-04-23 findings' line numbers and markup
+no longer match. Re-run the audit before trusting any specific breakpoint claim.
 
 ## Formatter consolidation
 
-- [x] **Promote `formatRelativeDate` to `services/format.ts`.** Landed 2026-07-10 alongside the shared `sourceLabel()` builder (both copies deleted; SupportingDocsTable + Narratives import it).
-- [ ] **`formatCount(n)` — wraps `toLocaleString()` with null/NaN guard.** `formatCount(null)` → `"—"`. Eliminates scattered `(value ?? 0).toLocaleString()` calls.
-- [ ] **`formatScore(n, decimals=2)` — wraps `toFixed()` with guard.** For propaganda scores, confidence values, and coordination index where the number is a 0-1 score, not a percentage.
+- [x] **`formatCount(n)`** — landed in `services/format.ts`; wraps
+      `toLocaleString()` with a null/NaN guard (`formatCount(null)` -> `"—"`).
+      Used across `RangeCaption`, `DigestSection`, `OutletSignalsPanel`,
+      `DataDesk`.
+- [ ] **`formatScore(n, decimals=2)`** — still open. Wrap `toFixed()` with a
+      null guard for 0-1 scores (not percentages): current hand-rolled call
+      sites are `Propaganda.tsx` (mean score), `propaganda/TechniqueExplorer.tsx`
+      (per-party mean score), `review/ReviewItemCard.tsx` (confidence), and
+      `components/common/DocDetailModal.tsx` (confidence).
 
-## Duplication clusters (2026-07-10 audit — deferred extractions)
+## Duplication clusters
 
-- [ ] **`EntityModalStats` + `EntityModalLinks`.** The eyebrow/`.metric-value`
-      stat grid and "Visit {name} ↗ / lean-rated-by / Bio ↗" links row are
-      hand-rolled in four modals now (Narratives ~534-563, Propaganda
-      ~272-302, PublicSentiment ~398-460/572-588, BotActivityProfiler's new
-      entity modal). Extract to `components/common/`.
-- [ ] **`BreakdownTable`** for PublicSentiment's three near-identical
-      received-tone tables (byTopic / bySpeakerTier / byNarrative,
-      ~467-548): same Topic/Net/n shape and low-sample branch; only the
-      header + key differ.
-- [x] **Confidence chip** — DONE 2026-07-10 via PostCard: SupportingDocsTable
-      and Propaganda's ExampleRow were both replaced by
-      `components/common/PostCard.tsx`, which renders the raw-% confidence in
-      one place (`.post-card-confidence` / technique badges).
-- [x] **Propaganda `ExampleRow`** — DONE 2026-07-10: deleted; propaganda
-      examples render through the shared PostCard adapters
-      (`propagandaExampleToPostCard`).
+- [ ] **`EntityProfileCard`/`EntityHeader` (`components/common/EntityProfileCard.tsx`)
+      extraction is done for `PublicSentiment.tsx` and `BotActivityProfiler.tsx`.**
+      `Narratives.tsx::NarrativeDetailModal` still hand-rolls its own
+      eyebrow/`.metric-value` stat grid, but its stats describe the
+      narrative (member posts, net tone, citations), not an entity profile —
+      confirm whether it's worth converging on the same primitive or is
+      genuinely a different shape before extracting further.
+- [ ] The three near-identical received-tone breakdown tables
+      (byTopic/bySpeakerTier/byNarrative) that motivated a shared
+      `BreakdownTable` no longer exist as described — `PublicSentiment.tsx`
+      now renders a single `byTopic` table. Re-check whether any remaining
+      table duplication (e.g. `DataDesk.tsx`'s desk-matrix vs. movers table)
+      is close enough in shape to warrant a shared component, or drop this
+      item.
 
 ## Accessibility follow-ups
 
-- [ ] **Filter pills in Review** — ensure focus styles meet contrast on mobile. Currently rely on browser defaults; document in the component file.
-- [ ] **Heatmap cells** — `onMouseEnter` fires only on desktop; mobile taps trigger `onFocus` via keyboard focus but not via tap. Add `onTouchStart` or switch to a `<button>` element with `onClick`.
+- [ ] **`filter-pill` focus styles** (`components/common/GlobalFilters.tsx`) —
+      ensure focus styles meet contrast on mobile; currently rely on browser
+      defaults.
+- [ ] **Review controls** (`pages/Review.tsx`, `.review-controls-input`) — the
+      task/confidence `<select>` elements and reviewer-ID `<input>` should get
+      a mobile-specific accessibility pass (tap target size, label
+      association) as part of the fresh mobile audit above.
 
 ## Parent-file references
 
-- `docs/audit-trail/ui/2026-04-23-gop-stance-layout-stability-and-mobile-fixes.md` — today's landed fixes.
-- `docs/audit-trail/ui/2026-04-22-modal-mobile-centering.md` — earlier mobile pass (bottom-sheet → centered modals).
-- `docs/audit-trail/ui/2026-04-22-three-way-grid-primitive.md` — the shared-primitive template this work should follow.
+- `docs/audit-trail/ui/2026-04-23-gop-stance-layout-stability-and-mobile-fixes.md` — the original landed fixes this audit followed up on.

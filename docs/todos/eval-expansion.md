@@ -7,10 +7,12 @@ truncation, triviality pre-filter, reasoning bounds) landed in
 
 ## Calibration report
 
-- [ ] Join `ai_outputs.confidence` with `ai_output_evals.is_correct` per
-      task_type into confidence buckets (0.5-0.6, ..., 0.9-1.0) with
-      observed accuracy per bucket.
-- [ ] Expose as part of `/review/stats` (admin-gated) so the Review tab
+- [ ] Join `analysis.runs.confidence` with `analysis.evals.verdict` per
+      task into confidence buckets (0.5-0.6, ..., 0.9-1.0) with
+      observed accuracy per bucket (`analysis/src/review/service.py` already
+      owns the `analysis.evals` writes to build this off of).
+- [ ] Expose alongside `GET /eval-accuracy` (`analysis/src/api/routers/status.py`,
+      backed by `review_service.get_public_accuracy()`) so the Review tab
       can render a reliability table.
 - [ ] Document the caveat: buckets with < 20 reviewed rows are
       directional, not conclusive.
@@ -38,6 +40,17 @@ truncation, triviality pre-filter, reasoning bounds) landed in
       technique-confusion breakdown.
 - [ ] Include negatives that the `_has_loaded_language` pre-filter kills,
       and one example with a technique near the 800-char clamp.
+
+## Flash-Lite switch (gated on golden-set eval)
+
+- [ ] Hand-verify golden-set labels and commit the
+      `analysis/evals/baseline_claims.json` baseline (gate is warn-and-pass
+      until this lands).
+- [ ] Re-record golden-set recordings against `gemini-2.5-flash-lite`; run
+      `python -m analysis.evals.run_eval --gate` (0.02 F1 tolerance).
+- [ ] On pass: set `CIVIC_GEMINI_MODEL=gemini-2.5-flash-lite` in
+      /etc/civic-lens.env. On fail: stay on the current model and record the
+      result in an audit-trail entry either way.
 
 ## Few-shot example pool
 

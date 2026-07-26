@@ -49,8 +49,8 @@ const iconProps = {
 
 const BASE_TABS: Tab[] = [
     {
-        // Tab id stays 'sentiment' for URL hash + cache-key stability
-        // (walkthrough 060 renamed the display label only).
+        // Tab id stays 'sentiment' for URL hash + cache-key stability;
+        // only the display label is "Overall Tone".
         id: 'sentiment',
         label: 'Overall Tone',
         shortLabel: 'Tone',
@@ -62,7 +62,8 @@ const BASE_TABS: Tab[] = [
         ),
     },
     {
-        // Walkthrough 061 renamed label to "Political Narratives"; id + shortLabel unchanged.
+        // id + shortLabel stay 'narratives'/'Narratives'; only the display
+        // label is "Political Narratives".
         id: 'narratives',
         label: 'Political Narratives',
         shortLabel: 'Narratives',

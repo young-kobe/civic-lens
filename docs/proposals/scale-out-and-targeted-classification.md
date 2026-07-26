@@ -1,5 +1,9 @@
 # Scale-out and targeted classification — design proposal
 
+> **SUPERSEDED (2026-07-26):** superseded by the Postgres redesign
+> (`docs/todos/post-rewrite-cutover.md`); the stay-on-SQLite decision this
+> proposal records was reversed.
+
 Status: draft for human decision, approved plan pending implementation. Date: 2026-07-13.
 
 Covers: 90-day data window, local Reddit ingestion + merge, cheap cloud inference tier with Gemini escalation, analyze throughput, web-box isolation (noisy-neighbor mitigation), snapshot read efficiency, and relevance-targeted classification. Also records the decision to stay on SQLite and NOT decouple the crawler/engine to a separate server.

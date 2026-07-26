@@ -48,8 +48,8 @@ trigger: always_on
 3. Prefer explicit over implicit behavior
 4. Write self-documenting code; add comments only for non-obvious logic
 5. Keep function and method lengths to ~60 lines MAXIMUM as general rule, unless unavoidable. Do not eclipse 100 lines.
-6. **Plan -> audit-trail workflow.** Non-trivial work starts as a checklist in `docs/todos/<initiative>.md`. On merge, the change lands with a dated entry in `docs/audit-trail/<layer>/YYYY-MM-DD-short-slug.md`. Completed todos get deleted; audit-trail entries are permanent. See `docs/audit-trail/README.md` for the entry template. Do not add new files under `docs/walkthroughs/` — that directory is being consolidated (see `docs/todos/walkthrough-consolidation.md`).
+6. **Plan -> audit-trail workflow.** Non-trivial work starts as a checklist in `docs/todos/<initiative>.md`. On merge, the change lands with a dated entry in `docs/audit-trail/<layer>/YYYY-MM-DD-short-slug.md`. Completed todos get deleted; audit-trail entries are permanent. See `docs/audit-trail/README.md` for the entry template.
 
 ## Current project shape (reference)
 
-Four layers, strictly ordered (see CLAUDE.md for detail): Go ingest → Python analysis (ETL + engine + aggregators + scheduler) → FastAPI API (serves snapshot cache) → React UI. Public-facing data is editorial, bucketed by the three-way entity frame (News Outlets / Verified Officials / General Public) driven by YAML registries under `data/`. Confidence scores, sample labeling, and source-back-links (`docs/INVARIANTS.md` C1) are non-negotiable on every evidence surface.
+Four layers, strictly ordered (see CLAUDE.md for detail): Go ingest → Python analysis (ETL + engine + scheduler) → FastAPI API (live Postgres queries at request time) → React UI. Public-facing data is editorial, bucketed by the three-way entity frame (News Outlets / Verified Officials / General Public) driven by DB-native entity curation (`corpus.entities`, curated directly in the database — see `docs/audit-trail/analysis/2026-07-22-db-native-entity-curation.md`). Confidence scores, sample labeling, and source-back-links (`docs/INVARIANTS.md` C1) are non-negotiable on every evidence surface.
