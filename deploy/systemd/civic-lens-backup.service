@@ -1,5 +1,5 @@
 [Unit]
-Description=Civic Lens SQLite backup (one-shot)
+Description=Civic Lens Postgres backup (one-shot)
 
 [Service]
 Type=oneshot

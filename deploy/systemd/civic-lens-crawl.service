@@ -16,13 +16,12 @@ WorkingDirectory=/opt/civic-lens
 EnvironmentFile=/etc/civic-lens.env
 # Two-phase cycle: `ingest` parses RSS seeds and pushes new URLs onto the
 # frontier; `crawl` drains the frontier. Back-to-back ExecStart lines keep
-# them coupled so a scheduled fetch always picks up newly-published articles
-# (walkthrough 049 — launch wrap-up). `docker compose run --rm` propagates
-# the container's exit code, so OnFailure alerting behaves exactly as before.
+# them coupled so a scheduled fetch always picks up newly-published articles.
+# `docker compose run --rm` propagates the container's exit code, so
+# OnFailure alerting behaves exactly as before. No --db flag: the CLI
+# defaults to CIVIC_DATABASE_URL from the compose env_file (Postgres).
 ExecStart=/usr/bin/docker compose run --rm --quiet-pull ingest ingest \
-    --config /app/data/seeds.yaml \
-    --db ${CIVIC_DB_PATH}
+    --config /app/data/seeds.yaml
 ExecStart=/usr/bin/docker compose run --rm --quiet-pull ingest crawl \
     --config /app/data/seeds.yaml \
-    --db ${CIVIC_DB_PATH} \
     --duration 10m

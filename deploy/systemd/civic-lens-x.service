@@ -10,6 +10,7 @@ Type=oneshot
 # See civic-lens-crawl.service for the root/docker rationale.
 WorkingDirectory=/opt/civic-lens
 EnvironmentFile=/etc/civic-lens.env
+# No --db flag: the CLI defaults to CIVIC_DATABASE_URL from the compose
+# env_file (Postgres).
 ExecStart=/usr/bin/docker compose run --rm --quiet-pull ingest x \
-    --config /app/data/seeds.yaml \
-    --db ${CIVIC_DB_PATH}
+    --config /app/data/seeds.yaml

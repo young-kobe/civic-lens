@@ -9,9 +9,8 @@
 #   - No compilation on the box — images are built in CI (deploy.yml `images`
 #     job) and pulled from GHCR. The git checkout exists only for
 #     docker-compose.yml, unit files, and deploy scripts.
-#   - Runs DB migrations (idempotent by design — civic-ingest migrate; the
-#     ingest image entrypoint materializes migrations beside the DB,
-#     replacing the old symlink-into-/opt mechanism).
+#   - Runs DB migrations (idempotent by design — civic-ingest migrate against
+#     the CIVIC_DATABASE_URL DSN; tracked in ops.schema_migrations).
 #   - Restarts the always-on stack; systemd timers keep owning one-shots.
 #   - Does NOT enable/disable timers — the operator owns that.
 set -euo pipefail
@@ -31,11 +30,10 @@ echo "[2/5] pulling images"
 docker compose --profile jobs pull --quiet
 
 echo "[3/5] migrations"
-# Matches the containers' view: CIVIC_DB_PATH from /etc/civic-lens.env rides
-# in via the compose env_file; this explicit --db only needs the same default
-# the env file uses.
-DB_PATH="${CIVIC_DB_PATH:-/var/lib/civic-lens/data/civic_lens.db}"
-docker compose run --rm --quiet-pull ingest migrate --db "$DB_PATH"
+# No --db flag: CIVIC_DATABASE_URL from /etc/civic-lens.env rides in via the
+# compose env_file and the CLI defaults --db to it, so the DSN (and thus the
+# Postgres backend) is picked inside the container. Applies data/pg-migrations/.
+docker compose run --rm --quiet-pull ingest migrate
 
 echo "[4/5] systemd units"
 # Retired units: reddit (API access withdrawn) and api (now a compose

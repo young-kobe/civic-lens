@@ -28,11 +28,12 @@ fi
 echo "[1/9] system packages"
 # No language toolchains or host caddy — everything that used to be built on
 # the box now ships as GHCR images (see docker-compose.yml). python3 stays
-# for the stdlib-only failure alerter; sqlite3/rclone/age for backup.sh.
+# for the stdlib-only failure alerter; postgresql-client/rclone/age for
+# backup.sh (pg_dump over the compose loopback publish).
 apt-get update
 apt-get install -y --no-install-recommends \
     git docker.io docker-compose-v2 python3 \
-    sqlite3 ufw fail2ban rclone age curl ca-certificates
+    postgresql-client ufw fail2ban rclone age curl ca-certificates
 systemctl enable --now docker
 
 echo "[2/9] users + directories"
@@ -55,15 +56,7 @@ if ! id deployment &>/dev/null; then
     install -d -m 0700 -o deployment -g deployment /home/deployment/.ssh
 fi
 install -d -m 0750 -o civic-lens -g civic-lens /var/lib/civic-lens /var/lib/civic-lens/data /var/lib/civic-lens/backups
-install -d -m 0700 -o civic-lens -g civic-lens /var/lib/civic-lens/data/cache
 install -d -m 0755 /etc/civic-lens /etc/caddy /var/log/caddy
-# civic-ingest resolves migrations relative to the DB's directory. The ingest
-# image entrypoint materializes them beside the DB on every run — no symlink.
-# If a symlink from a pre-container install exists, remove it so the
-# entrypoint can create a real directory.
-if [[ -L /var/lib/civic-lens/data/migrations ]]; then
-    rm /var/lib/civic-lens/data/migrations
-fi
 
 echo "[3/9] env file"
 if [[ ! -f /etc/civic-lens.env ]]; then
@@ -119,8 +112,9 @@ systemctl enable civic-lens-crawl.timer \
 
 echo
 echo "install.sh complete. NEXT STEPS (see deploy/README.md):"
-echo "  1. fill in /etc/civic-lens.env (especially CIVIC_ADMIN_TOKEN + CIVIC_GEMINI_API_KEY,"
-echo "     and the LITESTREAM_* R2 replication settings)"
+echo "  1. fill in /etc/civic-lens.env (especially POSTGRES_USER/POSTGRES_PASSWORD,"
+echo "     CIVIC_DATABASE_URL, CIVIC_NARRATIVE_EMBEDDING_MODEL, CIVIC_RAW_STORE_DIR,"
+echo "     CIVIC_ADMIN_TOKEN and CIVIC_GEMINI_API_KEY)"
 echo "  2. install Cloudflare origin cert + key + CF origin-pull CA cert in /etc/caddy/"
 echo "  3. add the deployment SSH key to /home/deployment/.ssh/authorized_keys with the forced command"
 echo "  4. bash /opt/civic-lens/deploy/deploy.sh   # pulls images + migrates + starts the stack"

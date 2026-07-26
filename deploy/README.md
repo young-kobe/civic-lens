@@ -8,24 +8,24 @@ compilation during deploys. Scheduling stays on host systemd timers, which
 exec `docker compose run --rm <service>` so the existing `OnFailure=` alert
 plumbing keeps watching real exit codes.
 
-The full rationale and the shape of the stack live in
-`docs/deployment/plan.md` and `docs/audit-trail/infra/2026-07-09-docker-compose-stack.md`.
-
 ## Stack shape
 
 - **Always-on** (`docker compose up -d`): `caddy` (host network, TLS + static
   UI + `/api` reverse proxy + Cloudflare Authenticated Origin Pulls gate),
-  `api` (uvicorn, publishes `127.0.0.1:8000` only), `litestream` (continuous
-  SQLite replication to R2).
+  `api` (uvicorn, publishes `127.0.0.1:8000` only), `postgres` (the primary
+  datastore, publishes `127.0.0.1:5432` for host tooling).
 - **One-shots** (`jobs` profile, never started by `up`): `ingest` + `analyze`,
   invoked only as `docker compose run --rm <service> ...` by the systemd timers.
 - **Data contract**: the host dir `/var/lib/civic-lens` is bind-mounted at the
   identical path in every container, so absolute paths in `/etc/civic-lens.env`
-  and relative paths in `seeds.yaml` resolve the same in-container and on-host.
-  Host tooling (`backup.sh`, `sqlite3` spot checks) keeps working. Containers
-  run as UID 10001, matching the `civic-lens` host user, so bind-mount writes
-  need no chown. (10001 sits above the host system-UID range; the earlier 990
-  collided with `systemd-resolve` on stock Ubuntu.)
+  (e.g. `CIVIC_RAW_STORE_DIR`) resolve the same in-container and on-host.
+  Postgres data lives in the `pgdata` named volume. Containers run as UID
+  10001, matching the `civic-lens` host user, so bind-mount writes need no
+  chown.
+- **DSN vantage points**: containers reach the DB at `@postgres:5432` (compose
+  service DNS); host tooling (`backup.sh`, `psql` spot checks) uses the
+  loopback publish `@127.0.0.1:5432`. `/etc/civic-lens.env` must carry the
+  container form.
 
 ## Layout
 
@@ -36,7 +36,6 @@ The full rationale and the shape of the stack live in
   `analysis/Dockerfile`.)
 - `caddy/Caddyfile` — reverse proxy + static serving + origin-pull gate. Shipped
   inside the web image; TLS material stays host-side, bind-mounted read-only.
-- `litestream.yml` — continuous WAL replication of the SQLite DB to R2.
 - `systemd/` — `civic-lens-stack.service` brings the compose stack up at boot;
   `civic-lens-{crawl,analyze,x}.{service,timer}` exec the compose one-shots;
   backup/firewall units. (There is no `civic-lens-api.service` — compose
@@ -49,41 +48,40 @@ The full rationale and the shape of the stack live in
   `civic-lens`/`deployment` users, pins the app UID, writes units + firewall).
   Run once as root.
 - `deploy.sh` — idempotent redeploy: `git fetch` (for the compose file +
-  migrations only) → `docker compose pull` → `compose run --rm ingest migrate`
-  → `compose up -d` → weekly image prune. Run by the `deployment` user on every
+  unit files only) → `docker compose pull` → `compose run --rm ingest migrate`
+  (applies `data/pg-migrations/`, tracked in `ops.schema_migrations`) →
+  `compose up -d` → weekly image prune. Run by the `deployment` user on every
   CI deploy; safe for manual re-runs.
-- `backup.sh` — nightly SQLite backup to `/var/lib/civic-lens/backups/`,
-  optionally age-encrypted and pushed to R2 (second durability layer alongside
-  Litestream).
+- `backup.sh` — nightly `pg_dump -Fc` to `/var/lib/civic-lens/backups/`,
+  age-encrypted when `BACKUP_AGE_RECIPIENT` is set, optionally pushed to R2
+  via rclone. 14-day local retention.
 - `authorized_keys.example` — forced-command template for the CI deploy key.
 
 ## First-time install (day 1)
 
 1. Provision Ubuntu 24.04 VPS (Hetzner CPX21 or similar), SSH in as root with a key.
 2. Clone: `git clone git@github.com:young-kobe/civic-lens.git /opt/civic-lens`.
-   The checkout stays on the box for the compose file + migrations; code runs
+   The checkout stays on the box for the compose file + unit files; code runs
    from the GHCR images, not this tree.
-3. Run `/opt/civic-lens/deploy/install.sh`. Installs Docker, creates the
-   `civic-lens` and `deployment` users, pins the app UID, writes the sshd
-   drop-in, systemd units, and refreshes the firewall.
+3. Run `/opt/civic-lens/deploy/install.sh`. Installs Docker + postgresql-client,
+   creates the `civic-lens` and `deployment` users, pins the app UID, writes
+   the sshd drop-in, systemd units, and refreshes the firewall.
 4. Fill in `/etc/civic-lens.env`:
+   - `POSTGRES_USER=` / `POSTGRES_PASSWORD=` — the compose file hard-fails
+     every operation if these are unset (`:?` interpolation).
+   - `CIVIC_DATABASE_URL=postgresql://civic:<password>@postgres:5432/civic_lens`
+     — the CONTAINER form; see DSN vantage points above.
+   - `CIVIC_RAW_STORE_DIR=/var/lib/civic-lens/data/raw/sha256` — ABSOLUTE.
+     A relative value silently admits zero news documents.
+   - `CIVIC_NARRATIVE_EMBEDDING_MODEL=` — REQUIRED (e.g.
+     `gemini-embedding-001`); narrative clustering refuses to start without it.
+   - `CIVIC_ANALYZE_CONCURRENCY=` / `CIVIC_PG_POOL_MAX=` — pipeline
+     concurrency; keep pool above concurrency.
    - `CIVIC_ADMIN_TOKEN=` — generate with `python -c "import secrets; print(secrets.token_urlsafe(48))"`.
-   - `CIVIC_LLM_BACKEND=` — `gemini` | `ollama` | `openai_compat`.
-   - `CIVIC_GEMINI_API_KEY=` — freshly rotated key from Google AI Studio (if using Gemini).
-   - `CIVIC_LLM_BASE_URL=` / `CIVIC_LLM_API_KEY=` — for `openai_compat`.
+   - `CIVIC_LLM_BACKEND=` — `gemini` | `ollama` | `openai_compat`, plus its
+     key/URL settings.
    - `CIVIC_API_HOST=127.0.0.1`.
-   - `CIVIC_DB_PATH=/var/lib/civic-lens/data/civic_lens.db`.
-   - `CIVIC_CACHE_DIR=/var/lib/civic-lens/data/cache`.
    - `X_BEARER_TOKEN=` — rotated X API token.
-   - `LITESTREAM_*` — R2 bucket + credentials for continuous replication.
-     `LITESTREAM_R2_ENDPOINT` is the account host ONLY
-     (`https://<ACCOUNT_ID>.r2.cloudflarestorage.com`) — the bucket goes in
-     `LITESTREAM_R2_BUCKET` and nowhere else. Putting the bucket in the
-     endpoint too doubles the path, 404s every request, and the replica's
-     local shadow WAL then grows unbounded until it fills the disk (the
-     2026-07-15 incident). Verify with `docker compose logs litestream`: the
-     `replicating to` line must print the endpoint with no bucket suffix, and
-     you should see `snapshot written` with no `monitor error` follow-ups.
    - `BACKUP_AGE_RECIPIENT=` — optional `age` public key for backup encryption;
      keep the private key off the VPS.
    - `BACKUP_RCLONE_REMOTE=` — optional, e.g. `r2:civic-lens-backups`.
@@ -106,8 +104,7 @@ The full rationale and the shape of the stack live in
 9. Smoke: `curl -I https://civic-lens.info` (expect 200 + security headers);
    `curl https://civic-lens.info/api/v1/sentiment` (expect JSON).
 10. Wire Cloudflare Access: dashboard → Zero Trust → Access → Add self-hosted
-    app for civic-lens.info, paths `/api/v1/run/*`, `/api/v1/review/*`,
-    `/api/v1/cache-status`. Policy: Allow, emails = your email.
+    app for civic-lens.info, paths `/api/v1/run/*`, `/api/v1/review/*`.
 
 ## Redeploy (every push to main)
 
@@ -121,12 +118,13 @@ tag) that on-box git builds never did.
 
 ## Recovery
 
-- **A service crashes**: `docker compose logs -f api` (or `caddy`/`litestream`).
+- **A service crashes**: `docker compose logs -f api` (or `caddy`/`postgres`).
   Fix code, push, let CI rebuild + redeploy; or `docker compose up -d` to
   re-pull a known-good tag.
-- **DB corruption**: stop the stack, restore from Litestream (`litestream
-  restore`) or the most recent `backup.sh` archive in
-  `/var/lib/civic-lens/backups/` (or R2), restart.
+- **DB loss**: stop the stack, restore the most recent `backup.sh` dump from
+  `/var/lib/civic-lens/backups/` (or R2):
+  `age -d -i <key> civic_lens-<stamp>.dump.age | pg_restore -h 127.0.0.1 -U <user> -d civic_lens --clean --if-exists`,
+  restart.
 - **Cloudflare IP range rotation blocks legit traffic at the origin**:
   `bash /opt/civic-lens/deploy/firewall.sh` — the timer picks this up monthly,
   but you can re-run it manually.
