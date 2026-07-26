@@ -1,16 +1,15 @@
 """
 Narrative clusterer (Postgres redesign Phase 6, Wave 3): groups current
-`analysis.claims` into `analysis.narratives` (jaccard/embedding comparator,
-deferred-materialization fragmentation fix) -- see docs/DATABASE_SCHEMA.md's "Narratives" section.
+`analysis.claims` into `analysis.narratives` by embedding cosine only --
+see docs/DATABASE_SCHEMA.md's "Narratives" section.
 """
 
 from __future__ import annotations
 
 import math
-import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Callable, Dict, List, Optional, Set, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 from analysis.src.common import db
 from analysis.src.common.logger import get_logger
@@ -35,38 +34,6 @@ logger = get_logger(__name__)
 # returns this signature; None means "no vector" (never fabricated).
 EmbedFn = Callable[[str], Optional[List[float]]]
 
-# Ported verbatim from the old engine/narrative_clusterer.py -- the only
-# canonicalization jaccard mode uses.
-_STOPWORDS: Set[str] = {
-    "a", "an", "the", "and", "or", "but", "if", "of", "in", "on", "at", "by",
-    "to", "for", "from", "with", "as", "is", "are", "was", "were", "be", "been",
-    "being", "it", "its", "this", "that", "these", "those", "i", "you", "he",
-    "she", "we", "they", "them", "his", "her", "their", "our", "my", "your",
-    "not", "no", "do", "does", "did", "have", "has", "had", "will", "would",
-    "could", "should", "can", "may", "might", "must", "just", "so", "than",
-    "then", "there", "about", "into", "over", "after", "before", "more",
-    "most", "some", "any", "all", "such", "up", "down", "out",
-}
-
-_TOKEN_RE = re.compile(r"[a-z0-9]+")
-
-
-def tokenize_claim(text: str) -> Set[str]:
-    """Lowercase, split, drop stopwords -- the only canonicalization jaccard
-    mode uses."""
-    if not text:
-        return set()
-    return {t for t in _TOKEN_RE.findall(text.lower()) if t not in _STOPWORDS and len(t) > 1}
-
-
-def jaccard(a: Set[str], b: Set[str]) -> float:
-    if not a or not b:
-        return 0.0
-    inter = len(a & b)
-    if inter == 0:
-        return 0.0
-    return inter / len(a | b)
-
 
 def cosine(a: Optional[List[float]], b: Optional[List[float]]) -> float:
     if not a or not b or len(a) != len(b):
@@ -88,15 +55,14 @@ def cosine(a: Optional[List[float]], b: Optional[List[float]]) -> float:
 class PendingClaim:
     """One claim not yet linked to any narrative (its doc has no
     narrative_docs row). `embedding` is filled in by `_embed_pending_claims`
-    when mode == "embedding"; stays None on failure (counted, not
-    fabricated) or in jaccard mode."""
+    and stays None when the embed call failed -- counted, never fabricated,
+    and excluded from matching rather than compared some other way."""
 
     claim_id: int
     doc_id: int
     claim_text: str
     confidence: Optional[float]
     published_at: datetime
-    tokens: Set[str] = field(default_factory=set)
     embedding: Optional[List[float]] = None
 
 
@@ -108,7 +74,6 @@ class ExistingAnchor:
 
     narrative_id: int
     anchor_text: str
-    tokens: Set[str]
     embedding: Optional[List[float]]
     first_seen_at: datetime
     first_seen_doc_id: int
@@ -153,21 +118,18 @@ def plan_clustering(
     pending: List[PendingClaim],
     existing_anchors: List[ExistingAnchor],
     *,
-    mode: str,
-    jaccard_threshold: float,
-    embedding_threshold: float,
+    threshold: float,
     min_support: int = MIN_NARRATIVE_SUPPORT,
 ) -> ClusterPlan:
     """Decide, for each pending claim, whether it joins an existing
     narrative, joins/founds a provisional (in-run, not-yet-persisted) group,
     or ends up alone. No DB, no network -- `pending`/`existing_anchors`
-    already carry whatever tokens/embeddings the comparator needs.
+    already carry their embeddings.
 
-    Per-claim mode fallback matches the old clusterer exactly: a claim uses
-    embedding comparison only if `mode == "embedding"` AND its own embedding
-    succeeded; otherwise it compares by jaccard against every anchor
-    (skipping none) -- comparing jaccard tokens against an anchor that only
-    has an embedding, or vice versa, mixes thresholds and is never done.
+    A claim with no embedding is left unclustered. There is no lexical
+    comparator to fall back to: word overlap answers a different question
+    than semantic similarity, and clustering some claims one way and some
+    the other put both under one `narratives` table with one recorded mode.
     """
     existing_by_id: Dict[int, ExistingAnchor] = {a.narrative_id: a for a in existing_anchors}
     provisional: Dict[int, _Provisional] = {}
@@ -177,15 +139,12 @@ def plan_clustering(
 
     claims_by_doc: Dict[int, List[PendingClaim]] = {}
     for pc in pending:
-        if pc.tokens:  # empty-token claims (stopwords-only) can never match
+        if pc.embedding is not None:  # unembedded claims can never match
             claims_by_doc.setdefault(pc.doc_id, []).append(pc)
 
     for doc_claims in claims_by_doc.values():
         for pc in doc_claims:
-            use_embedding = mode == "embedding" and pc.embedding is not None
-            threshold = embedding_threshold if use_embedding else jaccard_threshold
-
-            kind, key, similarity = _best_match(pc, use_embedding, existing_by_id, provisional)
+            kind, key, similarity = _best_match(pc, existing_by_id, provisional)
 
             if key is not None and similarity >= threshold:
                 if kind == "existing":
@@ -226,7 +185,6 @@ def plan_clustering(
 
 def _best_match(
     pc: PendingClaim,
-    use_embedding: bool,
     existing_by_id: Dict[int, ExistingAnchor],
     provisional: Dict[int, _Provisional],
 ) -> Tuple[Optional[str], Optional[int], float]:
@@ -235,23 +193,17 @@ def _best_match(
     best_sim = 0.0
 
     for narrative_id, anchor in existing_by_id.items():
-        if use_embedding:
-            if anchor.embedding is None:
-                continue
-            sim = cosine(pc.embedding, anchor.embedding)
-        else:
-            sim = jaccard(pc.tokens, anchor.tokens)
+        if anchor.embedding is None:
+            continue
+        sim = cosine(pc.embedding, anchor.embedding)
         if sim > best_sim:
             best_sim, best_kind, best_key = sim, "existing", narrative_id
 
     for temp_id, prov in provisional.items():
         anchor_claim = prov.members[0]
-        if use_embedding:
-            if anchor_claim.embedding is None:
-                continue
-            sim = cosine(pc.embedding, anchor_claim.embedding)
-        else:
-            sim = jaccard(pc.tokens, anchor_claim.tokens)
+        if anchor_claim.embedding is None:
+            continue
+        sim = cosine(pc.embedding, anchor_claim.embedding)
         if sim > best_sim:
             best_sim, best_kind, best_key = sim, "provisional", temp_id
 
@@ -292,7 +244,6 @@ def _load_pending_claims(lookback_days: int = CLAIM_LOOKBACK_DAYS) -> List[Pendi
             claim_text=row["claim_text"],
             confidence=row["confidence"],
             published_at=row["published_at"],
-            tokens=tokenize_claim(row["claim_text"]),
         )
         for row in rows
     ]
@@ -310,7 +261,6 @@ def _load_existing_anchors() -> List[ExistingAnchor]:
         ExistingAnchor(
             narrative_id=row["narrative_id"],
             anchor_text=row["description"] or "",
-            tokens=tokenize_claim(row["description"] or ""),
             embedding=list(row["anchor_embedding"]) if row["anchor_embedding"] is not None else None,
             first_seen_at=row["first_seen_at"],
             first_seen_doc_id=row["first_seen_doc_id"],
@@ -321,40 +271,41 @@ def _load_existing_anchors() -> List[ExistingAnchor]:
 
 def _warm_anchor_embeddings(anchors: List[ExistingAnchor], embed_fn: EmbedFn) -> int:
     """Materialize anchor_embedding for every existing narrative missing one,
-    once per run (not per pending claim) -- matches the old clusterer's
-    _warm_anchor_embeddings rationale. Returns the fallback count."""
-    fallbacks = 0
+    once per run (not per pending claim). Returns the failure count; an
+    anchor left without a vector is skipped by _best_match, never matched
+    against by some other measure."""
+    failures = 0
     with db.connection() as conn:
         for anchor in anchors:
             if anchor.embedding is not None or not anchor.anchor_text:
                 continue
             embedding = embed_fn(anchor.anchor_text)
             if embedding is None:
-                fallbacks += 1
+                failures += 1
                 continue
             anchor.embedding = embedding
             conn.execute(
                 "UPDATE analysis.narratives SET anchor_embedding = %s WHERE narrative_id = %s",
                 (embedding, anchor.narrative_id),
             )
-    return fallbacks
+    return failures
 
 
 def _embed_pending_claims(pending: List[PendingClaim], embed_fn: EmbedFn) -> int:
     """One batched up-front pass over every pending claim's text -- the
     matching loop then only does in-memory cosine, never a network call.
     A failed embed() call (backend already logs the warning) leaves
-    `embedding` as None; that claim degrades to jaccard-only for this run
-    (see plan_clustering's per-claim fallback) rather than fabricating a
-    vector. Returns the fallback count."""
-    fallbacks = 0
+    `embedding` as None; that claim goes unclustered this run rather than
+    being fabricated or measured some other way. Returns the failure
+    count, which run() persists to clustering_runs."""
+    failures = 0
     for pc in pending:
         embedding = embed_fn(pc.claim_text)
         if embedding is None:
-            fallbacks += 1
+            failures += 1
             continue
         pc.embedding = embedding
-    return fallbacks
+    return failures
 
 
 def _resolve_embed_fn(embedding_model: str) -> Optional[EmbedFn]:
@@ -363,15 +314,14 @@ def _resolve_embed_fn(embedding_model: str) -> Optional[EmbedFn]:
     embedding` is checked up front (true identity check against
     BaseLLMClient.embed's no-op default -- see LLMClient.supports_embedding)
     and a None return signals "this backend cannot embed at all"; run()
-    escalates that to a hard failure rather than silently downgrading to
-    jaccard (see run()'s misconfiguration check)."""
+    escalates that to a hard failure."""
     from analysis.src.llm.client import get_client
 
     client = get_client()
     if not client.supports_embedding:
         logger.warning(
-            f"Narrative clustering: backend has no embed() support -- "
-            "mode='embedding' cannot proceed this run"
+            "Narrative clustering: backend has no embed() support -- "
+            "cannot proceed this run"
         )
         return None
     return lambda text: client.embed(text, model=embedding_model)
@@ -399,25 +349,38 @@ def _earliest_doc(members: List[PendingClaim]) -> Tuple[int, datetime]:
     return best.doc_id, best.published_at
 
 
-def _open_clustering_run(mode: str, threshold: float, embedding_model: Optional[str]) -> int:
+def _open_clustering_run(threshold: float, embedding_model: Optional[str]) -> int:
+    # `mode` stays in the DDL so historical 'jaccard' rows remain readable;
+    # every new run is 'embedding' because that is the only mode there is.
     with db.connection() as conn:
         row = conn.execute(
             """
             INSERT INTO analysis.clustering_runs (mode, threshold, embedding_model, started_at)
-            VALUES (%s, %s, %s, now())
+            VALUES ('embedding', %s, %s, now())
             RETURNING clustering_run_id
             """,
-            (mode, threshold, embedding_model),
+            (threshold, embedding_model),
         ).fetchone()
         return row["clustering_run_id"]
 
 
-def _finish_clustering_run(clustering_run_id: int, doc_count: int) -> None:
+def _finish_clustering_run(clustering_run_id: int, doc_count: int, embedding_failures: int) -> None:
     with db.connection() as conn:
         conn.execute(
-            "UPDATE analysis.clustering_runs SET completed_at = now(), doc_count = %s "
+            "UPDATE analysis.clustering_runs SET completed_at = now(), doc_count = %s, "
+            "embedding_failures = %s WHERE clustering_run_id = %s",
+            (doc_count, embedding_failures, clustering_run_id),
+        )
+
+
+def _fail_clustering_run(clustering_run_id: int, embedding_failures: int) -> None:
+    """Stamp a run that raised before producing narratives. completed_at
+    stays NULL -- that, plus embedding_failures, is what marks it failed."""
+    with db.connection() as conn:
+        conn.execute(
+            "UPDATE analysis.clustering_runs SET embedding_failures = %s "
             "WHERE clustering_run_id = %s",
-            (doc_count, clustering_run_id),
+            (embedding_failures, clustering_run_id),
         )
 
 
@@ -502,8 +465,6 @@ def _apply_plan(plan: ClusterPlan, clustering_run_id: int) -> Tuple[int, int]:
 def run(
     *,
     embed_fn: Optional[EmbedFn] = None,
-    mode: Optional[str] = None,
-    jaccard_threshold: Optional[float] = None,
     embedding_threshold: Optional[float] = None,
     embedding_model: Optional[str] = None,
     min_support: int = MIN_NARRATIVE_SUPPORT,
@@ -513,103 +474,93 @@ def run(
     the result, and record one `clustering_runs` provenance row.
 
     `embed_fn` lets tests/callers inject a fake embedder without a live
-    Ollama/OpenAI-compatible server; production leaves it None and this
-    resolves the configured backend's embed() (see `_resolve_embed_fn`).
-    Settings-derived args default from `CIVIC_NARRATIVE_*` (get_settings())
-    when not passed explicitly.
+    backend; production leaves it None and this resolves the configured
+    backend's embed() (see `_resolve_embed_fn`). Settings-derived args
+    default from `CIVIC_NARRATIVE_*` when not passed explicitly.
 
-    Raises RuntimeError if mode resolves to "embedding" and no embed_fn is
-    available (i.e. the configured backend's class never overrides
-    BaseLLMClient.embed's no-op default) -- see the misconfiguration check
-    below for why this fails loudly instead of silently clustering on
-    jaccard. This is distinct from a per-text embed() call failing mid-run
-    (a live backend returning None for one claim), which still degrades
-    that one claim to jaccard and is counted in `embedding_fallbacks`.
+    Raises RuntimeError when the backend cannot embed at all, and when
+    every embed call fails. Both are the same refusal the other engines
+    make: record a failure, never a result derived some other way.
     """
     settings = get_settings()
-    resolved_mode = mode if mode in ("jaccard", "embedding") else settings.narrative_similarity_mode
-    if resolved_mode not in ("jaccard", "embedding"):
-        resolved_mode = "jaccard"
-    jaccard_threshold = (
-        settings.narrative_jaccard_threshold if jaccard_threshold is None else jaccard_threshold
-    )
-    embedding_threshold = (
+    threshold = (
         settings.narrative_embedding_threshold if embedding_threshold is None else embedding_threshold
     )
     embedding_model = embedding_model or settings.narrative_embedding_model
 
-    embedding_fallbacks = 0
-    if resolved_mode == "embedding" and embed_fn is None:
+    if embed_fn is None:
+        # clustering_runs.embedding_model is what says which model produced a
+        # run's vectors -- the one question that column exists to answer, and
+        # the one you need when a model swap splits the narrative table into
+        # before and after. A blank setting cannot answer it, so refuse
+        # rather than record a run nobody can account for. Callers injecting
+        # embed_fn (tests) bypass this; they are not writing prod provenance.
+        if not embedding_model:
+            raise RuntimeError(
+                "CIVIC_NARRATIVE_EMBEDDING_MODEL is unset. Narrative clustering "
+                "records the model that produced its vectors and will not run "
+                "without one. Name a model the configured CIVIC_LLM_BACKEND "
+                "serves -- see .env.example for how to list them."
+            )
         embed_fn = _resolve_embed_fn(embedding_model)
         if embed_fn is None:
-            # A backend whose class never overrides embed() is a
-            # MISCONFIGURATION (CIVIC_NARRATIVE_SIMILARITY_MODE=embedding
-            # paired with a CIVIC_LLM_BACKEND that can't embed at all), not
-            # a transient failure -- unlike a live embed() call returning
-            # None for one claim (handled below, per-claim, and counted in
-            # embedding_fallbacks). Silently downgrading resolved_mode to
-            # "jaccard" here was exactly the bug this check replaces: every
-            # narrative in the DB got clustered by word overlap while
-            # settings/logs said "embedding". Raised before
-            # _open_clustering_run() so no clustering_runs/narratives rows
-            # are written for a run that should never have started -- as
-            # early as this module can fail, since narrative clustering has
-            # no separate startup/config-validation entry point of its own
-            # (see the audit-trail entry for why the check lives here).
+            # Raised before _open_clustering_run() so no clustering_runs or
+            # narratives rows exist for a run that should never have started.
             raise RuntimeError(
-                "Narrative clustering is configured for mode='embedding' "
-                "(CIVIC_NARRATIVE_SIMILARITY_MODE) but the resolved LLM "
-                "backend (CIVIC_LLM_BACKEND) does not implement embed() -- "
-                "refusing to silently fall back to jaccard clustering. "
-                "Fix the backend/config, or set "
-                "CIVIC_NARRATIVE_SIMILARITY_MODE=jaccard to choose lexical "
-                "clustering deliberately."
+                "Narrative clustering needs an embedding backend, but the "
+                "resolved CIVIC_LLM_BACKEND does not implement embed(). "
+                "Clustering is embedding-only -- there is no lexical mode to "
+                "fall back to. Fix CIVIC_LLM_BACKEND or disable the stage."
             )
 
-    threshold = embedding_threshold if resolved_mode == "embedding" else jaccard_threshold
-    clustering_run_id = _open_clustering_run(
-        resolved_mode, threshold, embedding_model if resolved_mode == "embedding" else None
-    )
+    clustering_run_id = _open_clustering_run(threshold, embedding_model)
 
     existing_anchors = _load_existing_anchors()
-    if resolved_mode == "embedding":
-        embedding_fallbacks += _warm_anchor_embeddings(existing_anchors, embed_fn)
+    embedding_failures = _warm_anchor_embeddings(existing_anchors, embed_fn)
 
     pending = _load_pending_claims()
-    if resolved_mode == "embedding":
-        embedding_fallbacks += _embed_pending_claims(pending, embed_fn)
+    embedding_failures += _embed_pending_claims(pending, embed_fn)
+
+    # Every embed failing is a broken backend or a wrong model name, not a
+    # run with nothing to say. Fail rather than write an empty result that
+    # reads as "no narratives found".
+    if pending and all(pc.embedding is None for pc in pending):
+        _fail_clustering_run(clustering_run_id, embedding_failures)
+        raise RuntimeError(
+            f"Narrative clustering: all {len(pending)} claim embeddings failed "
+            f"(model={embedding_model!r}). Check the model name against the "
+            "backend's model list -- a name it does not serve fails per-call."
+        )
 
     docs_considered = len({pc.doc_id for pc in pending})
 
-    plan = plan_clustering(
-        pending,
-        existing_anchors,
-        mode=resolved_mode,
-        jaccard_threshold=jaccard_threshold,
-        embedding_threshold=embedding_threshold,
-        min_support=min_support,
-    )
+    plan = plan_clustering(pending, existing_anchors, threshold=threshold, min_support=min_support)
 
     docs_touched, narratives_created = _apply_plan(plan, clustering_run_id)
-    _finish_clustering_run(clustering_run_id, docs_touched)
+    _finish_clustering_run(clustering_run_id, docs_touched, embedding_failures)
+
+    if embedding_failures:
+        logger.error(
+            f"Narrative clustering run={clustering_run_id}: {embedding_failures} "
+            "embed call(s) failed; those claims are unclustered, NOT clustered "
+            "by another measure. Recorded in clustering_runs.embedding_failures."
+        )
 
     logger.info(
-        f"Narrative clustering [{resolved_mode}] run={clustering_run_id}: "
+        f"Narrative clustering run={clustering_run_id}: "
         f"considered {len(pending)} claims across {docs_considered} docs, "
         f"created {narratives_created} narratives, touched {docs_touched} docs, "
         f"suppressed {plan.suppressed_count} sub-threshold group(s) "
         f"({plan.suppressed_claims} claim(s) left unclustered)"
-        + (f", embedding fallbacks: {embedding_fallbacks}" if embedding_fallbacks else "")
     )
 
     return {
         "clustering_run_id": clustering_run_id,
-        "mode": resolved_mode,
         "claims_considered": len(pending),
         "docs_considered": docs_considered,
         "narratives_created": narratives_created,
         "docs_touched": docs_touched,
         "suppressed_groups": plan.suppressed_count,
         "suppressed_claims": plan.suppressed_claims,
-        "embedding_fallbacks": embedding_fallbacks,
+        "embedding_failures": embedding_failures,
     }

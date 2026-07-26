@@ -38,7 +38,8 @@ _PERMISSIVE_SAFETY_SETTINGS = [
 # the generation model above (gemini-3.5-flash cannot embed). Used only when
 # a caller doesn't pass `model` explicitly -- production always does, via
 # CIVIC_NARRATIVE_EMBEDDING_MODEL (see engine/narrative_clustering.py).
-_DEFAULT_EMBEDDING_MODEL = "text-embedding-004"
+# Verified against ListModels 2026-07-26. text-embedding-004 is gone.
+_DEFAULT_EMBEDDING_MODEL = "gemini-embedding-001"
 
 
 class GeminiClient(BaseLLMClient):

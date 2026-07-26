@@ -12,12 +12,12 @@ class Settings(BaseSettings):
     # Postgres redesign (Phase 1, plumbing only — nothing reads this yet).
     # Empty by default; analysis/src/common/db.py refuses to guess a DSN.
     database_url: str = ""
-    # Pool max size for the Postgres ConnectionPool. Small box: server-side
-    # max_connections=30, so keep this well under that per process.
-    pg_pool_max: int = 5
-    # Worker thread count for the new-stack scheduler's per-queue-stage
-    # claim loop (analysis/src/scheduler/stages.py::run_queue_stage).
-    analyze_concurrency: int = 4
+    # Postgres ConnectionPool max. Keep above analyze_concurrency: workers
+    # borrow a connection per doc. Server-side max_connections=30.
+    pg_pool_max: int = 12
+    # Worker threads per stage (scheduler/stages.py::run_queue_stage). One
+    # in-flight LLM call each; Gemini caps remote calls around 10.
+    analyze_concurrency: int = 10
     
     # Cache for pre-computed analysis snapshots
     cache_dir: str = "data/cache"
@@ -94,14 +94,13 @@ class Settings(BaseSettings):
     polling_enabled: bool = True  # Feature flag for live polling
     polling_cache_ttl: int = 3600  # Cache TTL in seconds (1 hour)
 
-    # Narrative clustering: "embedding" (semantic, default) or "jaccard" (lexical).
-    # Embedding mode needs Ollama + nomic-embed-text; the clusterer transparently
-    # falls back to Jaccard per-claim when the embedding call fails so the
-    # default change is safe for installs without Ollama (walkthrough 039).
-    narrative_similarity_mode: Literal["jaccard", "embedding"] = "embedding"
-    narrative_embedding_model: str = "nomic-embed-text"
-    # Match threshold per mode — Jaccard ~0.3, embedding cosine ~0.65 for nomic-embed-text.
-    narrative_jaccard_threshold: float = 0.3
+    # Narrative clustering is embedding-only and REQUIRES this. No default:
+    # a wrong name would be a backend mismatch (an Ollama tag reaching
+    # Gemini), and a blank one leaves clustering_runs unable to say which
+    # model made its vectors. run() refuses to start on blank.
+    narrative_embedding_model: str = ""
+    # Cosine match threshold. Tuned for nomic-embed-text and NOT portable
+    # across embedding models -- recheck on a real claim sample after a swap.
     narrative_embedding_threshold: float = 0.65
 
     # Minimum ai_outputs.confidence for a row to count in aggregations (walkthrough 039).
