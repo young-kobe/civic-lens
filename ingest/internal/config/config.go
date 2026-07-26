@@ -58,7 +58,7 @@ type XConfig struct {
 	// Enforced by a persistent counter in the x_api_budget table. When the
 	// estimated spend hits this value, the runner aborts remaining queries
 	// for the month. Zero disables the check — but always set this in
-	// production. (walkthrough 048.)
+	// production.
 	MonthlyBudgetCents int `yaml:"monthly_budget_cents"`
 	// OfficialsListPath points at the editorial verified-officials YAML
 	// (default: data/verified_officials.yaml). The X runner walks this

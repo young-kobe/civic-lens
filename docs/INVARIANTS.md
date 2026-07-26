@@ -2,7 +2,7 @@
 
 Civic Lens measures **sampled political discourse** across news, Reddit, and X, with a **narrative overlay** that clusters recurring claims and a **partial citation overlay** between owned sources. This document defines the non-negotiable invariants for the system. All code changes must preserve these properties.
 
-See `docs/walkthroughs/035-goal-narrowing-and-renames.md` for the rationale behind the current goal framing.
+See `docs/audit-trail/` (analysis and infra buckets) for the rationale behind the current goal framing and its evolution.
 
 ## Part A: Ingestion & Storage (Go)
 
@@ -33,8 +33,8 @@ See `docs/walkthroughs/035-goal-narrowing-and-renames.md` for the rationale behi
 ## Part B: Analysis API (Python)
 
 ### B1. ETL / Dataset Builder
-- [x] **Traceability**: Every row in the `docs` table links to a `raw_hash`.
-- [x] **Versioning**: ETL jobs stamp the logic version onto every `docs` row via the `etl_version` column (`loader.ETL_VERSION`, migration `020_docs_etl_version.sql`) and log it per run, so docs produced by different filter/extraction logic are distinguishable (audit A-9). Bump `ETL_VERSION` when the keyword filter, 30-day rule, or extraction changes.
+- [x] **Traceability**: Every row in `corpus.documents` links to a `raw_hash`.
+- [x] **Versioning**: ETL jobs stamp the logic version onto every `corpus.documents` row via the `etl_version` column (`etl/constants.py::ETL_VERSION`, stamped by `etl/documents.py`) and log it per run, so docs produced by different filter/extraction logic are distinguishable (audit A-9). Bump `ETL_VERSION` when the admission rules, recency window, or extraction changes.
 
 ### B2. AI Analysis
 - [ ] **Evidence**: AI classifications (topic, stance, propaganda) must cite specific spans/quotes from the text as evidence.
@@ -45,7 +45,7 @@ See `docs/walkthroughs/035-goal-narrowing-and-renames.md` for the rationale behi
 - [ ] **Operational Definition**: "Propaganda" is the presence of measurable rhetorical techniques (loaded language, name-calling, ad hominem, appeal to fear, whataboutism, doubt-casting), not a subjective label. A flag measures rhetorical style — not truth, intent, or whether a post is "propaganda" in the everyday sense.
 - [ ] **Auditability**: Every flagged technique must point to a verbatim text span that triggered the flag. A technique whose evidence span is under four words, or is not a substring of the source text, is dropped.
 
-> **Status:** Implemented and live. `analysis/src/engine/propaganda_detector.py` runs as a first-class pipeline stage (`job_runner.run_propaganda_detection`) writing `ai_outputs` rows with `task_type='propaganda'`, surfaced on the Propaganda tab via `PropagandaAggregator`. It is LLM-only (no deterministic fallback); when the LLM returns techniques but none validate against the source text, `overall_propaganda_score` is capped at 0.2.
+> **Status:** Implemented and live. `analysis/src/engine/propaganda.py` runs as a first-class pipeline stage, writing `analysis.propaganda_results`/`propaganda_techniques` rows via `results/store.py`, surfaced on the Propaganda tab via `api/queries/propaganda.py`. It is LLM-only (no deterministic fallback); when the LLM returns techniques but none validate against the source text, `density` is capped at 0.3.
 
 ## Part C: Frontend / Presentation
 

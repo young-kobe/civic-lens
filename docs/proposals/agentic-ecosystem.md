@@ -1,5 +1,7 @@
 # Agentic ecosystem — design proposal
 
+> Draft (pre-Postgres-rewrite, 2026-04); machinery references are stale.
+
 Status: draft for human decision. No code changes in this branch.
 
 ## 1. Executive summary

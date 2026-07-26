@@ -1,14 +1,15 @@
 # Civic Lens Database Schema Reference
 
-> **TARGET SCHEMA — not yet live in production.** The live system runs the
-> v2.0 SQLite schema (below the fold, unchanged) until cutover. Tracking:
-> `docs/todos/pg-redesign.md`. Do not point application code at this schema
-> until the corresponding phase has landed and the todo box is checked.
+> **LIVE SCHEMA.** This is the schema running in production and dev — the
+> pre-Postgres SQLite schema was retired at cutover. See
+> `docs/todos/post-rewrite-cutover.md` for remaining cleanup (the Go
+> SQLite backend itself is deprecated and pending deletion; see
+> `.agent/workflows/go-ingestion.md`).
 
-> **Version**: 3.1 (target)
-> **Last updated**: 2026-07-24
+> **Version**: 3.2
+> **Last updated**: 2026-07-26
 > **Source of truth**: `data/pg-migrations/0001_north_star.sql` plus
-> `0002`-`0004` — this document is regenerated from those files; when it
+> `0002`-`0006` — this document is regenerated from those files; when it
 > drifts, rebuild and re-diff rather than hand-editing.
 
 ---
@@ -384,8 +385,12 @@ above).
 ### Narratives
 
 - **clustering_runs**: clustering_run_id PK; mode (jaccard/embedding),
-  threshold, embedding_model, started_at, completed_at, doc_count —
-  versioned provenance per `narrative_clusterer` invocation.
+  threshold, embedding_model, started_at, completed_at, doc_count,
+  `embedding_failures` (added by `0006_clustering_embedding_failures.sql`;
+  count of embed() calls that returned no vector this run — those claims
+  went unclustered, not clustered by another measure; 0 for pre-migration
+  rows regardless of true count) — versioned provenance per
+  `narrative_clustering.py` invocation.
 - **narratives**: narrative_id PK; clustering_run_id FK; name, description;
   anchor_claim_id FK -> claims; anchor_embedding REAL[] (pgvector
   deferred); first_seen_at/first_seen_doc_id (earliest doc **we ingested**,
@@ -448,8 +453,8 @@ not).
   `FOR UPDATE SKIP LOCKED`. Reprocess = UPDATE to pending, never DELETE.
   Index `(task, status)`.
 - **pipeline_runs**: pipeline_run_id PK; started_at/completed_at; status;
-  `stage_summary JSONB` — per-stage counts/timings for one `job_runner.py`
-  invocation.
+  `stage_summary JSONB` — per-stage counts/timings for one
+  `scheduler/pipeline.py` invocation.
 - **x_api_budget**: month_key ('YYYY-MM' UTC) PK; post_count, user_count,
   request_count, estimated_cents, last_updated.
 - **schema_migrations**: version INTEGER PK; applied_at. Ledger for the
@@ -469,22 +474,18 @@ Tables: `docs`, `ai_outputs`, `prompt_versions`, `target_mentions`,
 `narratives`, `narrative_docs`, `narrative_citations`, `account_profiles`,
 `author_bot_scores`, `doc_task_state`, `ai_output_evals` (expected empty —
 production `ai_output_evals` confirmed 0 rows as of the 2026-07-22 plan
-pull). Column shapes mirror the v2.0 SQLite tables documented below.
+pull). Column shapes mirror the pre-Postgres SQLite tables they were
+imported from.
 
 The app role gets `REVOKE INSERT, UPDATE, DELETE` on this schema; the
 GRANT/REVOKE statements are a commented template in
 `0001_north_star.sql` (role names are a deploy-time decision).
 
----
-
-## Appendix: v2.0 SQLite schema (live in production until cutover)
-
-The full v2.0 reference — `pages`, `articles_raw`, `reddit_posts_raw`,
+The retired SQLite schema (`pages`, `articles_raw`, `reddit_posts_raw`,
 `x_posts_raw`, `x_users_raw`, `docs`, `ai_outputs`, `ai_output_evals`,
 `prompt_versions`, `narratives`, `narrative_docs`, `narrative_citations`,
-`account_profiles`, `author_bot_scores`, `x_api_budget`, `schema_version` —
+`account_profiles`, `author_bot_scores`, `x_api_budget`, `schema_version`)
 is preserved in git history at the last commit before this rewrite
-(`docs/DATABASE_SCHEMA.md` v2.0, dated 2026-07-09). Consult
-`data/migrations/001-025` directly, or `git show <rev>:docs/DATABASE_SCHEMA.md`,
-for the column-level v2.0 reference; it is not duplicated here to keep this
-document under the terse-target-schema length.
+(`docs/DATABASE_SCHEMA.md` v2.0, dated 2026-07-09) and, verbatim, in the
+`archive.*` tables above — consult `git show <rev>:docs/DATABASE_SCHEMA.md`
+for the column-level v2.0 reference if needed.

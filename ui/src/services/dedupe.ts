@@ -1,11 +1,10 @@
 // Shared dedupe helpers for aggregation surfaces.
 //
 // Aggregation tables (recently flagged posts, supporting-docs, narrative
-// example posts) consume rows joined off ``ai_outputs`` — when a doc has
-// multiple classifier rows for the same task (re-runs, stale rows from
-// older prompt versions) the joined query returns the doc once per
-// ``ai_outputs`` row. Dedupe on the doc-level identifier so readers
-// never see the same tweet ten times in a row.
+// example posts) consume rows joined across multiple analysis runs per
+// doc — when a doc has more than one run for the same task, the joined
+// query returns the doc once per run. Dedupe on the doc-level identifier
+// so readers never see the same tweet ten times in a row.
 
 export function dedupeById<T>(items: readonly T[], getId: (item: T) => unknown): T[] {
     const seen = new Set<unknown>();

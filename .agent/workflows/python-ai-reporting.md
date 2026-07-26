@@ -7,13 +7,11 @@ description: Core python code instruction set
 ## Objective
 
 Build an analysis and reporting pipeline that:
-- Loads raw news + Reddit + X data produced by the Go ingestor
-- Extracts clean text in Python
-- Uses AI to compute sentiment + favorability + bot signals + claim extraction, all with explicit evidence spans
-- Clusters repeat claims into narratives (lexical Jaccard by default; embedding-mode opt-in)
-- Extracts a partial citation overlay between owned docs (URL mentions; X reply/quote/retweet)
-- Pre-computes results into JSON cache files
-- Serves cached data via FastAPI
+- Loads raw news + Reddit + X data produced by the Go ingestor (`raw.*` Postgres tables + content-addressed store)
+- Extracts clean text and admits it into the normalized corpus (`corpus.*`)
+- Claims per-doc work from a Postgres task queue and runs one engine per stage: bot detection, sentiment, per-entity target stance, propaganda-technique detection, deterministic citation extraction, LLM claim extraction, embedding-based narrative clustering, deterministic political-lean derivation, account-tier classification — all with explicit evidence spans where applicable
+- Writes every analysis attempt as a traceable `analysis.runs` row (task, model_id, prompt_version_id, confidence) via `results/store.py`
+- Serves live-aggregated results via FastAPI — no cache layer
 - Displays in React dashboard
 - Maintains auditability: every output is traceable to raw sources and model/prompt versions
 
@@ -24,17 +22,16 @@ The system must clearly label reach and sentiment as **proxies** and must avoid 
 ```
 analysis/
 ├── src/
-│   ├── common/          # Shared utilities (logger, cache, settings)
-│   ├── engine/          # AI analysis: bot, sentiment+favorability (analyzer),
-│   │                    # citations, claims, narrative clustering
-│   │   └── models/      # Dataclasses for engine outputs
-│   ├── reporting/       # Aggregators + review service
-│   │   ├── aggregators/ # Sentiment / bot / geo / narrative / outlet
-│   │   ├── models/      # Dataclasses for aggregator outputs
-│   │   └── review.py    # Human-in-loop review queue (writes ai_output_evals)
-│   ├── etl/             # Data loading and transformation
-│   ├── scheduler/       # Pipeline orchestration (job_runner)
-│   └── api/             # FastAPI server
+│   ├── common/          # Shared utilities (logger, settings, db pool, canonicalize)
+│   ├── engine/          # One module per pipeline stage: bot_detection, text (sentiment-only),
+│   │                    # targets (per-entity stance), propaganda, citations (deterministic),
+│   │                    # claims, narrative_clustering (embedding-only), lean_derivation
+│   │                    # (deterministic), account_tier (deterministic)
+│   ├── results/         # store.py — the only writer of run-anchored analysis.* tables
+│   ├── etl/             # documents.py (raw.* -> corpus.*), authors.py, queue.py
+│   ├── scheduler/       # pipeline.py + stages.py — task-queue-driven orchestration
+│   ├── review/          # service.py — human-in-loop review queue (writes analysis.evals/golden_labels)
+│   └── api/             # FastAPI server: routers/ (thin) + queries/ (live aggregation) + models/
 └── requirements.txt
 
 ui/
@@ -49,56 +46,59 @@ ui/
 ## Data Flow
 
 ```
-SQLite -> ETL (loader.py) -> Engine (AI analysis) -> Aggregators -> Cache (JSON) -> FastAPI -> React
+raw.* (Postgres) -> etl/documents.py -> corpus.* + ops.task_queue
+                 -> scheduler/pipeline.py + stages.py (claim work, FOR UPDATE SKIP LOCKED)
+                 -> engine/*.py -> results/store.py -> analysis.*
+                 -> api/queries/* (live aggregation) -> FastAPI -> React
 ```
 
 ## Key Invariants
 
 ### ETL
-- Every row in `docs` table links to a `raw_hash`
+- Every `corpus.documents` row links to a `raw_hash`
 - ETL is deterministic under fixed library versions
-- `docs.raw_hash` must always exist and correspond to raw bytes
+- `corpus.documents.raw_hash` must always exist and correspond to raw bytes
+- `admission_class` (`sampled` vs `official_record`) governs which docs bypass the ~30-day recency window — only tracked active officials' X posts
 
 ### AI Analysis
-- AI classifications must include confidence scores
-- Outputs include evidence spans where applicable
+- Every `analysis.runs` row has `model_id` (NOT NULL, always) and `confidence`
+- `prompt_version_id` is required whenever `status='done'` and `inference_method` is `llm`/`hybrid`
+- Outputs include evidence spans where applicable; a span that fails verbatim-substring validation either drops the result entirely (claims) or caps confidence (sentiment, propaganda) — never both silently
 - No hallucination: if data is missing, return null, not a guess
 
-### Cache Architecture
-- All dashboard data is pre-computed and stored in `data/cache/`
-- FastAPI serves cached JSON directly (stateless)
-- Cache is refreshed by running `./run.sh analyze`
+### Results Contract (`results/store.py`)
+- Engines call `open_run()` -> `RunHandle.save_*()` -> `finish()`; nothing reaches Postgres before `finish()` commits the run row plus all accumulated result rows in one transaction
+- `is_current` flips the predecessor to `false` before the new row inserts (same transaction) — the query layer always reads `is_current` rows only
+- A `failed` run never flips a predecessor and discards all accumulated results — stale-but-valid beats broken
+- Two documented exceptions write `analysis.*` directly instead of through a run: `author_bot_scores` (materialized rollup, `bot_detection.py::refresh_author_bot_scores()`) and the narrative tables (batch job over many docs, `narrative_clustering.py`)
 
 ## Data Model
 
-### docs (core)
-- `doc_id` (stable id)
-- `source_type`: `news` | `reddit_post` | `reddit_comment` | `x_post`
-- `url_canon` or `fullname`
-- `domain` or `subreddit`
-- `published_at`, `fetched_at`
-- `title`, `text` (clean)
-- `raw_hash`
+See `docs/DATABASE_SCHEMA.md` for the full reference. Core tables:
 
-### ai_outputs (traceable)
-- `doc_id`, `task_type` (sentiment|bot|favorability|claims|citations)
-- `output_json`, `confidence`
-- `model_id`, `prompt_version`, `created_at`
-- Joined via `prompt_version` → `prompt_versions` for full prompt text per inference
+### corpus.documents
+- `doc_id`, `source_type` (`news`/`reddit_post`/`x_post`), `natural_key` (url_canon/fullname/tweet_id)
+- `published_at`, `title`, `body`, `source_url` (NOT NULL, invariant C1)
+- `raw_hash`, `etl_version`, `admission_class`
+
+### analysis.runs (traceable)
+- `run_id`, `task`, `doc_id` XOR `author_id`, `status`, `model_id`, `prompt_version_id`, `inference_method`, `confidence`, `is_current`, `raw_response` (JSONB), `error`
+- One run feeds one or more typed result tables (e.g. a `propaganda` run writes both `propaganda_results` and `propaganda_techniques`)
 
 ### narrative overlay
-- `narratives` (identity, `first_seen_doc_id`, anchor embedding)
-- `narrative_docs` (membership)
-- `narrative_citations` (partial link graph — owned → owned or owned → external URL)
+- `analysis.narratives` (identity, `first_seen_doc_id`, `anchor_embedding`)
+- `analysis.narrative_docs` (membership, `confidence`, `added_by_run`)
+- `analysis.citations` (partial link graph — owned -> owned or owned -> external URL)
 
 ### human-in-loop
-- `ai_output_evals` (per-row correctness markers + golden-set flags)
+- `analysis.evals` (per-run verdict), `analysis.golden_labels` (run-independent expected answer)
 
 ## Commands
 
 ```bash
 # Run full analysis pipeline
 ./run.sh analyze
+./run.sh analyze --tasks bot,text   # specific stages
 
 # Start FastAPI server only
 ./run.sh api
@@ -112,16 +112,22 @@ SQLite -> ETL (loader.py) -> Engine (AI analysis) -> Aggregators -> Cache (JSON)
 
 ## API Endpoints
 
+Health is unversioned; everything else mounts under `/api/v1` (`analysis/src/api/routers/`, thin wrappers over `analysis/src/api/queries/`).
+
 | Endpoint | Description |
 |----------|-------------|
 | `GET /health` | Health check |
-| `GET /api/cache-status` | Cache freshness metadata |
-| `GET /api/sentiment?window=...` | Sentiment + GOP favorability snapshot |
-| `GET /api/profiles` | Outlet profiles |
-| `GET /api/bot-activity` | Bot activity snapshot |
-| `GET /api/geo-sentiment?window=...` | Country-level sentiment for the global heatmap |
-| `GET /api/narratives?window=...&limit=...` | Top narratives (claim clusters) |
-| `GET /api/review/queue` / `POST /api/review/submit` / `GET /api/review/stats` | Human review flow |
+| `GET /api/v1/snapshot-status` | Latest pipeline run status/freshness (`ops.pipeline_runs`) |
+| `GET /api/v1/sentiment?window=...` | Sentiment panel: net tone, distribution, splits, per-entity stance |
+| `GET /api/v1/bot-activity` | Bot activity |
+| `GET /api/v1/propaganda?window=...` | Propaganda-technique overview |
+| `GET /api/v1/movers?window=...` | Largest sentiment movers |
+| `GET /api/v1/narratives?window=...&limit=...` | Top narratives (claim clusters) |
+| `GET /api/v1/entity-posts` / `GET /api/v1/entity-profile/{entity_id}` | Entity-scoped posts/profile |
+| `GET /api/v1/outlet-profiles` | Outlet profiles |
+| `GET /api/v1/docs/{doc_id}` | Universal doc drill-down (no time predicate) |
+| `GET /api/v1/review/queue` / `POST /api/v1/review/submit` / `GET /api/v1/review/stats` | Human review flow (`review/service.py`) — admin |
+| `POST /api/v1/run/*` | Trigger a pipeline stage in the background — admin |
 
 ## Proxy Labeling Requirements
 
@@ -145,9 +151,9 @@ Avoid universal language about national sentiment.
 
 ## Acceptance Criteria
 
-1. Can run end-to-end: `./run.sh analyze` populates cache, `./run.sh dev` serves data
-2. Dashboard shows sentiment, favorability, bot activity, narratives, and the global heatmap
-3. Every data point is traceable to raw sources
+1. Can run end-to-end: `./run.sh analyze` populates `analysis.*`, `./run.sh dev` serves it live
+2. Dashboard shows sentiment, per-entity stance, bot activity, propaganda, narratives
+3. Every data point is traceable to a source document and an `analysis.runs` row
 4. Reach and sentiment are clearly labeled as proxies/samples
 5. Narrative "first seen" is honestly framed as first-ingested-by-us, not world-origin
 6. Citation counts are labeled as a partial link graph (owned-only)

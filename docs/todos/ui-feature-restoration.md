@@ -75,6 +75,15 @@ Sequencing: none of this blocks Phase 11 cutover. Land it after.
         place (no writer, no reader). Dropping it is a Phase 11 checklist
         item in `docs/todos/pg-redesign.md`.
 
+- [ ] **Narrative-level confidence chip.** `NarrativeSummaryModel`
+      (`analysis/src/api/models/narratives.py`) carries no confidence field,
+      and averaging only the top-N `member_doc_samples` would misrepresent
+      the full cluster. `queries/narratives.py` already joins
+      `analysis.narrative_docs` to `analysis.runs.confidence` per member doc
+      (see the `_target_mentions_by_narrative` / sample-building queries) —
+      add a mean-confidence aggregate over all member docs in the window to
+      `NarrativeSummaryModel` and wire the chip into `ui/src/pages/Narratives.tsx`.
+
 ## Blocked — needs a decision or new computation, not a join
 
 - [ ] **Copy-paste similarity distribution.** `analysis.bot_signals

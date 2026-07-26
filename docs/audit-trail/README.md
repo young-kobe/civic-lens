@@ -60,4 +60,9 @@ This workflow is a hard rule. Every merge should leave the tree consistent: if c
 
 ## Seed
 
-The pre-existing numbered walkthroughs under `docs/walkthroughs/` are being consolidated into this structure; see `docs/todos/walkthrough-consolidation.md`. Until that lands, treat the walkthroughs as a secondary source.
+The pre-existing numbered walkthroughs formerly under `docs/walkthroughs/` were consolidated into
+five per-layer timeline files: `ingestion/timeline.md`, `analysis/timeline.md`, `api/timeline.md`,
+`ui/timeline.md`, `infra/timeline.md`. Each is a condensed, chronological digest of that linear log,
+written for a reader who wants to understand *the system as it is now* rather than a diff of what
+used to be. Read the relevant layer's timeline before this bucket's dated entries when you need
+older context.

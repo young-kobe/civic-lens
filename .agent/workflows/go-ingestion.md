@@ -6,21 +6,25 @@ description: Go ingestion layer - crawler and data storage
 
 ## Objective
 
-Build a crash-resumable, polite, deduplicating news + Reddit ingestion system in Go with strong invariants and an auditable raw-data trail suitable for downstream AI analysis.
+Build a crash-resumable, polite, deduplicating news + Reddit + X ingestion system in Go with strong invariants and an auditable raw-data trail suitable for downstream AI analysis.
 
 ## Architecture
 
 ```
 ingest/
-├── cmd/ingest/         # CLI entrypoint
+├── cmd/civic-ingest/    # CLI entrypoint (cobra: migrate|ingest|crawl|reddit|x|requeue-stale)
 ├── internal/
-│   ├── crawler/        # HTTP fetcher with rate limiting
-│   ├── frontier/       # SQLite-backed URL queue
-│   ├── extract/        # RSS parser, Reddit API client
-│   ├── model/          # Shared data types
-│   └── runner/         # Orchestration logic
+│   ├── crawler/         # HTTP fetcher with rate limiting
+│   ├── frontier/        # URL queue: frontier_postgres.go (primary), frontier_sqlite.go (deprecated)
+│   ├── storage/db/      # db_postgres.go (primary), db_sqlite.go (deprecated), migration runner
+│   ├── extract/         # RSS parser, Reddit API client
+│   ├── model/           # Shared data types
+│   └── runner/          # Orchestration logic (article_writer_postgres.go, reddit_postgres.go,
+│                         # x_postgres.go, x_officials_postgres.go, x_budget_postgres.go)
 └── go.mod
 ```
+
+Postgres is the live backend as of the pg-redesign cutover — `--db` accepts a Postgres DSN (`postgres://...`) and the binary migrates/writes through `*_postgres.go`. The SQLite backend (`frontier_sqlite.go`, `db_sqlite.go`, `data/migrations/*.sql`) is deprecated: kept only so old on-disk SQLite files remain readable during the migration window, not touched for new work, and slated for deletion in a later cleanup phase (`docs/todos/post-rewrite-cutover.md`). Do not add new SQLite-path code.
 
 ## Invariants (Must-Have)
 
@@ -32,14 +36,14 @@ ingest/
 - Canonical URL is the DB primary key for page identity
 
 ### Frontier State Machine
-States: `QUEUED(0) -> INFLIGHT(1) -> DONE(2)` or `QUEUED -> INFLIGHT -> QUEUED(backoff)` or `FAILED(3)`
+States (`raw.page_state` enum): `queued -> inflight -> done` or `queued -> inflight -> queued (backoff)` or `failed`
 - A URL row exists at most once (`PRIMARY KEY(url_canon)`)
 - A URL cannot be queued and inflight simultaneously
 - Claiming a URL is atomic (transaction)
-- On startup: any `INFLIGHT` older than threshold is returned to `QUEUED`
+- On startup: any `inflight` older than threshold is returned to `queued`
 
 ### Raw Content
-- Raw content stored immutably by hash at `data/raw/sha256/<hash>.<ext>`
+- Raw content stored immutably by hash in the content-addressed store (`CIVIC_RAW_STORE_DIR`, `data/raw/sha256/<hash>` in dev)
 - DB records must reference `raw_hash` for every successful fetch
 - `raw_hash` must match file contents
 
@@ -52,28 +56,34 @@ States: `QUEUED(0) -> INFLIGHT(1) -> DONE(2)` or `QUEUED -> INFLIGHT -> QUEUED(b
 - No panics on malformed HTML/JSON
 - Every failure recorded with `last_error` and retry/backoff policy
 
-## SQLite Schema (Essential Tables)
+## Postgres Schema (raw.* — Essential Tables)
 
-### pages (frontier)
+Source of truth: `data/pg-migrations/0001_north_star.sql`. Near-1:1 port of the old SQLite tables — deliberately not redesigned; rows must stay byte-faithful to what the crawler/fetchers key on.
+
+### raw.pages (frontier)
 - `url_canon TEXT PRIMARY KEY`
 - `url_raw TEXT NOT NULL`
 - `domain TEXT NOT NULL`
-- `state INTEGER NOT NULL`
+- `state raw.page_state NOT NULL DEFAULT 'queued'` (`queued`/`inflight`/`done`/`failed`)
 - `content_sha256 TEXT`
 - `last_error TEXT`
 
-### articles_raw
-- `article_id INTEGER PRIMARY KEY AUTOINCREMENT`
-- `url_canon TEXT UNIQUE NOT NULL`
-- `raw_hash TEXT NOT NULL`
+### raw.articles
+- `url_canon TEXT PRIMARY KEY REFERENCES raw.pages`
+- `raw_hash TEXT NOT NULL` — key into the content-addressed store
 - `title TEXT`
-- `published_at INTEGER`
+- `published_at TIMESTAMPTZ`
 
-### reddit_posts_raw / reddit_comments_raw
+### raw.reddit_posts
 - `fullname TEXT PRIMARY KEY`
 - `raw_hash TEXT NOT NULL`
-- `subreddit TEXT NOT NULL`
-- `created_utc INTEGER NOT NULL`
+- `subreddit TEXT`
+- `created_utc TIMESTAMPTZ`
+
+### raw.x_posts / raw.x_users
+- `tweet_id TEXT PRIMARY KEY` / `user_id TEXT PRIMARY KEY`
+- `author_id` on `raw.x_posts` deliberately has no FK to `raw.x_users` — capture must never drop a post over referential nicety
+- `raw_hash TEXT NOT NULL`, `extraction_version TEXT NOT NULL`
 
 ## Commands
 

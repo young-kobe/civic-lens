@@ -1,5 +1,9 @@
 # Civic Lens Deployment Plan — civic-lens.info
 
+> **SUPERSEDED (2026-07-26):** the SQLite/litestream architecture this plan
+> recommends was replaced by the Postgres stack — see `deploy/README.md` for
+> the system as it is now.
+
 Status: draft 2026-04-19. Domain purchased via Cloudflare. Target: public internet.
 
 > **2026-07-09 addendum:** the Docker Compose shape this plan recommends has

@@ -58,22 +58,22 @@ until the single Phase 6 push, which is the cutover.
 
 ## Phase 3 — Docs consolidation
 
-- [ ] Delete todos (salvage first): backend-aggregator-audit,
+- [x] Delete todos (salvage first): backend-aggregator-audit,
       cross-tier-narrative-clustering, news-visibility-prod, containerization
       (Flash-Lite item -> eval-expansion), bot-propaganda-entity-signals
       (2 live questions -> fresh todo), ui-rework (R-3 -> ui-feature-restoration)
-- [ ] Superseded banners: `docs/proposals/scale-out-and-targeted-classification.md`,
+- [x] Superseded banners: `docs/proposals/scale-out-and-targeted-classification.md`,
       `docs/deployment/plan.md`
-- [ ] Rewrite: CLAUDE.md, README.md, docs/ARCHITECTURE_DIAGRAM.md,
+- [x] Rewrite: CLAUDE.md, README.md, docs/ARCHITECTURE_DIAGRAM.md,
       .agent/workflows/{python-ai-reporting,global,go-ingestion}.md,
       docs/SCORING_METHODOLOGY.md, docs/DATABASE_SCHEMA.md, docs/INVARIANTS.md,
       .agent/rules/code-style.md, todos {eval-expansion,dead-code-cleanup,
       ui-consistency-audit}
-- [ ] Collapse 67 walkthroughs into per-layer `docs/audit-trail/<layer>/timeline.md`;
+- [x] Collapse 67 walkthroughs into per-layer `docs/audit-trail/<layer>/timeline.md`;
       delete originals; repoint ~6 live-code refs + doc links
-- [ ] Comment trim: engine/constants.py, engine/text.py, engine/targets.py,
+- [x] Comment trim: engine/constants.py, engine/text.py, engine/targets.py,
       bot_detection.py, ui/src/services/dedupe.ts, ui/src/App.tsx
-- [ ] Gate: no `walkthroughs/` refs; ui typecheck+build green
+- [x] Gate: no `walkthroughs/` refs; ui typecheck+build green
 
 ## Phase 4 — Full verification of the final tree (Kobe)
 
