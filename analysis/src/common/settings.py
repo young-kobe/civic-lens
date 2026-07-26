@@ -94,14 +94,12 @@ class Settings(BaseSettings):
     polling_enabled: bool = True  # Feature flag for live polling
     polling_cache_ttl: int = 3600  # Cache TTL in seconds (1 hour)
 
-    # Narrative clustering: "embedding" (semantic, default) or "jaccard" (lexical).
-    # Embedding mode needs Ollama + nomic-embed-text; the clusterer transparently
-    # falls back to Jaccard per-claim when the embedding call fails so the
-    # default change is safe for installs without Ollama (walkthrough 039).
-    narrative_similarity_mode: Literal["jaccard", "embedding"] = "embedding"
-    narrative_embedding_model: str = "nomic-embed-text"
-    # Match threshold per mode — Jaccard ~0.3, embedding cosine ~0.65 for nomic-embed-text.
-    narrative_jaccard_threshold: float = 0.3
+    # Narrative clustering is embedding-only. Empty model = let the backend
+    # pick its own default; naming one here sends it to whichever backend is
+    # configured, so an Ollama tag reaches Gemini.
+    narrative_embedding_model: str = ""
+    # Cosine match threshold. Tuned for nomic-embed-text and NOT portable
+    # across embedding models -- recheck on a real claim sample after a swap.
     narrative_embedding_threshold: float = 0.65
 
     # Minimum ai_outputs.confidence for a row to count in aggregations (walkthrough 039).

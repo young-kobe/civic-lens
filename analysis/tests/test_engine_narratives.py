@@ -6,12 +6,17 @@ Two tiers, matching the repo's established convention for Postgres-redesign
 test modules (test_engine_claims.py, test_engine_citations.py):
 
   1. Pure-core tests (no DB) -- plan_clustering() against constructed
-     PendingClaim/ExistingAnchor fixtures with pre-set tokens/embeddings
-     (no embed_fn needed: embedding happens in run(), not the planner).
+     PendingClaim/ExistingAnchor fixtures with pre-set embeddings (no
+     embed_fn needed: embedding happens in run(), not the planner).
      Always run.
   2. Integration tests gated on CIVIC_TEST_DATABASE_URL, against a real
-     Postgres with data/pg-migrations/0001+0002 applied. Skipped (never
-     failed) when the env var is absent.
+     Postgres with data/pg-migrations applied. Skipped (never failed) when
+     the env var is absent.
+
+Clustering is embedding-only (2026-07-26). Vectors here are explicit and
+tiny on purpose: the planner's job is "cosine against a threshold", and
+tests that spell out the vectors say what similarity is being asserted
+instead of hiding it behind a similarity function of their own.
 """
 
 from __future__ import annotations
@@ -45,7 +50,6 @@ def _claim(claim_id, doc_id, text, published_at=None, confidence=0.7, embedding=
         claim_text=text,
         confidence=confidence,
         published_at=published_at or _T0 + timedelta(days=doc_id),
-        tokens=nc.tokenize_claim(text),
         embedding=embedding,
     )
 
@@ -54,7 +58,6 @@ def _anchor(narrative_id, text, embedding=None, first_seen_at=None, first_seen_d
     return nc.ExistingAnchor(
         narrative_id=narrative_id,
         anchor_text=text,
-        tokens=nc.tokenize_claim(text),
         embedding=embedding,
         first_seen_at=first_seen_at or _T0,
         first_seen_doc_id=first_seen_doc_id,
@@ -65,23 +68,7 @@ def _anchor(narrative_id, text, embedding=None, first_seen_at=None, first_seen_d
 # Tier 1 -- pure core, no DB.
 # =============================================================================
 
-class TokenizeAndCompareTests(unittest.TestCase):
-    def test_tokenize_drops_stopwords_and_short_tokens(self):
-        tokens = nc.tokenize_claim("The president is a strong leader of it")
-        self.assertNotIn("the", tokens)
-        self.assertNotIn("is", tokens)
-        self.assertNotIn("a", tokens)  # len(1) dropped too
-        self.assertIn("president", tokens)
-        self.assertIn("strong", tokens)
-        self.assertIn("leader", tokens)
-
-    def test_jaccard_empty_sets_is_zero(self):
-        self.assertEqual(nc.jaccard(set(), {"a"}), 0.0)
-        self.assertEqual(nc.jaccard(set(), set()), 0.0)
-
-    def test_jaccard_identical_sets_is_one(self):
-        self.assertEqual(nc.jaccard({"a", "b"}, {"a", "b"}), 1.0)
-
+class CosineTests(unittest.TestCase):
     def test_cosine_orthogonal_vectors_is_zero(self):
         self.assertEqual(nc.cosine([1.0, 0.0], [0.0, 1.0]), 0.0)
 
@@ -91,16 +78,20 @@ class TokenizeAndCompareTests(unittest.TestCase):
     def test_cosine_mismatched_length_is_zero(self):
         self.assertEqual(nc.cosine([1.0], [1.0, 2.0]), 0.0)
 
+    def test_cosine_missing_vector_is_zero(self):
+        # A None operand must score 0, never raise and never be treated as
+        # a match -- the planner relies on this to skip unembedded rows.
+        self.assertEqual(nc.cosine(None, [1.0, 0.0]), 0.0)
+        self.assertEqual(nc.cosine([1.0, 0.0], None), 0.0)
+
 
 class TwoSimilarClaimsClusterTests(unittest.TestCase):
     def test_two_similar_claims_on_different_docs_form_one_narrative(self):
         pending = [
-            _claim(1, doc_id=1, text="Trump won Pennsylvania decisively in the election"),
-            _claim(2, doc_id=2, text="Trump won Pennsylvania decisively in the vote"),
+            _claim(1, doc_id=1, text="Trump won Pennsylvania decisively", embedding=[1.0, 0.0]),
+            _claim(2, doc_id=2, text="Trump carried Pennsylvania", embedding=[0.99, 0.01]),
         ]
-        plan = nc.plan_clustering(
-            pending, [], mode="jaccard", jaccard_threshold=0.3, embedding_threshold=0.65,
-        )
+        plan = nc.plan_clustering(pending, [], threshold=0.9)
         self.assertEqual(len(plan.new_narratives), 1)
         self.assertEqual(plan.suppressed_count, 0)
         self.assertEqual(plan.suppressed_claims, 0)
@@ -109,16 +100,28 @@ class TwoSimilarClaimsClusterTests(unittest.TestCase):
         # Anchor is the founding (first-processed) claim, not a drifting centroid.
         self.assertEqual(plan.new_narratives[0].anchor_claim.claim_id, 1)
 
+    def test_different_wording_same_meaning_still_clusters(self):
+        # The whole reason clustering is embedding-only: these two share
+        # almost no vocabulary. A lexical comparator would never group them.
+        pending = [
+            _claim(1, doc_id=1, text="The Senate greenlit the spending package",
+                   embedding=[0.0, 1.0]),
+            _claim(2, doc_id=2, text="Upper chamber approves budget resolution",
+                   embedding=[0.02, 0.99]),
+        ]
+        plan = nc.plan_clustering(pending, [], threshold=0.9)
+        self.assertEqual(len(plan.new_narratives), 1)
+
 
 class DissimilarClaimsStayApartTests(unittest.TestCase):
     def test_two_unrelated_claims_produce_no_narrative(self):
         pending = [
-            _claim(1, doc_id=1, text="Congress passed a new infrastructure funding bill"),
-            _claim(2, doc_id=2, text="Local school board debates cafeteria menu changes"),
+            _claim(1, doc_id=1, text="Congress passed an infrastructure bill",
+                   embedding=[1.0, 0.0]),
+            _claim(2, doc_id=2, text="School board debates cafeteria menus",
+                   embedding=[0.0, 1.0]),
         ]
-        plan = nc.plan_clustering(
-            pending, [], mode="jaccard", jaccard_threshold=0.3, embedding_threshold=0.65,
-        )
+        plan = nc.plan_clustering(pending, [], threshold=0.65)
         self.assertEqual(plan.new_narratives, [])
         self.assertEqual(plan.suppressed_count, 2)
         self.assertEqual(plan.suppressed_claims, 2)
@@ -126,10 +129,8 @@ class DissimilarClaimsStayApartTests(unittest.TestCase):
 
 class SingletonSuppressionTests(unittest.TestCase):
     def test_single_unmatched_claim_is_suppressed_not_materialized(self):
-        pending = [_claim(1, doc_id=1, text="A wholly unique claim about municipal zoning")]
-        plan = nc.plan_clustering(
-            pending, [], mode="jaccard", jaccard_threshold=0.3, embedding_threshold=0.65,
-        )
+        pending = [_claim(1, doc_id=1, text="A unique claim about zoning", embedding=[1.0, 0.0])]
+        plan = nc.plan_clustering(pending, [], threshold=0.65)
         self.assertEqual(plan.new_narratives, [])
         self.assertEqual(plan.existing_assignments, [])
         self.assertEqual(plan.suppressed_count, 1)
@@ -137,13 +138,10 @@ class SingletonSuppressionTests(unittest.TestCase):
 
     def test_min_support_above_two_requires_more_docs(self):
         pending = [
-            _claim(1, doc_id=1, text="Senate confirms new cabinet nominee today"),
-            _claim(2, doc_id=2, text="Senate confirms new cabinet nominee this week"),
+            _claim(1, doc_id=1, text="Senate confirms the nominee today", embedding=[1.0, 0.0]),
+            _claim(2, doc_id=2, text="Senate confirms the nominee this week", embedding=[0.99, 0.01]),
         ]
-        plan = nc.plan_clustering(
-            pending, [], mode="jaccard", jaccard_threshold=0.3, embedding_threshold=0.65,
-            min_support=3,
-        )
+        plan = nc.plan_clustering(pending, [], threshold=0.9, min_support=3)
         # Two matching docs is still below a min_support=3 bar.
         self.assertEqual(plan.new_narratives, [])
         self.assertEqual(plan.suppressed_count, 1)
@@ -152,57 +150,38 @@ class SingletonSuppressionTests(unittest.TestCase):
 
 class IncrementalExtendTests(unittest.TestCase):
     def test_claim_matching_existing_anchor_extends_it_not_a_new_narrative(self):
-        anchor = _anchor(narrative_id=42, text="Senate passes the annual budget resolution")
-        pending = [_claim(1, doc_id=5, text="Senate passes the annual budget resolution again")]
-        plan = nc.plan_clustering(
-            pending, [anchor], mode="jaccard", jaccard_threshold=0.3, embedding_threshold=0.65,
-        )
+        anchor = _anchor(narrative_id=42, text="Senate passes the budget", embedding=[1.0, 0.0])
+        pending = [_claim(1, doc_id=5, text="Senate passes the budget again", embedding=[0.99, 0.01])]
+        plan = nc.plan_clustering(pending, [anchor], threshold=0.9)
         self.assertEqual(plan.new_narratives, [])
         self.assertEqual(len(plan.existing_assignments), 1)
         self.assertEqual(plan.existing_assignments[0].narrative_id, 42)
         self.assertEqual(plan.existing_assignments[0].claim.doc_id, 5)
 
 
-class EmbeddingModeTests(unittest.TestCase):
-    def test_claims_with_similar_embeddings_cluster_via_cosine(self):
-        pending = [
-            _claim(1, doc_id=1, text="completely different wording one", embedding=[1.0, 0.0]),
-            _claim(2, doc_id=2, text="completely different wording two", embedding=[0.99, 0.01]),
-        ]
-        plan = nc.plan_clustering(
-            pending, [], mode="embedding", jaccard_threshold=0.3, embedding_threshold=0.9,
-        )
-        self.assertEqual(len(plan.new_narratives), 1)
-        self.assertEqual({m.doc_id for m in plan.new_narratives[0].members}, {1, 2})
+class UnembeddedRowsAreExcludedTests(unittest.TestCase):
+    """The behavior that replaced the jaccard fallback. A row without a
+    vector is not comparable, so it is left alone -- it is never measured
+    by some other yardstick and slipped into the same narratives table."""
 
-    def test_claim_missing_embedding_falls_back_to_jaccard_against_all_anchors(self):
-        # No embedding computed (e.g. embed() failed) -- mode is "embedding"
-        # but this claim must still be comparable via jaccard, per-claim.
-        anchor = _anchor(narrative_id=7, text="Border security funding bill advances in Congress")
+    def test_claim_without_embedding_is_left_unclustered(self):
+        # Word-for-word near-identical to the anchor. Under the old lexical
+        # fallback this joined narrative 7; now it must not, because the
+        # claim carries no vector and no other comparator exists.
+        anchor = _anchor(narrative_id=7, text="Border funding bill advances", embedding=[1.0, 0.0])
         pending = [
-            _claim(
-                1, doc_id=9,
-                text="Border security funding bill advances in Congress today",
-                embedding=None,
-            )
+            _claim(1, doc_id=9, text="Border funding bill advances today", embedding=None),
         ]
-        plan = nc.plan_clustering(
-            pending, [anchor], mode="embedding", jaccard_threshold=0.3, embedding_threshold=0.9,
-        )
-        self.assertEqual(len(plan.existing_assignments), 1)
-        self.assertEqual(plan.existing_assignments[0].narrative_id, 7)
+        plan = nc.plan_clustering(pending, [anchor], threshold=0.9)
+        self.assertEqual(plan.existing_assignments, [])
+        self.assertEqual(plan.new_narratives, [])
+        # Not even counted as a suppressed group -- it never entered planning.
+        self.assertEqual(plan.suppressed_count, 0)
 
-    def test_embedding_only_claim_never_compared_against_jaccard_only_anchor(self):
-        # Anchor has no embedding (created under jaccard mode, say); a claim
-        # with a real embedding must skip it entirely, not fall back to
-        # jaccard for that one anchor (mixing thresholds is never done).
+    def test_anchor_without_embedding_is_skipped_not_matched(self):
         anchor = _anchor(narrative_id=3, text="identical shared wording here", embedding=None)
-        pending = [
-            _claim(1, doc_id=2, text="identical shared wording here", embedding=[1.0, 0.0]),
-        ]
-        plan = nc.plan_clustering(
-            pending, [anchor], mode="embedding", jaccard_threshold=0.3, embedding_threshold=0.9,
-        )
+        pending = [_claim(1, doc_id=2, text="identical shared wording here", embedding=[1.0, 0.0])]
+        plan = nc.plan_clustering(pending, [anchor], threshold=0.9)
         self.assertEqual(plan.existing_assignments, [])
         # Falls through to founding its own (suppressed, alone) group.
         self.assertEqual(plan.suppressed_count, 1)
@@ -210,40 +189,34 @@ class EmbeddingModeTests(unittest.TestCase):
 
 class _NoEmbedBackend:
     """Stand-in for LLMClient with a backend whose class never overrides
-    BaseLLMClient.embed's no-op default (e.g. GeminiClient before this
-    change, or any future backend that regresses)."""
+    BaseLLMClient.embed's no-op default."""
 
     supports_embedding = False
 
 
-class MisconfiguredEmbeddingModeTests(unittest.TestCase):
-    """Regression guard for the exact bug this workstream fixes: mode=
-    'embedding' paired with a backend that cannot embed at all must fail
-    loudly, not silently cluster on jaccard while settings/logs still say
-    'embedding'. No DB is touched -- run() must raise before reaching
-    _open_clustering_run(), so this test needs no CIVIC_TEST_DATABASE_URL
-    and always runs."""
+class MisconfiguredBackendTests(unittest.TestCase):
+    """A backend that cannot embed must fail the stage, not produce
+    narratives by another route. No DB is touched -- run() raises before
+    reaching _open_clustering_run(), so this needs no
+    CIVIC_TEST_DATABASE_URL and always runs."""
 
-    def test_unsupported_backend_raises_instead_of_silently_falling_back(self):
-        with patch(
-            "analysis.src.llm.client.get_client", return_value=_NoEmbedBackend()
-        ):
+    def test_unsupported_backend_raises(self):
+        with patch("analysis.src.llm.client.get_client", return_value=_NoEmbedBackend()):
             with self.assertRaises(RuntimeError):
-                nc.run(mode="embedding")
+                nc.run()
 
     def test_check_is_bypassed_when_caller_injects_embed_fn_directly(self):
         # Passing embed_fn explicitly (as tests/callers may) skips backend
         # resolution entirely -- _resolve_embed_fn, and thus the
-        # misconfiguration check, must never be reached even against a
-        # backend that can't embed.
+        # misconfiguration check, must never be reached.
         fake_get_client = MagicMock()
         with patch("analysis.src.llm.client.get_client", fake_get_client):
             try:
-                nc.run(mode="embedding", embed_fn=lambda text: None)
+                nc.run(embed_fn=lambda text: None)
             except Exception:
-                # Anything past the check (e.g. no test database
-                # configured) is irrelevant here -- only whether the
-                # resolver path was reached is being asserted.
+                # Anything past the check (e.g. no test database configured)
+                # is irrelevant here -- only whether the resolver path was
+                # reached is being asserted.
                 pass
         fake_get_client.assert_not_called()
 
@@ -257,7 +230,7 @@ class MisconfiguredEmbeddingModeTests(unittest.TestCase):
     "CIVIC_TEST_DATABASE_URL not set — no Postgres server available to test against",
 )
 class RunIntegrationTests(unittest.TestCase):
-    """Live-run against a real Postgres with 0001+0002 applied."""
+    """Live-run against a real Postgres with the migrations applied."""
 
     @classmethod
     def setUpClass(cls):
@@ -280,6 +253,12 @@ class RunIntegrationTests(unittest.TestCase):
                 "analysis.clustering_runs, analysis.claims, analysis.runs, "
                 "analysis.prompt_versions, corpus.documents CASCADE"
             )
+
+    @staticmethod
+    def _embedder(vectors):
+        """An embed_fn over an explicit text -> vector table. Unknown text
+        returns None, which is exactly what a failed embed() looks like."""
+        return lambda text: vectors.get(text)
 
     def _seed_claim(self, claim_text, published_at=None, confidence=0.7):
         """Seed one doc + one done/current 'claims' run + one analysis.claims
@@ -342,21 +321,25 @@ class RunIntegrationTests(unittest.TestCase):
     # -- full run: provenance + FKs + singleton suppression -----------------
 
     def test_full_run_lands_clustering_run_and_narratives_with_provenance(self):
-        doc_a, claim_a = self._seed_claim("Trump won Pennsylvania decisively in the election")
-        doc_b, _claim_b = self._seed_claim("Trump won Pennsylvania decisively in the vote")
-        self._seed_claim("A wholly unrelated claim about municipal zoning")
+        a, b, c = "Trump won Pennsylvania", "Trump carried Pennsylvania", "Municipal zoning changes"
+        doc_a, claim_a = self._seed_claim(a)
+        doc_b, _claim_b = self._seed_claim(b)
+        self._seed_claim(c)
+        embed = self._embedder({a: [1.0, 0.0], b: [0.99, 0.01], c: [0.0, 1.0]})
 
-        result = nc.run(mode="jaccard")
+        result = nc.run(embed_fn=embed, embedding_threshold=0.9)
 
-        self.assertEqual(result["mode"], "jaccard")
         self.assertEqual(result["narratives_created"], 1)
         self.assertEqual(result["docs_touched"], 2)
         self.assertEqual(result["suppressed_groups"], 1)
         self.assertEqual(result["suppressed_claims"], 1)
+        self.assertEqual(result["embedding_failures"], 0)
 
         runs = self._clustering_runs()
         self.assertEqual(len(runs), 1)
-        self.assertEqual(runs[0]["mode"], "jaccard")
+        # Provenance says embedding because that is the only mode there is.
+        self.assertEqual(runs[0]["mode"], "embedding")
+        self.assertEqual(runs[0]["embedding_failures"], 0)
         self.assertIsNotNone(runs[0]["completed_at"])
         self.assertEqual(runs[0]["doc_count"], 2)
 
@@ -365,6 +348,7 @@ class RunIntegrationTests(unittest.TestCase):
         narrative = narratives[0]
         self.assertEqual(narrative["clustering_run_id"], runs[0]["clustering_run_id"])
         self.assertEqual(narrative["anchor_claim_id"], claim_a)
+        self.assertIsNotNone(narrative["anchor_embedding"])
 
         docs = self._narrative_docs()
         # Singleton claim's doc got no narrative_docs row at all -- only the
@@ -373,23 +357,25 @@ class RunIntegrationTests(unittest.TestCase):
         # Both founding rows carry the founding run's id.
         self.assertTrue(all(d["added_by_run"] == runs[0]["clustering_run_id"] for d in docs))
 
-        result2 = nc.run(mode="jaccard")
+        result2 = nc.run(embed_fn=embed, embedding_threshold=0.9)
         # The singleton doc is still pending next run (no narrative_docs row
         # excludes it) -- reprocessed, still alone, still suppressed.
         self.assertEqual(result2["narratives_created"], 0)
         self.assertEqual(result2["suppressed_groups"], 1)
 
     def test_second_run_extends_existing_narrative_not_a_duplicate(self):
-        self._seed_claim("Senate passes the annual budget resolution today")
-        self._seed_claim("Senate passes the annual budget resolution now")
-        result1 = nc.run(mode="jaccard")
+        a, b, c = "Senate passes the budget", "Senate approves the budget", "Senate okays the budget"
+        embed = self._embedder({a: [1.0, 0.0], b: [0.99, 0.01], c: [0.98, 0.02]})
+        self._seed_claim(a)
+        self._seed_claim(b)
+        result1 = nc.run(embed_fn=embed, embedding_threshold=0.9)
         founding_run_id = result1["clustering_run_id"]
         narratives_before = self._narratives()
         self.assertEqual(len(narratives_before), 1)
         narrative_id = narratives_before[0]["narrative_id"]
 
-        doc_c, _ = self._seed_claim("Senate passes the annual budget resolution finally")
-        result2 = nc.run(mode="jaccard")
+        doc_c, _ = self._seed_claim(c)
+        result2 = nc.run(embed_fn=embed, embedding_threshold=0.9)
         extending_run_id = result2["clustering_run_id"]
 
         self.assertEqual(result2["narratives_created"], 0)
@@ -414,14 +400,16 @@ class RunIntegrationTests(unittest.TestCase):
         self.assertNotEqual(founding_run_id, extending_run_id)
 
     def test_idempotent_rerun_is_zero_delta_on_narratives(self):
-        self._seed_claim("Congress passed a new infrastructure funding bill today")
-        self._seed_claim("Congress passed a new infrastructure funding bill yesterday")
-        nc.run(mode="jaccard")
+        a, b = "Congress passed the infrastructure bill", "Congress cleared the infrastructure bill"
+        embed = self._embedder({a: [1.0, 0.0], b: [0.99, 0.01]})
+        self._seed_claim(a)
+        self._seed_claim(b)
+        nc.run(embed_fn=embed, embedding_threshold=0.9)
 
         narratives_before = self._narratives()
         docs_before = self._narrative_docs()
 
-        result2 = nc.run(mode="jaccard")  # no new claims seeded
+        result2 = nc.run(embed_fn=embed, embedding_threshold=0.9)  # no new claims seeded
 
         self.assertEqual(result2["claims_considered"], 0)
         self.assertEqual(result2["narratives_created"], 0)
@@ -432,9 +420,10 @@ class RunIntegrationTests(unittest.TestCase):
         self.assertEqual(len(self._clustering_runs()), 2)
 
     def test_singleton_claim_produces_no_narrative_row(self):
-        self._seed_claim("A completely one-off claim nobody else made")
+        a = "A one-off claim nobody else made"
+        self._seed_claim(a)
 
-        result = nc.run(mode="jaccard")
+        result = nc.run(embed_fn=self._embedder({a: [1.0, 0.0]}), embedding_threshold=0.9)
 
         self.assertEqual(result["narratives_created"], 0)
         self.assertEqual(result["suppressed_groups"], 1)
@@ -446,51 +435,60 @@ class RunIntegrationTests(unittest.TestCase):
     def test_first_seen_at_is_earliest_published_at_among_members(self):
         earlier = datetime(2026, 1, 1, tzinfo=timezone.utc)
         later = datetime(2026, 6, 1, tzinfo=timezone.utc)
-        self._seed_claim("Federal court blocks the new voting law", published_at=later)
-        self._seed_claim("Federal court blocks the new voting law today", published_at=earlier)
+        a, b = "Court blocks the voting law", "Court halts the voting law"
+        self._seed_claim(a, published_at=later)
+        self._seed_claim(b, published_at=earlier)
 
-        nc.run(mode="jaccard")
+        nc.run(
+            embed_fn=self._embedder({a: [1.0, 0.0], b: [0.99, 0.01]}),
+            embedding_threshold=0.9,
+        )
 
         narrative = self._narratives()[0]
         self.assertEqual(narrative["first_seen_at"], earlier)
 
-    # -- embedding mode, injected fake embed_fn (no live Ollama needed) ------
+    # -- embedding failures ------------------------------------------------
 
-    def test_embedding_mode_with_injected_embed_fn_clusters_and_stores_vector(self):
-        doc_a, claim_a = self._seed_claim("alpha bravo charlie delta")
-        doc_b, _ = self._seed_claim("echo foxtrot golf hotel")
+    def test_total_embedding_failure_raises_instead_of_writing_an_empty_result(self):
+        """A dead backend or a model name it does not serve fails every
+        call. That must not land as "no narratives found" -- an empty result
+        is a claim about the corpus, and this run has nothing to say."""
+        self._seed_claim("Wildfire smoke blankets the east coast")
+        self._seed_claim("Wildfire smoke covers the eastern seaboard")
 
-        vectors = {
-            "alpha bravo charlie delta": [1.0, 0.0],
-            "echo foxtrot golf hotel": [0.98, 0.02],
-        }
+        with self.assertRaises(RuntimeError) as ctx:
+            nc.run(embed_fn=lambda text: None)
+
+        self.assertIn("embeddings failed", str(ctx.exception))
+        self.assertEqual(self._narratives(), [])
+        # The run row survives with the failure count and no completed_at --
+        # provenance for an attempt that produced nothing.
+        runs = self._clustering_runs()
+        self.assertEqual(len(runs), 1)
+        self.assertIsNone(runs[0]["completed_at"])
+        self.assertGreaterEqual(runs[0]["embedding_failures"], 2)
+
+    def test_partial_embedding_failure_is_recorded_and_claim_left_unclustered(self):
+        """One bad embed does not sink the run, but the count is persisted:
+        clustering_runs.mode alone would otherwise imply every row in the
+        run was produced the same way."""
+        a, b, c = "Senate passes the budget", "Senate approves the budget", "Unembeddable claim"
+        self._seed_claim(a)
+        self._seed_claim(b)
+        self._seed_claim(c)
+
         result = nc.run(
-            mode="embedding", embedding_threshold=0.9,
-            embed_fn=lambda text: vectors.get(text),
+            embed_fn=self._embedder({a: [1.0, 0.0], b: [0.99, 0.01]}),  # c -> None
+            embedding_threshold=0.9,
         )
 
-        self.assertEqual(result["mode"], "embedding")
         self.assertEqual(result["narratives_created"], 1)
-        self.assertEqual(result["embedding_fallbacks"], 0)
-        narrative = self._narratives()[0]
-        self.assertEqual(narrative["anchor_claim_id"], claim_a)
-        self.assertIsNotNone(narrative["anchor_embedding"])
-
-    def test_embedding_failure_is_counted_and_degrades_to_jaccard_for_that_claim(self):
-        self._seed_claim("Wildfire smoke blankets the entire east coast region")
-        self._seed_claim("Wildfire smoke blankets the entire east coast area")
-
-        # embed_fn returns None for everything -- simulates a down backend;
-        # the claims still cluster via jaccard fallback, never a fabricated vector.
-        result = nc.run(
-            mode="embedding", jaccard_threshold=0.3,
-            embed_fn=lambda text: None,
-        )
-
-        self.assertEqual(result["narratives_created"], 1)
-        self.assertGreaterEqual(result["embedding_fallbacks"], 2)
-        narrative = self._narratives()[0]
-        self.assertIsNone(narrative["anchor_embedding"])
+        self.assertEqual(result["embedding_failures"], 1)
+        runs = self._clustering_runs()
+        self.assertEqual(runs[0]["embedding_failures"], 1)
+        self.assertIsNotNone(runs[0]["completed_at"])
+        # The unembedded claim's doc is absent from narrative_docs entirely.
+        self.assertEqual(len(self._narrative_docs()), 2)
 
 
 if __name__ == "__main__":

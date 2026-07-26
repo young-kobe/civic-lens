@@ -73,8 +73,7 @@ All Python settings use the `CIVIC_` env prefix and are defined in `analysis/src
 - `CIVIC_LLM_ENABLED` = `true` | `false`
 - `CIVIC_RUN_ANALYSIS_ON` = `all` | `social_media` | `x` (scopes which `source_type` docs are analyzed)
 - `CIVIC_LOADER_BATCH_SIZE`
-- `CIVIC_NARRATIVE_SIMILARITY_MODE` = `jaccard` (lexical, default) | `embedding` (semantic via Ollama)
-- `CIVIC_NARRATIVE_JACCARD_THRESHOLD`, `CIVIC_NARRATIVE_EMBEDDING_THRESHOLD`
+- `CIVIC_NARRATIVE_EMBEDDING_MODEL` (blank = backend default), `CIVIC_NARRATIVE_EMBEDDING_THRESHOLD` — clustering is embedding-only; a backend that cannot embed fails the stage
 
 `data/seeds.yaml` drives the Go ingestor (RSS seeds, subreddits, Reddit API creds, rate limits).
 
