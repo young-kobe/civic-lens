@@ -65,7 +65,6 @@ class FakeTransport:
 
 def _valid_llm_response(**overrides) -> dict:
     base = {
-        "is_bot": False,
         "label": "human",
         "confidence": 0.8,
         "llm_text_likelihood": 0.2,
@@ -123,36 +122,33 @@ class AnalyzeEmptyTextTests(unittest.TestCase):
         self.assertEqual(result.label, "unknown")
         self.assertEqual(result.confidence, 0.0)
         self.assertEqual(result.inference_method, "deterministic")
-        self.assertIsNone(result.score)
+        self.assertIsNone(result.llm_text_likelihood)
         self.assertIsNone(result.raw_response)
 
 
 class SignalBatteryTests(unittest.TestCase):
     """Deterministic text + account signal battery, tested directly against
-    _compute_signals/_aggregate_score -- these no longer classify on their
-    own (an LLM failure raises rather than falling back to them), so they
-    are exercised as the pure functions they are rather than through
-    analyze()."""
+    _compute_signals. These never classify: an LLM failure raises rather than
+    falling back to them, and since 2026-07-25 they no longer feed a score
+    either (_aggregate_score is gone). They are measurements that reach the
+    prompt and the typed stylometric columns, nothing more."""
 
-    def test_casual_human_text_scores_low(self):
+    def test_casual_human_text_has_no_template_signal(self):
         signals = bot._compute_signals(_doc(text=_CASUAL_TEXT))
-        self.assertLess(signals["aggregated_score"], 0.2)
+        self.assertEqual(signals["hedge_phrase_rate"], 0)
 
     def test_llm_style_uniform_text_trips_stylometric_signals(self):
         signals = bot._compute_signals(_doc(text=_UNIFORM_LLM_STYLE_TEXT))
         self.assertGreater(signals["hedge_phrase_rate"], 0)
-        self.assertGreater(signals["aggregated_score"], 0.2)
 
-    def test_new_low_follower_x_account_raises_score(self):
+    def test_new_low_follower_x_account_trips_both_flags(self):
         recent = datetime.now(timezone.utc) - timedelta(days=5)
-        baseline = bot._compute_signals(_doc(source_type="x_post"))["aggregated_score"]
         signals = bot._compute_signals(_doc(
             source_type="x_post", followers_count=3, following_count=2000,
             account_created_at=recent,
         ))
         self.assertTrue(signals["x_new_account_flag"])
         self.assertTrue(signals["x_low_followers_flag"])
-        self.assertGreater(signals["aggregated_score"], baseline)
 
     def test_follow_ratio_anomaly_is_flagged_for_x_only(self):
         signals = bot._compute_signals(
@@ -173,19 +169,18 @@ class SignalBatteryTests(unittest.TestCase):
         self.assertFalse(signals["x_low_followers_flag"])
         self.assertFalse(signals["follow_ratio_anomaly"])
 
-    def test_government_verified_type_zeroes_aggregated_score(self):
+    def test_verified_type_is_measured_but_no_longer_gates_anything(self):
+        """The de-bias gate that hard-zeroed government-verified accounts and
+        capped business accounts at 0.3 went with _aggregate_score. It was
+        itself a hand-tuned rule overriding the model. verified_type is still
+        captured so it reaches the prompt and raw_response, but nothing in
+        the engine now uses it to override a judgment."""
         signals = bot._compute_signals(_doc(
             source_type="x_post", text=_UNIFORM_LLM_STYLE_TEXT,
             verified_type="government", followers_count=2, following_count=9000,
         ))
-        self.assertEqual(signals["aggregated_score"], 0.0)
-
-    def test_business_verified_type_caps_aggregated_score(self):
-        signals = bot._compute_signals(_doc(
-            source_type="x_post", text=_UNIFORM_LLM_STYLE_TEXT,
-            verified_type="business", followers_count=2, following_count=9000,
-        ))
-        self.assertLessEqual(signals["aggregated_score"], 0.3)
+        self.assertEqual(signals["verified_type"], "government")
+        self.assertNotIn("aggregated_score", signals)
 
 
 class HybridAnalyzeTests(unittest.TestCase):
@@ -209,7 +204,6 @@ class HybridAnalyzeTests(unittest.TestCase):
         result = bot.analyze(_doc(text=_UNIFORM_LLM_STYLE_TEXT), client)
 
         expected = bot._compute_signals(_doc(text=_UNIFORM_LLM_STYLE_TEXT))
-        self.assertEqual(result.score, expected["aggregated_score"])
         self.assertEqual(result.burstiness, expected["sentence_length_variance"])
         self.assertEqual(result.type_token_ratio, expected["unique_ratio"])
         self.assertEqual(result.template_score, expected["hedge_phrase_rate"])
@@ -365,7 +359,7 @@ class ProcessIntegrationTests(unittest.TestCase):
         self.assertEqual(run["inference_method"], "deterministic")
         signals_row = self._bot_signals_row(run_id)
         self.assertEqual(signals_row["label"], "unknown")
-        self.assertIsNone(signals_row["score"])
+        self.assertIsNone(signals_row["llm_text_likelihood"])
 
     def test_llm_failure_process_persists_failed_run_with_no_signals_row(self):
         """The spec's new failure contract: client unavailable (or retries
@@ -392,7 +386,10 @@ class ProcessIntegrationTests(unittest.TestCase):
 class RefreshAuthorBotScoresIntegrationTests(unittest.TestCase):
     """refresh_author_bot_scores() aggregates per-author over current bot
     runs -- verified against a hand-computed fixture (2 authors, several
-    docs each), plus reprocess supersession."""
+    docs each), plus reprocess supersession, the confidence floor
+    (BOT_LABEL_MIN_CONFIDENCE), and the label-not-llm_text_likelihood
+    exclusion contract (owner decision 2026-07-25,
+    docs/audit-trail/analysis/2026-07-25-bot-exclusion-gate.md)."""
 
     @classmethod
     def setUpClass(cls):
@@ -440,36 +437,37 @@ class RefreshAuthorBotScoresIntegrationTests(unittest.TestCase):
             ).fetchone()
             return row["doc_id"]
 
-    def _process_with_score(self, doc_id, label, score, llm_text_likelihood):
-        """Writes one done bot run + bot_signals row with a fixed score,
-        bypassing analyze() so the rollup math can be hand-verified against
-        exact input numbers."""
+    def _process_with_signal(self, doc_id, label, llm_text_likelihood, *, confidence=0.9):
+        """Writes one done bot run + bot_signals row with a fixed
+        label/confidence, bypassing analyze() so the rollup counts -- and
+        the confidence-floor gate on bot_post_count/suspicious_post_count --
+        can be exercised directly against known inputs."""
         from analysis.src.results import store
         handle = store.open_run(
             bot.BOT_TASK, doc_id=doc_id, model_id="test-model", inference_method="deterministic",
         )
         handle.save_bot_signals(store.BotSignalsRow(
-            label=label, score=score, llm_text_likelihood=llm_text_likelihood,
+            label=label, llm_text_likelihood=llm_text_likelihood,
         ))
-        return handle.finish("done")
+        return handle.finish("done", confidence=confidence)
 
-    def test_aggregates_two_authors_with_hand_computed_mean_and_variance(self):
+    def test_aggregates_two_authors_with_hand_computed_counts(self):
         author_a = self._seed_author("author-a")
         author_b = self._seed_author("author-b")
 
-        # Author A: scores 0.2, 0.4, 0.9 (one 'bot', one 'suspicious').
+        # Author A: one human, one suspicious, one bot -- all HIGH confidence.
         doc_a1 = self._seed_doc("a1", author_a)
         doc_a2 = self._seed_doc("a2", author_a)
         doc_a3 = self._seed_doc("a3", author_a)
-        self._process_with_score(doc_a1, "human", 0.2, 0.1)
-        self._process_with_score(doc_a2, "suspicious", 0.4, 0.3)
-        self._process_with_score(doc_a3, "bot", 0.9, 0.8)
+        self._process_with_signal(doc_a1, "human", 0.1)
+        self._process_with_signal(doc_a2, "suspicious", 0.3)
+        self._process_with_signal(doc_a3, "bot", 0.8)
 
-        # Author B: scores 0.1, 0.3 (both human).
+        # Author B: two human docs.
         doc_b1 = self._seed_doc("b1", author_b)
         doc_b2 = self._seed_doc("b2", author_b)
-        self._process_with_score(doc_b1, "human", 0.1, 0.0)
-        self._process_with_score(doc_b2, "human", 0.3, 0.2)
+        self._process_with_signal(doc_b1, "human", 0.0)
+        self._process_with_signal(doc_b2, "human", 0.2)
 
         written = bot.refresh_author_bot_scores()
         self.assertEqual(written, 2)
@@ -481,20 +479,17 @@ class RefreshAuthorBotScoresIntegrationTests(unittest.TestCase):
                 for r in conn.execute("SELECT * FROM analysis.author_bot_scores").fetchall()
             }
 
-        # Hand-computed: mean=(0.2+0.4+0.9)/3=0.5, pvariance=mean((x-0.5)^2)
-        # = ((-0.3)^2+(-0.1)^2+0.4^2)/3 = (0.09+0.01+0.16)/3 = 0.08666...
         row_a = rows[author_a]
-        self.assertAlmostEqual(row_a["score"], 0.5, places=6)
-        self.assertAlmostEqual(row_a["variance"], 0.08666667, places=5)
+        # 0005_drop_bot_score.sql retired the additive score/variance pair --
+        # a regression that reintroduces either column would fail here.
+        self.assertNotIn("score", row_a)
+        self.assertNotIn("variance", row_a)
         self.assertEqual(row_a["sample_count"], 3)
         self.assertEqual(row_a["bot_post_count"], 1)
         self.assertEqual(row_a["suspicious_post_count"], 1)
         self.assertAlmostEqual(row_a["llm_text_likelihood_mean"], (0.1 + 0.3 + 0.8) / 3, places=6)
 
-        # Hand-computed: mean=(0.1+0.3)/2=0.2, pvariance=((-0.1)^2+0.1^2)/2=0.01
         row_b = rows[author_b]
-        self.assertAlmostEqual(row_b["score"], 0.2, places=6)
-        self.assertAlmostEqual(row_b["variance"], 0.01, places=6)
         self.assertEqual(row_b["sample_count"], 2)
         self.assertEqual(row_b["bot_post_count"], 0)
         self.assertEqual(row_b["suspicious_post_count"], 0)
@@ -503,7 +498,7 @@ class RefreshAuthorBotScoresIntegrationTests(unittest.TestCase):
         author_a = self._seed_author("author-a")
         doc_a1 = self._seed_doc("a1", author_a)
 
-        self._process_with_score(doc_a1, "bot", 0.95, 0.9)
+        self._process_with_signal(doc_a1, "bot", 0.9)
         bot.refresh_author_bot_scores()
 
         from analysis.src.results import store
@@ -511,28 +506,26 @@ class RefreshAuthorBotScoresIntegrationTests(unittest.TestCase):
             before = conn.execute(
                 "SELECT * FROM analysis.author_bot_scores WHERE author_id = %s", (author_a,)
             ).fetchone()
-        self.assertEqual(before["score"], 0.95)
         self.assertEqual(before["bot_post_count"], 1)
 
         # Reprocess the same doc: the new run supersedes the old one
-        # (is_current flip), so refresh must reflect ONLY the new score.
-        self._process_with_score(doc_a1, "human", 0.1, 0.05)
+        # (is_current flip), so refresh must reflect ONLY the new label.
+        self._process_with_signal(doc_a1, "human", 0.05)
         bot.refresh_author_bot_scores()
 
         with store.db.connection() as conn:
             after = conn.execute(
                 "SELECT * FROM analysis.author_bot_scores WHERE author_id = %s", (author_a,)
             ).fetchone()
-        self.assertEqual(after["score"], 0.1)
         self.assertEqual(after["sample_count"], 1)
         self.assertEqual(after["bot_post_count"], 0)
 
     def test_author_with_no_qualifying_runs_is_removed_on_refresh(self):
         """An author previously rolled up whose only doc later reprocesses
-        to 'unknown' (score NULL) must be deleted, not left stale."""
+        to 'unknown' (empty text) must be deleted, not left stale."""
         author_a = self._seed_author("author-a")
         doc_a1 = self._seed_doc("a1", author_a)
-        self._process_with_score(doc_a1, "bot", 0.8, 0.7)
+        self._process_with_signal(doc_a1, "bot", 0.7)
         bot.refresh_author_bot_scores()
 
         from analysis.src.results import store
@@ -543,11 +536,11 @@ class RefreshAuthorBotScoresIntegrationTests(unittest.TestCase):
             ).fetchone()["n"]
         self.assertEqual(count_before, 1)
 
-        # Supersede with an 'unknown' (empty-text) run -- no score to aggregate.
+        # Supersede with an 'unknown' (empty-text) run -- no label to aggregate.
         handle = store.open_run(
             bot.BOT_TASK, doc_id=doc_a1, model_id="test-model", inference_method="deterministic",
         )
-        handle.save_bot_signals(store.BotSignalsRow(label="unknown", score=None))
+        handle.save_bot_signals(store.BotSignalsRow(label="unknown"))
         handle.finish("done")
         bot.refresh_author_bot_scores()
 
@@ -557,6 +550,50 @@ class RefreshAuthorBotScoresIntegrationTests(unittest.TestCase):
                 (author_a,),
             ).fetchone()["n"]
         self.assertEqual(count_after, 0)
+
+    def test_low_confidence_bot_labels_do_not_count_toward_bot_post_count(self):
+        """Confidence-floor gate (BOT_LABEL_MIN_CONFIDENCE): an author whose
+        posts are ALL labelled 'bot' but at LOW confidence must not
+        accumulate bot_post_count -- a low-confidence guess must not silence
+        (exclude) an author from downstream panels. Contrast with
+        test_aggregates_two_authors_with_hand_computed_counts, where the
+        same label at HIGH confidence DOES count."""
+        author = self._seed_author("low-conf-author")
+        docs = [self._seed_doc(f"low-conf-{i}", author) for i in range(3)]
+        for doc_id in docs:
+            self._process_with_signal(doc_id, "bot", 0.9, confidence=0.2)
+
+        bot.refresh_author_bot_scores()
+
+        from analysis.src.results import store
+        with store.db.connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM analysis.author_bot_scores WHERE author_id = %s", (author,)
+            ).fetchone()
+        # All 3 posts still count in the denominator (label != 'unknown');
+        # none count as bot_post_count (confidence below the floor).
+        self.assertEqual(row["sample_count"], 3)
+        self.assertEqual(row["bot_post_count"], 0)
+
+    def test_high_llm_text_likelihood_with_human_label_does_not_count_as_bot(self):
+        """The whole point of moving off llm_text_likelihood (2026-07-25):
+        text that READS as machine-written but is LABELLED human must not
+        count toward bot_post_count/suspicious_post_count -- only the
+        model's own bot/suspicious/human verdict does."""
+        author = self._seed_author("llm-style-human-author")
+        doc_id = self._seed_doc("llm-style-doc", author)
+        self._process_with_signal(doc_id, "human", 0.95, confidence=0.9)
+
+        bot.refresh_author_bot_scores()
+
+        from analysis.src.results import store
+        with store.db.connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM analysis.author_bot_scores WHERE author_id = %s", (author,)
+            ).fetchone()
+        self.assertEqual(row["bot_post_count"], 0)
+        self.assertEqual(row["suspicious_post_count"], 0)
+        self.assertAlmostEqual(row["llm_text_likelihood_mean"], 0.95, places=6)
 
 
 if __name__ == "__main__":

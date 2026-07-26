@@ -24,7 +24,7 @@ import unittest
 from datetime import datetime, timedelta, timezone
 
 from analysis.src.api.queries import movers
-from analysis.src.api.queries.constants import BOT_SCORE_AUTHOR_EXCLUSION, MIN_TARGET_SAMPLE_N
+from analysis.src.api.queries.constants import BOT_FLAGGED_SHARE_EXCLUSION, MIN_TARGET_SAMPLE_N
 from analysis.tests import pg_fixture
 
 
@@ -78,7 +78,7 @@ class GetMoversIntegrationTests(unittest.TestCase):
         import psycopg
         with psycopg.connect(self._dsn, autocommit=True) as conn:
             conn.execute(
-                "TRUNCATE analysis.favorability_stances, analysis.sentiment_results, "
+                "TRUNCATE analysis.target_mentions, analysis.sentiment_results, "
                 "analysis.author_bot_scores, analysis.runs, corpus.author_profiles, "
                 "corpus.documents, corpus.authors, corpus.entities CASCADE"
             )
@@ -160,22 +160,41 @@ class GetMoversIntegrationTests(unittest.TestCase):
                 (run_id, label),
             )
 
-    def _favorability(self, run_id, entity_id, stance):
+    def _targets_run(self, doc_id, *, model_id="test-model"):
+        from analysis.src.common import db as dbmod
+        with dbmod.connection() as conn:
+            row = conn.execute(
+                "INSERT INTO analysis.runs "
+                "(task, doc_id, status, model_id, inference_method, is_current) "
+                "VALUES ('targets'::analysis.task, %s, 'done'::analysis.run_status, %s, "
+                "        'llm'::analysis.inference_method, true) "
+                "RETURNING run_id",
+                (doc_id, model_id),
+            ).fetchone()
+            return row["run_id"]
+
+    def _target_mention(self, run_id, doc_id, entity_id, stance):
         from analysis.src.common import db as dbmod
         with dbmod.connection() as conn:
             conn.execute(
-                "INSERT INTO analysis.favorability_stances (run_id, entity_id, stance) "
-                "VALUES (%s, %s, %s::analysis.favorability_label)",
-                (run_id, entity_id, stance),
+                "INSERT INTO analysis.target_mentions "
+                "(run_id, doc_id, raw_target, entity_id, stance, confidence) "
+                "VALUES (%s, %s, 'raw target', %s, %s::analysis.sentiment_label, 0.9)",
+                (run_id, doc_id, entity_id, stance),
             )
 
-    def _author_bot_score(self, author_id, score):
+    def _author_bot_score(self, author_id, flagged_share, *, sample_count=10):
+        """Seeds a bot_post_count so bot_post_count/sample_count ==
+        flagged_share -- the label-driven share the exclusion predicate
+        reads (replacing the retired additive `score` column)."""
         from analysis.src.common import db as dbmod
+        bot_post_count = round(flagged_share * sample_count)
         with dbmod.connection() as conn:
             conn.execute(
-                "INSERT INTO analysis.author_bot_scores (author_id, score, sample_count, updated_at) "
-                "VALUES (%s, %s, 5, now())",
-                (author_id, score),
+                "INSERT INTO analysis.author_bot_scores "
+                "(author_id, bot_post_count, suspicious_post_count, sample_count, updated_at) "
+                "VALUES (%s, %s, 0, %s, now())",
+                (author_id, bot_post_count, sample_count),
             )
 
     def _seed_tone_docs(self, author_id, published_at, labels):
@@ -187,8 +206,8 @@ class GetMoversIntegrationTests(unittest.TestCase):
     def _seed_favorability_docs(self, author_id, entity_id, published_at, stances):
         for i, stance in enumerate(stances):
             doc_id = self._doc(f"fav-{entity_id}-{published_at.isoformat()}-{i}", author_id=author_id, published_at=published_at)
-            run_id = self._run(doc_id)
-            self._favorability(run_id, entity_id, stance)
+            run_id = self._targets_run(doc_id)
+            self._target_mention(run_id, doc_id, entity_id, stance)
 
     # -- tests --------------------------------------------------------------
 
@@ -214,7 +233,7 @@ class GetMoversIntegrationTests(unittest.TestCase):
         bot_author = self._author("bot-handle")
         self._author_profile(human_author, entity_id)
         self._author_profile(bot_author, entity_id)
-        self._author_bot_score(bot_author, BOT_SCORE_AUTHOR_EXCLUSION + 0.1)
+        self._author_bot_score(bot_author, BOT_FLAGGED_SHARE_EXCLUSION + 0.1)
         # Enough human-authored docs to clear the floor in both periods.
         self._seed_tone_docs(human_author, self._current_start + timedelta(days=1), ["positive"] * MIN_TARGET_SAMPLE_N)
         self._seed_tone_docs(human_author, self._previous_start + timedelta(days=1), ["positive"] * MIN_TARGET_SAMPLE_N)
@@ -246,10 +265,10 @@ class GetMoversIntegrationTests(unittest.TestCase):
         author_id = self._author("handle-1")
         self._author_profile(author_id, small_entity)  # profile link irrelevant to favorability resolution
 
-        self._seed_favorability_docs(author_id, small_entity, self._current_start + timedelta(days=1), ["favorable"] * 3 + ["unfavorable"] * 2)
-        self._seed_favorability_docs(author_id, small_entity, self._previous_start + timedelta(days=1), ["favorable"] * 2 + ["unfavorable"] * 3)
-        self._seed_favorability_docs(author_id, big_entity, self._current_start + timedelta(days=1), ["favorable"] * MIN_TARGET_SAMPLE_N)
-        self._seed_favorability_docs(author_id, big_entity, self._previous_start + timedelta(days=1), ["unfavorable"] * MIN_TARGET_SAMPLE_N)
+        self._seed_favorability_docs(author_id, small_entity, self._current_start + timedelta(days=1), ["positive"] * 3 + ["negative"] * 2)
+        self._seed_favorability_docs(author_id, small_entity, self._previous_start + timedelta(days=1), ["positive"] * 2 + ["negative"] * 3)
+        self._seed_favorability_docs(author_id, big_entity, self._current_start + timedelta(days=1), ["positive"] * MIN_TARGET_SAMPLE_N)
+        self._seed_favorability_docs(author_id, big_entity, self._previous_start + timedelta(days=1), ["negative"] * MIN_TARGET_SAMPLE_N)
 
         result = self._get_movers()
         self.assertIsNotNone(result.top_favorability_mover)

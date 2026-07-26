@@ -30,16 +30,15 @@ from analysis.tests import pg_fixture
 # =============================================================================
 
 class TopicForRowTests(unittest.TestCase):
-    def test_resolved_topic_wins_over_title_keywords(self):
-        topic = sentiment._topic_for_row(1, "something about jobs", {1: "Healthcare"})
+    def test_resolved_topic_is_used(self):
+        topic = sentiment._topic_for_row(1, {1: "Healthcare"})
         self.assertEqual(topic, "Healthcare")
 
-    def test_falls_back_to_title_keywords(self):
-        topic = sentiment._topic_for_row(1, "new tariff plan announced", {})
-        self.assertEqual(topic, "Economy")
-
-    def test_no_title_no_topic_is_general(self):
-        self.assertEqual(sentiment._topic_for_row(1, None, {}), "General")
+    def test_unresolved_topic_is_general_never_a_keyword_guess(self):
+        # Topic classification is an LLM judgment call (analysis.target_mentions),
+        # never a title heuristic -- a doc the LLM never resolved a topic for
+        # must render as the honest "General" bucket, not a keyword-guessed one.
+        self.assertEqual(sentiment._topic_for_row(1, {}), "General")
 
 
 class TimeOfDayTests(unittest.TestCase):
@@ -78,17 +77,6 @@ class NetScoreSuppressionTests(unittest.TestCase):
     def test_at_floor_computes(self):
         counts = {"positive": 4, "negative": 1, "neutral": 0, "mixed": 0}
         self.assertEqual(sentiment._net_score(counts), 60.0)
-
-
-class NormalizeFavorabilityTests(unittest.TestCase):
-    def test_favorable_maps_to_positive(self):
-        self.assertEqual(sentiment._normalize_favorability("favorable"), "positive")
-
-    def test_unfavorable_maps_to_negative(self):
-        self.assertEqual(sentiment._normalize_favorability("unfavorable"), "negative")
-
-    def test_neutral_passes_through(self):
-        self.assertEqual(sentiment._normalize_favorability("neutral"), "neutral")
 
 
 class LeanLabelKindTests(unittest.TestCase):
@@ -165,12 +153,17 @@ class SentimentPanelIntegrationTests(unittest.TestCase):
                 (author_id, tier, entity_id),
             )
 
-    def _seed_bot_score(self, author_id: int, score: float) -> None:
+    def _seed_bot_score(self, author_id: int, flagged_share: float, *, sample_count: int = 10) -> None:
+        """Seeds a bot_post_count so bot_post_count/sample_count ==
+        flagged_share -- the label-driven share the exclusion predicate
+        reads (replacing the retired additive `score` column)."""
+        bot_post_count = round(flagged_share * sample_count)
         with self._conn() as conn:
             conn.execute(
-                "INSERT INTO analysis.author_bot_scores (author_id, score, sample_count, updated_at) "
-                "VALUES (%s, %s, 1, now())",
-                (author_id, score),
+                "INSERT INTO analysis.author_bot_scores "
+                "(author_id, bot_post_count, suspicious_post_count, sample_count, updated_at) "
+                "VALUES (%s, %s, 0, %s, now())",
+                (author_id, bot_post_count, sample_count),
             )
 
     def _seed_document(
@@ -204,14 +197,6 @@ class SentimentPanelIntegrationTests(unittest.TestCase):
                     (run_id, label),
                 )
             return run_id
-
-    def _seed_favorability(self, run_id: int, entity_id: int, stance: str) -> None:
-        with self._conn() as conn:
-            conn.execute(
-                "INSERT INTO analysis.favorability_stances (run_id, entity_id, stance) "
-                "VALUES (%s, %s, %s::analysis.favorability_label)",
-                (run_id, entity_id, stance),
-            )
 
     def _seed_targets_run(self, doc_id: int, model_id: str = "gemini-3.5-flash") -> int:
         with self._conn() as conn:
@@ -275,6 +260,24 @@ class SentimentPanelIntegrationTests(unittest.TestCase):
         self.assertEqual(panel.overview.total_analyzed, 0)
         self.assertEqual(panel.overview.volume, 0)
 
+    def test_doc_with_no_resolved_topic_is_general_not_keyword_guessed(self):
+        # Title is deliberately topic-suggestive ("tariff" -> the old,
+        # now-removed TOPIC_KEYWORDS fallback would have guessed "Economy").
+        # With no analysis.target_mentions row for this doc, topic
+        # classification never ran an LLM judgment on it -- the panel must
+        # report the honest "General" bucket, not a title-keyword guess.
+        author = self._seed_author()
+        doc = self._seed_document(
+            "x_post", datetime.now(timezone.utc), author_id=author, title="new tariff plan announced",
+        )
+        self._seed_text_run(doc, "positive")
+
+        panel = sentiment.get_sentiment_panel(window="7d")
+        topics = {t.topic: t for t in panel.by_topic}
+        self.assertIn("General", topics)
+        self.assertNotIn("Economy", topics)
+        self.assertEqual(topics["General"].volume, 1)
+
     def test_official_post_routes_to_officials_tier(self):
         entity = self._seed_entity("official", "Sen. Example", lean="republican")
         author = self._seed_author()
@@ -300,18 +303,20 @@ class SentimentPanelIntegrationTests(unittest.TestCase):
         self.assertIsNone(catch_all[0].entity_id)
         self.assertEqual(catch_all[0].target_stance.negative, 1)
 
-    def test_favorability_and_target_stance_merge_per_entity(self):
+    def test_entity_stance_surfaces_from_target_mentions_alone(self):
+        # The regression this whole change is for: analysis.favorability_stances
+        # is retired (no writer as of 2026-07-25) -- an entity with ONLY
+        # target_mentions evidence (no favorability row could ever exist) must
+        # still surface in entity_stances, sourced from target_mentions alone.
         entity = self._seed_entity("official", "Sen. Example", lean="democrat")
         author = self._seed_author()
         doc = self._seed_document("x_post", datetime.now(timezone.utc), author_id=author)
-        text_run = self._seed_text_run(doc, "neutral")
-        self._seed_favorability(text_run, entity, "favorable")
+        self._seed_text_run(doc, "neutral")
         targets_run = self._seed_targets_run(doc)
         self._seed_target_mention(targets_run, doc, "Sen. Example", entity, "positive")
 
         panel = sentiment.get_sentiment_panel(window="7d")
         cell = next(e for e in panel.entity_stances if e.entity_id == entity)
-        self.assertEqual(cell.favorability.positive, 1)
         self.assertEqual(cell.target_stance.positive, 1)
         self.assertEqual(cell.lean.kind, "fact")
         self.assertEqual(cell.lean.value, "democrat")

@@ -125,7 +125,7 @@ def _analysis_result(conn, run_row: Dict[str, Any]) -> Dict[str, Any]:
 
 def _bot_fields(conn, run_id: int) -> Dict[str, Any]:
     row = conn.execute(
-        "SELECT label::text AS label, score, llm_text_likelihood, burstiness, "
+        "SELECT label::text AS label, llm_text_likelihood, burstiness, "
         "type_token_ratio, template_score FROM analysis.bot_signals WHERE run_id = %(run_id)s",
         {"run_id": run_id},
     ).fetchone()
@@ -138,14 +138,8 @@ def _text_fields(conn, run_id: int) -> Dict[str, Any]:
         "FROM analysis.sentiment_results WHERE run_id = %(run_id)s",
         {"run_id": run_id},
     ).fetchone()
-    stances = conn.execute(
-        "SELECT entity_id, stance::text AS stance, score, evidence_spans "
-        "FROM analysis.favorability_stances WHERE run_id = %(run_id)s",
-        {"run_id": run_id},
-    ).fetchall()
     return {
         "sentiment": dict(sentiment_row) if sentiment_row else None,
-        "favorability_stances": [dict(row) for row in stances],
     }
 
 

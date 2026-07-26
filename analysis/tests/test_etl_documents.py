@@ -461,6 +461,45 @@ class LoadNewDocumentsIntegrationTests(unittest.TestCase):
                 ).fetchone()
                 self.assertIsNotNone(sub)
 
+    def test_default_raw_root_comes_from_settings_not_code_tree(self):
+        # Regression for the 2026-07-23 zero-news prod incident: the analysis
+        # image ships no data/raw, so a code-tree-relative default finds no
+        # files and silently drops every news candidate. The store location
+        # must come from CIVIC_RAW_STORE_DIR (deployment data dir), so a
+        # caller passing no raw_root still extracts.
+        raw_hash = "ab" + "2" * 62
+        with tempfile.TemporaryDirectory() as tmp:
+            raw_root = Path(tmp)
+            self._write_raw_html(
+                raw_root, raw_hash,
+                "Congress approved the infrastructure bill after the Senate "
+                "vote on Tuesday in Washington.",
+            )
+            with docs.db.connection() as conn:
+                self._insert_page_and_article(
+                    conn, "https://example.com/settings-root", "example.com", raw_hash,
+                    "Congress approves bill", datetime.datetime.now(UTC),
+                )
+            with mock.patch.dict(os.environ, {"CIVIC_RAW_STORE_DIR": str(raw_root)}):
+                result = docs.load_new_documents()
+            self.assertEqual(result.inserted, 1)
+
+    def test_extraction_failure_is_tallied_not_silent(self):
+        # A raw_hash resolving to no file is not a policy rejection, but it
+        # must surface in rejections — an across-the-board extraction failure
+        # (missing raw store) previously produced zero news docs with no
+        # signal at all.
+        raw_hash = "ac" + "3" * 62
+        with tempfile.TemporaryDirectory() as tmp:
+            with docs.db.connection() as conn:
+                self._insert_page_and_article(
+                    conn, "https://example.com/no-file", "example.com", raw_hash,
+                    "Senate vote", datetime.datetime.now(UTC),
+                )
+            result = docs.load_new_documents(raw_root=Path(tmp))
+            self.assertEqual(result.inserted, 0)
+            self.assertEqual(result.rejections.get("extraction_failed"), 1)
+
     def test_reddit_doc_inserted_with_subtype_row_and_synthesized_url(self):
         with docs.db.connection() as conn:
             conn.execute(

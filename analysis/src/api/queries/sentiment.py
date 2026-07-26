@@ -3,8 +3,9 @@ GET /api/v1/sentiment aggregation: net tone, intensity distribution,
 platform/topic/time-of-day/day-of-week splits, the news/officials/
 general-public tier split, and per-entity stance aggregates -- computed
 live against corpus.documents + analysis.runs/sentiment_results/
-favorability_stances/target_mentions. See docs/audit-trail/api/
-2026-07-24-phase9-sentiment-entities.md.
+target_mentions. See docs/audit-trail/api/2026-07-24-phase9-sentiment-entities.md
+and docs/audit-trail/api/2026-07-25-favorability-retirement.md (entity
+stance aggregates now come from target_mentions alone).
 """
 
 from __future__ import annotations
@@ -31,7 +32,7 @@ from analysis.src.api.queries.base import (
     split_admission_counts,
 )
 from analysis.src.api.queries.constants import (
-    BOT_SCORE_AUTHOR_EXCLUSION,
+    BOT_FLAGGED_SHARE_EXCLUSION,
     MAX_DISTRIBUTION_SAMPLES_PER_BUCKET,
     MAX_SAMPLES_PER_ENTITY,
     MIN_TARGET_SAMPLE_N,
@@ -48,18 +49,6 @@ from analysis.src.common.settings import get_settings
 
 DAY_OF_WEEK_LABELS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 
-# Coarse political-topic keyword map for the title-fallback topic bucket --
-# used only when a doc has no resolved analysis.target_mentions topic.
-# Subset of reporting/aggregators/constants.py::TOPIC_KEYWORDS (that module is
-# read-only legacy reference, not imported across the analysis/api boundary).
-TOPIC_KEYWORDS: Dict[str, List[str]] = {
-    "Immigration": ["immigration", "border", "migrant", "asylum", "deportation"],
-    "Economy": ["economy", "inflation", "jobs", "unemployment", "tax", "tariff"],
-    "Healthcare": ["healthcare", "obamacare", "medicare", "insurance", "medicaid"],
-    "Foreign Policy": ["foreign", "russia", "china", "ukraine", "military", "nato"],
-    "Justice": ["justice", "supreme court", "police", "crime", "prison"],
-}
-
 DISCLAIMER = "Represents sampled platform discourse, not verified population sentiment"
 
 UNRESOLVED_CATCH_ALL_KEY = "unresolved"
@@ -75,7 +64,9 @@ _RANGE_PREDICATE = (
 _BOT_EXCLUSION_SQL = """
     NOT EXISTS (
         SELECT 1 FROM analysis.author_bot_scores b
-        WHERE b.author_id = d.author_id AND b.score >= %(bot_floor)s
+        WHERE b.author_id = d.author_id
+          AND (b.bot_post_count + b.suspicious_post_count)::float
+              / NULLIF(b.sample_count, 0) >= %(bot_floor)s
     )
 """
 
@@ -90,19 +81,18 @@ def get_sentiment_panel(
     queries/base.py::resolve_time_range."""
     start, end = resolve_time_range(window, date_from, date_to)
     min_conf = get_settings().aggregation_min_confidence
-    params = {"start": start, "end": end, "min_conf": min_conf, "bot_floor": BOT_SCORE_AUTHOR_EXCLUSION}
+    params = {"start": start, "end": end, "min_conf": min_conf, "bot_floor": BOT_FLAGGED_SHARE_EXCLUSION}
 
     with connection() as conn:
         rows = conn.execute(_SENTIMENT_ROWS_SQL, params).fetchall()
         analyzed_rows = conn.execute(_TOTAL_ANALYZED_SQL, params).fetchall()
         excluded_bot_docs = conn.execute(_BOT_EXCLUDED_SQL, params).fetchone()["n"]
         doc_topics = _fetch_doc_topics(conn, params)
-        favorability_rows = conn.execute(_FAVORABILITY_ROWS_SQL, params).fetchall()
         target_rows = conn.execute(_TARGET_ROWS_SQL, params).fetchall()
 
     range_meta = _build_range_meta(window, start, end, analyzed_rows)
     accum = _aggregate_rows(rows, doc_topics)
-    entity_stances = _build_entity_stances(favorability_rows, target_rows)
+    entity_stances = _build_entity_stances(target_rows)
     return _build_response(range_meta, accum, len(analyzed_rows), excluded_bot_docs, entity_stances)
 
 
@@ -143,7 +133,9 @@ _BOT_EXCLUDED_SQL = f"""
       AND r.confidence >= %(min_conf)s AND {_RANGE_PREDICATE}
       AND EXISTS (
           SELECT 1 FROM analysis.author_bot_scores b
-          WHERE b.author_id = d.author_id AND b.score >= %(bot_floor)s
+          WHERE b.author_id = d.author_id
+          AND (b.bot_post_count + b.suspicious_post_count)::float
+              / NULLIF(b.sample_count, 0) >= %(bot_floor)s
       )
 """
 
@@ -158,19 +150,6 @@ _DOC_TOPICS_SQL = f"""
       AND {_BOT_EXCLUSION_SQL}
     GROUP BY m.doc_id, m.topic
     ORDER BY m.doc_id, n DESC, m.topic
-"""
-
-_FAVORABILITY_ROWS_SQL = f"""
-    SELECT fs.entity_id, fs.stance, d.doc_id, d.source_url, d.published_at, d.title,
-           d.admission_class, r.confidence,
-           e.display_name, e.kind, e.lean
-    FROM analysis.favorability_stances fs
-    JOIN analysis.runs r ON r.run_id = fs.run_id
-    JOIN corpus.documents d ON d.doc_id = r.doc_id
-    JOIN corpus.entities e ON e.entity_id = fs.entity_id
-    WHERE r.is_current AND r.task = 'text' AND r.status = 'done'
-      AND r.confidence >= %(min_conf)s AND {_RANGE_PREDICATE}
-      AND {_BOT_EXCLUSION_SQL}
 """
 
 _TARGET_ROWS_SQL = f"""
@@ -190,7 +169,7 @@ _TARGET_ROWS_SQL = f"""
 def _fetch_doc_topics(conn, params: Dict[str, Any]) -> Dict[int, str]:
     """doc_id -> dominant resolved target_mentions topic (highest count,
     ties broken alphabetically); docs with no resolved topic are absent
-    (title-keyword fallback applies in ``_topic_for_row``)."""
+    (``_topic_for_row`` reports those as unclassified, never a guess)."""
     topics: Dict[int, str] = {}
     for row in conn.execute(_DOC_TOPICS_SQL, params).fetchall():
         topics.setdefault(row["doc_id"], row["topic"])
@@ -217,17 +196,10 @@ def _build_range_meta(
 #  Row-level helpers                                                          #
 # --------------------------------------------------------------------------- #
 
-def _topic_for_row(doc_id: int, title: Optional[str], doc_topics: Dict[int, str]) -> str:
-    resolved = doc_topics.get(doc_id)
-    if resolved:
-        return resolved
-    if not title:
-        return "General"
-    title_lower = title.lower()
-    for topic, keywords in TOPIC_KEYWORDS.items():
-        if any(kw in title_lower for kw in keywords):
-            return topic
-    return "General"
+def _topic_for_row(doc_id: int, doc_topics: Dict[int, str]) -> str:
+    """LLM-resolved topic when analysis.target_mentions has one; the
+    literal "General" otherwise -- topic is never guessed from the title."""
+    return doc_topics.get(doc_id, "General")
 
 
 def _time_of_day(dt: datetime) -> str:
@@ -290,7 +262,7 @@ def _aggregate_rows(rows: List[Any], doc_topics: Dict[int, str]) -> Dict[str, An
         label_key = "neutral" if label == "mixed" else label
         _bump_distribution(accum, label, conf)
 
-        topic = _topic_for_row(row["doc_id"], row["title"], doc_topics)
+        topic = _topic_for_row(row["doc_id"], doc_topics)
         _increment(accum["by_platform"], row["source_type"], label_key)
         _increment(accum["by_topic"], topic, label_key)
         _increment(accum["by_tod"], _time_of_day(dt), label_key)
@@ -320,11 +292,13 @@ def _increment(bucket: Dict[str, Dict[str, int]], key: str, label_key: str) -> N
     bucket[key][label_key] += 1
 
 
-def _build_entity_stances(
-    favorability_rows: List[Any], target_rows: List[Any],
-) -> List[EntityStanceAggregate]:
-    """Merge favorability_stances + target_mentions into one aggregate per
-    entity (keyed by entity_id, or the unresolved-mentions catch-all)."""
+def _build_entity_stances(target_rows: List[Any]) -> List[EntityStanceAggregate]:
+    """One aggregate per entity target_mentions names (keyed by entity_id, or
+    the unresolved-mentions catch-all). Sourced from target_mentions alone
+    as of 2026-07-25 -- analysis.favorability_stances (the text task's
+    former per-entity stance output, GOP-only by prompt instruction) is no
+    longer written; target_mentions already covered the same "stance toward
+    a mentioned entity" axis, party-neutral and topic-tagged."""
     cells: Dict[Any, Dict[str, Any]] = {}
 
     def cell_for(entity_id: Optional[int], row: Any) -> Dict[str, Any]:
@@ -335,16 +309,10 @@ def _build_entity_stances(
                 "display_name": row["display_name"] if entity_id is not None else "Unresolved mentions",
                 "kind": row["kind"] if entity_id is not None else None,
                 "lean": _lean_label(row["kind"], row["lean"]) if entity_id is not None else None,
-                "favorability": _empty_counts(),
                 "target_stance": _empty_counts(),
                 "samples": [],
             }
         return cells[key]
-
-    for row in favorability_rows:
-        cell = cell_for(row["entity_id"], row)
-        cell["favorability"][_normalize_favorability(row["stance"])] += 1
-        cell["samples"].append((row["confidence"], row))
 
     for row in target_rows:
         cell = cell_for(row["entity_id"], row)
@@ -352,10 +320,6 @@ def _build_entity_stances(
         cell["samples"].append((row["confidence"], row))
 
     return [_format_entity_stance(key, cell) for key, cell in cells.items()]
-
-
-def _normalize_favorability(stance: str) -> str:
-    return {"favorable": "positive", "unfavorable": "negative"}.get(stance, stance)
 
 
 def _lean_label(kind: str, lean_value: str) -> LeanLabel:
@@ -371,7 +335,6 @@ def _format_entity_stance(key: Any, cell: Dict[str, Any]) -> EntityStanceAggrega
         display_name=cell["display_name"],
         kind=cell["kind"],
         lean=cell["lean"],
-        favorability=_stance_counts(cell["favorability"]),
         target_stance=_stance_counts(cell["target_stance"]),
         samples=[
             SampleDocModel(**build_sample_doc(

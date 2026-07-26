@@ -18,7 +18,7 @@ import unittest
 from datetime import datetime, timedelta, timezone
 
 from analysis.src.api.queries import bots
-from analysis.src.api.queries.constants import BOT_SCORE_AUTHOR_EXCLUSION
+from analysis.src.api.queries.constants import BOT_FLAGGED_SHARE_EXCLUSION
 from analysis.tests import pg_fixture
 
 
@@ -170,7 +170,11 @@ class GetBotActivityIntegrationTests(unittest.TestCase):
                  stylometrics.get("type_token_ratio"), stylometrics.get("template_score")),
             )
 
-    def _author_bot_score(self, author_id, score, *, sample_count=5, followers_count=None):
+    def _author_bot_score(self, author_id, flagged_share, *, sample_count=5, followers_count=None):
+        """Seeds analysis.author_bot_scores directly with a bot_post_count
+        chosen so (bot_post_count / sample_count) == flagged_share -- the
+        label-driven flagged-share gate the exclusion predicate now reads,
+        replacing the retired additive `score` column."""
         from analysis.src.common import db as dbmod
         if followers_count is not None:
             with dbmod.connection() as conn:
@@ -178,11 +182,13 @@ class GetBotActivityIntegrationTests(unittest.TestCase):
                     "UPDATE corpus.authors SET followers_count = %s WHERE author_id = %s",
                     (followers_count, author_id),
                 )
+        bot_post_count = round(flagged_share * sample_count)
         with dbmod.connection() as conn:
             conn.execute(
                 "INSERT INTO analysis.author_bot_scores "
-                "(author_id, score, sample_count, updated_at) VALUES (%s, %s, %s, now())",
-                (author_id, score, sample_count),
+                "(author_id, bot_post_count, suspicious_post_count, sample_count, updated_at) "
+                "VALUES (%s, %s, 0, %s, now())",
+                (author_id, bot_post_count, sample_count),
             )
 
     def _author_lean(self, author_id, lean, lean_share=0.8, confidence=0.6, sample_count=10):
@@ -224,15 +230,16 @@ class GetBotActivityIntegrationTests(unittest.TestCase):
 
     # -- tests --------------------------------------------------------------
 
-    def test_automation_rate_keys_off_author_score_not_doc_label(self):
+    def test_automation_rate_keys_off_author_flagged_share_not_doc_label(self):
         # The binding rule this exists to encode: automation rate is
         # "bot-scored authors' share of in-window analyzed docs" -- an
-        # author whose author_bot_scores.score is above the exclusion
-        # threshold counts even if THIS PARTICULAR doc was labeled human.
+        # author whose flagged share (bot_post_count + suspicious_post_count
+        # over sample_count) is at/above the exclusion threshold counts even
+        # if THIS PARTICULAR doc was labeled human.
         bot_author = self._author("bot-handle")
         human_author = self._author("human-handle")
-        self._author_bot_score(bot_author, BOT_SCORE_AUTHOR_EXCLUSION + 0.1)
-        self._author_bot_score(human_author, BOT_SCORE_AUTHOR_EXCLUSION - 0.1)
+        self._author_bot_score(bot_author, BOT_FLAGGED_SHARE_EXCLUSION + 0.1)
+        self._author_bot_score(human_author, BOT_FLAGGED_SHARE_EXCLUSION - 0.1)
         doc_a = self._doc("doc-a", author_id=bot_author)
         doc_b = self._doc("doc-b", author_id=human_author)
         run_a = self._run("bot", doc_a)
@@ -403,6 +410,39 @@ class GetBotActivityIntegrationTests(unittest.TestCase):
 
         result = bots.get_bot_activity(start=None, end=None, window_label="all")
         self.assertEqual(result.analyzed_doc_count, 0)
+
+    def test_refresh_author_bot_scores_feeds_the_flagged_share_exclusion(self):
+        """End-to-end (not a hand-seeded author_bot_scores row): bot_detection
+        .refresh_author_bot_scores() rolls HIGH-confidence bot-labelled docs
+        into bot_post_count/sample_count, and the panel's flagged-account
+        gate reads that rollup through BOT_FLAGGED_SHARE_EXCLUSION. A LOW-
+        confidence 'bot' doc for the same author must not inflate the
+        share -- the confidence floor (BOT_LABEL_MIN_CONFIDENCE) and the
+        flagged-share gate earning their keep together, not as isolated
+        units (docs/audit-trail/analysis/2026-07-25-bot-exclusion-gate.md)."""
+        from analysis.src.engine import bot_detection
+
+        author = self._author("rollup-author", followers_count=5000)
+        for i in range(4):
+            doc_id = self._doc(f"rollup-doc-{i}", author_id=author)
+            run_id = self._run("bot", doc_id, confidence=0.9)
+            self._bot_signals(run_id, doc_id, "bot")
+        # A fifth doc labelled 'bot' but at LOW confidence -- must not count.
+        low_conf_doc = self._doc("rollup-doc-lowconf", author_id=author)
+        low_conf_run = self._run("bot", low_conf_doc, confidence=0.2)
+        self._bot_signals(low_conf_run, low_conf_doc, "bot")
+
+        written = bot_detection.refresh_author_bot_scores()
+        self.assertEqual(written, 1)
+
+        result = bots.get_bot_activity(start=None, end=None, window_label="all")
+        account = next(a for a in result.flagged_accounts if a.author_id == author)
+        # 4 of 5 sampled posts are HIGH-confidence 'bot' -- flagged_post_share
+        # = 4/5 = 0.8, comfortably above BOT_FLAGGED_SHARE_EXCLUSION (0.5).
+        # If the low-confidence doc had counted, the share would still be
+        # 0.8 by coincidence of these numbers -- the assertion that matters
+        # is the exact share, not merely ">= threshold".
+        self.assertAlmostEqual(account.flagged_post_share, 0.8, places=6)
 
 
 if __name__ == "__main__":

@@ -1,7 +1,11 @@
 """
 Deterministic political-lean derivation (Postgres redesign Phase 7B): pools
-directional favorability_stances/target_mentions evidence per author and
-per narrative into analysis.author_leans/narrative_leans (full rebuild every invocation).
+directional target_mentions evidence per author and per narrative into
+analysis.author_leans/narrative_leans (full rebuild every invocation).
+
+favorability_stances dropped out of the evidence query 2026-07-25 along with
+its only writer (engine/text.py) -- target_mentions alone now supplies every
+directional sample; the sample-count/threshold gates below are unchanged.
 """
 
 from __future__ import annotations
@@ -27,22 +31,8 @@ logger = get_logger(__name__)
 # itself (that stays in _signal_for so it's unit-testable without a
 # database). Restricted to analysis.runs.is_current AND status='done' so a
 # stale or failed run's stances never enter derivation. target_mentions
-# carries its own doc_id (used directly); favorability_stances has none, so
-# its doc_id comes from joining analysis.runs (that table is doc-scoped for
-# the unified text engine that writes it).
+# carries its own doc_id, used directly.
 _SELECT_DIRECTIONAL_EVIDENCE_SQL = """
-    SELECT d.doc_id AS doc_id, d.author_id AS author_id,
-           e.lean::text AS entity_lean, fs.stance::text AS stance
-    FROM analysis.favorability_stances fs
-    JOIN analysis.runs r ON r.run_id = fs.run_id
-    JOIN corpus.entities e ON e.entity_id = fs.entity_id
-    JOIN corpus.documents d ON d.doc_id = r.doc_id
-    WHERE r.is_current AND r.status = 'done'::analysis.run_status
-      AND e.lean IN ('democrat'::corpus.political_lean, 'republican'::corpus.political_lean)
-      AND fs.stance IN ('favorable'::analysis.favorability_label, 'unfavorable'::analysis.favorability_label)
-
-    UNION ALL
-
     SELECT tm.doc_id AS doc_id, d.author_id AS author_id,
            e.lean::text AS entity_lean, tm.stance::text AS stance
     FROM analysis.target_mentions tm
@@ -77,11 +67,10 @@ _INSERT_NARRATIVE_LEAN_SQL = """
             %(confidence)s, %(doc_count)s, %(computed_at)s)
 """
 
-# Stance values from the two source enums that read as "favorable"/
-# "unfavorable" toward the entity they're attached to -- favorability_label
-# and sentiment_label use different words for the same two directions.
-_FAVORABLE_STANCES = frozenset({"favorable", "positive"})
-_UNFAVORABLE_STANCES = frozenset({"unfavorable", "negative"})
+# target_mentions.stance values that read as a positive/negative direction
+# toward the entity they're attached to (analysis.sentiment_label).
+_FAVORABLE_STANCES = frozenset({"positive"})
+_UNFAVORABLE_STANCES = frozenset({"negative"})
 
 
 @dataclass(frozen=True)
@@ -94,10 +83,10 @@ class LeanDerivationResult:
 
 
 def _signal_for(entity_lean: str, stance: str) -> Optional[str]:
-    """Explicit signal mapping (pinned design): favorable-or-positive toward
-    a democrat entity, OR unfavorable-or-negative toward a republican entity,
-    is one pro-democrat sample -- the mirror is one pro-republican sample.
-    Returns the political_lean value the sample supports, or None for a
+    """Explicit signal mapping (pinned design): positive stance toward a
+    democrat entity, OR negative stance toward a republican entity, is one
+    pro-democrat sample -- the mirror is one pro-republican sample. Returns
+    the political_lean value the sample supports, or None for a
     non-directional stance (neutral/mixed) or a non-partisan curated lean
     (independent/mixed/unknown), so callers can filter with `is None`."""
     if entity_lean not in ("democrat", "republican"):

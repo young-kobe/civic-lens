@@ -82,6 +82,119 @@ class TestLLMClientRetry(unittest.TestCase):
         self.assertEqual(backend.calls, 2)
         self.assertEqual(result["confidence"], 0.9)
 
+    def test_quota_exhaustion_error_is_not_retried(self):
+        # Simulates google-genai's APIError shape: a `.code` attribute
+        # (gemini.py's live path) carrying 429, with a billing-flavored
+        # message -- the exact failure mode that burned through the
+        # owner's Gemini prepayment credits by retrying 3x per doc. This
+        # test exists to stop a future refactor from silently restoring
+        # blanket retry on billing errors.
+        class FakeQuotaError(Exception):
+            code = 429
+
+            def __init__(self):
+                super().__init__(
+                    "429 RESOURCE_EXHAUSTED. You exceeded your current "
+                    "quota, please check your plan and billing details."
+                )
+
+        backend = FakeTransport([FakeQuotaError(), {"label": "unreachable"}])
+        client = LLMClient(backend, max_retries=3)
+
+        with patch("analysis.src.llm.client.time.sleep") as sleep:
+            with self.assertRaises(RuntimeError) as ctx:
+                client.complete("sys", "user")
+
+        self.assertIn("quota", str(ctx.exception).lower())
+        self.assertEqual(backend.calls, 1)
+        sleep.assert_not_called()
+
+    def test_auth_error_is_not_retried(self):
+        # Simulates requests.exceptions.HTTPError's shape (Ollama/
+        # OpenAICompat's response.raise_for_status()): a `.response`
+        # object exposing `.status_code`. A bad/expired API key cannot be
+        # fixed by retrying the same request.
+        class FakeResponse:
+            status_code = 401
+
+        class FakeAuthError(Exception):
+            def __init__(self):
+                self.response = FakeResponse()
+                super().__init__("401 Client Error: Unauthorized")
+
+        backend = FakeTransport([FakeAuthError(), {"label": "unreachable"}])
+        client = LLMClient(backend, max_retries=3)
+
+        with patch("analysis.src.llm.client.time.sleep") as sleep:
+            with self.assertRaises(RuntimeError) as ctx:
+                client.complete("sys", "user")
+
+        self.assertIn("authentication", str(ctx.exception).lower())
+        self.assertEqual(backend.calls, 1)
+        sleep.assert_not_called()
+
+    def test_malformed_request_error_is_not_retried(self):
+        class FakeMalformedRequestError(Exception):
+            code = 400
+
+        backend = FakeTransport([FakeMalformedRequestError(), {"label": "unreachable"}])
+        client = LLMClient(backend, max_retries=3)
+
+        with self.assertRaises(RuntimeError) as ctx:
+            client.complete("sys", "user")
+
+        self.assertIn("malformed", str(ctx.exception).lower())
+        self.assertEqual(backend.calls, 1)
+
+    def test_generic_rate_limit_429_without_quota_wording_still_retries(self):
+        # A 429 alone is ambiguous (Gemini uses it for both a transient
+        # rate limit and true quota exhaustion); absent quota/billing/
+        # credit wording in the message, it must retry like any other
+        # transient failure.
+        class FakeRateLimitError(Exception):
+            code = 429
+
+            def __init__(self):
+                super().__init__("429 RESOURCE_EXHAUSTED. Too many requests, slow down.")
+
+        backend = FakeTransport([FakeRateLimitError(), {"label": "ok"}])
+        client = LLMClient(backend, max_retries=3)
+
+        with patch("analysis.src.llm.client.time.sleep") as sleep:
+            result = client.complete("sys", "user")
+
+        self.assertEqual(result["label"], "ok")
+        self.assertEqual(backend.calls, 2)
+        sleep.assert_called_once()
+
+    def test_transient_error_without_status_code_still_retries_to_limit(self):
+        # Plain network blips (e.g. a bare ConnectionError/timeout with no
+        # status code attribute at all) carry no non-retryable signal and
+        # must still exhaust the configured retry budget, same as before
+        # this change.
+        backend = FakeTransport([TimeoutError("timed out"), TimeoutError("timed out"), TimeoutError("timed out")])
+        client = LLMClient(backend, max_retries=3)
+
+        with patch("analysis.src.llm.client.time.sleep"):
+            with self.assertRaises(RuntimeError) as ctx:
+                client.complete("sys", "user")
+
+        self.assertIn("3 retries", str(ctx.exception))
+        self.assertEqual(backend.calls, 3)
+
+    def test_server_error_5xx_still_retries(self):
+        class FakeServerError(Exception):
+            code = 503
+
+        backend = FakeTransport([FakeServerError(), {"label": "ok"}])
+        client = LLMClient(backend, max_retries=3)
+
+        with patch("analysis.src.llm.client.time.sleep"):
+            result = client.complete("sys", "user")
+
+        self.assertEqual(result["label"], "ok")
+        self.assertEqual(backend.calls, 2)
+
     def test_no_sleep_after_final_attempt(self):
         backend = FakeTransport([RuntimeError("e1"), RuntimeError("e2"), RuntimeError("e3")])
         client = LLMClient(backend, max_retries=3)

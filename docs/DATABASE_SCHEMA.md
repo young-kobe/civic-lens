@@ -273,7 +273,7 @@ Each FKs both the parent document AND its raw row — the old convention-only
 
 `analysis/src/results/store.py` owns every run-anchored typed result table
 (the tables `RunHandle.save_*()` writes: `sentiment_results`,
-`favorability_stances`, `target_mentions`, `propaganda_results` +
+`target_mentions`, `propaganda_results` +
 `propaganda_techniques`, `claims`, `bot_signals`, `citations`) plus
 `analysis.runs`/`analysis.prompt_versions` themselves — store.py is the
 only module that ever inserts one of these, and every row traces back to
@@ -325,8 +325,10 @@ CREATE UNIQUE INDEX runs_current_author_task_uq ON analysis.runs (author_id, tas
     WHERE is_current AND author_id IS NOT NULL;
 ```
 
-One run may feed multiple typed result tables (the unified `text` run
-writes both `sentiment_results` and `favorability_stances`).
+One run may feed multiple typed result tables (a `propaganda` run writes
+both `propaganda_results` and its `propaganda_techniques` children). The
+`text` run no longer does: its favorability half was retired 2026-07-25
+and it now writes `sentiment_results` alone.
 
 ### Result-store write semantics (`results/store.py`)
 
@@ -369,13 +371,13 @@ above).
 | Table | Key | Notes |
 | --- | --- | --- |
 | `sentiment_results` | run_id PK | label, score, sarcasm_detected, evidence_spans TEXT[] |
-| `favorability_stances` | favorability_id PK | run_id + entity_id FK, stance, score, evidence_spans — one run can carry stance toward >1 entity |
+| `favorability_stances` | favorability_id PK | **RETIRED 2026-07-25 — no writer, no reader.** Held GOP-only stance from the text task; superseded by `target_mentions` joined to `corpus.entities.lean`, which is symmetric across parties. Table still exists; dropped at Phase 11 |
 | `target_mentions` | mention_id PK | run_id, doc_id, raw_target (audit, always kept), entity_id nullable (unresolved persists), stance, topic, confidence, evidence_spans |
 | `propaganda_results` | run_id PK | density, summary, techniques_validated, techniques_dropped |
 | `propaganda_techniques` | technique_id PK | run_id FK -> propaganda_results, technique enum, verbatim evidence_span, confidence |
 | `claims` | claim_id PK | run_id, doc_id, claim_text, topic, confidence |
-| `bot_signals` | run_id PK | doc_id, label, score, and typed stylometrics: llm_text_likelihood, burstiness, type_token_ratio, template_score (full detail stays in runs.raw_response) |
-| `author_bot_scores` | author_id PK | materialized per-author rollup: score, variance, sample_count, bot_post_count, suspicious_post_count, llm_text_likelihood_mean, updated_at |
+| `bot_signals` | run_id PK | doc_id, label, and typed stylometrics: llm_text_likelihood, burstiness, type_token_ratio, template_score (full detail stays in runs.raw_response) |
+| `author_bot_scores` | author_id PK | materialized per-author rollup: sample_count, bot_post_count, suspicious_post_count (both confidence-floored, see `engine/constants.py::BOT_LABEL_MIN_CONFIDENCE`), llm_text_likelihood_mean, updated_at. `score`/`variance` were dropped by `0005_drop_bot_score.sql` (2026-07-25) -- the author-exclusion gate now reads a flagged-post SHARE (`(bot_post_count + suspicious_post_count) / sample_count`), see `docs/audit-trail/analysis/2026-07-25-bot-exclusion-gate.md` |
 | `author_leans` | author_id PK | lean, lean_share REAL, lean_confidence, stance_sample_count, computed_at — deterministic, from `engine/lean_derivation.py` |
 | `citations` | citation_id PK | run_id (citation_extractor now emits a run row), source_doc_id, target_doc_id XOR target_url, link_type |
 

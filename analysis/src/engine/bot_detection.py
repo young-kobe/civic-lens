@@ -32,13 +32,13 @@ from analysis.src.common import db
 from analysis.src.common.logger import get_logger
 from analysis.src.common.settings import get_settings
 from analysis.src.engine.constants import (
+    BOT_LABEL_MIN_CONFIDENCE,
     BOT_PROMPT_TEXT_MAX_CHARS,
     BOT_TASK,
     FOLLOW_RATIO_ANOMALY_MAX_FOLLOWER_SHARE,
     FOLLOW_RATIO_ANOMALY_MIN_FOLLOWING,
     LLM_HEDGE_PHRASES,
     LLM_TYPOGRAPHIC_TELLS,
-    NEW_ACCOUNT_AGE_DAYS,
     SPAM_KEYWORDS,
     X_LOW_FOLLOWERS_THRESHOLD,
     X_NEW_ACCOUNT_AGE_DAYS,
@@ -54,15 +54,28 @@ logger = get_logger(__name__)
 # =============================================================================
 # Constants. BOT_TASK/BOT_PROMPT_TEXT_MAX_CHARS/the account-age-and-follower
 # thresholds are consolidated into engine/constants.py (Postgres redesign
-# Phase 6, constants-consolidation pass, 2026-07-23) -- imported above.
-# _GOVERNMENT_VERIFIED_TYPE/_BUSINESS_VERIFIED_TYPE and the compiled regexes
-# below stay module-local: de-bias gate values and patterns read by exactly
-# one function each (see engine/constants.py's Wave 3 section for the
-# stated rule).
+# Phase 6, constants-consolidation pass, 2026-07-23) -- imported above. The
+# compiled regexes below stay module-local: patterns read by exactly one
+# function each (see engine/constants.py's Wave 3 section for the stated
+# rule).
+#
+# The _GOVERNMENT_VERIFIED_TYPE / _BUSINESS_VERIFIED_TYPE de-bias gate went
+# with _aggregate_score on 2026-07-25: it hard-zeroed the score for verified
+# government accounts and capped business accounts at 0.3. Nothing replaces
+# it -- verified_type is still measured, still lands in raw_response, and
+# still reaches the prompt, but nothing derived from it overrides the
+# model's label/confidence.
+#
+# `analysis.bot_signals.score` / `analysis.author_bot_scores.score`+
+# `.variance` are gone entirely as of 0005_drop_bot_score.sql -- `score` had
+# become a literal duplicate of `llm_text_likelihood` (2026-07-25), and a
+# duplicate column with no reader beyond the one it duplicates does not earn
+# its keep. `BotAnalysis`/`BotSignalsRow` carry `llm_text_likelihood` only;
+# the author-level exclusion gate reads `bot_post_count`/
+# `suspicious_post_count`/`sample_count` instead (see
+# `refresh_author_bot_scores()` below and
+# `analysis/src/api/queries/constants.py::BOT_FLAGGED_SHARE_EXCLUSION`).
 # =============================================================================
-
-_GOVERNMENT_VERIFIED_TYPE = "government"
-_BUSINESS_VERIFIED_TYPE = "business"
 
 _SENTENCE_SPLIT_RE = re.compile(r"[.!?]+")
 
@@ -104,9 +117,9 @@ class BotDocInput:
 class BotAnalysis:
     """The validated outcome of one `analyze()` call.
 
-    `score`/`burstiness`/`type_token_ratio`/`template_score` are the
-    deterministic stylometric battery -- always computed the same way for
-    every non-empty-text doc, so they carry one consistent meaning for
+    `burstiness`/`type_token_ratio`/`template_score` are the deterministic
+    stylometric battery -- always computed the same way for every
+    non-empty-text doc, so they carry one consistent meaning for
     rollups/thresholds regardless of inference_method (DDL comment on
     analysis.bot_signals). `confidence` and `label` come from the LLM for
     every successful (hybrid) run; the battery never classifies on its own
@@ -134,7 +147,6 @@ class BotAnalysis:
 
     label: str  # analysis.bot_label: human|suspicious|bot|unknown
     confidence: float
-    score: Optional[float]
     llm_text_likelihood: Optional[float]
     burstiness: Optional[float]
     type_token_ratio: Optional[float]
@@ -156,7 +168,7 @@ def analyze(doc: BotDocInput, client: LLMClient) -> BotAnalysis:
     """
     if not doc.text:
         return BotAnalysis(
-            label="unknown", confidence=0.0, score=None, llm_text_likelihood=None,
+            label="unknown", confidence=0.0, llm_text_likelihood=None,
             burstiness=None, type_token_ratio=None, template_score=None,
             indicators=[], reasoning="Empty text", inference_method="deterministic",
             raw_response=None,
@@ -238,7 +250,6 @@ def _compute_signals(doc: BotDocInput) -> Dict[str, Any]:
         "x_foreign_origin_flag": x_foreign_origin_flag,
         "follow_ratio_anomaly": follow_ratio_anomaly,
     }
-    signals["aggregated_score"] = _aggregate_score(signals)
     return signals
 
 
@@ -264,57 +275,6 @@ def _typographic_purity(text: str) -> float:
         return 0.0
     hits = sum(1 for ch in LLM_TYPOGRAPHIC_TELLS if ch in text)
     return hits / len(LLM_TYPOGRAPHIC_TELLS)
-
-
-def _aggregate_score(signals: Dict[str, Any]) -> float:
-    """Deterministic aggregated bot score. Ported from old bot.py's
-    _aggregate_score, minus the two contributions that had no surviving data
-    source: sustained_tweet_rate_flag (+0.15) and unlisted_active_flag
-    (+0.08) both needed tweet_count/listed_count, which corpus.authors does
-    not carry (see BotDocInput's docstring). The achievable ceiling for an
-    X account is therefore lower than old bot.py's by up to ~0.23 for those
-    two flags alone -- a deliberate scope reduction, not a bug; revisit once
-    corpus.authors gains richer X snapshot columns or a golden set drives a
-    recalibration (matches this formula's own "placeholders" precedent)."""
-    score = 0.0
-
-    spam_hits = signals["spam_keyword_hits"]
-    if spam_hits > 0:
-        score += 0.3 + (0.1 * min(spam_hits, 3))
-    if signals["repetition_score"] > 0.5:
-        score += 0.2
-    if signals["word_count"] > 0 and signals["url_count"] / max(signals["word_count"], 1) > 0.1:
-        score += 0.1
-    if signals["hashtag_count"] > 5:
-        score += 0.08
-
-    if signals["sentence_length_variance"] < 4 and signals["word_count"] > 30:
-        score += 0.15
-    if signals["hedge_phrase_rate"] > 1.0:
-        score += 0.18
-    if signals["typographic_purity_score"] >= 0.5:
-        score += 0.12
-
-    age = signals.get("account_age_days")
-    if age is not None and age < NEW_ACCOUNT_AGE_DAYS:
-        score += 0.12
-
-    if signals.get("x_new_account_flag"):
-        score += 0.08
-    if signals.get("x_low_followers_flag"):
-        score += 0.05
-    if signals.get("x_foreign_origin_flag"):
-        score += 0.1
-    if signals.get("follow_ratio_anomaly"):
-        score += 0.2
-
-    vtype = signals.get("verified_type", "")
-    if vtype == _GOVERNMENT_VERIFIED_TYPE:
-        return 0.0
-    if vtype == _BUSINESS_VERIFIED_TYPE:
-        score = min(score, 0.3)
-
-    return round(min(score, 1.0), 3)
 
 
 # =============================================================================
@@ -365,11 +325,10 @@ def _llm_analysis(text: str, signals: Dict[str, Any], client: LLMClient) -> BotA
     as prompt context. inference_method='hybrid': both the signal battery
     and the LLM's own judgment contributed to `label`/`confidence`.
 
-    posting_frequency/listed_count are hardcoded "unknown" -- BOT_USER_PROMPT_
-    TEMPLATE (llm/prompts.py, not owned by this module) still has placeholders
-    for both, but neither signal has a data source anymore (see BotDocInput's
-    docstring); always "unknown" is simpler than routing a value that is
-    always absent through _safe_prompt_value.
+    posting_frequency/listed_count are gone from BOT_USER_PROMPT_TEMPLATE
+    (llm/prompts.py, not owned by this module, 2026-07-25) -- neither signal
+    ever had a data source (see BotDocInput's docstring), so the prompt no
+    longer spends tokens reasoning about two literal "unknown" strings.
     """
     user_prompt = BOT_USER_PROMPT_TEMPLATE.format(
         text=text[:BOT_PROMPT_TEXT_MAX_CHARS],
@@ -383,10 +342,8 @@ def _llm_analysis(text: str, signals: Dict[str, Any], client: LLMClient) -> BotA
         hedge_phrase_rate=signals["hedge_phrase_rate"],
         typographic_purity_score=signals["typographic_purity_score"],
         account_age_days=_safe_prompt_value(signals.get("account_age_days")),
-        posting_frequency="unknown",
         followers=_safe_prompt_value(signals.get("followers")),
         following=_safe_prompt_value(signals.get("following")),
-        listed_count="unknown",
         verified_type=_safe_prompt_value(signals.get("verified_type")),
     )
 
@@ -407,7 +364,13 @@ def _llm_analysis(text: str, signals: Dict[str, Any], client: LLMClient) -> BotA
     return BotAnalysis(
         label=label,
         confidence=response.get("confidence", 0.5),  # already normalized by LLMClient
-        score=signals["aggregated_score"],
+        # Owner decision 2026-07-25: the hand-tuned additive _aggregate_score
+        # is gone -- a threshold formula must not produce a bot judgment. The
+        # deterministic stylometrics only feed the prompt and their typed
+        # columns; llm_text_likelihood is the model's own text-style signal,
+        # kept distinct from `label` (the account-level exclusion gate reads
+        # label-derived counts, never this field -- see
+        # refresh_author_bot_scores() below).
         llm_text_likelihood=llm_text_likelihood,
         burstiness=signals["sentence_length_variance"],
         type_token_ratio=signals["unique_ratio"],
@@ -461,7 +424,6 @@ def process(doc: BotDocInput, client: LLMClient) -> store.RunOutcome:
     )
     handle.save_bot_signals(store.BotSignalsRow(
         label=result.label,
-        score=result.score,
         llm_text_likelihood=result.llm_text_likelihood,
         burstiness=result.burstiness,
         type_token_ratio=result.type_token_ratio,
@@ -485,31 +447,29 @@ _DELETE_STALE_AUTHOR_SCORES_SQL = """
         FROM analysis.bot_signals bs
         JOIN analysis.runs r ON r.run_id = bs.run_id
         JOIN corpus.documents d ON d.doc_id = bs.doc_id
-        WHERE r.is_current AND d.author_id IS NOT NULL AND bs.score IS NOT NULL
+        WHERE r.is_current AND d.author_id IS NOT NULL
+          AND bs.label != 'unknown'::analysis.bot_label
     )
 """
 
 _UPSERT_AUTHOR_BOT_SCORES_SQL = """
     INSERT INTO analysis.author_bot_scores
-        (author_id, score, variance, sample_count, bot_post_count,
+        (author_id, sample_count, bot_post_count,
          suspicious_post_count, llm_text_likelihood_mean, updated_at)
     SELECT
         d.author_id,
-        AVG(bs.score),
-        VAR_POP(bs.score),
         COUNT(*),
-        COUNT(*) FILTER (WHERE bs.label = 'bot'),
-        COUNT(*) FILTER (WHERE bs.label = 'suspicious'),
+        COUNT(*) FILTER (WHERE bs.label = 'bot' AND r.confidence >= %(min_conf)s),
+        COUNT(*) FILTER (WHERE bs.label = 'suspicious' AND r.confidence >= %(min_conf)s),
         AVG(bs.llm_text_likelihood),
         now()
     FROM analysis.bot_signals bs
     JOIN analysis.runs r ON r.run_id = bs.run_id
     JOIN corpus.documents d ON d.doc_id = bs.doc_id
-    WHERE r.is_current AND d.author_id IS NOT NULL AND bs.score IS NOT NULL
+    WHERE r.is_current AND d.author_id IS NOT NULL
+      AND bs.label != 'unknown'::analysis.bot_label
     GROUP BY d.author_id
     ON CONFLICT (author_id) DO UPDATE SET
-        score = EXCLUDED.score,
-        variance = EXCLUDED.variance,
         sample_count = EXCLUDED.sample_count,
         bot_post_count = EXCLUDED.bot_post_count,
         suspicious_post_count = EXCLUDED.suspicious_post_count,
@@ -526,9 +486,18 @@ def refresh_author_bot_scores() -> int:
     reprocess that supersedes a prior run drops that run's is_current, so
     its bot_signals row is automatically excluded here without any special
     casing (old code's equivalent was a raw ai_outputs_latest view). Rows
-    with bs.score IS NULL (the 'unknown'/empty-text case) are excluded --
-    they carry no signal to aggregate, the same exclusion old code achieved
-    by only appending to bucket["scores"] when a numeric score existed.
+    with bs.label = 'unknown' (the empty-text case) are excluded from both
+    the DELETE and the UPSERT -- they carry no signal to aggregate, the same
+    exclusion the pre-0005 `bs.score IS NOT NULL` guard achieved (`score` was
+    NULL for, and only for, the 'unknown' label).
+
+    `bot_post_count`/`suspicious_post_count` additionally require
+    `r.confidence >= BOT_LABEL_MIN_CONFIDENCE` -- a low-confidence 'bot'
+    guess must not silence an author from the downstream flagged-share
+    exclusion gate (analysis/src/api/queries/constants.py's
+    BOT_FLAGGED_SHARE_EXCLUSION). `sample_count` itself is NOT
+    confidence-floored: it is the denominator of "how many analyzed posts",
+    which is true regardless of how confident any one label was.
 
     Old code hardcoded platform='x' (the account_bot_scores table only ever
     held X authors, "reddit stays at per-post scoring" per its own comment).
@@ -545,8 +514,9 @@ def refresh_author_bot_scores() -> int:
 
     Returns the number of author_bot_scores rows inserted or updated.
     """
+    params = {"min_conf": BOT_LABEL_MIN_CONFIDENCE}
     with db.connection() as conn:
         with conn.cursor() as cur:
             cur.execute(_DELETE_STALE_AUTHOR_SCORES_SQL)
-            cur.execute(_UPSERT_AUTHOR_BOT_SCORES_SQL)
+            cur.execute(_UPSERT_AUTHOR_BOT_SCORES_SQL, params)
             return cur.rowcount

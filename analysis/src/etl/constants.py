@@ -85,6 +85,12 @@ INDEX_PAGE = "index_page"
 NOT_POLITICAL = "not_political"
 ADMITTED = "admitted"
 
+# Not an admission verdict: a news row whose raw_hash resolved to no
+# readable/extractable file. Tallied in DocLoadResult.rejections only, so a
+# misconfigured raw store (the 2026-07-23 zero-news prod incident) is loud
+# in the ETL summary instead of silently zeroing the news corpus.
+EXTRACTION_FAILED = "extraction_failed"
+
 # corpus.documents.admission_class values (data/pg-migrations/0003_admission_class.sql).
 ADMISSION_SAMPLED = "sampled"
 ADMISSION_OFFICIAL_RECORD = "official_record"

@@ -315,13 +315,37 @@ record.
 
 ## Phase 8 — Recompute run
 
-- [ ] Pilot `--limit 200` on the box: measure per-doc latency, token cost,
+Live state 2026-07-24 (box-side, not verifiable from the repo): corpus at
+2,758 docs (966 X + ~1,800 news). `bot`, `text`, `targets`, `propaganda`,
+`citations` are all 2,758 done / 0 failed. `claims` is partial (~950 done)
+because Gemini prepayment credits ran out for the third time. Every claims
+failure is at `attempts=1`, so stage-start auto-requeue
+(`MAX_TASK_ATTEMPTS=3`) picks them up — no manual `UPDATE` needed.
+
+- [x] Pilot `--limit 200` on the box: measure per-doc latency, token cost,
       PG memory under `docker stats`
-- [ ] Kobe picks the backend (Gemini vs Ollama) with real numbers
+- [x] Kobe picks the backend (Gemini vs Ollama) with real numbers — Gemini
 - [ ] Full recompute in resumable chunks via the queue (crash resumes free)
-- [ ] Acceptance: queue drains, failure rate <5%
-- [ ] 20-doc random traceability audit (doc -> run -> result ->
-      prompt_version -> raw_hash -> file on disk)
+      — IN FLIGHT, blocked on a Gemini credit top-up sized for ~2k
+      remaining claims calls plus 1-2 more ETL passes (news articles cost
+      several times more per call than X posts). Probe with a single
+      `curl generateContent` before relaunching; relaunch on each
+      `pipeline complete` until ETL logs `inserted=0` (per-run candidate
+      batch cap; expect a final news corpus of 2-4k of the ~12,977
+      in-window candidates).
+- [ ] Acceptance gate 1: queue drains, failure rate <5% per task
+- [ ] Acceptance gate 2: 20-doc random traceability audit (doc -> is_current
+      run -> typed result -> prompt_version -> raw_hash -> file on disk).
+      `has_rows=false` is only a failure for `bot`/`propaganda`;
+      `text`/`targets`/`claims`/`citations` may legitimately be empty
+- [ ] Acceptance gate 3: whole-corpus contract-violation sweep (llm runs
+      missing prompt/confidence/raw_response; done bot/propaganda runs with
+      no result row; failed runs with no error) — every count must be 0
+- [ ] Acceptance gate 4: every DISTINCT `corpus.documents.raw_hash` resolves
+      to a file under `/var/lib/civic-lens/data/raw/sha256` (0 missing)
+
+Paste-ready verification commands for all four gates:
+`docs/deployment/phase8-acceptance-gates.md`.
 
 ## Phase 9 — Strictly-live API (serving schema dropped)
 
@@ -378,12 +402,20 @@ its cross-linked sibling entries) for the full wave.
 
 ## Phase 10 — UI adaptation
 
-- [ ] Regenerate `ui/src/types.ts` from the API contract
-- [ ] Update `services/api.ts` / `transformers.ts` (tolerance shrinks —
-      shapes are now trustworthy)
-- [ ] Page wiring updates where fields changed
-- [ ] Verify: `npm run typecheck` + `npm run build` + manual pass of every
-      tab
+Landed on `ui-data-contract-rewrite` (commit `db8c9ef`) — see
+`docs/audit-trail/ui/2026-07-24-phase10-ui-adaptation.md` for the full
+inventory, including the pre-redesign features removed rather than faked.
+
+- [x] Regenerate `ui/src/types.ts` from the API contract
+- [x] Update `services/api.ts` (tolerance shrinks — shapes are now
+      trustworthy); `services/transformers.ts` deleted outright rather than
+      updated, since the contract is trustworthy field-for-field
+- [x] Page wiring updates where fields changed
+- [x] Verify: `npm run typecheck` + `npm run build` — both clean
+      2026-07-25 (only the pre-existing >500 kB chunk-size warning)
+- [ ] Verify: manual pass of every tab against the live API — owner-run,
+      blocked until the Phase 8 recompute finishes (empty panels are
+      otherwise indistinguishable from broken ones)
 
 ## Phase 11 — Verify, cut over, decommission
 
@@ -406,6 +438,34 @@ its cross-linked sibling entries) for the full wave.
 - [ ] Update systemd units
 - [ ] Drop `modernc.org/sqlite` + the SQLite storage branch
 - [ ] Delete dead modules
+- [ ] Repoint the four production entrypoints at `scheduler.pipeline` BEFORE
+      deleting `job_runner.py` — `docker-compose.yml:133`, `run.sh:127`
+      (`analyze`), `setup-cron.sh:59`, and
+      `deploy/systemd/civic-lens-analyze.service` all still run the retired
+      SQLite stack. Deleting the module first stops production analysis.
+- [ ] Delete `settings.llm_enabled` (`analysis/src/common/settings.py`) and
+      the `CIVIC_LLM_ENABLED` entry in `.env.example`. No engine in the
+      Postgres pipeline reads it (2026-07-25 audit) and `/health` no longer
+      reports it, but `job_runner.py` plus `engine/{analyzer,bot,
+      propaganda_detector,target_extractor,claim_extractor}.py` still do —
+      so it can only go when they do. See
+      `docs/audit-trail/api/2026-07-25-drop-unhonored-llm-switch.md`.
+- [ ] Delete the heuristic engines retired on 2026-07-25 along with the old
+      stack: `engine/analyzer.py`, `engine/bot.py`, and the constants only
+      they use (`PROXIMITY_WINDOW`, `POSITIVE_WORDS`, `NEGATORS`,
+      `GOP_ENTITIES`, `FAVORABLE_INDICATORS`, `UNFAVORABLE_INDICATORS`, and
+      `NEGATIVE_WORDS`/`INTENSIFIERS` once `propaganda_detector.py` goes).
+      See `docs/audit-trail/analysis/2026-07-25-llm-only-judgments.md`.
 - [ ] Rewrite CLAUDE.md data-flow + architecture docs
 - [ ] Audit-trail entries per affected layer
+- [ ] Drop `analysis.favorability_stances` (0001_north_star.sql): its writer
+      was removed 2026-07-25 (`engine/text.py` sentiment-only rewrite,
+      `results/store.py` has no `save_favorability_stances` path) and every
+      reader repointed to `analysis.target_mentions`. Deliberately NOT
+      dropped in that same change -- data loss is irreversible and the full
+      recompute + side-by-side acceptance above is still ahead. Drop it in
+      the same decommission migration as the rest of the retired surface;
+      existing rows are Republican-only (the old prompt scoped favorability
+      to GOP entities), so do not resurrect them as a general-purpose stance
+      source. See `docs/audit-trail/analysis/2026-07-25-text-sentiment-only.md`.
 - [ ] Delete this todo file when every box above is checked

@@ -35,11 +35,10 @@ class EntityPostsResponse(CamelModel):
 
 
 class StanceDistribution(CamelModel):
-    """Stance-count distribution normalized onto one positive/negative/
-    neutral/mixed vocabulary, whether the source was
-    analysis.target_mentions (sentiment_label) or
-    analysis.favorability_stances (favorability_label: favorable ->
-    positive, unfavorable -> negative)."""
+    """Stance-count distribution on the analysis.target_mentions
+    sentiment_label vocabulary (positive/negative/neutral/mixed) --
+    the sole source for both stance_received and stance_expressed since
+    analysis.favorability_stances retired 2026-07-25."""
 
     positive: int
     negative: int

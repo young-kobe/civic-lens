@@ -120,7 +120,11 @@ class AnalysisJobRunner:
         or the configured embedding call fails, the clusterer transparently
         falls back to Jaccard at runtime per claim.
         """
-        mode = self.settings.narrative_similarity_mode
+        # Was settings.narrative_similarity_mode / narrative_jaccard_threshold.
+        # Both settings went away with the jaccard comparator (2026-07-26);
+        # the old defaults are inlined here to keep this retired stack running
+        # unchanged until Phase 11 deletes it. Do not reintroduce the settings.
+        mode = "embedding"
         embedding_client = None
         if mode == "embedding" and self.settings.llm_enabled:
             try:
@@ -137,7 +141,7 @@ class AnalysisJobRunner:
             mode=mode,
             embedding_client=embedding_client,
             embedding_model=self.settings.narrative_embedding_model,
-            jaccard_threshold=self.settings.narrative_jaccard_threshold,
+            jaccard_threshold=0.3,
             embedding_threshold=self.settings.narrative_embedding_threshold,
         )
     

@@ -25,7 +25,7 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 from analysis.src.api.queries import narratives
-from analysis.src.api.queries.constants import BOT_SCORE_AUTHOR_EXCLUSION
+from analysis.src.api.queries.constants import BOT_FLAGGED_SHARE_EXCLUSION
 from analysis.tests import pg_fixture
 
 
@@ -104,8 +104,8 @@ class BotPushedFractionTests(unittest.TestCase):
         self.assertIsNone(narratives._bot_pushed_fraction([]))
 
     def test_fraction_at_or_above_exclusion_threshold_counts_as_bot_pushed(self):
-        scores = [BOT_SCORE_AUTHOR_EXCLUSION, BOT_SCORE_AUTHOR_EXCLUSION - 0.1]
-        self.assertEqual(narratives._bot_pushed_fraction(scores), 0.5)
+        shares = [BOT_FLAGGED_SHARE_EXCLUSION, BOT_FLAGGED_SHARE_EXCLUSION - 0.1]
+        self.assertEqual(narratives._bot_pushed_fraction(shares), 0.5)
 
 
 class BuildLeanTests(unittest.TestCase):
@@ -231,13 +231,18 @@ class GetNarrativesIntegrationTests(unittest.TestCase):
                 (run_id, density, techniques_validated),
             )
 
-    def _bot_score(self, author_id, score):
+    def _bot_score(self, author_id, flagged_share, *, sample_count=10):
+        """Seeds a bot_post_count so bot_post_count/sample_count ==
+        flagged_share -- the label-driven share the exclusion predicate
+        reads (replacing the retired additive `score` column)."""
         from analysis.src.common import db as dbmod
+        bot_post_count = round(flagged_share * sample_count)
         with dbmod.connection() as conn:
             conn.execute(
                 "INSERT INTO analysis.author_bot_scores "
-                "(author_id, score, sample_count, updated_at) VALUES (%s, %s, 1, now())",
-                (author_id, score),
+                "(author_id, bot_post_count, suspicious_post_count, sample_count, updated_at) "
+                "VALUES (%s, %s, 0, %s, now())",
+                (author_id, bot_post_count, sample_count),
             )
 
     def _clustering_run(self):

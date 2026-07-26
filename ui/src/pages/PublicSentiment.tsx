@@ -168,8 +168,8 @@ function BreakdownCard({ data }: { data: SentimentPanelResponse }) {
 // --------------------------------------------------------------------------- //
 
 const ENTITY_SORTERS: ColumnSorter<EntityStanceAggregate>[] = [
-    { label: 'posts', compare: (a, b) => b.favorability.volume - a.favorability.volume },
-    { label: 'net tone', compare: (a, b) => (b.favorability.netScore ?? 0) - (a.favorability.netScore ?? 0) },
+    { label: 'posts', compare: (a, b) => b.targetStance.volume - a.targetStance.volume },
+    { label: 'net tone', compare: (a, b) => (b.targetStance.netScore ?? 0) - (a.targetStance.netScore ?? 0) },
     { label: 'name', compare: (a, b) => a.displayName.localeCompare(b.displayName) },
 ];
 
@@ -188,7 +188,7 @@ function EntityThreeWayGrid({
         <EntityProfileCard
             key={item.entityId ?? item.catchAllKey}
             entity={{ kind: item.kind, displayName: item.displayName, lean: item.lean }}
-            stats={toneStats({ netTone: item.favorability.netScore, volume: item.favorability.volume })}
+            stats={toneStats({ netTone: item.targetStance.netScore, volume: item.targetStance.volume })}
             onClick={() => onOpen(item)}
         />
     );
@@ -198,8 +198,8 @@ function EntityThreeWayGrid({
             <ThreeWayGrid>
                 <ThreeWayColumn
                     header="The News"
-                    byline="Outlets with a favorability reading in this window"
-                    empty="No news outlets have a favorability reading in this window."
+                    byline="Outlets with a stance reading in this window"
+                    empty="No news outlets have a stance reading in this window."
                     items={outlets}
                     renderItem={renderCard}
                     sorters={ENTITY_SORTERS}
@@ -207,7 +207,7 @@ function EntityThreeWayGrid({
                 <ThreeWayColumn
                     header="Politicians, Officials & Collectives"
                     byline="Tracked officeholders and party collectives"
-                    empty="No officials have a favorability reading in this window."
+                    empty="No officials have a stance reading in this window."
                     items={officials}
                     renderItem={renderCard}
                     sorters={ENTITY_SORTERS}
@@ -215,7 +215,7 @@ function EntityThreeWayGrid({
                 <ThreeWayColumn
                     header="Communities"
                     byline="Tracked subreddits"
-                    empty="No communities have a favorability reading in this window."
+                    empty="No communities have a stance reading in this window."
                     items={communities}
                     renderItem={renderCard}
                     sorters={ENTITY_SORTERS}
@@ -223,7 +223,7 @@ function EntityThreeWayGrid({
             </ThreeWayGrid>
             {unresolved.length > 0 && (
                 <p className="text-xs text-muted mt-2">
-                    Plus {unresolved[0].favorability.volume + unresolved[0].targetStance.volume} mentions
+                    Plus {unresolved[0].targetStance.volume} mentions
                     of entities outside our tracked registry ("{unresolved[0].displayName}").
                 </p>
             )}
@@ -271,17 +271,8 @@ function EntitySentimentModal({
             <EntityHeader entity={{ kind: item.kind, displayName: item.displayName, lean: item.lean }} />
             <div className="entity-modal-stats">
                 <div>
-                    <div className="eyebrow" title="Tone of this entity's own posts (favorability_stances), -100..+100">
-                        Favorability net
-                    </div>
-                    <div className="metric-value">
-                        {item.favorability.netScore != null ? formatPts(item.favorability.netScore) : '—'}
-                    </div>
-                    <div className="text-xs text-muted">{item.favorability.volume.toLocaleString()} posts</div>
-                </div>
-                <div>
                     <div className="eyebrow" title="Tone of posts mentioning this entity (target_mentions), -100..+100">
-                        Received tone
+                        Net tone
                     </div>
                     <div className="metric-value">
                         {item.targetStance.netScore != null ? formatPts(item.targetStance.netScore) : '—'}

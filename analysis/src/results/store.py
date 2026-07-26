@@ -34,14 +34,6 @@ class SentimentRow:
 
 
 @dataclass(frozen=True)
-class FavorabilityStanceRow:
-    entity_id: int
-    stance: str  # analysis.favorability_label
-    score: Optional[float] = None
-    evidence_spans: Optional[List[str]] = None
-
-
-@dataclass(frozen=True)
 class TargetMentionRow:
     raw_target: str
     stance: str  # analysis.sentiment_label
@@ -76,7 +68,6 @@ class ClaimRow:
 @dataclass(frozen=True)
 class BotSignalsRow:
     label: str  # analysis.bot_label
-    score: Optional[float] = None
     llm_text_likelihood: Optional[float] = None
     burstiness: Optional[float] = None
     type_token_ratio: Optional[float] = None
@@ -131,7 +122,6 @@ class RunHandle:
         self.prompt_version = prompt_version
         self.inference_method = inference_method
         self._sentiment: Optional[SentimentRow] = None
-        self._favorability_stances: List[FavorabilityStanceRow] = []
         self._target_mentions: List[TargetMentionRow] = []
         self._propaganda: Optional[
             Tuple[PropagandaResultRow, List[PropagandaTechniqueRow]]
@@ -142,9 +132,6 @@ class RunHandle:
 
     def save_sentiment(self, row: SentimentRow) -> None:
         self._sentiment = row
-
-    def save_favorability_stances(self, rows: List[FavorabilityStanceRow]) -> None:
-        self._favorability_stances = list(rows)
 
     def save_target_mentions(self, rows: List[TargetMentionRow]) -> None:
         self._target_mentions = list(rows)
@@ -267,15 +254,6 @@ class RunHandle:
                 """,
                 (run_id, r.label, r.score, r.sarcasm_detected, r.evidence_spans),
             )
-        for r in self._favorability_stances:
-            conn.execute(
-                """
-                INSERT INTO analysis.favorability_stances
-                    (run_id, entity_id, stance, score, evidence_spans)
-                VALUES (%s, %s, %s::analysis.favorability_label, %s, %s)
-                """,
-                (run_id, r.entity_id, r.stance, r.score, r.evidence_spans),
-            )
         for r in self._target_mentions:
             conn.execute(
                 """
@@ -302,11 +280,11 @@ class RunHandle:
             conn.execute(
                 """
                 INSERT INTO analysis.bot_signals
-                    (run_id, doc_id, label, score, llm_text_likelihood, burstiness,
+                    (run_id, doc_id, label, llm_text_likelihood, burstiness,
                      type_token_ratio, template_score)
-                VALUES (%s, %s, %s::analysis.bot_label, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s::analysis.bot_label, %s, %s, %s, %s)
                 """,
-                (run_id, self.doc_id, r.label, r.score, r.llm_text_likelihood,
+                (run_id, self.doc_id, r.label, r.llm_text_likelihood,
                  r.burstiness, r.type_token_ratio, r.template_score),
             )
         for r in self._citations:
@@ -378,11 +356,10 @@ def register_prompt_version(
     an engine runs with a given prompt_version — the second-and-later calls
     are no-ops beyond filling in `user_prompt_template` if it was NULL.
 
-    `task` is deliberately not part of the ON CONFLICT SET clause: sentiment
-    and favorability share one prompt_version under the unified 'text' task
-    but this function may be called for either first — rewriting `task` on
-    every call would make the audit column flip-flop for no reason (mirrors
-    the same convention in the old etl/loader.py::save_ai_output).
+    `task` is deliberately not part of the ON CONFLICT SET clause: rewriting
+    it on every call would make the audit column flip-flop for no reason if
+    two engines ever shared a `prompt_version` string (mirrors the same
+    convention in the old etl/loader.py::save_ai_output).
     """
     with db.connection() as conn:
         conn.execute(

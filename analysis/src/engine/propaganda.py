@@ -1,12 +1,12 @@
 """
 Propaganda-technique engine (Postgres redesign Phase 6): pure `analyze()` +
-thin `process()`, same shape as engine/text.py. Ports propaganda_detector.py's
-loaded-language pre-filter and evidence validation onto engine/validation.py.
+thin `process()`, same shape as engine/text.py. Every doc with substantive
+content gets an LLM call; trivial posts are declined, not scored. Evidence
+validation runs through engine/validation.py.
 """
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from typing import Dict, List, Optional
 
@@ -15,12 +15,10 @@ from analysis.src.common.settings import get_settings
 from analysis.src.engine import validation
 from analysis.src.engine.constants import (
     MAX_PROPAGANDA_TECHNIQUES,
-    PROPAGANDA_LOADED_LEXICON,
-    PROPAGANDA_PRE_FILTER_SCAN_CHARS,
     PROPAGANDA_TASK,
     PROPAGANDA_TEXT_MAX_CHARS,
 )
-from analysis.src.engine.text_prep import truncate_at_sentence
+from analysis.src.engine.text_prep import is_trivial_content, truncate_at_sentence
 from analysis.src.llm.client import LLMClient
 from analysis.src.llm.prompts import (
     PROPAGANDA_PROMPT_VERSION,
@@ -32,12 +30,11 @@ from analysis.src.results import store
 
 logger = get_logger(__name__)
 
-# PROPAGANDA_TASK, PROPAGANDA_TEXT_MAX_CHARS, MAX_PROPAGANDA_TECHNIQUES,
-# PROPAGANDA_LOADED_LEXICON, PROPAGANDA_PRE_FILTER_SCAN_CHARS consolidated
-# into engine/constants.py (Postgres redesign Phase 6, constants-
-# consolidation pass) -- imported above. _DDL_PROPAGANDA_TECHNIQUES below
-# stays local: a private enum-gate frozenset read by exactly one function
-# here, not a genuinely shared value.
+# PROPAGANDA_TASK, PROPAGANDA_TEXT_MAX_CHARS, MAX_PROPAGANDA_TECHNIQUES
+# consolidated into engine/constants.py (Postgres redesign Phase 6,
+# constants-consolidation pass) -- imported above. _DDL_PROPAGANDA_TECHNIQUES
+# below stays local: a private enum-gate frozenset read by exactly one
+# function here, not a genuinely shared value.
 
 # The DDL's analysis.propaganda_technique enum (data/pg-migrations/
 # 0001_north_star.sql), duplicated here as the INSERT-time gate on purpose:
@@ -51,25 +48,6 @@ _DDL_PROPAGANDA_TECHNIQUES = frozenset({
     "loaded_language", "name_calling", "ad_hominem",
     "appeal_to_fear", "whataboutism", "doubt_casting",
 })
-
-# Compiled pattern for the pre-filter word scan -- implementation detail of
-# _has_loaded_language() below, not a shared config value; stays local.
-_WORD_RE = re.compile(r"[a-zA-Z']+")
-
-_PRE_FILTER_REASONING = (
-    "No loaded language detected in the pre-filter window (or empty "
-    "document); propaganda-technique LLM call skipped."
-)
-
-
-def _has_loaded_language(text: str) -> bool:
-    """True if the first `PROPAGANDA_PRE_FILTER_SCAN_CHARS` of `text` contain
-    any token from `PROPAGANDA_LOADED_LEXICON`."""
-    if not text:
-        return False
-    window = text[:PROPAGANDA_PRE_FILTER_SCAN_CHARS].lower()
-    return any(m.group() in PROPAGANDA_LOADED_LEXICON for m in _WORD_RE.finditer(window))
-
 
 @dataclass(frozen=True)
 class PropagandaDocInput:
@@ -101,7 +79,6 @@ class PropagandaAnalysis:
     techniques: List[PropagandaTechniqueOutcome]
     techniques_validated: int
     techniques_dropped: int
-    inference_method: str  # 'llm' | 'deterministic'
     raw_response: Optional[Dict]
 
 
@@ -112,17 +89,6 @@ def analyze(doc: PropagandaDocInput, client: LLMClient) -> PropagandaAnalysis:
     `process()` below is what turns that into a recorded failed run."""
     combined = f"{doc.title}\n\n{doc.text}" if doc.title else doc.text
     clamped = truncate_at_sentence(combined, PROPAGANDA_TEXT_MAX_CHARS)
-
-    if not _has_loaded_language(clamped):
-        return PropagandaAnalysis(
-            density=0.0,
-            summary=_PRE_FILTER_REASONING,
-            techniques=[],
-            techniques_validated=0,
-            techniques_dropped=0,
-            inference_method="deterministic",
-            raw_response=None,
-        )
 
     response = client.complete(
         system_prompt=PROPAGANDA_SYSTEM_PROMPT,
@@ -166,7 +132,6 @@ def analyze(doc: PropagandaDocInput, client: LLMClient) -> PropagandaAnalysis:
         techniques=validated,
         techniques_validated=len(validated),
         techniques_dropped=dropped,
-        inference_method="llm",
         raw_response=response,
     )
 
@@ -213,6 +178,20 @@ def process(doc: PropagandaDocInput, client: LLMClient) -> store.RunOutcome:
     )
     model_id = _resolve_model_id()
 
+    # Same gate text.py/targets.py/claims.py apply (2026-07-25: propaganda was
+    # the only LLM stage without it, so every @-mention-and-link-only post paid
+    # a full call for a guaranteed-empty result). This DECLINES to judge -- a
+    # done run with no propaganda_results row -- rather than asserting a zero.
+    # An absent row means unanalyzable; density=0.0 means the model looked and
+    # found nothing. Checked on doc.text alone, matching the sibling engines;
+    # news bodies are never trivial, so this only ever fires on short posts.
+    if is_trivial_content(doc.text):
+        handle = store.open_run(
+            PROPAGANDA_TASK, doc_id=doc.doc_id, model_id=model_id,
+            prompt_version=None, inference_method="deterministic",
+        )
+        return handle.finish("done", confidence=None, raw_response=None)
+
     try:
         result = analyze(doc, client)
     except Exception as exc:
@@ -223,10 +202,9 @@ def process(doc: PropagandaDocInput, client: LLMClient) -> store.RunOutcome:
         )
         return handle.finish("failed", error=str(exc))
 
-    prompt_version = PROPAGANDA_PROMPT_VERSION if result.inference_method == "llm" else None
     handle = store.open_run(
         PROPAGANDA_TASK, doc_id=doc.doc_id, model_id=model_id,
-        prompt_version=prompt_version, inference_method=result.inference_method,
+        prompt_version=PROPAGANDA_PROMPT_VERSION, inference_method="llm",
     )
     handle.save_propaganda(
         store.PropagandaResultRow(

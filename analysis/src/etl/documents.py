@@ -18,6 +18,7 @@ from psycopg import Connection
 
 from analysis.src.common import db
 from analysis.src.common.logger import get_logger
+from analysis.src.common.settings import get_settings
 from analysis.src.common.canonicalize import canonicalize_news_domain, canonicalize_subreddit
 from analysis.src.etl.constants import (
     ADMISSION_OFFICIAL_RECORD,
@@ -26,6 +27,7 @@ from analysis.src.etl.constants import (
     DENIED_DOMAIN,
     ETL_VERSION,
     EXCLUDE_PATTERNS,
+    EXTRACTION_FAILED,
     FUTURE_SLOP,
     HIGH_TITLECASE_SHARE,
     HUB_URL_PATTERN,
@@ -47,9 +49,13 @@ from analysis.src.etl.constants import (
 
 logger = get_logger(__name__)
 
+# Committed YAMLs ship inside the code tree (the analysis image COPYs data/
+# beside analysis/), so seeds resolve from REPO_ROOT. The raw HTML store does
+# NOT ship with the code — it lives in the deployment data dir and resolves
+# via settings.raw_store_dir (cwd-relative, like db_path/cache_dir), never
+# from the code tree.
 REPO_ROOT = Path(__file__).resolve().parents[3]
 _DEFAULT_SEEDS_PATH = REPO_ROOT / "data" / "seeds.yaml"
-_DEFAULT_RAW_ROOT = REPO_ROOT / "data" / "raw" / "sha256"
 
 # ---------------------------------------------------------------------------
 # US-politics content filter
@@ -599,7 +605,11 @@ def _gather_news_candidates(
 
         text = _extract_text_from_raw(row["raw_hash"], raw_root)
         if not text:
-            continue  # extraction failure — not a policy rejection, not counted
+            # Not a policy rejection (no named counter), but tallied in
+            # rejections: an across-the-board extraction failure means a
+            # missing/misconfigured raw store and must be visible.
+            result.record_rejection(EXTRACTION_FAILED)
+            continue
 
         posttext_verdict = _admit_news_posttext(text, row["title"], row["url_canon"], domain_key, cfg)
         if not posttext_verdict.admitted:
@@ -1001,7 +1011,12 @@ def load_new_documents(
     natural_key) and on every subtype table (doc_id).
     """
     cfg = load_domain_filter_config(seeds_path)
-    root = raw_root or _DEFAULT_RAW_ROOT
+    root = raw_root or Path(get_settings().raw_store_dir)
+    if not root.is_dir():
+        logger.warning(
+            f"raw store root {root} does not exist — news text extraction "
+            f"will fail for every candidate (check CIVIC_RAW_STORE_DIR / cwd)"
+        )
     now = datetime.datetime.now(datetime.timezone.utc)
 
     with db.connection() as conn:
