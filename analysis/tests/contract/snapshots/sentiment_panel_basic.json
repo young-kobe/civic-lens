@@ -344,6 +344,8 @@
         "engagementWeightedNet": null,
         "lowSample": true,
         "net": null,
+        "receivedFromGroups": [],
+        "receivedFromTop": [],
         "samples": [],
         "volume": 0
       },
@@ -354,6 +356,8 @@
         "engagementWeightedNet": null,
         "lowSample": true,
         "net": null,
+        "receivedFromGroups": [],
+        "receivedFromTop": [],
         "samples": [],
         "volume": 0
       }

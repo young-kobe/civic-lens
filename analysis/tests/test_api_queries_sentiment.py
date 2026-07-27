@@ -189,6 +189,83 @@ class ConsolidateSampledXAuthorsTests(unittest.TestCase):
         self.assertIn(("catchall", sentiment.CATCH_ALL_X_USERS), buckets)
 
 
+class RouteReceivedSourceTests(unittest.TestCase):
+    """_route_received_source is the sole (source_class, ident, lean)
+    decision point for received_from_groups/_top -- the inbound mirror of
+    RouteOwnPostTests. Every branch must land somewhere so shares sum to
+    1.0, including a single explicit 'other' catch-all for unroutable
+    rows."""
+
+    def _row(self, **overrides):
+        base = {
+            "source_type": "x_post",
+            "outlet_entity_id": None, "outlet_lean": None,
+            "subreddit_entity_id": None, "subreddit_lean": None,
+            "author_entity_id": None, "author_entity_kind": None,
+            "author_entity_editorial": None, "author_entity_lean": None,
+            "x_handle": None,
+        }
+        base.update(overrides)
+        return base
+
+    def test_news_with_resolved_outlet_carries_its_lean(self):
+        source_class, ident, lean = sentiment._route_received_source(
+            self._row(source_type="news", outlet_entity_id=7, outlet_lean="republican"),
+        )
+        self.assertEqual(source_class, "news_outlet")
+        self.assertEqual(ident, 7)
+        self.assertEqual(lean, "republican")
+
+    def test_news_with_no_outlet_match_is_other(self):
+        source_class, ident, lean = sentiment._route_received_source(self._row(source_type="news"))
+        self.assertEqual(source_class, "other")
+        self.assertIsNone(ident)
+        self.assertIsNone(lean)
+
+    def test_reddit_with_resolved_subreddit_carries_its_lean(self):
+        source_class, ident, lean = sentiment._route_received_source(
+            self._row(source_type="reddit_post", subreddit_entity_id=4, subreddit_lean="democrat"),
+        )
+        self.assertEqual(source_class, "subreddit")
+        self.assertEqual(ident, 4)
+        self.assertEqual(lean, "democrat")
+
+    def test_reddit_with_no_subreddit_match_is_other(self):
+        source_class, ident, lean = sentiment._route_received_source(self._row(source_type="reddit_post"))
+        self.assertEqual(source_class, "other")
+
+    def test_editorial_official_author_is_official_class(self):
+        source_class, ident, lean = sentiment._route_received_source(self._row(
+            author_entity_id=3, author_entity_kind="official", author_entity_editorial=True,
+            author_entity_lean="independent",
+        ))
+        self.assertEqual(source_class, "official")
+        self.assertEqual(ident, 3)
+        self.assertEqual(lean, "independent")
+
+    def test_non_editorial_official_author_is_account_class(self):
+        source_class, ident, lean = sentiment._route_received_source(self._row(
+            author_entity_id=3, author_entity_kind="official", author_entity_editorial=False,
+        ))
+        self.assertEqual(source_class, "account")
+        self.assertEqual(ident, 3)
+
+    def test_unmatched_x_author_with_handle_is_x_user(self):
+        source_class, ident, lean = sentiment._route_received_source(self._row(x_handle="SomeHandle"))
+        self.assertEqual(source_class, "x_user")
+        self.assertEqual(ident, "somehandle")
+        self.assertIsNone(lean)
+
+    def test_unmatched_x_author_with_no_handle_is_other(self):
+        source_class, ident, lean = sentiment._route_received_source(self._row())
+        self.assertEqual(source_class, "other")
+        self.assertIsNone(ident)
+
+    def test_unknown_source_type_is_other(self):
+        source_class, ident, lean = sentiment._route_received_source(self._row(source_type="unknown"))
+        self.assertEqual(source_class, "other")
+
+
 class NormalizePartyTests(unittest.TestCase):
     def test_r_normalizes_to_r(self):
         self.assertEqual(sentiment._normalize_party("R"), "R")
@@ -782,6 +859,80 @@ class SentimentPanelIntegrationTests(unittest.TestCase):
         self.assertIsNotNone(item.received)
         self.assertTrue(item.received.low_sample)
         self.assertIsNone(item.received.engagement_weighted_net)
+
+    def test_received_provenance_groups_and_top_sources(self):
+        # Full received-tone provenance scenario: one editorial official
+        # receives tone from a news outlet, another editorial official's
+        # x_post, an unresolved sampled x author, and one unattributed
+        # ("other") mention -- shares must sum to 1.0, registry sources
+        # must carry entity_key/profile, the sampled author must carry a
+        # handle label with no profile-fetch crash, and low-n nets must
+        # be withheld.
+        target = self._seed_entity_full(
+            "official", "Sen. Target", lean="democrat", editorial=True, blurb="The receiving official.",
+        )
+
+        outlet = self._seed_entity_full("outlet", "Example Times", lean="republican")
+        news_doc = self._seed_document("news", datetime.now(timezone.utc))
+        self._seed_news_article(news_doc, "example.com", outlet_entity_id=outlet)
+        self._seed_text_run(news_doc, "neutral")
+        news_targets_run = self._seed_targets_run(news_doc)
+        self._seed_target_mention(news_targets_run, news_doc, "Sen. Target", target, "positive")
+
+        speaker = self._seed_entity_full("official", "Sen. Speaker", lean="republican", editorial=True)
+        speaker_author = self._seed_author()
+        self._seed_author_profile(speaker_author, "elected_official", entity_id=speaker)
+        speaker_doc = self._seed_document("x_post", datetime.now(timezone.utc), author_id=speaker_author)
+        self._seed_text_run(speaker_doc, "neutral")
+        speaker_targets_run = self._seed_targets_run(speaker_doc)
+        self._seed_target_mention(speaker_targets_run, speaker_doc, "Sen. Target", target, "negative")
+
+        sampled_author = self._seed_author()
+        sampled_doc = self._seed_document("x_post", datetime.now(timezone.utc), author_id=sampled_author)
+        self._seed_text_run(sampled_doc, "neutral")
+        sampled_targets_run = self._seed_targets_run(sampled_doc)
+        self._seed_target_mention(sampled_targets_run, sampled_doc, "Sen. Target", target, "neutral")
+
+        other_doc = self._seed_document("news", datetime.now(timezone.utc))
+        self._seed_news_article(other_doc, "unregistered.example", outlet_entity_id=None)
+        self._seed_text_run(other_doc, "neutral")
+        other_targets_run = self._seed_targets_run(other_doc)
+        self._seed_target_mention(other_targets_run, other_doc, "Sen. Target", target, "mixed")
+
+        panel = sentiment.get_sentiment_panel(window="7d")
+        item = next(i for i in panel.by_official if i.entity_profile.entity_id == target)
+        received = item.received
+        self.assertIsNotNone(received)
+        self.assertEqual(received.volume, 4)
+
+        total_group_volume = sum(c.volume for c in received.received_from_groups)
+        self.assertEqual(total_group_volume, received.volume)
+        total_share = sum(c.share for c in received.received_from_groups)
+        self.assertAlmostEqual(total_share, 1.0, places=3)
+        for cell in received.received_from_groups:
+            self.assertTrue(cell.low_sample)
+            self.assertIsNone(cell.net)
+
+        other_groups = [c for c in received.received_from_groups if c.source_class == "other"]
+        self.assertEqual(len(other_groups), 1)
+        self.assertEqual(other_groups[0].volume, 1)
+        self.assertIsNone(other_groups[0].lean)
+
+        top_classes = {c.source_class for c in received.received_from_top}
+        self.assertNotIn("other", top_classes)
+
+        outlet_cell = next(c for c in received.received_from_top if c.source_class == "news_outlet")
+        self.assertIsNotNone(outlet_cell.entity_key)
+        self.assertIsNotNone(outlet_cell.entity_profile)
+        self.assertEqual(outlet_cell.lean, "republican")
+
+        official_cell = next(c for c in received.received_from_top if c.source_class == "official")
+        self.assertIsNotNone(official_cell.entity_key)
+        self.assertIsNotNone(official_cell.entity_profile)
+
+        x_user_cell = next(c for c in received.received_from_top if c.source_class == "x_user")
+        self.assertIsNone(x_user_cell.entity_key)
+        self.assertIsNotNone(x_user_cell.label)
 
 
 if __name__ == "__main__":
