@@ -356,6 +356,28 @@ class EntityQueriesIntegrationTests(unittest.TestCase):
         profile = entities.get_entity_profile(official)
         self.assertEqual(profile.entity_key, self._entity_key(official))
 
+    def test_entity_profile_field_round_trips_blurb_and_party(self):
+        # Restoration contract: EntityProfileResponse.profile is the same
+        # EntityProfileModel the old pre-Postgres UI's entity modals
+        # consumed -- blurb passes through verbatim, and party (officials/
+        # collectives) is read from lean_source, never the flattened
+        # `lean` enum.
+        with self._conn() as conn:
+            row = conn.execute(
+                "INSERT INTO corpus.entities "
+                "(entity_key, kind, display_name, lean, lean_source, blurb, editorial) "
+                "VALUES (%s, 'official'::corpus.entity_kind, 'Sen. Blurbed', "
+                "'republican'::corpus.political_lean, 'R', 'A test senator.', true) "
+                "RETURNING entity_id",
+                (self._next_key("entity"),),
+            ).fetchone()
+            official = row["entity_id"]
+
+        profile = entities.get_entity_profile(official)
+        self.assertEqual(profile.profile.blurb, "A test senator.")
+        self.assertEqual(profile.profile.party, "R")
+        self.assertEqual(profile.profile.kind, "official")
+
 
 if __name__ == "__main__":
     unittest.main()

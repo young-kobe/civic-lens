@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import List, Optional
 
-from analysis.src.api.models.common import CamelModel, RangeMeta
+from analysis.src.api.models.common import CamelModel, EntityProfileModel, RangeMeta
 
 
 class ToneMover(CamelModel):
@@ -16,7 +16,8 @@ class ToneMover(CamelModel):
     `delta_pts` is signed: current_net - prev_net. Carries both
     `entity_id` (numeric) and `entity_key` (stable slug) -- owner decision
     2026-07-26: emit both so cross-page joins are exact, not a
-    (kind, displayName) guess."""
+    (kind, displayName) guess. `entity_profile` restores the old contract's
+    editorial card (blurb/party/office/etc.) alongside the numbers."""
 
     entity_id: int
     entity_key: str
@@ -27,6 +28,7 @@ class ToneMover(CamelModel):
     delta_pts: float
     current_volume: int
     prev_volume: int
+    entity_profile: EntityProfileModel
 
 
 class FavorabilityMover(CamelModel):

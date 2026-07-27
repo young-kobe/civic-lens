@@ -6,7 +6,8 @@ Two tiers, matching the repo's established convention
 (test_engine_lean_derivation.py, test_api_queries_base.py):
 
   1. Pure-core tests (no DB) -- _summarize_docs, _bucket_by_source,
-     _bucket_by_party, _summarize_techniques against synthetic row dicts.
+     _bucket_by_party, _summarize_techniques, and the Wave 2 per-tier entity
+     leaderboard/examples-by-entity helpers against synthetic row dicts.
   2. Integration tests gated on CIVIC_TEST_DATABASE_URL, against a real
      Postgres with 0001-0004 applied, exercising get_propaganda_overview()
      end to end against seeded scenario rows.
@@ -24,7 +25,13 @@ project_root = os.path.dirname(os.path.dirname(current_dir))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
+from analysis.src.api.models.common import EntityProfileModel
 from analysis.src.api.queries import propaganda
+from analysis.src.api.queries.profiles import (
+    CATCH_ALL_OUTLETS,
+    CATCH_ALL_SUBREDDITS,
+    CATCH_ALL_X_USERS,
+)
 from analysis.tests import pg_fixture
 
 
@@ -169,6 +176,162 @@ class SummarizeEntityRowsTests(unittest.TestCase):
         self.assertEqual(len(items), propaganda.MAX_ENTITY_LEADERBOARD_ROWS)
 
 
+class ResolveTierAndKeyTests(unittest.TestCase):
+    def _row(self, source_type, outlet_entity_id=None, subreddit_entity_id=None, author_entity_id=None):
+        return {
+            "source_type": source_type,
+            "outlet_entity_id": outlet_entity_id,
+            "subreddit_entity_id": subreddit_entity_id,
+            "author_entity_id": author_entity_id,
+        }
+
+    def test_news_resolves_to_outlet_entity(self):
+        profile = EntityProfileModel(kind="outlet", key="outlet-x", display_name="Outlet X")
+        tier, key, resolved = propaganda._resolve_tier_and_key(
+            self._row("news", outlet_entity_id=1), {1: profile},
+        )
+        self.assertEqual(tier, "news_outlet")
+        self.assertEqual(key, "outlet-x")
+        self.assertIs(resolved, profile)
+
+    def test_news_with_no_outlet_falls_to_catch_all(self):
+        tier, key, _resolved = propaganda._resolve_tier_and_key(self._row("news"), {})
+        self.assertEqual(tier, "news_outlet")
+        self.assertEqual(key, CATCH_ALL_OUTLETS)
+
+    def test_editorial_official_x_post_lands_in_officials_tier(self):
+        # kind == 'official' is the already-resolved ui-kind from
+        # profiles.py's _entity_ui_kind -- 'official' means editorial
+        # official or collective, per that module's mapping.
+        profile = EntityProfileModel(
+            kind="official", key="sen-x", display_name="Sen X", party="republican",
+        )
+        tier, _key, _resolved = propaganda._resolve_tier_and_key(
+            self._row("x_post", author_entity_id=2), {2: profile},
+        )
+        self.assertEqual(tier, "official")
+
+    def test_non_editorial_account_x_post_lands_in_general_public(self):
+        # A resolved-but-non-editorial account still gets its own card, just
+        # under general_public rather than official.
+        profile = EntityProfileModel(kind="account", key="acct-x", display_name="Acct X")
+        tier, key, _resolved = propaganda._resolve_tier_and_key(
+            self._row("x_post", author_entity_id=3), {3: profile},
+        )
+        self.assertEqual(tier, "general_public")
+        self.assertEqual(key, "acct-x")
+
+    def test_reddit_post_always_general_public(self):
+        profile = EntityProfileModel(kind="subreddit", key="sub-x", display_name="Sub X")
+        tier, _key, _resolved = propaganda._resolve_tier_and_key(
+            self._row("reddit_post", subreddit_entity_id=4), {4: profile},
+        )
+        self.assertEqual(tier, "general_public")
+
+    def test_unresolved_reddit_post_falls_to_subreddit_catch_all(self):
+        tier, key, _resolved = propaganda._resolve_tier_and_key(self._row("reddit_post"), {})
+        self.assertEqual(tier, "general_public")
+        self.assertEqual(key, CATCH_ALL_SUBREDDITS)
+
+    def test_unresolved_x_post_falls_to_catch_all(self):
+        _tier, key, _resolved = propaganda._resolve_tier_and_key(self._row("x_post"), {})
+        self.assertEqual(key, CATCH_ALL_X_USERS)
+
+
+class BucketByTierEntityTests(unittest.TestCase):
+    def _news_row(self, outlet_entity_id, density, techniques_validated):
+        return {
+            "source_type": "news", "outlet_entity_id": outlet_entity_id,
+            "subreddit_entity_id": None, "author_entity_id": None,
+            "density": density, "techniques_validated": techniques_validated,
+        }
+
+    def test_ranked_by_flagged_rate_desc_within_tier(self):
+        # binding rule: within a tier, entities rank by flagged_rate_pct, not
+        # mean_score -- a lower-density but more-frequently-flagged outlet
+        # must outrank a higher-density but rarely-flagged one.
+        profiles = {
+            1: EntityProfileModel(kind="outlet", key="a", display_name="A"),
+            2: EntityProfileModel(kind="outlet", key="b", display_name="B"),
+        }
+        rows = [
+            self._news_row(1, density=0.9, techniques_validated=1),
+            self._news_row(2, density=0.1, techniques_validated=0),
+        ]
+        buckets = propaganda._bucket_by_tier_entity(rows, profiles)
+        items = propaganda._finalize_tier_items(buckets["news_outlet"])
+        self.assertEqual([item["key"] for item in items], ["a", "b"])
+        self.assertEqual(items[0]["flagged_rate_pct"], 100.0)
+
+    def test_catch_all_sorted_last_even_with_higher_rate(self):
+        profiles = {1: EntityProfileModel(kind="outlet", key="a", display_name="A")}
+        rows = [
+            self._news_row(None, density=1.0, techniques_validated=1),  # catch-all, 100% flagged
+            self._news_row(1, density=0.0, techniques_validated=0),     # named outlet, 0% flagged
+        ]
+        buckets = propaganda._bucket_by_tier_entity(rows, profiles)
+        items = propaganda._finalize_tier_items(buckets["news_outlet"])
+        self.assertEqual(items[-1]["kind"], "catch_all")
+
+    def test_empty_slots_are_never_emitted(self):
+        buckets = propaganda._bucket_by_tier_entity([], {})
+        self.assertEqual(propaganda._finalize_tier_items(buckets["news_outlet"]), [])
+
+
+class BuildExamplesByEntityTests(unittest.TestCase):
+    def _row(self, doc_id, run_id, density, author_entity_id=None, body="body text"):
+        return {
+            "doc_id": doc_id, "run_id": run_id, "source_type": "x_post",
+            "domain_or_subreddit": None, "title": None, "body": body,
+            "source_url": "https://example.com/x", "density": density,
+            "author_handle": "senx", "outlet_entity_id": None,
+            "subreddit_entity_id": None, "author_entity_id": author_entity_id,
+        }
+
+    def test_examples_grouped_by_resolved_entity_key_carry_technique_spans(self):
+        profile = EntityProfileModel(
+            kind="official", key="sen-x", display_name="Sen X", party="republican",
+        )
+        rows = [self._row(1, 10, density=0.9, author_entity_id=2)]
+        technique_rows = [
+            {"run_id": 10, "technique": "loaded_language", "evidence_span": "vile", "confidence": 0.8},
+        ]
+        result = propaganda._build_examples_by_entity(rows, technique_rows, {2: profile})
+        self.assertIn("sen-x", result)
+        example = result["sen-x"][0]
+        self.assertEqual(example["party"], "republican")
+        self.assertEqual(example["techniques"][0]["technique"], "loaded_language")
+        self.assertEqual(example["techniques"][0]["evidence_span"], "vile")
+
+    def test_examples_capped_per_entity(self):
+        profile = EntityProfileModel(kind="official", key="sen-x", display_name="Sen X")
+        rows = [
+            self._row(i, i, density=1.0 - i * 0.01, author_entity_id=2)
+            for i in range(propaganda.EXAMPLES_PER_ENTITY + 3)
+        ]
+        result = propaganda._build_examples_by_entity(rows, [], {2: profile})
+        self.assertEqual(len(result["sen-x"]), propaganda.EXAMPLES_PER_ENTITY)
+
+    def test_party_none_for_non_editorial_account(self):
+        # Binding rule: an example's own party field is populated only for
+        # the editorial 'official' ui-kind, even though a non-editorial
+        # account's EntityProfileModel may itself carry a party value.
+        profile = EntityProfileModel(
+            kind="account", key="acct-x", display_name="Acct X", party="democrat",
+        )
+        rows = [self._row(1, 10, density=0.5, author_entity_id=3)]
+        result = propaganda._build_examples_by_entity(rows, [], {3: profile})
+        self.assertIsNone(result["acct-x"][0]["party"])
+
+    def test_text_preview_truncated_to_snippet_max(self):
+        from analysis.src.api.queries.constants import SNIPPET_MAX_CHARS
+        long_body = "x" * (SNIPPET_MAX_CHARS + 50)
+        rows = [self._row(1, 10, density=0.5, author_entity_id=2, body=long_body)]
+        profile = EntityProfileModel(kind="official", key="sen-x", display_name="Sen X")
+        result = propaganda._build_examples_by_entity(rows, [], {2: profile})
+        self.assertEqual(len(result["sen-x"][0]["text_preview"]), SNIPPET_MAX_CHARS)
+
+
 class SummarizeTechniquesTests(unittest.TestCase):
     def test_every_enum_technique_present_even_at_zero_count(self):
         rows = [{"technique": "loaded_language", "evidence_span": "vile scheme"}]
@@ -235,14 +398,14 @@ class GetPropagandaOverviewIntegrationTests(unittest.TestCase):
 
     # -- seeding helpers --------------------------------------------------
 
-    def _entity(self, key, lean="unknown", kind="official"):
+    def _entity(self, key, lean="unknown", kind="official", blurb=None, editorial=False):
         from analysis.src.common import db as dbmod
         with dbmod.connection() as conn:
             row = conn.execute(
-                "INSERT INTO corpus.entities (entity_key, kind, display_name, lean) "
-                "VALUES (%s, %s::corpus.entity_kind, %s, %s::corpus.political_lean) "
+                "INSERT INTO corpus.entities (entity_key, kind, display_name, lean, blurb, editorial) "
+                "VALUES (%s, %s::corpus.entity_kind, %s, %s::corpus.political_lean, %s, %s) "
                 "RETURNING entity_id",
-                (key, kind, key, lean),
+                (key, kind, key, lean, blurb, editorial),
             ).fetchone()
             return row["entity_id"]
 
@@ -534,6 +697,64 @@ class GetPropagandaOverviewIntegrationTests(unittest.TestCase):
         self.assertEqual(overview["examples"], [])
         self.assertEqual(overview["by_entity"], [])
         self.assertEqual({t["group"] for t in overview["by_tier"]}, {"news", "officials", "public"})
+
+    # -- Wave 2: per-tier entity leaderboards + examples_by_entity ----------
+
+    def test_outlet_appears_in_by_news_outlet_with_profile_and_flagged_rate(self):
+        outlet_entity = self._entity(
+            "outlet-y", kind="outlet", blurb="A test news outlet.",
+        )
+        flagged_doc, _run = self._flagged_doc(
+            "outlet-flagged", source_type="news", density=0.7, techniques_validated=1,
+        )
+        self._news_article(flagged_doc, outlet_entity)
+        clean_doc, _run2 = self._flagged_doc(
+            "outlet-clean", source_type="news", density=0.1, techniques_validated=0,
+        )
+        self._news_article(clean_doc, outlet_entity)
+
+        overview = propaganda.get_propaganda_overview(start=None, end=None, window_label="all")
+        outlets = {item["key"]: item for item in overview["by_news_outlet"]}
+        self.assertIn("outlet-y", outlets)
+        item = outlets["outlet-y"]
+        self.assertEqual(item["entity_profile"].blurb, "A test news outlet.")
+        self.assertEqual(item["kind"], "outlet")
+        self.assertEqual(item["total_docs"], 2)
+        self.assertEqual(item["flagged_docs"], 1)
+        self.assertEqual(item["flagged_rate_pct"], 50.0)
+
+    def test_editorial_official_appears_in_by_official_not_general_public(self):
+        official_entity = self._entity(
+            "sen-z", kind="official", lean="republican", editorial=True,
+        )
+        official_author = self._author("sen-z-handle")
+        self._author_profile(official_author, official_entity)
+        self._flagged_doc(
+            "sen-z-doc", author_id=official_author, source_type="x_post",
+            density=0.6, techniques_validated=1,
+        )
+
+        overview = propaganda.get_propaganda_overview(start=None, end=None, window_label="all")
+        official_keys = {item["key"] for item in overview["by_official"]}
+        public_keys = {item["key"] for item in overview["by_general_public"]}
+        self.assertIn("sen-z", official_keys)
+        self.assertNotIn("sen-z", public_keys)
+
+    def test_examples_by_entity_carries_technique_evidence_spans(self):
+        outlet_entity = self._entity("outlet-z", kind="outlet")
+        doc_id, run_id = self._flagged_doc(
+            "outlet-example-doc", source_type="news", density=0.9, techniques_validated=1,
+        )
+        self._news_article(doc_id, outlet_entity)
+        self._propaganda_technique(run_id, "loaded_language", "vile scheme")
+
+        overview = propaganda.get_propaganda_overview(start=None, end=None, window_label="all")
+        examples = overview["examples_by_entity"]["outlet-z"]
+        self.assertEqual(len(examples), 1)
+        example = examples[0]
+        self.assertEqual(example["doc_id"], doc_id)
+        self.assertEqual(example["techniques"][0]["technique"], "loaded_language")
+        self.assertEqual(example["techniques"][0]["evidence_span"], "vile scheme")
 
 
 if __name__ == "__main__":

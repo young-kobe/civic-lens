@@ -1,5 +1,35 @@
 {
   "byEntity": [],
+  "byGeneralPublic": [],
+  "byNewsOutlet": [
+    {
+      "entityProfile": {
+        "accountType": null,
+        "bioSource": null,
+        "blurb": "News docs whose domain is not in the tracked outlet registry.",
+        "circulationNote": null,
+        "displayName": "Other news outlets",
+        "entityId": null,
+        "founded": null,
+        "key": "other-outlets",
+        "kind": "catch_all",
+        "lean": null,
+        "leanSource": null,
+        "office": null,
+        "owner": null,
+        "party": null,
+        "subscriberCountProxy": null,
+        "termStart": null
+      },
+      "flaggedDocs": 1,
+      "flaggedRatePct": 100.0,
+      "key": "other-outlets",
+      "kind": "catch_all",
+      "meanScore": 0.7,
+      "totalDocs": 1
+    }
+  ],
+  "byOfficial": [],
   "byParty": [
     {
       "flaggedDocs": 1,
@@ -98,6 +128,28 @@
       "sourceUrl": "https://example.com/contract-doc"
     }
   ],
+  "examplesByEntity": {
+    "other-outlets": [
+      {
+        "authorHandle": null,
+        "docId": 1,
+        "domain": null,
+        "overallScore": 0.7,
+        "party": null,
+        "sourceType": "news",
+        "techniques": [
+          {
+            "confidence": 0.9,
+            "evidenceSpan": "a vile scheme",
+            "technique": "loaded_language"
+          }
+        ],
+        "textPreview": "body",
+        "title": null,
+        "url": "https://example.com/contract-doc"
+      }
+    ]
+  },
   "flaggedDocs": 1,
   "flaggedRatePct": 100.0,
   "meanScore": 0.7,

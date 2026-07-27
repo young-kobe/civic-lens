@@ -1,34 +1,84 @@
-import { useState, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { dedupeById } from '../../services/dedupe';
-import { formatCount, formatPct, formatRelativeDate, sourceLabel } from '../../services/format';
-import { useDocDetail } from '../../services/useDocDetail';
-import { AdmissionBadge } from './AdmissionBadge';
-import { DocDetailModal } from './DocDetailModal';
-import type { AnalysisResult, DocumentDetail, SampleDoc } from '../../types';
+import {
+    formatCount, formatPct, formatRelativeDate, sourceLabel,
+} from '../../services/format';
+import { TECHNIQUE_LABEL } from './constants';
+import type {
+    ClassificationSample, FlaggedExample, PropagandaExample, PropagandaTechniqueName,
+    PropagandaTechniqueSpan, SampleTarget,
+} from '../../types';
 
 // --------------------------------------------------------------------------- //
 //  PostCard — the one way a sampled post renders anywhere on the site.        //
 //                                                                             //
 //  Self-rendered from ingested data (no embed widgets, no external scripts).  //
-//  Renders in two stages: immediately from the SampleDoc the list endpoint    //
-//  already carries (snippet, confidence, admission class, date, permalink),  //
-//  then lazily hydrates the source/author/analysis overlay from the EXISTING //
-//  GET /docs/{doc_id} endpoint via `useDocDetail` (a shared, concurrency-     //
-//  capped, cache-backed fetch — see services/lazyHydration.ts) once it       //
-//  arrives. Evidence spans highlight verbatim inside the text (with a        //
-//  quoted fallback when a span falls outside the preview — evidence is       //
-//  never silently dropped). Styled via the `.post-card*` rules in index.css. //
+//  Three visual flavors keyed off source_type: x_post (tweet-like), reddit    //
+//  (thread-like), news (clipping-like). Every card carries the audit          //
+//  contract: the AI label always shows its confidence, evidence spans are     //
+//  highlighted verbatim inside the text (with a quoted fallback when the      //
+//  span falls outside the preview — evidence is never silently dropped),      //
+//  reasoning sits behind a disclosure, and the permalink out is invariant     //
+//  C1. Styled via the `.post-card*` rules in index.css.                       //
+//                                                                             //
+//  Restored verbatim from `pre-cutover-main` (docs/todos/                     //
+//  ui-feature-restoration.md, Wave 3 UI): samples now arrive rich straight     //
+//  off `ClassificationSample`/`FlaggedExample`/`PropagandaExample` (the       //
+//  Wave 2 API additions), so this card renders inline with no lazy            //
+//  hydration step. Only the adapter functions changed from the old file —     //
+//  they read the current CamelModel wire shapes (camelCase) instead of the    //
+//  old snake_case dicts; `PostCardData` itself is an unchanged internal       //
+//  view-model, not a wire type. `supportingDocToPostCard` is dropped: the     //
+//  old `SupportingDoc` wire shape it adapted no longer exists — narratives    //
+//  now serve `topSupportingDocs: ClassificationSample[]` directly, so         //
+//  `sampleToPostCard` covers that caller too.                                 //
 // --------------------------------------------------------------------------- //
 
 export interface PostCardEngagement {
     // X counts.
-    likes?: number | null;
-    retweets?: number | null;
-    replies?: number | null;
-    quotes?: number | null;
+    likes?: number;
+    retweets?: number;
+    replies?: number;
+    quotes?: number;
     // Reddit counts.
-    score?: number | null;
-    num_comments?: number | null;
+    score?: number;
+    num_comments?: number;
+}
+
+export interface PostCardAuthor {
+    display_name?: string | null;
+    handle?: string | null;
+    avatar_url?: string | null;
+    verified_type?: string | null;
+}
+
+export interface PostCardData {
+    doc_id: number;
+    source_type: string;
+    source_label: string;            // "News · nytimes.com" / "X · @handle" / "Reddit · r/politics"
+    title: string | null;
+    text: string | null;
+    published_at: number | null;     // unix seconds
+    url: string | null;
+    // Analysis overlay — every label renders with its confidence.
+    label?: string | null;
+    labelKind?: 'tone' | 'propaganda' | 'bot';
+    confidence?: number | null;      // 0..1
+    reasoning?: string | null;
+    evidenceSpans?: string[];
+    techniques?: PropagandaTechniqueSpan[];
+    sarcasm?: boolean;
+    /** Small mono annotation in the analysis row (e.g. a per-doc score). */
+    meta?: string | null;
+    // Enrichment — rendered only when the backend supplied it.
+    engagement?: PostCardEngagement | null;
+    author?: PostCardAuthor | null;
+    botIndicators?: string[] | null;
+    /** Who the post's sentiment is directed at ("about Trump — negative"). */
+    targets?: SampleTarget[] | null;
+    // Avatar hints when no author payload exists (parsed by the adapters).
+    domain?: string | null;          // news favicon
+    handle?: string | null;          // x avatar via unavatar
 }
 
 const TONE_BADGE_CLASS: Record<string, string> = {
@@ -36,20 +86,6 @@ const TONE_BADGE_CLASS: Record<string, string> = {
     negative: 'badge-negative',
     neutral: 'badge-neutral',
     mixed: 'badge-warning',
-};
-
-const TECHNIQUE_LABEL: Record<string, string> = {
-    loaded_language: 'Loaded language',
-    name_calling: 'Name-calling',
-    ad_hominem: 'Ad hominem',
-    appeal_to_fear: 'Appeal to fear',
-    whataboutism: 'Whataboutism',
-    doubt_casting: 'Doubt-casting',
-};
-
-const BOT_LABEL_TEXT: Record<string, string> = {
-    bot: 'Likely automated',
-    suspicious: 'Suspected automation',
 };
 
 const BODY_MAX_CHARS = 420;
@@ -98,9 +134,8 @@ export function highlightSpans(text: string, spans: string[]): HighlightResult {
     return { segments, unmatched };
 }
 
-/** Collapse whitespace and cap length for card bodies — full body text can
- *  be an entire article. Slice before collapsing: this runs per card in
- *  render. */
+/** Collapse whitespace and cap length for card bodies — full_text can be an
+ *  entire article. Slice before collapsing: this runs per card in render. */
 export function textSnippet(text: string, maxChars = BODY_MAX_CHARS): string {
     const collapsed = text.slice(0, maxChars * 4).split(/\s+/).join(' ').trim();
     return collapsed.length > maxChars
@@ -108,159 +143,21 @@ export function textSnippet(text: string, maxChars = BODY_MAX_CHARS): string {
         : collapsed;
 }
 
-/** Best-effort domain for the pre-hydration avatar/source line — parsed
- *  straight from the SampleDoc's sourceUrl (invariant C1: always present). */
-function domainFromUrl(url: string): string | null {
-    try {
-        return new URL(url).hostname.replace(/^www\./, '');
-    } catch {
-        return null;
-    }
-}
-
-// --------------------------------------------------------------------------- //
-//  Hydrated analysis overlay — one per task, read straight off               //
-//  DocumentDetail.analysisResults[].fields. Those field shapes come back     //
-//  with their ORIGINAL snake_case keys (see analysis/src/api/queries/        //
-//  docs.py) — CamelModel's alias generator only camelCases a model's own     //
-//  declared fields, not the values inside this untyped Dict[str, Any].       //
-// --------------------------------------------------------------------------- //
-
-interface SentimentField {
-    label: string;
-    score: number;
-    sarcasm_detected: boolean;
-    evidence_spans: string[];
-}
-
-interface TargetMentionField {
-    raw_target: string;
-    stance: string;
-    evidence_spans: string[];
-}
-
-interface TechniqueField {
-    technique: string;
-    evidence_span: string;
-    confidence: number;
-}
-
-interface BotField {
-    label: string;
-}
-
-function findResult(results: AnalysisResult[], task: string): AnalysisResult | undefined {
-    return results.find((r) => r.task === task);
-}
-
-interface Overlay {
-    sourceType: string;
-    sourceLabel: string;
-    domain: string | null;
-    authorName: string | null;
-    avatarUrl: string | null;
-    title: string | null;
-    body: string;
-    engagement: PostCardEngagement | null;
-    toneLabel: string | null;
-    toneConfidence: number | null;
-    sarcasm: boolean;
-    evidenceSpans: string[];
-    techniques: TechniqueField[];
-    techniqueConfidence: number | null;
-    botLabel: string | null;
-    targets: Array<{ label: string; stance: string }>;
-    reasoning: string | null;
-}
-
-function sourceFlavor(sourceType: string): 'x' | 'reddit' | 'news' {
-    if (sourceType === 'x_post') return 'x';
-    if (sourceType.startsWith('reddit')) return 'reddit';
-    return 'news';
-}
-
-function buildOverlay(doc: DocumentDetail): Overlay {
-    const textResult = findResult(doc.analysisResults, 'text');
-    const sentiment = (textResult?.fields.sentiment as SentimentField | null) ?? null;
-
-    const propagandaResult = findResult(doc.analysisResults, 'propaganda');
-    const techniques = (propagandaResult?.fields.techniques as TechniqueField[] | undefined) ?? [];
-
-    const botResult = findResult(doc.analysisResults, 'bot');
-    const botField = botResult?.fields as BotField | undefined;
-
-    const targetsResult = findResult(doc.analysisResults, 'targets');
-    const targetMentions = (targetsResult?.fields.target_mentions as TargetMentionField[] | undefined) ?? [];
-
-    const domain = doc.sourceType === 'news' ? (doc.newsExtras?.domain ?? doc.domainOrSubreddit) : null;
-    const name = doc.sourceType === 'x_post'
-        ? (doc.authorHandle ? `@${doc.authorHandle}` : null)
-        : doc.sourceType === 'reddit_post' ? doc.domainOrSubreddit : domain;
-    const authorName = doc.authorDisplayName
-        ?? (doc.authorHandle ? `@${doc.authorHandle}` : null);
-    const avatarUrl = doc.authorProfileImageUrl
-        ?? (doc.sourceType === 'x_post' && doc.authorHandle
-            ? `https://unavatar.io/twitter/${doc.authorHandle}?fallback=false`
-            : null);
-
-    const engagement: PostCardEngagement | null = doc.xPostExtras
-        ? {
-            likes: doc.xPostExtras.likeCount,
-            retweets: doc.xPostExtras.retweetCount,
-            replies: doc.xPostExtras.replyCount,
-            quotes: doc.xPostExtras.quoteCount,
-        }
-        : doc.redditExtras
-            ? { score: doc.redditExtras.score, num_comments: doc.redditExtras.numComments }
-            : null;
-
-    const evidenceSpans = [
-        ...(sentiment?.evidence_spans ?? []),
-        ...techniques.map((t) => t.evidence_span),
-        ...targetMentions.flatMap((t) => t.evidence_spans ?? []),
-    ];
-
-    return {
-        sourceType: doc.sourceType,
-        sourceLabel: sourceLabel(doc.sourceType, name),
-        domain,
-        authorName,
-        avatarUrl,
-        title: doc.title,
-        body: doc.body,
-        engagement,
-        toneLabel: sentiment?.label ?? null,
-        toneConfidence: textResult?.confidence ?? null,
-        sarcasm: sentiment?.sarcasm_detected ?? false,
-        evidenceSpans,
-        techniques,
-        techniqueConfidence: propagandaResult?.confidence ?? null,
-        botLabel: botField?.label && botField.label !== 'human' && botField.label !== 'unknown'
-            ? botField.label
-            : null,
-        targets: targetMentions.map((t) => ({ label: t.raw_target, stance: t.stance })),
-        reasoning: (propagandaResult?.fields.summary as string | undefined) ?? null,
-    };
-}
-
 // --------------------------------------------------------------------------- //
 //  Avatar                                                                     //
 // --------------------------------------------------------------------------- //
 
-function PostAvatar({ domain, sourceLabelText, avatarUrl }: { domain: string | null; sourceLabelText: string; avatarUrl?: string | null }) {
-    if (avatarUrl) {
-        return (
-            <span className="post-card-avatar post-card-avatar-img" aria-hidden>
-                <img src={avatarUrl} alt="" loading="lazy"
-                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-            </span>
-        );
-    }
-    if (domain) {
+function PostAvatar({ post }: { post: PostCardData }) {
+    const src = post.author?.avatar_url
+        ?? (post.handle ? `https://unavatar.io/twitter/${post.handle}?fallback=false` : null)
+        ?? (post.source_type === 'news' && post.domain
+            ? `https://www.google.com/s2/favicons?domain=${post.domain}&sz=64`
+            : null);
+    if (src) {
         return (
             <span className="post-card-avatar post-card-avatar-img" aria-hidden>
                 <img
-                    src={`https://www.google.com/s2/favicons?domain=${domain}&sz=64`}
+                    src={src}
                     alt=""
                     width={28}
                     height={28}
@@ -271,7 +168,7 @@ function PostAvatar({ domain, sourceLabelText, avatarUrl }: { domain: string | n
             </span>
         );
     }
-    const monogram = (sourceLabelText.split('·').pop() ?? '?').trim().replace(/^[@r]\/?/, '')
+    const monogram = (post.source_label.split('·').pop() ?? '?').trim().replace(/^[@r]\/?/, '')
         .charAt(0).toUpperCase() || '?';
     return <span className="post-card-avatar post-card-avatar-mono" aria-hidden>{monogram}</span>;
 }
@@ -279,6 +176,12 @@ function PostAvatar({ domain, sourceLabelText, avatarUrl }: { domain: string | n
 // --------------------------------------------------------------------------- //
 //  Card                                                                       //
 // --------------------------------------------------------------------------- //
+
+function sourceFlavor(sourceType: string): 'x' | 'reddit' | 'news' {
+    if (sourceType === 'x_post') return 'x';
+    if (sourceType.startsWith('reddit')) return 'reddit';
+    return 'news';
+}
 
 function EngagementRow({ engagement, flavor }: { engagement: PostCardEngagement; flavor: string }) {
     const parts: string[] = [];
@@ -302,45 +205,59 @@ function EngagementRow({ engagement, flavor }: { engagement: PostCardEngagement;
     );
 }
 
-export function PostCard({ sample }: { sample: SampleDoc }) {
-    const [showDetail, setShowDetail] = useState(false);
-    const { data: doc } = useDocDetail(sample.docId);
-    const overlay = doc ? buildOverlay(doc) : null;
-    const flavor = overlay ? sourceFlavor(overlay.sourceType) : null;
+export function PostCard({ post }: { post: PostCardData }) {
+    const flavor = sourceFlavor(post.source_type);
 
-    const rawBody = overlay ? textSnippet(overlay.body) : (sample.snippet ? textSnippet(sample.snippet) : null);
-    const { segments, unmatched } = rawBody && overlay
-        ? highlightSpans(rawBody, overlay.evidenceSpans)
-        : { segments: rawBody ? [{ text: rawBody, mark: false }] : [], unmatched: [] };
+    // Body text: news cards lead with the headline, so the body is the dek;
+    // social cards lead with the text itself.
+    const rawBody = post.text ? textSnippet(post.text) : null;
+    const allSpans = [
+        ...(post.evidenceSpans ?? []),
+        ...(post.techniques ?? [])
+            .map((t) => t.evidenceSpan)
+            .filter((s): s is string => s != null),
+    ];
+    const { segments, unmatched } = rawBody
+        ? highlightSpans(rawBody, allSpans)
+        : { segments: [], unmatched: allSpans.filter((s) => s.trim().length > 2) };
 
-    const sourceLabelText = overlay ? overlay.sourceLabel : (domainFromUrl(sample.sourceUrl) ?? 'Source unknown');
-    const domain = overlay ? overlay.domain : domainFromUrl(sample.sourceUrl);
+    const authorName = post.author?.display_name
+        ?? (flavor === 'x' && post.author?.handle ? `@${post.author.handle}` : null);
 
-    const toneBadgeClass = overlay?.toneLabel ? TONE_BADGE_CLASS[overlay.toneLabel] ?? 'badge-neutral' : null;
-    const confPct = formatPct(sample.confidence * 100, { decimals: 0 });
+    const toneBadgeClass = post.labelKind === 'tone' && post.label
+        ? TONE_BADGE_CLASS[post.label.toLowerCase()] ?? 'badge-neutral'
+        : null;
+
+    const confPct = post.confidence != null
+        ? formatPct(post.confidence * 100, { decimals: 0 })
+        : null;
 
     return (
-        <article className={`post-card${flavor ? ` post-card-${flavor}` : ''}`}>
+        <article className={`post-card post-card-${flavor}`}>
             <header className="post-card-head">
-                <PostAvatar domain={domain} sourceLabelText={sourceLabelText} avatarUrl={overlay?.avatarUrl} />
+                <PostAvatar post={post} />
                 <div className="post-card-head-text">
-                    {overlay?.authorName && <span className="post-card-author">{overlay.authorName}</span>}
-                    <span className="post-card-source">{sourceLabelText}</span>
+                    {authorName && <span className="post-card-author">{authorName}</span>}
+                    <span className="post-card-source">{post.source_label}</span>
                 </div>
-                <span className="post-card-when">{formatRelativeDate(unixSecondsFromIso(sample.publishedAt))}</span>
-                <a
-                    className="post-card-permalink"
-                    href={sample.sourceUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    aria-label="Open the original post in a new tab"
-                    title="Open the original in a new tab"
-                >
-                    View original
-                </a>
+                <span className="post-card-when">
+                    {post.published_at ? formatRelativeDate(post.published_at) : ''}
+                </span>
+                {post.url && (
+                    <a
+                        className="post-card-permalink"
+                        href={post.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        aria-label="Open the original post in a new tab"
+                        title="Open the original in a new tab"
+                    >
+                        View original
+                    </a>
+                )}
             </header>
 
-            {overlay?.title && <h4 className="post-card-title">{overlay.title}</h4>}
+            {post.title && <h4 className="post-card-title">{post.title}</h4>}
 
             {segments.length > 0 && (
                 <p className="post-card-body">
@@ -369,82 +286,79 @@ export function PostCard({ sample }: { sample: SampleDoc }) {
                 </div>
             )}
 
-            {overlay?.engagement && <EngagementRow engagement={overlay.engagement} flavor={flavor!} />}
+            {post.engagement && <EngagementRow engagement={post.engagement} flavor={flavor} />}
 
-            <div className="post-card-analysis">
-                <AdmissionBadge admissionClass={sample.admissionClass} />
-                {toneBadgeClass && overlay?.toneLabel && (
-                    <span
-                        className={`badge ${toneBadgeClass}`}
-                        title={overlay.toneConfidence != null
-                            ? `Model confidence in this label: ${formatPct(overlay.toneConfidence * 100, { decimals: 0 })}`
-                            : undefined}
-                    >
-                        {overlay.toneLabel}
-                    </span>
-                )}
-                {overlay?.targets.map((t, i) => (
-                    <span
-                        key={i}
-                        className={`badge ${TONE_BADGE_CLASS[t.stance] ?? 'badge-neutral'}`}
-                        title="Who the post's sentiment is directed at, per the model's target extraction"
-                    >
-                        about {t.label} · {t.stance}
-                    </span>
-                ))}
-                {overlay?.botLabel && (
-                    <span
-                        className="badge badge-warning"
-                        title="Our detector flags this post as likely automated. A lead, not a verdict."
-                    >
-                        {BOT_LABEL_TEXT[overlay.botLabel] ?? overlay.botLabel}
-                    </span>
-                )}
-                {overlay?.techniques.map((t, i) => (
-                    <span
-                        key={i}
-                        className="badge badge-negative"
-                        title="Model confidence that this technique is present"
-                    >
-                        {TECHNIQUE_LABEL[t.technique] ?? t.technique}
-                        {' · '}
-                        {formatPct(t.confidence * 100, { decimals: 0 })}
-                    </span>
-                ))}
-                {overlay?.sarcasm && (
-                    <span
-                        className="badge badge-neutral"
-                        title="The model flagged possible sarcasm or irony — tone labels on sarcastic posts are less reliable."
-                    >
-                        sarcasm flagged
-                    </span>
-                )}
-                <span className="post-card-confidence" title="Model confidence in this run's label">
-                    {confPct} confidence
-                </span>
-                <button type="button" className="link-button" onClick={() => setShowDetail(true)}>
-                    Read full document →
-                </button>
-            </div>
-
-            {overlay?.reasoning && (
-                <details className="post-card-reasoning">
-                    <summary>Why this label</summary>
-                    <p>{overlay.reasoning}</p>
-                </details>
+            {(post.label || (post.techniques?.length ?? 0) > 0 || post.sarcasm || post.meta
+                || (post.targets?.length ?? 0) > 0) && (
+                <div className="post-card-analysis">
+                    {post.labelKind === 'tone' && post.label && (
+                        <span className={`badge ${toneBadgeClass}`}>{post.label.toLowerCase()}</span>
+                    )}
+                    {(post.targets ?? []).map((t, i) => (
+                        <span
+                            key={i}
+                            className={`badge ${TONE_BADGE_CLASS[t.stance] ?? 'badge-neutral'}`}
+                            title="Who the post's sentiment is directed at, per the model's target extraction"
+                        >
+                            about {t.label} · {t.stance}
+                        </span>
+                    ))}
+                    {post.labelKind === 'bot' && post.label && (
+                        <span
+                            className="badge badge-warning"
+                            title="Our detector flags this post as likely automated. A lead, not a verdict."
+                        >
+                            {post.label}
+                        </span>
+                    )}
+                    {(post.techniques ?? []).map((t, i) => (
+                        <span
+                            key={i}
+                            className="badge badge-negative"
+                            title="Model confidence that this technique is present"
+                        >
+                            {TECHNIQUE_LABEL[t.technique as PropagandaTechniqueName] ?? t.technique}
+                            {' · '}
+                            {formatPct(t.confidence * 100, { decimals: 0 })}
+                        </span>
+                    ))}
+                    {post.sarcasm && (
+                        <span
+                            className="badge badge-neutral"
+                            title="The model flagged possible sarcasm or irony — tone labels on sarcastic posts are less reliable."
+                        >
+                            sarcasm flagged
+                        </span>
+                    )}
+                    {confPct && (
+                        <span
+                            className="post-card-confidence"
+                            title="Model confidence in this label"
+                        >
+                            {confPct} confidence
+                        </span>
+                    )}
+                    {post.meta && (
+                        <span className="post-card-confidence">{post.meta}</span>
+                    )}
+                    {(post.botIndicators?.length ?? 0) > 0 && (
+                        <span className="post-card-indicators">
+                            {post.botIndicators!.map((ind, i) => (
+                                <span key={i} className="badge badge-neutral">{ind}</span>
+                            ))}
+                        </span>
+                    )}
+                </div>
             )}
 
-            {showDetail && (
-                <DocDetailModal docId={sample.docId} onClose={() => setShowDetail(false)} />
+            {post.reasoning && (
+                <details className="post-card-reasoning">
+                    <summary>Why this label</summary>
+                    <p>{post.reasoning}</p>
+                </details>
             )}
         </article>
     );
-}
-
-function unixSecondsFromIso(iso: string | null | undefined): number | null {
-    if (!iso) return null;
-    const t = Date.parse(iso);
-    return Number.isNaN(t) ? null : Math.floor(t / 1000);
 }
 
 // --------------------------------------------------------------------------- //
@@ -452,7 +366,7 @@ function unixSecondsFromIso(iso: string | null | undefined): number | null {
 // --------------------------------------------------------------------------- //
 
 interface PostCardListProps {
-    samples: SampleDoc[];
+    posts: PostCardData[];
     /** Required sample framing rendered above the cards, e.g.
      *  "Highest-confidence samples from this window — not a complete feed." */
     sampleNote: string;
@@ -460,8 +374,8 @@ interface PostCardListProps {
     emptyNote?: ReactNode;
 }
 
-export function PostCardList({ samples, sampleNote, emptyNote }: PostCardListProps) {
-    const unique = dedupeById(samples, (s) => s.docId);
+export function PostCardList({ posts, sampleNote, emptyNote }: PostCardListProps) {
+    const unique = dedupeById(posts, (p) => p.doc_id);
     if (unique.length === 0) {
         return emptyNote
             ? <p className="text-sm text-muted" style={{ fontStyle: 'italic' }}>{emptyNote}</p>
@@ -470,9 +384,123 @@ export function PostCardList({ samples, sampleNote, emptyNote }: PostCardListPro
     return (
         <div className="post-card-list">
             <p className="post-card-list-note">{sampleNote}</p>
-            {unique.map((s) => <PostCard key={s.docId} sample={s} />)}
+            {unique.map((p) => <PostCard key={p.doc_id} post={p} />)}
         </div>
     );
+}
+
+// --------------------------------------------------------------------------- //
+//  Adapters — one per wire shape                                              //
+// --------------------------------------------------------------------------- //
+
+/** Date-only strings ("2026-04-14") parse as UTC midnight via Date.parse,
+ *  which can render "1 day ago" off-by-one near local midnight. Parse those
+ *  as a LOCAL date; fall back to Date.parse for full timestamps. */
+function parseSampleDate(date: string | null | undefined): number | null {
+    if (!date) return null;
+    const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+    if (dateOnly) {
+        const [, y, m, d] = dateOnly;
+        return Math.floor(new Date(Number(y), Number(m) - 1, Number(d)).getTime() / 1000);
+    }
+    const parsed = Date.parse(date);
+    return isNaN(parsed) ? null : Math.floor(parsed / 1000);
+}
+
+/** Avatar hints from the canonical source label when the wire shape carries
+ *  no structured author/domain ("X · @handle" / "News · foo.com" /
+ *  "Reddit · r/politics"). Cosmetic only — drives the avatar, nothing else. */
+function avatarHintsFromLabel(label: string): { handle: string | null; domain: string | null } {
+    const x = /^X · @([\w.]+)/.exec(label);
+    if (x) return { handle: x[1], domain: null };
+    const news = /^News · ([\w.-]+)/.exec(label);
+    if (news) return { handle: null, domain: news[1] };
+    return { handle: null, domain: null };
+}
+
+export function sampleToPostCard(s: ClassificationSample): PostCardData {
+    const label = sourceLabel(s.sourceType, s.sourceName);
+    return {
+        doc_id: s.docId,
+        source_type: s.sourceType || 'unknown',
+        source_label: label,
+        title: s.title || null,
+        text: s.fullText || null,
+        published_at: parseSampleDate(s.date),
+        url: s.url ?? null,
+        label: s.label ?? null,
+        labelKind: 'tone',
+        confidence: typeof s.confidence === 'number' ? s.confidence : null,
+        reasoning: s.reasoning || null,
+        evidenceSpans: s.evidenceSpans ?? [],
+        sarcasm: s.sarcasmDetected ?? false,
+        engagement: s.engagement
+            ? {
+                likes: s.engagement.likes ?? undefined,
+                retweets: s.engagement.retweets ?? undefined,
+                replies: s.engagement.replies ?? undefined,
+                quotes: s.engagement.quotes ?? undefined,
+                score: s.engagement.score ?? undefined,
+                num_comments: s.engagement.numComments ?? undefined,
+            }
+            : null,
+        author: s.author
+            ? {
+                display_name: s.author.displayName,
+                handle: s.author.handle,
+                avatar_url: s.author.avatarUrl,
+                verified_type: s.author.verifiedType,
+            }
+            : null,
+        targets: s.targets ?? null,
+        handle: s.sourceType === 'x_post' ? (s.sourceName ?? null) : null,
+        domain: s.sourceType === 'news' ? (s.sourceName ?? null) : null,
+    };
+}
+
+export function flaggedExampleToPostCard(ex: FlaggedExample): PostCardData {
+    const hints = avatarHintsFromLabel(ex.sourceLabel);
+    return {
+        doc_id: ex.docId,
+        source_type: hints.handle ? 'x_post' : hints.domain ? 'news' : 'reddit_post',
+        source_label: ex.sourceLabel,
+        title: null,
+        text: ex.text,
+        published_at: null,
+        url: ex.url,
+        label: 'Suspected automation',
+        labelKind: 'bot',
+        confidence: ex.confidence ?? null,
+        // Transition filter mirroring BotActivityProfiler's isNoiseLabel:
+        // pre-sanitization ai_outputs rows can leak raw signal-field
+        // artifacts ("account_age=None days") until they age out of the
+        // aggregation windows.
+        botIndicators: (ex.indicators ?? []).filter(
+            (i) => i.trim() && !/=\s*(None|null|undefined|0)?\s*$/i.test(i),
+        ),
+        reasoning: ex.reasoning ?? null,
+        ...hints,
+    };
+}
+
+export function propagandaExampleToPostCard(ex: PropagandaExample): PostCardData {
+    return {
+        doc_id: ex.docId,
+        source_type: ex.sourceType,
+        source_label: sourceLabel(
+            ex.sourceType,
+            ex.sourceType === 'x_post' ? ex.authorHandle : ex.domain,
+        ),
+        title: ex.title,
+        text: ex.textPreview,
+        published_at: null,
+        url: ex.url ?? null,
+        labelKind: 'propaganda',
+        techniques: ex.techniques,
+        meta: `score ${ex.overallScore.toFixed(2)} / 1`,
+        handle: ex.sourceType === 'x_post' ? (ex.authorHandle ?? null) : null,
+        domain: ex.domain,
+    };
 }
 
 export default PostCard;

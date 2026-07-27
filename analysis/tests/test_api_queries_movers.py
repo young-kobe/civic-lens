@@ -230,6 +230,21 @@ class GetMoversIntegrationTests(unittest.TestCase):
         # must be the same numeric id backing entity_key, not just the slug.
         self.assertEqual(mover.entity_id, entity_id)
 
+    def test_tone_mover_carries_entity_profile(self):
+        # Restoration contract: ToneMover.entity_profile is the same
+        # EntityProfileModel the entity-profile endpoint serves, batched
+        # over the page of movers rather than fetched per-row.
+        entity_id = self._entity("sen-profile")
+        author_id = self._author("sen-profile-handle")
+        self._author_profile(author_id, entity_id)
+        self._seed_tone_docs(author_id, self._current_start + timedelta(days=1), ["positive"] * MIN_TARGET_SAMPLE_N)
+        self._seed_tone_docs(author_id, self._previous_start + timedelta(days=1), ["negative"] * MIN_TARGET_SAMPLE_N)
+
+        result = self._get_movers()
+        mover = next(m for m in result.tone_movers if m.entity_key == "sen-profile")
+        self.assertIsNotNone(mover.entity_profile)
+        self.assertEqual(mover.entity_profile.key, "sen-profile")
+
     def test_tone_mover_excludes_bot_scored_author_docs(self):
         entity_id = self._entity("sen-test")
         human_author = self._author("human-handle")

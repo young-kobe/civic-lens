@@ -5,9 +5,17 @@
       "botPushedFraction": null,
       "citationCount": 0,
       "citedDocs": [],
+      "crossTier": false,
       "docCount": 1,
       "firstSeenAt": null,
+      "firstSeenAuthor": null,
       "firstSeenDocId": null,
+      "firstSeenDomain": null,
+      "firstSeenEntityProfile": null,
+      "firstSeenSourceType": null,
+      "firstSeenTier": null,
+      "firstSeenTierGroup": null,
+      "inboundByLinkType": {},
       "lean": null,
       "meanConfidence": 0.9,
       "memberDocSamples": [
@@ -20,6 +28,7 @@
           "sourceUrl": "https://example.com/contract-doc"
         }
       ],
+      "name": "contract narrative",
       "narrativeId": 1,
       "netSentiment": null,
       "propagandaFlaggedFraction": null,
@@ -34,7 +43,8 @@
           "day": "2026-01-15",
           "docCount": 1
         }
-      ]
+      ],
+      "topSupportingDocs": []
     }
   ],
   "range": {

@@ -12,12 +12,18 @@ from collections import defaultdict
 from datetime import datetime
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
-from analysis.src.api.queries.base import build_sample_doc, split_admission_counts
+from analysis.src.api.queries.base import (
+    build_classification_sample,
+    build_sample_doc,
+    fetch_rich_sample_fields,
+    split_admission_counts,
+)
 from analysis.src.api.queries.constants import (
     BOT_FLAGGED_SHARE_EXCLUSION,
     MAX_EVIDENCE_PER_SAMPLE,
     SNIPPET_MAX_CHARS,
 )
+from analysis.src.api.queries.profiles import fetch_entity_profiles, sampled_account_profile
 from analysis.src.common import db
 from analysis.src.common.settings import get_settings
 
@@ -85,13 +91,28 @@ def get_narratives(
         citations = _fetch_citations(conn, ids, start, end)
         member_samples = _fetch_member_samples(conn, ids, start, end)
         mean_confidences = _fetch_mean_confidence(conn, ids, start, end)
+        cross_tier_rows = _fetch_cross_tier_rows(conn, ids, start, end)
+        inbound_by_link_type = _fetch_inbound_by_link_type(conn, ids, start, end)
+        top_supporting_docs = _fetch_top_supporting_docs(conn, ids, start, end)
+
+        first_seen_doc_ids = [row["first_seen_doc_id"] for row in ranked if row["first_seen_doc_id"] is not None]
+        first_seen_rows = _fetch_first_seen_docs(conn, first_seen_doc_ids)
+        first_seen_entity_ids = {
+            entity_id
+            for row in first_seen_rows.values()
+            for entity_id in (row["outlet_entity_id"], row["subreddit_entity_id"], row["profile_entity_id"])
+            if entity_id is not None
+        }
+        first_seen_entity_profiles = fetch_entity_profiles(conn, first_seen_entity_ids)
 
     narratives = []
     for row in ranked:
         nid = row["narrative_id"]
         citation_count, cited_docs = citations.get(nid, (0, []))
+        first_seen_row = first_seen_rows.get(row["first_seen_doc_id"])
         narratives.append({
             "narrative_id": nid,
+            "name": row["name"],
             "anchor_claim_text": row["anchor_claim_text"],
             "doc_count": row["doc_count"],
             "source_breakdown": source_breakdowns.get(nid, []),
@@ -105,6 +126,10 @@ def get_narratives(
             "member_doc_samples": member_samples.get(nid, []),
             "first_seen_at": row["first_seen_at"],
             "first_seen_doc_id": row["first_seen_doc_id"],
+            **_build_first_seen_fields(first_seen_row, first_seen_entity_profiles),
+            "cross_tier": _is_cross_tier(cross_tier_rows.get(nid, [])),
+            "inbound_by_link_type": inbound_by_link_type.get(nid, {}),
+            "top_supporting_docs": top_supporting_docs.get(nid, []),
             "mean_confidence": mean_confidences.get(nid),
         })
     return {"range": range_meta, "narratives": narratives}
@@ -153,6 +178,92 @@ def _bot_pushed_fraction(flagged_shares: Sequence[Optional[float]]) -> Optional[
     return round(flagged / len(flagged_shares), 3)
 
 
+def _tier_group(source_type: Optional[str], tier: Optional[str]) -> str:
+    """Coarse three-way frame for one doc: 'news' for a news doc,
+    'officials' for an elected_official/affiliated author (corpus.
+    author_profiles.tier), else 'public' (reddit, unmatched/general-public
+    X authors). Ported from the old registry-based tiering (walkthrough
+    058) onto the PG author_profiles.tier column directly."""
+    if source_type == "news":
+        return "news"
+    if tier in ("elected_official", "affiliated"):
+        return "officials"
+    return "public"
+
+
+def _is_cross_tier(rows: Sequence[Tuple[Optional[str], Optional[str]]]) -> bool:
+    """True when a narrative's in-window member docs (source_type, tier)
+    pairs span more than one of the three tier groups."""
+    groups = {_tier_group(source_type, tier) for source_type, tier in rows}
+    return len(groups) > 1
+
+
+def _build_first_seen_fields(
+    row: Optional[Mapping[str, Any]], entity_profiles: Mapping[int, Any],
+) -> Dict[str, Any]:
+    """{first_seen_source_type, first_seen_domain, first_seen_tier,
+    first_seen_author, first_seen_entity_profile, first_seen_tier_group}
+    for one narrative's first-seen doc. All None/False-shaped when the
+    narrative has no first_seen_doc_id (row is None) -- never guessed."""
+    if row is None:
+        return {
+            "first_seen_source_type": None,
+            "first_seen_domain": None,
+            "first_seen_tier": None,
+            "first_seen_author": None,
+            "first_seen_entity_profile": None,
+            "first_seen_tier_group": None,
+        }
+    return {
+        "first_seen_source_type": row["source_type"],
+        "first_seen_domain": row["domain"],
+        "first_seen_tier": row["tier"],
+        "first_seen_author": _build_first_seen_author(row, entity_profiles),
+        "first_seen_entity_profile": _resolve_first_seen_entity_profile(row, entity_profiles),
+        "first_seen_tier_group": _tier_group(row["source_type"], row["tier"]),
+    }
+
+
+def _build_first_seen_author(
+    row: Mapping[str, Any], entity_profiles: Mapping[int, Any],
+) -> Optional[Dict[str, Any]]:
+    """AccountProfileModel-shaped dict for the first-seen doc's author, or
+    None when the doc has no author at all (news/reddit never carry
+    corpus.documents.author_id). branch/chamber/state_or_district have no
+    PG source and stay None (model default)."""
+    if row["author_id"] is None:
+        return None
+    profile_entity = entity_profiles.get(row["profile_entity_id"]) if row["profile_entity_id"] is not None else None
+    full_name = row["author_display_name"] or (profile_entity.display_name if profile_entity else None)
+    return {
+        "handle": row["author_handle"],
+        "full_name": full_name,
+        "party": profile_entity.party if profile_entity else None,
+        "office_title": profile_entity.office if profile_entity else None,
+    }
+
+
+def _resolve_first_seen_entity_profile(
+    row: Mapping[str, Any], entity_profiles: Mapping[int, Any],
+) -> Optional[Any]:
+    """The first-seen doc's authoring entity profile: outlet, then
+    subreddit, then the author's linked registry entity (official/
+    collective/account); an unmatched X author falls back to a
+    sampled_account_profile built from their own public bio. None only
+    when nothing at all resolves (e.g. an unmatched news/reddit doc)."""
+    if row["outlet_entity_id"] is not None:
+        return entity_profiles.get(row["outlet_entity_id"])
+    if row["subreddit_entity_id"] is not None:
+        return entity_profiles.get(row["subreddit_entity_id"])
+    if row["profile_entity_id"] is not None:
+        return entity_profiles.get(row["profile_entity_id"])
+    if row["author_id"] is not None and row["author_handle"]:
+        return sampled_account_profile(
+            row["author_handle"], row["author_display_name"], row["author_description"],
+        )
+    return None
+
+
 def _build_lean(row: Optional[Mapping[str, Any]]) -> Optional[Dict[str, Any]]:
     """LeanLabel-shaped dict from an analysis.narrative_leans row, or None
     if the narrative has no derived-lean row -- omitted entirely rather than
@@ -178,7 +289,7 @@ def _fetch_ranked(
     params: Dict[str, Any] = {"limit": limit}
     time_clause = _time_filter(start, end, params)
     sql = f"""
-        SELECT n.narrative_id AS narrative_id, c.claim_text AS anchor_claim_text,
+        SELECT n.narrative_id AS narrative_id, n.name AS name, c.claim_text AS anchor_claim_text,
                n.first_seen_at AS first_seen_at, n.first_seen_doc_id AS first_seen_doc_id,
                COUNT(DISTINCT nd.doc_id) AS doc_count
         FROM analysis.narratives n
@@ -186,7 +297,7 @@ def _fetch_ranked(
         JOIN corpus.documents d ON d.doc_id = nd.doc_id
         LEFT JOIN analysis.claims c ON c.claim_id = n.anchor_claim_id
         WHERE true{time_clause}
-        GROUP BY n.narrative_id, c.claim_text, n.first_seen_at, n.first_seen_doc_id
+        GROUP BY n.narrative_id, n.name, c.claim_text, n.first_seen_at, n.first_seen_doc_id
         ORDER BY doc_count DESC, n.narrative_id
         LIMIT %(limit)s
     """
@@ -457,3 +568,125 @@ def _fetch_member_samples(
             build_sample_doc(row, admission_class=row["admission_class"])
         )
     return out
+
+
+def _fetch_cross_tier_rows(
+    conn, ids: Sequence[int], start: Optional[datetime], end: Optional[datetime],
+) -> Dict[int, List[Tuple[Optional[str], Optional[str]]]]:
+    """{narrative_id -> [(source_type, author tier), ...]} of every
+    in-window member doc, feeding _is_cross_tier's fold."""
+    params: Dict[str, Any] = {"ids": list(ids)}
+    time_clause = _time_filter(start, end, params)
+    sql = f"""
+        SELECT nd.narrative_id AS narrative_id, d.source_type::text AS source_type,
+               ap.tier::text AS tier
+        FROM analysis.narrative_docs nd
+        JOIN corpus.documents d ON d.doc_id = nd.doc_id
+        LEFT JOIN corpus.author_profiles ap ON ap.author_id = d.author_id
+        WHERE nd.narrative_id = ANY(%(ids)s){time_clause}
+    """
+    out: Dict[int, List[Tuple[Optional[str], Optional[str]]]] = defaultdict(list)
+    for row in conn.execute(sql, params).fetchall():
+        out[row["narrative_id"]].append((row["source_type"], row["tier"]))
+    return out
+
+
+def _fetch_inbound_by_link_type(
+    conn, ids: Sequence[int], start: Optional[datetime], end: Optional[datetime],
+) -> Dict[int, Dict[str, int]]:
+    """{narrative_id -> {link_type -> count}} over analysis.citations
+    targeting this narrative's in-window member docs -- the member
+    (target) doc is scoped to [start, end]; the citing (source) doc is
+    unbounded, same convention as _fetch_citations' cited_docs."""
+    params: Dict[str, Any] = {"ids": list(ids)}
+    time_clause = _time_filter(start, end, params)
+    sql = f"""
+        SELECT nd.narrative_id AS narrative_id, c.link_type::text AS link_type, COUNT(*) AS n
+        FROM analysis.narrative_docs nd
+        JOIN corpus.documents d ON d.doc_id = nd.doc_id
+        JOIN analysis.citations c ON c.target_doc_id = d.doc_id
+        WHERE nd.narrative_id = ANY(%(ids)s){time_clause}
+        GROUP BY nd.narrative_id, c.link_type
+    """
+    out: Dict[int, Dict[str, int]] = defaultdict(dict)
+    for row in conn.execute(sql, params).fetchall():
+        out[row["narrative_id"]][row["link_type"]] = row["n"]
+    return out
+
+
+def _fetch_top_supporting_doc_ids(
+    conn, ids: Sequence[int], start: Optional[datetime], end: Optional[datetime],
+) -> Dict[int, List[int]]:
+    """{narrative_id -> up to MAX_EVIDENCE_PER_SAMPLE doc_ids}, ranked by
+    the doc's current sentiment-run confidence then recency -- restores the
+    old top_supporting_docs ranking (repository.py::get_supporting_docs).
+    Requires a done current text run so every returned id can build a
+    ClassificationSample (build_classification_sample fails loud otherwise)."""
+    params: Dict[str, Any] = {"ids": list(ids), "max_samples": MAX_EVIDENCE_PER_SAMPLE}
+    time_clause = _time_filter(start, end, params)
+    sql = f"""
+        SELECT narrative_id, doc_id FROM (
+            SELECT nd.narrative_id AS narrative_id, d.doc_id AS doc_id,
+                   ROW_NUMBER() OVER (
+                       PARTITION BY nd.narrative_id
+                       ORDER BY r.confidence DESC NULLS LAST, d.published_at DESC
+                   ) AS rn
+            FROM analysis.narrative_docs nd
+            JOIN corpus.documents d ON d.doc_id = nd.doc_id
+            JOIN analysis.runs r
+                 ON r.doc_id = d.doc_id AND r.task = 'text'::analysis.task
+                AND r.is_current AND r.status = 'done'::analysis.run_status
+            WHERE nd.narrative_id = ANY(%(ids)s){time_clause}
+        ) ranked
+        WHERE rn <= %(max_samples)s
+        ORDER BY narrative_id, rn
+    """
+    out: Dict[int, List[int]] = defaultdict(list)
+    for row in conn.execute(sql, params).fetchall():
+        out[row["narrative_id"]].append(row["doc_id"])
+    return out
+
+
+def _fetch_top_supporting_docs(
+    conn, ids: Sequence[int], start: Optional[datetime], end: Optional[datetime],
+) -> Dict[int, List[Any]]:
+    """{narrative_id -> up to MAX_EVIDENCE_PER_SAMPLE ClassificationSampleModel}
+    -- one batched fetch_rich_sample_fields call over the union of every
+    narrative's ranked doc_ids, not a per-narrative loop."""
+    doc_ids_by_narrative = _fetch_top_supporting_doc_ids(conn, ids, start, end)
+    all_doc_ids = {doc_id for doc_ids in doc_ids_by_narrative.values() for doc_id in doc_ids}
+    fields_by_doc = fetch_rich_sample_fields(conn, all_doc_ids)
+    return {
+        narrative_id: [
+            build_classification_sample(doc_id, fields_by_doc[doc_id])
+            for doc_id in doc_ids
+            if doc_id in fields_by_doc
+        ]
+        for narrative_id, doc_ids in doc_ids_by_narrative.items()
+    }
+
+
+def _fetch_first_seen_docs(conn, doc_ids: Sequence[int]) -> Dict[int, Mapping[str, Any]]:
+    """{doc_id -> first-seen provenance row} for the distinct
+    first_seen_doc_ids among the ranked narratives -- source_type/domain,
+    the author's tier/registry-entity link (author_profiles), and the
+    outlet/subreddit entity the doc itself was published by."""
+    ids = sorted(set(doc_ids))
+    if not ids:
+        return {}
+    sql = """
+        SELECT d.doc_id AS doc_id, d.source_type::text AS source_type,
+               d.domain_or_subreddit AS domain, d.author_id AS author_id,
+               ap.tier::text AS tier, ap.entity_id AS profile_entity_id,
+               na.outlet_entity_id AS outlet_entity_id,
+               rp.subreddit_entity_id AS subreddit_entity_id,
+               a.handle AS author_handle, a.display_name AS author_display_name,
+               a.description AS author_description
+        FROM corpus.documents d
+        LEFT JOIN corpus.author_profiles ap ON ap.author_id = d.author_id
+        LEFT JOIN corpus.news_articles na ON na.doc_id = d.doc_id
+        LEFT JOIN corpus.reddit_posts rp ON rp.doc_id = d.doc_id
+        LEFT JOIN corpus.authors a ON a.author_id = d.author_id
+        WHERE d.doc_id = ANY(%(doc_ids)s)
+    """
+    return {row["doc_id"]: row for row in conn.execute(sql, {"doc_ids": ids}).fetchall()}

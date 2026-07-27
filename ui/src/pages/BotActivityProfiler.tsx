@@ -1,209 +1,185 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
-    Card, CollapsibleInfo, DefinitionChip, EmptyState, EntityHeader, ErrorState,
-    GlobalTicker, LoadingCard, MethodPopover, Modal, RangeCaption,
-    RankedEntityList, SampleCardList, ThreeWayColumn, TwoWayGrid,
+    Card, CollapsibleInfo, DefinitionChip, EmptyState, EntityHeader,
+    EntityHubLinks, ErrorState,
+    GlobalTicker,
+    LoadingCard, MethodPopover, Modal, PostCardList,
+    RangeCaption, RankedEntityList, ThreeWayColumn, TwoWayGrid,
+    entityExternalUrl, flaggedExampleToPostCard, parseEntityParam,
+    LeanLabel as LeanLabelChip,
 } from '../components/common';
+import type { PostCardData } from '../components/common/PostCard';
+import { deepLinkHref, useDeepLinkParam } from '../services/deepLink';
+import { coordinationLevel } from '../services/glossary';
+import { CoordinationEvidencePanel } from './bots/CoordinationEvidencePanel';
+import { PostingCadenceHeatmap } from './bots/PostingCadenceHeatmap';
 import type { ColumnSorter, RankedEntity, TickerItem } from '../components/common';
-import { deepLinkHref } from '../services/deepLink';
 import { fetchBotActivity, fetchSnapshotStatus } from '../services/api';
 import { useFetch } from '../services/useFetch';
 import { formatRefreshedAgo, pipelineRunTimestamp } from '../services/freshness';
 import { formatPct } from '../services/format';
-import { coordinationLevel } from '../services/glossary';
 import { COLORS } from '../theme';
-import { CoordinationEvidencePanel } from './bots/CoordinationEvidencePanel';
 import type {
-    AccountAgeBucket, BehavioralSignalBucket, BotActivityResponse, BotPushedNarrative,
-    EntityBotRate, Filters, FlaggedAccount, SnapshotStatusResponse,
+    AccountAgeBucket, BehavioralSignalBucket, BotActivityResponse, BotEntityItem,
+    BotPushedNarrative, CoordinationStats, Filters, FlaggedAccount, PostingCadenceCell,
+    SampleDoc, SnapshotStatusResponse,
 } from '../types';
 
 // --------------------------------------------------------------------------- //
-//  Phase 10 adaptation note, updated for this restore: the pre-redesign       //
-//  coordination index, top amplified domain clusters, posting-cadence        //
-//  heatmap, copy-paste-similarity distribution, and per-narrative "why        //
-//  flagged" LLM breakdown still have no equivalent in the strictly-live       //
-//  /bot-activity response (see analysis/src/api/models/bots.py). This        //
-//  restore keeps the pre-cutover page's geometry (coordination summary,       //
-//  chain-of-evidence strip, per-entity drill-down, 2-up amplification tiles)  //
-//  and degrades each to the closest field the response actually carries,     //
-//  rather than dropping the panel. Per-panel degradation notes are inline.   //
+//  sampleDocToPostCard — local adapter for the plain SampleDoc[] shape        //
+//  (BotPushedNarrative.samples, FlaggedAccount.samples, data.flaggedDocs).    //
+//  No shared adapter covers SampleDoc today (PostCard.tsx's adapters cover    //
+//  ClassificationSample/FlaggedExample/PropagandaExample); SampleDoc is a     //
+//  thin doc reference (docId, sourceUrl, snippet, confidence, publishedAt) —  //
+//  everything PostCardData needs beyond that (title, author, engagement) is   //
+//  simply absent here, not fabricated.                                       //
+// --------------------------------------------------------------------------- //
+
+function domainFromUrl(url: string): string | null {
+    try {
+        return new URL(url).hostname.replace(/^www\./, '');
+    } catch {
+        return null;
+    }
+}
+
+function unixSecondsFromIso(iso: string | null | undefined): number | null {
+    if (!iso) return null;
+    const t = Date.parse(iso);
+    return Number.isNaN(t) ? null : Math.floor(t / 1000);
+}
+
+function sampleDocToPostCard(s: SampleDoc): PostCardData {
+    const domain = domainFromUrl(s.sourceUrl);
+    return {
+        doc_id: s.docId,
+        source_type: 'unknown',
+        source_label: domain ? `Source · ${domain}` : 'Source unknown',
+        title: null,
+        text: s.snippet ?? null,
+        published_at: unixSecondsFromIso(s.publishedAt),
+        url: s.sourceUrl,
+        confidence: s.confidence,
+        domain,
+    };
+}
+
+// --------------------------------------------------------------------------- //
+//  Restoration note (docs/audit-trail/ui/2026-07-27-bot-activity-restoration  //
+//  records the full rationale). This page restores the pre-cutover           //
+//  BotActivityProfiler's geometry — the two-way officials/public grid with   //
+//  per-entity drill-down, coordination summary, per-narrative amplification   //
+//  cards, and the behavioral-signals band — wired to the strictly-live       //
+//  /bot-activity response (analysis/src/api/models/bots.py). Two pre-cutover //
+//  data sources have no Postgres equivalent yet and are rendered as honest   //
+//  "not measured" states rather than invented: identicalTextPairs            //
+//  (CoordinationStats — the O(n^2) shingle scan was never ported) and        //
+//  pairwise copy-paste-similarity buckets (no engine output at all; the      //
+//  closest available proxy, per-label mean template_score, fills that slot   //
+//  with an explicit caveat). The old day-by-hour posting-cadence heatmap IS  //
+//  restored: postingCadenceGrid now carries real (dayOfWeek, hour) UTC       //
+//  buckets, unlike the server-local-hour data that got it dropped originally.//
 // --------------------------------------------------------------------------- //
 
 function botRateColor(ratePct: number): string {
-    return ratePct > 10 ? COLORS.negative : ratePct > 3 ? COLORS.warning : 'var(--neutral-700)';
+    return ratePct > 10
+        ? COLORS.negative
+        : ratePct > 3
+            ? COLORS.warning
+            : 'var(--neutral-700)';
 }
 
+/**
+ * True for narrative-name artifacts that leaked a raw signal field (e.g.
+ * `account_age=None days`, trailing `=`). Restored defensively from the
+ * pre-cutover filter (`analysis/src/engine/bot.py::_sanitize_llm_indicators`
+ * sanitizes at write time now) — narrative.name is an editorial registry
+ * name today, not an LLM label, so this should be a no-op in practice.
+ */
+function isNoiseLabel(label: string | null | undefined): boolean {
+    if (!label) return true;
+    const text = label.trim();
+    if (!text) return true;
+    if (/=\s*(None|null|undefined|0)\b/i.test(text)) return true;
+    if (/=\s*$/.test(text)) return true;
+    return false;
+}
+
+/** Headline derived from the automation rate + the top bot-pushed narrative.
+ *  Pre-cutover also named the top amplified link-domain cluster
+ *  (`overview.topClusters`) — that field has no equivalent in the current
+ *  response (analysis/src/api/models/bots.py carries no domain-cluster
+ *  rollup), so this reads as automation rate + narrative only rather than
+ *  guessing a domain. */
 function readsAsToday(data: BotActivityResponse): string {
     const rate = data.automationRatePct;
     const ratePct = formatPct(rate, { decimals: 0 });
-    if (rate > 10) return `A high share of the posts we scanned look automated — roughly ${ratePct}.`;
-    if (rate > 3) return `Some of the posts we scanned look automated — about ${ratePct}.`;
-    return `Most posts we scanned look like real people — only about ${ratePct} look automated.`;
+    const parts: string[] = [];
+    if (rate > 10) {
+        parts.push(`A high share of the posts we scanned look automated — roughly ${ratePct}.`);
+    } else if (rate > 3) {
+        parts.push(`Some of the posts we scanned look automated — about ${ratePct}.`);
+    } else {
+        parts.push(`Most posts we scanned look like real people — only about ${ratePct} look automated.`);
+    }
+    const topNarrative = data.botPushedNarratives.find((n) => !isNoiseLabel(n.name));
+    if (topNarrative) {
+        const count = topNarrative.botAuthoredDocCount.toLocaleString();
+        parts.push(`${count} bot-authored posts are amplifying the same narrative: "${topNarrative.name}".`);
+    }
+    return parts.join(' ');
 }
 
-function buildTickerItems(data: BotActivityResponse): TickerItem[] {
+function buildBotTickerItems(data: BotActivityResponse): TickerItem[] {
     const rate = data.automationRatePct;
     const rateTone = rate > 10 ? 'warning' : rate > 3 ? 'neutral' : 'positive';
+
+    // Pre-cutover's fourth slot was overview.confidence (a detector-wide
+    // ConfidenceLevel) — that field does not exist on BotActivityResponse.
+    // Analyzed docs is the closest honestly-available volume figure, so it
+    // fills the slot instead of dropping the ticker to three items.
     return [
         {
             label: 'Suspected automation',
             value: formatPct(rate, { decimals: 0 }),
-            hint: 'of scored posts',
+            hint: 'of posts',
             tone: rateTone as TickerItem['tone'],
             emphasis: true,
             ariaLabel: `Suspected automation rate ${rate.toFixed(1)} percent`,
         },
-        { label: 'Analyzed docs', value: data.analyzedDocCount.toLocaleString() },
-        { label: 'Bot-scored posts', value: data.botScoredDocCount.toLocaleString() },
+        {
+            label: 'Coordination',
+            value: coordinationLevel(data.coordinationIndex),
+            hint: `${data.coordinationIndex.toFixed(2)} / 1`,
+        },
+        {
+            label: 'Flagged Posts',
+            value: data.totalFlaggedPosts.toLocaleString(),
+        },
+        {
+            label: 'Analyzed docs',
+            value: data.analyzedDocCount.toLocaleString(),
+        },
     ];
 }
 
 // --------------------------------------------------------------------------- //
-//  SimilarityBar — generic labeled percentage bar, restored from the          //
-//  pre-cutover page's Text Similarity Distribution card. That card's own      //
-//  data (pairwise copy-paste similarity buckets) has no equivalent in the     //
-//  current response, so the component is reused here for the account-age     //
-//  distribution instead of being dropped.                                    //
+//  Amplification by tier — two-way entity grid                                //
 // --------------------------------------------------------------------------- //
 
-interface SimilarityBarProps {
-    label: string;
-    value: number;
-    color: string;
-    title?: string;
-}
-
-function SimilarityBar({ label, value, color, title }: SimilarityBarProps) {
-    return (
-        <div title={title}>
-            <div className="flex justify-between text-sm mb-1">
-                <span>{label}</span>
-                <span className="font-medium" style={{ color }}>{formatPct(value, { decimals: 0 })}</span>
-            </div>
-            <div style={{ height: '8px', background: 'var(--neutral-100)', overflow: 'hidden' }}>
-                <div style={{ width: `${value}%`, height: '100%', background: color }} />
-            </div>
-        </div>
-    );
-}
-
-// --------------------------------------------------------------------------- //
-//  Account age + behavioral-signal cards                                      //
-// --------------------------------------------------------------------------- //
-
-function AccountAgeCard({ buckets }: { buckets: AccountAgeBucket[] }) {
-    const total = buckets.reduce((s, b) => s + b.accountCount, 0);
-    if (total === 0) return null;
-    return (
-        <Card
-            title="Account age of flagged authors"
-            subtitle="Distinct bot-flagged accounts, bucketed by account age. Freshly created accounts skew toward automation."
-        >
-            <div className="flex flex-col gap-3">
-                {buckets.filter((b) => b.accountCount > 0).map((b) => {
-                    const pct = (b.accountCount / total) * 100;
-                    const isNewest = b.ageRange.startsWith('<');
-                    return (
-                        <SimilarityBar
-                            key={b.ageRange}
-                            label={b.ageRange}
-                            value={pct}
-                            color={isNewest ? COLORS.warning : COLORS.chartAccent}
-                            title={`${b.accountCount.toLocaleString()} accounts (${pct.toFixed(0)}%)`}
-                        />
-                    );
-                })}
-            </div>
-        </Card>
-    );
-}
-
-function fmtAvg(v: number | null): string {
-    return v == null ? '—' : v.toFixed(2);
-}
-
-function BehavioralSignalsCard({ buckets }: { buckets: BehavioralSignalBucket[] }) {
-    if (buckets.length === 0) return null;
-    return (
-        <Card
-            title="Behavioral signals by label"
-            subtitle="Mean typed stylometrics per bot_label bucket — why docs in that bucket read the way they do."
-            headerActions={
-                <MethodPopover
-                    description={
-                        'llm_text_likelihood, burstiness, type_token_ratio, and template_score are '
-                        + 'per-doc stylometric signals averaged within each bucket the detector assigned '
-                        + '(e.g. "bot", "human", "uncertain"). Higher template_score and lower '
-                        + 'type_token_ratio both lean toward templated/automated text.'
-                    }
-                />
-            }
-        >
-            <div className="desk-table-wrap">
-                <table className="table">
-                    <thead>
-                        <tr>
-                            <th>Label</th>
-                            <th className="num">Docs</th>
-                            <th className="num">LLM likelihood</th>
-                            <th className="num">Burstiness</th>
-                            <th className="num">Type/token</th>
-                            <th className="num">Template score</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {buckets.map((b) => (
-                            <tr key={b.label}>
-                                <td style={{ textTransform: 'capitalize' }}>{b.label}</td>
-                                <td className="num">{b.docCount.toLocaleString()}</td>
-                                <td className="num">{fmtAvg(b.avgLlmTextLikelihood)}</td>
-                                <td className="num">{fmtAvg(b.avgBurstiness)}</td>
-                                <td className="num">{fmtAvg(b.avgTypeTokenRatio)}</td>
-                                <td className="num">{fmtAvg(b.avgTemplateScore)}</td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            </div>
-        </Card>
-    );
-}
-
-// --------------------------------------------------------------------------- //
-//  Per-entity bot rates — two-way (officials/collectives vs communities)      //
-//  Restored: rows now open BotEntityModal (pre-cutover's per-entity drill-    //
-//  down). Degraded: EntityBotRate carries no per-entity sample docs, so the   //
-//  modal shows stats only — no flagged-post excerpts for that entity.        //
-// --------------------------------------------------------------------------- //
-
-const BOT_SORTERS: ColumnSorter<EntityBotRate>[] = [
-    { label: 'bot rate', compare: (a, b) => b.botRatePct - a.botRatePct },
-    { label: 'posts scanned', compare: (a, b) => b.totalDocs - a.totalDocs },
-    { label: 'name', compare: (a, b) => a.displayName.localeCompare(b.displayName) },
-];
-
-function toRanked(item: EntityBotRate, onOpen: (item: EntityBotRate) => void): RankedEntity {
-    return {
-        entity: { kind: item.kind, displayName: item.displayName },
-        rateValue: item.totalDocs > 0 ? formatPct(item.botRatePct) : '—',
-        ratePct: item.botRatePct,
-        rateColor: botRateColor(item.botRatePct),
-        detail: `${item.botDocs.toLocaleString()} of ${item.totalDocs.toLocaleString()} flagged`,
-        onClick: () => onOpen(item),
-    };
-}
-
-function BotEntityModal({ item, onClose }: { item: EntityBotRate; onClose: () => void }) {
+function BotEntityModal({ item, onClose }: { item: BotEntityItem; onClose: () => void }) {
+    const profile = item.entityProfile;
     const rateColor = botRateColor(item.botRatePct);
+    const sourceUrl = entityExternalUrl(profile);
+
     return (
         <Modal
             isOpen
             onClose={onClose}
-            title={item.displayName}
+            title={profile.displayName}
             subtitle="Bot-detection drill-down"
         >
-            <EntityHeader entity={{ kind: item.kind, displayName: item.displayName }} />
+            <EntityHeader profile={profile} />
             <div className="entity-modal-stats">
                 <div>
                     <div
@@ -225,42 +201,75 @@ function BotEntityModal({ item, onClose }: { item: EntityBotRate; onClose: () =>
                     <div className="metric-value">{item.totalDocs.toLocaleString()}</div>
                 </div>
             </div>
-            {/* The pre-redesign modal listed this entity's own flagged-post
-                excerpts (BotEntityItem.samples). EntityBotRate carries no
-                per-entity sample docs, so that section is dropped rather
-                than filled with the whole window's flagged posts under this
-                entity's name. */}
+
+            <h3 className="card-title mt-4 mb-2">Flagged posts from this source</h3>
+            <PostCardList
+                posts={item.samples.map(flaggedExampleToPostCard)}
+                sampleNote="The highest-confidence flagged posts from this source — a sample, not every flag."
+                emptyNote={item.botDocs > 0
+                    ? 'Flagged posts exist but their excerpts are not in this snapshot yet — they will appear on the next data refresh.'
+                    : 'No posts from this source were flagged in this window.'}
+            />
             <div className="card-note mt-4">
-                Bot flags are probabilistic leads, not verdicts. See "Flagged posts" below
-                for excerpts across the whole window.
+                Bot flags are probabilistic leads, not verdicts. Every excerpt links
+                back to the original post so you can judge it yourself.
             </div>
+            {sourceUrl && (
+                <div className="mt-3">
+                    <a href={sourceUrl} target="_blank" rel="noreferrer" className="example-row-link">
+                        Visit {profile.displayName}
+                    </a>
+                </div>
+            )}
+            <EntityHubLinks entityId={profile.entityId ?? null} currentTab="bots" />
         </Modal>
     );
 }
 
-function EntityBotGrid({ byEntity, onOpen }: { byEntity: EntityBotRate[]; onOpen: (item: EntityBotRate) => void }) {
-    const officials = byEntity.filter((e) => e.kind === 'official' || e.kind === 'collective');
-    const communities = byEntity.filter((e) => e.kind === 'subreddit');
+const BOT_SORTERS: ColumnSorter<BotEntityItem>[] = [
+    { label: 'bot rate', compare: (a, b) => b.botRatePct - a.botRatePct },
+    { label: 'posts scanned', compare: (a, b) => b.totalDocs - a.totalDocs },
+    { label: 'name', compare: (a, b) => a.entityProfile.displayName.localeCompare(b.entityProfile.displayName) },
+];
+
+function BotThreeWayGrid({
+    data, onOpen,
+}: {
+    data: BotActivityResponse;
+    onOpen: (item: BotEntityItem) => void;
+}) {
+    // Two tiers only: news is not bot-scored (articles are not accounts) —
+    // the response carries no byNewsOutlet field at all.
+    const ranked = (label: string) => (items: BotEntityItem[]) => (
+        <RankedEntityList
+            items={items.map((it): RankedEntity => ({
+                profile: it.entityProfile,
+                rateValue: it.totalDocs > 0 ? formatPct(it.botRatePct) : '—',
+                ratePct: it.botRatePct,
+                rateColor: botRateColor(it.botRatePct),
+                detail: `${it.botDocs.toLocaleString()} of ${it.totalDocs.toLocaleString()} flagged`,
+                onClick: () => onOpen(it),
+            }))}
+            ariaLabel={label}
+        />
+    );
+
     return (
         <TwoWayGrid>
             <ThreeWayColumn
-                header="Politicians, Officials & Collectives"
-                byline="Tracked officeholders and party collectives, ranked by the share of their posts our detector flags as likely automated."
-                empty="No official posts scored for bot detection in this window."
-                items={officials}
-                renderItems={(items) => (
-                    <RankedEntityList items={items.map((it) => toRanked(it, onOpen))} ariaLabel="Officials by suspected bot rate" />
-                )}
+                header="Politicians & Officials"
+                byline="Tracked officeholders, ranked by the share of their posts our detector flags as likely automated."
+                empty="No official posts scored for bot detection."
+                items={data.byOfficial}
+                renderItems={ranked('Officials by suspected bot rate')}
                 sorters={BOT_SORTERS}
             />
             <ThreeWayColumn
-                header="Communities"
-                byline="Tracked subreddits, ranked by the share of their posts our detector flags as likely automated."
-                empty="No subreddit posts scored for bot detection in this window."
-                items={communities}
-                renderItems={(items) => (
-                    <RankedEntityList items={items.map((it) => toRanked(it, onOpen))} ariaLabel="Communities by suspected bot rate" />
-                )}
+                header="The Public"
+                byline="Political subreddits, plus X users we don't track individually, ranked by the share of their posts our detector flags as likely automated."
+                empty="No public social posts scored for bot detection."
+                items={data.byGeneralPublic}
+                renderItems={ranked('Public sources by suspected bot rate')}
                 sorters={BOT_SORTERS}
             />
         </TwoWayGrid>
@@ -268,75 +277,11 @@ function EntityBotGrid({ byEntity, onOpen }: { byEntity: EntityBotRate[]; onOpen
 }
 
 // --------------------------------------------------------------------------- //
-//  Coordination summary — pre-redesign panel restored. The headline metric   //
-//  is now the real coordinationIndex (max single-hour share of the           //
-//  bot-flagged posting-cadence histogram, restored 2026-07-26): the original //
-//  CoordinationStats (accountReuse, identicalTextPairs,                      //
-//  avgPostsPerSuspectedAccount) still has no equivalent in /bot-activity.    //
-// --------------------------------------------------------------------------- //
-
-function coordinationColor(level: 'low' | 'moderate' | 'high'): string {
-    return level === 'high' ? COLORS.negative : level === 'moderate' ? COLORS.warning : 'var(--neutral-700)';
-}
-
-function CoordinationSummary({ data }: { data: BotActivityResponse }) {
-    const level = coordinationLevel(data.coordinationIndex);
-    return (
-        <Card
-            title="Coordination Indicators"
-            subtitle={<DefinitionChip entry="coordination" label="What counts as coordination?" />}
-            headerActions={
-                <MethodPopover
-                    description="Coordination is detected through behavioral analysis including timing patterns, text similarity, and network analysis."
-                    limitations={[
-                        'Some legitimate coordinated campaigns may be flagged',
-                        'Sophisticated actors may evade detection',
-                        'Metrics are indicative, not definitive proof',
-                    ]}
-                />
-            }
-        >
-            <div className="grid-2 gap-3">
-                <div className="flex flex-col gap-2">
-                    <div className="flex justify-between items-center" style={{ padding: '6px 0' }}>
-                        <span
-                            className="text-sm"
-                            title="Max single-hour share of the bot-flagged posting-cadence histogram. 1.0 means every bot-flagged doc in range posted in the same UTC hour."
-                        >
-                            Coordination index
-                        </span>
-                        <span className="num font-semibold" style={{ color: coordinationColor(level) }}>
-                            {level} ({data.coordinationIndex.toFixed(2)})
-                        </span>
-                    </div>
-                    <div className="flex justify-between items-center" style={{ padding: '6px 0' }}>
-                        <span className="text-sm" title="Share of scored posts our detector flags as likely automated.">Suspected automation rate</span>
-                        <span className="num font-semibold">{formatPct(data.automationRatePct, { decimals: 0 })}</span>
-                    </div>
-                </div>
-                <div className="flex flex-col gap-2">
-                    <div className="flex justify-between items-center" style={{ padding: '6px 0', borderBottom: '1px solid var(--neutral-150)' }}>
-                        <span className="text-sm">Bot-scored posts</span>
-                        <span className="num font-semibold">{data.botScoredDocCount.toLocaleString()}</span>
-                    </div>
-                    <div className="flex justify-between items-center" style={{ padding: '6px 0' }}>
-                        <span className="text-sm">Analyzed docs</span>
-                        <span className="num font-semibold">{data.analyzedDocCount.toLocaleString()}</span>
-                    </div>
-                </div>
-            </div>
-            <div className="card-note mt-4">
-                These metrics indicate potential automation but are not definitive proof of
-                coordinated or malicious activity. Account-reuse and identical-text-pair
-                coordination scoring is not part of this build's data yet.
-            </div>
-        </Card>
-    );
-}
-
-// --------------------------------------------------------------------------- //
-//  Narrative amplification — 2-up tiles, degraded to the botFractionPct       //
-//  the response carries (no whyFlagged/hashtags/targets breakdown today).     //
+//  Narrative amplification — 2-up tiles. samples ARE SampleDoc[] here, so     //
+//  PostCardList renders them directly (no adaptation needed, unlike           //
+//  BotEntityItem.samples above). Pre-cutover's whyFlagged/topHashtags/        //
+//  targets breakdown has no equivalent in BotPushedNarrative — dropped        //
+//  rather than invented.                                                     //
 // --------------------------------------------------------------------------- //
 
 function amplificationConfidence(botFractionPct: number): 'high' | 'medium' | 'low' {
@@ -353,6 +298,7 @@ function ConfidenceBadge({ level }: { level: 'high' | 'medium' | 'low' }) {
 
 function NarrativeAmplificationCard({ narrative }: { narrative: BotPushedNarrative }) {
     const [modalOpen, setModalOpen] = useState(false);
+    if (isNoiseLabel(narrative.name)) return null;
     const level = amplificationConfidence(narrative.botFractionPct);
 
     return (
@@ -360,7 +306,7 @@ function NarrativeAmplificationCard({ narrative }: { narrative: BotPushedNarrati
             <Card>
                 <div className="flex items-start justify-between mb-3" style={{ gap: 'var(--space-3)', flexWrap: 'wrap' }}>
                     <div style={{ minWidth: 0 }}>
-                        <h4 className="font-semibold">{narrative.name || '(unnamed narrative)'}</h4>
+                        <h4 className="font-semibold">{narrative.name}</h4>
                         <div className="flex items-center gap-2 mt-1" style={{ flexWrap: 'wrap' }}>
                             <ConfidenceBadge level={level} />
                             <span className="eyebrow num">
@@ -394,17 +340,12 @@ function NarrativeAmplificationCard({ narrative }: { narrative: BotPushedNarrati
                 isOpen={modalOpen}
                 onClose={() => setModalOpen(false)}
                 kicker="Narrative amplification"
-                title={narrative.name || '(unnamed narrative)'}
+                title={narrative.name}
                 subtitle={`${narrative.botAuthoredDocCount.toLocaleString()} of ${narrative.memberDocCount.toLocaleString()} member docs bot-authored · ${level} likelihood`}
             >
-                {/* The pre-redesign modal listed why-flagged signals plus
-                    derived hashtag/target chips (NarrativeAmplification.
-                    whyFlagged/topHashtags/targets). BotPushedNarrative
-                    carries none of those — this section is dropped rather
-                    than invented. */}
                 <h3 className="card-title mb-2">Flagged posts</h3>
-                <SampleCardList
-                    samples={narrative.samples}
+                <PostCardList
+                    posts={narrative.samples.map(sampleDocToPostCard)}
                     sampleNote="Bot-authored member docs, confidence-sorted — a sample, not every flag."
                     emptyNote="No sample docs stored for this narrative."
                 />
@@ -414,7 +355,234 @@ function NarrativeAmplificationCard({ narrative }: { narrative: BotPushedNarrati
 }
 
 // --------------------------------------------------------------------------- //
-//  Flagged accounts                                                           //
+//  Coordination summary                                                       //
+// --------------------------------------------------------------------------- //
+
+function CoordinationSummary({ data }: { data: CoordinationStats }) {
+    return (
+        <Card
+            title="Coordination Indicators"
+            subtitle={<DefinitionChip entry="coordination" label="What counts as coordination?" />}
+            headerActions={
+                <MethodPopover
+                    description="Coordination is detected through behavioral analysis including timing patterns, text similarity, and network analysis."
+                    limitations={[
+                        'Some legitimate coordinated campaigns may be flagged',
+                        'Sophisticated actors may evade detection',
+                        'Metrics are indicative, not definitive proof',
+                    ]}
+                />
+            }
+        >
+            <div className="grid-2 gap-3">
+                <div className="flex flex-col gap-2">
+                    <div className="flex justify-between items-center" style={{ padding: '6px 0' }}>
+                        <span className="text-sm" title="Share of suspected-bot accounts that posted more than once in this sample.">Suspected accounts posting more than once</span>
+                        <span className="num font-semibold">{formatPct(data.accountReuse * 100, { decimals: 0 })}</span>
+                    </div>
+                </div>
+                <div className="flex flex-col gap-2">
+                    <div className="flex justify-between items-center" style={{ padding: '6px 0', borderBottom: '1px solid var(--neutral-150)' }}>
+                        <span className="text-sm">Identical text pairs detected</span>
+                        <span className="num font-semibold">
+                            {data.identicalTextPairs != null ? data.identicalTextPairs.toLocaleString() : 'not measured'}
+                        </span>
+                    </div>
+                    <div className="flex justify-between items-center" style={{ padding: '6px 0' }}>
+                        <span className="text-sm">Avg posts per suspected account</span>
+                        <span className="num font-semibold">{data.avgPostsPerSuspectedAccount.toFixed(1)}</span>
+                    </div>
+                </div>
+            </div>
+            <div className="card-note mt-4">
+                These metrics indicate potential coordination but are not definitive proof of automated
+                or malicious activity. Identical-text-pair detection (the pre-cutover O(n^2) shingle scan)
+                has not been ported to this build — the count above reads "not measured", never a guess,
+                until it is.
+            </div>
+        </Card>
+    );
+}
+
+// --------------------------------------------------------------------------- //
+//  Behavioral signals — four cards as direct children of the outer dashboard   //
+//  grid, restoring the pre-cutover 3-across col-span-4 layout plus the        //
+//  restored day-by-hour heatmap. Account age keeps its pre-cutover slot, now  //
+//  fed by the top-level accountAgeBuckets field (percentage already on the    //
+//  wire). Text-similarity has no data source; the per-label mean             //
+//  template_score table is the closest honest proxy and fills that slot with //
+//  an explicit caveat rather than a bare empty card. Link-domain             //
+//  concentration has no data source at all — honest "not measured" card.     //
+// --------------------------------------------------------------------------- //
+
+interface SimilarityBarProps {
+    label: string;
+    value: number;
+    color: string;
+    title?: string;
+}
+
+function SimilarityBar({ label, value, color, title }: SimilarityBarProps) {
+    return (
+        <div title={title}>
+            <div className="flex justify-between text-sm mb-1">
+                <span>{label}</span>
+                <span className="font-medium" style={{ color }}>{formatPct(value, { decimals: 0 })}</span>
+            </div>
+            <div style={{ height: '8px', background: 'var(--neutral-100)', overflow: 'hidden' }}>
+                <div style={{ width: `${value}%`, height: '100%', background: color }} />
+            </div>
+        </div>
+    );
+}
+
+function AccountAgeCard({ buckets }: { buckets: AccountAgeBucket[] }) {
+    const total = buckets.reduce((s, b) => s + b.accountCount, 0);
+    return (
+        <Card title="Account Age Distribution">
+            {total === 0 ? (
+                <p className="text-sm text-muted" style={{ margin: 0 }}>
+                    No bot-flagged accounts with a known creation date in this window.
+                </p>
+            ) : (
+                <>
+                    <div className="flex flex-col gap-2">
+                        {buckets.filter((b) => b.accountCount > 0).map((b) => {
+                            const isNewest = b.ageRange.startsWith('<');
+                            return (
+                                <div
+                                    key={b.ageRange}
+                                    title={isNewest
+                                        ? `Newest-account bucket (${b.ageRange}) — highlighted because freshly created accounts skew toward automation. ${formatPct(b.percentage, { decimals: 0 })} of bot-flagged accounts.`
+                                        : `Established-account bucket (${b.ageRange}) — ${formatPct(b.percentage, { decimals: 0 })} of bot-flagged accounts.`}
+                                >
+                                    <div className="flex justify-between text-sm mb-1">
+                                        <span>{b.ageRange}</span>
+                                        <span className="num text-muted">{formatPct(b.percentage, { decimals: 0 })}</span>
+                                    </div>
+                                    <div style={{ height: '6px', background: 'var(--neutral-100)', overflow: 'hidden' }}>
+                                        <div
+                                            style={{
+                                                width: `${b.percentage}%`,
+                                                height: '100%',
+                                                background: isNewest ? COLORS.warning : COLORS.chartAccent,
+                                            }}
+                                        />
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                    <div className="chart-swatch-legend" aria-hidden>
+                        <span className="chart-swatch-item">
+                            <span className="chart-swatch" style={{ background: COLORS.warning }} />
+                            Newest accounts
+                        </span>
+                        <span className="chart-swatch-item">
+                            <span className="chart-swatch" style={{ background: COLORS.chartAccent }} />
+                            Older accounts
+                        </span>
+                    </div>
+                    {(() => {
+                        const youngest = buckets.find((b) => b.ageRange.startsWith('<'));
+                        if (!youngest) return null;
+                        return (
+                            <div className="card-note mt-4">
+                                {formatPct(youngest.percentage, { decimals: 0 })} of bot-flagged accounts are
+                                in the {youngest.ageRange} bucket.
+                            </div>
+                        );
+                    })()}
+                </>
+            )}
+        </Card>
+    );
+}
+
+function fmtAvg(v: number | null): string {
+    return v == null ? '—' : v.toFixed(2);
+}
+
+function TextSimilarityProxyCard({ buckets }: { buckets: BehavioralSignalBucket[] }) {
+    return (
+        <Card
+            title="Text Similarity Distribution"
+            headerActions={
+                <MethodPopover
+                    description={
+                        'Pairwise copy-paste-similarity buckets (this build\'s pre-cutover measure) are not '
+                        + 'computed yet. template_score — mean per-label templated-language score — is the '
+                        + 'closest signal this build measures toward the same question: do this label\'s '
+                        + 'posts read as boilerplate/repeated text?'
+                    }
+                />
+            }
+        >
+            <div className="text-xs text-muted mb-3">
+                Pairwise copy-paste similarity across suspected-bot posts is not measured in this build.
+                Shown instead: mean template_score per detector label — higher values lean toward
+                templated/repeated text.
+            </div>
+            {buckets.length === 0 ? (
+                <p className="text-sm text-muted" style={{ margin: 0 }}>No labeled posts in this window.</p>
+            ) : (
+                <div className="flex flex-col gap-3">
+                    {buckets.map((b) => (
+                        <SimilarityBar
+                            key={b.label}
+                            label={`${b.label} (n=${b.docCount.toLocaleString()})`}
+                            value={b.avgTemplateScore != null ? b.avgTemplateScore * 100 : 0}
+                            color={b.label === 'bot' ? COLORS.negative : b.label === 'suspicious' ? COLORS.warning : COLORS.chartAccent}
+                            title={`Mean template_score for "${b.label}": ${fmtAvg(b.avgTemplateScore)}`}
+                        />
+                    ))}
+                </div>
+            )}
+        </Card>
+    );
+}
+
+function LinkDomainConcentrationCard() {
+    return (
+        <Card title="Link Domain Concentration">
+            <p className="text-sm text-muted" style={{ margin: 0 }}>
+                Shared-link-domain concentration across suspected-bot posts is not part of this build's
+                bot-activity data yet. High concentration of links to a small number of domains would
+                indicate coordinated promotion once this measure lands.
+            </p>
+        </Card>
+    );
+}
+
+interface BehavioralSignalsPanelProps {
+    accountAgeBuckets: AccountAgeBucket[];
+    behavioralSignals: BehavioralSignalBucket[];
+    postingCadenceGrid: PostingCadenceCell[];
+}
+
+function BehavioralSignalsPanel({ accountAgeBuckets, behavioralSignals, postingCadenceGrid }: BehavioralSignalsPanelProps) {
+    return (
+        <>
+            <div className="col-span-4"><AccountAgeCard buckets={accountAgeBuckets} /></div>
+            <div className="col-span-4"><TextSimilarityProxyCard buckets={behavioralSignals} /></div>
+            <div className="col-span-4"><LinkDomainConcentrationCard /></div>
+            <div className="col-span-12">
+                <Card
+                    title="Posting Cadence by Day and Hour"
+                    subtitle="Bot-flagged posts, bucketed by day of week and hour of day (UTC)."
+                >
+                    <PostingCadenceHeatmap cells={postingCadenceGrid} />
+                </Card>
+            </div>
+        </>
+    );
+}
+
+// --------------------------------------------------------------------------- //
+//  Flagged accounts — current-era addition, kept and slotted into the         //
+//  restored geometry. FlaggedAccount carries no EntityProfile (no key/blurb), //
+//  so the modal renders account identity directly rather than routing         //
+//  through EntityHeader/EntityProfileCard.                                   //
 // --------------------------------------------------------------------------- //
 
 function FlaggedAccountModal({ account, onClose }: { account: FlaggedAccount; onClose: () => void }) {
@@ -425,11 +593,19 @@ function FlaggedAccountModal({ account, onClose }: { account: FlaggedAccount; on
             title={account.displayName || account.handle || `Author #${account.authorId}`}
             subtitle="Bot-detection drill-down"
         >
-            <EntityHeader entity={{ kind: null, displayName: account.displayName || account.handle || 'Unknown', lean: account.lean }} />
+            <div className="entity-modal-head">
+                <div>
+                    <p className="lead" style={{ margin: 0 }}>
+                        {account.platform} account
+                        {account.handle ? ` · @${account.handle}` : ''}
+                    </p>
+                    {account.lean && <LeanLabelChip lean={account.lean} variant="chip" />}
+                </div>
+            </div>
             <div className="entity-modal-stats">
                 <div>
                     <div className="eyebrow">Flagged post share</div>
-                    <div className="metric-value">{(account.flaggedPostShare * 100).toFixed(0)}%</div>
+                    <div className="metric-value">{formatPct(account.flaggedPostShare * 100, { decimals: 0 })}</div>
                 </div>
                 <div>
                     <div className="eyebrow">Sample count</div>
@@ -443,8 +619,8 @@ function FlaggedAccountModal({ account, onClose }: { account: FlaggedAccount; on
                 )}
             </div>
             <h3 className="card-title mt-4 mb-2">Flagged posts from this account</h3>
-            <SampleCardList
-                samples={account.samples}
+            <PostCardList
+                posts={account.samples.map(sampleDocToPostCard)}
                 sampleNote="The highest-confidence flagged posts from this account — a sample, not every flag."
                 emptyNote="No sample posts stored for this account in this window."
             />
@@ -476,7 +652,7 @@ function FlaggedAccountsCard({ accounts }: { accounts: FlaggedAccount[] }) {
                         </span>
                         <span className="ranked-entity-rate">
                             <span className="ranked-entity-rate-value" style={{ color: botRateColor(a.flaggedPostShare * 100) }}>
-                                {(a.flaggedPostShare * 100).toFixed(0)}%
+                                {formatPct(a.flaggedPostShare * 100, { decimals: 0 })}
                             </span>
                         </span>
                     </button>
@@ -496,42 +672,79 @@ interface BotActivityProfilerProps {
 }
 
 function BotActivityProfiler({ filters }: BotActivityProfilerProps) {
-    const [activeEntity, setActiveEntity] = useState<EntityBotRate | null>(null);
+    const [activeItem, setActiveItem] = useState<BotEntityItem | null>(null);
+    // Cross-page entity deep link ("#bots?entity=<entityId>").
+    const [entityParam, setEntityParam] = useDeepLinkParam('entity');
     const { data, loading, error, refetch } = useFetch<BotActivityResponse>(
         () => fetchBotActivity(filters.timeRange),
         [filters.timeRange],
         `bot-activity:${filters.timeRange}`,
     );
     const { data: snapshotStatus } = useFetch<SnapshotStatusResponse>(
-        () => fetchSnapshotStatus(), [], 'snapshot-status',
+        () => fetchSnapshotStatus(),
+        [],
+        'snapshot-status',
     );
 
-    if (error) return <ErrorState message={error.message} onRetry={refetch} />;
+    // Resolve entity= once data lands; unknown entities clear the param.
+    // Pre-cutover matched on (kind, key); the current param is a numeric
+    // entityId (see EntityHubLinks.tsx), so this matches on entityProfile.entityId.
+    useEffect(() => {
+        if (!data || !entityParam) return;
+        const target = parseEntityParam(entityParam);
+        if (target != null) {
+            const lists = [data.byOfficial, data.byGeneralPublic];
+            for (const list of lists) {
+                const item = list.find((it) => it.entityProfile.entityId === target);
+                if (item) {
+                    setActiveItem(item);
+                    return;
+                }
+            }
+        }
+        setEntityParam(null);
+    }, [data, entityParam, setEntityParam]);
+
+    if (error) {
+        return <ErrorState message={error.message} onRetry={refetch} />;
+    }
+
     if (loading) {
         return (
             <div className="flex flex-col gap-6">
-                <div className="grid-3"><LoadingCard /><LoadingCard /><LoadingCard /></div>
+                <div className="grid-3">
+                    <LoadingCard />
+                    <LoadingCard />
+                    <LoadingCard />
+                </div>
+                <LoadingCard />
                 <LoadingCard />
             </div>
         );
     }
+
+    // Zero flagged accounts is a legitimate signal (pipeline ran, nothing
+    // tripped) — the frame still renders with per-column empty copy; only an
+    // absent fetch result hides the whole page.
     if (!data) return <EmptyState title="No bot-activity data available" />;
 
-    const refreshed = formatRefreshedAgo(pipelineRunTimestamp(snapshotStatus));
+    const botTickerItems = buildBotTickerItems(data);
+    const botRefreshed = formatRefreshedAgo(pipelineRunTimestamp(snapshotStatus));
 
     return (
         <div className="dashboard-grid">
             <div className="col-span-12">
                 <GlobalTicker
-                    items={buildTickerItems(data)}
-                    refreshed={refreshed}
+                    items={botTickerItems}
+                    refreshed={botRefreshed}
                     ariaLabel="Bot detector overview"
                     legend={
                         <MethodPopover
                             title="How to read these numbers"
                             description={
-                                'Suspected automation = the share of scored posts our detector flags as '
-                                + 'likely automated. These are probabilistic leads, not verdicts.'
+                                'Suspected automation = the share of scored posts our detector flags as likely '
+                                + 'automated. Coordination = a 0 (none) to 1 (high) index of timing overlap across '
+                                + 'suspected accounts. These are probabilistic leads, not verdicts.'
                             }
                         />
                     }
@@ -551,19 +764,26 @@ function BotActivityProfiler({ filters }: BotActivityProfilerProps) {
             </div>
 
             <div className="col-span-12">
-                <EntityBotGrid byEntity={data.byEntity} onOpen={setActiveEntity} />
+                <BotThreeWayGrid data={data} onOpen={setActiveItem} />
                 <p className="card-note">
-                    News articles are not bot-scored: articles are not accounts, so an outlet has no
-                    automation rate. Bot detection covers social posts only.
+                    News articles are not bot-scored: articles are not accounts, so
+                    an outlet has no automation rate. Bot detection covers social
+                    posts only.
                 </p>
             </div>
 
-            {activeEntity && (
-                <BotEntityModal item={activeEntity} onClose={() => setActiveEntity(null)} />
+            {activeItem && (
+                <BotEntityModal
+                    item={activeItem}
+                    onClose={() => {
+                        setActiveItem(null);
+                        if (entityParam) setEntityParam(null);
+                    }}
+                />
             )}
 
             <div className="col-span-12">
-                <CoordinationSummary data={data} />
+                <CoordinationSummary data={data.coordinationStats} />
             </div>
 
             <div className="col-span-12 bot-section-label">
@@ -571,8 +791,8 @@ function BotActivityProfiler({ filters }: BotActivityProfilerProps) {
                     Narratives with Suspected Bot Amplification
                 </div>
                 <div className="text-xs text-muted" style={{ lineHeight: 'var(--leading-relaxed)' }}>
-                    Each row below is a narrative whose amplifying accounts score as likely bots. Open
-                    View details to see the bot-authored posts carrying it.
+                    Each row below is a narrative whose amplifying accounts score as likely bots. Open View
+                    details to see the bot-authored posts carrying it.
                 </div>
             </div>
 
@@ -593,15 +813,22 @@ function BotActivityProfiler({ filters }: BotActivityProfilerProps) {
                 </div>
             )}
 
-            <div className="col-span-6"><AccountAgeCard buckets={data.accountAgeBuckets} /></div>
-            <div className="col-span-6"><BehavioralSignalsCard buckets={data.behavioralSignals} /></div>
+            {/* Behavioral signals — four cards rendered as direct grid children.
+                See BehavioralSignalsPanel for per-card span decisions. */}
+            <BehavioralSignalsPanel
+                accountAgeBuckets={data.accountAgeBuckets}
+                behavioralSignals={data.behavioralSignals}
+                postingCadenceGrid={data.postingCadenceGrid}
+            />
 
-            <div className="col-span-12"><FlaggedAccountsCard accounts={data.flaggedAccounts} /></div>
+            <div className="col-span-12">
+                <FlaggedAccountsCard accounts={data.flaggedAccounts} />
+            </div>
 
             <div className="col-span-12">
                 <Card title="Flagged posts">
-                    <SampleCardList
-                        samples={data.flaggedDocs}
+                    <PostCardList
+                        posts={data.flaggedDocs.map(sampleDocToPostCard)}
                         sampleNote="The highest-confidence flagged posts across the whole window — a sample, not every flag."
                         emptyNote="No posts were flagged in this window."
                     />
@@ -613,11 +840,12 @@ function BotActivityProfiler({ filters }: BotActivityProfilerProps) {
                     <p className="text-sm">
                         This page flags accounts and posts in our political-content sample that look
                         automated. The detector scores each account from behavioral signals — posting
-                        rate, text repetition, account age.
+                        rate, text repetition, account age, and coordinated timing.
                     </p>
                     <p className="text-sm">
                         Some real users post in bot-like ways, and some real bots post like humans.
-                        Treat flags as <strong>leads, not verdicts</strong>.
+                        Treat flags as <strong>leads, not verdicts</strong>: every signal points at
+                        the specific behavior that triggered it, so a reader can audit each call.
                     </p>
                 </CollapsibleInfo>
             </div>

@@ -30,6 +30,7 @@ from analysis.src.api.queries.constants import (
     MIN_TARGET_SAMPLE_N,
     SNIPPET_MAX_CHARS,
 )
+from analysis.src.api.queries.profiles import fetch_entity_profiles
 from analysis.src.common.db import connection
 from analysis.src.common.settings import get_settings
 
@@ -254,6 +255,7 @@ def get_entity_profile(entity_id: int) -> EntityProfileResponse:
         model_id_rows = conn.execute(_AUTHORED_MODEL_IDS_SQL, params).fetchall()
         received_rows = conn.execute(_STANCE_RECEIVED_SQL, params).fetchall()
         expressed_rows = conn.execute(_STANCE_EXPRESSED_SQL, params).fetchall()
+        entity_profiles = fetch_entity_profiles(conn, [entity_id])
 
     sampled, official_record = split_admission_counts(authored_rows)
     first_activity, last_activity = _activity_bounds(authored_rows)
@@ -268,6 +270,7 @@ def get_entity_profile(entity_id: int) -> EntityProfileResponse:
             kind="fact" if entity["kind"] in ("official", "collective") else "curated",
             value=entity["lean"],
         ),
+        profile=entity_profiles[entity_id],
         range=RangeMeta(
             window=None, start=None, end=None,
             sampled_doc_count=sampled, official_record_doc_count=official_record,

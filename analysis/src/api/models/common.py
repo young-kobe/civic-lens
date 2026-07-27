@@ -93,3 +93,108 @@ class SampleDocModel(CamelModel):
     confidence: float
     admission_class: Literal["sampled", "official_record"]
     published_at: Optional[datetime] = None
+
+
+class EntityProfileModel(CamelModel):
+    """
+    Editorial profile payload for one entity card, restoring the
+    pre-Postgres UI's `EntityProfile` shape (see
+    docs/audit-trail/api/2026-07-27-entity-profile-restoration.md). The PG
+    `corpus.entities` columns feed this model's fields per `kind` (mapping
+    decided in `queries/profiles.py::_map_entity_row`), NOT one-to-one by
+    name -- in particular:
+
+      * `lean` (this model) <- `entities.lean_source` (the curated
+        pre-flattening classification string), for outlet/subreddit rows.
+        NEVER `entities.lean` -- that column is the flattened join-axis
+        enum and is never surfaced through this field.
+      * `lean_source` (this model) <- `entities.source_citation` -- the
+        CITATION for the lean above, not the lean value itself. Same PG
+        column also feeds `bio_source` (see next point); the two model
+        fields are populated from opposite `kind` branches, never both.
+      * `bio_source` (this model) <- `entities.source_citation` too, but
+        for official/collective rows (the citation for `party`, i.e. the
+        bio_source of the old officials registry).
+      * `party` (this model) <- `entities.lean_source` for official/
+        collective rows (party membership was the "lean" for officials).
+    """
+
+    kind: str
+    key: str
+    display_name: str
+    blurb: str = ""
+    lean: Optional[str] = None
+    lean_source: Optional[str] = None
+    owner: Optional[str] = None
+    founded: Optional[int] = None
+    circulation_note: Optional[str] = None
+    office: Optional[str] = None
+    party: Optional[str] = None
+    term_start: Optional[str] = None
+    bio_source: Optional[str] = None
+    subscriber_count_proxy: Optional[str] = None
+    account_type: Optional[str] = None
+    entity_id: Optional[int] = None
+
+
+class ClassificationSampleModel(CamelModel):
+    """
+    One evidence sample for the Source-signals drill-down, restoring the
+    pre-Postgres UI's `ClassificationSample` shape (see
+    docs/audit-trail/api/2026-07-27-entity-profile-restoration.md).
+    Assembled by `queries/base.py::build_classification_sample` from
+    `fetch_rich_sample_fields()`'s per-doc dict.
+    """
+
+    doc_id: int
+    label: str
+    confidence: float
+    reasoning: Optional[str] = None
+    evidence_spans: List[str] = Field(default_factory=list)
+    sarcasm_detected: Optional[bool] = None
+    title: Optional[str] = None
+    source_type: str
+    source_name: Optional[str] = None
+    date: Optional[str] = None
+    full_text: Optional[str] = None
+    url: Optional[str] = None
+    topic: Optional[str] = None
+    engagement: Optional["SampleEngagementModel"] = None
+    author: Optional["SampleAuthorModel"] = None
+    targets: Optional[List["SampleTargetModel"]] = None
+    narrative: Optional[str] = None
+
+
+class SampleEngagementModel(CamelModel):
+    """Per-platform engagement counts backing a ClassificationSample --
+    retweet/reply/like/quote for X, score/num_comments for Reddit. Fields
+    outside the doc's own platform stay None (never fabricated as 0)."""
+
+    retweets: Optional[int] = None
+    replies: Optional[int] = None
+    likes: Optional[int] = None
+    quotes: Optional[int] = None
+    score: Optional[int] = None
+    num_comments: Optional[int] = None
+
+
+class SampleAuthorModel(CamelModel):
+    """X author metadata from corpus.authors backing a ClassificationSample.
+    None/absent for non-X docs -- Reddit stores no author profile here, and
+    we never fabricate one."""
+
+    handle: Optional[str] = None
+    display_name: Optional[str] = None
+    avatar_url: Optional[str] = None
+    verified_type: Optional[str] = None
+    followers_count: Optional[int] = None
+    account_created_at: Optional[datetime] = None
+    bio: Optional[str] = None
+
+
+class SampleTargetModel(CamelModel):
+    """One "about X -- stance" chip on a ClassificationSample, sourced
+    from analysis.target_mentions."""
+
+    label: str
+    stance: Literal["positive", "negative", "neutral", "mixed"]

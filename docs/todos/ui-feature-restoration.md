@@ -117,6 +117,58 @@ degraded panels to full fidelity.
       add a mean-confidence aggregate over all member docs in the window to
       `NarrativeSummaryModel` and wire the chip into `ui/src/pages/Narratives.tsx`.
 
+## Full-fidelity restoration — old contract served live (owner decision 2026-07-27)
+
+The geometry pass above was not enough: the owner wants the pages to look
+EXACTLY as they did at `pre-cutover-main`, including the rich drill-down
+modality (card -> entity modal -> per-story modal). Approach: the old JSX
+comes back verbatim; the API is reshaped to serve the old contract shape
+(embedded entityProfile, pre-bucketed tier arrays, rich samples). The
+diagnostic sweeps (2026-07-27) confirmed nearly every old field is either
+already in Postgres unqueried, or expressible as SQL over existing tables.
+Vocabulary traps documented in `api/queries/profiles.py`: old UI `lean` =
+PG `entities.lean_source`; old UI `leanSource`/`bioSource` = PG
+`entities.source_citation`; old kind 'account' = `kind='official' AND NOT
+editorial` plus synthesized sampled authors.
+
+Stays retired regardless (separate owner decisions): GOP favorability /
+gopTrend / pollingVsSocial (favorability retired 2026-07-25), copy-paste
+similarity distribution + identicalTextPairs (needs engine recompute).
+
+- [x] Wave 1 foundations: migration 0007 (founded, circulation_note,
+      subscriber_count_proxy, account_type backfilled from the frozen YAML
+      at `pre-cutover-main`), shared `EntityProfileModel` + vocabulary
+      mapping in `api/queries/profiles.py`, rich
+      `ClassificationSampleModel` + batched builder in `queries/base.py`,
+      collective alias sets in `queries/constants.py`
+- [x] Wave 2 sentiment: `byNewsOutlet`/`byOfficial`/`byGeneralPublic`
+      EntitySentimentItem arrays (expressed rollups, received embed,
+      expressedAlignment, expressed byTopic, outbound targets,
+      engagementTotal, per-entity dailyTone, sampled-author cards +
+      other-x-users fold, collectives, baselines), day-by-tier toneTrend,
+      distributionSamples, daySamples
+- [x] Wave 2 propaganda: per-tier ranked entity arrays with profiles,
+      `examples_by_entity`, rich PropagandaExample (title, score,
+      technique spans, author_handle, party)
+- [x] Wave 2 bots: per-tier entity arrays with profiles,
+      `BotEntityItem.samples` flagged examples, coordinationStats
+      (accountReuse, avgPostsPerSuspectedAccount), day-by-hour cadence
+- [x] Wave 2 narratives: `name`, first_seen_entity_profile,
+      first_seen_tier_group, cross_tier, first_seen_author, rich
+      supporting docs, inbound_by_link_type; movers/outlets/docs get
+      entity_profile attached
+- [x] Wave 3 UI: old pages + inline modals restored verbatim from
+      `pre-cutover-main` (EntitySentimentModal, NarrativeEntityModal ->
+      NarrativeDetailModal two-level drill-down, SegmentSamplesModal,
+      DaySamplesModal, ToneBarRows, PropagandaEntityModal flagged
+      examples, BotEntityModal samples, avatar/external-link/chip
+      helpers, ranked three-way grids), transformers/topics services
+      ported to the new endpoints
+- [x] Gate: contract snapshots re-recorded, full Python suite green (882
+      passed, 0 failures), UI typecheck + build green
+- [ ] Owner side-by-side eyeball pass vs `pre-cutover-main` (design
+      parity sign-off — not automatable)
+
 ## Blocked — needs a decision or new computation, not a join
 
 - [ ] **Copy-paste similarity distribution.** `analysis.bot_signals

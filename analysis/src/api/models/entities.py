@@ -9,7 +9,13 @@ from __future__ import annotations
 from datetime import datetime
 from typing import List, Literal, Optional
 
-from analysis.src.api.models.common import CamelModel, LeanLabel, RangeMeta, SampleDocModel
+from analysis.src.api.models.common import (
+    CamelModel,
+    EntityProfileModel,
+    LeanLabel,
+    RangeMeta,
+    SampleDocModel,
+)
 
 
 class EntityPostRow(SampleDocModel):
@@ -80,6 +86,10 @@ class EntityProfileResponse(CamelModel):
     display_name: str
     kind: str
     lean: Optional[LeanLabel]
+    # Editorial card (blurb/party/office/term_start/bio_source/owner/
+    # founded/etc.) restoring the old pre-Postgres EntityProfile shape --
+    # see queries/profiles.py::fetch_entity_profiles.
+    profile: EntityProfileModel
     range: RangeMeta
     analyzed_doc_counts: AdmissionSplit
     stance_received: StanceDistribution

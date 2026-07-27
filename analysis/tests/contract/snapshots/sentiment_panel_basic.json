@@ -9,6 +9,104 @@
       "volume": 1
     }
   ],
+  "byGeneralPublic": [
+    {
+      "byTopic": [
+        {
+          "lowSample": true,
+          "net": null,
+          "topic": "General",
+          "volume": 1
+        }
+      ],
+      "classificationSamples": [
+        {
+          "author": {
+            "accountCreatedAt": null,
+            "avatarUrl": null,
+            "bio": null,
+            "displayName": null,
+            "followersCount": null,
+            "handle": "senexample",
+            "verifiedType": null
+          },
+          "confidence": 0.9,
+          "date": "2026-06-01T14:00:00+00:00",
+          "docId": 1,
+          "engagement": null,
+          "evidenceSpans": [],
+          "fullText": "body",
+          "label": "positive",
+          "narrative": null,
+          "reasoning": null,
+          "sarcasmDetected": null,
+          "sourceName": "senexample",
+          "sourceType": "x_post",
+          "targets": [
+            {
+              "label": "Sen. Example",
+              "stance": "positive"
+            }
+          ],
+          "title": "A tariff plan",
+          "topic": null,
+          "url": "https://example.com/tweet-1"
+        }
+      ],
+      "dailyTone": [
+        {
+          "date": "2026-06-01",
+          "lowSample": true,
+          "net": null,
+          "volume": 1
+        }
+      ],
+      "engagementTotal": 0,
+      "entityProfile": {
+        "accountType": null,
+        "bioSource": null,
+        "blurb": "",
+        "circulationNote": null,
+        "displayName": "Sen. Example",
+        "entityId": 1,
+        "founded": null,
+        "key": "sen-example",
+        "kind": "account",
+        "lean": null,
+        "leanSource": null,
+        "office": null,
+        "owner": null,
+        "party": null,
+        "subscriberCountProxy": null,
+        "termStart": null
+      },
+      "expressedAlignment": null,
+      "key": "sen-example",
+      "kind": "account",
+      "negative": 0,
+      "netScore": 100.0,
+      "neutral": 0,
+      "outbound": {
+        "minSampleN": 5,
+        "targets": [
+          {
+            "entityKey": "sen-example",
+            "kind": "official",
+            "label": "Sen. Example",
+            "lowSample": true,
+            "net": null,
+            "volume": 1
+          }
+        ],
+        "volume": 1
+      },
+      "positive": 1,
+      "received": null,
+      "volume": 1
+    }
+  ],
+  "byNewsOutlet": [],
+  "byOfficial": [],
   "byPlatform": [
     {
       "negative": 0,
@@ -59,6 +157,42 @@
       "volume": 1
     }
   ],
+  "daySamples": {
+    "2026-06-01": [
+      {
+        "author": {
+          "accountCreatedAt": null,
+          "avatarUrl": null,
+          "bio": null,
+          "displayName": null,
+          "followersCount": null,
+          "handle": "senexample",
+          "verifiedType": null
+        },
+        "confidence": 0.9,
+        "date": "2026-06-01T14:00:00+00:00",
+        "docId": 1,
+        "engagement": null,
+        "evidenceSpans": [],
+        "fullText": "body",
+        "label": "positive",
+        "narrative": null,
+        "reasoning": null,
+        "sarcasmDetected": null,
+        "sourceName": "senexample",
+        "sourceType": "x_post",
+        "targets": [
+          {
+            "label": "Sen. Example",
+            "stance": "positive"
+          }
+        ],
+        "title": "A tariff plan",
+        "topic": null,
+        "url": "https://example.com/tweet-1"
+      }
+    ]
+  },
   "disclaimer": "Represents sampled platform discourse, not verified population sentiment",
   "distribution": {
     "mildNegative": 0,
@@ -66,6 +200,46 @@
     "neutral": 0,
     "strongNegative": 0,
     "strongPositive": 1
+  },
+  "distributionSamples": {
+    "mildNegative": [],
+    "mildPositive": [],
+    "neutral": [],
+    "strongNegative": [],
+    "strongPositive": [
+      {
+        "author": {
+          "accountCreatedAt": null,
+          "avatarUrl": null,
+          "bio": null,
+          "displayName": null,
+          "followersCount": null,
+          "handle": "senexample",
+          "verifiedType": null
+        },
+        "confidence": 0.9,
+        "date": "2026-06-01T14:00:00+00:00",
+        "docId": 1,
+        "engagement": null,
+        "evidenceSpans": [],
+        "fullText": "body",
+        "label": "positive",
+        "narrative": null,
+        "reasoning": null,
+        "sarcasmDetected": null,
+        "sourceName": "senexample",
+        "sourceType": "x_post",
+        "targets": [
+          {
+            "label": "Sen. Example",
+            "stance": "positive"
+          }
+        ],
+        "title": "A tariff plan",
+        "topic": null,
+        "url": "https://example.com/tweet-1"
+      }
+    ]
   },
   "entityStances": [
     {
@@ -152,6 +326,57 @@
       "publishedAt": "2026-06-01T14:00:00Z",
       "snippet": "A tariff plan",
       "sourceUrl": "https://example.com/tweet-1"
+    }
+  ],
+  "targetTone": {
+    "baselines": {
+      "crossPartyNet": null,
+      "crossPartyVolume": 0,
+      "samePartyNet": null,
+      "samePartyVolume": 0
+    },
+    "botExcludedMentions": 0,
+    "collectives": {
+      "dem_collective": {
+        "byNarrative": [],
+        "bySpeakerTier": [],
+        "byTopic": [],
+        "engagementWeightedNet": null,
+        "lowSample": true,
+        "net": null,
+        "samples": [],
+        "volume": 0
+      },
+      "gop_collective": {
+        "byNarrative": [],
+        "bySpeakerTier": [],
+        "byTopic": [],
+        "engagementWeightedNet": null,
+        "lowSample": true,
+        "net": null,
+        "samples": [],
+        "volume": 0
+      }
+    },
+    "minSampleN": 5,
+    "resolvedMentions": 1,
+    "unresolvedMentions": 0
+  },
+  "toneTrend": [
+    {
+      "date": "2026-06-01",
+      "news": {
+        "net": null,
+        "volume": 0
+      },
+      "officials": {
+        "net": null,
+        "volume": 1
+      },
+      "public": {
+        "net": null,
+        "volume": 0
+      }
     }
   ]
 }

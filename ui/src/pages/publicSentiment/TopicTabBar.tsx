@@ -1,63 +1,121 @@
+import { TOPICS, type Topic, type TopicKey } from '../../services/topics';
 import type { TopicSentiment } from '../../types';
 
 // --------------------------------------------------------------------------- //
-//  TopicTabBar — the Overall Tone page's visual anchor, restored from the     //
-//  pre-cutover tree (see docs/todos and PublicSentiment.tsx's degradation     //
-//  notes). The old bar read a fixed topic registry (services/topics.ts, with  //
-//  per-topic icons and slugs) that no longer exists; this version rebuilds    //
-//  the tabs straight from `byTopic` in SentimentPanelResponse, so the tab set //
-//  and per-tab volumes are exactly what the backend currently publishes.      //
+//  TopicTabBar — the Overall Tone page's visual anchor, restored verbatim     //
+//  from `pre-cutover-main` (docs/todos/ui-feature-restoration.md, Wave 3 UI). //
+//  `services/topics.ts` (the fixed political-topic taxonomy with icons/slugs) //
+//  is back too, so the tab set is the curated registry again rather than a   //
+//  set rebuilt straight from whatever topics happen to appear in `byTopic`.   //
+//  Per-tab volumes still come from the live `byTopic` (now `TopicSentiment[]` //
+//  — the pre-Postgres `SentimentBreakdown` shape this used to read, minus    //
+//  the retired per-tier net fields this component never used).              //
 // --------------------------------------------------------------------------- //
 
-export const ALL_TOPICS_KEY = 'all';
-
 interface TopicTabBarProps {
-    activeKey: string;
-    onChange: (key: string) => void;
+    activeKey: TopicKey;
+    onChange: (key: TopicKey) => void;
+    /** Per-topic volumes from `data.byTopic`, used to surface a small
+     *  "n posts" affordance under each label so users can see at a glance
+     *  which topics are dense in the current window. Tabs whose topic has
+     *  zero docs render slightly muted but stay clickable — clicking
+     *  them still scopes the page (it'll show the empty state). */
     byTopic: TopicSentiment[];
 }
 
+/**
+ * Big-tab category bar for political topics — the visual anchor of the
+ * Overall Tone page. One tab per backend topic plus an "All Topics"
+ * option that disables filtering. On wide viewports renders a single
+ * wrapping row; on narrow viewports the row scrolls horizontally so the
+ * tabs stay full-size rather than crushing into a dropdown.
+ */
 export function TopicTabBar({ activeKey, onChange, byTopic }: TopicTabBarProps) {
-    const totalVolume = byTopic.reduce((sum, t) => sum + t.volume, 0);
-    const tabs = [
-        { key: ALL_TOPICS_KEY, label: 'All Topics', volume: totalVolume },
-        ...[...byTopic]
-            .sort((a, b) => b.volume - a.volume)
-            .map((t) => ({ key: t.topic, label: t.topic, volume: t.volume })),
-    ];
+    const volumes = new Map<string, number>();
+    let totalVolume = 0;
+    for (const row of byTopic) {
+        if (!row.topic) continue;
+        const v = row.volume ?? 0;
+        volumes.set(row.topic, v);
+        totalVolume += v;
+    }
 
     return (
-        <nav className="topic-tabbar" role="tablist" aria-label="Filter by political topic">
-            {tabs.map((tab) => {
-                const active = tab.key === activeKey;
-                const hasData = tab.volume > 0;
-                const className = [
-                    'topic-tab',
-                    active ? 'topic-tab-active' : '',
-                    !hasData ? 'topic-tab-empty' : '',
-                ].filter(Boolean).join(' ');
-                const countLabel = hasData
-                    ? `${tab.volume.toLocaleString()} ${tab.volume === 1 ? 'post' : 'posts'}`
-                    : 'no posts';
-                const title = tab.key === ALL_TOPICS_KEY
-                    ? `All topics — every scored post in this window.`
-                    : `${tab.label} — ${countLabel} in this window`;
+        <nav
+            className="topic-tabbar"
+            role="tablist"
+            aria-label="Filter by political topic"
+        >
+            {TOPICS.map((topic) => {
+                const volume = topic.key === 'all' ? totalVolume : (volumes.get(topic.key) ?? 0);
+                const active = topic.key === activeKey;
                 return (
-                    <button
-                        key={tab.key}
-                        type="button"
-                        role="tab"
-                        aria-selected={active}
-                        className={className}
-                        onClick={() => onChange(tab.key)}
-                        title={title}
-                    >
-                        <span className="topic-tab-label">{tab.label}</span>
-                        <span className="topic-tab-count">{countLabel}</span>
-                    </button>
+                    <TopicTab
+                        key={topic.key}
+                        topic={topic}
+                        active={active}
+                        volume={volume}
+                        onClick={() => onChange(topic.key)}
+                    />
                 );
             })}
         </nav>
+    );
+}
+
+interface TopicTabProps {
+    topic: Topic;
+    active: boolean;
+    volume: number;
+    onClick: () => void;
+}
+
+function TopicTab({ topic, active, volume, onClick }: TopicTabProps) {
+    const hasData = volume > 0;
+    const isAll = topic.key === 'all';
+    const className = [
+        'topic-tab',
+        active ? 'topic-tab-active' : '',
+        !hasData ? 'topic-tab-empty' : '',
+    ].filter(Boolean).join(' ');
+
+    // "All Topics" sums the per-topic volumes, and since 'General' (the
+    // unclassified bucket) is a real tab, that sum now covers every scored
+    // post in the window — no more "topic-matched" caveat.
+    const countLabel = hasData
+        ? `${volume.toLocaleString()} ${volume === 1 ? 'post' : 'posts'}`
+        : 'no posts';
+    const title = isAll
+        ? `All topics — every scored post in this window, including posts `
+            + `with no topic signal (General).`
+        : `${topic.label} — ${countLabel} in this window`;
+
+    return (
+        <button
+            type="button"
+            role="tab"
+            aria-selected={active}
+            className={className}
+            onClick={onClick}
+            title={title}
+        >
+            <span className="topic-tab-icon" aria-hidden>
+                <svg
+                    viewBox="0 0 24 24"
+                    width={22}
+                    height={22}
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth={1.75}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                >
+                    {topic.iconPaths.map((d, i) => <path key={i} d={d} />)}
+                </svg>
+            </span>
+            <span className="topic-tab-label">{topic.label}</span>
+            <span className="topic-tab-count">{countLabel}</span>
+        </button>
     );
 }
 

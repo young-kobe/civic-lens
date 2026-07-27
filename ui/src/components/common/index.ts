@@ -13,9 +13,13 @@ export {
     default as EntityProfileCard,
     EntityAvatar,
     EntityHeader,
-    toneStats,
+    entityExternalUrl,
+    entityChipLabel,
+    entityChipTitle,
+    sentimentStats,
+    officialToneStats,
 } from './EntityProfileCard';
-export type { EntityStat, EntityLike } from './EntityProfileCard';
+export type { EntityStat } from './EntityProfileCard';
 export { default as EntityHubLinks, entityParamValue, parseEntityParam } from './EntityHubLinks';
 export { default as LeanLabel } from './LeanLabel';
 export { default as RangeCaption } from './RangeCaption';
@@ -31,9 +35,14 @@ export { default as CollapsibleInfo } from './CollapsibleInfo';
 export { default as TopMetricsBlock, TierRow } from './TopMetricsBlock';
 export type { TierRowDot } from './TopMetricsBlock';
 export {
-    default as SampleCard,
-    SampleCardList,
-} from './SampleCard';
+    default as PostCard,
+    PostCardList,
+    sampleToPostCard,
+    flaggedExampleToPostCard,
+    propagandaExampleToPostCard,
+} from './PostCard';
+export type { PostCardData, PostCardEngagement, PostCardAuthor } from './PostCard';
 export { default as MoversTicker } from './MoversTicker';
 export { ThreeWayGrid, TwoWayGrid, ThreeWayColumn, ThreeWayToolbar, matchesLeanFilter } from './ThreeWayGrid';
 export type { ColumnSorter, LeanFilter } from './ThreeWayGrid';
+export { TECHNIQUE_LABEL } from './constants';

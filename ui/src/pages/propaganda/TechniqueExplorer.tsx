@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Card, MethodPopover, Modal } from '../../components/common';
+import { Card, MethodPopover, Modal, TECHNIQUE_LABEL } from '../../components/common';
 import { formatPct } from '../../services/format';
 import { useDeepLinkParam } from '../../services/deepLink';
 import { COLORS } from '../../theme';
@@ -16,15 +16,6 @@ import type { PartySplit, PropagandaTechniqueName, TechniqueCount } from '../../
 //  no per-example technique breakdown), so this modal shows verbatim quotes   //
 //  rather than filtered post cards.                                          //
 // --------------------------------------------------------------------------- //
-
-const TECHNIQUE_LABEL: Record<PropagandaTechniqueName, string> = {
-    loaded_language: 'Loaded language',
-    name_calling: 'Name-calling',
-    ad_hominem: 'Ad hominem',
-    appeal_to_fear: 'Appeal to fear',
-    whataboutism: 'Whataboutism',
-    doubt_casting: 'Doubt-casting',
-};
 
 const TECHNIQUE_BLURB: Record<PropagandaTechniqueName, string> = {
     loaded_language: 'Emotionally charged framing designed to influence rather than inform.',

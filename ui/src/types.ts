@@ -149,6 +149,225 @@ export interface EntityStanceAggregate {
     samples: SampleDoc[];
 }
 
+// --------------------------------------------------------------------------- //
+//  Restored pre-Postgres entity-profile + editorial-card contract            //
+//  (analysis/src/api/models/common.py EntityProfileModel /                   //
+//  ClassificationSampleModel and friends — see docs/audit-trail/api/         //
+//  2026-07-27-entity-profile-restoration.md). `kind` is a plain string on     //
+//  the wire (the Python model doesn't constrain it to a Literal either).     //
+// --------------------------------------------------------------------------- //
+
+/** Editorial profile payload for one entity card. Shape is keyed by `kind`
+ *  ('outlet' | 'official' | 'subreddit' | 'account' | 'collective' |
+ *  'catch_all'); see EntityProfileModel's docstring for which PG columns
+ *  feed which field per kind. */
+export interface EntityProfile {
+    kind: string;
+    key: string;
+    displayName: string;
+    blurb: string;
+    lean?: string | null;
+    leanSource?: string | null;
+    owner?: string | null;
+    founded?: number | null;
+    circulationNote?: string | null;
+    office?: string | null;
+    party?: string | null;
+    termStart?: string | null;
+    bioSource?: string | null;
+    subscriberCountProxy?: string | null;
+    accountType?: string | null;
+    entityId?: number | null;
+}
+
+/** Engagement counts at collection time — a reach proxy, not verified
+ *  reach. X posts carry retweets/replies/likes/quotes; Reddit carries
+ *  score (+ numComments for posts). Absent = source stores none. */
+export interface SampleEngagement {
+    retweets?: number | null;
+    replies?: number | null;
+    likes?: number | null;
+    quotes?: number | null;
+    score?: number | null;
+    numComments?: number | null;
+}
+
+/** X author metadata from corpus.authors. Absent for non-X docs — Reddit
+ *  stores no author profile here, and we never fabricate one. */
+export interface SampleAuthor {
+    handle?: string | null;
+    displayName?: string | null;
+    avatarUrl?: string | null;
+    verifiedType?: string | null;
+    followersCount?: number | null;
+    accountCreatedAt?: string | null;
+    bio?: string | null;
+}
+
+/** One "about X — stance" chip on a ClassificationSample, sourced from
+ *  analysis.target_mentions. */
+export interface SampleTarget {
+    label: string;
+    stance: 'positive' | 'negative' | 'neutral' | 'mixed';
+}
+
+/** One evidence sample for the Source-signals drill-down (restores the
+ *  pre-Postgres `ClassificationSample` shape). */
+export interface ClassificationSample {
+    docId: number;
+    label: string;
+    confidence: number;
+    reasoning?: string | null;
+    evidenceSpans: string[];
+    sarcasmDetected?: boolean | null;
+    title?: string | null;
+    sourceType: string;
+    sourceName?: string | null;
+    date?: string | null;
+    fullText?: string | null;
+    url?: string | null;
+    topic?: string | null;
+    engagement?: SampleEngagement | null;
+    author?: SampleAuthor | null;
+    targets?: SampleTarget[] | null;
+    narrative?: string | null;
+}
+
+/** One topic-scoped EXPRESSED cell for an entity's own posts. */
+export interface EntityTopicCell {
+    topic: string;
+    net: number | null;
+    volume: number;
+    lowSample: boolean;
+}
+
+/** One day of an entity's own-post net-tone series. */
+export interface EntityDailyTonePoint {
+    date: string;
+    net: number | null;
+    volume: number;
+    lowSample: boolean;
+}
+
+/** One "who this bucket talks about" row. `kind` is the resolved target's
+ *  corpus.entities.kind when resolved, 'collective' for a raw_target
+ *  matched against a party alias set, 'raw' for a recurring unresolved
+ *  free-text target, 'other' for the pooled overflow bucket. */
+export interface OutboundTargetCell {
+    label: string;
+    entityKey: string | null;
+    kind: string;
+    net: number | null;
+    volume: number;
+    lowSample: boolean;
+}
+
+/** News/public-tier "who they're talking about" rollup — the inverse of
+ *  received tone. Capped at MAX_OUTBOUND_TARGETS named rows plus an
+ *  'Other targets' overflow row. */
+export interface OutboundTargets {
+    minSampleN: number;
+    volume: number;
+    targets: OutboundTargetCell[];
+}
+
+export interface ReceivedTopicCell {
+    topic: string;
+    net: number | null;
+    volume: number;
+    lowSample: boolean;
+}
+
+/** WHO is talking about the entity: news / officials / affiliated / public,
+ *  from the mentioning doc's own tier. */
+export interface ReceivedSpeakerTierCell {
+    tier: 'news' | 'officials' | 'affiliated' | 'public';
+    net: number | null;
+    volume: number;
+    lowSample: boolean;
+}
+
+/** Top narratives driving the mentions of an entity, by volume. */
+export interface ReceivedNarrativeCell {
+    narrativeId: number;
+    name: string;
+    net: number | null;
+    volume: number;
+    lowSample: boolean;
+}
+
+/** How sampled posts talk ABOUT an entity (the reputational signal), as
+ *  opposed to an EntitySentimentItem's own positive/negative/neutral
+ *  counts, which score the entity's OWN posts. */
+export interface ReceivedTone {
+    net: number | null;
+    volume: number;
+    lowSample: boolean;
+    engagementWeightedNet: number | null;
+    byTopic: ReceivedTopicCell[];
+    bySpeakerTier: ReceivedSpeakerTierCell[];
+    byNarrative: ReceivedNarrativeCell[];
+    samples: ClassificationSample[];
+}
+
+/** How an official's own posts score toward same-party vs cross-party
+ *  tracked targets (self-mentions excluded). Nets withheld below the
+ *  suppression floor. Also reused for the panel-wide alignment baseline. */
+export interface ExpressedAlignment {
+    samePartyNet: number | null;
+    samePartyVolume: number;
+    crossPartyNet: number | null;
+    crossPartyVolume: number;
+}
+
+/** Received-tone meta: the suppression threshold, resolution coverage,
+ *  bot-authored-mention exclusion count, party-collective rollups, and the
+ *  global same/cross-party alignment baseline. */
+export interface TargetToneMeta {
+    minSampleN: number;
+    resolvedMentions: number;
+    unresolvedMentions: number;
+    botExcludedMentions: number;
+    collectives: Record<string, ReceivedTone>;
+    baselines: ExpressedAlignment;
+}
+
+/** One per-entity card on the three-way (news/officials/public) sentiment
+ *  dashboard. positive/negative/neutral/volume/netScore are the entity's
+ *  OWN posts (MIXED folded into neutral); `received` is the tone directed
+ *  AT the entity (officials only; null elsewhere). */
+export interface EntitySentimentItem {
+    key: string;
+    kind: string;
+    entityProfile: EntityProfile;
+    positive: number;
+    negative: number;
+    neutral: number;
+    volume: number;
+    netScore: number | null;
+    classificationSamples: ClassificationSample[];
+    received?: ReceivedTone | null;
+    expressedAlignment?: ExpressedAlignment | null;
+    byTopic: EntityTopicCell[];
+    outbound?: OutboundTargets | null;
+    engagementTotal: number;
+    dailyTone: EntityDailyTonePoint[];
+}
+
+export interface ToneTrendCell {
+    net: number | null;
+    volume: number;
+}
+
+/** One day of the day-by-tier expressed net-tone series overlaying the
+ *  news/officials/public columns on one chart. */
+export interface ToneTrendPoint {
+    date: string;
+    news: ToneTrendCell;
+    officials: ToneTrendCell;
+    public: ToneTrendCell;
+}
+
 export interface SentimentPanelResponse {
     range: RangeMeta;
     overview: SentimentOverview;
@@ -162,6 +381,17 @@ export interface SentimentPanelResponse {
     entityStances: EntityStanceAggregate[];
     samples: SampleDoc[];
     disclaimer: string;
+    // Three-way (news/officials/public) per-entity rollups, restoring the
+    // pre-Postgres PublicSentimentData.byNewsOutlet/byOfficial/byGeneralPublic
+    // contract (docs/todos/ui-feature-restoration.md).
+    byNewsOutlet: EntitySentimentItem[];
+    byOfficial: EntitySentimentItem[];
+    byGeneralPublic: EntitySentimentItem[];
+    targetTone: TargetToneMeta | null;
+    toneTrend: ToneTrendPoint[];
+    // Keyed by SentimentDistribution's own field names (e.g. 'strongPositive').
+    distributionSamples: Record<string, ClassificationSample[]>;
+    daySamples: Record<string, ClassificationSample[]>;
 }
 
 // --------------------------------------------------------------------------- //
@@ -180,6 +410,9 @@ export interface BehavioralSignalBucket {
 export interface AccountAgeBucket {
     ageRange: string;
     accountCount: number;
+    // Share of all bot-flagged authors this bucket represents (0.0 when
+    // there are no bot-flagged authors at all, never divide-by-zero).
+    percentage: number;
 }
 
 export interface EntityBotRate {
@@ -221,11 +454,60 @@ export interface FlaggedAccount {
     samples: SampleDoc[];
 }
 
+/** One bot-flagged doc shown as evidence on a BotEntityItem card. Restores
+ *  the pre-Postgres `FlaggedExample` shape. `url` is always present
+ *  (invariant C1), never synthesized. */
+export interface FlaggedExample {
+    docId: number;
+    text: string;
+    url: string;
+    sourceLabel: string;
+    confidence?: number | null;
+    reasoning?: string | null;
+    indicators: string[];
+}
+
+/** One entity's bot-classification rollup for the officials / general-
+ *  public grid (restores the pre-Postgres `BotEntityItem`). `samples` are
+ *  confidence-ranked, capped at 3 -- an evidence preview, not a full
+ *  drill-down. */
+export interface BotEntityItem {
+    key: string;
+    kind: string;
+    entityProfile: EntityProfile;
+    totalDocs: number;
+    botDocs: number;
+    botRatePct: number;
+    samples: FlaggedExample[];
+}
+
+/** Restores the pre-Postgres `CoordinationStats`. `identicalTextPairs` has
+ *  no Postgres source (the old O(n^2) shingle-similarity scan was never
+ *  ported) -- always null, never fabricated. */
+export interface CoordinationStats {
+    accountReuse: number;
+    avgPostsPerSuspectedAccount: number;
+    identicalTextPairs: number | null;
+}
+
+/** One cell of the day-of-week x hour-of-day bot-flagged posting-cadence
+ *  grid (restores the pre-Postgres `HeatmapDataPoint`). All 7 x 24 = 168
+ *  cells are present even at count 0. `dayOfWeek` follows Postgres
+ *  EXTRACT(dow) (and JS Date.getDay()): Sunday=0 .. Saturday=6. */
+export interface PostingCadenceCell {
+    dayOfWeek: number;
+    hour: number;
+    docCount: number;
+}
+
 export interface BotActivityResponse {
     range: RangeMeta;
     analyzedDocCount: number;
     botScoredDocCount: number;
     automationRatePct: number;
+    // Docs labelled 'bot' OR 'suspicious' -- restores the pre-Postgres
+    // BotOverview.totalFlaggedPosts, wider than botScoredDocCount.
+    totalFlaggedPosts: number;
     behavioralSignals: BehavioralSignalBucket[];
     accountAgeBuckets: AccountAgeBucket[];
     // Max single-hour share of the bot-flagged posting-cadence histogram
@@ -233,7 +515,16 @@ export interface BotActivityResponse {
     // in the same UTC hour, 0.0 when there is no bot-flagged activity at all.
     coordinationIndex: number;
     postingCadence: PostingCadenceBucket[];
+    // Day-of-week x hour-of-day grid over the same bot-flagged docs --
+    // restores the pre-Postgres BehavioralSignals.postingCadence heatmap.
+    postingCadenceGrid: PostingCadenceCell[];
     byEntity: EntityBotRate[];
+    // Officials / general-public entity rollups -- restores the
+    // pre-Postgres BotOverview.by_official / by_general_public three-way
+    // grid (news is out of scope here; there is no byNewsOutlet).
+    byOfficial: BotEntityItem[];
+    byGeneralPublic: BotEntityItem[];
+    coordinationStats: CoordinationStats;
     botPushedNarratives: BotPushedNarrative[];
     flaggedAccounts: FlaggedAccount[];
     flaggedDocs: SampleDoc[];
@@ -253,8 +544,24 @@ export interface TimelinePoint {
     docCount: number;
 }
 
+/** Faction context for an X-origin narrative's first-seen doc (old
+ *  pre-Postgres `AccountProfile` subset carried by `firstSeenAuthor`).
+ *  `branch`/`chamber`/`stateOrDistrict` have no PG equivalent (that data
+ *  lived in the retired SQLite `account_profiles` table) -- always null
+ *  here, never guessed. */
+export interface AccountProfile {
+    handle: string | null;
+    fullName: string | null;
+    party: string | null;
+    branch: string | null;
+    chamber: string | null;
+    stateOrDistrict: string | null;
+    officeTitle: string | null;
+}
+
 export interface NarrativeSummary {
     narrativeId: number;
+    name: string;
     anchorClaimText: string | null;
     docCount: number;
     sourceBreakdown: SourceBreakdownItem[];
@@ -270,6 +577,27 @@ export interface NarrativeSummary {
     // narrative predates the first_seen columns existing.
     firstSeenAt: string | null;
     firstSeenDocId: number | null;
+    // First-seen-doc provenance (old contract restoration) -- all null
+    // together whenever firstSeenDocId is null.
+    firstSeenSourceType: string | null;
+    firstSeenDomain: string | null;
+    // corpus.author_profiles.tier of the first-seen doc's author; null when
+    // the doc has no author or the author has no profile row.
+    firstSeenTier: string | null;
+    firstSeenAuthor: AccountProfile | null;
+    firstSeenEntityProfile: EntityProfile | null;
+    // Coarse three-way frame: 'news' for a news first-seen doc, 'officials'
+    // when firstSeenTier is elected_official/affiliated, else 'public'.
+    firstSeenTierGroup: 'news' | 'officials' | 'public' | null;
+    // True when the narrative's in-window member docs span more than one
+    // of the three tier groups above.
+    crossTier: boolean;
+    // analysis.citations grouped by link_type, targeting this narrative's
+    // in-window member docs.
+    inboundByLinkType: Record<string, number>;
+    // Up to MAX_EVIDENCE_PER_SAMPLE rich evidence samples for the modal
+    // drill-down -- restores the old ClassificationSample-backed table.
+    topSupportingDocs: ClassificationSample[];
     // Mean claim-match confidence over ALL in-window member docs -- not just
     // the ranked subset memberDocSamples carries. Null when no member doc in
     // range has a non-null confidence.
@@ -337,6 +665,43 @@ export interface PropagandaTierSplit {
     meanScore: number;
 }
 
+/** One evidence span backing a PropagandaExample, from
+ *  analysis.propaganda_techniques for the doc's current propaganda run. */
+export interface PropagandaTechniqueSpan {
+    technique: string;
+    evidenceSpan: string | null;
+    confidence: number;
+}
+
+/** One flagged doc backing a per-entity drill-down (restores the
+ *  pre-Postgres `PropagandaExample`). `authorHandle` is null for news/reddit
+ *  docs. `party` is populated only when the author resolves to the
+ *  editorial 'official' bucket. */
+export interface PropagandaExample {
+    docId: number;
+    sourceType: string;
+    domain: string | null;
+    title: string | null;
+    overallScore: number;
+    textPreview: string;
+    url: string | null;
+    techniques: PropagandaTechniqueSpan[];
+    authorHandle: string | null;
+    party: string | null;
+}
+
+/** One registry entity's (or catch-all bucket's) propaganda footprint
+ *  within a single tier (news outlets / officials / general public). */
+export interface PropagandaEntityItem {
+    key: string;
+    kind: string;
+    entityProfile: EntityProfile;
+    totalDocs: number;
+    flaggedDocs: number;
+    flaggedRatePct: number;
+    meanScore: number;
+}
+
 export interface PropagandaOverview {
     range: RangeMeta;
     totalEligibleDocs: number;
@@ -349,6 +714,15 @@ export interface PropagandaOverview {
     byTier: PropagandaTierSplit[];
     byEntity: PropagandaEntityRow[];
     examples: SampleDoc[];
+    // Per-tier ranked entity leaderboards with full editorial profiles,
+    // restoring the old PropagandaOverview.byNewsOutlet/byOfficial/
+    // byGeneralPublic contract (docs/todos/ui-feature-restoration.md).
+    byNewsOutlet: PropagandaEntityItem[];
+    byOfficial: PropagandaEntityItem[];
+    byGeneralPublic: PropagandaEntityItem[];
+    // Per-entity flagged-example bucket, keyed by the same key used in
+    // PropagandaEntityItem.key (entity_key or catch-all sentinel).
+    examplesByEntity: Record<string, PropagandaExample[]>;
 }
 
 // --------------------------------------------------------------------------- //
