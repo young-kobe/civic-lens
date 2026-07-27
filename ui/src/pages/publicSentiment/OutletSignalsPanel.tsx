@@ -1,17 +1,77 @@
 import { useState } from 'react';
-import { Card, MethodPopover, Modal, RangeCaption, SampleCardList } from '../../components/common';
+import { AdmissionBadge, Card, MethodPopover, Modal, RangeCaption } from '../../components/common';
 import { fetchOutletProfiles, type TimeWindow } from '../../services/api';
-import { formatCount, formatPct, formatPts } from '../../services/format';
+import { formatCount, formatPct, formatPts, formatRelativeDate } from '../../services/format';
 import { useFetch } from '../../services/useFetch';
 import { COLORS } from '../../theme';
-import type { OutletProfile, OutletProfilesResponse } from '../../types';
+import type { OutletProfile, OutletProfilesResponse, SampleDoc } from '../../types';
 
 // --------------------------------------------------------------------------- //
 //  OutletSignalsPanel — per-domain net tone x bot rate side by side.          //
 //                                                                             //
 //  The one public surface that INCLUDES bot-flagged content: the bot rate    //
 //  is the signal being shown, so excluding flagged posts would erase it.     //
+//                                                                             //
+//  Renders `outlet.samples` (`SampleDoc[]`) with a small local thin card     //
+//  instead of the shared `SampleCardList`: that component re-exports         //
+//  `PostCard`/`PostCardList` from `./PostCard.tsx`, which Wave 3 UI restored //
+//  to the rich `ClassificationSample`-based pre-cutover card (see            //
+//  `PostCard.tsx`'s module docstring) — a different, thinner shape than      //
+//  `SampleDoc`. See this restoration's report for the cross-scope note on    //
+//  `SampleCard.tsx` needing its own `SampleDoc` implementation again.        //
 // --------------------------------------------------------------------------- //
+
+/** "1234567890" (unix seconds) → "3 days ago". */
+function unixSecondsFromIso(iso: string | null | undefined): number | null {
+    if (!iso) return null;
+    const t = Date.parse(iso);
+    return Number.isNaN(t) ? null : Math.floor(t / 1000);
+}
+
+function OutletSampleCard({ sample }: { sample: SampleDoc }) {
+    return (
+        <article className="post-card">
+            <header className="post-card-head">
+                <span className="post-card-when">{formatRelativeDate(unixSecondsFromIso(sample.publishedAt))}</span>
+                <a
+                    className="post-card-permalink"
+                    href={sample.sourceUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    aria-label="Open the original post in a new tab"
+                    title="Open the original in a new tab"
+                >
+                    View original
+                </a>
+            </header>
+            {sample.snippet && <p className="post-card-body">{sample.snippet}</p>}
+            <div className="post-card-analysis">
+                <AdmissionBadge admissionClass={sample.admissionClass} />
+                <span className="post-card-confidence" title="Model confidence in this run's label">
+                    {formatPct(sample.confidence * 100, { decimals: 0 })} confidence
+                </span>
+            </div>
+        </article>
+    );
+}
+
+function OutletSampleList({ samples }: { samples: SampleDoc[] }) {
+    if (samples.length === 0) {
+        return (
+            <p className="text-sm text-muted" style={{ fontStyle: 'italic' }}>
+                No stored example posts for this source in this window.
+            </p>
+        );
+    }
+    return (
+        <div className="post-card-list">
+            <p className="post-card-list-note">
+                This source's highest-confidence scored posts — the posts behind the number.
+            </p>
+            {samples.map((s) => <OutletSampleCard key={s.docId} sample={s} />)}
+        </div>
+    );
+}
 
 const MAX_ROWS = 9;
 
@@ -40,11 +100,7 @@ function OutletSamplesModal({ outlet, onClose }: { outlet: OutletProfile; onClos
             title={outlet.outletKey}
             subtitle={`${outlet.netTone != null ? formatPts(outlet.netTone) : '—'} net tone · ${formatCount(outlet.volume)} scored posts, bots included`}
         >
-            <SampleCardList
-                samples={outlet.samples}
-                sampleNote="This source's highest-confidence scored posts — the posts behind the number."
-                emptyNote="No stored example posts for this source in this window."
-            />
+            <OutletSampleList samples={outlet.samples} />
         </Modal>
     );
 }

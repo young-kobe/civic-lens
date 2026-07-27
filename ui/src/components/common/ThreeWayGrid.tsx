@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
-import { leanClass } from '../../theme';
-import type { LeanLabel as LeanLabelData } from '../../types';
+import { entityLeanClass } from './EntityProfileCard';
+import type { EntityProfile } from '../../types';
 
 /**
  * Three-way entity frame shared across every data page: News Outlets /
@@ -61,7 +61,7 @@ export interface ColumnSorter<T> {
 }
 
 // --------------------------------------------------------------------------- //
-//  Lean filter — shared by the toolbar and the pages' item filter            //
+//  Lean / party filter — shared by the toolbar and the pages' item filter    //
 // --------------------------------------------------------------------------- //
 
 /** Political-lean filter buckets. 'all' is the no-op default. */
@@ -75,22 +75,23 @@ const LEAN_FILTER_OPTIONS: Array<{ key: LeanFilter; label: string }> = [
 ];
 
 /**
- * True when an entity's LeanLabel passes the active lean filter. Reads the
- * shared three-epistemic-kinds shape (fact/curated/derived — see
- * `LeanLabel` in types.ts; a 'derived' lean is always evidence-backed)
- * through `leanClass`, so "Left" catches both left-leaning outlets/
- * subreddits (curated) and Democratic officials (fact). The "Center" pill
- * also admits mixed/neutral so no card silently vanishes under a specific
- * pill (only "All" shows literally everything). An entity with no lean at
- * all only passes "all" or "center".
+ * True when a profile passes the active lean filter. Unifies outlet/subreddit
+ * `lean` and official/account `party` through the shared `entityLeanClass`
+ * map (the same EntityProfile-shaped port EntityProfileCard uses — see that
+ * module's docstring for why this doesn't call the current `theme.ts`
+ * `leanClass`, which was rewritten for the flattened `corpus.political_lean`
+ * enum string, a different contract than this restored profile shape), so
+ * "Left" catches both left-leaning outlets and Democratic officials. The
+ * "Center" pill also admits mixed/neutral so no card silently vanishes under
+ * a specific pill (only "All" shows literally everything).
  */
 export function matchesLeanFilter(
-    lean: LeanLabelData | null | undefined,
+    profile: EntityProfile | undefined | null,
     filter: LeanFilter,
 ): boolean {
     if (filter === 'all') return true;
-    if (!lean) return filter === 'center';
-    const cls = leanClass(lean.value);
+    if (!profile) return filter === 'center';
+    const cls = entityLeanClass(profile);
     if (filter === 'center') return cls === 'center' || cls === 'mixed' || cls === 'neutral';
     return cls === filter;
 }
@@ -102,8 +103,8 @@ interface ThreeWayToolbarProps {
 }
 
 /**
- * Header band of the three-way frame — hosts the lean filter. Returns null
- * when the filter isn't wired so the frame has no empty band.
+ * Header band of the three-way frame — hosts the lean/party filter. Returns
+ * null when the filter isn't wired so the frame has no empty band.
  */
 export function ThreeWayToolbar({ leanFilter, onLeanFilterChange }: ThreeWayToolbarProps) {
     const showLean = leanFilter !== undefined && !!onLeanFilterChange;
@@ -113,7 +114,7 @@ export function ThreeWayToolbar({ leanFilter, onLeanFilterChange }: ThreeWayTool
             <div
                 className="three-way-toolbar-filter"
                 role="group"
-                aria-label="Filter by political lean"
+                aria-label="Filter by political lean or party"
             >
                 <span className="eyebrow three-way-toolbar-label">Lean</span>
                 {LEAN_FILTER_OPTIONS.map((opt) => (

@@ -1,31 +1,49 @@
-import { useId, useState, type KeyboardEvent, type MouseEvent } from 'react';
+import { useId } from 'react';
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis } from 'recharts';
 import type { TooltipProps } from 'recharts';
-import { Card, DocDetailModal, MethodPopover } from '../../components/common';
+import { Card, MethodPopover } from '../../components/common';
 import { formatRefreshedAgo } from '../../services/freshness';
 import { COLORS } from '../../theme';
 import type { NarrativeSummary } from '../../types';
-import { SOURCE_COLOR, SOURCE_LABEL, dominantSource, sourcesPresent } from './sourceMix';
 
 // --------------------------------------------------------------------------- //
 //  NarrativeLifecyclePanel — the page's signature read: which stories are     //
 //  rising and which are dying, at a glance. One row per narrative: name,      //
-//  daily-volume timeline, the sources carrying it, and post count. Click      //
+//  its daily-volume timeline, the groups carrying it, and post count. Click   //
 //  opens the detail modal.                                                    //
 //                                                                             //
-//  Degraded from the pre-redesign version: that panel colored each row's      //
-//  line by first_seen_tier_group, a field the current /narratives response   //
-//  does not carry. This version colors by dominant source (sourceBreakdown)  //
-//  instead. "First seen" now renders firstSeenAt (relative date, restored     //
-//  2026-07-26) -- the source/entity split that field used to carry still     //
-//  doesn't exist.                                                            //
+//  Restored verbatim from pre-cutover-main onto the current /narratives       //
+//  contract: supporting_doc_count -> docCount, narrative_id -> narrativeId,   //
+//  first_seen_at is now an ISO string (formatRefreshedAgo, not               //
+//  formatRelativeDate's unix-seconds path), and timeline points carry         //
+//  {day, docCount} instead of {date, count}. The meanConfidence badge is a    //
+//  current-era addition the owner approved keeping.                          //
 // --------------------------------------------------------------------------- //
 
+// 5 to match the "Stories spreading across groups" panel it now shares a row with.
 const LIFECYCLE_TOP_N = 5;
+
+const TIER_LABEL: Record<string, string> = {
+    news: 'News',
+    officials: 'Officials',
+    public: 'Public',
+};
+
+// Canonical speaker-tier palette (news / officials / public = blue / teal /
+// amber) — the same trio the tone-trend lines and cross-tier chips use, so the
+// origin line color and the tier chips beside it always agree.
+const TIER_COLOR: Record<string, string> = {
+    news: 'var(--tier-news)',
+    officials: 'var(--tier-officials)',
+    public: 'var(--tier-public)',
+};
 
 interface NarrativeLifecyclePanelProps {
     narratives: NarrativeSummary[];
     onOpen: (n: NarrativeSummary) => void;
+    /** Groups present per narrative (news/officials/public), computed by the
+     *  page's tierChipsForNarrative so both surfaces agree. */
+    tiersFor: (n: NarrativeSummary) => string[];
 }
 
 function rowTooltip({ payload, label }: TooltipProps<number, string>) {
@@ -46,8 +64,7 @@ function LifecycleSparkline({ narrative }: { narrative: NarrativeSummary }) {
     if (data.length < 2) {
         return <span className="lifecycle-row-flat" aria-hidden />;
     }
-    const origin = dominantSource(narrative);
-    const originColor = (origin && SOURCE_COLOR[origin]) || COLORS.chartAccent;
+    const originColor = TIER_COLOR[narrative.firstSeenTierGroup ?? ''] ?? COLORS.chartAccent;
     return (
         <ResponsiveContainer width="100%" height={36}>
             <AreaChart data={data} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
@@ -76,8 +93,7 @@ function LifecycleSparkline({ narrative }: { narrative: NarrativeSummary }) {
     );
 }
 
-export function NarrativeLifecyclePanel({ narratives, onOpen }: NarrativeLifecyclePanelProps) {
-    const [firstSeenDocId, setFirstSeenDocId] = useState<number | null>(null);
+export function NarrativeLifecyclePanel({ narratives, onOpen, tiersFor }: NarrativeLifecyclePanelProps) {
     const rows = [...narratives]
         .sort((a, b) => b.docCount - a.docCount)
         .slice(0, LIFECYCLE_TOP_N);
@@ -86,13 +102,14 @@ export function NarrativeLifecyclePanel({ narratives, onOpen }: NarrativeLifecyc
     return (
         <Card
             title="Story lifecycles"
-            subtitle="The most-repeated claims and their day-by-day volume — rising lines are stories gaining repetition, falling lines are stories dying out. Line color = the source carrying the most of the story's posts."
+            subtitle="The most-repeated claims and their day-by-day volume — rising lines are stories gaining repetition, falling lines are stories dying out. Line color = the group where we first saw the story."
             headerActions={
                 <MethodPopover
                     description={
                         'Each row is a recurring claim; its line is the daily count of sampled '
-                        + "posts carrying it. Chips show which sources (news, reddit, X) are "
-                        + 'repeating it now.'
+                        + 'posts carrying it. "First seen" is the earliest post WE collected — '
+                        + 'the claim may have started elsewhere before we picked it up. Chips '
+                        + 'show which groups (news, officials, public) are repeating it now.'
                     }
                     limitations={[
                         'Volume counts our sample, not the whole internet — a flat line can mean we stopped sampling a source, not that the story died.',
@@ -102,32 +119,19 @@ export function NarrativeLifecyclePanel({ narratives, onOpen }: NarrativeLifecyc
         >
             <div className="lifecycle-rows">
                 {rows.map((n) => {
-                    const sources = sourcesPresent(n);
-                    const openRow = () => onOpen(n);
-                    const onRowKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault();
-                            openRow();
-                        }
-                    };
-                    const onFirstSeenClick = (e: MouseEvent<HTMLButtonElement>) => {
-                        e.stopPropagation();
-                        if (n.firstSeenDocId != null) setFirstSeenDocId(n.firstSeenDocId);
-                    };
+                    const tiers = tiersFor(n);
                     return (
-                        <div
+                        <button
                             key={n.narrativeId}
-                            role="button"
-                            tabIndex={0}
+                            type="button"
                             className="lifecycle-row"
-                            onClick={openRow}
-                            onKeyDown={onRowKeyDown}
-                            aria-label={`${n.anchorClaimText ?? '(unnamed)'}. ${n.docCount} posts. Open details.`}
-                            title={n.anchorClaimText ?? '(unnamed)'}
+                            onClick={() => onOpen(n)}
+                            aria-label={`${n.name}. ${n.docCount} posts, first seen ${n.firstSeenAt ? formatRefreshedAgo(n.firstSeenAt) : 'unknown'}. Open details.`}
+                            title={n.name}
                         >
                             <span className="lifecycle-row-name-wrap">
                                 <span className="lifecycle-row-name">
-                                    {n.anchorClaimText || '(unnamed)'}
+                                    {n.name || '(unnamed)'}
                                     {n.meanConfidence != null && (
                                         <span
                                             className="badge badge-neutral"
@@ -139,33 +143,16 @@ export function NarrativeLifecyclePanel({ narratives, onOpen }: NarrativeLifecyc
                                     )}
                                 </span>
                                 <span className="lifecycle-row-meta">
-                                    first seen{' '}
-                                    {n.firstSeenAt ? formatRefreshedAgo(n.firstSeenAt) : '—'}
-                                    {n.firstSeenDocId != null && (
-                                        <>
-                                            {' '}
-                                            <button
-                                                type="button"
-                                                className="link-button"
-                                                onClick={onFirstSeenClick}
-                                            >
-                                                (view doc)
-                                            </button>
-                                        </>
-                                    )}
+                                    first seen {n.firstSeenAt ? formatRefreshedAgo(n.firstSeenAt) : '—'}
                                 </span>
                             </span>
                             <span className="lifecycle-row-spark">
                                 <LifecycleSparkline narrative={n} />
                             </span>
                             <span className="lifecycle-row-tiers">
-                                {sources.map((s) => (
-                                    <span
-                                        key={s}
-                                        className="cross-tier-chip"
-                                        style={{ color: SOURCE_COLOR[s] }}
-                                    >
-                                        {SOURCE_LABEL[s] ?? s}
+                                {tiers.map((t) => (
+                                    <span key={t} className={`cross-tier-chip cross-tier-chip-${t}`}>
+                                        {TIER_LABEL[t] ?? t}
                                     </span>
                                 ))}
                             </span>
@@ -173,13 +160,10 @@ export function NarrativeLifecyclePanel({ narratives, onOpen }: NarrativeLifecyc
                                 {n.docCount.toLocaleString()}
                                 <span className="lifecycle-row-count-label">posts</span>
                             </span>
-                        </div>
+                        </button>
                     );
                 })}
             </div>
-            {firstSeenDocId != null && (
-                <DocDetailModal docId={firstSeenDocId} onClose={() => setFirstSeenDocId(null)} />
-            )}
         </Card>
     );
 }
