@@ -12,36 +12,69 @@ genuinely blocked.
 
 Sequencing: none of this blocks Phase 11 cutover. Land it after.
 
+## Geometry restoration — frontend-only (owner decision 2026-07-26)
+
+The cutover revealed that Phase 10 changed page geometry and card design,
+not just content: the Bloomberg-dense look (old walkthroughs 073/079 line,
+recoverable at tag `pre-cutover-main`) was lost. Owner wants the old visual
+layer back NOW, frontend-only: the JSX at `pre-cutover-main` is the visual
+source of truth; the current `types.ts`/`api.ts` contract is the data source
+of truth. Where data is missing, panels keep their old geometry and render a
+degraded cousin of the data (owner choice), falling back to a quiet
+empty-state only where nothing related exists. Rich card fields hydrate
+lazily from the existing `GET /docs/{id}` endpoint — no backend changes.
+
+- [x] Restore `PostCard`/`PostCardList` (old 504-line card): old geometry;
+      thin fields from `SampleDoc`, rich fields lazily from `/docs/{id}`
+- [x] Restore `EntityProfileCard` (old 350-line version) + `EntityHubLinks`,
+      wired to the existing `GET /entity-profile/{id}`
+- [x] Restore `ThreeWayGrid` toolbar + lean filter pills over `LeanLabel`
+- [x] Restore `PublicSentiment` page tree (tone panels, topic tabs from
+      `byTopic`, divergence/polling shells degraded)
+- [x] Restore `Narratives` three-way columns, lifecycle panel, entity modal
+- [x] Restore `BotActivityProfiler` layout (behavioral cards over existing
+      buckets; coordination panel degraded)
+- [x] Restore `Propaganda` layout (leaderboard degraded to `bySource` rows
+      until the per-entity query lands)
+- [x] Restore `DataDesk` matrix grouping + freshness card over `pipelineRun`
+- [x] Restore `ReviewItemCard` per-task evidence rendering where the queue
+      payload carries it
+- [x] Gate: typecheck + build green; side-by-side eyeball vs `pre-cutover-main`
+      run for geometry parity
+
+The read-side query additions below remain the follow-up that upgrades the
+degraded panels to full fidelity.
+
 ## Restorable from data already stored (no engine change, no recompute)
 
-- [ ] **Daily tone-trend series.** `analysis.sentiment_results` JOIN
+- [x] **Daily tone-trend series.** `analysis.sentiment_results` JOIN
       `analysis.runs` (`is_current`) JOIN `corpus.documents.published_at`,
       grouped by `date_trunc('day', published_at)`.
       `idx_documents_published_at` already exists. Add a per-day series to
       `SentimentPanelResponse` and restore the chart.
-- [ ] **Narrative first-seen.** `analysis.narratives.first_seen_at` and
+- [x] **Narrative first-seen.** `analysis.narratives.first_seen_at` and
       `first_seen_doc_id` are populated columns — `NarrativeSummaryModel`
       simply does not select them. Model + query addition only. Keep the
       existing first-ingested-by-us labeling (CLAUDE.md scope note).
-- [ ] **Bot coordination index + posting-cadence heatmap.** The retired
+- [x] **Bot coordination index + posting-cadence heatmap.** The retired
       `_compute_coordination_index()`
       (`analysis/src/reporting/aggregators/bot/metrics.py`) takes nothing but
       an hour-of-day histogram, which is
       `date_part('hour', documents.published_at)` grouped by author. Pure SQL
       against `corpus.documents` + `analysis.bot_signals`.
-- [ ] **Propaganda per-entity leaderboard / three-way grid.** The doc ->
+- [x] **Propaganda per-entity leaderboard / three-way grid.** The doc ->
       entity path exists three ways: `corpus.news_articles.outlet_entity_id`,
       `corpus.reddit_posts.subreddit_entity_id`, and
       `corpus.authors` -> `corpus.author_profiles.entity_id`. The
       News/Officials/Public split is `corpus.author_profiles.tier`
       (`elected_official|affiliated|general_public`). Join to
       `analysis.propaganda_results` via `analysis.runs.doc_id`.
-- [ ] **Per-entity target tone by topic.** `analysis.target_mentions` already
+- [x] **Per-entity target tone by topic.** `analysis.target_mentions` already
       carries `entity_id`, `stance`, `topic`, and `confidence` on one row —
       the breakdown is a `GROUP BY entity_id, topic`.
-- [ ] **Received tone by speaker tier.** `target_mentions` -> `documents` ->
+- [x] **Received tone by speaker tier.** `target_mentions` -> `documents` ->
       `authors` -> `author_profiles.tier`.
-- [ ] **Cross-page entity deep-linking / Data Desk cross-signal matrix.**
+- [x] **Cross-page entity deep-linking / Data Desk cross-signal matrix.**
       Not a data gap — `corpus.entities` has both a numeric `entity_id` and a
       stable unique `entity_key` slug, and the panels each picked a different
       one (`EntityStanceAggregate.entityId` numeric vs
@@ -75,7 +108,7 @@ Sequencing: none of this blocks Phase 11 cutover. Land it after.
         place (no writer, no reader). Dropping it is a Phase 11 checklist
         item in `docs/todos/pg-redesign.md`.
 
-- [ ] **Narrative-level confidence chip.** `NarrativeSummaryModel`
+- [x] **Narrative-level confidence chip.** `NarrativeSummaryModel`
       (`analysis/src/api/models/narratives.py`) carries no confidence field,
       and averaging only the top-N `member_doc_samples` would misrepresent
       the full cluster. `queries/narratives.py` already joins

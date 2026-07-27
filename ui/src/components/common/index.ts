@@ -16,6 +16,7 @@ export {
     toneStats,
 } from './EntityProfileCard';
 export type { EntityStat, EntityLike } from './EntityProfileCard';
+export { default as EntityHubLinks, entityParamValue, parseEntityParam } from './EntityHubLinks';
 export { default as LeanLabel } from './LeanLabel';
 export { default as RangeCaption } from './RangeCaption';
 export { default as AdmissionBadge } from './AdmissionBadge';
@@ -34,5 +35,5 @@ export {
     SampleCardList,
 } from './SampleCard';
 export { default as MoversTicker } from './MoversTicker';
-export { ThreeWayGrid, TwoWayGrid, ThreeWayColumn } from './ThreeWayGrid';
-export type { ColumnSorter } from './ThreeWayGrid';
+export { ThreeWayGrid, TwoWayGrid, ThreeWayColumn, ThreeWayToolbar, matchesLeanFilter } from './ThreeWayGrid';
+export type { ColumnSorter, LeanFilter } from './ThreeWayGrid';

@@ -15,22 +15,23 @@ import type {
 } from '../types';
 
 // --------------------------------------------------------------------------- //
-//  Data Desk — the numbers-forward page.                                     //
+//  Data Desk — the numbers-forward page, restored onto the pre-cutover        //
+//  desk-matrix-group layout (see docs/todos and PublicSentiment.tsx's         //
+//  degradation notes for the sibling page's version of this same rebuild).    //
 //                                                                             //
 //  Phase 10 adaptation note: the pre-redesign cross-signal matrix joined     //
 //  sentiment/propaganda/bots/narratives on a shared per-entity `kind:key`.    //
-//  The strictly-live contract no longer gives every panel the same entity    //
-//  identifier (sentiment keys entities by numeric entity_id, bots by the     //
-//  entity_key string, and propaganda/narratives carry no entity breakdown    //
-//  at all) -- this rebuild joins sentiment x bots on (kind, displayName) as  //
-//  the closest available proxy, and drops the propaganda/narratives columns  //
-//  the join can no longer support.                                          //
+//  The strictly-live contract still gives propaganda/narratives no entity    //
+//  breakdown, so those columns stay dropped -- but sentiment and bots both   //
+//  now carry `entityKey` (owner decision 2026-07-26), so this rebuild joins  //
+//  them on that exact slug instead of the earlier (kind, displayName) guess. //
 // --------------------------------------------------------------------------- //
 
 interface MatrixRow {
     id: string;
     name: string;
     kind: string;
+    group: string;
     netTone: number | null;
     posts: number | null;
     botRate: number | null;
@@ -38,29 +39,41 @@ interface MatrixRow {
 
 type MatrixSortKey = 'name' | 'netTone' | 'posts' | 'botRate';
 
+/** Restores the old three-way "Group" column — outlets/officials-and-
+ *  collectives/subreddits, matching the grouping used by the Overall Tone
+ *  page's three-way grid. */
+function groupForKind(kind: string | null): string {
+    if (kind === 'outlet') return 'News';
+    if (kind === 'official' || kind === 'collective') return 'Officials';
+    if (kind === 'subreddit') return 'Communities';
+    return 'Other';
+}
+
 function buildMatrix(
     sentiment: SentimentPanelResponse | null,
     bots: BotActivityResponse | null,
 ): MatrixRow[] {
     const rows = new Map<string, MatrixRow>();
-    const ensure = (kind: string | null, name: string): MatrixRow => {
-        const id = `${kind ?? 'unresolved'}:${name}`;
-        let row = rows.get(id);
+    const ensure = (entityKey: string, kind: string | null, name: string): MatrixRow => {
+        let row = rows.get(entityKey);
         if (!row) {
-            row = { id, name, kind: kind ?? 'unresolved', netTone: null, posts: null, botRate: null };
-            rows.set(id, row);
+            row = {
+                id: entityKey, name, kind: kind ?? 'unresolved', group: groupForKind(kind),
+                netTone: null, posts: null, botRate: null,
+            };
+            rows.set(entityKey, row);
         }
         return row;
     };
 
     for (const e of sentiment?.entityStances ?? []) {
-        if (e.entityId == null) continue;
-        const row = ensure(e.kind, e.displayName);
+        if (e.entityKey == null) continue;
+        const row = ensure(e.entityKey, e.kind, e.displayName);
         row.netTone = e.targetStance.netScore;
         row.posts = e.targetStance.volume;
     }
     for (const e of bots?.byEntity ?? []) {
-        const row = ensure(e.kind, e.displayName);
+        const row = ensure(e.entityKey, e.kind, e.displayName);
         row.botRate = e.botRatePct;
     }
     return Array.from(rows.values());
@@ -126,6 +139,7 @@ function CrossSignalMatrix({ rows }: { rows: MatrixRow[] }) {
                 <table className="table desk-matrix">
                     <thead>
                         <tr>
+                            <th className="desk-matrix-group">Group</th>
                             {MATRIX_COLUMNS.map((col) => (
                                 <th key={col.key} className={col.key === 'name' ? '' : 'num'} title={col.title}>
                                     <button type="button" className="desk-sort-btn" onClick={() => onSort(col.key)}>
@@ -139,6 +153,7 @@ function CrossSignalMatrix({ rows }: { rows: MatrixRow[] }) {
                     <tbody>
                         {sorted.map((row) => (
                             <tr key={row.id}>
+                                <td className="desk-matrix-group">{row.group}</td>
                                 <td>{row.name}</td>
                                 <td className="num" style={row.netTone != null ? { color: toneColor(row.netTone) } : undefined}>
                                     {row.netTone != null ? formatPts(row.netTone) : '—'}
@@ -187,15 +202,43 @@ function MoversBoard({ movers }: { movers: MoversResponse }) {
     );
 }
 
-function SmallMultiples({ narratives }: { narratives: NarrativesResponse | null }) {
+/** Restores the old small-multiples row's first hero. The pre-cutover panel
+ *  led with a daily GOP-tone sparkline (`sentiment.gopTrend`), which the
+ *  strictly-live contract doesn't publish (no daily series of any kind, no
+ *  GOP-specific favorability). Net tone by source type (byPlatform) is the
+ *  closest existing series in the current payload — categorical rather than
+ *  daily, but a real, honestly-labeled reading rather than an empty slot. */
+function SmallMultiples({
+    sentiment, narratives,
+}: {
+    sentiment: SentimentPanelResponse | null;
+    narratives: NarrativesResponse | null;
+}) {
+    const platformTone = (sentiment?.byPlatform ?? [])
+        .filter((p) => p.netScore != null)
+        .map((p) => ({ date: p.platform, value: p.netScore as number }));
     const topStories = [...(narratives?.narratives ?? [])]
         .sort((a, b) => b.docCount - a.docCount)
         .slice(0, 6)
         .filter((n) => n.timeline.length >= 2);
-    if (topStories.length === 0) return null;
+    if (platformTone.length < 2 && topStories.length === 0) return null;
     return (
-        <Card title="Small multiples" subtitle="Top stories' daily volume curves, side by side.">
+        <Card
+            title="Small multiples"
+            subtitle="Net tone by source type, and the top stories' daily volume curves, side by side."
+        >
             <div className="desk-multiples">
+                {platformTone.length >= 2 && (
+                    <div className="desk-multiple" title="Net tone by source type in this window">
+                        <div className="desk-multiple-label">Net tone by source type</div>
+                        <Sparkline
+                            data={platformTone}
+                            height={48}
+                            showXAxis
+                            ariaLabel={`Net tone by source type: ${platformTone.map((p) => `${p.date} ${p.value}`).join(', ')}`}
+                        />
+                    </div>
+                )}
                 {topStories.map((n) => (
                     <div key={n.narrativeId} className="desk-multiple" title={n.anchorClaimText ?? undefined}>
                         <div className="desk-multiple-label">{n.anchorClaimText || '(unnamed)'}</div>
@@ -211,12 +254,20 @@ function SmallMultiples({ narratives }: { narratives: NarrativesResponse | null 
     );
 }
 
-function PipelineHealthCard({ status }: { status: SnapshotStatusResponse | null }) {
+/** Restored under the old "Snapshot freshness" card frame (name and
+ *  desk-table-scroll geometry) but fed by the single GET /snapshot-status
+ *  pipeline run rather than the retired per-snapshot cache-metadata table —
+ *  the strictly-live API has one pipeline run, not one row per cached
+ *  aggregation, so this is a one-row table rather than the old ~21-row one. */
+function SnapshotFreshnessCard({ status }: { status: SnapshotStatusResponse | null }) {
     const run = status?.pipelineRun;
     if (!run) return null;
     return (
-        <Card title="Pipeline health" subtitle="The most recent recorded pipeline run.">
-            <div className="desk-table-wrap">
+        <Card
+            title="Snapshot freshness"
+            subtitle="The most recent recorded pipeline run — this API has one live run, not one cached snapshot per panel."
+        >
+            <div className="desk-table-wrap desk-table-scroll">
                 <table className="table">
                     <tbody>
                         <tr><td>Status</td><td className="num" style={{ textTransform: 'capitalize' }}>{run.status}</td></tr>
@@ -316,12 +367,12 @@ function DataDesk({ filters }: DataDeskProps) {
             {matrix.length > 0 && <div className="col-span-12"><CrossSignalMatrix rows={matrix} /></div>}
             {hasLeftColumn && (
                 <div className="col-span-5">
-                    {hasSnapshots && <PipelineHealthCard status={snapshotStatus} />}
+                    {hasSnapshots && <SnapshotFreshnessCard status={snapshotStatus} />}
                     {hasReview && <HumanReviewCard evalAccuracy={evalAccuracy} />}
                 </div>
             )}
             <div className={hasLeftColumn ? 'col-span-7' : 'col-span-12'}>
-                <SmallMultiples narratives={narrativesFetch.data} />
+                <SmallMultiples sentiment={sentimentFetch.data} narratives={narrativesFetch.data} />
                 {moversFetch.data && <MoversBoard movers={moversFetch.data} />}
             </div>
         </div>

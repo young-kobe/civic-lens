@@ -101,6 +101,10 @@ export interface TimeOfDaySentiment extends BucketSentiment { bucket: 'Morning' 
 export interface DayOfWeekSentiment extends BucketSentiment { day: string; }
 export interface TierSplit extends BucketSentiment { tier: 'news' | 'officials' | 'general_public'; }
 
+/** One calendar day's net tone/volume within the request window --
+ *  restores the tone-trend chart line (docs/todos/ui-feature-restoration.md). */
+export interface DailySentiment extends BucketSentiment { date: string; }
+
 export interface StanceCounts {
     positive: number;
     negative: number;
@@ -111,20 +115,37 @@ export interface StanceCounts {
     lowSample: boolean;
 }
 
+/** One entity's stance breakdown for a single topic (analysis.target_mentions
+ *  GROUP BY entity_id, topic) -- feeds the three-way grid's per-entity topic
+ *  tabs. `topic` is 'General' when target_mentions.topic is NULL, matching
+ *  the panel-level byTopic convention (never keyword-guessed). */
+export interface TopicStanceCounts extends StanceCounts { topic: string; }
+
+/** One entity's stance breakdown by the speaker tier (news/officials/
+ *  general_public) of the mentioning doc's author -- the "received tone
+ *  by speaker tier" divergence view. */
+export interface TierStanceCounts extends StanceCounts { tier: 'news' | 'officials' | 'general_public'; }
+
 /** Per-entity stance aggregate, sourced from analysis.target_mentions alone
  *  (the retired analysis.favorability_stances no longer contributes a
  *  separate `favorability` count — see docs/audit-trail/api/
  *  2026-07-25-favorability-retirement.md). `entityId` is null only for the
  *  unresolved-mentions catch-all (`catchAllKey` set instead). `kind` is
  *  corpus.entities.kind ('official' | 'collective' | 'outlet' |
- *  'subreddit'), null for the catch-all. */
+ *  'subreddit'), null for the catch-all. `entityKey` is the stable slug
+ *  counterpart to `entityId` (owner decision 2026-07-26: emit both so
+ *  cross-page joins are exact, not a (kind, displayName) guess); also
+ *  null for the catch-all. */
 export interface EntityStanceAggregate {
     entityId: number | null;
+    entityKey: string | null;
     catchAllKey: string | null;
     displayName: string;
     kind: string | null;
     lean: LeanLabel | null;
     targetStance: StanceCounts;
+    byTopic: TopicStanceCounts[];
+    receivedByTier: TierStanceCounts[];
     samples: SampleDoc[];
 }
 
@@ -137,6 +158,7 @@ export interface SentimentPanelResponse {
     byTimeOfDay: TimeOfDaySentiment[];
     byDayOfWeek: DayOfWeekSentiment[];
     byTier: TierSplit[];
+    daily: DailySentiment[];
     entityStances: EntityStanceAggregate[];
     samples: SampleDoc[];
     disclaimer: string;
@@ -161,12 +183,21 @@ export interface AccountAgeBucket {
 }
 
 export interface EntityBotRate {
+    entityId: number;
     entityKey: string;
     kind: string;
     displayName: string;
     totalDocs: number;
     botDocs: number;
     botRatePct: number;
+}
+
+/** Count of bot-flagged docs published in this UTC hour-of-day (0-23) across
+ *  the whole window -- the histogram coordinationIndex is computed over. All
+ *  24 hours are present even at count 0. */
+export interface PostingCadenceBucket {
+    hour: number;
+    docCount: number;
 }
 
 export interface BotPushedNarrative {
@@ -197,6 +228,11 @@ export interface BotActivityResponse {
     automationRatePct: number;
     behavioralSignals: BehavioralSignalBucket[];
     accountAgeBuckets: AccountAgeBucket[];
+    // Max single-hour share of the bot-flagged posting-cadence histogram
+    // (postingCadence) -- 1.0 means every bot-flagged doc in range posted
+    // in the same UTC hour, 0.0 when there is no bot-flagged activity at all.
+    coordinationIndex: number;
+    postingCadence: PostingCadenceBucket[];
     byEntity: EntityBotRate[];
     botPushedNarratives: BotPushedNarrative[];
     flaggedAccounts: FlaggedAccount[];
@@ -230,6 +266,14 @@ export interface NarrativeSummary {
     botPushedFraction: number | null;
     lean: LeanLabel | null;
     memberDocSamples: SampleDoc[];
+    // First-ingested-by-us, not claim origin in the world. Null whenever the
+    // narrative predates the first_seen columns existing.
+    firstSeenAt: string | null;
+    firstSeenDocId: number | null;
+    // Mean claim-match confidence over ALL in-window member docs -- not just
+    // the ranked subset memberDocSamples carries. Null when no member doc in
+    // range has a non-null confidence.
+    meanConfidence: number | null;
 }
 
 export interface NarrativesResponse {
@@ -268,6 +312,31 @@ export interface PartySplit {
     meanScore: number;
 }
 
+/** One registry entity's propaganda footprint (top 20, ranked). `group` is
+ *  'news'/'subreddit' for an outlet/subreddit-resolved entity, or the
+ *  author's tier ('elected_official' etc.) for an author-resolved entity. */
+export interface PropagandaEntityRow {
+    entityId: number;
+    entityKey: string;
+    displayName: string;
+    group: string;
+    docCount: number;
+    meanDensity: number;
+    flaggedShare: number;
+}
+
+/** News/Officials/Public split -- the ThreeWayGrid tiers. 'news' is
+ *  source_type='news'; 'officials' is an elected-official author; every
+ *  other doc (affiliated/general_public authors, unresolved authors)
+ *  buckets as 'public'. */
+export interface PropagandaTierSplit {
+    group: 'news' | 'officials' | 'public';
+    totalDocs: number;
+    flaggedDocs: number;
+    flaggedRatePct: number;
+    meanScore: number;
+}
+
 export interface PropagandaOverview {
     range: RangeMeta;
     totalEligibleDocs: number;
@@ -277,6 +346,8 @@ export interface PropagandaOverview {
     byTechnique: TechniqueCount[];
     bySource: SourceSplit[];
     byParty: PartySplit[];
+    byTier: PropagandaTierSplit[];
+    byEntity: PropagandaEntityRow[];
     examples: SampleDoc[];
 }
 
@@ -305,6 +376,7 @@ export interface OutletProfilesResponse {
 // --------------------------------------------------------------------------- //
 
 export interface ToneMover {
+    entityId: number;
     entityKey: string;
     kind: string;
     displayName: string;
@@ -316,6 +388,7 @@ export interface ToneMover {
 }
 
 export interface FavorabilityMover {
+    entityId: number;
     entityKey: string;
     kind: string;
     displayName: string;
@@ -343,6 +416,7 @@ export interface EntityPostRow extends SampleDoc {
 
 export interface EntityPostsResponse {
     entityId: number;
+    entityKey: string;
     window: string | null;
     page: number;
     pageSize: number;
@@ -373,6 +447,7 @@ export interface MonthlyActivity {
 
 export interface EntityProfileResponse {
     entityId: number;
+    entityKey: string;
     displayName: string;
     kind: string;
     lean: LeanLabel | null;
@@ -443,6 +518,10 @@ export interface DocumentDetail {
     sourceType: 'news' | 'reddit_post' | 'x_post';
     domainOrSubreddit: string | null;
     authorId: number | null;
+    authorHandle: string | null;
+    authorDisplayName: string | null;
+    authorProfileImageUrl: string | null;
+    authorVerified: boolean | null;
     publishedAt: string;
     title: string | null;
     body: string;
