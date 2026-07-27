@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional
 
 from analysis.src.api.models.common import LeanLabel, RangeMeta, SampleDocModel
 from analysis.src.api.models.sentiment import (
+    DailySentiment,
     DayOfWeekSentiment,
     EntityStanceAggregate,
     PlatformSentiment,
@@ -21,8 +22,10 @@ from analysis.src.api.models.sentiment import (
     SentimentPanelResponse,
     StanceCounts,
     TierSplit,
+    TierStanceCounts,
     TimeOfDaySentiment,
     TopicSentiment,
+    TopicStanceCounts,
 )
 from analysis.src.api.queries.base import (
     build_sample_doc,
@@ -151,13 +154,14 @@ _DOC_TOPICS_SQL = f"""
 """
 
 _TARGET_ROWS_SQL = f"""
-    SELECT m.entity_id, m.stance, d.doc_id, d.source_url, d.published_at, d.title,
-           d.admission_class, m.confidence,
-           e.display_name, e.kind, e.lean
+    SELECT m.entity_id, m.stance, m.topic, d.doc_id, d.source_type, d.source_url,
+           d.published_at, d.title, d.admission_class, m.confidence,
+           e.display_name, e.kind, e.lean, e.entity_key, ap.tier AS author_tier
     FROM analysis.target_mentions m
     JOIN analysis.runs r ON r.run_id = m.run_id
     JOIN corpus.documents d ON d.doc_id = m.doc_id
     LEFT JOIN corpus.entities e ON e.entity_id = m.entity_id
+    LEFT JOIN corpus.author_profiles ap ON ap.author_id = d.author_id
     WHERE r.is_current AND r.task = 'targets'
       AND m.confidence >= %(min_conf)s AND {_RANGE_PREDICATE}
       AND {_BOT_EXCLUSION_SQL}
@@ -250,7 +254,7 @@ def _aggregate_rows(rows: List[Any], doc_topics: Dict[int, str]) -> Dict[str, An
     accum: Dict[str, Any] = {
         "strong_pos": 0, "mild_pos": 0, "strong_neg": 0, "mild_neg": 0, "neutral": 0,
         "conf_sum": 0.0, "count": 0,
-        "by_platform": {}, "by_topic": {}, "by_tod": {}, "by_dow": {}, "by_tier": {},
+        "by_platform": {}, "by_topic": {}, "by_tod": {}, "by_dow": {}, "by_tier": {}, "by_day": {},
         "samples": [],
     }
     for row in rows:
@@ -266,6 +270,7 @@ def _aggregate_rows(rows: List[Any], doc_topics: Dict[int, str]) -> Dict[str, An
         _increment(accum["by_tod"], _time_of_day(dt), label_key)
         _increment(accum["by_dow"], _day_of_week(dt), label_key)
         _increment(accum["by_tier"], _tier_for_row(row["source_type"], row["author_tier"]), label_key)
+        _increment(accum["by_day"], dt.date().isoformat(), label_key)
 
         accum["count"] += 1
         accum["conf_sum"] += conf
@@ -293,7 +298,9 @@ def _increment(bucket: Dict[str, Dict[str, int]], key: str, label_key: str) -> N
 def _build_entity_stances(target_rows: List[Any]) -> List[EntityStanceAggregate]:
     """One aggregate per entity target_mentions names (keyed by entity_id, or
     the unresolved-mentions catch-all). Sourced from target_mentions alone,
-    party-neutral and topic-tagged."""
+    party-neutral and topic-tagged. Also fans each mention into its entity's
+    per-topic (GROUP BY entity_id, topic) and per-speaker-tier stance
+    breakdowns."""
     cells: Dict[Any, Dict[str, Any]] = {}
 
     def cell_for(entity_id: Optional[int], row: Any) -> Dict[str, Any]:
@@ -301,10 +308,13 @@ def _build_entity_stances(target_rows: List[Any]) -> List[EntityStanceAggregate]
         if key not in cells:
             cells[key] = {
                 "entity_id": entity_id,
+                "entity_key": row["entity_key"] if entity_id is not None else None,
                 "display_name": row["display_name"] if entity_id is not None else "Unresolved mentions",
                 "kind": row["kind"] if entity_id is not None else None,
                 "lean": _lean_label(row["kind"], row["lean"]) if entity_id is not None else None,
                 "target_stance": _empty_counts(),
+                "by_topic": {},
+                "by_tier": {},
                 "samples": [],
             }
         return cells[key]
@@ -313,8 +323,17 @@ def _build_entity_stances(target_rows: List[Any]) -> List[EntityStanceAggregate]
         cell = cell_for(row["entity_id"], row)
         cell["target_stance"][row["stance"]] += 1
         cell["samples"].append((row["confidence"], row))
+        topic = row["topic"] or "General"
+        _bump_stance_bucket(cell["by_topic"], topic, row["stance"])
+        tier = _tier_for_row(row["source_type"], row["author_tier"])
+        _bump_stance_bucket(cell["by_tier"], tier, row["stance"])
 
     return [_format_entity_stance(key, cell) for key, cell in cells.items()]
+
+
+def _bump_stance_bucket(bucket: Dict[str, Dict[str, int]], key: str, stance: str) -> None:
+    bucket.setdefault(key, _empty_counts())
+    bucket[key][stance] += 1
 
 
 def _lean_label(kind: str, lean_value: str) -> LeanLabel:
@@ -326,11 +345,14 @@ def _format_entity_stance(key: Any, cell: Dict[str, Any]) -> EntityStanceAggrega
     samples = sorted(cell["samples"], key=lambda pair: -pair[0])[:MAX_SAMPLES_PER_ENTITY]
     return EntityStanceAggregate(
         entity_id=cell["entity_id"],
+        entity_key=cell["entity_key"],
         catch_all_key=None if cell["entity_id"] is not None else UNRESOLVED_CATCH_ALL_KEY,
         display_name=cell["display_name"],
         kind=cell["kind"],
         lean=cell["lean"],
         target_stance=_stance_counts(cell["target_stance"]),
+        by_topic=_format_topic_stances(cell["by_topic"]),
+        received_by_tier=_format_tier_stances(cell["by_tier"]),
         samples=[
             SampleDocModel(**build_sample_doc(
                 {**row, "snippet": _snippet(row["title"])},
@@ -341,13 +363,30 @@ def _format_entity_stance(key: Any, cell: Dict[str, Any]) -> EntityStanceAggrega
     )
 
 
-def _stance_counts(counts: Dict[str, int]) -> StanceCounts:
+def _stance_kwargs(counts: Dict[str, int]) -> Dict[str, Any]:
     volume = sum(counts.values())
-    return StanceCounts(
-        positive=counts["positive"], negative=counts["negative"],
-        neutral=counts["neutral"], mixed=counts["mixed"],
-        volume=volume, net_score=_net_score(counts), low_sample=volume < MIN_TARGET_SAMPLE_N,
+    return {
+        "positive": counts["positive"], "negative": counts["negative"],
+        "neutral": counts["neutral"], "mixed": counts["mixed"],
+        "volume": volume, "net_score": _net_score(counts), "low_sample": volume < MIN_TARGET_SAMPLE_N,
+    }
+
+
+def _stance_counts(counts: Dict[str, int]) -> StanceCounts:
+    return StanceCounts(**_stance_kwargs(counts))
+
+
+def _format_topic_stances(buckets: Dict[str, Dict[str, int]]) -> List[TopicStanceCounts]:
+    """General last, then descending volume -- same ordering convention as
+    the panel-level by_topic."""
+    return sorted(
+        (TopicStanceCounts(topic=k, **_stance_kwargs(v)) for k, v in buckets.items()),
+        key=lambda t: (t.topic != "General", -t.volume),
     )
+
+
+def _format_tier_stances(buckets: Dict[str, Dict[str, int]]) -> List[TierStanceCounts]:
+    return [TierStanceCounts(tier=k, **_stance_kwargs(v)) for k, v in buckets.items()]
 
 
 # --------------------------------------------------------------------------- #
@@ -393,6 +432,10 @@ def _build_response(
             key=lambda d: DAY_OF_WEEK_LABELS.index(d.day),
         ),
         by_tier=[TierSplit(tier=k, **_bucket_kwargs(v)) for k, v in accum["by_tier"].items()],
+        daily=sorted(
+            (DailySentiment(date=k, **_bucket_kwargs(v)) for k, v in accum["by_day"].items()),
+            key=lambda d: d.date,
+        ),
         entity_stances=entity_stances,
         samples=[
             SampleDocModel(**build_sample_doc(

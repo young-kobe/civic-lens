@@ -24,9 +24,12 @@ class EntityPostsResponse(CamelModel):
     """GET /api/v1/entity-posts payload. ``window`` is None for an
     un-windowed (all-time) request -- required so officials' backfilled
     official_record history older than every preset window stays
-    reachable."""
+    reachable. Carries both ``entity_id`` and ``entity_key`` (owner
+    decision 2026-07-26: emit both so cross-page joins are exact, not a
+    (kind, displayName) guess)."""
 
     entity_id: int
+    entity_key: str
     window: Optional[str]
     page: int
     page_size: int
@@ -68,9 +71,12 @@ class EntityProfileResponse(CamelModel):
     window cutoff, so an inactive official's history never vanishes.
     ``range`` is the honesty block (owner decision 2026-07-24); its
     start/end are always null here since this endpoint is unconditionally
-    all-time."""
+    all-time. Carries both ``entity_id`` and ``entity_key`` (owner
+    decision 2026-07-26: emit both so cross-page joins are exact, not a
+    (kind, displayName) guess)."""
 
     entity_id: int
+    entity_key: str
     display_name: str
     kind: str
     lean: Optional[LeanLabel]

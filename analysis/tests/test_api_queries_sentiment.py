@@ -209,13 +209,14 @@ class SentimentPanelIntegrationTests(unittest.TestCase):
             return row["run_id"]
 
     def _seed_target_mention(
-        self, run_id: int, doc_id: int, raw_target: str, entity_id, stance: str, confidence: float = 0.9,
+        self, run_id: int, doc_id: int, raw_target: str, entity_id, stance: str,
+        confidence: float = 0.9, topic: str = None,
     ) -> None:
         with self._conn() as conn:
             conn.execute(
-                "INSERT INTO analysis.target_mentions (run_id, doc_id, raw_target, entity_id, stance, confidence) "
-                "VALUES (%s, %s, %s, %s, %s::analysis.sentiment_label, %s)",
-                (run_id, doc_id, raw_target, entity_id, stance, confidence),
+                "INSERT INTO analysis.target_mentions (run_id, doc_id, raw_target, entity_id, stance, confidence, topic) "
+                "VALUES (%s, %s, %s, %s, %s::analysis.sentiment_label, %s, %s)",
+                (run_id, doc_id, raw_target, entity_id, stance, confidence, topic),
             )
 
     # --- tests ---------------------------------------------------------
@@ -301,6 +302,7 @@ class SentimentPanelIntegrationTests(unittest.TestCase):
         catch_all = [e for e in panel.entity_stances if e.catch_all_key == "unresolved"]
         self.assertEqual(len(catch_all), 1)
         self.assertIsNone(catch_all[0].entity_id)
+        self.assertIsNone(catch_all[0].entity_key)
         self.assertEqual(catch_all[0].target_stance.negative, 1)
 
     def test_entity_stance_surfaces_from_target_mentions_alone(self):
@@ -350,6 +352,92 @@ class SentimentPanelIntegrationTests(unittest.TestCase):
         self.assertEqual(panel.range.model_ids, ["gemini-3.5-flash", "qwen2.5:3b"])
         self.assertEqual(panel.range.sampled_doc_count, 2)
         self.assertEqual(panel.range.official_record_doc_count, 0)
+
+    def test_daily_series_groups_by_calendar_day_not_by_window(self):
+        # Several docs on the same calendar day must fall into one `daily`
+        # bucket; docs on a different day get their own -- proves the
+        # date_trunc('day', ...) grouping, not just a flat total. Each day
+        # clears MIN_TARGET_SAMPLE_N so net_score isn't withheld as low-n.
+        from analysis.src.api.queries.constants import MIN_TARGET_SAMPLE_N
+        author = self._seed_author()
+        day_one = datetime.now(timezone.utc).replace(hour=9, minute=0, second=0, microsecond=0)
+        day_two = day_one - timedelta(days=1)
+        for i in range(MIN_TARGET_SAMPLE_N):
+            doc = self._seed_document("x_post", day_one.replace(hour=8 + i), author_id=author)
+            self._seed_text_run(doc, "positive")
+        for i in range(MIN_TARGET_SAMPLE_N):
+            doc = self._seed_document("x_post", day_two.replace(hour=8 + i), author_id=author)
+            self._seed_text_run(doc, "negative")
+
+        panel = sentiment.get_sentiment_panel(window="7d")
+        by_date = {d.date: d for d in panel.daily}
+        self.assertEqual(by_date[day_one.date().isoformat()].volume, MIN_TARGET_SAMPLE_N)
+        self.assertEqual(by_date[day_one.date().isoformat()].net_score, 100.0)
+        self.assertEqual(by_date[day_two.date().isoformat()].volume, MIN_TARGET_SAMPLE_N)
+        self.assertEqual(by_date[day_two.date().isoformat()].net_score, -100.0)
+
+    def test_entity_stance_by_topic_breaks_down_target_mentions(self):
+        # Regression for the per-entity-per-topic breakdown: GROUP BY
+        # entity_id, topic must separate an entity's Economy mentions from
+        # its unresolved-topic mentions rather than folding them together.
+        entity = self._seed_entity("official", "Sen. Example", lean="republican")
+        author = self._seed_author()
+        doc_econ = self._seed_document("x_post", datetime.now(timezone.utc), author_id=author)
+        self._seed_text_run(doc_econ, "neutral")
+        run_econ = self._seed_targets_run(doc_econ)
+        self._seed_target_mention(run_econ, doc_econ, "Sen. Example", entity, "positive", topic="Economy")
+
+        doc_notopic = self._seed_document("x_post", datetime.now(timezone.utc), author_id=author)
+        self._seed_text_run(doc_notopic, "neutral")
+        run_notopic = self._seed_targets_run(doc_notopic)
+        self._seed_target_mention(run_notopic, doc_notopic, "Sen. Example", entity, "negative", topic=None)
+
+        panel = sentiment.get_sentiment_panel(window="7d")
+        cell = next(e for e in panel.entity_stances if e.entity_id == entity)
+        by_topic = {t.topic: t for t in cell.by_topic}
+        self.assertEqual(by_topic["Economy"].positive, 1)
+        self.assertEqual(by_topic["Economy"].volume, 1)
+        self.assertEqual(by_topic["General"].negative, 1)
+
+    def test_entity_stance_received_by_tier_separates_officials_from_public(self):
+        # "Received tone by speaker tier": the tone an entity receives
+        # from an elected-official X post must bucket separately from
+        # tone received from an unaffiliated (general_public) X post.
+        entity = self._seed_entity("official", "Sen. Example", lean="democrat")
+        official_author = self._seed_author()
+        self._seed_author_profile(official_author, "elected_official")
+        public_author = self._seed_author()
+
+        doc_official = self._seed_document("x_post", datetime.now(timezone.utc), author_id=official_author)
+        self._seed_text_run(doc_official, "neutral")
+        run_official = self._seed_targets_run(doc_official)
+        self._seed_target_mention(run_official, doc_official, "Sen. Example", entity, "positive")
+
+        doc_public = self._seed_document("x_post", datetime.now(timezone.utc), author_id=public_author)
+        self._seed_text_run(doc_public, "neutral")
+        run_public = self._seed_targets_run(doc_public)
+        self._seed_target_mention(run_public, doc_public, "Sen. Example", entity, "negative")
+
+        panel = sentiment.get_sentiment_panel(window="7d")
+        cell = next(e for e in panel.entity_stances if e.entity_id == entity)
+        by_tier = {t.tier: t for t in cell.received_by_tier}
+        self.assertEqual(by_tier["officials"].positive, 1)
+        self.assertEqual(by_tier["general_public"].negative, 1)
+
+    def test_entity_stance_carries_entity_key_alongside_entity_id(self):
+        # Dual-identifier restoration (owner decision 2026-07-26): the
+        # per-entity aggregate must carry the stable slug too, not just
+        # the numeric id, so cross-page joins don't need a name guess.
+        entity = self._seed_entity("official", "Sen. Example", lean="republican")
+        author = self._seed_author()
+        doc = self._seed_document("x_post", datetime.now(timezone.utc), author_id=author)
+        self._seed_text_run(doc, "neutral")
+        run_id = self._seed_targets_run(doc)
+        self._seed_target_mention(run_id, doc, "Sen. Example", entity, "positive")
+
+        panel = sentiment.get_sentiment_panel(window="7d")
+        cell = next(e for e in panel.entity_stances if e.entity_id == entity)
+        self.assertIsNotNone(cell.entity_key)
 
 
 if __name__ == "__main__":

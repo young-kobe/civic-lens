@@ -40,6 +40,41 @@ class PartySplit(CamelModel):
     mean_score: float
 
 
+class PropagandaEntityRow(CamelModel):
+    """One registry entity's propaganda footprint over analysis.runs
+    (is_current, done, task='propaganda') for [start, end], resolved via
+    corpus.news_articles.outlet_entity_id / corpus.reddit_posts
+    .subreddit_entity_id / corpus.authors -> corpus.author_profiles
+    .entity_id, in that priority order. `group` is 'news'/'subreddit' for
+    an outlet/subreddit-resolved entity, or the author's
+    corpus.author_profiles.tier for an author-resolved entity."""
+
+    entity_id: int
+    entity_key: str
+    display_name: str
+    group: str
+    doc_count: int
+    mean_density: float
+    flagged_share: float
+
+
+class PropagandaTierSplit(CamelModel):
+    """News/Officials/Public split (the ThreeWayGrid tiers, restored per
+    docs/todos/ui-feature-restoration.md): 'news' is
+    corpus.documents.source_type='news'; 'officials' is an author whose
+    corpus.author_profiles.tier='elected_official'; every other doc
+    (affiliated/general_public authors, and docs with no resolved author
+    profile) buckets as 'public' -- mirrors by_party's 'unknown' convention
+    of accounting for every eligible doc rather than dropping unmatched
+    ones."""
+
+    group: Literal["news", "officials", "public"]
+    total_docs: int
+    flagged_docs: int
+    flagged_rate_pct: float
+    mean_score: float
+
+
 class PropagandaOverviewModel(CamelModel):
     """GET /api/v1/propaganda response. The denominator behind
     total_eligible_docs/flagged_docs/mean_score is analysis.runs (is_current,
@@ -55,4 +90,6 @@ class PropagandaOverviewModel(CamelModel):
     by_technique: List[TechniqueCount] = Field(default_factory=list)
     by_source: List[SourceSplit] = Field(default_factory=list)
     by_party: List[PartySplit] = Field(default_factory=list)
+    by_tier: List[PropagandaTierSplit] = Field(default_factory=list)
+    by_entity: List[PropagandaEntityRow] = Field(default_factory=list)
     examples: List[SampleDocModel] = Field(default_factory=list)

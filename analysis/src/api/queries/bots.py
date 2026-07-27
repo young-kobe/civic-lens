@@ -8,6 +8,7 @@ Live query module for GET /bot-activity. Aggregates
 
 from __future__ import annotations
 
+from collections import Counter
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Set, Tuple
 
@@ -18,6 +19,7 @@ from analysis.src.api.models.bots import (
     BotPushedNarrative,
     EntityBotRate,
     FlaggedAccount,
+    PostingCadenceBucket,
 )
 from analysis.src.api.models.common import LeanLabel, RangeMeta, SampleDocModel
 from analysis.src.api.queries import base
@@ -215,7 +217,8 @@ def _build_entity_bot_rates(
         if entity is None:
             continue
         slot = accum.setdefault(entity["entity_id"], {
-            "entity_key": entity["entity_key"], "kind": entity["kind"],
+            "entity_id": entity["entity_id"], "entity_key": entity["entity_key"],
+            "kind": entity["kind"],
             "display_name": entity["display_name"], "total": 0, "bot": 0,
         })
         slot["total"] += 1
@@ -224,7 +227,8 @@ def _build_entity_bot_rates(
 
     items = [
         EntityBotRate(
-            entity_key=slot["entity_key"], kind=slot["kind"], display_name=slot["display_name"],
+            entity_id=slot["entity_id"], entity_key=slot["entity_key"],
+            kind=slot["kind"], display_name=slot["display_name"],
             total_docs=slot["total"], bot_docs=slot["bot"],
             bot_rate_pct=round(slot["bot"] / slot["total"] * 100, 1) if slot["total"] else 0.0,
         )
@@ -331,6 +335,30 @@ def _build_bot_pushed_narratives(
     return narratives[:_TOP_N_NARRATIVES]
 
 
+def _build_posting_cadence(bot_rows: List[Dict[str, Any]]) -> List[PostingCadenceBucket]:
+    """24-bucket UTC hour-of-day histogram over bot-flagged (label='bot')
+    docs in range -- pure post-processing over the same `bot_rows` already
+    fetched for the rest of the panel (no extra query), matching the
+    retired aggregator's hourly_distribution (a single combined histogram,
+    not one per author)."""
+    counts = Counter(
+        row["published_at"].hour for row in bot_rows
+        if row["bot_label"] == "bot" and row["published_at"] is not None
+    )
+    return [PostingCadenceBucket(hour=hour, doc_count=counts.get(hour, 0)) for hour in range(24)]
+
+
+def _compute_coordination_index(cadence: List[PostingCadenceBucket]) -> float:
+    """Reimplements the retired
+    reporting/aggregators/bot/metrics.py::_compute_coordination_index():
+    the busiest hour's share of all bot-flagged posts in range. 0.0 when
+    there is no bot-flagged posting activity at all (empty histogram)."""
+    total = sum(bucket.doc_count for bucket in cadence)
+    if total == 0:
+        return 0.0
+    return round(max(bucket.doc_count for bucket in cadence) / total, 3)
+
+
 def get_bot_activity(
     *, start: Optional[datetime], end: Optional[datetime], window_label: Optional[str],
 ) -> BotActivityResponse:
@@ -385,6 +413,7 @@ def get_bot_activity(
         sampled_doc_count=sampled_count, official_record_doc_count=official_count,
         model_ids=model_ids,
     )
+    posting_cadence = _build_posting_cadence(bot_rows)
 
     return BotActivityResponse(
         range=range_meta,
@@ -393,6 +422,8 @@ def get_bot_activity(
         automation_rate_pct=automation_rate_pct,
         behavioral_signals=behavioral_signals,
         account_age_buckets=_build_age_buckets(bot_rows, bot_scores, now),
+        coordination_index=_compute_coordination_index(posting_cadence),
+        posting_cadence=posting_cadence,
         by_entity=_build_entity_bot_rates(bot_rows, entities),
         bot_pushed_narratives=_build_bot_pushed_narratives(narrative_rows, bot_scores),
         flagged_accounts=_build_flagged_accounts(bot_rows, bot_scores, leans),

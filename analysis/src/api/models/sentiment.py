@@ -63,6 +63,16 @@ class DayOfWeekSentiment(BucketSentiment):
     day: str
 
 
+class DailySentiment(BucketSentiment):
+    """One calendar day's net tone/volume within the request window
+    (`date_trunc('day', published_at)`) -- restores the tone-trend chart
+    line (docs/todos/ui-feature-restoration.md). ``date`` is an ISO
+    calendar date (YYYY-MM-DD), matching the ``month`` string convention
+    on entities.MonthlyActivity."""
+
+    date: str
+
+
 class TierSplit(BucketSentiment):
     tier: Literal["news", "officials", "general_public"]
 
@@ -81,20 +91,44 @@ class StanceCounts(CamelModel):
     low_sample: bool
 
 
+class TopicStanceCounts(StanceCounts):
+    """One entity's stance breakdown for a single topic
+    (analysis.target_mentions GROUP BY entity_id, topic) -- feeds the
+    three-way grid's per-entity topic tabs. ``topic`` is 'General' when
+    target_mentions.topic is NULL, matching the panel-level by_topic
+    convention (never keyword-guessed)."""
+
+    topic: str
+
+
+class TierStanceCounts(StanceCounts):
+    """One entity's stance breakdown by the speaker tier (news/officials/
+    general_public) of the mentioning doc's author -- the "received tone
+    by speaker tier" divergence view, computed via the same
+    ``_tier_for_row`` convention as the panel-level by_tier."""
+
+    tier: Literal["news", "officials", "general_public"]
+
+
 class EntityStanceAggregate(CamelModel):
     """Per-entity stance aggregate from analysis.target_mentions
     (``target_stance``) -- the sole per-entity stance source as of
     2026-07-25 (analysis.favorability_stances is retired, no longer
     written). ``entity_id`` is None only for the unresolved-mentions
     catch-all (``catch_all_key``) -- unresolved target_mentions are never
-    dropped."""
+    dropped. ``entity_key`` is the stable slug counterpart to ``entity_id``
+    (owner decision 2026-07-26: emit both so cross-page joins are exact,
+    not a (kind, displayName) guess); also None for the catch-all."""
 
     entity_id: Optional[int]
+    entity_key: Optional[str] = None
     catch_all_key: Optional[str]
     display_name: str
     kind: Optional[str]
     lean: Optional[LeanLabel]
     target_stance: StanceCounts
+    by_topic: List[TopicStanceCounts] = []
+    received_by_tier: List[TierStanceCounts] = []
     samples: List[SampleDocModel]
 
 
@@ -113,6 +147,7 @@ class SentimentPanelResponse(CamelModel):
     by_time_of_day: List[TimeOfDaySentiment]
     by_day_of_week: List[DayOfWeekSentiment]
     by_tier: List[TierSplit]
+    daily: List[DailySentiment] = []
     entity_stances: List[EntityStanceAggregate]
     samples: List[SampleDocModel]
     disclaimer: str

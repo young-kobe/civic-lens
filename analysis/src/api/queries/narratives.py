@@ -84,6 +84,7 @@ def get_narratives(
         leans = _fetch_leans(conn, ids)
         citations = _fetch_citations(conn, ids, start, end)
         member_samples = _fetch_member_samples(conn, ids, start, end)
+        mean_confidences = _fetch_mean_confidence(conn, ids, start, end)
 
     narratives = []
     for row in ranked:
@@ -102,6 +103,9 @@ def get_narratives(
             "bot_pushed_fraction": _bot_pushed_fraction(bot_rows.get(nid, [])),
             "lean": _build_lean(leans.get(nid)),
             "member_doc_samples": member_samples.get(nid, []),
+            "first_seen_at": row["first_seen_at"],
+            "first_seen_doc_id": row["first_seen_doc_id"],
+            "mean_confidence": mean_confidences.get(nid),
         })
     return {"range": range_meta, "narratives": narratives}
 
@@ -175,13 +179,14 @@ def _fetch_ranked(
     time_clause = _time_filter(start, end, params)
     sql = f"""
         SELECT n.narrative_id AS narrative_id, c.claim_text AS anchor_claim_text,
+               n.first_seen_at AS first_seen_at, n.first_seen_doc_id AS first_seen_doc_id,
                COUNT(DISTINCT nd.doc_id) AS doc_count
         FROM analysis.narratives n
         JOIN analysis.narrative_docs nd ON nd.narrative_id = n.narrative_id
         JOIN corpus.documents d ON d.doc_id = nd.doc_id
         LEFT JOIN analysis.claims c ON c.claim_id = n.anchor_claim_id
         WHERE true{time_clause}
-        GROUP BY n.narrative_id, c.claim_text
+        GROUP BY n.narrative_id, c.claim_text, n.first_seen_at, n.first_seen_doc_id
         ORDER BY doc_count DESC, n.narrative_id
         LIMIT %(limit)s
     """
@@ -340,6 +345,30 @@ def _fetch_bot_rows(
     for row in conn.execute(sql, params).fetchall():
         out[row["narrative_id"]].append(row["flagged_share"])
     return out
+
+
+def _fetch_mean_confidence(
+    conn, ids: Sequence[int], start: Optional[datetime], end: Optional[datetime],
+) -> Dict[int, float]:
+    """Mean analysis.narrative_docs.confidence (the claim-match confidence
+    copied from analysis.claims.confidence at insert time -- see that
+    column's comment in 0001_north_star.sql) over ALL in-window member
+    docs, not just the MAX_EVIDENCE_PER_SAMPLE ranked subset
+    _fetch_member_samples returns. Narratives with no non-null confidence
+    in range are simply absent from the returned mapping (None upstream)."""
+    params: Dict[str, Any] = {"ids": list(ids)}
+    time_clause = _time_filter(start, end, params)
+    sql = f"""
+        SELECT nd.narrative_id AS narrative_id, AVG(nd.confidence) AS mean_confidence
+        FROM analysis.narrative_docs nd
+        JOIN corpus.documents d ON d.doc_id = nd.doc_id
+        WHERE nd.narrative_id = ANY(%(ids)s) AND nd.confidence IS NOT NULL{time_clause}
+        GROUP BY nd.narrative_id
+    """
+    return {
+        row["narrative_id"]: round(row["mean_confidence"], 3)
+        for row in conn.execute(sql, params).fetchall()
+    }
 
 
 def _fetch_leans(conn, ids: Sequence[int]) -> Dict[int, Mapping[str, Any]]:

@@ -254,13 +254,17 @@ class GetNarrativesIntegrationTests(unittest.TestCase):
             ).fetchone()
             return row["clustering_run_id"]
 
-    def _narrative(self, clustering_run_id, name="test narrative", anchor_claim_id=None):
+    def _narrative(
+        self, clustering_run_id, name="test narrative", anchor_claim_id=None,
+        first_seen_at=None, first_seen_doc_id=None,
+    ):
         from analysis.src.common import db as dbmod
         with dbmod.connection() as conn:
             row = conn.execute(
-                "INSERT INTO analysis.narratives (clustering_run_id, name, anchor_claim_id) "
-                "VALUES (%s, %s, %s) RETURNING narrative_id",
-                (clustering_run_id, name, anchor_claim_id),
+                "INSERT INTO analysis.narratives "
+                "(clustering_run_id, name, anchor_claim_id, first_seen_at, first_seen_doc_id) "
+                "VALUES (%s, %s, %s, %s, %s) RETURNING narrative_id",
+                (clustering_run_id, name, anchor_claim_id, first_seen_at, first_seen_doc_id),
             ).fetchone()
             return row["narrative_id"]
 
@@ -449,6 +453,62 @@ class GetNarrativesIntegrationTests(unittest.TestCase):
         sample = item["member_doc_samples"][0]
         self.assertEqual(sample["doc_id"], doc_id)
         self.assertEqual(sample["confidence"], 0.9)  # default in _narrative_doc
+
+    def test_first_seen_columns_pass_through_from_narratives_row(self):
+        clustering_run_id = self._clustering_run()
+        doc_id = self._doc("first-seen-doc")
+        first_seen_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        narrative_id = self._narrative(
+            clustering_run_id, first_seen_at=first_seen_at, first_seen_doc_id=doc_id,
+        )
+        self._narrative_doc(narrative_id, doc_id)
+
+        result = narratives.get_narratives(start=None, end=None, limit=20, window_label="all")
+        item = next(n for n in result["narratives"] if n["narrative_id"] == narrative_id)
+        self.assertEqual(item["first_seen_at"], first_seen_at)
+        self.assertEqual(item["first_seen_doc_id"], doc_id)
+
+    def test_first_seen_columns_none_when_unset(self):
+        narrative_id, _doc_id = self._basic_narrative_with_one_doc()
+        result = narratives.get_narratives(start=None, end=None, limit=20, window_label="all")
+        item = next(n for n in result["narratives"] if n["narrative_id"] == narrative_id)
+        self.assertIsNone(item["first_seen_at"])
+        self.assertIsNone(item["first_seen_doc_id"])
+
+    def test_mean_confidence_averages_all_member_docs_not_just_top_n(self):
+        # Binding rule this exists to encode: mean_confidence must reflect
+        # the WHOLE cluster, not the MAX_EVIDENCE_PER_SAMPLE-capped
+        # member_doc_samples list -- seed more member docs than the sample
+        # cap and confirm the mean still spans all of them.
+        from analysis.src.api.queries.constants import MAX_EVIDENCE_PER_SAMPLE
+
+        clustering_run_id = self._clustering_run()
+        narrative_id = self._narrative(clustering_run_id)
+        confidences = [0.9] * MAX_EVIDENCE_PER_SAMPLE + [0.1]
+        for i, confidence in enumerate(confidences):
+            doc_id = self._doc(f"conf-doc-{i}")
+            self._narrative_doc(narrative_id, doc_id, confidence=confidence)
+
+        result = narratives.get_narratives(start=None, end=None, limit=20, window_label="all")
+        item = next(n for n in result["narratives"] if n["narrative_id"] == narrative_id)
+        expected = round(sum(confidences) / len(confidences), 3)
+        self.assertAlmostEqual(item["mean_confidence"], expected, places=3)
+
+    def test_mean_confidence_none_without_any_confidence_rows(self):
+        clustering_run_id = self._clustering_run()
+        narrative_id = self._narrative(clustering_run_id)
+        doc_id = self._doc("no-conf-doc")
+        from analysis.src.common import db as dbmod
+        with dbmod.connection() as conn:
+            conn.execute(
+                "INSERT INTO analysis.narrative_docs (narrative_id, doc_id, confidence) "
+                "VALUES (%s, %s, NULL)",
+                (narrative_id, doc_id),
+            )
+
+        result = narratives.get_narratives(start=None, end=None, limit=20, window_label="all")
+        item = next(n for n in result["narratives"] if n["narrative_id"] == narrative_id)
+        self.assertIsNone(item["mean_confidence"])
 
     def test_no_narratives_in_range_returns_empty_list(self):
         result = narratives.get_narratives(

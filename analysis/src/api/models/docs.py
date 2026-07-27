@@ -78,6 +78,12 @@ class DocumentDetailResponse(CamelModel):
     source_type: Literal["news", "reddit_post", "x_post"]
     domain_or_subreddit: Optional[str] = None
     author_id: Optional[int] = None
+    # Author display fields from corpus.authors (LEFT JOIN — all None for
+    # news docs, whose author rows are rarely populated).
+    author_handle: Optional[str] = None
+    author_display_name: Optional[str] = None
+    author_profile_image_url: Optional[str] = None
+    author_verified: Optional[bool] = None
     published_at: datetime
     title: Optional[str] = None
     body: str
