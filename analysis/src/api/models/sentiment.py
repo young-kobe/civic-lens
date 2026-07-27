@@ -215,6 +215,33 @@ class ReceivedNarrativeCell(CamelModel):
     low_sample: bool
 
 
+class ReceivedSourceCell(CamelModel):
+    """One provenance cell answering WHO a slice of received tone comes
+    from -- the inbound-edge counterpart to OutboundTargetCell.
+    ``received_from_groups`` rolls cells up by (source_class, lean);
+    ``received_from_top`` lists named individual sources. ``lean`` is the
+    flat corpus.political_lean enum value of the source (never
+    lean_source), None for the 'other' catch-all and for unresolved
+    sampled X users (per-sampled-user derived lean is out of scope, see
+    docs/todos/provenance-and-plain-language.md). ``share`` is this cell's
+    volume over the received block's total volume -- all cells for one
+    ReceivedTone sum to 1.0. ``net``/``low_sample`` share received tone's
+    MIN_TARGET_SAMPLE_N suppression floor. Collective (gop/dem) provenance
+    denominators are built the same way, but from the alias-matched
+    unresolved raw_target rows that feed the collective rollup, not from
+    an entity_id-resolved mention."""
+
+    source_class: Literal["news_outlet", "official", "account", "subreddit", "x_user", "other"]
+    label: str
+    entity_key: Optional[str] = None
+    lean: Optional[str] = None
+    entity_profile: Optional[EntityProfileModel] = None
+    share: float
+    volume: int
+    net: Optional[float] = None
+    low_sample: bool = False
+
+
 class ReceivedTone(CamelModel):
     """How sampled posts talk ABOUT an entity (the reputational signal),
     as opposed to an EntitySentimentItem's own positive/negative/neutral
@@ -227,6 +254,8 @@ class ReceivedTone(CamelModel):
     by_topic: List[ReceivedTopicCell] = []
     by_speaker_tier: List[ReceivedSpeakerTierCell] = []
     by_narrative: List[ReceivedNarrativeCell] = []
+    received_from_groups: List[ReceivedSourceCell] = []
+    received_from_top: List[ReceivedSourceCell] = []
     samples: List[ClassificationSampleModel] = []
 
 

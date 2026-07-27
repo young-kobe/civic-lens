@@ -25,6 +25,7 @@ from analysis.src.api.models.sentiment import (
     OutboundTargets,
     PlatformSentiment,
     ReceivedNarrativeCell,
+    ReceivedSourceCell,
     ReceivedSpeakerTierCell,
     ReceivedTone,
     ReceivedTopicCell,
@@ -109,6 +110,10 @@ DAY_SAMPLES_MAX_PER_DAY = 8
 # pre-redesign target_tone.py.
 MAX_NARRATIVES_PER_TARGET = 5
 
+# Received-tone provenance ("who this tone comes from"): named individual
+# sources are capped; the (source_class x lean) rollup itself is not.
+MAX_RECEIVED_TOP_SOURCES = 8
+
 # Outbound-target rollup ("who this bucket talks about"): named rows are
 # capped; an unresolved raw_target needs to recur before earning its own row.
 MAX_OUTBOUND_TARGETS = 8
@@ -161,7 +166,8 @@ def get_sentiment_panel(
             if row["entity_id"] is not None and row["kind"] == "official" and row["target_editorial"]
         }
         tier_entity_ids = {key[1] for key in buckets if key[0] == "entity"}
-        profiles = fetch_entity_profiles(conn, tier_entity_ids | editorial_official_ids)
+        source_entity_ids = _received_source_entity_ids(target_rows)
+        profiles = fetch_entity_profiles(conn, tier_entity_ids | editorial_official_ids | source_entity_ids)
 
         received, collectives, alignment, baseline, resolved_mentions, unresolved_mentions = (
             _accumulate_target_tone(target_rows, narrative_map)
@@ -176,7 +182,7 @@ def get_sentiment_panel(
 
     tier_items, tier_lookup = _build_tier_items(buckets, profiles, rich_samples)
     _attach_official_stubs(tier_items, tier_lookup, editorial_official_ids, profiles, received)
-    _attach_received(tier_lookup, received, rich_samples)
+    _attach_received(tier_lookup, received, rich_samples, profiles)
     _attach_expressed_alignment(tier_lookup, alignment)
     _attach_outbound(tier_lookup, buckets, target_rows)
 
@@ -193,8 +199,8 @@ def get_sentiment_panel(
         resolved_mentions=resolved_mentions, unresolved_mentions=unresolved_mentions,
         bot_excluded_mentions=target_bot_excluded,
         collectives={
-            "gop_collective": _format_received(collectives["gop_collective"], rich_samples),
-            "dem_collective": _format_received(collectives["dem_collective"], rich_samples),
+            "gop_collective": _format_received(collectives["gop_collective"], rich_samples, profiles),
+            "dem_collective": _format_received(collectives["dem_collective"], rich_samples, profiles),
         },
         baselines=_format_alignment(baseline),
     )
@@ -288,8 +294,9 @@ _TARGET_ROWS_SQL = f"""
            e.lean_source AS target_lean_source, e.editorial AS target_editorial,
            ap.tier AS author_tier, ap.entity_id AS author_entity_id,
            e_auth.editorial AS author_entity_editorial, e_auth.kind AS author_entity_kind,
-           e_auth.lean_source AS author_entity_lean_source,
-           na.outlet_entity_id, rp.subreddit_entity_id,
+           e_auth.lean_source AS author_entity_lean_source, e_auth.lean AS author_entity_lean,
+           na.outlet_entity_id, e_out.lean AS outlet_lean,
+           rp.subreddit_entity_id, e_sub.lean AS subreddit_lean,
            au.handle AS x_handle, au.display_name AS x_display_name,
            au.description AS x_description, au.followers_count AS x_followers_count,
            (COALESCE(xp.retweet_count, 0) + COALESCE(xp.reply_count, 0)
@@ -301,7 +308,9 @@ _TARGET_ROWS_SQL = f"""
     LEFT JOIN corpus.author_profiles ap ON ap.author_id = d.author_id
     LEFT JOIN corpus.entities e_auth ON e_auth.entity_id = ap.entity_id
     LEFT JOIN corpus.news_articles na ON na.doc_id = d.doc_id
+    LEFT JOIN corpus.entities e_out ON e_out.entity_id = na.outlet_entity_id
     LEFT JOIN corpus.reddit_posts rp ON rp.doc_id = d.doc_id
+    LEFT JOIN corpus.entities e_sub ON e_sub.entity_id = rp.subreddit_entity_id
     LEFT JOIN corpus.authors au ON au.author_id = d.author_id
     LEFT JOIN corpus.x_posts xp ON xp.doc_id = d.doc_id
     WHERE r.is_current AND r.task = 'targets'
@@ -924,10 +933,58 @@ def _engagement_weight(engagement: Optional[int]) -> float:
 def _received_accum_default() -> Dict[str, Any]:
     return {
         "counts": _empty_counts(),
-        "by_topic": {}, "by_speaker_tier": {}, "by_narrative": {},
+        "by_topic": {}, "by_speaker_tier": {}, "by_narrative": {}, "by_source": {},
         "w_pos": 0.0, "w_neg": 0.0, "w_total": 0.0,
         "samples": [],
     }
+
+
+def _route_received_source(row: Mapping[str, Any]) -> Tuple[str, Any, Optional[str]]:
+    """Resolve one received-tone mention row to (source_class, ident,
+    lean) -- WHO the tone comes from, the inbound mirror of
+    _route_own_post/_route_outbound_bucket. ident is an entity_id for a
+    registry source, a lowercased handle for an unresolved sampled X
+    author, or None for the single 'other' bucket every unroutable row
+    (unmatched outlet/subreddit, unknown source_type, no author identity
+    at all) folds into -- so received_from_groups' shares always sum to
+    1.0."""
+    source_type = row["source_type"]
+    if source_type == "news":
+        outlet_entity_id = row["outlet_entity_id"]
+        if outlet_entity_id is not None:
+            return "news_outlet", outlet_entity_id, row["outlet_lean"]
+        return "other", None, None
+    if source_type == "reddit_post":
+        subreddit_entity_id = row["subreddit_entity_id"]
+        if subreddit_entity_id is not None:
+            return "subreddit", subreddit_entity_id, row["subreddit_lean"]
+        return "other", None, None
+    if source_type == "x_post":
+        author_entity_id = row["author_entity_id"]
+        if author_entity_id is not None:
+            source_class = (
+                "official" if row["author_entity_kind"] == "official" and row["author_entity_editorial"]
+                else "account"
+            )
+            return source_class, author_entity_id, row["author_entity_lean"]
+        handle = row.get("x_handle")
+        if handle:
+            return "x_user", handle.lower().lstrip("@"), None
+        return "other", None, None
+    return "other", None, None
+
+
+def _received_source_entity_ids(target_rows: List[Any]) -> set:
+    """Registry entity ids on the SOURCE side of a received-tone mention
+    (outlet/subreddit/author entity) -- widens fetch_entity_profiles'
+    fetch beyond the tier-bucket ids so received_from_top's registry
+    cells can carry an entity_profile."""
+    ids: set = set()
+    for row in target_rows:
+        source_class, ident, _lean = _route_received_source(row)
+        if source_class not in ("x_user", "other"):
+            ids.add(ident)
+    return ids
 
 
 def _accumulate_received(
@@ -947,6 +1004,12 @@ def _accumulate_received(
     for narrative_id, name in narrative_map.get(row["doc_id"], []):
         cell = accum["by_narrative"].setdefault(narrative_id, {"name": name, "counts": _empty_counts()})
         cell["counts"][stance] += 1
+    source_class, ident, lean = _route_received_source(row)
+    source_cell = accum["by_source"].setdefault(
+        (source_class, ident),
+        {"source_class": source_class, "ident": ident, "lean": lean, "counts": _empty_counts(), "row": row},
+    )
+    source_cell["counts"][stance] += 1
     accum["samples"].append((row["confidence"], row))
 
 
@@ -1005,7 +1068,100 @@ def _accumulate_target_tone(
     return received, collectives, alignment, baseline, resolved_mentions, unresolved_mentions
 
 
-def _format_received(accum: Dict[str, Any], rich_samples: Dict[int, dict]) -> ReceivedTone:
+_SOURCE_CLASS_GROUP_NOUN = {
+    "news_outlet": "news outlets", "subreddit": "subreddits",
+    "official": "officials", "account": "accounts", "x_user": "x users",
+}
+
+
+def _group_label(source_class: str, lean: Optional[str]) -> str:
+    """Simple, deterministic label for a received_from_groups cell -- the
+    UI builds its own polished display label from source_class + lean
+    (raw enum values), this is just a stable fallback/debug string."""
+    if source_class == "other":
+        return "other"
+    return f"{lean or 'unknown'} {_SOURCE_CLASS_GROUP_NOUN[source_class]}"
+
+
+def _source_identity(
+    source_class: str, ident: Any, sample_row: Mapping[str, Any], profiles: Dict[int, Any],
+) -> Tuple[str, Optional[str], Optional[Any]]:
+    """(label, entity_key, entity_profile) for one received_from_top cell.
+    Registry sources (news_outlet/subreddit/official/account) look up
+    their profile from the widened fetch_entity_profiles set -- a missing
+    id renders entity_profile=None rather than raising (provenance
+    profiles are a separate lookup concern from the tier-bucket
+    ValueError contract in _format_entity_item). x_user sources are
+    unresolved sampled X authors -- handle as label, entity_key always
+    None, profile built from the row's own already-fetched bio fields."""
+    if source_class == "x_user":
+        profile = sampled_account_profile(
+            ident, sample_row.get("x_display_name"), sample_row.get("x_description"),
+        )
+        return ident, None, profile
+    profile = profiles.get(ident)
+    if profile is None:
+        return f"entity-{ident}", None, None
+    return profile.display_name, profile.key, profile
+
+
+def _received_source_groups(by_source: Dict[Any, Dict[str, Any]], total_volume: int) -> List[ReceivedSourceCell]:
+    """Rollup by (source_class, lean) -- always includes the 'other'
+    bucket when it has any volume, so shares sum to 1.0 over the received
+    block's total."""
+    rollup: Dict[Tuple[str, Optional[str]], Dict[str, int]] = {}
+    for cell in by_source.values():
+        lean = cell["lean"] if cell["source_class"] != "other" else None
+        counts = rollup.setdefault((cell["source_class"], lean), _empty_counts())
+        for stance, n in cell["counts"].items():
+            counts[stance] += n
+
+    cells = []
+    for (source_class, lean), counts in rollup.items():
+        volume = sum(counts.values())
+        low_sample = volume < MIN_TARGET_SAMPLE_N
+        cells.append(ReceivedSourceCell(
+            source_class=source_class, label=_group_label(source_class, lean), lean=lean,
+            share=round(volume / total_volume, 3) if total_volume else 0.0,
+            volume=volume, net=None if low_sample else _net_score(counts), low_sample=low_sample,
+        ))
+    cells.sort(key=lambda c: (-c.volume, c.label))
+    return cells
+
+
+def _received_source_top(
+    by_source: Dict[Any, Dict[str, Any]], total_volume: int, profiles: Dict[int, Any],
+) -> List[ReceivedSourceCell]:
+    """Top MAX_RECEIVED_TOP_SOURCES named individual sources by volume,
+    excluding the 'other' bucket (that one has no single named source)."""
+    cells = []
+    for (source_class, _ident), cell in by_source.items():
+        if source_class == "other":
+            continue
+        counts = cell["counts"]
+        volume = sum(counts.values())
+        low_sample = volume < MIN_TARGET_SAMPLE_N
+        sample_row = cell["row"]
+        label, entity_key, profile = _source_identity(source_class, cell["ident"], sample_row, profiles)
+        cells.append(ReceivedSourceCell(
+            source_class=source_class, label=label, entity_key=entity_key, lean=cell["lean"],
+            entity_profile=profile,
+            share=round(volume / total_volume, 3) if total_volume else 0.0,
+            volume=volume, net=None if low_sample else _net_score(counts), low_sample=low_sample,
+        ))
+    cells.sort(key=lambda c: (-c.volume, c.label))
+    return cells[:MAX_RECEIVED_TOP_SOURCES]
+
+
+def _format_received(
+    accum: Dict[str, Any], rich_samples: Dict[int, dict], profiles: Dict[int, Any],
+) -> ReceivedTone:
+    """Assembles one ReceivedTone, including received_from_groups/_top
+    provenance. Applies uniformly to editorial officials' received blocks
+    AND the gop/dem collective rollups (both flow through
+    _accumulate_received) -- a collective's provenance denominator is
+    built from the same alias-matched-unresolved rows that feed its net
+    tone, not from an entity_id-resolved mention."""
     counts = accum["counts"]
     volume = sum(counts.values())
     low_sample = volume < MIN_TARGET_SAMPLE_N
@@ -1045,6 +1201,8 @@ def _format_received(accum: Dict[str, Any], rich_samples: Dict[int, dict]) -> Re
         net=_net_score(counts), volume=volume, low_sample=low_sample,
         engagement_weighted_net=weighted_net,
         by_topic=by_topic, by_speaker_tier=by_speaker_tier, by_narrative=by_narrative,
+        received_from_groups=_received_source_groups(accum["by_source"], volume),
+        received_from_top=_received_source_top(accum["by_source"], volume, profiles),
         samples=_build_classification_samples(samples, rich_samples),
     )
 
@@ -1058,12 +1216,12 @@ def _format_alignment(cells: Dict[str, Dict[str, int]]) -> ExpressedAlignment:
 
 def _attach_received(
     lookup: Dict[Tuple[str, Tuple[str, Any]], EntitySentimentItem],
-    received: Dict[int, Dict[str, Any]], rich_samples: Dict[int, dict],
+    received: Dict[int, Dict[str, Any]], rich_samples: Dict[int, dict], profiles: Dict[int, Any],
 ) -> None:
     for entity_id, accum in received.items():
         item = lookup.get(("officials", ("entity", entity_id)))
         if item is not None:
-            item.received = _format_received(accum, rich_samples)
+            item.received = _format_received(accum, rich_samples, profiles)
 
 
 def _attach_expressed_alignment(
