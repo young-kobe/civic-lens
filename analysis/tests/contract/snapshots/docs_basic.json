@@ -1,7 +1,11 @@
 {
   "admissionClass": "sampled",
   "analysisResults": [],
+  "authorDisplayName": null,
+  "authorHandle": null,
   "authorId": null,
+  "authorProfileImageUrl": null,
+  "authorVerified": null,
   "body": "contract body",
   "citationsIn": [],
   "citationsOut": [],

@@ -25,6 +25,7 @@
       "currentVolume": 5,
       "deltaPts": 200.0,
       "displayName": "Senator Contract",
+      "entityId": 1,
       "entityKey": "sen-contract",
       "kind": "official",
       "prevNet": -100.0,

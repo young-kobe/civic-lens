@@ -102,6 +102,73 @@ class BucketByPartyTests(unittest.TestCase):
         self.assertEqual(parties, sorted(parties))
 
 
+class BucketByTierTests(unittest.TestCase):
+    def _row(self, source_type="x_post", tier=None, density=0.0, techniques_validated=0):
+        return {
+            "source_type": source_type, "tier": tier, "density": density,
+            "techniques_validated": techniques_validated,
+        }
+
+    def test_news_source_type_always_buckets_as_news_regardless_of_tier(self):
+        rows = [self._row(source_type="news", tier="elected_official")]
+        buckets = {b["group"]: b for b in propaganda._bucket_by_tier(rows)}
+        self.assertEqual(buckets["news"]["total_docs"], 1)
+        self.assertEqual(buckets["officials"]["total_docs"], 0)
+
+    def test_elected_official_tier_buckets_as_officials(self):
+        rows = [self._row(tier="elected_official")]
+        buckets = {b["group"]: b for b in propaganda._bucket_by_tier(rows)}
+        self.assertEqual(buckets["officials"]["total_docs"], 1)
+
+    def test_affiliated_and_no_tier_both_bucket_as_public(self):
+        # Binding rule: the three-way split has no separate 'affiliated'
+        # column -- affiliated authors and entity-less docs both collapse
+        # into 'public' rather than being dropped.
+        rows = [self._row(tier="affiliated"), self._row(tier=None)]
+        buckets = {b["group"]: b for b in propaganda._bucket_by_tier(rows)}
+        self.assertEqual(buckets["public"]["total_docs"], 2)
+
+    def test_all_three_groups_present_even_at_zero_count(self):
+        buckets = {b["group"] for b in propaganda._bucket_by_tier([])}
+        self.assertEqual(buckets, {"news", "officials", "public"})
+
+
+class SummarizeEntityRowsTests(unittest.TestCase):
+    def _row(self, entity_id=1, entity_key="ent-1", display_name="Entity One",
+             group="elected_official", density=0.5, techniques_validated=1):
+        return {
+            "entity_id": entity_id, "entity_key": entity_key, "display_name": display_name,
+            "group": group, "density": density, "techniques_validated": techniques_validated,
+        }
+
+    def test_groups_by_entity_id_and_computes_share_and_mean(self):
+        rows = [
+            self._row(density=0.2, techniques_validated=0),
+            self._row(density=0.8, techniques_validated=1),
+        ]
+        items = propaganda._summarize_entity_rows(rows)
+        self.assertEqual(len(items), 1)
+        item = items[0]
+        self.assertEqual(item["doc_count"], 2)
+        self.assertEqual(item["mean_density"], 0.5)
+        self.assertEqual(item["flagged_share"], 0.5)
+
+    def test_ranked_by_doc_count_descending(self):
+        rows = (
+            [self._row(entity_id=1, entity_key="e1")]
+            + [self._row(entity_id=2, entity_key="e2")] * 3
+        )
+        items = propaganda._summarize_entity_rows(rows)
+        self.assertEqual(items[0]["entity_id"], 2)
+
+    def test_capped_at_max_leaderboard_rows(self):
+        rows = [
+            self._row(entity_id=i, entity_key=f"e{i}") for i in range(propaganda.MAX_ENTITY_LEADERBOARD_ROWS + 5)
+        ]
+        items = propaganda._summarize_entity_rows(rows)
+        self.assertEqual(len(items), propaganda.MAX_ENTITY_LEADERBOARD_ROWS)
+
+
 class SummarizeTechniquesTests(unittest.TestCase):
     def test_every_enum_technique_present_even_at_zero_count(self):
         rows = [{"technique": "loaded_language", "evidence_span": "vile scheme"}]
@@ -160,13 +227,15 @@ class GetPropagandaOverviewIntegrationTests(unittest.TestCase):
         with psycopg.connect(self._dsn, autocommit=True) as conn:
             conn.execute(
                 "TRUNCATE analysis.propaganda_techniques, analysis.propaganda_results, "
-                "analysis.author_bot_scores, analysis.runs, corpus.author_profiles, "
-                "corpus.documents, corpus.authors, corpus.entities CASCADE"
+                "analysis.author_bot_scores, analysis.runs, corpus.news_articles, "
+                "corpus.reddit_posts, corpus.author_profiles, corpus.documents, "
+                "corpus.authors, corpus.entities, raw.articles, raw.reddit_posts, "
+                "raw.pages CASCADE"
             )
 
     # -- seeding helpers --------------------------------------------------
 
-    def _entity(self, key, lean, kind="official"):
+    def _entity(self, key, lean="unknown", kind="official"):
         from analysis.src.common import db as dbmod
         with dbmod.connection() as conn:
             row = conn.execute(
@@ -176,6 +245,45 @@ class GetPropagandaOverviewIntegrationTests(unittest.TestCase):
                 (key, kind, key, lean),
             ).fetchone()
             return row["entity_id"]
+
+    def _news_article(self, doc_id, outlet_entity_id):
+        """corpus.news_articles.url_canon FKs to raw.articles, which FKs to
+        raw.pages -- seed the raw-layer rows first so the FK is
+        satisfiable (matches test_api_queries_docs.py's convention)."""
+        from analysis.src.common import db as dbmod
+        url_canon = f"https://example.com/canon/{doc_id}"
+        with dbmod.connection() as conn:
+            conn.execute(
+                "INSERT INTO raw.pages (url_canon, url_raw, domain) VALUES (%s, %s, 'example.com')",
+                (url_canon, url_canon),
+            )
+            conn.execute(
+                "INSERT INTO raw.articles (url_canon, fetched_at, raw_hash, extraction_version) "
+                "VALUES (%s, now(), 'deadbeef', 'test')",
+                (url_canon,),
+            )
+            conn.execute(
+                "INSERT INTO corpus.news_articles (doc_id, url_canon, outlet_entity_id) "
+                "VALUES (%s, %s, %s)",
+                (doc_id, url_canon, outlet_entity_id),
+            )
+
+    def _reddit_post(self, doc_id, subreddit_entity_id):
+        """corpus.reddit_posts.fullname FKs to raw.reddit_posts -- seed the
+        raw-layer row first so the FK is satisfiable."""
+        from analysis.src.common import db as dbmod
+        fullname = f"t3_{doc_id}"
+        with dbmod.connection() as conn:
+            conn.execute(
+                "INSERT INTO raw.reddit_posts (fullname, raw_hash, extraction_version) "
+                "VALUES (%s, 'deadbeef', 'test')",
+                (fullname,),
+            )
+            conn.execute(
+                "INSERT INTO corpus.reddit_posts (doc_id, fullname, subreddit_entity_id) "
+                "VALUES (%s, %s, %s)",
+                (doc_id, fullname, subreddit_entity_id),
+            )
 
     def _author(self, handle):
         from analysis.src.common import db as dbmod
@@ -358,11 +466,74 @@ class GetPropagandaOverviewIntegrationTests(unittest.TestCase):
         self.assertEqual(overview["range"]["sampled_doc_count"], 1)
         self.assertEqual(overview["range"]["official_record_doc_count"], 1)
 
+    def test_by_tier_officials_bucket_reflects_author_profiles_tier(self):
+        official_entity = self._entity("sen-x")
+        official_author = self._author("sen-x-handle")
+        self._author_profile(official_author, official_entity)
+        self._flagged_doc(
+            "official-doc", author_id=official_author, source_type="x_post",
+            density=0.6, techniques_validated=1,
+        )
+        self._flagged_doc("news-doc", source_type="news", density=0.4, techniques_validated=0)
+
+        overview = propaganda.get_propaganda_overview(start=None, end=None, window_label="all")
+        by_tier = {t["group"]: t for t in overview["by_tier"]}
+        self.assertEqual(by_tier["officials"]["total_docs"], 1)
+        self.assertEqual(by_tier["news"]["total_docs"], 1)
+        self.assertEqual(by_tier["public"]["total_docs"], 0)
+
+    def test_by_entity_resolves_via_news_outlet_entity_id(self):
+        outlet_entity = self._entity("outlet-x", kind="outlet")
+        doc_id, _run_id = self._flagged_doc(
+            "outlet-doc", source_type="news", density=0.7, techniques_validated=1,
+        )
+        self._news_article(doc_id, outlet_entity)
+
+        overview = propaganda.get_propaganda_overview(start=None, end=None, window_label="all")
+        self.assertEqual(len(overview["by_entity"]), 1)
+        row = overview["by_entity"][0]
+        self.assertEqual(row["entity_id"], outlet_entity)
+        self.assertEqual(row["entity_key"], "outlet-x")
+        self.assertEqual(row["group"], "news")
+        self.assertEqual(row["doc_count"], 1)
+
+    def test_by_entity_resolves_via_reddit_subreddit_entity_id(self):
+        subreddit_entity = self._entity("subreddit-x", kind="subreddit")
+        doc_id, _run_id = self._flagged_doc(
+            "reddit-doc", source_type="reddit_post", density=0.5, techniques_validated=0,
+        )
+        self._reddit_post(doc_id, subreddit_entity)
+
+        overview = propaganda.get_propaganda_overview(start=None, end=None, window_label="all")
+        row = next(r for r in overview["by_entity"] if r["entity_id"] == subreddit_entity)
+        self.assertEqual(row["group"], "subreddit")
+        self.assertEqual(row["entity_key"], "subreddit-x")
+
+    def test_by_entity_resolves_via_author_profiles_entity_id_with_tier_group(self):
+        official_entity = self._entity("sen-y")
+        official_author = self._author("sen-y-handle")
+        self._author_profile(official_author, official_entity)
+        self._flagged_doc(
+            "sen-y-doc", author_id=official_author, source_type="x_post",
+            density=0.9, techniques_validated=1,
+        )
+
+        overview = propaganda.get_propaganda_overview(start=None, end=None, window_label="all")
+        row = next(r for r in overview["by_entity"] if r["entity_id"] == official_entity)
+        self.assertEqual(row["group"], "elected_official")
+
+    def test_by_entity_excludes_docs_with_no_resolvable_entity(self):
+        self._flagged_doc("no-entity-doc", density=0.5, techniques_validated=1)
+        overview = propaganda.get_propaganda_overview(start=None, end=None, window_label="all")
+        self.assertEqual(overview["by_entity"], [])
+
     def test_no_eligible_docs_yields_zeroed_overview_not_error(self):
         overview = propaganda.get_propaganda_overview(start=None, end=None, window_label="all")
         self.assertEqual(overview["total_eligible_docs"], 0)
         self.assertEqual(overview["by_technique"][0]["count"], 0)
         self.assertEqual(overview["examples"], [])
+        self.assertEqual(overview["by_entity"], [])
+        self.assertEqual({t["group"] for t in overview["by_tier"]}, {"news", "officials", "public"})
 
 
 if __name__ == "__main__":

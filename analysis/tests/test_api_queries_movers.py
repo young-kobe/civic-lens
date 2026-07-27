@@ -226,6 +226,9 @@ class GetMoversIntegrationTests(unittest.TestCase):
         self.assertEqual(mover.delta_pts, 200.0)
         self.assertEqual(mover.current_volume, MIN_TARGET_SAMPLE_N)
         self.assertEqual(mover.prev_volume, MIN_TARGET_SAMPLE_N)
+        # Dual-identifier restoration (owner decision 2026-07-26): entity_id
+        # must be the same numeric id backing entity_key, not just the slug.
+        self.assertEqual(mover.entity_id, entity_id)
 
     def test_tone_mover_excludes_bot_scored_author_docs(self):
         entity_id = self._entity("sen-test")
@@ -273,6 +276,7 @@ class GetMoversIntegrationTests(unittest.TestCase):
         result = self._get_movers()
         self.assertIsNotNone(result.top_favorability_mover)
         self.assertEqual(result.top_favorability_mover.entity_key, "big-delta")
+        self.assertEqual(result.top_favorability_mover.entity_id, big_entity)
         self.assertEqual(result.top_favorability_mover.delta_pts, 200.0)
 
     def test_range_meta_model_ids_for_current_and_previous(self):

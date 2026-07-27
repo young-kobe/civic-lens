@@ -13,8 +13,12 @@ from analysis.src.api.models.common import CamelModel, RangeMeta
 class ToneMover(CamelModel):
     """One entity (`corpus.entities`) whose net political tone shifted
     between the previous equal-length period and the current one.
-    `delta_pts` is signed: current_net - prev_net."""
+    `delta_pts` is signed: current_net - prev_net. Carries both
+    `entity_id` (numeric) and `entity_key` (stable slug) -- owner decision
+    2026-07-26: emit both so cross-page joins are exact, not a
+    (kind, displayName) guess."""
 
+    entity_id: int
     entity_key: str
     kind: str
     display_name: str
@@ -29,8 +33,11 @@ class FavorabilityMover(CamelModel):
     """The single largest window-over-window favorability shift among
     entities with `analysis.target_mentions` stance coverage in both
     periods (source swapped from the retired `analysis.favorability_stances`
-    2026-07-25; the metric and shape are unchanged)."""
+    2026-07-25; the metric and shape are unchanged). Carries both
+    `entity_id` and `entity_key`, same dual-identifier convention as
+    ToneMover."""
 
+    entity_id: int
     entity_key: str
     kind: str
     display_name: str

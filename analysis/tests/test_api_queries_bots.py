@@ -47,6 +47,47 @@ class TimeFilterTests(unittest.TestCase):
         self.assertEqual(params["_range_end"], end)
 
 
+class PostingCadenceTests(unittest.TestCase):
+    def _row(self, hour, label="bot"):
+        return {"bot_label": label, "published_at": datetime(2026, 1, 1, hour, tzinfo=timezone.utc)}
+
+    def test_all_24_hours_present_even_at_zero_count(self):
+        cadence = bots._build_posting_cadence([self._row(3)])
+        self.assertEqual(len(cadence), 24)
+        hours = {bucket.hour for bucket in cadence}
+        self.assertEqual(hours, set(range(24)))
+
+    def test_only_bot_labeled_docs_counted(self):
+        rows = [self._row(5, label="bot"), self._row(5, label="human")]
+        cadence = bots._build_posting_cadence(rows)
+        bucket = next(b for b in cadence if b.hour == 5)
+        self.assertEqual(bucket.doc_count, 1)
+
+    def test_none_published_at_does_not_raise(self):
+        rows = [{"bot_label": "bot", "published_at": None}]
+        cadence = bots._build_posting_cadence(rows)
+        self.assertEqual(sum(b.doc_count for b in cadence), 0)
+
+
+class CoordinationIndexTests(unittest.TestCase):
+    def test_empty_histogram_is_zero(self):
+        from analysis.src.api.models.bots import PostingCadenceBucket
+        cadence = [PostingCadenceBucket(hour=h, doc_count=0) for h in range(24)]
+        self.assertEqual(bots._compute_coordination_index(cadence), 0.0)
+
+    def test_all_posts_in_one_hour_is_maximal_coordination(self):
+        from analysis.src.api.models.bots import PostingCadenceBucket
+        cadence = [
+            PostingCadenceBucket(hour=h, doc_count=10 if h == 4 else 0) for h in range(24)
+        ]
+        self.assertEqual(bots._compute_coordination_index(cadence), 1.0)
+
+    def test_evenly_spread_posts_yield_low_coordination(self):
+        from analysis.src.api.models.bots import PostingCadenceBucket
+        cadence = [PostingCadenceBucket(hour=h, doc_count=1) for h in range(24)]
+        self.assertAlmostEqual(bots._compute_coordination_index(cadence), 1 / 24, places=3)
+
+
 class AgeBucketLabelTests(unittest.TestCase):
     def test_none_created_at_is_unknown(self):
         self.assertEqual(bots._age_bucket_label(datetime.now(timezone.utc), None), "unknown")
@@ -410,6 +451,30 @@ class GetBotActivityIntegrationTests(unittest.TestCase):
 
         result = bots.get_bot_activity(start=None, end=None, window_label="all")
         self.assertEqual(result.analyzed_doc_count, 0)
+
+    def test_posting_cadence_and_coordination_index_reflect_bot_flagged_docs_only(self):
+        # Binding rule: the cadence histogram (and the coordination index
+        # derived from it) counts only label='bot' docs -- a human-labeled
+        # doc from the same author posted at the same hour must not
+        # inflate either number.
+        bot_author = self._author("cadence-bot")
+        same_hour = datetime(2026, 4, 1, 14, tzinfo=timezone.utc)
+        other_hour = datetime(2026, 4, 1, 20, tzinfo=timezone.utc)
+        for i, published_at in enumerate([same_hour, same_hour, other_hour]):
+            doc_id = self._doc(f"bot-cadence-{i}", author_id=bot_author, published_at=published_at)
+            run_id = self._run("bot", doc_id)
+            self._bot_signals(run_id, doc_id, "bot")
+        human_doc = self._doc("human-cadence", author_id=bot_author, published_at=same_hour)
+        human_run = self._run("bot", human_doc)
+        self._bot_signals(human_run, human_doc, "human")
+
+        result = bots.get_bot_activity(start=None, end=None, window_label="all")
+        self.assertEqual(len(result.posting_cadence), 24)
+        bucket_14 = next(b for b in result.posting_cadence if b.hour == 14)
+        bucket_20 = next(b for b in result.posting_cadence if b.hour == 20)
+        self.assertEqual(bucket_14.doc_count, 2)
+        self.assertEqual(bucket_20.doc_count, 1)
+        self.assertAlmostEqual(result.coordination_index, 2 / 3, places=3)
 
     def test_refresh_author_bot_scores_feeds_the_flagged_share_exclusion(self):
         """End-to-end (not a hand-seeded author_bot_scores row): bot_detection

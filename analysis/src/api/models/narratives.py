@@ -5,7 +5,7 @@ queries/narratives.py for the live aggregation these shapes wrap.
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from typing import List, Literal, Optional
 
 from pydantic import Field
@@ -42,6 +42,17 @@ class NarrativeSummaryModel(CamelModel):
     bot_pushed_fraction: Optional[float] = None
     lean: Optional[LeanLabel] = None
     member_doc_samples: List[SampleDocModel] = Field(default_factory=list)
+    # First-ingested-by-us, not claim origin in the world (see CLAUDE.md
+    # scope note / analysis.narratives.first_seen_doc_id column comment).
+    # None whenever the narrative predates the first_seen columns existing.
+    first_seen_at: Optional[datetime] = None
+    first_seen_doc_id: Optional[int] = None
+    # Mean analysis.narrative_docs.confidence (the claim-match confidence,
+    # copied from analysis.claims.confidence at insert time) over ALL
+    # in-window member docs -- not just the MAX_EVIDENCE_PER_SAMPLE ranked
+    # subset member_doc_samples carries. None when no member doc in range
+    # has a non-null confidence.
+    mean_confidence: Optional[float] = None
 
 
 class NarrativesResponse(CamelModel):
