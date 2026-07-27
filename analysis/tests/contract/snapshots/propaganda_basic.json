@@ -1,4 +1,5 @@
 {
+  "byEntity": [],
   "byParty": [
     {
       "flaggedDocs": 1,
@@ -62,6 +63,29 @@
       "pctOfFlaggedDocs": 0.0,
       "sampleEvidence": [],
       "technique": "doubt_casting"
+    }
+  ],
+  "byTier": [
+    {
+      "flaggedDocs": 1,
+      "flaggedRatePct": 100.0,
+      "group": "news",
+      "meanScore": 0.7,
+      "totalDocs": 1
+    },
+    {
+      "flaggedDocs": 0,
+      "flaggedRatePct": 0.0,
+      "group": "officials",
+      "meanScore": 0.0,
+      "totalDocs": 0
+    },
+    {
+      "flaggedDocs": 0,
+      "flaggedRatePct": 0.0,
+      "group": "public",
+      "meanScore": 0.0,
+      "totalDocs": 0
     }
   ],
   "examples": [

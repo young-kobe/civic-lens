@@ -29,6 +29,10 @@ PROPAGANDA_TECHNIQUES = (
 SAMPLE_EVIDENCE_PER_TECHNIQUE = 3
 FLAGGED_EXAMPLE_LIMIT = 10
 
+# Per-entity leaderboard cap -- tolerance-based territory (a ranked
+# top-N), not a hard cap tied to any stored rollup size.
+MAX_ENTITY_LEADERBOARD_ROWS = 20
+
 
 def _time_filter(
     start: Optional[datetime], end: Optional[datetime], params: Dict[str, Any],
@@ -55,9 +59,12 @@ def get_propaganda_overview(
         doc_rows = _fetch_eligible_docs(conn, start, end)
         technique_rows = _fetch_technique_evidence(conn, start, end)
         sample_rows = _fetch_flagged_samples(conn, start, end)
+        entity_rows = _fetch_entity_rows(conn, start, end)
 
     overview = _summarize_docs(doc_rows)
     overview["by_technique"] = _summarize_techniques(technique_rows, overview["flagged_docs"])
+    overview["by_tier"] = _bucket_by_tier(doc_rows)
+    overview["by_entity"] = _summarize_entity_rows(entity_rows)
     overview["examples"] = [
         build_sample_doc(row, admission_class=row["admission_class"]) for row in sample_rows
     ]
@@ -149,6 +156,73 @@ def _bucket_by_party(rows: Sequence[Mapping[str, Any]]) -> List[Dict[str, Any]]:
     return out
 
 
+def _bucket_by_tier(rows: Sequence[Mapping[str, Any]]) -> List[Dict[str, Any]]:
+    """News/Officials/Public three-way split (the ThreeWayGrid tiers):
+    'news' is source_type='news'; 'officials' is an author whose
+    author_profiles.tier='elected_official'; every other doc (affiliated/
+    general_public authors, and docs with no resolved author profile)
+    buckets as 'public' -- every eligible doc lands in exactly one of the
+    three groups, matching by_party's 'unknown' convention of accounting
+    for every row rather than dropping unmatched ones."""
+    buckets: Dict[str, Dict[str, Any]] = {
+        group: {"total": 0, "flagged": 0, "score_sum": 0.0} for group in ("news", "officials", "public")
+    }
+    for row in rows:
+        if row["source_type"] == "news":
+            group = "news"
+        elif row["tier"] == "elected_official":
+            group = "officials"
+        else:
+            group = "public"
+        bucket = buckets[group]
+        bucket["total"] += 1
+        bucket["score_sum"] += row["density"]
+        if (row["techniques_validated"] or 0) > 0:
+            bucket["flagged"] += 1
+    out = []
+    for group in ("news", "officials", "public"):
+        b = buckets[group]
+        total = b["total"]
+        out.append({
+            "group": group,
+            "total_docs": total,
+            "flagged_docs": b["flagged"],
+            "flagged_rate_pct": round(b["flagged"] / total * 100, 1) if total else 0.0,
+            "mean_score": round(b["score_sum"] / total, 3) if total else 0.0,
+        })
+    return out
+
+
+def _summarize_entity_rows(rows: Sequence[Mapping[str, Any]]) -> List[Dict[str, Any]]:
+    """Per-entity propaganda leaderboard: groups already-resolved-entity
+    rows (entity_id IS NOT NULL is enforced in SQL) by entity_id, ranks by
+    doc_count, and caps at MAX_ENTITY_LEADERBOARD_ROWS."""
+    accum: Dict[int, Dict[str, Any]] = {}
+    for row in rows:
+        slot = accum.setdefault(row["entity_id"], {
+            "entity_id": row["entity_id"], "entity_key": row["entity_key"],
+            "display_name": row["display_name"], "group": row["group"],
+            "doc_count": 0, "score_sum": 0.0, "flagged": 0,
+        })
+        slot["doc_count"] += 1
+        slot["score_sum"] += row["density"]
+        if (row["techniques_validated"] or 0) > 0:
+            slot["flagged"] += 1
+
+    items = [
+        {
+            "entity_id": slot["entity_id"], "entity_key": slot["entity_key"],
+            "display_name": slot["display_name"], "group": slot["group"],
+            "doc_count": slot["doc_count"],
+            "mean_density": round(slot["score_sum"] / slot["doc_count"], 3),
+            "flagged_share": round(slot["flagged"] / slot["doc_count"], 3),
+        }
+        for slot in accum.values()
+    ]
+    items.sort(key=lambda item: item["doc_count"], reverse=True)
+    return items[:MAX_ENTITY_LEADERBOARD_ROWS]
+
+
 def _summarize_techniques(
     rows: Sequence[Mapping[str, Any]], flagged_docs: int,
 ) -> List[Dict[str, Any]]:
@@ -187,9 +261,9 @@ def _fetch_eligible_docs(
     """One row per (doc, current done propaganda run) in [start, end],
     excluding docs whose author is bot-flagged (>= BOT_FLAGGED_SHARE_EXCLUSION)
     -- the rate-denominator exclusion binding rule. Carries source_type,
-    density, techniques_validated, party (entities.lean or 'unknown'),
-    admission_class, and model_id -- everything the overview + RangeMeta need
-    from a single pass."""
+    density, techniques_validated, party (entities.lean or 'unknown'), tier
+    (author_profiles.tier or NULL), admission_class, and model_id --
+    everything the overview + RangeMeta + by_tier need from a single pass."""
     params: Dict[str, Any] = {"bot_exclusion": BOT_FLAGGED_SHARE_EXCLUSION}
     time_clause = _time_filter(start, end, params)
     sql = f"""
@@ -198,7 +272,8 @@ def _fetch_eligible_docs(
                COALESCE(pr.density, 0.0) AS density,
                pr.techniques_validated AS techniques_validated,
                r.model_id AS model_id,
-               COALESCE(e.lean::text, 'unknown') AS party
+               COALESCE(e.lean::text, 'unknown') AS party,
+               ap.tier::text AS tier
         FROM analysis.runs r
         JOIN analysis.propaganda_results pr ON pr.run_id = r.run_id
         JOIN corpus.documents d ON d.doc_id = r.doc_id
@@ -235,6 +310,50 @@ def _fetch_technique_evidence(
                       / NULLIF(ab.sample_count, 0) >= %(bot_exclusion)s
               )){time_clause}
         ORDER BY pt.technique_id
+    """
+    return conn.execute(sql, params).fetchall()
+
+
+def _fetch_entity_rows(
+    conn, start: Optional[datetime], end: Optional[datetime],
+) -> List[Mapping[str, Any]]:
+    """One row per (doc, current done propaganda run) in [start, end] that
+    resolves to a registry entity, excluding bot-flagged authors (same
+    predicate as _fetch_eligible_docs). Resolution priority:
+    corpus.news_articles.outlet_entity_id, then corpus.reddit_posts
+    .subreddit_entity_id, then corpus.authors -> corpus.author_profiles
+    .entity_id -- docs resolving through none of the three are dropped
+    (entity_id IS NOT NULL), since there is no entity to attribute them to
+    on the leaderboard."""
+    params: Dict[str, Any] = {"bot_exclusion": BOT_FLAGGED_SHARE_EXCLUSION}
+    time_clause = _time_filter(start, end, params)
+    sql = f"""
+        SELECT COALESCE(na.outlet_entity_id, rp.subreddit_entity_id, ap.entity_id) AS entity_id,
+               e.entity_key AS entity_key, e.display_name AS display_name,
+               CASE
+                   WHEN na.outlet_entity_id IS NOT NULL THEN 'news'
+                   WHEN rp.subreddit_entity_id IS NOT NULL THEN 'subreddit'
+                   ELSE ap.tier::text
+               END AS "group",
+               COALESCE(pr.density, 0.0) AS density,
+               pr.techniques_validated AS techniques_validated
+        FROM analysis.runs r
+        JOIN analysis.propaganda_results pr ON pr.run_id = r.run_id
+        JOIN corpus.documents d ON d.doc_id = r.doc_id
+        LEFT JOIN corpus.news_articles na ON na.doc_id = d.doc_id
+        LEFT JOIN corpus.reddit_posts rp ON rp.doc_id = d.doc_id
+        LEFT JOIN corpus.author_profiles ap ON ap.author_id = d.author_id
+        LEFT JOIN corpus.entities e
+               ON e.entity_id = COALESCE(na.outlet_entity_id, rp.subreddit_entity_id, ap.entity_id)
+        WHERE r.task = 'propaganda'::analysis.task
+          AND r.is_current AND r.status = 'done'::analysis.run_status
+          AND COALESCE(na.outlet_entity_id, rp.subreddit_entity_id, ap.entity_id) IS NOT NULL
+          AND (d.author_id IS NULL OR NOT EXISTS (
+                SELECT 1 FROM analysis.author_bot_scores ab
+                WHERE ab.author_id = d.author_id
+                  AND (ab.bot_post_count + ab.suspicious_post_count)::float
+                      / NULLIF(ab.sample_count, 0) >= %(bot_exclusion)s
+              )){time_clause}
     """
     return conn.execute(sql, params).fetchall()
 

@@ -336,6 +336,26 @@ class EntityQueriesIntegrationTests(unittest.TestCase):
         self.assertIsNone(profile.range.end)
         self.assertEqual(profile.range.model_ids, ["gemini-3.5-flash", "qwen2.5:3b"])
 
+    def _entity_key(self, entity_id: int) -> str:
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT entity_key FROM corpus.entities WHERE entity_id = %s", (entity_id,),
+            ).fetchone()
+            return row["entity_key"]
+
+    def test_entity_posts_carries_entity_key_alongside_entity_id(self):
+        # Dual-identifier restoration (owner decision 2026-07-26): the
+        # per-entity endpoints must carry the stable slug too, so a client
+        # can join across pages without a (kind, displayName) guess.
+        official = self._seed_entity("official", "Sen. Example", lean="republican")
+        response = entities.get_entity_posts(official, window="all")
+        self.assertEqual(response.entity_key, self._entity_key(official))
+
+    def test_entity_profile_carries_entity_key_alongside_entity_id(self):
+        official = self._seed_entity("official", "Sen. Example", lean="republican")
+        profile = entities.get_entity_profile(official)
+        self.assertEqual(profile.entity_key, self._entity_key(official))
+
 
 if __name__ == "__main__":
     unittest.main()

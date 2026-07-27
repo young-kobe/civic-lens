@@ -146,7 +146,8 @@ def _diff_tone(
         cur_net = (cur["pos"] - cur["neg"]) / cur["count"] * 100
         prev_net = (prev["pos"] - prev["neg"]) / prev["count"] * 100
         movers.append(ToneMover(
-            entity_key=entity["entity_key"], kind=entity["kind"], display_name=entity["display_name"],
+            entity_id=entity_id, entity_key=entity["entity_key"],
+            kind=entity["kind"], display_name=entity["display_name"],
             current_net=round(cur_net, 1), prev_net=round(prev_net, 1),
             delta_pts=round(cur_net - prev_net, 1),
             current_volume=cur["count"], prev_volume=prev["count"],
@@ -171,7 +172,8 @@ def _diff_favorability(
         cur_net = (cur["pos"] - cur["neg"]) / cur["count"] * 100
         prev_net = (prev["pos"] - prev["neg"]) / prev["count"] * 100
         candidates.append(FavorabilityMover(
-            entity_key=entity["entity_key"], kind=entity["kind"], display_name=entity["display_name"],
+            entity_id=entity_id, entity_key=entity["entity_key"],
+            kind=entity["kind"], display_name=entity["display_name"],
             current_net=round(cur_net, 1), prev_net=round(prev_net, 1),
             delta_pts=round(cur_net - prev_net, 1),
             current_volume=cur["count"], prev_volume=prev["count"],

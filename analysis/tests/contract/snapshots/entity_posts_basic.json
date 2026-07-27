@@ -1,5 +1,6 @@
 {
   "entityId": 1,
+  "entityKey": "sen-example",
   "items": [
     {
       "admissionClass": "official_record",

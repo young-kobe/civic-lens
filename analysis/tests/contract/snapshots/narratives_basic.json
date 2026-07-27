@@ -6,7 +6,10 @@
       "citationCount": 0,
       "citedDocs": [],
       "docCount": 1,
+      "firstSeenAt": null,
+      "firstSeenDocId": null,
       "lean": null,
+      "meanConfidence": 0.9,
       "memberDocSamples": [
         {
           "admissionClass": "sampled",

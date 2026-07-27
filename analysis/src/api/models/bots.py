@@ -39,12 +39,23 @@ class EntityBotRate(CamelModel):
     (general_public accounts with no registry match) are not represented
     here -- they surface only via `flagged_accounts`/`flagged_docs`."""
 
+    entity_id: int
     entity_key: str
     kind: str
     display_name: str
     total_docs: int
     bot_docs: int
     bot_rate_pct: float
+
+
+class PostingCadenceBucket(CamelModel):
+    """Count of bot-flagged (`bot_signals.label='bot'`) docs published in
+    this UTC hour-of-day (0-23) across the whole [start, end] window -- the
+    histogram `coordinationIndex` is computed over. All 24 hours are
+    present even at count 0."""
+
+    hour: int
+    doc_count: int
 
 
 class BotPushedNarrative(CamelModel):
@@ -93,6 +104,13 @@ class BotActivityResponse(CamelModel):
     automation_rate_pct: float
     behavioral_signals: List[BehavioralSignalBucket] = []
     account_age_buckets: List[AccountAgeBucket] = []
+    # Max single-hour share of the bot-flagged posting-cadence histogram
+    # (posting_cadence) -- 1.0 means every bot-flagged doc in range posted
+    # in the same UTC hour, 0.0 when there is no bot-flagged activity at
+    # all. Reimplements the retired
+    # reporting/aggregators/bot/metrics.py::_compute_coordination_index().
+    coordination_index: float
+    posting_cadence: List[PostingCadenceBucket] = []
     by_entity: List[EntityBotRate] = []
     bot_pushed_narratives: List[BotPushedNarrative] = []
     flagged_accounts: List[FlaggedAccount] = []

@@ -109,7 +109,10 @@ _ENTITY_POSTS_SQL = f"""
     ORDER BY d.published_at DESC, resolved.doc_id DESC
 """
 
-_ENTITY_ROW_SQL = "SELECT entity_id, display_name, kind, lean FROM corpus.entities WHERE entity_id = %(entity_id)s"
+_ENTITY_ROW_SQL = (
+    "SELECT entity_id, entity_key, display_name, kind, lean "
+    "FROM corpus.entities WHERE entity_id = %(entity_id)s"
+)
 
 # The entity's own doc history (officials/collectives via author_profiles,
 # outlets via news_articles, subreddits via reddit_posts) -- ALL-TIME, no
@@ -216,7 +219,7 @@ def get_entity_posts(
     page = max(1, page)
 
     with connection() as conn:
-        _require_entity(conn, entity_id)
+        entity = _require_entity(conn, entity_id)
         rows = conn.execute(_ENTITY_POSTS_SQL, params).fetchall()
 
     total = len(rows)
@@ -234,7 +237,7 @@ def get_entity_posts(
         for row in page_rows
     ]
     return EntityPostsResponse(
-        entity_id=entity_id, window=window,
+        entity_id=entity_id, entity_key=entity["entity_key"], window=window,
         page=page, page_size=ENTITY_POSTS_PAGE_SIZE, total=total, items=items,
     )
 
@@ -258,6 +261,7 @@ def get_entity_profile(entity_id: int) -> EntityProfileResponse:
 
     return EntityProfileResponse(
         entity_id=entity_id,
+        entity_key=entity["entity_key"],
         display_name=entity["display_name"],
         kind=entity["kind"],
         lean=LeanLabel(

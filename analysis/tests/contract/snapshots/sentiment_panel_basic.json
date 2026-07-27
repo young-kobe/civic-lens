@@ -49,6 +49,16 @@
       "volume": 1
     }
   ],
+  "daily": [
+    {
+      "date": "2026-06-01",
+      "negative": 0,
+      "netScore": null,
+      "neutral": 0,
+      "positive": 1,
+      "volume": 1
+    }
+  ],
   "disclaimer": "Represents sampled platform discourse, not verified population sentiment",
   "distribution": {
     "mildNegative": 0,
@@ -59,9 +69,22 @@
   },
   "entityStances": [
     {
+      "byTopic": [
+        {
+          "lowSample": true,
+          "mixed": 0,
+          "negative": 0,
+          "netScore": null,
+          "neutral": 0,
+          "positive": 1,
+          "topic": "General",
+          "volume": 1
+        }
+      ],
       "catchAllKey": null,
       "displayName": "Sen. Example",
       "entityId": 1,
+      "entityKey": "sen-example",
       "kind": "official",
       "lean": {
         "confidence": null,
@@ -70,6 +93,18 @@
         "sampleCount": null,
         "value": "republican"
       },
+      "receivedByTier": [
+        {
+          "lowSample": true,
+          "mixed": 0,
+          "negative": 0,
+          "netScore": null,
+          "neutral": 0,
+          "positive": 1,
+          "tier": "officials",
+          "volume": 1
+        }
+      ],
       "samples": [
         {
           "admissionClass": "sampled",

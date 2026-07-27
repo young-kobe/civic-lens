@@ -12,10 +12,14 @@ from typing import Any, Dict, List, Optional
 from analysis.src.common import db
 
 _CORE_SQL = """
-    SELECT doc_id, source_type::text AS source_type, domain_or_subreddit, author_id,
-           published_at, title, body, source_url, admission_class::text AS admission_class
-    FROM corpus.documents
-    WHERE doc_id = %(doc_id)s
+    SELECT d.doc_id, d.source_type::text AS source_type, d.domain_or_subreddit, d.author_id,
+           d.published_at, d.title, d.body, d.source_url,
+           d.admission_class::text AS admission_class,
+           a.handle AS author_handle, a.display_name AS author_display_name,
+           a.profile_image_url AS author_profile_image_url, a.verified AS author_verified
+    FROM corpus.documents d
+    LEFT JOIN corpus.authors a ON a.author_id = d.author_id
+    WHERE d.doc_id = %(doc_id)s
 """
 
 _CITATIONS_OUT_SQL = """

@@ -5,6 +5,7 @@
   },
   "displayName": "Sen. Example",
   "entityId": 1,
+  "entityKey": "sen-example",
   "firstActivity": "2024-01-01T12:00:00Z",
   "kind": "official",
   "lastActivity": "2024-01-01T12:00:00Z",
