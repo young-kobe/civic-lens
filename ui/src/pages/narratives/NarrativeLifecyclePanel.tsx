@@ -1,7 +1,7 @@
 import { useId } from 'react';
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis } from 'recharts';
 import type { TooltipProps } from 'recharts';
-import { Card, MethodPopover } from '../../components/common';
+import { Card, DefinitionChip, MethodPopover } from '../../components/common';
 import { formatRefreshedAgo } from '../../services/freshness';
 import { COLORS } from '../../theme';
 import type { NarrativeSummary } from '../../types';
@@ -136,9 +136,11 @@ export function NarrativeLifecyclePanel({ narratives, onOpen, tiersFor }: Narrat
                                         <span
                                             className="badge badge-neutral"
                                             style={{ marginLeft: 'var(--space-2)' }}
-                                            title="Mean claim-match confidence across this story's member posts"
                                         >
-                                            {Math.round(n.meanConfidence * 100)}% confidence
+                                            <DefinitionChip
+                                                entry="claim_match_confidence"
+                                                label={`${Math.round(n.meanConfidence * 100)}% confidence`}
+                                            />
                                         </span>
                                     )}
                                 </span>

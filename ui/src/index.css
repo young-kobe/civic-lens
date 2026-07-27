@@ -2212,6 +2212,107 @@ code, pre {
   margin: -4px 0 var(--space-2);
 }
 
+/* "Where this tone comes from" provenance block (EntitySentimentModal) —
+   group rows are a share bar (not a tone-net axis, so a distinct visual
+   from .tone-bar-row); named-source rows reuse the entity-avatar +
+   lean-chip language from the entity cards. */
+.provenance-groups {
+  display: flex;
+  flex-direction: column;
+}
+
+.provenance-group-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) minmax(80px, 160px) 40px minmax(110px, auto);
+  gap: var(--space-2);
+  align-items: center;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--neutral-150);
+}
+.provenance-group-row:last-child { border-bottom: none; }
+
+.provenance-group-label {
+  font-size: var(--text-sm);
+  color: var(--neutral-800);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.provenance-group-share-track {
+  position: relative;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--neutral-100);
+  overflow: hidden;
+}
+
+.provenance-group-share-fill {
+  display: block;
+  height: 100%;
+  background: var(--chart-accent);
+  border-radius: 3px;
+}
+
+.provenance-group-share-value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  text-align: right;
+  color: var(--neutral-600);
+}
+
+.provenance-group-meta {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  color: var(--neutral-500);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.provenance-top-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.provenance-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: 6px 0;
+  border-bottom: 1px solid var(--neutral-150);
+}
+.provenance-top-row:last-child { border-bottom: none; }
+
+.provenance-top-identity {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.provenance-top-name {
+  font-size: var(--text-sm);
+  color: var(--neutral-800);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.provenance-top-meta {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  color: var(--neutral-500);
+  text-align: right;
+  white-space: nowrap;
+  flex: none;
+}
+
 /* Mono count annotation beside a modal section header ("140 of 3,212"). */
 .modal-section-count {
   font-family: var(--font-mono);
@@ -2564,6 +2665,12 @@ code, pre {
   color: var(--neutral-500);
 }
 
+/* Forces onto its own line under the filter pills — a hint, not a control. */
+.three-way-toolbar-hint {
+  flex-basis: 100%;
+  margin: 0;
+}
+
 /* "Who the public is talking about" — target-sentiment rows that fill the
    public column, which otherwise often carries a single pooled card. */
 .three-way-column-targets {
@@ -2808,6 +2915,16 @@ code, pre {
   margin: 0;
   padding-top: 4px;
   border-top: 1px dashed var(--neutral-150);
+  line-height: 1.4;
+}
+
+/* Displayed (not hover-only) one-line context under a card's stats row --
+   e.g. received-tone provenance ("Mostly from left-leaning outlets..."). */
+.entity-card-stat-hint {
+  font-size: 11px;
+  color: var(--neutral-600);
+  margin: 0;
+  padding-top: 4px;
   line-height: 1.4;
 }
 

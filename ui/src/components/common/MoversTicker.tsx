@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { MoversResponse, ToneMover, FavorabilityMover } from '../../types';
+import { formatPts } from '../../services/format';
 
 interface MoversTickerProps {
     /** Movers payload (GET /movers) — window-over-window tone/favorability
@@ -15,8 +16,7 @@ type TickerRow =
     | { kind: 'favorability'; mover: FavorabilityMover };
 
 function formatDelta(delta: number): string {
-    const sign = delta > 0 ? '+' : '';
-    return `${sign}${delta.toFixed(1)} pts`;
+    return formatPts(delta);
 }
 
 function deltaClass(delta: number): string {

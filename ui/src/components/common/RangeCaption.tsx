@@ -26,8 +26,8 @@ export function RangeCaption({ range }: { range: RangeMeta }) {
             {parts.join(' · ')}
             {range.modelIds.length > 1 && (
                 <span className="range-caption-caveat">
-                    {' '}· spans {range.modelIds.length} model versions ({range.modelIds.join(', ')}) —
-                    not directly comparable across the full range
+                    {' '}· scored by {range.modelIds.length} different model versions over this
+                    range — numbers may not be directly comparable
                 </span>
             )}
         </p>

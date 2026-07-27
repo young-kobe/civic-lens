@@ -4,7 +4,10 @@ import { COLORS } from '../../theme';
 export type TickerTone = 'positive' | 'negative' | 'neutral' | 'accent' | 'warning';
 
 export interface TickerItem {
-    label: string;
+    /** Plain strings render verbatim; a node (e.g. a DefinitionChip) lets
+     *  callers gloss a jargony label in place. A bare string is still
+     *  assignable everywhere this type is used. */
+    label: ReactNode;
     /**
      * The main value. Strings are rendered verbatim (caller formats the unit,
      * sign, etc.); nodes let callers drop in richer marks (badges, dots).
@@ -78,7 +81,7 @@ export function GlobalTicker({ items, refreshed, ariaLabel, legend }: GlobalTick
                     : 'global-ticker-value';
                 return (
                     <span
-                        key={`${item.label}-${i}`}
+                        key={i}
                         className="global-ticker-item"
                         aria-label={item.ariaLabel}
                     >

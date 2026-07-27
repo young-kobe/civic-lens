@@ -60,7 +60,7 @@ function ByPartySection({ parties }: { parties: PartySplit[] }) {
                 {known.map((p) => {
                     const accent = PARTY_ACCENT[p.party] ?? 'var(--neutral-500)';
                     return (
-                        <div key={p.party} className="party-bar-row" title={`Mean score ${p.meanScore.toFixed(2)} / 1`}>
+                        <div key={p.party} className="party-bar-row" title={`Saturation ${p.meanScore.toFixed(2)} / 1`}>
                             <span className="party-bar-label">{partyLabel(p.party)}</span>
                             <span className="party-bar-track" aria-hidden>
                                 <span className="party-bar-fill" style={{ width: `${p.flaggedRatePct}%`, background: accent }} />

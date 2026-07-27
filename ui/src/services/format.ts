@@ -74,7 +74,7 @@ export function formatPct(
 
 /**
  * Format a signed net-tone / net-difference value on the -100..+100 scale
- * as points ("pts"), e.g. "+12 pts" / "-8 pts" / "0 pts".
+ * as points, e.g. "+12 points" / "-8 points" / "0 points".
  *
  * A net difference between two shares is measured in percentage *points*,
  * not a percentage. Rendering it with a bare "%" makes it read as a share
@@ -83,9 +83,9 @@ export function formatPct(
  * default; out-of-range values return the fallback, matching formatPct's
  * honesty policy (see the module docstring).
  *
- *   formatPts(12.3)              → "+12.3 pts"
- *   formatPts(-8, {decimals: 0}) → "-8 pts"
- *   formatPts(0)                 → "0 pts"
+ *   formatPts(12.3)              → "+12.3 points"
+ *   formatPts(-8, {decimals: 0}) → "-8 points"
+ *   formatPts(0)                 → "0 points"
  *   formatPts(null)              → "—"
  */
 export function formatPts(
@@ -110,7 +110,7 @@ export function formatPts(
     const decimals = opts.decimals ?? 1;
     const signed = opts.signed ?? true;
     const sign = signed && value > 0 ? '+' : '';
-    return `${sign}${value.toFixed(decimals)} pts`;
+    return `${sign}${value.toFixed(decimals)} points`;
 }
 
 /**

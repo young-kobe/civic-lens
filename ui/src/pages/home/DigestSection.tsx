@@ -188,7 +188,7 @@ function SignalTiles({
                 <a className="digest-tile" href={deepLinkHref('bots')}>
                     <span className="eyebrow">Suspected automation</span>
                     <span className="digest-tile-value">{formatPct(bots.automationRatePct, { decimals: 0 })}</span>
-                    <span className="digest-tile-detail">of {formatCount(bots.analyzedDocCount)} scanned posts</span>
+                    <span className="digest-tile-detail">of {formatCount(bots.analyzedDocCount)} scored posts</span>
                     <span className="digest-block-cta">Bot Detector →</span>
                 </a>
             )}

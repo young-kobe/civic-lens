@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-    Card, CollapsibleInfo, EmptyState, EntityHeader, EntityHubLinks,
+    Card, CollapsibleInfo, DefinitionChip, EmptyState, EntityHeader, EntityHubLinks,
     EntityProfileCard,
     ErrorState, GlobalTicker, LoadingCard, MethodPopover, Modal, PostCardList,
     RangeCaption, ThreeWayColumn, ThreeWayGrid,
@@ -246,16 +246,16 @@ function NarrativeDetailModal({
             onBack={onBack}
             backLabel={backLabel}
             kicker="Narrative"
-            title={narrative.name || '(unnamed narrative)'}
+            title={narrative.name || '(unnamed story)'}
             subtitle={`First seen ${narrative.firstSeenAt ? formatRefreshedAgo(narrative.firstSeenAt) : 'unknown'} · ${firstSeenLabel(narrative)}`}
             maxWidth={1040}
         >
             {narrative.meanConfidence != null && (
-                <span
-                    className="badge badge-neutral"
-                    title="Mean claim-match confidence across this story's member posts"
-                >
-                    {Math.round(narrative.meanConfidence * 100)}% confidence
+                <span className="badge badge-neutral">
+                    <DefinitionChip
+                        entry="claim_match_confidence"
+                        label={`${Math.round(narrative.meanConfidence * 100)}% confidence`}
+                    />
                 </span>
             )}
 
@@ -448,8 +448,9 @@ function entityStatsForNarratives(g: NarrativeEntityGroup): EntityStat[] {
     ];
     if (g.crossTierCount > 0) {
         stats.push({
-            label: 'Crossing groups',
+            label: 'Also seen in other groups',
             value: g.crossTierCount.toLocaleString(),
+            title: 'Stories first seen here that have since surfaced in at least one other group (news, officials, or the public) too.',
         });
     }
     return stats;
@@ -502,8 +503,12 @@ function NarrativeEntityModal({
                 </div>
                 {group.crossTierCount > 0 && (
                     <div>
-                        <div className="eyebrow">Crossing groups</div>
+                        <div className="eyebrow">Also seen in other groups</div>
                         <div className="metric-value">{group.crossTierCount.toLocaleString()}</div>
+                        <div className="text-xs text-muted">
+                            Stories first seen here that have since surfaced in at least one other
+                            group (news, officials, or the public) too.
+                        </div>
                     </div>
                 )}
             </div>
