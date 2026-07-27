@@ -140,7 +140,7 @@ function compareRows(a: MatrixRow, b: MatrixRow, key: MatrixSortKey, dir: 1 | -1
 
 const MATRIX_COLUMNS: Array<{ key: MatrixSortKey; label: string; title: string }> = [
     { key: 'name', label: 'Entity', title: 'Tracked outlet, official, or community' },
-    { key: 'netTone', label: 'Net tone', title: 'Positive minus negative share of their posts, -100..+100' },
+    { key: 'netTone', label: 'Net tone', title: 'Positive minus negative share of their posts, from -100 to +100' },
     { key: 'flaggedRate', label: 'Propaganda', title: 'Share of their scored posts flagged for persuasion techniques' },
     { key: 'botRate', label: 'Bot rate', title: 'Share of their scored posts our detector flags as likely automated. News is not bot-scored (articles are not accounts).' },
     { key: 'stories', label: 'Stories', title: 'Recurring claims first seen at this source in our sample' },
@@ -176,7 +176,7 @@ function CrossSignalMatrix({ rows }: { rows: MatrixRow[] }) {
     return (
         <Card
             title="Cross-signal matrix"
-            subtitle="Every tracked entity across all four signals in the selected window. Click a column to sort; an em dash means no data for that signal, not zero."
+            subtitle="Every tracked entity, with its tone, propaganda, and bot-detection numbers side by side. Click a column to sort; an em dash means no data for that signal, not zero."
             headerActions={
                 <MethodPopover
                     description={
@@ -258,7 +258,7 @@ function MoversBoard({ movers }: { movers: MoversResponse }) {
     return (
         <Card
             title="Movers board"
-            subtitle="Biggest window-over-window shifts in net tone. Check the sample sizes — a big move on few posts is noise, not news."
+            subtitle="Biggest shifts in net tone compared with the previous period. Check the sample sizes — a big move on few posts is noise, not news."
         >
             <RangeCaption range={movers.currentRange} />
             <MoversTicker data={movers} />
@@ -332,8 +332,8 @@ function SmallMultiples({
 
     return (
         <Card
-            title="Small multiples"
-            subtitle="The page heroes, side by side: net tone by source type and the top stories' volume curves."
+            title="Trend snapshots"
+            subtitle="Small charts side by side: net tone by source type and the top stories' volume curves."
         >
             <div className="desk-multiples">
                 {platformTone.length >= 2 && (
@@ -379,7 +379,7 @@ function SnapshotFreshnessCard({ status }: { status: SnapshotStatusResponse | nu
     return (
         <Card
             title="Snapshot freshness"
-            subtitle="The most recent recorded pipeline run — this API has one live run, not one cached snapshot per panel."
+            subtitle={`Data last refreshed ${formatRefreshedAgo(run.completedAt ?? run.startedAt)}.`}
         >
             <div className="desk-table-wrap desk-table-scroll">
                 <table className="table">
@@ -412,19 +412,37 @@ function SnapshotFreshnessCard({ status }: { status: SnapshotStatusResponse | nu
     );
 }
 
+// Reader-facing names for analysis.task (data/pg-migrations/0001_north_star.sql:
+// bot, text, targets, propaganda, claims, citations, account_tier). Built
+// explicitly rather than title-casing the raw enum value, which reads as
+// internal shorthand ("targets", "account_tier") to a non-technical reader.
+const TASK_LABEL: Record<string, string> = {
+    bot: 'Bot detection',
+    text: 'Tone',
+    targets: 'Target stance',
+    propaganda: 'Propaganda',
+    claims: 'Claim extraction',
+    citations: 'Citations',
+    account_tier: 'Account tier',
+};
+
+function taskLabel(taskType: string): string {
+    return TASK_LABEL[taskType] ?? taskType.replace(/_/g, ' ');
+}
+
 function HumanReviewCard({ evalAccuracy }: { evalAccuracy: EvalAccuracy | null }) {
     const tasks = evalAccuracy?.perTask ?? [];
     if (tasks.length === 0) return null;
     return (
         <Card
             title="Human review agreement"
-            subtitle="How often human reviewers marked each classifier's outputs correct. Reviews cover a sample of outputs; accuracy is withheld below the minimum review count."
+            subtitle="How often human reviewers marked each analysis type's outputs correct. Reviews cover a sample of outputs; accuracy is withheld below the minimum review count."
         >
             <div className="desk-table-wrap">
                 <table className="table">
                     <thead>
                         <tr>
-                            <th>Classifier</th>
+                            <th>Analysis type</th>
                             <th className="num">Reviewed</th>
                             <th className="num">Agreement</th>
                         </tr>
@@ -432,9 +450,7 @@ function HumanReviewCard({ evalAccuracy }: { evalAccuracy: EvalAccuracy | null }
                     <tbody>
                         {tasks.map((t) => (
                             <tr key={t.taskType}>
-                                <td style={{ textTransform: 'capitalize' }}>
-                                    {t.taskType.replace(/_/g, ' ')}
-                                </td>
+                                <td>{taskLabel(t.taskType)}</td>
                                 <td className="num">{formatCount(t.scored)}</td>
                                 <td className="num">
                                     {t.accuracyPct != null && !t.lowSample

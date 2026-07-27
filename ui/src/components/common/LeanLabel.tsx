@@ -48,7 +48,7 @@ function evidenceLine(lean: LeanLabelData): string | null {
         parts.push(`${Math.round(lean.leanShare * 100)}% of scored posts leaned ${lean.value}`);
     }
     if (lean.sampleCount != null) {
-        parts.push(`n=${lean.sampleCount.toLocaleString()}`);
+        parts.push(`${lean.sampleCount.toLocaleString()} posts`);
     }
     if (lean.confidence != null) {
         parts.push(`confidence ${Math.round(lean.confidence * 100)}%`);

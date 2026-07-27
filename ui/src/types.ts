@@ -296,6 +296,28 @@ export interface ReceivedNarrativeCell {
     lowSample: boolean;
 }
 
+/** One provenance cell answering WHO a slice of received tone comes from --
+ *  the inbound-edge counterpart to OutboundTargetCell. `receivedFromGroups`
+ *  rolls cells up by (sourceClass, lean); `receivedFromTop` lists named
+ *  individual sources (cap 8). `lean` is the flat corpus.political_lean
+ *  enum value of the source (never leanSource), null for the 'other'
+ *  catch-all and for unresolved sampled X users. `share` is this cell's
+ *  volume over the received block's total volume -- all cells for one
+ *  ReceivedTone sum to 1.0. `net`/`lowSample` share received tone's
+ *  suppression floor. Build display labels UI-side from `sourceClass` +
+ *  `lean` -- the backend emits raw values only. */
+export interface ReceivedSourceCell {
+    sourceClass: 'news_outlet' | 'official' | 'account' | 'subreddit' | 'x_user' | 'other';
+    label: string;
+    entityKey: string | null;
+    lean: string | null;
+    entityProfile: EntityProfile | null;
+    share: number;
+    volume: number;
+    net: number | null;
+    lowSample: boolean;
+}
+
 /** How sampled posts talk ABOUT an entity (the reputational signal), as
  *  opposed to an EntitySentimentItem's own positive/negative/neutral
  *  counts, which score the entity's OWN posts. */
@@ -307,6 +329,8 @@ export interface ReceivedTone {
     byTopic: ReceivedTopicCell[];
     bySpeakerTier: ReceivedSpeakerTierCell[];
     byNarrative: ReceivedNarrativeCell[];
+    receivedFromGroups: ReceivedSourceCell[];
+    receivedFromTop: ReceivedSourceCell[];
     samples: ClassificationSample[];
 }
 

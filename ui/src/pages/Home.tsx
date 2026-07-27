@@ -119,6 +119,7 @@ function Home({ onNavigate, isAdmin = false }: HomeProps) {
                         display: 'grid',
                         gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
                         gap: 'var(--space-4)',
+                        alignItems: 'start',
                     }}
                 >
                     <div>
@@ -136,10 +137,47 @@ function Home({ onNavigate, isAdmin = false }: HomeProps) {
                             02 &middot; Score
                         </div>
                         <div style={{ marginTop: 'var(--space-1)', fontSize: 'var(--text-sm)', color: 'var(--neutral-700)', lineHeight: 'var(--leading-relaxed)' }}>
-                            Each document is scored for sentiment, bot likelihood,
-                            propaganda techniques, claim extraction, and narrative clustering.
-                            Every score carries a confidence value and a verbatim quote
-                            taken from the source.
+                            An AI model reads each collected post and makes four separate judgments:
+                        </div>
+                        <dl style={{
+                            margin: 'var(--space-2) 0 0',
+                            fontSize: 'var(--text-sm)',
+                            color: 'var(--neutral-700)',
+                            lineHeight: 'var(--leading-relaxed)',
+                        }}>
+                            <div style={{ marginBottom: 'var(--space-2)' }}>
+                                <dt style={{ fontWeight: 600, display: 'inline' }}>Tone. </dt>
+                                <dd style={{ display: 'inline', margin: 0 }}>
+                                    Does the post read positive, negative, or neutral, and about whom.
+                                </dd>
+                            </div>
+                            <div style={{ marginBottom: 'var(--space-2)' }}>
+                                <dt style={{ fontWeight: 600, display: 'inline' }}>Persuasion techniques. </dt>
+                                <dd style={{ display: 'inline', margin: 0 }}>
+                                    Does the wording use tactics like name-calling or appeals to fear —
+                                    a read on the writing style, never on whether a claim is true or what
+                                    the author intended.
+                                </dd>
+                            </div>
+                            <div style={{ marginBottom: 'var(--space-2)' }}>
+                                <dt style={{ fontWeight: 600, display: 'inline' }}>Automation signals. </dt>
+                                <dd style={{ display: 'inline', margin: 0 }}>
+                                    Does the account's posting behavior look automated — a lead worth
+                                    checking, not a verdict.
+                                </dd>
+                            </div>
+                            <div>
+                                <dt style={{ fontWeight: 600, display: 'inline' }}>Repeated claims. </dt>
+                                <dd style={{ display: 'inline', margin: 0 }}>
+                                    Posts making the same claim are grouped into a "story" so you can
+                                    watch a claim travel across sources.
+                                </dd>
+                            </div>
+                        </dl>
+                        <div style={{ marginTop: 'var(--space-2)', fontSize: 'var(--text-sm)', color: 'var(--neutral-700)', lineHeight: 'var(--leading-relaxed)' }}>
+                            Every one of these four judgments carries a confidence score shown right
+                            in the interface. A sample of them is checked by a human reviewer, and
+                            when too few posts back a number, we withhold it rather than guess.
                         </div>
                     </div>
                     <div>
@@ -153,6 +191,18 @@ function Home({ onNavigate, isAdmin = false }: HomeProps) {
                         </div>
                     </div>
                 </div>
+                <p style={{
+                    marginTop: 'var(--space-4)',
+                    marginBottom: 0,
+                    fontSize: 'var(--text-sm)',
+                    color: 'var(--neutral-600)',
+                    lineHeight: 'var(--leading-relaxed)',
+                    maxWidth: 820,
+                }}>
+                    <strong>What this isn't:</strong> the posts we score are a sample of what we
+                    collected, not a poll of the public. A flag describes the wording or behavior
+                    in a post we saw — it is never a verdict on the person who wrote it.
+                </p>
             </section>
 
             {/* Tabs */}

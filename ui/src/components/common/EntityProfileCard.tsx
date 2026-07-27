@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import type { EntityProfile, ReceivedTone } from '../../types';
 import { COLORS } from '../../theme';
 import { formatPts } from '../../services/format';
+import { sourceGroupLabel, topGroupsByShare } from '../../services/provenanceLabels';
 
 /** One stat cell in the card's stats row. */
 export interface EntityStat {
@@ -13,8 +14,12 @@ export interface EntityStat {
     emphasis?: boolean;
     /** Optional hover tooltip on the stat (e.g. the net-tone definition). */
     title?: string;
+    /** Optional one-line displayed context under the stats row (e.g.
+     *  received-tone provenance) -- unlike `title`, this renders visibly,
+     *  not just on hover. */
+    hint?: string;
     /** Optional mini axis bar under the value — a visual anchor so a bare
-     *  number like "-12.3 pts" reads at a glance. Mirrors TierRow's dot-
+     *  number like "-12.3 points" reads at a glance. Mirrors TierRow's dot-
      *  on-axis language. */
     bar?: {
         /** Dot position, 0-100 along the axis. */
@@ -158,6 +163,12 @@ export function EntityProfileCard({
             )}
 
             {readsAs && hasStats && <p className="entity-card-reads-as">Reads as: {readsAs}</p>}
+
+            {hasStats && stats.some((s) => s.hint) && (
+                <p className="entity-card-stat-hint">
+                    {stats.filter((s) => s.hint).map((s) => s.hint).join(' ')}
+                </p>
+            )}
         </>
     );
 
@@ -332,15 +343,26 @@ export function officialToneStats({
 }): EntityStat[] {
     const stats: EntityStat[] = [];
     if (received && received.volume > 0) {
+        // "Mostly from ..." suffix — the two biggest provenance groups,
+        // when the backend attached any (empty arrays render no suffix,
+        // never a guess). Shares the group-label builder with
+        // PublicSentiment's "Where this tone comes from" block so the
+        // same group reads identically on both surfaces.
+        const topGroups = topGroupsByShare(received.receivedFromGroups ?? []);
+        const provenanceLine = topGroups.length > 0
+            ? `Mostly from ${topGroups.map((g) => sourceGroupLabel(g.sourceClass, g.lean)).join(', ')}.`
+            : '';
         stats.push({
-            label: `Received tone (n=${received.volume})`,
+            label: `Received tone (${received.volume.toLocaleString()} posts)`,
             value: received.net != null ? formatPts(received.net) : 'low sample',
             color: received.net != null ? toneStatColor(received.net) : 'var(--neutral-500)',
             emphasis: true,
-            title: received.net != null
+            title: (received.net != null
                 ? RECEIVED_TONE_TITLE
                 : `Only ${received.volume} classified post${received.volume === 1 ? '' : 's'} `
-                  + 'mention this person in this window — too few to score reliably.',
+                  + 'mention this person in this window — too few to score reliably.')
+                + (provenanceLine ? ` ${provenanceLine}` : ''),
+            hint: provenanceLine || undefined,
             bar: received.net != null ? toneBar(received.net) : undefined,
         });
     }

@@ -129,6 +129,11 @@ export function ThreeWayToolbar({ leanFilter, onLeanFilterChange }: ThreeWayTool
                     </button>
                 ))}
             </div>
+            <p className="text-xs text-muted three-way-toolbar-hint">
+                Left includes left-leaning outlets and Democratic officials; Right includes
+                right-leaning outlets and Republican officials; Center includes mixed or neutral
+                leans.
+            </p>
         </div>
     );
 }

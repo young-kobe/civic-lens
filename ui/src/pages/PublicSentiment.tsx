@@ -1,16 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-    AdmissionBadge, Card, CollapsibleInfo, EmptyState, EntityHeader, EntityHubLinks, EntityProfileCard,
-    ErrorState, GlobalTicker, LoadingCard, MethodPopover, Modal,
+    AdmissionBadge, Card, CollapsibleInfo, DefinitionChip, EmptyState, EntityHeader, EntityHubLinks,
+    EntityProfileCard, ErrorState, GlobalTicker, LoadingCard, MethodPopover, Modal,
     ThreeWayColumn, ThreeWayGrid, ThreeWayToolbar, TierRow, TopMetricsBlock,
     entityExternalUrl, matchesLeanFilter,
     officialToneStats, parseEntityParam, sentimentStats,
 } from '../components/common';
 import type { ColumnSorter, LeanFilter, TickerItem } from '../components/common';
 import { PostCardList, sampleToPostCard } from '../components/common/PostCard';
+import { EntityAvatar, entityChipLabel, entityChipTitle, entityLeanClass } from '../components/common/EntityProfileCard';
 import type {
     ChartDataPoint, ClassificationSample, EntityPostRow, EntitySentimentItem, Filters,
-    SentimentDistribution, SentimentPanelResponse, TopicSentiment,
+    ReceivedSourceCell, SentimentDistribution, SentimentPanelResponse, TopicSentiment,
 } from '../types';
 import Sparkline from '../components/charts/Sparkline';
 import {
@@ -19,7 +20,8 @@ import {
 } from '../services/api';
 import { asOfTodayEyebrow, formatTimeWindow } from '../services/timeWindow';
 import { formatRefreshedAgo, pipelineRunTimestamp } from '../services/freshness';
-import { formatPct, formatPts, formatRelativeDate } from '../services/format';
+import { clampWidthPct, formatPct, formatPts, formatRelativeDate } from '../services/format';
+import { sourceGroupLabel, topGroupsByShare } from '../services/provenanceLabels';
 import { useFetch } from '../services/useFetch';
 import { COLORS } from '../theme';
 import {
@@ -420,8 +422,8 @@ function ToneDivergenceCard({ data }: { data: SentimentPanelResponse }) {
 
     const rows = [
         { key: 'news', label: 'News', color: COLORS.tierNews, agg: aggregateTier(data.byNewsOutlet) },
-        { key: 'dem', label: 'Dem officials', color: COLORS.leanLeft, agg: aggregateOfficialsByParty(data.byOfficial, 'D') },
-        { key: 'gop', label: 'GOP officials', color: COLORS.leanRight, agg: aggregateOfficialsByParty(data.byOfficial, 'R') },
+        { key: 'dem', label: 'Democratic officials', color: COLORS.leanLeft, agg: aggregateOfficialsByParty(data.byOfficial, 'D') },
+        { key: 'gop', label: 'Republican officials', color: COLORS.leanRight, agg: aggregateOfficialsByParty(data.byOfficial, 'R') },
     ]
         .filter((r) => r.agg.net !== null)
         .map((r) => ({ ...r, div: Math.round((r.agg.net! - base) * 10) / 10 }));
@@ -431,7 +433,13 @@ function ToneDivergenceCard({ data }: { data: SentimentPanelResponse }) {
     return (
         <Card
             title="Divergence from the public"
-            subtitle={`How far each group's net tone sits from the public's ${formatPts(base)} baseline. Right = warmer than the public, left = harsher. Officials split by party.`}
+            subtitle={(
+                <>
+                    How far each group's net tone sits from the public's {formatPts(base)} baseline. Right
+                    = warmer than the public, left = harsher. Officials split by party.{' '}
+                    <DefinitionChip entry="divergence" />
+                </>
+            )}
             headerActions={
                 <MethodPopover
                     description={
@@ -452,7 +460,7 @@ function ToneDivergenceCard({ data }: { data: SentimentPanelResponse }) {
                         <div
                             key={r.key}
                             className="tone-divergence-row"
-                            title={`${r.label}: ${formatPts(r.agg.net)} net vs the public's ${formatPts(base)} — ${r.div >= 0 ? '+' : ''}${r.div.toFixed(1)} pts`}
+                            title={`${r.label}: ${formatPts(r.agg.net)} net vs the public's ${formatPts(base)} — ${r.div >= 0 ? '+' : ''}${r.div.toFixed(1)} points`}
                         >
                             <span className="tone-divergence-label">{r.label}</span>
                             <span className="tone-divergence-track" aria-hidden>
@@ -714,7 +722,7 @@ function ToneBarRows({ rows }: { rows: ToneBarRow[] }) {
                     <span className="tone-bar-row-value" style={row.net != null ? { color: toneColor(row.net) } : undefined}>
                         {row.net != null ? formatPts(row.net) : 'low sample'}
                     </span>
-                    <span className="tone-bar-row-n">n={row.volume}</span>
+                    <span className="tone-bar-row-n">{row.volume} post{row.volume === 1 ? '' : 's'}</span>
                 </div>
             ))}
         </div>
@@ -782,6 +790,114 @@ function EntityPostRowList({ rows }: { rows: EntityPostRow[] }) {
             </p>
             {rows.map((r) => <EntityPostRowCard key={r.docId} row={r} />)}
         </div>
+    );
+}
+
+// --------------------------------------------------------------------------- //
+//  Received-tone provenance — "Where this tone comes from" (WHO the mentions //
+//  come from, at the source level: outlet/official/account/subreddit/x-user //
+//  x lean groups, plus up to 8 named sources). The inbound-edge counterpart  //
+//  to "Who they're talking about" below. Renders nothing when the backend   //
+//  attached no provenance cells — never a guessed breakdown.                //
+// --------------------------------------------------------------------------- //
+
+function ProvenanceGroupRow({ cell }: { cell: ReceivedSourceCell }) {
+    const label = sourceGroupLabel(cell.sourceClass, cell.lean);
+    const metaText = cell.net != null
+        ? `${cell.volume.toLocaleString()} posts · ${formatPts(cell.net)}`
+        : `${cell.volume} post${cell.volume === 1 ? '' : 's'} · too few to score reliably`;
+    return (
+        <div
+            className="provenance-group-row"
+            title={`${label}: ${formatPct(cell.share * 100, { decimals: 0 })} of sampled mentions, ${metaText}`}
+        >
+            <span className="provenance-group-label">{label}</span>
+            <span className="provenance-group-share-track" aria-hidden>
+                <span
+                    className="provenance-group-share-fill"
+                    style={{ width: `${clampWidthPct(cell.share * 100)}%` }}
+                />
+            </span>
+            <span className="provenance-group-share-value">
+                {formatPct(cell.share * 100, { decimals: 0 })}
+            </span>
+            <span className="provenance-group-meta">{metaText}</span>
+        </div>
+    );
+}
+
+function ProvenanceTopRow({ cell }: { cell: ReceivedSourceCell }) {
+    const profile = cell.entityProfile;
+    const chipLabel = profile ? entityChipLabel(profile) : null;
+    const lean = profile ? entityLeanClass(profile) : 'neutral';
+    const name = profile ? profile.displayName : `@${cell.label}`;
+    const metaText = cell.net != null
+        ? `${formatPct(cell.share * 100, { decimals: 0 })} · ${cell.volume.toLocaleString()} posts · ${formatPts(cell.net)}`
+        : `${formatPct(cell.share * 100, { decimals: 0 })} · ${cell.volume} post${cell.volume === 1 ? '' : 's'} · too few to score reliably`;
+    return (
+        <div className="provenance-top-row">
+            <span className="provenance-top-identity">
+                {profile ? (
+                    <EntityAvatar profile={profile} />
+                ) : (
+                    <span className="entity-avatar entity-avatar-mono" aria-hidden>
+                        {(cell.label || '?').trim().charAt(0).toUpperCase()}
+                    </span>
+                )}
+                <span className="provenance-top-name">{name}</span>
+                {chipLabel && (
+                    <span className={`entity-card-chip lean-chip-${lean}`} title={entityChipTitle(profile!)}>
+                        {chipLabel}
+                    </span>
+                )}
+            </span>
+            <span className="provenance-top-meta">{metaText}</span>
+        </div>
+    );
+}
+
+function ReceivedProvenanceBlock({
+    displayName, groups, top,
+}: {
+    displayName: string;
+    groups: ReceivedSourceCell[];
+    top: ReceivedSourceCell[];
+}) {
+    if (groups.length === 0 && top.length === 0) return null;
+    const leadGroups = topGroupsByShare(groups, 2);
+    const lead = leadGroups.length > 0
+        ? `Most of the tone aimed at ${displayName} comes from `
+            + leadGroups
+                .map((g) => `${sourceGroupLabel(g.sourceClass, g.lean)} (${formatPct(g.share * 100, { decimals: 0 })})`)
+                .join(' and ')
+            + '.'
+        : null;
+
+    return (
+        <>
+            <h3 className="card-title mt-4 mb-2">Where this tone comes from</h3>
+            <p className="modal-section-lede">
+                {lead ?? 'WHO the mentions come from, at the source level — a sample breakdown, not a complete accounting.'}
+            </p>
+            {groups.length > 0 && (
+                <div className="provenance-groups">
+                    {groups.map((g, i) => (
+                        <ProvenanceGroupRow key={`${g.sourceClass}-${g.lean ?? 'none'}-${i}`} cell={g} />
+                    ))}
+                </div>
+            )}
+            {top.length > 0 && (
+                <div className="provenance-top-list" style={{ marginTop: 'var(--space-2)' }}>
+                    {top.map((cell, i) => (
+                        <ProvenanceTopRow key={cell.entityKey ?? `${cell.label}-${i}`} cell={cell} />
+                    ))}
+                </div>
+            )}
+            <p className="text-xs text-muted">
+                Share of sampled mentions in this window — not a complete accounting of who
+                talks about {displayName}.
+            </p>
+        </>
     );
 }
 
@@ -872,18 +988,22 @@ function EntitySentimentModal({
                         <div className="metric-value">
                             {received.net != null ? formatPts(received.net) : '—'}
                         </div>
-                        <div
-                            className="text-xs text-muted"
-                            title={received.engagementWeightedNet != null
-                                ? 'The weighted figure re-scores the same posts by 1 + ln(1 + retweets + replies + likes + quotes). Engagement counts are a reach proxy, not verified reach.'
-                                : undefined}
-                        >
-                            {received.net != null
-                                ? `across ${received.volume} posts about them`
-                                    + (received.engagementWeightedNet != null
-                                        ? ` · engagement-weighted ${formatPts(received.engagementWeightedNet)}`
-                                        : '')
-                                : `only ${received.volume} sampled post${received.volume === 1 ? '' : 's'} about them — too few to score reliably`}
+                        <div className="text-xs text-muted">
+                            {received.net != null ? (
+                                <>
+                                    across {received.volume} posts about them
+                                    {received.engagementWeightedNet != null && (
+                                        <>
+                                            {' · '}
+                                            <DefinitionChip entry="engagement_weighted" label="engagement-weighted" />
+                                            {' '}
+                                            {formatPts(received.engagementWeightedNet)}
+                                        </>
+                                    )}
+                                </>
+                            ) : (
+                                `only ${received.volume} sampled post${received.volume === 1 ? '' : 's'} about them — too few to score reliably`
+                            )}
                         </div>
                     </div>
                 )}
@@ -921,6 +1041,14 @@ function EntitySentimentModal({
                     <div className="metric-value">{volume.toLocaleString()}</div>
                 </div>
             </div>
+
+            {received && received.volume > 0 && (
+                <ReceivedProvenanceBlock
+                    displayName={profile.displayName}
+                    groups={received.receivedFromGroups ?? []}
+                    top={received.receivedFromTop ?? []}
+                />
+            )}
 
             {item.outbound && item.outbound.targets.length > 0 && (
                 <>
@@ -1002,11 +1130,11 @@ function EntitySentimentModal({
                     {alignment.samePartyNet != null
                         ? formatPts(alignment.samePartyNet)
                         : 'low sample'}{' '}
-                    (n={alignment.samePartyVolume}), toward the other party{' '}
+                    ({alignment.samePartyVolume} posts), toward the other party{' '}
                     {alignment.crossPartyNet != null
                         ? formatPts(alignment.crossPartyNet)
                         : 'low sample'}{' '}
-                    (n={alignment.crossPartyVolume}). Cross-party criticism is the
+                    ({alignment.crossPartyVolume} posts). Cross-party criticism is the
                     expected baseline — deviation from it is the signal.
                 </p>
             )}
@@ -1475,10 +1603,10 @@ function PublicSentiment({ filters }: PublicSentimentProps) {
                 {sentimentAgreement && (
                     <p
                         className="text-xs text-muted"
-                        title="Share of human-reviewed tone classifications marked correct in our review queue. Reviews cover a sample of outputs, not all of them."
+                        title="Share of human-reviewed tone classifications where the reviewer agreed with our model's label. Reviews cover a sample of outputs, not all of them — not an independent accuracy measurement."
                     >
-                        Human review agreement on tone classifications:{' '}
-                        {sentimentAgreement.accuracyPct}% across {sentimentAgreement.scored} reviewed outputs.
+                        Human reviewers agreed with our tone classifications{' '}
+                        {sentimentAgreement.accuracyPct}% of the time, across {sentimentAgreement.scored} reviewed outputs.
                     </p>
                 )}
             </div>

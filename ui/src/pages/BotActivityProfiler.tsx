@@ -116,11 +116,11 @@ function readsAsToday(data: BotActivityResponse): string {
     const ratePct = formatPct(rate, { decimals: 0 });
     const parts: string[] = [];
     if (rate > 10) {
-        parts.push(`A high share of the posts we scanned look automated — roughly ${ratePct}.`);
+        parts.push(`A high share of the posts we scored look automated — roughly ${ratePct}.`);
     } else if (rate > 3) {
-        parts.push(`Some of the posts we scanned look automated — about ${ratePct}.`);
+        parts.push(`Some of the posts we scored look automated — about ${ratePct}.`);
     } else {
-        parts.push(`Most posts we scanned look like real people — only about ${ratePct} look automated.`);
+        parts.push(`Most posts we scored look like real people — only about ${ratePct} look automated.`);
     }
     const topNarrative = data.botPushedNarratives.find((n) => !isNoiseLabel(n.name));
     if (topNarrative) {
@@ -157,7 +157,7 @@ function buildBotTickerItems(data: BotActivityResponse): TickerItem[] {
             value: data.totalFlaggedPosts.toLocaleString(),
         },
         {
-            label: 'Analyzed docs',
+            label: 'Posts analyzed',
             value: data.analyzedDocCount.toLocaleString(),
         },
     ];
@@ -197,7 +197,7 @@ function BotEntityModal({ item, onClose }: { item: BotEntityItem; onClose: () =>
                     <div className="metric-value">{item.botDocs.toLocaleString()}</div>
                 </div>
                 <div>
-                    <div className="eyebrow">Posts scanned</div>
+                    <div className="eyebrow">Posts scored</div>
                     <div className="metric-value">{item.totalDocs.toLocaleString()}</div>
                 </div>
             </div>
@@ -228,7 +228,7 @@ function BotEntityModal({ item, onClose }: { item: BotEntityItem; onClose: () =>
 
 const BOT_SORTERS: ColumnSorter<BotEntityItem>[] = [
     { label: 'bot rate', compare: (a, b) => b.botRatePct - a.botRatePct },
-    { label: 'posts scanned', compare: (a, b) => b.totalDocs - a.totalDocs },
+    { label: 'posts scored', compare: (a, b) => b.totalDocs - a.totalDocs },
     { label: 'name', compare: (a, b) => a.entityProfile.displayName.localeCompare(b.entityProfile.displayName) },
 ];
 
@@ -291,9 +291,9 @@ function amplificationConfidence(botFractionPct: number): 'high' | 'medium' | 'l
 }
 
 function ConfidenceBadge({ level }: { level: 'high' | 'medium' | 'low' }) {
-    if (level === 'high') return <span className="badge badge-negative" title="High share of bot-authored member docs">High likelihood</span>;
-    if (level === 'medium') return <span className="badge badge-warning" title="Medium share of bot-authored member docs">Medium likelihood</span>;
-    return <span className="badge badge-neutral" title="Low share of bot-authored member docs">Low likelihood</span>;
+    if (level === 'high') return <span className="badge badge-negative" title="High share of this story's posts authored by a bot-scored account">High likelihood</span>;
+    if (level === 'medium') return <span className="badge badge-warning" title="Medium share of this story's posts authored by a bot-scored account">Medium likelihood</span>;
+    return <span className="badge badge-neutral" title="Low share of this story's posts authored by a bot-scored account">Low likelihood</span>;
 }
 
 function NarrativeAmplificationCard({ narrative }: { narrative: BotPushedNarrative }) {
@@ -331,8 +331,8 @@ function NarrativeAmplificationCard({ narrative }: { narrative: BotPushedNarrati
                     </button>
                 </div>
                 <p className="text-xs text-muted" style={{ margin: 0 }}>
-                    {narrative.botAuthoredDocCount.toLocaleString()} of {narrative.memberDocCount.toLocaleString()} member docs
-                    authored by a bot-scored account.
+                    {narrative.botAuthoredDocCount.toLocaleString()} of {narrative.memberDocCount.toLocaleString()} posts in this
+                    story authored by a bot-scored account.
                 </p>
             </Card>
 
@@ -341,12 +341,12 @@ function NarrativeAmplificationCard({ narrative }: { narrative: BotPushedNarrati
                 onClose={() => setModalOpen(false)}
                 kicker="Narrative amplification"
                 title={narrative.name}
-                subtitle={`${narrative.botAuthoredDocCount.toLocaleString()} of ${narrative.memberDocCount.toLocaleString()} member docs bot-authored · ${level} likelihood`}
+                subtitle={`${narrative.botAuthoredDocCount.toLocaleString()} of ${narrative.memberDocCount.toLocaleString()} posts in this story bot-authored · ${level} likelihood`}
             >
                 <h3 className="card-title mb-2">Flagged posts</h3>
                 <PostCardList
                     posts={narrative.samples.map(sampleDocToPostCard)}
-                    sampleNote="Bot-authored member docs, confidence-sorted — a sample, not every flag."
+                    sampleNote="Bot-authored posts in this story, confidence-sorted — a sample, not every flag."
                     emptyNote="No sample docs stored for this narrative."
                 />
             </Modal>
@@ -365,7 +365,7 @@ function CoordinationSummary({ data }: { data: CoordinationStats }) {
             subtitle={<DefinitionChip entry="coordination" label="What counts as coordination?" />}
             headerActions={
                 <MethodPopover
-                    description="Coordination is detected through behavioral analysis including timing patterns, text similarity, and network analysis."
+                    description="Coordination is detected from behavioral signals: suspected accounts posting at the same times, using near-identical wording, or sharing the same link targets."
                     limitations={[
                         'Some legitimate coordinated campaigns may be flagged',
                         'Sophisticated actors may evade detection',
@@ -507,21 +507,22 @@ function TextSimilarityProxyCard({ buckets }: { buckets: BehavioralSignalBucket[
     return (
         <Card
             title="Text Similarity Distribution"
+            subtitle={<DefinitionChip entry="template_proxy" label="Templated-language score" />}
             headerActions={
                 <MethodPopover
                     description={
                         'Pairwise copy-paste-similarity buckets (this build\'s pre-cutover measure) are not '
-                        + 'computed yet. template_score — mean per-label templated-language score — is the '
-                        + 'closest signal this build measures toward the same question: do this label\'s '
-                        + 'posts read as boilerplate/repeated text?'
+                        + 'computed yet. The templated-language score — mean per-label fill-in-the-blank '
+                        + 'score — is the closest signal this build measures toward the same question: do '
+                        + 'this label\'s posts read as boilerplate/repeated text?'
                     }
                 />
             }
         >
             <div className="text-xs text-muted mb-3">
                 Pairwise copy-paste similarity across suspected-bot posts is not measured in this build.
-                Shown instead: mean template_score per detector label — higher values lean toward
-                templated/repeated text.
+                Shown instead: mean templated-language score per detector label — higher values lean
+                toward templated/repeated text.
             </div>
             {buckets.length === 0 ? (
                 <p className="text-sm text-muted" style={{ margin: 0 }}>No labeled posts in this window.</p>
@@ -530,10 +531,10 @@ function TextSimilarityProxyCard({ buckets }: { buckets: BehavioralSignalBucket[
                     {buckets.map((b) => (
                         <SimilarityBar
                             key={b.label}
-                            label={`${b.label} (n=${b.docCount.toLocaleString()})`}
+                            label={`${b.label} (${b.docCount.toLocaleString()} posts)`}
                             value={b.avgTemplateScore != null ? b.avgTemplateScore * 100 : 0}
                             color={b.label === 'bot' ? COLORS.negative : b.label === 'suspicious' ? COLORS.warning : COLORS.chartAccent}
-                            title={`Mean template_score for "${b.label}": ${fmtAvg(b.avgTemplateScore)}`}
+                            title={`Mean templated-language score for "${b.label}": ${fmtAvg(b.avgTemplateScore)} (a proxy, not a copy-paste-similarity measure)`}
                         />
                     ))}
                 </div>
@@ -544,7 +545,10 @@ function TextSimilarityProxyCard({ buckets }: { buckets: BehavioralSignalBucket[
 
 function LinkDomainConcentrationCard() {
     return (
-        <Card title="Link Domain Concentration">
+        <Card
+            title="Link Domain Concentration"
+            subtitle="How often suspected-bot posts link to the same handful of sites."
+        >
             <p className="text-sm text-muted" style={{ margin: 0 }}>
                 Shared-link-domain concentration across suspected-bot posts is not part of this build's
                 bot-activity data yet. High concentration of links to a small number of domains would
@@ -788,7 +792,7 @@ function BotActivityProfiler({ filters }: BotActivityProfilerProps) {
 
             <div className="col-span-12 bot-section-label">
                 <div className="eyebrow" style={{ marginBottom: 'var(--space-1)' }}>
-                    Narratives with Suspected Bot Amplification
+                    Stories Bots Appear to Be Pushing
                 </div>
                 <div className="text-xs text-muted" style={{ lineHeight: 'var(--leading-relaxed)' }}>
                     Each row below is a narrative whose amplifying accounts score as likely bots. Open View

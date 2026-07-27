@@ -23,10 +23,11 @@ import type {
     PropagandaOverview, PropagandaTechniqueName, SnapshotStatusResponse,
 } from '../types';
 
-// Shared so the 0-to-1 mean-score scale reads identically everywhere it
-// appears (top metrics, ticker, entity cards, modal, source split).
-const MEAN_SCORE_TITLE =
-    'Average technique-intensity score across scored posts, from 0 (none) to 1 (saturated).';
+// Shared so the "saturation" naming and its 0-to-1 scale read identically
+// everywhere they appear (top metrics, ticker, entity cards, modal, source
+// split) rather than switching between "saturation" and "mean score".
+const SATURATION_TITLE =
+    'How saturated flagged posts are with persuasion techniques, from 0 (none) to 1 (wall-to-wall).';
 
 // --------------------------------------------------------------------------- //
 //  Ticker + reads-as-today                                                    //
@@ -175,7 +176,8 @@ function toOffenderRow(
                 {clamped && <span className="ranked-entity-blurb">{clamped}</span>}
                 <span className="ranked-entity-why">
                     {item.flaggedDocs.toLocaleString()} of {item.totalDocs.toLocaleString()} posts
-                    {' '}flagged · {saturationLevel(item.meanScore)} technique saturation
+                    {' '}flagged · {saturationLevel(item.meanScore)}{' '}
+                    <DefinitionChip entry="mean_score" label="technique saturation" />
                     {lowSample && (
                         <span
                             className="ranked-entity-lowsample"
@@ -203,7 +205,7 @@ function TopFlaggedLeaderboard({
     const top = topFlaggedOffenders(data);
     return (
         <Card
-            title="Top flagged offenders"
+            title="Highest flagged rates"
             subtitle={`The highest flagged-rate sources across news, officials, and the public · as of ${windowLabel}`}
             headerActions={
                 <MethodPopover
@@ -221,7 +223,7 @@ function TopFlaggedLeaderboard({
             {top.length > 0 ? (
                 <RankedEntityList
                     items={top.map((it) => toOffenderRow(it, onOpen))}
-                    ariaLabel="Top flagged-rate offenders across all sources"
+                    ariaLabel="Highest flagged-rate sources across all groups"
                 />
             ) : (
                 <p className="text-sm text-muted">
@@ -273,7 +275,7 @@ function PropagandaEntityModal({
                         <DefinitionChip entry="mean_score" label="Saturation" />
                     </div>
                     <div className="metric-value">{saturationLevel(item.meanScore)}</div>
-                    <div className="text-xs text-muted" title={MEAN_SCORE_TITLE}>
+                    <div className="text-xs text-muted" title={SATURATION_TITLE}>
                         {item.meanScore.toFixed(2)} on a 0-to-1 scale
                     </div>
                 </div>
@@ -469,7 +471,7 @@ function Propaganda({ filters }: PropagandaProps) {
                                     'We flag six persuasion techniques (loaded language, name-calling, fear '
                                     + 'appeals, ad hominem, whataboutism, doubt-casting) in political posts. A '
                                     + "flag measures rhetorical style — not truth, intent, or whether the post is "
-                                    + "'propaganda' in the everyday sense. Mean score runs 0 (none) to 1 (saturated)."
+                                    + "'propaganda' in the everyday sense. Saturation runs 0 (none) to 1 (wall-to-wall)."
                                 }
                             />
                         }

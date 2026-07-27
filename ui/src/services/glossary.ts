@@ -100,6 +100,61 @@ export const GLOSSARY = {
             + 'shows one — none is presented as fact.',
         scale: '0% to 100%.',
     },
+    engagement_weighted: {
+        term: 'Engagement-weighted',
+        definition:
+            'Posts that got more likes, comments, or reposts count a bit more toward this '
+            + 'average. Reactions are a reach proxy, not verified audience size.',
+    },
+    divergence: {
+        term: 'Divergence from the public',
+        definition:
+            "How far a group's average tone differs from the public's average tone on the "
+            + 'same stories, in the same window. A bigger gap means that group is reading the '
+            + 'story more differently from ordinary posters, not that either side is right.',
+        scale: '0 (matches the public) and up (further apart).',
+    },
+    posting_cadence: {
+        term: 'Posting pattern (cadence)',
+        definition:
+            'When an account posts across the day and week. Many suspected accounts posting '
+            + 'at the same times, with near-identical wording, is one of the signals behind a '
+            + 'coordination flag.',
+    },
+    claim_match_confidence: {
+        term: 'Claim-match confidence',
+        definition:
+            "How confident the model is, on average, that a story's member posts really make "
+            + 'the same claim rather than just a similar one.',
+        scale: '0% to 100%.',
+    },
+    window: {
+        term: 'Time window',
+        definition:
+            'The date range the numbers on this page cover. It decides which posts count '
+            + "toward a total — it never hides a single document you drill into, even if that "
+            + "document falls outside the window.",
+    },
+    template_proxy: {
+        term: 'Templated-language score',
+        definition:
+            "How closely a post's wording matches a fill-in-the-blank template. This is our "
+            + 'stand-in for direct post-to-post copy-paste comparison, which we don\'t compute '
+            + 'yet — not a copy-paste-similarity measure itself.',
+        scale: '0 (original wording) to 1 (heavily templated).',
+    },
+    story: {
+        term: 'Story',
+        definition:
+            'A political claim we saw repeated across multiple posts or articles. It is a '
+            + 'pattern in what we collected, not a poll finding.',
+    },
+    speaker_tier: {
+        term: 'Group',
+        definition:
+            'Which kind of source posted: news outlets, verified officials, or the public '
+            + '(political subreddits and X accounts we don\'t track individually).',
+    },
 } as const satisfies Record<string, GlossaryEntry>;
 
 export type GlossaryKey = keyof typeof GLOSSARY;

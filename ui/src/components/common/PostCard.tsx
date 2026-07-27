@@ -88,6 +88,15 @@ const TONE_BADGE_CLASS: Record<string, string> = {
     mixed: 'badge-warning',
 };
 
+// Plain-language reading of a target's stance (analysis.sentiment_label:
+// positive/negative/neutral/mixed) for the "about X — <word>" chip below.
+const STANCE_WORD: Record<string, string> = {
+    positive: 'supportive',
+    negative: 'critical',
+    neutral: 'neutral',
+    mixed: 'mixed',
+};
+
 const BODY_MAX_CHARS = 420;
 
 // --------------------------------------------------------------------------- //
@@ -300,7 +309,7 @@ export function PostCard({ post }: { post: PostCardData }) {
                             className={`badge ${TONE_BADGE_CLASS[t.stance] ?? 'badge-neutral'}`}
                             title="Who the post's sentiment is directed at, per the model's target extraction"
                         >
-                            about {t.label} · {t.stance}
+                            about {t.label} · {STANCE_WORD[t.stance] ?? t.stance}
                         </span>
                     ))}
                     {post.labelKind === 'bot' && post.label && (
