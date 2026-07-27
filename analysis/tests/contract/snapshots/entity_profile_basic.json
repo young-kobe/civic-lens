@@ -24,6 +24,24 @@
       "sampledCount": 0
     }
   ],
+  "profile": {
+    "accountType": null,
+    "bioSource": null,
+    "blurb": "",
+    "circulationNote": null,
+    "displayName": "Sen. Example",
+    "entityId": 1,
+    "founded": null,
+    "key": "sen-example",
+    "kind": "account",
+    "lean": null,
+    "leanSource": null,
+    "office": null,
+    "owner": null,
+    "party": null,
+    "subscriberCountProxy": null,
+    "termStart": null
+  },
   "propagandaAnalyzedDocs": 0,
   "propagandaRate": null,
   "range": {

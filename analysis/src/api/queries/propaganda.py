@@ -15,6 +15,13 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence
 
 from analysis.src.api.queries.base import build_sample_doc, split_admission_counts
 from analysis.src.api.queries.constants import BOT_FLAGGED_SHARE_EXCLUSION, SNIPPET_MAX_CHARS
+from analysis.src.api.queries.profiles import (
+    CATCH_ALL_OUTLETS,
+    CATCH_ALL_SUBREDDITS,
+    CATCH_ALL_X_USERS,
+    catch_all_profile,
+    fetch_entity_profiles,
+)
 from analysis.src.common import db
 
 # The six analysis.propaganda_technique enum values -- rendered even at
@@ -32,6 +39,16 @@ FLAGGED_EXAMPLE_LIMIT = 10
 # Per-entity leaderboard cap -- tolerance-based territory (a ranked
 # top-N), not a hard cap tied to any stored rollup size.
 MAX_ENTITY_LEADERBOARD_ROWS = 20
+
+# Per-entity flagged-example cap for the drill-down bucket (Wave 2 restoration,
+# docs/todos/ui-feature-restoration.md) -- readers only need a handful of
+# examples to audit the score, not an exhaustive list.
+EXAMPLES_PER_ENTITY = 5
+# Pool size for the examples-by-entity fetch: pulled once, ordered by density
+# desc, then fanned into per-entity buckets in Python (capped at
+# EXAMPLES_PER_ENTITY each) -- larger than any single entity needs so a long
+# tail of low-volume outlets/officials still gets a few rows.
+EXAMPLE_POOL_LIMIT = 500
 
 
 def _time_filter(
@@ -60,6 +77,20 @@ def get_propaganda_overview(
         technique_rows = _fetch_technique_evidence(conn, start, end)
         sample_rows = _fetch_flagged_samples(conn, start, end)
         entity_rows = _fetch_entity_rows(conn, start, end)
+        example_rows = _fetch_example_rows(conn, start, end)
+        run_ids = [row["run_id"] for row in example_rows]
+        example_technique_rows = _fetch_example_techniques(conn, run_ids)
+
+        # One batched profile fetch covers every entity id referenced by
+        # either the tier buckets (doc_rows) or the drill-down examples
+        # (example_rows) -- no per-entity query loop.
+        entity_ids = {
+            row[col]
+            for row in (*doc_rows, *example_rows)
+            for col in ("outlet_entity_id", "subreddit_entity_id", "author_entity_id")
+            if row[col] is not None
+        }
+        profiles = fetch_entity_profiles(conn, entity_ids)
 
     overview = _summarize_docs(doc_rows)
     overview["by_technique"] = _summarize_techniques(technique_rows, overview["flagged_docs"])
@@ -68,6 +99,13 @@ def get_propaganda_overview(
     overview["examples"] = [
         build_sample_doc(row, admission_class=row["admission_class"]) for row in sample_rows
     ]
+    tier_buckets = _bucket_by_tier_entity(doc_rows, profiles)
+    overview["by_news_outlet"] = _finalize_tier_items(tier_buckets["news_outlet"])
+    overview["by_official"] = _finalize_tier_items(tier_buckets["official"])
+    overview["by_general_public"] = _finalize_tier_items(tier_buckets["general_public"])
+    overview["examples_by_entity"] = _build_examples_by_entity(
+        example_rows, example_technique_rows, profiles,
+    )
     sampled, official_record = split_admission_counts(doc_rows) if doc_rows else (0, 0)
     overview["range"] = {
         "window": window_label,
@@ -193,6 +231,136 @@ def _bucket_by_tier(rows: Sequence[Mapping[str, Any]]) -> List[Dict[str, Any]]:
     return out
 
 
+def _resolve_tier_and_key(
+    row: Mapping[str, Any], profiles: Mapping[int, Any],
+) -> tuple:
+    """Route one doc to (tier, bucket_key, profile) for the per-tier entity
+    leaderboards (Wave 2 restoration). Mirrors the source_type resolution
+    already used by _bucket_by_tier, but resolved to a specific registry
+    entity (or a catch-all sentinel) rather than a bare group label:
+
+      * source_type='news' -> corpus.news_articles.outlet_entity_id, else
+        the 'other-outlets' catch-all.
+      * source_type='reddit_post' -> corpus.reddit_posts.subreddit_entity_id
+        (always general_public -- a subreddit is never an official), else
+        the 'other-subreddits' catch-all.
+      * source_type='x_post' -> corpus.author_profiles.entity_id. Only an
+        editorial official/collective (EntityProfileModel.kind == 'official',
+        the ui-kind already resolved by profiles.py's _entity_ui_kind) lands
+        in the officials tier; a resolved but non-editorial 'account' entity
+        still gets its own general_public card rather than folding into the
+        catch-all. An unresolved x_post falls to the 'other-x-users'
+        catch-all.
+
+    Every row lands in exactly one (tier, key) -- there is no dropped/
+    unclassified case, matching by_tier's accounting convention."""
+    source_type = row["source_type"]
+    if source_type == "news":
+        entity_id = row["outlet_entity_id"]
+        if entity_id is not None and entity_id in profiles:
+            return "news_outlet", profiles[entity_id].key, profiles[entity_id]
+        return "news_outlet", CATCH_ALL_OUTLETS, catch_all_profile(CATCH_ALL_OUTLETS)
+    if source_type == "reddit_post":
+        entity_id = row["subreddit_entity_id"]
+        if entity_id is not None and entity_id in profiles:
+            return "general_public", profiles[entity_id].key, profiles[entity_id]
+        return "general_public", CATCH_ALL_SUBREDDITS, catch_all_profile(CATCH_ALL_SUBREDDITS)
+    # x_post
+    entity_id = row["author_entity_id"]
+    if entity_id is not None and entity_id in profiles:
+        profile = profiles[entity_id]
+        tier = "official" if profile.kind == "official" else "general_public"
+        return tier, profile.key, profile
+    return "general_public", CATCH_ALL_X_USERS, catch_all_profile(CATCH_ALL_X_USERS)
+
+
+def _bucket_by_tier_entity(
+    rows: Sequence[Mapping[str, Any]], profiles: Mapping[int, Any],
+) -> Dict[str, Dict[str, Dict[str, Any]]]:
+    """Accumulate per-(tier, entity-key) doc/flagged/score stats across the
+    eligible-doc rows -- the pure core behind by_news_outlet/by_official/
+    by_general_public, unit-testable without a database."""
+    buckets: Dict[str, Dict[str, Dict[str, Any]]] = {
+        "news_outlet": {}, "official": {}, "general_public": {},
+    }
+    for row in rows:
+        tier, key, profile = _resolve_tier_and_key(row, profiles)
+        slot = buckets[tier].setdefault(
+            key, {"profile": profile, "total": 0, "flagged": 0, "score_sum": 0.0},
+        )
+        slot["total"] += 1
+        slot["score_sum"] += row["density"]
+        if (row["techniques_validated"] or 0) > 0:
+            slot["flagged"] += 1
+    return buckets
+
+
+def _finalize_tier_items(bucket: Dict[str, Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Turn one tier's per-key accumulator dict into ranked PropagandaEntityItem
+    dicts -- sorted by flagged_rate_pct desc, catch-alls last."""
+    items = []
+    for key, slot in bucket.items():
+        total = slot["total"]
+        if total == 0:
+            continue
+        flagged = slot["flagged"]
+        items.append({
+            "key": key,
+            "kind": slot["profile"].kind,
+            "entity_profile": slot["profile"],
+            "total_docs": total,
+            "flagged_docs": flagged,
+            "flagged_rate_pct": round(flagged / total * 100, 1),
+            "mean_score": round(slot["score_sum"] / total, 3),
+        })
+    items.sort(key=lambda item: (item["kind"] == "catch_all", -item["flagged_rate_pct"]))
+    return items
+
+
+def _build_examples_by_entity(
+    example_rows: Sequence[Mapping[str, Any]],
+    technique_rows: Sequence[Mapping[str, Any]],
+    profiles: Mapping[int, Any],
+) -> Dict[str, List[Dict[str, Any]]]:
+    """Fan the flagged-example pool (already ordered by density desc in SQL)
+    into per-entity buckets keyed by the same key _resolve_tier_and_key
+    produces for the tier leaderboards -- capped at EXAMPLES_PER_ENTITY each,
+    so iterating the pre-sorted pool keeps the highest-density examples per
+    entity without a separate per-entity query."""
+    techniques_by_run: Dict[int, List[Dict[str, Any]]] = defaultdict(list)
+    for row in technique_rows:
+        techniques_by_run[row["run_id"]].append({
+            "technique": row["technique"],
+            "evidence_span": row["evidence_span"],
+            "confidence": row["confidence"],
+        })
+
+    result: Dict[str, List[Dict[str, Any]]] = {}
+    for row in example_rows:
+        _tier, key, profile = _resolve_tier_and_key(row, profiles)
+        bucket = result.setdefault(key, [])
+        if len(bucket) >= EXAMPLES_PER_ENTITY:
+            continue
+        party = None
+        if row["author_entity_id"] is not None and row["author_entity_id"] in profiles:
+            author_profile = profiles[row["author_entity_id"]]
+            if author_profile.kind == "official":
+                party = author_profile.party
+        bucket.append({
+            "doc_id": row["doc_id"],
+            "source_type": row["source_type"],
+            "domain": row["domain_or_subreddit"],
+            "title": row["title"],
+            "overall_score": row["density"],
+            "text_preview": (row["body"] or "")[:SNIPPET_MAX_CHARS],
+            "url": row["source_url"],
+            "techniques": techniques_by_run.get(row["run_id"], []),
+            "author_handle": row["author_handle"],
+            "party": party,
+        })
+    return result
+
+
 def _summarize_entity_rows(rows: Sequence[Mapping[str, Any]]) -> List[Dict[str, Any]]:
     """Per-entity propaganda leaderboard: groups already-resolved-entity
     rows (entity_id IS NOT NULL is enforced in SQL) by entity_id, ranks by
@@ -263,7 +431,12 @@ def _fetch_eligible_docs(
     -- the rate-denominator exclusion binding rule. Carries source_type,
     density, techniques_validated, party (entities.lean or 'unknown'), tier
     (author_profiles.tier or NULL), admission_class, and model_id --
-    everything the overview + RangeMeta + by_tier need from a single pass."""
+    everything the overview + RangeMeta + by_tier need from a single pass.
+    Also carries the three doc->entity resolution columns (outlet_entity_id,
+    subreddit_entity_id, author_entity_id) the by_news_outlet/by_official/
+    by_general_public leaderboards resolve against -- same batched-fetch
+    convention as _fetch_entity_rows, added here rather than a second query
+    since this row set already covers every eligible doc."""
     params: Dict[str, Any] = {"bot_exclusion": BOT_FLAGGED_SHARE_EXCLUSION}
     time_clause = _time_filter(start, end, params)
     sql = f"""
@@ -273,10 +446,15 @@ def _fetch_eligible_docs(
                pr.techniques_validated AS techniques_validated,
                r.model_id AS model_id,
                COALESCE(e.lean::text, 'unknown') AS party,
-               ap.tier::text AS tier
+               ap.tier::text AS tier,
+               na.outlet_entity_id AS outlet_entity_id,
+               rp.subreddit_entity_id AS subreddit_entity_id,
+               ap.entity_id AS author_entity_id
         FROM analysis.runs r
         JOIN analysis.propaganda_results pr ON pr.run_id = r.run_id
         JOIN corpus.documents d ON d.doc_id = r.doc_id
+        LEFT JOIN corpus.news_articles na ON na.doc_id = d.doc_id
+        LEFT JOIN corpus.reddit_posts rp ON rp.doc_id = d.doc_id
         LEFT JOIN corpus.author_profiles ap ON ap.author_id = d.author_id
         LEFT JOIN corpus.entities e ON e.entity_id = ap.entity_id
         WHERE r.task = 'propaganda'::analysis.task
@@ -391,3 +569,66 @@ def _fetch_flagged_samples(
         LIMIT %(limit)s
     """
     return conn.execute(sql, params).fetchall()
+
+
+def _fetch_example_rows(
+    conn, start: Optional[datetime], end: Optional[datetime],
+) -> List[Mapping[str, Any]]:
+    """Flagged-doc pool backing examples_by_entity (Wave 2 restoration),
+    ordered by density desc so fanning the pool into per-entity buckets in
+    Python keeps each entity's highest-density examples first. Carries the
+    full PropagandaExample field set (title/body/domain/source_url/
+    author_handle) plus run_id (to join propaganda_techniques) and the same
+    three doc->entity resolution columns as _fetch_eligible_docs, so
+    _resolve_tier_and_key buckets examples under the exact same keys as the
+    tier leaderboards."""
+    params: Dict[str, Any] = {
+        "bot_exclusion": BOT_FLAGGED_SHARE_EXCLUSION,
+        "limit": EXAMPLE_POOL_LIMIT,
+    }
+    time_clause = _time_filter(start, end, params)
+    sql = f"""
+        SELECT d.doc_id AS doc_id, r.run_id AS run_id,
+               d.source_type::text AS source_type,
+               d.domain_or_subreddit AS domain_or_subreddit,
+               d.title AS title, d.body AS body, d.source_url AS source_url,
+               COALESCE(pr.density, 0.0) AS density,
+               a.handle AS author_handle,
+               na.outlet_entity_id AS outlet_entity_id,
+               rp.subreddit_entity_id AS subreddit_entity_id,
+               ap.entity_id AS author_entity_id
+        FROM analysis.runs r
+        JOIN analysis.propaganda_results pr ON pr.run_id = r.run_id
+        JOIN corpus.documents d ON d.doc_id = r.doc_id
+        LEFT JOIN corpus.authors a ON a.author_id = d.author_id
+        LEFT JOIN corpus.news_articles na ON na.doc_id = d.doc_id
+        LEFT JOIN corpus.reddit_posts rp ON rp.doc_id = d.doc_id
+        LEFT JOIN corpus.author_profiles ap ON ap.author_id = d.author_id
+        WHERE r.task = 'propaganda'::analysis.task
+          AND r.is_current AND r.status = 'done'::analysis.run_status
+          AND pr.techniques_validated > 0
+          AND (d.author_id IS NULL OR NOT EXISTS (
+                SELECT 1 FROM analysis.author_bot_scores ab
+                WHERE ab.author_id = d.author_id
+                  AND (ab.bot_post_count + ab.suspicious_post_count)::float
+                      / NULLIF(ab.sample_count, 0) >= %(bot_exclusion)s
+              )){time_clause}
+        ORDER BY pr.density DESC NULLS LAST, d.published_at DESC
+        LIMIT %(limit)s
+    """
+    return conn.execute(sql, params).fetchall()
+
+
+def _fetch_example_techniques(conn, run_ids: List[int]) -> List[Mapping[str, Any]]:
+    """Evidence spans for exactly the runs behind example_rows -- one
+    batched `run_id = ANY(...)` query, never a per-doc loop."""
+    if not run_ids:
+        return []
+    sql = """
+        SELECT run_id, technique::text AS technique,
+               evidence_span AS evidence_span, confidence AS confidence
+        FROM analysis.propaganda_techniques
+        WHERE run_id = ANY(%(run_ids)s)
+        ORDER BY technique_id
+    """
+    return conn.execute(sql, {"run_ids": run_ids}).fetchall()

@@ -14,6 +14,7 @@ from analysis.src.api.models.common import RangeMeta
 from analysis.src.api.models.movers import FavorabilityMover, MoversResponse, ToneMover
 from analysis.src.api.queries import base
 from analysis.src.api.queries.constants import BOT_FLAGGED_SHARE_EXCLUSION, MIN_TARGET_SAMPLE_N
+from analysis.src.api.queries.profiles import fetch_entity_profiles
 from analysis.src.common import db
 from analysis.src.common.settings import get_settings
 
@@ -131,7 +132,10 @@ def _tally_favorability(rows: List[Dict[str, Any]]) -> Dict[int, Dict[str, Any]]
 
 
 def _diff_tone(
-    current: Dict[int, Dict[str, Any]], previous: Dict[int, Dict[str, Any]], entities: Dict[int, Dict[str, Any]],
+    current: Dict[int, Dict[str, Any]],
+    previous: Dict[int, Dict[str, Any]],
+    entities: Dict[int, Dict[str, Any]],
+    entity_profiles: Dict[int, Any],
 ) -> List[ToneMover]:
     movers: List[ToneMover] = []
     for entity_id, cur in current.items():
@@ -141,7 +145,8 @@ def _diff_tone(
         if prev is None or prev["count"] < MIN_TARGET_SAMPLE_N:
             continue
         entity = entities.get(entity_id)
-        if entity is None:
+        entity_profile = entity_profiles.get(entity_id)
+        if entity is None or entity_profile is None:
             continue
         cur_net = (cur["pos"] - cur["neg"]) / cur["count"] * 100
         prev_net = (prev["pos"] - prev["neg"]) / prev["count"] * 100
@@ -151,6 +156,7 @@ def _diff_tone(
             current_net=round(cur_net, 1), prev_net=round(prev_net, 1),
             delta_pts=round(cur_net - prev_net, 1),
             current_volume=cur["count"], prev_volume=prev["count"],
+            entity_profile=entity_profile,
         ))
     movers.sort(key=lambda m: -abs(m.delta_pts))
     return movers[:_TOP_N_MOVERS]
@@ -211,8 +217,11 @@ def get_movers(
             if row["entity_id"] is not None
         }
         entities = _fetch_entities(conn, entity_ids)
+        entity_profiles = fetch_entity_profiles(conn, entity_ids)
 
-    tone_movers = _diff_tone(_tally_tone(current_tone_rows), _tally_tone(previous_tone_rows), entities)
+    tone_movers = _diff_tone(
+        _tally_tone(current_tone_rows), _tally_tone(previous_tone_rows), entities, entity_profiles,
+    )
     top_favorability_mover = _diff_favorability(
         _tally_favorability(current_fav_rows), _tally_favorability(previous_fav_rows), entities,
     )

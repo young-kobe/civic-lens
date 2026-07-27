@@ -3,11 +3,15 @@ Live query module for GET /bot-activity. Aggregates
 `analysis.bot_signals` + `analysis.author_bot_scores` +
 `analysis.author_leans` + `analysis.narrative_docs` over an arbitrary
 [start, end] range -- no precomputed rollup (Phase 9 strictly-live,
-`docs/audit-trail/analysis/2026-07-24-phase9-prewave.md`).
+`docs/audit-trail/analysis/2026-07-24-phase9-prewave.md`). Also restores
+the pre-Postgres officials/general-public entity rollup, coordination
+stats, and day-of-week x hour-of-day posting-cadence grid (see
+docs/audit-trail/api/2026-07-27-bot-activity-restoration.md).
 """
 
 from __future__ import annotations
 
+import re
 from collections import Counter
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Set, Tuple
@@ -16,13 +20,17 @@ from analysis.src.api.models.bots import (
     AccountAgeBucket,
     BehavioralSignalBucket,
     BotActivityResponse,
+    BotEntityItem,
     BotPushedNarrative,
+    CoordinationStats,
     EntityBotRate,
     FlaggedAccount,
+    FlaggedExample,
     PostingCadenceBucket,
+    PostingCadenceCell,
 )
 from analysis.src.api.models.common import LeanLabel, RangeMeta, SampleDocModel
-from analysis.src.api.queries import base
+from analysis.src.api.queries import base, profiles
 from analysis.src.api.queries.constants import (
     BOT_FLAGGED_SHARE_EXCLUSION,
     MAX_DISTRIBUTION_SAMPLES_PER_BUCKET,
@@ -50,6 +58,22 @@ _MAX_FLAGGED_DOCS = MAX_DISTRIBUTION_SAMPLES_PER_BUCKET
 _MAX_SAMPLES_PER_ACCOUNT = MAX_SAMPLES_PER_TARGET
 _MAX_SAMPLES_PER_NARRATIVE = MAX_SAMPLES_PER_TARGET
 
+# Officials/general-public entity rollup + flagged-example evidence caps --
+# not in queries/constants.py (module-local; ported verbatim from the
+# retired reporting/aggregators/bot/{entities,narratives}.py, whose
+# _SAMPLES_PER_ENTITY=5/_EXAMPLES_PER_NARRATIVE=3/_EXAMPLE_TEXT_CHARS=220/
+# _MAX_INDICATORS_PER_EXAMPLE=4/_EXAMPLE_REASONING_CHARS=240 constants this
+# restoration follows).
+_MAX_SAMPLES_PER_BOT_ENTITY = 3
+_FLAGGED_EXAMPLE_TEXT_CHARS = 220
+_MAX_INDICATORS_PER_EXAMPLE = 4
+_EXAMPLE_REASONING_CHARS = 240
+
+# Matches the retired reporting/aggregators/bot/narratives.py::_SLUG_RE --
+# an LLM-echoed snake_case indicator name (vs. already-prose heuristic
+# text) is the only case _humanize_indicator rewrites.
+_INDICATOR_SLUG_RE = re.compile(r"^[a-z0-9_]+$")
+
 
 def _time_filter(
     start: Optional[datetime], end: Optional[datetime], params: Dict[str, Any],
@@ -71,15 +95,28 @@ def _time_filter(
 
 
 def _fetch_bot_docs(conn, start, end, min_conf: float) -> List[Dict[str, Any]]:
-    params: Dict[str, Any] = {"min_conf": min_conf, "snip": SNIPPET_MAX_CHARS}
+    """One row per (doc, current done 'bot' run) in range. Also carries
+    everything the officials/general-public rollup + FlaggedExample
+    evidence need (source_type, domain_or_subreddit, the author's handle,
+    a longer body excerpt, and the run's own LLM indicators/reasoning)
+    so those are built from this single pass -- no per-entity queries."""
+    params: Dict[str, Any] = {
+        "min_conf": min_conf, "snip": SNIPPET_MAX_CHARS, "flagged_chars": _FLAGGED_EXAMPLE_TEXT_CHARS,
+    }
     time_clause = _time_filter(start, end, params)
     sql = f"""
         SELECT bs.doc_id, bs.label::text AS bot_label, r.confidence, r.model_id,
                d.author_id, d.published_at, d.source_url, d.admission_class::text AS admission_class,
-               LEFT(d.body, %(snip)s) AS snippet
+               d.source_type::text AS source_type, d.domain_or_subreddit,
+               a.handle AS author_handle,
+               LEFT(d.body, %(snip)s) AS snippet,
+               LEFT(d.body, %(flagged_chars)s) AS flagged_text,
+               r.raw_response -> 'llm' -> 'indicators' AS indicators_json,
+               r.raw_response -> 'llm' ->> 'reasoning' AS reasoning
         FROM analysis.bot_signals bs
         JOIN analysis.runs r ON r.run_id = bs.run_id AND r.is_current AND r.status = 'done'::analysis.run_status
         JOIN corpus.documents d ON d.doc_id = bs.doc_id
+        LEFT JOIN corpus.authors a ON a.author_id = d.author_id
         WHERE r.confidence >= %(min_conf)s{time_clause}
     """
     return conn.execute(sql, params).fetchall()
@@ -133,16 +170,40 @@ def _fetch_author_leans(conn, author_ids: Set[int]) -> Dict[int, Dict[str, Any]]
 
 
 def _fetch_author_entities(conn, author_ids: Set[int]) -> Dict[int, Dict[str, Any]]:
+    """`editorial` is carried alongside kind/entity_key/display_name so the
+    officials/general-public rollup (_route_entity_bucket) can tell an
+    editorial official (its own 'officials' card) from a non-editorial
+    officials-list account (folds into 'general_public' as an 'account'
+    card) -- by_entity (EntityBotRate) ignores the flag and keeps its
+    existing every-registry-entity behavior."""
     if not author_ids:
         return {}
     sql = """
-        SELECT ap.author_id, e.entity_id, e.entity_key, e.kind::text AS kind, e.display_name
+        SELECT ap.author_id, e.entity_id, e.entity_key, e.kind::text AS kind,
+               e.display_name, e.editorial
         FROM corpus.author_profiles ap
         JOIN corpus.entities e ON e.entity_id = ap.entity_id
         WHERE ap.author_id = ANY(%(author_ids)s) AND ap.entity_id IS NOT NULL
     """
     rows = conn.execute(sql, {"author_ids": list(author_ids)}).fetchall()
     return {row["author_id"]: row for row in rows}
+
+
+def _fetch_subreddit_entities(conn, doc_ids: Set[int]) -> Dict[int, Dict[str, Any]]:
+    """`corpus.reddit_posts.subreddit_entity_id` -> `corpus.entities`
+    (kind='subreddit'), keyed by doc_id -- the general-public rollup's
+    subreddit routing path (mirrors propaganda.py's entity-resolution
+    join, restricted to the subreddit half)."""
+    if not doc_ids:
+        return {}
+    sql = """
+        SELECT rp.doc_id, e.entity_id, e.entity_key, e.display_name
+        FROM corpus.reddit_posts rp
+        JOIN corpus.entities e ON e.entity_id = rp.subreddit_entity_id
+        WHERE rp.doc_id = ANY(%(doc_ids)s) AND rp.subreddit_entity_id IS NOT NULL
+    """
+    rows = conn.execute(sql, {"doc_ids": list(doc_ids)}).fetchall()
+    return {row["doc_id"]: row for row in rows}
 
 
 def _fetch_narrative_member_docs(conn, start, end) -> List[Dict[str, Any]]:
@@ -202,7 +263,14 @@ def _build_age_buckets(
         seen_authors.add(row["author_id"])
         created_at = bot_scores.get(row["author_id"], {}).get("account_created_at")
         counts[_age_bucket_label(now, created_at)] += 1
-    return [AccountAgeBucket(age_range=label, account_count=count) for label, count in counts.items()]
+    total = sum(counts.values())
+    return [
+        AccountAgeBucket(
+            age_range=label, account_count=count,
+            percentage=round(count / total * 100, 1) if total else 0.0,
+        )
+        for label, count in counts.items()
+    ]
 
 
 def _build_entity_bot_rates(
@@ -290,6 +358,214 @@ def _build_flagged_docs(bot_rows: List[Dict[str, Any]]) -> List[SampleDocModel]:
     return [
         SampleDocModel(**base.build_sample_doc(row, admission_class=row["admission_class"]))
         for row in flagged[:_MAX_FLAGGED_DOCS]
+    ]
+
+
+def _humanize_indicator(indicator: str) -> str:
+    """Display form of one LLM-echoed bot-detection indicator string
+    (`runs.raw_response -> 'llm' -> 'indicators'`). Ported verbatim from
+    the retired reporting/aggregators/bot/narratives.py: an
+    already-prose heuristic string passes through unchanged; a
+    snake_case slug (e.g. 'zero_followers_following_listed') is turned
+    into display prose so it never renders raw."""
+    text = (indicator or "").strip()
+    if _INDICATOR_SLUG_RE.match(text):
+        return text.replace("_", " ").capitalize()
+    return text
+
+
+def _build_source_label(source_type: str, domain_or_subreddit: Optional[str], author_handle: Optional[str]) -> str:
+    """Human-readable source label for one doc row, ported verbatim from
+    the retired reporting/aggregators/evidence.py::build_source_label
+    (e.g. 'News · nyt.com', 'X · @handle', 'Reddit · r/politics')."""
+    if source_type == "news":
+        return f"News · {domain_or_subreddit}" if domain_or_subreddit else "News"
+    if source_type == "x_post":
+        return f"X · @{author_handle}" if author_handle else "X"
+    if source_type == "reddit_post" and domain_or_subreddit:
+        return f"Reddit · r/{domain_or_subreddit}"
+    if source_type == "reddit_post":
+        return "Reddit"
+    return source_type or "unknown"
+
+
+def _build_flagged_example(row: Dict[str, Any]) -> Optional[FlaggedExample]:
+    """One bot-flagged doc as evidence, or None when the doc has no body
+    text to excerpt (mirrors the retired
+    reporting/aggregators/bot/narratives.py::_flagged_example). `url` is
+    `corpus.documents.source_url` directly -- always present (invariant
+    C1), never synthesized the way the old SQLite aggregator had to.
+    Indicators/reasoning come from the run's own LLM response
+    (`raw_response -> 'llm'`), not the typed bot_signals stylometrics --
+    those numeric columns have no free-form indicator vocabulary of
+    their own to humanize."""
+    text = (row.get("flagged_text") or "").strip()
+    if not text:
+        return None
+    reasoning = row.get("reasoning")
+    if reasoning and len(reasoning) > _EXAMPLE_REASONING_CHARS:
+        reasoning = reasoning[:_EXAMPLE_REASONING_CHARS - 3].rstrip() + "..."
+    indicators_json = row.get("indicators_json") or []
+    indicators = [
+        _humanize_indicator(indicator)
+        for indicator in indicators_json[:_MAX_INDICATORS_PER_EXAMPLE]
+        if isinstance(indicator, str) and indicator.strip()
+    ]
+    confidence = row.get("confidence")
+    return FlaggedExample(
+        doc_id=row["doc_id"], text=text, url=row["source_url"],
+        source_label=_build_source_label(row["source_type"], row["domain_or_subreddit"], row["author_handle"]),
+        confidence=round(float(confidence), 3) if confidence is not None else None,
+        reasoning=reasoning, indicators=indicators,
+    )
+
+
+def _route_entity_bucket(
+    row: Dict[str, Any],
+    author_entities: Dict[int, Dict[str, Any]],
+    subreddit_entities: Dict[int, Dict[str, Any]],
+) -> Optional[Tuple[str, Any, str, Optional[int]]]:
+    """Bucket one bot-detection doc row into the officials/general-public
+    rollup, mirroring the retired reporting/aggregators/bot/repository.py
+    ``_fetch_entity_rollups`` tier split -- simplified to what
+    author_profiles/corpus.entities can resolve today (no is_official_tier
+    provenance upgrade; that ingestor-side flag was never ported into the
+    Postgres officials/general-public split for any other restored panel
+    either). News docs are excluded entirely -- there is no by_news_outlet
+    in this restoration. Returns (bucket, slot_key, kind, entity_id) or
+    None when the row is out of scope; entity_id is None for a catch-all
+    fold (slot_key is the catch-all sentinel string in that case)."""
+    if row["source_type"] == "news":
+        return None
+    author_id = row["author_id"]
+    author_entity = author_entities.get(author_id) if author_id is not None else None
+    if author_entity is not None and author_entity["kind"] == "official" and author_entity["editorial"]:
+        return ("officials", author_entity["entity_id"], "official", author_entity["entity_id"])
+    subreddit_entity = subreddit_entities.get(row["doc_id"])
+    if subreddit_entity is not None:
+        return ("general_public", subreddit_entity["entity_id"], "subreddit", subreddit_entity["entity_id"])
+    if author_entity is not None:
+        return ("general_public", author_entity["entity_id"], "account", author_entity["entity_id"])
+    if row["source_type"] == "x_post":
+        return ("general_public", profiles.CATCH_ALL_X_USERS, "catch_all", None)
+    if row["source_type"] == "reddit_post":
+        return ("general_public", profiles.CATCH_ALL_SUBREDDITS, "catch_all", None)
+    return None
+
+
+def _accumulate_entity_slots(
+    bot_rows: List[Dict[str, Any]],
+    author_entities: Dict[int, Dict[str, Any]],
+    subreddit_entities: Dict[int, Dict[str, Any]],
+) -> Tuple[Dict[str, Dict[Any, Dict[str, Any]]], Set[int]]:
+    """One pass building both rollup buckets' accumulator slots (total
+    docs, bot docs, confidence-ranked flagged examples) plus the set of
+    registry entity_ids referenced, so the caller can batch-fetch their
+    profiles in a single follow-up query (fetch_entity_profiles)."""
+    accum: Dict[str, Dict[Any, Dict[str, Any]]] = {"officials": {}, "general_public": {}}
+    entity_ids: Set[int] = set()
+    for row in bot_rows:
+        routing = _route_entity_bucket(row, author_entities, subreddit_entities)
+        if routing is None:
+            continue
+        bucket, slot_key, kind, entity_id = routing
+        slot = accum[bucket].setdefault(slot_key, {
+            "kind": kind, "entity_id": entity_id, "total": 0, "bot": 0, "flagged": [],
+        })
+        slot["total"] += 1
+        if row["bot_label"] == "bot":
+            slot["bot"] += 1
+            example = _build_flagged_example(row)
+            if example is not None:
+                slot["flagged"].append((row["confidence"] or 0.0, example))
+        if entity_id is not None:
+            entity_ids.add(entity_id)
+    return accum, entity_ids
+
+
+def _finalize_entity_items(
+    slots: Dict[Any, Dict[str, Any]], entity_profiles: Dict[int, Any],
+) -> List[BotEntityItem]:
+    """Turn one bucket's accumulator slots into ranked BotEntityItems.
+    Catch-all slots (entity_id is None) get the shared sentinel profile;
+    every other slot's profile MUST already be in `entity_profiles` --
+    the caller fetches it for exactly the entity_ids _accumulate_entity_
+    slots collected, so a miss here means that contract broke, and this
+    fails loud rather than silently dropping the entity's rollup."""
+    items: List[BotEntityItem] = []
+    for slot_key, slot in slots.items():
+        entity_id = slot["entity_id"]
+        if entity_id is None:
+            profile = profiles.catch_all_profile(slot_key)
+            key = slot_key
+        else:
+            profile = entity_profiles.get(entity_id)
+            if profile is None:
+                raise ValueError(
+                    f"entity_id={entity_id} routed into the bot rollup but "
+                    "fetch_entity_profiles returned no row for it"
+                )
+            key = profile.key
+        total = slot["total"]
+        ranked_samples = sorted(slot["flagged"], key=lambda pair: -pair[0])[:_MAX_SAMPLES_PER_BOT_ENTITY]
+        items.append(BotEntityItem(
+            key=key, kind=slot["kind"], entity_profile=profile,
+            total_docs=total, bot_docs=slot["bot"],
+            bot_rate_pct=round(slot["bot"] / total * 100, 1) if total else 0.0,
+            samples=[example for _confidence, example in ranked_samples],
+        ))
+    items.sort(key=lambda item: (-item.bot_rate_pct, -item.total_docs))
+    return items
+
+
+def _build_coordination_stats(bot_rows: List[Dict[str, Any]]) -> CoordinationStats:
+    """Restores the retired reporting/aggregators/bot/repository.py
+    ``_fetch_behavior_signals``' accountReuse/avgPostsPerSuspectedAccount:
+    both are computed over IN-RANGE bot-flagged (label='bot') docs' own
+    author_id counts -- NOT author_bot_scores.sample_count (that is a
+    lifetime rollup across every analyzed post regardless of label, a
+    different denominator than the old per-scan window-scoped count).
+    identical_text_pairs has no Postgres source (the old O(n^2) shingle
+    scan was never ported) -- always None, never fabricated."""
+    flagged_doc_counts = Counter(
+        row["author_id"] for row in bot_rows
+        if row["bot_label"] == "bot" and row["author_id"] is not None
+    )
+    unique_authors = len(flagged_doc_counts)
+    if unique_authors == 0:
+        return CoordinationStats(account_reuse=0.0, avg_posts_per_suspected_account=0.0, identical_text_pairs=None)
+    reused_authors = sum(1 for count in flagged_doc_counts.values() if count > 1)
+    return CoordinationStats(
+        account_reuse=round(reused_authors / unique_authors, 3),
+        avg_posts_per_suspected_account=round(sum(flagged_doc_counts.values()) / unique_authors, 2),
+        identical_text_pairs=None,
+    )
+
+
+def _pg_day_of_week(published_at: datetime) -> int:
+    """Postgres `EXTRACT(dow)` convention: Sunday=0 .. Saturday=6.
+    Python's `datetime.weekday()` is Monday=0..Sunday=6; this converts so
+    the grid's day axis matches what a Postgres-driven chart (and the old
+    HeatmapDataPoint.day / JS `Date.getDay()`, also Sunday=0) would
+    produce."""
+    return (published_at.weekday() + 1) % 7
+
+
+def _build_posting_cadence_grid(bot_rows: List[Dict[str, Any]]) -> List[PostingCadenceCell]:
+    """Day-of-week x hour-of-day histogram over bot-flagged (label='bot')
+    docs in range -- pure post-processing over the same bot_rows already
+    fetched for the rest of the panel (no extra query). All 7*24=168
+    cells are present even at count 0, matching posting_cadence's
+    all-24-hours convention."""
+    counts = Counter(
+        (_pg_day_of_week(row["published_at"]), row["published_at"].hour)
+        for row in bot_rows
+        if row["bot_label"] == "bot" and row["published_at"] is not None
+    )
+    return [
+        PostingCadenceCell(day_of_week=day, hour=hour, doc_count=counts.get((day, hour), 0))
+        for day in range(7)
+        for hour in range(24)
     ]
 
 
@@ -384,6 +660,10 @@ def get_bot_activity(
         leans = _fetch_author_leans(conn, author_ids)
         entities = _fetch_author_entities(conn, author_ids)
         model_ids = _fetch_model_ids(conn, start, end)
+        doc_ids = {row["doc_id"] for row in bot_rows}
+        subreddit_entities = _fetch_subreddit_entities(conn, doc_ids)
+        entity_slots, routed_entity_ids = _accumulate_entity_slots(bot_rows, entities, subreddit_entities)
+        entity_profiles = profiles.fetch_entity_profiles(conn, routed_entity_ids)
 
     analyzed_doc_count = len(bot_rows)
     bot_scored_doc_count = sum(
@@ -414,17 +694,23 @@ def get_bot_activity(
         model_ids=model_ids,
     )
     posting_cadence = _build_posting_cadence(bot_rows)
+    total_flagged_posts = sum(1 for row in bot_rows if row["bot_label"] in ("bot", "suspicious"))
 
     return BotActivityResponse(
         range=range_meta,
         analyzed_doc_count=analyzed_doc_count,
         bot_scored_doc_count=bot_scored_doc_count,
         automation_rate_pct=automation_rate_pct,
+        total_flagged_posts=total_flagged_posts,
         behavioral_signals=behavioral_signals,
         account_age_buckets=_build_age_buckets(bot_rows, bot_scores, now),
         coordination_index=_compute_coordination_index(posting_cadence),
         posting_cadence=posting_cadence,
+        posting_cadence_grid=_build_posting_cadence_grid(bot_rows),
         by_entity=_build_entity_bot_rates(bot_rows, entities),
+        by_official=_finalize_entity_items(entity_slots["officials"], entity_profiles),
+        by_general_public=_finalize_entity_items(entity_slots["general_public"], entity_profiles),
+        coordination_stats=_build_coordination_stats(bot_rows),
         bot_pushed_narratives=_build_bot_pushed_narratives(narrative_rows, bot_scores),
         flagged_accounts=_build_flagged_accounts(bot_rows, bot_scores, leans),
         flagged_docs=_build_flagged_docs(bot_rows),

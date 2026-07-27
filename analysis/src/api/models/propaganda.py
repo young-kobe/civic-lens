@@ -5,11 +5,11 @@ queries/propaganda.py for the live aggregation these shapes wrap.
 
 from __future__ import annotations
 
-from typing import List, Literal
+from typing import Dict, List, Literal, Optional
 
 from pydantic import Field
 
-from analysis.src.api.models.common import CamelModel, RangeMeta, SampleDocModel
+from analysis.src.api.models.common import CamelModel, EntityProfileModel, RangeMeta, SampleDocModel
 
 
 class TechniqueCount(CamelModel):
@@ -75,6 +75,51 @@ class PropagandaTierSplit(CamelModel):
     mean_score: float
 
 
+class PropagandaTechniqueSpan(CamelModel):
+    """One evidence span backing a PropagandaExample, from
+    analysis.propaganda_techniques for the doc's current propaganda run."""
+
+    technique: str
+    evidence_span: Optional[str] = None
+    confidence: float
+
+
+class PropagandaExample(CamelModel):
+    """One flagged doc backing a per-entity drill-down (restored per
+    docs/todos/ui-feature-restoration.md, Wave 2 propaganda). ``domain`` is
+    corpus.documents.domain_or_subreddit; ``url`` is source_url;
+    ``text_preview`` is body truncated to SNIPPET_MAX_CHARS. ``author_handle``
+    is null for news/reddit docs. ``party`` is entities.lean_source via the
+    author's author_profiles.entity_id, populated only when that entity
+    resolves to the editorial 'official' bucket -- never for non-editorial
+    accounts or unaffiliated authors."""
+
+    doc_id: int
+    source_type: str
+    domain: Optional[str] = None
+    title: Optional[str] = None
+    overall_score: float
+    text_preview: str
+    url: Optional[str] = None
+    techniques: List[PropagandaTechniqueSpan] = Field(default_factory=list)
+    author_handle: Optional[str] = None
+    party: Optional[str] = None
+
+
+class PropagandaEntityItem(CamelModel):
+    """One registry entity's (or catch-all bucket's) propaganda footprint
+    within a single tier (news outlets / officials / general public).
+    Ranked by flagged_rate_pct desc within its tier, catch-alls last."""
+
+    key: str
+    kind: str
+    entity_profile: EntityProfileModel
+    total_docs: int
+    flagged_docs: int
+    flagged_rate_pct: float
+    mean_score: float
+
+
 class PropagandaOverviewModel(CamelModel):
     """GET /api/v1/propaganda response. The denominator behind
     total_eligible_docs/flagged_docs/mean_score is analysis.runs (is_current,
@@ -93,3 +138,13 @@ class PropagandaOverviewModel(CamelModel):
     by_tier: List[PropagandaTierSplit] = Field(default_factory=list)
     by_entity: List[PropagandaEntityRow] = Field(default_factory=list)
     examples: List[SampleDocModel] = Field(default_factory=list)
+    # Wave 2 (docs/todos/ui-feature-restoration.md): per-tier ranked entity
+    # leaderboards with full editorial profiles, restoring the old
+    # PropagandaOverview.byNewsOutlet/byOfficial/byGeneralPublic contract.
+    by_news_outlet: List[PropagandaEntityItem] = Field(default_factory=list)
+    by_official: List[PropagandaEntityItem] = Field(default_factory=list)
+    by_general_public: List[PropagandaEntityItem] = Field(default_factory=list)
+    # Per-entity flagged-example bucket, keyed by the same key used in
+    # PropagandaEntityItem.key (entity_key or catch-all sentinel) -- the
+    # drill-down modal reads from this, not the small global `examples` list.
+    examples_by_entity: Dict[str, List[PropagandaExample]] = Field(default_factory=dict)

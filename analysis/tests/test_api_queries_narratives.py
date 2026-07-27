@@ -108,6 +108,44 @@ class BotPushedFractionTests(unittest.TestCase):
         self.assertEqual(narratives._bot_pushed_fraction(shares), 0.5)
 
 
+class TierGroupTests(unittest.TestCase):
+    def test_news_source_type_is_news_regardless_of_tier(self):
+        self.assertEqual(narratives._tier_group("news", None), "news")
+        self.assertEqual(narratives._tier_group("news", "elected_official"), "news")
+
+    def test_elected_official_tier_is_officials(self):
+        self.assertEqual(narratives._tier_group("x_post", "elected_official"), "officials")
+
+    def test_affiliated_tier_is_officials(self):
+        self.assertEqual(narratives._tier_group("x_post", "affiliated"), "officials")
+
+    def test_general_public_tier_is_public(self):
+        self.assertEqual(narratives._tier_group("x_post", "general_public"), "public")
+
+    def test_no_tier_falls_back_to_public(self):
+        # Unmatched X author (no author_profiles row) and every reddit doc
+        # both land here -- coarse "not news, not an official" bucket.
+        self.assertEqual(narratives._tier_group("x_post", None), "public")
+        self.assertEqual(narratives._tier_group("reddit_post", None), "public")
+
+
+class IsCrossTierTests(unittest.TestCase):
+    def test_single_tier_group_is_not_cross_tier(self):
+        rows = [("news", None), ("news", None)]
+        self.assertFalse(narratives._is_cross_tier(rows))
+
+    def test_news_and_officials_is_cross_tier(self):
+        rows = [("news", None), ("x_post", "elected_official")]
+        self.assertTrue(narratives._is_cross_tier(rows))
+
+    def test_officials_and_public_is_cross_tier(self):
+        rows = [("x_post", "elected_official"), ("reddit_post", None)]
+        self.assertTrue(narratives._is_cross_tier(rows))
+
+    def test_empty_rows_is_not_cross_tier(self):
+        self.assertFalse(narratives._is_cross_tier([]))
+
+
 class BuildLeanTests(unittest.TestCase):
     def test_no_row_omits_lean_entirely(self):
         # The binding rule this exists to enforce: a narrative with no
@@ -153,7 +191,8 @@ class GetNarrativesIntegrationTests(unittest.TestCase):
                 "analysis.narrative_docs, analysis.narratives, analysis.clustering_runs, "
                 "analysis.claims, analysis.propaganda_techniques, analysis.propaganda_results, "
                 "analysis.sentiment_results, analysis.author_bot_scores, analysis.runs, "
-                "corpus.author_profiles, corpus.documents, corpus.authors, corpus.entities CASCADE"
+                "corpus.author_profiles, corpus.news_articles, corpus.documents, "
+                "corpus.authors, corpus.entities, raw.articles, raw.pages CASCADE"
             )
 
     # -- seeding helpers --------------------------------------------------
@@ -305,6 +344,40 @@ class GetNarrativesIntegrationTests(unittest.TestCase):
         narrative_id = self._narrative(clustering_run_id, anchor_claim_id=claim_id)
         self._narrative_doc(narrative_id, doc_id)
         return narrative_id, doc_id
+
+    def _outlet_entity(self, key, blurb):
+        from analysis.src.common import db as dbmod
+        with dbmod.connection() as conn:
+            row = conn.execute(
+                "INSERT INTO corpus.entities (entity_key, kind, display_name, blurb) "
+                "VALUES (%s, 'outlet'::corpus.entity_kind, %s, %s) RETURNING entity_id",
+                (key, key, blurb),
+            ).fetchone()
+            return row["entity_id"]
+
+    def _news_doc_with_outlet(self, natural_key, outlet_entity_id, *, published_at=None):
+        """A news doc whose corpus.news_articles row resolves to
+        ``outlet_entity_id`` -- exercises the outlet_entity_id ->
+        EntityProfileModel path of first_seen_entity_profile."""
+        from analysis.src.common import db as dbmod
+        doc_id = self._doc(natural_key, source_type="news", published_at=published_at)
+        url_canon = f"https://example.com/{natural_key}"
+        with dbmod.connection() as conn:
+            conn.execute(
+                "INSERT INTO raw.pages (url_canon, url_raw, domain) VALUES (%s, %s, 'example.com')",
+                (url_canon, url_canon),
+            )
+            conn.execute(
+                "INSERT INTO raw.articles (url_canon, fetched_at, raw_hash, extraction_version) "
+                "VALUES (%s, now(), 'h'||repeat('0', 63), 'v1')",
+                (url_canon,),
+            )
+            conn.execute(
+                "INSERT INTO corpus.news_articles (doc_id, url_canon, domain, outlet_entity_id) "
+                "VALUES (%s, %s, 'example.com', %s)",
+                (doc_id, url_canon, outlet_entity_id),
+            )
+        return doc_id
 
     # -- tests --------------------------------------------------------------
 
@@ -474,6 +547,26 @@ class GetNarrativesIntegrationTests(unittest.TestCase):
         item = next(n for n in result["narratives"] if n["narrative_id"] == narrative_id)
         self.assertIsNone(item["first_seen_at"])
         self.assertIsNone(item["first_seen_doc_id"])
+
+    def test_first_seen_entity_profile_carries_blurb_for_outlet_first_seen_doc(self):
+        # Restoration contract: a narrative whose first-seen doc is an
+        # outlet-authored news article must surface that outlet's editorial
+        # profile (blurb included), not just the source_type/domain pair.
+        clustering_run_id = self._clustering_run()
+        outlet_entity_id = self._outlet_entity("example-outlet", "A test news outlet.")
+        doc_id = self._news_doc_with_outlet("outlet-doc-1", outlet_entity_id)
+        narrative_id = self._narrative(clustering_run_id, first_seen_doc_id=doc_id)
+        self._narrative_doc(narrative_id, doc_id)
+
+        result = narratives.get_narratives(start=None, end=None, limit=20, window_label="all")
+        item = next(n for n in result["narratives"] if n["narrative_id"] == narrative_id)
+        self.assertEqual(item["first_seen_source_type"], "news")
+        self.assertEqual(item["first_seen_tier_group"], "news")
+        self.assertIsNone(item["first_seen_author"])
+        profile = item["first_seen_entity_profile"]
+        self.assertIsNotNone(profile)
+        self.assertEqual(profile.blurb, "A test news outlet.")
+        self.assertFalse(item["cross_tier"])
 
     def test_mean_confidence_averages_all_member_docs_not_just_top_n(self):
         # Binding rule this exists to encode: mean_confidence must reflect

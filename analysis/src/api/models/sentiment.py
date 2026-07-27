@@ -7,9 +7,16 @@ stance aggregates. See queries/sentiment.py for the aggregation.
 
 from __future__ import annotations
 
-from typing import List, Literal, Optional
+from typing import Dict, List, Literal, Optional
 
-from analysis.src.api.models.common import CamelModel, LeanLabel, RangeMeta, SampleDocModel
+from analysis.src.api.models.common import (
+    CamelModel,
+    ClassificationSampleModel,
+    EntityProfileModel,
+    LeanLabel,
+    RangeMeta,
+    SampleDocModel,
+)
 
 
 class SentimentOverview(CamelModel):
@@ -132,6 +139,160 @@ class EntityStanceAggregate(CamelModel):
     samples: List[SampleDocModel]
 
 
+class EntityTopicCell(CamelModel):
+    """One topic-scoped EXPRESSED cell for an entity's own posts (this
+    entity's own sentiment label counts, grouped by the doc's dominant
+    target_mentions topic) -- volume-sorted, net withheld below
+    MIN_TARGET_SAMPLE_N."""
+
+    topic: str
+    net: Optional[float]
+    volume: int
+    low_sample: bool
+
+
+class EntityDailyTonePoint(CamelModel):
+    """One day of an entity's own-post net-tone series. Net withheld
+    below MIN_TARGET_SAMPLE_N."""
+
+    date: str
+    net: Optional[float]
+    volume: int
+    low_sample: bool
+
+
+class OutboundTargetCell(CamelModel):
+    """One "who this bucket talks about" row. ``kind`` is the resolved
+    target's corpus.entities.kind (official/collective/outlet/subreddit)
+    when entity_id resolved, 'collective' for a raw_target matched against
+    the GOP/DEM alias sets, 'raw' for a recurring unresolved free-text
+    target, 'other' for the pooled one-off/overflow bucket."""
+
+    label: str
+    entity_key: Optional[str]
+    kind: str
+    net: Optional[float]
+    volume: int
+    low_sample: bool
+
+
+class OutboundTargets(CamelModel):
+    """News/public-tier "who they're talking about" rollup -- the inverse
+    of received tone. Capped at MAX_OUTBOUND_TARGETS named rows plus an
+    'Other targets' overflow row."""
+
+    min_sample_n: int
+    volume: int
+    targets: List[OutboundTargetCell]
+
+
+class ReceivedTopicCell(CamelModel):
+    topic: str
+    net: Optional[float]
+    volume: int
+    low_sample: bool
+
+
+class ReceivedSpeakerTierCell(CamelModel):
+    """WHO is talking about the entity: news / officials / affiliated /
+    public, from the mentioning doc's own tier (source_type='news' ->
+    news; author_profiles.tier elected_official/affiliated -> officials/
+    affiliated; everything else -> public)."""
+
+    tier: Literal["news", "officials", "affiliated", "public"]
+    net: Optional[float]
+    volume: int
+    low_sample: bool
+
+
+class ReceivedNarrativeCell(CamelModel):
+    """Top narratives driving the mentions of an entity, by volume."""
+
+    narrative_id: int
+    name: str
+    net: Optional[float]
+    volume: int
+    low_sample: bool
+
+
+class ReceivedTone(CamelModel):
+    """How sampled posts talk ABOUT an entity (the reputational signal),
+    as opposed to an EntitySentimentItem's own positive/negative/neutral
+    counts, which score the entity's OWN posts."""
+
+    net: Optional[float]
+    volume: int
+    low_sample: bool
+    engagement_weighted_net: Optional[float]
+    by_topic: List[ReceivedTopicCell] = []
+    by_speaker_tier: List[ReceivedSpeakerTierCell] = []
+    by_narrative: List[ReceivedNarrativeCell] = []
+    samples: List[ClassificationSampleModel] = []
+
+
+class ExpressedAlignment(CamelModel):
+    """How an official's own posts score toward same-party vs cross-party
+    tracked targets (self-mentions excluded). Nets withheld below
+    MIN_TARGET_SAMPLE_N. Also reused for the panel-wide alignment
+    baseline (TargetToneMeta.baselines)."""
+
+    same_party_net: Optional[float]
+    same_party_volume: int
+    cross_party_net: Optional[float]
+    cross_party_volume: int
+
+
+class TargetToneMeta(CamelModel):
+    """Received-tone meta: the suppression threshold, resolution
+    coverage, bot-authored-mention exclusion count, party-collective
+    rollups, and the global same/cross-party alignment baseline."""
+
+    min_sample_n: int
+    resolved_mentions: int
+    unresolved_mentions: int
+    bot_excluded_mentions: int
+    collectives: Dict[str, ReceivedTone]
+    baselines: ExpressedAlignment
+
+
+class EntitySentimentItem(CamelModel):
+    """One per-entity card on the three-way (news/officials/public)
+    sentiment dashboard. positive/negative/neutral/volume/net_score are
+    the entity's OWN posts (MIXED folded into neutral); ``received`` is
+    the tone directed AT the entity (officials only; None elsewhere)."""
+
+    key: str
+    kind: str
+    entity_profile: EntityProfileModel
+    positive: int
+    negative: int
+    neutral: int
+    volume: int
+    net_score: Optional[float]
+    classification_samples: List[ClassificationSampleModel] = []
+    received: Optional[ReceivedTone] = None
+    expressed_alignment: Optional[ExpressedAlignment] = None
+    by_topic: List[EntityTopicCell] = []
+    outbound: Optional[OutboundTargets] = None
+    engagement_total: int = 0
+    daily_tone: List[EntityDailyTonePoint] = []
+
+
+class ToneTrendCell(CamelModel):
+    net: Optional[float]
+    volume: int
+
+
+class ToneTrendPoint(CamelModel):
+    """One day of the day-by-tier expressed net-tone series overlaying
+    the news/officials/public columns on one chart."""
+
+    date: str
+    news: ToneTrendCell
+    officials: ToneTrendCell
+    public: ToneTrendCell
+
+
 class SentimentPanelResponse(CamelModel):
     """Full GET /api/v1/sentiment payload. ``range`` is the honesty block:
     resolved bounds (a preset, 'all', or a custom from/to pair all land
@@ -151,3 +312,10 @@ class SentimentPanelResponse(CamelModel):
     entity_stances: List[EntityStanceAggregate]
     samples: List[SampleDocModel]
     disclaimer: str
+    by_news_outlet: List[EntitySentimentItem] = []
+    by_official: List[EntitySentimentItem] = []
+    by_general_public: List[EntitySentimentItem] = []
+    target_tone: Optional[TargetToneMeta] = None
+    tone_trend: List[ToneTrendPoint] = []
+    distribution_samples: Dict[str, List[ClassificationSampleModel]] = {}
+    day_samples: Dict[str, List[ClassificationSampleModel]] = {}

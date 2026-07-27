@@ -60,3 +60,17 @@ BOT_FLAGGED_SHARE_EXCLUSION = 0.5
 MIN_SAMPLED_AUTHOR_POSTS = 3
 MIN_SAMPLED_AUTHOR_FOLLOWERS = 1000
 MAX_SAMPLED_AUTHOR_CARDS = 12
+
+# Collective partisan-target alias sets, ported verbatim from
+# reporting/entity_registry.py's _GOP_TARGET_ALIASES / _DEM_TARGET_ALIASES.
+# Power the gop_collective/dem_collective received-tone rollups: a
+# target_mentions row's raw_target, lowercased, is matched against these
+# sets when it names the party rather than an individual official.
+GOP_TARGET_ALIASES = frozenset({
+    "gop", "republican party", "republicans", "republican", "rnc",
+    "house republicans", "senate republicans", "congressional republicans",
+})
+DEM_TARGET_ALIASES = frozenset({
+    "democratic party", "democrats", "democrat", "dems", "dnc",
+    "house democrats", "senate democrats", "congressional democrats",
+})
