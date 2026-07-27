@@ -1,17 +1,28 @@
 import type { LeanLabel as LeanLabelData } from '../../types';
-import { COLORS } from '../../theme';
+import { COLORS, leanClass } from '../../theme';
 import { formatPts } from '../../services/format';
 import { LeanLabel } from './LeanLabel';
+import { useEntityProfile } from '../../services/useEntityProfile';
 
 // --------------------------------------------------------------------------- //
-//  EntityProfileCard — Phase 10 adaptation.                                  //
+//  EntityProfileCard — Phase 10 adaptation, restyled with the pre-cutover    //
+//  card's lean-coded left border (`lean-${cls}` — see .entity-card.lean-*    //
+//  in index.css).                                                            //
 //                                                                             //
 //  The Phase 9 API no longer ships the rich registry bio (blurb, owner,      //
-//  founded, office, party, subreddit subscriber proxy) that the pre-redesign //
-//  EntityProfile carried — panels now hand back only display_name, kind, and //
-//  (where available) a LeanLabel. This card is the corresponding thin shape: //
-//  a monogram, the name, a LeanLabel chip when present, and the caller's     //
-//  stats row. The removed bio fields have no replacement in this phase.      //
+//  founded, office, party, subreddit subscriber proxy, or the key needed to  //
+//  resolve an outbound link/favicon) that the pre-redesign EntityProfile     //
+//  carried — panels now hand back only display_name, kind, and (where       //
+//  available) a LeanLabel. This card is the corresponding thin shape: a     //
+//  monogram, the name, a LeanLabel chip when present, and the caller's       //
+//  stats row. The removed bio/link fields have no replacement in this       //
+//  phase (see docs/audit-trail — no source column carries them).            //
+//                                                                             //
+//  An optional `entityId` lazily hydrates the all-time GET                  //
+//  /entity-profile/{id} profile (via `useEntityProfile`, the same           //
+//  concurrency-capped cache pattern as PostCard's `useDocDetail`); when      //
+//  present, its activity span backs the "reads as" line whenever the        //
+//  caller didn't supply one directly.                                       //
 // --------------------------------------------------------------------------- //
 
 /** The minimal per-entity identity every panel can supply. `kind` is
@@ -37,6 +48,11 @@ interface EntityProfileCardProps {
     entity: EntityLike;
     stats: EntityStat[];
     readsAs?: string;
+    /** Optional registry entity id — when supplied, lazily hydrates
+     *  GET /entity-profile/{id} to back the "reads as" line when the
+     *  caller didn't supply one directly. Additive: omit to keep the
+     *  card's current behavior unchanged. */
+    entityId?: number | null;
     onClick?: () => void;
     ariaLabel?: string;
     emptyNote?: string;
@@ -51,16 +67,30 @@ export function EntityAvatar({ entity }: { entity: EntityLike }) {
     return <span className="entity-avatar entity-avatar-mono" aria-hidden>{monogram}</span>;
 }
 
+/** "active 2026-05-01 to 2026-07-20" from the hydrated profile's activity
+ *  bounds, or null when either bound is missing (never fabricate a span
+ *  from a partial pair). */
+function activitySpanText(first: string | null, last: string | null): string | null {
+    if (!first || !last) return null;
+    const firstDate = first.slice(0, 10);
+    const lastDate = last.slice(0, 10);
+    return firstDate === lastDate ? `active ${firstDate}` : `active ${firstDate} to ${lastDate}`;
+}
+
 export function EntityProfileCard({
-    entity, stats, readsAs, onClick, ariaLabel,
+    entity, stats, readsAs, entityId, onClick, ariaLabel,
     emptyNote = 'Tracked — no coverage in this window yet.',
 }: EntityProfileCardProps) {
+    const { data: profile } = useEntityProfile(entityId ?? null);
     const hasStats = stats.length > 0;
     const emphasisStat = stats.find((s) => s.emphasis) ?? stats[0];
     const autoAria = emphasisStat
         ? `${entity.displayName}: ${emphasisStat.label} ${emphasisStat.value}. ${onClick ? 'Open details.' : ''}`
         : `${entity.displayName}: tracked, no coverage yet.`;
-    const className = `entity-card${hasStats ? '' : ' entity-card-empty'}`;
+    const lean = leanClass(entity.lean?.value);
+    const className = `entity-card lean-${lean}${hasStats ? '' : ' entity-card-empty'}`;
+    const resolvedReadsAs = readsAs
+        ?? (profile ? activitySpanText(profile.firstActivity, profile.lastActivity) ?? undefined : undefined);
 
     const content = (
         <>
@@ -103,7 +133,7 @@ export function EntityProfileCard({
                 <div className="entity-card-empty-note">{emptyNote}</div>
             )}
 
-            {readsAs && hasStats && <p className="entity-card-reads-as">Reads as: {readsAs}</p>}
+            {resolvedReadsAs && hasStats && <p className="entity-card-reads-as">Reads as: {resolvedReadsAs}</p>}
         </>
     );
 

@@ -6,16 +6,158 @@ import { COLORS } from '../../theme';
 import type { ReviewQueueItem } from '../../types';
 
 // --------------------------------------------------------------------------- //
-//  Phase 10 adaptation note: the pre-redesign per-task label pickers          //
-//  (sentiment/favorability/bot_detection-specific dropdowns reading           //
-//  model_output.label) assumed a shape the Phase 9 review contract doesn't    //
-//  guarantee -- `raw_response` is an opaque per-task JSON blob, and the       //
-//  verdict vocabulary changed to correct/incorrect/uncertain (see             //
-//  analysis/src/api/routers/review.py). This card renders raw_response as     //
-//  formatted JSON and asks for a free-text expected_label only when the       //
-//  reviewer marks a row golden -- honest given the task-shape is no longer    //
-//  known client-side, rather than guessing at per-task fields.                //
+//  Restores the pre-cutover per-task-type evidence rendering (the old        //
+//  `modelLabel`/label-options blocks) onto the current review contract.       //
+//  `raw_response` is typed as an opaque JSON blob (ReviewQueueItem in         //
+//  types.ts carries no per-task narrowing, and the queue endpoint's task     //
+//  filter -- see Review.tsx -- isn't threaded down to this card either), so   //
+//  the per-task block below is picked by DUCK-TYPING raw_response's shape    //
+//  rather than switching on a task name. Its actual shape still matches the  //
+//  LLM structured-output schemas in analysis/src/llm/schemas.py for the      //
+//  tasks that run through an LLM -- text (sentiment_label / evidence /       //
+//  sarcasm), targets (per-target stance), propaganda (techniques + score),   //
+//  bot (label / indicators), and claims (claim / confidence). `citations`    //
+//  and `account_tier` are deterministic, non-LLM tasks with no documented    //
+//  client-facing schema, so an unrecognized shape keeps the generic JSON     //
+//  fallback the Phase 10 rewrite introduced. The verdict vocabulary          //
+//  (correct/incorrect/uncertain) and golden-set flow are the CURRENT         //
+//  contract (see analysis/src/api/routers/review.py) -- restoring the old    //
+//  is_correct/human_label/human_confidence submission shape would not match  //
+//  the live API and is not restored.                                        //
 // --------------------------------------------------------------------------- //
+
+interface TargetStance {
+    target: string;
+    topic: string;
+    stance: string;
+    confidence: number;
+    evidence_spans?: string[];
+}
+
+interface PropagandaTechnique {
+    technique: string;
+    confidence: number;
+    evidence_span: string;
+}
+
+interface Claim {
+    claim: string;
+    confidence: number;
+    evidence_span: string;
+}
+
+/** Task-specific summary of `raw_response`, restoring the old card's model-
+ *  output block. Returns null for tasks with no documented client shape
+ *  (citations, account_tier) or a response that doesn't match any known
+ *  schema -- callers fall back to the generic JSON dump in that case. */
+function TaskOutput({ output }: { output: Record<string, any> }) {
+    if (typeof output.sentiment_label === 'string') {
+        const spans = (output.sentiment_evidence_spans ?? []) as string[];
+        return (
+            <>
+                <div className="flex items-baseline gap-3 mb-2">
+                    <span style={{ fontSize: 'var(--text-base)', fontWeight: 700 }}>{output.sentiment_label}</span>
+                    <span className="num" style={{ color: 'var(--neutral-500)' }}>
+                        confidence {typeof output.sentiment_confidence === 'number' ? output.sentiment_confidence.toFixed(2) : '—'}
+                    </span>
+                    {output.sarcasm_detected && <span className="badge badge-neutral">sarcasm flagged</span>}
+                </div>
+                {spans.length > 0 && <EvidenceLine spans={spans} />}
+            </>
+        );
+    }
+
+    if (Array.isArray(output.targets)) {
+        const targets = output.targets as TargetStance[];
+        return (
+            <ul style={{ margin: 0, paddingLeft: 'var(--space-5)', fontSize: 'var(--text-sm)' }}>
+                {targets.map((t, i) => (
+                    <li key={i} className="mb-1">
+                        about <strong>{t.target}</strong> ({t.topic}) · {t.stance}{' '}
+                        <span className="num" style={{ color: 'var(--neutral-500)' }}>({t.confidence.toFixed(2)})</span>
+                        {t.evidence_spans && t.evidence_spans.length > 0 && <EvidenceLine spans={t.evidence_spans} />}
+                    </li>
+                ))}
+            </ul>
+        );
+    }
+
+    if (Array.isArray(output.techniques)) {
+        const techniques = output.techniques as PropagandaTechnique[];
+        return (
+            <>
+                <div className="flex items-baseline gap-3 mb-2">
+                    <span className="num" style={{ color: 'var(--neutral-500)' }}>
+                        overall score {typeof output.overall_propaganda_score === 'number' ? output.overall_propaganda_score.toFixed(2) : '—'}
+                    </span>
+                </div>
+                {techniques.length === 0 ? (
+                    <p className="text-sm text-muted">No techniques flagged.</p>
+                ) : (
+                    <ul style={{ margin: 0, paddingLeft: 'var(--space-5)', fontSize: 'var(--text-sm)' }}>
+                        {techniques.map((t, i) => (
+                            <li key={i} className="mb-1">
+                                {t.technique} <span className="num" style={{ color: 'var(--neutral-500)' }}>({t.confidence.toFixed(2)})</span>
+                                {' — '}<em>"{t.evidence_span}"</em>
+                            </li>
+                        ))}
+                    </ul>
+                )}
+            </>
+        );
+    }
+
+    if (typeof output.label === 'string') {
+        const indicators = (output.indicators ?? []) as string[];
+        return (
+            <>
+                <div className="flex items-baseline gap-3 mb-2">
+                    <span style={{ fontSize: 'var(--text-base)', fontWeight: 700 }}>{output.label}</span>
+                    <span className="num" style={{ color: 'var(--neutral-500)' }}>
+                        confidence {typeof output.confidence === 'number' ? output.confidence.toFixed(2) : '—'}
+                    </span>
+                </div>
+                {indicators.length > 0 && (
+                    <ul style={{ margin: 0, paddingLeft: 'var(--space-5)', fontSize: 'var(--text-sm)' }}>
+                        {indicators.map((ind, i) => <li key={i}>{ind}</li>)}
+                    </ul>
+                )}
+            </>
+        );
+    }
+
+    if (Array.isArray(output.claims)) {
+        const claims = output.claims as Claim[];
+        return claims.length === 0 ? (
+            <p className="text-sm text-muted">No claims extracted.</p>
+        ) : (
+            <ul style={{ margin: 0, paddingLeft: 'var(--space-5)', fontSize: 'var(--text-sm)' }}>
+                {claims.map((c, i) => (
+                    <li key={i} className="mb-1">
+                        {c.claim} <span className="num" style={{ color: 'var(--neutral-500)' }}>({c.confidence.toFixed(2)})</span>
+                        {' — '}<em>"{c.evidence_span}"</em>
+                    </li>
+                ))}
+            </ul>
+        );
+    }
+
+    return (
+        <pre style={{ margin: 0, fontSize: 'var(--text-xs)', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
+            {JSON.stringify(output, null, 2)}
+        </pre>
+    );
+}
+
+function EvidenceLine({ spans }: { spans: string[] }) {
+    return (
+        <div className="text-xs" style={{ color: 'var(--neutral-600)' }}>
+            Evidence: {spans.map((e, i) => (
+                <span key={i} style={{ marginRight: 8, fontStyle: 'italic' }}>"{e}"</span>
+            ))}
+        </div>
+    );
+}
 
 interface ReviewItemCardProps {
     item: ReviewQueueItem;
@@ -108,9 +250,7 @@ export default function ReviewItemCard({ item, reviewerId, onSubmitted }: Review
                     Model output · {item.model_id} · v{item.prompt_version ?? '?'}
                     {' · confidence '}{item.confidence != null ? item.confidence.toFixed(2) : '—'}
                 </div>
-                <pre style={{ margin: 0, fontSize: 'var(--text-xs)', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
-                    {JSON.stringify(item.raw_response, null, 2)}
-                </pre>
+                <TaskOutput output={item.raw_response} />
             </div>
 
             <div className="flex flex-col gap-3">
