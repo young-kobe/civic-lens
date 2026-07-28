@@ -89,3 +89,24 @@ outbound targets and own-post buckets, rather than inventing a new shape.
 - Per-sampled-user derived lean on provenance cells (an `analysis
   .author_leans` join) stays deferred -- revisit if the flat "sampled X
   users" group proves too coarse for readers.
+
+## Follow-up: module split (2026-07-27)
+
+`analysis/src/api/queries/sentiment.py` had grown to ~1,300 lines and is
+now `analysis/src/api/queries/sentiment/`, a package with the same public
+surface (`get_sentiment_panel`, re-exported from `__init__.py`). Pure
+mechanical split, no behavior change: `sql.py` holds the SQL constants and
+their thin fetch helpers; `routing.py` holds the row-routing decisions
+(`_route_own_post`/`_route_outbound_bucket`/`_route_received_source`/
+`_speaker_tier_4way`/`_normalize_party`) plus the small counting/labeling
+primitives shared across the other modules; `received.py` holds
+received-tone accumulation, provenance, and expressed-alignment
+formatting; `outbound.py` holds the outbound-target rollup; `panel.py`
+holds the entry point, aggregation, entity-item formatting, own-post tier
+bucketing, and response assembly (kept as one file rather than splitting
+further into an `entities.py`, since the candidate split would have
+required either a real import cycle with `panel.py` or moving shared
+primitives out of it -- not worth the churn for a same-behavior
+refactor). Verified byte-identical against `sentiment_panel_basic.json`
+(sha256 `8a96d6a8...`) across a full gated test run; full suite 892
+passed, 0 failed, both gated and ungated.

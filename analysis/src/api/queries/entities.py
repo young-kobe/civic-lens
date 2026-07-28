@@ -40,7 +40,7 @@ from analysis.src.common.settings import get_settings
 
 ENTITY_POSTS_PAGE_SIZE = 20
 
-# NULL-safe bound predicate, same convention as queries/sentiment.py --
+# NULL-safe bound predicate, same convention as queries/sentiment/sql.py --
 # either side of (start, end) may be None (unbounded).
 _RANGE_PREDICATE = (
     "(%(start)s::timestamptz IS NULL OR d.published_at >= %(start)s) "
