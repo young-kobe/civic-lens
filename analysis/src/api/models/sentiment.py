@@ -2,7 +2,7 @@
 Response models for GET /api/v1/sentiment (Phase 9 strictly-live panel):
 net tone, intensity distribution, platform/topic/time-of-day/day-of-week
 splits, the news/officials/general-public tier split, and per-entity
-stance aggregates. See queries/sentiment.py for the aggregation.
+stance aggregates. See the queries/sentiment/ package for the aggregation.
 """
 
 from __future__ import annotations
