@@ -8,10 +8,9 @@ import {
 } from '../components/common';
 import type { ColumnSorter, LeanFilter, TickerItem } from '../components/common';
 import { PostCardList, sampleToPostCard } from '../components/common/PostCard';
-import { EntityAvatar, entityChipLabel, entityChipTitle, entityLeanClass } from '../components/common/EntityProfileCard';
 import type {
     ChartDataPoint, ClassificationSample, EntityPostRow, EntitySentimentItem, Filters,
-    ReceivedSourceCell, SentimentDistribution, SentimentPanelResponse, TopicSentiment,
+    SentimentDistribution, SentimentPanelResponse, TopicSentiment,
 } from '../types';
 import Sparkline from '../components/charts/Sparkline';
 import {
@@ -20,8 +19,7 @@ import {
 } from '../services/api';
 import { asOfTodayEyebrow, formatTimeWindow } from '../services/timeWindow';
 import { formatRefreshedAgo, pipelineRunTimestamp } from '../services/freshness';
-import { clampWidthPct, formatPct, formatPts, formatRelativeDate } from '../services/format';
-import { sourceGroupLabel, topGroupsByShare } from '../services/provenanceLabels';
+import { formatPct, formatPts, formatRelativeDate } from '../services/format';
 import { useFetch } from '../services/useFetch';
 import { COLORS } from '../theme';
 import {
@@ -30,6 +28,10 @@ import {
 } from '../services/topics';
 import { readHashParam, useDeepLinkParam, writeHashParam } from '../services/deepLink';
 import { OutletSignalsPanel } from './publicSentiment/OutletSignalsPanel';
+import { PartyTonePanel } from './publicSentiment/PartyTonePanel';
+import {
+    ReceivedProvenanceBlock, SPEAKER_TIER_LABELS, ToneBarRows,
+} from './publicSentiment/ReceivedToneBlocks';
 import { TopicTabBar } from './publicSentiment/TopicTabBar';
 import { ToneTrendPanel } from './publicSentiment/ToneTrendPanel';
 
@@ -676,59 +678,6 @@ function SentimentThreeWayGrid({
 //  Entity detail modal (sentiment page)                                        //
 // --------------------------------------------------------------------------- //
 
-const SPEAKER_TIER_LABELS: Record<string, string> = {
-    news: 'News outlets',
-    officials: 'Officials',
-    affiliated: 'Politically affiliated accounts',
-    public: 'General public',
-};
-
-// --------------------------------------------------------------------------- //
-//  Tone bar rows — the modal's received-tone breakdowns as dot-on-axis        //
-//  rows instead of bare tables, matching the divergence panel's visual        //
-//  language. Suppressed nets ("low sample") stay words, never numbers.        //
-// --------------------------------------------------------------------------- //
-
-interface ToneBarRow {
-    key: string | number;
-    label: string;
-    net: number | null;
-    volume: number;
-}
-
-function ToneBarRows({ rows }: { rows: ToneBarRow[] }) {
-    return (
-        <div className="tone-bar-rows">
-            {rows.map((row) => (
-                <div key={row.key} className="tone-bar-row" title={row.net != null
-                    ? `${row.label}: ${formatPts(row.net)} across ${row.volume} posts`
-                    : `${row.label}: only ${row.volume} post${row.volume === 1 ? '' : 's'} — too few to score reliably`}
-                >
-                    {/* title repeats the label so an ellipsized narrative/topic
-                        name is still readable on hover. */}
-                    <span className="tone-bar-row-label" title={row.label}>{row.label}</span>
-                    <span className="tone-bar-row-axis" aria-hidden>
-                        <span className="tone-bar-row-zero" />
-                        {row.net != null && (
-                            <span
-                                className="tone-bar-row-dot"
-                                style={{
-                                    left: `${((Math.max(-100, Math.min(100, row.net)) + 100) / 200) * 100}%`,
-                                    background: toneColor(row.net),
-                                }}
-                            />
-                        )}
-                    </span>
-                    <span className="tone-bar-row-value" style={row.net != null ? { color: toneColor(row.net) } : undefined}>
-                        {row.net != null ? formatPts(row.net) : 'low sample'}
-                    </span>
-                    <span className="tone-bar-row-n">{row.volume} post{row.volume === 1 ? '' : 's'}</span>
-                </div>
-            ))}
-        </div>
-    );
-}
-
 /** "1234567890" (unix seconds) → "3 days ago". Entity-posts pagination rows
  *  carry an ISO `publishedAt`, not the unix-seconds `formatRelativeDate`
  *  expects. */
@@ -790,114 +739,6 @@ function EntityPostRowList({ rows }: { rows: EntityPostRow[] }) {
             </p>
             {rows.map((r) => <EntityPostRowCard key={r.docId} row={r} />)}
         </div>
-    );
-}
-
-// --------------------------------------------------------------------------- //
-//  Received-tone provenance — "Where this tone comes from" (WHO the mentions //
-//  come from, at the source level: outlet/official/account/subreddit/x-user //
-//  x lean groups, plus up to 8 named sources). The inbound-edge counterpart  //
-//  to "Who they're talking about" below. Renders nothing when the backend   //
-//  attached no provenance cells — never a guessed breakdown.                //
-// --------------------------------------------------------------------------- //
-
-function ProvenanceGroupRow({ cell }: { cell: ReceivedSourceCell }) {
-    const label = sourceGroupLabel(cell.sourceClass, cell.lean);
-    const metaText = cell.net != null
-        ? `${cell.volume.toLocaleString()} posts · ${formatPts(cell.net)}`
-        : `${cell.volume} post${cell.volume === 1 ? '' : 's'} · too few to score reliably`;
-    return (
-        <div
-            className="provenance-group-row"
-            title={`${label}: ${formatPct(cell.share * 100, { decimals: 0 })} of sampled mentions, ${metaText}`}
-        >
-            <span className="provenance-group-label">{label}</span>
-            <span className="provenance-group-share-track" aria-hidden>
-                <span
-                    className="provenance-group-share-fill"
-                    style={{ width: `${clampWidthPct(cell.share * 100)}%` }}
-                />
-            </span>
-            <span className="provenance-group-share-value">
-                {formatPct(cell.share * 100, { decimals: 0 })}
-            </span>
-            <span className="provenance-group-meta">{metaText}</span>
-        </div>
-    );
-}
-
-function ProvenanceTopRow({ cell }: { cell: ReceivedSourceCell }) {
-    const profile = cell.entityProfile;
-    const chipLabel = profile ? entityChipLabel(profile) : null;
-    const lean = profile ? entityLeanClass(profile) : 'neutral';
-    const name = profile ? profile.displayName : `@${cell.label}`;
-    const metaText = cell.net != null
-        ? `${formatPct(cell.share * 100, { decimals: 0 })} · ${cell.volume.toLocaleString()} posts · ${formatPts(cell.net)}`
-        : `${formatPct(cell.share * 100, { decimals: 0 })} · ${cell.volume} post${cell.volume === 1 ? '' : 's'} · too few to score reliably`;
-    return (
-        <div className="provenance-top-row">
-            <span className="provenance-top-identity">
-                {profile ? (
-                    <EntityAvatar profile={profile} />
-                ) : (
-                    <span className="entity-avatar entity-avatar-mono" aria-hidden>
-                        {(cell.label || '?').trim().charAt(0).toUpperCase()}
-                    </span>
-                )}
-                <span className="provenance-top-name">{name}</span>
-                {chipLabel && (
-                    <span className={`entity-card-chip lean-chip-${lean}`} title={entityChipTitle(profile!)}>
-                        {chipLabel}
-                    </span>
-                )}
-            </span>
-            <span className="provenance-top-meta">{metaText}</span>
-        </div>
-    );
-}
-
-function ReceivedProvenanceBlock({
-    displayName, groups, top,
-}: {
-    displayName: string;
-    groups: ReceivedSourceCell[];
-    top: ReceivedSourceCell[];
-}) {
-    if (groups.length === 0 && top.length === 0) return null;
-    const leadGroups = topGroupsByShare(groups, 2);
-    const lead = leadGroups.length > 0
-        ? `Most of the tone aimed at ${displayName} comes from `
-            + leadGroups
-                .map((g) => `${sourceGroupLabel(g.sourceClass, g.lean)} (${formatPct(g.share * 100, { decimals: 0 })})`)
-                .join(' and ')
-            + '.'
-        : null;
-
-    return (
-        <>
-            <h3 className="card-title mt-4 mb-2">Where this tone comes from</h3>
-            <p className="modal-section-lede">
-                {lead ?? 'WHO the mentions come from, at the source level — a sample breakdown, not a complete accounting.'}
-            </p>
-            {groups.length > 0 && (
-                <div className="provenance-groups">
-                    {groups.map((g, i) => (
-                        <ProvenanceGroupRow key={`${g.sourceClass}-${g.lean ?? 'none'}-${i}`} cell={g} />
-                    ))}
-                </div>
-            )}
-            {top.length > 0 && (
-                <div className="provenance-top-list" style={{ marginTop: 'var(--space-2)' }}>
-                    {top.map((cell, i) => (
-                        <ProvenanceTopRow key={cell.entityKey ?? `${cell.label}-${i}`} cell={cell} />
-                    ))}
-                </div>
-            )}
-            <p className="text-xs text-muted">
-                Share of sampled mentions in this window — not a complete accounting of who
-                talks about {displayName}.
-            </p>
-        </>
     );
 }
 
@@ -1659,6 +1500,12 @@ function PublicSentiment({ filters }: PublicSentimentProps) {
             </div>
             <div className="col-span-6">
                 <OutletSignalsPanel window={filters.timeRange} />
+            </div>
+
+            {/* Party-collective received tone -- posts that mention a party
+                alias ("the GOP", "Democrats") rather than a tracked official. */}
+            <div className="col-span-12">
+                <PartyTonePanel collectives={data.targetTone?.collectives} />
             </div>
 
             {/* Three-way grid: News / Officials / Public. */}

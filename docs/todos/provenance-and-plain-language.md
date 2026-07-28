@@ -34,14 +34,16 @@ Grouping axis is `corpus.entities.lean` (flat enum), never `lean_source`.
 - [ ] Owner eyeball + commit (Kobe runs all git)
 
 Follow-ups found during integration (2026-07-27), not built now:
-- [ ] Party-collective received-tone provenance has no UI surface yet.
+- [x] Party-collective received-tone provenance has no UI surface yet.
       `TargetToneMeta.collectives` (gop_collective/dem_collective) carries
       the same `receivedFromGroups`/`receivedFromTop` fields as an
       official's `received` block (backend emits it uniformly via
       `_format_received`), but `PublicSentiment.tsx` never renders
       `targetTone.collectives` at all -- this predates this wave. Needs its
       own panel, not a reuse of `ReceivedProvenanceBlock` as-is (no single
-      `EntitySentimentItem` to attach it to).
+      `EntitySentimentItem` to attach it to). Built as `PartyTonePanel`
+      (`ui/src/pages/publicSentiment/PartyTonePanel.tsx`); see
+      `docs/audit-trail/ui/2026-07-27-plain-language-and-provenance.md`.
 - [ ] `GlobalTicker`'s `TickerItem.label` is now `ReactNode` (widened for
       the plain-language pass) -- the Saturation ticker label on
       Propaganda/DataDesk could take a `DefinitionChip` the same way

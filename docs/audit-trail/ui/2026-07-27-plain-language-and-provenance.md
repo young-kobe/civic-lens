@@ -110,11 +110,25 @@ wording per call site.
 
 ## Follow-ups
 
-- Party-collective received-tone provenance has no UI surface --
-  `PublicSentiment.tsx` never renders `targetTone.collectives` at all
-  (predates this wave); `ReceivedProvenanceBlock` can't be reused as-is
-  since there's no `EntitySentimentItem` to attach it to. Tracked in
-  docs/todos/provenance-and-plain-language.md.
 - `GlobalTicker.TickerItem.label`'s widened `ReactNode` type is not yet
   used anywhere beyond what shipped -- the Propaganda/DataDesk Saturation
   ticker label is a candidate for a `DefinitionChip` if wanted.
+
+## Addendum (2026-07-27): party-collective panel
+
+`targetTone.collectives` (gop_collective/dem_collective) now has a UI
+surface: `PartyTonePanel` (`ui/src/pages/publicSentiment/PartyTonePanel.tsx`),
+placed on `PublicSentiment.tsx` below the tone-trend/source-signals row and
+above the three-way grid. Two side-by-side cards (stacking on mobile via
+the existing `.grid-2` rule) -- "Democratic Party" and "Republican Party"
+-- each render the collective's net tone (or "too few to score reliably"
+below the sample floor), volume, an engagement-weighted figure behind the
+existing `engagement_weighted` `DefinitionChip`, a speaker-tier and
+top-topic breakdown, and "Where this tone comes from" provenance. Sample
+posts, when present, sit behind a "Show sample posts" toggle using
+`PostCardList` with a `sampleNote`. The panel always renders, with an
+honest empty-state line when neither collective has volume in the window
+-- never a hidden panel. `ToneBarRows` and `ReceivedProvenanceBlock` moved
+out of `PublicSentiment.tsx` into a new `ReceivedToneBlocks.tsx` module so
+both the entity modal and this panel import the same code instead of the
+two page modules importing each other.
