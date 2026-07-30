@@ -127,13 +127,22 @@ class BucketByTierTests(unittest.TestCase):
         buckets = {b["group"]: b for b in propaganda._bucket_by_tier(rows)}
         self.assertEqual(buckets["officials"]["total_docs"], 1)
 
-    def test_affiliated_and_no_tier_both_bucket_as_public(self):
-        # Binding rule: the three-way split has no separate 'affiliated'
-        # column -- affiliated authors and entity-less docs both collapse
-        # into 'public' rather than being dropped.
-        rows = [self._row(tier="affiliated"), self._row(tier=None)]
+    def test_affiliated_tier_buckets_as_officials(self):
+        # OFFICIAL_AUTHOR_TIERS = ('elected_official', 'affiliated') --
+        # engine/account_tier.py assigns 'affiliated' only to authors
+        # resolved to a kind='official' entity (e.g. cabinet secretaries,
+        # agency heads), so it belongs in 'officials' alongside
+        # 'elected_official', not in 'public'.
+        rows = [self._row(tier="affiliated")]
         buckets = {b["group"]: b for b in propaganda._bucket_by_tier(rows)}
-        self.assertEqual(buckets["public"]["total_docs"], 2)
+        self.assertEqual(buckets["officials"]["total_docs"], 1)
+
+    def test_no_tier_buckets_as_public(self):
+        # An entity-less doc (no resolved author profile) has no tier at
+        # all -- it collapses into 'public' rather than being dropped.
+        rows = [self._row(tier=None)]
+        buckets = {b["group"]: b for b in propaganda._bucket_by_tier(rows)}
+        self.assertEqual(buckets["public"]["total_docs"], 1)
 
     def test_all_three_groups_present_even_at_zero_count(self):
         buckets = {b["group"] for b in propaganda._bucket_by_tier([])}
@@ -199,10 +208,11 @@ class ResolveTierAndKeyTests(unittest.TestCase):
         self.assertEqual(tier, "news_outlet")
         self.assertEqual(key, CATCH_ALL_OUTLETS)
 
-    def test_editorial_official_x_post_lands_in_officials_tier(self):
+    def test_official_x_post_lands_in_officials_tier(self):
         # kind == 'official' is the already-resolved ui-kind from
-        # profiles.py's _entity_ui_kind -- 'official' means editorial
-        # official or collective, per that module's mapping.
+        # profiles.py's _entity_ui_kind, which now maps kind='official'
+        # unconditionally (editorial is provenance, not routing -- see
+        # profiles.is_official_kind).
         profile = EntityProfileModel(
             kind="official", key="sen-x", display_name="Sen X", party="republican",
         )
@@ -211,9 +221,12 @@ class ResolveTierAndKeyTests(unittest.TestCase):
         )
         self.assertEqual(tier, "official")
 
-    def test_non_editorial_account_x_post_lands_in_general_public(self):
-        # A resolved-but-non-editorial account still gets its own card, just
-        # under general_public rather than official.
+    def test_non_official_x_post_lands_in_general_public(self):
+        # A resolved kind='account' entity still gets its own card, just
+        # under general_public rather than official. 'account' can no longer
+        # arise from a registry official (those are always kind='official'
+        # now) -- it is sampled_account_profile's kind for an unmatched X
+        # author.
         profile = EntityProfileModel(kind="account", key="acct-x", display_name="Acct X")
         tier, key, _resolved = propaganda._resolve_tier_and_key(
             self._row("x_post", author_entity_id=3), {3: profile},
@@ -312,10 +325,23 @@ class BuildExamplesByEntityTests(unittest.TestCase):
         result = propaganda._build_examples_by_entity(rows, [], {2: profile})
         self.assertEqual(len(result["sen-x"]), propaganda.EXAMPLES_PER_ENTITY)
 
-    def test_party_none_for_non_editorial_account(self):
+    def test_party_populated_for_promoted_non_editorial_official(self):
+        # A non-editorial (promoted) official's EntityProfileModel.kind is
+        # 'official' unconditionally now (profiles.py's _entity_ui_kind
+        # cares about kind alone) -- its party surfaces in the example
+        # exactly like an editorial official's.
+        profile = EntityProfileModel(
+            kind="official", key="promoted-x", display_name="Promoted X", party="democrat",
+        )
+        rows = [self._row(1, 10, density=0.5, author_entity_id=3)]
+        result = propaganda._build_examples_by_entity(rows, [], {3: profile})
+        self.assertEqual(result["promoted-x"][0]["party"], "democrat")
+
+    def test_party_none_for_non_official_kind(self):
         # Binding rule: an example's own party field is populated only for
-        # the editorial 'official' ui-kind, even though a non-editorial
-        # account's EntityProfileModel may itself carry a party value.
+        # the 'official' ui-kind -- an 'account' profile (a sampled,
+        # non-registry author) never surfaces a party even if the model
+        # instance happens to carry one.
         profile = EntityProfileModel(
             kind="account", key="acct-x", display_name="Acct X", party="democrat",
         )

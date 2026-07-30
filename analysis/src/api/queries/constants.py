@@ -42,6 +42,13 @@ MAX_SAMPLES_PER_TARGET = 5
 # reporting/aggregators/sentiment/target_tone.py.
 MIN_TARGET_SAMPLE_N = 5
 
+# corpus.author_profiles.tier values assigned only to authors resolved to a
+# kind='official' corpus.entities row (see engine/account_tier.py::_tier_for,
+# which derives 'elected_official'/'affiliated' exclusively from entities
+# already restricted to kind='official' in SQL). The tier-only equivalent of
+# profiles.py::is_official_kind for contexts with no entity kind on the row.
+OFFICIAL_AUTHOR_TIERS = ("elected_official", "affiliated")
+
 # Author-level bot-exclusion gate (owner decision 2026-07-25, replacing the
 # retired BOT_SCORE_AUTHOR_EXCLUSION -- see
 # docs/audit-trail/analysis/2026-07-25-bot-exclusion-gate.md). Label-driven,

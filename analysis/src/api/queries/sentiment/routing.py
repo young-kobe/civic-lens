@@ -12,8 +12,13 @@ from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 from analysis.src.api.models.common import LeanLabel
 from analysis.src.api.queries.base import build_classification_sample
-from analysis.src.api.queries.constants import MIN_TARGET_SAMPLE_N, SNIPPET_MAX_CHARS
-from analysis.src.api.queries.profiles import CATCH_ALL_OUTLETS, CATCH_ALL_SUBREDDITS, CATCH_ALL_X_USERS
+from analysis.src.api.queries.constants import MIN_TARGET_SAMPLE_N, OFFICIAL_AUTHOR_TIERS, SNIPPET_MAX_CHARS
+from analysis.src.api.queries.profiles import (
+    CATCH_ALL_OUTLETS,
+    CATCH_ALL_SUBREDDITS,
+    CATCH_ALL_X_USERS,
+    is_official_kind,
+)
 
 DAY_OF_WEEK_LABELS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 
@@ -80,7 +85,7 @@ def _day_of_week(dt: datetime) -> str:
 def _tier_for_row(source_type: str, author_tier: Optional[str]) -> str:
     if source_type == "news":
         return "news"
-    if source_type == "x_post" and author_tier == "elected_official":
+    if source_type == "x_post" and author_tier in OFFICIAL_AUTHOR_TIERS:
         return "officials"
     return "general_public"
 
@@ -134,7 +139,7 @@ def _route_own_post(row: Mapping[str, Any]) -> Optional[Tuple[str, Tuple[str, An
     if source_type == "x_post":
         author_entity_id = row["author_entity_id"]
         if author_entity_id is not None:
-            if row["author_entity_kind"] == "official" and row["author_entity_editorial"]:
+            if is_official_kind(row["author_entity_kind"]):
                 return "officials", ("entity", author_entity_id)
             return "public", ("entity", author_entity_id)
         handle = row.get("x_handle")
@@ -198,10 +203,7 @@ def _route_received_source(row: Mapping[str, Any]) -> Tuple[str, Any, Optional[s
     if source_type == "x_post":
         author_entity_id = row["author_entity_id"]
         if author_entity_id is not None:
-            source_class = (
-                "official" if row["author_entity_kind"] == "official" and row["author_entity_editorial"]
-                else "account"
-            )
+            source_class = "official" if is_official_kind(row["author_entity_kind"]) else "account"
             return source_class, author_entity_id, row["author_entity_lean"]
         handle = row.get("x_handle")
         if handle:
@@ -214,7 +216,9 @@ def _speaker_tier_4way(row: Mapping[str, Any]) -> str:
     """WHO authored the mention: news / officials / affiliated / public --
     a finer vocabulary than the panel-level 3-way _tier_for_row, needed so
     received tone can separate 'officials talking about X' from 'curated
-    affiliated accounts talking about X'."""
+    affiliated accounts talking about X'. Deliberately does NOT collapse
+    onto OFFICIAL_AUTHOR_TIERS: it subdivides that canonical set into its
+    two constituent tiers rather than routing them together."""
     if row["source_type"] == "news":
         return "news"
     tier = row["author_tier"]

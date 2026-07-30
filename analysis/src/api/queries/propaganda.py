@@ -14,7 +14,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Mapping, Optional, Sequence
 
 from analysis.src.api.queries.base import build_sample_doc, split_admission_counts
-from analysis.src.api.queries.constants import BOT_FLAGGED_SHARE_EXCLUSION, SNIPPET_MAX_CHARS
+from analysis.src.api.queries.constants import BOT_FLAGGED_SHARE_EXCLUSION, OFFICIAL_AUTHOR_TIERS, SNIPPET_MAX_CHARS
 from analysis.src.api.queries.profiles import (
     CATCH_ALL_OUTLETS,
     CATCH_ALL_SUBREDDITS,
@@ -197,18 +197,19 @@ def _bucket_by_party(rows: Sequence[Mapping[str, Any]]) -> List[Dict[str, Any]]:
 def _bucket_by_tier(rows: Sequence[Mapping[str, Any]]) -> List[Dict[str, Any]]:
     """News/Officials/Public three-way split (the ThreeWayGrid tiers):
     'news' is source_type='news'; 'officials' is an author whose
-    author_profiles.tier='elected_official'; every other doc (affiliated/
-    general_public authors, and docs with no resolved author profile)
-    buckets as 'public' -- every eligible doc lands in exactly one of the
-    three groups, matching by_party's 'unknown' convention of accounting
-    for every row rather than dropping unmatched ones."""
+    author_profiles.tier is in OFFICIAL_AUTHOR_TIERS (elected_official or
+    affiliated); every other doc (general_public authors, and docs with no
+    resolved author profile) buckets as 'public' -- every eligible doc
+    lands in exactly one of the three groups, matching by_party's
+    'unknown' convention of accounting for every row rather than dropping
+    unmatched ones."""
     buckets: Dict[str, Dict[str, Any]] = {
         group: {"total": 0, "flagged": 0, "score_sum": 0.0} for group in ("news", "officials", "public")
     }
     for row in rows:
         if row["source_type"] == "news":
             group = "news"
-        elif row["tier"] == "elected_official":
+        elif row["tier"] in OFFICIAL_AUTHOR_TIERS:
             group = "officials"
         else:
             group = "public"
@@ -244,13 +245,13 @@ def _resolve_tier_and_key(
       * source_type='reddit_post' -> corpus.reddit_posts.subreddit_entity_id
         (always general_public -- a subreddit is never an official), else
         the 'other-subreddits' catch-all.
-      * source_type='x_post' -> corpus.author_profiles.entity_id. Only an
-        editorial official/collective (EntityProfileModel.kind == 'official',
-        the ui-kind already resolved by profiles.py's _entity_ui_kind) lands
-        in the officials tier; a resolved but non-editorial 'account' entity
-        still gets its own general_public card rather than folding into the
-        catch-all. An unresolved x_post falls to the 'other-x-users'
-        catch-all.
+      * source_type='x_post' -> corpus.author_profiles.entity_id. An
+        official/collective (EntityProfileModel.kind == 'official', the
+        ui-kind already resolved by profiles.py's _entity_ui_kind per its
+        is_official_kind predicate) lands in the officials tier; any other
+        resolved entity still gets its own general_public card rather than
+        folding into the catch-all. An unresolved x_post falls to the
+        'other-x-users' catch-all.
 
     Every row lands in exactly one (tier, key) -- there is no dropped/
     unclassified case, matching by_tier's accounting convention."""

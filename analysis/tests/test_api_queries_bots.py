@@ -142,12 +142,22 @@ class RouteEntityBucketTests(unittest.TestCase):
         )
         self.assertEqual((bucket, slot_key, kind, entity_id), ("officials", 42, "official", 42))
 
-    def test_non_editorial_account_routes_to_general_public(self):
+    def test_non_editorial_official_still_routes_to_officials(self):
+        # kind='official' is the sole routing input (profiles.is_official_kind)
+        # -- editorial is provenance only, so a non-editorial kind='official'
+        # entity lands in 'officials' exactly like an editorial one.
         author_entities = {1: {"entity_id": 43, "kind": "official", "editorial": False}}
         bucket, slot_key, kind, entity_id = bots._route_entity_bucket(
             self._row("x_post", author_id=1), author_entities, {},
         )
-        self.assertEqual((bucket, slot_key, kind, entity_id), ("general_public", 43, "account", 43))
+        self.assertEqual((bucket, slot_key, kind, entity_id), ("officials", 43, "official", 43))
+
+    def test_non_official_kind_routes_to_general_public(self):
+        author_entities = {1: {"entity_id": 44, "kind": "collective", "editorial": False}}
+        bucket, slot_key, kind, entity_id = bots._route_entity_bucket(
+            self._row("x_post", author_id=1), author_entities, {},
+        )
+        self.assertEqual((bucket, slot_key, kind, entity_id), ("general_public", 44, "account", 44))
 
     def test_subreddit_match_routes_to_general_public(self):
         subreddit_entities = {7: {"entity_id": 99, "entity_key": "r-politics"}}
@@ -707,13 +717,18 @@ class GetBotActivityIntegrationTests(unittest.TestCase):
         self.assertIn("Zero followers following listed", item.samples[0].indicators)
         self.assertEqual(item.samples[0].reasoning, "templated phrasing")
 
-    def test_non_editorial_account_and_subreddit_land_in_general_public(self):
-        account_entity = self._entity("known-account", editorial=False)
-        account_author = self._author("known-account-handle")
-        self._author_profile(account_author, account_entity)
-        account_doc = self._doc("account-doc", author_id=account_author, source_type="x_post")
-        run_a = self._run("bot", account_doc)
-        self._bot_signals(run_a, account_doc, "bot")
+    def test_non_editorial_official_lands_in_officials_not_general_public(self):
+        # kind='official', editorial=False -- is_official_kind cares about
+        # kind alone, so this still lands in by_official (mirrors the
+        # pure-core RouteEntityBucketTests.test_non_editorial_official_
+        # still_routes_to_officials case). The subreddit stays general_public
+        # regardless -- a subreddit is never an official.
+        official_entity = self._entity("known-official", editorial=False)
+        official_author = self._author("known-official-handle")
+        self._author_profile(official_author, official_entity)
+        official_doc = self._doc("official-doc-2", author_id=official_author, source_type="x_post")
+        run_a = self._run("bot", official_doc)
+        self._bot_signals(run_a, official_doc, "bot")
 
         subreddit_entity = self._entity("r-testpolitics", kind="subreddit")
         reddit_doc = self._doc(
@@ -724,12 +739,14 @@ class GetBotActivityIntegrationTests(unittest.TestCase):
         self._bot_signals(run_b, reddit_doc, "bot")
 
         result = bots.get_bot_activity(start=None, end=None, window_label="all")
+        official_keys = {item.key: item for item in result.by_official}
+        self.assertIn("known-official", official_keys)
+        self.assertEqual(official_keys["known-official"].kind, "official")
+
         gp_keys = {item.key: item for item in result.by_general_public}
-        self.assertIn("known-account", gp_keys)
-        self.assertEqual(gp_keys["known-account"].kind, "account")
         self.assertIn("r-testpolitics", gp_keys)
         self.assertEqual(gp_keys["r-testpolitics"].kind, "subreddit")
-        self.assertEqual([i.key for i in result.by_official], [])
+        self.assertNotIn("known-official", gp_keys)
 
     def test_unmatched_x_post_folds_into_general_public_catch_all(self):
         from analysis.src.api.queries import profiles

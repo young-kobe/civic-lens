@@ -5,9 +5,10 @@ restoration (docs/audit-trail/api/2026-07-27-entity-profile-restoration.md).
 Two tiers, matching the repo's established convention:
 
   1. Pure-core tests (no DB) -- `_map_entity_row`'s vocabulary mapping:
-     editorial/non-editorial official, collective, outlet, subreddit, and
-     the source_citation name trap (lean_source vs bio_source landing on
-     the right model field depending on kind).
+     official, collective, outlet, subreddit, and the source_citation name
+     trap (lean_source vs bio_source landing on the right model field
+     depending on kind). `editorial` is provenance only (see
+     profiles.is_official_kind) -- it plays no role in this mapping.
   2. An integration test gated on CIVIC_TEST_DATABASE_URL: applies
      migrations through 0007, asserts a known outlet's founded/
      circulation_note backfill landed, and that `fetch_entity_profiles`
@@ -33,7 +34,6 @@ def _row(**overrides):
         "entity_id": 1,
         "entity_key": "test-key",
         "kind": "official",
-        "editorial": True,
         "display_name": "Test Entity",
         "blurb": "A blurb.",
         "role_title": None,
@@ -50,38 +50,47 @@ def _row(**overrides):
     return base
 
 
+class IsOfficialKindTests(unittest.TestCase):
+    """is_official_kind is THE canonical predicate this whole workstream
+    unifies the API query layer around -- kind=='official' alone, matching
+    etl/documents.py's official_record admission."""
+
+    def test_official_kind_is_official(self):
+        self.assertTrue(profiles.is_official_kind("official"))
+
+    def test_other_kinds_are_not_official(self):
+        for kind in ("collective", "outlet", "subreddit"):
+            self.assertFalse(profiles.is_official_kind(kind))
+
+
 class EntityUiKindTests(unittest.TestCase):
-    def test_editorial_official_maps_to_official(self):
-        self.assertEqual(profiles._entity_ui_kind("official", True), "official")
+    def test_official_maps_to_official(self):
+        # No editorial parameter: kind alone decides (is_official_kind).
+        self.assertEqual(profiles._entity_ui_kind("official"), "official")
 
-    def test_non_editorial_official_maps_to_account(self):
-        self.assertEqual(profiles._entity_ui_kind("official", False), "account")
-
-    def test_collective_maps_to_official_regardless_of_editorial(self):
-        self.assertEqual(profiles._entity_ui_kind("collective", True), "official")
-        self.assertEqual(profiles._entity_ui_kind("collective", False), "official")
+    def test_collective_maps_to_official(self):
+        self.assertEqual(profiles._entity_ui_kind("collective"), "official")
 
     def test_outlet_and_subreddit_pass_through(self):
-        self.assertEqual(profiles._entity_ui_kind("outlet", True), "outlet")
-        self.assertEqual(profiles._entity_ui_kind("subreddit", True), "subreddit")
+        self.assertEqual(profiles._entity_ui_kind("outlet"), "outlet")
+        self.assertEqual(profiles._entity_ui_kind("subreddit"), "subreddit")
 
 
 class MapEntityRowTests(unittest.TestCase):
-    def test_editorial_official_kind(self):
-        model = profiles._map_entity_row(_row(kind="official", editorial=True))
+    def test_official_kind(self):
+        # kind='official' is the sole routing input (row carries no
+        # editorial field) -- an "Official record" badge can never render
+        # for a public-column account by mistake.
+        model = profiles._map_entity_row(_row(kind="official"))
         self.assertEqual(model.kind, "official")
 
-    def test_non_editorial_official_kind(self):
-        model = profiles._map_entity_row(_row(kind="official", editorial=False))
-        self.assertEqual(model.kind, "account")
-
     def test_collective_kind(self):
-        model = profiles._map_entity_row(_row(kind="collective", editorial=False))
+        model = profiles._map_entity_row(_row(kind="collective"))
         self.assertEqual(model.kind, "official")
 
     def test_outlet_lean_and_citation_mapping(self):
         row = _row(
-            kind="outlet", editorial=True, entity_key="nytimes.com",
+            kind="outlet", entity_key="nytimes.com",
             lean_source="center-left", source_citation="AllSides 2024 (Lean Left)",
         )
         model = profiles._map_entity_row(row)
@@ -97,7 +106,7 @@ class MapEntityRowTests(unittest.TestCase):
 
     def test_subreddit_lean_and_citation_mapping(self):
         row = _row(
-            kind="subreddit", editorial=True, entity_key="politics",
+            kind="subreddit", entity_key="politics",
             lean_source="left", source_citation="Community sidebar",
         )
         model = profiles._map_entity_row(row)
@@ -108,7 +117,7 @@ class MapEntityRowTests(unittest.TestCase):
 
     def test_official_party_and_bio_source_mapping(self):
         row = _row(
-            kind="official", editorial=True, entity_key="potus",
+            kind="official", entity_key="potus",
             lean_source="R", source_citation="whitehouse.gov/administration",
             role_title="President",
         )
@@ -124,7 +133,7 @@ class MapEntityRowTests(unittest.TestCase):
 
     def test_collective_party_and_bio_source_mapping(self):
         row = _row(
-            kind="collective", editorial=True, entity_key="thedemocrats",
+            kind="collective", entity_key="thedemocrats",
             lean_source="D", source_citation="Party platform",
         )
         model = profiles._map_entity_row(row)
@@ -132,17 +141,17 @@ class MapEntityRowTests(unittest.TestCase):
         self.assertEqual(model.bio_source, "Party platform")
 
     def test_term_start_formatted_as_iso_date_string(self):
-        row = _row(kind="official", editorial=True, term_start=date(2023, 1, 3))
+        row = _row(kind="official", term_start=date(2023, 1, 3))
         model = profiles._map_entity_row(row)
         self.assertEqual(model.term_start, "2023-01-03")
 
     def test_term_start_none_stays_none(self):
-        model = profiles._map_entity_row(_row(kind="official", editorial=True))
+        model = profiles._map_entity_row(_row(kind="official"))
         self.assertIsNone(model.term_start)
 
     def test_restored_columns_pass_through_as_is(self):
         row = _row(
-            kind="outlet", editorial=True, founded=1851, circulation_note="~10M (proxy)",
+            kind="outlet", founded=1851, circulation_note="~10M (proxy)",
         )
         model = profiles._map_entity_row(row)
         self.assertEqual(model.founded, 1851)
