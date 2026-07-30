@@ -1358,81 +1358,177 @@ code, pre {
    All row-based for density; share the Overall-Tone top-metrics layout.
    ============================================ */
 
-/* Technique explorer — a full-width bar graphic; each row opens a modal of
-   that technique's flagged posts (evidence highlighted inline). */
-.technique-explorer-list {
+/* Technique chips — legend + filter for the density constellation. A chip
+   is a technique's name, flagged-post count, and share of flagged docs;
+   selecting one isolates its dots below and offers its evidence quotes. */
+.technique-chip-row {
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
+  gap: var(--space-2);
 }
 
-/* Compact single-line technique rows (2026-07-11): name · inline bar ·
-   count · pct. The old stacked layout (name/count → bar → italic blurb) made
-   the 6-item list tall and heavy; the blurb now rides a button `title`. */
-.technique-explorer-row {
-  display: grid;
-  grid-template-columns: minmax(90px, auto) minmax(36px, 1fr) auto auto;
-  align-items: center;
-  gap: var(--space-2);
-  width: 100%;
-  padding: 6px var(--space-2);
-  background: none;
-  border: none;
-  border-left: 3px solid transparent;
-  border-bottom: 1px solid var(--neutral-150);
+.technique-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 4px 10px;
+  background: var(--bg-card);
+  border: 1px solid var(--neutral-200);
   font: inherit;
-  color: inherit;
-  text-align: left;
+  font-size: var(--text-sm);
+  color: var(--neutral-800);
   cursor: pointer;
   transition: background var(--transition-fast), border-color var(--transition-fast);
 }
-.technique-explorer-list .technique-explorer-row:last-child { border-bottom: none; }
-.technique-explorer-row:hover { background: var(--bg-inset); }
-.technique-explorer-row:focus-visible {
+.technique-chip:hover { background: var(--bg-inset); }
+.technique-chip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.technique-chip-selected {
+  border-color: var(--neutral-800);
+  background: var(--bg-panel);
+}
+.technique-chip-zero { color: var(--neutral-400); }
+
+.technique-chip-label { font-weight: 600; }
+
+.technique-chip-count {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.technique-chip-pct {
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--neutral-500);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* Blurb + evidence-quotes affordance under the chip row, shown only while
+   a chip is selected. */
+.technique-chip-detail {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+}
+
+.technique-evidence-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.technique-evidence-link:hover { color: var(--accent-hover); }
+
+/* Density constellation — deterministic beeswarm of the flagged-example
+   pool. Tier hues are the data legend; chrome stays monochrome. */
+.density-constellation { margin-top: var(--space-3); }
+
+.density-swarm-wrap { position: relative; }
+
+.density-swarm {
+  display: block;
+  width: 100%;
+}
+.density-swarm:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
 
-.technique-explorer-row-name {
-  font-size: var(--text-sm);
-  font-weight: 600;
-  color: var(--neutral-900);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.density-dot {
+  stroke: var(--bg-card);
+  stroke-width: 1;
+  cursor: pointer;
+}
+.density-dot-dim { opacity: 0.15; pointer-events: none; }
+.density-dot-active { stroke: var(--neutral-900); stroke-width: 1.5; }
+
+.density-overflow-note {
+  fill: var(--neutral-500);
+  font-family: var(--font-mono);
+  font-size: 9px;
 }
 
-.technique-explorer-row-count {
+.density-tooltip {
+  position: absolute;
+  top: 0;
+  right: 0;
+  max-width: 260px;
+}
+
+.density-tooltip-techniques {
+  font-size: 10px;
+  color: var(--neutral-600);
+  margin-top: 2px;
+}
+
+.density-tooltip-snippet {
+  font-size: 10px;
+  color: var(--neutral-500);
+  margin-top: 2px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.density-axis {
+  position: relative;
+  height: 14px;
+  border-top: 1px solid var(--chart-grid);
+}
+
+.density-axis-tick {
+  position: absolute;
+  transform: translateX(-50%);
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
-  font-size: var(--text-sm);
-  font-weight: 700;
-  color: var(--neutral-800);
-  text-align: right;
-  white-space: nowrap;
-}
-
-.technique-explorer-row-pct {
   font-size: 9px;
-  font-weight: 600;
   color: var(--neutral-500);
-  font-family: var(--font-family);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  white-space: nowrap;
-  min-width: 34px;
-  text-align: right;
 }
 
-.technique-explorer-row-bar {
-  height: 6px;
-  background: var(--neutral-100);
-  overflow: hidden;
+.density-axis-caption {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--neutral-500);
+  text-align: center;
 }
 
-.technique-explorer-row-fill {
-  display: block;
-  height: 100%;
-  background: var(--semantic-negative);
+.density-tier-legend {
+  display: flex;
+  justify-content: center;
+  gap: var(--space-4);
+  margin-top: var(--space-2);
+  font-size: 11px;
+  color: var(--neutral-600);
+}
+
+.density-tier-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.density-tier-legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.density-tier-legend-count {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
 }
 
 /* By-party propaganda rollup (Phase 4) — one labeled bar per party. The bar

@@ -492,18 +492,15 @@ function Propaganda({ filters }: PropagandaProps) {
                 </div>
 
                 {/* One row: the "As of last N days" top-metrics block beside the
-                    technique bar graphic. Both read from the same windowed
+                    density constellation. Both read from the same windowed
                     `data`, so they filter in step; pairing them condenses two
-                    full-width rows into one. Hover a technique bar for what it
-                    means, click to open its flagged posts. */}
+                    full-width rows into one. Technique chips filter the
+                    constellation and carry the ?technique= deep link. */}
                 <div className="col-span-5">
                     <TopFlaggedLeaderboard data={data} windowLabel={windowLabel} onOpen={setActiveEntity} />
                 </div>
                 <div className="col-span-7">
-                    <TechniqueExplorer
-                        techniques={data.byTechnique}
-                        parties={data.byParty ?? []}
-                    />
+                    <TechniqueExplorer data={data} />
                 </div>
 
                 {/* Always render the three-way frame, even when every tier is
