@@ -170,17 +170,17 @@ def _fetch_author_leans(conn, author_ids: Set[int]) -> Dict[int, Dict[str, Any]]
 
 
 def _fetch_author_entities(conn, author_ids: Set[int]) -> Dict[int, Dict[str, Any]]:
-    """`editorial` is carried alongside kind/entity_key/display_name so the
-    officials/general-public rollup (_route_entity_bucket) can tell an
-    editorial official (its own 'officials' card) from a non-editorial
-    officials-list account (folds into 'general_public' as an 'account'
-    card) -- by_entity (EntityBotRate) ignores the flag and keeps its
-    existing every-registry-entity behavior."""
+    """kind is carried alongside entity_key/display_name so the
+    officials/general-public rollup (_route_entity_bucket) can tell a
+    kind='official' entity (its own 'officials' card, see
+    profiles.is_official_kind) from any other registry entity (folds into
+    'general_public' as an 'account' card) -- by_entity (EntityBotRate)
+    ignores kind and keeps its existing every-registry-entity behavior."""
     if not author_ids:
         return {}
     sql = """
         SELECT ap.author_id, e.entity_id, e.entity_key, e.kind::text AS kind,
-               e.display_name, e.editorial
+               e.display_name
         FROM corpus.author_profiles ap
         JOIN corpus.entities e ON e.entity_id = ap.entity_id
         WHERE ap.author_id = ANY(%(author_ids)s) AND ap.entity_id IS NOT NULL
@@ -439,7 +439,7 @@ def _route_entity_bucket(
         return None
     author_id = row["author_id"]
     author_entity = author_entities.get(author_id) if author_id is not None else None
-    if author_entity is not None and author_entity["kind"] == "official" and author_entity["editorial"]:
+    if author_entity is not None and profiles.is_official_kind(author_entity["kind"]):
         return ("officials", author_entity["entity_id"], "official", author_entity["entity_id"])
     subreddit_entity = subreddit_entities.get(row["doc_id"])
     if subreddit_entity is not None:

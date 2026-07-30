@@ -21,6 +21,7 @@ from analysis.src.api.queries.base import (
 from analysis.src.api.queries.constants import (
     BOT_FLAGGED_SHARE_EXCLUSION,
     MAX_EVIDENCE_PER_SAMPLE,
+    OFFICIAL_AUTHOR_TIERS,
     SNIPPET_MAX_CHARS,
 )
 from analysis.src.api.queries.profiles import fetch_entity_profiles, sampled_account_profile
@@ -180,13 +181,15 @@ def _bot_pushed_fraction(flagged_shares: Sequence[Optional[float]]) -> Optional[
 
 def _tier_group(source_type: Optional[str], tier: Optional[str]) -> str:
     """Coarse three-way frame for one doc: 'news' for a news doc,
-    'officials' for an elected_official/affiliated author (corpus.
-    author_profiles.tier), else 'public' (reddit, unmatched/general-public
-    X authors). Ported from the old registry-based tiering (walkthrough
-    058) onto the PG author_profiles.tier column directly."""
+    'officials' for an author whose tier is in OFFICIAL_AUTHOR_TIERS (see
+    api/queries/constants.py -- the tier-only mirror of profiles.py's
+    canonical is_official_kind predicate), else 'public' (reddit,
+    unmatched/general-public X authors). Ported from the old registry-based
+    tiering (walkthrough 058) onto the PG author_profiles.tier column
+    directly."""
     if source_type == "news":
         return "news"
-    if tier in ("elected_official", "affiliated"):
+    if tier in OFFICIAL_AUTHOR_TIERS:
         return "officials"
     return "public"
 

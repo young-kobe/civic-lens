@@ -19,7 +19,7 @@ from analysis.src.api.models.sentiment import (
     ReceivedTopicCell,
 )
 from analysis.src.api.queries.constants import DEM_TARGET_ALIASES, GOP_TARGET_ALIASES, MAX_SAMPLES_PER_TARGET, MIN_TARGET_SAMPLE_N
-from analysis.src.api.queries.profiles import sampled_account_profile
+from analysis.src.api.queries.profiles import is_official_kind, sampled_account_profile
 from analysis.src.api.queries.sentiment.routing import (
     _STANCE_KEYS,
     _bump_stance_bucket,
@@ -105,14 +105,15 @@ def _accumulate_target_tone(
     target_rows: List[Any], narrative_map: Dict[int, List[Tuple[int, str]]],
 ) -> Tuple[Dict[int, Dict[str, Any]], Dict[str, Dict[str, Any]], Dict[int, Dict[str, Dict[str, int]]],
            Dict[str, Dict[str, int]], int, int]:
-    """One pass over target_rows building: received tone per editorial
-    official entity_id, the two party-collective received accumulators
-    (raw_target alias match), each official-speaker's same/cross-party
-    expressed_alignment cells, the global alignment baseline, and the
-    resolved/unresolved mention counts (resolved = entity_id IS NOT NULL,
-    the strict registry-resolution reading of the column -- collective
-    alias matches on an unresolved raw_target still count as unresolved
-    here, even though they get their own received-tone rollup below)."""
+    """One pass over target_rows building: received tone per official
+    entity_id (kind='official', see profiles.is_official_kind), the two
+    party-collective received accumulators (raw_target alias match), each
+    official-speaker's same/cross-party expressed_alignment cells, the
+    global alignment baseline, and the resolved/unresolved mention counts
+    (resolved = entity_id IS NOT NULL, the strict registry-resolution
+    reading of the column -- collective alias matches on an unresolved
+    raw_target still count as unresolved here, even though they get their
+    own received-tone rollup below)."""
     received: Dict[int, Dict[str, Any]] = {}
     collectives = {"gop_collective": _received_accum_default(), "dem_collective": _received_accum_default()}
     alignment: Dict[int, Dict[str, Dict[str, int]]] = {}
@@ -130,7 +131,7 @@ def _accumulate_target_tone(
         else:
             unresolved_mentions += 1
 
-        if entity_id is not None and row["kind"] == "official" and row["target_editorial"]:
+        if entity_id is not None and is_official_kind(row["kind"]):
             accum = received.setdefault(entity_id, _received_accum_default())
             _accumulate_received(accum, row, narrative_map)
         elif entity_id is None:
@@ -142,8 +143,8 @@ def _accumulate_target_tone(
 
         author_entity_id = row["author_entity_id"]
         if (
-            author_entity_id is not None and row["author_entity_kind"] == "official"
-            and row["author_entity_editorial"] and entity_id is not None and entity_id != author_entity_id
+            author_entity_id is not None and is_official_kind(row["author_entity_kind"])
+            and entity_id is not None and entity_id != author_entity_id
         ):
             speaker_party = _normalize_party(row["author_entity_lean_source"])
             target_party = _normalize_party(row["target_lean_source"])
@@ -239,11 +240,11 @@ def _format_received(
     accum: Dict[str, Any], rich_samples: Dict[int, dict], profiles: Dict[int, Any],
 ) -> ReceivedTone:
     """Assembles one ReceivedTone, including received_from_groups/_top
-    provenance. Applies uniformly to editorial officials' received blocks
-    AND the gop/dem collective rollups (both flow through
-    _accumulate_received) -- a collective's provenance denominator is
-    built from the same alias-matched-unresolved rows that feed its net
-    tone, not from an entity_id-resolved mention."""
+    provenance. Applies uniformly to officials' received blocks AND the
+    gop/dem collective rollups (both flow through _accumulate_received) --
+    a collective's provenance denominator is built from the same
+    alias-matched-unresolved rows that feed its net tone, not from an
+    entity_id-resolved mention."""
     counts = accum["counts"]
     volume = sum(counts.values())
     low_sample = volume < MIN_TARGET_SAMPLE_N

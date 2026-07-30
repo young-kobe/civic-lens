@@ -57,6 +57,7 @@ from analysis.src.api.queries.profiles import (
     CATCH_ALL_X_USERS,
     catch_all_profile,
     fetch_entity_profiles,
+    is_official_kind,
     sampled_account_profile,
 )
 from analysis.src.api.queries.sentiment.outbound import _attach_outbound
@@ -146,13 +147,13 @@ def get_sentiment_panel(
 
         buckets = _build_tier_buckets(rows, doc_topics)
         _consolidate_sampled_x_authors(buckets)
-        editorial_official_ids = {
+        official_ids = {
             row["entity_id"] for row in target_rows
-            if row["entity_id"] is not None and row["kind"] == "official" and row["target_editorial"]
+            if row["entity_id"] is not None and is_official_kind(row["kind"])
         }
         tier_entity_ids = {key[1] for key in buckets if key[0] == "entity"}
         source_entity_ids = _received_source_entity_ids(target_rows)
-        profiles = fetch_entity_profiles(conn, tier_entity_ids | editorial_official_ids | source_entity_ids)
+        profiles = fetch_entity_profiles(conn, tier_entity_ids | official_ids | source_entity_ids)
 
         received, collectives, alignment, baseline, resolved_mentions, unresolved_mentions = (
             _accumulate_target_tone(target_rows, narrative_map)
@@ -166,7 +167,7 @@ def get_sentiment_panel(
     entity_stances = _build_entity_stances(target_rows)
 
     tier_items, tier_lookup = _build_tier_items(buckets, profiles, rich_samples)
-    _attach_official_stubs(tier_items, tier_lookup, editorial_official_ids, profiles, received)
+    _attach_official_stubs(tier_items, tier_lookup, official_ids, profiles, received)
     _attach_received(tier_lookup, received, rich_samples, profiles)
     _attach_expressed_alignment(tier_lookup, alignment)
     _attach_outbound(tier_lookup, buckets, target_rows)
@@ -592,14 +593,14 @@ def _build_tier_items(
 def _attach_official_stubs(
     grouped: Dict[str, List[EntitySentimentItem]],
     lookup: Dict[Tuple[str, Tuple[str, Any]], EntitySentimentItem],
-    editorial_official_ids: set, profiles: Dict[int, Any], received: Dict[int, Dict[str, Any]],
+    official_ids: set, profiles: Dict[int, Any], received: Dict[int, Dict[str, Any]],
 ) -> None:
-    """An editorial official who never posted in the window but IS
-    discussed still needs a card -- received tone is exactly the metric
-    that exists without their participation. Skips officials with no
-    received evidence either (nothing to show)."""
+    """An official who never posted in the window but IS discussed still
+    needs a card -- received tone is exactly the metric that exists
+    without their participation. Skips officials with no received
+    evidence either (nothing to show)."""
     existing_ids = {k[1][1] for k in lookup if k[0] == "officials" and k[1][0] == "entity"}
-    for entity_id in editorial_official_ids - existing_ids:
+    for entity_id in official_ids - existing_ids:
         if entity_id not in received:
             continue
         profile = profiles[entity_id]

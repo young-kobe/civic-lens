@@ -9,7 +9,9 @@
       "volume": 1
     }
   ],
-  "byGeneralPublic": [
+  "byGeneralPublic": [],
+  "byNewsOutlet": [],
+  "byOfficial": [
     {
       "byTopic": [
         {
@@ -71,7 +73,7 @@
         "entityId": 1,
         "founded": null,
         "key": "sen-example",
-        "kind": "account",
+        "kind": "official",
         "lean": null,
         "leanSource": null,
         "office": null,
@@ -82,31 +84,115 @@
       },
       "expressedAlignment": null,
       "key": "sen-example",
-      "kind": "account",
+      "kind": "official",
       "negative": 0,
       "netScore": 100.0,
       "neutral": 0,
-      "outbound": {
-        "minSampleN": 5,
-        "targets": [
+      "outbound": null,
+      "positive": 1,
+      "received": {
+        "byNarrative": [],
+        "bySpeakerTier": [
           {
-            "entityKey": "sen-example",
-            "kind": "official",
-            "label": "Sen. Example",
             "lowSample": true,
             "net": null,
+            "tier": "officials",
             "volume": 1
+          }
+        ],
+        "byTopic": [
+          {
+            "lowSample": true,
+            "net": null,
+            "topic": "General",
+            "volume": 1
+          }
+        ],
+        "engagementWeightedNet": null,
+        "lowSample": true,
+        "net": null,
+        "receivedFromGroups": [
+          {
+            "entityKey": null,
+            "entityProfile": null,
+            "label": "republican officials",
+            "lean": "republican",
+            "lowSample": true,
+            "net": null,
+            "share": 1.0,
+            "sourceClass": "official",
+            "volume": 1
+          }
+        ],
+        "receivedFromTop": [
+          {
+            "entityKey": "sen-example",
+            "entityProfile": {
+              "accountType": null,
+              "bioSource": null,
+              "blurb": "",
+              "circulationNote": null,
+              "displayName": "Sen. Example",
+              "entityId": 1,
+              "founded": null,
+              "key": "sen-example",
+              "kind": "official",
+              "lean": null,
+              "leanSource": null,
+              "office": null,
+              "owner": null,
+              "party": null,
+              "subscriberCountProxy": null,
+              "termStart": null
+            },
+            "label": "Sen. Example",
+            "lean": "republican",
+            "lowSample": true,
+            "net": null,
+            "share": 1.0,
+            "sourceClass": "official",
+            "volume": 1
+          }
+        ],
+        "samples": [
+          {
+            "author": {
+              "accountCreatedAt": null,
+              "avatarUrl": null,
+              "bio": null,
+              "displayName": null,
+              "followersCount": null,
+              "handle": "senexample",
+              "verifiedType": null
+            },
+            "confidence": 0.9,
+            "date": "2026-06-01T14:00:00+00:00",
+            "docId": 1,
+            "engagement": null,
+            "evidenceSpans": [],
+            "fullText": "body",
+            "label": "positive",
+            "narrative": null,
+            "reasoning": null,
+            "sarcasmDetected": null,
+            "sourceName": "senexample",
+            "sourceType": "x_post",
+            "targets": [
+              {
+                "label": "Sen. Example",
+                "stance": "positive"
+              }
+            ],
+            "title": "A tariff plan",
+            "topic": null,
+            "url": "https://example.com/tweet-1"
           }
         ],
         "volume": 1
       },
-      "positive": 1,
-      "received": null,
       "volume": 1
     }
   ],
-  "byNewsOutlet": [],
-  "byOfficial": [],
   "byPlatform": [
     {
       "negative": 0,

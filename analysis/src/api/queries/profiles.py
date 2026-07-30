@@ -14,7 +14,7 @@ from typing import Any, Dict, Iterable, Mapping, Optional
 from analysis.src.api.models.common import EntityProfileModel
 
 # --------------------------------------------------------------------------- #
-#  Vocabulary mapping: corpus.entities.kind (+ editorial) -> old UI kind      #
+#  Vocabulary mapping: corpus.entities.kind -> old UI kind                    #
 # --------------------------------------------------------------------------- #
 
 _LEAN_BEARING_KINDS = ("outlet", "subreddit")
@@ -48,13 +48,22 @@ _CATCH_ALL_PROFILES = {
 _SAMPLED_BIO_MAX_CHARS = 140
 
 
-def _entity_ui_kind(kind: str, editorial: bool) -> str:
-    """corpus.entities (kind, editorial) -> the old UI's five-way kind
-    vocabulary. editorial official -> 'official'; non-editorial official
-    (promoted from known_political_x_accounts.yaml) -> 'account'; every
+def is_official_kind(kind: str) -> bool:
+    """THE canonical "is this entity an official" predicate for the API
+    query layer: an entity is an official iff corpus.entities.kind ==
+    'official' -- mirrors etl/documents.py's official_record admission
+    (kind='official' AND active=true, no editorial check). `editorial` is
+    provenance (which YAML the entity came from -- verified_officials.yaml
+    vs. known_political_x_accounts.yaml), never routing."""
+    return kind == "official"
+
+
+def _entity_ui_kind(kind: str) -> str:
+    """corpus.entities.kind -> the old UI's five-way kind vocabulary.
+    official -> 'official' unconditionally (see is_official_kind); every
     collective -> 'official'; outlet/subreddit pass through unchanged."""
-    if kind == "official":
-        return "official" if editorial else "account"
+    if is_official_kind(kind):
+        return "official"
     if kind == "collective":
         return "official"
     if kind in ("outlet", "subreddit"):
@@ -71,7 +80,7 @@ def _map_entity_row(row: Mapping[str, Any]) -> EntityProfileModel:
     `bio_source` (the party's citation) for official/collective rows --
     never both, and never `entities.lean` (the flattened join-axis enum,
     which this model does not expose)."""
-    ui_kind = _entity_ui_kind(row["kind"], row["editorial"])
+    ui_kind = _entity_ui_kind(row["kind"])
     lean_bearing = row["kind"] in _LEAN_BEARING_KINDS
     party_bearing = row["kind"] in _PARTY_BEARING_KINDS
 
@@ -109,7 +118,7 @@ def _map_entity_row(row: Mapping[str, Any]) -> EntityProfileModel:
 # --------------------------------------------------------------------------- #
 
 _ENTITY_PROFILE_ROWS_SQL = """
-    SELECT entity_id, entity_key, kind, editorial, display_name, blurb,
+    SELECT entity_id, entity_key, kind, display_name, blurb,
            role_title, term_start, owner, source_citation, lean_source,
            founded, circulation_note, subscriber_count_proxy, account_type
     FROM corpus.entities

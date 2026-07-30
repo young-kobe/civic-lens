@@ -66,6 +66,13 @@ class TierForRowTests(unittest.TestCase):
     def test_elected_official_x_post_is_officials_tier(self):
         self.assertEqual(routing._tier_for_row("x_post", "elected_official"), "officials")
 
+    def test_affiliated_x_post_is_officials_tier(self):
+        # 'affiliated' (appointed/institutional officials, e.g. cabinet
+        # secretaries) is in OFFICIAL_AUTHOR_TIERS alongside 'elected_official'
+        # -- both are corpus.author_profiles.tier values engine/account_tier.py
+        # assigns only to authors resolved to a kind='official' entity.
+        self.assertEqual(routing._tier_for_row("x_post", "affiliated"), "officials")
+
     def test_unaffiliated_x_post_is_general_public(self):
         self.assertEqual(routing._tier_for_row("x_post", None), "general_public")
 
@@ -130,13 +137,16 @@ class RouteOwnPostTests(unittest.TestCase):
         self.assertEqual(tier, "officials")
         self.assertEqual(key, ("entity", 3))
 
-    def test_non_editorial_official_author_routes_to_public_as_curated_account(self):
-        # kind='official' AND NOT editorial -- the curated-account case, not
-        # the editorial-officials column.
+    def test_official_author_routes_to_officials_regardless_of_editorial(self):
+        # kind='official' alone is the canonical predicate (profiles.py's
+        # is_official_kind), mirroring etl/documents.py's official_record
+        # admission -- editorial is provenance (which YAML the entity came
+        # from), never routing. This must hold so an "Official record" badge
+        # can never render in the public column.
         tier, key = routing._route_own_post(self._row(
             author_entity_id=3, author_entity_kind="official", author_entity_editorial=False,
         ))
-        self.assertEqual(tier, "public")
+        self.assertEqual(tier, "officials")
         self.assertEqual(key, ("entity", 3))
 
     def test_unmatched_x_author_with_handle_gets_provisional_handle_bucket(self):
@@ -247,11 +257,13 @@ class RouteReceivedSourceTests(unittest.TestCase):
         self.assertEqual(ident, 3)
         self.assertEqual(lean, "independent")
 
-    def test_non_editorial_official_author_is_account_class(self):
+    def test_official_author_is_official_class_regardless_of_editorial(self):
+        # Same canonical-predicate contract as RouteOwnPostTests: kind=
+        # 'official' alone decides, never the editorial provenance flag.
         source_class, ident, lean = routing._route_received_source(self._row(
             author_entity_id=3, author_entity_kind="official", author_entity_editorial=False,
         ))
-        self.assertEqual(source_class, "account")
+        self.assertEqual(source_class, "official")
         self.assertEqual(ident, 3)
 
     def test_unmatched_x_author_with_handle_is_x_user(self):
