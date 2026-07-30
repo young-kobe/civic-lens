@@ -104,9 +104,9 @@ degraded panels to full fidelity.
         `overall_gop_stance` inside `analysis.runs.raw_response`. It is
         readable history, not a live signal — the set stops growing at the
         v6 cutover, so a surface built on it silently ages out.
-      - The `analysis.favorability_stances` table is deliberately still in
-        place (no writer, no reader). Dropping it is a Phase 11 checklist
-        item in `docs/todos/pg-redesign.md`.
+      - The `analysis.favorability_stances` table was dropped in the Phase 7
+        decommission (migration 0008, 2026-07-28); the rows survive in the
+        pre-cutover pg_dump and the SQLite cold artifact.
 
 - [x] **Narrative-level confidence chip.** `NarrativeSummaryModel`
       (`analysis/src/api/models/narratives.py`) carries no confidence field,

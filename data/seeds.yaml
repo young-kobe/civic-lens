@@ -21,13 +21,11 @@ crawl:
   user_agent: "CivicLens/1.0 (+https://github.com/young-kobe/civic-lens)"
   stale_inflight_age: 10m
 
-# crawl_balance (optional, Postgres-only — Postgres-redesign Phase 2): caps
-# how many docs per domain the frontier claims in a rolling window, so one
-# prolific outlet cannot dominate a sample the way cbsnews (2,404 docs) has
-# dominated npr (65) in production. Omit this section entirely to keep
-# today's unlimited-claim behavior on both backends; the SQLite path never
-# reads it regardless (frozen production behavior). Uncomment and tune once
-# Postgres is live:
+# crawl_balance (optional): caps how many docs per domain the frontier
+# claims in a rolling window, so one prolific outlet cannot dominate a
+# sample the way cbsnews (2,404 docs) has dominated npr (65) in production.
+# Omit this section entirely to keep unlimited-claim behavior. Uncomment
+# and tune as needed:
 #
 # crawl_balance:
 #   # How far back the per-domain "already fetched" count looks (against
@@ -44,8 +42,7 @@ crawl:
 #     www.cbsnews.com: 15
 #     feeds.npr.org: 50
 
-# domain_filter (Postgres-redesign Phase 4 — analysis/src/etl/documents.py
-# only; the SQLite loader.py path never reads this). All three keys are
+# domain_filter (read by analysis/src/etl/documents.py). All three keys are
 # optional and additive: an absent section, or an absent key within it,
 # keeps today's unfiltered/uncapped ETL behavior.
 domain_filter:

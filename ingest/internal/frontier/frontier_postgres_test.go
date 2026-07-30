@@ -77,10 +77,6 @@ func newTestFrontierPostgres(t *testing.T, maxRetries int, quota *DomainQuota) (
 	if err != nil {
 		t.Fatalf("Open(%q): %v", dsn, err)
 	}
-	if !database.IsPostgres() {
-		database.Close()
-		t.Fatalf("Open(%q) did not select the Postgres backend", dsn)
-	}
 
 	ctx := context.Background()
 	if _, err := database.Conn().ExecContext(ctx, rawFixtureSQL); err != nil {
@@ -138,7 +134,7 @@ func pageState(t *testing.T, database *db.DB, urlCanon string) string {
 
 // TestPostgresFrontierEnumStateMachine exercises the full
 // queued -> inflight -> done/failed state machine against a real Postgres
-// enum column, mirroring TestFrontierBasicOperations for the SQLite path.
+// enum column.
 func TestPostgresFrontierEnumStateMachine(t *testing.T) {
 	f, database, cleanup := newTestFrontierPostgres(t, 3, nil)
 	defer cleanup()
@@ -147,11 +143,10 @@ func TestPostgresFrontierEnumStateMachine(t *testing.T) {
 	ctx := context.Background()
 
 	// Stats() counts the whole (shared, unfiltered) raw.pages table by
-	// design — mirroring statsSQLite, which is only safe there because
-	// SQLite tests get a fresh tempfile DB per test. Against a live shared
-	// Postgres instance other rows legitimately exist (other tests in this
-	// suite, other packages' own gated tests), so this asserts the delta
-	// this test's own actions produce rather than an absolute count.
+	// design. Against a live shared Postgres instance other rows legitimately
+	// exist (other tests in this suite, other packages' own gated tests), so
+	// this asserts the delta this test's own actions produce rather than an
+	// absolute count.
 	baseQueued, baseInflight, baseDone, baseFailed, err := f.Stats(ctx)
 	if err != nil {
 		t.Fatalf("baseline Stats: %v", err)
@@ -447,10 +442,10 @@ func TestPostgresFrontierQuotaPrefersUnderRepresentedDomain(t *testing.T) {
 	}
 }
 
-// TestPostgresFrontierNoQuota_UnlimitedLikeSQLite asserts a nil DomainQuota
-// (no crawl_balance section) behaves exactly like the unlimited SQLite path:
-// every queued row across every domain is claimable.
-func TestPostgresFrontierNoQuota_UnlimitedLikeSQLite(t *testing.T) {
+// TestPostgresFrontierNoQuota_Unlimited asserts a nil DomainQuota (no
+// crawl_balance section) means every queued row across every domain is
+// claimable.
+func TestPostgresFrontierNoQuota_Unlimited(t *testing.T) {
 	f, database, cleanup := newTestFrontierPostgres(t, 3, nil)
 	defer cleanup()
 	cleanupDomains(database, "a.example.com", "b.example.com")
@@ -468,5 +463,130 @@ func TestPostgresFrontierNoQuota_UnlimitedLikeSQLite(t *testing.T) {
 	}
 	if len(items) != 3 {
 		t.Fatalf("claimed %d, want 3 (no quota configured => unlimited)", len(items))
+	}
+}
+
+// TestPostgresFrontierPushLinksMalformed asserts that bad URLs are counted
+// separately from DB errors instead of being silently swallowed.
+func TestPostgresFrontierPushLinksMalformed(t *testing.T) {
+	f, database, cleanup := newTestFrontierPostgres(t, 3, nil)
+	defer cleanup()
+	cleanupDomains(database, "example.com")
+	defer cleanupDomains(database, "example.com")
+	ctx := context.Background()
+
+	stats, err := f.PushLinks(ctx, []string{
+		"https://example.com/good",
+		"http://[::1:bad",        // malformed — unclosed bracket in host
+		"http://%ZZ.example.com", // malformed — invalid percent-escape
+	}, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.Added != 1 {
+		t.Errorf("Added = %d, want 1", stats.Added)
+	}
+	if stats.Malformed != 2 {
+		t.Errorf("Malformed = %d, want 2", stats.Malformed)
+	}
+	if stats.DBErrors != 0 {
+		t.Errorf("DBErrors = %d, want 0", stats.DBErrors)
+	}
+}
+
+// TestPostgresFrontierMarkDoneWrongKeyIsLoud asserts that a MarkDone whose
+// key does not match a live claimed row returns an error instead of
+// silently updating nothing. Regression for I-1b (zero-row UPDATE used to
+// be swallowed) and the reason the crawler must not mutate the frontier
+// key: a mutated key lands here as a loud error, and the real claimed row
+// is left untouched rather than clobbered.
+func TestPostgresFrontierMarkDoneWrongKeyIsLoud(t *testing.T) {
+	f, database, cleanup := newTestFrontierPostgres(t, 3, nil)
+	defer cleanup()
+	cleanupDomains(database, "example.com")
+	defer cleanupDomains(database, "example.com")
+	ctx := context.Background()
+
+	f.PushLinks(ctx, []string{"https://example.com/real"}, 0)
+	items, err := f.ClaimItems(ctx, 1)
+	if err != nil || len(items) != 1 {
+		t.Fatalf("ClaimItems: %v (len=%d)", err, len(items))
+	}
+
+	// Simulate the old bug: key swapped to the page-declared canonical.
+	stuck := *items[0]
+	stuck.URLCanon = "https://example.com/declared-canonical"
+	stuck.HTTPStatus = 200
+	if err := f.MarkDone(ctx, &stuck); err == nil {
+		t.Fatal("MarkDone with a non-matching key should error, got nil")
+	}
+
+	if got := pageState(t, database, items[0].URLCanon); got != "inflight" {
+		t.Errorf("claimed row state = %q, want inflight (untouched)", got)
+	}
+}
+
+// TestPostgresFrontierMarkDoneStaleReclaimGuard asserts a worker whose row
+// was recovered and re-claimed by another worker cannot clobber the new
+// claim. Regression for I-7: MarkDone/MarkFailed guard on (state = INFLIGHT
+// AND inflight_at = the timestamp this worker claimed at), so a late
+// completion from the original worker no-ops loudly instead of flipping the
+// re-claimed row.
+func TestPostgresFrontierMarkDoneStaleReclaimGuard(t *testing.T) {
+	f, database, cleanup := newTestFrontierPostgres(t, 3, nil)
+	defer cleanup()
+	cleanupDomains(database, "example.com")
+	defer cleanupDomains(database, "example.com")
+	ctx := context.Background()
+
+	f.PushLinks(ctx, []string{"https://example.com/race"}, 0)
+	itemsA, err := f.ClaimItems(ctx, 1)
+	if err != nil || len(itemsA) != 1 {
+		t.Fatalf("ClaimItems: %v (len=%d)", err, len(itemsA))
+	}
+	a := itemsA[0] // worker A's claim, inflight_at = a.InflightAt
+
+	// Worker B re-claims after a stale recovery. We simulate B's fresh claim
+	// by advancing inflight_at on the row while it stays INFLIGHT.
+	newClaim := time.Unix(a.InflightAt+100, 0).UTC()
+	if _, err := database.Conn().ExecContext(ctx,
+		`UPDATE raw.pages SET inflight_at = $1 WHERE url_canon = $2`, newClaim, a.URLCanon); err != nil {
+		t.Fatal(err)
+	}
+
+	// Worker A finishes late and tries to mark done under its stale claim.
+	a.HTTPStatus = 200
+	a.ContentSHA256 = "stale"
+	if err := f.MarkDone(ctx, a); err == nil {
+		t.Fatal("stale MarkDone should error under the claim guard, got nil")
+	}
+
+	if got := pageState(t, database, a.URLCanon); got != "inflight" {
+		t.Errorf("row clobbered: state=%q, want inflight under B's claim", got)
+	}
+}
+
+// TestPostgresFrontierMarkFailedExhaustsRetries asserts that reaching the
+// retry ceiling promotes the failure to permanent without the caller asking.
+func TestPostgresFrontierMarkFailedExhaustsRetries(t *testing.T) {
+	f, database, cleanup := newTestFrontierPostgres(t, 3, nil)
+	defer cleanup()
+	cleanupDomains(database, "example.com")
+	defer cleanupDomains(database, "example.com")
+	ctx := context.Background()
+
+	f.PushLinks(ctx, []string{"https://example.com/exhausted"}, 0)
+	items, err := f.ClaimItems(ctx, 1)
+	if err != nil || len(items) != 1 {
+		t.Fatalf("ClaimItems: %v (len=%d)", err, len(items))
+	}
+
+	items[0].Retries = 3 // already at ceiling
+	if err := f.MarkFailed(ctx, items[0], "still failing", false); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := pageState(t, database, items[0].URLCanon); got != "failed" {
+		t.Errorf("state = %q, want failed (retries exhausted)", got)
 	}
 }

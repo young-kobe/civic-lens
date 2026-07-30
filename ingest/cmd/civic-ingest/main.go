@@ -24,7 +24,7 @@ func main() {
 	}
 
 	rootCmd.PersistentFlags().StringVar(&cfgPath, "config", "data/seeds.yaml", "Path to config file")
-	rootCmd.PersistentFlags().StringVar(&dbPath, "db", defaultDBPath(), "Path to SQLite database, or a Postgres DSN (postgres://...)")
+	rootCmd.PersistentFlags().StringVar(&dbPath, "db", defaultDBPath(), "Postgres DSN (postgres://...); defaults to CIVIC_DATABASE_URL")
 
 	rootCmd.AddCommand(migrateCmd())
 	rootCmd.AddCommand(ingestCmd())
@@ -39,15 +39,12 @@ func main() {
 	}
 }
 
-// defaultDBPath resolves the --db default: CIVIC_DATABASE_URL when set (so
-// deploys can point the binary at Postgres via env, matching the
-// CIVIC_DATABASE_URL name already used on the Python side), falling back to
-// the SQLite path otherwise. An explicit --db flag still overrides either.
+// defaultDBPath resolves the --db default from CIVIC_DATABASE_URL (matching
+// the env var name already used on the Python side). An explicit --db flag
+// still overrides it. An empty or non-Postgres value is not defaulted
+// further here — db.Open rejects it loudly instead.
 func defaultDBPath() string {
-	if dsn := os.Getenv("CIVIC_DATABASE_URL"); dsn != "" {
-		return dsn
-	}
-	return "data/civic_lens.db"
+	return os.Getenv("CIVIC_DATABASE_URL")
 }
 
 func migrateCmd() *cobra.Command {
@@ -206,7 +203,7 @@ func xCmd() *cobra.Command {
 // officials' historical X posts: it walks corpus.entities (kind='official',
 // active=true) and tops up raw.x_posts to each official's target so an
 // inactive official never vanishes from dashboards for lack of stored
-// history. Postgres-only — corpus.entities has no SQLite counterpart.
+// history.
 func backfillOfficialsCmd() *cobra.Command {
 	var spendCapUSD float64
 

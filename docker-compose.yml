@@ -4,8 +4,7 @@
 #
 # Shape:
 #   Always-on:  caddy (TLS + static UI + /api reverse proxy), api (uvicorn),
-#               postgres, litestream (frozen-SQLite replication to R2 —
-#               retires once the final cold artifact is archived post-cutover).
+#               postgres.
 #   One-shots:  ingest + analyze under the "jobs" profile — never started by
 #               `up`, only by the systemd timers as
 #               `docker compose run --rm <service> ...` so the existing
@@ -72,21 +71,6 @@ services:
     restart: unless-stopped
     mem_limit: 512m
     cpus: 0.8
-
-  litestream:
-    image: litestream/litestream:0.3
-    command: replicate -config /etc/litestream.yml
-    env_file: ${CIVIC_ENV_FILE:-/etc/civic-lens.env}
-    volumes:
-      - /var/lib/civic-lens:/var/lib/civic-lens
-      - ./deploy/litestream.yml:/etc/litestream.yml:ro
-    restart: unless-stopped
-    mem_limit: 256m
-    logging:
-      driver: json-file
-      options:
-        max-size: 10m
-        max-file: "3"
 
   # The primary datastore — every service above and below reads/writes it.
   # POSTGRES_USER/POSTGRES_PASSWORD have no defaults on purpose (see

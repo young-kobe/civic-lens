@@ -221,7 +221,7 @@ class ResultStoreIntegrationTests(unittest.TestCase):
             conn.execute(
                 "TRUNCATE analysis.citations, analysis.bot_signals, analysis.claims, "
                 "analysis.propaganda_techniques, analysis.propaganda_results, "
-                "analysis.target_mentions, analysis.favorability_stances, "
+                "analysis.target_mentions, "
                 "analysis.sentiment_results, analysis.runs, analysis.prompt_versions, "
                 "corpus.documents, corpus.authors, corpus.entities CASCADE"
             )

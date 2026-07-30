@@ -1,7 +1,6 @@
 """
-Constants for analysis/src/scheduler/stages.py and pipeline.py (Postgres
-redesign Phase 7 — new-stack scheduler). See docs/todos/pg-redesign.md's
-Phase 7 section for the design writeup.
+Constants for analysis/src/scheduler/stages.py and pipeline.py. Design
+writeup: docs/audit-trail/analysis/timeline.md (Postgres-redesign scheduler).
 """
 
 from __future__ import annotations

@@ -6,7 +6,7 @@ import (
 )
 
 // initRowPostgres lazy-inserts the current month into ops.x_api_budget so
-// later UPDATEs always find a row. Counterpart to initRowSQLite.
+// later UPDATEs always find a row.
 func (t *XBudgetTracker) initRowPostgres(ctx context.Context) error {
 	if _, err := t.db.ExecContext(ctx,
 		`INSERT INTO ops.x_api_budget
@@ -21,7 +21,7 @@ func (t *XBudgetTracker) initRowPostgres(ctx context.Context) error {
 }
 
 // reloadPostgres loads the accumulated state for the current month from
-// ops.x_api_budget. Counterpart to the SQLite branch inlined in reload.
+// ops.x_api_budget.
 func (t *XBudgetTracker) reloadPostgres(ctx context.Context) error {
 	row := t.db.QueryRowContext(ctx,
 		`SELECT post_count, user_count, request_count, estimated_cents
@@ -34,8 +34,10 @@ func (t *XBudgetTracker) reloadPostgres(ctx context.Context) error {
 	return nil
 }
 
-// recordPostgres applies the increment relative to the stored value, same
-// composability rationale as recordSQLite (x_budget.go).
+// recordPostgres applies the increment RELATIVE to the stored value in a
+// single statement rather than writing an absolute in-memory total. Two
+// overlapping `civic-ingest x` runs would otherwise clobber each other's
+// increments; `x = x + $n` composes correctly regardless of interleaving.
 func (t *XBudgetTracker) recordPostgres(ctx context.Context, posts, newUsers, costCents int) error {
 	if _, err := t.db.ExecContext(ctx,
 		`UPDATE ops.x_api_budget

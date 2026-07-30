@@ -4,7 +4,7 @@ import "time"
 
 // unixOrNil converts a Unix-epoch-seconds value into a *time.Time for a
 // nullable Postgres TIMESTAMPTZ column, returning nil when sec is the
-// zero-value sentinel the SQLite-era model structs use for "not set".
+// zero-value sentinel the model structs use for "not set".
 // Storing epoch-zero (1970-01-01) in a real TIMESTAMPTZ column would read as
 // a fabricated timestamp rather than "unknown" (see the media-analysis
 // invariant against fabricating data) — nil lets Postgres store SQL NULL

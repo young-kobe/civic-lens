@@ -13,8 +13,7 @@ import (
 )
 
 // pgEpochZero is the "never claimed" sentinel stored in raw.pages.inflight_at
-// (default to_timestamp(0), see 0001_north_star.sql), mirroring the SQLite
-// path's inflight_at = 0 sentinel.
+// (default to_timestamp(0), see 0001_north_star.sql).
 var pgEpochZero = time.Unix(0, 0).UTC()
 
 // pgNow returns the current time truncated to whole-second precision. Every
@@ -44,9 +43,9 @@ func pgStateString(s model.PageState) string {
 	}
 }
 
-// recoverStalePostgres is the Postgres implementation of RecoverStale: same
-// invariant (A3 crash recovery, INFLIGHT -> QUEUED past staleAge) as
-// recoverStaleSQLite, expressed with the raw.page_state enum and TIMESTAMPTZ.
+// recoverStalePostgres implements RecoverStale's invariant (A3 crash
+// recovery, INFLIGHT -> QUEUED past staleAge) against the raw.page_state
+// enum and TIMESTAMPTZ columns.
 func (f *Frontier) recoverStalePostgres(ctx context.Context, staleAge time.Duration) (int64, error) {
 	now := pgNow()
 	cutoff := now.Add(-staleAge)
@@ -74,11 +73,10 @@ func (f *Frontier) claimItemsPostgres(ctx context.Context, batchSize int) ([]*mo
 }
 
 // claimItemsPostgresPlain claims a batch of QUEUED rows via a single
-// writable CTE using FOR UPDATE SKIP LOCKED — this is the plan's marquee
-// concurrency win over the SQLite busy-timeout dance: two concurrent
-// claimers never see the same candidate row, because the second claimer's
-// FOR UPDATE simply skips whatever the first has already locked, instead of
-// blocking or retrying on SQLITE_BUSY.
+// writable CTE using FOR UPDATE SKIP LOCKED: two concurrent claimers never
+// see the same candidate row, because the second claimer's FOR UPDATE
+// simply skips whatever the first has already locked, instead of blocking
+// or retrying.
 func (f *Frontier) claimItemsPostgresPlain(ctx context.Context, batchSize int) ([]*model.Page, error) {
 	now := pgNow()
 	rows, err := f.db.Conn().QueryContext(ctx, `
@@ -223,8 +221,7 @@ func (q *DomainQuota) perDomainJSON() (string, error) {
 
 // pgSetClause builds the SET clause (starting at placeholder $3, since $1
 // and $2 are always state and inflight_at) and its ordered args for
-// updatePageStatePostgres, mirroring updatePageStateSQLite's column set
-// exactly so the two backends stay behaviorally equivalent.
+// updatePageStatePostgres.
 func pgSetClause(updates map[string]any) (string, []any, error) {
 	clause := ""
 	var args []any
@@ -252,9 +249,9 @@ func pgSetClause(updates map[string]any) (string, []any, error) {
 	return clause, args, nil
 }
 
-// updatePageStatePostgres is the Postgres implementation of updatePageState
-// — same claim-guard semantics (A3 exclusivity) as updatePageStateSQLite,
-// expressed with $N placeholders, an enum cast on state, and TIMESTAMPTZ.
+// updatePageStatePostgres implements updatePageState's claim-guard semantics
+// (A3 exclusivity) with $N placeholders, an enum cast on state, and
+// TIMESTAMPTZ.
 func (f *Frontier) updatePageStatePostgres(ctx context.Context, page *model.Page, state model.PageState, updates map[string]any) error {
 	setClause, extraArgs, err := pgSetClause(updates)
 	if err != nil {

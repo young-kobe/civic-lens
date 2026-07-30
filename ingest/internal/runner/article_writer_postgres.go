@@ -6,11 +6,14 @@ import (
 	"log"
 )
 
-// flushPostgres is the Postgres counterpart to flushSQLite: same batching and
-// transaction shape, targeting raw.pages/raw.articles with $-placeholders and
-// TIMESTAMPTZ columns. See flushSQLite for the placeholder-pages rationale
-// (a validated same-domain canonical can point at a URL raw.pages does not
-// have a row for yet, and raw.articles.url_canon FKs to raw.pages).
+// flushPostgres writes a batch of articles in a single transaction against
+// raw.pages/raw.articles with $-placeholders and TIMESTAMPTZ columns.
+//
+// When WriteFromMeta keys an article off a validated same-domain canonical
+// that differs from the URL we fetched, that canonical URL is often NOT in
+// raw.pages yet (only the fetched url_canon is). raw.articles has a FK to
+// raw.pages(url_canon) so the insert would fail and the article would be
+// dropped; we upsert a placeholder pages row before the article insert.
 func (w *ArticleWriter) flushPostgres(ctx context.Context, batch []articleEntry) {
 	tx, err := w.database.BeginImmediate(ctx)
 	if err != nil {
@@ -18,9 +21,10 @@ func (w *ArticleWriter) flushPostgres(ctx context.Context, batch []articleEntry)
 		return
 	}
 
-	// Placeholder pages row: QUEUED (not DONE), same reasoning as the SQLite
-	// path — this is honest, not-yet-fetched crawl work for the same
-	// publisher, not a substitute for actually fetching it.
+	// Placeholder pages row: QUEUED (not DONE) — this is honest,
+	// not-yet-fetched crawl work for the same publisher, not a substitute
+	// for actually fetching it. Marking it DONE would permanently block the
+	// crawler from ever fetching it.
 	pageStmt, err := tx.PrepareContext(ctx, `
 		INSERT INTO raw.pages (url_canon, url_raw, domain, state, priority, retries, next_fetch_at, inflight_at)
 		VALUES ($1, $2, $3, 'queued', 0, 0, to_timestamp(0), to_timestamp(0))

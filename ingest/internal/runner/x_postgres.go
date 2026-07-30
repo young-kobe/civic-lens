@@ -10,9 +10,9 @@ import (
 // xPostColumns and xPostUpdateSet are the raw.x_posts columns/assignments
 // shared by both upsert paths (search-query and officials-pass). They
 // deliberately exclude is_official_tier: insertPostPostgres (search-query
-// path) never lists it, mirroring the SQLite upsertRowOnConflict behavior of
-// preserving whatever tier flag an earlier officials-pass insert set (I-6).
-// insertOfficialPostPostgres (x_officials_postgres.go) appends it to both.
+// path) never lists it, preserving whatever tier flag an earlier
+// officials-pass insert set (I-6). insertOfficialPostPostgres
+// (x_officials_postgres.go) appends it to both.
 const xPostColumns = `tweet_id, author_id, conversation_id, created_at, fetched_at,
 		text, lang, retweet_count, reply_count, like_count, quote_count,
 		place_id, place_country_code, place_full_name,
@@ -76,7 +76,7 @@ func (xr *XRunner) insertPostPostgres(ctx context.Context, post model.XPost) err
 
 // insertUserPostgres upserts one row into raw.x_users. verified/protected are
 // real BOOLEAN columns, so user.Verified/user.Protected pass straight
-// through — no 0/1 conversion needed (that's a SQLite-only concession).
+// through.
 func (xr *XRunner) insertUserPostgres(ctx context.Context, user model.XUser) error {
 	_, err := xr.app.Database.Conn().ExecContext(ctx, `
 		INSERT INTO raw.x_users (

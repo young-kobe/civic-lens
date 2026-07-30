@@ -35,22 +35,26 @@ func openTestPostgres(t *testing.T) *db.DB {
 		t.Fatalf("open postgres: %v", err)
 	}
 	t.Cleanup(func() { _ = database.Close() })
-	if !database.IsPostgres() {
-		t.Fatalf("dsn %q did not select the Postgres backend", dsn)
-	}
 	return database
 }
 
-// TestPostgresArticleUpsertIdempotency drives the real ArticleWriter (the
-// production dispatch path, flush -> flushPostgres) against raw.pages/
-// raw.articles twice for the same url_canon and asserts a single row with
-// the second write's fields — the Postgres mirror of the SQLite
-// ON CONFLICT DO UPDATE upsert semantics.
+// TestPostgresArticleUpsertIdempotency drives the real ArticleWriter
+// (flush -> flushPostgres) against raw.pages/raw.articles twice for the
+// same url_canon and asserts a single row with the second write's fields.
 func TestPostgresArticleUpsertIdempotency(t *testing.T) {
 	database := openTestPostgres(t)
 	ctx := context.Background()
 
 	page := &model.Page{URLCanon: "https://pgtest.example.com/article-idem", Domain: "pgtest.example.com"}
+	// Row-level cleanup scoped to this test's domain (same convention as the
+	// frontier package's cleanupDomains): a leftover queued/inflight pages row
+	// breaks the frontier tests' claim-count assertions on a shared instance.
+	t.Cleanup(func() {
+		_, _ = database.Conn().ExecContext(context.Background(),
+			`DELETE FROM raw.articles WHERE domain = 'pgtest.example.com'`)
+		_, _ = database.Conn().ExecContext(context.Background(),
+			`DELETE FROM raw.pages WHERE domain = 'pgtest.example.com'`)
+	})
 	meta1 := &html.Metadata{Title: "First title"}
 	published := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
 	meta2 := &html.Metadata{Title: "Updated title", PublishedTime: published}
@@ -83,10 +87,9 @@ func TestPostgresArticleUpsertIdempotency(t *testing.T) {
 	}
 }
 
-// TestPostgresXPostAndUserUpsert exercises the production dispatch methods
-// (insertPost/insertOfficialPost/insertUser, which route to the *Postgres
-// variants because database.IsPostgres() is true) against raw.x_posts and
-// raw.x_users: JSONB round-trip on context_annotations, real BOOLEAN columns
+// TestPostgresXPostAndUserUpsert exercises insertPost/insertOfficialPost/
+// insertUser against raw.x_posts and raw.x_users: JSONB round-trip on
+// context_annotations, real BOOLEAN columns
 // (is_official_tier/verified), and the I-6 semantic — a topic-query upsert
 // must not clear a tier flag an officials-pass upsert set.
 func TestPostgresXPostAndUserUpsert(t *testing.T) {

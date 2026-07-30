@@ -7,9 +7,8 @@ import (
 )
 
 // insertPostPostgres upserts one row into raw.reddit_posts. Unlike x_posts,
-// this table carries no provenance column that must survive a re-insert
-// (no is_official_tier equivalent), so a full-column upsert mirrors the
-// SQLite path's INSERT OR REPLACE semantics exactly.
+// this table carries no provenance column that must survive a re-insert (no
+// is_official_tier equivalent), so a full-column upsert is safe.
 func (rr *RedditRunner) insertPostPostgres(ctx context.Context, post model.RedditPost) error {
 	_, err := rr.app.Database.Conn().ExecContext(ctx, `
 		INSERT INTO raw.reddit_posts

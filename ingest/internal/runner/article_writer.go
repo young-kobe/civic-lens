@@ -2,8 +2,6 @@ package runner
 
 import (
 	"context"
-	"fmt"
-	"log"
 	"time"
 
 	"github.com/young-kobe/civic-lens/ingest/internal/extract/html"
@@ -150,87 +148,11 @@ func (w *ArticleWriter) Close() {
 	w.cancel()
 }
 
-// flush writes a batch of articles in a single transaction, dispatching to
-// the SQLite or Postgres statement text for the backend this writer's
-// database was opened against (see db.DB.IsPostgres).
+// flush writes a batch of articles in a single transaction. See
+// flushPostgres (article_writer_postgres.go) for the statement text.
 func (w *ArticleWriter) flush(ctx context.Context, batch []articleEntry) {
 	if len(batch) == 0 {
 		return
 	}
-	if w.database.IsPostgres() {
-		w.flushPostgres(ctx, batch)
-		return
-	}
-	w.flushSQLite(ctx, batch)
-}
-
-// flushSQLite writes a batch of articles in a single transaction against the
-// SQLite backend. This is the live production path — kept byte-identical
-// while the Postgres path (flushPostgres, article_writer_postgres.go) is
-// built out alongside it.
-func (w *ArticleWriter) flushSQLite(ctx context.Context, batch []articleEntry) {
-	tx, err := w.database.BeginImmediate(ctx)
-	if err != nil {
-		log.Printf("ArticleWriter: begin tx failed: %v", err)
-		return
-	}
-
-	// When WriteFromMeta keys an article off a validated same-domain
-	// canonical that differs from the URL we fetched, that canonical URL is
-	// often NOT in the `pages` table yet (only the fetched url_canon is).
-	// articles_raw has a FK to pages(url_canon) so the insert would fail with
-	// SQLITE_CONSTRAINT_FOREIGNKEY (code 787) and the article would be
-	// dropped. We upsert a placeholder pages row before the article insert.
-	//
-	// The placeholder is QUEUED (state=0), NOT DONE: this is a real,
-	// same-publisher URL we have not fetched, so it is honest crawl work.
-	// Marking it DONE would permanently block the crawler from ever fetching
-	// it (PushLinks's INSERT OR IGNORE would no-op on the existing row). When
-	// the canonical equals the URL we just fetched, the row already exists as
-	// INFLIGHT/DONE and INSERT OR IGNORE leaves it untouched.
-	pageStmt, err := tx.PrepareContext(ctx, `
-		INSERT OR IGNORE INTO pages (url_canon, url_raw, domain, state, priority, retries, next_fetch_at, inflight_at)
-		VALUES (?, ?, ?, 0, 0, 0, 0, 0)
-	`)
-	if err != nil {
-		log.Printf("ArticleWriter: prepare pages upsert failed: %v", err)
-		tx.Rollback()
-		return
-	}
-	defer pageStmt.Close()
-
-	stmt, err := tx.PrepareContext(ctx, `
-		INSERT INTO articles_raw (url_canon, domain, fetched_at, published_at, title, raw_hash, extraction_version)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT(url_canon) DO UPDATE SET
-			fetched_at = excluded.fetched_at,
-			published_at = excluded.published_at,
-			title = excluded.title,
-			raw_hash = excluded.raw_hash,
-			extraction_version = excluded.extraction_version
-	`)
-	if err != nil {
-		log.Printf("ArticleWriter: prepare failed: %v", err)
-		tx.Rollback()
-		return
-	}
-	defer stmt.Close()
-
-	for _, e := range batch {
-		// Ensure a pages row exists for this canonical URL so the
-		// articles_raw FK resolves. No-op when the row already exists.
-		if _, err := pageStmt.ExecContext(ctx, e.CanonURL, e.CanonURL, e.Domain); err != nil {
-			log.Printf("ArticleWriter: pages upsert %s failed: %v", e.CanonURL, err)
-			continue
-		}
-		if _, err := stmt.ExecContext(ctx, e.CanonURL, e.Domain, e.FetchedAt, e.PublishedAt, e.Title, e.RawHash, e.Version); err != nil {
-			log.Printf("ArticleWriter: insert %s failed: %v", e.CanonURL, err)
-		}
-	}
-
-	if err := tx.Commit(); err != nil {
-		log.Printf("ArticleWriter: commit failed: %v", err)
-	} else {
-		fmt.Printf("ArticleWriter: flushed %d articles\n", len(batch))
-	}
+	w.flushPostgres(ctx, batch)
 }
