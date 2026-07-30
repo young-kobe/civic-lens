@@ -148,3 +148,16 @@ class PropagandaOverviewModel(CamelModel):
     # PropagandaEntityItem.key (entity_key or catch-all sentinel) -- the
     # drill-down modal reads from this, not the small global `examples` list.
     examples_by_entity: Dict[str, List[PropagandaExample]] = Field(default_factory=dict)
+
+
+class PropagandaPublicPostsResponse(CamelModel):
+    """GET /api/v1/propaganda-public-posts payload -- the Propaganda page's
+    public-column feed. Items reuse the PropagandaExample drill-down shape
+    (a clean scored post carries an empty ``techniques`` list and its true
+    density); ``window`` is None for an explicit from/to range request."""
+
+    window: Optional[str]
+    page: int
+    page_size: int
+    total: int
+    items: List[PropagandaExample]

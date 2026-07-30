@@ -82,6 +82,10 @@ class FlaggedExample(CamelModel):
     confidence: Optional[float] = None
     reasoning: Optional[str] = None
     indicators: List[str] = []
+    # analysis.bot_label verdict ('bot'|'suspicious'|'human'|'unknown').
+    # None on BotEntityItem.samples, which are bot-labeled by construction;
+    # populated by the public feed, which mixes verdicts.
+    label: Optional[str] = None
 
 
 class BotEntityItem(CamelModel):
@@ -198,3 +202,17 @@ class BotActivityResponse(CamelModel):
     bot_pushed_narratives: List[BotPushedNarrative] = []
     flagged_accounts: List[FlaggedAccount] = []
     flagged_docs: List[SampleDocModel] = []
+
+
+class BotPublicPostsResponse(CamelModel):
+    """GET /api/v1/bot-public-posts payload -- the Bot Detector's
+    public-column feed. Items reuse the FlaggedExample evidence shape with
+    ``label`` populated (the feed mixes bot/suspicious/human verdicts, so
+    the card must say which); ``window`` is None for an explicit from/to
+    range request."""
+
+    window: Optional[str]
+    page: int
+    page_size: int
+    total: int
+    items: List[FlaggedExample]

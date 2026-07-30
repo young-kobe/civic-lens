@@ -1,8 +1,10 @@
 """
-Contract test for GET /api/v1/public-posts: mounts sentiment.router on a
-throwaway FastAPI app, seeds a deterministic scenario (fixed timestamps,
-window='all', so the snapshot is byte-stable), and snapshots the JSON
-response via the shared harness (conftest.assert_snapshot_match).
+Contract tests for the three public-column feeds -- GET /api/v1/
+public-posts (tone), /propaganda-public-posts, and /bot-public-posts:
+mounts the owning routers on a throwaway FastAPI app, seeds one
+deterministic scenario (fixed timestamps, window='all', so the snapshots
+are byte-stable), and snapshots each JSON response via the shared harness
+(conftest.assert_snapshot_match).
 """
 
 from __future__ import annotations
@@ -14,6 +16,8 @@ from datetime import datetime, timezone
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from analysis.src.api.routers.bots import router as bots_router
+from analysis.src.api.routers.propaganda import router as propaganda_router
 from analysis.src.api.routers.sentiment import router as sentiment_router
 from analysis.tests.contract import conftest
 
@@ -29,6 +33,8 @@ class PublicPostsContractTests(unittest.TestCase):
         conftest.pg_fixture.reset_schema(cls._dsn)
         app = FastAPI()
         app.include_router(sentiment_router, prefix="/api/v1")
+        app.include_router(propaganda_router, prefix="/api/v1")
+        app.include_router(bots_router, prefix="/api/v1")
         cls._client = TestClient(app)
 
     def setUp(self):
@@ -69,6 +75,40 @@ class PublicPostsContractTests(unittest.TestCase):
             "INSERT INTO analysis.sentiment_results (run_id, label) "
             "VALUES (%s, 'neutral'::analysis.sentiment_label)",
             (run["run_id"],),
+        )
+
+    def _seed_propaganda_run(self, conn, doc_id: int, density: float, techniques=()) -> None:
+        run = conn.execute(
+            "INSERT INTO analysis.runs (task, doc_id, status, model_id, inference_method, confidence, is_current) "
+            "VALUES ('propaganda'::analysis.task, %s, 'done'::analysis.run_status, 'gemini-3.5-flash', "
+            "'llm'::analysis.inference_method, 0.9, true) RETURNING run_id",
+            (doc_id,),
+        ).fetchone()
+        conn.execute(
+            "INSERT INTO analysis.propaganda_results (run_id, density, techniques_validated) "
+            "VALUES (%s, %s, %s)",
+            (run["run_id"], density, len(techniques)),
+        )
+        for technique, span in techniques:
+            conn.execute(
+                "INSERT INTO analysis.propaganda_techniques (run_id, technique, evidence_span, confidence) "
+                "VALUES (%s, %s::analysis.propaganda_technique, %s, 0.8)",
+                (run["run_id"], technique, span),
+            )
+
+    def _seed_bot_run(self, conn, doc_id: int, label: str) -> None:
+        run = conn.execute(
+            "INSERT INTO analysis.runs (task, doc_id, status, model_id, inference_method, confidence, is_current, raw_response) "
+            "VALUES ('bot'::analysis.task, %s, 'done'::analysis.run_status, 'gemini-3.5-flash', "
+            "'llm'::analysis.inference_method, 0.9, true, "
+            "'{\"llm\": {\"indicators\": [\"posting cadence\"], \"reasoning\": \"test reasoning\"}}'::jsonb) "
+            "RETURNING run_id",
+            (doc_id,),
+        ).fetchone()
+        conn.execute(
+            "INSERT INTO analysis.bot_signals (run_id, doc_id, label) "
+            "VALUES (%s, %s, %s::analysis.bot_label)",
+            (run["run_id"], doc_id, label),
         )
 
     def _seed(self) -> None:
@@ -139,6 +179,15 @@ class PublicPostsContractTests(unittest.TestCase):
             )
             self._seed_scored_run(conn, o_doc)
 
+            # Propaganda + bot lenses over the same three docs -- the
+            # official's runs must not surface in either feed.
+            self._seed_propaganda_run(conn, x_doc, 0.6, techniques=[("loaded_language", "a verbatim span")])
+            self._seed_propaganda_run(conn, r_doc, 0.0)
+            self._seed_propaganda_run(conn, o_doc, 0.9, techniques=[("name_calling", "span")])
+            self._seed_bot_run(conn, x_doc, "bot")
+            self._seed_bot_run(conn, r_doc, "human")
+            self._seed_bot_run(conn, o_doc, "bot")
+
     def test_public_posts_shape_snapshot(self):
         response = self._client.get("/api/v1/public-posts", params={"window": "all"})
         self.assertEqual(response.status_code, 200)
@@ -148,6 +197,26 @@ class PublicPostsContractTests(unittest.TestCase):
         self.assertEqual(body["total"], 2)
         self.assertEqual([item["sourceType"] for item in body["items"]], ["x_post", "reddit_post"])
         conftest.assert_snapshot_match("public_posts_basic", body)
+
+    def test_propaganda_public_posts_shape_snapshot(self):
+        response = self._client.get("/api/v1/propaganda-public-posts", params={"window": "all"})
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        # Official excluded; flagged X post leads on engagement, clean
+        # Reddit post follows with an empty technique list and density 0.
+        self.assertEqual(body["total"], 2)
+        self.assertEqual(body["items"][0]["techniques"][0]["technique"], "loaded_language")
+        self.assertEqual(body["items"][1]["techniques"], [])
+        conftest.assert_snapshot_match("propaganda_public_posts_basic", body)
+
+    def test_bot_public_posts_shape_snapshot(self):
+        response = self._client.get("/api/v1/bot-public-posts", params={"window": "all"})
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        # Official excluded; every verdict carries its label.
+        self.assertEqual(body["total"], 2)
+        self.assertEqual([item["label"] for item in body["items"]], ["bot", "human"])
+        conftest.assert_snapshot_match("bot_public_posts_basic", body)
 
 
 if __name__ == "__main__":

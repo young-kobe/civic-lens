@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
     Card, CollapsibleInfo, DefinitionChip, EmptyState, EntityHeader,
     EntityHubLinks, ErrorState,
     GlobalTicker,
-    LoadingCard, MethodPopover, Modal, PostCardList,
+    LoadingCard, MethodPopover, Modal, PaginatedPostFeed, PostCardList,
     RangeCaption, RankedEntityList, ThreeWayColumn, TwoWayGrid,
     entityExternalUrl, flaggedExampleToPostCard, parseEntityParam,
     LeanLabel as LeanLabelChip,
@@ -14,7 +14,9 @@ import { coordinationLevel } from '../services/glossary';
 import { CoordinationEvidencePanel } from './bots/CoordinationEvidencePanel';
 import { PostingCadenceHeatmap } from './bots/PostingCadenceHeatmap';
 import type { ColumnSorter, RankedEntity, TickerItem } from '../components/common';
-import { fetchBotActivity, fetchSnapshotStatus } from '../services/api';
+import {
+    fetchBotActivity, fetchBotPublicPosts, fetchSnapshotStatus, type TimeWindow,
+} from '../services/api';
 import { useFetch } from '../services/useFetch';
 import { formatRefreshedAgo, pipelineRunTimestamp } from '../services/freshness';
 import { formatPct } from '../services/format';
@@ -232,11 +234,31 @@ const BOT_SORTERS: ColumnSorter<BotEntityItem>[] = [
     { label: 'name', compare: (a, b) => a.entityProfile.displayName.localeCompare(b.entityProfile.displayName) },
 ];
 
+function BotPublicFeed({ timeWindow }: { timeWindow: TimeWindow }) {
+    const fetchPage = useCallback(async (page: number) => {
+        const resp = await fetchBotPublicPosts(timeWindow, page);
+        return { items: resp.items.map(flaggedExampleToPostCard), total: resp.total };
+    }, [timeWindow]);
+    return (
+        <PaginatedPostFeed
+            fetchPage={fetchPage}
+            resetKey={timeWindow}
+            sampleNote={
+                'Sampled public posts (Reddit and X) scored by the bot detector — every verdict '
+                + 'shown, not just flags. Ordered by engagement, a reach proxy, not verified '
+                + 'audience. A sample, not the full corpus.'
+            }
+            emptyNote="No public social posts scored for bot detection in this window."
+        />
+    );
+}
+
 function BotThreeWayGrid({
-    data, onOpen,
+    data, onOpen, timeWindow,
 }: {
     data: BotActivityResponse;
     onOpen: (item: BotEntityItem) => void;
+    timeWindow: TimeWindow;
 }) {
     // Two tiers only: news is not bot-scored (articles are not accounts) —
     // the response carries no byNewsOutlet field at all.
@@ -266,12 +288,11 @@ function BotThreeWayGrid({
             />
             <ThreeWayColumn
                 header="The Public"
-                byline="Political subreddits, plus X users we don't track individually, ranked by the share of their posts our detector flags as likely automated."
-                empty="No public social posts scored for bot detection."
-                items={data.byGeneralPublic}
-                renderItems={ranked('Public sources by suspected bot rate')}
-                sorters={BOT_SORTERS}
-            />
+                byline="Most-engaged sampled public posts, scored for automation signals."
+                empty=""
+            >
+                <BotPublicFeed timeWindow={timeWindow} />
+            </ThreeWayColumn>
         </TwoWayGrid>
     );
 }
@@ -768,7 +789,7 @@ function BotActivityProfiler({ filters }: BotActivityProfilerProps) {
             </div>
 
             <div className="col-span-12">
-                <BotThreeWayGrid data={data} onOpen={setActiveItem} />
+                <BotThreeWayGrid data={data} onOpen={setActiveItem} timeWindow={filters.timeRange} />
                 <p className="card-note">
                     News articles are not bot-scored: articles are not accounts, so
                     an outlet has no automation rate. Bot detection covers social

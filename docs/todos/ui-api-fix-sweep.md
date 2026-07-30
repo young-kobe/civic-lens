@@ -29,6 +29,12 @@ Plan approved 2026-07-30. Audit-trail entries (the permanent record):
 - [x] Highest-flagged leaderboard bumped to top 5
 - [x] `npm run typecheck` + `npm run build` clean
 
+## E — propaganda/bot lensed public feeds (API + UI)
+
+- [x] `GET /propaganda-public-posts` + `GET /bot-public-posts` sharing the /public-posts frame (canonical officials exclusion, engagement ordering, SQL pagination); bot lens keeps bot authors in
+- [x] Shared `PaginatedPostFeed` frame; Propaganda + Bot public columns swap rollups for lensed feeds via the pages' existing PostCard adapters
+- [x] `FlaggedExample.label` verdict field (bots_basic snapshot re-recorded); lens tests + two contract snapshots; full gated suite green (906/906)
+
 ## Remaining (Kobe)
 
 - [ ] Visual pass on a live dev DB (`./run.sh dev`): feed pagination + topic switching; party panel and public footer at 375px; constellation hover/chips/`?technique=` round-trip; promoted officials in officials columns on all four pages

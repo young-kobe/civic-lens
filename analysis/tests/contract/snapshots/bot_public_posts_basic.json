@@ -1,0 +1,32 @@
+{
+  "items": [
+    {
+      "confidence": 0.9,
+      "docId": 1,
+      "indicators": [
+        "posting cadence"
+      ],
+      "label": "bot",
+      "reasoning": "test reasoning",
+      "sourceLabel": "X \u00b7 @someuser",
+      "text": "body",
+      "url": "https://example.com/tweet-1"
+    },
+    {
+      "confidence": 0.9,
+      "docId": 2,
+      "indicators": [
+        "posting cadence"
+      ],
+      "label": "human",
+      "reasoning": "test reasoning",
+      "sourceLabel": "Reddit",
+      "text": "body",
+      "url": "https://example.com/t3_abc"
+    }
+  ],
+  "page": 1,
+  "pageSize": 20,
+  "total": 2,
+  "window": "all"
+}

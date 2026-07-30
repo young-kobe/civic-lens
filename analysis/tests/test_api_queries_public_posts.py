@@ -158,6 +158,42 @@ class PublicPostsIntegrationTests(unittest.TestCase):
                 (run["run_id"], doc_id, topic, confidence),
             )
 
+    def _seed_propaganda_run(self, doc_id: int, density: float, techniques=()) -> None:
+        with self._conn() as conn:
+            run = conn.execute(
+                "INSERT INTO analysis.runs (task, doc_id, status, model_id, inference_method, confidence, is_current) "
+                "VALUES ('propaganda'::analysis.task, %s, 'done'::analysis.run_status, 'test-model', "
+                "'llm'::analysis.inference_method, 0.9, true) RETURNING run_id",
+                (doc_id,),
+            ).fetchone()
+            conn.execute(
+                "INSERT INTO analysis.propaganda_results (run_id, density, techniques_validated) "
+                "VALUES (%s, %s, %s)",
+                (run["run_id"], density, len(techniques)),
+            )
+            for technique, span in techniques:
+                conn.execute(
+                    "INSERT INTO analysis.propaganda_techniques (run_id, technique, evidence_span, confidence) "
+                    "VALUES (%s, %s::analysis.propaganda_technique, %s, 0.8)",
+                    (run["run_id"], technique, span),
+                )
+
+    def _seed_bot_run(self, doc_id: int, label: str, confidence: float = 0.9) -> None:
+        with self._conn() as conn:
+            run = conn.execute(
+                "INSERT INTO analysis.runs (task, doc_id, status, model_id, inference_method, confidence, is_current, raw_response) "
+                "VALUES ('bot'::analysis.task, %s, 'done'::analysis.run_status, 'test-model', "
+                "'llm'::analysis.inference_method, %s, true, "
+                "'{\"llm\": {\"indicators\": [\"posting cadence\"], \"reasoning\": \"test reasoning\"}}'::jsonb) "
+                "RETURNING run_id",
+                (doc_id, confidence),
+            ).fetchone()
+            conn.execute(
+                "INSERT INTO analysis.bot_signals (run_id, doc_id, label) "
+                "VALUES (%s, %s, %s::analysis.bot_label)",
+                (run["run_id"], doc_id, label),
+            )
+
     def _seed_public_x_doc(self, published_at=None, **engagement) -> int:
         author = self._seed_author()
         doc = self._seed_document(
@@ -268,6 +304,59 @@ class PublicPostsIntegrationTests(unittest.TestCase):
         self.assertFalse(
             {i.doc_id for i in page1.items} & {i.doc_id for i in page2.items}
         )
+
+
+    def test_propaganda_feed_is_lensed_and_excludes_officials(self):
+        # The propaganda page's public column shows what the PAGE measures:
+        # scored posts with their true technique flags/density (clean posts
+        # included -- the baseline is part of the story), and officials
+        # excluded by the same canonical kind predicate as the tone feed.
+        flagged = self._seed_public_x_doc(like_count=50)
+        self._seed_propaganda_run(flagged, 0.6, techniques=[("loaded_language", "verbatim span")])
+        clean = self._seed_public_x_doc(like_count=10)
+        self._seed_propaganda_run(clean, 0.0)
+
+        official = self._seed_entity("official", "Promoted Official", editorial=False)
+        official_author = self._seed_author()
+        self._seed_author_profile(official_author, "elected_official", official)
+        official_doc = self._seed_document(
+            "x_post", datetime.now(timezone.utc) - timedelta(days=1), author_id=official_author,
+        )
+        self._seed_x_post(official_doc)
+        self._seed_propaganda_run(official_doc, 0.9, techniques=[("name_calling", "span")])
+
+        resp = public_posts.get_propaganda_public_posts(window="30d")
+        self.assertEqual([i.doc_id for i in resp.items], [flagged, clean])
+        self.assertEqual(resp.total, 2)
+        self.assertEqual(resp.items[0].overall_score, 0.6)
+        self.assertEqual(resp.items[0].techniques[0].technique, "loaded_language")
+        self.assertEqual(resp.items[1].techniques, [])
+
+    def test_bot_feed_carries_every_verdict_with_its_label(self):
+        # The bot page's public column must show the verdict per card (the
+        # feed mixes bot/suspicious/human -- an unlabeled card would imply
+        # everything shown is flagged) and must NOT bot-exclude authors:
+        # this page measures automation, excluding it would delete the
+        # subject. Officials still route to their own column.
+        bot_doc = self._seed_public_x_doc(like_count=50)
+        self._seed_bot_run(bot_doc, "bot")
+        human_doc = self._seed_public_x_doc(like_count=10)
+        self._seed_bot_run(human_doc, "human")
+
+        official = self._seed_entity("official", "Promoted Official", editorial=False)
+        official_author = self._seed_author()
+        self._seed_author_profile(official_author, "elected_official", official)
+        official_doc = self._seed_document(
+            "x_post", datetime.now(timezone.utc) - timedelta(days=1), author_id=official_author,
+        )
+        self._seed_x_post(official_doc)
+        self._seed_bot_run(official_doc, "bot")
+
+        resp = public_posts.get_bot_public_posts(window="30d")
+        self.assertEqual([i.doc_id for i in resp.items], [bot_doc, human_doc])
+        self.assertEqual(resp.total, 2)
+        self.assertEqual([i.label for i in resp.items], ["bot", "human"])
+        self.assertEqual(resp.items[0].indicators, ["posting cadence"])
 
 
 if __name__ == "__main__":

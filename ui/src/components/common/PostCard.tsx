@@ -467,6 +467,16 @@ export function sampleToPostCard(s: ClassificationSample): PostCardData {
     };
 }
 
+// Display labels per analysis.bot_label verdict. Entity-card samples carry
+// no label field (bot-flagged by construction) and fall back to the 'bot'
+// wording; the public feed mixes verdicts and passes each one through.
+const BOT_VERDICT_LABEL: Record<string, string> = {
+    bot: 'Suspected automation',
+    suspicious: 'Suspicious patterns',
+    human: 'No automation flags',
+    unknown: 'Inconclusive',
+};
+
 export function flaggedExampleToPostCard(ex: FlaggedExample): PostCardData {
     const hints = avatarHintsFromLabel(ex.sourceLabel);
     return {
@@ -477,7 +487,7 @@ export function flaggedExampleToPostCard(ex: FlaggedExample): PostCardData {
         text: ex.text,
         published_at: null,
         url: ex.url,
-        label: 'Suspected automation',
+        label: (ex.label && BOT_VERDICT_LABEL[ex.label]) || BOT_VERDICT_LABEL.bot,
         labelKind: 'bot',
         confidence: ex.confidence ?? null,
         // Transition filter mirroring BotActivityProfiler's isNoiseLabel:

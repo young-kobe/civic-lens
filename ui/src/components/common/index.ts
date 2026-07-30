@@ -41,6 +41,8 @@ export {
     propagandaExampleToPostCard,
 } from './PostCard';
 export type { PostCardData, PostCardEngagement, PostCardAuthor } from './PostCard';
+export { PaginatedPostFeed } from './PaginatedPostFeed';
+export type { PostFeedPage } from './PaginatedPostFeed';
 export { default as MoversTicker } from './MoversTicker';
 export { ThreeWayGrid, TwoWayGrid, ThreeWayColumn, ThreeWayToolbar, matchesLeanFilter } from './ThreeWayGrid';
 export type { ColumnSorter, LeanFilter } from './ThreeWayGrid';

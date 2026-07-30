@@ -80,6 +80,7 @@
           "confidence": 0.9,
           "docId": 1,
           "indicators": [],
+          "label": null,
           "reasoning": null,
           "sourceLabel": "X \u00b7 @contract-handle",
           "text": "body",
