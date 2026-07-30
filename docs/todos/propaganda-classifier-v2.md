@@ -9,6 +9,38 @@ stub in `docs/todos/eval-expansion.md` moved here.
 No LLM output, and nothing Claude writes, enters `analysis/evals/golden/propaganda/`
 without his explicit verdict. The eval runner refuses unverified files.
 
+## Phase 0 — Per-flag verdicts and the labeling rubric (prerequisite)
+
+The run-level `analysis.evals` verdict cannot express "this run's
+loaded_language flag is right, its appeal_to_fear flag is wrong." Kobe rates
+every label, so verdicts attach to flags, not runs.
+
+- [ ] Migration: `analysis.technique_evals` — verdict per
+      `analysis.propaganda_techniques.technique_id` (correct / incorrect /
+      uncertain), a `reason` enum for rejections, reviewer, notes,
+      timestamp. Plus a way to record a MISSED technique (false negative):
+      reviewer-supplied technique + verbatim span for a doc, not tied to a
+      model flag.
+- [ ] Rejection-reason vocabulary (the enum): `factual_report` (span reports
+      a real event/fact, no rhetorical device), `attributed_quote`,
+      `sarcasm_misread`, `wrong_technique` (device present, different
+      technique — feeds the confusion matrix), `span_not_representative`,
+      `measured_opinion`. These reasons ARE the product: Phase 2's
+      false-positive breakdown and Phase 3's few-shot hard negatives come
+      straight from them.
+- [ ] Review tab: propaganda runs render one verdict row per flag (technique,
+      span highlighted in the doc, confidence) + an "add missed technique"
+      affordance; run-level verdict derives from the flags (all correct ->
+      correct), not the other way around.
+- [ ] Labeling rubric (`analysis/evals/golden/propaganda/RUBRIC.md`), written
+      first and signed off by Kobe before any adjudication. Must decide the
+      framing-vs-truth rule explicitly: the verdict rates the rhetorical
+      framing of the flagged span, never the truth of the underlying event —
+      a factual repost of a real event is not appeal_to_fear (reject as
+      `factual_report`), but a true event packaged to bypass reasoning
+      ("this PROVES they're coming for your kids") still is. Scariness alone
+      earns nothing; truth alone clears nothing.
+
 ## Phase 1 — Golden set (~300 docs, Kobe adjudicates all of them)
 
 - [ ] Deterministic stratified sampler (script under `analysis/evals/`), documented in the file it writes:
@@ -17,8 +49,8 @@ without his explicit verdict. The eval runner refuses unverified files.
       - at least 25 flagged examples per technique (all six)
       - hard negatives on purpose: attributed quotes ("Critics say X is a 'radical extremist'"), sarcasm, strong-but-measured opinion, factual reporting on charged topics
       - carried over from the eval-expansion stub: negatives the `_has_loaded_language` pre-filter kills, and one example with a technique near the 800-char clamp
-- [ ] Queue the sample through the existing Review tab (`review/service.py` — propaganda is already a `ReviewTaskType`; add a way to pin this batch ahead of lowest-confidence ordering). Kobe verdicts each run correct / incorrect / uncertain, with notes naming missed or wrong techniques. Budget: ~300 docs at 30–45s ≈ 3–4 hours, splittable.
-- [ ] Curation script: adjudicated evals -> `analysis/evals/golden/propaganda/propaganda-NNN.json` (doc text, expected techniques with verbatim spans, expected density band). "Incorrect" runs get their corrected expected label from Kobe's notes or a second pass — never inferred.
+- [ ] Queue the sample through the Review tab (`review/service.py` — propaganda is already a `ReviewTaskType`; add a way to pin this batch ahead of lowest-confidence ordering). Kobe verdicts every FLAG per the Phase 0 rubric (per-flag correct/incorrect + reason, plus missed techniques). Budget: ~300 docs at 45–60s with per-flag rating ≈ 4–5 hours, splittable.
+- [ ] Curation script: per-flag adjudications -> `analysis/evals/golden/propaganda/propaganda-NNN.json` (doc text; expected techniques with verbatim spans; rejected flags kept as named negatives with their reason codes; expected density band). Corrections come from Kobe's verdicts/notes only — never inferred.
 - [ ] Sign-off gate: each golden file carries `verified_by`; the runner hard-fails on any file without it. Golden set is locked only when Kobe has verified every file.
 - [ ] Record replay recordings for the current model (claims-harness pattern) so scoring runs offline.
 
