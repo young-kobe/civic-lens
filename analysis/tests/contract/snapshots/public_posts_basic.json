@@ -1,0 +1,69 @@
+{
+  "items": [
+    {
+      "author": {
+        "accountCreatedAt": null,
+        "avatarUrl": null,
+        "bio": null,
+        "displayName": "Some User",
+        "followersCount": null,
+        "handle": "someuser",
+        "verifiedType": null
+      },
+      "confidence": 0.9,
+      "date": "2026-01-15T12:00:00+00:00",
+      "docId": 1,
+      "engagement": {
+        "likes": 10,
+        "numComments": null,
+        "quotes": null,
+        "replies": null,
+        "retweets": null,
+        "score": null
+      },
+      "evidenceSpans": [],
+      "fullText": "body",
+      "label": "neutral",
+      "narrative": null,
+      "reasoning": null,
+      "sarcasmDetected": null,
+      "sourceName": "someuser",
+      "sourceType": "x_post",
+      "targets": null,
+      "title": "A post",
+      "topic": "General",
+      "url": "https://example.com/tweet-1"
+    },
+    {
+      "author": null,
+      "confidence": 0.9,
+      "date": "2026-01-15T12:00:00+00:00",
+      "docId": 2,
+      "engagement": {
+        "likes": null,
+        "numComments": 1,
+        "quotes": null,
+        "replies": null,
+        "retweets": null,
+        "score": 2
+      },
+      "evidenceSpans": [],
+      "fullText": "body",
+      "label": "neutral",
+      "narrative": null,
+      "reasoning": null,
+      "sarcasmDetected": null,
+      "sourceName": null,
+      "sourceType": "reddit_post",
+      "targets": null,
+      "title": "A post",
+      "topic": "General",
+      "url": "https://example.com/t3_abc"
+    }
+  ],
+  "page": 1,
+  "pageSize": 20,
+  "topic": null,
+  "total": 2,
+  "window": "all"
+}

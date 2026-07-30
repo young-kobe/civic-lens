@@ -2676,6 +2676,16 @@ code, pre {
   overflow-y: auto;
 }
 
+/* Public column post feed — paginated PostCards inside the column scroll
+   region; the load-more button centers under the cards. */
+.public-post-feed {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2);
+}
+.public-post-feed .btn { align-self: center; }
+
 /* Cross-column control bar above the grid: lean/party filter + entity search. */
 /* Filter bar — the header band of the three-way frame. The frame supplies the
    outer border; the band just needs a bottom rule to divide it from the

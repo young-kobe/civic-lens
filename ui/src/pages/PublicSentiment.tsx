@@ -23,12 +23,13 @@ import { formatPct, formatPts, formatRelativeDate } from '../services/format';
 import { useFetch } from '../services/useFetch';
 import { COLORS } from '../theme';
 import {
-    TOPICS, topicByKey, topicFromSlug,
+    topicByKey, topicFromSlug,
     type Topic, type TopicKey,
 } from '../services/topics';
 import { readHashParam, useDeepLinkParam, writeHashParam } from '../services/deepLink';
 import { OutletSignalsPanel } from './publicSentiment/OutletSignalsPanel';
 import { PartyTonePanel } from './publicSentiment/PartyTonePanel';
+import { PublicPostFeed } from './publicSentiment/PublicPostFeed';
 import {
     ReceivedProvenanceBlock, SPEAKER_TIER_LABELS, ToneBarRows,
 } from './publicSentiment/ReceivedToneBlocks';
@@ -522,6 +523,7 @@ interface ThreeWayGridProps {
     generalPublic: EntitySentimentItem[];
     onOpen: (item: EntitySentimentItem) => void;
     activeTopic: Topic;
+    timeWindow: TimeWindow;
 }
 
 const SENTIMENT_SORTERS: ColumnSorter<EntitySentimentItem>[] = [
@@ -547,15 +549,16 @@ function publicOutboundTargets(items: EntitySentimentItem[]): EntitySentimentIte
 }
 
 function SentimentThreeWayGrid({
-    newsOutlets, officials, generalPublic, onOpen, activeTopic,
+    newsOutlets, officials, generalPublic, onOpen, activeTopic, timeWindow,
 }: ThreeWayGridProps) {
     // Lean/party filter (owned here; ThreeWayColumn receives filtered items).
+    // The public column is a post feed with no curated lean, so the filter
+    // applies to the news/officials columns only (the byline says so).
     const [leanFilter, setLeanFilter] = useState<LeanFilter>('all');
 
     const byLean = (it: EntitySentimentItem) => matchesLeanFilter(it.entityProfile, leanFilter);
     const filteredNews = newsOutlets.filter(byLean);
     const filteredOfficials = officials.filter(byLean);
-    const filteredPublic = generalPublic.filter(byLean);
     // Targets are computed from the unfiltered public tier — they describe who
     // the public talks ABOUT, independent of the entities' own lean.
     const publicTargets = publicOutboundTargets(generalPublic);
@@ -654,7 +657,7 @@ function SentimentThreeWayGrid({
                 />
                 <ThreeWayColumn
                     header="Politicians & Officials"
-                    byline={`Tracked officeholders posting on X${topicSuffix}`}
+                    byline={`Tracked officials and appointees posting on X${topicSuffix}`}
                     empty="No officials match this filter in this window."
                     items={filteredOfficials}
                     renderItem={renderCard}
@@ -662,13 +665,19 @@ function SentimentThreeWayGrid({
                 />
                 <ThreeWayColumn
                     header="The Public"
-                    byline={`Political subreddits, curated political accounts, and the most active X voices in our sample${topicSuffix}`}
-                    empty="No social posts match this filter in this window."
-                    items={filteredPublic}
-                    renderItem={renderCard}
-                    sorters={SENTIMENT_SORTERS}
+                    byline={
+                        (activeTopic.key === 'all'
+                            ? 'Most-engaged sampled posts from Reddit and X'
+                            : `Most-engaged sampled ${activeTopic.label} posts from Reddit and X`)
+                        + (leanFilter !== 'all'
+                            ? ' · the lean filter applies to the news and officials columns only'
+                            : '')
+                    }
+                    empty=""
                     footer={publicTargetsFooter}
-                />
+                >
+                    <PublicPostFeed timeWindow={timeWindow} activeTopic={activeTopic} />
+                </ThreeWayColumn>
         </ThreeWayGrid>
     );
 }
@@ -1223,28 +1232,6 @@ function writeTopicToUrl(key: TopicKey): void {
     } catch { /* noop — older browsers / sandboxed contexts */ }
 }
 
-function pickDefaultTopic(byTopic: TopicSentiment[] | undefined): TopicKey {
-    // First load behavior: pick the topic with the most volume in the
-    // current window so the page lands on something substantive instead
-    // of an arbitrary alphabetical default. Falls back to 'all' if no
-    // per-topic data is available.
-    if (!byTopic || byTopic.length === 0) return 'all';
-    // 'General' (the unclassified bucket) usually has the largest volume
-    // but is never a substantive landing tab — exclude it from the default.
-    const validTopicNames = new Set(
-        TOPICS.filter(t => t.key !== 'all' && t.key !== 'General').map(t => t.key),
-    );
-    let best: { key: TopicKey; volume: number } | null = null;
-    for (const row of byTopic) {
-        if (!row.topic || !validTopicNames.has(row.topic as TopicKey)) continue;
-        const volume = row.volume ?? 0;
-        if (!best || volume > best.volume) {
-            best = { key: row.topic as TopicKey, volume };
-        }
-    }
-    return best && best.volume > 0 ? best.key : 'all';
-}
-
 
 // --------------------------------------------------------------------------- //
 //  Page                                                                       //
@@ -1306,17 +1293,14 @@ function PublicSentiment({ filters }: PublicSentimentProps) {
     const [activeEntity, setActiveEntity] = useState<EntitySentimentItem | null>(null);
     const [activeSegment, setActiveSegment] = useState<SentimentSegmentKey | null>(null);
     const [activeDate, setActiveDate] = useState<string | null>(null);
+    // 'all' is the stable default: no URL param means All Topics, and
+    // nothing overrides it (the old most-discussed auto-default made
+    // "All Topics" unreachable — clicking it deleted the param, which
+    // re-armed the picker and snapped the tab back).
     const [activeTopicKey, setActiveTopicKeyState] = useState<TopicKey>(() => readTopicFromUrl());
-    // Tracks whether the current activeTopicKey came from the URL (or
-    // explicit user click) vs. the implicit default. We only auto-pick a
-    // most-discussed default on the first render where no URL value was
-    // present — re-fetches on filter changes shouldn't keep flipping the
-    // user's selection.
-    const [pickedDefault, setPickedDefault] = useState<boolean>(() => readTopicFromUrl() !== 'all');
 
     const setActiveTopicKey = (key: TopicKey) => {
         setActiveTopicKeyState(key);
-        setPickedDefault(true);
         writeTopicToUrl(key);
     };
 
@@ -1366,28 +1350,13 @@ function PublicSentiment({ filters }: PublicSentimentProps) {
         setEntityParam(null);
     }, [data, entityParam, setEntityParam]);
 
-    // Pick the most-discussed topic as the default once data lands, but
-    // only if the user hasn't already chosen something (URL or click).
-    useEffect(() => {
-        if (pickedDefault) return;
-        if (!data) return;
-        const def = pickDefaultTopic(data.byTopic);
-        if (def !== 'all') {
-            setActiveTopicKeyState(def);
-            writeTopicToUrl(def);
-            setPickedDefault(true);
-        }
-    }, [data, pickedDefault]);
-
     // Sync state from back/forward navigation or an incoming deep link
     // ("#sentiment?topic=economy") that mutates the topic param while the
     // page stays mounted. hashchange covers deep links + back/forward on
     // the hash; popstate covers legacy search-param history entries.
     useEffect(() => {
         const onUrlChange = () => {
-            const next = readTopicFromUrl();
-            setActiveTopicKeyState(next);
-            setPickedDefault(next !== 'all');
+            setActiveTopicKeyState(readTopicFromUrl());
         };
         window.addEventListener('popstate', onUrlChange);
         window.addEventListener('hashchange', onUrlChange);
@@ -1516,6 +1485,7 @@ function PublicSentiment({ filters }: PublicSentimentProps) {
                     generalPublic={data.byGeneralPublic ?? []}
                     onOpen={setActiveEntity}
                     activeTopic={activeTopic}
+                    timeWindow={filters.timeRange}
                 />
             </div>
 

@@ -348,3 +348,16 @@ class SentimentPanelResponse(CamelModel):
     tone_trend: List[ToneTrendPoint] = []
     distribution_samples: Dict[str, List[ClassificationSampleModel]] = {}
     day_samples: Dict[str, List[ClassificationSampleModel]] = {}
+
+
+class PublicPostsResponse(CamelModel):
+    """GET /api/v1/public-posts payload -- the sentiment page's public
+    column feed. ``topic`` echoes the active filter (None = all topics);
+    ``window`` is None for an explicit from/to range request."""
+
+    window: Optional[str]
+    topic: Optional[str]
+    page: int
+    page_size: int
+    total: int
+    items: List[ClassificationSampleModel]
