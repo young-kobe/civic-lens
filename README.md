@@ -1,5 +1,16 @@
 # Civic Lens
 
+[![CI](https://github.com/young-kobe/civic-lens/actions/workflows/ci.yml/badge.svg)](https://github.com/young-kobe/civic-lens/actions/workflows/ci.yml)
+[![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](./LICENSE)
+![Go](https://img.shields.io/badge/Go-crash--resumable_ingester-00ADD8.svg)
+![Python](https://img.shields.io/badge/Python-analysis_pipeline-3776AB.svg)
+![TypeScript](https://img.shields.io/badge/TypeScript-React_%2B_Vite-3178c6.svg)
+![Postgres](https://img.shields.io/badge/Postgres-single_source_of_truth-4169E1.svg)
+![FastAPI](https://img.shields.io/badge/FastAPI-strictly_live-009688.svg)
+![LLM](https://img.shields.io/badge/LLM-Gemini_%7C_Ollama_%7C_OpenAI--compat-a855f7.svg)
+![Outputs](https://img.shields.io/badge/every_output-traceable_%26_confidence--scored-1a8a3d.svg)
+[![Live](https://img.shields.io/badge/live-civic--lens.info-brightgreen.svg)](https://civic-lens.info)
+
 Civic Lens is an audit-driven system for measuring **sampled political discourse** across news, Reddit, and X, with a **narrative overlay** that clusters recurring claims and a **partial citation overlay** between owned sources. Every output is traceable, confidence-scored, and labeled as a sample; the system never fabricates data.
 
 The goal is deliberately scoped: this is a sampled-discourse tracker with a narrative overlay, not a causal propagation engine. The citation graph only covers edges between docs we ingested, and narrative "first seen" means first-ingested-by-us, not world-origin. See `docs/audit-trail/` for the scoping rationale and its evolution.
