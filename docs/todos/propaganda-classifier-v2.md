@@ -1,7 +1,7 @@
 # Propaganda classifier v2: Kobe-verified golden set, calibration, then the prompt
 
 First instance of the all-metrics golden-set initiative
-(`docs/todos/llm-golden-sets.md`) — the per-flag machinery built here is
+(`docs/todos/golden-sets.md`) — the per-flag machinery built here is
 the template the targets set clones, so design Phase 0 with that second
 consumer in mind (verdict + reason + missed-item is the shared shape;
 the reason enums are per-domain).
