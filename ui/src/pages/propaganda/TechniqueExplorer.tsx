@@ -69,7 +69,7 @@ function ByPartySection({ parties }: { parties: PartySplit[] }) {
             </p>
             <p className="text-xs text-muted" style={{ margin: 'var(--space-1) 0 0' }}>
                 Officials' own accounts only — says nothing about the media or the public.
-                An overall rate, not a breakdown of the techniques above.
+                An overall rate, not a per-technique breakdown.
                 {lowSample.length > 0 && (
                     ` Low sample: ${lowSample.map((p) => `${partyLabel(p.party)} has only ${p.totalDocs.toLocaleString()} scored posts`).join('; ')}.`
                 )}
@@ -149,21 +149,21 @@ export function TechniqueExplorer({ data }: TechniqueExplorerProps) {
 
     return (
         <Card
-            title="Technique density, post by post"
-            subtitle="Every dot is a flagged post, placed by how saturated it is with persuasion techniques and colored by who said it. Click a technique to isolate its posts."
+            title="Persuasion density, post by post"
+            subtitle="Every dot is a flagged post, placed by how heavily it leans on persuasion and colored by who said it. Click a chip to isolate its posts."
             note="A sample of flagged posts (capped per speaker), not the full corpus. Density measures rhetorical style, not truth or intent."
             headerActions={
                 <MethodPopover
                     description={
-                        'Each post is scored for six rhetorical techniques; the model must quote a '
-                        + 'verbatim phrase from the source as evidence for every flag. Density runs 0 '
-                        + '(no techniques) to 1 (wall-to-wall). The dots are the flagged-example pool '
-                        + '(up to 5 posts per speaker), colored News / Officials / Public.'
+                        'The dots are the flagged-example pool (up to 5 posts per speaker), colored '
+                        + 'News / Officials / Public. Density runs 0 (none) to 1 (wall-to-wall). What '
+                        + 'gets flagged and how is defined under "How to read these numbers" at the '
+                        + 'top of the page.'
                     }
                 />
             }
         >
-            <div className="technique-chip-row" role="group" aria-label="Propaganda techniques">
+            <div className="technique-chip-row" role="group" aria-label="Persuasion techniques">
                 {data.byTechnique.map((t) => (
                     <TechniqueChip
                         key={t.technique}
@@ -193,7 +193,7 @@ export function TechniqueExplorer({ data }: TechniqueExplorerProps) {
             <Modal
                 isOpen={evidenceOpen && selected !== null}
                 onClose={closeEvidence}
-                kicker="Propaganda technique"
+                kicker="Persuasion technique"
                 title={selected ? (TECHNIQUE_LABEL[selected] || selected) : ''}
                 subtitle={selected ? TECHNIQUE_BLURB[selected] : undefined}
             >
