@@ -48,7 +48,7 @@ func withDatabase(dsn, dbName string) (string, error) {
 // TestPostgresMigrate verifies the Postgres runner end to end against a real
 // server: bootstrap creates ops.schema_migrations, migrations apply in
 // numeric-prefix order and are recorded, a re-run is a no-op, and a failing
-// migration rolls back atomically (the same D-6 guarantee as SQLite) — using
+// migration rolls back atomically (the D-6 guarantee) — using
 // a temp fixture directory rather than the real data/pg-migrations/, per the
 // instruction not to depend on that file's contents.
 //
@@ -91,9 +91,6 @@ func TestPostgresMigrate(t *testing.T) {
 		t.Fatalf("Open(%q): %v", scratchDSN, err)
 	}
 	defer database.Close()
-	if !database.isPostgres {
-		t.Fatalf("Open(%q) did not select the Postgres backend", scratchDSN)
-	}
 
 	ctx := context.Background()
 

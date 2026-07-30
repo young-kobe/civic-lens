@@ -1,5 +1,5 @@
 [Unit]
-Description=Civic Lens compose stack (caddy + api + litestream)
+Description=Civic Lens compose stack (caddy + api + postgres)
 # Boot-time bring-up for the always-on services. Deploys restart the stack
 # directly via `docker compose up -d` in deploy.sh; this unit exists so a
 # reboot brings everything back without an operator.

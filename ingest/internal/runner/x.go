@@ -181,61 +181,14 @@ func (xr *XRunner) Run(ctx context.Context) (*XResult, error) {
 	return result, nil
 }
 
+// insertPost upserts a search-query post into raw.x_posts. is_official_tier
+// is never in the column list ON CONFLICT DO UPDATE writes, so a topic-query
+// match on a tweet already ingested by the officials pass updates the
+// metrics/text but leaves an existing is_official_tier=1 intact (I-6).
 func (xr *XRunner) insertPost(ctx context.Context, post model.XPost) error {
-	if xr.app.Database.IsPostgres() {
-		return xr.insertPostPostgres(ctx, post)
-	}
-	// ON CONFLICT DO UPDATE without is_official_tier in the column list: a
-	// topic-query match on a tweet already ingested by the officials pass
-	// updates the metrics/text but leaves is_official_tier=1 intact. A brand
-	// new topic post gets the column default (0). INSERT OR REPLACE would
-	// have erased the flag on the overlap (I-6).
-	return upsertRowOnConflict(ctx, xr.app.Database.Conn(), "x_posts_raw", "tweet_id",
-		[]string{
-			"tweet_id", "author_id", "conversation_id", "created_at", "fetched_at",
-			"text", "lang", "retweet_count", "reply_count", "like_count", "quote_count",
-			"place_id", "place_country_code", "place_full_name",
-			"context_annotations_json", "in_reply_to_user_id",
-			"referenced_tweet_id", "referenced_tweet_type",
-			"raw_hash", "extraction_version",
-		},
-		[]any{
-			post.TweetID, post.AuthorID, post.ConversationID, post.CreatedAt, post.FetchedAt,
-			post.Text, post.Lang, post.RetweetCount, post.ReplyCount, post.LikeCount, post.QuoteCount,
-			post.PlaceID, post.PlaceCountryCode, post.PlaceFullName,
-			post.ContextAnnotationsJSON, post.InReplyToUserID,
-			post.ReferencedTweetID, post.ReferencedTweetType,
-			post.RawHash, post.ExtractionVersion,
-		},
-	)
+	return xr.insertPostPostgres(ctx, post)
 }
 
 func (xr *XRunner) insertUser(ctx context.Context, user model.XUser) error {
-	if xr.app.Database.IsPostgres() {
-		return xr.insertUserPostgres(ctx, user)
-	}
-
-	verified := 0
-	if user.Verified {
-		verified = 1
-	}
-	protected := 0
-	if user.Protected {
-		protected = 1
-	}
-
-	return upsertRow(ctx, xr.app.Database.Conn(), "x_users_raw",
-		[]string{
-			"user_id", "username", "name", "location", "description", "created_at",
-			"followers_count", "following_count", "tweet_count", "listed_count",
-			"verified", "verified_type", "profile_image_url", "protected",
-			"fetched_at", "raw_hash",
-		},
-		[]any{
-			user.UserID, user.Username, user.Name, user.Location, user.Description, user.CreatedAt,
-			user.FollowersCount, user.FollowingCount, user.TweetCount, user.ListedCount,
-			verified, user.VerifiedType, user.ProfileImageURL, protected,
-			user.FetchedAt, user.RawHash,
-		},
-	)
+	return xr.insertUserPostgres(ctx, user)
 }

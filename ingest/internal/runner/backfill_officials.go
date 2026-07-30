@@ -115,16 +115,11 @@ type backfillDeps struct {
 }
 
 // RunBackfillOfficials is the `civic-ingest backfill-officials` entry point:
-// bootstraps the X client from config the same way Run does, requires a
-// Postgres backend (corpus.entities has no SQLite counterpart), and wires
-// the real Postgres-backed deps before delegating to runBackfillOfficials —
-// the same Run/runOfficialsPass split the existing officials pass uses so
-// the walk itself stays testable against a stub client.
+// bootstraps the X client from config the same way Run does, and wires the
+// Postgres-backed deps before delegating to runBackfillOfficials — the same
+// Run/runOfficialsPass split the existing officials pass uses so the walk
+// itself stays testable against a stub client.
 func (xr *XRunner) RunBackfillOfficials(ctx context.Context, spendCapCents int) (*BackfillOfficialsResult, error) {
-	if !xr.app.Database.IsPostgres() {
-		return nil, fmt.Errorf("backfill-officials requires a Postgres --db: corpus.entities does not exist on the SQLite backend")
-	}
-
 	cfg := xr.app.Config
 	xr.client = x.NewFromEnv(x.Config{
 		BearerToken:     cfg.X.BearerToken,

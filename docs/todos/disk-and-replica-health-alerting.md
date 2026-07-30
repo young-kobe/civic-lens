@@ -8,9 +8,10 @@ plumbing (`deploy/scripts/send-alert.py`, `civic-lens-alert@.service`, systemd
 `OnFailure=`).
 
 Litestream-specific replica-health checks (WAL-size threshold, replica-desync
-log scanning) are dropped from this initiative — litestream retires as part of
-the Postgres cutover (`docs/todos/post-rewrite-cutover.md`), so alerting on its
-health is not worth building.
+log scanning) are dropped from this initiative — litestream was removed in the
+Phase 7 decommission
+(`docs/audit-trail/infra/2026-07-28-post-cutover-decommission.md`), so
+alerting on its health is moot.
 
 ## Design constraints
 

@@ -1,13 +1,11 @@
 # Civic Lens Database Schema Reference
 
 > **LIVE SCHEMA.** This is the schema running in production and dev — the
-> pre-Postgres SQLite schema was retired at cutover. See
-> `docs/todos/post-rewrite-cutover.md` for remaining cleanup (the Go
-> SQLite backend itself is deprecated and pending deletion; see
-> `.agent/workflows/go-ingestion.md`).
+> pre-Postgres SQLite schema was retired at cutover (2026-07-26) and the Go
+> SQLite backend was deleted in the Phase 7 decommission (2026-07-28).
 
-> **Version**: 3.2
-> **Last updated**: 2026-07-26
+> **Version**: 3.3
+> **Last updated**: 2026-07-28
 > **Source of truth**: `data/pg-migrations/0001_north_star.sql` plus
 > `0002`-`0006` — this document is regenerated from those files; when it
 > drifts, rebuild and re-diff rather than hand-editing.
@@ -218,8 +216,8 @@ Currently empty and unwritten: the only prior writer
 (`analysis/src/etl/registry_sync.py`) is retired, and it could never have
 populated this table from a virgin seed anyway (`author_id` is `NOT NULL`
 and `corpus.authors` is empty pre-ETL). Populating it is either a direct DB
-curation edit once an author exists, or future work for Phase 6's
-`account_classifier` — see `docs/todos/pg-redesign.md`.
+curation edit once an author exists, or future work for a registry-aware
+account classifier.
 
 ### corpus.documents
 
@@ -295,7 +293,7 @@ docstring.
 `task` (bot/text/targets/propaganda/claims/citations/account_tier),
 `run_status` (pending/running/done/failed), `inference_method`
 (llm/deterministic/hybrid), `sentiment_label` (positive/negative/neutral/mixed),
-`favorability_label` (favorable/unfavorable/neutral/mixed), `bot_label`
+`bot_label`
 (bot/suspicious/human/unknown), `propaganda_technique` (loaded_language/
 name_calling/ad_hominem/appeal_to_fear/whataboutism/doubt_casting),
 `link_type` (url_citation/quote/reply/retweet), `verdict`
@@ -372,7 +370,6 @@ above).
 | Table | Key | Notes |
 | --- | --- | --- |
 | `sentiment_results` | run_id PK | label, score, sarcasm_detected, evidence_spans TEXT[] |
-| `favorability_stances` | favorability_id PK | **RETIRED 2026-07-25 — no writer, no reader.** Held GOP-only stance from the text task; superseded by `target_mentions` joined to `corpus.entities.lean`, which is symmetric across parties. Table still exists; dropped at Phase 11 |
 | `target_mentions` | mention_id PK | run_id, doc_id, raw_target (audit, always kept), entity_id nullable (unresolved persists), stance, topic, confidence, evidence_spans |
 | `propaganda_results` | run_id PK | density, summary, techniques_validated, techniques_dropped |
 | `propaganda_techniques` | technique_id PK | run_id FK -> propaganda_results, technique enum, verbatim evidence_span, confidence |
@@ -467,8 +464,8 @@ not).
 Read-only by convention: no FKs beyond primary keys, no CHECK constraints,
 PKs preserve the imported SQLite integer IDs verbatim. Epoch integers
 convert to TIMESTAMPTZ; TEXT JSON columns become JSONB for browsability.
-No application code reads or writes these tables except
-`tools/migrate_sqlite_to_pg.py --archive` (one-time, Phase 3).
+No application code reads or writes these tables; the one-time import tool
+(`tools/migrate_sqlite_to_pg.py`) was deleted in the Phase 7 decommission.
 
 Tables: `docs`, `ai_outputs`, `prompt_versions`, `target_mentions`,
 `narratives`, `narrative_docs`, `narrative_citations`, `account_profiles`,

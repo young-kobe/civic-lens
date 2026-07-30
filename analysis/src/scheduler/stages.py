@@ -206,9 +206,9 @@ _TARGETS_INPUT_SQL = "SELECT doc_id, source_type, body FROM corpus.documents WHE
 # tracked_targets is the same canonical-name list for every doc in a targets
 # stage run (built once from the curated registry, not per doc). No
 # hardcoded party-collective strings are added (corpus.entities has no
-# populated kind='collective' rows yet; see docs/todos/pg-redesign.md
-# Phase 4's "Future decision" item -- fabricating them here would violate
-# the never-fabricate-values rule).
+# populated kind='collective' rows yet; the open decision lives in
+# docs/todos/recompute-acceptance-and-tuning.md -- fabricating them here
+# would violate the never-fabricate-values rule).
 _TRACKED_TARGET_NAMES_SQL = """
     SELECT display_name FROM corpus.entities
     WHERE kind = 'official' AND editorial AND active

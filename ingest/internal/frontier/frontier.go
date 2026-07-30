@@ -1,12 +1,8 @@
-// Package frontier manages the crawl queue with state machine transitions.
-// Two backends are supported from one binary, mirroring the internal/storage/db
-// split: SQLite, the live production path until the Phase 11 Postgres-redesign
-// cutover, and Postgres, the new path being built out ahead of that cutover.
-// Frontier dispatches by f.db.IsPostgres() so callers do not need to branch
-// themselves; SQLite-specific SQL lives in frontier_sqlite.go and
-// Postgres-specific SQL (including the FOR UPDATE SKIP LOCKED claim and the
-// optional per-domain balance quota) lives in frontier_postgres.go. This file
-// holds the shared surface, dispatch, and the DomainQuota config type.
+// Package frontier manages the crawl queue with state machine transitions
+// against Postgres. Postgres-specific SQL (including the FOR UPDATE SKIP
+// LOCKED claim and the optional per-domain balance quota) lives in
+// frontier_postgres.go. This file holds the shared surface and the
+// DomainQuota config type.
 package frontier
 
 import (
@@ -26,18 +22,14 @@ type Frontier struct {
 	db         *db.DB
 	maxRetries int
 	// quota configures optional per-domain balance caps. Read only by the
-	// Postgres claim path (see frontier_postgres.go); nil on every SQLite
-	// Frontier and on any Postgres Frontier where seeds.yaml has no
-	// crawl_balance section — both mean "unlimited claiming", i.e. today's
-	// behavior.
+	// claim path (see frontier_postgres.go); nil when seeds.yaml has no
+	// crawl_balance section, meaning "unlimited claiming".
 	quota *DomainQuota
 }
 
-// DomainQuota configures per-domain balance quotas for the Postgres claim
-// query (Postgres-redesign Phase 2, Task 2 — production is skewed, e.g.
-// cbsnews 2,404 docs vs npr 65). It is additive and Postgres-only: the
-// SQLite path never reads it, so a Frontier built with a nil DomainQuota (or
-// any SQLite Frontier) claims exactly as it always has.
+// DomainQuota configures per-domain balance quotas for the claim query
+// (production is skewed, e.g. cbsnews 2,404 docs vs npr 65). A nil
+// DomainQuota means unlimited claiming for every domain.
 type DomainQuota struct {
 	// Window bounds how far back the per-domain "already fetched" count is
 	// computed, against raw.articles.fetched_at (see frontier_postgres.go's
@@ -63,7 +55,7 @@ type PushStats struct {
 }
 
 // New creates a new Frontier. quota is optional (nil disables balance
-// quotas) and is only ever consulted on the Postgres path.
+// quotas).
 func New(database *db.DB, maxRetries int, quota *DomainQuota) *Frontier {
 	return &Frontier{
 		db:         database,
@@ -81,13 +73,9 @@ func New(database *db.DB, maxRetries int, quota *DomainQuota) *Frontier {
 // operator tunes staleAge below the fetch timeout and a still-live row is
 // recovered and re-claimed, the claim guard in updatePageState makes the
 // original worker's completion a no-op error rather than a clobber, so
-// exclusivity (A3) holds regardless. This invariant is enforced identically
-// on both backends (see recoverStaleSQLite / recoverStalePostgres).
+// exclusivity (A3) holds regardless. See recoverStalePostgres for the SQL.
 func (f *Frontier) RecoverStale(ctx context.Context, staleAge time.Duration) (int64, error) {
-	if f.db.IsPostgres() {
-		return f.recoverStalePostgres(ctx, staleAge)
-	}
-	return f.recoverStaleSQLite(ctx, staleAge)
+	return f.recoverStalePostgres(ctx, staleAge)
 }
 
 // EnsureRecovered runs RecoverStale and logs the result. Every runner
@@ -106,15 +94,11 @@ func (f *Frontier) EnsureRecovered(ctx context.Context, staleAge time.Duration) 
 }
 
 // ClaimItems atomically claims a batch of work items, moving rows from
-// QUEUED to INFLIGHT. On Postgres this is a single FOR UPDATE SKIP LOCKED
-// statement (see claimItemsPostgres) instead of the SQLite busy-timeout
-// dance; the per-domain balance quota, when configured, is applied only on
-// that path (claimItemsPostgresQuota).
+// QUEUED to INFLIGHT via a single FOR UPDATE SKIP LOCKED statement (see
+// claimItemsPostgres); the per-domain balance quota, when configured, is
+// applied there too (claimItemsPostgresQuota).
 func (f *Frontier) ClaimItems(ctx context.Context, batchSize int) ([]*model.Page, error) {
-	if f.db.IsPostgres() {
-		return f.claimItemsPostgres(ctx, batchSize)
-	}
-	return f.claimItemsSQLite(ctx, batchSize)
+	return f.claimItemsPostgres(ctx, batchSize)
 }
 
 // MarkDone marks a page as successfully fetched.
@@ -152,12 +136,9 @@ func (f *Frontier) MarkFailed(ctx context.Context, page *model.Page, errMsg stri
 // the timestamp this worker claimed the row at), so a worker whose row was
 // recovered by RecoverStale and re-claimed by another worker matches 0 rows
 // and gets a "not claimed" error instead of silently clobbering the new
-// claim (A3 exclusivity) — enforced identically on both backends.
+// claim (A3 exclusivity).
 func (f *Frontier) updatePageState(ctx context.Context, page *model.Page, state model.PageState, updates map[string]any) error {
-	if f.db.IsPostgres() {
-		return f.updatePageStatePostgres(ctx, page, state, updates)
-	}
-	return f.updatePageStateSQLite(ctx, page, state, updates)
+	return f.updatePageStatePostgres(ctx, page, state, updates)
 }
 
 // PushLinks adds new URLs to the frontier and returns categorized counts.
@@ -167,15 +148,11 @@ func (f *Frontier) PushLinks(ctx context.Context, links []string, priority int) 
 	if len(links) == 0 {
 		return &PushStats{}, nil
 	}
-	if f.db.IsPostgres() {
-		return f.pushLinksPostgres(ctx, links, priority)
-	}
-	return f.pushLinksSQLite(ctx, links, priority)
+	return f.pushLinksPostgres(ctx, links, priority)
 }
 
-// canonicalizeLink resolves a raw link to (canon, domain, ok). Shared by
-// both backends' PushLinks so the malformed-URL classification cannot drift
-// between SQLite and Postgres.
+// canonicalizeLink resolves a raw link to (canon, domain, ok). Shared with
+// pushLinksPostgres so the malformed-URL classification lives in one place.
 func canonicalizeLink(link string) (canon, domain string, ok bool) {
 	c, err := util.CanonicalizeURL(link)
 	if err != nil {
@@ -186,8 +163,5 @@ func canonicalizeLink(link string) (canon, domain string, ok bool) {
 
 // Stats returns current frontier statistics.
 func (f *Frontier) Stats(ctx context.Context) (queued, inflight, done, failed int64, err error) {
-	if f.db.IsPostgres() {
-		return f.statsPostgres(ctx)
-	}
-	return f.statsSQLite(ctx)
+	return f.statsPostgres(ctx)
 }

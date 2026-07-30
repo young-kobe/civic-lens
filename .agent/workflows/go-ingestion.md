@@ -15,8 +15,8 @@ ingest/
 ├── cmd/civic-ingest/    # CLI entrypoint (cobra: migrate|ingest|crawl|reddit|x|requeue-stale)
 ├── internal/
 │   ├── crawler/         # HTTP fetcher with rate limiting
-│   ├── frontier/        # URL queue: frontier_postgres.go (primary), frontier_sqlite.go (deprecated)
-│   ├── storage/db/      # db_postgres.go (primary), db_sqlite.go (deprecated), migration runner
+│   ├── frontier/        # URL queue (frontier.go surface, frontier_postgres.go SQL)
+│   ├── storage/db/      # Postgres connection + migration runner (db.go, db_postgres.go)
 │   ├── extract/         # RSS parser, Reddit API client
 │   ├── model/           # Shared data types
 │   └── runner/          # Orchestration logic (article_writer_postgres.go, reddit_postgres.go,
@@ -24,7 +24,7 @@ ingest/
 └── go.mod
 ```
 
-Postgres is the live backend as of the pg-redesign cutover — `--db` accepts a Postgres DSN (`postgres://...`) and the binary migrates/writes through `*_postgres.go`. The SQLite backend (`frontier_sqlite.go`, `db_sqlite.go`, `data/migrations/*.sql`) is deprecated: kept only so old on-disk SQLite files remain readable during the migration window, not touched for new work, and slated for deletion in a later cleanup phase (`docs/todos/post-rewrite-cutover.md`). Do not add new SQLite-path code.
+Postgres is the only backend — `--db` takes a Postgres DSN (`postgres://...`, defaulting to `CIVIC_DATABASE_URL`) and `db.Open` fails loudly on anything else. The SQLite backend was deleted in the Phase 7 post-cutover decommission (2026-07-28).
 
 ## Invariants (Must-Have)
 

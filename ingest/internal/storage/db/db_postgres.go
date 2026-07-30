@@ -10,8 +10,7 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
-// pgMigrationsDir is where Postgres migrations live: `data/pg-migrations/`
-// sits alongside `data/migrations/` (SQLite-only). Resolution must not
+// pgMigrationsDir is where Postgres migrations live. Resolution must not
 // depend on the process working directory — in the container, compose sets
 // working_dir to the data volume while the migrations ship in the image at
 // /app/data/pg-migrations, so a CWD-only lookup silently finds nothing.
@@ -44,7 +43,7 @@ func openPostgres(dsn string) (*DB, error) {
 	}
 
 	// Modest pool: the box is a 3-vCPU host shared with the API and job
-	// workers, comparable in spirit to the SQLite connection limits below.
+	// workers.
 	conn.SetMaxOpenConns(5)
 	conn.SetMaxIdleConns(2)
 
@@ -53,7 +52,7 @@ func openPostgres(dsn string) (*DB, error) {
 		return nil, fmt.Errorf("ping postgres database: %w", err)
 	}
 
-	return &DB{conn: conn, dsn: dsn, isPostgres: true}, nil
+	return &DB{conn: conn, dsn: dsn}, nil
 }
 
 // migratePostgresDir applies all pending migrations from migrationsDir,
@@ -123,9 +122,8 @@ CREATE TABLE IF NOT EXISTS ops.schema_migrations (
 
 // applyPostgresMigration runs one migration file and records it in
 // ops.schema_migrations inside the same transaction, so a crash mid-migration
-// rolls both back together and a re-run applies cleanly — the same D-6
-// guarantee as the SQLite path. Unlike SQLite migration files, Postgres
-// migration files do not self-track their version; the runner records it.
+// rolls both back together and a re-run applies cleanly (the D-6 guarantee).
+// Migration files do not self-track their version; the runner records it.
 func (d *DB) applyPostgresMigration(ctx context.Context, m migration, migrationSQL string) error {
 	tx, err := d.conn.BeginTx(ctx, nil)
 	if err != nil {

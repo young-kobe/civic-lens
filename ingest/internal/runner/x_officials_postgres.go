@@ -25,10 +25,9 @@ func (xr *XRunner) insertOfficialPostPostgres(ctx context.Context, post model.XP
 	return err
 }
 
-// lookupCachedUserIDPostgres is the Postgres counterpart to
-// lookupCachedUserID (x_officials.go), reading raw.x_users instead of
-// x_users_raw with a $-placeholder. Same signature so resolveOfficialUserID
-// can select between them as a plain function value.
+// lookupCachedUserIDPostgres returns the cached user_id for a username from
+// raw.x_users, or "" when we haven't fetched this handle before.
+// Case-insensitive on username.
 func lookupCachedUserIDPostgres(ctx context.Context, conn *sql.DB, handle string) (string, error) {
 	row := conn.QueryRowContext(ctx,
 		`SELECT user_id FROM raw.x_users WHERE LOWER(username) = LOWER($1) LIMIT 1`,

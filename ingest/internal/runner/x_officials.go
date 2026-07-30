@@ -2,7 +2,6 @@ package runner
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"time"
@@ -171,11 +170,7 @@ func (xr *XRunner) resolveOfficialUserID(
 	handle string,
 	budget *XBudgetTracker,
 ) (string, *model.XUser, error) {
-	lookup := lookupCachedUserID
-	if xr.app.Database.IsPostgres() {
-		lookup = lookupCachedUserIDPostgres
-	}
-	if cachedID, err := lookup(ctx, xr.app.Database.Conn(), handle); err != nil {
+	if cachedID, err := lookupCachedUserIDPostgres(ctx, xr.app.Database.Conn(), handle); err != nil {
 		return "", nil, fmt.Errorf("cache lookup: %w", err)
 	} else if cachedID != "" {
 		return cachedID, nil, nil
@@ -222,49 +217,12 @@ func (xr *XRunner) resolveOfficialUserID(
 	return userData.ID, &user, nil
 }
 
-// lookupCachedUserID returns the cached user_id for a username, or "" when
-// we haven't fetched this handle before. Case-insensitive on username.
-func lookupCachedUserID(ctx context.Context, conn *sql.DB, handle string) (string, error) {
-	row := conn.QueryRowContext(ctx,
-		`SELECT user_id FROM x_users_raw WHERE LOWER(username) = LOWER(?) LIMIT 1`,
-		handle,
-	)
-	var id string
-	switch err := row.Scan(&id); {
-	case errors.Is(err, sql.ErrNoRows):
-		return "", nil
-	case err != nil:
-		return "", err
-	}
-	return id, nil
-}
-
 // insertOfficialPost is the officials-pass variant of insertPost: same
 // columns plus is_official_tier=1. Kept as a separate method so the
 // search-query path stays completely untouched (its callers don't even
 // know the column exists).
 func (xr *XRunner) insertOfficialPost(ctx context.Context, post model.XPost) error {
-	if xr.app.Database.IsPostgres() {
-		return xr.insertOfficialPostPostgres(ctx, post)
-	}
-	return upsertRow(ctx, xr.app.Database.Conn(), "x_posts_raw",
-		[]string{
-			"tweet_id", "author_id", "conversation_id", "created_at", "fetched_at",
-			"text", "lang", "retweet_count", "reply_count", "like_count", "quote_count",
-			"place_id", "place_country_code", "place_full_name",
-			"context_annotations_json", "in_reply_to_user_id",
-			"referenced_tweet_id", "referenced_tweet_type",
-			"raw_hash", "extraction_version", "is_official_tier",
-		},
-		[]any{
-			post.TweetID, post.AuthorID, post.ConversationID, post.CreatedAt, post.FetchedAt,
-			post.Text, post.Lang, post.RetweetCount, post.ReplyCount, post.LikeCount, post.QuoteCount,
-			post.PlaceID, post.PlaceCountryCode, post.PlaceFullName,
-			post.ContextAnnotationsJSON, post.InReplyToUserID,
-			post.ReferencedTweetID, post.ReferencedTweetType,
-			post.RawHash, post.ExtractionVersion, 1,
-		},
-	)
+	return xr.insertOfficialPostPostgres(ctx, post)
 }
 
 func safePrefix(s string, n int) string {

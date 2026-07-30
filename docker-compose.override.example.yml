@@ -9,19 +9,14 @@
 # the base file automatically. Production hosts must never carry one.
 #
 # Windows/WSL2 note: keep the data directory on the Linux filesystem (inside
-# WSL2, e.g. ~/civic-lens/.compose-data). SQLite WAL over a Windows-mounted
-# path (/mnt/c/...) is unsafe — this is the one real WAL-corruption case.
-# The native Windows dev path remains run.ps1, unchanged.
+# WSL2, e.g. ~/civic-lens/.compose-data). The native Windows dev path remains
+# run.ps1, unchanged.
 
 services:
   # TLS, Cloudflare origin pulls, and the static UI don't apply in dev —
   # run the Vite dev server (`.\run.ps1 ui` / `npm run dev`) against the api
   # below instead. The unknown profile name keeps the service inert.
   caddy:
-    profiles: [disabled-in-dev]
-
-  # Litestream needs R2 credentials; dev durability is just your local file.
-  litestream:
     profiles: [disabled-in-dev]
 
   api:
@@ -48,12 +43,11 @@ services:
     volumes:
       - ./.compose-data:/var/lib/civic-lens
 
-  # pg-redesign Phase 1 groundwork (not yet live — nothing reads/writes this
-  # DB yet). Bind-mount instead of the named `pgdata` volume so `rm -rf
-  # .compose-data` resets Postgres the same way it already resets the SQLite
-  # data dir. Set POSTGRES_USER/POSTGRES_PASSWORD in your .env — see
-  # .env.example; there are no defaults, so `docker compose up -d postgres`
-  # fails loud without them.
+  # Bind-mount instead of the named `pgdata` volume so `rm -rf
+  # .compose-data` resets dev Postgres along with the rest of the data dir.
+  # Set POSTGRES_USER/POSTGRES_PASSWORD in your .env — see .env.example;
+  # there are no defaults, so `docker compose up -d postgres` fails loud
+  # without them.
   postgres:
     volumes:
       - ./.compose-data/pgdata:/var/lib/postgresql/data

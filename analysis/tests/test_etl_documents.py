@@ -1,9 +1,8 @@
 """
 Tests for analysis/src/etl/documents.py — Postgres redesign Phase 4.
 
-Two tiers, matching the repo's established convention for Phase 1-3
-Postgres-redesign tests (analysis/tests/test_pg_db.py,
-tools/test_migrate_sqlite_to_pg.py):
+Two tiers, matching the repo's established convention for Postgres-gated
+tests (analysis/tests/test_pg_db.py):
 
   1. Pure decision-function unit tests (no DB) — filter/recency/cap/config
      logic, always run.

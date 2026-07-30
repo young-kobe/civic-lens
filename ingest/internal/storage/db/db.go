@@ -1,11 +1,7 @@
 // Package db provides the storage layer's database connection and migration
-// runner. Two backends are supported from one binary: SQLite, the live
-// production path until the Phase 11 cutover of the Postgres redesign, and
-// Postgres, the new path being built out ahead of that cutover. Open selects
-// the backend by DSN scheme (see isPostgresDSN), so callers do not need to
-// branch themselves. SQLite-specific logic lives in db_sqlite.go and
-// Postgres-specific logic in db_postgres.go; this file holds the shared
-// surface and dispatch.
+// runner. Postgres is the only backend: Open rejects any DSN that is not
+// postgres:// or postgresql:// (see isPostgresDSN). Postgres-specific logic
+// lives in db_postgres.go; this file holds the shared surface.
 package db
 
 import (
@@ -18,41 +14,35 @@ import (
 	"strings"
 )
 
-// DB wraps a SQL database connection — SQLite or Postgres, selected in Open
-// by the DSN scheme.
+// DB wraps a Postgres connection.
 type DB struct {
-	conn       *sql.DB
-	dsn        string
-	isPostgres bool
+	conn *sql.DB
+	dsn  string
 }
 
 // isPostgresDSN reports whether dsn names a Postgres connection
-// (postgres:// or postgresql://) rather than a SQLite file path.
+// (postgres:// or postgresql://). Open rejects anything else.
 func isPostgresDSN(dsn string) bool {
 	return strings.HasPrefix(dsn, "postgres://") || strings.HasPrefix(dsn, "postgresql://")
 }
 
-// Open opens a database connection. dsn is either a SQLite file path or a
-// Postgres connection string (postgres:// / postgresql://) — the scheme
-// picks the backend so callers do not need to branch themselves.
+// Open opens a Postgres database connection. dsn must be a Postgres
+// connection string (postgres:// or postgresql://); anything else is a
+// configuration error, not a fallback to another backend.
 func Open(dsn string) (*DB, error) {
-	if isPostgresDSN(dsn) {
-		return openPostgres(dsn)
+	if !isPostgresDSN(dsn) {
+		return nil, fmt.Errorf("civic-ingest requires a Postgres DSN (postgres:// or postgresql://); got %q", dsn)
 	}
-	return openSQLite(dsn)
+	return openPostgres(dsn)
 }
 
-// Migrate applies all pending migrations, dispatching to the SQLite or
-// Postgres runner per the backend selected in Open.
+// Migrate applies all pending migrations from data/pg-migrations/.
 func (d *DB) Migrate(ctx context.Context) error {
-	if d.isPostgres {
-		dir, err := resolvePgMigrationsDir()
-		if err != nil {
-			return err
-		}
-		return d.migratePostgresDir(ctx, dir)
+	dir, err := resolvePgMigrationsDir()
+	if err != nil {
+		return err
 	}
-	return d.migrateSQLite(ctx)
+	return d.migratePostgresDir(ctx, dir)
 }
 
 // Close closes the database connection.
@@ -65,23 +55,11 @@ func (d *DB) Conn() *sql.DB {
 	return d.conn
 }
 
-// IsPostgres reports whether this DB was opened against a Postgres DSN.
-// Callers use it to select backend-specific SQL during the dual-backend
-// period (see the package comment).
-func (d *DB) IsPostgres() bool {
-	return d.isPostgres
-}
-
-// BeginImmediate starts a transaction with BEGIN IMMEDIATE for write operations.
+// BeginImmediate starts a transaction for write operations. A plain
+// BeginTx on Postgres; the name predates the Postgres cutover and is kept
+// so callers (e.g. ArticleWriter.flush) don't need to change.
 func (d *DB) BeginImmediate(ctx context.Context) (*sql.Tx, error) {
-	tx, err := d.conn.BeginTx(ctx, nil)
-	if err != nil {
-		return nil, err
-	}
-	// On SQLite, immediate-mode semantics come from the busy_timeout pragma
-	// rather than a literal BEGIN IMMEDIATE. On Postgres this is a plain
-	// BeginTx; the name is historical until the Phase 2 writer rework.
-	return tx, nil
+	return d.conn.BeginTx(ctx, nil)
 }
 
 // migration represents a single versioned SQL migration file.

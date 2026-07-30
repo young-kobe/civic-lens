@@ -82,12 +82,9 @@ type SeedConfig struct {
 }
 
 // CrawlBalanceConfig configures optional per-domain balance quotas for the
-// Postgres frontier claim query (Postgres-redesign Phase 2, Task 2 —
-// production is heavily skewed, e.g. cbsnews 2,404 docs vs npr 65). Quotas
-// apply ONLY when the ingestor is pointed at Postgres; the SQLite path is
-// frozen production behavior and never reads this section. An absent
-// section (a nil Config.CrawlBalance) means unlimited claiming for every
-// domain — unchanged, backward-compatible behavior.
+// frontier claim query (production is heavily skewed, e.g. cbsnews 2,404
+// docs vs npr 65). An absent section (a nil Config.CrawlBalance) means
+// unlimited claiming for every domain.
 type CrawlBalanceConfig struct {
 	// Window bounds how far back the per-domain "already fetched" count is
 	// computed (see frontier.DomainQuota). Defaults to 24h when the section
