@@ -517,6 +517,7 @@ export function propagandaExampleToPostCard(ex: PropagandaExample): PostCardData
         labelKind: 'propaganda',
         techniques: ex.techniques,
         meta: `score ${ex.overallScore.toFixed(2)} / 1`,
+        targets: ex.targets ?? null,
         handle: ex.sourceType === 'x_post' ? (ex.authorHandle ?? null) : null,
         domain: ex.domain,
     };

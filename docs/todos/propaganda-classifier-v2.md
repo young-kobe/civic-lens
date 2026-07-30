@@ -65,6 +65,7 @@ every label, so verdicts attach to flags, not runs.
 
 - [ ] Fix the confidence/density conflation first: the engine currently writes density into `runs.confidence`. Schema/prompt emit a separate model confidence; `results/store.py` stores confidence in `runs.confidence`, density stays in `propaganda_results.density`. Trace every reader of `runs.confidence` where task='propaganda' (review-queue ordering, any API min_conf filter) before flipping.
 - [ ] Prompt changes only for failure classes Phase 2 actually shows. Candidates, in likely order: sharpen technique definitions against the SemEval/PTC propaganda-technique taxonomy (Da San Martino et al. — our six map onto theirs); add 2–3 few-shot exemplars per weak technique, drawn from Kobe's corrected failures and kept disjoint from golden/ (contamination guard, same rule as the claims few-shot pool box).
+- [ ] Per-flag target attribution (candidate, same gate): the schema could ask which target each technique is deployed for/against, replacing the doc-level `PropagandaExample.targets` join (shipped 2026-07-30) with a real technique->target edge. Only with golden-set verification of the edge itself — Kobe's per-flag verdicts would then rate (technique, span, target) triples, and the rubric needs a target-attribution rule first.
 - [ ] Bump `PROPAGANDA_PROMPT_VERSION` to `propaganda-v2`; re-record recordings; ship only if v2 beats the v1 baseline outside the harness's F1 tolerance. Record the before/after in the audit trail either way.
 
 ## Phase 4 — the train-our-own-model checkpoint (decision, not work)

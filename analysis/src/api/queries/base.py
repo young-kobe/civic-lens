@@ -172,6 +172,23 @@ _RICH_NARRATIVE_ROWS_SQL = """
 """
 
 
+def fetch_doc_targets(conn, doc_ids: Iterable[int]) -> Dict[int, List[Dict[str, Any]]]:
+    """Per-doc "about X -- stance" target chips from the current targets
+    runs, batched (`doc_id = ANY(...)`). Shared by the rich
+    ClassificationSample assembly below and the propaganda example
+    builders -- the same doc must show the same targets on every card."""
+    ids = list(doc_ids)
+    if not ids:
+        return {}
+    rows = conn.execute(_RICH_TARGET_ROWS_SQL, {"doc_ids": ids}).fetchall()
+    targets_by_doc: Dict[int, List[Dict[str, Any]]] = {}
+    for row in rows:
+        targets_by_doc.setdefault(row["doc_id"], []).append(
+            {"label": row["label"], "stance": row["stance"]}
+        )
+    return targets_by_doc
+
+
 def fetch_rich_sample_fields(conn, doc_ids: Iterable[int]) -> Dict[int, dict]:
     """Batch-fetch every field a ClassificationSample drill-down needs for
     each id in ``doc_ids`` -- a handful of `WHERE doc_id = ANY(...)` queries,
@@ -196,7 +213,7 @@ def fetch_rich_sample_fields(conn, doc_ids: Iterable[int]) -> Dict[int, dict]:
     sentiment_rows = conn.execute(_RICH_SENTIMENT_ROWS_SQL, params).fetchall()
     x_engagement_rows = conn.execute(_RICH_X_ENGAGEMENT_ROWS_SQL, params).fetchall()
     reddit_engagement_rows = conn.execute(_RICH_REDDIT_ENGAGEMENT_ROWS_SQL, params).fetchall()
-    target_rows = conn.execute(_RICH_TARGET_ROWS_SQL, params).fetchall()
+    targets_by_doc = fetch_doc_targets(conn, ids)
     narrative_rows = conn.execute(_RICH_NARRATIVE_ROWS_SQL, params).fetchall()
 
     sentiment_by_doc = {row["doc_id"]: _rich_sentiment_dict(row) for row in sentiment_rows}
@@ -204,11 +221,6 @@ def fetch_rich_sample_fields(conn, doc_ids: Iterable[int]) -> Dict[int, dict]:
     reddit_engagement_by_doc = {
         row["doc_id"]: _rich_reddit_engagement_dict(row) for row in reddit_engagement_rows
     }
-    targets_by_doc: Dict[int, List[Dict[str, Any]]] = {}
-    for row in target_rows:
-        targets_by_doc.setdefault(row["doc_id"], []).append(
-            {"label": row["label"], "stance": row["stance"]}
-        )
     narrative_by_doc = {row["doc_id"]: row["name"] for row in narrative_rows}
 
     result: Dict[int, dict] = {}

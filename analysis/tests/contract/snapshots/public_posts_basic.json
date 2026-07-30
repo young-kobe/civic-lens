@@ -29,7 +29,12 @@
       "sarcasmDetected": null,
       "sourceName": "someuser",
       "sourceType": "x_post",
-      "targets": null,
+      "targets": [
+        {
+          "label": "Some Politician",
+          "stance": "negative"
+        }
+      ],
       "title": "A post",
       "topic": "General",
       "url": "https://example.com/tweet-1"

@@ -9,6 +9,8 @@ The public-column feed frame introduced by `GET /public-posts` (see `api/2026-07
 - Routes on the owning routers (`routers/propaganda.py`, `routers/bots.py`), same window-XOR-range contract and 30d default as their pages. Response models `PropagandaPublicPostsResponse` / `BotPublicPostsResponse`.
 - Tests: lens cases in `test_api_queries_public_posts.py` (officials excluded per lens, clean posts carry empty technique lists and true density, every bot verdict labeled, indicators humanized) and contract snapshots `propaganda_public_posts_basic.json` / `bot_public_posts_basic.json`.
 
+- `PropagandaExample.targets` (2026-07-30 follow-up): every flagged example — the entity drill-down pool and the feed alike — now carries the doc's "about X — stance" edges from the current targets runs, via the shared `base.py::fetch_doc_targets` (extracted from the rich-sample assembly so the same doc shows the same targets on every card). Deliberately doc-level: it says who the flagged post talks about, never which technique targets whom — a per-technique target attribution would be a model claim we don't collect yet (see `docs/todos/propaganda-classifier-v2.md`, Phase 3). `propaganda_basic` / `propaganda_public_posts_basic` / `public_posts_basic` snapshots re-recorded for the new field.
+
 ## Why
 
 - The Propaganda and Bot pages' public columns showed per-account rollups that mostly collapsed into pooled catch-all cards; the owner wants the same paginated post feed the sentiment page got, with each page showing its own measurement rather than tone labels everywhere.

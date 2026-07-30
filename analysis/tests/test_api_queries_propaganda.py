@@ -309,12 +309,31 @@ class BuildExamplesByEntityTests(unittest.TestCase):
         technique_rows = [
             {"run_id": 10, "technique": "loaded_language", "evidence_span": "vile", "confidence": 0.8},
         ]
-        result = propaganda._build_examples_by_entity(rows, technique_rows, {2: profile})
+        result = propaganda._build_examples_by_entity(rows, technique_rows, {2: profile}, {})
         self.assertIn("sen-x", result)
         example = result["sen-x"][0]
         self.assertEqual(example["party"], "republican")
         self.assertEqual(example["techniques"][0]["technique"], "loaded_language")
         self.assertEqual(example["techniques"][0]["evidence_span"], "vile")
+
+    def test_targets_attach_per_doc_and_absent_stays_none(self):
+        # The "about X -- stance" edge rides the example so a flagged card
+        # can show who the propaganda is aimed at -- the doc's own
+        # target_mentions (same source as tone cards), never a fabricated
+        # per-technique attribution; a doc with no mentions carries None,
+        # not an empty guess.
+        profile = EntityProfileModel(kind="official", key="sen-x", display_name="Sen X")
+        rows = [
+            self._row(1, 10, density=0.9, author_entity_id=2),
+            self._row(2, 11, density=0.5, author_entity_id=2),
+        ]
+        targets = {1: [{"label": "Some Politician", "stance": "negative"}]}
+        result = propaganda._build_examples_by_entity(rows, [], {2: profile}, targets)
+        self.assertEqual(
+            result["sen-x"][0]["targets"],
+            [{"label": "Some Politician", "stance": "negative"}],
+        )
+        self.assertIsNone(result["sen-x"][1]["targets"])
 
     def test_examples_capped_per_entity(self):
         profile = EntityProfileModel(kind="official", key="sen-x", display_name="Sen X")
@@ -322,7 +341,7 @@ class BuildExamplesByEntityTests(unittest.TestCase):
             self._row(i, i, density=1.0 - i * 0.01, author_entity_id=2)
             for i in range(propaganda.EXAMPLES_PER_ENTITY + 3)
         ]
-        result = propaganda._build_examples_by_entity(rows, [], {2: profile})
+        result = propaganda._build_examples_by_entity(rows, [], {2: profile}, {})
         self.assertEqual(len(result["sen-x"]), propaganda.EXAMPLES_PER_ENTITY)
 
     def test_party_populated_for_promoted_non_editorial_official(self):
@@ -334,7 +353,7 @@ class BuildExamplesByEntityTests(unittest.TestCase):
             kind="official", key="promoted-x", display_name="Promoted X", party="democrat",
         )
         rows = [self._row(1, 10, density=0.5, author_entity_id=3)]
-        result = propaganda._build_examples_by_entity(rows, [], {3: profile})
+        result = propaganda._build_examples_by_entity(rows, [], {3: profile}, {})
         self.assertEqual(result["promoted-x"][0]["party"], "democrat")
 
     def test_party_none_for_non_official_kind(self):
@@ -346,7 +365,7 @@ class BuildExamplesByEntityTests(unittest.TestCase):
             kind="account", key="acct-x", display_name="Acct X", party="democrat",
         )
         rows = [self._row(1, 10, density=0.5, author_entity_id=3)]
-        result = propaganda._build_examples_by_entity(rows, [], {3: profile})
+        result = propaganda._build_examples_by_entity(rows, [], {3: profile}, {})
         self.assertIsNone(result["acct-x"][0]["party"])
 
     def test_text_preview_truncated_to_snippet_max(self):
@@ -354,7 +373,7 @@ class BuildExamplesByEntityTests(unittest.TestCase):
         long_body = "x" * (SNIPPET_MAX_CHARS + 50)
         rows = [self._row(1, 10, density=0.5, author_entity_id=2, body=long_body)]
         profile = EntityProfileModel(kind="official", key="sen-x", display_name="Sen X")
-        result = propaganda._build_examples_by_entity(rows, [], {2: profile})
+        result = propaganda._build_examples_by_entity(rows, [], {2: profile}, {})
         self.assertEqual(len(result["sen-x"][0]["text_preview"]), SNIPPET_MAX_CHARS)
 
 

@@ -9,7 +9,13 @@ from typing import Dict, List, Literal, Optional
 
 from pydantic import Field
 
-from analysis.src.api.models.common import CamelModel, EntityProfileModel, RangeMeta, SampleDocModel
+from analysis.src.api.models.common import (
+    CamelModel,
+    EntityProfileModel,
+    RangeMeta,
+    SampleDocModel,
+    SampleTargetModel,
+)
 
 
 class TechniqueCount(CamelModel):
@@ -104,6 +110,11 @@ class PropagandaExample(CamelModel):
     techniques: List[PropagandaTechniqueSpan] = Field(default_factory=list)
     author_handle: Optional[str] = None
     party: Optional[str] = None
+    # The doc's "about X -- stance" edges from the current targets runs
+    # (same source as tone cards) -- who or what the flagged post is
+    # talking about, NOT a per-technique target attribution (that would
+    # be a model claim we don't have; see propaganda-classifier-v2).
+    targets: Optional[List[SampleTargetModel]] = None
 
 
 class PropagandaEntityItem(CamelModel):
