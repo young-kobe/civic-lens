@@ -1,8 +1,8 @@
 import type {
     BotActivityResponse, DocumentDetail, EntityPostsResponse, EntityProfileResponse,
     EvalAccuracy, MoversResponse, NarrativesResponse, OutletProfilesResponse,
-    PropagandaOverview, ReviewQueueItem, ReviewStats, ReviewSubmission, ReviewTaskType,
-    SentimentPanelResponse, SnapshotStatusResponse, TimeWindow,
+    PropagandaOverview, PublicPostsResponse, ReviewQueueItem, ReviewStats, ReviewSubmission,
+    ReviewTaskType, SentimentPanelResponse, SnapshotStatusResponse, TimeWindow,
 } from '../types';
 
 export type { TimeWindow } from '../types';
@@ -129,6 +129,18 @@ export async function fetchEntityPosts(
     const params = new URLSearchParams({ page: String(page) });
     if (window) params.set('window', window);
     return fetchJSON<EntityPostsResponse>(`/entity-posts?entity_id=${entityId}&${params}`);
+}
+
+/** Paginated public post feed — non-official Reddit/X posts ordered by
+ *  engagement, officials excluded server-side. `topic` null = all topics
+ *  (the UI's 'all' pseudo-key is never sent). */
+export async function fetchPublicPosts(
+    window: TimeWindow = '30d', topic: string | null = null, page: number = 1,
+): Promise<PublicPostsResponse> {
+    const params = windowParams(window);
+    if (topic) params.set('topic', topic);
+    params.set('page', String(page));
+    return fetchJSON<PublicPostsResponse>(`/public-posts?${params}`);
 }
 
 /** ALL-TIME entity profile — no window param, see routers/entities.py. */

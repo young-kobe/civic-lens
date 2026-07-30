@@ -822,6 +822,21 @@ export interface EntityPostsResponse {
     items: EntityPostRow[];
 }
 
+// --------------------------------------------------------------------------- //
+//  Public post feed (GET /public-posts)                                       //
+// --------------------------------------------------------------------------- //
+
+/** Paginated corpus-wide public feed: non-official Reddit/X posts, ordered
+ *  by engagement. `topic` echoes the active filter; null = all topics. */
+export interface PublicPostsResponse {
+    window: string | null;
+    topic: string | null;
+    page: number;
+    pageSize: number;
+    total: number;
+    items: ClassificationSample[];
+}
+
 export interface StanceDistribution {
     positive: number;
     negative: number;
