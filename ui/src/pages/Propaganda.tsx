@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
     Card, CollapsibleInfo, DefinitionChip, EmptyState, EntityHeader,
     EntityHubLinks, ErrorState, GlobalTicker, LoadingCard, MethodPopover,
-    Modal, PostCardList,
+    Modal, PaginatedPostFeed, PostCardList,
     RankedEntityList, TECHNIQUE_LABEL, ThreeWayColumn, ThreeWayGrid,
     entityExternalUrl,
     parseEntityParam, propagandaExampleToPostCard,
@@ -11,7 +11,9 @@ import type { ColumnSorter, RankedEntity, TickerItem } from '../components/commo
 import { useDeepLinkParam } from '../services/deepLink';
 import { saturationLevel } from '../services/glossary';
 import { TechniqueExplorer } from './propaganda/TechniqueExplorer';
-import { fetchPropaganda, fetchSnapshotStatus } from '../services/api';
+import {
+    fetchPropaganda, fetchPropagandaPublicPosts, fetchSnapshotStatus, type TimeWindow,
+} from '../services/api';
 import { asOfTodayEyebrow, formatTimeWindow } from '../services/timeWindow';
 import { useFetch } from '../services/useFetch';
 import { formatRefreshedAgo, pipelineRunTimestamp } from '../services/freshness';
@@ -330,11 +332,31 @@ const PROPAGANDA_SORTERS: ColumnSorter<PropagandaEntityItem>[] = [
     { label: 'name', compare: (a, b) => a.entityProfile.displayName.localeCompare(b.entityProfile.displayName) },
 ];
 
+function PropagandaPublicFeed({ timeWindow }: { timeWindow: TimeWindow }) {
+    const fetchPage = useCallback(async (page: number) => {
+        const resp = await fetchPropagandaPublicPosts(timeWindow, page);
+        return { items: resp.items.map(propagandaExampleToPostCard), total: resp.total };
+    }, [timeWindow]);
+    return (
+        <PaginatedPostFeed
+            fetchPage={fetchPage}
+            resetKey={timeWindow}
+            sampleNote={
+                'Sampled public posts (Reddit and X) scored for persuasion techniques — flagged '
+                + 'phrases highlighted, clean posts shown too. Ordered by engagement, a reach '
+                + 'proxy, not verified audience. A sample, not the full corpus.'
+            }
+            emptyNote="No public social posts scored for these techniques in this window."
+        />
+    );
+}
+
 function ThreeWayEntityGrid({
-    data, onOpen,
+    data, onOpen, timeWindow,
 }: {
     data: PropagandaOverview;
     onOpen: (item: PropagandaEntityItem) => void;
+    timeWindow: TimeWindow;
 }) {
     const ranked = (label: string) => (items: PropagandaEntityItem[]) => (
         <RankedEntityList
@@ -363,12 +385,11 @@ function ThreeWayEntityGrid({
             />
             <ThreeWayColumn
                 header="The Public"
-                byline="Political subreddits, plus X users we don't track individually, ranked by flagged share"
-                empty="No social posts scored yet."
-                items={data.byGeneralPublic ?? []}
-                renderItems={ranked('Public sources by flagged rate')}
-                sorters={PROPAGANDA_SORTERS}
-            />
+                byline="Most-engaged sampled public posts, scored for these techniques"
+                empty=""
+            >
+                <PropagandaPublicFeed timeWindow={timeWindow} />
+            </ThreeWayColumn>
         </ThreeWayGrid>
     );
 }
@@ -510,7 +531,7 @@ function Propaganda({ filters }: PropagandaProps) {
                     empty. Per-column empty copy inside ThreeWayEntityGrid is
                     the honest shape — matches Tone/Narratives/Bot. */}
                 <div className="col-span-12">
-                    <ThreeWayEntityGrid data={data} onOpen={setActiveEntity} />
+                    <ThreeWayEntityGrid data={data} onOpen={setActiveEntity} timeWindow={filters.timeRange} />
                 </div>
 
                 {/* News-vs-social removed (its numbers already appear in the

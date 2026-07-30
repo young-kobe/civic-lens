@@ -489,6 +489,10 @@ export interface FlaggedExample {
     confidence?: number | null;
     reasoning?: string | null;
     indicators: string[];
+    /** analysis.bot_label verdict ('bot'|'suspicious'|'human'|'unknown').
+     *  Absent on BotEntityItem.samples (bot-labeled by construction);
+     *  populated by the public feed, which mixes verdicts. */
+    label?: string | null;
 }
 
 /** One entity's bot-classification rollup for the officials / general-
@@ -835,6 +839,28 @@ export interface PublicPostsResponse {
     pageSize: number;
     total: number;
     items: ClassificationSample[];
+}
+
+/** GET /propaganda-public-posts — same feed frame, propaganda lens: every
+ *  item is a scored post (flagged or clean) in the PropagandaExample
+ *  drill-down shape. */
+export interface PropagandaPublicPostsResponse {
+    window: string | null;
+    page: number;
+    pageSize: number;
+    total: number;
+    items: PropagandaExample[];
+}
+
+/** GET /bot-public-posts — same feed frame, bot lens: every item is a
+ *  bot-scored post (all verdicts) in the FlaggedExample shape with
+ *  `label` populated. */
+export interface BotPublicPostsResponse {
+    window: string | null;
+    page: number;
+    pageSize: number;
+    total: number;
+    items: FlaggedExample[];
 }
 
 export interface StanceDistribution {

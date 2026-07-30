@@ -11,9 +11,10 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
 
-from analysis.src.api.models.bots import BotActivityResponse
+from analysis.src.api.models.bots import BotActivityResponse, BotPublicPostsResponse
 from analysis.src.api.queries import base
 from analysis.src.api.queries.bots import get_bot_activity
+from analysis.src.api.queries.public_posts import get_bot_public_posts
 
 router = APIRouter(tags=["bots"])
 
@@ -40,3 +41,24 @@ def bot_activity(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return get_bot_activity(start=start, end=end, window_label=window_label)
+
+
+@router.get("/bot-public-posts", response_model=BotPublicPostsResponse)
+def bot_public_posts(
+    window: Optional[str] = Query(None, description="24h|7d|30d|90d|all (default 30d)"),
+    date_from: Optional[datetime] = Query(None, alias="from"),
+    date_to: Optional[datetime] = Query(None, alias="to"),
+    page: int = Query(default=1, ge=1),
+) -> BotPublicPostsResponse:
+    """The page's public-column feed: engagement-ordered non-official
+    Reddit/X posts scored by the bot detector, every verdict included
+    (label says which). Same window-XOR-range contract as /bot-activity."""
+    window_label = window
+    if window_label is None and date_from is None and date_to is None:
+        window_label = _DEFAULT_WINDOW
+    try:
+        return get_bot_public_posts(
+            window=window_label, date_from=date_from, date_to=date_to, page=page,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc

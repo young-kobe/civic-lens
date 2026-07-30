@@ -1,0 +1,38 @@
+{
+  "items": [
+    {
+      "authorHandle": "someuser",
+      "docId": 1,
+      "domain": null,
+      "overallScore": 0.6,
+      "party": null,
+      "sourceType": "x_post",
+      "techniques": [
+        {
+          "confidence": 0.8,
+          "evidenceSpan": "a verbatim span",
+          "technique": "loaded_language"
+        }
+      ],
+      "textPreview": "body",
+      "title": "A post",
+      "url": "https://example.com/tweet-1"
+    },
+    {
+      "authorHandle": null,
+      "docId": 2,
+      "domain": null,
+      "overallScore": 0.0,
+      "party": null,
+      "sourceType": "reddit_post",
+      "techniques": [],
+      "textPreview": "body",
+      "title": "A post",
+      "url": "https://example.com/t3_abc"
+    }
+  ],
+  "page": 1,
+  "pageSize": 20,
+  "total": 2,
+  "window": "all"
+}

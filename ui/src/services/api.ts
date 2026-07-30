@@ -1,7 +1,8 @@
 import type {
-    BotActivityResponse, DocumentDetail, EntityPostsResponse, EntityProfileResponse,
-    EvalAccuracy, MoversResponse, NarrativesResponse, OutletProfilesResponse,
-    PropagandaOverview, PublicPostsResponse, ReviewQueueItem, ReviewStats, ReviewSubmission,
+    BotActivityResponse, BotPublicPostsResponse, DocumentDetail, EntityPostsResponse,
+    EntityProfileResponse, EvalAccuracy, MoversResponse, NarrativesResponse,
+    OutletProfilesResponse, PropagandaOverview, PropagandaPublicPostsResponse,
+    PublicPostsResponse, ReviewQueueItem, ReviewStats, ReviewSubmission,
     ReviewTaskType, SentimentPanelResponse, SnapshotStatusResponse, TimeWindow,
 } from '../types';
 
@@ -141,6 +142,26 @@ export async function fetchPublicPosts(
     if (topic) params.set('topic', topic);
     params.set('page', String(page));
     return fetchJSON<PublicPostsResponse>(`/public-posts?${params}`);
+}
+
+/** Propaganda-lens public feed: same frame as /public-posts, items are
+ *  scored posts (flagged or clean) in the PropagandaExample shape. */
+export async function fetchPropagandaPublicPosts(
+    window: TimeWindow = '30d', page: number = 1,
+): Promise<PropagandaPublicPostsResponse> {
+    const params = windowParams(window);
+    params.set('page', String(page));
+    return fetchJSON<PropagandaPublicPostsResponse>(`/propaganda-public-posts?${params}`);
+}
+
+/** Bot-lens public feed: same frame, items are bot-scored posts (all
+ *  verdicts) in the FlaggedExample shape with `label` populated. */
+export async function fetchBotPublicPosts(
+    window: TimeWindow = '30d', page: number = 1,
+): Promise<BotPublicPostsResponse> {
+    const params = windowParams(window);
+    params.set('page', String(page));
+    return fetchJSON<BotPublicPostsResponse>(`/bot-public-posts?${params}`);
 }
 
 /** ALL-TIME entity profile — no window param, see routers/entities.py. */
