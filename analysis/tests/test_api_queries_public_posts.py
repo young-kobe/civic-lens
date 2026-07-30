@@ -313,6 +313,9 @@ class PublicPostsIntegrationTests(unittest.TestCase):
         # excluded by the same canonical kind predicate as the tone feed.
         flagged = self._seed_public_x_doc(like_count=50)
         self._seed_propaganda_run(flagged, 0.6, techniques=[("loaded_language", "verbatim span")])
+        # The flagged post's target edge (same target_mentions source as
+        # tone cards) must ride along -- who the propaganda is aimed at.
+        self._seed_topic_mention(flagged, "Economy")
         clean = self._seed_public_x_doc(like_count=10)
         self._seed_propaganda_run(clean, 0.0)
 
@@ -330,7 +333,10 @@ class PublicPostsIntegrationTests(unittest.TestCase):
         self.assertEqual(resp.total, 2)
         self.assertEqual(resp.items[0].overall_score, 0.6)
         self.assertEqual(resp.items[0].techniques[0].technique, "loaded_language")
+        self.assertEqual(resp.items[0].targets[0].label, "someone")
+        self.assertEqual(resp.items[0].targets[0].stance, "neutral")
         self.assertEqual(resp.items[1].techniques, [])
+        self.assertIsNone(resp.items[1].targets)
 
     def test_bot_feed_carries_every_verdict_with_its_label(self):
         # The bot page's public column must show the verdict per card (the

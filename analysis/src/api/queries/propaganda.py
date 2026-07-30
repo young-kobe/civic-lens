@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from datetime import datetime
 from typing import Any, Dict, List, Mapping, Optional, Sequence
 
-from analysis.src.api.queries.base import build_sample_doc, split_admission_counts
+from analysis.src.api.queries.base import build_sample_doc, fetch_doc_targets, split_admission_counts
 from analysis.src.api.queries.constants import BOT_FLAGGED_SHARE_EXCLUSION, OFFICIAL_AUTHOR_TIERS, SNIPPET_MAX_CHARS
 from analysis.src.api.queries.profiles import (
     CATCH_ALL_OUTLETS,
@@ -80,6 +80,9 @@ def get_propaganda_overview(
         example_rows = _fetch_example_rows(conn, start, end)
         run_ids = [row["run_id"] for row in example_rows]
         example_technique_rows = _fetch_example_techniques(conn, run_ids)
+        example_targets_by_doc = fetch_doc_targets(
+            conn, [row["doc_id"] for row in example_rows],
+        )
 
         # One batched profile fetch covers every entity id referenced by
         # either the tier buckets (doc_rows) or the drill-down examples
@@ -104,7 +107,7 @@ def get_propaganda_overview(
     overview["by_official"] = _finalize_tier_items(tier_buckets["official"])
     overview["by_general_public"] = _finalize_tier_items(tier_buckets["general_public"])
     overview["examples_by_entity"] = _build_examples_by_entity(
-        example_rows, example_technique_rows, profiles,
+        example_rows, example_technique_rows, profiles, example_targets_by_doc,
     )
     sampled, official_record = split_admission_counts(doc_rows) if doc_rows else (0, 0)
     overview["range"] = {
@@ -322,6 +325,7 @@ def _build_examples_by_entity(
     example_rows: Sequence[Mapping[str, Any]],
     technique_rows: Sequence[Mapping[str, Any]],
     profiles: Mapping[int, Any],
+    targets_by_doc: Mapping[int, List[Dict[str, Any]]],
 ) -> Dict[str, List[Dict[str, Any]]]:
     """Fan the flagged-example pool (already ordered by density desc in SQL)
     into per-entity buckets keyed by the same key _resolve_tier_and_key
@@ -358,6 +362,7 @@ def _build_examples_by_entity(
             "techniques": techniques_by_run.get(row["run_id"], []),
             "author_handle": row["author_handle"],
             "party": party,
+            "targets": targets_by_doc.get(row["doc_id"]) or None,
         })
     return result
 

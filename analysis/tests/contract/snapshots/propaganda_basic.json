@@ -137,6 +137,7 @@
         "overallScore": 0.7,
         "party": null,
         "sourceType": "news",
+        "targets": null,
         "techniques": [
           {
             "confidence": 0.9,

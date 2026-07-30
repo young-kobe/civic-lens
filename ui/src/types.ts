@@ -716,6 +716,10 @@ export interface PropagandaExample {
     techniques: PropagandaTechniqueSpan[];
     authorHandle: string | null;
     party: string | null;
+    /** The doc's "about X — stance" edges from the current targets runs
+     *  (same source as tone cards) — who the flagged post talks about,
+     *  not a per-technique target attribution. */
+    targets?: SampleTarget[] | null;
 }
 
 /** One registry entity's (or catch-all bucket's) propaganda footprint

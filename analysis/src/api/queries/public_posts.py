@@ -19,6 +19,7 @@ from analysis.src.api.models.propaganda import PropagandaExample, PropagandaPubl
 from analysis.src.api.models.sentiment import PublicPostsResponse
 from analysis.src.api.queries.base import (
     build_classification_sample,
+    fetch_doc_targets,
     fetch_rich_sample_fields,
     resolve_time_range,
 )
@@ -225,6 +226,7 @@ def get_propaganda_public_posts(
             _PROPAGANDA_PAGE_SELECT + _PROPAGANDA_FEED_FROM_SQL + _PAGE_TAIL, params,
         ).fetchall()
         technique_rows = _fetch_example_techniques(conn, [row["run_id"] for row in rows])
+        targets_by_doc = fetch_doc_targets(conn, [row["doc_id"] for row in rows])
 
     techniques_by_run = defaultdict(list)
     for row in technique_rows:
@@ -246,6 +248,7 @@ def get_propaganda_public_posts(
             techniques=techniques_by_run.get(row["run_id"], []),
             author_handle=row["author_handle"],
             party=None,
+            targets=targets_by_doc.get(row["doc_id"]) or None,
         )
         for row in rows
     ]

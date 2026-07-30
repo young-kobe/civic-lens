@@ -182,6 +182,19 @@ class PublicPostsContractTests(unittest.TestCase):
             # Propaganda + bot lenses over the same three docs -- the
             # official's runs must not surface in either feed.
             self._seed_propaganda_run(conn, x_doc, 0.6, techniques=[("loaded_language", "a verbatim span")])
+            # A target mention on the flagged doc: the "about X -- stance"
+            # edge must appear on both the tone and propaganda feed items.
+            targets_run = conn.execute(
+                "INSERT INTO analysis.runs (task, doc_id, status, model_id, inference_method, is_current) "
+                "VALUES ('targets'::analysis.task, %s, 'done'::analysis.run_status, 'gemini-3.5-flash', "
+                "'llm'::analysis.inference_method, true) RETURNING run_id",
+                (x_doc,),
+            ).fetchone()
+            conn.execute(
+                "INSERT INTO analysis.target_mentions (run_id, doc_id, raw_target, stance, confidence) "
+                "VALUES (%s, %s, 'Some Politician', 'negative'::analysis.sentiment_label, 0.9)",
+                (targets_run["run_id"], x_doc),
+            )
             self._seed_propaganda_run(conn, r_doc, 0.0)
             self._seed_propaganda_run(conn, o_doc, 0.9, techniques=[("name_calling", "span")])
             self._seed_bot_run(conn, x_doc, "bot")
@@ -206,6 +219,7 @@ class PublicPostsContractTests(unittest.TestCase):
         # Reddit post follows with an empty technique list and density 0.
         self.assertEqual(body["total"], 2)
         self.assertEqual(body["items"][0]["techniques"][0]["technique"], "loaded_language")
+        self.assertEqual(body["items"][0]["targets"], [{"label": "Some Politician", "stance": "negative"}])
         self.assertEqual(body["items"][1]["techniques"], [])
         conftest.assert_snapshot_match("propaganda_public_posts_basic", body)
 
