@@ -140,7 +140,10 @@ const MIN_OFFENDER_FLAGGED = 2;
 // the "N scored" context already shown on the detail columns.
 const LOW_SAMPLE_OFFENDER_DOCS = 10;
 
-/** The 3 highest flagged-rate sources across ALL tiers in the window (catch-all
+// How many sources the leaderboard shows.
+const TOP_OFFENDERS_COUNT = 5;
+
+/** The highest flagged-rate sources across ALL tiers in the window (catch-all
  *  buckets and single-flag sources excluded; low-sample sources are kept but
  *  caveated). */
 function topFlaggedOffenders(data: PropagandaOverview): PropagandaEntityItem[] {
@@ -152,7 +155,7 @@ function topFlaggedOffenders(data: PropagandaOverview): PropagandaEntityItem[] {
         .filter((it) => it.kind !== 'catch_all' && it.flaggedDocs >= MIN_OFFENDER_FLAGGED)
         .sort((a, b) => (b.flaggedRatePct - a.flaggedRatePct)
             || (b.flaggedDocs - a.flaggedDocs))
-        .slice(0, 3);
+        .slice(0, TOP_OFFENDERS_COUNT);
 }
 
 const OFFENDER_BLURB_MAX = 96;
@@ -192,7 +195,7 @@ function toOffenderRow(
     };
 }
 
-/** Top-3 flagged-rate leaderboard — same ranked row-card as the three-way
+/** Top-5 flagged-rate leaderboard — same ranked row-card as the three-way
  *  columns. Replaces the "As of last N" top-metrics block, scoped to the date
  *  range selector (the payload is fetched per window). */
 function TopFlaggedLeaderboard({
@@ -210,7 +213,7 @@ function TopFlaggedLeaderboard({
             headerActions={
                 <MethodPopover
                     description={
-                        'The three sources with the highest flagged rate (flagged posts / scored '
+                        `The ${TOP_OFFENDERS_COUNT} sources with the highest flagged rate (flagged posts / scored `
                         + 'posts) in the selected window, across all tiers. Catch-all buckets and '
                         + `sources with fewer than ${MIN_OFFENDER_FLAGGED} flagged posts are excluded so `
                         + "a one-off flag can't top the board. Sources with fewer than "

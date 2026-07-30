@@ -1617,7 +1617,8 @@ code, pre {
   text-align: right;
 }
 
-/* "By party" section folded under the technique bars in the same card. */
+/* "By party" section — a prose readout under the constellation, not a
+   bar pair (see ByPartySection's docstring for why). */
 .technique-by-party {
   margin-top: var(--space-3);
   padding-top: var(--space-3);
@@ -1628,56 +1629,11 @@ code, pre {
   margin-bottom: var(--space-2);
   cursor: help;
 }
-
-.party-bars {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-.party-bar-row {
-  display: grid;
-  grid-template-columns: 116px minmax(0, 1fr) 60px auto;
-  align-items: center;
-  gap: var(--space-3);
-}
-.party-bar-label {
-  font-size: var(--text-sm);
-  font-weight: 600;
-  color: var(--neutral-800);
-}
-.party-bar-track {
-  height: 12px;
-  background: var(--neutral-100);
-  overflow: hidden;
-}
-.party-bar-fill {
-  display: block;
-  height: 100%;
-  min-width: 3px;
-}
-.party-bar-value {
+.technique-by-party-readout {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
-  font-size: var(--text-sm);
   font-weight: 700;
-  text-align: right;
   color: var(--neutral-800);
-}
-.party-bar-meta {
-  font-size: var(--text-xs);
-  color: var(--neutral-500);
-  white-space: nowrap;
-}
-@media (max-width: 560px) {
-  .party-bar-row {
-    grid-template-columns: 1fr auto;
-    grid-template-areas: "label value" "track track" "meta meta";
-    row-gap: var(--space-1);
-  }
-  .party-bar-label { grid-area: label; }
-  .party-bar-value { grid-area: value; }
-  .party-bar-track { grid-area: track; }
-  .party-bar-meta  { grid-area: meta; }
 }
 
 /* Small outbound "View original" link — used by modal footers and the
