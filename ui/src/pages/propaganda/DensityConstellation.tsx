@@ -165,7 +165,7 @@ export function DensityConstellation({ dots, selectedTechnique }: DensityConstel
                     style={{ height }}
                     role="group"
                     tabIndex={0}
-                    aria-label={`${points.length} flagged posts by technique density. Use arrow keys to inspect each post.`}
+                    aria-label={`${points.length} flagged posts by propaganda density. Use arrow keys to inspect each post.`}
                     aria-activedescendant={active ? `density-dot-${active.example.docId}` : undefined}
                     onKeyDown={onKeyDown}
                     onBlur={() => setActiveId(null)}
@@ -220,7 +220,7 @@ export function DensityConstellation({ dots, selectedTechnique }: DensityConstel
                 ))}
             </div>
             <p className="density-axis-caption">
-                Technique density per flagged post — 0 none, 1 wall-to-wall.
+                Propaganda density per flagged post — 0 none, 1 wall-to-wall.
             </p>
             <div className="density-tier-legend" role="list" aria-label="Speaker tiers">
                 {(Object.keys(CONSTELLATION_TIER_LABELS) as ConstellationTier[]).map((tier) => {

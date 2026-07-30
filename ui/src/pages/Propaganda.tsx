@@ -29,7 +29,7 @@ import type {
 // everywhere they appear (top metrics, ticker, entity cards, modal, source
 // split) rather than switching between "saturation" and "mean score".
 const SATURATION_TITLE =
-    'How saturated flagged posts are with persuasion techniques, from 0 (none) to 1 (wall-to-wall).';
+    'How saturated flagged posts are with propaganda techniques, from 0 (none) to 1 (wall-to-wall).';
 
 // --------------------------------------------------------------------------- //
 //  Ticker + reads-as-today                                                    //
@@ -60,17 +60,18 @@ function buildPropagandaTickerItems(data: PropagandaOverview): TickerItem[] {
             hint: `${data.meanScore.toFixed(2)} / 1`,
         },
         {
-            label: 'Top technique',
+            label: 'Most common',
             value: topTechLabel,
             hint: topTech ? `${formatPct(topTech.pctOfFlaggedDocs, { decimals: 0 })} of flagged` : undefined,
         },
     ];
 }
 
-/** Reader-facing headline: which side leans harder on these techniques,
- *  plus which technique shows up most. Intentionally avoids the "X% of
- *  flagged posts" phrasing — with multiple techniques per post that
- *  figure can read >100% and confuse everyday readers. */
+/** Reader-facing headline: which side leans harder on propaganda
+ *  techniques, plus what shows up most. Intentionally avoids the "X% of
+ *  flagged posts" phrasing — with multiple flags per post that figure can
+ *  read >100% and confuse everyday readers. The measure is named and
+ *  defined once, in the ticker legend; this line stays in plain words. */
 function readsAsToday(data: PropagandaOverview): string {
     const news = data.bySource.find((s) => s.source === 'news');
     const social = data.bySource.find((s) => s.source === 'social');
@@ -83,15 +84,15 @@ function readsAsToday(data: PropagandaOverview): string {
     if (news && social) {
         const gap = news.flaggedRatePct - social.flaggedRatePct;
         if (Math.abs(gap) < 2) {
-            parts.push('News and social media are leaning on persuasion techniques (loaded language, name-calling, fear appeals) at about the same rate.');
+            parts.push('News and social media are leaning on propaganda techniques at about the same rate.');
         } else if (gap > 0) {
-            parts.push('News is leaning on persuasion techniques (loaded language, name-calling, fear appeals) more than social media right now.');
+            parts.push('News is leaning on propaganda techniques harder than social media right now.');
         } else {
-            parts.push('Social media is leaning on persuasion techniques (loaded language, name-calling, fear appeals) more than news right now.');
+            parts.push('Social media is leaning on propaganda techniques harder than news right now.');
         }
     }
     if (topTechLabel && topTech && topTech.count > 0) {
-        parts.push(`${topTechLabel} is the technique we're seeing the most.`);
+        parts.push(`${topTechLabel} is what we see most.`);
     }
     return parts.length > 0
         ? parts.join(' ')
@@ -182,7 +183,7 @@ function toOffenderRow(
                 <span className="ranked-entity-why">
                     {item.flaggedDocs.toLocaleString()} of {item.totalDocs.toLocaleString()} posts
                     {' '}flagged · {saturationLevel(item.meanScore)}{' '}
-                    <DefinitionChip entry="mean_score" label="technique saturation" />
+                    <DefinitionChip entry="mean_score" label="saturation" />
                     {lowSample && (
                         <span
                             className="ranked-entity-lowsample"
@@ -314,7 +315,7 @@ function PropagandaEntityModal({
             </h3>
             <PostCardList
                 posts={matching.map(propagandaExampleToPostCard)}
-                sampleNote="Highlighted text is the verbatim evidence behind each technique flag."
+                sampleNote="Highlighted text is the verbatim evidence behind each flag."
                 emptyNote="No flagged examples available for this entity in the current window."
             />
         </Modal>
@@ -342,11 +343,11 @@ function PropagandaPublicFeed({ timeWindow }: { timeWindow: TimeWindow }) {
             fetchPage={fetchPage}
             resetKey={timeWindow}
             sampleNote={
-                'Sampled public posts (Reddit and X) scored for persuasion techniques — flagged '
-                + 'phrases highlighted, clean posts shown too. Ordered by engagement, a reach '
-                + 'proxy, not verified audience. A sample, not the full corpus.'
+                'Sampled public posts (Reddit and X) — flagged phrases highlighted, clean posts '
+                + 'shown too. Ordered by engagement, a reach proxy, not verified audience. '
+                + 'A sample, not the full corpus.'
             }
-            emptyNote="No public social posts scored for these techniques in this window."
+            emptyNote="No public social posts scored in this window."
         />
     );
 }
@@ -369,7 +370,7 @@ function ThreeWayEntityGrid({
         <ThreeWayGrid>
             <ThreeWayColumn
                 header="The News"
-                byline="News outlets ranked by the share of their posts flagged for these techniques"
+                byline="News outlets ranked by the share of their posts flagged"
                 empty="No news articles scored yet."
                 items={data.byNewsOutlet ?? []}
                 renderItems={ranked('News outlets by flagged rate')}
@@ -377,7 +378,7 @@ function ThreeWayEntityGrid({
             />
             <ThreeWayColumn
                 header="Politicians & Officials"
-                byline="Tracked officeholders ranked by the share of their posts flagged for these techniques"
+                byline="Tracked officials and appointees ranked by the share of their posts flagged"
                 empty="No officials scored yet."
                 items={data.byOfficial ?? []}
                 renderItems={ranked('Officials by flagged rate')}
@@ -385,7 +386,7 @@ function ThreeWayEntityGrid({
             />
             <ThreeWayColumn
                 header="The Public"
-                byline="Most-engaged sampled public posts, scored for these techniques"
+                byline="The most-engaged sampled public posts and what we flagged in them"
                 empty=""
             >
                 <PropagandaPublicFeed timeWindow={timeWindow} />
@@ -403,13 +404,14 @@ function HowThisWorks() {
     return (
         <CollapsibleInfo>
             <p className="text-sm">
-                Each post is scored for six rhetorical techniques: loaded language, name-calling,
-                ad hominem, appeal to fear, whataboutism, and doubt-casting. The model has to
-                quote a verbatim phrase from the source as evidence, so flags aren't hand-waved.
+                Every sampled post is scored for the six propaganda techniques listed on the
+                chips above. The model has to quote a verbatim phrase from the source as
+                evidence for each flag, and flags whose quote can't be verified against the
+                source text are dropped — nothing is hand-waved.
             </p>
             <p className="text-sm">
-                A high flagged rate means the sample leaned on these techniques — it's a measure
-                of technique density, not authorial intent. Straight reporting reads as unflagged;
+                A high flagged rate means the sample leaned on these techniques — a measure
+                of density, not authorial intent. Straight reporting reads as unflagged;
                 opinion and activist content tends to light up.
             </p>
         </CollapsibleInfo>
@@ -474,7 +476,7 @@ function Propaganda({ filters }: PropagandaProps) {
     // Tone and Narratives do. Hiding the frame on empty data was
     // misleading: a stalled propaganda-detection cron looked identical to
     // a clean run with nothing to flag.
-    if (!data) return <EmptyState title="No rhetoric analysis available for this window." />;
+    if (!data) return <EmptyState title="No propaganda analysis available for this window." />;
 
     const windowLabel = formatTimeWindow(filters.timeRange);
     const tickerItems = buildPropagandaTickerItems(data);
@@ -492,10 +494,14 @@ function Propaganda({ filters }: PropagandaProps) {
                             <MethodPopover
                                 title="How to read these numbers"
                                 description={
-                                    'We flag six persuasion techniques (loaded language, name-calling, fear '
-                                    + 'appeals, ad hominem, whataboutism, doubt-casting) in political posts. A '
-                                    + "flag measures rhetorical style — not truth, intent, or whether the post is "
-                                    + "'propaganda' in the everyday sense. Saturation runs 0 (none) to 1 (wall-to-wall)."
+                                    'This page measures propaganda techniques: six rhetorical devices — '
+                                    + 'emotionally loaded wording, name-calling, personal attacks, fear appeals, '
+                                    + 'whataboutism, and insinuation — flagged in sampled political posts. Every '
+                                    + 'flag must quote the exact phrase as evidence; unverifiable flags are '
+                                    + 'dropped. A flag measures rhetorical style — not truth, intent, or whether '
+                                    + "the post is 'propaganda' in the everyday sense. The flagged rate is the "
+                                    + 'share of scored posts with at least one flag; density and saturation run '
+                                    + '0 (none) to 1 (wall-to-wall).'
                                 }
                             />
                         }
@@ -509,8 +515,8 @@ function Propaganda({ filters }: PropagandaProps) {
                         </span>
                         <p className="lead" style={{ margin: 0 }}>{readsAsToday(data)}</p>
                         <p className="text-xs text-muted" style={{ margin: 'var(--space-2) 0 0' }}>
-                            We flag six persuasion techniques in political posts. A flag measures rhetorical
-                            style — not truth, intent, or whether the post is "propaganda" in the everyday sense.
+                            A flag measures rhetorical style — not truth or intent. See "How to
+                            read these numbers" above for what we flag and how.
                         </p>
                     </div>
                 </div>
