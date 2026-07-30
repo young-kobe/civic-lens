@@ -24,7 +24,9 @@ Plan approved 2026-07-30. Audit-trail entries (the permanent record):
 
 ## D — propaganda density constellation (UI)
 
-- [x] `DensityConstellation.tsx` (deterministic beeswarm) + `TechniqueExplorer.tsx` chips/evidence rewrite; `ByPartySection` stays as footer; old bar-list CSS removed
+- [x] `DensityConstellation.tsx` (deterministic beeswarm) + `TechniqueExplorer.tsx` chips/evidence rewrite; old bar-list CSS removed
+- [x] `ByPartySection` demoted to a prose readout naming the real denominator (tracked officials' own posts); party-bar CSS removed
+- [x] Highest-flagged leaderboard bumped to top 5
 - [x] `npm run typecheck` + `npm run build` clean
 
 ## Remaining (Kobe)

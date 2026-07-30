@@ -3,7 +3,6 @@ import { Card, MethodPopover, Modal, TECHNIQUE_LABEL } from '../../components/co
 import { formatPct } from '../../services/format';
 import { useDeepLinkParam } from '../../services/deepLink';
 import { dedupeById } from '../../services/dedupe';
-import { COLORS } from '../../theme';
 import type {
     PartySplit, PropagandaOverview, PropagandaTechniqueName, TechniqueCount,
 } from '../../types';
@@ -39,7 +38,6 @@ function isTechniqueName(value: string): value is PropagandaTechniqueName {
     return value in TECHNIQUE_LABEL;
 }
 
-const PARTY_ACCENT: Record<string, string> = { republican: COLORS.leanRight, democrat: COLORS.leanLeft };
 const LOW_SAMPLE_DOCS = 30;
 
 function partyLabel(party: string): string {
@@ -47,41 +45,35 @@ function partyLabel(party: string): string {
     return party.charAt(0).toUpperCase() + party.slice(1);
 }
 
+/** Prose readout, deliberately not a bar chart: a two-bar red-vs-blue
+ *  scoreline was the page's most screenshot-ready artifact while resting
+ *  on its narrowest denominator (party attribution exists only for
+ *  tracked officials' own posts). The sentence keeps the answer and its
+ *  scope in the same glance. */
 function ByPartySection({ parties }: { parties: PartySplit[] }) {
     const known = parties.filter((p) => p.party !== 'unknown' && p.totalDocs > 0);
     if (known.length === 0) return null;
+    const ordered = [...known].sort((a, b) => partyLabel(a.party).localeCompare(partyLabel(b.party)));
+    const readout = ordered
+        .map((p) => `${partyLabel(p.party)}s ${formatPct(p.flaggedRatePct)} of ${p.totalDocs.toLocaleString()} scored posts`)
+        .join(' · ');
     const lowSample = known.filter((p) => p.totalDocs < LOW_SAMPLE_DOCS);
     return (
         <div className="technique-by-party">
             <div className="eyebrow technique-by-party-title" title="A density measure, not intent.">
                 By party
             </div>
-            <p className="text-xs text-muted" style={{ margin: '0 0 var(--space-2)' }}>
-                Share of each party's scored posts flagged for any technique — an overall rate, not a
-                breakdown of the techniques above.
+            <p className="text-sm" style={{ margin: 0 }}>
+                Flagged rate among posts by each party's tracked officials and appointees:{' '}
+                <span className="technique-by-party-readout">{readout}</span>.
             </p>
-            <div className="party-bars">
-                {known.map((p) => {
-                    const accent = PARTY_ACCENT[p.party] ?? 'var(--neutral-500)';
-                    return (
-                        <div key={p.party} className="party-bar-row" title={`Saturation ${p.meanScore.toFixed(2)} / 1`}>
-                            <span className="party-bar-label">{partyLabel(p.party)}</span>
-                            <span className="party-bar-track" aria-hidden>
-                                <span className="party-bar-fill" style={{ width: `${p.flaggedRatePct}%`, background: accent }} />
-                            </span>
-                            <span className="party-bar-value">{formatPct(p.flaggedRatePct)}</span>
-                            <span className="party-bar-meta">
-                                {p.flaggedDocs.toLocaleString()} of {p.totalDocs.toLocaleString()} posts
-                            </span>
-                        </div>
-                    );
-                })}
-            </div>
-            {lowSample.length > 0 && (
-                <p className="text-xs text-muted" style={{ margin: 'var(--space-2) 0 0' }}>
-                    Low sample: {lowSample.map((p) => `${partyLabel(p.party)} has only ${p.totalDocs.toLocaleString()} scored posts`).join('; ')}.
-                </p>
-            )}
+            <p className="text-xs text-muted" style={{ margin: 'var(--space-1) 0 0' }}>
+                Officials' own accounts only — says nothing about the media or the public.
+                An overall rate, not a breakdown of the techniques above.
+                {lowSample.length > 0 && (
+                    ` Low sample: ${lowSample.map((p) => `${partyLabel(p.party)} has only ${p.totalDocs.toLocaleString()} scored posts`).join('; ')}.`
+                )}
+            </p>
         </div>
     );
 }
