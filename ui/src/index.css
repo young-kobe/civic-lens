@@ -2313,6 +2313,43 @@ code, pre {
   flex: none;
 }
 
+/* The fixed 4-slot row templates above have hard minimum widths (344px
+   tone rows / 394px provenance rows) that exceed the content box inside
+   a .grid-2 > .surface-card on narrow viewports. Collapse each to a
+   two-row layout (explicit placement: the visual sits mid-DOM, so
+   auto-flow would strand the trailing numbers on a third row): text on
+   the top row, axis/share track on the bottom row. Provenance rows
+   reflow at 1024px — inside the party panel's two-up grid their 394px
+   minimum overflows well before the phone breakpoint. */
+@media (max-width: 1024px) {
+  .provenance-group-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    row-gap: 4px;
+  }
+  .provenance-group-label { grid-row: 1; grid-column: 1; }
+  .provenance-group-share-value { grid-row: 1; grid-column: 2; }
+  .provenance-group-share-track { grid-row: 2; grid-column: 1; align-self: center; }
+  .provenance-group-meta {
+    grid-row: 2;
+    grid-column: 2;
+    white-space: normal;
+    min-width: 0;
+  }
+}
+
+@media (max-width: 640px) {
+  .tone-bar-row {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    row-gap: 4px;
+  }
+  .tone-bar-row-label { grid-row: 1; grid-column: 1; }
+  .tone-bar-row-value { grid-row: 1; grid-column: 2; }
+  .tone-bar-row-n { grid-row: 1; grid-column: 3; }
+  .tone-bar-row-axis { grid-row: 2; grid-column: 1 / -1; }
+
+  .provenance-top-meta { white-space: normal; }
+}
+
 /* Mono count annotation beside a modal section header ("140 of 3,212"). */
 .modal-section-count {
   font-family: var(--font-mono);
@@ -4323,11 +4360,13 @@ a.digest-block-cta:hover { color: var(--accent-hover); }
    ============================================ */
 
 @media (max-width: 1024px) {
-  .grid-3 { grid-template-columns: repeat(2, 1fr); }
+  .grid-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 768px) {
-  .grid-3, .grid-2 { grid-template-columns: 1fr; }
+  /* minmax(0, …), matching .dashboard-grid — a bare 1fr track floors at
+     the item's min-content width and lets oversized rows spill the page. */
+  .grid-3, .grid-2 { grid-template-columns: minmax(0, 1fr); }
   .app-container { padding: 0 var(--space-3); }
   /* Switch the top-nav to short labels at the tablet breakpoint so the
      four tabs fit the viewport without horizontal scroll. The phone
