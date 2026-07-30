@@ -35,10 +35,12 @@ independently tickable.
 
 ## Test coverage
 
-- [ ] Rebuild the officials-pass integration coverage lost with the SQLite
+- [x] Rebuild the officials-pass integration coverage lost with the SQLite
       test fixture (cache reuse, budget-exhaustion skip, per-account
       failure isolation, backfill walk): needs a
       `CIVIC_TEST_POSTGRES_DSN`-gated fixture over
       `raw.x_users`/`raw.x_posts`/`ops.x_api_budget` following
       `frontier_postgres_test.go`'s cleanup-by-domain pattern (see
-      docs/audit-trail/ingestion/2026-07-28-delete-go-sqlite-backend.md)
+      docs/audit-trail/ingestion/2026-07-28-delete-go-sqlite-backend.md;
+      restored 2026-07-30, see
+      docs/audit-trail/ingestion/2026-07-30-restore-officials-pass-test-coverage.md)
