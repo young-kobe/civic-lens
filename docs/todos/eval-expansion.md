@@ -34,12 +34,12 @@ truncation, triviality pre-filter, reasoning bounds) landed in
 
 ## Propaganda golden set
 
-- [ ] `analysis/evals/golden/propaganda/` following the claims schema,
-      with technique labels per span.
-- [ ] Metric: (span IoU >= 0.3 AND technique match) micro-F1, plus a
-      technique-confusion breakdown.
-- [ ] Include negatives that the `_has_loaded_language` pre-filter kills,
-      and one example with a technique near the 800-char clamp.
+Moved to `docs/todos/propaganda-classifier-v2.md` (2026-07-30) — grown into
+its own initiative: Kobe-verified golden set, calibration report, then a
+propaganda-v2 prompt gated on the numbers. Two details preserved there in
+spirit; keep them in mind during Phase 1 sampling: include negatives the
+`_has_loaded_language` pre-filter kills, and one example with a technique
+near the 800-char clamp.
 
 ## Flash-Lite switch (gated on golden-set eval)
 
