@@ -149,8 +149,8 @@ export function TechniqueExplorer({ data }: TechniqueExplorerProps) {
 
     return (
         <Card
-            title="Persuasion density, post by post"
-            subtitle="Every dot is a flagged post, placed by how heavily it leans on persuasion and colored by who said it. Click a chip to isolate its posts."
+            title="Propaganda density, post by post"
+            subtitle="Every dot is a flagged post, placed by how heavily it leans on propaganda techniques and colored by who said it. Click a chip to isolate its posts."
             note="A sample of flagged posts (capped per speaker), not the full corpus. Density measures rhetorical style, not truth or intent."
             headerActions={
                 <MethodPopover
@@ -163,7 +163,7 @@ export function TechniqueExplorer({ data }: TechniqueExplorerProps) {
                 />
             }
         >
-            <div className="technique-chip-row" role="group" aria-label="Persuasion techniques">
+            <div className="technique-chip-row" role="group" aria-label="Propaganda techniques">
                 {data.byTechnique.map((t) => (
                     <TechniqueChip
                         key={t.technique}
@@ -193,7 +193,7 @@ export function TechniqueExplorer({ data }: TechniqueExplorerProps) {
             <Modal
                 isOpen={evidenceOpen && selected !== null}
                 onClose={closeEvidence}
-                kicker="Persuasion technique"
+                kicker="Propaganda technique"
                 title={selected ? (TECHNIQUE_LABEL[selected] || selected) : ''}
                 subtitle={selected ? TECHNIQUE_BLURB[selected] : undefined}
             >

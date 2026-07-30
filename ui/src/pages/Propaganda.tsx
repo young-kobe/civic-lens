@@ -29,7 +29,7 @@ import type {
 // everywhere they appear (top metrics, ticker, entity cards, modal, source
 // split) rather than switching between "saturation" and "mean score".
 const SATURATION_TITLE =
-    'How saturated flagged posts are with persuasion techniques, from 0 (none) to 1 (wall-to-wall).';
+    'How saturated flagged posts are with propaganda techniques, from 0 (none) to 1 (wall-to-wall).';
 
 // --------------------------------------------------------------------------- //
 //  Ticker + reads-as-today                                                    //
@@ -67,11 +67,11 @@ function buildPropagandaTickerItems(data: PropagandaOverview): TickerItem[] {
     ];
 }
 
-/** Reader-facing headline: which side leans harder on persuasive rhetoric,
- *  plus what shows up most. Intentionally avoids the "X% of flagged posts"
- *  phrasing — with multiple flags per post that figure can read >100% and
- *  confuse everyday readers. The measure is named and defined once, in the
- *  ticker legend; this line stays in plain words. */
+/** Reader-facing headline: which side leans harder on propaganda
+ *  techniques, plus what shows up most. Intentionally avoids the "X% of
+ *  flagged posts" phrasing — with multiple flags per post that figure can
+ *  read >100% and confuse everyday readers. The measure is named and
+ *  defined once, in the ticker legend; this line stays in plain words. */
 function readsAsToday(data: PropagandaOverview): string {
     const news = data.bySource.find((s) => s.source === 'news');
     const social = data.bySource.find((s) => s.source === 'social');
@@ -84,11 +84,11 @@ function readsAsToday(data: PropagandaOverview): string {
     if (news && social) {
         const gap = news.flaggedRatePct - social.flaggedRatePct;
         if (Math.abs(gap) < 2) {
-            parts.push('News and social media are leaning on persuasive rhetoric at about the same rate.');
+            parts.push('News and social media are leaning on propaganda techniques at about the same rate.');
         } else if (gap > 0) {
-            parts.push('News is leaning on persuasive rhetoric harder than social media right now.');
+            parts.push('News is leaning on propaganda techniques harder than social media right now.');
         } else {
-            parts.push('Social media is leaning on persuasive rhetoric harder than news right now.');
+            parts.push('Social media is leaning on propaganda techniques harder than news right now.');
         }
     }
     if (topTechLabel && topTech && topTech.count > 0) {
@@ -404,13 +404,13 @@ function HowThisWorks() {
     return (
         <CollapsibleInfo>
             <p className="text-sm">
-                Every sampled post is scored for the six persuasion techniques listed on the
+                Every sampled post is scored for the six propaganda techniques listed on the
                 chips above. The model has to quote a verbatim phrase from the source as
                 evidence for each flag, and flags whose quote can't be verified against the
                 source text are dropped — nothing is hand-waved.
             </p>
             <p className="text-sm">
-                A high flagged rate means the sample leaned on persuasive rhetoric — a measure
+                A high flagged rate means the sample leaned on these techniques — a measure
                 of density, not authorial intent. Straight reporting reads as unflagged;
                 opinion and activist content tends to light up.
             </p>
@@ -476,7 +476,7 @@ function Propaganda({ filters }: PropagandaProps) {
     // Tone and Narratives do. Hiding the frame on empty data was
     // misleading: a stalled propaganda-detection cron looked identical to
     // a clean run with nothing to flag.
-    if (!data) return <EmptyState title="No persuasion-technique analysis available for this window." />;
+    if (!data) return <EmptyState title="No propaganda analysis available for this window." />;
 
     const windowLabel = formatTimeWindow(filters.timeRange);
     const tickerItems = buildPropagandaTickerItems(data);
@@ -494,7 +494,7 @@ function Propaganda({ filters }: PropagandaProps) {
                             <MethodPopover
                                 title="How to read these numbers"
                                 description={
-                                    'This page measures persuasion techniques: six rhetorical devices — '
+                                    'This page measures propaganda techniques: six rhetorical devices — '
                                     + 'emotionally loaded wording, name-calling, personal attacks, fear appeals, '
                                     + 'whataboutism, and insinuation — flagged in sampled political posts. Every '
                                     + 'flag must quote the exact phrase as evidence; unverifiable flags are '
