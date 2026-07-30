@@ -1,20 +1,25 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Card, MethodPopover, Modal, TECHNIQUE_LABEL } from '../../components/common';
 import { formatPct } from '../../services/format';
 import { useDeepLinkParam } from '../../services/deepLink';
+import { dedupeById } from '../../services/dedupe';
 import { COLORS } from '../../theme';
-import type { PartySplit, PropagandaTechniqueName, TechniqueCount } from '../../types';
+import type {
+    PartySplit, PropagandaOverview, PropagandaTechniqueName, TechniqueCount,
+} from '../../types';
+import {
+    ConstellationDot, ConstellationTier, DensityConstellation,
+} from './DensityConstellation';
 
 // --------------------------------------------------------------------------- //
-//  TechniqueExplorer — the Propaganda page's signature interaction.           //
+//  TechniqueExplorer — the Propaganda page's signature card.                  //
 //                                                                             //
-//  A horizontal bar graphic: one bar per rhetorical technique, sized by how   //
-//  many flagged posts carry it. Clicking a bar opens a modal of that          //
-//  technique's stored evidence quotes (TechniqueCount.sampleEvidence).        //
-//  Phase 10 note: the strictly-live /propaganda response no longer ties       //
-//  evidence spans to a specific doc/example (PropagandaOverviewModel carries  //
-//  no per-example technique breakdown), so this modal shows verbatim quotes   //
-//  rather than filtered post cards.                                          //
+//  A density constellation (every dot one flagged post, positioned by         //
+//  technique density, colored by speaker tier) fronted by a row of technique  //
+//  chips. A chip is both legend and filter: clicking isolates that            //
+//  technique's dots and deep-links via ?technique=; the selected chip offers  //
+//  the technique's stored evidence quotes (TechniqueCount.sampleEvidence)     //
+//  in a modal.                                                                //
 // --------------------------------------------------------------------------- //
 
 const TECHNIQUE_BLURB: Record<PropagandaTechniqueName, string> = {
@@ -27,8 +32,7 @@ const TECHNIQUE_BLURB: Record<PropagandaTechniqueName, string> = {
 };
 
 interface TechniqueExplorerProps {
-    techniques: TechniqueCount[];
-    parties?: PartySplit[];
+    data: PropagandaOverview;
 }
 
 function isTechniqueName(value: string): value is PropagandaTechniqueName {
@@ -82,65 +86,121 @@ function ByPartySection({ parties }: { parties: PartySplit[] }) {
     );
 }
 
-export function TechniqueExplorer({ techniques, parties = [] }: TechniqueExplorerProps) {
+function TechniqueChip({
+    row, selected, onToggle,
+}: {
+    row: TechniqueCount;
+    selected: boolean;
+    onToggle: (name: PropagandaTechniqueName) => void;
+}) {
+    const name = row.technique as PropagandaTechniqueName;
+    const label = TECHNIQUE_LABEL[name] || row.technique;
+    return (
+        <button
+            type="button"
+            className={`technique-chip${selected ? ' technique-chip-selected' : ''}${row.count === 0 ? ' technique-chip-zero' : ''}`}
+            aria-pressed={selected}
+            onClick={() => onToggle(name)}
+            title={TECHNIQUE_BLURB[name]}
+        >
+            <span className="technique-chip-label">{label}</span>
+            <span className="technique-chip-count">{row.count.toLocaleString()}</span>
+            <span className="technique-chip-pct">{formatPct(row.pctOfFlaggedDocs, { decimals: 0 })}</span>
+        </button>
+    );
+}
+
+export function TechniqueExplorer({ data }: TechniqueExplorerProps) {
     const [techParam, setTechParam] = useDeepLinkParam('technique');
     const [selected, setSelected] = useState<PropagandaTechniqueName | null>(() =>
         techParam && isTechniqueName(techParam) ? techParam : null);
+    const [evidenceOpen, setEvidenceOpen] = useState(false);
 
     useEffect(() => {
         if (techParam && isTechniqueName(techParam)) setSelected(techParam);
         else if (!techParam) setSelected(null);
     }, [techParam]);
 
-    const open = (name: PropagandaTechniqueName) => { setSelected(name); setTechParam(name); };
-    const close = () => { setSelected(null); setTechParam(null); };
+    const toggle = (name: PropagandaTechniqueName) => {
+        const next = selected === name ? null : name;
+        setSelected(next);
+        setTechParam(next);
+        if (next === null) setEvidenceOpen(false);
+    };
+    const closeEvidence = () => setEvidenceOpen(false);
 
-    const maxCount = techniques.reduce((m, t) => Math.max(m, t.count), 0);
-    const selectedRow = selected ? techniques.find((t) => t.technique === selected) : undefined;
+    // Pool the per-entity flagged examples into constellation dots. Tier
+    // comes from which leaderboard the example's entity key belongs to
+    // (the backend builds examplesByEntity in lockstep with those keys);
+    // an unmatched key falls back on the doc's own source_type.
+    const dots = useMemo<ConstellationDot[]>(() => {
+        const tierByKey = new Map<string, ConstellationTier>();
+        for (const it of data.byNewsOutlet ?? []) tierByKey.set(it.key, 'news');
+        for (const it of data.byOfficial ?? []) tierByKey.set(it.key, 'officials');
+        for (const it of data.byGeneralPublic ?? []) tierByKey.set(it.key, 'public');
+        const all: ConstellationDot[] = [];
+        for (const [key, examples] of Object.entries(data.examplesByEntity ?? {})) {
+            const tier = tierByKey.get(key);
+            for (const example of examples) {
+                all.push({
+                    example,
+                    tier: tier ?? (example.sourceType === 'news' ? 'news' : 'public'),
+                });
+            }
+        }
+        return dedupeById(all, (d) => d.example.docId);
+    }, [data]);
+
+    const selectedRow = selected
+        ? data.byTechnique.find((t) => t.technique === selected)
+        : undefined;
 
     return (
         <Card
-            title="Techniques being used"
-            subtitle="Each bar is a rhetorical technique, sized by how many flagged posts carry it. Click a bar to read its stored evidence quotes."
+            title="Technique density, post by post"
+            subtitle="Every dot is a flagged post, placed by how saturated it is with persuasion techniques and colored by who said it. Click a technique to isolate its posts."
+            note="A sample of flagged posts (capped per speaker), not the full corpus. Density measures rhetorical style, not truth or intent."
             headerActions={
                 <MethodPopover
                     description={
-                        'Each post is scored for six rhetorical techniques. The model must quote '
-                        + 'a verbatim phrase from the source as evidence for every flag.'
+                        'Each post is scored for six rhetorical techniques; the model must quote a '
+                        + 'verbatim phrase from the source as evidence for every flag. Density runs 0 '
+                        + '(no techniques) to 1 (wall-to-wall). The dots are the flagged-example pool '
+                        + '(up to 5 posts per speaker), colored News / Officials / Public.'
                     }
                 />
             }
         >
-            <div className="technique-explorer-list" role="list" aria-label="Propaganda techniques">
-                {techniques.map((t) => {
-                    const name = t.technique as PropagandaTechniqueName;
-                    const label = TECHNIQUE_LABEL[name] || t.technique;
-                    const widthPct = maxCount > 0 ? (t.count / maxCount) * 100 : 0;
-                    return (
-                        <button
-                            key={t.technique}
-                            type="button"
-                            role="listitem"
-                            className="technique-explorer-row"
-                            onClick={() => open(name)}
-                            title={TECHNIQUE_BLURB[name]}
-                        >
-                            <span className="technique-explorer-row-name">{label}</span>
-                            <span className="technique-explorer-row-bar" aria-hidden>
-                                <span className="technique-explorer-row-fill" style={{ width: `${widthPct}%` }} />
-                            </span>
-                            <span className="technique-explorer-row-count">{t.count.toLocaleString()}</span>
-                            <span className="technique-explorer-row-pct">{formatPct(t.pctOfFlaggedDocs, { decimals: 0 })}</span>
-                        </button>
-                    );
-                })}
+            <div className="technique-chip-row" role="group" aria-label="Propaganda techniques">
+                {data.byTechnique.map((t) => (
+                    <TechniqueChip
+                        key={t.technique}
+                        row={t}
+                        selected={selected === t.technique}
+                        onToggle={toggle}
+                    />
+                ))}
             </div>
+            {selected && selectedRow && (
+                <div className="technique-chip-detail">
+                    <span className="text-xs text-muted">{TECHNIQUE_BLURB[selected]}</span>
+                    <button
+                        type="button"
+                        className="technique-evidence-link"
+                        onClick={() => setEvidenceOpen(true)}
+                    >
+                        Read evidence quotes
+                    </button>
+                </div>
+            )}
 
-            <ByPartySection parties={parties} />
+            <DensityConstellation dots={dots} selectedTechnique={selected} />
+
+            <ByPartySection parties={data.byParty ?? []} />
 
             <Modal
-                isOpen={selected !== null}
-                onClose={close}
+                isOpen={evidenceOpen && selected !== null}
+                onClose={closeEvidence}
                 kicker="Propaganda technique"
                 title={selected ? (TECHNIQUE_LABEL[selected] || selected) : ''}
                 subtitle={selected ? TECHNIQUE_BLURB[selected] : undefined}
