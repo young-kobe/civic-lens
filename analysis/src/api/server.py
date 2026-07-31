@@ -21,9 +21,10 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
-from starlette.responses import Response
+from starlette.responses import JSONResponse, Response
 
 from analysis.src.api.rate_limits import limiter
+from analysis.src.common.error_log import record_error
 from analysis.src.api.routers import (
     admin_router,
     auth_bootstrap_router,
@@ -57,6 +58,18 @@ app = FastAPI(title="Civic Lens API", version=API_VERSION)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
+
+
+async def _record_unhandled(request: Request, exc: Exception) -> Response:
+    """Durable record for every unhandled 500 (ops.error_log). Starlette's
+    ServerErrorMiddleware still re-raises after this handler runs, so
+    uvicorn's stderr traceback is unchanged -- this adds durability, it
+    does not swallow."""
+    record_error(exc, source="api", component=f"{request.method} {request.url.path}")
+    return JSONResponse({"detail": "Internal server error"}, status_code=500)
+
+
+app.add_exception_handler(Exception, _record_unhandled)
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):

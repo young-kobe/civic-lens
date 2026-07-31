@@ -11,6 +11,7 @@ embed_content (see embed() below).
 import time
 from typing import Any, Dict, Optional
 from analysis.src.llm.base import BaseLLMClient
+from analysis.src.common.error_log import record_error
 from analysis.src.common.logger import get_logger
 
 logger = get_logger(__name__)
@@ -85,6 +86,7 @@ class GeminiClient(BaseLLMClient):
             self._client = None
         except Exception as e:
             logger.error(f"Failed to initialize Gemini client: {e}")
+            record_error(e, component="llm.gemini")
             self._client = None
 
     @property
@@ -204,4 +206,5 @@ class GeminiClient(BaseLLMClient):
             return None
         except Exception as e:
             logger.warning(f"Gemini embedding call failed for model={embed_model}: {e}")
+            record_error(e, component="llm.gemini", context={"embed_model": embed_model})
             return None

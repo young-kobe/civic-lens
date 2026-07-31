@@ -17,6 +17,7 @@ import yaml
 from psycopg import Connection
 
 from analysis.src.common import db
+from analysis.src.common.error_log import record_error
 from analysis.src.common.logger import get_logger
 from analysis.src.common.settings import get_settings
 from analysis.src.common.canonicalize import canonicalize_news_domain, canonicalize_subreddit
@@ -292,7 +293,10 @@ def _extract_text_from_raw(raw_hash: Optional[str], raw_root: Path) -> Optional[
         html_content = path.read_text(encoding="utf-8", errors="ignore")
         return trafilatura.extract(html_content)
     except (OSError, UnicodeError) as e:
+        # The doc drops out of the corpus entirely on this path -- durable
+        # record or the loss is invisible after the stdout log rotates.
         logger.warning(f"Failed to extract text for {raw_hash}: {e}")
+        record_error(e, component="etl.documents", context={"raw_hash": raw_hash})
         return None
 
 

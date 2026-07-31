@@ -109,7 +109,7 @@ class RunQueueStageIntegrationTests(unittest.TestCase):
         self._prev_url = pg_fixture.begin_test(self._dsn)
         import psycopg
         with psycopg.connect(self._dsn, autocommit=True) as conn:
-            conn.execute("TRUNCATE ops.task_queue, corpus.documents CASCADE")
+            conn.execute("TRUNCATE ops.task_queue, ops.error_log, corpus.documents CASCADE")
         # run_queue_stage always constructs a fresh LLM client per worker
         # thread (see stages._new_llm_client) -- stubbed here so these
         # hermetic tests never need a reachable LLM backend.
@@ -224,6 +224,55 @@ class RunQueueStageIntegrationTests(unittest.TestCase):
             row = self._queue_row(conn, doc_id)
         self.assertEqual(row["status"], "failed")
         self.assertIn("loader exploded", row["last_error"])
+
+    def test_loader_exception_writes_durable_error_log_row(self):
+        """last_error is a single overwritten column with no traceback --
+        ops.error_log is where the failure has to survive with enough
+        context to debug after the stdout log rotates away."""
+        from analysis.src.common import db
+        with db.connection() as conn:
+            doc_id = self._insert_doc(conn, "n3b")
+            self._insert_queue_row(conn, doc_id)
+
+        def _broken_loader(conn, doc_id):
+            raise RuntimeError("loader exploded durably")
+
+        spec = stages.StageSpec("citations", "queue", _stub_worker_factory(), _broken_loader)
+        stages.run_queue_stage(spec, concurrency=1, limit=None, budget_deadline=None)
+
+        with db.connection() as conn:
+            rows = conn.execute(
+                "SELECT source, component, doc_id, task, traceback FROM ops.error_log"
+            ).fetchall()
+        self.assertEqual(len(rows), 1)
+        row = rows[0]
+        self.assertEqual(row["source"], "analysis")
+        self.assertEqual(row["component"], "scheduler.stages")
+        self.assertEqual(row["doc_id"], doc_id)
+        self.assertEqual(row["task"], "citations")
+        self.assertIn("RuntimeError: loader exploded durably", row["traceback"])
+
+    def test_success_after_retry_clears_stale_last_error(self):
+        """A doc that fails then succeeds must stop advertising the old
+        error -- before this, _MARK_DONE_SQL left last_error in place and
+        a 'done' row still carried a failure message forever."""
+        from analysis.src.common import db
+        with db.connection() as conn:
+            doc_id = self._insert_doc(conn, "n3c")
+            self._insert_queue_row(conn, doc_id, status="failed", attempts=1)
+            conn.execute(
+                "UPDATE ops.task_queue SET last_error = 'stale failure' WHERE doc_id = %s",
+                (doc_id,),
+            )
+
+        spec = stages.StageSpec("citations", "queue", _stub_worker_factory(status="done"), _stub_loader)
+        result = stages.run_queue_stage(spec, concurrency=1, limit=None, budget_deadline=None)
+        self.assertEqual(result.done, 1)
+
+        with db.connection() as conn:
+            row = self._queue_row(conn, doc_id)
+        self.assertEqual(row["status"], "done")
+        self.assertIsNone(row["last_error"])
 
     # -- retry / requeue policy ---------------------------------------------
 

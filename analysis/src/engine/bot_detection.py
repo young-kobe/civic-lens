@@ -29,6 +29,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from analysis.src.common import db
+from analysis.src.common.error_log import record_error
 from analysis.src.common.logger import get_logger
 from analysis.src.common.settings import get_settings
 from analysis.src.engine.constants import (
@@ -411,6 +412,7 @@ def process(doc: BotDocInput, client: LLMClient) -> store.RunOutcome:
         result = analyze(doc, client)
     except Exception as exc:
         logger.warning(f"bot engine failed for doc={doc.doc_id}: {exc}")
+        record_error(exc, component="engine.bot_detection", doc_id=doc.doc_id, task="bot")
         handle = store.open_run(
             BOT_TASK, doc_id=doc.doc_id, model_id=model_id,
             prompt_version=BOT_PROMPT_VERSION, inference_method="hybrid",

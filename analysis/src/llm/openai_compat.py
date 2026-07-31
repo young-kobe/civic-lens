@@ -13,6 +13,7 @@ import time
 from typing import Any, Dict, Optional
 import requests
 from analysis.src.llm.base import BaseLLMClient
+from analysis.src.common.error_log import record_error
 from analysis.src.common.logger import get_logger
 
 logger = get_logger(__name__)
@@ -221,4 +222,5 @@ class OpenAICompatClient(BaseLLMClient):
             logger.warning(
                 f"openai_compat embedding call failed for model={embed_model}: {e}"
             )
+            record_error(e, component="llm.openai_compat", context={"embed_model": embed_model})
             return None

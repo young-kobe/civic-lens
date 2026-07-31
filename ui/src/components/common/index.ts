@@ -30,6 +30,7 @@ export type { RankedEntity } from './RankedEntityList';
 export { default as LoadingState, LoadingCard, LoadingMetric, LoadingTable, LoadingChart, LoadingSkeleton } from './LoadingState';
 export { default as EmptyState } from './EmptyState';
 export { default as ErrorState } from './ErrorState';
+export { default as ErrorBoundary } from './ErrorBoundary';
 export { default as CollapsibleInfo } from './CollapsibleInfo';
 export { default as TopMetricsBlock, TierRow } from './TopMetricsBlock';
 export type { TierRowDot } from './TopMetricsBlock';

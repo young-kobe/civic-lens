@@ -3,12 +3,15 @@ package app
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
 
 	"github.com/young-kobe/civic-lens/ingest/internal/config"
+	"github.com/young-kobe/civic-lens/ingest/internal/errorlog"
 	"github.com/young-kobe/civic-lens/ingest/internal/frontier"
 	"github.com/young-kobe/civic-lens/ingest/internal/httpclient"
 	"github.com/young-kobe/civic-lens/ingest/internal/robots"
@@ -49,6 +52,7 @@ func New(ctx context.Context, opts Options) (*App, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
+	installErrorLogHandler(database.Conn())
 
 	if err := database.Migrate(ctx); err != nil {
 		database.Close()
@@ -110,10 +114,21 @@ func NewDBOnly(ctx context.Context, dbPath string) (*App, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
+	installErrorLogHandler(database.Conn())
 
 	return &App{
 		Database: database,
 	}, nil
+}
+
+// installErrorLogHandler makes the process-wide default logger mirror
+// Error-level records into ops.error_log (see internal/errorlog). Called
+// from both App construction sites, right after the database handle exists
+// — every command path installs it exactly once, so runners/frontier code
+// can keep using the package-level slog.Error/Warn/Info funcs without
+// threading a logger through every signature.
+func installErrorLogHandler(conn *sql.DB) {
+	slog.SetDefault(slog.New(errorlog.NewHandler(slog.NewTextHandler(os.Stderr, nil), conn)))
 }
 
 // SignalContext returns a context that is canceled on SIGINT/SIGTERM.

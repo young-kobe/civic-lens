@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/young-kobe/civic-lens/ingest/internal/extract/x"
@@ -86,14 +87,14 @@ func (xr *XRunner) runOfficialsPass(
 		userID, hydratedUser, err := xr.resolveOfficialUserID(ctx, job.handle, budget)
 		if err != nil {
 			res.HandlesFailed++
-			fmt.Printf("  @%s lookup failed: %v\n", job.handle, err)
+			slog.Error("official lookup failed", "component", "runner.x_officials", "handle", job.handle, "error", err)
 			continue
 		}
 
 		if hydratedUser != nil {
 			hydratedUser.FetchedAt = now
 			if err := xr.insertUser(ctx, *hydratedUser); err != nil {
-				fmt.Printf("  @%s user insert error: %v\n", job.handle, err)
+				slog.Error("official user insert failed", "component", "runner.x_officials", "handle", job.handle, "error", err)
 			} else {
 				res.UsersIngested++
 			}
@@ -108,7 +109,7 @@ func (xr *XRunner) runOfficialsPass(
 		resp, rawJSON, err := xr.client.UserTimeline(ctx, userID, maxTweetsPerAccount)
 		if err != nil {
 			res.HandlesFailed++
-			fmt.Printf("  @%s timeline failed: %v\n", job.handle, err)
+			slog.Error("official timeline failed", "component", "runner.x_officials", "handle", job.handle, "error", err)
 			continue
 		}
 
@@ -118,7 +119,7 @@ func (xr *XRunner) runOfficialsPass(
 			// breaks A6/A7 traceability for the highest-signal surface we
 			// collect. Count the handle as failed and move on.
 			res.HandlesFailed++
-			fmt.Printf("  @%s raw store error: %v\n", job.handle, err)
+			slog.Error("official raw store failed", "component", "runner.x_officials", "handle", job.handle, "error", err)
 			continue
 		}
 		posts, hydrated := x.ToModels(resp)
@@ -126,7 +127,7 @@ func (xr *XRunner) runOfficialsPass(
 		// Persist budget BEFORE inserts so a DB error on one timeline
 		// doesn't drift the ceiling away from reality.
 		if err := budget.Record(ctx, len(posts), len(hydrated)); err != nil {
-			fmt.Printf("  @%s budget record error: %v\n", job.handle, err)
+			slog.Error("budget record failed", "component", "runner.x_officials", "handle", job.handle, "error", err)
 		}
 
 		insertedHere := 0
@@ -135,7 +136,7 @@ func (xr *XRunner) runOfficialsPass(
 			post.RawHash = hash
 			post.ExtractionVersion = "1.0"
 			if err := xr.insertOfficialPost(ctx, post); err != nil {
-				fmt.Printf("  @%s post insert error: %v\n", job.handle, err)
+				slog.Error("official post insert failed", "component", "runner.x_officials", "handle", job.handle, "error", err)
 				continue
 			}
 			insertedHere++
@@ -146,7 +147,7 @@ func (xr *XRunner) runOfficialsPass(
 			user.FetchedAt = now
 			user.RawHash = hash
 			if err := xr.insertUser(ctx, user); err != nil {
-				fmt.Printf("  @%s user expansion insert error: %v\n", job.handle, err)
+				slog.Error("official user expansion insert failed", "component", "runner.x_officials", "handle", job.handle, "error", err)
 			} else {
 				res.UsersIngested++
 			}
@@ -186,7 +187,7 @@ func (xr *XRunner) resolveOfficialUserID(
 	}
 	// One user-resource billed against the monthly budget.
 	if err := budget.Record(ctx, 0, 1); err != nil {
-		fmt.Printf("  @%s budget record error (user lookup): %v\n", handle, err)
+		slog.Error("budget record failed (user lookup)", "component", "runner.x_officials", "handle", handle, "error", err)
 	}
 
 	// Convert to model.XUser so the caller can persist via the existing

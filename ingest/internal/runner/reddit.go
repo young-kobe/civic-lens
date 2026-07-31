@@ -3,6 +3,7 @@ package runner
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/young-kobe/civic-lens/ingest/internal/app"
@@ -46,7 +47,7 @@ func (rr *RedditRunner) Run(ctx context.Context) (*RedditResult, error) {
 
 		posts, rawJSON, err := client.FetchSubredditPostsPublic(ctx, subreddit, 25)
 		if err != nil {
-			fmt.Printf("  Error: %v\n", err)
+			slog.Error("fetch subreddit posts failed", "component", "runner.reddit", "subreddit", subreddit, "error", err)
 			continue
 		}
 
@@ -55,7 +56,7 @@ func (rr *RedditRunner) Run(ctx context.Context) (*RedditResult, error) {
 		// log also panicked on the empty string.
 		hash, err := rr.app.RawStore.Store(ctx, rawJSON, ".json")
 		if err != nil {
-			fmt.Printf("  Raw store error, skipping subreddit: %v\n", err)
+			slog.Error("raw store failed, skipping subreddit", "component", "runner.reddit", "subreddit", subreddit, "error", err)
 			continue
 		}
 
@@ -75,7 +76,7 @@ func (rr *RedditRunner) Run(ctx context.Context) (*RedditResult, error) {
 			post.ExtractionVersion = "1.0"
 
 			if err := rr.insertPost(ctx, post); err != nil {
-				fmt.Printf("  Insert error: %v\n", err)
+				slog.Error("insert post failed", "component", "runner.reddit", "subreddit", subreddit, "error", err)
 			} else {
 				rr.postsIngested++
 			}
