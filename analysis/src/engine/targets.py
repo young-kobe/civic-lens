@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional, Sequence
 
 from analysis.src.common.entity_resolver import EntityResolver
+from analysis.src.common.error_log import record_error
 from analysis.src.common.logger import get_logger
 from analysis.src.common.settings import get_settings
 from analysis.src.engine import validation
@@ -216,6 +217,7 @@ def process(doc: TargetDocInput, client: LLMClient, resolver: EntityResolver) ->
         result = analyze(doc, client, resolver)
     except Exception as exc:
         logger.warning(f"targets engine failed for doc={doc.doc_id}: {exc}")
+        record_error(exc, component="engine.targets", doc_id=doc.doc_id, task="targets")
         handle = store.open_run(
             TARGETS_TASK, doc_id=doc.doc_id, model_id=model_id,
             prompt_version=TARGET_SENTIMENT_PROMPT_VERSION, inference_method="llm",

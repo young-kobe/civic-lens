@@ -10,6 +10,7 @@ import time
 from typing import Any, Dict, Optional
 import requests
 from analysis.src.llm.base import BaseLLMClient
+from analysis.src.common.error_log import record_error
 from analysis.src.common.logger import get_logger
 
 logger = get_logger(__name__)
@@ -175,4 +176,5 @@ class OllamaClient(BaseLLMClient):
             return None
         except Exception as e:
             logger.warning(f"Ollama embedding call failed for model={embed_model}: {e}")
+            record_error(e, component="llm.ollama", context={"embed_model": embed_model})
             return None

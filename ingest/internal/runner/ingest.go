@@ -3,6 +3,7 @@ package runner
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/young-kobe/civic-lens/ingest/internal/app"
@@ -41,14 +42,14 @@ func (ir *IngestRunner) Run(ctx context.Context) (*IngestResult, error) {
 		domain := util.ExtractDomain(seed.URL)
 		result := ir.app.Fetcher.Fetch(ctx, seed.URL, domain)
 		if result.Error != nil {
-			fmt.Printf("  Error: %v\n", result.Error)
+			slog.Error("fetch seed failed", "component", "runner.ingest", "url", seed.URL, "error", result.Error)
 			continue
 		}
 
 		if seed.Type == "rss" {
 			feed, err := rss.Parse(result.Body)
 			if err != nil {
-				fmt.Printf("  Parse error: %v\n", err)
+				slog.Error("parse rss feed failed", "component", "runner.ingest", "url", seed.URL, "error", err)
 				continue
 			}
 
@@ -68,7 +69,7 @@ func (ir *IngestRunner) Run(ctx context.Context) (*IngestResult, error) {
 
 			stats, err := ir.app.Frontier.PushLinks(ctx, links, seed.Priority)
 			if err != nil {
-				fmt.Printf("  PushLinks error: %v\n", err)
+				slog.Error("push links failed", "component", "runner.ingest", "url", seed.URL, "error", err)
 			}
 			ir.totalDiscovered += stats.Added
 			ir.skipped += seedSkipped

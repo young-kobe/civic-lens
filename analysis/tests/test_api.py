@@ -41,6 +41,39 @@ class LegacyPrefixAndAuthGateTests(unittest.TestCase):
         )
 
 
+class UnhandledExceptionRecordingTests(unittest.TestCase):
+    """The catch-all handler exists so a 500 leaves a durable ops.error_log
+    row -- before it, unhandled endpoint exceptions lived only in uvicorn's
+    stderr under a 30 MB Docker log rotation. No DB needed: record_error is
+    stubbed; what matters is that the handler fires with the right identity
+    and still returns a 500 body."""
+
+    def test_unhandled_exception_records_and_returns_500(self):
+        from unittest import mock
+        from fastapi.testclient import TestClient
+        from analysis.src.api import server
+        from analysis.src.api.server import app
+
+        # A throwaway route that raises -- registered once; FastAPI ignores
+        # duplicates on re-run because unittest imports this module once.
+        if not any(getattr(r, "path", None) == "/api/v1/_test_boom" for r in app.routes):
+            @app.get("/api/v1/_test_boom")
+            def _boom():
+                raise RuntimeError("kaboom")
+
+        with mock.patch.object(server, "record_error") as recorded:
+            client = TestClient(app, raise_server_exceptions=False)
+            response = client.get("/api/v1/_test_boom")
+
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(response.json(), {"detail": "Internal server error"})
+        recorded.assert_called_once()
+        args, kwargs = recorded.call_args
+        self.assertIsInstance(args[0], RuntimeError)
+        self.assertEqual(kwargs["source"], "api")
+        self.assertEqual(kwargs["component"], "GET /api/v1/_test_boom")
+
+
 @unittest.skipUnless(
     os.environ.get("CIVIC_TEST_DATABASE_URL"),
     "CIVIC_TEST_DATABASE_URL not set — no Postgres server available to test against",

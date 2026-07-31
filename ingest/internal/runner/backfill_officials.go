@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -195,7 +196,7 @@ func (xr *XRunner) runBackfillOfficials(
 		if err != nil {
 			res.OfficialsErrored++
 			errored = append(errored, off.Handle)
-			fmt.Printf("  @%s lookup failed: %v\n", off.Handle, err)
+			slog.Error("official lookup failed", "component", "runner.backfill_officials", "handle", off.Handle, "error", err)
 			continue
 		}
 		// A non-nil hydratedUser means resolveOfficialUserID went to the API
@@ -206,7 +207,7 @@ func (xr *XRunner) runBackfillOfficials(
 			spent += ceilDiv(centsPerUser, centsConversionUnit)
 			hydratedUser.FetchedAt = now
 			if err := xr.insertUser(ctx, *hydratedUser); err != nil {
-				fmt.Printf("  @%s user insert error: %v\n", off.Handle, err)
+				slog.Error("official user insert failed", "component", "runner.backfill_officials", "handle", off.Handle, "error", err)
 			}
 		}
 
@@ -214,7 +215,7 @@ func (xr *XRunner) runBackfillOfficials(
 		if err != nil {
 			res.OfficialsErrored++
 			errored = append(errored, off.Handle)
-			fmt.Printf("  @%s stored-count query failed: %v\n", off.Handle, err)
+			slog.Error("stored-count query failed", "component", "runner.backfill_officials", "handle", off.Handle, "error", err)
 			continue
 		}
 
@@ -263,7 +264,7 @@ func (xr *XRunner) fetchAndStoreShortfall(
 ) error {
 	resp, rawJSON, err := xr.client.UserTimeline(ctx, userID, need)
 	if err != nil {
-		fmt.Printf("  @%s timeline fetch failed: %v\n", handle, err)
+		slog.Error("official timeline fetch failed", "component", "runner.backfill_officials", "handle", handle, "error", err)
 		return err
 	}
 
@@ -271,13 +272,13 @@ func (xr *XRunner) fetchAndStoreShortfall(
 	if err != nil {
 		// Never persist official posts with an empty raw_hash — that breaks
 		// A6/A7 traceability, matching the existing officials pass.
-		fmt.Printf("  @%s raw store error: %v\n", handle, err)
+		slog.Error("official raw store failed", "component", "runner.backfill_officials", "handle", handle, "error", err)
 		return err
 	}
 	posts, hydrated := x.ToModels(resp)
 
 	if err := budget.Record(ctx, len(posts), len(hydrated)); err != nil {
-		fmt.Printf("  @%s budget record error: %v\n", handle, err)
+		slog.Error("budget record failed", "component", "runner.backfill_officials", "handle", handle, "error", err)
 	}
 	*spent += ceilDiv(len(posts)*centsPerPost+len(hydrated)*centsPerUser, centsConversionUnit)
 
@@ -287,7 +288,7 @@ func (xr *XRunner) fetchAndStoreShortfall(
 		post.RawHash = hash
 		post.ExtractionVersion = "1.0"
 		if err := xr.insertOfficialPost(ctx, post); err != nil {
-			fmt.Printf("  @%s post insert error: %v\n", handle, err)
+			slog.Error("official post insert failed", "component", "runner.backfill_officials", "handle", handle, "error", err)
 			continue
 		}
 		insertedHere++
@@ -298,7 +299,7 @@ func (xr *XRunner) fetchAndStoreShortfall(
 		user.FetchedAt = fetchedAt
 		user.RawHash = hash
 		if err := xr.insertUser(ctx, user); err != nil {
-			fmt.Printf("  @%s user expansion insert error: %v\n", handle, err)
+			slog.Error("official user expansion insert failed", "component", "runner.backfill_officials", "handle", handle, "error", err)
 		}
 	}
 

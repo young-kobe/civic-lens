@@ -1,5 +1,11 @@
 # Propaganda classifier v2: Kobe-verified golden set, calibration, then the prompt
 
+First instance of the all-metrics golden-set initiative
+(`docs/todos/golden-sets.md`) — the per-flag machinery built here is
+the template the targets set clones, so design Phase 0 with that second
+consumer in mind (verdict + reason + missed-item is the shared shape;
+the reason enums are per-domain).
+
 Order is deliberate: measure first, change the prompt only against numbers.
 Reuses the claims eval harness (`analysis/evals/` — golden JSON, replay
 recordings, span-IoU scoring, CI gate; see `docs/EVALS.md`). The propaganda

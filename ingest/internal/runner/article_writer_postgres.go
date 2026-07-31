@@ -3,7 +3,7 @@ package runner
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 )
 
 // flushPostgres writes a batch of articles in a single transaction against
@@ -17,7 +17,7 @@ import (
 func (w *ArticleWriter) flushPostgres(ctx context.Context, batch []articleEntry) {
 	tx, err := w.database.BeginImmediate(ctx)
 	if err != nil {
-		log.Printf("ArticleWriter: begin tx failed: %v", err)
+		slog.Error("ArticleWriter: begin tx failed", "component", "runner.article_writer", "error", err)
 		return
 	}
 
@@ -31,7 +31,7 @@ func (w *ArticleWriter) flushPostgres(ctx context.Context, batch []articleEntry)
 		ON CONFLICT (url_canon) DO NOTHING
 	`)
 	if err != nil {
-		log.Printf("ArticleWriter: prepare pages upsert failed: %v", err)
+		slog.Error("ArticleWriter: prepare pages upsert failed", "component", "runner.article_writer", "error", err)
 		tx.Rollback()
 		return
 	}
@@ -48,7 +48,7 @@ func (w *ArticleWriter) flushPostgres(ctx context.Context, batch []articleEntry)
 			extraction_version = excluded.extraction_version
 	`)
 	if err != nil {
-		log.Printf("ArticleWriter: prepare failed: %v", err)
+		slog.Error("ArticleWriter: prepare failed", "component", "runner.article_writer", "error", err)
 		tx.Rollback()
 		return
 	}
@@ -56,16 +56,16 @@ func (w *ArticleWriter) flushPostgres(ctx context.Context, batch []articleEntry)
 
 	for _, e := range batch {
 		if _, err := pageStmt.ExecContext(ctx, e.CanonURL, e.CanonURL, e.Domain); err != nil {
-			log.Printf("ArticleWriter: pages upsert %s failed: %v", e.CanonURL, err)
+			slog.Error("ArticleWriter: pages upsert failed", "component", "runner.article_writer", "url", e.CanonURL, "error", err)
 			continue
 		}
 		if _, err := stmt.ExecContext(ctx, e.CanonURL, e.Domain, unixTime(e.FetchedAt), unixOrNil(e.PublishedAt), e.Title, e.RawHash, e.Version); err != nil {
-			log.Printf("ArticleWriter: insert %s failed: %v", e.CanonURL, err)
+			slog.Error("ArticleWriter: insert failed", "component", "runner.article_writer", "url", e.CanonURL, "error", err)
 		}
 	}
 
 	if err := tx.Commit(); err != nil {
-		log.Printf("ArticleWriter: commit failed: %v", err)
+		slog.Error("ArticleWriter: commit failed", "component", "runner.article_writer", "error", err)
 	} else {
 		fmt.Printf("ArticleWriter: flushed %d articles\n", len(batch))
 	}

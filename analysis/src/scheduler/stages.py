@@ -15,6 +15,7 @@ from psycopg import Connection
 
 from analysis.src.common import db
 from analysis.src.common.entity_resolver import EntityResolver
+from analysis.src.common.error_log import record_error
 from analysis.src.common.logger import get_logger
 from analysis.src.common.settings import get_settings
 from analysis.src.engine.bot_detection import BotDocInput
@@ -285,7 +286,7 @@ def _claim_one(task: str) -> Optional[int]:
 
 
 _MARK_DONE_SQL = """
-    UPDATE ops.task_queue SET status = 'done', updated_at = now()
+    UPDATE ops.task_queue SET status = 'done', last_error = NULL, updated_at = now()
     WHERE doc_id = %(doc_id)s AND task = %(task)s::analysis.task
 """
 
@@ -371,6 +372,7 @@ def _process_one(
         outcome = spec.worker(doc_input, client, resolver)
     except Exception as exc:
         logger.warning(f"stage {spec.name}: doc_id={doc_id} raised before a run row existed: {exc}")
+        record_error(exc, component="scheduler.stages", doc_id=doc_id, task=spec.name)
         _mark_failed(spec.name, doc_id, str(exc))
         progress.record_failed()
         return
@@ -407,6 +409,7 @@ def _worker_loop(spec: StageSpec, progress: _StageProgress, resolver: EntityReso
         # exception silently on join(); record it so run_queue_stage can
         # surface it instead (Rule: fail loud).
         logger.error(f"stage {spec.name}: worker thread aborted: {exc}")
+        record_error(exc, component="scheduler.stages", task=spec.name)
         progress.record_error(str(exc))
 
 
@@ -457,6 +460,7 @@ def run_global_stage(spec: StageSpec) -> StageResult:
         )
     except Exception as exc:
         logger.error(f"stage {spec.name}: failed: {exc}")
+        record_error(exc, component="scheduler.stages", task=spec.name)
         return StageResult(
             name=spec.name, claimed=0, done=0, failed=1, skipped=0,
             duration_seconds=time.monotonic() - started, error=str(exc),

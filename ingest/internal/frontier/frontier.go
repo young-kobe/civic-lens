@@ -7,7 +7,7 @@ package frontier
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/young-kobe/civic-lens/ingest/internal/model"
@@ -85,11 +85,11 @@ func (f *Frontier) RecoverStale(ctx context.Context, staleAge time.Duration) (in
 func (f *Frontier) EnsureRecovered(ctx context.Context, staleAge time.Duration) {
 	recovered, err := f.RecoverStale(ctx, staleAge)
 	if err != nil {
-		log.Printf("frontier: recover stale failed: %v", err)
+		slog.Error("recover stale failed", "component", "frontier", "error", err)
 		return
 	}
 	if recovered > 0 {
-		log.Printf("frontier: recovered %d stale inflight items", recovered)
+		slog.Info("recovered stale inflight items", "component", "frontier", "count", recovered)
 	}
 }
 

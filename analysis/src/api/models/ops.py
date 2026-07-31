@@ -35,3 +35,23 @@ class PipelineRunsResponse(CamelModel):
     rows, newest first."""
 
     pipeline_runs: List[PipelineRunModel] = Field(default_factory=list)
+
+
+class ErrorLogEntryModel(CamelModel):
+    error_id: int
+    occurred_at: datetime
+    source: str
+    component: str
+    message: str
+    traceback: Optional[str] = None
+    doc_id: Optional[int] = None
+    task: Optional[str] = None
+    pipeline_run_id: Optional[int] = None
+    context: Optional[Dict[str, Any]] = None
+
+
+class ErrorLogResponse(CamelModel):
+    """GET /api/v1/admin/errors (admin-gated): recent ops.error_log rows,
+    newest first."""
+
+    errors: List[ErrorLogEntryModel] = Field(default_factory=list)

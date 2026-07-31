@@ -4,7 +4,7 @@ package runner
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -78,7 +78,7 @@ loop:
 			if ctx.Err() != nil {
 				break loop
 			}
-			log.Printf("Claim error: %v", err)
+			slog.Error("claim items failed", "component", "runner.crawl", "error", err)
 			time.Sleep(1 * time.Second)
 			continue
 		}
@@ -139,7 +139,13 @@ func (cr *CrawlRunner) processPage(ctx context.Context, page *model.Page) {
 	cr.extractAndEnqueue(ctx, page, result.Body, hash)
 
 	if err := cr.app.Frontier.MarkDone(ctx, page); err != nil && ctx.Err() == nil {
-		log.Printf("mark done %s: %v", page.URLCanon, err)
+		// Warn, not Error: this is the documented claim-guard race
+		// (frontier.go's RecoverStale doc comment) — a stale-recovered row
+		// re-claimed by another worker makes THIS worker's completion a
+		// benign no-op, not an operator-actionable failure. It can fire at
+		// per-page volume under normal operation, so it must not reach the
+		// durable mirror.
+		slog.Warn("mark done failed", "component", "runner.crawl", "url", page.URLCanon, "error", err)
 	}
 }
 
@@ -149,7 +155,12 @@ func (cr *CrawlRunner) processPage(ctx context.Context, page *model.Page) {
 func (cr *CrawlRunner) failPage(ctx context.Context, page *model.Page, category, reason string, permanent bool) {
 	atomic.AddInt64(&cr.errors, 1)
 	if err := cr.app.Frontier.MarkFailed(ctx, page, fmt.Sprintf("%s: %s", category, reason), permanent); err != nil && ctx.Err() == nil {
-		log.Printf("mark failed %s: %v", page.URLCanon, err)
+		// Warn, not Error: same claim-guard race as MarkDone above — the
+		// page's actual failure reason is already durable in
+		// raw.pages.last_error via MarkFailed itself, so this call site is
+		// only about MarkFailed's own write failing, which at scale is
+		// dominated by the benign race, not genuine infra trouble.
+		slog.Warn("mark failed write failed", "component", "runner.crawl", "url", page.URLCanon, "error", err)
 	}
 }
 
@@ -218,7 +229,7 @@ func (cr *CrawlRunner) extractAndEnqueue(ctx context.Context, page *model.Page, 
 		}
 		if len(sameDomainLinks) > 0 {
 			if _, err := cr.app.Frontier.PushLinks(ctx, sameDomainLinks, 0); err != nil && ctx.Err() == nil {
-				log.Printf("push links for %s: %v", page.URLCanon, err)
+				slog.Error("push links failed", "component", "runner.crawl", "url", page.URLCanon, "error", err)
 			}
 		}
 	}

@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"time"
 
@@ -35,7 +35,8 @@ func main() {
 	rootCmd.AddCommand(requeueStaleCmd())
 
 	if err := rootCmd.Execute(); err != nil {
-		log.Fatal(err)
+		slog.Error(err.Error(), "component", "main")
+		os.Exit(1)
 	}
 }
 

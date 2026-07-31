@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Optional
 from psycopg.types.json import Jsonb
 
 from analysis.src.common import db
+from analysis.src.common import error_log
 from analysis.src.common.logger import get_logger
 from analysis.src.common.settings import get_settings
 from analysis.src.engine import account_tier, bot_detection, citations, claims, narrative_clustering, propaganda, targets, text
@@ -148,6 +149,19 @@ def _finish_pipeline_run(pipeline_run_id: int, *, status: str, stage_summary: Di
             })
 
 
+def _prune_error_log() -> None:
+    """ops.error_log retention (30 days, contract on the table comment).
+    Runs at pipeline start because the analyze timer is the one reliably
+    recurring process; failure here must never block the run."""
+    try:
+        with db.connection() as conn:
+            pruned = error_log.prune(conn)
+        if pruned:
+            logger.info(f"error_log: pruned {pruned} rows past 30-day retention")
+    except Exception as exc:
+        logger.warning(f"error_log prune failed (run continues): {exc}")
+
+
 # =============================================================================
 # Orchestrator
 # =============================================================================
@@ -184,6 +198,7 @@ def run_pipeline(
 
     registry = _build_registry()
     pipeline_run_id = _start_pipeline_run()
+    _prune_error_log()
     stage_summary: Dict[str, Any] = {}
     status = "done"
     try:
@@ -203,6 +218,7 @@ def run_pipeline(
     except Exception as exc:
         status = "failed"
         stage_summary["_pipeline_error"] = str(exc)
+        error_log.record_error(exc, component="scheduler.pipeline", pipeline_run_id=pipeline_run_id)
         raise
     finally:
         _finish_pipeline_run(pipeline_run_id, status=status, stage_summary=stage_summary)
