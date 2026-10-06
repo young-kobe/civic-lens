@@ -3,6 +3,7 @@ using CivicLens.Application.Collection;
 using CivicLens.Core.Collection;
 using CivicLens.Infrastructure.Collection.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
 using Npgsql;
 
@@ -13,6 +14,25 @@ public sealed class PostgresCollectionAttemptStore(IDbContextFactory<CollectionA
     : ICollectionAttemptStore
 {
     private const string ImportLockName = "civic-lens-collection-import";
+
+    public static PostgresCollectionAttemptStore FromConnectionString(string connectionString)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);
+        try
+        {
+            var parsed = new NpgsqlConnectionStringBuilder(connectionString);
+            if (string.IsNullOrWhiteSpace(parsed.Host) || string.IsNullOrWhiteSpace(parsed.Database))
+                throw new ArgumentException("Host and Database are required.");
+            var options = new DbContextOptionsBuilder<CollectionAttemptDbContext>()
+                .UseNpgsql(parsed.ConnectionString).Options;
+            return new PostgresCollectionAttemptStore(new PooledDbContextFactory<CollectionAttemptDbContext>(options));
+        }
+        catch (ArgumentException)
+        {
+            // Provider diagnostics can include connection-string values.
+            throw new ArgumentException("CIVIC_LENS_DATABASE must be a valid Postgres connection string with Host and Database.");
+        }
+    }
 
     public async Task<CollectionImportDecision> ImportAtomicallyAsync(CollectionAttemptImport attempt,
         CancellationToken cancellationToken)
