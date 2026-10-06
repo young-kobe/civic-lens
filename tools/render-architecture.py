@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 VIEWS = [
     {
         "title": "Collection to publication (target)",
-        "description": "Target workflow. Only project boundaries and CLI entry points exist today.",
+        "description": "Target workflow. Configuration, bounded watched-page collection, and verified file captures are implemented; durable evidence storage and downstream stages remain planned.",
         "nodes": [
             ("config", "Coverage configuration", "People, dated roles, sources, issues and policies; one authoritative configuration path."),
             ("app", "C# application", "Owns durable jobs, aggregate budgets, retries and orchestration."),
@@ -26,10 +26,10 @@ VIEWS = [
         "description": "Arrows mean references. These project boundaries are checked by xUnit tests.",
         "nodes": [
             ("host", "Host", "CLI entry point and future local review/MCP composition root."),
-            ("infra", "Infrastructure", "Future external adapters. References Application."),
+            ("infra", "Infrastructure", "Collector process execution and capture verification. References Application."),
             ("app", "Application", "Use cases and external interfaces; no infrastructure reference."),
             ("core", "Core", "Domain invariants. No project or third-party dependencies."),
-            ("cc", "Collection.Contracts", "Future process protocol. No dependencies."),
+            ("cc", "Collection.Contracts", "Versioned watched-page requests and receipts. No dependencies."),
             ("pc", "Publication.Contracts", "Future public release contract. No dependencies."),
             ("collector", "Collector", "Independent executable referencing Collection.Contracts only."),
         ],
@@ -70,7 +70,7 @@ def render_html():
     options = ''.join(f'<option value="view-{i}">{html.escape(v["title"])}</option>' for i, v in enumerate(VIEWS))
     return '''<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Civic Lens architecture</title>
 <style>body{margin:0;background:#101b2b;color:#e3ecf6;font:16px/1.6 system-ui,sans-serif}main{max-width:1000px;margin:auto;padding:32px}h1{font-size:38px;margin-bottom:8px}h2{font-size:24px}p,li{color:#bacee1}select{padding:10px;max-width:100%;background:#20334b;color:white;border:1px solid #7d9cbb;border-radius:6px}svg{width:100%;height:auto}rect{fill:#20334b;stroke:#71c6bc;stroke-width:2}text{fill:#e3ecf6;font-size:17px}g{cursor:pointer}g:focus rect,g:hover rect{fill:#30536b;stroke:#fff}aside{padding:18px;border-left:3px solid #71c6bc;background:#17283e}li{margin:8px 0}[hidden]{display:none}</style>
-<main><p>CIVIC LENS / ENGINEERING REFERENCE</p><h1>Evidence, with clear boundaries.</h1><p>Generated from the same definitions as docs/architecture.md. This explorer separates the implemented scaffold from the planned system.</p><label for="view">Diagram </label><select id="view">''' + options + '</select>' + ''.join(panels) + '''<aside id="detail" aria-live="polite">Select a component to inspect its responsibility.</aside><p>Regenerate: <code>python3 tools/render-architecture.py</code></p></main>
+<main><p>CIVIC LENS / ENGINEERING REFERENCE</p><h1>Evidence, with clear boundaries.</h1><p>Generated from the same definitions as docs/architecture.md. This explorer separates the implemented tracer from the planned system.</p><label for="view">Diagram </label><select id="view">''' + options + '</select>' + ''.join(panels) + '''<aside id="detail" aria-live="polite">Select a component to inspect its responsibility.</aside><p>Regenerate: <code>python3 tools/render-architecture.py</code></p></main>
 <script>document.querySelector('#view').addEventListener('change',e=>{document.querySelectorAll('section').forEach(s=>s.hidden=s.id!==e.target.value);document.querySelector('#detail').textContent='Select a component to inspect its responsibility.'});document.querySelectorAll('[data-detail]').forEach(n=>{const show=()=>document.querySelector('#detail').textContent=n.dataset.detail;n.addEventListener('click',show);n.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();show()}})});</script></html>'''
 
 

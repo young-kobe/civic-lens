@@ -1,10 +1,10 @@
 # Remaining implementation
 
-Phase 0's repository foundation is implemented. The following is planned work, not available functionality. Remove completed work and update the current architecture/operations references; Git preserves previous plans.
+Phase 0 and the watched-page tracer are implemented. The following is remaining planned work, not available functionality. Remove completed work and update the current architecture/operations references; Git preserves previous plans.
 
 ## 1. Collection and evidence
 
-Implement versioned JSON/JSONL contracts, configuration validation, identities/source relationships, application-owned Postgres jobs, collector HTTP/feed/scoped-discovery behavior, immutable captures, and idempotent imports. Add only packages needed for this work.
+Extend the versioned JSON/JSONL watched-page protocol as needed for feeds and bounded discovery. Extend validated people/source configuration with dated identities/source relationships. Implement application-owned Postgres jobs, cross-run host pacing and backoff, durable observations, capture recovery, and idempotent imports. Complete robots handling and collector feed/scoped-discovery behavior. Add only packages needed for this work.
 
 Acceptance: add an official through configuration; collect one feed and watched page; demonstrate cancellation/restart without duplicate imports, conditional 304 handling, 429 backoff, bounded discovery, and explicit incomplete-download errors. Validate registry behavior with hundreds of fixture identities without issuing hundreds of live requests.
 
