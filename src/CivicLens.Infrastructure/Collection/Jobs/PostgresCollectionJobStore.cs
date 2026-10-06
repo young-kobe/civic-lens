@@ -70,17 +70,19 @@ public sealed class PostgresCollectionJobStore(IDbContextFactory<CollectionAttem
             return row is null ? null : await ToRecordAsync(db, row, cancellationToken);
         }, cancellationToken);
 
-    public Task<IReadOnlyList<CollectionJobRecord>> ListAsync(int limit, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<CollectionJobRecord>> ListAsync(int limit, CancellationToken cancellationToken)
     {
         if (limit is < 1 or > 100) throw new ArgumentOutOfRangeException(nameof(limit), "Job list limit must be 1 to 100.");
-        return TransactionAsync<IReadOnlyList<CollectionJobRecord>>(async (db, _) =>
-        {
-            var rows = await db.Set<JobRow>().OrderByDescending(row => row.CreatedAt).ThenBy(row => row.JobId)
-                .Take(limit).ToListAsync(cancellationToken);
-            var records = new List<CollectionJobRecord>(rows.Count);
-            foreach (var row in rows) records.Add(await ToRecordAsync(db, row, cancellationToken));
-            return records;
-        }, cancellationToken);
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
+        var rows = await db.Set<JobRow>().AsNoTracking().OrderByDescending(row => row.CreatedAt).ThenBy(row => row.JobId)
+            .Take(limit).ToListAsync(cancellationToken);
+        var jobIds = rows.Select(row => row.JobId).ToArray();
+        var attempts = await db.Set<JobAttemptRow>().AsNoTracking().Where(attempt => jobIds.Contains(attempt.JobId))
+            .OrderBy(attempt => attempt.Sequence).ToListAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        var attemptsByJob = attempts.ToLookup(attempt => attempt.JobId);
+        return rows.Select(row => ToRecord(row, attemptsByJob[row.JobId])).ToArray();
     }
 
     public Task<CollectionJobRecord?> CancelAsync(string jobId, CancellationToken cancellationToken) =>
@@ -333,8 +335,11 @@ public sealed class PostgresCollectionJobStore(IDbContextFactory<CollectionAttem
     private static async Task<CollectionJobRecord> ToRecordAsync(CollectionAttemptDbContext db, JobRow row, CancellationToken cancellationToken)
     {
         var attempts = await db.Set<JobAttemptRow>().Where(attempt => attempt.JobId == row.JobId).OrderBy(attempt => attempt.Sequence).ToListAsync(cancellationToken);
-        return new CollectionJobRecord(row.JobId, Read<CollectionJobDefinition>(row.DefinitionJson), row.IdempotencyKey,
+        return ToRecord(row, attempts);
+    }
+
+    private static CollectionJobRecord ToRecord(JobRow row, IEnumerable<JobAttemptRow> attempts) =>
+        new(row.JobId, Read<CollectionJobDefinition>(row.DefinitionJson), row.IdempotencyKey,
             row.State, FromTicks(row.CreatedAt)!.Value, FromTicks(row.RetryAt), row.CancellationRequested,
             row.ChargedRequests, row.ChargedBytes, row.ChargedSeconds, attempts.Select(ToAttempt).ToArray());
-    }
 }

@@ -1,3 +1,4 @@
+using System.Data.Common;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Collection.Contracts;
@@ -5,6 +6,7 @@ using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Collection.Jobs;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Npgsql;
 
 namespace CivicLens.Tests.Infrastructure.Collection.Jobs;
@@ -40,6 +42,54 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
         await connection.OpenAsync();
         await using var command = new NpgsqlCommand($"DROP SCHEMA {schema} CASCADE", connection);
         await command.ExecuteNonQueryAsync();
+    }
+
+    [Fact]
+    public async Task ListingBatchesAttemptsWithoutWaitingForCoordinationLock()
+    {
+        var first = await EnqueueClaimAsync("first", Definition());
+        var initial = await jobs.TryStartAttemptAsync(first.Lease, root, default);
+        await jobs.ReleaseCollectorAsync(first.Lease, initial.CollectorLease!, default);
+        await jobs.SettleAttemptAsync(first.Lease, initial.Attempt!.AttemptId,
+            new CollectionAttemptResolution(CollectionJobAttemptOutcome.Interrupted, null, "UnknownUsage"), default);
+        var retry = await jobs.TryStartAttemptAsync(first.Lease, root, default);
+        var empty = await jobs.EnqueueAsync(Definition(), "empty", default);
+        var counter = new ReadCounter();
+        var options = new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString)
+            .AddInterceptors(counter).Options;
+        var reader = new PostgresCollectionJobStore(new PooledDbContextFactory<CollectionAttemptDbContext>(options));
+
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var transaction = await connection.BeginTransactionAsync();
+        await using var command = new NpgsqlCommand(
+            "SELECT pg_advisory_xact_lock(hashtextextended('civic-lens-collection-jobs', 0))", connection, transaction);
+        await command.ExecuteNonQueryAsync();
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var listed = await reader.ListAsync(100, timeout.Token);
+
+        Assert.Equal(2, counter.Count);
+        Assert.Equal(new[] { empty.JobId, first.Job.JobId }, listed.Select(job => job.JobId));
+        Assert.Empty(listed[0].Attempts);
+        Assert.Equal(new[] { initial.Attempt.AttemptId, retry.Attempt!.AttemptId },
+            listed[1].Attempts.Select(attempt => attempt.AttemptId));
+        Assert.NotNull(listed[1].Attempts[0].Resolution);
+        Assert.Null(listed[1].Attempts[1].Resolution);
+        var limited = Assert.Single(await reader.ListAsync(1, timeout.Token));
+        Assert.Equal(empty.JobId, limited.JobId);
+        Assert.Empty(limited.Attempts);
+    }
+
+    private sealed class ReadCounter : DbCommandInterceptor
+    {
+        public int Count { get; private set; }
+
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(DbCommand command,
+            CommandEventData eventData, InterceptionResult<DbDataReader> result, CancellationToken cancellationToken = default)
+        {
+            Count++;
+            return ValueTask.FromResult(result);
+        }
     }
 
     [Fact]
