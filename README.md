@@ -25,14 +25,14 @@ No credentials, database, or paid services are required for the tracer. See [ope
 | `src/CivicLens.Core` | Domain boundary, currently empty |
 | `src/CivicLens.Collection.Contracts` | Versioned collection types and shared receipt validation |
 | `src/CivicLens.Publication.Contracts` | Public release boundary, currently empty |
-| `src/CivicLens.Application` | Configuration validation and watched-page orchestration |
-| `src/CivicLens.Infrastructure` | Collector process adapter and capture verification |
+| `src/CivicLens.Application` | `Collection/` groups configuration, use cases, and external interfaces |
+| `src/CivicLens.Infrastructure` | `Collection/` implements process execution and capture verification |
 | `src/CivicLens.Host` | Local application entry point |
-| `src/CivicLens.Collector` | Bounded HTTP collection and immutable capture files |
-| `tests/CivicLens.Tests` | Architecture, protocol, configuration, and collection regression checks |
+| `src/CivicLens.Collector` | `Http/` contains bounded collection and immutable capture production |
+| `tests/CivicLens.Tests` | Tests mirror their owning layer and feature; `Architecture/` checks dependencies |
 | `tools/render-architecture.py` | Shared diagram definitions and offline visual generator |
 
-Read `AGENTS.md` before implementation or delegation. The solution is the authoritative project inventory. Add source/configuration/fixture directories only when a feature needs them.
+Projects define architectural layers; feature folders group related code within them. Small contract projects stay flat. Read `AGENTS.md` before implementation or delegation. The solution is the authoritative project inventory. Add source/configuration/fixture directories only when a feature needs them.
 
 ## Reference
 

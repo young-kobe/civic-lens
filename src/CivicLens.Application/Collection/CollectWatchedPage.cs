@@ -1,6 +1,6 @@
 using CivicLens.Collection.Contracts;
 
-namespace CivicLens.Application;
+namespace CivicLens.Application.Collection;
 
 public sealed class CollectWatchedPage(ICollectorProcess collector)
 {

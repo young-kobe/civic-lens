@@ -1,6 +1,6 @@
 using System.Xml.Linq;
 
-namespace CivicLens.Tests;
+namespace CivicLens.Tests.Architecture;
 
 public sealed class ArchitectureTests
 {

@@ -3,10 +3,10 @@ using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using CivicLens.Application;
+using CivicLens.Application.Collection;
 using CivicLens.Collection.Contracts;
 
-namespace CivicLens.Infrastructure;
+namespace CivicLens.Infrastructure.Collection;
 
 public sealed class CollectorProcess(string collectorAssembly, string dotnetExecutable = "dotnet") : ICollectorProcess
 {

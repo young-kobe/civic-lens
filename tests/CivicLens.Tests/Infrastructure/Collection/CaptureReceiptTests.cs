@@ -2,9 +2,10 @@ using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
 using CivicLens.Collection.Contracts;
-using CivicLens.Infrastructure;
+using CivicLens.Infrastructure.Collection;
+using static CivicLens.Tests.Fixtures.CollectionFixtures;
 
-namespace CivicLens.Tests;
+namespace CivicLens.Tests.Infrastructure.Collection;
 
 public sealed class CaptureReceiptTests
 {
@@ -17,8 +18,8 @@ public sealed class CaptureReceiptTests
         {
             var bytes = Encoding.UTF8.GetBytes("A source passage with exact bytes.\n");
             var hash = Convert.ToHexStringLower(SHA256.HashData(bytes));
-            var request = CollectionProtocolTests.Request() with { ArtifactDirectory = directory };
-            var result = CollectionProtocolTests.Receipt(request) with
+            var request = Request() with { ArtifactDirectory = directory };
+            var result = Receipt(request) with
             {
                 Capture = new CaptureArtifact { Sha256 = hash, RelativePath = hash + ".gz", ByteLength = bytes.Length },
                 BytesReceived = bytes.Length + 10

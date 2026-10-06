@@ -4,7 +4,7 @@
 
 Read README.md for current capabilities and commands, then docs/architecture.md for ownership and dependency rules. Read docs/roadmap.md only to select pending work, and docs/operations.md for execution. Inspect the relevant project and tests before changing code. Do not recursively read the legacy repo or generated artifacts by default.
 
-Entry points: src/CivicLens.Host/Program.cs and src/CivicLens.Collector/Program.cs. Boundary tests: tests/CivicLens.Tests/ArchitectureTests.cs. Build policy: Directory.Build.props and global.json. The solution file is the project inventory. Do not create a second navigation index.
+Entry points: src/CivicLens.Host/Program.cs and src/CivicLens.Collector/Program.cs. Boundary tests: tests/CivicLens.Tests/Architecture/ArchitectureTests.cs. Build policy: Directory.Build.props and global.json. The solution file is the project inventory. Do not create a second navigation index.
 
 ## Product and ownership
 
@@ -28,6 +28,8 @@ Use C#/.NET for the application and independently runnable collector. Keep packa
 Keep cyclomatic complexity low and code easy for a human to read. Prefer small, cohesive methods, explicit names, guard clauses, and readable control flow over deeply nested branches or long compound conditions. Encourage well-designed abstractions that give a responsibility a clear home, protect an invariant, or isolate a dependency. Apply SOLID at those boundaries and DRY by giving each rule one owner. Do not hide similar-looking code behind a generic abstraction when its responsibilities differ, or build frameworks for hypothetical variation.
 
 Use conventions consistently across the repository. Reuse established patterns before introducing another way to solve the same problem. In production code, use file-scoped namespaces, PascalCase types and members, camelCase parameters and private fields, Async suffixes and CancellationToken parameters for asynchronous operations, records for wire data, and interfaces at external boundaries. Keep substantive public types in their own files; related enums may live beside the type that uses them. Keep validation at its owning layer, invoke it at trust boundaries, and distinguish invalid input from operational failure results. Apply new conventions deliberately across affected code and document significant departures in the architecture reference.
+
+Organize projects by architectural layer and code within each project by feature. Keep a feature's use cases, configuration, and external interfaces together, and reuse feature names across layers (for example, Application/Collection and Infrastructure/Collection). Namespaces follow the project root namespace and feature folders. Avoid global Models, Services, or Interfaces buckets. Keep small contract projects flat; leave executable entry points and genuinely project-wide types at the project root. Mirror the owning layer and feature under tests, keep architecture checks in Architecture, and put shared test data factories in Fixtures only when several test groups need them. MVC or Razor Pages organizes the Host's future web presentation only. Add folders for implemented code, not anticipated features.
 
 The application owns durable jobs and aggregate budgets. The collector accepts bounded work and returns captures/discovered links. Captures are immutable; jobs and imports are idempotent. A model prediction is never a human approval. Publication must reference the exact approved evidence version.
 

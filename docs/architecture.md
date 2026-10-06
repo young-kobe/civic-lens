@@ -34,7 +34,7 @@ Core contains domain invariants; Application contains use cases and interfaces; 
 
 ### Design and layer ownership
 
-Build each capability from its invariants and contracts outward. Keep validation where its meaning is owned, and call the same validation at trust boundaries. Use cohesive abstractions to protect responsibilities and invariants. Use interfaces for external execution and persistence boundaries; use concrete types for internal policy and transformations unless an actual variation calls for another abstraction. Follow the existing naming and validation conventions across layers. Organize implemented types by their responsibility, with a separate file for each substantial public contract. Add a feature directory when there are several related implementations, and a project only when a new dependency boundary is required.
+Build each capability from its invariants and contracts outward. Keep validation where its meaning is owned, and call the same validation at trust boundaries. Use cohesive abstractions to protect responsibilities and invariants. Use interfaces for external execution and persistence boundaries; use concrete types for internal policy and transformations unless an actual variation calls for another abstraction. Follow the existing naming and validation conventions across layers. Organize projects by architectural layer and the code within them by feature. Keep substantive public types in their own files. Add a project only when a new dependency boundary is required.
 
 | Layer | Owns | Must not own |
 |---|---|---|
@@ -44,6 +44,12 @@ Build each capability from its invariants and contracts outward. Keep validation
 | Infrastructure | Process lifecycle, protocol decoding, actual capture verification, future persistence adapters | Independent definitions of contract or editorial validity |
 | Collector | Bounded source interaction and complete raw capture production | Durable scheduling, imports, officials registry or publication |
 | Host | Command parsing and composition | Collection algorithms or evidence invariants |
+
+Feature folders keep related use cases, configuration and external interfaces together. Application and Infrastructure both use `Collection` for their respective parts of collection; Collector uses `Http` for its HTTP implementation. Namespaces match those folders beneath the project namespace. Contract projects remain flat while small and cohesive. Executable `Program.cs` files and genuinely project-wide types remain at project roots. There are no global `Models`, `Services`, or `Interfaces` directories that separate a feature from the types it uses.
+
+Tests mirror the production project suffix and feature, such as `Application/Collection` and `Infrastructure/Collection`; collection protocol tests live in `Collection/Contracts`. Cross-project dependency checks live in `Architecture`. Shared sample factories live in `Fixtures` when multiple test groups need the same contract examples, so one test class does not depend on another for its setup. The root README remains the navigation map and the solution remains the project inventory.
+
+MVC and Razor Pages are presentation choices within Host. The planned review UI will use Razor Pages and call the same application handlers as CLI and local MCP. Business rules, collection, jobs and persistence retain their own layer and feature ownership. New feature folders are added with implemented code; empty Core, publication, persistence and UI areas are not scaffolded in anticipation of later phases.
 
 The implemented `ICollectorProcess` is an external boundary used by `CollectWatchedPage`. `CollectionResult.ValidateAgainst` owns receipt validity; collector, application and process adapter reuse it. Infrastructure additionally verifies the file bytes. Structural validity does not prove that an artifact exists or matches its hash. Wire DTOs remain separate from future domain evidence and database entities, so changing transport layout does not require changing persistence semantics.
 

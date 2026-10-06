@@ -1,7 +1,8 @@
 using System.Text.Json;
 using CivicLens.Application;
+using CivicLens.Application.Collection;
 using CivicLens.Collection.Contracts;
-using CivicLens.Infrastructure;
+using CivicLens.Infrastructure.Collection;
 
 if (args is [] or ["--help"] or ["help"])
 {
