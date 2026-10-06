@@ -1,6 +1,7 @@
 using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
+using CivicLens.Collection.Contracts;
 using CivicLens.Infrastructure;
 
 namespace CivicLens.Tests;
@@ -19,16 +20,14 @@ public sealed class CaptureReceiptTests
             var request = CollectionProtocolTests.Request() with { ArtifactDirectory = directory };
             var result = CollectionProtocolTests.Receipt(request) with
             {
-                Sha256 = hash,
-                ArtifactPath = hash + ".gz",
-                ArtifactBytes = bytes.Length,
+                Capture = new CaptureArtifact { Sha256 = hash, RelativePath = hash + ".gz", ByteLength = bytes.Length },
                 BytesReceived = bytes.Length + 10
             };
-            var path = Path.Combine(directory, result.ArtifactPath);
+            var path = Path.Combine(directory, result.Capture!.RelativePath);
             await WriteAsync(path, bytes);
             await CollectorProcess.VerifyCaptureAsync(request, result);
-            await Assert.ThrowsAsync<InvalidDataException>(() => CollectorProcess.VerifyCaptureAsync(request, result with { ArtifactBytes = bytes.Length - 1 }));
-            await Assert.ThrowsAsync<InvalidDataException>(() => CollectorProcess.VerifyCaptureAsync(request, result with { ArtifactBytes = bytes.Length + 1 }));
+            await Assert.ThrowsAsync<InvalidDataException>(() => CollectorProcess.VerifyCaptureAsync(request, result with { Capture = result.Capture! with { ByteLength = bytes.Length - 1 } }));
+            await Assert.ThrowsAsync<InvalidDataException>(() => CollectorProcess.VerifyCaptureAsync(request, result with { Capture = result.Capture! with { ByteLength = bytes.Length + 1 } }));
             await WriteAsync(path, Encoding.UTF8.GetBytes("Changed"));
             await Assert.ThrowsAsync<InvalidDataException>(() => CollectorProcess.VerifyCaptureAsync(request, result));
         }

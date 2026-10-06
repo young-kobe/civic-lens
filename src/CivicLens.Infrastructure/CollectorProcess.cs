@@ -28,6 +28,8 @@ public sealed class CollectorProcess(string collectorAssembly, string dotnetExec
             {
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
+                StandardOutputEncoding = new UTF8Encoding(false, true),
+                StandardErrorEncoding = Encoding.UTF8,
                 UseShellExecute = false
             };
             start.ArgumentList.Add(assembly);
@@ -51,7 +53,7 @@ public sealed class CollectorProcess(string collectorAssembly, string dotnetExec
                     throw new InvalidDataException("Collector must emit exactly one JSONL result.");
                 var result = JsonSerializer.Deserialize<CollectionResult>(lines[0], CollectionProtocol.JsonOptions)
                     ?? throw new InvalidDataException("Collector emitted a null result.");
-                CollectWatchedPage.ValidateResult(request, result);
+                result.ValidateAgainst(request);
                 var expectedExit = result.Outcome is CollectionOutcome.Captured or CollectionOutcome.NotModified ? 0 : 1;
                 if (process.ExitCode != expectedExit)
                     throw new InvalidDataException("Collector exit code disagrees with its result.");
@@ -76,10 +78,10 @@ public sealed class CollectorProcess(string collectorAssembly, string dotnetExec
 
     public static async Task VerifyCaptureAsync(CollectionRequest request, CollectionResult result, CancellationToken cancellationToken = default)
     {
-        CollectWatchedPage.ValidateResult(request, result);
+        result.ValidateAgainst(request);
         if (result.Outcome != CollectionOutcome.Captured)
             throw new InvalidDataException("Capture verification requires a captured result.");
-        var path = Path.Combine(request.ArtifactDirectory, result.ArtifactPath!);
+        var path = Path.Combine(request.ArtifactDirectory, result.Capture!.RelativePath);
         if ((File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0)
             throw new InvalidDataException("Capture artifacts cannot be symbolic links.");
         await using var file = File.OpenRead(path);
@@ -91,11 +93,11 @@ public sealed class CollectorProcess(string collectorAssembly, string dotnetExec
         while ((read = await gzip.ReadAsync(buffer, cancellationToken)) != 0)
         {
             bytes += read;
-            if (bytes > request.MaxBytes || bytes > result.ArtifactBytes)
+            if (bytes > request.MaxBytes || bytes > result.Capture!.ByteLength)
                 throw new InvalidDataException("Capture exceeds reported resource usage.");
             hash.AppendData(buffer, 0, read);
         }
-        if (bytes != result.ArtifactBytes || Convert.ToHexStringLower(hash.GetHashAndReset()) != result.Sha256)
+        if (bytes != result.Capture!.ByteLength || Convert.ToHexStringLower(hash.GetHashAndReset()) != result.Capture!.Sha256)
             throw new InvalidDataException("Capture hash does not match its receipt.");
     }
 

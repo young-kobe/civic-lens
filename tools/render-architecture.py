@@ -29,7 +29,7 @@ VIEWS = [
             ("infra", "Infrastructure", "Collector process execution and capture verification. References Application."),
             ("app", "Application", "Use cases and external interfaces; no infrastructure reference."),
             ("core", "Core", "Domain invariants. No project or third-party dependencies."),
-            ("cc", "Collection.Contracts", "Versioned watched-page requests and receipts. No dependencies."),
+            ("cc", "Collection.Contracts", "Versioned watched-page requests, capture/response metadata and receipt validation. No dependencies."),
             ("pc", "Publication.Contracts", "Future public release contract. No dependencies."),
             ("collector", "Collector", "Independent executable referencing Collection.Contracts only."),
         ],

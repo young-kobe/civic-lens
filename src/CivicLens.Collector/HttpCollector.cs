@@ -25,28 +25,28 @@ public sealed class HttpCollector : IDisposable
 
     public async Task<CollectionResult> FetchAsync(CollectionRequest request, CancellationToken cancellationToken = default)
     {
+        request.Validate();
         var requests = 0;
         long bytes = 0;
-        var current = Uri.TryCreate(request.Url, UriKind.Absolute, out var parsed) ? parsed : new Uri("http://invalid/");
+        var current = new Uri(request.Url);
         var requestedUri = current;
-        int? status = null;
+        HttpResponseMetadata? responseMetadata = null;
         try
         {
-            request.Validate();
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeout.CancelAfter(TimeSpan.FromSeconds(request.TimeoutSeconds));
             var token = timeout.Token;
             RobotsRules rules;
             try { rules = await GetRobotsAsync(request, () => requests++, n => bytes += n, () => bytes, token); }
-            catch (RobotsException) { return Result(CollectionOutcome.Failed, "robotsUnavailable"); }
-            catch (HttpRequestException) { return Result(CollectionOutcome.Failed, "robotsUnavailable"); }
-            if (!rules.Allowed(current.PathAndQuery, token)) return Result(CollectionOutcome.Failed, "robotsDenied");
-            await Delay(request.MinDelayMilliseconds, token);
+            catch (RobotsException) { return Result(CollectionOutcome.Failed, CollectionFailureCode.RobotsUnavailable); }
+            catch (HttpRequestException) { return Result(CollectionOutcome.Failed, CollectionFailureCode.RobotsUnavailable); }
+            if (!rules.Allowed(current.PathAndQuery, token)) return Result(CollectionOutcome.Failed, CollectionFailureCode.RobotsDenied);
+            await DelayAsync(request.MinDelayMilliseconds, token);
             var target = current;
             while (true)
             {
                 EnsureBudget(request, requests);
-                if (!request.Allows(target)) return Result(CollectionOutcome.Failed, "outOfScope");
+                if (!request.Allows(target)) return Result(CollectionOutcome.Failed, CollectionFailureCode.OutOfScope);
                 using var message = new HttpRequestMessage(HttpMethod.Get, target);
                 message.Headers.UserAgent.ParseAdd("CivicLens/0.1");
                 if (target == requestedUri)
@@ -55,63 +55,97 @@ public sealed class HttpCollector : IDisposable
                     if (request.LastModified is not null) message.Headers.IfModifiedSince = request.LastModified;
                 }
                 var hasConditionals = message.Headers.IfNoneMatch.Count > 0 || message.Headers.IfModifiedSince is not null;
+                current = target;
+                responseMetadata = null;
                 requests++;
                 using var response = await client.SendAsync(message, HttpCompletionOption.ResponseHeadersRead, token);
-                status = (int)response.StatusCode;
+                try { responseMetadata = ReadResponseMetadata(response); }
+                catch (InvalidDataException) { return Result(CollectionOutcome.Failed, CollectionFailureCode.InvalidResponse); }
                 if (response.StatusCode == HttpStatusCode.NotModified)
                 {
-                    if (!hasConditionals) return Result(CollectionOutcome.Failed, "unexpectedNotModified");
-                    return Result(CollectionOutcome.NotModified, etag: response.Headers.ETag?.ToString(), modified: response.Content.Headers.LastModified);
+                    if (!hasConditionals) return Result(CollectionOutcome.Failed, CollectionFailureCode.UnexpectedNotModified);
+                    return Result(CollectionOutcome.NotModified);
                 }
                 if ((int)response.StatusCode == 429)
-                    return Result(CollectionOutcome.Deferred, "rateLimited", retry: RetrySeconds(response.Headers.RetryAfter));
+                    return Result(CollectionOutcome.Deferred, CollectionFailureCode.RateLimited, retry: RetrySeconds(response.Headers.RetryAfter));
                 if ((int)response.StatusCode is >= 300 and < 400)
                 {
-                    if (response.Headers.Location is null) return Result(CollectionOutcome.Failed, "redirectMissingLocation");
+                    if (response.Headers.Location is null) return Result(CollectionOutcome.Failed, CollectionFailureCode.RedirectMissingLocation);
                     var next = response.Headers.Location.IsAbsoluteUri ? response.Headers.Location : new Uri(target, response.Headers.Location);
-                    if (!request.Allows(next)) return Result(CollectionOutcome.Failed, "outOfScope");
-                    if (!rules.Allowed(next.PathAndQuery, token)) return Result(CollectionOutcome.Failed, "robotsDenied");
-                    await Delay(request.MinDelayMilliseconds, token);
-                    target = next; current = target;
+                    if (!request.Allows(next)) return Result(CollectionOutcome.Failed, CollectionFailureCode.OutOfScope);
+                    if (!rules.Allowed(next.PathAndQuery, token)) return Result(CollectionOutcome.Failed, CollectionFailureCode.RobotsDenied);
+                    await DelayAsync(request.MinDelayMilliseconds, token);
+                    target = next;
                     continue;
                 }
-                if (response.StatusCode != HttpStatusCode.OK) return Result(CollectionOutcome.Failed, "httpError");
+                if (response.StatusCode != HttpStatusCode.OK) return Result(CollectionOutcome.Failed, CollectionFailureCode.HttpError);
                 var artifact = await SaveBoundedAsync(response, request, () => bytes, n => bytes += n, token);
-                var etag = response.Headers.ETag?.ToString();
-                DateTimeOffset? modified = response.Content.Headers.LastModified;
-                return Result(CollectionOutcome.Captured, artifactPath: artifact.Path, etag: etag, modified: modified,
-                    artifactBytes: artifact.Bytes, sha256: artifact.Hash);
+                return Result(CollectionOutcome.Captured, capture: artifact);
             }
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { return Result(CollectionOutcome.Failed, "cancelled"); }
-        catch (OperationCanceledException) { return Result(CollectionOutcome.Failed, "timeout"); }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { return Result(CollectionOutcome.Failed, CollectionFailureCode.Cancelled); }
+        catch (OperationCanceledException) { return Result(CollectionOutcome.Failed, CollectionFailureCode.Timeout); }
         catch (BudgetException e) { return Result(CollectionOutcome.Failed, e.Code); }
-        catch (RobotsException) { return Result(CollectionOutcome.Failed, "robotsUnavailable"); }
-        catch (HttpRequestException) { return Result(CollectionOutcome.Failed, "transportError"); }
-        catch (UnauthorizedAccessException) { return Result(CollectionOutcome.Failed, "artifactWriteFailed"); }
-        catch (IOException) { return Result(CollectionOutcome.Failed, "incompleteResponse"); }
-        catch (ArgumentException) { return Result(CollectionOutcome.Failed, "invalidRequest"); }
+        catch (RobotsException) { return Result(CollectionOutcome.Failed, CollectionFailureCode.RobotsUnavailable); }
+        catch (HttpRequestException) { return Result(CollectionOutcome.Failed, CollectionFailureCode.TransportError); }
+        catch (UnauthorizedAccessException) { return Result(CollectionOutcome.Failed, CollectionFailureCode.ArtifactWriteFailed); }
+        catch (IOException) { return Result(CollectionOutcome.Failed, CollectionFailureCode.IncompleteResponse); }
+        catch (Exception exception) when (exception is ArgumentException or FormatException)
+        {
+            return Result(CollectionOutcome.Failed, CollectionFailureCode.InvalidResponse);
+        }
 
-        CollectionResult Result(CollectionOutcome outcome, string? failure = null, string? artifactPath = null,
-            string? etag = null, DateTimeOffset? modified = null, long? retry = null, long? artifactBytes = null, string? sha256 = null) => new()
+        CollectionResult Result(CollectionOutcome outcome, CollectionFailureCode? failure = null,
+            CaptureArtifact? capture = null, long? retry = null)
+        {
+            var result = new CollectionResult
             {
                 JobId = request.JobId,
                 SourceId = request.SourceId,
                 RequestedUrl = request.Url,
-                FinalUrl = current.ToString(),
+                FinalUrl = current.AbsoluteUri,
                 Outcome = outcome,
                 ObservedAt = DateTimeOffset.UtcNow,
-                HttpStatus = status,
-                ETag = etag,
-                LastModified = modified,
-                Sha256 = sha256,
-                ArtifactBytes = artifactBytes,
-                ArtifactPath = artifactPath,
+                Response = responseMetadata,
+                Capture = capture,
                 BytesReceived = bytes,
                 RequestCount = requests,
-                FailureCode = outcome is CollectionOutcome.Failed or CollectionOutcome.Deferred ? failure : null,
+                FailureCode = failure,
                 RetryAfterSeconds = retry
             };
+            result.ValidateAgainst(request);
+            return result;
+        }
+    }
+
+    private static HttpResponseMetadata ReadResponseMetadata(HttpResponseMessage response)
+    {
+        var metadata = new HttpResponseMetadata
+        {
+            StatusCode = (int)response.StatusCode,
+            ETag = SingleHeader(response.Headers, "ETag"),
+            LastModified = ReadLastModified(response.Content.Headers),
+            ContentType = SingleHeader(response.Content.Headers, "Content-Type"),
+            ContentEncodings = response.Content.Headers.NonValidated.TryGetValues("Content-Encoding", out var values)
+                ? values.SelectMany(value => value.Split(',')).Select(value => value.Trim()).ToArray()
+                : []
+        };
+        metadata.Validate();
+        return metadata;
+    }
+
+    private static DateTimeOffset? ReadLastModified(HttpContentHeaders headers)
+    {
+        if (SingleHeader(headers, "Last-Modified") is null) return null;
+        return headers.LastModified ?? throw new InvalidDataException("Last-Modified must be a valid HTTP date.");
+    }
+
+    private static string? SingleHeader(HttpHeaders headers, string name)
+    {
+        if (!headers.NonValidated.TryGetValues(name, out var values)) return null;
+        var fields = values.ToArray();
+        if (fields.Length != 1) throw new InvalidDataException($"Expected one {name} field.");
+        return fields[0];
     }
 
     private async Task<RobotsRules> GetRobotsAsync(CollectionRequest request, Action count, Action<long> addBytes, Func<long> getBytes, CancellationToken token)
@@ -128,10 +162,10 @@ public sealed class HttpCollector : IDisposable
         catch (Exception exception) when (exception is ArgumentException or NotSupportedException or TimeoutException) { throw new RobotsException(); }
     }
 
-    private static async Task<(string Hash, string Path, long Bytes)> SaveBoundedAsync(HttpResponseMessage response, CollectionRequest req, Func<long> getBytes, Action<long> addBytes, CancellationToken token)
+    private static async Task<CaptureArtifact> SaveBoundedAsync(HttpResponseMessage response, CollectionRequest req, Func<long> getBytes, Action<long> addBytes, CancellationToken token)
     {
         var declared = response.Content.Headers.ContentLength;
-        if (declared is > 0 && declared > req.MaxBytes - getBytes()) throw new BudgetException("oversized");
+        if (declared is > 0 && declared > req.MaxBytes - getBytes()) throw new BudgetException(CollectionFailureCode.Oversized);
         var dir = Path.GetFullPath(req.ArtifactDirectory);
         Directory.CreateDirectory(dir);
         var temp = Path.Combine(dir, ".capture-" + Guid.NewGuid().ToString("N") + ".tmp");
@@ -149,7 +183,7 @@ public sealed class HttpCollector : IDisposable
                 var read = await input.ReadAsync(buffer.AsMemory(0, readLimit), token);
                 if (read == 0) break;
                 var counted = Math.Min(read, allowed); addBytes(counted);
-                if (counted != read) throw new BudgetException("oversized");
+                if (counted != read) throw new BudgetException(CollectionFailureCode.Oversized);
                 size += read;
                 hash.AppendData(buffer, 0, read);
                 await output.WriteAsync(buffer.AsMemory(0, read), token);
@@ -169,7 +203,7 @@ public sealed class HttpCollector : IDisposable
                 File.Delete(temp);
             }
             else File.Move(temp, destination);
-            return (digest, destinationName, size);
+            return new CaptureArtifact { Sha256 = digest, RelativePath = destinationName, ByteLength = size };
         }
         catch (HttpRequestException exception) { throw new IOException("Response body transport failed before completion.", exception); }
         finally { if (File.Exists(temp)) File.Delete(temp); }
@@ -197,7 +231,7 @@ public sealed class HttpCollector : IDisposable
     private static async Task<byte[]> ReadLimitedAsync(HttpContent content, long max, Action<long> addBytes, CancellationToken token)
     {
         var declared = content.Headers.ContentLength;
-        if (declared is > 0 && declared.Value > max) throw new BudgetException("oversized");
+        if (declared is > 0 && declared.Value > max) throw new BudgetException(CollectionFailureCode.Oversized);
         await using var stream = await content.ReadAsStreamAsync(token);
         using var memory = new MemoryStream();
         var buffer = new byte[8192];
@@ -209,7 +243,7 @@ public sealed class HttpCollector : IDisposable
             if (read == 0) break;
             var counted = (int)Math.Min(read, Math.Max(0, remaining));
             addBytes(counted);
-            if (counted != read) throw new BudgetException("oversized");
+            if (counted != read) throw new BudgetException(CollectionFailureCode.Oversized);
             await memory.WriteAsync(buffer.AsMemory(0, read), token);
         }
         if (declared is not null && memory.Length != declared.Value) throw new IOException("Response length did not match Content-Length.");
@@ -217,7 +251,7 @@ public sealed class HttpCollector : IDisposable
     }
     private static void EnsureBudget(CollectionRequest request, int count)
     {
-        if (count >= request.MaxRequests) throw new BudgetException("requestBudget");
+        if (count >= request.MaxRequests) throw new BudgetException(CollectionFailureCode.RequestBudget);
     }
 
     private static long? RetrySeconds(RetryConditionHeaderValue? value)
@@ -226,12 +260,12 @@ public sealed class HttpCollector : IDisposable
         return delay is { } duration ? Math.Max(0, (long)Math.Ceiling(duration.TotalSeconds)) : null;
     }
 
-    private static async Task Delay(int milliseconds, CancellationToken token)
+    private static async Task DelayAsync(int milliseconds, CancellationToken token)
     {
         if (milliseconds > 0) await Task.Delay(milliseconds, token);
     }
     public void Dispose() => client.Dispose();
-    private sealed class BudgetException(string code) : Exception { public string Code { get; } = code; }
+    private sealed class BudgetException(CollectionFailureCode code) : Exception { public CollectionFailureCode Code { get; } = code; }
     private sealed class RobotsException : Exception { }
 
     /// <summary>Supports wildcard user-agent groups and Disallow path rules with * and terminal $. Unknown directives are ignored.</summary>
