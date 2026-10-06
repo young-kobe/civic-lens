@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "people": [
+    {
+      "id": "example-official",
+      "name": "Example Official"
+    }
+  ],
+  "sources": [
+    {
+      "id": "example-local-source",
+      "personIds": ["example-official"],
+      "url": "http://127.0.0.1:8765/page.html",
+      "allowedOrigin": "http://127.0.0.1:8765",
+      "allowedPathPrefix": "/",
+      "enabled": true,
+      "maxRequests": 5,
+      "maxBytes": 2000000,
+      "timeoutSeconds": 30,
+      "minDelayMilliseconds": 1000
+    }
+  ]
+}
