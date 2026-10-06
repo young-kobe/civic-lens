@@ -25,6 +25,10 @@ Local CLI, review UI, and local MCP will call shared application handlers. Publi
 
 Use C#/.NET for the application and independently runnable collector. Keep packages feature-focused. Prefer concrete types; interfaces belong at real external boundaries. Do not introduce microservices, a workflow DSL, broad repositories, dynamic plugins, or generic helpers without a concrete requirement.
 
+Keep cyclomatic complexity low and code easy for a human to read. Prefer small, cohesive methods, explicit names, guard clauses, and readable control flow over deeply nested branches or long compound conditions. Encourage well-designed abstractions that give a responsibility a clear home, protect an invariant, or isolate a dependency. Apply SOLID at those boundaries and DRY by giving each rule one owner. Do not hide similar-looking code behind a generic abstraction when its responsibilities differ, or build frameworks for hypothetical variation.
+
+Use conventions consistently across the repository. Reuse established patterns before introducing another way to solve the same problem. In production code, use file-scoped namespaces, PascalCase types and members, camelCase parameters and private fields, Async suffixes and CancellationToken parameters for asynchronous operations, records for wire data, and interfaces at external boundaries. Keep substantive public types in their own files; related enums may live beside the type that uses them. Keep validation at its owning layer, invoke it at trust boundaries, and distinguish invalid input from operational failure results. Apply new conventions deliberately across affected code and document significant departures in the architecture reference.
+
 The application owns durable jobs and aggregate budgets. The collector accepts bounded work and returns captures/discovered links. Captures are immutable; jobs and imports are idempotent. A model prediction is never a human approval. Publication must reference the exact approved evidence version.
 
 ## Documentation and repository hygiene

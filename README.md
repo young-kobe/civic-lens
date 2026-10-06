@@ -2,7 +2,7 @@
 
 Political transparency through officials' statements and actions, document changes, and evidence-backed weekly media briefs.
 
-**Current state:** a watched-page tracer with validated people/source configuration, a separate bounded HTTP collector, immutable gzip captures, and host-verified JSON receipts. Durable jobs/imports, feeds/discovery, database storage, AI, review, publication, and MCP endpoints are not implemented yet. The prior implementation is preserved in [civic-lens-legacy](https://github.com/young-kobe/civic-lens-legacy).
+**Current state:** a watched-page tracer with validated people/source configuration, a separate bounded HTTP collector, immutable gzip captures, and host-verified JSON receipts that preserve response metadata. Durable jobs/imports, feeds/discovery, database storage, AI, review, publication, and MCP endpoints are not implemented yet. The prior implementation is preserved in [civic-lens-legacy](https://github.com/young-kobe/civic-lens-legacy).
 
 ## Start here
 
@@ -23,7 +23,7 @@ No credentials, database, or paid services are required for the tracer. See [ope
 | Path | Responsibility |
 |---|---|
 | `src/CivicLens.Core` | Domain boundary, currently empty |
-| `src/CivicLens.Collection.Contracts` | Versioned request and receipt protocol |
+| `src/CivicLens.Collection.Contracts` | Versioned collection types and shared receipt validation |
 | `src/CivicLens.Publication.Contracts` | Public release boundary, currently empty |
 | `src/CivicLens.Application` | Configuration validation and watched-page orchestration |
 | `src/CivicLens.Infrastructure` | Collector process adapter and capture verification |
