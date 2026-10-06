@@ -2,7 +2,6 @@ using System.Text.Json;
 using CivicLens.Application;
 using CivicLens.Application.Collection;
 using CivicLens.Collection.Contracts;
-using CivicLens.Core.Collection;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Host.Collection;
 
@@ -15,8 +14,11 @@ if (args is [] or ["--help"] or ["help"])
           collect <config.json> <source-id> <collector.dll> <artifact-directory>
           db migrate
           collect-import <config.json> <source-id> <collector.dll> <artifact-directory>
+          receipts list <artifact-directory>
+          receipts replay <artifact-directory> <attempt-id|--all>
         Database commands require CIVIC_LENS_DATABASE (Postgres connection string with Host and Database).
-        collect is database-free. collect-import creates a fresh attempt; it does not replay saved receipts.
+        collect and receipts list are database-free. collect-import saves a handoff before importing.
+        receipts replay imports saved handoffs without collecting again; use the capture directory after relocation.
         Exit codes: 0 success, 1 failed/deferred collection or operational failure, 2 invalid input/configuration.
         """);
     return 0;
@@ -28,7 +30,8 @@ if (args is ["status"])
     return 0;
 }
 
-if (args is not (["db", "migrate"] or ["validate", _] or ["collect", _, _, _, _] or ["collect-import", _, _, _, _]))
+if (args is not (["db", "migrate"] or ["validate", _] or ["collect", _, _, _, _] or ["collect-import", _, _, _, _]
+    or ["receipts", "list", _] or ["receipts", "replay", _, _]))
 {
     Console.Error.WriteLine("Unknown command. Use --help.");
     return 2;
@@ -37,9 +40,30 @@ if (args is not (["db", "migrate"] or ["validate", _] or ["collect", _, _, _, _]
 using var cancellation = new CancellationTokenSource();
 Console.CancelKeyPress += (_, e) => { e.Cancel = true; cancellation.Cancel(); };
 var executing = false;
-var importing = args[0] == "collect-import";
+var importing = args[0] == "collect-import" || args is ["receipts", "replay", _, _];
 try
 {
+    if (args is ["receipts", "list", var listRoot])
+    {
+        var handoffs = new FileCollectionReceiptHandoffStore(Path.GetFullPath(listRoot));
+        executing = true;
+        var pending = await handoffs.ListAsync(cancellation.Token);
+        Console.WriteLine(JsonSerializer.Serialize(pending, CollectionProtocol.JsonOptions));
+        return 0;
+    }
+
+    if (args is ["receipts", "replay", var replayRoot, var selection])
+    {
+        if (selection != "--all" && !PendingCollectionHandoff.IsValidAttemptId(selection))
+            throw new ArgumentException("Invalid attempt ID.");
+        var root = Path.GetFullPath(replayRoot);
+        var database = CreateDatabase();
+        var recovery = new RecoverCollectionAttempts(new FileCollectionReceiptHandoffStore(root),
+            new CaptureArtifactVerifier(), database);
+        executing = true;
+        return await CollectionRecoveryCommand.ExecuteAsync(recovery, root, selection, cancellation.Token);
+    }
+
     if (args is ["db", "migrate"])
     {
         var database = CreateDatabase();
@@ -63,21 +87,10 @@ try
         var attempt = new PreparedCollectionAttempt(configuration, args[2], args[4]);
         Console.Error.WriteLine($"Attempt ID: {attempt.AttemptId}");
         executing = true;
-        var decision = await new CollectAndImportCollectionAttempt(runner, database)
+        var completion = await new CollectAndImportCollectionAttempt(runner, database,
+            new FileCollectionReceiptHandoffStore(attempt.Request.ArtifactDirectory))
             .ExecuteAsync(attempt.AttemptId, attempt.Request, cancellation.Token);
-        var outcome = decision.AttemptResult switch
-        {
-            CapturedAttemptResult => CollectionOutcome.Captured,
-            NotModifiedAttemptResult => CollectionOutcome.NotModified,
-            FailedAttemptResult => CollectionOutcome.Failed,
-            DeferredAttemptResult => CollectionOutcome.Deferred,
-            _ => throw new InvalidOperationException("Unknown collection outcome.")
-        };
-        var output = new CollectionImportOutput(attempt.AttemptId, outcome,
-            JsonNamingPolicy.CamelCase.ConvertName(decision.Disposition.ToString()),
-            JsonNamingPolicy.CamelCase.ConvertName(decision.PriorCaptureLinkStatus.ToString()));
-        Console.WriteLine(JsonSerializer.Serialize(output, CollectionProtocol.JsonOptions));
-        return outcome is CollectionOutcome.Captured or CollectionOutcome.NotModified ? 0 : 1;
+        return CollectionCommandOutput.WriteCompletion(completion);
     }
 
     // Validate the selected source before entering operational execution.
@@ -90,7 +103,7 @@ try
 catch (OperationCanceledException)
 {
     Console.Error.WriteLine(importing && executing
-        ? "Collection/import cancelled or timed out. Persistence was not confirmed."
+        ? "Collection/import cancelled or timed out. Persistence was not confirmed. Use receipts list and receipts replay to recover saved handoffs."
         : "Command cancelled or timed out.");
     return 1;
 }
@@ -103,7 +116,7 @@ catch (Exception exception) when (!executing && exception is ArgumentException o
 catch (Exception)
 {
     Console.Error.WriteLine(importing
-        ? "Collection/import failed. Persistence was not confirmed. Check the collector, capture directory, database connectivity, and applied migrations."
+        ? "Collection/import failed. Persistence was not confirmed. Check the collector, capture directory, database connectivity, and applied migrations. Use receipts list and receipts replay to recover saved handoffs."
         : "Command failed. Check filesystem access, collector availability, or database connectivity as applicable.");
     return 1;
 }
