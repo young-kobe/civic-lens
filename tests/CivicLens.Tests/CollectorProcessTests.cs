@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using System.Net;
 using System.Net.Sockets;
 using System.Security.Cryptography;
@@ -12,9 +13,10 @@ namespace CivicLens.Tests;
 public sealed class CollectorProcessTests
 {
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task RealProcessVerifiesCapturesAndRejectsIncompleteHttpBodies(bool truncate)
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public async Task RealProcessVerifiesCapturesAndRejectsIncompleteHttpBodies(bool truncate, bool encoded)
     {
         var directory = Path.Combine(Path.GetTempPath(), "civic-process-" + Guid.NewGuid().ToString("N"));
         using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(20));
@@ -22,7 +24,13 @@ public sealed class CollectorProcessTests
         listener.Start();
         var origin = $"http://127.0.0.1:{((IPEndPoint)listener.LocalEndpoint).Port}";
         var payload = Encoding.UTF8.GetBytes("Exact source bytes.\r\n");
-        var server = ServeAsync(listener, payload, truncate, truncate ? 2 : 4, deadline.Token);
+        if (encoded)
+        {
+            using var memory = new MemoryStream();
+            using (var gzip = new GZipStream(memory, CompressionMode.Compress, leaveOpen: true)) gzip.Write(payload);
+            payload = memory.ToArray();
+        }
+        var server = ServeAsync(listener, payload, truncate, encoded, truncate ? 2 : 4, deadline.Token);
         try
         {
             var configuration = new CollectionConfiguration
@@ -39,17 +47,22 @@ public sealed class CollectorProcessTests
             if (truncate)
             {
                 Assert.Equal(CollectionOutcome.Failed, result.Outcome);
-                Assert.Equal("incompleteResponse", result.FailureCode);
+                Assert.Equal(CollectionFailureCode.IncompleteResponse, result.FailureCode);
                 Assert.Empty(Directory.GetFiles(directory, "*.gz"));
             }
             else
             {
                 Assert.Equal(CollectionOutcome.Captured, result.Outcome);
-                Assert.Equal(Convert.ToHexStringLower(SHA256.HashData(payload)), result.Sha256);
+                Assert.Equal("text/plain; charset=utf-8", result.Response!.ContentType);
+                Assert.Equal(new DateTimeOffset(2026, 10, 6, 12, 0, 0, TimeSpan.Zero), result.Response.LastModified);
+                Assert.Equal("\"fixture-v1\"", result.Response.ETag);
+                Assert.Equal(encoded ? new[] { "gzip" } : [], result.Response.ContentEncodings);
+                Assert.Equal(payload.Length, result.Capture!.ByteLength);
+                Assert.Equal(Convert.ToHexStringLower(SHA256.HashData(payload)), result.Capture!.Sha256);
                 var repeated = await useCase.ExecuteAsync(configuration, "source", directory, deadline.Token);
                 Assert.Equal(CollectionOutcome.Captured, repeated.Outcome);
                 Assert.NotEqual(result.JobId, repeated.JobId);
-                Assert.Equal(result.ArtifactPath, repeated.ArtifactPath);
+                Assert.Equal(result.Capture!.RelativePath, repeated.Capture!.RelativePath);
                 Assert.Single(Directory.GetFiles(directory, "*.gz"));
             }
             Assert.Empty(Directory.GetFiles(directory, ".request-*"));
@@ -100,7 +113,7 @@ public sealed class CollectorProcessTests
         }
     }
 
-    private static async Task ServeAsync(TcpListener listener, byte[] payload, bool truncate, int count, CancellationToken token)
+    private static async Task ServeAsync(TcpListener listener, byte[] payload, bool truncate, bool encoded, int count, CancellationToken token)
     {
         for (var i = 0; i < count; i++)
         {
@@ -112,7 +125,8 @@ public sealed class CollectorProcessTests
             var robots = requestLine!.Contains(" /robots.txt ", StringComparison.Ordinal);
             var body = robots ? Encoding.UTF8.GetBytes("User-agent: *\nDisallow:\n") : payload;
             var length = body.Length + (!robots && truncate ? 100 : 0);
-            var header = Encoding.ASCII.GetBytes($"HTTP/1.1 200 OK\r\nContent-Length: {length}\r\nConnection: close\r\n\r\n");
+            var metadata = robots ? "" : "Content-Type: text/plain; charset=utf-8\r\nLast-Modified: Tue, 06 Oct 2026 12:00:00 GMT\r\nETag: \"fixture-v1\"\r\n" + (encoded ? "Content-Encoding: gzip\r\n" : "");
+            var header = Encoding.ASCII.GetBytes($"HTTP/1.1 200 OK\r\nContent-Length: {length}\r\n{metadata}Connection: close\r\n\r\n");
             await stream.WriteAsync(header, token);
             await stream.WriteAsync(body, token);
         }

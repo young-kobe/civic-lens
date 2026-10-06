@@ -1,5 +1,5 @@
 using System.Text.Json;
-using CivicLens.Application;
+using System.Text.Json.Nodes;
 using CivicLens.Collection.Contracts;
 
 namespace CivicLens.Tests;
@@ -24,11 +24,23 @@ public sealed class CollectionProtocolTests
     [InlineData("https://example.test/pages/a?x=1")]
     public void ScopeAllowsExactPathOrDescendants(string url) => (Request() with { Url = url }).Validate();
 
+    [Fact]
+    public void VersionTwoRoundTripsExplicitlyAndVersionOneIsRejected()
+    {
+        var requestJson = JsonSerializer.Serialize(Request(), CollectionProtocol.JsonOptions);
+        Assert.Contains("\"version\":2", requestJson, StringComparison.Ordinal);
+        var resultJson = JsonSerializer.Serialize(Receipt(Request()), CollectionProtocol.JsonOptions);
+        Assert.Contains("\"failureCode\":null", resultJson, StringComparison.Ordinal);
+        var roundTrip = JsonSerializer.Serialize(JsonSerializer.Deserialize<CollectionResult>(resultJson, CollectionProtocol.JsonOptions), CollectionProtocol.JsonOptions);
+        Assert.Equal(resultJson, roundTrip);
+        var oldRequest = requestJson.Replace("\"version\":2", "\"version\":1", StringComparison.Ordinal);
+        Assert.Throws<ArgumentException>(() => JsonSerializer.Deserialize<CollectionRequest>(oldRequest, CollectionProtocol.JsonOptions)!.Validate());
+    }
+
     [Theory]
-    [InlineData("\"version\":1,", "")]
-    [InlineData("\"version\":1", "\"version\":99")]
-    [InlineData("\"version\":1", "\"version\":1,\"version\":1")]
-    [InlineData("\"version\":1", "\"version\":1,\"extra\":true")]
+    [InlineData("\"version\":2", "\"version\":99")]
+    [InlineData("\"version\":2", "\"version\":2,\"version\":2")]
+    [InlineData("\"version\":2", "\"version\":2,\"extra\":true")]
     [InlineData("\"sourceId\":\"source\"", "\"sourceId\":null")]
     public void MalformedOrUnsupportedWireContractsAreRejected(string original, string replacement)
     {
@@ -38,42 +50,103 @@ public sealed class CollectionProtocolTests
     }
 
     [Fact]
+    public void FailureCodeRejectsUnknownNamesAndNumericValues()
+    {
+        var result = Receipt(Request()) with { Outcome = CollectionOutcome.Failed, Capture = null, FailureCode = CollectionFailureCode.HttpError };
+        var json = JsonSerializer.Serialize(result, CollectionProtocol.JsonOptions);
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<CollectionResult>(json.Replace("httpError", "invented", StringComparison.Ordinal), CollectionProtocol.JsonOptions));
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<CollectionResult>(json.Replace("\"httpError\"", "99", StringComparison.Ordinal), CollectionProtocol.JsonOptions));
+    }
+
+    [Fact]
+    public void MissingNestedRequiredFieldsAndNullEncodingEntriesFailClearly()
+    {
+        var json = JsonSerializer.Serialize(Receipt(Request()), CollectionProtocol.JsonOptions);
+        var missingEncodings = JsonNode.Parse(json)!;
+        missingEncodings["response"]!.AsObject().Remove("contentEncodings");
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<CollectionResult>(missingEncodings.ToJsonString(), CollectionProtocol.JsonOptions));
+        var missingArtifactLength = JsonNode.Parse(json)!;
+        missingArtifactLength["capture"]!.AsObject().Remove("byteLength");
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<CollectionResult>(missingArtifactLength.ToJsonString(), CollectionProtocol.JsonOptions));
+        var missingVersion = JsonNode.Parse(JsonSerializer.Serialize(Request(), CollectionProtocol.JsonOptions))!;
+        missingVersion.AsObject().Remove("version");
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<CollectionRequest>(missingVersion.ToJsonString(), CollectionProtocol.JsonOptions));
+        Assert.Throws<InvalidDataException>(() => (Receipt(Request()) with
+        {
+            Response = new HttpResponseMetadata { StatusCode = 200, ContentEncodings = null! }
+        }).ValidateAgainst(Request()));
+        Assert.Throws<InvalidDataException>(() => (Receipt(Request()) with
+        {
+            Response = new HttpResponseMetadata { StatusCode = 200, ContentEncodings = [null!] }
+        }).ValidateAgainst(Request()));
+    }
+
+    [Fact]
+    public void ResultMustMatchRequestAndItsCaptureMetadata()
+    {
+        var request = Request();
+        var result = Receipt(request);
+        result.ValidateAgainst(request);
+        Assert.Throws<InvalidDataException>(() => (result with { JobId = "other" }).ValidateAgainst(request));
+        Assert.Throws<InvalidDataException>(() => (result with { Version = 1 }).ValidateAgainst(request));
+        Assert.Throws<InvalidDataException>(() => (result with { FinalUrl = "https://example.test/private" }).ValidateAgainst(request));
+        Assert.Throws<InvalidDataException>(() => (result with { Capture = result.Capture! with { RelativePath = "../capture.gz" } }).ValidateAgainst(request));
+        Assert.Throws<InvalidDataException>(() => (result with { Capture = result.Capture! with { ByteLength = result.BytesReceived + 1 } }).ValidateAgainst(request));
+        Assert.Throws<InvalidDataException>(() => (result with { BytesReceived = request.MaxBytes + 1 }).ValidateAgainst(request));
+        Assert.Throws<InvalidDataException>(() => (result with { Outcome = CollectionOutcome.Failed, FailureCode = CollectionFailureCode.IncompleteResponse }).ValidateAgainst(request));
+    }
+
+    [Fact]
+    public void OutcomeShapeRequiresMatchingResponseAndFailureFields()
+    {
+        var request = Request();
+        var captured = Receipt(request);
+        Assert.Throws<InvalidDataException>(() => (captured with { Response = captured.Response! with { StatusCode = 201 } }).ValidateAgainst(request));
+        Assert.Throws<InvalidDataException>(() => (captured with { Capture = null }).ValidateAgainst(request));
+        Assert.Throws<InvalidDataException>(() => (captured with { FailureCode = CollectionFailureCode.HttpError }).ValidateAgainst(request));
+
+        var deferred = captured with { Outcome = CollectionOutcome.Deferred, Response = captured.Response! with { StatusCode = 429 }, Capture = null, FailureCode = CollectionFailureCode.RateLimited, RetryAfterSeconds = 15 };
+        deferred.ValidateAgainst(request);
+        Assert.Throws<InvalidDataException>(() => (deferred with { FailureCode = CollectionFailureCode.HttpError }).ValidateAgainst(request));
+        Assert.Throws<InvalidDataException>(() => (deferred with { Outcome = CollectionOutcome.Failed }).ValidateAgainst(request));
+
+        var failed = captured with { Outcome = CollectionOutcome.Failed, Capture = null, FailureCode = CollectionFailureCode.InvalidResponse, Response = null };
+        failed.ValidateAgainst(request);
+    }
+
+    [Fact]
+    public void NotModifiedRequiresPriorValidatorAndOriginalUrl()
+    {
+        var request = Request();
+        var result = Receipt(request) with
+        {
+            Outcome = CollectionOutcome.NotModified,
+            Response = new HttpResponseMetadata { StatusCode = 304, ContentEncodings = [] },
+            Capture = null
+        };
+        Assert.Throws<InvalidDataException>(() => result.ValidateAgainst(request));
+        result.ValidateAgainst(request with { ETag = "\"v1\"" });
+        Assert.Throws<InvalidDataException>(() => (result with { FinalUrl = "https://example.test/pages/redirected" }).ValidateAgainst(request with { ETag = "\"v1\"" }));
+    }
+
+    [Fact]
+    public void ResponseHeadersAndArtifactMetadataAreBounded()
+    {
+        var response = new HttpResponseMetadata { StatusCode = 200, ETag = "W/\"v1\"", ContentType = "text/html; charset=utf-8", ContentEncodings = ["br", "vendor-opaque"] };
+        response.Validate();
+        Assert.Throws<InvalidDataException>(() => (response with { ContentType = "text/html\r\ninjected" }).Validate());
+        Assert.Throws<InvalidDataException>(() => (response with { ContentEncodings = ["bad coding"] }).Validate());
+        Assert.Throws<InvalidDataException>(() => (response with { ContentEncodings = Enumerable.Repeat("x", 17).ToArray() }).Validate());
+        Assert.Throws<InvalidDataException>(() => new CaptureArtifact { Sha256 = new string('A', 64), RelativePath = new string('A', 64) + ".gz", ByteLength = 0 }.Validate());
+    }
+
+    [Fact]
     public void MalformedUtf8CannotChangeIdentityDuringDeserialization()
     {
         var json = System.Text.Encoding.UTF8.GetBytes(JsonSerializer.Serialize(Request(), CollectionProtocol.JsonOptions));
         var offset = System.Text.Encoding.UTF8.GetString(json).IndexOf("sourceId", StringComparison.Ordinal) + "sourceId\":\"".Length;
         json[offset] = 0xff;
         Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<CollectionRequest>(json, CollectionProtocol.JsonOptions));
-    }
-
-    [Fact]
-    public void ReceiptMustMatchRequestAndCaptureMetadata()
-    {
-        var request = Request();
-        var result = Receipt(request);
-        CollectWatchedPage.ValidateResult(request, result);
-        Assert.Throws<InvalidDataException>(() => CollectWatchedPage.ValidateResult(request, result with { JobId = "other" }));
-        Assert.Throws<InvalidDataException>(() => CollectWatchedPage.ValidateResult(request, result with { Version = 2 }));
-        Assert.Throws<InvalidDataException>(() => CollectWatchedPage.ValidateResult(request, result with { ArtifactPath = "../capture.gz" }));
-        Assert.Throws<InvalidDataException>(() => CollectWatchedPage.ValidateResult(request, result with { ArtifactBytes = result.BytesReceived + 1 }));
-        Assert.Throws<InvalidDataException>(() => CollectWatchedPage.ValidateResult(request, result with { BytesReceived = request.MaxBytes + 1 }));
-        Assert.Throws<InvalidDataException>(() => CollectWatchedPage.ValidateResult(request, result with { Outcome = CollectionOutcome.Failed, FailureCode = "incomplete" }));
-    }
-
-    [Fact]
-    public void NotModifiedWithoutPriorValidatorIsRejected()
-    {
-        var request = Request();
-        var result = Receipt(request) with
-        {
-            Outcome = CollectionOutcome.NotModified,
-            HttpStatus = 304,
-            Sha256 = null,
-            ArtifactPath = null,
-            ArtifactBytes = null
-        };
-        Assert.Throws<InvalidDataException>(() => CollectWatchedPage.ValidateResult(request, result));
-        CollectWatchedPage.ValidateResult(request with { ETag = "\"v1\"" }, result);
     }
 
     internal static CollectionRequest Request() => new()
@@ -94,10 +167,8 @@ public sealed class CollectionProtocolTests
         FinalUrl = request.Url,
         Outcome = CollectionOutcome.Captured,
         ObservedAt = DateTimeOffset.UtcNow,
-        HttpStatus = 200,
-        Sha256 = new string('a', 64),
-        ArtifactPath = new string('a', 64) + ".gz",
-        ArtifactBytes = 4,
+        Response = new HttpResponseMetadata { StatusCode = 200, ETag = "\"v1\"", ContentEncodings = [] },
+        Capture = new CaptureArtifact { Sha256 = new string('a', 64), RelativePath = new string('a', 64) + ".gz", ByteLength = 4 },
         BytesReceived = 10,
         RequestCount = 2
     };

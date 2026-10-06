@@ -19,12 +19,104 @@ public sealed class CollectorTests
         using var collector = new HttpCollector(handler);
         var result = await collector.FetchAsync(Request(directory));
         Assert.Equal(CollectionOutcome.Captured, result.Outcome);
-        Assert.Equal(Convert.ToHexString(SHA256.HashData(payload)).ToLowerInvariant(), result.Sha256);
+        Assert.Equal(Convert.ToHexString(SHA256.HashData(payload)).ToLowerInvariant(), result.Capture!.Sha256);
         Assert.Equal(2, result.RequestCount);
-        await using var file = File.OpenRead(Path.Combine(directory, result.ArtifactPath!));
+        await using var file = File.OpenRead(Path.Combine(directory, result.Capture!.RelativePath));
         await using var gzip = new GZipStream(file, CompressionMode.Decompress);
         using var output = new MemoryStream(); await gzip.CopyToAsync(output);
         Assert.Equal(payload, output.ToArray());
+    }
+
+    [Fact]
+    public async Task IdenticalBytesCanHaveDifferentRepresentationMetadata()
+    {
+        using var directory = new TemporaryDirectory();
+        var payload = Encoding.UTF8.GetBytes("opaque response body");
+        var handler = new QueueHandler(
+            _ => Response(HttpStatusCode.NotFound),
+            _ =>
+            {
+                var response = Response(HttpStatusCode.OK, payload);
+                response.Content.Headers.TryAddWithoutValidation("Content-Type", "text/plain; charset=iso-8859-1");
+                return response;
+            },
+            _ => Response(HttpStatusCode.NotFound),
+            _ =>
+            {
+                var response = Response(HttpStatusCode.OK, payload);
+                response.Content.Headers.TryAddWithoutValidation("Content-Type", "application/octet-stream");
+                response.Content.Headers.TryAddWithoutValidation("Content-Encoding", "vendor-opaque, gzip");
+                return response;
+            });
+        using var collector = new HttpCollector(handler);
+        var first = await collector.FetchAsync(Request(directory.Path));
+        var second = await collector.FetchAsync(Request(directory.Path));
+
+        Assert.Equal(CollectionOutcome.Captured, first.Outcome);
+        Assert.Equal(CollectionOutcome.Captured, second.Outcome);
+        Assert.Equal(first.Capture, second.Capture);
+        Assert.Equal("text/plain; charset=iso-8859-1", first.Response!.ContentType);
+        Assert.Empty(first.Response.ContentEncodings);
+        Assert.Equal("application/octet-stream", second.Response!.ContentType);
+        Assert.Equal(new[] { "vendor-opaque", "gzip" }, second.Response.ContentEncodings);
+        Assert.Equal(Convert.ToHexStringLower(SHA256.HashData(payload)), second.Capture!.Sha256);
+        Assert.Single(Directory.GetFiles(directory.Path, "*.gz"));
+    }
+
+    [Theory]
+    [InlineData("Content-Type", "not a media type")]
+    [InlineData("Content-Encoding", "bad coding")]
+    [InlineData("ETag", "*")]
+    [InlineData("Last-Modified", "invalid-date")]
+    public async Task MalformedResponseMetadataFailsBeforeWritingCapture(string name, string value)
+    {
+        using var directory = new TemporaryDirectory();
+        var handler = new QueueHandler(_ => Response(HttpStatusCode.NotFound), _ =>
+        {
+            var response = Response(HttpStatusCode.OK, "body");
+            if (name == "ETag") response.Headers.TryAddWithoutValidation(name, value);
+            else response.Content.Headers.TryAddWithoutValidation(name, value);
+            return response;
+        });
+        using var collector = new HttpCollector(handler);
+        var result = await collector.FetchAsync(Request(directory.Path));
+        Assert.Equal(CollectionOutcome.Failed, result.Outcome);
+        Assert.Equal(CollectionFailureCode.InvalidResponse, result.FailureCode);
+        Assert.Null(result.Capture);
+        Assert.Null(result.Response);
+        Assert.Empty(Directory.GetFiles(directory.Path));
+    }
+
+    [Fact]
+    public async Task DuplicateLastModifiedHeadersCannotBeSilentlyDiscarded()
+    {
+        using var directory = new TemporaryDirectory();
+        var handler = new QueueHandler(_ => Response(HttpStatusCode.NotFound), _ =>
+        {
+            var response = Response(HttpStatusCode.OK, "body");
+            response.Content.Headers.TryAddWithoutValidation("Last-Modified",
+                new[] { "Tue, 06 Oct 2026 12:00:00 GMT", "invalid-date" });
+            return response;
+        });
+        using var collector = new HttpCollector(handler);
+        var result = await collector.FetchAsync(Request(directory.Path));
+        Assert.Equal(CollectionFailureCode.InvalidResponse, result.FailureCode);
+        Assert.Null(result.Capture);
+        Assert.Empty(Directory.GetFiles(directory.Path));
+    }
+
+    [Fact]
+    public async Task RedirectTransportFailureCannotReusePreviousResponseMetadata()
+    {
+        using var directory = new TemporaryDirectory();
+        var handler = new QueueHandler(_ => Response(HttpStatusCode.NotFound),
+            _ => Redirect("https://example.test/watch/next"), _ => throw new HttpRequestException("Fixture transport failure"));
+        using var collector = new HttpCollector(handler);
+        var result = await collector.FetchAsync(Request(directory.Path));
+        Assert.Equal(CollectionFailureCode.TransportError, result.FailureCode);
+        Assert.Equal("https://example.test/watch/next", result.FinalUrl);
+        Assert.Null(result.Response);
+        Assert.Equal(3, result.RequestCount);
     }
 
     [Fact]
@@ -34,7 +126,7 @@ public sealed class CollectorTests
         using var collector = new HttpCollector(handler);
         using var directoryOwner = new TemporaryDirectory();
         var result = await collector.FetchAsync(Request(directoryOwner.Path));
-        Assert.Equal("robotsDenied", result.FailureCode);
+        Assert.Equal(CollectionFailureCode.RobotsDenied, result.FailureCode);
         Assert.Equal(1, handler.Calls);
     }
 
@@ -45,7 +137,7 @@ public sealed class CollectorTests
         var handler = new QueueHandler(_ => Response(HttpStatusCode.OK, "User-agent: *\nDisallow: /watch*\n"));
         using var collector = new HttpCollector(handler);
         var result = await collector.FetchAsync(Request(directoryOwner.Path));
-        Assert.Equal("robotsDenied", result.FailureCode);
+        Assert.Equal(CollectionFailureCode.RobotsDenied, result.FailureCode);
         Assert.Equal(1, handler.Calls);
     }
 
@@ -56,7 +148,7 @@ public sealed class CollectorTests
         var handler = new QueueHandler(_ => Response(HttpStatusCode.OK, "User-agent: *\nDisallow: /watch/secret\n"));
         using var collector = new HttpCollector(handler);
         var result = await collector.FetchAsync(Request(directoryOwner.Path) with { Url = "https://example.test/watch/%73ecret" });
-        Assert.Equal("robotsDenied", result.FailureCode);
+        Assert.Equal(CollectionFailureCode.RobotsDenied, result.FailureCode);
         Assert.Equal(1, handler.Calls);
     }
 
@@ -67,7 +159,7 @@ public sealed class CollectorTests
         var handler = new QueueHandler(_ => Response(HttpStatusCode.OK, "User-agent: *\nDisallow: /watch/café\n"));
         using var collector = new HttpCollector(handler);
         var result = await collector.FetchAsync(Request(directoryOwner.Path) with { Url = "https://example.test/watch/caf%C3%A9" });
-        Assert.Equal("robotsDenied", result.FailureCode);
+        Assert.Equal(CollectionFailureCode.RobotsDenied, result.FailureCode);
         Assert.Equal(1, handler.Calls);
     }
 
@@ -79,7 +171,7 @@ public sealed class CollectorTests
         var handler = new QueueHandler(_ => Response(HttpStatusCode.OK, robots));
         using var collector = new HttpCollector(handler);
         var result = await collector.FetchAsync(Request(directoryOwner.Path) with { MaxBytes = 20_000 });
-        Assert.Equal("robotsUnavailable", result.FailureCode);
+        Assert.Equal(CollectionFailureCode.RobotsUnavailable, result.FailureCode);
         Assert.Equal(1, handler.Calls);
     }
 
@@ -95,7 +187,7 @@ public sealed class CollectorTests
         });
         using var collector = new HttpCollector(handler);
         var result = await collector.FetchAsync(Request(directoryOwner.Path));
-        Assert.Equal("robotsUnavailable", result.FailureCode);
+        Assert.Equal(CollectionFailureCode.RobotsUnavailable, result.FailureCode);
         Assert.Equal(1, handler.Calls);
     }
 
@@ -106,7 +198,7 @@ public sealed class CollectorTests
         var handler = new QueueHandler(_ => Response(HttpStatusCode.NotFound), _ => Redirect("https://outside.test/watch"));
         using var collector = new HttpCollector(handler);
         var result = await collector.FetchAsync(Request(directoryOwner.Path));
-        Assert.Equal("outOfScope", result.FailureCode);
+        Assert.Equal(CollectionFailureCode.OutOfScope, result.FailureCode);
         Assert.Equal(2, handler.Calls);
     }
 
@@ -142,7 +234,7 @@ public sealed class CollectorTests
         var handler = new QueueHandler(_ => Response(HttpStatusCode.NotFound), _ => Response(HttpStatusCode.OK, new byte[20]));
         using var collector = new HttpCollector(handler);
         var result = await collector.FetchAsync(Request(directory) with { MaxBytes = 10 });
-        Assert.Equal("oversized", result.FailureCode);
+        Assert.Equal(CollectionFailureCode.Oversized, result.FailureCode);
         Assert.Empty(Directory.GetFiles(directory));
     }
 
@@ -154,7 +246,7 @@ public sealed class CollectorTests
         var handler = new QueueHandler(_ => Response(HttpStatusCode.NotFound), _ => new HttpResponseMessage(HttpStatusCode.OK) { Content = new TruncatedContent() });
         using var collector = new HttpCollector(handler);
         var result = await collector.FetchAsync(Request(directory));
-        Assert.Equal("incompleteResponse", result.FailureCode);
+        Assert.Equal(CollectionFailureCode.IncompleteResponse, result.FailureCode);
         Assert.Empty(Directory.GetFiles(directory));
     }
 
@@ -166,7 +258,7 @@ public sealed class CollectorTests
         var handler = new QueueHandler(_ => Response(HttpStatusCode.NotFound), _ => new HttpResponseMessage(HttpStatusCode.OK) { Content = new CancelContent(cts) });
         using var collector = new HttpCollector(handler);
         var result = await collector.FetchAsync(Request(directory), cts.Token);
-        Assert.Equal("cancelled", result.FailureCode);
+        Assert.Equal(CollectionFailureCode.Cancelled, result.FailureCode);
         Assert.Empty(Directory.GetFiles(directory));
     }
 
