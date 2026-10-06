@@ -394,6 +394,9 @@ public sealed class CollectAndImportCollectionAttemptTests
 
     private sealed class FakeStore : ICollectionAttemptStore
     {
+        public Task<StoredCollectionAttempt?> GetAsync(string attemptId, CancellationToken cancellationToken) =>
+            Task.FromResult(Existing?.AttemptResult.AttemptId == attemptId ? Existing : null);
+
         public Action? OnImport { get; init; }
         public bool LoseAcknowledgmentOnce { get; set; }
         public int ImportCount { get; private set; }

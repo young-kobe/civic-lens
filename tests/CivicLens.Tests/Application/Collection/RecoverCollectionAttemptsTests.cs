@@ -237,6 +237,8 @@ public sealed class RecoverCollectionAttemptsTests
     {
         private int importCount;
         private readonly Dictionary<string, StoredCollectionAttempt> retained = [];
+        public Task<StoredCollectionAttempt?> GetAsync(string attemptId, CancellationToken cancellationToken) =>
+            Task.FromResult(retained.GetValueOrDefault(attemptId));
         public string? FailureId { get; set; }
 
         public Task<CollectionImportDecision> ImportAtomicallyAsync(CollectionAttemptImport attempt,

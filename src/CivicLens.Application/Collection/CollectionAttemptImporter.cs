@@ -3,16 +3,21 @@ using CivicLens.Core.Collection;
 
 namespace CivicLens.Application.Collection;
 
-internal static class CollectionAttemptImporter
+public static class CollectionAttemptImporter
 {
     public static Task<CollectionImportDecision> ImportAsync(string attemptId, CollectionRequest request,
         CollectionResult result, ICollectionAttemptStore store, CancellationToken cancellationToken)
     {
-        result.ValidateAgainst(request);
         cancellationToken.ThrowIfCancellationRequested();
+        return store.ImportAtomicallyAsync(CreateImport(attemptId, request, result), cancellationToken);
+    }
+
+    public static CollectionAttemptImport CreateImport(string attemptId, CollectionRequest request, CollectionResult result)
+    {
+        result.ValidateAgainst(request);
         var sentValidators = result.SentValidators is null ? null :
             new SentValidators(result.SentValidators.ETag, result.SentValidators.LastModified);
-        return store.ImportAtomicallyAsync(new CollectionAttemptImport(Map(attemptId, result), sentValidators), cancellationToken);
+        return new CollectionAttemptImport(Map(attemptId, result), sentValidators);
     }
 
     private static CollectionAttemptResult Map(string attemptId, CollectionResult result)

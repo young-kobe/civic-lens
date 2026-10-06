@@ -15,6 +15,15 @@ public sealed class PostgresCollectionAttemptStore(IDbContextFactory<CollectionA
 {
     private const string ImportLockName = "civic-lens-collection-import";
 
+    public async Task<StoredCollectionAttempt?> GetAsync(string attemptId, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(attemptId);
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        var row = await db.Attempts.AsNoTracking().SingleOrDefaultAsync(
+            candidate => candidate.AttemptId == attemptId, cancellationToken);
+        return row is null ? null : await ReadStoredAttemptAsync(db, row, cancellationToken);
+    }
+
     public static PostgresCollectionAttemptStore FromConnectionString(string connectionString)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);
