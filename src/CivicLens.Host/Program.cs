@@ -40,7 +40,8 @@ if (args is not (["db", "migrate"] or ["validate", _] or ["collect", _, _, _, _]
 using var cancellation = new CancellationTokenSource();
 Console.CancelKeyPress += (_, e) => { e.Cancel = true; cancellation.Cancel(); };
 var executing = false;
-var importing = args[0] == "collect-import" || args is ["receipts", "replay", _, _];
+var replaying = args is ["receipts", "replay", _, _];
+var importing = args[0] == "collect-import" || replaying;
 try
 {
     if (args is ["receipts", "list", var listRoot])
@@ -102,9 +103,12 @@ try
 }
 catch (OperationCanceledException)
 {
-    Console.Error.WriteLine(importing && executing
-        ? "Collection/import cancelled or timed out. Persistence was not confirmed. Use receipts list and receipts replay to recover saved handoffs."
-        : "Command cancelled or timed out.");
+    if (replaying && executing)
+        Console.Error.WriteLine("Receipt replay cancelled or timed out. Persistence was not confirmed. Use receipts list to inspect retained handoffs.");
+    else
+        Console.Error.WriteLine(importing && executing
+            ? "Collection/import cancelled or timed out. Persistence was not confirmed. Use receipts list and receipts replay to recover saved handoffs."
+            : "Command cancelled or timed out.");
     return 1;
 }
 catch (Exception exception) when (!executing && exception is ArgumentException or UnauthorizedAccessException or IOException or JsonException or InvalidOperationException)
@@ -115,9 +119,12 @@ catch (Exception exception) when (!executing && exception is ArgumentException o
 }
 catch (Exception)
 {
-    Console.Error.WriteLine(importing
-        ? "Collection/import failed. Persistence was not confirmed. Check the collector, capture directory, database connectivity, and applied migrations. Use receipts list and receipts replay to recover saved handoffs."
-        : "Command failed. Check filesystem access, collector availability, or database connectivity as applicable.");
+    if (replaying)
+        Console.Error.WriteLine("Receipt replay failed. Persistence was not confirmed. Check the capture directory, retained handoff, database connectivity, and applied migrations.");
+    else
+        Console.Error.WriteLine(importing
+            ? "Collection/import failed. Persistence was not confirmed. Check the collector, capture directory, database connectivity, and applied migrations. Use receipts list and receipts replay to recover saved handoffs."
+            : "Command failed. Check filesystem access, collector availability, or database connectivity as applicable.");
     return 1;
 }
 
