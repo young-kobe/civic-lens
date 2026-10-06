@@ -3,7 +3,7 @@ namespace CivicLens.Core.Collection;
 /// <summary>Pure policy for idempotently importing a single observation attempt.</summary>
 public sealed class ObservationImportPolicy
 {
-    public ObservationImportPlan Plan(Observation incoming, ObservationImportPlan? existingAttempt = null,
+    public ObservationImportDecision Decide(Observation incoming, ObservationImportDecision? existingAttempt = null,
         CapturedObservation? priorCapturedObservation = null, SentValidators? sentValidators = null)
     {
         ArgumentNullException.ThrowIfNull(incoming);
@@ -14,17 +14,17 @@ public sealed class ObservationImportPolicy
             sentValidators is not null && Binds(notModified, priorCapturedObservation, sentValidators)
                 ? priorCapturedObservation
                 : null;
-        return new ObservationImportPlan(incoming, link, ObservationImportTransition.NewObservation, sentValidators);
+        return new ObservationImportDecision(incoming, link, ObservationImportTransition.NewObservation, sentValidators);
     }
 
-    private static ObservationImportPlan ReplayOrReject(Observation incoming, ObservationImportPlan existing,
+    private static ObservationImportDecision ReplayOrReject(Observation incoming, ObservationImportDecision existing,
         SentValidators? sentValidators)
     {
         if (existing.Observation.AttemptId != incoming.AttemptId)
             throw new InvalidOperationException("Existing observation belongs to a different attempt.");
         if (!existing.Observation.Equals(incoming) || existing.SentValidators != sentValidators)
             throw new InvalidOperationException("Attempt identity was reused with conflicting observation data or validators.");
-        return new ObservationImportPlan(existing.Observation, existing.CapturedRepresentation,
+        return new ObservationImportDecision(existing.Observation, existing.CapturedRepresentation,
             ObservationImportTransition.Replay, existing.SentValidators);
     }
 

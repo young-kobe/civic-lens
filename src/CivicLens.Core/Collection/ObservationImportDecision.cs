@@ -14,9 +14,9 @@ public enum RepresentationBinding
 }
 
 /// <summary>Pure import decision. The observation remains the exact attempt; a 304 representation is a separate link.</summary>
-public sealed class ObservationImportPlan
+public sealed class ObservationImportDecision
 {
-    internal ObservationImportPlan(Observation observation, CapturedObservation? capturedRepresentation,
+    internal ObservationImportDecision(Observation observation, CapturedObservation? capturedRepresentation,
         ObservationImportTransition transition, SentValidators? sentValidators)
     {
         Observation = observation;
