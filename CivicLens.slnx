@@ -1,0 +1,14 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/CivicLens.Application/CivicLens.Application.csproj" />
+    <Project Path="src/CivicLens.Collection.Contracts/CivicLens.Collection.Contracts.csproj" />
+    <Project Path="src/CivicLens.Collector/CivicLens.Collector.csproj" />
+    <Project Path="src/CivicLens.Core/CivicLens.Core.csproj" />
+    <Project Path="src/CivicLens.Host/CivicLens.Host.csproj" />
+    <Project Path="src/CivicLens.Infrastructure/CivicLens.Infrastructure.csproj" />
+    <Project Path="src/CivicLens.Publication.Contracts/CivicLens.Publication.Contracts.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/CivicLens.Tests/CivicLens.Tests.csproj" />
+  </Folder>
+</Solution>

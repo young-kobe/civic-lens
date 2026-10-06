@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "dependencies": {
+    "net10.0": {
+      "civiclens.collection.contracts": {
+        "type": "Project"
+      },
+      "civiclens.core": {
+        "type": "Project"
+      },
+      "civiclens.publication.contracts": {
+        "type": "Project"
+      }
+    }
+  }
+}

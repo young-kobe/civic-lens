@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "dependencies": {
+    "net10.0": {
+      "civiclens.collection.contracts": {
+        "type": "Project"
+      }
+    }
+  }
+}

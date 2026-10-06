@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="../CivicLens.Core/CivicLens.Core.csproj" />
+    <ProjectReference Include="../CivicLens.Collection.Contracts/CivicLens.Collection.Contracts.csproj" />
+    <ProjectReference Include="../CivicLens.Publication.Contracts/CivicLens.Publication.Contracts.csproj" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "dependencies": {
+    "net10.0": {
+      "civiclens.application": {
+        "type": "Project",
+        "dependencies": {
+          "CivicLens.Collection.Contracts": "[1.0.0, )",
+          "CivicLens.Core": "[1.0.0, )",
+          "CivicLens.Publication.Contracts": "[1.0.0, )"
+        }
+      },
+      "civiclens.collection.contracts": {
+        "type": "Project"
+      },
+      "civiclens.core": {
+        "type": "Project"
+      },
+      "civiclens.infrastructure": {
+        "type": "Project",
+        "dependencies": {
+          "CivicLens.Application": "[1.0.0, )"
+        }
+      },
+      "civiclens.publication.contracts": {
+        "type": "Project"
+      }
+    }
+  }
+}
