@@ -1,66 +1,46 @@
 using CivicLens.Collection.Contracts;
-using CivicLens.Core.Collection;
 
 namespace CivicLens.Application.Collection;
 
-/// <summary>Collects, validates, maps, and atomically imports one verified collection result.</summary>
-/// <remarks>Each call performs a fresh collection. Replaying a saved receipt requires a separate verified-token import path.</remarks>
-public sealed class CollectAndImportCollectionAttempt(ICollectorProcess collector, ICollectionAttemptStore store)
+/// <summary>Collects and durably hands off a verified result before attempting its evidence import.</summary>
+public sealed class CollectAndImportCollectionAttempt(ICollectorProcess collector, ICollectionAttemptStore store,
+    ICollectionReceiptHandoffStore handoffs)
 {
-    public async Task<CollectionImportDecision> ExecuteAsync(string attemptId, CollectionRequest request,
+    public async Task<CollectionAttemptCompletion> ExecuteAsync(string attemptId, CollectionRequest request,
         CancellationToken cancellationToken = default)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(attemptId);
+        if (!PendingCollectionHandoff.IsValidAttemptId(attemptId))
+            throw new ArgumentException("Attempt ID must be 1 to 128 ASCII letters, digits, dashes, or underscores.", nameof(attemptId));
         ArgumentNullException.ThrowIfNull(request);
         request.Validate();
-        cancellationToken.ThrowIfCancellationRequested();
-
+        await using var lease = await handoffs.AcquireRecoveryLeaseAsync(cancellationToken);
         var result = await collector.RunAsync(request, cancellationToken);
         result.ValidateAgainst(request);
         cancellationToken.ThrowIfCancellationRequested();
 
-        var sentValidators = result.SentValidators is null
-            ? null
-            : new SentValidators(result.SentValidators.ETag, result.SentValidators.LastModified);
-        var attempt = new CollectionAttemptImport(Map(attemptId, result), sentValidators);
-        return await store.ImportAtomicallyAsync(attempt, cancellationToken);
+        var handoff = new PendingCollectionHandoff(PendingCollectionHandoff.CurrentVersion, attemptId, request, result);
+        handoff.Validate();
+        await handoffs.SaveAsync(handoff, cancellationToken);
+        var decision = await CollectionAttemptImporter.ImportAsync(attemptId, request, result, store, cancellationToken);
+        return await RemoveHandoffAsync(attemptId, decision, handoffs, cancellationToken);
     }
 
-    private static CollectionAttemptResult Map(string attemptId, CollectionResult result)
+    internal static async Task<CollectionAttemptCompletion> RemoveHandoffAsync(string id,
+        CivicLens.Core.Collection.CollectionImportDecision decision, ICollectionReceiptHandoffStore handoffs,
+        CancellationToken cancellationToken)
     {
-        var response = result.Response is null ? null : new CollectionResponse(
-            result.Response.StatusCode,
-            result.Response.ETag,
-            result.Response.LastModified,
-            result.Response.ContentType,
-            result.Response.ContentEncodings);
-
-        return result.Outcome switch
+        try
         {
-            CollectionOutcome.Captured => new CapturedAttemptResult(attemptId, result.SourceId,
-                result.RequestedUrl, result.FinalUrl, result.ObservedAt, response!,
-                new CaptureIdentity(result.Capture!.Sha256, result.Capture.ByteLength)),
-            CollectionOutcome.NotModified => new NotModifiedAttemptResult(attemptId, result.SourceId,
-                result.RequestedUrl, result.FinalUrl, result.ObservedAt, response!),
-            CollectionOutcome.Failed => new FailedAttemptResult(attemptId, result.SourceId,
-                result.RequestedUrl, result.FinalUrl, result.ObservedAt, result.FailureCode!.Value.ToString(), response),
-            CollectionOutcome.Deferred => new DeferredAttemptResult(attemptId, result.SourceId,
-                result.RequestedUrl, result.FinalUrl, result.ObservedAt, result.FailureCode!.Value.ToString(),
-                MapRetryDelay(result.RetryAfterSeconds), response),
-            _ => throw new InvalidDataException("Collection result outcome is invalid.")
-        };
-    }
-
-    private static TimeSpan? MapRetryDelay(long? retryAfterSeconds)
-    {
-        if (retryAfterSeconds is null)
-            return null;
-
-        var maximumSeconds = TimeSpan.MaxValue.Ticks / TimeSpan.TicksPerSecond;
-        var seconds = retryAfterSeconds.Value;
-        if (seconds < 0 || seconds > maximumSeconds)
-            throw new InvalidDataException("Collection retry delay is outside the supported range.");
-
-        return TimeSpan.FromTicks(seconds * TimeSpan.TicksPerSecond);
+            await handoffs.DeleteAsync(id, cancellationToken);
+            return new CollectionAttemptCompletion(decision, true, null);
+        }
+        catch (OperationCanceledException)
+        {
+            return new CollectionAttemptCompletion(decision, false, "Handoff cleanup was interrupted; pending receipt was retained.");
+        }
+        catch (Exception)
+        {
+            return new CollectionAttemptCompletion(decision, false, "Handoff cleanup failed; pending receipt was retained.");
+        }
     }
 }

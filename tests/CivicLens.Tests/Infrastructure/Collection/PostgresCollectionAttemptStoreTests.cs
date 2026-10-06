@@ -274,8 +274,41 @@ public sealed class PostgresCollectionAttemptStoreTests(PostgresCollection postg
         }
     }
 
-    private static CollectAndImportCollectionAttempt Handler(CollectionResult result, ICollectionAttemptStore target) =>
-        new(new FakeCollector(result), target);
+    private static AttemptRunner Handler(CollectionResult result, ICollectionAttemptStore target) =>
+        new(new CollectAndImportCollectionAttempt(new FakeCollector(result), target, new TestHandoffs()));
+
+    private sealed class AttemptRunner(CollectAndImportCollectionAttempt handler)
+    {
+        public async Task<CollectionImportDecision> ExecuteAsync(string attemptId, CollectionRequest request,
+            CancellationToken cancellationToken = default) =>
+            (await handler.ExecuteAsync(attemptId, request, cancellationToken)).Decision;
+    }
+
+    private sealed class TestHandoffs : ICollectionReceiptHandoffStore
+    {
+        private readonly Dictionary<string, PendingCollectionHandoff> entries = [];
+        public ValueTask<IAsyncDisposable> AcquireRecoveryLeaseAsync(CancellationToken cancellationToken) =>
+            ValueTask.FromResult<IAsyncDisposable>(new NoopLease());
+        public Task SaveAsync(PendingCollectionHandoff handoff, CancellationToken cancellationToken)
+        {
+            handoff.Validate();
+            if (!entries.TryAdd(handoff.AttemptId, handoff)) throw new IOException("duplicate handoff");
+            return Task.CompletedTask;
+        }
+        public Task<IReadOnlyList<string>> ListAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<string>>(entries.Keys.Order(StringComparer.Ordinal).ToArray());
+        public Task<PendingCollectionHandoff> LoadAsync(string handoffId, CancellationToken cancellationToken) =>
+            Task.FromResult(entries[handoffId]);
+        public Task DeleteAsync(string handoffId, CancellationToken cancellationToken)
+        {
+            entries.Remove(handoffId);
+            return Task.CompletedTask;
+        }
+        private sealed class NoopLease : IAsyncDisposable
+        {
+            public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+        }
+    }
 
     private static CollectionRequest Request(string id, string? etag = null) => new()
     {

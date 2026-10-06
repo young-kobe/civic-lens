@@ -36,6 +36,76 @@ public sealed class CollectAndImportCollectionAttemptTests
     }
 
     [Fact]
+    public async Task HandoffIsDurableBeforeImportAndCleanupFollowsConfirmedImport()
+    {
+        var request = Request();
+        var result = Result(CollectionOutcome.Failed, request) with { FailureCode = CollectionFailureCode.TransportError };
+        var events = new List<string>();
+        var store = new FakeStore { OnImport = () => events.Add("import") };
+        var handoffs = new RecordingHandoffs(events);
+
+        var completion = await new CollectAndImportCollectionAttempt(
+            new FakeCollector((_, _) => Task.FromResult(result)), store, handoffs).ExecuteAsync("attempt", request);
+
+        Assert.Equal(new[] { "save", "import", "delete" }, events);
+        Assert.True(completion.HandoffRemoved);
+        Assert.Null(handoffs.LastSaved);
+    }
+
+    [Fact]
+    public async Task HandoffSaveFailurePreventsImport()
+    {
+        var request = Request();
+        var result = Result(CollectionOutcome.Failed, request) with { FailureCode = CollectionFailureCode.TransportError };
+        var store = new FakeStore();
+        var handoffs = new RecordingHandoffs([]) { FailSave = true };
+
+        await Assert.ThrowsAsync<IOException>(() => new CollectAndImportCollectionAttempt(
+            new FakeCollector((_, _) => Task.FromResult(result)), store, handoffs).ExecuteAsync("attempt", request));
+
+        Assert.Null(store.Received);
+    }
+
+    [Fact]
+    public async Task UncertainCommitReplaysIdempotentlyWithOriginalAttemptIdAndRelocatedArtifactRoot()
+    {
+        var request = Request();
+        var result = Result(CollectionOutcome.Failed, request) with { FailureCode = CollectionFailureCode.TransportError };
+        var store = new FakeStore { LoseAcknowledgmentOnce = true };
+        var handoffs = new RecordingHandoffs([]);
+        var collector = new FakeCollector((_, _) => Task.FromResult(result));
+        var fresh = new CollectAndImportCollectionAttempt(collector, store, handoffs);
+
+        await Assert.ThrowsAsync<IOException>(() => fresh.ExecuteAsync("attempt", request));
+        var verifier = new RecordingVerifier();
+        var recovery = new RecoverCollectionAttempts(handoffs, verifier, store);
+        var replay = await recovery.ReplayAsync("attempt", Path.Combine(Path.GetTempPath(), "relocated-captures"));
+
+        Assert.Equal(ImportDisposition.DuplicateAttempt, replay.Decision.Disposition);
+        Assert.Equal("attempt", replay.Decision.AttemptResult.AttemptId);
+        Assert.True(replay.HandoffRemoved);
+        Assert.Equal(Path.GetFullPath(Path.Combine(Path.GetTempPath(), "relocated-captures")), verifier.ArtifactRoot);
+        Assert.Equal(2, store.ImportCount);
+    }
+
+    [Fact]
+    public async Task CleanupCancellationReturnsConfirmedDecisionAndLeavesHandoffPending()
+    {
+        var request = Request();
+        var result = Result(CollectionOutcome.Failed, request) with { FailureCode = CollectionFailureCode.TransportError };
+        var store = new FakeStore();
+        var handoffs = new RecordingHandoffs([]) { CancelDelete = true };
+
+        var completion = await new CollectAndImportCollectionAttempt(
+            new FakeCollector((_, _) => Task.FromResult(result)), store, handoffs).ExecuteAsync("attempt", request);
+
+        Assert.Equal(ImportDisposition.NewAttempt, completion.Decision.Disposition);
+        Assert.False(completion.HandoffRemoved);
+        Assert.NotNull(handoffs.LastSaved);
+        Assert.Contains("Handoff cleanup was interrupted", completion.CleanupFailure);
+    }
+
+    [Fact]
     public async Task Maps304AndUsesValidatorsActuallySentForConservativePriorLink()
     {
         var request = Request() with { ETag = "\"v1\"", LastModified = ObservedAt };
@@ -48,7 +118,7 @@ public sealed class CollectAndImportCollectionAttemptTests
         var prior = Captured("prior", request.SourceId, request.Url, result.FinalUrl);
         var store = new FakeStore { Prior = prior };
 
-        var decision = await Handler(result, store).ExecuteAsync("attempt-304", request);
+        var decision = (await Handler(result, store).ExecuteAsync("attempt-304", request)).Decision;
 
         var mapped = Assert.IsType<NotModifiedAttemptResult>(decision.AttemptResult);
         Assert.Equal("attempt-304", mapped.AttemptId);
@@ -82,7 +152,7 @@ public sealed class CollectAndImportCollectionAttemptTests
         };
         var store = new FakeStore { Prior = Captured("prior", request.SourceId, request.Url, request.Url) };
 
-        var decision = await Handler(result, store).ExecuteAsync("normalized-304", request);
+        var decision = (await Handler(result, store).ExecuteAsync("normalized-304", request)).Decision;
 
         Assert.Equal(new SentValidators("\"v1\"", ObservedAt), store.Existing!.SentValidators);
         Assert.Equal(PriorCaptureLinkStatus.Linked, decision.PriorCaptureLinkStatus);
@@ -136,7 +206,7 @@ public sealed class CollectAndImportCollectionAttemptTests
         var request = Request();
         var store = new FakeStore();
         var failedCollector = new FakeCollector((_, _) => throw new InvalidOperationException("verification failed"));
-        await Assert.ThrowsAsync<InvalidOperationException>(() => new CollectAndImportCollectionAttempt(failedCollector, store)
+        await Assert.ThrowsAsync<InvalidOperationException>(() => new CollectAndImportCollectionAttempt(failedCollector, store, new RecordingHandoffs([]))
             .ExecuteAsync("attempt", request));
         Assert.Null(store.Received);
 
@@ -147,7 +217,7 @@ public sealed class CollectAndImportCollectionAttemptTests
             token.ThrowIfCancellationRequested();
             return Task.FromResult(Result(CollectionOutcome.Failed, request));
         });
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => new CollectAndImportCollectionAttempt(canceledCollector, store)
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => new CollectAndImportCollectionAttempt(canceledCollector, store, new RecordingHandoffs([]))
             .ExecuteAsync("attempt", request, canceled.Token));
         Assert.Null(store.Received);
     }
@@ -165,7 +235,7 @@ public sealed class CollectAndImportCollectionAttemptTests
         });
         var store = new FakeStore();
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => new CollectAndImportCollectionAttempt(collector, store)
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => new CollectAndImportCollectionAttempt(collector, store, new RecordingHandoffs([]))
             .ExecuteAsync("attempt", request, canceled.Token));
 
         Assert.Null(store.Received);
@@ -184,8 +254,8 @@ public sealed class CollectAndImportCollectionAttemptTests
         };
         var store = new FakeStore();
         var handler = Handler(result, store);
-        var first = await handler.ExecuteAsync("attempt", request);
-        var duplicate = await handler.ExecuteAsync("attempt", request);
+        var first = (await handler.ExecuteAsync("attempt", request)).Decision;
+        var duplicate = (await handler.ExecuteAsync("attempt", request)).Decision;
 
         Assert.Equal(ImportDisposition.NewAttempt, first.Disposition);
         Assert.Equal(ImportDisposition.DuplicateAttempt, duplicate.Disposition);
@@ -208,9 +278,9 @@ public sealed class CollectAndImportCollectionAttemptTests
         };
         var store = new FakeStore();
         var handler = Handler(result, store);
-        var first = await handler.ExecuteAsync("attempt-304", request);
+        var first = (await handler.ExecuteAsync("attempt-304", request)).Decision;
         store.Prior = Captured("prior", request.SourceId, request.Url, request.Url);
-        var duplicate = await handler.ExecuteAsync("attempt-304", request);
+        var duplicate = (await handler.ExecuteAsync("attempt-304", request)).Decision;
 
         Assert.Equal(PriorCaptureLinkStatus.Unresolved, first.PriorCaptureLinkStatus);
         Assert.Equal(ImportDisposition.DuplicateAttempt, duplicate.Disposition);
@@ -270,7 +340,7 @@ public sealed class CollectAndImportCollectionAttemptTests
     }
 
     private static CollectAndImportCollectionAttempt Handler(CollectionResult result, FakeStore store) =>
-        new(new FakeCollector((_, _) => Task.FromResult(result)), store);
+        new(new FakeCollector((_, _) => Task.FromResult(result)), store, new RecordingHandoffs([]));
 
     private static CollectionRequest Request() => new()
     {
@@ -324,6 +394,9 @@ public sealed class CollectAndImportCollectionAttemptTests
 
     private sealed class FakeStore : ICollectionAttemptStore
     {
+        public Action? OnImport { get; init; }
+        public bool LoseAcknowledgmentOnce { get; set; }
+        public int ImportCount { get; private set; }
         public CollectionAttemptImport? Received { get; private set; }
         public CapturedAttemptResult? Prior { get; set; }
         public StoredCollectionAttempt? Existing { get; private set; }
@@ -332,12 +405,62 @@ public sealed class CollectAndImportCollectionAttemptTests
             CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            ImportCount++;
+            OnImport?.Invoke();
             Received = attempt;
             var decision = attempt.Decide(Existing, Prior);
             if (decision.Disposition == ImportDisposition.NewAttempt)
                 Existing = new StoredCollectionAttempt(decision.AttemptResult, decision.SentValidators,
                     decision.PriorCapturedAttempt);
+            if (LoseAcknowledgmentOnce)
+            {
+                LoseAcknowledgmentOnce = false;
+                throw new IOException("commit acknowledgment lost");
+            }
             return Task.FromResult(decision);
+        }
+    }
+
+    private sealed class RecordingHandoffs(List<string> events) : ICollectionReceiptHandoffStore
+    {
+        public bool FailSave { get; init; }
+        public bool CancelDelete { get; init; }
+        public PendingCollectionHandoff? LastSaved { get; private set; }
+        public ValueTask<IAsyncDisposable> AcquireRecoveryLeaseAsync(CancellationToken cancellationToken) =>
+            ValueTask.FromResult<IAsyncDisposable>(new NoopLease());
+        public Task SaveAsync(PendingCollectionHandoff handoff, CancellationToken cancellationToken)
+        {
+            if (FailSave) throw new IOException("disk full");
+            LastSaved = handoff;
+            events.Add("save");
+            return Task.CompletedTask;
+        }
+        public Task<IReadOnlyList<string>> ListAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<string>>(LastSaved is null ? [] : [LastSaved.AttemptId]);
+        public Task<PendingCollectionHandoff> LoadAsync(string handoffId, CancellationToken cancellationToken) =>
+            Task.FromResult(LastSaved is { } saved && handoffId == saved.AttemptId ? saved : throw new FileNotFoundException());
+        public Task DeleteAsync(string handoffId, CancellationToken cancellationToken)
+        {
+            if (CancelDelete) throw new OperationCanceledException();
+            events.Add("delete");
+            LastSaved = null;
+            return Task.CompletedTask;
+        }
+        private sealed class NoopLease : IAsyncDisposable
+        {
+            public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+        }
+    }
+
+    private sealed class RecordingVerifier : ICaptureArtifactVerifier
+    {
+        public string? ArtifactRoot { get; private set; }
+        public Task VerifyAsync(CollectionRequest request, CollectionResult receipt, string artifactRoot,
+            CancellationToken cancellationToken)
+        {
+            ArtifactRoot = artifactRoot;
+            receipt.ValidateAgainst(request);
+            return Task.CompletedTask;
         }
     }
 

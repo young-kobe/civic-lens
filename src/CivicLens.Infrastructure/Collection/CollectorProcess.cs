@@ -78,11 +78,15 @@ public sealed class CollectorProcess(string collectorAssembly, string dotnetExec
     }
 
     public static async Task VerifyCaptureAsync(CollectionRequest request, CollectionResult result, CancellationToken cancellationToken = default)
+        => await VerifyCaptureAsync(request, result, request.ArtifactDirectory, cancellationToken);
+
+    public static async Task VerifyCaptureAsync(CollectionRequest request, CollectionResult result, string artifactRoot,
+        CancellationToken cancellationToken = default)
     {
         result.ValidateAgainst(request);
         if (result.Outcome != CollectionOutcome.Captured)
             throw new InvalidDataException("Capture verification requires a captured result.");
-        var path = Path.Combine(request.ArtifactDirectory, result.Capture!.RelativePath);
+        var path = Path.Combine(Path.GetFullPath(artifactRoot), result.Capture!.RelativePath);
         if ((File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0)
             throw new InvalidDataException("Capture artifacts cannot be symbolic links.");
         await using var file = File.OpenRead(path);

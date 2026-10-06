@@ -111,6 +111,66 @@ public sealed class DatabaseCommandTests(PostgresCollection postgres) : IAsyncLi
     }
 
     [Fact]
+    public async Task FailedImportCanReplayAfterRelocationWithoutConfigurationOrCollector()
+    {
+        var failed = await CollectAsync("collect-import", connectionString);
+        Assert.Equal(1, failed.ExitCode);
+        var original = Path.Combine(directory, "captures");
+        var listed = await HostProcess.RunAsync(null, "receipts", "list", original);
+        Assert.Equal(0, listed.ExitCode);
+        var ids = JsonSerializer.Deserialize<string[]>(listed.Output)!;
+        var id = Assert.Single(ids);
+        Assert.Contains(id, failed.Error);
+
+        var relocated = Path.Combine(directory, "relocated-captures");
+        Directory.Move(original, relocated);
+        File.Delete(Path.Combine(directory, "config.json"));
+        shutdown.Cancel();
+        listener.Stop();
+        Assert.Equal(0, (await HostProcess.RunAsync(connectionString, "db", "migrate")).ExitCode);
+
+        var replayed = await HostProcess.RunWithCollectorHostAsync(connectionString, "/no-collector-host",
+            "receipts", "replay", relocated, id);
+        Assert.Equal(0, replayed.ExitCode);
+        using var output = JsonDocument.Parse(replayed.Output);
+        Assert.Equal(id, output.RootElement.GetProperty("attemptId").GetString());
+        Assert.True(output.RootElement.GetProperty("handoffRemoved").GetBoolean());
+        Assert.Equal("newAttempt", output.RootElement.GetProperty("importDisposition").GetString());
+        var empty = await HostProcess.RunAsync(null, "receipts", "list", relocated);
+        Assert.Equal("[]", empty.Output.Trim());
+
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var count = new NpgsqlCommand("SELECT count(*) FROM collection_attempts WHERE attempt_id = @id", connection);
+        count.Parameters.AddWithValue("id", id);
+        Assert.Equal(1L, await count.ExecuteScalarAsync());
+    }
+
+    [Fact]
+    public async Task BatchRecoveryRetainsInvalidEntryAndImportsOtherPendingReceipt()
+    {
+        var failed = await CollectAsync("collect-import", connectionString);
+        Assert.Equal(1, failed.ExitCode);
+        var root = Path.Combine(directory, "captures");
+        var invalid = Path.Combine(root, ".pending", "000-invalid.json");
+        await File.WriteAllTextAsync(invalid, "{broken");
+        Assert.Equal(0, (await HostProcess.RunAsync(connectionString, "db", "migrate")).ExitCode);
+
+        var batch = await HostProcess.RunAsync(connectionString, "receipts", "replay", root, "--all");
+        Assert.Equal(1, batch.ExitCode);
+        var lines = batch.Output.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        Assert.Equal(2, lines.Length);
+        Assert.Contains(lines, line => line.Contains("\"status\":\"invalidHandoff\"", StringComparison.Ordinal));
+        Assert.Contains(lines, line => line.Contains("\"status\":\"importedAndRemoved\"", StringComparison.Ordinal));
+        Assert.True(File.Exists(invalid));
+        Assert.Single(Directory.GetFiles(Path.Combine(root, ".pending"), "*.json"));
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var count = new NpgsqlCommand("SELECT count(*) FROM collection_attempts", connection);
+        Assert.Equal(1L, await count.ExecuteScalarAsync());
+    }
+
+    [Fact]
     public async Task TracerAndValidationRemainDatabaseFreeAndMissingDatabasePreventsCollection()
     {
         var validation = await HostProcess.RunAsync(null, "validate", Path.Combine(directory, "config.json"));
