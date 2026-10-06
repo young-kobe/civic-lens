@@ -2,7 +2,7 @@
 
 ## Implementation status
 
-Implemented: project boundaries, pinned SDK and package locks, CI, diagrams, the first watched-page tracer, Core collection-import rules, and an Application collection/import handler with an atomic persistence contract. Application validates people and shared watched-source membership and creates a bounded request. Infrastructure invokes the independent collector and verifies its receipt and capture bytes. Collector performs scoped HTTP collection and writes immutable content-addressed gzip artifacts. Core models immutable collection attempt results and guarded import decisions, and Application maps verified receipts into those rules. The import contract is exercised with test doubles; no production persistence adapter, durable jobs/imports, database, feeds/discovery, AI, review, publication, or MCP are implemented yet. The remaining workflow descriptions below are target design.
+Implemented: project boundaries, pinned SDK and package locks, CI, diagrams, the first watched-page tracer, Core collection-import rules, an Application collection/import handler, and a Postgres persistence adapter with an initial EF migration. Application validates people and shared watched-source membership and creates a bounded request. Infrastructure invokes the independent collector and verifies its receipt and capture bytes. Collector performs scoped HTTP collection and writes immutable content-addressed gzip artifacts. Core models immutable collection attempt results and guarded import decisions, and Application maps verified receipts into those rules. The persistence adapter is exercised against disposable Postgres containers. CLI database wiring, durable receipt handoff and job recovery, feeds/discovery, AI, review, publication, and MCP remain planned. The remaining workflow descriptions below are target design.
 
 The tracer crosses only the configuration, application, process adapter, and collection layers. It deliberately ends at a verified receipt, before operational evidence persistence. A capture is not a document version, approval, or publication. Configuration currently supports people and watched-source membership; dated relationships and other registry concepts remain planned.
 
@@ -26,7 +26,7 @@ One repository, a local C# application, a separate C# collector executable, and 
 | Hosting | Cloudflare Pages and Worker; public operation independent of local machine |
 | Tests/CI | xUnit, architecture/contract/integration tests, GitHub Actions |
 
-Only the SDK and test dependencies are installed. Introduce the other packages when their phase begins and pin them. No Rust, Go, Python analysis service, or React application is planned. Python's standard library is used only for the development diagram generator.
+The SDK, EF Core/Npgsql persistence packages, and test dependencies including Testcontainers are installed and pinned. EF Core Design is private tooling in Infrastructure; database dependencies are forbidden in the other production projects. Introduce remaining packages when their phase begins and pin them. No Rust, Go, Python analysis service, or React application is planned. Python's standard library is used only for the development diagram generator.
 
 ## Dependency rules
 
@@ -41,7 +41,7 @@ Build each capability from its invariants and contracts outward. Keep validation
 | Collection.Contracts | Wire types, supported versions, request scope, receipt shape and resource accounting | Filesystem reads, scheduling, database or editorial rules |
 | Core | Domain identity, evidence and review invariants as those capabilities are implemented | JSON process DTOs, HTTP, EF Core or local paths |
 | Application | Use cases, configuration policy, external ports and mapping into domain evidence | Process launching, SQL or storage compression |
-| Infrastructure | Process lifecycle, protocol decoding, actual capture verification, future persistence adapters | Independent definitions of contract or editorial validity |
+| Infrastructure | Process lifecycle, protocol decoding, actual capture verification, Postgres persistence | Independent definitions of contract or editorial validity |
 | Collector | Bounded source interaction and complete raw capture production | Durable scheduling, imports, officials registry or publication |
 | Host | Command parsing and composition | Collection algorithms or evidence invariants |
 
@@ -65,14 +65,26 @@ Collection attempt results have separate sealed `CapturedAttemptResult`, `NotMod
 
 Attempt results are immutable outcomes: captured, not modified, failed, or deferred. A retry produces a new attempt; it does not change a failed result into a captured result. The import policy is a pure decision function, not a durable lifecycle state machine. It performs no I/O and does not prove that supplied captures were verified or persisted.
 
-`CollectAndImportCollectionAttempt` maps verified receipts under an explicit application-owned attempt identity independent of the wire job ID. `ICollectionAttemptStore.ImportAtomicallyAsync` requires the adapter to load existing and prior evidence, apply the Core policy, and commit within one atomic operation. `StoredCollectionAttempt` contains the attempt result, sent validators, and prior capture link; new-or-replay disposition belongs only to the current call. The future persistence adapter must atomically enforce unique attempts and capture identity.
+`CollectAndImportCollectionAttempt` maps verified receipts under an explicit application-owned attempt identity independent of the wire job ID. `ICollectionAttemptStore.ImportAtomicallyAsync` requires the adapter to load existing and prior evidence, apply the Core policy, and commit within one atomic operation. `StoredCollectionAttempt` contains the attempt result, sent validators, and prior capture link; new-or-replay disposition belongs only to the current call. The Postgres adapter atomically enforces unique attempts and capture identity.
 
-Collection runs through `ICollectorProcess`, which verifies capture bytes before returning; receipt validation runs again before mapping. Collector execution or verification errors, invalid receipts, and cancellation prevent import. Failed and deferred collection outcomes remain valid evidence to import. Retry-After values beyond the domain `TimeSpan` range are rejected before persistence rather than truncated. Each handler invocation performs collection again, so retrying after an import failure is not a saved-receipt replay mechanism. Durable receipt handoff, database persistence, and job recovery remain subsequent checkpoints. The CLI still uses the original receipt-only tracer. Job transitions will govern claiming, retry, cancellation, and recovery; project dependency tests continue to enforce layer boundaries.
+Collection runs through `ICollectorProcess`, which verifies capture bytes before returning; receipt validation runs again before mapping. Collector execution or verification errors, invalid receipts, and cancellation prevent import. Failed and deferred collection outcomes remain valid evidence to import. Retry-After values beyond the domain `TimeSpan` range are rejected before persistence rather than truncated. Each handler invocation performs collection again, so retrying after an import failure is not a saved-receipt replay mechanism. CLI database wiring, durable receipt handoff, and job recovery remain subsequent checkpoints. The CLI still uses the original receipt-only tracer. Job transitions will govern claiming, retry, cancellation, and recovery; project dependency tests continue to enforce layer boundaries.
+
+### Postgres collection persistence
+
+`PostgresCollectionAttemptStore` implements the existing Application port using a fresh `CollectionAttemptDbContext` per call. It starts a READ COMMITTED transaction, acquires one transaction-scoped advisory lock shared by all collection imports, and then reads existing evidence. All import writers must use that same lock. HTTP collection and capture verification finish before entering this operation; reads and unrelated application work do not take the import lock. Imports serialize intentionally at this checkpoint. A later change to concurrency strategy should follow measured contention, not merely the addition of more collectors.
+
+The `collection_captures` table has one row per SHA-256 with its immutable byte length. `collection_attempts` retains each outcome, source and URLs, response metadata, applied validators, and optional prior-capture reference. Exact timestamps use UTC ticks in `bigint`, and retry durations use ticks, preserving .NET precision during replay comparisons. Ordered content encodings use PostgreSQL `text[]`. Presence flags distinguish absent response/validators from a present value whose optional fields are null. Raw capture files remain outside Postgres; no file bytes or storage paths are copied into domain identities.
+
+Unique keys, foreign keys, and check constraints protect capture identity and outcome shape. The adapter inserts evidence and never updates an existing observation. Conflicting attempt replays and reuse of a capture hash with a different length fail without partial writes. This is an application write invariant, not protection from a database administrator issuing arbitrary updates. The prior-link composite foreign key is added explicitly by the migration because EF alternate keys would make the capture column non-nullable for every outcome; the model retains a unique index on the referenced pair.
+
+For a new 304, Infrastructure loads potentially eligible captures for the same source, exact requested/final URLs, and no later observation time. Core's `DecideFromCandidates` owns final eligibility and ambiguity handling: different eligible capture identities leave the result unresolved; one shared capture selects the newest observation, with ordinal attempt ID as the tie-break. A replay preserves its original resolved or unresolved link. Candidate loading has no arbitrary cutoff, so memory usage can grow with a source's history; pagination or streaming must preserve the all-candidates ambiguity rule if later needed.
+
+Schema changes are explicit through checked-in EF migrations and `MigrateAsync`; an import never applies migrations. Generated migration designers and snapshots retain EF's generated layout. The current CLI is still receipt-only. Integration tests create disposable Postgres databases with Testcontainers, apply the actual migration, and exercise persistence rather than substituting an in-memory provider. Full CI requires Docker; database-free tests remain available through the documented category filter.
 
 <!-- diagrams:start -->
 ### Collection to publication (target)
 
-Target workflow. Configuration, bounded watched-page collection, and verified file captures are implemented; durable evidence storage and downstream stages remain planned.
+Target workflow. Configuration, bounded watched-page collection, verified captures, and the Postgres import adapter are implemented; CLI database wiring, durable job recovery, and downstream stages remain planned.
 
 ```mermaid
 flowchart LR

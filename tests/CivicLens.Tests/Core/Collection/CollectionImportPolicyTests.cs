@@ -128,6 +128,53 @@ public sealed class CollectionImportPolicyTests
     }
 
     [Fact]
+    public void DifferentEligibleCapturesLeave304UnresolvedRegardlessOfOrder()
+    {
+        var first = Captured("first");
+        var second = new CapturedAttemptResult("second", first.SourceId, first.RequestedUrl, first.FinalUrl,
+            first.ObservedAt.AddSeconds(1), first.Response, new CaptureIdentity(new string('b', 64), 13));
+        var incoming = NotModified("attempt", first.SourceId, first.RequestedUrl, first.FinalUrl);
+        var validators = new SentValidators("\"v1\"", null);
+
+        foreach (var candidates in new[] { new[] { first, second }, new[] { second, first } })
+        {
+            var decision = policy.DecideFromCandidates(incoming, candidates, sentValidators: validators);
+            Assert.Equal(PriorCaptureLinkStatus.Unresolved, decision.PriorCaptureLinkStatus);
+            Assert.Null(decision.PriorCapturedAttempt);
+        }
+    }
+
+    [Fact]
+    public void SameCaptureSelectsNewestEligibleObservationWithOrdinalTieBreak()
+    {
+        var old = Captured("old");
+        var newest = WithObservedAt(Captured("a"), ObservedAt.AddSeconds(1));
+        var tied = WithObservedAt(Captured("z"), newest.ObservedAt);
+        var wrongSource = new CapturedAttemptResult("unrelated", "other", old.RequestedUrl, old.FinalUrl,
+            newest.ObservedAt, old.Response, new CaptureIdentity(new string('b', 64), 13));
+        var incoming = NotModified("attempt", old.SourceId, old.RequestedUrl, old.FinalUrl);
+
+        foreach (var candidates in new[] { new[] { old, tied, newest, wrongSource }, new[] { wrongSource, newest, tied, old } })
+        {
+            var decision = policy.DecideFromCandidates(incoming, candidates, sentValidators: new SentValidators("\"v1\"", null));
+            Assert.Same(newest, decision.PriorCapturedAttempt);
+        }
+    }
+
+    [Fact]
+    public void CandidateSelectionDoesNotReevaluateRetained304Link()
+    {
+        var prior = Captured("prior");
+        var incoming = NotModified("attempt", prior.SourceId, prior.RequestedUrl, prior.FinalUrl);
+        var validators = new SentValidators("\"v1\"", null);
+        var linked = policy.Decide(incoming, priorCapturedAttempt: prior, sentValidators: validators);
+        var unresolved = policy.Decide(incoming, sentValidators: validators);
+
+        Assert.Same(prior, policy.DecideFromCandidates(incoming, [], linked, validators).PriorCapturedAttempt);
+        Assert.Null(policy.DecideFromCandidates(incoming, [prior], unresolved, validators).PriorCapturedAttempt);
+    }
+
+    [Fact]
     public void FailedAndDeferredOutcomesNeverLinkPriorCapture()
     {
         var prior = Captured("prior");
