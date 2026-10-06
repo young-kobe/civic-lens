@@ -55,6 +55,6 @@ Do not run concurrent collectors for the same origin. Host invocations sharing a
 
 Runtime data belongs in ignored .runtime/; generated publication and evaluation artifacts in ignored artifacts/. Never commit credentials or copy operational directories from the legacy repository. There is currently no deploy command and no public endpoint.
 
-Core collection-import decisions are exercised by unit tests only. The host still ends at a verified receipt; there is no import command or database adapter. The next checkpoint connects the application handler to these domain rules.
+Core collection-import decisions and the Application collection/import handler are exercised with unit tests and a test persistence adapter. The handler validates the request, obtains a receipt through the capture-verifying collector boundary, maps domain evidence, and submits one atomic import operation. Each handler invocation collects again; it does not replay saved receipts. The host still ends at a verified receipt; there is no import command or database adapter. The next checkpoint implements Postgres persistence, followed by durable handoff and recovery.
 
 Durable collection/import, review, backup/restore, publication, rollback, and MCP runbooks will be added here when implemented. Do not treat target architecture descriptions as executable procedures.
