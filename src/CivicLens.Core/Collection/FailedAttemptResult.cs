@@ -1,9 +1,9 @@
 namespace CivicLens.Core.Collection;
 
-public sealed class FailedObservation : Observation
+public sealed class FailedAttemptResult : CollectionAttemptResult
 {
-    public FailedObservation(string attemptId, string sourceId, string requestedUrl, string finalUrl,
-        DateTimeOffset observedAt, string failureCode, ObservationResponse? response = null)
+    public FailedAttemptResult(string attemptId, string sourceId, string requestedUrl, string finalUrl,
+        DateTimeOffset observedAt, string failureCode, CollectionResponse? response = null)
         : base(attemptId, sourceId, requestedUrl, finalUrl, observedAt)
     {
         if (string.IsNullOrWhiteSpace(failureCode))
@@ -13,9 +13,9 @@ public sealed class FailedObservation : Observation
     }
 
     public string FailureCode { get; }
-    public override ObservationResponse? Response { get; }
+    public override CollectionResponse? Response { get; }
 
-    protected override bool OutcomeEquals(Observation other) => other is FailedObservation failed &&
+    protected override bool OutcomeEquals(CollectionAttemptResult other) => other is FailedAttemptResult failed &&
         FailureCode == failed.FailureCode && Equals(Response, failed.Response);
 
     protected override void AddOutcomeHash(ref HashCode hash)

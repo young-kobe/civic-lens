@@ -3,41 +3,41 @@ using CivicLens.Core.Collection;
 
 namespace CivicLens.Tests.Core.Collection;
 
-public sealed class ObservationImportPolicyTests
+public sealed class CollectionImportPolicyTests
 {
     private static readonly DateTimeOffset ObservedAt = new(2026, 1, 2, 3, 4, 5, TimeSpan.Zero);
-    private readonly ObservationImportPolicy policy = new();
+    private readonly CollectionImportPolicy policy = new();
 
     [Fact]
-    public void EqualSeparateInstanceReplaysAndPreservesResolved304Link()
+    public void EqualSeparateInstanceIsDuplicateAndPreservesResolved304Link()
     {
         var prior = Captured("prior");
         var incoming = NotModified("attempt", prior.SourceId, prior.RequestedUrl, prior.FinalUrl);
         var validators = new SentValidators("\"v1\"", null);
-        var persisted = policy.Decide(incoming, priorCapturedObservation: prior, sentValidators: validators);
+        var persisted = policy.Decide(incoming, priorCapturedAttempt: prior, sentValidators: validators);
 
         var equalInput = NotModified("attempt", prior.SourceId, prior.RequestedUrl, prior.FinalUrl);
         Assert.Equal(incoming, equalInput);
-        var replay = policy.Decide(equalInput, persisted, sentValidators: validators);
+        var duplicate = policy.Decide(equalInput, persisted, sentValidators: validators);
 
-        Assert.Equal(ObservationImportTransition.Replay, replay.Transition);
-        Assert.Equal(RepresentationBinding.Linked, replay.RepresentationBinding);
-        Assert.Same(prior, replay.CapturedRepresentation);
+        Assert.Equal(ImportDisposition.DuplicateAttempt, duplicate.Disposition);
+        Assert.Equal(PriorCaptureLinkStatus.Linked, duplicate.PriorCaptureLinkStatus);
+        Assert.Same(prior, duplicate.PriorCapturedAttempt);
         Assert.Throws<InvalidOperationException>(() => policy.Decide(incoming, persisted,
             sentValidators: new SentValidators("\"different\"", null)));
     }
 
     [Fact]
-    public void ReplayConflictsOnResponseMetadataIncludingEncodingOrder()
+    public void DuplicateAttemptConflictsOnResponseMetadataIncludingEncodingOrder()
     {
         var captured = Captured("attempt");
         var persisted = policy.Decide(captured);
-        var reordered = new CapturedObservation("attempt", captured.SourceId, captured.RequestedUrl, captured.FinalUrl,
-            captured.ObservedAt, new ObservationResponse(200, "\"v1\"", ObservedAt, "text/html", ["gzip", "br"]),
+        var reordered = new CapturedAttemptResult("attempt", captured.SourceId, captured.RequestedUrl, captured.FinalUrl,
+            captured.ObservedAt, new CollectionResponse(200, "\"v1\"", ObservedAt, "text/html", ["gzip", "br"]),
             captured.Capture);
         Assert.Throws<InvalidOperationException>(() => policy.Decide(reordered, persisted));
 
-        var otherOutcome = new FailedObservation("attempt", captured.SourceId, captured.RequestedUrl, captured.FinalUrl,
+        var otherOutcome = new FailedAttemptResult("attempt", captured.SourceId, captured.RequestedUrl, captured.FinalUrl,
             captured.ObservedAt, "network");
         Assert.False(captured.Equals(otherOutcome));
         Assert.Throws<InvalidOperationException>(() => policy.Decide(otherOutcome, persisted));
@@ -45,41 +45,41 @@ public sealed class ObservationImportPolicyTests
     }
 
     [Fact]
-    public void IdenticalCaptureBytesOnDifferentAttemptsRemainSeparateObservations()
+    public void IdenticalCaptureBytesOnDifferentAttemptsRemainSeparateResults()
     {
         var first = policy.Decide(Captured("attempt-1"));
         var second = policy.Decide(Captured("attempt-2"));
-        Assert.NotSame(first.Observation, second.Observation);
+        Assert.NotSame(first.AttemptResult, second.AttemptResult);
         Assert.Equal(first.Capture, second.Capture);
-        Assert.Equal(ObservationImportTransition.NewObservation, second.Transition);
+        Assert.Equal(ImportDisposition.NewAttempt, second.Disposition);
     }
 
     [Fact]
     public void ResponseEncodingsAreDefensivelySnapshottedAndComparedByValue()
     {
         var encodings = new[] { "br", "gzip" };
-        var response = new ObservationResponse(200, null, null, null, encodings);
+        var response = new CollectionResponse(200, null, null, null, encodings);
         encodings[0] = "changed";
         Assert.Equal(new[] { "br", "gzip" }, response.ContentEncodings);
         Assert.Throws<NotSupportedException>(() => ((IList<string>)response.ContentEncodings)[0] = "changed");
-        Assert.Equal(response, new ObservationResponse(200, null, null, null, ["br", "gzip"]));
-        Assert.Empty(new ObservationResponse(200, null, null, null, Array.Empty<string>()).ContentEncodings);
-        Assert.Throws<ArgumentException>(() => new ObservationResponse(200, null, null, null,
+        Assert.Equal(response, new CollectionResponse(200, null, null, null, ["br", "gzip"]));
+        Assert.Empty(new CollectionResponse(200, null, null, null, Array.Empty<string>()).ContentEncodings);
+        Assert.Throws<ArgumentException>(() => new CollectionResponse(200, null, null, null,
             default(ImmutableArray<string>)));
     }
 
     [Fact]
-    public void NotModifiedLinksOnlyWhenSourceUrlsAndSentValidatorBindCapturedRepresentation()
+    public void NotModifiedLinksOnlyWhenSourceUrlsAndSentValidatorBindPriorCapture()
     {
         var prior = Captured("prior");
         var unchanged = NotModified("attempt", prior.SourceId, prior.RequestedUrl, prior.FinalUrl);
-        var decision = policy.Decide(unchanged, priorCapturedObservation: prior,
+        var decision = policy.Decide(unchanged, priorCapturedAttempt: prior,
             sentValidators: new SentValidators("\"v1\"", null));
-        Assert.Equal(RepresentationBinding.Linked, decision.RepresentationBinding);
-        Assert.Same(prior, decision.CapturedRepresentation);
-        Assert.Equal(304, decision.Observation.Response!.StatusCode);
-        Assert.Equal("\"v1\"", decision.Observation.Response.ETag);
-        Assert.Null(decision.Observation.Response.ContentType);
+        Assert.Equal(PriorCaptureLinkStatus.Linked, decision.PriorCaptureLinkStatus);
+        Assert.Same(prior, decision.PriorCapturedAttempt);
+        Assert.Equal(304, decision.AttemptResult.Response!.StatusCode);
+        Assert.Equal("\"v1\"", decision.AttemptResult.Response.ETag);
+        Assert.Null(decision.AttemptResult.Response.ContentType);
 
         AssertUnresolved(unchanged, Captured("prior", source: "other"), new SentValidators("\"v1\"", null));
         AssertUnresolved(unchanged, Captured("prior", final: "https://example.test/redirect"), new SentValidators("\"v1\"", null));
@@ -104,47 +104,47 @@ public sealed class ObservationImportPolicyTests
         var prior = Captured("prior");
         var withoutResponseValidators = NotModified("attempt", prior.SourceId, prior.RequestedUrl,
             prior.FinalUrl, etag: null, lastModified: null);
-        var linkedByEtag = policy.Decide(withoutResponseValidators, priorCapturedObservation: prior,
+        var linkedByEtag = policy.Decide(withoutResponseValidators, priorCapturedAttempt: prior,
             sentValidators: new SentValidators("\"v1\"", null));
-        Assert.Equal(RepresentationBinding.Linked, linkedByEtag.RepresentationBinding);
+        Assert.Equal(PriorCaptureLinkStatus.Linked, linkedByEtag.PriorCaptureLinkStatus);
 
-        var linkedByDate = policy.Decide(withoutResponseValidators, priorCapturedObservation: prior,
+        var linkedByDate = policy.Decide(withoutResponseValidators, priorCapturedAttempt: prior,
             sentValidators: new SentValidators(null, ObservedAt));
-        Assert.Equal(RepresentationBinding.Linked, linkedByDate.RepresentationBinding);
+        Assert.Equal(PriorCaptureLinkStatus.Linked, linkedByDate.PriorCaptureLinkStatus);
     }
 
     [Fact]
-    public void ReplayOfUnresolved304DoesNotSilentlyGainLaterPriorEvidence()
+    public void DuplicateUnresolved304DoesNotSilentlyGainLaterPriorEvidence()
     {
         var prior = Captured("prior");
         var incoming = NotModified("attempt", prior.SourceId, prior.RequestedUrl, prior.FinalUrl);
         var validators = new SentValidators("\"v1\"", null);
         var unresolved = policy.Decide(incoming, sentValidators: validators);
-        var replay = policy.Decide(NotModified("attempt", prior.SourceId, prior.RequestedUrl, prior.FinalUrl), unresolved,
-            priorCapturedObservation: prior, sentValidators: validators);
-        Assert.Equal(ObservationImportTransition.Replay, replay.Transition);
-        Assert.Equal(RepresentationBinding.Unresolved, replay.RepresentationBinding);
-        Assert.Null(replay.CapturedRepresentation);
+        var duplicate = policy.Decide(NotModified("attempt", prior.SourceId, prior.RequestedUrl, prior.FinalUrl), unresolved,
+            priorCapturedAttempt: prior, sentValidators: validators);
+        Assert.Equal(ImportDisposition.DuplicateAttempt, duplicate.Disposition);
+        Assert.Equal(PriorCaptureLinkStatus.Unresolved, duplicate.PriorCaptureLinkStatus);
+        Assert.Null(duplicate.PriorCapturedAttempt);
     }
 
     [Fact]
     public void FailedAndDeferredOutcomesNeverLinkPriorCapture()
     {
         var prior = Captured("prior");
-        Observation[] failures =
+        CollectionAttemptResult[] failures =
         [
-            new FailedObservation("failed", prior.SourceId, prior.RequestedUrl, prior.FinalUrl,
+            new FailedAttemptResult("failed", prior.SourceId, prior.RequestedUrl, prior.FinalUrl,
                 ObservedAt.AddMinutes(1), "network"),
-            new DeferredObservation("deferred", prior.SourceId, prior.RequestedUrl, prior.FinalUrl,
+            new DeferredAttemptResult("deferred", prior.SourceId, prior.RequestedUrl, prior.FinalUrl,
                 ObservedAt.AddMinutes(1), "rateLimited", TimeSpan.FromSeconds(15))
         ];
 
-        foreach (var observation in failures)
+        foreach (var attemptResult in failures)
         {
-            var decision = policy.Decide(observation, priorCapturedObservation: prior,
+            var decision = policy.Decide(attemptResult, priorCapturedAttempt: prior,
                 sentValidators: new SentValidators("\"v1\"", null));
-            Assert.Equal(RepresentationBinding.NotApplicable, decision.RepresentationBinding);
-            Assert.Null(decision.CapturedRepresentation);
+            Assert.Equal(PriorCaptureLinkStatus.NotApplicable, decision.PriorCaptureLinkStatus);
+            Assert.Null(decision.PriorCapturedAttempt);
             Assert.Null(decision.Capture);
         }
     }
@@ -152,14 +152,14 @@ public sealed class ObservationImportPolicyTests
     [Fact]
     public void OutcomeConstructorsExposeOnlyValidOutcomeData()
     {
-        Assert.Throws<ArgumentException>(() => new FailedObservation("a", "s", "url", "url", ObservedAt, " "));
-        Assert.Throws<ArgumentException>(() => new DeferredObservation("a", "s", "url", "url", ObservedAt, ""));
-        Assert.Throws<ArgumentOutOfRangeException>(() => new DeferredObservation("a", "s", "url", "url", ObservedAt,
+        Assert.Throws<ArgumentException>(() => new FailedAttemptResult("a", "s", "url", "url", ObservedAt, " "));
+        Assert.Throws<ArgumentException>(() => new DeferredAttemptResult("a", "s", "url", "url", ObservedAt, ""));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new DeferredAttemptResult("a", "s", "url", "url", ObservedAt,
             "rateLimited", TimeSpan.FromSeconds(-1)));
-        Assert.Throws<ArgumentException>(() => new NotModifiedObservation("a", "s", "url", "url", ObservedAt,
-            new ObservationResponse(200, null, null, null, [])));
-        Assert.Throws<ArgumentException>(() => new CapturedObservation("a", "s", "url", "url", ObservedAt,
-            new ObservationResponse(304, null, null, null, []), new CaptureIdentity(new string('a', 64), 0)));
+        Assert.Throws<ArgumentException>(() => new NotModifiedAttemptResult("a", "s", "url", "url", ObservedAt,
+            new CollectionResponse(200, null, null, null, [])));
+        Assert.Throws<ArgumentException>(() => new CapturedAttemptResult("a", "s", "url", "url", ObservedAt,
+            new CollectionResponse(304, null, null, null, []), new CaptureIdentity(new string('a', 64), 0)));
     }
 
     [Theory]
@@ -169,25 +169,25 @@ public sealed class ObservationImportPolicyTests
     public void CaptureIdentityRejectsInvalidHashOrLength(string hash, long length) =>
         Assert.ThrowsAny<ArgumentException>(() => new CaptureIdentity(hash, length));
 
-    private void AssertUnresolved(NotModifiedObservation incoming, CapturedObservation prior, SentValidators validators)
+    private void AssertUnresolved(NotModifiedAttemptResult incoming, CapturedAttemptResult prior, SentValidators validators)
     {
-        var decision = policy.Decide(incoming, priorCapturedObservation: prior, sentValidators: validators);
-        Assert.Equal(RepresentationBinding.Unresolved, decision.RepresentationBinding);
-        Assert.Null(decision.CapturedRepresentation);
+        var decision = policy.Decide(incoming, priorCapturedAttempt: prior, sentValidators: validators);
+        Assert.Equal(PriorCaptureLinkStatus.Unresolved, decision.PriorCaptureLinkStatus);
+        Assert.Null(decision.PriorCapturedAttempt);
     }
 
-    private static CapturedObservation Captured(string attempt, string source = "source",
+    private static CapturedAttemptResult Captured(string attempt, string source = "source",
         string requested = "https://example.test/page", string final = "https://example.test/page") =>
         new(attempt, source, requested, final, ObservedAt,
-            new ObservationResponse(200, "\"v1\"", ObservedAt, "text/html", ["br", "gzip"]),
+            new CollectionResponse(200, "\"v1\"", ObservedAt, "text/html", ["br", "gzip"]),
             new CaptureIdentity(new string('a', 64), 12));
 
-    private static NotModifiedObservation NotModified(string attempt, string source, string requested, string final,
+    private static NotModifiedAttemptResult NotModified(string attempt, string source, string requested, string final,
         string? etag = "\"v1\"", DateTimeOffset? lastModified = null) =>
         new(attempt, source, requested, final, ObservedAt.AddMinutes(1),
-            new ObservationResponse(304, etag, lastModified, null, []));
+            new CollectionResponse(304, etag, lastModified, null, []));
 
-    private static CapturedObservation WithObservedAt(CapturedObservation observation, DateTimeOffset observedAt) =>
-        new(observation.AttemptId, observation.SourceId, observation.RequestedUrl, observation.FinalUrl, observedAt,
-            observation.Response, observation.Capture);
+    private static CapturedAttemptResult WithObservedAt(CapturedAttemptResult attemptResult, DateTimeOffset observedAt) =>
+        new(attemptResult.AttemptId, attemptResult.SourceId, attemptResult.RequestedUrl, attemptResult.FinalUrl, observedAt,
+            attemptResult.Response, attemptResult.Capture);
 }

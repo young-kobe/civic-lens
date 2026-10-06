@@ -2,7 +2,7 @@
 
 Political transparency through officials' statements and actions, document changes, and evidence-backed weekly media briefs.
 
-**Current state:** a watched-page tracer with validated people/source configuration, a separate bounded HTTP collector, immutable gzip captures, and host-verified JSON receipts that preserve response metadata. Core domain rules now model immutable observations, import replay decisions, and conservative 304 evidence linkage. Application import integration, durable jobs/imports, feeds/discovery, database storage, AI, review, publication, and MCP endpoints are not implemented yet. The prior implementation is preserved in [civic-lens-legacy](https://github.com/young-kobe/civic-lens-legacy).
+**Current state:** a watched-page tracer with validated people/source configuration, a separate bounded HTTP collector, immutable gzip captures, and host-verified JSON receipts that preserve response metadata. Core domain rules now model immutable collection attempt results, import decisions for new and duplicate attempts, and conservative 304 evidence linkage. Application import integration, durable jobs/imports, feeds/discovery, database storage, AI, review, publication, and MCP endpoints are not implemented yet. The prior implementation is preserved in [civic-lens-legacy](https://github.com/young-kobe/civic-lens-legacy).
 
 ## Start here
 
@@ -22,7 +22,7 @@ No credentials, database, or paid services are required for the tracer. See [ope
 
 | Path | Responsibility |
 |---|---|
-| `src/CivicLens.Core` | `Collection/` owns immutable observations and import decisions |
+| `src/CivicLens.Core` | `Collection/` owns immutable collection attempt results and import decisions |
 | `src/CivicLens.Collection.Contracts` | Versioned collection types and shared receipt validation |
 | `src/CivicLens.Publication.Contracts` | Public release boundary, currently empty |
 | `src/CivicLens.Application` | `Collection/` groups configuration, use cases, and external interfaces |

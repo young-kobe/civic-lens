@@ -3,11 +3,11 @@ using System.Collections.Immutable;
 namespace CivicLens.Core.Collection;
 
 /// <summary>Response metadata from this attempt. Encodings retain their original order.</summary>
-public sealed class ObservationResponse : IEquatable<ObservationResponse>
+public sealed class CollectionResponse : IEquatable<CollectionResponse>
 {
     private readonly ImmutableArray<string> encodings;
 
-    public ObservationResponse(int statusCode, string? etag, DateTimeOffset? lastModified, string? contentType,
+    public CollectionResponse(int statusCode, string? etag, DateTimeOffset? lastModified, string? contentType,
         IEnumerable<string> contentEncodings)
     {
         if (statusCode is < 100 or > 599)
@@ -33,11 +33,11 @@ public sealed class ObservationResponse : IEquatable<ObservationResponse>
     public string? ContentType { get; }
     public ImmutableArray<string> ContentEncodings => encodings;
 
-    public bool Equals(ObservationResponse? other) => other is not null &&
+    public bool Equals(CollectionResponse? other) => other is not null &&
         StatusCode == other.StatusCode && ETag == other.ETag && LastModified == other.LastModified &&
         ContentType == other.ContentType && encodings.SequenceEqual(other.encodings, StringComparer.Ordinal);
 
-    public override bool Equals(object? obj) => Equals(obj as ObservationResponse);
+    public override bool Equals(object? obj) => Equals(obj as CollectionResponse);
 
     public override int GetHashCode()
     {

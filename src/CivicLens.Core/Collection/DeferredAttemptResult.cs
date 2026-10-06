@@ -1,10 +1,10 @@
 namespace CivicLens.Core.Collection;
 
-public sealed class DeferredObservation : Observation
+public sealed class DeferredAttemptResult : CollectionAttemptResult
 {
-    public DeferredObservation(string attemptId, string sourceId, string requestedUrl, string finalUrl,
+    public DeferredAttemptResult(string attemptId, string sourceId, string requestedUrl, string finalUrl,
         DateTimeOffset observedAt, string failureCode, TimeSpan? retryDelay = null,
-        ObservationResponse? response = null)
+        CollectionResponse? response = null)
         : base(attemptId, sourceId, requestedUrl, finalUrl, observedAt)
     {
         if (string.IsNullOrWhiteSpace(failureCode))
@@ -18,9 +18,9 @@ public sealed class DeferredObservation : Observation
 
     public string FailureCode { get; }
     public TimeSpan? RetryDelay { get; }
-    public override ObservationResponse? Response { get; }
+    public override CollectionResponse? Response { get; }
 
-    protected override bool OutcomeEquals(Observation other) => other is DeferredObservation deferred &&
+    protected override bool OutcomeEquals(CollectionAttemptResult other) => other is DeferredAttemptResult deferred &&
         FailureCode == deferred.FailureCode && RetryDelay == deferred.RetryDelay && Equals(Response, deferred.Response);
 
     protected override void AddOutcomeHash(ref HashCode hash)

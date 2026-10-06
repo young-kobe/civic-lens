@@ -1,9 +1,9 @@
 namespace CivicLens.Core.Collection;
 
-/// <summary>Shared identity and time for one immutable source attempt.</summary>
-public abstract class Observation : IEquatable<Observation>
+/// <summary>Immutable result of one completed collection attempt, not a mutable job lifecycle.</summary>
+public abstract class CollectionAttemptResult : IEquatable<CollectionAttemptResult>
 {
-    private protected Observation(string attemptId, string sourceId, string requestedUrl, string finalUrl,
+    private protected CollectionAttemptResult(string attemptId, string sourceId, string requestedUrl, string finalUrl,
         DateTimeOffset observedAt)
     {
         if (string.IsNullOrWhiteSpace(attemptId)) throw new ArgumentException("Attempt ID is required.", nameof(attemptId));
@@ -24,16 +24,16 @@ public abstract class Observation : IEquatable<Observation>
     public string RequestedUrl { get; }
     public string FinalUrl { get; }
     public DateTimeOffset ObservedAt { get; }
-    public abstract ObservationResponse? Response { get; }
+    public abstract CollectionResponse? Response { get; }
 
-    protected abstract bool OutcomeEquals(Observation other);
+    protected abstract bool OutcomeEquals(CollectionAttemptResult other);
     protected abstract void AddOutcomeHash(ref HashCode hash);
 
-    public bool Equals(Observation? other) => other is not null && GetType() == other.GetType() &&
+    public bool Equals(CollectionAttemptResult? other) => other is not null && GetType() == other.GetType() &&
         AttemptId == other.AttemptId && SourceId == other.SourceId && RequestedUrl == other.RequestedUrl &&
         FinalUrl == other.FinalUrl && ObservedAt == other.ObservedAt && OutcomeEquals(other);
 
-    public override bool Equals(object? obj) => obj is Observation other && Equals(other);
+    public override bool Equals(object? obj) => obj is CollectionAttemptResult other && Equals(other);
 
     public override int GetHashCode()
     {
