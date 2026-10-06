@@ -26,22 +26,26 @@ public sealed class CollectionProtocolTests
     public void ScopeAllowsExactPathOrDescendants(string url) => (Request() with { Url = url }).Validate();
 
     [Fact]
-    public void VersionTwoRoundTripsExplicitlyAndVersionOneIsRejected()
+    public void VersionThreeRoundTripsExplicitlyAndOlderVersionsAreRejected()
     {
         var requestJson = JsonSerializer.Serialize(Request(), CollectionProtocol.JsonOptions);
-        Assert.Contains("\"version\":2", requestJson, StringComparison.Ordinal);
+        Assert.Contains("\"version\":3", requestJson, StringComparison.Ordinal);
         var resultJson = JsonSerializer.Serialize(Receipt(Request()), CollectionProtocol.JsonOptions);
         Assert.Contains("\"failureCode\":null", resultJson, StringComparison.Ordinal);
         var roundTrip = JsonSerializer.Serialize(JsonSerializer.Deserialize<CollectionResult>(resultJson, CollectionProtocol.JsonOptions), CollectionProtocol.JsonOptions);
         Assert.Equal(resultJson, roundTrip);
-        var oldRequest = requestJson.Replace("\"version\":2", "\"version\":1", StringComparison.Ordinal);
-        Assert.Throws<ArgumentException>(() => JsonSerializer.Deserialize<CollectionRequest>(oldRequest, CollectionProtocol.JsonOptions)!.Validate());
+        foreach (var version in new[] { 1, 2 })
+        {
+            var oldRequest = requestJson.Replace("\"version\":3", $"\"version\":{version}", StringComparison.Ordinal);
+            Assert.Throws<ArgumentException>(() => JsonSerializer.Deserialize<CollectionRequest>(oldRequest, CollectionProtocol.JsonOptions)!.Validate());
+            Assert.Throws<InvalidDataException>(() => (Receipt(Request()) with { Version = version }).ValidateAgainst(Request()));
+        }
     }
 
     [Theory]
-    [InlineData("\"version\":2", "\"version\":99")]
-    [InlineData("\"version\":2", "\"version\":2,\"version\":2")]
-    [InlineData("\"version\":2", "\"version\":2,\"extra\":true")]
+    [InlineData("\"version\":3", "\"version\":99")]
+    [InlineData("\"version\":3", "\"version\":3,\"version\":3")]
+    [InlineData("\"version\":3", "\"version\":3,\"extra\":true")]
     [InlineData("\"sourceId\":\"source\"", "\"sourceId\":null")]
     public void MalformedOrUnsupportedWireContractsAreRejected(string original, string replacement)
     {
@@ -126,8 +130,64 @@ public sealed class CollectionProtocolTests
             Capture = null
         };
         Assert.Throws<InvalidDataException>(() => result.ValidateAgainst(request));
+        Assert.Throws<InvalidDataException>(() => result.ValidateAgainst(request with { ETag = "\"v1\"" }));
+        result = result with { SentValidators = new HttpRequestValidators { ETag = "\"v1\"" } };
         result.ValidateAgainst(request with { ETag = "\"v1\"" });
         Assert.Throws<InvalidDataException>(() => (result with { FinalUrl = "https://example.test/pages/redirected" }).ValidateAgainst(request with { ETag = "\"v1\"" }));
+    }
+
+    [Fact]
+    public void SentValidatorsAreRequiredOnWireAndMustMatchAttemptedRequest()
+    {
+        var request = Request() with { ETag = "  \"v1\"  " };
+        var result = Receipt(request) with { SentValidators = new HttpRequestValidators { ETag = "\"v1\"" } };
+        result.ValidateAgainst(request);
+        Assert.Throws<InvalidDataException>(() => (result with { SentValidators = null }).ValidateAgainst(request));
+        Assert.Throws<InvalidDataException>(() => (result with
+        {
+            SentValidators = new HttpRequestValidators { ETag = request.ETag }
+        }).ValidateAgainst(request));
+        Assert.Throws<InvalidDataException>(() => (result with
+        {
+            SentValidators = new HttpRequestValidators { ETag = "\"other\"" }
+        }).ValidateAgainst(request));
+        Assert.Throws<InvalidDataException>(() => (result with
+        {
+            Outcome = CollectionOutcome.Failed,
+            Response = null,
+            Capture = null,
+            FailureCode = CollectionFailureCode.RobotsDenied,
+            BytesReceived = 0,
+            RequestCount = 1
+        }).ValidateAgainst(request));
+        Assert.Throws<InvalidDataException>(() => (result with
+        {
+            FinalUrl = "https://example.test/pages/redirected"
+        }).ValidateAgainst(request));
+
+        var json = JsonNode.Parse(JsonSerializer.Serialize(result, CollectionProtocol.JsonOptions))!;
+        json.AsObject().Remove("sentValidators");
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<CollectionResult>(json.ToJsonString(), CollectionProtocol.JsonOptions));
+        json = JsonNode.Parse(JsonSerializer.Serialize(result, CollectionProtocol.JsonOptions))!;
+        json["sentValidators"]!.AsObject().Remove("lastModified");
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<CollectionResult>(json.ToJsonString(), CollectionProtocol.JsonOptions));
+    }
+
+    [Fact]
+    public void SentLastModifiedMustUseWholeSecondsAtUtcWirePrecision()
+    {
+        var modified = new DateTimeOffset(2026, 10, 6, 12, 0, 0, TimeSpan.Zero);
+        var request = Request() with { LastModified = modified.AddTicks(1234567) };
+        var result = Receipt(request) with { SentValidators = new HttpRequestValidators { LastModified = modified } };
+        result.ValidateAgainst(request);
+        Assert.Throws<InvalidDataException>(() => (result with
+        {
+            SentValidators = new HttpRequestValidators { LastModified = request.LastModified }
+        }).ValidateAgainst(request));
+        Assert.Throws<InvalidDataException>(() => (result with
+        {
+            SentValidators = new HttpRequestValidators { LastModified = modified.ToOffset(TimeSpan.FromHours(2)) }
+        }).ValidateAgainst(request));
     }
 
     [Fact]

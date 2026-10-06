@@ -42,6 +42,7 @@ public sealed class CollectAndImportCollectionAttemptTests
         var result = Result(CollectionOutcome.NotModified, request) with
         {
             Response = Response(304, "\"v1\"", []),
+            SentValidators = new HttpRequestValidators { ETag = request.ETag, LastModified = request.LastModified },
             RequestCount = 2
         };
         var prior = Captured("prior", request.SourceId, request.Url, result.FinalUrl);
@@ -55,6 +56,36 @@ public sealed class CollectAndImportCollectionAttemptTests
         Assert.Equal(PriorCaptureLinkStatus.Linked, decision.PriorCaptureLinkStatus);
         Assert.Same(prior, decision.PriorCapturedAttempt);
         Assert.Null(mapped.Response.ContentType);
+    }
+
+    [Fact]
+    public async Task RobotsFailureDoesNotRetainRequestedValidatorsAsSent()
+    {
+        var request = Request() with { ETag = "\"v1\"", LastModified = ObservedAt };
+        var result = Result(CollectionOutcome.Failed, request) with { FailureCode = CollectionFailureCode.RobotsDenied };
+        var store = new FakeStore();
+
+        await Handler(result, store).ExecuteAsync("robots-failure", request);
+
+        Assert.Null(store.Existing!.SentValidators);
+    }
+
+    [Fact]
+    public async Task ImportUsesReceiptValidatorsAtWirePrecisionFor304Link()
+    {
+        var request = Request() with { ETag = "  \"v1\"  ", LastModified = ObservedAt.AddTicks(1234567) };
+        var result = Result(CollectionOutcome.NotModified, request) with
+        {
+            Response = Response(304, "\"v1\"", []),
+            SentValidators = new HttpRequestValidators { ETag = "\"v1\"", LastModified = ObservedAt },
+            RequestCount = 2
+        };
+        var store = new FakeStore { Prior = Captured("prior", request.SourceId, request.Url, request.Url) };
+
+        var decision = await Handler(result, store).ExecuteAsync("normalized-304", request);
+
+        Assert.Equal(new SentValidators("\"v1\"", ObservedAt), store.Existing!.SentValidators);
+        Assert.Equal(PriorCaptureLinkStatus.Linked, decision.PriorCaptureLinkStatus);
     }
 
     [Fact]
@@ -172,6 +203,7 @@ public sealed class CollectAndImportCollectionAttemptTests
         var result = Result(CollectionOutcome.NotModified, request) with
         {
             Response = Response(304, "\"v1\"", []),
+            SentValidators = new HttpRequestValidators { ETag = request.ETag, LastModified = request.LastModified },
             RequestCount = 2
         };
         var store = new FakeStore();

@@ -1,6 +1,6 @@
 # Remaining implementation
 
-Phase 0, the watched-page tracer, version 2 capture contracts, Core collection-import rules, and the Application collection/import handler and atomic persistence contract are implemented. The following is remaining planned work, not available functionality. Remove completed work and update the current architecture/operations references; Git preserves previous plans.
+Phase 0, the watched-page tracer, version 3 collection contracts, Core collection-import rules, and the Application collection/import handler and atomic persistence contract are implemented. The following is remaining planned work, not available functionality. Remove completed work and update the current architecture/operations references; Git preserves previous plans.
 
 ## 1. Collection and evidence
 

@@ -80,6 +80,65 @@ public sealed class CollectorProcessTests
     }
 
     [Fact]
+    public async Task RealProcessReceiptMatchesConditionalHeadersReceivedByServer()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "civic-validators-" + Guid.NewGuid().ToString("N"));
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var origin = $"http://127.0.0.1:{((IPEndPoint)listener.LocalEndpoint).Port}";
+        var modified = new DateTimeOffset(2026, 10, 6, 12, 0, 0, TimeSpan.Zero);
+        var request = Request() with
+        {
+            Url = origin + "/watch",
+            AllowedOrigin = origin,
+            AllowedPathPrefix = "/watch",
+            ArtifactDirectory = directory,
+            MinDelayMilliseconds = 0,
+            ETag = "  W/\"v1\"  ",
+            LastModified = modified.AddTicks(1234567).ToOffset(TimeSpan.FromHours(2))
+        };
+        var server = ServeConditionalAsync();
+        try
+        {
+            var result = await new CollectorProcess(typeof(HttpCollector).Assembly.Location).RunAsync(request, deadline.Token);
+            var headers = await server;
+
+            Assert.Equal(CollectionOutcome.NotModified, result.Outcome);
+            Assert.Equal(new HttpRequestValidators { ETag = "W/\"v1\"", LastModified = modified }, result.SentValidators);
+            Assert.Contains("If-None-Match: " + result.SentValidators!.ETag, headers);
+            Assert.Contains("If-Modified-Since: Tue, 06 Oct 2026 12:00:00 GMT", headers);
+        }
+        finally
+        {
+            deadline.Cancel();
+            listener.Stop();
+            try { await server; } catch (Exception e) when (e is OperationCanceledException or SocketException) { }
+            if (Directory.Exists(directory)) Directory.Delete(directory, true);
+        }
+
+        async Task<List<string>> ServeConditionalAsync()
+        {
+            var headers = new List<string>();
+            for (var i = 0; i < 2; i++)
+            {
+                using var socket = await listener.AcceptTcpClientAsync(deadline.Token);
+                await using var stream = socket.GetStream();
+                using var reader = new StreamReader(stream, Encoding.ASCII, leaveOpen: true);
+                headers.Clear();
+                while (await reader.ReadLineAsync(deadline.Token) is { Length: > 0 } line)
+                    headers.Add(line);
+                if (i == 0)
+                    Assert.DoesNotContain(headers, header => header.StartsWith("If-", StringComparison.OrdinalIgnoreCase));
+                var status = i == 0 ? "404 Not Found" : "304 Not Modified";
+                await stream.WriteAsync(Encoding.ASCII.GetBytes(
+                    $"HTTP/1.1 {status}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"), deadline.Token);
+            }
+            return headers;
+        }
+    }
+
+    [Fact]
     public async Task CancellingChildReleasesDirectoryLeaseAndRemovesManifest()
     {
         var directory = Path.Combine(Path.GetTempPath(), "civic-cancel-" + Guid.NewGuid().ToString("N"));

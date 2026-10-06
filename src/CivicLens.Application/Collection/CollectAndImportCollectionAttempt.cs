@@ -19,9 +19,9 @@ public sealed class CollectAndImportCollectionAttempt(ICollectorProcess collecto
         result.ValidateAgainst(request);
         cancellationToken.ThrowIfCancellationRequested();
 
-        var sentValidators = request.ETag is null && request.LastModified is null
+        var sentValidators = result.SentValidators is null
             ? null
-            : new SentValidators(request.ETag, request.LastModified);
+            : new SentValidators(result.SentValidators.ETag, result.SentValidators.LastModified);
         var attempt = new CollectionAttemptImport(Map(attemptId, result), sentValidators);
         return await store.ImportAtomicallyAsync(attempt, cancellationToken);
     }
