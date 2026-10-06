@@ -32,6 +32,7 @@ public sealed class CollectorProcess(string collectorAssembly, string dotnetExec
                 StandardErrorEncoding = Encoding.UTF8,
                 UseShellExecute = false
             };
+            start.Environment.Remove("CIVIC_LENS_DATABASE");
             start.ArgumentList.Add(assembly);
             start.ArgumentList.Add("collect");
             start.ArgumentList.Add(manifest);

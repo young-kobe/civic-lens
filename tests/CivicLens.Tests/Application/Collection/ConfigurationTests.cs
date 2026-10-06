@@ -5,6 +5,19 @@ namespace CivicLens.Tests.Application.Collection;
 public sealed class ConfigurationTests
 {
     [Fact]
+    public void PreparedAttemptsHaveFreshIdentitiesSeparateFromWireJobs()
+    {
+        var configuration = ValidConfiguration([new PersonConfiguration { Id = "person", Name = "Official" }], ["person"]);
+        var first = new PreparedCollectionAttempt(configuration, "shared", "captures");
+        var second = new PreparedCollectionAttempt(configuration, "shared", "captures");
+
+        Assert.Equal(4, new[] { first.AttemptId, first.Request.JobId, second.AttemptId, second.Request.JobId }.Distinct().Count());
+        Assert.Equal(Path.GetFullPath("captures"), first.Request.ArtifactDirectory);
+        Assert.Equal("shared", first.Request.SourceId);
+        Assert.Throws<ArgumentException>(() => new PreparedCollectionAttempt(configuration, "missing", "captures"));
+    }
+
+    [Fact]
     public void ManyPeopleCanShareOneWatchedSourceWithoutCreatingPerPersonRequests()
     {
         var people = Enumerable.Range(1, 500)
