@@ -215,7 +215,7 @@ public sealed class PostgresCollectionJobStore(IDbContextFactory<CollectionAttem
             if (attempt.ResolutionJson != resolutionJson) throw new InvalidOperationException("Conflicting job attempt settlement.");
             return true;
         }
-        var evidence = await new PostgresCollectionAttemptStore(contextFactory).GetAsync(attemptId, cancellationToken);
+        var evidence = await PostgresCollectionAttemptStore.GetAsync(db, attemptId, cancellationToken);
         if (resolution.Outcome == CollectionJobAttemptOutcome.Interrupted)
         {
             if (evidence is not null) throw new InvalidOperationException("Imported evidence must be reconciled before retrying.");

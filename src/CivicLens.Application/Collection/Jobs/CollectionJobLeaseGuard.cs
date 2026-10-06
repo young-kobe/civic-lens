@@ -42,18 +42,6 @@ internal sealed class CollectionJobLeaseGuard : IAsyncDisposable
         finally { gate.Release(); }
     }
 
-    public async Task<bool> AttachCollectorAsync(CollectionCollectorLease lease, CancellationToken cancellationToken)
-    {
-        await gate.WaitAsync(cancellationToken);
-        try
-        {
-            if (!IsOwned) return false;
-            collectorLease = lease;
-            return true;
-        }
-        finally { gate.Release(); }
-    }
-
     public async Task<bool> ReleaseCollectorAsync(CancellationToken cancellationToken)
     {
         await gate.WaitAsync(cancellationToken);
@@ -102,7 +90,9 @@ internal sealed class CollectionJobLeaseGuard : IAsyncDisposable
             if (!IsOwned) return new CollectionJobStartResult(CollectionJobStartStatus.LostOwnership);
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeout.CancelAfter(RenewalTimeout());
-            return await jobs.TryStartAttemptAsync(jobLease, artifactDirectory, timeout.Token);
+            var result = await jobs.TryStartAttemptAsync(jobLease, artifactDirectory, timeout.Token);
+            if (result.Status == CollectionJobStartStatus.Started) collectorLease = result.CollectorLease;
+            return result;
         }
         finally { gate.Release(); }
     }

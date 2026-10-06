@@ -45,6 +45,47 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task SettlementWorksWithOnePooledConnection()
+    {
+        var pooled = new NpgsqlConnectionStringBuilder(connectionString) { MaxPoolSize = 1, Timeout = 3 }.ConnectionString;
+        jobs = PostgresCollectionJobStore.FromConnectionString(pooled);
+        var claim = await EnqueueClaimAsync("single-connection", Definition());
+        var start = await jobs.TryStartAttemptAsync(claim.Lease, root, default);
+        var receipt = ReceiptCollector.Result(start.Attempt!.Request, 404);
+        await CollectionAttemptImporter.ImportAsync(start.Attempt.AttemptId, start.Attempt.Request, receipt, evidence, default);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        Assert.True(await jobs.SettleAttemptAsync(claim.Lease, start.Attempt.AttemptId,
+            CollectionJobLifecycle.Resolve(receipt), timeout.Token));
+        Assert.True((await jobs.RenewAsync(claim.Lease, start.CollectorLease, LeaseDuration, timeout.Token)).Owned);
+        Assert.Equal(CollectionJobState.Failed, (await jobs.GetAsync(claim.Job.JobId, timeout.Token))!.State);
+    }
+
+    [Fact]
+    public async Task ConflictingHandoffSettlesRetainedEvidenceWithoutRefundOrDeletion()
+    {
+        var claim = await EnqueueClaimAsync("conflicting-handoff", Definition());
+        var start = await jobs.TryStartAttemptAsync(claim.Lease, root, default);
+        var receipt = ReceiptCollector.Result(start.Attempt!.Request, 404);
+        await CollectionAttemptImporter.ImportAsync(start.Attempt.AttemptId, start.Attempt.Request, receipt, evidence, default);
+        var handoffs = new FileCollectionReceiptHandoffStore(root);
+        await handoffs.SaveAsync(new PendingCollectionHandoff(1, start.Attempt.AttemptId, start.Attempt.Request,
+            receipt with { FinalUrl = receipt.FinalUrl + "/different" }), default);
+        await jobs.ReleaseCollectorAsync(claim.Lease, start.CollectorLease!, default);
+        await jobs.ReleaseClaimAsync(claim.Lease, default);
+
+        var result = await Runner(new RejectCollector()).ExecuteAsync(claim.Job.JobId, root, LeaseDuration);
+
+        Assert.Equal(CollectionJobState.Failed, result.Job!.State);
+        Assert.Equal(5, result.Job.ReservedRequests);
+        Assert.Equal(100, result.Job.ReservedBytes);
+        Assert.Null(Assert.Single(result.Job.Attempts).Resolution!.Receipt);
+        Assert.Equal(start.Attempt.AttemptId, Assert.Single(await handoffs.ListAsync(default)));
+        Assert.Equal(receipt.FinalUrl, (await evidence.GetAsync(start.Attempt.AttemptId, default))!.AttemptResult.FinalUrl);
+        var next = await EnqueueClaimAsync("next", Definition());
+        Assert.Equal(CollectionJobStartStatus.Started, (await jobs.TryStartAttemptAsync(next.Lease, root, default)).Status);
+    }
+
+    [Fact]
     public async Task ListingBatchesAttemptsWithoutWaitingForCoordinationLock()
     {
         var first = await EnqueueClaimAsync("first", Definition());

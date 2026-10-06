@@ -45,8 +45,6 @@ public sealed class RunCollectionJob(
             var start = await lease.TryStartAttemptAsync(Path.GetFullPath(artifactDirectory), lease.WorkToken);
             if (start.Status != CollectionJobStartStatus.Started || start.Attempt is null || start.CollectorLease is null)
                 return new CollectionJobRunResult(MapStatus(start.Status), await ReadJobBoundedAsync(jobId), start.BlockReason, start.RetryAt);
-            if (!await lease.AttachCollectorAsync(start.CollectorLease, CancellationToken.None))
-                return new CollectionJobRunResult(CollectionJobRunStatus.LostOwnership, await ReadJobBoundedAsync(jobId));
 
             return await CollectOneAsync(lease, start.Attempt, artifactDirectory, cancellationToken);
         }
@@ -207,7 +205,7 @@ public sealed class RunCollectionJob(
                         if (Equals(replay.AttemptResult, retained.AttemptResult)) verifiedReceipt = entry.Receipt;
                     }
                 }
-                catch (Exception exception) when (exception is IOException or InvalidDataException or UnauthorizedAccessException)
+                catch (Exception exception) when (exception is IOException or InvalidDataException or UnauthorizedAccessException or InvalidOperationException)
                 {
                     // Retained evidence still settles safely with the full reservation.
                 }

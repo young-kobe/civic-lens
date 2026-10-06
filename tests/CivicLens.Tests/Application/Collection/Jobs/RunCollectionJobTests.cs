@@ -35,6 +35,7 @@ public sealed class RunCollectionJobTests
 
         Assert.Equal(CollectionJobRunStatus.LostOwnership, result.Status);
         Assert.True(collector.CancellationObserved);
+        Assert.NotNull(Assert.Single(jobs.RenewedCollectors));
     }
 
     [Fact]
@@ -187,6 +188,7 @@ public sealed class RunCollectionJobTests
         public int SettleCalls { get; private set; }
         public List<string> ReadJobIds { get; } = [];
         public bool FailRenewals { get; init; }
+        public List<CollectionCollectorLease?> RenewedCollectors { get; } = [];
         public bool CancelOnRenewal { get; init; }
         public bool ReturnFalseOnSettlement { get; init; }
         public CollectionRequest? StartRequest { get; init; }
@@ -200,11 +202,14 @@ public sealed class RunCollectionJobTests
         public Task<CollectionJobRecord?> CancelAsync(string jobId, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<CollectionJobClaim?> TryClaimAsync(string jobId, TimeSpan leaseDuration, CancellationToken cancellationToken) =>
             Task.FromResult<CollectionJobClaim?>(new CollectionJobClaim(new CollectionJobLease(jobId, "token", 1, DateTimeOffset.UtcNow.Add(leaseDuration)), current));
-        public Task<CollectionJobRenewal> RenewAsync(CollectionJobLease jobLease, CollectionCollectorLease? collectorLease, TimeSpan leaseDuration, CancellationToken cancellationToken) =>
-            Task.FromResult(FailRenewals
+        public Task<CollectionJobRenewal> RenewAsync(CollectionJobLease jobLease, CollectionCollectorLease? collectorLease, TimeSpan leaseDuration, CancellationToken cancellationToken)
+        {
+            RenewedCollectors.Add(collectorLease);
+            return Task.FromResult(FailRenewals
                 ? new CollectionJobRenewal(false, false, null, null)
                 : new CollectionJobRenewal(true, CancelOnRenewal,
                     jobLease with { ExpiresAt = DateTimeOffset.UtcNow.Add(leaseDuration) }, collectorLease));
+        }
         public Task<CollectionJobStartResult> TryStartAttemptAsync(CollectionJobLease jobLease, string artifactDirectory, CancellationToken cancellationToken)
         {
             StartCalls++;
