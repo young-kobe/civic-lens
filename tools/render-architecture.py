@@ -8,12 +8,12 @@ ROOT = Path(__file__).resolve().parents[1]
 VIEWS = [
     {
         "title": "Collection to publication (target)",
-        "description": "Target workflow. Configuration, bounded watched-page collection, and verified file captures are implemented; durable evidence storage and downstream stages remain planned.",
+        "description": "Target workflow. Configuration, bounded watched-page collection, verified captures, and the Postgres import adapter are implemented; CLI database wiring, durable job recovery, and downstream stages remain planned.",
         "nodes": [
             ("config", "Coverage configuration", "People, dated roles, sources, issues and policies; one authoritative configuration path."),
             ("app", "C# application", "Owns durable jobs, aggregate budgets, retries and orchestration."),
             ("collector", "C# collector", "Separate executable. Bounded HTTP/feed discovery and immutable captures; no database or AI."),
-            ("evidence", "Evidence store", "Planned local Postgres and content-addressed files; observations and document versions remain distinct."),
+            ("evidence", "Evidence store", "Local Postgres import adapter and content-addressed files are implemented. CLI database wiring and document versions remain planned."),
             ("analysis", "Selective analysis", "Deterministic records first; evaluated classification and evidence extraction only where useful."),
             ("review", "Local review and MCP", "Inspect evidence and proposed changes. Human decisions bind to exact versions."),
             ("release", "Versioned release", "Approved records, static pages and search index. Validate citations before switching the active release."),
@@ -26,7 +26,7 @@ VIEWS = [
         "description": "Arrows mean references. These project boundaries are checked by xUnit tests.",
         "nodes": [
             ("host", "Host", "CLI entry point and future local review/MCP composition root."),
-            ("infra", "Infrastructure", "Collector process execution and capture verification. References Application."),
+            ("infra", "Infrastructure", "Collector process execution, capture verification, and EF Core/Npgsql persistence. References Application."),
             ("app", "Application", "Use cases and external interfaces; no infrastructure reference."),
             ("core", "Core", "Domain invariants. No project or third-party dependencies."),
             ("cc", "Collection.Contracts", "Versioned watched-page requests, capture/response metadata and receipt validation. No dependencies."),

@@ -32,10 +32,11 @@ public sealed class ArchitectureTests
             Assert.Equal(Allowed[name].Order(), references.Order());
             Assert.Empty(xml.Descendants("Reference")); // No binary references bypassing the project graph.
 
-            if (name is "CivicLens.Core" or "CivicLens.Collection.Contracts" or "CivicLens.Publication.Contracts")
-            {
-                Assert.Empty(xml.Descendants("PackageReference"));
-            }
+            string[] allowedPackages = name == "CivicLens.Infrastructure"
+                ? ["Microsoft.EntityFrameworkCore", "Microsoft.EntityFrameworkCore.Design", "Microsoft.EntityFrameworkCore.Relational", "Npgsql.EntityFrameworkCore.PostgreSQL"]
+                : [];
+            Assert.Equal(allowedPackages.Order(), xml.Descendants("PackageReference")
+                .Select(element => element.Attribute("Include")!.Value).Order());
         }
     }
 

@@ -2,15 +2,18 @@
 
 ## Verification
 
-Prerequisites: .NET SDK selected by global.json. Python 3 is needed only to regenerate the architecture visual. No database, model account, Node installation, or deployment credentials are needed yet.
+Prerequisites: .NET SDK selected by global.json and a working Docker daemon for the full test suite. Python 3 is needed only to regenerate the architecture visual. Testcontainers creates disposable Postgres instances; no pre-existing database, model account, Node installation, or deployment credentials are needed.
 
 ```sh
 dotnet restore --locked-mode
 dotnet build CivicLens.slnx --configuration Release --no-restore
+docker version
 dotnet test CivicLens.slnx --configuration Release --no-build
 dotnet format CivicLens.slnx --verify-no-changes --no-restore
 python3 tools/render-architecture.py --check
 ```
+
+For a database-free test run, use `dotnet test CivicLens.slnx --configuration Release --no-build --filter 'Category!=Postgres'`. This excludes the persistence integration tests and is not a substitute for the full required check. Testcontainers requires Docker socket access; an agent sandbox may need an execution override for Docker and local test sockets. Missing Docker fails the full suite rather than silently skipping database checks. The Postgres image is pinned by tag and digest in the test fixture; its first run and the Testcontainers cleanup container may require image downloads.
 
 `dotnet run --project src/CivicLens.Host -- status` describes implemented capabilities. `dotnet run --project src/CivicLens.Collector -- --help` describes the manifest-driven collector. Unsupported commands return nonzero exit codes.
 
@@ -51,10 +54,18 @@ Standalone collection accepts `CivicLens.Collector collect <manifest.json>` (or 
 
 Do not run concurrent collectors for the same origin. Host invocations sharing a capture directory are mutually exclusive, but separate directories and standalone invocations are not coordinated. Robots support and protocol limits are documented in [architecture](architecture.md). A killed child can leave `.capture-*.tmp`; these files are never valid captures and can be removed when no collector is running. Do not remove hash-named captures as temporary files. Durable jobs, imports, retry scheduling, cross-run pacing, and crash recovery are the next Phase 1 checkpoint.
 
+## Postgres adapter and migrations
+
+The adapter is available to application composition and integration tests; the Host has no database command yet. Construct `CollectionAttemptDbContext` with Npgsql options through an `IDbContextFactory<CollectionAttemptDbContext>`, then pass that factory to `PostgresCollectionAttemptStore`. Call `MigrateAsync` explicitly to apply the checked-in schema before importing. Imports never run schema changes. Capture files remain in the configured artifact directory; the database stores their identities, not their bodies.
+
+The design-time context factory reads `CIVIC_LENS_DATABASE` when supplied and otherwise uses a local design database name for offline migration generation. Keep credentials out of committed files and command output. Use EF tooling version 10.0.12 when generating future migrations for `src/CivicLens.Infrastructure`, with output under `Collection/Migrations`. Review generated migration operations and the snapshot together. The initial migration includes an explicit composite prior-capture foreign key that EF cannot represent without incorrectly making the principal capture field required for all outcomes; preserve and test that constraint in later schema changes.
+
+Integration tests apply migrations against disposable Postgres instances and check for model drift. They verify exact evidence round trips, duplicate/conflicting and concurrent imports, capture-length conflicts, 304 ambiguity, and transaction cancellation/rollback. These tests do not establish crash-safe receipt handoff or a production backup/restore procedure.
+
 ## Runtime and future operations
 
 Runtime data belongs in ignored .runtime/; generated publication and evaluation artifacts in ignored artifacts/. Never commit credentials or copy operational directories from the legacy repository. There is currently no deploy command and no public endpoint.
 
-Core collection-import decisions and the Application collection/import handler are exercised with unit tests and a test persistence adapter. The handler validates the request, obtains a receipt through the capture-verifying collector boundary, maps domain evidence, and submits one atomic import operation. Each handler invocation collects again; it does not replay saved receipts. The host still ends at a verified receipt; there is no import command or database adapter. The next checkpoint implements Postgres persistence, followed by durable handoff and recovery.
+Core collection-import decisions and the Application collection/import handler are exercised with unit tests and the Postgres persistence adapter. The handler validates the request, obtains a receipt through the capture-verifying collector boundary, maps domain evidence, and submits one atomic import operation. Each handler invocation collects again; it does not replay saved receipts. The Postgres adapter now retains attempts, captures, and prior evidence links atomically. The host still ends at a verified receipt; there is no database-backed import command. The next checkpoint wires explicit local database setup and collection/import commands, followed by durable handoff and recovery.
 
 Durable collection/import, review, backup/restore, publication, rollback, and MCP runbooks will be added here when implemented. Do not treat target architecture descriptions as executable procedures.
