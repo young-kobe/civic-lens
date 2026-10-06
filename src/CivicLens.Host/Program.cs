@@ -89,7 +89,7 @@ try
 }
 catch (OperationCanceledException)
 {
-    Console.Error.WriteLine(importing
+    Console.Error.WriteLine(importing && executing
         ? "Collection/import cancelled or timed out. Persistence was not confirmed."
         : "Command cancelled or timed out.");
     return 1;
