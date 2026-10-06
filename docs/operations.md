@@ -52,7 +52,7 @@ Edit configuration to add people or shared sources. A source URL occurs once, wi
 
 Standalone collection accepts `CivicLens.Collector collect <manifest.json>` (or `dotnet <collector.dll> collect <manifest.json>`). Version 3 request fields are defined by `CollectionRequest` in Collection.Contracts: `version`, `jobId`, `sourceId`, `url`, `allowedOrigin`, `allowedPathPrefix`, and absolute `artifactDirectory`, plus optional bounded `maxRequests`, `maxBytes`, `timeoutSeconds`, `minDelayMilliseconds`, `eTag`, and `lastModified`. JSON names are case-sensitive. Use version 3 in standalone manifests and rebuild host and collector together; version 1 and 2 collection messages are rejected. Registry configuration remains version 1. Receipts report applied conditional headers in `sentValidators`, using serialized ETags and whole-second UTC dates; the field is null when no conditional headers were applied to the last attempted content request. Validators are explicit in standalone manifests; the host does not yet automatically replay stored validators. A 304 emits `notModified` without a capture. A 429 emits `deferred`, with optional `retryAfterSeconds`; wait before rerunning. HTTP failures, robots denial/unavailability, budget exhaustion, incomplete bodies, and cancellation are explicit failures rather than source deletion.
 
-Do not run concurrent collectors for the same origin. Host invocations sharing a capture directory are mutually exclusive, but separate directories and standalone invocations are not coordinated. Robots support and protocol limits are documented in [architecture](architecture.md). A killed child can leave `.capture-*.tmp`; these files are never valid captures and can be removed when no collector is running. Do not remove hash-named captures as temporary files. Use `collect-import` below for atomic evidence persistence. Use the receipt recovery commands below after an interrupted import. Durable jobs, retry scheduling, and cross-run pacing remain planned.
+Do not run concurrent collectors for the same origin. Host invocations sharing a capture directory are mutually exclusive, but separate directories and standalone invocations are not coordinated. Robots support and protocol limits are documented in [architecture](architecture.md). A killed child can leave `.capture-*.tmp`; these files are never valid captures and can be removed when no collector is running. Do not remove hash-named captures as temporary files. Use `collect-import` below for atomic evidence persistence. Use the receipt recovery commands below after an interrupted import. Use managed jobs below for cross-run admission, retry budgets, and origin pacing.
 
 ## Postgres adapter and migrations
 
@@ -83,6 +83,27 @@ The design-time context factory reads `CIVIC_LENS_DATABASE` when supplied and ot
 
 Integration tests apply migrations against disposable Postgres instances and check for model drift. They verify exact evidence round trips, duplicate/conflicting and concurrent imports, capture-length conflicts, 304 ambiguity, and transaction cancellation/rollback. Receipt tests additionally exercise failed-import recovery, relocation, revalidation, uncertain commit replay, and cleanup failures. They do not establish machine power-loss durability or a production backup/restore procedure.
 
+## Managed collection jobs
+
+Apply `db migrate` first. Job commands require `CIVIC_LENS_DATABASE`. Enqueue snapshots the selected source and policy; later runs need neither the original configuration nor an enabled entry in a changed configuration.
+
+```sh
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- jobs enqueue config/example.json example-local-source check-2026-10-06
+# Use the jobId returned above:
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- jobs run <job-id> src/CivicLens.Collector/bin/Release/net10.0/CivicLens.Collector.dll .runtime/captures
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- jobs get <job-id>
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- jobs list 20
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- jobs cancel <job-id>
+```
+
+Reuse an enqueue key only for the same source settings and policy; use a new key for a new logical check. `jobs run` reconciles old execution before making at most one new attempt. It returns immediately when a lease, global collector slot, origin barrier, origin deadline, or retry deadline blocks admission. Inspect `status`, `blockReason`, `retryAt`, and `job` in the JSON result; rerun when eligible. Run exits 0 only for a succeeded job, otherwise 1. Other job commands return 0 on success, 2 for invalid input or missing inspected jobs, and 1 for operational failures. Listing defaults to 20 jobs, maximum 100.
+
+Optional source `jobPolicy` fields are `maxAttempts` (default 3), `initialRetryDelaySeconds` (30), `maximumRetryDelaySeconds` (3600), `maxTotalRequests`, `maxTotalBytes`, and `maxTotalTimeoutSeconds`. Omitted aggregate limits equal the corresponding per-attempt limit times `maxAttempts`. Limits must reserve at least one complete attempt. Source `eTag` and `lastModified` are optional explicit validators; automatic stored-validator lookup is not implemented. A server Retry-After can exceed the exponential delay cap. Inspection includes immutable attempts and charged totals; the `reserved*` totals retain timeout reservations and unknown usage conservatively.
+
+The CLI uses a 60-second renewable database-time lease. Persisted cancellation is observed on renewal (normally within 20 seconds) and stops future collection. Complete receipts remain recoverable. Ctrl+C does not permanently cancel the job. After interruption, rerun the same job with the complete artifact root, including `.pending`, or its relocated copy. A same-origin unresolved attempt blocks other managed jobs until reconciled. Use `jobs run` to reconcile its job; standalone receipt replay imports evidence but does not settle jobs. No receipt and no imported evidence means unknown execution, charged at the full reserved budget. There is no automatic polling worker.
+
+Managed jobs share one collector slot per operational store across artifact roots. Direct `collect`, `collect-import`, and standalone collector commands are outside this guarantee. A lost lease cannot guarantee that an old process has physically ceased HTTP; do not treat collection as exactly once. A stale runner can save a late receipt after its attempt was already settled as interrupted. Such a handoff remains available to `receipts replay`; later managed runs do not revisit already settled attempts. Back up the database and complete artifact roots together.
+
 ## Recover saved receipts
 
 `collect-import` saves a versioned handoff in `<artifact-directory>/.pending/` after the collector receipt and capture have been verified and before importing into Postgres. The directory also contains the hash-named gzip captures. Database outages and missing migrations leave the saved handoff available for replay. Missing or invalid database configuration is still rejected before collection.
@@ -111,6 +132,6 @@ Recovery begins only once a complete handoff has been saved. A crash or cancella
 
 Runtime data belongs in ignored .runtime/; generated publication and evaluation artifacts in ignored artifacts/. Never commit credentials or copy operational directories from the legacy repository. There is currently no deploy command and no public endpoint.
 
-Core collection-import decisions and the Application fresh/replay handlers share evidence mapping and atomic Postgres imports. The host exposes receipt-only `collect`, database-backed `collect-import`, and explicit receipt recovery. Durable job execution and scheduling are the next checkpoint.
+Core collection-import decisions and the Application fresh/replay handlers share evidence mapping and atomic Postgres imports. The host exposes receipt-only `collect`, database-backed `collect-import`, and explicit receipt recovery. Managed jobs add explicit lifecycle execution; background scheduling remains planned.
 
-Durable jobs, review, backup/restore, publication, rollback, and MCP runbooks will be added here when implemented. Do not treat target architecture descriptions as executable procedures.
+Review, backup/restore, publication, rollback, and MCP runbooks will be added here when implemented. Do not treat target architecture descriptions as executable procedures.

@@ -96,6 +96,38 @@ public sealed class DatabaseCommandTests(PostgresCollection postgres) : IAsyncLi
     }
 
     [Fact]
+    public async Task ManagedJobUsesSnapshotAndRepeatedRunDoesNotCollectAgain()
+    {
+        Assert.Equal(0, (await HostProcess.RunAsync(connectionString, "db", "migrate")).ExitCode);
+        var arguments = new[] { "jobs", "enqueue", Path.Combine(directory, "config.json"), "source", "check-1" };
+        var enqueued = await HostProcess.RunAsync(connectionString, arguments);
+        Assert.Equal(0, enqueued.ExitCode);
+        using var definition = JsonDocument.Parse(enqueued.Output);
+        var id = definition.RootElement.GetProperty("jobId").GetString()!;
+        var duplicate = await HostProcess.RunAsync(connectionString, arguments);
+        using var duplicateOutput = JsonDocument.Parse(duplicate.Output);
+        Assert.Equal(id, duplicateOutput.RootElement.GetProperty("jobId").GetString());
+        File.Delete(Path.Combine(directory, "config.json"));
+        var run = await HostProcess.RunAsync(connectionString, "jobs", "run", id,
+            typeof(HttpCollector).Assembly.Location, Path.Combine(directory, "captures"));
+        Assert.True(run.ExitCode == 0, run.Error + run.Output);
+        using var result = JsonDocument.Parse(run.Output);
+        Assert.Equal("succeeded", result.RootElement.GetProperty("job").GetProperty("state").GetString());
+        shutdown.Cancel();
+        listener.Stop();
+        var again = await HostProcess.RunWithCollectorHostAsync(connectionString, "/no-collector-host",
+            "jobs", "run", id, "/missing-collector.dll", Path.Combine(directory, "captures"));
+        Assert.Equal(0, again.ExitCode);
+        var inspected = await HostProcess.RunAsync(connectionString, "jobs", "get", id);
+        using var inspection = JsonDocument.Parse(inspected.Output);
+        Assert.Single(inspection.RootElement.GetProperty("attempts").EnumerateArray());
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var count = new NpgsqlCommand("SELECT count(*) FROM collection_attempts", connection);
+        Assert.Equal(1L, await count.ExecuteScalarAsync());
+    }
+
+    [Fact]
     public async Task MissingMigrationsFailImportWithoutImplicitSchemaChangesOrSuccessOutput()
     {
         var result = await CollectAsync("collect-import", connectionString);

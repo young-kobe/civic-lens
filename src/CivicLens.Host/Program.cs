@@ -1,8 +1,10 @@
 using System.Text.Json;
 using CivicLens.Application;
 using CivicLens.Application.Collection;
+using CivicLens.Application.Collection.Jobs;
 using CivicLens.Collection.Contracts;
 using CivicLens.Infrastructure.Collection;
+using CivicLens.Infrastructure.Collection.Jobs;
 using CivicLens.Host.Collection;
 
 if (args is [] or ["--help"] or ["help"])
@@ -16,9 +18,15 @@ if (args is [] or ["--help"] or ["help"])
           collect-import <config.json> <source-id> <collector.dll> <artifact-directory>
           receipts list <artifact-directory>
           receipts replay <artifact-directory> <attempt-id|--all>
+          jobs enqueue <config.json> <source-id> <idempotency-key>
+          jobs run <job-id> <collector.dll> <artifact-directory>
+          jobs get <job-id>
+          jobs list [limit]
+          jobs cancel <job-id>
         Database commands require CIVIC_LENS_DATABASE (Postgres connection string with Host and Database).
         collect and receipts list are database-free. collect-import saves a handoff before importing.
         receipts replay imports saved handoffs without collecting again; use the capture directory after relocation.
+        jobs commands require the database. Each run reconciles prior work and performs at most one new fetch.
         Exit codes: 0 success, 1 failed/deferred collection or operational failure, 2 invalid input/configuration.
         """);
     return 0;
@@ -31,7 +39,7 @@ if (args is ["status"])
 }
 
 if (args is not (["db", "migrate"] or ["validate", _] or ["collect", _, _, _, _] or ["collect-import", _, _, _, _]
-    or ["receipts", "list", _] or ["receipts", "replay", _, _]))
+    or ["receipts", "list", _] or ["receipts", "replay", _, _]) && !CollectionJobCommand.Matches(args))
 {
     Console.Error.WriteLine("Unknown command. Use --help.");
     return 2;
@@ -44,6 +52,24 @@ var replaying = args is ["receipts", "replay", _, _];
 var importing = args[0] == "collect-import" || replaying;
 try
 {
+    if (args is ["jobs", "enqueue", var configPath, var sourceId, var idempotencyKey])
+    {
+        var config = await ReadConfigurationAsync(configPath, cancellation.Token);
+        var definition = CollectionJobDefinition.FromConfiguration(config, sourceId);
+        var jobs = CreateJobs();
+        executing = true;
+        return await CollectionJobCommand.EnqueueAsync(jobs, definition, idempotencyKey, cancellation.Token);
+    }
+
+    if (args[0] == "jobs")
+    {
+        CollectionJobCommand.ValidateArguments(args);
+        var jobs = CreateJobs();
+        var evidence = CreateDatabase();
+        executing = true;
+        return await CollectionJobCommand.ExecuteAsync(args, jobs, evidence, cancellation.Token);
+    }
+
     if (args is ["receipts", "list", var listRoot])
     {
         var handoffs = new FileCollectionReceiptHandoffStore(Path.GetFullPath(listRoot));
@@ -103,7 +129,9 @@ try
 }
 catch (OperationCanceledException)
 {
-    if (replaying && executing)
+    if (args[0] == "jobs" && executing)
+        Console.Error.WriteLine("Job execution interrupted. Use jobs get to inspect retained progress; jobs cancel requests permanent cancellation.");
+    else if (replaying && executing)
         Console.Error.WriteLine("Receipt replay cancelled or timed out. Persistence was not confirmed. Use receipts list to inspect retained handoffs.");
     else
         Console.Error.WriteLine(importing && executing
@@ -119,7 +147,9 @@ catch (Exception exception) when (!executing && exception is ArgumentException o
 }
 catch (Exception)
 {
-    if (replaying)
+    if (args[0] == "jobs")
+        Console.Error.WriteLine("Job operation failed. Inspect the job, retained receipts, database connectivity, and applied migrations before resuming.");
+    else if (replaying)
         Console.Error.WriteLine("Receipt replay failed. Persistence was not confirmed. Check the capture directory, retained handoff, database connectivity, and applied migrations.");
     else
         Console.Error.WriteLine(importing
@@ -134,6 +164,13 @@ static PostgresCollectionAttemptStore CreateDatabase()
     if (string.IsNullOrWhiteSpace(connectionString))
         throw new ArgumentException("CIVIC_LENS_DATABASE is required.");
     return PostgresCollectionAttemptStore.FromConnectionString(connectionString);
+}
+
+static PostgresCollectionJobStore CreateJobs()
+{
+    var connectionString = Environment.GetEnvironmentVariable("CIVIC_LENS_DATABASE");
+    if (string.IsNullOrWhiteSpace(connectionString)) throw new ArgumentException("CIVIC_LENS_DATABASE is required.");
+    return PostgresCollectionJobStore.FromConnectionString(connectionString);
 }
 
 static async Task<CollectionConfiguration> ReadConfigurationAsync(string path, CancellationToken cancellationToken)
