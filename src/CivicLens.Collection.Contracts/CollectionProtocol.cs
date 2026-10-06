@@ -5,7 +5,7 @@ namespace CivicLens.Collection.Contracts;
 
 public static class CollectionProtocol
 {
-    public const int Version = 2;
+    public const int Version = 3;
 
     static CollectionProtocol() => JsonOptions.MakeReadOnly(populateMissingResolver: true);
     public static JsonSerializerOptions JsonOptions { get; } = new(JsonSerializerDefaults.Web)

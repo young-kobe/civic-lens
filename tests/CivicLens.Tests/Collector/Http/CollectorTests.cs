@@ -203,6 +203,71 @@ public sealed class CollectorTests
     }
 
     [Fact]
+    public async Task ReceiptRetainsSerializedConditionalHeaders()
+    {
+        using var directory = new TemporaryDirectory();
+        var modified = new DateTimeOffset(2026, 10, 6, 12, 0, 0, TimeSpan.Zero);
+        var handler = new QueueHandler(_ => Response(HttpStatusCode.NotFound), message =>
+        {
+            Assert.Equal("W/\"v1\"", message.Headers.GetValues("If-None-Match").Single());
+            Assert.Equal("Tue, 06 Oct 2026 12:00:00 GMT", message.Headers.GetValues("If-Modified-Since").Single());
+            return Response(HttpStatusCode.NotModified);
+        });
+        using var collector = new HttpCollector(handler);
+
+        var result = await collector.FetchAsync(Request(directory.Path) with
+        {
+            ETag = "  W/\"v1\"  ",
+            LastModified = modified.AddTicks(1234567).ToOffset(TimeSpan.FromHours(2))
+        });
+
+        Assert.Equal(CollectionOutcome.NotModified, result.Outcome);
+        Assert.Equal(new HttpRequestValidators { ETag = "W/\"v1\"", LastModified = modified }, result.SentValidators);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task RobotsFailuresHaveNoSentValidators(bool denied)
+    {
+        using var directory = new TemporaryDirectory();
+        var handler = new QueueHandler(message =>
+        {
+            Assert.Empty(message.Headers.IfNoneMatch);
+            Assert.Null(message.Headers.IfModifiedSince);
+            return denied ? Response(HttpStatusCode.OK, "User-agent: *\nDisallow: /watch\n") :
+                Response(HttpStatusCode.ServiceUnavailable);
+        });
+        using var collector = new HttpCollector(handler);
+
+        var result = await collector.FetchAsync(Request(directory.Path) with { ETag = "\"v1\"" });
+
+        Assert.Equal(denied ? CollectionFailureCode.RobotsDenied : CollectionFailureCode.RobotsUnavailable, result.FailureCode);
+        Assert.Null(result.SentValidators);
+        Assert.Equal(1, handler.Calls);
+    }
+
+    [Fact]
+    public async Task RedirectFailureCannotInheritOriginalRequestValidators()
+    {
+        using var directory = new TemporaryDirectory();
+        var handler = new QueueHandler(_ => Response(HttpStatusCode.NotFound),
+            _ => Redirect("https://example.test/watch/next"), message =>
+            {
+                Assert.Empty(message.Headers.IfNoneMatch);
+                Assert.Null(message.Headers.IfModifiedSince);
+                throw new HttpRequestException("Fixture transport failure");
+            });
+        using var collector = new HttpCollector(handler);
+
+        var result = await collector.FetchAsync(Request(directory.Path) with { ETag = "\"v1\"" });
+
+        Assert.Equal(CollectionFailureCode.TransportError, result.FailureCode);
+        Assert.Equal("https://example.test/watch/next", result.FinalUrl);
+        Assert.Null(result.SentValidators);
+    }
+
+    [Fact]
     public async Task HandlesConditionalNotModifiedAndRateLimitWithoutRetry()
     {
         var notModified = new QueueHandler(_ => Response(HttpStatusCode.NotFound), _ => Response(HttpStatusCode.NotModified));

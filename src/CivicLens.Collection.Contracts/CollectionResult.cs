@@ -42,6 +42,8 @@ public sealed record CollectionResult
     public required DateTimeOffset ObservedAt { get; init; }
     public HttpResponseMetadata? Response { get; init; }
     [JsonRequired]
+    public HttpRequestValidators? SentValidators { get; init; }
+    [JsonRequired]
     public long BytesReceived { get; init; }
     [JsonRequired]
     public int RequestCount { get; init; }
@@ -57,6 +59,7 @@ public sealed record CollectionResult
         ValidateIdentity(request);
         ValidateObservation(request);
         ValidateResourceAccounting(request);
+        ValidateSentValidators(request);
         Response?.Validate();
         Capture?.Validate();
         ValidateOutcome(request);
@@ -108,6 +111,15 @@ public sealed record CollectionResult
         }
     }
 
+    private void ValidateSentValidators(CollectionRequest request)
+    {
+        var conditionalAttempt = RequestCount >= 2 && new Uri(FinalUrl) == new Uri(request.Url) &&
+            (request.ETag is not null || request.LastModified is not null);
+        if (conditionalAttempt != (SentValidators is not null))
+            throw new InvalidDataException("Sent validators must describe the last attempted content request.");
+        SentValidators?.ValidateAgainst(request);
+    }
+
     private void ValidateCaptured()
     {
         if (Response?.StatusCode != 200 || Capture is null || RequestCount < 2 || FailureCode is not null ||
@@ -118,7 +130,7 @@ public sealed record CollectionResult
     private void ValidateNotModified(CollectionRequest request)
     {
         if (Response?.StatusCode != 304 || !Uri.TryCreate(FinalUrl, UriKind.Absolute, out var final) ||
-            final != new Uri(request.Url) || (request.ETag is null && request.LastModified is null) ||
+            final != new Uri(request.Url) || SentValidators is null ||
             RequestCount < 2 || Capture is not null || FailureCode is not null || RetryAfterSeconds is not null)
             throw new InvalidDataException("Not-modified result requires a conditional request and HTTP 304.");
     }

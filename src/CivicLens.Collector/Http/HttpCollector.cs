@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using System.Globalization;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
@@ -31,6 +32,7 @@ public sealed class HttpCollector : IDisposable
         var current = new Uri(request.Url);
         var requestedUri = current;
         HttpResponseMetadata? responseMetadata = null;
+        HttpRequestValidators? sentValidators = null;
         try
         {
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -57,6 +59,7 @@ public sealed class HttpCollector : IDisposable
                 var hasConditionals = message.Headers.IfNoneMatch.Count > 0 || message.Headers.IfModifiedSince is not null;
                 current = target;
                 responseMetadata = null;
+                sentValidators = ReadRequestValidators(message);
                 requests++;
                 using var response = await client.SendAsync(message, HttpCompletionOption.ResponseHeadersRead, token);
                 try { responseMetadata = ReadResponseMetadata(response); }
@@ -107,6 +110,7 @@ public sealed class HttpCollector : IDisposable
                 Outcome = outcome,
                 ObservedAt = DateTimeOffset.UtcNow,
                 Response = responseMetadata,
+                SentValidators = sentValidators,
                 Capture = capture,
                 BytesReceived = bytes,
                 RequestCount = requests,
@@ -116,6 +120,17 @@ public sealed class HttpCollector : IDisposable
             result.ValidateAgainst(request);
             return result;
         }
+    }
+
+    private static HttpRequestValidators? ReadRequestValidators(HttpRequestMessage message)
+    {
+        var etag = message.Headers.IfNoneMatch.Count == 0 ? null :
+            message.Headers.GetValues("If-None-Match").Single();
+        var modified = message.Headers.IfModifiedSince is null ? (DateTimeOffset?)null :
+            DateTimeOffset.ParseExact(message.Headers.GetValues("If-Modified-Since").Single(),
+                "r", CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal);
+        return etag is null && modified is null ? null :
+            new HttpRequestValidators { ETag = etag, LastModified = modified };
     }
 
     private static HttpResponseMetadata ReadResponseMetadata(HttpResponseMessage response)
