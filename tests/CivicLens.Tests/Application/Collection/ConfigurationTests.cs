@@ -1,6 +1,6 @@
-using CivicLens.Application;
+using CivicLens.Application.Collection;
 
-namespace CivicLens.Tests;
+namespace CivicLens.Tests.Application.Collection;
 
 public sealed class ConfigurationTests
 {

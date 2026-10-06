@@ -3,12 +3,13 @@ using System.Net;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
-using CivicLens.Application;
+using CivicLens.Application.Collection;
 using CivicLens.Collection.Contracts;
-using CivicLens.Collector;
-using CivicLens.Infrastructure;
+using CivicLens.Collector.Http;
+using CivicLens.Infrastructure.Collection;
+using static CivicLens.Tests.Fixtures.CollectionFixtures;
 
-namespace CivicLens.Tests;
+namespace CivicLens.Tests.Infrastructure.Collection;
 
 public sealed class CollectorProcessTests
 {
@@ -87,7 +88,7 @@ public sealed class CollectorProcessTests
         var origin = $"http://127.0.0.1:{((IPEndPoint)listener.LocalEndpoint).Port}";
         using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         using var cancelled = new CancellationTokenSource();
-        var request = CollectionProtocolTests.Request() with
+        var request = Request() with
         {
             Url = origin + "/watch",
             AllowedOrigin = origin,

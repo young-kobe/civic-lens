@@ -1,8 +1,9 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using CivicLens.Collection.Contracts;
+using static CivicLens.Tests.Fixtures.CollectionFixtures;
 
-namespace CivicLens.Tests;
+namespace CivicLens.Tests.Collection.Contracts;
 
 public sealed class CollectionProtocolTests
 {
@@ -149,27 +150,4 @@ public sealed class CollectionProtocolTests
         Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<CollectionRequest>(json, CollectionProtocol.JsonOptions));
     }
 
-    internal static CollectionRequest Request() => new()
-    {
-        JobId = "job",
-        SourceId = "source",
-        Url = "https://example.test/pages/a",
-        AllowedOrigin = "https://example.test",
-        AllowedPathPrefix = "/pages",
-        ArtifactDirectory = Path.GetFullPath(".runtime/test-captures")
-    };
-
-    internal static CollectionResult Receipt(CollectionRequest request) => new()
-    {
-        JobId = request.JobId,
-        SourceId = request.SourceId,
-        RequestedUrl = request.Url,
-        FinalUrl = request.Url,
-        Outcome = CollectionOutcome.Captured,
-        ObservedAt = DateTimeOffset.UtcNow,
-        Response = new HttpResponseMetadata { StatusCode = 200, ETag = "\"v1\"", ContentEncodings = [] },
-        Capture = new CaptureArtifact { Sha256 = new string('a', 64), RelativePath = new string('a', 64) + ".gz", ByteLength = 4 },
-        BytesReceived = 10,
-        RequestCount = 2
-    };
 }

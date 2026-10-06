@@ -5,7 +5,7 @@ using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 using CivicLens.Collection.Contracts;
 
-namespace CivicLens.Collector;
+namespace CivicLens.Collector.Http;
 
 public sealed class HttpCollector : IDisposable
 {

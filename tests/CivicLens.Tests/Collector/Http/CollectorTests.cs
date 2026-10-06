@@ -3,9 +3,9 @@ using System.Net;
 using System.Security.Cryptography;
 using System.Text;
 using CivicLens.Collection.Contracts;
-using CivicLens.Collector;
+using CivicLens.Collector.Http;
 
-namespace CivicLens.Tests;
+namespace CivicLens.Tests.Collector.Http;
 
 public sealed class CollectorTests
 {
