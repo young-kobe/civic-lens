@@ -47,6 +47,7 @@ public sealed record CollectionConfiguration
 
             var request = BuildRequest(source, "validation-job", Path.GetFullPath("collection-artifacts"));
             request.Validate();
+            source.JobPolicy?.Validate(request);
         }
     }
 
@@ -78,7 +79,9 @@ public sealed record CollectionConfiguration
             MaxRequests = source.MaxRequests,
             MaxBytes = source.MaxBytes,
             TimeoutSeconds = source.TimeoutSeconds,
-            MinDelayMilliseconds = source.MinDelayMilliseconds
+            MinDelayMilliseconds = source.MinDelayMilliseconds,
+            ETag = source.ETag,
+            LastModified = source.LastModified
         };
         return request;
     }

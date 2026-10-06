@@ -37,7 +37,7 @@ public sealed class PostgresCollectionAttemptStoreTests(PostgresCollection postg
         await store.MigrateAsync();
         await using var db = await factory.CreateDbContextAsync();
         Assert.Empty(await db.Database.GetPendingMigrationsAsync());
-        Assert.Single(await db.Database.GetAppliedMigrationsAsync());
+        Assert.Equal(2, (await db.Database.GetAppliedMigrationsAsync()).Count());
         Assert.False(db.Database.HasPendingModelChanges());
     }
 

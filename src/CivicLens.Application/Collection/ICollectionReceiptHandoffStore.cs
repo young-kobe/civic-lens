@@ -1,7 +1,8 @@
 namespace CivicLens.Application.Collection;
 
 /// <summary>Durable pending receipts, separate from the evidence database and collector protocol.</summary>
-/// <remarks>Callers hold a recovery lease across save/import/delete or load/verify/import/delete.
+/// <remarks>Callers hold a recovery lease across import/delete or load/verify/import/delete.
+/// Saving a new handoff is atomic and may precede lease acquisition so contention cannot lose a completed receipt.
 /// Implementations retain unsuccessful imports and never overwrite a saved attempt.</remarks>
 public interface ICollectionReceiptHandoffStore
 {
