@@ -8,6 +8,44 @@ namespace CivicLens.Tests.Application.Collection.Jobs;
 public sealed class RunCollectionJobTests
 {
     [Fact]
+    public async Task InternalCollectorDeadlineSettlesAsInterruptedWithoutCallerCancellation()
+    {
+        var request = Request();
+        var jobs = new FakeJobs(PendingJob(request)) { StartRequest = request };
+        var runner = new RunCollectionJob(jobs, new InMemoryAttemptStore(), new TrackingHandoffs(),
+            new NoopVerifier(), new DeadlineCollector());
+
+        var result = await runner.ExecuteAsync("job-1", Path.GetTempPath(), TimeSpan.FromSeconds(5));
+
+        Assert.Equal(CollectionJobRunStatus.AttemptFailed, result.Status);
+        Assert.Equal(CollectionJobAttemptOutcome.Interrupted, Assert.Single(result.Job!.Attempts).Resolution!.Outcome);
+        Assert.False(result.Job.CancellationRequested);
+    }
+
+    [Fact]
+    public async Task RecoveryLeaseContentionDoesNotDiscardCompletedReceipt()
+    {
+        var request = Request();
+        var jobs = new FakeJobs(PendingJob(request)) { StartRequest = request };
+        var handoffs = new TrackingHandoffs { RecoveryLeaseUnavailable = true };
+        var runner = new RunCollectionJob(jobs, new InMemoryAttemptStore(), handoffs,
+            new NoopVerifier(), new ReturnReceiptCollector());
+
+        await Assert.ThrowsAsync<IOException>(() => runner.ExecuteAsync("job-1", Path.GetTempPath(), TimeSpan.FromSeconds(5)));
+
+        Assert.True(handoffs.Saved);
+        Assert.False(handoffs.Deleted);
+        Assert.Equal("attempt-new", Assert.Single(await handoffs.ListAsync(default)));
+        Assert.Equal(0, jobs.SettleCalls);
+    }
+
+    private sealed class DeadlineCollector : ICollectorProcess
+    {
+        public Task<CollectionResult> RunAsync(CollectionRequest request, CancellationToken cancellationToken) =>
+            throw new OperationCanceledException("Internal process deadline elapsed.");
+    }
+
+    [Fact]
     public async Task LostRenewalCancelsLongRecoveryAndPreventsStartingAnotherAttempt()
     {
         var request = Request();
@@ -255,9 +293,12 @@ public sealed class RunCollectionJobTests
     private sealed class TrackingHandoffs : ICollectionReceiptHandoffStore
     {
         private readonly Dictionary<string, PendingCollectionHandoff> entries = [];
+        public bool RecoveryLeaseUnavailable { get; init; }
         public bool Saved { get; private set; }
         public bool Deleted { get; private set; }
-        public ValueTask<IAsyncDisposable> AcquireRecoveryLeaseAsync(CancellationToken cancellationToken) => ValueTask.FromResult<IAsyncDisposable>(new NoopLease());
+        public ValueTask<IAsyncDisposable> AcquireRecoveryLeaseAsync(CancellationToken cancellationToken) =>
+            RecoveryLeaseUnavailable ? throw new IOException("Recovery lease unavailable.") :
+            ValueTask.FromResult<IAsyncDisposable>(new NoopLease());
         public Task SaveAsync(PendingCollectionHandoff handoff, CancellationToken cancellationToken)
         {
             entries.Add(handoff.AttemptId, handoff);

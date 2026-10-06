@@ -116,8 +116,6 @@ public sealed class RunCollectionJob(
         }
         if (callerToken.IsCancellationRequested)
             return new CollectionJobRunResult(CollectionJobRunStatus.Cancelled, await ReadJobBoundedAsync(lease.JobId));
-        if (executionFailure is OperationCanceledException)
-            return new CollectionJobRunResult(CollectionJobRunStatus.Cancelled, await ReadJobBoundedAsync(lease.JobId));
         var interrupted = new CollectionAttemptResolution(CollectionJobAttemptOutcome.Interrupted, null,
             executionFailure?.GetType().Name ?? "CollectorInterrupted");
         using var settlementTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
@@ -139,9 +137,9 @@ public sealed class RunCollectionJob(
         using var preservationTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
         try
         {
+            await handoffs.SaveAsync(handoff, preservationTimeout.Token);
             await using (await handoffs.AcquireRecoveryLeaseAsync(preservationTimeout.Token))
             {
-                await handoffs.SaveAsync(handoff, preservationTimeout.Token);
                 if (!lease.IsOwned)
                     return new CollectionJobRunResult(CollectionJobRunStatus.LostOwnership,
                         await ReadJobBoundedAsync(lease.JobId));
