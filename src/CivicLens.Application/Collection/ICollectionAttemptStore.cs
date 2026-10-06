@@ -6,8 +6,8 @@ namespace CivicLens.Application.Collection;
 public interface ICollectionAttemptStore
 {
     /// <summary>
-    /// In one transaction, load any same-ID retained attempt and eligible prior capture, call
-    /// <see cref="CollectionAttemptImport.Decide"/>, retain new evidence on NewAttempt, and return the decision.
+    /// In one transaction, load any same-ID retained attempt and all potentially eligible prior captures, call
+    /// <see cref="CollectionAttemptImport.DecideFromCandidates"/>, retain new evidence on NewAttempt, and return the decision.
     /// Enforce unique attempt identity and capture hash/length atomically. Retained state excludes per-call disposition.
     /// A conflicting replay must roll back without writes; honor cancellation and roll back on cancellation.
     /// </summary>

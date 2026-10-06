@@ -20,4 +20,9 @@ public sealed class CollectionAttemptImport
     public CollectionImportDecision Decide(StoredCollectionAttempt? existingAttempt,
         CapturedAttemptResult? priorCapturedAttempt) =>
         policy.Decide(AttemptResult, existingAttempt?.ToDecision(policy), priorCapturedAttempt, SentValidators);
+
+    /// <summary>Decides against all potentially eligible captures, retaining no link when their evidence is ambiguous.</summary>
+    public CollectionImportDecision DecideFromCandidates(StoredCollectionAttempt? existingAttempt,
+        IEnumerable<CapturedAttemptResult> priorCapturedAttempts) =>
+        policy.DecideFromCandidates(AttemptResult, priorCapturedAttempts, existingAttempt?.ToDecision(policy), SentValidators);
 }

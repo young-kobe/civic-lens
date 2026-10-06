@@ -3,6 +3,33 @@ namespace CivicLens.Core.Collection;
 /// <summary>Decides whether an attempt is new or duplicate and whether a 304 can link to prior captured evidence.</summary>
 public sealed class CollectionImportPolicy
 {
+    /// <summary>Links a new 304 only when all eligible observations identify the same capture.</summary>
+    public CollectionImportDecision DecideFromCandidates(CollectionAttemptResult incoming,
+        IEnumerable<CapturedAttemptResult> priorCapturedAttempts, CollectionImportDecision? existingAttempt = null,
+        SentValidators? sentValidators = null)
+    {
+        ArgumentNullException.ThrowIfNull(incoming);
+        ArgumentNullException.ThrowIfNull(priorCapturedAttempts);
+        if (existingAttempt is not null || incoming is not NotModifiedAttemptResult notModified || sentValidators is null)
+            return Decide(incoming, existingAttempt, sentValidators: sentValidators);
+
+        CapturedAttemptResult? selected = null;
+        foreach (var candidate in priorCapturedAttempts)
+        {
+            ArgumentNullException.ThrowIfNull(candidate);
+            if (!Binds(notModified, candidate, sentValidators))
+                continue;
+            if (selected is not null && selected.Capture != candidate.Capture)
+                return Decide(incoming, sentValidators: sentValidators);
+            if (selected is null || candidate.ObservedAt > selected.ObservedAt ||
+                (candidate.ObservedAt == selected.ObservedAt &&
+                 string.CompareOrdinal(candidate.AttemptId, selected.AttemptId) < 0))
+                selected = candidate;
+        }
+
+        return Decide(incoming, priorCapturedAttempt: selected, sentValidators: sentValidators);
+    }
+
     public CollectionImportDecision Decide(CollectionAttemptResult incoming, CollectionImportDecision? existingAttempt = null,
         CapturedAttemptResult? priorCapturedAttempt = null, SentValidators? sentValidators = null)
     {
