@@ -4,7 +4,11 @@ namespace CivicLens.Tests.Host;
 
 internal static class HostProcess
 {
-    public static async Task<(int ExitCode, string Output, string Error)> RunAsync(string? database, params string[] arguments)
+    public static Task<(int ExitCode, string Output, string Error)> RunAsync(string? database, params string[] arguments) =>
+        RunWithCollectorHostAsync(database, null, arguments);
+
+    public static async Task<(int ExitCode, string Output, string Error)> RunWithCollectorHostAsync(
+        string? database, string? collectorHost, params string[] arguments)
     {
         var root = new DirectoryInfo(AppContext.BaseDirectory);
         while (root is not null && !File.Exists(Path.Combine(root.FullName, "CivicLens.slnx")))
@@ -22,6 +26,7 @@ internal static class HostProcess
         foreach (var argument in arguments) start.ArgumentList.Add(argument);
         start.Environment.Remove("CIVIC_LENS_DATABASE");
         if (database is not null) start.Environment["CIVIC_LENS_DATABASE"] = database;
+        if (collectorHost is not null) start.Environment["DOTNET_HOST_PATH"] = collectorHost;
         using var process = Process.Start(start)!;
         var output = process.StandardOutput.ReadToEndAsync();
         var error = process.StandardError.ReadToEndAsync();
