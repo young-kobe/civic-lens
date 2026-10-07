@@ -48,6 +48,7 @@ public sealed record CollectionResult
     [JsonRequired]
     public int RequestCount { get; init; }
     public CaptureArtifact? Capture { get; init; }
+    public FeedDiscoveryResult? Discovery { get; init; }
     public CollectionFailureCode? FailureCode { get; init; }
     public long? RetryAfterSeconds { get; init; }
 
@@ -62,12 +63,20 @@ public sealed record CollectionResult
         ValidateSentValidators(request);
         Response?.Validate();
         Capture?.Validate();
+        if (Discovery is not null)
+        {
+            if (request.Mode != CollectionMode.Feed || request.Version != CollectionProtocol.Version || Outcome != CollectionOutcome.Captured)
+                throw new InvalidDataException("Feed discovery is only valid for captured v4 feed requests.");
+            Discovery.ValidateAgainst(request);
+        }
+        else if (Outcome == CollectionOutcome.Captured && request.Mode == CollectionMode.Feed)
+            throw new InvalidDataException("Captured feed result requires discovery metadata.");
         ValidateOutcome(request);
     }
 
     private void ValidateIdentity(CollectionRequest request)
     {
-        if (Version != CollectionProtocol.Version)
+        if (Version != request.Version || Version is not (CollectionProtocol.Version or CollectionProtocol.PreviousVersion))
             throw new InvalidDataException("Unsupported collection result version.");
         if (JobId != request.JobId || SourceId != request.SourceId || RequestedUrl != request.Url)
             throw new InvalidDataException("Collector result does not identify the requested work.");

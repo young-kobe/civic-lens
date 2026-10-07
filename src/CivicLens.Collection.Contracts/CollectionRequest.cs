@@ -12,6 +12,8 @@ public sealed record CollectionRequest
     public required string AllowedOrigin { get; init; }
     public required string AllowedPathPrefix { get; init; }
     public required string ArtifactDirectory { get; init; }
+    public CollectionMode Mode { get; init; } = CollectionMode.Page;
+    public int MaxCandidates { get; init; } = 100;
     public int MaxRequests { get; init; } = 5;
     public long MaxBytes { get; init; } = 2_000_000;
     public int TimeoutSeconds { get; init; } = 30;
@@ -32,8 +34,11 @@ public sealed record CollectionRequest
 
     private void ValidateIdentity()
     {
-        if (Version != CollectionProtocol.Version)
+        if (Version is not (CollectionProtocol.Version or CollectionProtocol.PreviousVersion))
             throw new ArgumentException("Unsupported collection protocol version.");
+        if (!Enum.IsDefined(Mode) || (Version == CollectionProtocol.PreviousVersion &&
+            (Mode != CollectionMode.Page || MaxCandidates != 100)))
+            throw new ArgumentException("Collection mode is unsupported for this protocol version.");
         if (string.IsNullOrWhiteSpace(JobId) || string.IsNullOrWhiteSpace(SourceId))
             throw new ArgumentException("Job and source IDs are required.");
     }
@@ -69,7 +74,7 @@ public sealed record CollectionRequest
     private void ValidateBudgets()
     {
         if (MaxRequests is < 2 or > 20 || MaxBytes is < 1 or > 100_000_000 ||
-            TimeoutSeconds is < 1 or > 300 || MinDelayMilliseconds is < 0 or > 60_000)
+            TimeoutSeconds is < 1 or > 300 || MinDelayMilliseconds is < 0 or > 60_000 || MaxCandidates is < 1 or > 1000)
             throw new ArgumentException("Collection budgets are outside supported bounds.");
     }
 

@@ -1,4 +1,6 @@
 using System.Data.Common;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Collection.Contracts;
@@ -42,6 +44,38 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
         await connection.OpenAsync();
         await using var command = new NpgsqlCommand($"DROP SCHEMA {schema} CASCADE", connection);
         await command.ExecuteNonQueryAsync();
+    }
+
+    [Fact]
+    public async Task VersionThreeSettlementReplayRemainsIdempotentAfterUpgrade()
+    {
+        var claim = await EnqueueClaimAsync("v3-settlement", Definition());
+        var start = await jobs.TryStartAttemptAsync(claim.Lease, root, default);
+        var request = start.Attempt!.Request with { Version = 3 };
+        var receipt = ReceiptCollector.Result(request, 404) with { Version = 3 };
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using (var command = new NpgsqlCommand("UPDATE collection_job_attempts SET request_json = @request WHERE attempt_id = @id", connection))
+        {
+            command.Parameters.AddWithValue("request", JsonSerializer.Serialize(request, CollectionProtocol.JsonOptions));
+            command.Parameters.AddWithValue("id", start.Attempt.AttemptId);
+            await command.ExecuteNonQueryAsync();
+        }
+        await CollectionAttemptImporter.ImportAsync(start.Attempt.AttemptId, request, receipt, evidence, default);
+        var resolution = CollectionJobLifecycle.Resolve(receipt);
+        Assert.True(await jobs.SettleAttemptAsync(claim.Lease, start.Attempt.AttemptId, resolution, default));
+        var legacyJson = JsonSerializer.SerializeToNode(resolution, CollectionProtocol.JsonOptions)!;
+        legacyJson["receipt"]!.AsObject().Remove("discovery");
+        await using (var command = new NpgsqlCommand("UPDATE collection_job_attempts SET resolution_json = @resolution WHERE attempt_id = @id", connection))
+        {
+            command.Parameters.AddWithValue("resolution", legacyJson.ToJsonString());
+            command.Parameters.AddWithValue("id", start.Attempt.AttemptId);
+            await command.ExecuteNonQueryAsync();
+        }
+        Assert.True(await jobs.SettleAttemptAsync(claim.Lease, start.Attempt.AttemptId, resolution, default));
+        Assert.Equal(2, (await jobs.GetAsync(claim.Job.JobId, default))!.ReservedRequests);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => jobs.SettleAttemptAsync(claim.Lease,
+            start.Attempt.AttemptId, resolution with { Receipt = receipt with { FinalUrl = receipt.FinalUrl + "/changed" } }, default));
     }
 
     [Fact]

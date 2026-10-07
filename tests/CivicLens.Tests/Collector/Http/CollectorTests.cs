@@ -28,6 +28,194 @@ public sealed class CollectorTests
     }
 
     [Fact]
+    public async Task FeedModeParsesScopedRssLinksAndKeepsRawCapture()
+    {
+        using var directory = new TemporaryDirectory();
+        var feed = "<rss version='2.0'><channel><item><link>/watch/story</link></item><item><link>https://example.test/watch/story</link></item></channel></rss>";
+        var payload = Encoding.UTF8.GetBytes(feed);
+        using var collector = new HttpCollector(new QueueHandler(_ => Response(HttpStatusCode.NotFound), _ => Response(HttpStatusCode.OK, payload)));
+        var result = await collector.FetchAsync(Request(directory.Path) with { Mode = CollectionMode.Feed });
+        Assert.Equal(CollectionOutcome.Captured, result.Outcome);
+        Assert.Equal(FeedDiscoveryStatus.Parsed, result.Discovery!.Status);
+        Assert.Equal(new[] { "https://example.test/watch/story" }, result.Discovery.Urls);
+        await using var file = File.OpenRead(Path.Combine(directory.Path, result.Capture!.RelativePath));
+        await using var gzip = new GZipStream(file, CompressionMode.Decompress);
+        using var output = new MemoryStream(); await gzip.CopyToAsync(output);
+        Assert.Equal(payload, output.ToArray());
+    }
+
+    [Fact]
+    public async Task OutOfScopeFeedLinksAreFilteredAndCaptureIsRetained()
+    {
+        using var directory = new TemporaryDirectory();
+        var payload = Encoding.UTF8.GetBytes("<rss version='2.0'><channel><item><link>https://outside.test/watch/x</link></item></channel></rss>");
+        using var collector = new HttpCollector(new QueueHandler(_ => Response(HttpStatusCode.NotFound), _ => Response(HttpStatusCode.OK, payload)));
+        var result = await collector.FetchAsync(Request(directory.Path) with { Mode = CollectionMode.Feed });
+        Assert.Equal(CollectionOutcome.Captured, result.Outcome);
+        Assert.NotNull(result.Capture);
+        Assert.Equal(FeedDiscoveryStatus.Parsed, result.Discovery!.Status);
+        Assert.Empty(result.Discovery.Urls);
+    }
+
+    [Fact]
+    public async Task FeedRelativeLinksUseRedirectedResponseUrlAndXmlBaseIsUnsupported()
+    {
+        using var directory = new TemporaryDirectory();
+        var redirectedFeed = Encoding.UTF8.GetBytes("<rss version='2.0'><channel><item><link>story</link></item></channel></rss>");
+        var handler = new QueueHandler(_ => Response(HttpStatusCode.NotFound), _ => Redirect("https://example.test/watch/feeds/current.xml"),
+            _ => Response(HttpStatusCode.OK, redirectedFeed));
+        using var collector = new HttpCollector(handler);
+        var result = await collector.FetchAsync(Request(directory.Path) with { Mode = CollectionMode.Feed });
+        Assert.Equal(new[] { "https://example.test/watch/feeds/story" }, result.Discovery!.Urls);
+
+        using var nextDirectory = new TemporaryDirectory();
+        var xmlBase = Encoding.UTF8.GetBytes("<feed xmlns='http://www.w3.org/2005/Atom' xml:base='https://example.test/watch/'><entry><link href='story'/></entry></feed>");
+        using var nextCollector = new HttpCollector(new QueueHandler(_ => Response(HttpStatusCode.NotFound), _ => Response(HttpStatusCode.OK, xmlBase)));
+        var unsupported = await nextCollector.FetchAsync(Request(nextDirectory.Path) with { Mode = CollectionMode.Feed });
+        Assert.Equal(FeedDiscoveryStatus.Unsupported, unsupported.Discovery!.Status);
+        Assert.Empty(unsupported.Discovery.Urls);
+        Assert.NotNull(unsupported.Capture);
+    }
+
+    [Fact]
+    public async Task FeedCandidateLimitReturnsNoPartialCandidates()
+    {
+        using var directory = new TemporaryDirectory();
+        var payload = Encoding.UTF8.GetBytes("<feed xmlns='http://www.w3.org/2005/Atom'><entry><link href='/watch/a'/></entry><entry><link href='/watch/b'/></entry></feed>");
+        using var collector = new HttpCollector(new QueueHandler(_ => Response(HttpStatusCode.NotFound), _ => Response(HttpStatusCode.OK, payload)));
+        var result = await collector.FetchAsync(Request(directory.Path) with { Mode = CollectionMode.Feed, MaxCandidates = 1 });
+        Assert.Equal(FeedDiscoveryStatus.LimitExceeded, result.Discovery!.Status);
+        Assert.Empty(result.Discovery.Urls);
+    }
+
+    [Fact]
+    public async Task FeedXmlLimitsDepthAndRejectsForeignRootNamespace()
+    {
+        using var directory = new TemporaryDirectory();
+        var deepXml = Encoding.UTF8.GetBytes("<rss version='2.0'><channel>" + string.Concat(Enumerable.Repeat("<x>", 66)) +
+            string.Concat(Enumerable.Repeat("</x>", 66)) + "</channel></rss>");
+        using var collector = new HttpCollector(new QueueHandler(_ => Response(HttpStatusCode.NotFound), _ => Response(HttpStatusCode.OK, deepXml)));
+        var limited = await collector.FetchAsync(Request(directory.Path) with { Mode = CollectionMode.Feed });
+        Assert.Equal(FeedDiscoveryStatus.LimitExceeded, limited.Discovery!.Status);
+        Assert.Empty(limited.Discovery.Urls);
+
+        using var foreignDirectory = new TemporaryDirectory();
+        var foreign = Encoding.UTF8.GetBytes("<rss xmlns='urn:foreign' version='2.0'><channel><item><link>/watch/a</link></item></channel></rss>");
+        using var foreignCollector = new HttpCollector(new QueueHandler(_ => Response(HttpStatusCode.NotFound), _ => Response(HttpStatusCode.OK, foreign)));
+        var unsupported = await foreignCollector.FetchAsync(Request(foreignDirectory.Path) with { Mode = CollectionMode.Feed });
+        Assert.Equal(FeedDiscoveryStatus.Unsupported, unsupported.Discovery!.Status);
+        Assert.Empty(unsupported.Discovery.Urls);
+    }
+
+    [Theory]
+    [InlineData("iso-8859-1", false, "caf%C3%83%C2%A9")]
+    [InlineData("iso-8859-1", true, "caf%C3%A9")]
+    [InlineData("utf-8", false, "caf%C3%A9")]
+    public async Task FeedCharsetUsesBomThenHttpHeaderThenXmlDeclaration(string charset, bool bom, string expectedPath)
+    {
+        using var directory = new TemporaryDirectory();
+        var xml = "<?xml version='1.0' encoding='iso-8859-1'?><rss version='2.0'><channel><item><link>/watch/café</link></item></channel></rss>";
+        var body = Encoding.UTF8.GetBytes(xml);
+        var payload = bom ? Encoding.UTF8.GetPreamble().Concat(body).ToArray() : body;
+        using var collector = new HttpCollector(new QueueHandler(_ => Response(HttpStatusCode.NotFound), _ =>
+        {
+            var response = Response(HttpStatusCode.OK, payload);
+            response.Content.Headers.TryAddWithoutValidation("Content-Type", "application/rss+xml; charset=" + charset);
+            return response;
+        }));
+        var result = await collector.FetchAsync(Request(directory.Path) with { Mode = CollectionMode.Feed });
+        Assert.Equal(CollectionOutcome.Captured, result.Outcome);
+        Assert.Equal(FeedDiscoveryStatus.Parsed, result.Discovery!.Status);
+        Assert.Equal("https://example.test/watch/" + expectedPath, Assert.Single(result.Discovery.Urls));
+        Assert.Equal(Convert.ToHexString(SHA256.HashData(payload)).ToLowerInvariant(), result.Capture!.Sha256);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task FeedConsumesExactlyOneUtf16ByteOrderMark(bool duplicate)
+    {
+        using var directory = new TemporaryDirectory();
+        var xml = "<rss version='2.0'><channel><item><link>/watch/article</link></item></channel></rss>";
+        var preamble = Encoding.Unicode.GetPreamble();
+        var prefix = duplicate ? preamble.Concat(preamble) : preamble;
+        var payload = prefix.Concat(Encoding.Unicode.GetBytes(xml)).ToArray();
+        using var collector = new HttpCollector(new QueueHandler(_ => Response(HttpStatusCode.NotFound), _ => Response(HttpStatusCode.OK, payload)));
+        var result = await collector.FetchAsync(Request(directory.Path) with { Mode = CollectionMode.Feed });
+        Assert.Equal(CollectionOutcome.Captured, result.Outcome);
+        Assert.Equal(duplicate ? FeedDiscoveryStatus.Invalid : FeedDiscoveryStatus.Parsed, result.Discovery!.Status);
+        if (duplicate) Assert.Empty(result.Discovery.Urls);
+        else Assert.Equal("https://example.test/watch/article", Assert.Single(result.Discovery.Urls));
+    }
+
+    [Theory]
+    [InlineData("unknown-charset", FeedDiscoveryStatus.Unsupported)]
+    [InlineData("utf-8", FeedDiscoveryStatus.Invalid)]
+    public async Task UndecodableFeedKeepsCaptureWithoutCandidates(string charset, FeedDiscoveryStatus status)
+    {
+        using var directory = new TemporaryDirectory();
+        var payload = Encoding.Latin1.GetBytes("<rss version='2.0'><channel><item><link>/watch/café</link></item></channel></rss>");
+        using var collector = new HttpCollector(new QueueHandler(_ => Response(HttpStatusCode.NotFound), _ =>
+        {
+            var response = Response(HttpStatusCode.OK, payload);
+            response.Content.Headers.TryAddWithoutValidation("Content-Type", "application/rss+xml; charset=" + charset);
+            return response;
+        }));
+        var result = await collector.FetchAsync(Request(directory.Path) with { Mode = CollectionMode.Feed });
+        Assert.Equal(CollectionOutcome.Captured, result.Outcome);
+        Assert.NotNull(result.Capture);
+        Assert.Equal(status, result.Discovery!.Status);
+        Assert.Empty(result.Discovery.Urls);
+    }
+
+    [Theory]
+    [InlineData("gzip", false)]
+    [InlineData("gzip", true)]
+    [InlineData("deflate", false)]
+    [InlineData("deflate", true)]
+    [InlineData("br", false)]
+    [InlineData("br", true)]
+    public async Task CompressedFeedsRequireCompleteEncoding(string coding, bool truncate)
+    {
+        using var directory = new TemporaryDirectory();
+        var xml = Encoding.UTF8.GetBytes("<rss version='2.0'><channel><item><link>/watch/article</link></item></channel></rss>");
+        using var output = new MemoryStream();
+        using (Stream encoder = coding switch
+        {
+            "gzip" => new GZipStream(output, CompressionLevel.NoCompression, leaveOpen: true),
+            "deflate" => new ZLibStream(output, CompressionLevel.NoCompression, leaveOpen: true),
+            _ => new BrotliStream(output, CompressionLevel.NoCompression, leaveOpen: true)
+        })
+            encoder.Write(xml);
+        var encoded = output.ToArray();
+        var payload = truncate ? encoded[..^(coding == "gzip" ? 8 : coding == "deflate" ? 4 : 1)] : encoded;
+        using var collector = new HttpCollector(new QueueHandler(_ => Response(HttpStatusCode.NotFound), _ =>
+        {
+            var response = Response(HttpStatusCode.OK, payload);
+            response.Content.Headers.ContentEncoding.Add(coding);
+            return response;
+        }));
+        var result = await collector.FetchAsync(Request(directory.Path) with { Mode = CollectionMode.Feed });
+        Assert.Equal(CollectionOutcome.Captured, result.Outcome);
+        Assert.Equal(Convert.ToHexString(SHA256.HashData(payload)).ToLowerInvariant(), result.Capture!.Sha256);
+        Assert.Equal(truncate ? FeedDiscoveryStatus.Invalid : FeedDiscoveryStatus.Parsed, result.Discovery!.Status);
+        if (truncate) Assert.Empty(result.Discovery.Urls);
+        else Assert.Equal("https://example.test/watch/article", Assert.Single(result.Discovery.Urls));
+    }
+
+    [Fact]
+    public async Task NestedRssLinkMarkupCannotInventCandidateUrls()
+    {
+        using var directory = new TemporaryDirectory();
+        var xml = "<rss version='2.0'><channel><item><link>/watch/a<x>b</x>c</link></item></channel></rss>";
+        using var collector = new HttpCollector(new QueueHandler(_ => Response(HttpStatusCode.NotFound), _ => Response(HttpStatusCode.OK, xml)));
+        var result = await collector.FetchAsync(Request(directory.Path) with { Mode = CollectionMode.Feed });
+        Assert.Equal(CollectionOutcome.Captured, result.Outcome);
+        Assert.Equal(FeedDiscoveryStatus.Invalid, result.Discovery!.Status);
+        Assert.Empty(result.Discovery.Urls);
+    }
+
+    [Fact]
     public async Task IdenticalBytesCanHaveDifferentRepresentationMetadata()
     {
         using var directory = new TemporaryDirectory();

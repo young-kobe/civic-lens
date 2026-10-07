@@ -26,26 +26,32 @@ public sealed class CollectionProtocolTests
     public void ScopeAllowsExactPathOrDescendants(string url) => (Request() with { Url = url }).Validate();
 
     [Fact]
-    public void VersionThreeRoundTripsExplicitlyAndOlderVersionsAreRejected()
+    public void VersionFourIsCurrentAndVersionThreeRemainsValidForPageRecovery()
     {
         var requestJson = JsonSerializer.Serialize(Request(), CollectionProtocol.JsonOptions);
-        Assert.Contains("\"version\":3", requestJson, StringComparison.Ordinal);
+        Assert.Contains("\"version\":4", requestJson, StringComparison.Ordinal);
         var resultJson = JsonSerializer.Serialize(Receipt(Request()), CollectionProtocol.JsonOptions);
         Assert.Contains("\"failureCode\":null", resultJson, StringComparison.Ordinal);
         var roundTrip = JsonSerializer.Serialize(JsonSerializer.Deserialize<CollectionResult>(resultJson, CollectionProtocol.JsonOptions), CollectionProtocol.JsonOptions);
         Assert.Equal(resultJson, roundTrip);
+        var v3Request = Request() with { Version = 3 };
+        v3Request.Validate();
+        var v3Result = Receipt(v3Request) with { Version = 3 };
+        v3Result.ValidateAgainst(v3Request);
+        Assert.Throws<ArgumentException>(() => (v3Request with { Mode = CollectionMode.Feed }).Validate());
+        Assert.Throws<ArgumentException>(() => (v3Request with { MaxCandidates = 5 }).Validate());
         foreach (var version in new[] { 1, 2 })
         {
-            var oldRequest = requestJson.Replace("\"version\":3", $"\"version\":{version}", StringComparison.Ordinal);
+            var oldRequest = requestJson.Replace("\"version\":4", $"\"version\":{version}", StringComparison.Ordinal);
             Assert.Throws<ArgumentException>(() => JsonSerializer.Deserialize<CollectionRequest>(oldRequest, CollectionProtocol.JsonOptions)!.Validate());
             Assert.Throws<InvalidDataException>(() => (Receipt(Request()) with { Version = version }).ValidateAgainst(Request()));
         }
     }
 
     [Theory]
-    [InlineData("\"version\":3", "\"version\":99")]
-    [InlineData("\"version\":3", "\"version\":3,\"version\":3")]
-    [InlineData("\"version\":3", "\"version\":3,\"extra\":true")]
+    [InlineData("\"version\":4", "\"version\":99")]
+    [InlineData("\"version\":4", "\"version\":4,\"version\":4")]
+    [InlineData("\"version\":4", "\"version\":4,\"extra\":true")]
     [InlineData("\"sourceId\":\"source\"", "\"sourceId\":null")]
     public void MalformedOrUnsupportedWireContractsAreRejected(string original, string replacement)
     {

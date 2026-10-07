@@ -50,7 +50,7 @@ The host prints a verified JSON receipt. A captured result points to `capture.re
 
 Edit configuration to add people or shared sources. A source URL occurs once, with multiple `personIds` when appropriate. `enabled: false` prevents collection without removing the configuration. `allowedOrigin` includes scheme and port; `allowedPathPrefix` permits that exact path and descendants. The local example explicitly permits loopback; this tool is for trusted local configuration, not arbitrary public fetch requests. Keep credentials out of source URLs and manifests.
 
-Standalone collection accepts `CivicLens.Collector collect <manifest.json>` (or `dotnet <collector.dll> collect <manifest.json>`). Version 3 request fields are defined by `CollectionRequest` in Collection.Contracts: `version`, `jobId`, `sourceId`, `url`, `allowedOrigin`, `allowedPathPrefix`, and absolute `artifactDirectory`, plus optional bounded `maxRequests`, `maxBytes`, `timeoutSeconds`, `minDelayMilliseconds`, `eTag`, and `lastModified`. JSON names are case-sensitive. Use version 3 in standalone manifests and rebuild host and collector together; version 1 and 2 collection messages are rejected. Registry configuration remains version 1. Receipts report applied conditional headers in `sentValidators`, using serialized ETags and whole-second UTC dates; the field is null when no conditional headers were applied to the last attempted content request. Validators are explicit in standalone manifests; the host does not yet automatically replay stored validators. A 304 emits `notModified` without a capture. A 429 emits `deferred`, with optional `retryAfterSeconds`; wait before rerunning. HTTP failures, robots denial/unavailability, budget exhaustion, incomplete bodies, and cancellation are explicit failures rather than source deletion.
+Standalone collection accepts `CivicLens.Collector collect <manifest.json>` (or `dotnet <collector.dll> collect <manifest.json>`). Version 4 request fields are defined by `CollectionRequest` in Collection.Contracts: `version`, `jobId`, `sourceId`, `url`, `allowedOrigin`, `allowedPathPrefix`, and absolute `artifactDirectory`, plus optional bounded `maxRequests`, `maxBytes`, `timeoutSeconds`, `minDelayMilliseconds`, `eTag`, and `lastModified`. JSON names are case-sensitive. Use version 4 in new standalone manifests and rebuild host and collector together; version 1 and 2 collection messages are rejected. Registry configuration remains version 1. Receipts report applied conditional headers in `sentValidators`, using serialized ETags and whole-second UTC dates; the field is null when no conditional headers were applied to the last attempted content request. Validators are explicit in standalone manifests; the host does not yet automatically replay stored validators. A 304 emits `notModified` without a capture. A 429 emits `deferred`, with optional `retryAfterSeconds`; wait before rerunning. HTTP failures, robots denial/unavailability, budget exhaustion, incomplete bodies, and cancellation are explicit failures rather than source deletion.
 
 Do not run concurrent collectors for the same origin. Host invocations sharing a capture directory are mutually exclusive, but separate directories and standalone invocations are not coordinated. Robots support and protocol limits are documented in [architecture](architecture.md). A killed child can leave `.capture-*.tmp`; these files are never valid captures and can be removed when no collector is running. Do not remove hash-named captures as temporary files. Use `collect-import` below for atomic evidence persistence. Use the receipt recovery commands below after an interrupted import. Use managed jobs below for cross-run admission, retry budgets, and origin pacing.
 
@@ -73,7 +73,7 @@ Before collection, stderr identifies the application-generated attempt ID. After
 {"attemptId":"<generated-id>","outcome":"captured","importDisposition":"newAttempt","priorCaptureLinkStatus":"notApplicable","handoffRemoved":true}
 ```
 
-Every invocation creates a fresh attempt ID independent of its collector wire job ID. There is no attempt-ID override. Repeated identical content retains separate attempts and reuses the capture. Failed and deferred outcomes are imported too. The command does not automatically load prior validators or schedule retries.
+Every invocation creates a fresh attempt ID independent of its collector wire job ID. There is no attempt-ID override. Repeated identical content retains separate attempts and reuses the capture. Failed and deferred outcomes are imported too. The command does not automatically load prior validators or schedule retries. Feed sources also retain their discovery result atomically with the captured attempt.
 
 Exit codes are 0 for imported captured/not-modified outcomes, 1 for failed/deferred collection or operational failure/cancellation, and 2 for invalid input/configuration. Only a returned import produces the JSON summary. On import failure or interruption, stderr reports that persistence was not confirmed: a lost commit acknowledgment can mean evidence was stored even though no success was printed. Retain the attempt ID for investigation. Re-running `collect-import` collects again with a new ID. Use `receipts replay` to retain the original attempt identity and import its saved receipt without another fetch. A confirmed import with failed handoff cleanup prints its summary with `handoffRemoved: false` and returns 1; replay remains safe. Provider error details and connection strings are not printed.
 
@@ -103,6 +103,51 @@ Optional source `jobPolicy` fields are `maxAttempts` (default 3), `initialRetryD
 The CLI uses a 60-second renewable database-time lease. Persisted cancellation is observed on renewal (normally within 20 seconds) and stops future collection. Complete receipts remain recoverable. Ctrl+C does not permanently cancel the job. After interruption, rerun the same job with the complete artifact root, including `.pending`, or its relocated copy. A same-origin unresolved attempt blocks other managed jobs until reconciled. Use `jobs run` to reconcile its job; standalone receipt replay imports evidence but does not settle jobs. No receipt and no imported evidence means unknown execution, charged at the full reserved budget. There is no automatic polling worker.
 
 Managed jobs share one collector slot per operational store across artifact roots. Direct `collect`, `collect-import`, and standalone collector commands are outside this guarantee. A lost lease cannot guarantee that an old process has physically ceased HTTP; do not treat collection as exactly once. A stale runner can save a late receipt after its attempt was already settled as interrupted. Such a handoff remains available to `receipts replay`; later managed runs do not revisit already settled attempts. Back up the database and complete artifact roots together.
+
+## Feeds and bounded article admission
+
+Set a source's `mode` to `feed` to collect RSS 2.0 or Atom; omitted mode remains `page`. `maxCandidates` defaults to 100 and accepts 1 through 1,000. The allowed origin and path prefix must cover both the feed and intended article URLs. Add this synthetic source to `config/example.json` for the local HTTP server described above:
+
+```json
+{
+  "id": "example-local-feed",
+  "personIds": ["example-official"],
+  "url": "http://127.0.0.1:8765/feed.xml",
+  "allowedOrigin": "http://127.0.0.1:8765",
+  "allowedPathPrefix": "/",
+  "mode": "feed",
+  "maxCandidates": 100,
+  "admissionPolicy": {
+    "maxJobs": 10,
+    "maxTotalRequests": 150,
+    "maxTotalBytes": 60000000,
+    "maxTotalTimeoutSeconds": 900
+  }
+}
+```
+
+Create the feed in the same local server directory. This fixture is synthetic and contains no claims about an actual official:
+
+```sh
+printf '<rss version="2.0"><channel><title>Local fixture</title><item><link>/page.html</link></item></channel></rss>' > .runtime/example-source/feed.xml
+```
+
+Apply migrations, collect/import the feed, inspect the returned attempt ID, and explicitly admit its candidates:
+
+```sh
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- db migrate
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- collect-import config/example.json example-local-feed src/CivicLens.Collector/bin/Release/net10.0/CivicLens.Collector.dll .runtime/captures
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- feeds get <attempt-id>
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- feeds admit config/example.json example-local-feed <attempt-id> local-feed-batch-1
+# Use a job ID from the admission result:
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- jobs run <job-id> src/CivicLens.Collector/bin/Release/net10.0/CivicLens.Collector.dll .runtime/captures
+```
+
+Feed collection also works through `jobs enqueue` and `jobs run`; inspect the job's attempts to obtain the evidence attempt ID. Successful HTTP capture does not guarantee valid discovery. `feeds get` reports `parsed`, `invalid`, `unsupported`, or `limitExceeded`, with URLs only after complete parsing. The raw feed remains inspectable in every captured case. Failed/deferred HTTP outcomes and 304s do not create candidate lists. For a 304, inspect the earlier captured feed attempt.
+
+`feeds admit` snapshots the current enabled source's page-job settings, clears its conditional validators, and checks that source and scope match the retained feed. Its limits reserve the full retry budget of every article job. Admission enqueues jobs and does not fetch them. The response reports jobs created, duplicate count, and deferred count. Repeating the same key and inputs returns the original result without creating jobs; changing inputs with the same key fails. A new key authorizes another bounded batch for remaining candidates. A source/URL already admitted stays deduplicated even if its job failed or was cancelled; inspect or recover that job instead. Existing admitted jobs run from their snapshot after configuration changes.
+
+Candidates, capture identity, and attempt evidence commit atomically. If import fails, use the existing `receipts replay` commands; no feed fetch is required. If admission acknowledgment is lost, repeat its exact key and configuration. Older v3 page handoffs remain recoverable after upgrading; v3 cannot request feed mode. Schema changes still require explicit `db migrate`.
 
 ## Recover saved receipts
 

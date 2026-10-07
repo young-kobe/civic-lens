@@ -13,7 +13,7 @@ using Npgsql;
 namespace CivicLens.Infrastructure.Collection.Jobs;
 
 /// <summary>Atomic job ownership, collection admission, and recovery accounting using database time.</summary>
-public sealed class PostgresCollectionJobStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory) : ICollectionJobStore
+public sealed partial class PostgresCollectionJobStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory) : ICollectionJobStore
 {
     private const string LockName = "civic-lens-collection-jobs";
 
@@ -212,7 +212,7 @@ public sealed class PostgresCollectionJobStore(IDbContextFactory<CollectionAttem
         var resolutionJson = Write(resolution);
         if (attempt.ResolutionJson is not null)
         {
-            if (attempt.ResolutionJson != resolutionJson) throw new InvalidOperationException("Conflicting job attempt settlement.");
+            if (Write(Read<CollectionAttemptResolution>(attempt.ResolutionJson)) != resolutionJson) throw new InvalidOperationException("Conflicting job attempt settlement.");
             return true;
         }
         var evidence = await PostgresCollectionAttemptStore.GetAsync(db, attemptId, cancellationToken);

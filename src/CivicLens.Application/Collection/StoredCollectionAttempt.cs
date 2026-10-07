@@ -1,4 +1,5 @@
 using CivicLens.Core.Collection;
+using CivicLens.Application.Collection.Discovery;
 
 namespace CivicLens.Application.Collection;
 
@@ -6,11 +7,15 @@ namespace CivicLens.Application.Collection;
 public sealed class StoredCollectionAttempt
 {
     public StoredCollectionAttempt(CollectionAttemptResult attemptResult, SentValidators? sentValidators,
-        CapturedAttemptResult? priorCapturedAttempt)
+        CapturedAttemptResult? priorCapturedAttempt, FeedDiscoveryEvidence? discovery = null)
     {
         ArgumentNullException.ThrowIfNull(attemptResult);
         if (attemptResult is not NotModifiedAttemptResult && priorCapturedAttempt is not null)
             throw new ArgumentException("Only a not-modified attempt can retain a prior capture link.", nameof(priorCapturedAttempt));
+        if (discovery is not null && (attemptResult is not CapturedAttemptResult ||
+            discovery.Request.SourceId != attemptResult.SourceId || discovery.Request.Url != attemptResult.RequestedUrl))
+            throw new ArgumentException("Discovery must belong to the captured attempt.", nameof(discovery));
+        Discovery = discovery;
         AttemptResult = attemptResult;
         SentValidators = sentValidators;
         PriorCapturedAttempt = priorCapturedAttempt;
@@ -20,6 +25,7 @@ public sealed class StoredCollectionAttempt
                 nameof(priorCapturedAttempt));
     }
 
+    public FeedDiscoveryEvidence? Discovery { get; }
     public CollectionAttemptResult AttemptResult { get; }
     public SentValidators? SentValidators { get; }
     public CapturedAttemptResult? PriorCapturedAttempt { get; }

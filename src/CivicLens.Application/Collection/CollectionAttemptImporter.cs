@@ -1,4 +1,5 @@
 using CivicLens.Collection.Contracts;
+using CivicLens.Application.Collection.Discovery;
 using CivicLens.Core.Collection;
 
 namespace CivicLens.Application.Collection;
@@ -17,7 +18,8 @@ public static class CollectionAttemptImporter
         result.ValidateAgainst(request);
         var sentValidators = result.SentValidators is null ? null :
             new SentValidators(result.SentValidators.ETag, result.SentValidators.LastModified);
-        return new CollectionAttemptImport(Map(attemptId, result), sentValidators);
+        return new CollectionAttemptImport(Map(attemptId, result), sentValidators,
+            result.Discovery is null ? null : new FeedDiscoveryEvidence(request, result.Discovery));
     }
 
     private static CollectionAttemptResult Map(string attemptId, CollectionResult result)

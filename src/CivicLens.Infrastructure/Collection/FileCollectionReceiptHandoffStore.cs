@@ -6,7 +6,7 @@ namespace CivicLens.Infrastructure.Collection;
 
 public sealed class FileCollectionReceiptHandoffStore : ICollectionReceiptHandoffStore
 {
-    private const int MaximumEnvelopeBytes = 1_048_576;
+    private const int MaximumEnvelopeBytes = CollectionProtocol.MaximumFeedReceiptSize + 1_048_576;
     private readonly string root;
     private readonly string spool;
 

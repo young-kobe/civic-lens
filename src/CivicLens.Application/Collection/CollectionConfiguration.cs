@@ -48,6 +48,7 @@ public sealed record CollectionConfiguration
             var request = BuildRequest(source, "validation-job", Path.GetFullPath("collection-artifacts"));
             request.Validate();
             source.JobPolicy?.Validate(request);
+            source.AdmissionPolicy?.Validate();
         }
     }
 
@@ -72,6 +73,8 @@ public sealed record CollectionConfiguration
         {
             JobId = jobId,
             SourceId = source.Id,
+            Mode = source.Mode,
+            MaxCandidates = source.MaxCandidates,
             Url = source.Url,
             AllowedOrigin = source.AllowedOrigin,
             AllowedPathPrefix = source.AllowedPathPrefix,
