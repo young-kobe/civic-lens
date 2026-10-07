@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using CivicLens.Application.Collection.Discovery;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Collection.Contracts;
@@ -25,7 +26,7 @@ public sealed partial class PostgresCollectionJobStore : IDiscoveryAdmissionStor
                 row => row.IdempotencyKey == request.IdempotencyKey, cancellationToken);
             if (batch is not null)
             {
-                if (batch.InputJson != inputJson)
+                if (batch.InputJson != inputJson && !MatchesLegacyAdmission(batch.InputJson, request))
                     throw new ArgumentException("The admission idempotency key belongs to different input.", nameof(request));
                 return Read<DiscoveryAdmissionResult>(batch.ResultJson);
             }
@@ -110,6 +111,19 @@ public sealed partial class PostgresCollectionJobStore : IDiscoveryAdmissionStor
             });
             return result;
         }, cancellationToken);
+    }
+
+    private static bool MatchesLegacyAdmission(string storedJson, DiscoveryAdmissionRequest request)
+    {
+        using var input = JsonDocument.Parse(storedJson);
+        var existingTemplate = ReadDefinition(input.RootElement.GetProperty("articleTemplate").GetRawText());
+        if (existingTemplate.ConfigurationRevision is not null || existingTemplate.CoverageAsOf is not null)
+            return false;
+        var template = request.ArticleTemplate with { ConfigurationRevision = null, CoverageAsOf = null };
+        var legacyJson = request.ExpectedDiscoveryMode == CollectionMode.Feed
+            ? Write(new LegacyAdmissionInput(request.AttemptId, template, request.Policy))
+            : Write(new AdmissionInput(request.AttemptId, template, request.Policy, request.ExpectedDiscoveryMode));
+        return storedJson == legacyJson;
     }
 
     private static void ValidateTemplate(CollectionJobDefinition template, CollectionRequest discoveryRequest)

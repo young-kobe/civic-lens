@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Globalization;
 using CivicLens.Application;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Jobs;
@@ -14,18 +15,19 @@ if (args is [] or ["--help"] or ["help"])
         Civic Lens:
           status
           validate <config.json>
-          collect <config.json> <source-id> <collector.dll> <artifact-directory>
+          collect <config.json> <source-id> <collector.dll> <artifact-directory> [--as-of yyyy-MM-dd]
           db migrate
-          collect-import <config.json> <source-id> <collector.dll> <artifact-directory>
+          collect-import <config.json> <source-id> <collector.dll> <artifact-directory> [--as-of yyyy-MM-dd]
           receipts list <artifact-directory>
           receipts replay <artifact-directory> <attempt-id|--all>
-          jobs enqueue <config.json> <source-id> <idempotency-key>
+          jobs enqueue <config.json> <source-id> <idempotency-key> [--as-of yyyy-MM-dd]
           jobs run <job-id> <collector.dll> <artifact-directory>
           jobs get <job-id>
           jobs list [limit]
           jobs cancel <job-id>
           discovery get <attempt-id>
-          discovery admit <config.json> <source-id> <attempt-id> <idempotency-key>
+          discovery admit <config.json> <source-id> <attempt-id> <idempotency-key> [--as-of yyyy-MM-dd]
+        Coverage defaults to the current UTC date; --as-of selects eligibility, not historical fetching or attribution.
         feeds get/admit remain aliases for discovery get/admit.
         Database commands require CIVIC_LENS_DATABASE (Postgres connection string with Host and Database).
         collect and receipts list are database-free. collect-import saves a handoff before importing.
@@ -40,6 +42,20 @@ if (args is ["status"])
 {
     Console.WriteLine(FoundationStatus.Description);
     return 0;
+}
+
+var coverageAsOf = DateOnly.FromDateTime(DateTime.UtcNow);
+if (args.Contains("--as-of", StringComparer.Ordinal))
+{
+    if (args is not [.., "--as-of", var dateText] ||
+        !DateOnly.TryParseExact(dateText, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out coverageAsOf) ||
+        args[..^2] is not (["collect" or "collect-import", _, _, _, _] or
+            ["jobs", "enqueue", _, _, _] or ["feeds" or "discovery", "admit", _, _, _, _]))
+    {
+        Console.Error.WriteLine("Use a trailing --as-of yyyy-MM-dd with collect, collect-import, jobs enqueue, or discovery admit.");
+        return 2;
+    }
+    args = args[..^2];
 }
 
 if (args is not (["db", "migrate"] or ["validate", _] or ["collect", _, _, _, _] or ["collect-import", _, _, _, _]
@@ -68,7 +84,7 @@ try
     if (args is ["feeds" or "discovery", "admit", var discoveryConfigPath, var discoverySourceId, var discoveryAttemptId, var admissionKey])
     {
         var config = await ReadConfigurationAsync(discoveryConfigPath, cancellation.Token);
-        var definition = CollectionJobDefinition.FromConfiguration(config, discoverySourceId);
+        var definition = CollectionJobDefinition.FromConfiguration(config, discoverySourceId, coverageAsOf);
         if (definition.Mode is not (CollectionMode.Feed or CollectionMode.Html)) throw new ArgumentException("Admission requires a configured feed or HTML discovery source.");
         var source = config.Sources.Single(item => item.Id == discoverySourceId);
         var request = new DiscoveryAdmissionRequest(discoveryAttemptId, admissionKey,
@@ -83,7 +99,7 @@ try
     if (args is ["jobs", "enqueue", var configPath, var sourceId, var idempotencyKey])
     {
         var config = await ReadConfigurationAsync(configPath, cancellation.Token);
-        var definition = CollectionJobDefinition.FromConfiguration(config, sourceId);
+        var definition = CollectionJobDefinition.FromConfiguration(config, sourceId, coverageAsOf);
         var jobs = CreateJobs();
         executing = true;
         return await CollectionJobCommand.EnqueueAsync(jobs, definition, idempotencyKey, cancellation.Token);
@@ -139,7 +155,7 @@ try
     if (importing)
     {
         var database = CreateDatabase();
-        var attempt = new PreparedCollectionAttempt(configuration, args[2], args[4]);
+        var attempt = new PreparedCollectionAttempt(configuration, args[2], args[4], coverageAsOf);
         Console.Error.WriteLine($"Attempt ID: {attempt.AttemptId}");
         executing = true;
         var completion = await new CollectAndImportCollectionAttempt(runner, database,
@@ -149,9 +165,9 @@ try
     }
 
     // Validate the selected source before entering operational execution.
-    configuration.CreateRequest(args[2], "validation-job", Path.GetFullPath(args[4]));
+    configuration.CreateRequest(args[2], "validation-job", Path.GetFullPath(args[4]), coverageAsOf);
     executing = true;
-    var result = await new CollectWatchedPage(runner).ExecuteAsync(configuration, args[2], args[4], cancellation.Token);
+    var result = await new CollectWatchedPage(runner).ExecuteAsync(configuration, args[2], args[4], cancellation.Token, coverageAsOf);
     Console.WriteLine(JsonSerializer.Serialize(result, CollectionProtocol.JsonOptions));
     return result.Outcome is CollectionOutcome.Captured or CollectionOutcome.NotModified ? 0 : 1;
 }

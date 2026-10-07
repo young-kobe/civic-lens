@@ -319,6 +319,65 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
     private RunCollectionJob Runner(ICollectorProcess collector) => new(jobs, evidence,
         new FileCollectionReceiptHandoffStore(root), new CaptureArtifactVerifier(), collector);
 
+    [Fact]
+    public async Task LegacyEnqueueReplayRetainsUnknownProvenanceAndNewJobsRetainRevisions()
+    {
+        var configuration = new CollectionConfiguration
+        {
+            People = [new PersonConfiguration { Id = "person", Name = "Original" }],
+            Sources = [new WatchedSourceConfiguration
+            {
+                Id = "source", PersonIds = ["person"], Url = "https://example.test/page",
+                AllowedOrigin = "https://example.test", AllowedPathPrefix = "/"
+            }]
+        };
+        var definition = CollectionJobDefinition.FromConfiguration(configuration, "source", new DateOnly(2026, 7, 1));
+        var legacy = await jobs.EnqueueAsync(definition with { ConfigurationRevision = null, CoverageAsOf = null }, "legacy", default);
+        var replay = await jobs.EnqueueAsync(definition, "legacy", default);
+        Assert.Equal(legacy.JobId, replay.JobId);
+        Assert.Null(replay.Definition.ConfigurationRevision);
+        var current = await jobs.EnqueueAsync(definition, "current", default);
+        var reopened = PostgresCollectionJobStore.FromConnectionString(connectionString);
+        var stored = await reopened.GetAsync(current.JobId, default);
+        Assert.Equal(definition, stored!.Definition);
+        configuration.People[0] = configuration.People[0] with { Name = "Correction" };
+        var corrected = CollectionJobDefinition.FromConfiguration(configuration, "source", definition.CoverageAsOf);
+        await Assert.ThrowsAsync<ArgumentException>(() => reopened.EnqueueAsync(corrected, "current", default));
+        await Assert.ThrowsAsync<ArgumentException>(() => reopened.EnqueueAsync(definition with { ConfigurationRevision = null, CoverageAsOf = null }, "current", default));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task StoredRevisionBindingIsRevalidatedBeforeExecution(bool removeDate)
+    {
+        var configuration = new CollectionConfiguration
+        {
+            People = [new PersonConfiguration { Id = "person", Name = "Person" }],
+            Sources = [new WatchedSourceConfiguration
+            {
+                Id = "source", PersonIds = ["person"], Url = "https://example.test/page",
+                AllowedOrigin = "https://example.test", AllowedPathPrefix = "/"
+            }]
+        };
+        var definition = CollectionJobDefinition.FromConfiguration(configuration, "source", new DateOnly(2026, 7, 1));
+        var claim = await EnqueueClaimAsync("corrupt-binding", definition);
+        var invalid = removeDate ? definition with { CoverageAsOf = null } : definition with { MaxBytes = 100 };
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using (var update = new NpgsqlCommand("UPDATE collection_jobs SET definition_json = @definition WHERE job_id = @id", connection))
+        {
+            update.Parameters.AddWithValue("definition", JsonSerializer.Serialize(invalid, CollectionProtocol.JsonOptions));
+            update.Parameters.AddWithValue("id", claim.Job.JobId);
+            await update.ExecuteNonQueryAsync();
+        }
+        await Assert.ThrowsAsync<InvalidDataException>(() => jobs.GetAsync(claim.Job.JobId, default));
+        await Assert.ThrowsAsync<InvalidDataException>(() => jobs.TryStartAttemptAsync(claim.Lease, root, default));
+        await using var count = new NpgsqlCommand("SELECT count(*) FROM collection_job_attempts WHERE job_id = @id", connection);
+        count.Parameters.AddWithValue("id", claim.Job.JobId);
+        Assert.Equal(0L, await count.ExecuteScalarAsync());
+    }
+
     private async Task<CollectionJobClaim> EnqueueClaimAsync(string key, CollectionJobDefinition definition)
     {
         var job = await jobs.EnqueueAsync(definition, key, default);
