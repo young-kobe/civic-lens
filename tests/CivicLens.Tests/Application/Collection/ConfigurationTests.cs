@@ -91,6 +91,126 @@ public sealed class ConfigurationTests
         }).Validate());
     }
 
+    [Fact]
+    public void VersionTwoCoverageUsesInclusiveStartExclusiveEndAndReturnsSortedIds()
+    {
+        var configuration = new CollectionConfiguration
+        {
+            Version = 2,
+            People = [
+                new PersonConfiguration { Id = "z", Name = "Zed" },
+                new PersonConfiguration { Id = "a", Name = "Amy" }],
+            Sources = [ValidSource([]) with
+            {
+                PersonIds = null,
+                Coverage = [
+                    new SourceCoverageConfiguration { PersonId = "z", StartsOn = new DateOnly(2024, 1, 1), EndsBefore = new DateOnly(2024, 2, 1) },
+                    new SourceCoverageConfiguration { PersonId = "a", EndsBefore = new DateOnly(2024, 2, 1) }]
+            }]
+        };
+
+        Assert.Equal(["a", "z"], configuration.GetCoveredPersonIds("shared", new DateOnly(2024, 1, 31)));
+        Assert.Equal(["a"], configuration.GetCoveredPersonIds("shared", new DateOnly(2023, 12, 31)));
+        Assert.Empty(configuration.GetCoveredPersonIds("shared", new DateOnly(2024, 2, 1)));
+        Assert.Throws<ArgumentException>(() => configuration.CreateRequest("shared", "job", Path.GetFullPath("captures"), new DateOnly(2024, 2, 1)));
+        Assert.Equal("shared", configuration.CreateRequest("shared", "job", Path.GetFullPath("captures"), new DateOnly(2024, 1, 1)).SourceId);
+    }
+
+    [Fact]
+    public void VersionTwoRejectsOverlappingCoverageButAllowsAdjacentIntervalsAndDifferentPeople()
+    {
+        var configuration = DatedConfiguration(
+            [new SourceCoverageConfiguration { PersonId = "one", StartsOn = new DateOnly(2024, 1, 1), EndsBefore = new DateOnly(2024, 2, 1) },
+             new SourceCoverageConfiguration { PersonId = "one", StartsOn = new DateOnly(2024, 2, 1), EndsBefore = new DateOnly(2024, 3, 1) },
+             new SourceCoverageConfiguration { PersonId = "two", StartsOn = new DateOnly(2024, 1, 15), EndsBefore = new DateOnly(2024, 2, 15) }]);
+        configuration.Validate();
+        var overlapping = configuration with
+        {
+            Sources = [configuration.Sources[0] with
+        {
+            Coverage = [.. configuration.Sources[0].Coverage!, new SourceCoverageConfiguration
+            {
+                PersonId = "one", StartsOn = new DateOnly(2024, 1, 31), EndsBefore = new DateOnly(2024, 2, 3)
+            }]
+        }]
+        };
+        Assert.Throws<ArgumentException>(overlapping.Validate);
+    }
+
+    [Fact]
+    public void VersionTwoSupportsHundredsOfPeopleOnOneSource()
+    {
+        var people = Enumerable.Range(1, 500)
+            .Select(index => new PersonConfiguration { Id = $"person-{index}", Name = $"Official {index}" })
+            .ToArray();
+        var configuration = new CollectionConfiguration
+        {
+            Version = 2,
+            People = people,
+            Sources = [ValidSource([]) with
+            {
+                PersonIds = null,
+                Coverage = people.Select(person => new SourceCoverageConfiguration { PersonId = person.Id }).ToArray()
+            }]
+        };
+
+        Assert.Equal(500, configuration.GetCoveredPersonIds("shared", new DateOnly(2024, 1, 1)).Length);
+        Assert.Single(configuration.Sources);
+    }
+
+    [Fact]
+    public void DatedNamesAllowOverlappingDifferentNamesAndRejectDuplicateNameOverlap()
+    {
+        var person = new PersonConfiguration
+        {
+            Id = "one",
+            Name = "Current",
+            Names = [
+                new DatedNameConfiguration { Name = "Alias", StartsOn = new DateOnly(2020, 1, 1), EndsBefore = new DateOnly(2021, 1, 1) },
+                new DatedNameConfiguration { Name = "Other", StartsOn = new DateOnly(2020, 6, 1), EndsBefore = new DateOnly(2021, 6, 1) }]
+        };
+        DatedConfiguration([new SourceCoverageConfiguration { PersonId = "one" }], person).Validate();
+        var duplicate = person with
+        {
+            Names = [.. person.Names!, person.Names[0] with
+        {
+            StartsOn = new DateOnly(2020, 12, 1), EndsBefore = new DateOnly(2021, 2, 1)
+        }]
+        };
+        Assert.Throws<ArgumentException>(() => DatedConfiguration([new SourceCoverageConfiguration { PersonId = "one" }], duplicate).Validate());
+    }
+
+    [Fact]
+    public void VersionAndCoverageShapesAreStrictEvenForDisabledSources()
+    {
+        var dated = DatedConfiguration([new SourceCoverageConfiguration { PersonId = "one" }]);
+        Assert.Throws<ArgumentException>(() => (dated with
+        {
+            Sources = [dated.Sources[0] with { Enabled = false, PersonIds = ["one"] }]
+        }).Validate());
+        Assert.Throws<ArgumentException>(() => (dated with
+        {
+            People = [dated.People[0] with
+        {
+            Names = [null!]
+        }]
+        }).Validate());
+        Assert.Throws<ArgumentException>(() => (dated with
+        {
+            Sources = [dated.Sources[0] with
+        {
+            Coverage = [new SourceCoverageConfiguration { PersonId = "missing" }], Enabled = false
+        }]
+        }).Validate());
+        Assert.Throws<ArgumentException>(() => (dated with
+        {
+            Sources = [dated.Sources[0] with
+        {
+            Coverage = [new SourceCoverageConfiguration { PersonId = "one", StartsOn = new DateOnly(2024, 2, 1), EndsBefore = new DateOnly(2024, 2, 1) }], Enabled = false
+        }]
+        }).Validate());
+    }
+
     private static CollectionConfiguration ValidConfiguration(PersonConfiguration[] people, string[] personIds) =>
         new() { People = people, Sources = [ValidSource(personIds)] };
 
@@ -102,4 +222,13 @@ public sealed class ConfigurationTests
         AllowedOrigin = "http://127.0.0.1:8765",
         AllowedPathPrefix = "/"
     };
+
+    private static CollectionConfiguration DatedConfiguration(SourceCoverageConfiguration[] coverage,
+        PersonConfiguration? person = null) => new()
+        {
+            Version = 2,
+            People = [person ?? new PersonConfiguration { Id = "one", Name = "One" },
+            new PersonConfiguration { Id = "two", Name = "Two" }],
+            Sources = [ValidSource([]) with { PersonIds = null, Coverage = coverage }]
+        };
 }
