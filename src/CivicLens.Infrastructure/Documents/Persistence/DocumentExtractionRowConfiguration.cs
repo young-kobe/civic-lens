@@ -23,6 +23,7 @@ internal sealed class DocumentExtractionRowConfiguration : IEntityTypeConfigurat
         builder.Property(row => row.NormalizationVersion).HasColumnName("normalization_version").HasMaxLength(128).IsRequired();
         builder.Property(row => row.Text).HasColumnName("text").IsRequired();
         builder.Property(row => row.TextSha256).HasColumnName("text_sha256").HasMaxLength(64).IsRequired();
+        builder.Property(row => row.ProfileJson).HasColumnName("profile_json").HasMaxLength(8000);
         builder.HasOne<AttemptRow>().WithMany().HasForeignKey(row => row.AttemptId).OnDelete(DeleteBehavior.Restrict);
         builder.HasIndex(row => row.AttemptId).HasDatabaseName("ix_document_extractions_attempt");
     }

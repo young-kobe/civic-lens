@@ -1,3 +1,4 @@
+using CivicLens.Application.Documents;
 using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
@@ -12,6 +13,7 @@ using CivicLens.Tests.Host;
 using CivicLens.Tests.Infrastructure.Collection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Npgsql;
 using static CivicLens.Tests.Fixtures.CollectionFixtures;
 
@@ -133,7 +135,89 @@ public sealed class PostgresDocumentExtractionStoreTests(PostgresCollection post
         Assert.Equal("A😀 source text", (await extractions.GetAsync(id, CancellationToken.None))!.Text);
     }
 
-    private async Task<CapturedAttemptResult> ImportAsync(string text)
+    [Fact]
+    public async Task ConfiguredCliRetainsOldProfileTextAndCitationsAfterProfileChanges()
+    {
+        var attempt = await ImportAsync("<nav>menu</nav><main>Policy <span class=aside>sidebar</span> text</main>", "text/html; charset=utf-8");
+        var config = ProfileConfiguration();
+        var configPath = Path.Combine(root, "config.json");
+        await File.WriteAllTextAsync(configPath, JsonSerializer.Serialize(config, CollectionProtocol.JsonOptions));
+        var first = await HostProcess.RunAsync(connectionString, "documents", "extract", configPath, attempt.AttemptId, root);
+        Assert.Equal(0, first.ExitCode);
+        using var firstResult = JsonDocument.Parse(first.Output);
+        var originalId = firstResult.RootElement.GetProperty("extractionId").GetString()!;
+        var original = (await extractions.GetAsync(originalId, CancellationToken.None))!;
+        Assert.Equal("Policy text", original.Text);
+        Assert.Equal("policy", original.Profile!.Id);
+        Assert.Equal(new[] { ".aside" }, original.Profile.ExcludedSelectors);
+        Assert.Equal(original.Profile.RevisionId, firstResult.RootElement.GetProperty("profileRevisionId").GetString());
+        Assert.Equal(0, (await HostProcess.RunAsync(connectionString, "documents", "extract", configPath, attempt.AttemptId, root)).ExitCode);
+
+        config = config with { DocumentProfiles = [config.DocumentProfiles![0] with { ExcludedSelectors = [] }] };
+        await File.WriteAllTextAsync(configPath, JsonSerializer.Serialize(config, CollectionProtocol.JsonOptions));
+        var changed = await HostProcess.RunAsync(connectionString, "documents", "extract", configPath, attempt.AttemptId, root);
+        Assert.Equal(0, changed.ExitCode);
+        using var changedResult = JsonDocument.Parse(changed.Output);
+        var changedId = changedResult.RootElement.GetProperty("extractionId").GetString()!;
+        Assert.NotEqual(originalId, changedId);
+        Assert.Equal("Policy sidebar text", (await extractions.GetAsync(changedId, CancellationToken.None))!.Text);
+        var cited = await HostProcess.RunAsync(connectionString, "documents", "cite", originalId, "0", "11");
+        Assert.Equal(0, cited.ExitCode);
+        using var citation = JsonDocument.Parse(cited.Output);
+        Assert.Equal("Policy text", citation.RootElement.GetProperty("quote").GetString());
+
+        config = config with { DocumentProfiles = [config.DocumentProfiles[0] with { Selector = "#missing" }] };
+        await File.WriteAllTextAsync(configPath, JsonSerializer.Serialize(config, CollectionProtocol.JsonOptions));
+        Assert.Equal(1, (await HostProcess.RunAsync(connectionString, "documents", "extract", configPath, attempt.AttemptId, root)).ExitCode);
+        await using var db = await factory.CreateDbContextAsync();
+        Assert.Equal(2, await db.Database.SqlQuery<int>($"SELECT count(*)::integer AS \"Value\" FROM document_extractions").SingleAsync());
+    }
+
+    [Fact]
+    public async Task StoredProfileTamperingCannotRelabelExistingExtraction()
+    {
+        var attempt = await ImportAsync("text");
+        var profile = new DocumentContentProfile("policy", "main", [".aside"]);
+        var original = new DocumentExtraction(attempt, "p", "n", "text", profile);
+        await extractions.SaveAsync(original, CancellationToken.None);
+        await using var db = await factory.CreateDbContextAsync();
+        await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE document_extractions SET profile_json = NULL WHERE extraction_id = {original.ExtractionId}");
+        await Assert.ThrowsAsync<InvalidOperationException>(() => extractions.GetAsync(original.ExtractionId, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task ProfileMigrationPreservesExistingExtractionAndCitationIdentity()
+    {
+        await using var db = await factory.CreateDbContextAsync();
+        var attempt = await ImportAsync("old text");
+        await db.GetService<IMigrator>().MigrateAsync("20261007161805_DocumentExtractions");
+        var original = new DocumentExtraction(attempt, "p", "n", "old text");
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO document_extractions (extraction_id, attempt_id, parser_version, normalization_version, text, text_sha256)
+            VALUES ({original.ExtractionId}, {attempt.AttemptId}, {original.ParserVersion}, {original.NormalizationVersion}, {original.Text}, {original.TextSha256})
+            """);
+        await attempts.MigrateAsync();
+        var retained = (await extractions.GetAsync(original.ExtractionId, CancellationToken.None))!;
+        Assert.Null(retained.Profile);
+        Assert.Equal(original.Text, retained.Text);
+        Assert.Equal(original.ExtractionId, retained.ExtractionId);
+        Assert.Equal("old text", new DocumentTextSpan(retained, 0, retained.Text.Length).Quote);
+    }
+
+    private static CollectionConfiguration ProfileConfiguration() => new()
+    {
+        Version = 2,
+        People = [new PersonConfiguration { Id = "person", Name = "Fixture Official" }],
+        DocumentProfiles = [new DocumentProfileConfiguration { Id = "policy", Selector = "main", ExcludedSelectors = [".aside"] }],
+        Sources = [new WatchedSourceConfiguration
+        {
+            Id = "source", Coverage = [new SourceCoverageConfiguration { PersonId = "person" }],
+            Url = "https://example.test/pages/a", AllowedOrigin = "https://example.test", AllowedPathPrefix = "/pages",
+            DocumentProfileId = "policy", Enabled = false
+        }]
+    };
+
+    private async Task<CapturedAttemptResult> ImportAsync(string text, string contentType = "text/plain; charset=utf-8")
     {
         var bytes = Encoding.UTF8.GetBytes(text);
         var hash = Convert.ToHexStringLower(SHA256.HashData(bytes));
@@ -145,7 +229,7 @@ public sealed class PostgresDocumentExtractionStoreTests(PostgresCollection post
         {
             BytesReceived = bytes.Length,
             Capture = new CaptureArtifact { Sha256 = hash, RelativePath = hash + ".gz", ByteLength = bytes.Length },
-            Response = new HttpResponseMetadata { StatusCode = 200, ContentType = "text/plain; charset=utf-8", ContentEncodings = [] }
+            Response = new HttpResponseMetadata { StatusCode = 200, ContentType = contentType, ContentEncodings = [] }
         };
         var imported = await attempts.ImportAtomicallyAsync(CollectionAttemptImporter.CreateImport(
             Guid.NewGuid().ToString("N"), request, result), CancellationToken.None);

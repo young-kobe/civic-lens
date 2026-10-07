@@ -217,7 +217,35 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- do
 
 Extraction returns the extraction ID, source attempt ID, processing versions, text hash, and text length. `get` returns the exact stored text and provenance. Citation offsets count UTF-16 units, matching .NET strings; an emoji represented by a surrogate pair counts as two units. The command rejects ranges that split that pair. Citation output is local evidence, not publication or approval.
 
-Only captured HTML/plain-text attempts are supported. For a linked 304, explicitly select the original captured attempt. Repeating extraction verifies the artifact again and returns the same record for identical output; different output under the same processing versions is rejected. A relocated artifact directory is supported. Missing/corrupt files, unsupported content, and parser limits fail without replacing earlier text. Inspection and citation can still use retained text if the capture is temporarily unavailable, but this does not replace backing up raw captures. Static HTML extraction may retain navigation or hidden text; it does not establish a substantive source change. See architecture for exact bounds and encoding rules.
+Only captured HTML/plain-text attempts are supported. For a linked 304, explicitly select the original captured attempt. Repeating extraction verifies the artifact again and returns the same record for identical output; different output under the same processing versions and profile revision is rejected. A relocated artifact directory is supported. Missing/corrupt files, unsupported content, and parser limits fail without replacing earlier text. Inspection and citation can still use retained text if the capture is temporarily unavailable, but this does not replace backing up raw captures. Static HTML extraction may retain navigation or hidden text; it does not establish a substantive source change. See architecture for exact bounds and encoding rules.
+
+### Configure versioned HTML content selection
+
+Apply `db migrate` to add the nullable profile snapshot column. In configuration v2, declare reusable profiles and reference them from sources. This example targets synthetic local HTML containing `<main>` and a `.related-news` subtree:
+
+```json
+{
+  "version": 2,
+  "people": [{ "id": "example-official", "name": "Example Official" }],
+  "documentProfiles": [{ "id": "policy", "selector": "main", "excludedSelectors": [".related-news"] }],
+  "sources": [{
+    "id": "example-local-source",
+    "coverage": [{ "personId": "example-official" }],
+    "url": "http://127.0.0.1:8765/page.html",
+    "allowedOrigin": "http://127.0.0.1:8765",
+    "allowedPathPrefix": "/",
+    "documentProfileId": "policy"
+  }]
+}
+```
+
+```sh
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- documents extract <config.json> <captured-attempt-id> .runtime/captures
+```
+
+This command uses the profile assigned to the imported attempt's source ID. It reports the profile ID and revision alongside the extraction ID. Missing assignments, missing/ambiguous content regions, a profile that excludes its own root, and non-HTML content fail without falling back to whole-body extraction. Selectors support one tag name, `#id`, or `.class`; they do not support combinations, attributes, or pseudo-classes. Inspect output with `documents get` to verify the selected content before relying on a profile.
+
+Changing selectors or exclusions produces a new immutable extraction identity even for the same capture. Earlier text, profiles, and citations remain readable; profiles are never retroactively attached to older records. Processing an already captured source is allowed after its coverage ends or it is disabled. Selection does not prove substantive change or grant publication approval. Version comparisons remain future work and must use matching processing settings on both sides.
 
 ### Remaining operations
 

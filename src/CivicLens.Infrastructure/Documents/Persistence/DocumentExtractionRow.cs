@@ -8,4 +8,5 @@ internal sealed class DocumentExtractionRow
     public string NormalizationVersion { get; set; } = null!;
     public string Text { get; set; } = null!;
     public string TextSha256 { get; set; } = null!;
+    public string? ProfileJson { get; set; }
 }

@@ -476,6 +476,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("character varying(128)")
                         .HasColumnName("parser_version");
 
+                    b.Property<string>("ProfileJson")
+                        .HasMaxLength(8000)
+                        .HasColumnType("character varying(8000)")
+                        .HasColumnName("profile_json");
+
                     b.Property<string>("Text")
                         .IsRequired()
                         .HasColumnType("text")

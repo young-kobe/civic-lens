@@ -30,6 +30,7 @@ if (args is [] or ["--help"] or ["help"])
           discovery get <attempt-id>
           discovery admit <config.json> <source-id> <attempt-id> <idempotency-key> [--as-of yyyy-MM-dd]
           documents extract <captured-attempt-id> <artifact-directory>
+          documents extract <config.json> <captured-attempt-id> <artifact-directory>
           documents get <extraction-id>
           documents cite <extraction-id> <start> <length>
         New admissions default to today in UTC; existing keys retain their saved date when --as-of is omitted.
@@ -84,10 +85,13 @@ try
 {
     if (DocumentCommand.Matches(args))
     {
+        var documentConfiguration = args is ["documents", "extract", var documentConfigPath, _, _]
+            ? await ReadConfigurationAsync(documentConfigPath, cancellation.Token) : null;
         var attempts = CreateDatabase();
         var extractions = PostgresDocumentExtractionStore.FromConnectionString(Environment.GetEnvironmentVariable("CIVIC_LENS_DATABASE")!);
         executing = true;
-        return await DocumentCommand.ExecuteAsync(args, attempts, new CaptureDocumentTextExtractor(), extractions, cancellation.Token);
+        return await DocumentCommand.ExecuteAsync(args, attempts, new CaptureDocumentTextExtractor(), extractions,
+            cancellation.Token, documentConfiguration);
     }
 
     if (args is ["feeds" or "discovery", "get", var discoveryId])
