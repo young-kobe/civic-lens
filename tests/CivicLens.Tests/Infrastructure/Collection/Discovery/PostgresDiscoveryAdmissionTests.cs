@@ -353,6 +353,28 @@ public sealed class PostgresDiscoveryAdmissionTests(PostgresCollection postgres)
         { Mode = CollectionMode.Page, ETag = null, LastModified = null };
         await Assert.ThrowsAsync<ArgumentException>(() => jobs.AdmitAsync(request with { ArticleTemplate = corrected }, default));
         Assert.Equal(admitted.Jobs, (await jobs.AdmitAsync(request, default)).Jobs);
+
+        var concurrentAttempt = await SaveDiscoveryAsync(["https://example.test/articles/concurrent"], mode);
+        var configuredSource = new ConfiguredCollectionSource(configuration, "source");
+        var concurrent = await Task.WhenAll(
+            jobs.AdmitAsync(configuredSource, concurrentAttempt, "concurrent-configured", default),
+            jobs.AdmitAsync(configuredSource, concurrentAttempt, "concurrent-configured", default));
+        Assert.Single(concurrent[0].Jobs);
+        Assert.Equal(concurrent[0].Jobs, concurrent[1].Jobs);
+
+        var expiredConfiguration = configuration with
+        {
+            Version = 2,
+            Sources = [configuration.Sources[0] with
+            {
+                PersonIds = null, Enabled = false,
+                Coverage = [new SourceCoverageConfiguration { PersonId = "person", EndsBefore = new DateOnly(2021, 1, 1) }]
+            }]
+        };
+        var expired = new ConfiguredCollectionSource(expiredConfiguration, "source");
+        Assert.Equal(legacy.Jobs, (await jobs.AdmitAsync(expired, attempt, "legacy-revision", default)).Jobs);
+        await Assert.ThrowsAsync<ArgumentException>(() => jobs.AdmitAsync(expired, attempt, "new-expired", default));
+        await Assert.ThrowsAsync<ArgumentException>(() => jobs.AdmitAsync(expired, "different-attempt", "legacy-revision", default));
     }
 
     private static CollectionJobDefinition Template(string path = "/") => new()

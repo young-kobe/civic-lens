@@ -148,6 +148,10 @@ public sealed class DatabaseCommandTests(PostgresCollection postgres) : IAsyncLi
         Assert.True(admitted.ExitCode == 0, admitted.Error);
         var repeated = await HostProcess.RunAsync(connectionString, args);
         Assert.Equal(admitted.Output, repeated.Output);
+        var replayAfterExpiry = await HostProcess.RunAsync(connectionString, args[..^2]);
+        Assert.True(replayAfterExpiry.ExitCode == 0, replayAfterExpiry.Error);
+        Assert.Equal(admitted.Output, replayAfterExpiry.Output);
+        Assert.Equal(2, (await HostProcess.RunAsync(connectionString, command, "admit", configPath, "source", attemptId, "new-after-expiry")).ExitCode);
         using var admission = JsonDocument.Parse(admitted.Output);
         var jobId = Assert.Single(admission.RootElement.GetProperty("jobs").EnumerateArray()).GetProperty("jobId").GetString()!;
         var inspectedJob = await HostProcess.RunAsync(connectionString, "jobs", "get", jobId);
@@ -237,23 +241,29 @@ public sealed class DatabaseCommandTests(PostgresCollection postgres) : IAsyncLi
         source["coverage"] = new JsonArray(new JsonObject
         {
             ["personId"] = "person",
-            ["startsOn"] = "2026-07-01",
-            ["endsBefore"] = "2026-08-01"
+            ["startsOn"] = "2020-07-01",
+            ["endsBefore"] = "2020-08-01"
         });
         await File.WriteAllTextAsync(configPath, config.ToJsonString());
         Assert.Equal(0, (await HostProcess.RunAsync(null, "validate", configPath)).ExitCode);
         Assert.Equal(0, (await HostProcess.RunAsync(connectionString, "db", "migrate")).ExitCode);
         var inactive = await HostProcess.RunAsync(connectionString, "jobs", "enqueue", configPath, "source", "dated",
-            "--as-of", "2026-08-01");
+            "--as-of", "2020-08-01");
         Assert.Equal(2, inactive.ExitCode);
-        var arguments = new[] { "jobs", "enqueue", configPath, "source", "dated", "--as-of", "2026-07-01" };
+        var arguments = new[] { "jobs", "enqueue", configPath, "source", "dated", "--as-of", "2020-07-01" };
         var enqueued = await HostProcess.RunAsync(connectionString, arguments);
         Assert.True(enqueued.ExitCode == 0, enqueued.Error);
         using var job = JsonDocument.Parse(enqueued.Output);
         var id = job.RootElement.GetProperty("jobId").GetString()!;
         var definition = job.RootElement.GetProperty("definition");
-        Assert.Equal("2026-07-01", definition.GetProperty("coverageAsOf").GetString());
+        Assert.Equal("2020-07-01", definition.GetProperty("coverageAsOf").GetString());
         var revision = definition.GetProperty("configurationRevision").GetProperty("id").GetString();
+        var replay = await HostProcess.RunAsync(connectionString, arguments[..^2]);
+        Assert.True(replay.ExitCode == 0, replay.Error);
+        using var replayed = JsonDocument.Parse(replay.Output);
+        Assert.Equal(id, replayed.RootElement.GetProperty("jobId").GetString());
+        Assert.Equal("2020-07-01", replayed.RootElement.GetProperty("definition").GetProperty("coverageAsOf").GetString());
+        Assert.Equal(2, (await HostProcess.RunAsync(connectionString, "jobs", "enqueue", configPath, "source", "new-after-expiry")).ExitCode);
         config["people"]![0]!["name"] = "Corrected name";
         await File.WriteAllTextAsync(configPath, config.ToJsonString());
         Assert.Equal(2, (await HostProcess.RunAsync(connectionString, arguments)).ExitCode);

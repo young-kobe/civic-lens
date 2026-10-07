@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Discovery;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Collection.Contracts;
@@ -12,18 +13,37 @@ namespace CivicLens.Infrastructure.Collection.Jobs;
 
 public sealed partial class PostgresCollectionJobStore : IDiscoveryAdmissionStore
 {
+    public Task<DiscoveryAdmissionResult> AdmitAsync(ConfiguredCollectionSource source, string attemptId,
+        string idempotencyKey, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        return AdmitAsync(idempotencyKey,
+            (existing, currentDate) => source.CreateDiscoveryAdmission(attemptId, idempotencyKey, currentDate, existing),
+            cancellationToken);
+    }
+
     public Task<DiscoveryAdmissionResult> AdmitAsync(DiscoveryAdmissionRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
         request.Validate();
-        // Keep the old feed input shape so durable batch replays created before this generalization still match.
-        var inputJson = request.ExpectedDiscoveryMode == CollectionMode.Feed
-            ? Write(new LegacyAdmissionInput(request.AttemptId, request.ArticleTemplate, request.Policy))
-            : Write(new AdmissionInput(request.AttemptId, request.ArticleTemplate, request.Policy, request.ExpectedDiscoveryMode));
+        return AdmitAsync(request.IdempotencyKey, (_, _) => request, cancellationToken);
+    }
+
+    private Task<DiscoveryAdmissionResult> AdmitAsync(string idempotencyKey,
+        Func<CollectionJobDefinition?, DateOnly, DiscoveryAdmissionRequest> prepareRequest, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(idempotencyKey) || idempotencyKey.Length > 256)
+            throw new ArgumentException("Admission idempotency key must contain 1 to 256 characters.", nameof(idempotencyKey));
         return TransactionAsync(async (db, now) =>
         {
             var batch = await db.Set<DiscoveryAdmissionBatchRow>().SingleOrDefaultAsync(
-                row => row.IdempotencyKey == request.IdempotencyKey, cancellationToken);
+                row => row.IdempotencyKey == idempotencyKey, cancellationToken);
+            var savedTemplate = batch is null ? null : ReadAdmissionTemplate(batch.InputJson);
+            var request = prepareRequest(savedTemplate, DateOnly.FromDateTime(now.UtcDateTime));
+            // Keep the old feed input shape so durable batch replays created before this generalization still match.
+            var inputJson = request.ExpectedDiscoveryMode == CollectionMode.Feed
+                ? Write(new LegacyAdmissionInput(request.AttemptId, request.ArticleTemplate, request.Policy))
+                : Write(new AdmissionInput(request.AttemptId, request.ArticleTemplate, request.Policy, request.ExpectedDiscoveryMode));
             if (batch is not null)
             {
                 if (batch.InputJson != inputJson && !MatchesLegacyAdmission(batch.InputJson, request))
@@ -113,10 +133,15 @@ public sealed partial class PostgresCollectionJobStore : IDiscoveryAdmissionStor
         }, cancellationToken);
     }
 
-    private static bool MatchesLegacyAdmission(string storedJson, DiscoveryAdmissionRequest request)
+    private static CollectionJobDefinition ReadAdmissionTemplate(string storedJson)
     {
         using var input = JsonDocument.Parse(storedJson);
-        var existingTemplate = ReadDefinition(input.RootElement.GetProperty("articleTemplate").GetRawText());
+        return ReadDefinition(input.RootElement.GetProperty("articleTemplate").GetRawText());
+    }
+
+    private static bool MatchesLegacyAdmission(string storedJson, DiscoveryAdmissionRequest request)
+    {
+        var existingTemplate = ReadAdmissionTemplate(storedJson);
         if (existingTemplate.ConfigurationRevision is not null || existingTemplate.CoverageAsOf is not null)
             return false;
         var template = request.ArticleTemplate with { ConfigurationRevision = null, CoverageAsOf = null };

@@ -27,12 +27,12 @@ internal static class DiscoveryCommand
         return 0;
     }
 
-    public static async Task<int> AdmitAsync(IDiscoveryAdmissionStore store, DiscoveryAdmissionRequest request,
-        CancellationToken cancellationToken)
+    public static async Task<int> AdmitAsync(IDiscoveryAdmissionStore store, ConfiguredCollectionSource source, string attemptId,
+        string idempotencyKey, CancellationToken cancellationToken)
     {
         try
         {
-            var result = await store.AdmitAsync(request, cancellationToken);
+            var result = await store.AdmitAsync(source, attemptId, idempotencyKey, cancellationToken);
             Console.WriteLine(JsonSerializer.Serialize(result, CollectionProtocol.JsonOptions));
             return 0;
         }

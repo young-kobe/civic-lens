@@ -40,7 +40,7 @@ public sealed record CollectionJobDefinition
         return definition;
     }
 
-    private static CollectionJobDefinition FromSource(WatchedSourceConfiguration source)
+    internal static CollectionJobDefinition FromSource(WatchedSourceConfiguration source)
     {
         var definition = new CollectionJobDefinition
         {

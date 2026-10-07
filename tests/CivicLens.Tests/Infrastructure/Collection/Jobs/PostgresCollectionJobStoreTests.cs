@@ -344,6 +344,28 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
         var corrected = CollectionJobDefinition.FromConfiguration(configuration, "source", definition.CoverageAsOf);
         await Assert.ThrowsAsync<ArgumentException>(() => reopened.EnqueueAsync(corrected, "current", default));
         await Assert.ThrowsAsync<ArgumentException>(() => reopened.EnqueueAsync(definition with { ConfigurationRevision = null, CoverageAsOf = null }, "current", default));
+
+        var source = new ConfiguredCollectionSource(configuration, "source");
+        var concurrent = await Task.WhenAll(jobs.EnqueueAsync(source, "concurrent-configured", default),
+            reopened.EnqueueAsync(source, "concurrent-configured", default));
+        Assert.Equal(concurrent[0].JobId, concurrent[1].JobId);
+        Assert.Equal(concurrent[0].Definition, concurrent[1].Definition);
+        Assert.NotNull(concurrent[0].Definition.CoverageAsOf);
+
+        var expiredConfiguration = configuration with
+        {
+            Version = 2,
+            Sources = [configuration.Sources[0] with
+            {
+                PersonIds = null, Enabled = false,
+                Coverage = [new SourceCoverageConfiguration { PersonId = "person", EndsBefore = new DateOnly(2021, 1, 1) }]
+            }]
+        };
+        var expired = new ConfiguredCollectionSource(expiredConfiguration, "source");
+        var legacyReplay = await reopened.EnqueueAsync(expired, "legacy", default);
+        Assert.Equal(legacy.JobId, legacyReplay.JobId);
+        Assert.Null(legacyReplay.Definition.ConfigurationRevision);
+        await Assert.ThrowsAsync<ArgumentException>(() => reopened.EnqueueAsync(expired, "new-expired", default));
     }
 
     [Theory]

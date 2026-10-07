@@ -2,6 +2,9 @@ namespace CivicLens.Application.Collection.Jobs;
 
 public interface ICollectionJobStore
 {
+    /// <summary>Resolve a configured request after atomically reading its key; only new keys evaluate current eligibility.</summary>
+    Task<CollectionJobRecord> EnqueueAsync(ConfiguredCollectionSource source, string idempotencyKey,
+        CancellationToken cancellationToken);
     Task<CollectionJobRecord> EnqueueAsync(CollectionJobDefinition definition, string idempotencyKey,
         CancellationToken cancellationToken);
     Task<CollectionJobRecord?> GetAsync(string jobId, CancellationToken cancellationToken);

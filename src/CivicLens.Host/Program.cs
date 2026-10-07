@@ -27,7 +27,8 @@ if (args is [] or ["--help"] or ["help"])
           jobs cancel <job-id>
           discovery get <attempt-id>
           discovery admit <config.json> <source-id> <attempt-id> <idempotency-key> [--as-of yyyy-MM-dd]
-        Coverage defaults to the current UTC date; --as-of selects eligibility, not historical fetching or attribution.
+        New admissions default to today in UTC; existing keys retain their saved date when --as-of is omitted.
+        --as-of selects eligibility, not historical fetching or attribution.
         feeds get/admit remain aliases for discovery get/admit.
         Database commands require CIVIC_LENS_DATABASE (Postgres connection string with Host and Database).
         collect and receipts list are database-free. collect-import saves a handoff before importing.
@@ -45,6 +46,7 @@ if (args is ["status"])
 }
 
 var coverageAsOf = DateOnly.FromDateTime(DateTime.UtcNow);
+DateOnly? admissionAsOf = null;
 if (args.Contains("--as-of", StringComparer.Ordinal))
 {
     if (args is not [.., "--as-of", var dateText] ||
@@ -55,6 +57,7 @@ if (args.Contains("--as-of", StringComparer.Ordinal))
         Console.Error.WriteLine("Use a trailing --as-of yyyy-MM-dd with collect, collect-import, jobs enqueue, or discovery admit.");
         return 2;
     }
+    admissionAsOf = coverageAsOf;
     args = args[..^2];
 }
 
@@ -84,25 +87,19 @@ try
     if (args is ["feeds" or "discovery", "admit", var discoveryConfigPath, var discoverySourceId, var discoveryAttemptId, var admissionKey])
     {
         var config = await ReadConfigurationAsync(discoveryConfigPath, cancellation.Token);
-        var definition = CollectionJobDefinition.FromConfiguration(config, discoverySourceId, coverageAsOf);
-        if (definition.Mode is not (CollectionMode.Feed or CollectionMode.Html)) throw new ArgumentException("Admission requires a configured feed or HTML discovery source.");
-        var source = config.Sources.Single(item => item.Id == discoverySourceId);
-        var request = new DiscoveryAdmissionRequest(discoveryAttemptId, admissionKey,
-            definition with { Mode = CollectionMode.Page, ETag = null, LastModified = null },
-            source.AdmissionPolicy ?? new DiscoveryAdmissionPolicy(), definition.Mode);
-        request.Validate();
+        var source = new ConfiguredCollectionSource(config, discoverySourceId, admissionAsOf);
         var jobs = CreateJobs();
         executing = true;
-        return await DiscoveryCommand.AdmitAsync(jobs, request, cancellation.Token);
+        return await DiscoveryCommand.AdmitAsync(jobs, source, discoveryAttemptId, admissionKey, cancellation.Token);
     }
 
     if (args is ["jobs", "enqueue", var configPath, var sourceId, var idempotencyKey])
     {
         var config = await ReadConfigurationAsync(configPath, cancellation.Token);
-        var definition = CollectionJobDefinition.FromConfiguration(config, sourceId, coverageAsOf);
+        var source = new ConfiguredCollectionSource(config, sourceId, admissionAsOf);
         var jobs = CreateJobs();
         executing = true;
-        return await CollectionJobCommand.EnqueueAsync(jobs, definition, idempotencyKey, cancellation.Token);
+        return await CollectionJobCommand.EnqueueAsync(jobs, source, idempotencyKey, cancellation.Token);
     }
 
     if (args[0] == "jobs")

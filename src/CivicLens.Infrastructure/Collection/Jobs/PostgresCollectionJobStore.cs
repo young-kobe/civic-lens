@@ -34,19 +34,36 @@ public sealed partial class PostgresCollectionJobStore(IDbContextFactory<Collect
         }
     }
 
+    public Task<CollectionJobRecord> EnqueueAsync(ConfiguredCollectionSource source, string idempotencyKey,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        return EnqueueAsync((existing, currentDate) => source.CreateJobDefinition(currentDate, existing),
+            idempotencyKey, cancellationToken);
+    }
+
     public Task<CollectionJobRecord> EnqueueAsync(CollectionJobDefinition definition, string idempotencyKey,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(definition);
         definition.Validate();
+        return EnqueueAsync((_, _) => definition, idempotencyKey, cancellationToken);
+    }
+
+    private Task<CollectionJobRecord> EnqueueAsync(
+        Func<CollectionJobDefinition?, DateOnly, CollectionJobDefinition> prepareDefinition, string idempotencyKey,
+        CancellationToken cancellationToken)
+    {
         if (string.IsNullOrWhiteSpace(idempotencyKey) || idempotencyKey.Length > 256)
             throw new ArgumentException("Job idempotency key must contain 1 to 256 characters.", nameof(idempotencyKey));
         return TransactionAsync(async (db, now) =>
         {
             var existing = await db.Set<JobRow>().SingleOrDefaultAsync(row => row.IdempotencyKey == idempotencyKey, cancellationToken);
+            var savedDefinition = existing is null ? null : ReadDefinition(existing.DefinitionJson);
+            var definition = prepareDefinition(savedDefinition, DateOnly.FromDateTime(now.UtcDateTime));
             if (existing is not null)
             {
-                if (!definition.MatchesReplayOf(ReadDefinition(existing.DefinitionJson)))
+                if (!definition.MatchesReplayOf(savedDefinition!))
                     throw new ArgumentException("The idempotency key belongs to a different job definition.");
                 return await ToRecordAsync(db, existing, cancellationToken);
             }
