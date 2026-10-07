@@ -1,4 +1,8 @@
 using System.Data;
+using System.Text.Json;
+using CivicLens.Collection.Contracts;
+using CivicLens.Application.Collection.Discovery;
+using CivicLens.Infrastructure.Collection.Discovery;
 using CivicLens.Application.Collection;
 using CivicLens.Core.Collection;
 using CivicLens.Infrastructure.Collection.Persistence;
@@ -74,6 +78,14 @@ public sealed class PostgresCollectionAttemptStore(IDbContextFactory<CollectionA
                     await db.SaveChangesAsync(cancellationToken);
                 }
                 db.Attempts.Add(ToRow(decision.AttemptResult, decision.PriorCapturedAttempt, decision.SentValidators));
+                if (attempt.Discovery is { } discovery)
+                    db.Add(new FeedDiscoveryRow
+                    {
+                        AttemptId = decision.AttemptResult.AttemptId,
+                        SourceId = decision.AttemptResult.SourceId,
+                        RequestJson = JsonSerializer.Serialize(discovery.Request, CollectionProtocol.JsonOptions),
+                        DiscoveryJson = JsonSerializer.Serialize(discovery.ToResult(), CollectionProtocol.JsonOptions)
+                    });
                 await db.SaveChangesAsync(cancellationToken);
             }
 
@@ -155,7 +167,12 @@ public sealed class PostgresCollectionAttemptStore(IDbContextFactory<CollectionA
                 .Select(capture => (long?)capture.ByteLength).SingleAsync(cancellationToken);
             prior = (CapturedAttemptResult)FromRow(priorRow, priorLength);
         }
-        return new StoredCollectionAttempt(result, row.HasSentValidators ? ReadSentValidators(row) : null, prior);
+        var discoveryRow = await db.Set<FeedDiscoveryRow>().AsNoTracking()
+            .SingleOrDefaultAsync(item => item.AttemptId == row.AttemptId, cancellationToken);
+        var discovery = discoveryRow is null ? null : new FeedDiscoveryEvidence(
+            JsonSerializer.Deserialize<CollectionRequest>(discoveryRow.RequestJson, CollectionProtocol.JsonOptions)!,
+            JsonSerializer.Deserialize<FeedDiscoveryResult>(discoveryRow.DiscoveryJson, CollectionProtocol.JsonOptions)!);
+        return new StoredCollectionAttempt(result, row.HasSentValidators ? ReadSentValidators(row) : null, prior, discovery);
     }
 
     private static AttemptRow ToRow(CollectionAttemptResult result, CapturedAttemptResult? prior,

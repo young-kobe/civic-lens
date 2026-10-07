@@ -2,7 +2,9 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using CivicLens.Application.Collection;
+using CivicLens.Application.Collection.Discovery;
 using CivicLens.Collection.Contracts;
 using CivicLens.Collector.Http;
 using CivicLens.Tests.Infrastructure.Collection;
@@ -21,6 +23,7 @@ public sealed class DatabaseCommandTests(PostgresCollection postgres) : IAsyncLi
     private string connectionString = null!;
     private Task server = Task.CompletedTask;
     private int statusCode = 200;
+    private string? feedBody;
 
     public async Task InitializeAsync()
     {
@@ -96,6 +99,56 @@ public sealed class DatabaseCommandTests(PostgresCollection postgres) : IAsyncLi
     }
 
     [Fact]
+    public async Task FeedRecoveryAdmissionReplayAndArticleCollectionWorkThroughCli()
+    {
+        var configPath = Path.Combine(directory, "config.json");
+        var config = JsonSerializer.Deserialize<CollectionConfiguration>(await File.ReadAllTextAsync(configPath),
+            CollectionProtocol.JsonOptions)!;
+        config = config with
+        {
+            Sources = [config.Sources[0] with
+            {
+                Mode = CollectionMode.Feed, AdmissionPolicy = new FeedAdmissionPolicy { MaxJobs = 1 }
+            }]
+        };
+        await File.WriteAllTextAsync(configPath, JsonSerializer.Serialize(config, CollectionProtocol.JsonOptions));
+        var entries = Enumerable.Range(0, 100).Select(index =>
+            $"<item><link>/page/article-{index}?value={new string('a', 750)}</link></item>");
+        feedBody = "<rss version=\"2.0\"><channel>" + string.Concat(entries) + "</channel></rss>";
+        Assert.True(feedBody.Length > 65_536);
+        // An import interrupted by missing schema must retain the feed and its discovery for replay.
+        var interrupted = await CollectAsync("collect-import", connectionString);
+        Assert.Equal(1, interrupted.ExitCode);
+        var root = Path.Combine(directory, "captures");
+        var listed = await HostProcess.RunAsync(null, "receipts", "list", root);
+        var attemptId = Assert.Single(JsonSerializer.Deserialize<string[]>(listed.Output)!);
+        Assert.Equal(0, (await HostProcess.RunAsync(connectionString, "db", "migrate")).ExitCode);
+        var replay = await HostProcess.RunWithCollectorHostAsync(connectionString, "/no-collector-host",
+            "receipts", "replay", root, attemptId);
+        Assert.True(replay.ExitCode == 0, replay.Error);
+        var inspected = await HostProcess.RunAsync(connectionString, "feeds", "get", attemptId);
+        Assert.True(inspected.ExitCode == 0, inspected.Error);
+        using var discovery = JsonDocument.Parse(inspected.Output);
+        Assert.Equal("parsed", discovery.RootElement.GetProperty("status").GetString());
+        Assert.Equal(100, discovery.RootElement.GetProperty("urls").GetArrayLength());
+        var args = new[] { "feeds", "admit", configPath, "source", attemptId, "batch-1" };
+        var admitted = await HostProcess.RunAsync(connectionString, args);
+        Assert.True(admitted.ExitCode == 0, admitted.Error);
+        var repeated = await HostProcess.RunAsync(connectionString, args);
+        Assert.Equal(admitted.Output, repeated.Output);
+        using var admission = JsonDocument.Parse(admitted.Output);
+        var jobId = Assert.Single(admission.RootElement.GetProperty("jobs").EnumerateArray()).GetProperty("jobId").GetString()!;
+        File.Delete(configPath);
+        var run = await HostProcess.RunAsync(connectionString, "jobs", "run", jobId,
+            typeof(HttpCollector).Assembly.Location, root);
+        Assert.True(run.ExitCode == 0, run.Error + run.Output);
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var count = new NpgsqlCommand("SELECT count(*) FROM collection_attempts", connection);
+        Assert.Equal(2L, await count.ExecuteScalarAsync());
+    }
+
+    [Fact]
     public async Task ManagedJobUsesSnapshotAndRepeatedRunDoesNotCollectAgain()
     {
         Assert.Equal(0, (await HostProcess.RunAsync(connectionString, "db", "migrate")).ExitCode);
@@ -142,8 +195,10 @@ public sealed class DatabaseCommandTests(PostgresCollection postgres) : IAsyncLi
         Assert.Equal(true, await command.ExecuteScalarAsync());
     }
 
-    [Fact]
-    public async Task FailedImportCanReplayAfterRelocationWithoutConfigurationOrCollector()
+    [Theory]
+    [InlineData(3)]
+    [InlineData(4)]
+    public async Task FailedImportCanReplayAfterRelocationWithoutConfigurationOrCollector(int protocolVersion)
     {
         var failed = await CollectAsync("collect-import", connectionString);
         Assert.Equal(1, failed.ExitCode);
@@ -153,6 +208,19 @@ public sealed class DatabaseCommandTests(PostgresCollection postgres) : IAsyncLi
         var ids = JsonSerializer.Deserialize<string[]>(listed.Output)!;
         var id = Assert.Single(ids);
         Assert.Contains(id, failed.Error);
+        if (protocolVersion == 3)
+        {
+            var path = Path.Combine(original, ".pending", id + ".json");
+            var envelope = JsonNode.Parse(await File.ReadAllTextAsync(path))!;
+            var request = envelope["request"]!.AsObject();
+            request["version"] = 3;
+            request.Remove("mode");
+            request.Remove("maxCandidates");
+            var receipt = envelope["receipt"]!.AsObject();
+            receipt["version"] = 3;
+            receipt.Remove("discovery");
+            await File.WriteAllTextAsync(path, envelope.ToJsonString());
+        }
 
         var relocated = Path.Combine(directory, "relocated-captures");
         Directory.Move(original, relocated);
@@ -233,7 +301,9 @@ public sealed class DatabaseCommandTests(PostgresCollection postgres) : IAsyncLi
             while (await reader.ReadLineAsync(shutdown.Token) is { Length: > 0 }) { }
             var robots = request!.Contains(" /robots.txt ", StringComparison.Ordinal);
             var status = robots ? 404 : statusCode;
-            var body = !robots && status == 200 ? "Verified CLI evidence." : "";
+            var body = !robots && status == 200
+                ? feedBody is not null && request!.Contains(" /page ", StringComparison.Ordinal) ? feedBody : "Verified CLI evidence."
+                : "";
             var response = $"HTTP/1.1 {status} Fixture\r\nContent-Length: {body.Length}\r\nConnection: close\r\nRetry-After: 10\r\n\r\n{body}";
             await stream.WriteAsync(Encoding.ASCII.GetBytes(response), shutdown.Token);
         }

@@ -37,7 +37,7 @@ public sealed class PostgresCollectionAttemptStoreTests(PostgresCollection postg
         await store.MigrateAsync();
         await using var db = await factory.CreateDbContextAsync();
         Assert.Empty(await db.Database.GetPendingMigrationsAsync());
-        Assert.Equal(2, (await db.Database.GetAppliedMigrationsAsync()).Count());
+        Assert.Equal(3, (await db.Database.GetAppliedMigrationsAsync()).Count());
         Assert.False(db.Database.HasPendingModelChanges());
     }
 
@@ -49,6 +49,43 @@ public sealed class PostgresCollectionAttemptStoreTests(PostgresCollection postg
         await using var command = connection.CreateCommand();
         command.CommandText = $"DROP SCHEMA IF EXISTS {schema} CASCADE";
         await command.ExecuteNonQueryAsync();
+    }
+
+    [Fact]
+    public async Task FeedDiscoveryIsAtomicImmutableAndRejectsConflictingReplay()
+    {
+        var request = Request("feed") with { Mode = CollectionMode.Feed };
+        var urls = new[] { "https://example.test/article" };
+        var result = Result("feed", CollectionOutcome.Captured,
+            Response: Metadata(200, null, null, "application/rss+xml", []),
+            Capture: Artifact(new string('e', 64), 12)) with
+        {
+            Discovery = new FeedDiscoveryResult { Status = FeedDiscoveryStatus.Parsed, Urls = urls }
+        };
+        var import = CollectionAttemptImporter.CreateImport("feed", request, result);
+        urls[0] = "https://example.test/mutated";
+        await store.ImportAtomicallyAsync(import, CancellationToken.None);
+        var retained = await store.GetAsync("feed", CancellationToken.None);
+        Assert.Equal("https://example.test/article", Assert.Single(retained!.Discovery!.Urls));
+        Assert.Equal(ImportDisposition.DuplicateAttempt,
+            (await store.ImportAtomicallyAsync(import, CancellationToken.None)).Disposition);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => store.ImportAtomicallyAsync(
+            CollectionAttemptImporter.CreateImport("feed", request, result), CancellationToken.None));
+
+        await using var db = await factory.CreateDbContextAsync();
+        await db.Database.ExecuteSqlRawAsync("""
+            CREATE FUNCTION fail_discovery_insert() RETURNS trigger LANGUAGE plpgsql AS $$
+            BEGIN RAISE EXCEPTION 'injected discovery failure'; END $$;
+            CREATE TRIGGER fail_discovery_insert BEFORE INSERT ON collection_feed_discoveries
+            FOR EACH ROW EXECUTE FUNCTION fail_discovery_insert();
+            """);
+        var other = result with { JobId = "feed-rollback", Capture = Artifact(new string('f', 64), 12) };
+        await Assert.ThrowsAsync<DbUpdateException>(() => store.ImportAtomicallyAsync(
+            CollectionAttemptImporter.CreateImport("feed-rollback", request with { JobId = "feed-rollback" }, other),
+            CancellationToken.None));
+        Assert.Null(await store.GetAsync("feed-rollback", CancellationToken.None));
+        var hash = new string('f', 64);
+        Assert.Equal(0, await db.Database.SqlQuery<int>($"SELECT count(*) AS \"Value\" FROM collection_captures WHERE sha256 = {hash}").SingleAsync());
     }
 
     [Fact]

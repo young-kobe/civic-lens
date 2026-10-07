@@ -4,6 +4,8 @@ namespace CivicLens.Application.Collection.Jobs;
 
 public sealed record CollectionJobDefinition
 {
+    public CollectionMode Mode { get; init; } = CollectionMode.Page;
+    public int MaxCandidates { get; init; } = 100;
     public required string SourceId { get; init; }
     public required string Url { get; init; }
     public required string AllowedOrigin { get; init; }
@@ -27,6 +29,8 @@ public sealed record CollectionJobDefinition
         var definition = new CollectionJobDefinition
         {
             SourceId = source.Id,
+            Mode = source.Mode,
+            MaxCandidates = source.MaxCandidates,
             Url = source.Url,
             AllowedOrigin = source.AllowedOrigin,
             AllowedPathPrefix = source.AllowedPathPrefix,
@@ -55,6 +59,8 @@ public sealed record CollectionJobDefinition
     {
         JobId = jobId,
         SourceId = SourceId,
+        Mode = Mode,
+        MaxCandidates = MaxCandidates,
         Url = Url,
         AllowedOrigin = AllowedOrigin,
         AllowedPathPrefix = AllowedPathPrefix,

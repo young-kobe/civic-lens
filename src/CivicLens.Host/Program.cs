@@ -2,6 +2,7 @@ using System.Text.Json;
 using CivicLens.Application;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Jobs;
+using CivicLens.Application.Collection.Discovery;
 using CivicLens.Collection.Contracts;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Collection.Jobs;
@@ -23,6 +24,8 @@ if (args is [] or ["--help"] or ["help"])
           jobs get <job-id>
           jobs list [limit]
           jobs cancel <job-id>
+          feeds get <attempt-id>
+          feeds admit <config.json> <source-id> <attempt-id> <idempotency-key>
         Database commands require CIVIC_LENS_DATABASE (Postgres connection string with Host and Database).
         collect and receipts list are database-free. collect-import saves a handoff before importing.
         receipts replay imports saved handoffs without collecting again; use the capture directory after relocation.
@@ -39,6 +42,7 @@ if (args is ["status"])
 }
 
 if (args is not (["db", "migrate"] or ["validate", _] or ["collect", _, _, _, _] or ["collect-import", _, _, _, _]
+    or ["feeds", "get", _] or ["feeds", "admit", _, _, _, _]
     or ["receipts", "list", _] or ["receipts", "replay", _, _]) && !CollectionJobCommand.Matches(args))
 {
     Console.Error.WriteLine("Unknown command. Use --help.");
@@ -52,6 +56,29 @@ var replaying = args is ["receipts", "replay", _, _];
 var importing = args[0] == "collect-import" || replaying;
 try
 {
+    if (args is ["feeds", "get", var feedAttemptId])
+    {
+        if (!PendingCollectionHandoff.IsValidAttemptId(feedAttemptId)) throw new ArgumentException("Invalid attempt ID.");
+        var evidence = CreateDatabase();
+        executing = true;
+        return await FeedDiscoveryCommand.InspectAsync(evidence, feedAttemptId, cancellation.Token);
+    }
+
+    if (args is ["feeds", "admit", var feedConfigPath, var feedSourceId, var discoveryAttemptId, var admissionKey])
+    {
+        var config = await ReadConfigurationAsync(feedConfigPath, cancellation.Token);
+        var definition = CollectionJobDefinition.FromConfiguration(config, feedSourceId);
+        if (definition.Mode != CollectionMode.Feed) throw new ArgumentException("Admission requires a configured feed.");
+        var source = config.Sources.Single(item => item.Id == feedSourceId);
+        var request = new FeedAdmissionRequest(discoveryAttemptId, admissionKey,
+            definition with { Mode = CollectionMode.Page, ETag = null, LastModified = null },
+            source.AdmissionPolicy ?? new FeedAdmissionPolicy());
+        request.Validate();
+        var jobs = CreateJobs();
+        executing = true;
+        return await FeedDiscoveryCommand.AdmitAsync(jobs, request, cancellation.Token);
+    }
+
     if (args is ["jobs", "enqueue", var configPath, var sourceId, var idempotencyKey])
     {
         var config = await ReadConfigurationAsync(configPath, cancellation.Token);

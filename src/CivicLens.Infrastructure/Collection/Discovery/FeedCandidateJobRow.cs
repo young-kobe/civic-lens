@@ -1,0 +1,9 @@
+namespace CivicLens.Infrastructure.Collection.Discovery;
+
+internal sealed class FeedCandidateJobRow
+{
+    public string SourceId { get; set; } = null!;
+    public string CandidateHash { get; set; } = null!;
+    public string Url { get; set; } = null!;
+    public string JobId { get; set; } = null!;
+}
