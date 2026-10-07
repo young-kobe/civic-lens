@@ -39,6 +39,18 @@ public sealed class CommandTests
     }
 
     [Theory]
+    [InlineData("jobs", "get", "job", "--as-of", "2026-07-01")]
+    [InlineData("jobs", "enqueue", "config", "source", "key", "--as-of", "07/01/2026")]
+    [InlineData("collect", "config", "source", "collector", "captures", "--as-of", "2026-02-30")]
+    public async Task CoverageDateRejectsInvalidFormatsAndUnsupportedCommands(params string[] arguments)
+    {
+        var result = await HostProcess.RunAsync(null, arguments);
+        Assert.Equal(2, result.ExitCode);
+        Assert.Contains("--as-of yyyy-MM-dd", result.Error);
+        Assert.Empty(result.Output);
+    }
+
+    [Theory]
     [InlineData(null)]
     [InlineData("")]
     [InlineData("Password=secret-sentinel;Invalid=secret-sentinel")]

@@ -34,19 +34,36 @@ public sealed partial class PostgresCollectionJobStore(IDbContextFactory<Collect
         }
     }
 
+    public Task<CollectionJobRecord> EnqueueAsync(ConfiguredCollectionSource source, string idempotencyKey,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        return EnqueueAsync((existing, currentDate) => source.CreateJobDefinition(currentDate, existing),
+            idempotencyKey, cancellationToken);
+    }
+
     public Task<CollectionJobRecord> EnqueueAsync(CollectionJobDefinition definition, string idempotencyKey,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(definition);
         definition.Validate();
+        return EnqueueAsync((_, _) => definition, idempotencyKey, cancellationToken);
+    }
+
+    private Task<CollectionJobRecord> EnqueueAsync(
+        Func<CollectionJobDefinition?, DateOnly, CollectionJobDefinition> prepareDefinition, string idempotencyKey,
+        CancellationToken cancellationToken)
+    {
         if (string.IsNullOrWhiteSpace(idempotencyKey) || idempotencyKey.Length > 256)
             throw new ArgumentException("Job idempotency key must contain 1 to 256 characters.", nameof(idempotencyKey));
         return TransactionAsync(async (db, now) =>
         {
             var existing = await db.Set<JobRow>().SingleOrDefaultAsync(row => row.IdempotencyKey == idempotencyKey, cancellationToken);
+            var savedDefinition = existing is null ? null : ReadDefinition(existing.DefinitionJson);
+            var definition = prepareDefinition(savedDefinition, DateOnly.FromDateTime(now.UtcDateTime));
             if (existing is not null)
             {
-                if (Read<CollectionJobDefinition>(existing.DefinitionJson) != definition)
+                if (!definition.MatchesReplayOf(savedDefinition!))
                     throw new ArgumentException("The idempotency key belongs to a different job definition.");
                 return await ToRecordAsync(db, existing, cancellationToken);
             }
@@ -145,7 +162,7 @@ public sealed partial class PostgresCollectionJobStore(IDbContextFactory<Collect
             return Blocked(CollectionJobBlockReason.AttemptUnresolved);
         if (row.RetryAt > Ticks(now)) return Blocked(CollectionJobBlockReason.RetryNotDue, FromTicks(row.RetryAt));
 
-        var definition = Read<CollectionJobDefinition>(row.DefinitionJson);
+        var definition = ReadDefinition(row.DefinitionJson);
         var request = definition.CreateRequest(Guid.NewGuid().ToString("N"), Path.GetFullPath(artifactDirectory));
         request.Validate();
         var count = await db.Set<JobAttemptRow>().CountAsync(attempt => attempt.JobId == row.JobId, cancellationToken);
@@ -207,7 +224,7 @@ public sealed partial class PostgresCollectionJobStore(IDbContextFactory<Collect
         if (job is null) return false;
         var attempt = await db.Set<JobAttemptRow>().SingleAsync(item => item.AttemptId == attemptId && item.JobId == job.JobId, cancellationToken);
         var request = Read<CollectionRequest>(attempt.RequestJson);
-        var definition = Read<CollectionJobDefinition>(job.DefinitionJson);
+        var definition = ReadDefinition(job.DefinitionJson);
         ValidateResolution(resolution, request);
         var resolutionJson = Write(resolution);
         if (attempt.ResolutionJson is not null)
@@ -321,6 +338,20 @@ public sealed partial class PostgresCollectionJobStore(IDbContextFactory<Collect
     }
     private static string Write<T>(T value) => JsonSerializer.Serialize(value, CollectionProtocol.JsonOptions);
     private static T Read<T>(string value) => JsonSerializer.Deserialize<T>(value, CollectionProtocol.JsonOptions) ?? throw new InvalidDataException("Missing job data.");
+    private static CollectionJobDefinition ReadDefinition(string json)
+    {
+        try
+        {
+            var definition = Read<CollectionJobDefinition>(json);
+            definition.Validate();
+            return definition;
+        }
+        catch (Exception exception) when (exception is ArgumentException or JsonException)
+        {
+            throw new InvalidDataException("Stored job definition is invalid.", exception);
+        }
+    }
+
     private static DateTimeOffset AddDelay(DateTimeOffset now, TimeSpan delay) => delay > DateTimeOffset.MaxValue - now ? DateTimeOffset.MaxValue : now + delay;
     private static void ValidateLeaseDuration(TimeSpan duration)
     {
@@ -339,7 +370,7 @@ public sealed partial class PostgresCollectionJobStore(IDbContextFactory<Collect
     }
 
     private static CollectionJobRecord ToRecord(JobRow row, IEnumerable<JobAttemptRow> attempts) =>
-        new(row.JobId, Read<CollectionJobDefinition>(row.DefinitionJson), row.IdempotencyKey,
+        new(row.JobId, ReadDefinition(row.DefinitionJson), row.IdempotencyKey,
             row.State, FromTicks(row.CreatedAt)!.Value, FromTicks(row.RetryAt), row.CancellationRequested,
             row.ChargedRequests, row.ChargedBytes, row.ChargedSeconds, attempts.Select(ToAttempt).ToArray());
 }

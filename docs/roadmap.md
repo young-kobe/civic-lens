@@ -1,10 +1,10 @@
 # Remaining implementation
 
-Phase 0, the watched-page tracer, version 5 collection contracts with v3 page and v4 feed recovery support, Core collection-import rules, the Application collection/import handler, the Postgres adapter with its initial migration, CLI database setup and collection/import, durable receipt handoff/replay, and managed jobs with fenced ownership, aggregate budgets, retries, cancellation, and origin pacing/backoff, plus RSS/Atom and scoped HTML discovery with explicit bounded article admission are implemented. The following is remaining planned work, not available functionality. Remove completed work and update the current architecture/operations references; Git preserves previous plans.
+Phase 0, the watched-page tracer, version 5 collection contracts with v3 page and v4 feed recovery support, Core collection-import rules, the Application collection/import handler, the Postgres adapter with its initial migration, CLI database setup and collection/import, durable receipt handoff/replay, and managed jobs with fenced ownership, aggregate budgets, retries, cancellation, and origin pacing/backoff, plus RSS/Atom and scoped HTML discovery with explicit bounded article admission are implemented. Configuration v2 dated coverage/names and immutable configuration revisions bound to managed jobs are also implemented. The following is remaining planned work, not available functionality. Remove completed work and update the current architecture/operations references; Git preserves previous plans.
 
 ## 1. Collection and evidence
 
-Extend validated people/source configuration with dated identities/source relationships. Complete robots handling. Automatic stored-validator selection and background scheduling remain future work. Add only packages needed for these capabilities.
+Complete robots handling. Automatic stored-validator selection and background scheduling remain future work. Add only packages needed for these capabilities.
 
 Acceptance: add an official through configuration; collect one feed and watched page; demonstrate cancellation/restart without duplicate imports, conditional 304 handling, 429 backoff, bounded discovery, and explicit incomplete-download errors. Validate registry behavior with hundreds of fixture identities without issuing hundreds of live requests.
 
@@ -16,7 +16,7 @@ Acceptance: inspect and publish a real substantive edit with both versions and v
 
 ## 3. Statements and actions
 
-Implement authoritative action connectors, structured statement extraction, temporal identity resolution, candidate matching, reviewed relationships, and timelines.
+Implement offices, dated terms, institutional source ownership, authoritative action connectors, structured statement extraction, temporal identity resolution, candidate matching, reviewed relationships, and timelines.
 
 Acceptance: every statement/action has exact inspectable provenance. Quotation validity and interpretation are separate checks. Human review is bound to the reviewed version. Adding/removing tracked officials requires no code changes and retains history.
 

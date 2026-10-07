@@ -26,17 +26,17 @@ internal static class CollectionJobCommand
         if (arguments[1] == "run") _ = Path.GetFullPath(arguments[4]);
     }
 
-    public static async Task<int> EnqueueAsync(ICollectionJobStore jobs, CollectionJobDefinition definition,
+    public static async Task<int> EnqueueAsync(ICollectionJobStore jobs, ConfiguredCollectionSource source,
         string key, CancellationToken cancellationToken)
     {
         try
         {
-            Write(await jobs.EnqueueAsync(definition, key, cancellationToken));
+            Write(await jobs.EnqueueAsync(source, key, cancellationToken));
             return 0;
         }
         catch (ArgumentException)
         {
-            Console.Error.WriteLine("Invalid job definition or idempotency key. An existing key must identify the same source settings and policy.");
+            Console.Error.WriteLine("Invalid job admission. Existing keys must match the saved configuration and any explicit date; new keys require active coverage.");
             return 2;
         }
     }

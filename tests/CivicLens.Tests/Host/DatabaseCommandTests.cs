@@ -108,8 +108,12 @@ public sealed class DatabaseCommandTests(PostgresCollection postgres) : IAsyncLi
             CollectionProtocol.JsonOptions)!;
         config = config with
         {
+            Version = 2,
             Sources = [config.Sources[0] with
             {
+                PersonIds = null,
+                Coverage = [new SourceCoverageConfiguration
+                { PersonId = "person", StartsOn = new DateOnly(2020, 1, 1), EndsBefore = new DateOnly(2021, 1, 1) }],
                 Mode = mode, AdmissionPolicy = new DiscoveryAdmissionPolicy { MaxJobs = 1 }
             }]
         };
@@ -122,7 +126,7 @@ public sealed class DatabaseCommandTests(PostgresCollection postgres) : IAsyncLi
                 $"<a href=\"/page/article-{index}?value={new string('a', 750)}\">Article</a>")) + "</body></html>";
         Assert.True(feedBody.Length > 65_536);
         // An import interrupted by missing schema must retain the feed and its discovery for replay.
-        var interrupted = await CollectAsync("collect-import", connectionString);
+        var interrupted = await CollectAsync("collect-import", connectionString, "2020-01-01");
         Assert.Equal(1, interrupted.ExitCode);
         var root = Path.Combine(directory, "captures");
         var listed = await HostProcess.RunAsync(null, "receipts", "list", root);
@@ -136,13 +140,24 @@ public sealed class DatabaseCommandTests(PostgresCollection postgres) : IAsyncLi
         using var discovery = JsonDocument.Parse(inspected.Output);
         Assert.Equal("parsed", discovery.RootElement.GetProperty("status").GetString());
         Assert.Equal(100, discovery.RootElement.GetProperty("urls").GetArrayLength());
-        var args = new[] { command, "admit", configPath, "source", attemptId, "batch-1" };
+        var inactive = await HostProcess.RunAsync(connectionString, command, "admit", configPath, "source", attemptId,
+            "batch-1", "--as-of", "2021-01-01");
+        Assert.Equal(2, inactive.ExitCode);
+        var args = new[] { command, "admit", configPath, "source", attemptId, "batch-1", "--as-of", "2020-01-01" };
         var admitted = await HostProcess.RunAsync(connectionString, args);
         Assert.True(admitted.ExitCode == 0, admitted.Error);
         var repeated = await HostProcess.RunAsync(connectionString, args);
         Assert.Equal(admitted.Output, repeated.Output);
+        var replayAfterExpiry = await HostProcess.RunAsync(connectionString, args[..^2]);
+        Assert.True(replayAfterExpiry.ExitCode == 0, replayAfterExpiry.Error);
+        Assert.Equal(admitted.Output, replayAfterExpiry.Output);
+        Assert.Equal(2, (await HostProcess.RunAsync(connectionString, command, "admit", configPath, "source", attemptId, "new-after-expiry")).ExitCode);
         using var admission = JsonDocument.Parse(admitted.Output);
         var jobId = Assert.Single(admission.RootElement.GetProperty("jobs").EnumerateArray()).GetProperty("jobId").GetString()!;
+        var inspectedJob = await HostProcess.RunAsync(connectionString, "jobs", "get", jobId);
+        using var job = JsonDocument.Parse(inspectedJob.Output);
+        Assert.Equal("2020-01-01", job.RootElement.GetProperty("definition").GetProperty("coverageAsOf").GetString());
+        Assert.Equal(64, job.RootElement.GetProperty("definition").GetProperty("configurationRevision").GetProperty("id").GetString()!.Length);
         File.Delete(configPath);
         var run = await HostProcess.RunAsync(connectionString, "jobs", "run", jobId,
             typeof(HttpCollector).Assembly.Location, root);
@@ -183,6 +198,82 @@ public sealed class DatabaseCommandTests(PostgresCollection postgres) : IAsyncLi
         await connection.OpenAsync();
         await using var count = new NpgsqlCommand("SELECT count(*) FROM collection_attempts", connection);
         Assert.Equal(1L, await count.ExecuteScalarAsync());
+    }
+
+    [Theory]
+    [InlineData("collect")]
+    [InlineData("collect-import")]
+    public async Task DirectCollectionUsesExplicitCoverageDate(string command)
+    {
+        var path = Path.Combine(directory, "config.json");
+        var configuration = JsonSerializer.Deserialize<CollectionConfiguration>(await File.ReadAllTextAsync(path), CollectionProtocol.JsonOptions)!;
+        configuration = configuration with
+        {
+            Version = 2,
+            Sources = [configuration.Sources[0] with
+            {
+                PersonIds = null,
+                Coverage = [new SourceCoverageConfiguration
+                { PersonId = "person", StartsOn = new DateOnly(2020, 1, 1), EndsBefore = new DateOnly(2021, 1, 1) }]
+            }]
+        };
+        await File.WriteAllTextAsync(path, JsonSerializer.Serialize(configuration, CollectionProtocol.JsonOptions));
+        if (command == "collect-import")
+            Assert.Equal(0, (await HostProcess.RunAsync(connectionString, "db", "migrate")).ExitCode);
+        var database = command == "collect-import" ? connectionString : null;
+        var inactive = await CollectAsync(command, database, "2021-01-01");
+        Assert.Equal(2, inactive.ExitCode);
+        Assert.Empty(inactive.Output);
+        var active = await CollectAsync(command, database, "2020-01-01");
+        Assert.True(active.ExitCode == 0, active.Error);
+        using var output = JsonDocument.Parse(active.Output);
+        Assert.Equal("captured", output.RootElement.GetProperty("outcome").GetString());
+    }
+
+    [Fact]
+    public async Task DatedJobAdmissionPinsRevisionAndDateAcrossConfigRemoval()
+    {
+        var configPath = Path.Combine(directory, "config.json");
+        var config = JsonNode.Parse(await File.ReadAllTextAsync(configPath))!;
+        config["version"] = 2;
+        var source = config["sources"]![0]!.AsObject();
+        source.Remove("personIds");
+        source["coverage"] = new JsonArray(new JsonObject
+        {
+            ["personId"] = "person",
+            ["startsOn"] = "2020-07-01",
+            ["endsBefore"] = "2020-08-01"
+        });
+        await File.WriteAllTextAsync(configPath, config.ToJsonString());
+        Assert.Equal(0, (await HostProcess.RunAsync(null, "validate", configPath)).ExitCode);
+        Assert.Equal(0, (await HostProcess.RunAsync(connectionString, "db", "migrate")).ExitCode);
+        var inactive = await HostProcess.RunAsync(connectionString, "jobs", "enqueue", configPath, "source", "dated",
+            "--as-of", "2020-08-01");
+        Assert.Equal(2, inactive.ExitCode);
+        var arguments = new[] { "jobs", "enqueue", configPath, "source", "dated", "--as-of", "2020-07-01" };
+        var enqueued = await HostProcess.RunAsync(connectionString, arguments);
+        Assert.True(enqueued.ExitCode == 0, enqueued.Error);
+        using var job = JsonDocument.Parse(enqueued.Output);
+        var id = job.RootElement.GetProperty("jobId").GetString()!;
+        var definition = job.RootElement.GetProperty("definition");
+        Assert.Equal("2020-07-01", definition.GetProperty("coverageAsOf").GetString());
+        var revision = definition.GetProperty("configurationRevision").GetProperty("id").GetString();
+        var replay = await HostProcess.RunAsync(connectionString, arguments[..^2]);
+        Assert.True(replay.ExitCode == 0, replay.Error);
+        using var replayed = JsonDocument.Parse(replay.Output);
+        Assert.Equal(id, replayed.RootElement.GetProperty("jobId").GetString());
+        Assert.Equal("2020-07-01", replayed.RootElement.GetProperty("definition").GetProperty("coverageAsOf").GetString());
+        Assert.Equal(2, (await HostProcess.RunAsync(connectionString, "jobs", "enqueue", configPath, "source", "new-after-expiry")).ExitCode);
+        config["people"]![0]!["name"] = "Corrected name";
+        await File.WriteAllTextAsync(configPath, config.ToJsonString());
+        Assert.Equal(2, (await HostProcess.RunAsync(connectionString, arguments)).ExitCode);
+        File.Delete(configPath);
+        var run = await HostProcess.RunAsync(connectionString, "jobs", "run", id,
+            typeof(HttpCollector).Assembly.Location, Path.Combine(directory, "captures"));
+        Assert.True(run.ExitCode == 0, run.Error + run.Output);
+        var inspected = await HostProcess.RunAsync(connectionString, "jobs", "get", id);
+        using var stored = JsonDocument.Parse(inspected.Output);
+        Assert.Equal(revision, stored.RootElement.GetProperty("definition").GetProperty("configurationRevision").GetProperty("id").GetString());
     }
 
     [Fact]
@@ -291,9 +382,13 @@ public sealed class DatabaseCommandTests(PostgresCollection postgres) : IAsyncLi
         Assert.False(receipt.RootElement.TryGetProperty("attemptId", out _));
     }
 
-    private Task<(int ExitCode, string Output, string Error)> CollectAsync(string command, string? database) =>
-        HostProcess.RunAsync(database, command, Path.Combine(directory, "config.json"), "source",
-            typeof(HttpCollector).Assembly.Location, Path.Combine(directory, "captures"));
+    private Task<(int ExitCode, string Output, string Error)> CollectAsync(string command, string? database, string? asOf = null)
+    {
+        string[] arguments = [command, Path.Combine(directory, "config.json"), "source",
+            typeof(HttpCollector).Assembly.Location, Path.Combine(directory, "captures")];
+        if (asOf is not null) arguments = [.. arguments, "--as-of", asOf];
+        return HostProcess.RunAsync(database, arguments);
+    }
 
     private async Task ServeAsync()
     {

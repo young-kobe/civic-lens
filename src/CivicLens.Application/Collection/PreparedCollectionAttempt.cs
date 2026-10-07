@@ -8,10 +8,10 @@ public sealed class PreparedCollectionAttempt
     public string AttemptId { get; }
     public CollectionRequest Request { get; }
 
-    public PreparedCollectionAttempt(CollectionConfiguration configuration, string sourceId, string artifactDirectory)
+    public PreparedCollectionAttempt(CollectionConfiguration configuration, string sourceId, string artifactDirectory, DateOnly? asOf = null)
     {
         ArgumentNullException.ThrowIfNull(configuration);
-        Request = configuration.CreateRequest(sourceId, Guid.NewGuid().ToString("N"), Path.GetFullPath(artifactDirectory));
+        Request = configuration.CreateRequest(sourceId, Guid.NewGuid().ToString("N"), Path.GetFullPath(artifactDirectory), asOf);
         AttemptId = Guid.NewGuid().ToString("N");
     }
 }

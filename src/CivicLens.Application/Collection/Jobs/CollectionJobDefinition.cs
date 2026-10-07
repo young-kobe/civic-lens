@@ -1,4 +1,5 @@
 using CivicLens.Collection.Contracts;
+using System.Text.Json.Serialization;
 
 namespace CivicLens.Application.Collection.Jobs;
 
@@ -18,14 +19,29 @@ public sealed record CollectionJobDefinition
     public DateTimeOffset? LastModified { get; init; }
     public required CollectionJobPolicy Policy { get; init; }
 
-    public static CollectionJobDefinition FromConfiguration(CollectionConfiguration configuration, string sourceId)
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public CollectionConfigurationRevision? ConfigurationRevision { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public DateOnly? CoverageAsOf { get; init; }
+
+    public static CollectionJobDefinition FromConfiguration(CollectionConfiguration configuration, string sourceId,
+        DateOnly? asOf = null)
     {
-        ArgumentNullException.ThrowIfNull(configuration);
-        configuration.Validate();
-        var source = configuration.Sources.SingleOrDefault(item => item.Id == sourceId)
-            ?? throw new ArgumentException($"Unknown source ID '{sourceId}'.", nameof(sourceId));
-        if (!source.Enabled)
-            throw new ArgumentException($"Source '{sourceId}' is disabled.", nameof(sourceId));
+        var revision = CollectionConfigurationRevision.Create(configuration);
+        var snapshot = revision.ReadConfiguration();
+        var effectiveDate = asOf ?? DateOnly.FromDateTime(DateTime.UtcNow);
+        snapshot.CreateRequest(sourceId, "validation-job", Path.GetFullPath("collection-artifacts"), effectiveDate);
+        var definition = FromSource(snapshot.Sources.Single(source => source.Id == sourceId)) with
+        {
+            ConfigurationRevision = revision,
+            CoverageAsOf = effectiveDate
+        };
+        definition.Validate();
+        return definition;
+    }
+
+    internal static CollectionJobDefinition FromSource(WatchedSourceConfiguration source)
+    {
         var definition = new CollectionJobDefinition
         {
             SourceId = source.Id,
@@ -42,7 +58,6 @@ public sealed record CollectionJobDefinition
             LastModified = source.LastModified,
             Policy = source.JobPolicy ?? new CollectionJobPolicy()
         };
-        definition.Validate();
         return definition;
     }
 
@@ -53,6 +68,32 @@ public sealed record CollectionJobDefinition
             throw new ArgumentException("Job source snapshot is incomplete.");
         var request = CreateRequest("validation-job", Path.GetFullPath("collection-artifacts"));
         Policy.Validate(request);
+        ValidateConfigurationBinding();
+    }
+
+    private void ValidateConfigurationBinding()
+    {
+        if (ConfigurationRevision is null && CoverageAsOf is null)
+            return; // Legacy or explicitly supplied standalone definitions have no registry provenance.
+        if (ConfigurationRevision is null || CoverageAsOf is null)
+            throw new ArgumentException("A configuration revision and coverage date must be supplied together.");
+
+        var configuration = ConfigurationRevision.ReadConfiguration();
+        configuration.CreateRequest(SourceId, "validation-job", Path.GetFullPath("collection-artifacts"), CoverageAsOf);
+        var expected = FromSource(configuration.Sources.Single(source => source.Id == SourceId));
+        if (expected.Mode is CollectionMode.Feed or CollectionMode.Html && Mode == CollectionMode.Page)
+            expected = expected with { Mode = CollectionMode.Page, Url = Url, ETag = null, LastModified = null };
+        if (expected != this with { ConfigurationRevision = null, CoverageAsOf = null })
+            throw new ArgumentException("Job settings do not match the bound configuration revision.");
+    }
+
+    public bool MatchesReplayOf(CollectionJobDefinition existing)
+    {
+        ArgumentNullException.ThrowIfNull(existing);
+        // Old jobs cannot gain historical provenance from a later configuration.
+        return existing.ConfigurationRevision is null && existing.CoverageAsOf is null
+            ? existing == this with { ConfigurationRevision = null, CoverageAsOf = null }
+            : existing == this;
     }
 
     public CollectionRequest CreateRequest(string jobId, string artifactDirectory) => new()

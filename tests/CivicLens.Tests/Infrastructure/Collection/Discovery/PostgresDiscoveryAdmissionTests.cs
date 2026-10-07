@@ -311,6 +311,72 @@ public sealed class PostgresDiscoveryAdmissionTests(PostgresCollection postgres)
         return attemptId;
     }
 
+    [Theory]
+    [InlineData(CollectionMode.Feed)]
+    [InlineData(CollectionMode.Html)]
+    public async Task AdmissionPinsRevisionsAndReplaysLegacyBatchesWithoutInventingHistory(CollectionMode mode)
+    {
+        var attempt = await SaveDiscoveryAsync(["https://example.test/articles/one"], mode);
+        var template = Template();
+        var configuration = new CollectionConfiguration
+        {
+            People = [new PersonConfiguration { Id = "person", Name = "Original" }],
+            Sources = [new WatchedSourceConfiguration
+            {
+                Id = "source", PersonIds = ["person"], Url = template.Url,
+                AllowedOrigin = template.AllowedOrigin, AllowedPathPrefix = template.AllowedPathPrefix,
+                Mode = mode, MaxRequests = template.MaxRequests, MaxBytes = template.MaxBytes,
+                TimeoutSeconds = template.TimeoutSeconds, MinDelayMilliseconds = template.MinDelayMilliseconds,
+                JobPolicy = template.Policy
+            }]
+        };
+        var definition = CollectionJobDefinition.FromConfiguration(configuration, "source", new DateOnly(2026, 7, 1)) with
+        { Mode = CollectionMode.Page, ETag = null, LastModified = null };
+        var legacyRequest = new DiscoveryAdmissionRequest(attempt, "legacy-revision", template, new DiscoveryAdmissionPolicy(), mode);
+        var legacy = await jobs.AdmitAsync(legacyRequest, default);
+        var replay = await jobs.AdmitAsync(legacyRequest with { ArticleTemplate = definition }, default);
+        Assert.Equal(legacy.Jobs, replay.Jobs);
+        Assert.Null((await jobs.GetAsync(Assert.Single(replay.Jobs).JobId, default))!.Definition.ConfigurationRevision);
+        var otherMode = mode == CollectionMode.Feed ? CollectionMode.Html : CollectionMode.Feed;
+        await Assert.ThrowsAsync<ArgumentException>(() => jobs.AdmitAsync(legacyRequest with
+        { ExpectedDiscoveryMode = otherMode }, default));
+
+        var nextAttempt = await SaveDiscoveryAsync(["https://example.test/articles/two"], mode);
+        var request = new DiscoveryAdmissionRequest(nextAttempt, "new-revision", definition, new DiscoveryAdmissionPolicy(), mode);
+        var admitted = await jobs.AdmitAsync(request, default);
+        var stored = await jobs.GetAsync(Assert.Single(admitted.Jobs).JobId, default);
+        Assert.Equal(definition.ConfigurationRevision, stored!.Definition.ConfigurationRevision);
+        Assert.Equal(definition.CoverageAsOf, stored.Definition.CoverageAsOf);
+        stored.Definition.Validate();
+        configuration.People[0] = configuration.People[0] with { Name = "Correction" };
+        var corrected = CollectionJobDefinition.FromConfiguration(configuration, "source", definition.CoverageAsOf) with
+        { Mode = CollectionMode.Page, ETag = null, LastModified = null };
+        await Assert.ThrowsAsync<ArgumentException>(() => jobs.AdmitAsync(request with { ArticleTemplate = corrected }, default));
+        Assert.Equal(admitted.Jobs, (await jobs.AdmitAsync(request, default)).Jobs);
+
+        var concurrentAttempt = await SaveDiscoveryAsync(["https://example.test/articles/concurrent"], mode);
+        var configuredSource = new ConfiguredCollectionSource(configuration, "source");
+        var concurrent = await Task.WhenAll(
+            jobs.AdmitAsync(configuredSource, concurrentAttempt, "concurrent-configured", default),
+            jobs.AdmitAsync(configuredSource, concurrentAttempt, "concurrent-configured", default));
+        Assert.Single(concurrent[0].Jobs);
+        Assert.Equal(concurrent[0].Jobs, concurrent[1].Jobs);
+
+        var expiredConfiguration = configuration with
+        {
+            Version = 2,
+            Sources = [configuration.Sources[0] with
+            {
+                PersonIds = null, Enabled = false,
+                Coverage = [new SourceCoverageConfiguration { PersonId = "person", EndsBefore = new DateOnly(2021, 1, 1) }]
+            }]
+        };
+        var expired = new ConfiguredCollectionSource(expiredConfiguration, "source");
+        Assert.Equal(legacy.Jobs, (await jobs.AdmitAsync(expired, attempt, "legacy-revision", default)).Jobs);
+        await Assert.ThrowsAsync<ArgumentException>(() => jobs.AdmitAsync(expired, attempt, "new-expired", default));
+        await Assert.ThrowsAsync<ArgumentException>(() => jobs.AdmitAsync(expired, "different-attempt", "legacy-revision", default));
+    }
+
     private static CollectionJobDefinition Template(string path = "/") => new()
     {
         SourceId = "source",
