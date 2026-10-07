@@ -9,6 +9,51 @@ namespace CivicLens.Tests.Collector.Http;
 
 public sealed class CollectorTests
 {
+    [Theory]
+    [InlineData(CollectionMode.Feed, "deflate", false, 0)]
+    [InlineData(CollectionMode.Feed, "deflate", true, 0)]
+    [InlineData(CollectionMode.Feed, "br", false, 0)]
+    [InlineData(CollectionMode.Feed, "br", true, 0)]
+    [InlineData(CollectionMode.Html, "deflate", false, 0)]
+    [InlineData(CollectionMode.Html, "deflate", true, 0)]
+    [InlineData(CollectionMode.Html, "br", false, 0)]
+    [InlineData(CollectionMode.Html, "br", true, 0)]
+    [InlineData(CollectionMode.Feed, "br", false, 10_000_001)]
+    [InlineData(CollectionMode.Html, "br", false, 10_000_001)]
+    public async Task NestedDiscoveryEncodingValidatesEveryLayer(CollectionMode mode, string innerCoding, bool truncate, int padding)
+    {
+        using var directory = new TemporaryDirectory();
+        var markup = mode == CollectionMode.Feed
+            ? "<rss version='2.0'><channel><item><link>/watch/article</link></item></channel></rss>"
+            : "<a href='/watch/article'>article</a>";
+        using var inner = new MemoryStream();
+        using (Stream encoder = innerCoding == "br"
+            ? new BrotliStream(inner, CompressionLevel.SmallestSize, leaveOpen: true)
+            : new ZLibStream(inner, CompressionLevel.SmallestSize, leaveOpen: true))
+            encoder.Write(Encoding.UTF8.GetBytes(markup));
+        using var outer = new MemoryStream();
+        using (var encoder = new GZipStream(outer, CompressionLevel.SmallestSize, leaveOpen: true))
+        {
+            encoder.Write(inner.ToArray());
+            if (padding > 0) encoder.Write(new byte[padding]);
+        }
+        var payload = truncate ? outer.ToArray()[..^4] : outer.ToArray();
+        using var collector = new HttpCollector(new QueueHandler(_ => Response(HttpStatusCode.NotFound), _ =>
+        {
+            var response = Response(HttpStatusCode.OK, payload);
+            response.Content.Headers.ContentEncoding.Add(innerCoding);
+            response.Content.Headers.ContentEncoding.Add("gzip");
+            return response;
+        }));
+        var result = await collector.FetchAsync(Request(directory.Path) with { Mode = mode, MaxBytes = 100_000 });
+        Assert.Equal(CollectionOutcome.Captured, result.Outcome);
+        Assert.NotNull(result.Capture);
+        var expected = padding > 0 ? DiscoveryStatus.LimitExceeded : truncate ? DiscoveryStatus.Invalid : DiscoveryStatus.Parsed;
+        Assert.Equal(expected, result.Discovery!.Status);
+        if (expected != DiscoveryStatus.Parsed) Assert.Empty(result.Discovery.Urls);
+        else Assert.Equal("https://example.test/watch/article", Assert.Single(result.Discovery.Urls));
+    }
+
     [Fact]
     public async Task CapturesRawBodyAsVerifiedContentAddressedGzip()
     {

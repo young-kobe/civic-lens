@@ -4,6 +4,8 @@ Political transparency through officials' statements and actions, document chang
 
 **Current state:** a watched-page tracer with validated v1/v2 people/source configuration, dated coverage and names, a separate bounded HTTP collector, immutable gzip captures, and host-verified JSON receipts that preserve response metadata. Core domain rules now model immutable collection attempt results, import decisions for new and duplicate attempts, and conservative 304 evidence linkage. Application maps verified attempts through the Core policy, and Infrastructure implements atomic Postgres imports with EF Core/Npgsql and an initial migration. Database integration tests use disposable Postgres containers. The CLI supports explicit database migrations, collection/import with application-generated attempt IDs, and filesystem receipt handoff with replay after interrupted imports. Recovery revalidates captures and can use relocated runtime storage without collecting again. Managed Postgres jobs now add a guarded lifecycle, bounded retries and aggregate budgets, fenced ownership, and shared origin pacing/backoff through explicit CLI commands. RSS/Atom feed and scoped HTML capture retain bounded discovery results and support explicit, budgeted admission of article jobs with durable deduplication. New configuration-based jobs retain immutable configuration revisions and explicit coverage dates. AI, review, publication, and MCP endpoints are not implemented yet. The prior implementation is preserved in [civic-lens-legacy](https://github.com/young-kobe/civic-lens-legacy).
 
+Immutable document text extraction is also available: local commands verify imported captures, retain versioned HTML/plain-text extractions in Postgres, and return exact text-span citations. These are extraction records, not substantive-change judgments or human approvals.
+
 ## Start here
 
 Install the .NET SDK selected by `global.json`, then run:
@@ -22,11 +24,11 @@ No credentials, database, or paid services are required for the tracer. The full
 
 | Path | Responsibility |
 |---|---|
-| `src/CivicLens.Core` | `Collection/` owns immutable collection attempt results and import decisions; `Registry/` owns immutable date ranges and dated names |
+| `src/CivicLens.Core` | `Collection/` owns immutable collection attempt results and import decisions; `Registry/` owns immutable date ranges and dated names; `Documents/` owns immutable text extractions and citation spans |
 | `src/CivicLens.Collection.Contracts` | Versioned collection types and shared receipt validation |
 | `src/CivicLens.Publication.Contracts` | Public release boundary, currently empty |
-| `src/CivicLens.Application` | `Collection/` groups configuration, collection/import use cases, and external interfaces |
-| `src/CivicLens.Infrastructure` | `Collection/` implements process execution, capture verification, and Postgres persistence |
+| `src/CivicLens.Application` | `Collection/` groups configuration and collection/import use cases; `Documents/` coordinates extraction and citations through external interfaces |
+| `src/CivicLens.Infrastructure` | `Collection/` implements process execution, capture verification, and Postgres persistence; `Documents/` parses verified captures and persists text extractions |
 | `src/CivicLens.Host` | Local application entry point |
 | `src/CivicLens.Collector` | `Http/` contains bounded collection and immutable capture production |
 | `tests/CivicLens.Tests` | Tests mirror their owning layer and feature; `Architecture/` checks dependencies |

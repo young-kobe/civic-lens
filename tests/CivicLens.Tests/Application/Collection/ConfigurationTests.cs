@@ -5,6 +5,16 @@ namespace CivicLens.Tests.Application.Collection;
 public sealed class ConfigurationTests
 {
     [Fact]
+    public void OversizedSourceIdentityIsRejectedBeforeCollectionOrJobAdmission()
+    {
+        var configuration = ValidConfiguration([new PersonConfiguration { Id = "person", Name = "Official" }], ["person"]);
+        configuration = configuration with { Sources = [configuration.Sources[0] with { Id = new string('s', 70_000) }] };
+        Assert.Throws<ArgumentException>(configuration.Validate);
+        Assert.Throws<ArgumentException>(() => CivicLens.Application.Collection.Jobs.CollectionJobDefinition
+            .FromConfiguration(configuration, configuration.Sources[0].Id));
+    }
+
+    [Fact]
     public void PreparedAttemptsHaveFreshIdentitiesSeparateFromWireJobs()
     {
         var configuration = ValidConfiguration([new PersonConfiguration { Id = "person", Name = "Official" }], ["person"]);

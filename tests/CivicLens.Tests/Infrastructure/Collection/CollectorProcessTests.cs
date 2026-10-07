@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using CivicLens.Application.Collection;
 using CivicLens.Collection.Contracts;
 using CivicLens.Collector.Http;
@@ -13,6 +14,41 @@ namespace CivicLens.Tests.Infrastructure.Collection;
 
 public sealed class CollectorProcessTests
 {
+    [Fact]
+    public async Task PageReceiptCanExceedManifestLimitWithoutLosingValidEvidence()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "civic-large-receipt-" + Guid.NewGuid().ToString("N"));
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var origin = $"http://127.0.0.1:{((IPEndPoint)listener.LocalEndpoint).Port}";
+        var request = Request() with
+        {
+            SourceId = new string('s', 64_000),
+            Url = origin + "/watch",
+            AllowedOrigin = origin,
+            AllowedPathPrefix = "/watch",
+            ArtifactDirectory = directory,
+            MinDelayMilliseconds = 0
+        };
+        var server = ServeAsync(listener, [65], false, false, 2, deadline.Token, "\"" + new string('e', 4000) + "\"");
+        try
+        {
+            request.Validate();
+            var result = await new CollectorProcess(typeof(HttpCollector).Assembly.Location).RunAsync(request, deadline.Token);
+            Assert.Equal(CollectionOutcome.Captured, result.Outcome);
+            Assert.True(JsonSerializer.Serialize(result, CollectionProtocol.JsonOptions).Length > CollectionProtocol.MaximumManifestBytes);
+            await server;
+        }
+        finally
+        {
+            deadline.Cancel();
+            listener.Stop();
+            try { await server; } catch (Exception exception) when (exception is OperationCanceledException or SocketException) { }
+            if (Directory.Exists(directory)) Directory.Delete(directory, true);
+        }
+    }
+
     [Theory]
     [InlineData(false, false)]
     [InlineData(true, false)]
@@ -173,7 +209,8 @@ public sealed class CollectorProcessTests
         }
     }
 
-    private static async Task ServeAsync(TcpListener listener, byte[] payload, bool truncate, bool encoded, int count, CancellationToken token)
+    private static async Task ServeAsync(TcpListener listener, byte[] payload, bool truncate, bool encoded, int count, CancellationToken token,
+        string etag = "\"fixture-v1\"")
     {
         for (var i = 0; i < count; i++)
         {
@@ -185,7 +222,7 @@ public sealed class CollectorProcessTests
             var robots = requestLine!.Contains(" /robots.txt ", StringComparison.Ordinal);
             var body = robots ? Encoding.UTF8.GetBytes("User-agent: *\nDisallow:\n") : payload;
             var length = body.Length + (!robots && truncate ? 100 : 0);
-            var metadata = robots ? "" : "Content-Type: text/plain; charset=utf-8\r\nLast-Modified: Tue, 06 Oct 2026 12:00:00 GMT\r\nETag: \"fixture-v1\"\r\n" + (encoded ? "Content-Encoding: gzip\r\n" : "");
+            var metadata = robots ? "" : $"Content-Type: text/plain; charset=utf-8\r\nLast-Modified: Tue, 06 Oct 2026 12:00:00 GMT\r\nETag: {etag}\r\n" + (encoded ? "Content-Encoding: gzip\r\n" : "");
             var header = Encoding.ASCII.GetBytes($"HTTP/1.1 200 OK\r\nContent-Length: {length}\r\n{metadata}Connection: close\r\n\r\n");
             await stream.WriteAsync(header, token);
             await stream.WriteAsync(body, token);

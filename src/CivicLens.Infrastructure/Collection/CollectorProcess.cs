@@ -41,7 +41,7 @@ public sealed class CollectorProcess(string collectorAssembly, string dotnetExec
             deadline.CancelAfter(TimeSpan.FromSeconds(request.TimeoutSeconds + 5));
             var outputLimit = request.Mode is CollectionMode.Feed or CollectionMode.Html
                 ? CollectionProtocol.MaximumDiscoveryReceiptSize
-                : 65_536;
+                : CollectionProtocol.MaximumPageReceiptSize;
             var stdout = ReadBoundedAsync(process.StandardOutput, outputLimit, deadline.Token);
             var stderr = ReadBoundedAsync(process.StandardError, 65_536, deadline.Token);
             // A malformed child must not deadlock the parent by filling either redirected pipe.

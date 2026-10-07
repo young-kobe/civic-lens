@@ -7,6 +7,19 @@ namespace CivicLens.Tests.Collection.Contracts;
 
 public sealed class CollectionProtocolTests
 {
+    [Fact]
+    public void RequestsRejectSerializedManifestOverflowIncludingJsonEscaping()
+    {
+        var basis = Request() with { SourceId = "" };
+        var overhead = JsonSerializer.SerializeToUtf8Bytes(basis, CollectionProtocol.JsonOptions).Length;
+        var maximum = basis with { SourceId = new string('s', CollectionProtocol.MaximumManifestBytes - overhead) };
+        maximum.Validate();
+        Assert.Throws<ArgumentException>(() => (maximum with { SourceId = maximum.SourceId + "s" }).Validate());
+        var escaped = basis with { SourceId = new string('é', 12_000) };
+        Assert.True(escaped.SourceId.Length < CollectionProtocol.MaximumManifestBytes);
+        Assert.Throws<ArgumentException>(escaped.Validate);
+    }
+
     [Theory]
     [InlineData("https://example.test/other")]
     [InlineData("https://example.test/pages-other/a")]

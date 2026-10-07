@@ -205,6 +205,22 @@ Recovery begins only once a complete handoff has been saved. A crash or cancella
 
 ## Runtime and future operations
 
+### Extract and cite document text
+
+Apply `db migrate` for the additive `document_extractions` table, then use an imported captured attempt and its artifact directory:
+
+```sh
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- documents extract <captured-attempt-id> .runtime/captures
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- documents get <extraction-id>
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- documents cite <extraction-id> <start> <length>
+```
+
+Extraction returns the extraction ID, source attempt ID, processing versions, text hash, and text length. `get` returns the exact stored text and provenance. Citation offsets count UTF-16 units, matching .NET strings; an emoji represented by a surrogate pair counts as two units. The command rejects ranges that split that pair. Citation output is local evidence, not publication or approval.
+
+Only captured HTML/plain-text attempts are supported. For a linked 304, explicitly select the original captured attempt. Repeating extraction verifies the artifact again and returns the same record for identical output; different output under the same processing versions is rejected. A relocated artifact directory is supported. Missing/corrupt files, unsupported content, and parser limits fail without replacing earlier text. Inspection and citation can still use retained text if the capture is temporarily unavailable, but this does not replace backing up raw captures. Static HTML extraction may retain navigation or hidden text; it does not establish a substantive source change. See architecture for exact bounds and encoding rules.
+
+### Remaining operations
+
 Runtime data belongs in ignored .runtime/; generated publication and evaluation artifacts in ignored artifacts/. Never commit credentials or copy operational directories from the legacy repository. There is currently no deploy command and no public endpoint.
 
 Core collection-import decisions and the Application fresh/replay handlers share evidence mapping and atomic Postgres imports. The host exposes receipt-only `collect`, database-backed `collect-import`, and explicit receipt recovery. Managed jobs add explicit lifecycle execution; background scheduling remains planned.

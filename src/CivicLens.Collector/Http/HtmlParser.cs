@@ -38,11 +38,15 @@ internal static class HtmlParser
                         "br" => Own(new BrotliStream(decoded, CompressionMode.Decompress), owned),
                         _ => throw new UnsupportedEncodingException()
                     };
+                    decoded = Own(new BoundedReadStream(decoded, MaximumDecodedBytes), owned);
                 }
 
                 using var bounded = new BoundedReadStream(decoded, MaximumDecodedBytes);
                 using var output = new MemoryStream();
                 await bounded.CopyToAsync(output, 81920, token);
+                // Validate every HTTP encoding layer, even if a downstream decoder stopped early.
+                foreach (var stage in owned.OfType<BoundedReadStream>().Reverse())
+                    await stage.CopyToAsync(Stream.Null, 81920, token);
                 token.ThrowIfCancellationRequested();
                 var bytes = output.ToArray();
                 var html = DecodeHtml(bytes, contentType);

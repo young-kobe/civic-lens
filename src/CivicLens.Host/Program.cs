@@ -8,6 +8,8 @@ using CivicLens.Collection.Contracts;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Collection.Jobs;
 using CivicLens.Host.Collection;
+using CivicLens.Host.Documents;
+using CivicLens.Infrastructure.Documents;
 
 if (args is [] or ["--help"] or ["help"])
 {
@@ -27,6 +29,9 @@ if (args is [] or ["--help"] or ["help"])
           jobs cancel <job-id>
           discovery get <attempt-id>
           discovery admit <config.json> <source-id> <attempt-id> <idempotency-key> [--as-of yyyy-MM-dd]
+          documents extract <captured-attempt-id> <artifact-directory>
+          documents get <extraction-id>
+          documents cite <extraction-id> <start> <length>
         New admissions default to today in UTC; existing keys retain their saved date when --as-of is omitted.
         --as-of selects eligibility, not historical fetching or attribution.
         feeds get/admit remain aliases for discovery get/admit.
@@ -34,6 +39,7 @@ if (args is [] or ["--help"] or ["help"])
         collect and receipts list are database-free. collect-import saves a handoff before importing.
         receipts replay imports saved handoffs without collecting again; use the capture directory after relocation.
         jobs commands require the database. Each run reconciles prior work and performs at most one new fetch.
+        documents commands require the database. Citations use UTF-16 offsets into immutable extracted text.
         Exit codes: 0 success, 1 failed/deferred collection or operational failure, 2 invalid input/configuration.
         """);
     return 0;
@@ -63,7 +69,7 @@ if (args.Contains("--as-of", StringComparer.Ordinal))
 
 if (args is not (["db", "migrate"] or ["validate", _] or ["collect", _, _, _, _] or ["collect-import", _, _, _, _]
     or ["feeds" or "discovery", "get", _] or ["feeds" or "discovery", "admit", _, _, _, _]
-    or ["receipts", "list", _] or ["receipts", "replay", _, _]) && !CollectionJobCommand.Matches(args))
+    or ["receipts", "list", _] or ["receipts", "replay", _, _]) && !CollectionJobCommand.Matches(args) && !DocumentCommand.Matches(args))
 {
     Console.Error.WriteLine("Unknown command. Use --help.");
     return 2;
@@ -76,6 +82,14 @@ var replaying = args is ["receipts", "replay", _, _];
 var importing = args[0] == "collect-import" || replaying;
 try
 {
+    if (DocumentCommand.Matches(args))
+    {
+        var attempts = CreateDatabase();
+        var extractions = PostgresDocumentExtractionStore.FromConnectionString(Environment.GetEnvironmentVariable("CIVIC_LENS_DATABASE")!);
+        executing = true;
+        return await DocumentCommand.ExecuteAsync(args, attempts, new CaptureDocumentTextExtractor(), extractions, cancellation.Token);
+    }
+
     if (args is ["feeds" or "discovery", "get", var discoveryId])
     {
         if (!PendingCollectionHandoff.IsValidAttemptId(discoveryId)) throw new ArgumentException("Invalid attempt ID.");

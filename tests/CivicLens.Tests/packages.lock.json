@@ -346,6 +346,7 @@
       "civiclens.infrastructure": {
         "type": "Project",
         "dependencies": {
+          "AngleSharp": "[1.8.3, )",
           "CivicLens.Application": "[1.0.0, )",
           "Microsoft.EntityFrameworkCore": "[10.0.12, )",
           "Microsoft.EntityFrameworkCore.Relational": "[10.0.12, )",
