@@ -33,6 +33,9 @@ if (args is [] or ["--help"] or ["help"])
           documents extract <config.json> <captured-attempt-id> <artifact-directory>
           documents get <extraction-id>
           documents cite <extraction-id> <start> <length>
+          documents history <source-id> <exact-requested-url>
+          documents compare <before-extraction-id> <after-extraction-id>
+          documents comparison <comparison-id>
         New admissions default to today in UTC; existing keys retain their saved date when --as-of is omitted.
         --as-of selects eligibility, not historical fetching or attribution.
         feeds get/admit remain aliases for discovery get/admit.
@@ -91,7 +94,9 @@ try
         var extractions = PostgresDocumentExtractionStore.FromConnectionString(Environment.GetEnvironmentVariable("CIVIC_LENS_DATABASE")!);
         executing = true;
         return await DocumentCommand.ExecuteAsync(args, attempts, new CaptureDocumentTextExtractor(), extractions,
-            cancellation.Token, documentConfiguration);
+            cancellation.Token, documentConfiguration,
+            PostgresDocumentHistoryStore.FromConnectionString(Environment.GetEnvironmentVariable("CIVIC_LENS_DATABASE")!),
+            PostgresDocumentComparisonStore.FromConnectionString(Environment.GetEnvironmentVariable("CIVIC_LENS_DATABASE")!));
     }
 
     if (args is ["feeds" or "discovery", "get", var discoveryId])
