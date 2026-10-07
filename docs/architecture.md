@@ -91,7 +91,7 @@ Host emits the attempt ID to stderr before collection and writes a JSON summary 
 
 ### Receipt handoff and replay
 
-Application owns `PendingCollectionHandoff`, the external handoff-store and capture-verifier ports, and the fresh/replay use cases. A handoff has its own version 1 envelope containing the original application attempt ID, original collection request, and receipt. The collector protocol is version 5, with version 3 page and version 4 page/feed receipts still supported. Receipt replay introduces no Core or collector responsibilities; evidence mapping and atomic import rules are shared between fresh collection and replay.
+Application owns `PendingCollectionHandoff`, the external handoff-store and capture-verifier ports, and the fresh/replay use cases. A handoff has its own version 1 envelope containing the original application attempt ID, original collection request, and receipt. The collector protocol is version 6, with versions 3 (page), 4 (page/feed), and 5 (page/feed/HTML) receipts still supported. Receipt replay introduces no Core or collector responsibilities; evidence mapping and atomic import rules are shared between fresh collection and replay.
 
 Infrastructure stores pending envelopes at `<artifact-root>/.pending/<attempt-id>.json`. Files are written to a temporary file, flushed, and promoted without overwriting an existing handoff. A spool lease serializes fresh collection/import and recovery operations using the same root, with a cancellable wait of up to 30 seconds for access. This spool remains independent of the managed job leases and state machine; it can also serve unmanaged commands. The filesystem handoff can be saved while Postgres is unavailable.
 
