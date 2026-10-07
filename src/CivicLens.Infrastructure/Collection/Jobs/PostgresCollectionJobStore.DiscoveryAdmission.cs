@@ -75,12 +75,30 @@ public sealed partial class PostgresCollectionJobStore : IDiscoveryAdmissionStor
             var reservedRequests = 0;
             long reservedBytes = 0;
             var reservedSeconds = 0;
+            var candidateHashes = new string[discovery.Urls.Length];
+            var urlsByCandidateHash = new Dictionary<string, string>(StringComparer.Ordinal);
+            for (var index = 0; index < discovery.Urls.Length; index++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var url = discovery.Urls[index];
+                var hash = HashCandidate(request.ArticleTemplate.SourceId, url);
+                if (urlsByCandidateHash.TryGetValue(hash, out var existingUrl) &&
+                    !string.Equals(existingUrl, url, StringComparison.Ordinal))
+                    throw new InvalidDataException("Discovery candidate URL hash collision detected.");
+                urlsByCandidateHash[hash] = url;
+                candidateHashes[index] = hash;
+            }
+            var existingCandidates = candidateHashes.Length == 0
+                ? []
+                : await db.Set<DiscoveryCandidateJobRow>()
+                    .Where(row => candidateHashes.Contains(row.CandidateHash))
+                    .ToDictionaryAsync(row => row.CandidateHash, cancellationToken);
+            var candidateIndex = 0;
             foreach (var url in discovery.Urls)
             {
-                var hash = HashCandidate(request.ArticleTemplate.SourceId, url);
-                var existing = await db.Set<DiscoveryCandidateJobRow>().SingleOrDefaultAsync(
-                    row => row.CandidateHash == hash, cancellationToken);
-                if (existing is not null)
+                cancellationToken.ThrowIfCancellationRequested();
+                var hash = candidateHashes[candidateIndex++];
+                if (existingCandidates.TryGetValue(hash, out var existing))
                 {
                     if (!string.Equals(existing.SourceId, request.ArticleTemplate.SourceId, StringComparison.Ordinal) ||
                         !string.Equals(existing.Url, url, StringComparison.Ordinal))
