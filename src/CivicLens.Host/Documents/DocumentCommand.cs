@@ -8,18 +8,24 @@ namespace CivicLens.Host.Documents;
 
 internal static class DocumentCommand
 {
-    public static bool Matches(string[] args) => args is ["documents", "extract", _, _] or
+    public static bool Matches(string[] args) => args is ["documents", "extract", _, _] or ["documents", "extract", _, _, _] or
         ["documents", "get", _] or ["documents", "cite", _, _, _];
 
     public static async Task<int> ExecuteAsync(string[] args, ICollectionAttemptStore attempts,
-        IDocumentTextExtractor extractor, IDocumentExtractionStore extractions, CancellationToken cancellationToken)
+        IDocumentTextExtractor extractor, IDocumentExtractionStore extractions, CancellationToken cancellationToken,
+        CollectionConfiguration? configuration = null)
     {
         try
         {
-            if (args is ["documents", "extract", var attemptId, var root])
+            if (args is ["documents", "extract", _, _] or ["documents", "extract", _, _, _])
             {
-                var extraction = await new ExtractDocument(attempts, extractor, extractions)
-                    .ExecuteAsync(attemptId, Path.GetFullPath(root), cancellationToken);
+                var handler = new ExtractDocument(attempts, extractor, extractions);
+                var attemptId = args[^2];
+                var root = Path.GetFullPath(args[^1]);
+                var extraction = args.Length == 5
+                    ? await handler.ExecuteConfiguredAsync(configuration ?? throw new ArgumentException("Configuration is required."),
+                        attemptId, root, cancellationToken)
+                    : await handler.ExecuteAsync(attemptId, root, cancellationToken);
                 Write(new
                 {
                     extraction.ExtractionId,
@@ -27,7 +33,9 @@ internal static class DocumentCommand
                     extraction.ParserVersion,
                     extraction.NormalizationVersion,
                     extraction.TextSha256,
-                    TextLength = extraction.Text.Length
+                    TextLength = extraction.Text.Length,
+                    ProfileId = extraction.Profile?.Id,
+                    ProfileRevisionId = extraction.Profile?.RevisionId
                 });
                 return 0;
             }
@@ -57,7 +65,7 @@ internal static class DocumentCommand
         }
         catch (Exception exception) when (exception is InvalidDataException or NotSupportedException)
         {
-            Console.Error.WriteLine("Capture text could not be extracted. Check byte integrity, supported text content type, encoding, and resource limits.");
+            Console.Error.WriteLine("Capture text could not be extracted. Check byte integrity, supported content, encoding, resource limits, and whether the profile selects one content region without excluding it.");
             return 1;
         }
     }

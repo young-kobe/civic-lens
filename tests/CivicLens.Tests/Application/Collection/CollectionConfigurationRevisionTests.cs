@@ -58,6 +58,18 @@ public sealed class CollectionConfigurationRevisionTests
         Assert.Throws<ArgumentException>(() => new CollectionConfigurationRevision(Hash(invalidJson), invalidJson));
     }
 
+    [Fact]
+    public void LegacyCanonicalConfigurationRevisionRetainsItsOriginalJsonAndId()
+    {
+        const string json = "{\"version\":1,\"people\":[{\"id\":\"person\",\"name\":\"Official\"}],\"sources\":[{\"id\":\"source\",\"personIds\":[\"person\"],\"url\":\"https://example.test/page\",\"allowedOrigin\":\"https://example.test\",\"allowedPathPrefix\":\"/\",\"mode\":\"page\",\"maxCandidates\":100,\"enabled\":true,\"maxRequests\":5,\"maxBytes\":2000000,\"timeoutSeconds\":30,\"minDelayMilliseconds\":1000}]}";
+        const string id = "7f4521051fe8c22d4588fdf8e61e4bffdf76d6130e472472b2d4595e117ded16";
+
+        var revision = new CollectionConfigurationRevision(id, json);
+
+        Assert.Equal(json, revision.Json);
+        Assert.Equal(id, CollectionConfigurationRevision.Create(revision.ReadConfiguration()).Id);
+    }
+
     private static CollectionConfiguration Configuration(string[] personIds) => new()
     {
         People = [new PersonConfiguration { Id = "person", Name = "Official" }],

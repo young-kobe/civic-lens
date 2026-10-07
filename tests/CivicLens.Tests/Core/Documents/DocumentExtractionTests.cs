@@ -33,6 +33,23 @@ public sealed class DocumentExtractionTests
     }
 
     [Fact]
+    public void ProfileRevisionChangesIdentityAndLegacyIdentityStaysUnchanged()
+    {
+        var attempt = Captured("attempt");
+        var legacy = new DocumentExtraction(attempt, "parser-v1", "normalization-v1", "text");
+        var profile = new DocumentContentProfile("profile", "main", [".navigation"]);
+        var configured = new DocumentExtraction(attempt, "parser-v1", "normalization-v1", "text", profile);
+        var updatedProfile = new DocumentExtraction(attempt, "parser-v1", "normalization-v1", "text",
+            new DocumentContentProfile("profile", "article", [".navigation"]));
+
+        Assert.Null(legacy.Profile);
+        Assert.Equal("9a96469ddac3413d432501af5ad40a1df9dd3b85ead274c77f5c1f94f295d42b", legacy.ExtractionId);
+        Assert.Same(profile, configured.Profile);
+        Assert.NotEqual(legacy.ExtractionId, configured.ExtractionId);
+        Assert.NotEqual(configured.ExtractionId, updatedProfile.ExtractionId);
+    }
+
+    [Fact]
     public void SpanRetainsExactUnicodeQuoteAndRejectsInvalidBoundaries()
     {
         var extraction = new DocumentExtraction(Captured("attempt"), "p", "n", "A😀B");

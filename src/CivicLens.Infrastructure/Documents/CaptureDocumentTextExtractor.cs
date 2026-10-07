@@ -6,6 +6,7 @@ using AngleSharp.Dom;
 using AngleSharp.Html.Parser;
 using CivicLens.Application.Documents;
 using CivicLens.Core.Collection;
+using CivicLens.Core.Documents;
 
 namespace CivicLens.Infrastructure.Documents;
 
@@ -29,7 +30,10 @@ public sealed class CaptureDocumentTextExtractor : IDocumentTextExtractor
     public string NormalizationVersion => "body-text-v1";
 
     public async Task<string> ExtractAsync(CapturedAttemptResult attempt, string artifactRoot,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken) => await ExtractAsync(attempt, artifactRoot, null, cancellationToken);
+
+    public async Task<string> ExtractAsync(CapturedAttemptResult attempt, string artifactRoot,
+        DocumentContentProfile? profile, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(attempt);
         ArgumentException.ThrowIfNullOrWhiteSpace(artifactRoot);
@@ -47,8 +51,8 @@ public sealed class CaptureDocumentTextExtractor : IDocumentTextExtractor
         {
             text = mediaType.MediaType?.ToLowerInvariant() switch
             {
-                "text/plain" => DecodePlainText(decoded, mediaType.CharSet?.Trim('"')),
-                "text/html" => await DecodeHtmlTextAsync(decoded, mediaType.CharSet?.Trim('"'), cancellationToken),
+                "text/plain" when profile is null => DecodePlainText(decoded, mediaType.CharSet?.Trim('"')),
+                "text/html" => await DecodeHtmlTextAsync(decoded, mediaType.CharSet?.Trim('"'), profile, cancellationToken),
                 _ => throw new NotSupportedException("Content type is not supported.")
             };
         }
@@ -130,7 +134,7 @@ public sealed class CaptureDocumentTextExtractor : IDocumentTextExtractor
     }
 
     private static async Task<string> DecodeHtmlTextAsync(byte[] bytes, string? charset,
-        CancellationToken cancellationToken)
+        DocumentContentProfile? profile, CancellationToken cancellationToken)
     {
         var (encoding, offset) = ReadBom(bytes);
         encoding ??= charset is null ? null : GetStrictEncoding(charset);
@@ -140,16 +144,86 @@ public sealed class CaptureDocumentTextExtractor : IDocumentTextExtractor
         cancellationToken.ThrowIfCancellationRequested();
         using var document = await CreateParser(cancellationToken).ParseDocumentAsync(markup, cancellationToken);
         ValidateTreeDepth(document, cancellationToken);
-        return ExtractBodyText(document, cancellationToken);
+        return profile is null
+            ? ExtractBodyText(document, cancellationToken)
+            : ExtractProfileText(document, profile, cancellationToken);
     }
 
+    private static string ExtractProfileText(IDocument document, DocumentContentProfile profile,
+        CancellationToken cancellationToken)
+    {
+        var body = document.Body ?? throw new InvalidDataException("HTML document has no body for the content profile.");
+        var matches = FindMatches(body, profile.Selector, cancellationToken);
+        if (matches.Count == 0) throw new InvalidDataException("Content profile selector did not match an HTML body element.");
+        if (matches.Count > 1) throw new InvalidDataException("Content profile selector matched more than one HTML body element.");
+
+        var root = matches[0];
+        if (IsIgnoredRoot(root)) throw new InvalidDataException("Content profile selected an excluded element type.");
+        var exclusions = new HashSet<IElement>();
+        foreach (var selector in profile.ExcludedSelectors)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (MatchesSelector(root, selector, cancellationToken))
+                throw new InvalidDataException("Content profile exclusion matches the selected root.");
+            foreach (var match in FindMatches(root, selector, cancellationToken)) exclusions.Add(match);
+        }
+
+        return ExtractTextFromRoot(root, exclusions, cancellationToken);
+    }
+
+    private static List<IElement> FindMatches(IElement root, string selector, CancellationToken cancellationToken)
+    {
+        var matches = new List<IElement>();
+        var pending = new Stack<INode>();
+        pending.Push(root);
+        while (pending.TryPop(out var node))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (node is not IElement element) continue;
+            if (element.NamespaceUri == HtmlNamespace && MatchesSelector(element, selector, cancellationToken))
+                matches.Add(element);
+            if (IgnoredElements.Contains(element.LocalName.ToLowerInvariant())) continue;
+            var children = element.ChildNodes;
+            for (var index = children.Length - 1; index >= 0; index--) pending.Push(children[index]);
+        }
+        return matches;
+    }
+
+    private static bool MatchesSelector(IElement element, string selector, CancellationToken cancellationToken)
+    {
+        if (selector[0] == '#') return element.Id.AsSpan().SequenceEqual(selector.AsSpan(1));
+        if (selector[0] == '.')
+        {
+            var classes = element.GetAttribute("class").AsSpan();
+            while (!classes.IsEmpty)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var end = classes.IndexOfAny(" \t\r\n\f");
+                if (end < 0) return classes.SequenceEqual(selector.AsSpan(1));
+                if (classes[..end].SequenceEqual(selector.AsSpan(1))) return true;
+                classes = classes[(end + 1)..];
+            }
+            return false;
+        }
+        return string.Equals(element.LocalName, selector, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsIgnoredRoot(IElement element) => IgnoredElements.Contains(element.LocalName.ToLowerInvariant());
+
     private static string ExtractBodyText(IDocument document, CancellationToken cancellationToken)
+    {
+        var body = document.Body;
+        return body is null ? string.Empty : ExtractTextFromRoot(body, new HashSet<IElement>(), cancellationToken);
+    }
+
+    private static string ExtractTextFromRoot(IElement root, HashSet<IElement> exclusions,
+        CancellationToken cancellationToken)
     {
         var output = new StringBuilder();
         var pendingSpace = false;
         var lineBreakPending = false;
         var stack = new Stack<(INode Node, bool Closing)>();
-        if (document.Body is { } body) stack.Push((body, false));
+        stack.Push((root, false));
         while (stack.TryPop(out var entry))
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -158,6 +232,12 @@ public sealed class CaptureDocumentTextExtractor : IDocumentTextExtractor
             {
                 var name = element.LocalName.ToLowerInvariant();
                 if (IgnoredElements.Contains(name)) continue;
+                if (exclusions.Contains(element))
+                {
+                    if (BlockElements.Contains(name)) lineBreakPending = true;
+                    else pendingSpace = true;
+                    continue;
+                }
                 if (BlockElements.Contains(name)) lineBreakPending = true;
                 if (entry.Closing) continue;
                 if (name == "br") lineBreakPending = true;

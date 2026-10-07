@@ -1,5 +1,7 @@
 using System.Data;
+using System.Text.Json;
 using CivicLens.Application.Documents;
+using CivicLens.Collection.Contracts;
 using CivicLens.Core.Collection;
 using CivicLens.Core.Documents;
 using CivicLens.Infrastructure.Collection;
@@ -56,7 +58,8 @@ public sealed class PostgresDocumentExtractionStore(IDbContextFactory<Collection
             ParserVersion = extraction.ParserVersion,
             NormalizationVersion = extraction.NormalizationVersion,
             Text = extraction.Text,
-            TextSha256 = extraction.TextSha256
+            TextSha256 = extraction.TextSha256,
+            ProfileJson = SerializeProfile(extraction.Profile)
         });
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
@@ -72,7 +75,18 @@ public sealed class PostgresDocumentExtractionStore(IDbContextFactory<Collection
         var imported = await PostgresCollectionAttemptStore.GetAsync(db, row.AttemptId, cancellationToken);
         if (imported?.AttemptResult is not CapturedAttemptResult captured)
             throw new InvalidOperationException("Stored extraction has no captured source attempt.");
-        var extraction = new DocumentExtraction(captured, row.ParserVersion, row.NormalizationVersion, row.Text);
+        DocumentExtraction extraction;
+        try
+        {
+            var profile = row.ProfileJson is null ? null :
+                (JsonSerializer.Deserialize<DocumentProfileConfiguration>(row.ProfileJson, CollectionProtocol.JsonOptions)
+                    ?? throw new JsonException("Stored profile is null.")).ToProfile();
+            extraction = new DocumentExtraction(captured, row.ParserVersion, row.NormalizationVersion, row.Text, profile);
+        }
+        catch (Exception exception) when (exception is ArgumentException or JsonException)
+        {
+            throw new InvalidOperationException("Stored extraction evidence is invalid.", exception);
+        }
         if (extraction.ExtractionId != row.ExtractionId || extraction.TextSha256 != row.TextSha256)
             throw new InvalidOperationException("Stored extraction identity or text hash is invalid.");
         return extraction;
@@ -80,7 +94,16 @@ public sealed class PostgresDocumentExtractionStore(IDbContextFactory<Collection
 
     private static bool SameEvidence(DocumentExtraction left, DocumentExtraction right) =>
         left.SourceAttempt.Equals(right.SourceAttempt) && left.ParserVersion == right.ParserVersion &&
-        left.NormalizationVersion == right.NormalizationVersion && left.Text == right.Text;
+        left.NormalizationVersion == right.NormalizationVersion && left.Text == right.Text &&
+        (left.Profile is null ? right.Profile is null : left.Profile.Matches(right.Profile));
+
+    private static string? SerializeProfile(DocumentContentProfile? profile) => profile is null ? null :
+        JsonSerializer.Serialize(new DocumentProfileConfiguration
+        {
+            Id = profile.Id,
+            Selector = profile.Selector,
+            ExcludedSelectors = profile.ExcludedSelectors.ToArray()
+        }, CollectionProtocol.JsonOptions);
 
     private static void ValidateId(string extractionId)
     {

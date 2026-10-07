@@ -1,3 +1,4 @@
+using CivicLens.Application.Documents;
 using CivicLens.Collection.Contracts;
 using CivicLens.Core.Registry;
 using System.Text.Json.Serialization;
@@ -10,6 +11,7 @@ public sealed record CollectionConfiguration
     public int Version { get; init; } = 1;
     public required PersonConfiguration[] People { get; init; }
     public required WatchedSourceConfiguration[] Sources { get; init; }
+    public DocumentProfileConfiguration[]? DocumentProfiles { get; init; }
 
     public void Validate()
     {
@@ -17,6 +19,8 @@ public sealed record CollectionConfiguration
             throw new ArgumentException("Unsupported collection configuration version.");
         if (People is null || Sources is null)
             throw new ArgumentException("People and sources are required.");
+        if (Version == 1 && (DocumentProfiles is not null || Sources.Any(source => source?.DocumentProfileId is not null)))
+            throw new ArgumentException("Document profiles require collection configuration version 2.");
 
         var peopleById = new Dictionary<string, PersonConfiguration>(StringComparer.Ordinal);
         foreach (var person in People)
@@ -31,6 +35,19 @@ public sealed record CollectionConfiguration
         }
 
         var sourceIds = new HashSet<string>(StringComparer.Ordinal);
+        var profilesById = new Dictionary<string, DocumentProfileConfiguration>(StringComparer.Ordinal);
+        if (DocumentProfiles is not null)
+        {
+            foreach (var profile in DocumentProfiles)
+            {
+                if (profile is null)
+                    throw new ArgumentException("Document profiles cannot contain null entries.");
+                _ = profile.ToProfile();
+                if (!profilesById.TryAdd(profile.Id, profile))
+                    throw new ArgumentException($"Duplicate document profile ID '{profile.Id}'.");
+            }
+        }
+
         var sourceUrls = new HashSet<Uri>();
         foreach (var source in Sources)
         {
@@ -39,6 +56,8 @@ public sealed record CollectionConfiguration
             ValidateCoverageShape(source);
             if (!sourceIds.Add(source.Id))
                 throw new ArgumentException($"Duplicate source ID '{source.Id}'.");
+            if (source.DocumentProfileId is not null && !profilesById.ContainsKey(source.DocumentProfileId))
+                throw new ArgumentException($"Source '{source.Id}' references a missing document profile.");
 
             if (!Uri.TryCreate(source.Url, UriKind.Absolute, out var url))
                 throw new ArgumentException($"Source '{source.Id}' must have an absolute URL.");
