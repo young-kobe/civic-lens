@@ -39,7 +39,9 @@ public sealed class CollectorProcess(string collectorAssembly, string dotnetExec
             using var process = Process.Start(start) ?? throw new IOException("Could not start collector.");
             using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             deadline.CancelAfter(TimeSpan.FromSeconds(request.TimeoutSeconds + 5));
-            var outputLimit = request.Mode == CollectionMode.Feed ? CollectionProtocol.MaximumFeedReceiptSize : 65_536;
+            var outputLimit = request.Mode is CollectionMode.Feed or CollectionMode.Html
+                ? CollectionProtocol.MaximumDiscoveryReceiptSize
+                : 65_536;
             var stdout = ReadBoundedAsync(process.StandardOutput, outputLimit, deadline.Token);
             var stderr = ReadBoundedAsync(process.StandardError, 65_536, deadline.Token);
             // A malformed child must not deadlock the parent by filling either redirected pipe.

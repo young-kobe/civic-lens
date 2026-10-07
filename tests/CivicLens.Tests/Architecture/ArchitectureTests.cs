@@ -34,7 +34,7 @@ public sealed class ArchitectureTests
 
             string[] allowedPackages = name == "CivicLens.Infrastructure"
                 ? ["Microsoft.EntityFrameworkCore", "Microsoft.EntityFrameworkCore.Design", "Microsoft.EntityFrameworkCore.Relational", "Npgsql.EntityFrameworkCore.PostgreSQL"]
-                : [];
+                : name == "CivicLens.Collector" ? ["AngleSharp"] : [];
             Assert.Equal(allowedPackages.Order(), xml.Descendants("PackageReference")
                 .Select(element => element.Attribute("Include")!.Value).Order());
         }

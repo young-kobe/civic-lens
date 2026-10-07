@@ -8,11 +8,11 @@ ROOT = Path(__file__).resolve().parents[1]
 VIEWS = [
     {
         "title": "Collection to publication (target)",
-        "description": "Target workflow. Configuration, bounded watched-page collection, verified captures, and the Postgres import adapter are implemented; CLI migration, collection/import, and saved receipt recovery are implemented; managed durable jobs and RSS/Atom discovery with explicit bounded article admission are implemented; downstream stages remain planned.",
+        "description": "Target workflow. Configuration, bounded watched-page collection, verified captures, and the Postgres import adapter are implemented; CLI migration, collection/import, and saved receipt recovery are implemented; managed durable jobs and RSS/Atom plus HTML discovery with explicit bounded article admission are implemented; downstream stages remain planned.",
         "nodes": [
             ("config", "Coverage configuration", "People, dated roles, sources, issues and policies; one authoritative configuration path."),
             ("app", "C# application", "Owns durable jobs, aggregate budgets, retries and orchestration."),
-            ("collector", "C# collector", "Separate executable. Bounded HTTP/feed discovery and immutable captures; no database or AI."),
+            ("collector", "C# collector", "Separate executable. Bounded HTTP/feed/HTML discovery and immutable captures; no database or AI."),
             ("evidence", "Evidence store", "Local Postgres import adapter and content-addressed files are implemented. CLI migration, collection/import, and filesystem receipt handoff/replay are implemented. Document versions remain planned."),
             ("analysis", "Selective analysis", "Deterministic records first; evaluated classification and evidence extraction only where useful."),
             ("review", "Local review and MCP", "Inspect evidence and proposed changes. Human decisions bind to exact versions."),
@@ -29,7 +29,7 @@ VIEWS = [
             ("infra", "Infrastructure", "Collector process execution, capture verification, and EF Core/Npgsql persistence. References Application."),
             ("app", "Application", "Use cases and external interfaces; no infrastructure reference."),
             ("core", "Core", "Domain invariants. No project or third-party dependencies."),
-            ("cc", "Collection.Contracts", "Versioned page/feed requests, capture/response metadata, bounded discovery and receipt validation. No dependencies."),
+            ("cc", "Collection.Contracts", "Versioned page/feed/HTML requests, capture/response metadata, bounded discovery and receipt validation. No dependencies."),
             ("pc", "Publication.Contracts", "Future public release contract. No dependencies."),
             ("collector", "Collector", "Independent executable referencing Collection.Contracts only."),
         ],

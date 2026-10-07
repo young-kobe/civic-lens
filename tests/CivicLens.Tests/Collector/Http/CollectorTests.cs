@@ -36,12 +36,266 @@ public sealed class CollectorTests
         using var collector = new HttpCollector(new QueueHandler(_ => Response(HttpStatusCode.NotFound), _ => Response(HttpStatusCode.OK, payload)));
         var result = await collector.FetchAsync(Request(directory.Path) with { Mode = CollectionMode.Feed });
         Assert.Equal(CollectionOutcome.Captured, result.Outcome);
-        Assert.Equal(FeedDiscoveryStatus.Parsed, result.Discovery!.Status);
+        Assert.Equal(DiscoveryStatus.Parsed, result.Discovery!.Status);
         Assert.Equal(new[] { "https://example.test/watch/story" }, result.Discovery.Urls);
         await using var file = File.OpenRead(Path.Combine(directory.Path, result.Capture!.RelativePath));
         await using var gzip = new GZipStream(file, CompressionMode.Decompress);
         using var output = new MemoryStream(); await gzip.CopyToAsync(output);
         Assert.Equal(payload, output.ToArray());
+    }
+
+    [Fact]
+    public async Task VersionFourFeedRequestKeepsItsProtocolVersionAndDiscovery()
+    {
+        using var directory = new TemporaryDirectory();
+        var payload = Encoding.UTF8.GetBytes("<rss version='2.0'><channel><item><link>/watch/story</link></item></channel></rss>");
+        using var collector = new HttpCollector(new QueueHandler(_ => Response(HttpStatusCode.NotFound), _ => Response(HttpStatusCode.OK, payload)));
+        var result = await collector.FetchAsync(Request(directory.Path) with
+        {
+            Version = CollectionProtocol.PreviousVersion,
+            Mode = CollectionMode.Feed
+        });
+
+        Assert.Equal(CollectionOutcome.Captured, result.Outcome);
+        Assert.Equal(CollectionProtocol.PreviousVersion, result.Version);
+        Assert.Equal(DiscoveryStatus.Parsed, result.Discovery!.Status);
+        Assert.Equal("https://example.test/watch/story", Assert.Single(result.Discovery.Urls));
+    }
+
+    [Fact]
+    public async Task HtmlModeUsesFirstValidBasePreservesQueriesStripsFragmentsAndDeduplicatesInOrder()
+    {
+        using var directory = new TemporaryDirectory();
+        var html = "<html><head><base href='http://[invalid'><base href='articles/'></head>" +
+            "<body><a href='one?edition=2#top'>one</a><a href='one?edition=2#other'>duplicate</a>" +
+            "<a href='/watch/two?x=1&amp;y=2#frag'>two</a><a href='https://outside.test/watch/no'>outside</a></body></html>";
+        using var collector = new HttpCollector(new QueueHandler(_ => Response(HttpStatusCode.NotFound), _ => Response(HttpStatusCode.OK, html)));
+        var result = await collector.FetchAsync(Request(directory.Path) with
+        {
+            Url = "https://example.test/watch/index.html",
+            Mode = CollectionMode.Html,
+            MaxBytes = 100_000
+        });
+
+        Assert.Equal(CollectionOutcome.Captured, result.Outcome);
+        Assert.NotNull(result.Capture);
+        Assert.Equal(DiscoveryStatus.Parsed, result.Discovery!.Status);
+        Assert.Equal(new[]
+        {
+            "https://example.test/watch/articles/one?edition=2",
+            "https://example.test/watch/two?x=1&y=2"
+        }, result.Discovery.Urls);
+    }
+
+    [Fact]
+    public async Task HtmlParserToleratesMalformedMarkupAndCandidateLimitDoesNotReturnPartialUrls()
+    {
+        using var directory = new TemporaryDirectory();
+        var html = "<a href='/watch/first'><b>first<a href='/watch/second'>second";
+        using var collector = new HttpCollector(new QueueHandler(_ => Response(HttpStatusCode.NotFound), _ => Response(HttpStatusCode.OK, html)));
+        var result = await collector.FetchAsync(Request(directory.Path) with { Mode = CollectionMode.Html, MaxCandidates = 1 });
+        Assert.Equal(CollectionOutcome.Captured, result.Outcome);
+        Assert.NotNull(result.Capture);
+        Assert.Equal(DiscoveryStatus.LimitExceeded, result.Discovery!.Status);
+        Assert.Empty(result.Discovery.Urls);
+    }
+
+    [Fact]
+    public async Task HtmlDiscoveryRejectsUnknownEncodingWithoutLosingCapture()
+    {
+        using var directory = new TemporaryDirectory();
+        using var collector = new HttpCollector(new QueueHandler(_ => Response(HttpStatusCode.NotFound), _ =>
+        {
+            var response = Response(HttpStatusCode.OK, "<a href='/watch/story'>story</a>");
+            response.Content.Headers.ContentEncoding.Add("made-up");
+            return response;
+        }));
+        var result = await collector.FetchAsync(Request(directory.Path) with { Mode = CollectionMode.Html });
+        Assert.Equal(CollectionOutcome.Captured, result.Outcome);
+        Assert.NotNull(result.Capture);
+        Assert.Equal(DiscoveryStatus.Unsupported, result.Discovery!.Status);
+        Assert.Empty(result.Discovery.Urls);
+    }
+
+    [Fact]
+    public async Task HtmlDiscoveryDecodesCompressedRepresentationAndRetainsEncodedCaptureBytes()
+    {
+        using var directory = new TemporaryDirectory();
+        var html = Encoding.UTF8.GetBytes("<a href='/watch/story?edition=1#top'>story</a>");
+        using var output = new MemoryStream();
+        using (var gzip = new GZipStream(output, CompressionLevel.SmallestSize, leaveOpen: true))
+            gzip.Write(html);
+        var encoded = output.ToArray();
+        using var collector = new HttpCollector(new QueueHandler(_ => Response(HttpStatusCode.NotFound), _ =>
+        {
+            var response = Response(HttpStatusCode.OK, encoded);
+            response.Content.Headers.ContentEncoding.Add("gzip");
+            return response;
+        }));
+
+        var result = await collector.FetchAsync(Request(directory.Path) with { Mode = CollectionMode.Html });
+        Assert.Equal(CollectionOutcome.Captured, result.Outcome);
+        Assert.Equal(Convert.ToHexStringLower(SHA256.HashData(encoded)), result.Capture!.Sha256);
+        Assert.Equal(DiscoveryStatus.Parsed, result.Discovery!.Status);
+        Assert.Equal("https://example.test/watch/story?edition=1", Assert.Single(result.Discovery.Urls));
+    }
+
+    [Fact]
+    public async Task HtmlDecodedByteLimitRetainsCaptureAndReturnsNoPartialCandidates()
+    {
+        using var directory = new TemporaryDirectory();
+        var html = Encoding.UTF8.GetBytes("<a href='/watch/story'>story</a><p>" + new string('x', 10_000_000) + "</p>");
+        using var collector = new HttpCollector(new QueueHandler(_ => Response(HttpStatusCode.NotFound), _ => Response(HttpStatusCode.OK, html)));
+
+        var result = await collector.FetchAsync(Request(directory.Path) with
+        {
+            Mode = CollectionMode.Html,
+            MaxBytes = 20_000_000
+        });
+        Assert.Equal(CollectionOutcome.Captured, result.Outcome);
+        Assert.NotNull(result.Capture);
+        Assert.Equal(DiscoveryStatus.LimitExceeded, result.Discovery!.Status);
+        Assert.Empty(result.Discovery.Urls);
+    }
+
+    [Theory]
+    [InlineData("<!-- <meta charset='unknown'> -->")]
+    [InlineData("<script>const example = \"<meta charset='unknown'>\";</script>")]
+    [InlineData("<meta data-charset='unknown'>")]
+    [InlineData("<meta content='text/html; charset=unknown'>")]
+    public async Task HtmlEncodingIgnoresDeclarationsOutsideActualCharsetMetadata(string prefix)
+    {
+        using var directory = new TemporaryDirectory();
+        using var collector = new HttpCollector(new QueueHandler(_ => Response(HttpStatusCode.NotFound),
+            _ => Response(HttpStatusCode.OK, prefix + "<a href='/watch/story'>story</a>")));
+        var result = await collector.FetchAsync(Request(directory.Path) with { Mode = CollectionMode.Html });
+        Assert.Equal(DiscoveryStatus.Parsed, result.Discovery!.Status);
+        Assert.Equal("https://example.test/watch/story", Assert.Single(result.Discovery.Urls));
+    }
+
+    [Theory]
+    [InlineData("<meta charset='utf-8'>")]
+    [InlineData("<meta content='text/html; charset=utf-8' http-equiv='content-type'>")]
+    public async Task HtmlDeclaredEncodingPreservesNonAsciiUrlBytes(string declaration)
+    {
+        using var directory = new TemporaryDirectory();
+        var bytes = Encoding.UTF8.GetBytes(declaration + "<a href='/watch/café'>story</a>");
+        using var collector = new HttpCollector(new QueueHandler(_ => Response(HttpStatusCode.NotFound),
+            _ => Response(HttpStatusCode.OK, bytes)));
+        var result = await collector.FetchAsync(Request(directory.Path) with { Mode = CollectionMode.Html });
+        Assert.Equal(DiscoveryStatus.Parsed, result.Discovery!.Status);
+        Assert.Equal("https://example.test/watch/caf%C3%A9", Assert.Single(result.Discovery.Urls));
+    }
+
+    [Theory]
+    [InlineData("iso-8859-1", false)]
+    [InlineData("ascii", false)]
+    [InlineData("latin1", true)]
+    [InlineData("  latin1  ", true)]
+    [InlineData("x-user-defined", true)]
+    public async Task HtmlLegacyEncodingLabelsUseHtmlMappingForUrlBytes(string label, bool meta)
+    {
+        using var directory = new TemporaryDirectory();
+        var prefix = meta ? $"<meta charset='{label}'>" : "";
+        var bytes = Encoding.Latin1.GetBytes(prefix + "<a href='/watch/price-\u0080'>story</a>");
+        using var collector = new HttpCollector(new QueueHandler(_ => Response(HttpStatusCode.NotFound), _ =>
+        {
+            var response = Response(HttpStatusCode.OK, bytes);
+            if (!meta) response.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("text/html") { CharSet = label };
+            return response;
+        }));
+        var result = await collector.FetchAsync(Request(directory.Path) with { Mode = CollectionMode.Html });
+        Assert.Equal(DiscoveryStatus.Parsed, result.Discovery!.Status);
+        Assert.Equal("https://example.test/watch/price-%E2%82%AC", Assert.Single(result.Discovery.Urls));
+    }
+
+    [Fact]
+    public async Task HttpUserDefinedCharsetIsUnsupportedRatherThanMappedToWrongUrls()
+    {
+        using var directory = new TemporaryDirectory();
+        var bytes = Encoding.Latin1.GetBytes("<a href='/watch/price-\u0080'>story</a>");
+        using var collector = new HttpCollector(new QueueHandler(_ => Response(HttpStatusCode.NotFound), _ =>
+        {
+            var response = Response(HttpStatusCode.OK, bytes);
+            response.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("text/html") { CharSet = "x-user-defined" };
+            return response;
+        }));
+        var result = await collector.FetchAsync(Request(directory.Path) with { Mode = CollectionMode.Html });
+        Assert.Equal(CollectionOutcome.Captured, result.Outcome);
+        Assert.NotNull(result.Capture);
+        Assert.Equal(DiscoveryStatus.Unsupported, result.Discovery!.Status);
+        Assert.Empty(result.Discovery.Urls);
+    }
+
+    [Theory]
+    [InlineData("iso-2022-cn", false)]
+    [InlineData("iso-2022-cn-ext", true)]
+    [InlineData("iso-2022-kr", false)]
+    [InlineData("csiso2022kr", true)]
+    [InlineData("hz-gb-2312", false)]
+    public async Task HtmlReplacementEncodingLabelsCannotInventCandidates(string charset, bool meta)
+    {
+        using var directory = new TemporaryDirectory();
+        var prefix = meta ? $"<meta charset='{charset}'>" : "";
+        using var collector = new HttpCollector(new QueueHandler(_ => Response(HttpStatusCode.NotFound), _ =>
+        {
+            var response = Response(HttpStatusCode.OK, prefix + "<a href='/watch/fake'>fake</a>");
+            if (!meta) response.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("text/html") { CharSet = charset };
+            return response;
+        }));
+        var result = await collector.FetchAsync(Request(directory.Path) with { Mode = CollectionMode.Html });
+        Assert.Equal(CollectionOutcome.Captured, result.Outcome);
+        Assert.Equal(DiscoveryStatus.Unsupported, result.Discovery!.Status);
+        Assert.Empty(result.Discovery.Urls);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task HtmlUtf32BomIsUnsupportedRatherThanInterpretedAsHtml(bool bigEndian)
+    {
+        using var directory = new TemporaryDirectory();
+        var encoding = new UTF32Encoding(bigEndian, true);
+        var bytes = encoding.GetPreamble().Concat(encoding.GetBytes("<a href='/watch/fake'>fake</a>")).ToArray();
+        using var collector = new HttpCollector(new QueueHandler(_ => Response(HttpStatusCode.NotFound),
+            _ => Response(HttpStatusCode.OK, bytes)));
+        var result = await collector.FetchAsync(Request(directory.Path) with { Mode = CollectionMode.Html });
+        Assert.Equal(CollectionOutcome.Captured, result.Outcome);
+        Assert.Equal(DiscoveryStatus.Unsupported, result.Discovery!.Status);
+        Assert.Empty(result.Discovery.Urls);
+    }
+
+    [Fact]
+    public async Task ForeignNamespaceElementsCannotForgeHtmlBaseOrAnchorLinks()
+    {
+        using var directory = new TemporaryDirectory();
+        var html = "<svg><base href='/watch/forged/'/><a href='/watch/svg'>svg</a></svg>" +
+            "<math><a href='/watch/math'>math</a></math><a href='story'>story</a>";
+        using var collector = new HttpCollector(new QueueHandler(_ => Response(HttpStatusCode.NotFound),
+            _ => Response(HttpStatusCode.OK, html)));
+        var result = await collector.FetchAsync(Request(directory.Path) with
+        {
+            Mode = CollectionMode.Html,
+            Url = "https://example.test/watch/index.html"
+        });
+        Assert.Equal(DiscoveryStatus.Parsed, result.Discovery!.Status);
+        Assert.Equal("https://example.test/watch/story", Assert.Single(result.Discovery.Urls));
+    }
+
+    [Theory]
+    [InlineData("<div>")]
+    [InlineData("<b><div></b>")]
+    public async Task HtmlExcessiveNestingRetainsCaptureWithoutCandidates(string nesting)
+    {
+        using var directory = new TemporaryDirectory();
+        var html = "<a href='/watch/story'>story</a>" + string.Concat(Enumerable.Repeat(nesting, 1000));
+        using var collector = new HttpCollector(new QueueHandler(_ => Response(HttpStatusCode.NotFound),
+            _ => Response(HttpStatusCode.OK, html)));
+        var result = await collector.FetchAsync(Request(directory.Path) with { Mode = CollectionMode.Html, MaxBytes = 100_000 });
+        Assert.Equal(CollectionOutcome.Captured, result.Outcome);
+        Assert.NotNull(result.Capture);
+        Assert.Equal(DiscoveryStatus.LimitExceeded, result.Discovery!.Status);
+        Assert.Empty(result.Discovery.Urls);
     }
 
     [Fact]
@@ -53,7 +307,7 @@ public sealed class CollectorTests
         var result = await collector.FetchAsync(Request(directory.Path) with { Mode = CollectionMode.Feed });
         Assert.Equal(CollectionOutcome.Captured, result.Outcome);
         Assert.NotNull(result.Capture);
-        Assert.Equal(FeedDiscoveryStatus.Parsed, result.Discovery!.Status);
+        Assert.Equal(DiscoveryStatus.Parsed, result.Discovery!.Status);
         Assert.Empty(result.Discovery.Urls);
     }
 
@@ -72,7 +326,7 @@ public sealed class CollectorTests
         var xmlBase = Encoding.UTF8.GetBytes("<feed xmlns='http://www.w3.org/2005/Atom' xml:base='https://example.test/watch/'><entry><link href='story'/></entry></feed>");
         using var nextCollector = new HttpCollector(new QueueHandler(_ => Response(HttpStatusCode.NotFound), _ => Response(HttpStatusCode.OK, xmlBase)));
         var unsupported = await nextCollector.FetchAsync(Request(nextDirectory.Path) with { Mode = CollectionMode.Feed });
-        Assert.Equal(FeedDiscoveryStatus.Unsupported, unsupported.Discovery!.Status);
+        Assert.Equal(DiscoveryStatus.Unsupported, unsupported.Discovery!.Status);
         Assert.Empty(unsupported.Discovery.Urls);
         Assert.NotNull(unsupported.Capture);
     }
@@ -84,7 +338,7 @@ public sealed class CollectorTests
         var payload = Encoding.UTF8.GetBytes("<feed xmlns='http://www.w3.org/2005/Atom'><entry><link href='/watch/a'/></entry><entry><link href='/watch/b'/></entry></feed>");
         using var collector = new HttpCollector(new QueueHandler(_ => Response(HttpStatusCode.NotFound), _ => Response(HttpStatusCode.OK, payload)));
         var result = await collector.FetchAsync(Request(directory.Path) with { Mode = CollectionMode.Feed, MaxCandidates = 1 });
-        Assert.Equal(FeedDiscoveryStatus.LimitExceeded, result.Discovery!.Status);
+        Assert.Equal(DiscoveryStatus.LimitExceeded, result.Discovery!.Status);
         Assert.Empty(result.Discovery.Urls);
     }
 
@@ -96,14 +350,14 @@ public sealed class CollectorTests
             string.Concat(Enumerable.Repeat("</x>", 66)) + "</channel></rss>");
         using var collector = new HttpCollector(new QueueHandler(_ => Response(HttpStatusCode.NotFound), _ => Response(HttpStatusCode.OK, deepXml)));
         var limited = await collector.FetchAsync(Request(directory.Path) with { Mode = CollectionMode.Feed });
-        Assert.Equal(FeedDiscoveryStatus.LimitExceeded, limited.Discovery!.Status);
+        Assert.Equal(DiscoveryStatus.LimitExceeded, limited.Discovery!.Status);
         Assert.Empty(limited.Discovery.Urls);
 
         using var foreignDirectory = new TemporaryDirectory();
         var foreign = Encoding.UTF8.GetBytes("<rss xmlns='urn:foreign' version='2.0'><channel><item><link>/watch/a</link></item></channel></rss>");
         using var foreignCollector = new HttpCollector(new QueueHandler(_ => Response(HttpStatusCode.NotFound), _ => Response(HttpStatusCode.OK, foreign)));
         var unsupported = await foreignCollector.FetchAsync(Request(foreignDirectory.Path) with { Mode = CollectionMode.Feed });
-        Assert.Equal(FeedDiscoveryStatus.Unsupported, unsupported.Discovery!.Status);
+        Assert.Equal(DiscoveryStatus.Unsupported, unsupported.Discovery!.Status);
         Assert.Empty(unsupported.Discovery.Urls);
     }
 
@@ -125,7 +379,7 @@ public sealed class CollectorTests
         }));
         var result = await collector.FetchAsync(Request(directory.Path) with { Mode = CollectionMode.Feed });
         Assert.Equal(CollectionOutcome.Captured, result.Outcome);
-        Assert.Equal(FeedDiscoveryStatus.Parsed, result.Discovery!.Status);
+        Assert.Equal(DiscoveryStatus.Parsed, result.Discovery!.Status);
         Assert.Equal("https://example.test/watch/" + expectedPath, Assert.Single(result.Discovery.Urls));
         Assert.Equal(Convert.ToHexString(SHA256.HashData(payload)).ToLowerInvariant(), result.Capture!.Sha256);
     }
@@ -143,15 +397,15 @@ public sealed class CollectorTests
         using var collector = new HttpCollector(new QueueHandler(_ => Response(HttpStatusCode.NotFound), _ => Response(HttpStatusCode.OK, payload)));
         var result = await collector.FetchAsync(Request(directory.Path) with { Mode = CollectionMode.Feed });
         Assert.Equal(CollectionOutcome.Captured, result.Outcome);
-        Assert.Equal(duplicate ? FeedDiscoveryStatus.Invalid : FeedDiscoveryStatus.Parsed, result.Discovery!.Status);
+        Assert.Equal(duplicate ? DiscoveryStatus.Invalid : DiscoveryStatus.Parsed, result.Discovery!.Status);
         if (duplicate) Assert.Empty(result.Discovery.Urls);
         else Assert.Equal("https://example.test/watch/article", Assert.Single(result.Discovery.Urls));
     }
 
     [Theory]
-    [InlineData("unknown-charset", FeedDiscoveryStatus.Unsupported)]
-    [InlineData("utf-8", FeedDiscoveryStatus.Invalid)]
-    public async Task UndecodableFeedKeepsCaptureWithoutCandidates(string charset, FeedDiscoveryStatus status)
+    [InlineData("unknown-charset", DiscoveryStatus.Unsupported)]
+    [InlineData("utf-8", DiscoveryStatus.Invalid)]
+    public async Task UndecodableFeedKeepsCaptureWithoutCandidates(string charset, DiscoveryStatus status)
     {
         using var directory = new TemporaryDirectory();
         var payload = Encoding.Latin1.GetBytes("<rss version='2.0'><channel><item><link>/watch/café</link></item></channel></rss>");
@@ -198,7 +452,7 @@ public sealed class CollectorTests
         var result = await collector.FetchAsync(Request(directory.Path) with { Mode = CollectionMode.Feed });
         Assert.Equal(CollectionOutcome.Captured, result.Outcome);
         Assert.Equal(Convert.ToHexString(SHA256.HashData(payload)).ToLowerInvariant(), result.Capture!.Sha256);
-        Assert.Equal(truncate ? FeedDiscoveryStatus.Invalid : FeedDiscoveryStatus.Parsed, result.Discovery!.Status);
+        Assert.Equal(truncate ? DiscoveryStatus.Invalid : DiscoveryStatus.Parsed, result.Discovery!.Status);
         if (truncate) Assert.Empty(result.Discovery.Urls);
         else Assert.Equal("https://example.test/watch/article", Assert.Single(result.Discovery.Urls));
     }
@@ -211,7 +465,7 @@ public sealed class CollectorTests
         using var collector = new HttpCollector(new QueueHandler(_ => Response(HttpStatusCode.NotFound), _ => Response(HttpStatusCode.OK, xml)));
         var result = await collector.FetchAsync(Request(directory.Path) with { Mode = CollectionMode.Feed });
         Assert.Equal(CollectionOutcome.Captured, result.Outcome);
-        Assert.Equal(FeedDiscoveryStatus.Invalid, result.Discovery!.Status);
+        Assert.Equal(DiscoveryStatus.Invalid, result.Discovery!.Status);
         Assert.Empty(result.Discovery.Urls);
     }
 

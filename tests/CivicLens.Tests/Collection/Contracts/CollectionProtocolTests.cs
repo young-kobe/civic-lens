@@ -26,10 +26,10 @@ public sealed class CollectionProtocolTests
     public void ScopeAllowsExactPathOrDescendants(string url) => (Request() with { Url = url }).Validate();
 
     [Fact]
-    public void VersionFourIsCurrentAndVersionThreeRemainsValidForPageRecovery()
+    public void VersionFiveIsCurrentAndVersionThreeRemainsValidForPageRecovery()
     {
         var requestJson = JsonSerializer.Serialize(Request(), CollectionProtocol.JsonOptions);
-        Assert.Contains("\"version\":4", requestJson, StringComparison.Ordinal);
+        Assert.Contains("\"version\":5", requestJson, StringComparison.Ordinal);
         var resultJson = JsonSerializer.Serialize(Receipt(Request()), CollectionProtocol.JsonOptions);
         Assert.Contains("\"failureCode\":null", resultJson, StringComparison.Ordinal);
         var roundTrip = JsonSerializer.Serialize(JsonSerializer.Deserialize<CollectionResult>(resultJson, CollectionProtocol.JsonOptions), CollectionProtocol.JsonOptions);
@@ -42,22 +42,69 @@ public sealed class CollectionProtocolTests
         Assert.Throws<ArgumentException>(() => (v3Request with { MaxCandidates = 5 }).Validate());
         foreach (var version in new[] { 1, 2 })
         {
-            var oldRequest = requestJson.Replace("\"version\":4", $"\"version\":{version}", StringComparison.Ordinal);
+            var oldRequest = requestJson.Replace("\"version\":5", $"\"version\":{version}", StringComparison.Ordinal);
             Assert.Throws<ArgumentException>(() => JsonSerializer.Deserialize<CollectionRequest>(oldRequest, CollectionProtocol.JsonOptions)!.Validate());
             Assert.Throws<InvalidDataException>(() => (Receipt(Request()) with { Version = version }).ValidateAgainst(Request()));
         }
     }
 
     [Theory]
-    [InlineData("\"version\":4", "\"version\":99")]
-    [InlineData("\"version\":4", "\"version\":4,\"version\":4")]
-    [InlineData("\"version\":4", "\"version\":4,\"extra\":true")]
+    [InlineData("\"version\":5", "\"version\":99")]
+    [InlineData("\"version\":5", "\"version\":5,\"version\":5")]
+    [InlineData("\"version\":5", "\"version\":5,\"extra\":true")]
     [InlineData("\"sourceId\":\"source\"", "\"sourceId\":null")]
     public void MalformedOrUnsupportedWireContractsAreRejected(string original, string replacement)
     {
         var json = JsonSerializer.Serialize(Request(), CollectionProtocol.JsonOptions).Replace(original, replacement, StringComparison.Ordinal);
         var exception = Record.Exception(() => JsonSerializer.Deserialize<CollectionRequest>(json, CollectionProtocol.JsonOptions)!.Validate());
         Assert.True(exception is JsonException or ArgumentException, $"Expected rejection, got {exception}");
+    }
+
+    [Theory]
+    [InlineData(4, CollectionMode.Feed)]
+    [InlineData(5, CollectionMode.Feed)]
+    [InlineData(5, CollectionMode.Html)]
+    public void DiscoveryWireRecoveryPreservesSupportedVersionsAndRequiresCapturedCandidates(int version, CollectionMode mode)
+    {
+        var request = Request() with { Version = version, Mode = mode };
+        var result = Receipt(request) with
+        {
+            Version = version,
+            Discovery = new DiscoveryResult { Status = DiscoveryStatus.Parsed, Urls = ["https://example.test/pages/article?q=1"] }
+        };
+        var json = JsonSerializer.Serialize(result, CollectionProtocol.JsonOptions);
+        var restored = JsonSerializer.Deserialize<CollectionResult>(json, CollectionProtocol.JsonOptions)!;
+        restored.ValidateAgainst(request);
+        Assert.Equal(version, restored.Version);
+        Assert.Equal(result.Discovery.Urls, restored.Discovery!.Urls);
+        Assert.Throws<InvalidDataException>(() => (restored with { Discovery = null }).ValidateAgainst(request));
+        Assert.Throws<InvalidDataException>(() => (restored with
+        {
+            Outcome = CollectionOutcome.Failed,
+            Capture = null,
+            FailureCode = CollectionFailureCode.HttpError
+        }).ValidateAgainst(request));
+        Assert.Throws<InvalidDataException>(() => (restored with
+        {
+            Discovery = result.Discovery with { Status = DiscoveryStatus.LimitExceeded }
+        }).ValidateAgainst(request));
+    }
+
+    [Theory]
+    [InlineData(3)]
+    [InlineData(4)]
+    public void HtmlModeCannotBeSmuggledIntoAnOlderProtocol(int version) =>
+        Assert.Throws<ArgumentException>(() => (Request() with { Version = version, Mode = CollectionMode.Html }).Validate());
+
+    [Theory]
+    [InlineData("https://example.test/pages/a#fragment")]
+    [InlineData("https://foreign.test/pages/a")]
+    [InlineData("https://example.test/private")]
+    public void DiscoveryReceiptCannotBypassScopeValidation(string url)
+    {
+        var request = Request() with { Mode = CollectionMode.Html };
+        var result = Receipt(request) with { Discovery = new DiscoveryResult { Status = DiscoveryStatus.Parsed, Urls = [url] } };
+        Assert.Throws<InvalidDataException>(() => result.ValidateAgainst(request));
     }
 
     [Fact]

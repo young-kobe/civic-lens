@@ -1,6 +1,6 @@
 namespace CivicLens.Infrastructure.Collection.Discovery;
 
-internal sealed class FeedCandidateJobRow
+internal sealed class DiscoveryCandidateJobRow
 {
     public string SourceId { get; set; } = null!;
     public string CandidateHash { get; set; } = null!;

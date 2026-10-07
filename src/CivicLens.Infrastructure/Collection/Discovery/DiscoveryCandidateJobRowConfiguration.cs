@@ -4,11 +4,11 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace CivicLens.Infrastructure.Collection.Discovery;
 
-internal sealed class FeedCandidateJobRowConfiguration : IEntityTypeConfiguration<FeedCandidateJobRow>
+internal sealed class DiscoveryCandidateJobRowConfiguration : IEntityTypeConfiguration<DiscoveryCandidateJobRow>
 {
-    public void Configure(EntityTypeBuilder<FeedCandidateJobRow> builder)
+    public void Configure(EntityTypeBuilder<DiscoveryCandidateJobRow> builder)
     {
-        builder.ToTable("collection_feed_candidate_jobs");
+        builder.ToTable("collection_candidate_jobs");
         builder.HasKey(row => row.CandidateHash);
         builder.Property(row => row.SourceId).HasColumnName("source_id").IsRequired();
         builder.Property(row => row.CandidateHash).HasColumnName("candidate_hash").HasMaxLength(64);

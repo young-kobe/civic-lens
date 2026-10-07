@@ -79,7 +79,7 @@ public sealed class PostgresCollectionAttemptStore(IDbContextFactory<CollectionA
                 }
                 db.Attempts.Add(ToRow(decision.AttemptResult, decision.PriorCapturedAttempt, decision.SentValidators));
                 if (attempt.Discovery is { } discovery)
-                    db.Add(new FeedDiscoveryRow
+                    db.Add(new DiscoveryRow
                     {
                         AttemptId = decision.AttemptResult.AttemptId,
                         SourceId = decision.AttemptResult.SourceId,
@@ -167,11 +167,11 @@ public sealed class PostgresCollectionAttemptStore(IDbContextFactory<CollectionA
                 .Select(capture => (long?)capture.ByteLength).SingleAsync(cancellationToken);
             prior = (CapturedAttemptResult)FromRow(priorRow, priorLength);
         }
-        var discoveryRow = await db.Set<FeedDiscoveryRow>().AsNoTracking()
+        var discoveryRow = await db.Set<DiscoveryRow>().AsNoTracking()
             .SingleOrDefaultAsync(item => item.AttemptId == row.AttemptId, cancellationToken);
-        var discovery = discoveryRow is null ? null : new FeedDiscoveryEvidence(
+        var discovery = discoveryRow is null ? null : new DiscoveryEvidence(
             JsonSerializer.Deserialize<CollectionRequest>(discoveryRow.RequestJson, CollectionProtocol.JsonOptions)!,
-            JsonSerializer.Deserialize<FeedDiscoveryResult>(discoveryRow.DiscoveryJson, CollectionProtocol.JsonOptions)!);
+            JsonSerializer.Deserialize<DiscoveryResult>(discoveryRow.DiscoveryJson, CollectionProtocol.JsonOptions)!);
         return new StoredCollectionAttempt(result, row.HasSentValidators ? ReadSentValidators(row) : null, prior, discovery);
     }
 

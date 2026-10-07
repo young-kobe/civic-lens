@@ -1,6 +1,6 @@
 namespace CivicLens.Infrastructure.Collection.Discovery;
 
-internal sealed class FeedAdmissionBatchRow
+internal sealed class DiscoveryAdmissionBatchRow
 {
     public string IdempotencyKey { get; set; } = null!;
     public string AttemptId { get; set; } = null!;

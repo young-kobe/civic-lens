@@ -98,8 +98,10 @@ public sealed class DatabaseCommandTests(PostgresCollection postgres) : IAsyncLi
         Assert.Equal(status == 200 ? 1 : 0, Directory.GetFiles(Path.Combine(directory, "captures"), "*.gz").Length);
     }
 
-    [Fact]
-    public async Task FeedRecoveryAdmissionReplayAndArticleCollectionWorkThroughCli()
+    [Theory]
+    [InlineData(CollectionMode.Feed, "feeds")]
+    [InlineData(CollectionMode.Html, "discovery")]
+    public async Task DiscoveryRecoveryAdmissionReplayAndArticleCollectionWorkThroughCli(CollectionMode mode, string command)
     {
         var configPath = Path.Combine(directory, "config.json");
         var config = JsonSerializer.Deserialize<CollectionConfiguration>(await File.ReadAllTextAsync(configPath),
@@ -108,13 +110,16 @@ public sealed class DatabaseCommandTests(PostgresCollection postgres) : IAsyncLi
         {
             Sources = [config.Sources[0] with
             {
-                Mode = CollectionMode.Feed, AdmissionPolicy = new FeedAdmissionPolicy { MaxJobs = 1 }
+                Mode = mode, AdmissionPolicy = new DiscoveryAdmissionPolicy { MaxJobs = 1 }
             }]
         };
         await File.WriteAllTextAsync(configPath, JsonSerializer.Serialize(config, CollectionProtocol.JsonOptions));
         var entries = Enumerable.Range(0, 100).Select(index =>
             $"<item><link>/page/article-{index}?value={new string('a', 750)}</link></item>");
-        feedBody = "<rss version=\"2.0\"><channel>" + string.Concat(entries) + "</channel></rss>";
+        feedBody = mode == CollectionMode.Feed
+            ? "<rss version=\"2.0\"><channel>" + string.Concat(entries) + "</channel></rss>"
+            : "<html><body>" + string.Concat(Enumerable.Range(0, 100).Select(index =>
+                $"<a href=\"/page/article-{index}?value={new string('a', 750)}\">Article</a>")) + "</body></html>";
         Assert.True(feedBody.Length > 65_536);
         // An import interrupted by missing schema must retain the feed and its discovery for replay.
         var interrupted = await CollectAsync("collect-import", connectionString);
@@ -126,12 +131,12 @@ public sealed class DatabaseCommandTests(PostgresCollection postgres) : IAsyncLi
         var replay = await HostProcess.RunWithCollectorHostAsync(connectionString, "/no-collector-host",
             "receipts", "replay", root, attemptId);
         Assert.True(replay.ExitCode == 0, replay.Error);
-        var inspected = await HostProcess.RunAsync(connectionString, "feeds", "get", attemptId);
+        var inspected = await HostProcess.RunAsync(connectionString, command, "get", attemptId);
         Assert.True(inspected.ExitCode == 0, inspected.Error);
         using var discovery = JsonDocument.Parse(inspected.Output);
         Assert.Equal("parsed", discovery.RootElement.GetProperty("status").GetString());
         Assert.Equal(100, discovery.RootElement.GetProperty("urls").GetArrayLength());
-        var args = new[] { "feeds", "admit", configPath, "source", attemptId, "batch-1" };
+        var args = new[] { command, "admit", configPath, "source", attemptId, "batch-1" };
         var admitted = await HostProcess.RunAsync(connectionString, args);
         Assert.True(admitted.ExitCode == 0, admitted.Error);
         var repeated = await HostProcess.RunAsync(connectionString, args);

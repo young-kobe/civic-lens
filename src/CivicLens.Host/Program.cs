@@ -24,8 +24,9 @@ if (args is [] or ["--help"] or ["help"])
           jobs get <job-id>
           jobs list [limit]
           jobs cancel <job-id>
-          feeds get <attempt-id>
-          feeds admit <config.json> <source-id> <attempt-id> <idempotency-key>
+          discovery get <attempt-id>
+          discovery admit <config.json> <source-id> <attempt-id> <idempotency-key>
+        feeds get/admit remain aliases for discovery get/admit.
         Database commands require CIVIC_LENS_DATABASE (Postgres connection string with Host and Database).
         collect and receipts list are database-free. collect-import saves a handoff before importing.
         receipts replay imports saved handoffs without collecting again; use the capture directory after relocation.
@@ -42,7 +43,7 @@ if (args is ["status"])
 }
 
 if (args is not (["db", "migrate"] or ["validate", _] or ["collect", _, _, _, _] or ["collect-import", _, _, _, _]
-    or ["feeds", "get", _] or ["feeds", "admit", _, _, _, _]
+    or ["feeds" or "discovery", "get", _] or ["feeds" or "discovery", "admit", _, _, _, _]
     or ["receipts", "list", _] or ["receipts", "replay", _, _]) && !CollectionJobCommand.Matches(args))
 {
     Console.Error.WriteLine("Unknown command. Use --help.");
@@ -56,27 +57,27 @@ var replaying = args is ["receipts", "replay", _, _];
 var importing = args[0] == "collect-import" || replaying;
 try
 {
-    if (args is ["feeds", "get", var feedAttemptId])
+    if (args is ["feeds" or "discovery", "get", var discoveryId])
     {
-        if (!PendingCollectionHandoff.IsValidAttemptId(feedAttemptId)) throw new ArgumentException("Invalid attempt ID.");
+        if (!PendingCollectionHandoff.IsValidAttemptId(discoveryId)) throw new ArgumentException("Invalid attempt ID.");
         var evidence = CreateDatabase();
         executing = true;
-        return await FeedDiscoveryCommand.InspectAsync(evidence, feedAttemptId, cancellation.Token);
+        return await DiscoveryCommand.InspectAsync(evidence, discoveryId, cancellation.Token);
     }
 
-    if (args is ["feeds", "admit", var feedConfigPath, var feedSourceId, var discoveryAttemptId, var admissionKey])
+    if (args is ["feeds" or "discovery", "admit", var discoveryConfigPath, var discoverySourceId, var discoveryAttemptId, var admissionKey])
     {
-        var config = await ReadConfigurationAsync(feedConfigPath, cancellation.Token);
-        var definition = CollectionJobDefinition.FromConfiguration(config, feedSourceId);
-        if (definition.Mode != CollectionMode.Feed) throw new ArgumentException("Admission requires a configured feed.");
-        var source = config.Sources.Single(item => item.Id == feedSourceId);
-        var request = new FeedAdmissionRequest(discoveryAttemptId, admissionKey,
+        var config = await ReadConfigurationAsync(discoveryConfigPath, cancellation.Token);
+        var definition = CollectionJobDefinition.FromConfiguration(config, discoverySourceId);
+        if (definition.Mode is not (CollectionMode.Feed or CollectionMode.Html)) throw new ArgumentException("Admission requires a configured feed or HTML discovery source.");
+        var source = config.Sources.Single(item => item.Id == discoverySourceId);
+        var request = new DiscoveryAdmissionRequest(discoveryAttemptId, admissionKey,
             definition with { Mode = CollectionMode.Page, ETag = null, LastModified = null },
-            source.AdmissionPolicy ?? new FeedAdmissionPolicy());
+            source.AdmissionPolicy ?? new DiscoveryAdmissionPolicy(), definition.Mode);
         request.Validate();
         var jobs = CreateJobs();
         executing = true;
-        return await FeedDiscoveryCommand.AdmitAsync(jobs, request, cancellation.Token);
+        return await DiscoveryCommand.AdmitAsync(jobs, request, cancellation.Token);
     }
 
     if (args is ["jobs", "enqueue", var configPath, var sourceId, var idempotencyKey])

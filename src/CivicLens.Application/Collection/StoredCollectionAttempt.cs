@@ -7,7 +7,7 @@ namespace CivicLens.Application.Collection;
 public sealed class StoredCollectionAttempt
 {
     public StoredCollectionAttempt(CollectionAttemptResult attemptResult, SentValidators? sentValidators,
-        CapturedAttemptResult? priorCapturedAttempt, FeedDiscoveryEvidence? discovery = null)
+        CapturedAttemptResult? priorCapturedAttempt, DiscoveryEvidence? discovery = null)
     {
         ArgumentNullException.ThrowIfNull(attemptResult);
         if (attemptResult is not NotModifiedAttemptResult && priorCapturedAttempt is not null)
@@ -25,7 +25,7 @@ public sealed class StoredCollectionAttempt
                 nameof(priorCapturedAttempt));
     }
 
-    public FeedDiscoveryEvidence? Discovery { get; }
+    public DiscoveryEvidence? Discovery { get; }
     public CollectionAttemptResult AttemptResult { get; }
     public SentValidators? SentValidators { get; }
     public CapturedAttemptResult? PriorCapturedAttempt { get; }

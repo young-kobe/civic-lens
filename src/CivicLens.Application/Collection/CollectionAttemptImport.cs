@@ -9,7 +9,7 @@ public sealed class CollectionAttemptImport
     private readonly CollectionImportPolicy policy = new();
 
     internal CollectionAttemptImport(CollectionAttemptResult attemptResult, SentValidators? sentValidators,
-        FeedDiscoveryEvidence? discovery = null)
+        DiscoveryEvidence? discovery = null)
     {
         AttemptResult = attemptResult;
         SentValidators = sentValidators;
@@ -18,7 +18,7 @@ public sealed class CollectionAttemptImport
 
     public CollectionAttemptResult AttemptResult { get; }
     public SentValidators? SentValidators { get; }
-    public FeedDiscoveryEvidence? Discovery { get; }
+    public DiscoveryEvidence? Discovery { get; }
 
     /// <summary>Decides against state loaded in the same atomic persistence operation.</summary>
     public CollectionImportDecision Decide(StoredCollectionAttempt? existingAttempt,

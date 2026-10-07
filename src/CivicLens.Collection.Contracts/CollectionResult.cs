@@ -48,7 +48,7 @@ public sealed record CollectionResult
     [JsonRequired]
     public int RequestCount { get; init; }
     public CaptureArtifact? Capture { get; init; }
-    public FeedDiscoveryResult? Discovery { get; init; }
+    public DiscoveryResult? Discovery { get; init; }
     public CollectionFailureCode? FailureCode { get; init; }
     public long? RetryAfterSeconds { get; init; }
 
@@ -65,18 +65,18 @@ public sealed record CollectionResult
         Capture?.Validate();
         if (Discovery is not null)
         {
-            if (request.Mode != CollectionMode.Feed || request.Version != CollectionProtocol.Version || Outcome != CollectionOutcome.Captured)
-                throw new InvalidDataException("Feed discovery is only valid for captured v4 feed requests.");
+            if (request.Mode == CollectionMode.Page || Outcome != CollectionOutcome.Captured)
+                throw new InvalidDataException("Discovery is only valid for captured discovery requests.");
             Discovery.ValidateAgainst(request);
         }
-        else if (Outcome == CollectionOutcome.Captured && request.Mode == CollectionMode.Feed)
-            throw new InvalidDataException("Captured feed result requires discovery metadata.");
+        else if (Outcome == CollectionOutcome.Captured && request.Mode != CollectionMode.Page)
+            throw new InvalidDataException("Captured discovery result requires discovery metadata.");
         ValidateOutcome(request);
     }
 
     private void ValidateIdentity(CollectionRequest request)
     {
-        if (Version != request.Version || Version is not (CollectionProtocol.Version or CollectionProtocol.PreviousVersion))
+        if (Version != request.Version || Version is not (CollectionProtocol.Version or CollectionProtocol.PreviousVersion or CollectionProtocol.LegacyPageVersion))
             throw new InvalidDataException("Unsupported collection result version.");
         if (JobId != request.JobId || SourceId != request.SourceId || RequestedUrl != request.Url)
             throw new InvalidDataException("Collector result does not identify the requested work.");
