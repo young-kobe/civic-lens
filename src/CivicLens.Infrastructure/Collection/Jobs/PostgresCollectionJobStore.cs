@@ -212,7 +212,7 @@ public sealed partial class PostgresCollectionJobStore(IDbContextFactory<Collect
         var resolutionJson = Write(resolution);
         if (attempt.ResolutionJson is not null)
         {
-            if (attempt.ResolutionJson != resolutionJson) throw new InvalidOperationException("Conflicting job attempt settlement.");
+            if (Write(Read<CollectionAttemptResolution>(attempt.ResolutionJson)) != resolutionJson) throw new InvalidOperationException("Conflicting job attempt settlement.");
             return true;
         }
         var evidence = await PostgresCollectionAttemptStore.GetAsync(db, attemptId, cancellationToken);
