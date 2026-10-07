@@ -242,6 +242,7 @@ public sealed partial class PostgresCollectionJobStore(IDbContextFactory<Collect
             if (evidence is null) throw new InvalidOperationException("Evidence import is not confirmed.");
             var expected = CollectionJobLifecycle.Resolve(evidence);
             if (expected.Outcome != resolution.Outcome || expected.RetryDelay != resolution.RetryDelay ||
+                expected.RobotsCrawlDelayMilliseconds != resolution.RobotsCrawlDelayMilliseconds ||
                 evidence.AttemptResult.SourceId != request.SourceId || evidence.AttemptResult.RequestedUrl != request.Url)
                 throw new InvalidOperationException("Job settlement does not match imported evidence.");
         }
@@ -263,7 +264,8 @@ public sealed partial class PostgresCollectionJobStore(IDbContextFactory<Collect
         attempt.CompletedAt = Ticks(now);
         var origin = await db.Set<JobOriginRow>().SingleAsync(item => item.Origin == NormalizeOrigin(definition.AllowedOrigin), cancellationToken);
         if (origin.UnresolvedAttemptId != attemptId) throw new InvalidOperationException("Origin ownership does not match the unresolved attempt.");
-        var nextOrigin = AddDelay(now, TimeSpan.FromMilliseconds(request.MinDelayMilliseconds));
+        var effectiveOriginDelay = Math.Max(request.MinDelayMilliseconds, resolution.RobotsCrawlDelayMilliseconds ?? 0);
+        var nextOrigin = AddDelay(now, TimeSpan.FromTicks(effectiveOriginDelay * TimeSpan.TicksPerMillisecond));
         if (evidence?.AttemptResult is DeferredAttemptResult)
         {
             var backoff = CollectionJobLifecycle.RetryAt(now, definition.Policy, attempt.Sequence, resolution.RetryDelay);
@@ -287,14 +289,19 @@ public sealed partial class PostgresCollectionJobStore(IDbContextFactory<Collect
     private static void ValidateResolution(CollectionAttemptResolution resolution, CollectionRequest request)
     {
         ArgumentNullException.ThrowIfNull(resolution);
-        if (!Enum.IsDefined(resolution.Outcome) || resolution.RetryDelay < TimeSpan.Zero)
+        if (!Enum.IsDefined(resolution.Outcome) || resolution.RetryDelay < TimeSpan.Zero ||
+            resolution.RobotsCrawlDelayMilliseconds is < 0 or > CollectionProtocol.MaximumCrawlDelayMilliseconds)
             throw new ArgumentException("Invalid job attempt resolution.");
         if (resolution.Outcome == CollectionJobAttemptOutcome.Interrupted && resolution.Receipt is not null)
             throw new ArgumentException("Interrupted execution cannot replace a completed receipt.");
+        if (resolution.Outcome == CollectionJobAttemptOutcome.Interrupted && resolution.RobotsCrawlDelayMilliseconds is not null)
+            throw new ArgumentException("Interrupted execution cannot declare an origin crawl delay.");
         if (resolution.Receipt is not { } receipt) return;
         receipt.ValidateAgainst(request);
         var expected = CollectionJobLifecycle.Resolve(receipt);
-        if (expected.Outcome != resolution.Outcome || expected.ErrorCode != resolution.ErrorCode || expected.RetryDelay != resolution.RetryDelay)
+        if (expected.Outcome != resolution.Outcome || expected.ErrorCode != resolution.ErrorCode ||
+            expected.RetryDelay != resolution.RetryDelay ||
+            expected.RobotsCrawlDelayMilliseconds != resolution.RobotsCrawlDelayMilliseconds)
             throw new ArgumentException("Job resolution does not match its receipt.");
     }
 

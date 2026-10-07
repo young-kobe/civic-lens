@@ -308,6 +308,27 @@ public sealed class CollectAndImportCollectionAttemptTests
     }
 
     [Fact]
+    public void LargestSupportedRobotsDelayCanBeImportedAndRecovered()
+    {
+        var request = Request();
+        var result = Result(CollectionOutcome.Deferred, request) with
+        {
+            FailureCode = CollectionFailureCode.CrawlDelay,
+            RobotsCrawlDelayMilliseconds = CollectionProtocol.MaximumCrawlDelayMilliseconds,
+            RetryAfterSeconds = CollectionProtocol.MaximumCrawlDelayMilliseconds / 1000
+        };
+        var import = CollectionAttemptImporter.CreateImport("maximum-delay", request, result);
+        var deferred = Assert.IsType<DeferredAttemptResult>(import.AttemptResult);
+        Assert.Equal(TimeSpan.FromTicks(CollectionProtocol.MaximumCrawlDelayMilliseconds * TimeSpan.TicksPerMillisecond),
+            deferred.RetryDelay);
+        var stored = new StoredCollectionAttempt(import.AttemptResult, import.SentValidators, null,
+            robotsCrawlDelayMilliseconds: import.RobotsCrawlDelayMilliseconds);
+        var resolution = CivicLens.Application.Collection.Jobs.CollectionJobLifecycle.Resolve(stored);
+        Assert.Equal(deferred.RetryDelay, resolution.RetryDelay);
+        Assert.Equal(CollectionProtocol.MaximumCrawlDelayMilliseconds, resolution.RobotsCrawlDelayMilliseconds);
+    }
+
+    [Fact]
     public async Task MapsLargestWholeSecondRetryDelaySupportedByDomain()
     {
         var request = Request();
@@ -361,6 +382,7 @@ public sealed class CollectAndImportCollectionAttemptTests
         Outcome = outcome,
         ObservedAt = ObservedAt,
         BytesReceived = 0,
+        RobotsRequestCount = request.Version >= 6 ? 1 : null,
         RequestCount = 1
     };
 

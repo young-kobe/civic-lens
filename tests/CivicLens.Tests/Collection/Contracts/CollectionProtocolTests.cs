@@ -8,6 +8,76 @@ namespace CivicLens.Tests.Collection.Contracts;
 public sealed class CollectionProtocolTests
 {
     [Fact]
+    public void RobotsRedirectAccountingCannotInventAConditionalContentRequest()
+    {
+        var request = Request() with { ETag = "\"v1\"" };
+        var receipt = Receipt(request) with
+        {
+            Outcome = CollectionOutcome.Deferred,
+            FailureCode = CollectionFailureCode.RateLimited,
+            Response = null,
+            Capture = null,
+            RobotsRequestCount = 2,
+            RequestCount = 2,
+            RetryAfterSeconds = 60
+        };
+        receipt.ValidateAgainst(request);
+        Assert.Throws<InvalidDataException>(() => (receipt with
+        {
+            SentValidators = new HttpRequestValidators { ETag = request.ETag }
+        }).ValidateAgainst(request));
+        Assert.Throws<InvalidDataException>(() => (receipt with
+        {
+            Response = new HttpResponseMetadata { StatusCode = 429, ContentEncodings = [] }
+        }).ValidateAgainst(request));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(-1)]
+    [InlineData(0)]
+    [InlineData(3)]
+    public void VersionSixRejectsMissingOrImpossibleRobotsAccounting(int? robotsRequests)
+    {
+        var request = Request();
+        Assert.Throws<InvalidDataException>(() => (Receipt(request) with
+        {
+            RobotsRequestCount = robotsRequests
+        }).ValidateAgainst(request));
+    }
+
+    [Theory]
+    [InlineData(3)]
+    [InlineData(4)]
+    [InlineData(5)]
+    public void LegacyReceiptsCannotClaimNewRobotsEvidence(int version)
+    {
+        var request = Request() with { Version = version };
+        var receipt = Receipt(request);
+        receipt.ValidateAgainst(request);
+        Assert.Throws<InvalidDataException>(() => (receipt with { RobotsCrawlDelayMilliseconds = 1 }).ValidateAgainst(request));
+    }
+
+    [Fact]
+    public void CrawlDelayDeferralCannotShortenDeclaredWait()
+    {
+        var request = Request();
+        var receipt = Receipt(request) with
+        {
+            Outcome = CollectionOutcome.Deferred,
+            FailureCode = CollectionFailureCode.CrawlDelay,
+            Response = null,
+            Capture = null,
+            RequestCount = 1,
+            RobotsCrawlDelayMilliseconds = 1501,
+            RetryAfterSeconds = 2
+        };
+        receipt.ValidateAgainst(request);
+        Assert.Throws<InvalidDataException>(() => (receipt with { RetryAfterSeconds = 1 }).ValidateAgainst(request));
+        Assert.Throws<InvalidDataException>(() => (receipt with { RobotsCrawlDelayMilliseconds = long.MaxValue }).ValidateAgainst(request));
+    }
+
+    [Fact]
     public void RequestsRejectSerializedManifestOverflowIncludingJsonEscaping()
     {
         var basis = Request() with { SourceId = "" };
@@ -39,10 +109,10 @@ public sealed class CollectionProtocolTests
     public void ScopeAllowsExactPathOrDescendants(string url) => (Request() with { Url = url }).Validate();
 
     [Fact]
-    public void VersionFiveIsCurrentAndVersionThreeRemainsValidForPageRecovery()
+    public void VersionSixIsCurrentAndVersionThreeRemainsValidForPageRecovery()
     {
         var requestJson = JsonSerializer.Serialize(Request(), CollectionProtocol.JsonOptions);
-        Assert.Contains("\"version\":5", requestJson, StringComparison.Ordinal);
+        Assert.Contains("\"version\":6", requestJson, StringComparison.Ordinal);
         var resultJson = JsonSerializer.Serialize(Receipt(Request()), CollectionProtocol.JsonOptions);
         Assert.Contains("\"failureCode\":null", resultJson, StringComparison.Ordinal);
         var roundTrip = JsonSerializer.Serialize(JsonSerializer.Deserialize<CollectionResult>(resultJson, CollectionProtocol.JsonOptions), CollectionProtocol.JsonOptions);
@@ -55,16 +125,16 @@ public sealed class CollectionProtocolTests
         Assert.Throws<ArgumentException>(() => (v3Request with { MaxCandidates = 5 }).Validate());
         foreach (var version in new[] { 1, 2 })
         {
-            var oldRequest = requestJson.Replace("\"version\":5", $"\"version\":{version}", StringComparison.Ordinal);
+            var oldRequest = requestJson.Replace("\"version\":6", $"\"version\":{version}", StringComparison.Ordinal);
             Assert.Throws<ArgumentException>(() => JsonSerializer.Deserialize<CollectionRequest>(oldRequest, CollectionProtocol.JsonOptions)!.Validate());
             Assert.Throws<InvalidDataException>(() => (Receipt(Request()) with { Version = version }).ValidateAgainst(Request()));
         }
     }
 
     [Theory]
-    [InlineData("\"version\":5", "\"version\":99")]
-    [InlineData("\"version\":5", "\"version\":5,\"version\":5")]
-    [InlineData("\"version\":5", "\"version\":5,\"extra\":true")]
+    [InlineData("\"version\":6", "\"version\":99")]
+    [InlineData("\"version\":6", "\"version\":6,\"version\":6")]
+    [InlineData("\"version\":6", "\"version\":6,\"extra\":true")]
     [InlineData("\"sourceId\":\"source\"", "\"sourceId\":null")]
     public void MalformedOrUnsupportedWireContractsAreRejected(string original, string replacement)
     {

@@ -390,6 +390,7 @@ public sealed class RunCollectionJobTests
         ObservedAt = DateTimeOffset.UtcNow,
         FailureCode = CollectionFailureCode.Timeout,
         BytesReceived = 0,
+        RobotsRequestCount = request.Version >= 6 ? 1 : null,
         RequestCount = 1
     };
 }

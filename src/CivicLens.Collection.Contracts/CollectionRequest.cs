@@ -37,11 +37,11 @@ public sealed record CollectionRequest
 
     private void ValidateIdentity()
     {
-        if (Version is not (CollectionProtocol.Version or CollectionProtocol.PreviousVersion or CollectionProtocol.LegacyPageVersion))
+        if (!CollectionProtocol.IsSupported(Version))
             throw new ArgumentException("Unsupported collection protocol version.");
         if (!Enum.IsDefined(Mode) || (Version == CollectionProtocol.LegacyPageVersion &&
             (Mode != CollectionMode.Page || MaxCandidates != 100)) ||
-            (Mode == CollectionMode.Html && Version != CollectionProtocol.Version))
+            (Mode == CollectionMode.Html && Version < CollectionProtocol.HtmlVersion))
             throw new ArgumentException("Collection mode is unsupported for this protocol version.");
         if (string.IsNullOrWhiteSpace(JobId) || string.IsNullOrWhiteSpace(SourceId))
             throw new ArgumentException("Job and source IDs are required.");

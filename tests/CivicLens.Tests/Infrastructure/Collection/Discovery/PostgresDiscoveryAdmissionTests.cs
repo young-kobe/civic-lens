@@ -303,6 +303,7 @@ public sealed class PostgresDiscoveryAdmissionTests(PostgresCollection postgres)
             Response = new HttpResponseMetadata { StatusCode = 200, ContentType = "application/rss+xml", ContentEncodings = [] },
             SentValidators = null,
             BytesReceived = 10,
+            RobotsRequestCount = version >= 6 ? 1 : null,
             RequestCount = 2,
             Capture = new CaptureArtifact { Sha256 = new string('a', 64), RelativePath = new string('a', 64) + ".gz", ByteLength = 10 },
             Discovery = new DiscoveryResult { Status = status, Urls = urls }

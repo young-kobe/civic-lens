@@ -1,4 +1,5 @@
 using CivicLens.Core.Collection;
+using CivicLens.Collection.Contracts;
 using CivicLens.Application.Collection.Discovery;
 
 namespace CivicLens.Application.Collection;
@@ -7,7 +8,7 @@ namespace CivicLens.Application.Collection;
 public sealed class StoredCollectionAttempt
 {
     public StoredCollectionAttempt(CollectionAttemptResult attemptResult, SentValidators? sentValidators,
-        CapturedAttemptResult? priorCapturedAttempt, DiscoveryEvidence? discovery = null)
+        CapturedAttemptResult? priorCapturedAttempt, DiscoveryEvidence? discovery = null, long? robotsCrawlDelayMilliseconds = null)
     {
         ArgumentNullException.ThrowIfNull(attemptResult);
         if (attemptResult is not NotModifiedAttemptResult && priorCapturedAttempt is not null)
@@ -15,6 +16,9 @@ public sealed class StoredCollectionAttempt
         if (discovery is not null && (attemptResult is not CapturedAttemptResult ||
             discovery.Request.SourceId != attemptResult.SourceId || discovery.Request.Url != attemptResult.RequestedUrl))
             throw new ArgumentException("Discovery must belong to the captured attempt.", nameof(discovery));
+        if (robotsCrawlDelayMilliseconds is < 0 or > CollectionProtocol.MaximumCrawlDelayMilliseconds)
+            throw new ArgumentOutOfRangeException(nameof(robotsCrawlDelayMilliseconds));
+        RobotsCrawlDelayMilliseconds = robotsCrawlDelayMilliseconds;
         Discovery = discovery;
         AttemptResult = attemptResult;
         SentValidators = sentValidators;
@@ -25,6 +29,7 @@ public sealed class StoredCollectionAttempt
                 nameof(priorCapturedAttempt));
     }
 
+    public long? RobotsCrawlDelayMilliseconds { get; }
     public DiscoveryEvidence? Discovery { get; }
     public CollectionAttemptResult AttemptResult { get; }
     public SentValidators? SentValidators { get; }

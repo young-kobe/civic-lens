@@ -5,8 +5,12 @@ namespace CivicLens.Collection.Contracts;
 
 public static class CollectionProtocol
 {
-    public const int Version = 5;
+    public const int Version = 6;
     public const int PreviousVersion = 4;
+    public const int HtmlVersion = 5;
+    public const long MaximumCrawlDelayMilliseconds = (long.MaxValue / TimeSpan.TicksPerSecond) * 1000;
+
+    public static bool IsSupported(int version) => version is >= LegacyPageVersion and <= Version;
     public const int LegacyPageVersion = 3;
     public const int MaximumManifestBytes = 64 * 1024;
     // A page receipt repeats request identity and URLs and adds escaped response metadata.

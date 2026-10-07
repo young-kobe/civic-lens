@@ -16,6 +16,8 @@ internal static class CollectionFixtures
 
     internal static CollectionResult Receipt(CollectionRequest request) => new()
     {
+        Version = request.Version,
+        RobotsRequestCount = request.Version >= 6 ? 1 : null,
         JobId = request.JobId,
         SourceId = request.SourceId,
         RequestedUrl = request.Url,

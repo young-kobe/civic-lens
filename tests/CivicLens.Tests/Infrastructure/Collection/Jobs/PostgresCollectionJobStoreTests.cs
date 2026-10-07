@@ -46,13 +46,21 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
         await command.ExecuteNonQueryAsync();
     }
 
-    [Fact]
-    public async Task VersionThreeSettlementReplayRemainsIdempotentAfterUpgrade()
+    [Theory]
+    [InlineData(3)]
+    [InlineData(4)]
+    [InlineData(5)]
+    public async Task LegacySettlementReplayWithoutNewReceiptFieldsRemainsIdempotent(int version)
     {
-        var claim = await EnqueueClaimAsync("v3-settlement", Definition());
+        var claim = await EnqueueClaimAsync($"v{version}-settlement", Definition());
         var start = await jobs.TryStartAttemptAsync(claim.Lease, root, default);
-        var request = start.Attempt!.Request with { Version = 3 };
-        var receipt = ReceiptCollector.Result(request, 404) with { Version = 3 };
+        var request = start.Attempt!.Request with { Version = version };
+        var receipt = ReceiptCollector.Result(request, 404) with
+        {
+            Version = version,
+            RobotsRequestCount = null,
+            RobotsCrawlDelayMilliseconds = null
+        };
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
         await using (var command = new NpgsqlCommand("UPDATE collection_job_attempts SET request_json = @request WHERE attempt_id = @id", connection))
@@ -66,6 +74,9 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
         Assert.True(await jobs.SettleAttemptAsync(claim.Lease, start.Attempt.AttemptId, resolution, default));
         var legacyJson = JsonSerializer.SerializeToNode(resolution, CollectionProtocol.JsonOptions)!;
         legacyJson["receipt"]!.AsObject().Remove("discovery");
+        legacyJson["receipt"]!.AsObject().Remove("robotsRequestCount");
+        legacyJson["receipt"]!.AsObject().Remove("robotsCrawlDelayMilliseconds");
+        legacyJson.AsObject().Remove("robotsCrawlDelayMilliseconds");
         await using (var command = new NpgsqlCommand("UPDATE collection_job_attempts SET resolution_json = @resolution WHERE attempt_id = @id", connection))
         {
             command.Parameters.AddWithValue("resolution", legacyJson.ToJsonString());
@@ -300,6 +311,47 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task SuccessfulCaptureRecoveryWithoutSpoolPreservesRobotsDelay()
+    {
+        var claim = await EnqueueClaimAsync("robots-delay-capture-recovery", Definition());
+        var start = await jobs.TryStartAttemptAsync(claim.Lease, root, default);
+        var hash = new string('a', 64);
+        var receipt = ReceiptCollector.Result(start.Attempt!.Request, 404) with
+        {
+            Outcome = CollectionOutcome.Captured,
+            Response = new HttpResponseMetadata { StatusCode = 200, ContentEncodings = [] },
+            FailureCode = null,
+            Capture = new CaptureArtifact { Sha256 = hash, RelativePath = hash + ".gz", ByteLength = 10 },
+            BytesReceived = 10,
+            RobotsCrawlDelayMilliseconds = 45_000
+        };
+        await CollectionAttemptImporter.ImportAsync(start.Attempt.AttemptId, start.Attempt.Request, receipt, evidence, default);
+        await jobs.ReleaseCollectorAsync(claim.Lease, start.CollectorLease!, default);
+        await jobs.ReleaseClaimAsync(claim.Lease, default);
+
+        var recovered = await Runner(new RejectCollector()).ExecuteAsync(claim.Job.JobId, root, LeaseDuration);
+
+        Assert.Equal(CollectionJobState.Succeeded, recovered.Job!.State);
+        var other = await EnqueueClaimAsync("robots-delay-capture-same-origin", Definition());
+        var blocked = await jobs.TryStartAttemptAsync(other.Lease, root, default);
+        Assert.Equal(CollectionJobBlockReason.OriginBackoff, blocked.BlockReason);
+        Assert.True(blocked.RetryAt > DateTimeOffset.UtcNow.AddSeconds(40));
+    }
+
+    [Fact]
+    public async Task RobotsRateLimitWithoutContentRequestSharesRetryAfterBackoff()
+    {
+        var job = await jobs.EnqueueAsync(Definition(), "robots-rate-limit", default);
+        var completed = await Runner(new RobotsRateLimitedCollector()).ExecuteAsync(job.JobId, root, LeaseDuration);
+        Assert.Equal(CollectionJobState.WaitingToRetry, completed.Job!.State);
+
+        var other = await EnqueueClaimAsync("robots-rate-limit-same-origin", Definition());
+        var blocked = await jobs.TryStartAttemptAsync(other.Lease, root, default);
+        Assert.Equal(CollectionJobBlockReason.OriginBackoff, blocked.BlockReason);
+        Assert.True(blocked.RetryAt > DateTimeOffset.UtcNow.AddSeconds(50));
+    }
+
+    [Fact]
     public async Task UnknownUsageCannotResetAggregateBudgetAndCancellationPreventsAdmission()
     {
         var definition = Definition() with { Policy = new CollectionJobPolicy { MaxAttempts = 3, MaxTotalRequests = 5, InitialRetryDelaySeconds = 0 } };
@@ -433,6 +485,25 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
             throw new InvalidOperationException("Recovery must not collect.");
     }
 
+    private sealed class RobotsRateLimitedCollector : ICollectorProcess
+    {
+        public Task<CollectionResult> RunAsync(CollectionRequest request, CancellationToken cancellationToken) =>
+            Task.FromResult(new CollectionResult
+            {
+                JobId = request.JobId,
+                SourceId = request.SourceId,
+                RequestedUrl = request.Url,
+                FinalUrl = request.Url,
+                Outcome = CollectionOutcome.Deferred,
+                ObservedAt = DateTimeOffset.UtcNow,
+                RequestCount = 1,
+                RobotsRequestCount = 1,
+                BytesReceived = 0,
+                FailureCode = CollectionFailureCode.RateLimited,
+                RetryAfterSeconds = 60
+            });
+    }
+
     private sealed class ReceiptCollector(int status) : ICollectorProcess
     {
         public Task<CollectionResult> RunAsync(CollectionRequest request, CancellationToken cancellationToken) => Task.FromResult(Result(request, status));
@@ -448,7 +519,8 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
             BytesReceived = 0,
             Response = new HttpResponseMetadata { StatusCode = status, ContentEncodings = [] },
             FailureCode = status == 429 ? CollectionFailureCode.RateLimited : CollectionFailureCode.HttpError,
-            RetryAfterSeconds = status == 429 ? 60 : null
+            RetryAfterSeconds = status == 429 ? 60 : null,
+            RobotsRequestCount = request.Version >= 6 ? 1 : null
         };
     }
 }

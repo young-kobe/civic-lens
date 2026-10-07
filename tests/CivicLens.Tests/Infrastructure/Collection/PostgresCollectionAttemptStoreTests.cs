@@ -37,7 +37,7 @@ public sealed class PostgresCollectionAttemptStoreTests(PostgresCollection postg
         await store.MigrateAsync();
         await using var db = await factory.CreateDbContextAsync();
         Assert.Empty(await db.Database.GetPendingMigrationsAsync());
-        Assert.Equal(5, (await db.Database.GetAppliedMigrationsAsync()).Count());
+        Assert.Equal(6, (await db.Database.GetAppliedMigrationsAsync()).Count());
         Assert.False(db.Database.HasPendingModelChanges());
     }
 
@@ -49,6 +49,29 @@ public sealed class PostgresCollectionAttemptStoreTests(PostgresCollection postg
         await using var command = connection.CreateCommand();
         command.CommandText = $"DROP SCHEMA IF EXISTS {schema} CASCADE";
         await command.ExecuteNonQueryAsync();
+    }
+
+    [Fact]
+    public async Task RobotsDelaySurvivesImportAndCannotChangeOnReplay()
+    {
+        var request = Request("robots-delay");
+        var receipt = Result(request.JobId, CollectionOutcome.Failed,
+            Response: Metadata(404, null, null, null, []), FailureCode: CollectionFailureCode.HttpError) with
+        {
+            RequestCount = 2,
+            RobotsCrawlDelayMilliseconds = 12_345
+        };
+        var import = CollectionAttemptImporter.CreateImport("robots-delay", request, receipt);
+        await store.ImportAtomicallyAsync(import, default);
+        var retained = await store.GetAsync("robots-delay", default);
+        Assert.Equal(12_345, retained!.RobotsCrawlDelayMilliseconds);
+        Assert.Equal(ImportDisposition.DuplicateAttempt, (await store.ImportAtomicallyAsync(import, default)).Disposition);
+        foreach (var delay in new long?[] { null, 0, 12_346 })
+        {
+            var conflict = CollectionAttemptImporter.CreateImport("robots-delay", request,
+                receipt with { RobotsCrawlDelayMilliseconds = delay });
+            await Assert.ThrowsAsync<InvalidOperationException>(() => store.ImportAtomicallyAsync(conflict, default));
+        }
     }
 
     [Fact]
@@ -372,6 +395,7 @@ public sealed class PostgresCollectionAttemptStoreTests(PostgresCollection postg
             Response = Response,
             SentValidators = SentValidators,
             BytesReceived = outcome == CollectionOutcome.Captured ? Capture!.ByteLength : 0,
+            RobotsRequestCount = outcome == CollectionOutcome.Failed && Response is null ? 0 : 1,
             RequestCount = outcome == CollectionOutcome.Failed && Response is null ? 0 : 2,
             Capture = Capture,
             FailureCode = FailureCode,
