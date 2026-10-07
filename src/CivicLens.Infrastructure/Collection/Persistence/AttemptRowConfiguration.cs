@@ -13,6 +13,7 @@ internal sealed class AttemptRowConfiguration : IEntityTypeConfiguration<Attempt
             table.HasCheckConstraint("ck_collection_attempts_identity", "length(btrim(attempt_id)) > 0 AND length(btrim(source_id)) > 0 AND length(btrim(requested_url)) > 0 AND length(btrim(final_url)) > 0");
             table.HasCheckConstraint("ck_collection_attempts_response_ticks", "response_last_modified_utc_ticks IS NULL OR response_last_modified_utc_ticks BETWEEN 0 AND 3155378975999999999");
             table.HasCheckConstraint("ck_collection_attempts_sent_ticks", "sent_last_modified_utc_ticks IS NULL OR sent_last_modified_utc_ticks BETWEEN 0 AND 3155378975999999999");
+            table.HasCheckConstraint("ck_collection_attempts_robots_delay", "robots_crawl_delay_milliseconds IS NULL OR robots_crawl_delay_milliseconds BETWEEN 0 AND 922337203685000");
             table.HasCheckConstraint("ck_collection_attempts_retry_ticks", "retry_delay_ticks IS NULL OR retry_delay_ticks >= 0");
             table.HasCheckConstraint("ck_collection_attempts_outcome", """
                 (outcome = 'captured' AND has_response AND response_status_code IS NOT NULL AND response_status_code = 200 AND capture_sha256 IS NOT NULL AND failure_code IS NULL AND retry_delay_ticks IS NULL AND prior_capture_attempt_id IS NULL AND prior_capture_sha256 IS NULL)
@@ -49,6 +50,7 @@ internal sealed class AttemptRowConfiguration : IEntityTypeConfiguration<Attempt
         builder.Property(row => row.HasSentValidators).HasColumnName("has_sent_validators").IsRequired();
         builder.Property(row => row.SentETag).HasColumnName("sent_etag");
         builder.Property(row => row.SentLastModifiedUtcTicks).HasColumnName("sent_last_modified_utc_ticks");
+        builder.Property(row => row.RobotsCrawlDelayMilliseconds).HasColumnName("robots_crawl_delay_milliseconds");
         builder.Property(row => row.FailureCode).HasColumnName("failure_code");
         builder.Property(row => row.RetryDelayTicks).HasColumnName("retry_delay_ticks");
         builder.Property(row => row.CaptureSha256).HasColumnName("capture_sha256");

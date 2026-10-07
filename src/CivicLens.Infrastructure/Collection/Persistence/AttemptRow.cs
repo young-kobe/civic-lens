@@ -17,6 +17,7 @@ internal sealed class AttemptRow
     public bool HasSentValidators { get; set; }
     public string? SentETag { get; set; }
     public long? SentLastModifiedUtcTicks { get; set; }
+    public long? RobotsCrawlDelayMilliseconds { get; set; }
     public string? FailureCode { get; set; }
     public long? RetryDelayTicks { get; set; }
     public string? CaptureSha256 { get; set; }

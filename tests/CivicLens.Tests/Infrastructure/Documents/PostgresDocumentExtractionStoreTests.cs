@@ -189,8 +189,8 @@ public sealed class PostgresDocumentExtractionStoreTests(PostgresCollection post
     public async Task ProfileMigrationPreservesExistingExtractionAndCitationIdentity()
     {
         await using var db = await factory.CreateDbContextAsync();
-        await db.GetService<IMigrator>().MigrateAsync("20261007161805_DocumentExtractions");
         var attempt = await ImportAsync("old text");
+        await db.GetService<IMigrator>().MigrateAsync("20261007161805_DocumentExtractions");
         var original = new DocumentExtraction(attempt, "p", "n", "old text");
         await db.Database.ExecuteSqlInterpolatedAsync($"""
             INSERT INTO document_extractions (extraction_id, attempt_id, parser_version, normalization_version, text, text_sha256)

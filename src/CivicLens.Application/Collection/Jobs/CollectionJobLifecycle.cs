@@ -16,7 +16,7 @@ public static class CollectionJobLifecycle
             _ => CollectionJobAttemptOutcome.PermanentFailure
         };
         return new CollectionAttemptResolution(outcome, receipt, receipt.FailureCode?.ToString(),
-            ToRetryDelay(receipt.RetryAfterSeconds));
+            ToRetryDelay(receipt.RetryAfterSeconds), receipt.RobotsCrawlDelayMilliseconds);
     }
 
     public static bool IsRetryable(CollectionResult receipt) => receipt.Outcome == CollectionOutcome.Deferred ||
@@ -28,7 +28,8 @@ public static class CollectionJobLifecycle
         ArgumentNullException.ThrowIfNull(retained);
         var attempt = retained.AttemptResult;
         if (attempt is CapturedAttemptResult or NotModifiedAttemptResult)
-            return new CollectionAttemptResolution(CollectionJobAttemptOutcome.Succeeded, null, "EvidenceAlreadyImported");
+            return new CollectionAttemptResolution(CollectionJobAttemptOutcome.Succeeded, null, "EvidenceAlreadyImported",
+                RobotsCrawlDelayMilliseconds: retained.RobotsCrawlDelayMilliseconds);
         var failureCode = attempt switch
         {
             FailedAttemptResult failed => failed.FailureCode,
@@ -40,7 +41,8 @@ public static class CollectionJobLifecycle
                 nameof(CollectionFailureCode.IncompleteResponse) || attempt.Response?.StatusCode is >= 500 and <= 599;
         TimeSpan? delay = attempt is DeferredAttemptResult deferredAttempt ? deferredAttempt.RetryDelay : null;
         return new CollectionAttemptResolution(retryable ? CollectionJobAttemptOutcome.RetryableFailure :
-            CollectionJobAttemptOutcome.PermanentFailure, null, failureCode, delay);
+            CollectionJobAttemptOutcome.PermanentFailure, null, failureCode, delay,
+            retained.RobotsCrawlDelayMilliseconds);
     }
 
     public static CollectionJobState Transition(CollectionJobState current, CollectionJobAttemptOutcome outcome,

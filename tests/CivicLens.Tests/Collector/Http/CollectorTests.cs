@@ -606,6 +606,50 @@ public sealed class CollectorTests
         Assert.Equal(3, result.RequestCount);
     }
 
+    [Theory]
+    [InlineData("/watch/file-%2A.html", "https://example.test/watch/file-*.html")]
+    [InlineData("/watch/foo-%24", "https://example.test/watch/foo-$")]
+    public async Task EscapedRobotsSpecialCharactersMatchLiteralUrlCharacters(string rule, string url)
+    {
+        using var directory = new TemporaryDirectory();
+        var handler = new QueueHandler(_ => Response(HttpStatusCode.OK, $"User-agent: *\nDisallow: {rule}\n"),
+            _ => Response(HttpStatusCode.OK, "unexpected content"));
+        using var collector = new HttpCollector(handler);
+        var result = await collector.FetchAsync(Request(directory.Path) with { Url = url });
+        Assert.Equal(CollectionFailureCode.RobotsDenied, result.FailureCode);
+        Assert.Equal(1, handler.Calls);
+    }
+
+    [Fact]
+    public async Task CrawlDelayDoesNotSplitConsecutiveUserAgentLines()
+    {
+        using var directory = new TemporaryDirectory();
+        var handler = new QueueHandler(_ => Response(HttpStatusCode.OK,
+            "User-agent: CivicLens\nCrawl-delay: 0\nUser-agent: OtherBot\nDisallow: /watch\n"),
+            _ => Response(HttpStatusCode.OK, "unexpected content"));
+        using var collector = new HttpCollector(handler);
+        var result = await collector.FetchAsync(Request(directory.Path));
+        Assert.Equal(CollectionFailureCode.RobotsDenied, result.FailureCode);
+        Assert.Equal(1, handler.Calls);
+    }
+
+    [Theory]
+    [InlineData("922337203685", CollectionFailureCode.CrawlDelay)]
+    [InlineData("922337203685.001", CollectionFailureCode.RobotsUnavailable)]
+    public async Task MaximumCrawlDelayFitsWholeSecondRetryRepresentation(string seconds, CollectionFailureCode expected)
+    {
+        using var directory = new TemporaryDirectory();
+        var handler = new QueueHandler(_ => Response(HttpStatusCode.OK, $"User-agent: *\nCrawl-delay: {seconds}\n"));
+        using var collector = new HttpCollector(handler);
+        var result = await collector.FetchAsync(Request(directory.Path));
+        Assert.Equal(expected, result.FailureCode);
+        if (expected == CollectionFailureCode.CrawlDelay)
+        {
+            Assert.Equal(CollectionProtocol.MaximumCrawlDelayMilliseconds, result.RobotsCrawlDelayMilliseconds);
+            Assert.Equal(TimeSpan.MaxValue.Ticks / TimeSpan.TicksPerSecond, result.RetryAfterSeconds);
+        }
+    }
+
     [Fact]
     public async Task BomPrefixedRobotsDenyPreventsTargetRequest()
     {
@@ -625,6 +669,344 @@ public sealed class CollectorTests
         using var collector = new HttpCollector(handler);
         var result = await collector.FetchAsync(Request(directoryOwner.Path));
         Assert.Equal(CollectionFailureCode.RobotsDenied, result.FailureCode);
+        Assert.Equal(1, handler.Calls);
+    }
+
+    [Fact]
+    public async Task RobotsUsesCivicLensGroupInsteadOfWildcardAndCombinesConsecutiveAgents()
+    {
+        using var directory = new TemporaryDirectory();
+        var robots = "User-agent: *\nDisallow: /watch\n\nUser-agent: CivicLens\nUser-agent: ExampleBot\nDisallow: /private\n";
+        var handler = new QueueHandler(_ => Response(HttpStatusCode.OK, robots), _ => Response(HttpStatusCode.OK, "ok"));
+        using var collector = new HttpCollector(handler);
+
+        var result = await collector.FetchAsync(Request(directory.Path));
+
+        Assert.Equal(CollectionOutcome.Captured, result.Outcome);
+        Assert.Equal(2, handler.Calls);
+    }
+
+    [Fact]
+    public async Task RobotsIgnoresGroupForDifferentProductTokenContainingCivicLens()
+    {
+        using var directory = new TemporaryDirectory();
+        var robots = "User-agent: OtherCivicLens\nDisallow: /watch\n";
+        var handler = new QueueHandler(_ => Response(HttpStatusCode.OK, robots), _ => Response(HttpStatusCode.OK, "ok"));
+        using var collector = new HttpCollector(handler);
+
+        var result = await collector.FetchAsync(Request(directory.Path));
+
+        Assert.Equal(CollectionOutcome.Captured, result.Outcome);
+    }
+
+    [Fact]
+    public async Task RobotsAllowsBlankLinesAndCarriageReturnLineEndingsWithinGroup()
+    {
+        using var directory = new TemporaryDirectory();
+        var robots = "User-agent: CivicLens\r\nDisallow: /watch\r\n\r\nAllow: /watch/public\rCrawl-delay: 0\r";
+        var handler = new QueueHandler(_ => Response(HttpStatusCode.OK, robots), _ => Response(HttpStatusCode.OK, "ok"));
+        using var collector = new HttpCollector(handler);
+
+        var result = await collector.FetchAsync(Request(directory.Path) with { Url = "https://example.test/watch/public" });
+
+        Assert.Equal(CollectionOutcome.Captured, result.Outcome);
+    }
+
+    [Fact]
+    public async Task RobotsUsesNormalizedOctetSpecificityForUnicodeRules()
+    {
+        using var directory = new TemporaryDirectory();
+        var robots = "User-agent: CivicLens\nDisallow: /watch/caf%C3%A9\nAllow: /watch/café\n";
+        var handler = new QueueHandler(_ => Response(HttpStatusCode.OK, robots), _ => Response(HttpStatusCode.OK, "ok"));
+        using var collector = new HttpCollector(handler);
+
+        var result = await collector.FetchAsync(Request(directory.Path) with { Url = "https://example.test/watch/caf%C3%A9" });
+
+        Assert.Equal(CollectionOutcome.Captured, result.Outcome);
+    }
+
+    [Fact]
+    public async Task RobotsUsesLongestRepeatedCrawlDelayInGroup()
+    {
+        using var directory = new TemporaryDirectory();
+        var robots = "User-agent: CivicLens\nCrawl-delay: 2\nCrawl-delay: 1\n";
+        var handler = new QueueHandler(_ => Response(HttpStatusCode.OK, robots));
+        using var collector = new HttpCollector(handler);
+
+        var result = await collector.FetchAsync(Request(directory.Path) with { TimeoutSeconds = 1, MinDelayMilliseconds = 0 });
+
+        Assert.Equal(2000, result.RobotsCrawlDelayMilliseconds);
+        Assert.Equal(2, result.RetryAfterSeconds);
+    }
+
+    [Fact]
+    public async Task RobotsIgnoresRulesWithoutAbsolutePath()
+    {
+        using var directory = new TemporaryDirectory();
+        var handler = new QueueHandler(_ => Response(HttpStatusCode.OK, "User-agent: CivicLens\nDisallow: watch\n"),
+            _ => Response(HttpStatusCode.OK, "ok"));
+        using var collector = new HttpCollector(handler);
+
+        var result = await collector.FetchAsync(Request(directory.Path));
+
+        Assert.Equal(CollectionOutcome.Captured, result.Outcome);
+    }
+
+    [Fact]
+    public async Task RobotsAllowsMoreSpecificPathWhenDisallowAlsoMatches()
+    {
+        using var directory = new TemporaryDirectory();
+        var robots = "User-agent: *\nDisallow: /watch\nAllow: /watch/public\n";
+        var handler = new QueueHandler(_ => Response(HttpStatusCode.OK, robots), _ => Response(HttpStatusCode.OK, "ok"));
+        using var collector = new HttpCollector(handler);
+
+        var result = await collector.FetchAsync(Request(directory.Path) with { Url = "https://example.test/watch/public/story" });
+
+        Assert.Equal(CollectionOutcome.Captured, result.Outcome);
+    }
+
+    [Fact]
+    public async Task RobotsAllowsEquivalentRuleTie()
+    {
+        using var directory = new TemporaryDirectory();
+        var robots = "User-agent: *\nDisallow: /watch\nAllow: /watch\n";
+        var handler = new QueueHandler(_ => Response(HttpStatusCode.OK, robots), _ => Response(HttpStatusCode.OK, "ok"));
+        using var collector = new HttpCollector(handler);
+
+        var result = await collector.FetchAsync(Request(directory.Path));
+
+        Assert.Equal(CollectionOutcome.Captured, result.Outcome);
+    }
+
+    [Fact]
+    public async Task RobotsRedirectCanLeaveContentPathButMustStayOnOrigin()
+    {
+        using var directory = new TemporaryDirectory();
+        var handler = new QueueHandler(
+            _ => new HttpResponseMessage(HttpStatusCode.Found) { Headers = { Location = new Uri("/policy/robots.txt", UriKind.Relative) } },
+            _ => Response(HttpStatusCode.OK, "User-agent: *\n"),
+            _ => Response(HttpStatusCode.OK, "ok"));
+        using var collector = new HttpCollector(handler);
+
+        var result = await collector.FetchAsync(Request(directory.Path));
+
+        Assert.Equal(CollectionOutcome.Captured, result.Outcome);
+        Assert.Equal(3, result.RequestCount);
+        Assert.Equal(2, result.RobotsRequestCount);
+    }
+
+    [Fact]
+    public async Task MultiHopRobotsFailureKeepsConditionalValidatorsUnsent()
+    {
+        using var directory = new TemporaryDirectory();
+        var handler = new QueueHandler(
+            _ => new HttpResponseMessage(HttpStatusCode.Found) { Headers = { Location = new Uri("/robots-one", UriKind.Relative) } },
+            _ => new HttpResponseMessage(HttpStatusCode.Found) { Headers = { Location = new Uri("/robots-two", UriKind.Relative) } },
+            _ => Response(HttpStatusCode.ServiceUnavailable));
+        using var collector = new HttpCollector(handler);
+
+        var result = await collector.FetchAsync(Request(directory.Path) with { ETag = "\"prior\"" });
+
+        Assert.Equal(CollectionOutcome.Deferred, result.Outcome);
+        Assert.Equal(3, result.RequestCount);
+        Assert.Equal(3, result.RobotsRequestCount);
+        Assert.Null(result.SentValidators);
+        Assert.Null(result.Response);
+    }
+
+    [Fact]
+    public async Task LegacyRobotsRedirectIsRejectedWithoutChangingContentRequestInference()
+    {
+        using var directory = new TemporaryDirectory();
+        var handler = new QueueHandler(_ => Redirect("https://example.test/robots-copy.txt"));
+        using var collector = new HttpCollector(handler);
+
+        var result = await collector.FetchAsync(Request(directory.Path) with
+        {
+            Version = CollectionProtocol.PreviousVersion,
+            ETag = "\"prior\""
+        });
+
+        Assert.Equal(CollectionOutcome.Failed, result.Outcome);
+        Assert.Equal(CollectionFailureCode.RobotsUnavailable, result.FailureCode);
+        Assert.Equal(1, result.RequestCount);
+        Assert.Null(result.SentValidators);
+    }
+
+    [Fact]
+    public async Task RobotsRedirectLoopStopsAtSharedRequestBudget()
+    {
+        using var directory = new TemporaryDirectory();
+        var handler = new QueueHandler(_ => Redirect("https://example.test/robots.txt"),
+            _ => Redirect("https://example.test/robots.txt"), _ => Redirect("https://example.test/robots.txt"));
+        using var collector = new HttpCollector(handler);
+        var result = await collector.FetchAsync(Request(directory.Path) with { MaxRequests = 3, ETag = "\"v1\"" });
+        Assert.Equal(CollectionFailureCode.RequestBudget, result.FailureCode);
+        Assert.Equal(3, result.RobotsRequestCount);
+        Assert.Equal(3, result.RequestCount);
+        Assert.Null(result.SentValidators);
+        Assert.Null(result.Capture);
+    }
+
+    [Fact]
+    public async Task RobotsCrossOriginRedirectFailsClosed()
+    {
+        using var directory = new TemporaryDirectory();
+        var handler = new QueueHandler(_ => Redirect("https://outside.test/robots.txt"));
+        using var collector = new HttpCollector(handler);
+
+        var result = await collector.FetchAsync(Request(directory.Path));
+
+        Assert.Equal(CollectionOutcome.Failed, result.Outcome);
+        Assert.Equal(CollectionFailureCode.RobotsUnavailable, result.FailureCode);
+        Assert.Equal(1, handler.Calls);
+    }
+
+    [Fact]
+    public async Task RobotsBodySupportsBoundedGzipDecoding()
+    {
+        using var directory = new TemporaryDirectory();
+        using var compressed = new MemoryStream();
+        using (var gzip = new GZipStream(compressed, CompressionMode.Compress, leaveOpen: true))
+            gzip.Write(Encoding.UTF8.GetBytes("User-agent: *\nDisallow: /private\n"));
+        var handler = new QueueHandler(_ =>
+        {
+            var response = Response(HttpStatusCode.OK, compressed.ToArray());
+            response.Content.Headers.ContentEncoding.Add("gzip");
+            return response;
+        }, _ => Response(HttpStatusCode.OK, "ok"));
+        using var collector = new HttpCollector(handler);
+
+        var result = await collector.FetchAsync(Request(directory.Path));
+
+        Assert.Equal(CollectionOutcome.Captured, result.Outcome);
+    }
+
+    [Fact]
+    public async Task RobotsNestedEncodingRejectsCorruptInnerTrailer()
+    {
+        using var directory = new TemporaryDirectory();
+        var inner = Gzip(Encoding.UTF8.GetBytes("User-agent: *\n"));
+        inner[^8] ^= 0xff;
+        var outer = Gzip(inner);
+        var handler = new QueueHandler(_ =>
+        {
+            var response = Response(HttpStatusCode.OK, outer);
+            response.Content.Headers.ContentEncoding.Add("gzip");
+            response.Content.Headers.ContentEncoding.Add("gzip");
+            return response;
+        });
+        using var collector = new HttpCollector(handler);
+
+        var result = await collector.FetchAsync(Request(directory.Path));
+
+        Assert.Equal(CollectionOutcome.Failed, result.Outcome);
+        Assert.Equal(CollectionFailureCode.RobotsUnavailable, result.FailureCode);
+        Assert.Equal(1, handler.Calls);
+    }
+
+    [Fact]
+    public async Task RobotsNestedEncodingBoundsIntermediateExpansionAndDrainsStages()
+    {
+        using var directory = new TemporaryDirectory();
+        var inner = Gzip(Encoding.UTF8.GetBytes("User-agent: *\n"));
+        var expandedIntermediate = new byte[10_000_001];
+        var intermediary = inner.Concat(expandedIntermediate).ToArray();
+        var outer = Gzip(intermediary);
+        var handler = new QueueHandler(_ =>
+        {
+            var response = Response(HttpStatusCode.OK, outer);
+            response.Content.Headers.ContentEncoding.Add("gzip");
+            response.Content.Headers.ContentEncoding.Add("gzip");
+            return response;
+        });
+        using var collector = new HttpCollector(handler);
+
+        var result = await collector.FetchAsync(Request(directory.Path) with { MaxBytes = 100_000 });
+
+        Assert.Equal(CollectionOutcome.Failed, result.Outcome);
+        Assert.Equal(CollectionFailureCode.RobotsUnavailable, result.FailureCode);
+        Assert.Equal(1, handler.Calls);
+    }
+
+    [Fact]
+    public async Task RobotsRateLimitDefersWithoutInventingContentResponse()
+    {
+        using var directory = new TemporaryDirectory();
+        var handler = new QueueHandler(_ =>
+        {
+            var response = new HttpResponseMessage((HttpStatusCode)429);
+            response.Headers.RetryAfter = new System.Net.Http.Headers.RetryConditionHeaderValue(TimeSpan.FromSeconds(9));
+            return response;
+        });
+        using var collector = new HttpCollector(handler);
+
+        var result = await collector.FetchAsync(Request(directory.Path) with { ETag = "\"prior\"" });
+
+        Assert.Equal(CollectionOutcome.Deferred, result.Outcome);
+        Assert.Equal(CollectionFailureCode.RateLimited, result.FailureCode);
+        Assert.Equal(9, result.RetryAfterSeconds);
+        Assert.Null(result.Response);
+        Assert.Null(result.SentValidators);
+        Assert.Equal(1, result.RobotsRequestCount);
+    }
+
+    [Fact]
+    public async Task RobotsServerFailureDefersForRetry()
+    {
+        using var directory = new TemporaryDirectory();
+        var handler = new QueueHandler(_ => Response(HttpStatusCode.ServiceUnavailable));
+        using var collector = new HttpCollector(handler);
+
+        var result = await collector.FetchAsync(Request(directory.Path));
+
+        Assert.Equal(CollectionOutcome.Deferred, result.Outcome);
+        Assert.Equal(CollectionFailureCode.RobotsUnavailable, result.FailureCode);
+        Assert.Null(result.Response);
+        Assert.Equal(1, result.RobotsRequestCount);
+    }
+
+    [Theory]
+    [InlineData("0.06", 0)]
+    [InlineData("0.02", 60)]
+    public async Task ContentRequestsHonorTheGreaterOfConfiguredAndDeclaredPacing(string crawlDelay, int configuredDelay)
+    {
+        using var directory = new TemporaryDirectory();
+        var requestsAt = new List<long>();
+        var handler = new QueueHandler(_ =>
+        {
+            requestsAt.Add(System.Diagnostics.Stopwatch.GetTimestamp());
+            return Response(HttpStatusCode.OK, $"User-agent: *\nCrawl-delay: {crawlDelay}\n");
+        }, _ =>
+        {
+            requestsAt.Add(System.Diagnostics.Stopwatch.GetTimestamp());
+            return Redirect("https://example.test/watch/next");
+        }, _ =>
+        {
+            requestsAt.Add(System.Diagnostics.Stopwatch.GetTimestamp());
+            return Response(HttpStatusCode.OK, "content");
+        });
+        using var collector = new HttpCollector(handler);
+        var result = await collector.FetchAsync(Request(directory.Path) with { MinDelayMilliseconds = configuredDelay });
+        Assert.Equal(CollectionOutcome.Captured, result.Outcome);
+        Assert.Equal(3, requestsAt.Count);
+        for (var index = 1; index < requestsAt.Count; index++)
+            Assert.True(System.Diagnostics.Stopwatch.GetElapsedTime(requestsAt[index - 1], requestsAt[index]).TotalMilliseconds >= 50);
+    }
+
+    [Fact]
+    public async Task RobotsCrawlDelayThatExceedsTimeoutDefersWithRequiredWait()
+    {
+        using var directory = new TemporaryDirectory();
+        var handler = new QueueHandler(_ => Response(HttpStatusCode.OK, "User-agent: *\nCrawl-delay: 1.25\n"));
+        using var collector = new HttpCollector(handler);
+
+        var result = await collector.FetchAsync(Request(directory.Path) with { TimeoutSeconds = 1, MinDelayMilliseconds = 0 });
+
+        Assert.Equal(CollectionOutcome.Deferred, result.Outcome);
+        Assert.Equal(CollectionFailureCode.CrawlDelay, result.FailureCode);
+        Assert.Equal(1250, result.RobotsCrawlDelayMilliseconds);
+        Assert.Equal(2, result.RetryAfterSeconds);
         Assert.Equal(1, handler.Calls);
     }
 
@@ -835,6 +1217,12 @@ public sealed class CollectorTests
     private static HttpResponseMessage Response(HttpStatusCode status, string text = "") => Response(status, Encoding.UTF8.GetBytes(text));
     private static HttpResponseMessage Response(HttpStatusCode status, byte[] bytes) => new(status) { Content = new ByteArrayContent(bytes) };
     private static HttpResponseMessage Redirect(string uri) { var response = new HttpResponseMessage(HttpStatusCode.Found); response.Headers.Location = new Uri(uri); return response; }
+    private static byte[] Gzip(byte[] bytes)
+    {
+        using var output = new MemoryStream();
+        using (var gzip = new GZipStream(output, CompressionMode.Compress, leaveOpen: true)) gzip.Write(bytes);
+        return output.ToArray();
+    }
 
     private sealed class QueueHandler(params Func<HttpRequestMessage, HttpResponseMessage>[] responses) : HttpMessageHandler
     {

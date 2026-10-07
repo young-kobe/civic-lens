@@ -294,6 +294,8 @@ public sealed class DatabaseCommandTests(PostgresCollection postgres) : IAsyncLi
     [Theory]
     [InlineData(3)]
     [InlineData(4)]
+    [InlineData(5)]
+    [InlineData(6)]
     public async Task FailedImportCanReplayAfterRelocationWithoutConfigurationOrCollector(int protocolVersion)
     {
         var failed = await CollectAsync("collect-import", connectionString);
@@ -304,16 +306,18 @@ public sealed class DatabaseCommandTests(PostgresCollection postgres) : IAsyncLi
         var ids = JsonSerializer.Deserialize<string[]>(listed.Output)!;
         var id = Assert.Single(ids);
         Assert.Contains(id, failed.Error);
-        if (protocolVersion == 3)
+        if (protocolVersion < 6)
         {
             var path = Path.Combine(original, ".pending", id + ".json");
             var envelope = JsonNode.Parse(await File.ReadAllTextAsync(path))!;
             var request = envelope["request"]!.AsObject();
-            request["version"] = 3;
+            request["version"] = protocolVersion;
             request.Remove("mode");
             request.Remove("maxCandidates");
             var receipt = envelope["receipt"]!.AsObject();
-            receipt["version"] = 3;
+            receipt["version"] = protocolVersion;
+            receipt.Remove("robotsRequestCount");
+            receipt.Remove("robotsCrawlDelayMilliseconds");
             receipt.Remove("discovery");
             await File.WriteAllTextAsync(path, envelope.ToJsonString());
         }
