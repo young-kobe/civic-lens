@@ -85,7 +85,7 @@ public sealed class HttpCollector : IDisposable
                 var artifact = await SaveBoundedAsync(response, request, () => bytes, n => bytes += n, token);
                 var discovery = request.Mode == CollectionMode.Feed
                     ? await FeedParser.ParseCaptureAsync(Path.Combine(request.ArtifactDirectory, artifact.RelativePath), request,
-                        current.AbsoluteUri, responseMetadata!.ContentEncodings, token)
+                        current.AbsoluteUri, responseMetadata!.ContentEncodings, responseMetadata.ContentType, token)
                     : null;
                 return Result(CollectionOutcome.Captured, capture: artifact, discovery: discovery);
             }

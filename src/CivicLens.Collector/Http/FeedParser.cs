@@ -1,4 +1,6 @@
 using System.IO.Compression;
+using System.Net.Http.Headers;
+using System.Text;
 using System.Xml;
 using System.Xml.Linq;
 using CivicLens.Collection.Contracts;
@@ -12,7 +14,7 @@ internal static class FeedParser
     private const int MaximumDepth = 64;
 
     public static async Task<FeedDiscoveryResult> ParseCaptureAsync(string capturePath, CollectionRequest request,
-        string responseUrl, IReadOnlyList<string> encodings, CancellationToken token)
+        string responseUrl, IReadOnlyList<string> encodings, string? contentType, CancellationToken token)
     {
         try
         {
@@ -38,7 +40,7 @@ internal static class FeedParser
                 using var xml = new MemoryStream();
                 await bounded.CopyToAsync(xml, 81920, token);
                 xml.Position = 0;
-                using (var limitReader = XmlReader.Create(xml, Settings()))
+                using (var limitReader = CreateXmlReader(xml, contentType))
                 {
                     var nodes = 0;
                     while (await limitReader.ReadAsync())
@@ -49,7 +51,7 @@ internal static class FeedParser
                     }
                 }
                 xml.Position = 0;
-                using var reader = XmlReader.Create(xml, Settings());
+                using var reader = CreateXmlReader(xml, contentType);
                 var document = await XDocument.LoadAsync(reader, LoadOptions.None, token);
                 var root = document.Root;
                 if (root is null) return Result(FeedDiscoveryStatus.Invalid);
@@ -83,14 +85,31 @@ internal static class FeedParser
         }
         catch (UnsupportedEncodingException) { return Result(FeedDiscoveryStatus.Unsupported); }
         catch (UnsupportedFeedException) { return Result(FeedDiscoveryStatus.Unsupported); }
-        catch (Exception exception) when (exception is XmlException or InvalidDataException or IOException or BoundedStreamLimitException)
+        catch (Exception exception) when (exception is XmlException or DecoderFallbackException or InvalidDataException or IOException or BoundedStreamLimitException)
         {
             return Result(exception is BoundedStreamLimitException ? FeedDiscoveryStatus.LimitExceeded : FeedDiscoveryStatus.Invalid);
         }
 
         static Stream Own(Stream stream, List<Stream> owned) { owned.Add(stream); return stream; }
         static FeedDiscoveryResult Result(FeedDiscoveryStatus status) => new() { Status = status, Urls = [] };
-        static XmlReaderSettings Settings() => new()
+    }
+
+    private static XmlReader CreateXmlReader(MemoryStream input, string? contentType)
+    {
+        var (encoding, preambleLength) = ReadByteOrderMark(input.GetBuffer().AsSpan(0, (int)input.Length));
+        if (encoding is null && contentType is not null)
+        {
+            var charset = MediaTypeHeaderValue.Parse(contentType).CharSet?.Trim('"');
+            if (charset is not null)
+            {
+                try { encoding = Encoding.GetEncoding(charset, EncoderFallback.ExceptionFallback, DecoderFallback.ExceptionFallback); }
+                catch (Exception exception) when (exception is ArgumentException or NotSupportedException)
+                {
+                    throw new UnsupportedFeedException();
+                }
+            }
+        }
+        var settings = new XmlReaderSettings
         {
             DtdProcessing = DtdProcessing.Prohibit,
             XmlResolver = null,
@@ -99,13 +118,31 @@ internal static class FeedParser
             Async = true,
             IgnoreComments = true
         };
+        if (encoding is null) return XmlReader.Create(input, settings);
+        input.Position = preambleLength;
+        var text = new StreamReader(input, encoding, detectEncodingFromByteOrderMarks: false, leaveOpen: true);
+        settings.CloseInput = true;
+        return XmlReader.Create(text, settings);
     }
+
+    private static (Encoding? Encoding, int PreambleLength) ReadByteOrderMark(ReadOnlySpan<byte> input) => input switch
+    {
+        [0xff, 0xfe, 0, 0, ..] => (new UTF32Encoding(false, false, true), 4),
+        [0, 0, 0xfe, 0xff, ..] => (new UTF32Encoding(true, false, true), 4),
+        [0xef, 0xbb, 0xbf, ..] => (new UTF8Encoding(false, true), 3),
+        [0xff, 0xfe, ..] => (new UnicodeEncoding(false, false, true), 2),
+        [0xfe, 0xff, ..] => (new UnicodeEncoding(true, false, true), 2),
+        _ => (null, 0)
+    };
 
     private static IEnumerable<string> ParseRss(XElement root)
     {
         foreach (var item in root.Elements("channel").Elements("item"))
             foreach (var link in item.Elements("link"))
+            {
+                if (link.HasElements) throw new InvalidDataException("RSS links cannot contain nested markup.");
                 if (!string.IsNullOrWhiteSpace(link.Value)) yield return link.Value.Trim();
+            }
     }
 
     private static IEnumerable<string> ParseAtom(XElement root)
