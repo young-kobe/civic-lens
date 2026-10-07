@@ -33,7 +33,7 @@ public sealed class ArchitectureTests
             Assert.Empty(xml.Descendants("Reference")); // No binary references bypassing the project graph.
 
             string[] allowedPackages = name == "CivicLens.Infrastructure"
-                ? ["Microsoft.EntityFrameworkCore", "Microsoft.EntityFrameworkCore.Design", "Microsoft.EntityFrameworkCore.Relational", "Npgsql.EntityFrameworkCore.PostgreSQL"]
+                ? ["AngleSharp", "Microsoft.EntityFrameworkCore", "Microsoft.EntityFrameworkCore.Design", "Microsoft.EntityFrameworkCore.Relational", "Npgsql.EntityFrameworkCore.PostgreSQL"]
                 : name == "CivicLens.Collector" ? ["AngleSharp"] : [];
             Assert.Equal(allowedPackages.Order(), xml.Descendants("PackageReference")
                 .Select(element => element.Attribute("Include")!.Value).Order());
