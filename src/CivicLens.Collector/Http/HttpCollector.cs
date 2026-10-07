@@ -83,10 +83,14 @@ public sealed class HttpCollector : IDisposable
                 }
                 if (response.StatusCode != HttpStatusCode.OK) return Result(CollectionOutcome.Failed, CollectionFailureCode.HttpError);
                 var artifact = await SaveBoundedAsync(response, request, () => bytes, n => bytes += n, token);
-                var discovery = request.Mode == CollectionMode.Feed
-                    ? await FeedParser.ParseCaptureAsync(Path.Combine(request.ArtifactDirectory, artifact.RelativePath), request,
-                        current.AbsoluteUri, responseMetadata!.ContentEncodings, responseMetadata.ContentType, token)
-                    : null;
+                var discovery = request.Mode switch
+                {
+                    CollectionMode.Feed => await FeedParser.ParseCaptureAsync(Path.Combine(request.ArtifactDirectory, artifact.RelativePath), request,
+                        current.AbsoluteUri, responseMetadata!.ContentEncodings, responseMetadata.ContentType, token),
+                    CollectionMode.Html => await HtmlParser.ParseCaptureAsync(Path.Combine(request.ArtifactDirectory, artifact.RelativePath), request,
+                        current.AbsoluteUri, responseMetadata!.ContentEncodings, responseMetadata.ContentType, token),
+                    _ => null
+                };
                 return Result(CollectionOutcome.Captured, capture: artifact, discovery: discovery);
             }
         }
@@ -103,7 +107,7 @@ public sealed class HttpCollector : IDisposable
         }
 
         CollectionResult Result(CollectionOutcome outcome, CollectionFailureCode? failure = null,
-            CaptureArtifact? capture = null, long? retry = null, FeedDiscoveryResult? discovery = null)
+            CaptureArtifact? capture = null, long? retry = null, DiscoveryResult? discovery = null)
         {
             var result = new CollectionResult
             {

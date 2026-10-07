@@ -13,7 +13,7 @@ internal static class FeedParser
     private const int MaximumNodes = 100_000;
     private const int MaximumDepth = 64;
 
-    public static async Task<FeedDiscoveryResult> ParseCaptureAsync(string capturePath, CollectionRequest request,
+    public static async Task<DiscoveryResult> ParseCaptureAsync(string capturePath, CollectionRequest request,
         string responseUrl, IReadOnlyList<string> encodings, string? contentType, CancellationToken token)
     {
         try
@@ -47,16 +47,16 @@ internal static class FeedParser
                     {
                         token.ThrowIfCancellationRequested();
                         if (++nodes > MaximumNodes || limitReader.Depth > MaximumDepth)
-                            return Result(FeedDiscoveryStatus.LimitExceeded);
+                            return Result(DiscoveryStatus.LimitExceeded);
                     }
                 }
                 xml.Position = 0;
                 using var reader = CreateXmlReader(xml, contentType);
                 var document = await XDocument.LoadAsync(reader, LoadOptions.None, token);
                 var root = document.Root;
-                if (root is null) return Result(FeedDiscoveryStatus.Invalid);
+                if (root is null) return Result(DiscoveryStatus.Invalid);
                 if (root.DescendantsAndSelf().Attributes().Any(attribute => attribute.Name == XNamespace.Xml + "base"))
-                    return Result(FeedDiscoveryStatus.Unsupported);
+                    return Result(DiscoveryStatus.Unsupported);
                 var links = root.Name.LocalName switch
                 {
                     "rss" when root.Name.NamespaceName.Length == 0 && (string?)root.Attribute("version") == "2.0" => ParseRss(root),
@@ -69,29 +69,29 @@ internal static class FeedParser
                 {
                     token.ThrowIfCancellationRequested();
                     if (link.Length > 4096 || !Uri.TryCreate(new Uri(responseUrl), link, out var resolved))
-                        return Result(FeedDiscoveryStatus.Invalid);
+                        return Result(DiscoveryStatus.Invalid);
                     if (!request.Allows(resolved)) continue;
                     var value = resolved.AbsoluteUri;
-                    if (value.Length > 4096) return Result(FeedDiscoveryStatus.Invalid);
+                    if (value.Length > 4096) return Result(DiscoveryStatus.Invalid);
                     if (seen.Add(value)) urls.Add(value);
-                    if (urls.Count > request.MaxCandidates) return Result(FeedDiscoveryStatus.LimitExceeded);
+                    if (urls.Count > request.MaxCandidates) return Result(DiscoveryStatus.LimitExceeded);
                 }
-                return new FeedDiscoveryResult { Status = FeedDiscoveryStatus.Parsed, Urls = urls.ToArray() };
+                return new DiscoveryResult { Status = DiscoveryStatus.Parsed, Urls = urls.ToArray() };
             }
             finally
             {
                 foreach (var stream in owned.AsEnumerable().Reverse()) await stream.DisposeAsync();
             }
         }
-        catch (UnsupportedEncodingException) { return Result(FeedDiscoveryStatus.Unsupported); }
-        catch (UnsupportedFeedException) { return Result(FeedDiscoveryStatus.Unsupported); }
+        catch (UnsupportedEncodingException) { return Result(DiscoveryStatus.Unsupported); }
+        catch (UnsupportedFeedException) { return Result(DiscoveryStatus.Unsupported); }
         catch (Exception exception) when (exception is XmlException or DecoderFallbackException or InvalidDataException or IOException or BoundedStreamLimitException)
         {
-            return Result(exception is BoundedStreamLimitException ? FeedDiscoveryStatus.LimitExceeded : FeedDiscoveryStatus.Invalid);
+            return Result(exception is BoundedStreamLimitException ? DiscoveryStatus.LimitExceeded : DiscoveryStatus.Invalid);
         }
 
         static Stream Own(Stream stream, List<Stream> owned) { owned.Add(stream); return stream; }
-        static FeedDiscoveryResult Result(FeedDiscoveryStatus status) => new() { Status = status, Urls = [] };
+        static DiscoveryResult Result(DiscoveryStatus status) => new() { Status = status, Urls = [] };
     }
 
     private static XmlReader CreateXmlReader(MemoryStream input, string? contentType)

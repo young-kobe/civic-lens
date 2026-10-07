@@ -37,7 +37,7 @@ public sealed class PostgresCollectionAttemptStoreTests(PostgresCollection postg
         await store.MigrateAsync();
         await using var db = await factory.CreateDbContextAsync();
         Assert.Empty(await db.Database.GetPendingMigrationsAsync());
-        Assert.Equal(3, (await db.Database.GetAppliedMigrationsAsync()).Count());
+        Assert.Equal(4, (await db.Database.GetAppliedMigrationsAsync()).Count());
         Assert.False(db.Database.HasPendingModelChanges());
     }
 
@@ -52,7 +52,7 @@ public sealed class PostgresCollectionAttemptStoreTests(PostgresCollection postg
     }
 
     [Fact]
-    public async Task FeedDiscoveryIsAtomicImmutableAndRejectsConflictingReplay()
+    public async Task DiscoveryIsAtomicImmutableAndRejectsConflictingReplay()
     {
         var request = Request("feed") with { Mode = CollectionMode.Feed };
         var urls = new[] { "https://example.test/article" };
@@ -60,7 +60,7 @@ public sealed class PostgresCollectionAttemptStoreTests(PostgresCollection postg
             Response: Metadata(200, null, null, "application/rss+xml", []),
             Capture: Artifact(new string('e', 64), 12)) with
         {
-            Discovery = new FeedDiscoveryResult { Status = FeedDiscoveryStatus.Parsed, Urls = urls }
+            Discovery = new DiscoveryResult { Status = DiscoveryStatus.Parsed, Urls = urls }
         };
         var import = CollectionAttemptImporter.CreateImport("feed", request, result);
         urls[0] = "https://example.test/mutated";
@@ -76,7 +76,7 @@ public sealed class PostgresCollectionAttemptStoreTests(PostgresCollection postg
         await db.Database.ExecuteSqlRawAsync("""
             CREATE FUNCTION fail_discovery_insert() RETURNS trigger LANGUAGE plpgsql AS $$
             BEGIN RAISE EXCEPTION 'injected discovery failure'; END $$;
-            CREATE TRIGGER fail_discovery_insert BEFORE INSERT ON collection_feed_discoveries
+            CREATE TRIGGER fail_discovery_insert BEFORE INSERT ON collection_discoveries
             FOR EACH ROW EXECUTE FUNCTION fail_discovery_insert();
             """);
         var other = result with { JobId = "feed-rollback", Capture = Artifact(new string('f', 64), 12) };

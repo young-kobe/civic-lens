@@ -1,7 +1,7 @@
 namespace CivicLens.Application.Collection.Discovery;
 
-public sealed record FeedAdmissionResult(
-    IReadOnlyList<FeedAdmissionJob> Jobs,
+public sealed record DiscoveryAdmissionResult(
+    IReadOnlyList<DiscoveryAdmissionJob> Jobs,
     int DeferredCount,
     int DuplicateCount)
 {

@@ -2,5 +2,6 @@
   <PropertyGroup><OutputType>Exe</OutputType></PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../CivicLens.Collection.Contracts/CivicLens.Collection.Contracts.csproj" />
+    <PackageReference Include="AngleSharp" Version="1.8.3" />
   </ItemGroup>
 </Project>

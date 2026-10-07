@@ -13,7 +13,7 @@ public sealed record WatchedSourceConfiguration
     public required string AllowedPathPrefix { get; init; }
     public CollectionMode Mode { get; init; } = CollectionMode.Page;
     public int MaxCandidates { get; init; } = 100;
-    public FeedAdmissionPolicy? AdmissionPolicy { get; init; }
+    public DiscoveryAdmissionPolicy? AdmissionPolicy { get; init; }
     public bool Enabled { get; init; } = true;
     public int MaxRequests { get; init; } = 5;
     public long MaxBytes { get; init; } = 2_000_000;

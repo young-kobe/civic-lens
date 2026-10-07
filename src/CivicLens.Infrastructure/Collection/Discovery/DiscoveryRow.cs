@@ -1,6 +1,6 @@
 namespace CivicLens.Infrastructure.Collection.Discovery;
 
-internal sealed class FeedDiscoveryRow
+internal sealed class DiscoveryRow
 {
     public string AttemptId { get; set; } = null!;
     public string SourceId { get; set; } = null!;

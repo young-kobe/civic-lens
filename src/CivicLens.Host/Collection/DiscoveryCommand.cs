@@ -5,7 +5,7 @@ using CivicLens.Collection.Contracts;
 
 namespace CivicLens.Host.Collection;
 
-internal static class FeedDiscoveryCommand
+internal static class DiscoveryCommand
 {
     public static async Task<int> InspectAsync(ICollectionAttemptStore evidence, string attemptId,
         CancellationToken cancellationToken)
@@ -13,20 +13,21 @@ internal static class FeedDiscoveryCommand
         var attempt = await evidence.GetAsync(attemptId, cancellationToken);
         if (attempt?.Discovery is not { } discovery)
         {
-            Console.Error.WriteLine("Feed discovery not found. Use the captured feed attempt ID.");
+            Console.Error.WriteLine("Discovery not found. Use the captured feed or HTML attempt ID.");
             return 2;
         }
         Console.WriteLine(JsonSerializer.Serialize(new
         {
             attemptId,
             sourceId = attempt.AttemptResult.SourceId,
+            mode = discovery.Request.Mode,
             discovery.Status,
             discovery.Urls
         }, CollectionProtocol.JsonOptions));
         return 0;
     }
 
-    public static async Task<int> AdmitAsync(IFeedAdmissionStore store, FeedAdmissionRequest request,
+    public static async Task<int> AdmitAsync(IDiscoveryAdmissionStore store, DiscoveryAdmissionRequest request,
         CancellationToken cancellationToken)
     {
         try
@@ -37,7 +38,7 @@ internal static class FeedDiscoveryCommand
         }
         catch (ArgumentException)
         {
-            Console.Error.WriteLine("Invalid admission. Check the feed attempt, source scope, limits, and idempotency key.");
+            Console.Error.WriteLine("Invalid admission. Check the discovery attempt, source scope, limits, and idempotency key.");
             return 2;
         }
     }
