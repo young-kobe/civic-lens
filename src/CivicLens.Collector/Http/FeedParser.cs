@@ -35,10 +35,14 @@ internal static class FeedParser
                         "br" => Own(new BrotliStream(decoded, CompressionMode.Decompress), owned),
                         _ => throw new UnsupportedEncodingException()
                     };
+                    decoded = Own(new BoundedReadStream(decoded, MaximumDecodedCharacters), owned);
                 }
                 using var bounded = new BoundedReadStream(decoded, MaximumDecodedCharacters);
                 using var xml = new MemoryStream();
                 await bounded.CopyToAsync(xml, 81920, token);
+                // An inner decoder may stop before an outer decoder checks its trailer.
+                foreach (var stage in owned.OfType<BoundedReadStream>().Reverse())
+                    await stage.CopyToAsync(Stream.Null, 81920, token);
                 xml.Position = 0;
                 using (var limitReader = CreateXmlReader(xml, contentType))
                 {

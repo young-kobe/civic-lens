@@ -8,6 +8,9 @@ public static class CollectionProtocol
     public const int Version = 5;
     public const int PreviousVersion = 4;
     public const int LegacyPageVersion = 3;
+    public const int MaximumManifestBytes = 64 * 1024;
+    // A page receipt repeats request identity and URLs and adds escaped response metadata.
+    public const int MaximumPageReceiptSize = 1024 * 1024;
     // Includes JSON escaping for up to 1,000 URLs of 4,096 characters plus response metadata.
     public const int MaximumDiscoveryReceiptSize = 32 * 1024 * 1024;
 

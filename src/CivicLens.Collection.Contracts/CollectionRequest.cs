@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace CivicLens.Collection.Contracts;
@@ -30,6 +31,8 @@ public sealed record CollectionRequest
         ValidateArtifactDirectory();
         ValidateBudgets();
         ValidateETag();
+        if (JsonSerializer.SerializeToUtf8Bytes(this, CollectionProtocol.JsonOptions).Length > CollectionProtocol.MaximumManifestBytes)
+            throw new ArgumentException("Serialized collection manifest exceeds 64 KiB.");
     }
 
     private void ValidateIdentity()

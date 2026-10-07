@@ -21,13 +21,13 @@ try
     var buffer = new byte[8192];
     while (true)
     {
-        var remaining = 64 * 1024 + 1 - (int)manifest.Length;
+        var remaining = CollectionProtocol.MaximumManifestBytes + 1 - (int)manifest.Length;
         if (remaining <= 0) throw new ArgumentException("Manifest must be no larger than 64 KiB.");
         var read = await input.ReadAsync(buffer.AsMemory(0, Math.Min(buffer.Length, remaining)));
         if (read == 0) break;
         await manifest.WriteAsync(buffer.AsMemory(0, read));
     }
-    if (manifest.Length > 64 * 1024) throw new ArgumentException("Manifest must be no larger than 64 KiB.");
+    if (manifest.Length > CollectionProtocol.MaximumManifestBytes) throw new ArgumentException("Manifest must be no larger than 64 KiB.");
     request = JsonSerializer.Deserialize<CollectionRequest>(manifest.ToArray(), CollectionProtocol.JsonOptions)
         ?? throw new JsonException("Manifest must contain one request object.");
     request.Validate();
