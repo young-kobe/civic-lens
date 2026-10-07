@@ -45,6 +45,42 @@ public sealed class GetDocumentHistoryTests
     }
 
     [Fact]
+    public async Task StreamsThatDropAndReappearStartNewTransitions()
+    {
+        var observations = new[]
+        {
+            Captured("both", 1, "same", parser: "parser-v1", secondText: "also same", parser2: "parser-v2"),
+            Captured("first-only", 2, "same"),
+            Captured("second-only", 3, "also same", parser: "parser-v2"),
+            Captured("first-again", 4, "same")
+        };
+
+        var history = await new GetDocumentHistory(new HistoryStore(observations)).ExecuteAsync("source", Url);
+        var firstStream = Assert.Single(history.Streams, stream => stream.ParserVersion == "parser-v1");
+        var secondStream = Assert.Single(history.Streams, stream => stream.ParserVersion == "parser-v2");
+
+        Assert.Equal(new[] { "both", "first-only" }, firstStream.Transitions[0].AttemptIds);
+        Assert.Equal("first-again", Assert.Single(firstStream.Transitions[1].AttemptIds));
+        Assert.Equal(2, secondStream.Transitions.Length);
+        Assert.Equal("both", Assert.Single(secondStream.Transitions[0].AttemptIds));
+        Assert.Equal("second-only", Assert.Single(secondStream.Transitions[1].AttemptIds));
+    }
+
+    [Fact]
+    public async Task LongUnchangedRunRetainsEveryAttemptAndExtractionIdInOrder()
+    {
+        var observations = Enumerable.Range(0, GetDocumentHistory.MaximumObservations)
+            .Select(index => Captured($"attempt-{index:D4}", index + 1, "unchanged text"))
+            .ToArray();
+
+        var history = await new GetDocumentHistory(new HistoryStore(observations)).ExecuteAsync("source", Url);
+        var transition = Assert.Single(Assert.Single(history.Streams).Transitions);
+
+        Assert.Equal(observations.Select(item => item.Attempt.AttemptResult.AttemptId), transition.AttemptIds);
+        Assert.Equal(observations.Select(item => item.Extractions[0].ExtractionId), transition.ExtractionIds);
+    }
+
+    [Fact]
     public async Task RejectsInvalidLimitBeforeReadingStore()
     {
         var store = new HistoryStore([]);
@@ -53,13 +89,17 @@ public sealed class GetDocumentHistoryTests
         Assert.Equal(0, store.Calls);
     }
 
-    private static DocumentHistoryObservation Captured(string id, int day, string text, string parser = "parser-v1")
+    private static DocumentHistoryObservation Captured(string id, int day, string text, string parser = "parser-v1",
+        string? secondText = null, string parser2 = "parser-v2")
     {
         var attempt = new CapturedAttemptResult(id, "source", Url, Url, DateTimeOffset.UnixEpoch.AddDays(day),
             new CollectionResponse(200, null, null, "text/plain", []), new CaptureIdentity(new string('a', 64), 4));
-        var extraction = new DocumentExtraction(attempt, parser, "normalization-v1", text);
+        var extractions = ImmutableArray.CreateBuilder<DocumentExtraction>();
+        extractions.Add(new DocumentExtraction(attempt, parser, "normalization-v1", text));
+        if (secondText is not null)
+            extractions.Add(new DocumentExtraction(attempt, parser2, "normalization-v1", secondText));
         return new DocumentHistoryObservation(new StoredCollectionAttempt(attempt, null, null),
-            ImmutableArray.Create(extraction));
+            extractions.ToImmutable());
     }
 
     private sealed class HistoryStore(IReadOnlyList<DocumentHistoryObservation> observations) : IDocumentHistoryStore

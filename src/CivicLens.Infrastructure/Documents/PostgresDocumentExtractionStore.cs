@@ -77,6 +77,13 @@ public sealed class PostgresDocumentExtractionStore(IDbContextFactory<Collection
             includeDiscovery: false);
         if (imported?.AttemptResult is not CapturedAttemptResult captured)
             throw new InvalidOperationException("Stored extraction has no captured source attempt.");
+        return FromRow(row, captured);
+    }
+
+    internal static DocumentExtraction FromRow(DocumentExtractionRow row, CapturedAttemptResult captured)
+    {
+        if (row.AttemptId != captured.AttemptId)
+            throw new InvalidOperationException("Stored extraction provenance does not match its captured attempt.");
         DocumentExtraction extraction;
         try
         {

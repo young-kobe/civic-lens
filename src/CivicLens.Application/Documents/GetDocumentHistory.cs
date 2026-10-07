@@ -65,12 +65,14 @@ public sealed class GetDocumentHistory(IDocumentHistoryStore store)
 
         var streams = new List<StreamBuilder>();
         var streamsByKey = new Dictionary<StreamKey, StreamBuilder>();
+        var previouslyActiveKeys = new HashSet<StreamKey>();
         foreach (var observation in observations)
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (observation.Extractions.IsDefaultOrEmpty)
             {
-                foreach (var stream in streams) stream.Break();
+                foreach (var key in previouslyActiveKeys) streamsByKey[key].Break();
+                previouslyActiveKeys.Clear();
                 continue;
             }
 
@@ -90,11 +92,13 @@ public sealed class GetDocumentHistory(IDocumentHistoryStore store)
                 stream.Add(observation, extraction);
             }
 
-            foreach (var stream in streams.Where(candidate => !currentKeys.Contains(candidate.Key)))
+            foreach (var key in previouslyActiveKeys)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                stream.Break();
+                if (!currentKeys.Contains(key))
+                    streamsByKey[key].Break();
             }
+            previouslyActiveKeys = currentKeys;
         }
 
         return new DocumentHistory(observations.ToImmutableArray(), streams.Select(stream => stream.Build()).ToImmutableArray());
@@ -104,7 +108,7 @@ public sealed class GetDocumentHistory(IDocumentHistoryStore store)
 
     private sealed class StreamBuilder(StreamKey key)
     {
-        private readonly List<DocumentHistoryTransition> transitions = [];
+        private readonly List<TransitionBuilder> transitions = [];
         private bool hasAdjacentObservation;
         public StreamKey Key { get; } = key;
 
@@ -113,17 +117,12 @@ public sealed class GetDocumentHistory(IDocumentHistoryStore store)
             if (!hasAdjacentObservation || transitions.Count == 0 || transitions[^1].TextSha256 != extraction.TextSha256 ||
                 transitions[^1].Text != extraction.Text)
             {
-                transitions.Add(new DocumentHistoryTransition(extraction.TextSha256, extraction.Text,
-                    ImmutableArray.Create(observation.Attempt.AttemptResult.AttemptId),
-                    ImmutableArray.Create(extraction.ExtractionId)));
+                transitions.Add(new TransitionBuilder(extraction.TextSha256, extraction.Text,
+                    observation.Attempt.AttemptResult.AttemptId, extraction.ExtractionId));
             }
             else
             {
-                transitions[^1] = transitions[^1] with
-                {
-                    AttemptIds = transitions[^1].AttemptIds.Add(observation.Attempt.AttemptResult.AttemptId),
-                    ExtractionIds = transitions[^1].ExtractionIds.Add(extraction.ExtractionId)
-                };
+                transitions[^1].Add(observation.Attempt.AttemptResult.AttemptId, extraction.ExtractionId);
             }
             hasAdjacentObservation = true;
         }
@@ -131,6 +130,23 @@ public sealed class GetDocumentHistory(IDocumentHistoryStore store)
         public void Break() => hasAdjacentObservation = false;
 
         public DocumentHistoryStream Build() => new(Key.ParserVersion, Key.NormalizationVersion,
-            Key.ProfileRevisionId, transitions.ToImmutableArray());
+            Key.ProfileRevisionId, transitions.Select(transition => transition.Build()).ToImmutableArray());
+    }
+
+    private sealed class TransitionBuilder(string textSha256, string text, string attemptId, string extractionId)
+    {
+        private readonly List<string> attemptIds = [attemptId];
+        private readonly List<string> extractionIds = [extractionId];
+        public string TextSha256 { get; } = textSha256;
+        public string Text { get; } = text;
+
+        public void Add(string nextAttemptId, string nextExtractionId)
+        {
+            attemptIds.Add(nextAttemptId);
+            extractionIds.Add(nextExtractionId);
+        }
+
+        public DocumentHistoryTransition Build() => new(TextSha256, Text,
+            attemptIds.ToImmutableArray(), extractionIds.ToImmutableArray());
     }
 }

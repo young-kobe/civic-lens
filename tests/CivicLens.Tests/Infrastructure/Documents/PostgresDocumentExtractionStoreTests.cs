@@ -3,6 +3,8 @@ using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Data.Common;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using CivicLens.Application.Collection;
 using CivicLens.Collection.Contracts;
 using CivicLens.Core.Collection;
@@ -260,6 +262,68 @@ public sealed class PostgresDocumentExtractionStoreTests(PostgresCollection post
         Assert.Single(history.Streams.Single(stream => stream.ParserVersion == "p2").Transitions);
         Assert.Empty((await new GetDocumentHistory(store).ExecuteAsync(first.SourceId, first.RequestedUrl + "?other")).Observations);
         await Assert.ThrowsAsync<DocumentHistoryLimitException>(() => store.GetAsync(first.SourceId, first.RequestedUrl, 2, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task HistoryReadQueryCountDoesNotGrowWithObservationsOrExtractionRevisions()
+    {
+        var first = await ImportAsync("first");
+        await extractions.SaveAsync(new DocumentExtraction(first, "p0", "n", "first"), CancellationToken.None);
+        var counter = new ReadCommandCounter();
+        var countedFactory = new PooledDbContextFactory<CollectionAttemptDbContext>(
+            new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString)
+                .AddInterceptors(counter).Options);
+        var store = new PostgresDocumentHistoryStore(countedFactory);
+        await store.GetAsync(first.SourceId, first.RequestedUrl, 1000, CancellationToken.None);
+        var smallReadCount = counter.ReadCount;
+        for (var observation = 0; observation < 8; observation++)
+        {
+            var attempt = await ImportAsync("text" + observation);
+            for (var revision = 0; revision < 8; revision++)
+                await extractions.SaveAsync(new DocumentExtraction(attempt, "p" + revision, "n", "text" + observation), CancellationToken.None);
+        }
+        counter.ReadCount = 0;
+        var history = await store.GetAsync(first.SourceId, first.RequestedUrl, 1000, CancellationToken.None);
+        Assert.Equal(9, history.Count);
+        Assert.Equal(65, history.Sum(item => item.Extractions.Length));
+        Assert.Equal(smallReadCount, counter.ReadCount);
+        Assert.InRange(counter.ReadCount, 1, 5);
+
+        await using var db = await factory.CreateDbContextAsync();
+        var id = history[0].Extractions[0].ExtractionId;
+        await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE document_extractions SET text = 'tampered' WHERE extraction_id = {id}");
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            store.GetAsync(first.SourceId, first.RequestedUrl, 1000, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task HistoryRejectsTextBudgetBeforeLoadingExtractionBodies()
+    {
+        var captured = await ImportAsync("capture");
+        for (var revision = 0; revision < 3; revision++)
+            await extractions.SaveAsync(new DocumentExtraction(captured, "p" + revision, "n",
+                new string('x', DocumentExtraction.MaximumTextLength)), CancellationToken.None);
+        var counter = new ReadCommandCounter();
+        var countedFactory = new PooledDbContextFactory<CollectionAttemptDbContext>(
+            new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString)
+                .AddInterceptors(counter).Options);
+        var store = new PostgresDocumentHistoryStore(countedFactory);
+        await Assert.ThrowsAsync<DocumentHistoryLimitException>(() =>
+            store.GetAsync(captured.SourceId, captured.RequestedUrl, 1000, CancellationToken.None));
+        Assert.Equal(3, counter.ReadCount);
+    }
+
+    private sealed class ReadCommandCounter : DbCommandInterceptor
+    {
+        public int ReadCount { get; set; }
+
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(DbCommand command,
+            CommandEventData eventData, InterceptionResult<DbDataReader> result,
+            CancellationToken cancellationToken = default)
+        {
+            ReadCount++;
+            return ValueTask.FromResult(result);
+        }
     }
 
     [Fact]
