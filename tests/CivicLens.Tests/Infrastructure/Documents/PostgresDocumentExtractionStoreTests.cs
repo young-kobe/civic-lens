@@ -3,6 +3,8 @@ using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Data.Common;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using CivicLens.Application.Collection;
 using CivicLens.Collection.Contracts;
 using CivicLens.Core.Collection;
@@ -204,6 +206,219 @@ public sealed class PostgresDocumentExtractionStoreTests(PostgresCollection post
         Assert.Equal("old text", new DocumentTextSpan(retained, 0, retained.Text.Length).Quote);
     }
 
+    [Fact]
+    public async Task ComparisonReplayBindsRetainedEvidenceAndDetectsTampering()
+    {
+        var before = new DocumentExtraction(await ImportAsync("Old policy."), "p", "n", "Old policy.");
+        var after = new DocumentExtraction(await ImportAsync("New policy."), "p", "n", "New policy.");
+        await extractions.SaveAsync(before, CancellationToken.None);
+        await extractions.SaveAsync(after, CancellationToken.None);
+        var comparisons = new PostgresDocumentComparisonStore(factory);
+        var comparison = DocumentComparison.Create(before, after);
+        var saved = await Task.WhenAll(Enumerable.Range(0, 4)
+            .Select(_ => comparisons.SaveAsync(comparison, CancellationToken.None)));
+        Assert.All(saved, item => Assert.Equal(comparison.ComparisonId, item.ComparisonId));
+        Assert.Equal(DocumentComparisonStatus.Complete,
+            (await comparisons.GetAsync(comparison.ComparisonId, CancellationToken.None))!.Status);
+        var forged = DocumentComparison.Create(new DocumentExtraction(before.SourceAttempt, "p", "n", "Forged policy."), after);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => comparisons.SaveAsync(forged, CancellationToken.None));
+        await using var db = await factory.CreateDbContextAsync();
+        Assert.Equal(1, await db.Database.SqlQuery<int>($"SELECT count(*)::integer AS \"Value\" FROM document_comparisons").SingleAsync());
+        await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE document_comparisons SET before_extraction_id = {after.ExtractionId} WHERE comparison_id = {comparison.ComparisonId}");
+        await Assert.ThrowsAsync<InvalidOperationException>(() => comparisons.SaveAsync(comparison, CancellationToken.None));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => comparisons.GetAsync(comparison.ComparisonId, CancellationToken.None));
+        await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE document_comparisons SET before_extraction_id = {before.ExtractionId} WHERE comparison_id = {comparison.ComparisonId}");
+        await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE document_comparisons SET result_json = '{{}}' WHERE comparison_id = {comparison.ComparisonId}");
+        await Assert.ThrowsAsync<InvalidOperationException>(() => comparisons.GetAsync(comparison.ComparisonId, CancellationToken.None));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => comparisons.SaveAsync(comparison, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task HistoryRetainsReversionsSettingsAndResolvedChecksAndRejectsOverflow()
+    {
+        var first = await ImportAsync("A");
+        var second = await ImportAsync("B");
+        var third = await ImportAsync("A", etag: "\"v3\"");
+        foreach (var pair in new[] { (first, "A"), (second, "B"), (third, "A") })
+            await extractions.SaveAsync(new DocumentExtraction(pair.Item1, "p", "n", pair.Item2), CancellationToken.None);
+        await extractions.SaveAsync(new DocumentExtraction(first, "p2", "n", "reprocessed"), CancellationToken.None);
+        var request = Request() with { ETag = "\"v3\"" };
+        var receipt = Receipt(request) with
+        {
+            Outcome = CollectionOutcome.NotModified,
+            SentValidators = new HttpRequestValidators { ETag = request.ETag },
+            Capture = null,
+            BytesReceived = 0,
+            Response = new HttpResponseMetadata { StatusCode = 304, ETag = "\"v3\"", ContentEncodings = [] }
+        };
+        // A matching validator links this check to the third capture without creating new text.
+        await attempts.ImportAtomicallyAsync(CollectionAttemptImporter.CreateImport("resolved", request, receipt), CancellationToken.None);
+        var store = new PostgresDocumentHistoryStore(factory);
+        var history = await new GetDocumentHistory(store).ExecuteAsync(first.SourceId, first.RequestedUrl);
+        Assert.Equal(4, history.Observations.Length);
+        Assert.Equal(new[] { "A", "B", "A" }, history.Streams.Single(stream => stream.ParserVersion == "p").Transitions.Select(item => item.Text));
+        Assert.Equal(third.AttemptId, Assert.Single(history.Observations[^1].Extractions).SourceAttempt.AttemptId);
+        Assert.Equal(2, history.Streams.Single(stream => stream.ParserVersion == "p").Transitions[^1].AttemptIds.Length);
+        Assert.Single(history.Streams.Single(stream => stream.ParserVersion == "p2").Transitions);
+        Assert.Empty((await new GetDocumentHistory(store).ExecuteAsync(first.SourceId, first.RequestedUrl + "?other")).Observations);
+        await Assert.ThrowsAsync<DocumentHistoryLimitException>(() => store.GetAsync(first.SourceId, first.RequestedUrl, 2, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task HistoryReadQueryCountDoesNotGrowWithObservationsOrExtractionRevisions()
+    {
+        var first = await ImportAsync("first");
+        await extractions.SaveAsync(new DocumentExtraction(first, "p0", "n", "first"), CancellationToken.None);
+        var counter = new ReadCommandCounter();
+        var countedFactory = new PooledDbContextFactory<CollectionAttemptDbContext>(
+            new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString)
+                .AddInterceptors(counter).Options);
+        var store = new PostgresDocumentHistoryStore(countedFactory);
+        await store.GetAsync(first.SourceId, first.RequestedUrl, 1000, CancellationToken.None);
+        var smallReadCount = counter.ReadCount;
+        for (var observation = 0; observation < 8; observation++)
+        {
+            var attempt = await ImportAsync("text" + observation);
+            for (var revision = 0; revision < 8; revision++)
+                await extractions.SaveAsync(new DocumentExtraction(attempt, "p" + revision, "n", "text" + observation), CancellationToken.None);
+        }
+        counter.ReadCount = 0;
+        var history = await store.GetAsync(first.SourceId, first.RequestedUrl, 1000, CancellationToken.None);
+        Assert.Equal(9, history.Count);
+        Assert.Equal(65, history.Sum(item => item.Extractions.Length));
+        Assert.Equal(smallReadCount, counter.ReadCount);
+        Assert.InRange(counter.ReadCount, 1, 5);
+
+        await using var db = await factory.CreateDbContextAsync();
+        var id = history[0].Extractions[0].ExtractionId;
+        await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE document_extractions SET text = 'tampered' WHERE extraction_id = {id}");
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            store.GetAsync(first.SourceId, first.RequestedUrl, 1000, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task HistoryRejectsTextBudgetBeforeLoadingExtractionBodies()
+    {
+        var captured = await ImportAsync("capture");
+        for (var revision = 0; revision < 3; revision++)
+            await extractions.SaveAsync(new DocumentExtraction(captured, "p" + revision, "n",
+                new string('x', DocumentExtraction.MaximumTextLength)), CancellationToken.None);
+        var counter = new ReadCommandCounter();
+        var countedFactory = new PooledDbContextFactory<CollectionAttemptDbContext>(
+            new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString)
+                .AddInterceptors(counter).Options);
+        var store = new PostgresDocumentHistoryStore(countedFactory);
+        await Assert.ThrowsAsync<DocumentHistoryLimitException>(() =>
+            store.GetAsync(captured.SourceId, captured.RequestedUrl, 1000, CancellationToken.None));
+        Assert.Equal(3, counter.ReadCount);
+    }
+
+    private sealed class ReadCommandCounter : DbCommandInterceptor
+    {
+        public int ReadCount { get; set; }
+
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(DbCommand command,
+            CommandEventData eventData, InterceptionResult<DbDataReader> result,
+            CancellationToken cancellationToken = default)
+        {
+            ReadCount++;
+            return ValueTask.FromResult(result);
+        }
+    }
+
+    [Fact]
+    public async Task HistoryIndexSupportsLongUrlsAndKeepsSourceAndOutcomeBoundaries()
+    {
+        var suffix = string.Concat(Enumerable.Range(0, 100).Select(index =>
+            Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(index.ToString(System.Globalization.CultureInfo.InvariantCulture))))));
+        var request = Request() with { Url = "https://example.test/pages/" + suffix };
+        var failed = Receipt(request) with
+        {
+            Outcome = CollectionOutcome.Failed,
+            FailureCode = CollectionFailureCode.TransportError,
+            Capture = null,
+            Response = null,
+            BytesReceived = 0
+        };
+        await attempts.ImportAtomicallyAsync(CollectionAttemptImporter.CreateImport("long-failed", request, failed), default);
+        var otherSource = request with { SourceId = "other-source" };
+        await attempts.ImportAtomicallyAsync(CollectionAttemptImporter.CreateImport("long-captured", otherSource, Receipt(otherSource)), default);
+        var reader = new GetDocumentHistory(new PostgresDocumentHistoryStore(factory));
+        var history = await reader.ExecuteAsync(request.SourceId, request.Url);
+        Assert.Equal("long-failed", Assert.Single(history.Observations).Attempt.AttemptResult.AttemptId);
+        var otherHistory = await reader.ExecuteAsync(otherSource.SourceId, otherSource.Url);
+        Assert.Equal("long-captured", Assert.Single(otherHistory.Observations).Attempt.AttemptResult.AttemptId);
+        Assert.Empty((await reader.ExecuteAsync(request.SourceId, request.Url + "x")).Observations);
+        await using var db = await factory.CreateDbContextAsync();
+        var indexDefinition = await db.Database.SqlQuery<string>($"""
+            SELECT indexdef AS "Value" FROM pg_indexes
+            WHERE schemaname = {schema} AND indexname = 'ix_collection_attempts_history_url'
+            """).SingleAsync();
+        Assert.Contains("USING hash (requested_url)", indexDefinition, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task HistoryTimestampTiesUseOrdinalUtf16AttemptOrder()
+    {
+        var request = Request();
+        var receipt = Receipt(request);
+        foreach (var id in new[] { "\ue000", "\U00010000" })
+            await attempts.ImportAtomicallyAsync(CollectionAttemptImporter.CreateImport(id, request, receipt), CancellationToken.None);
+        var history = await new GetDocumentHistory(new PostgresDocumentHistoryStore(factory))
+            .ExecuteAsync(request.SourceId, request.Url);
+        Assert.Equal(new[] { "\U00010000", "\ue000" }, history.Observations.Select(item => item.Attempt.AttemptResult.AttemptId));
+    }
+
+    [Fact]
+    public async Task DocumentHistoryDoesNotLoadDiscoveryPayloads()
+    {
+        var request = Request() with { Mode = CollectionMode.Html, MaxCandidates = 1000 };
+        var receipt = Receipt(request) with
+        {
+            Discovery = new DiscoveryResult
+            {
+                Status = DiscoveryStatus.Parsed,
+                Urls = Enumerable.Range(0, 1000).Select(index => request.Url + "/" + index + new string('a', 3000)).ToArray()
+            }
+        };
+        var imported = await attempts.ImportAtomicallyAsync(CollectionAttemptImporter.CreateImport("discovery", request, receipt), CancellationToken.None);
+        var captured = Assert.IsType<CapturedAttemptResult>(imported.AttemptResult);
+        await extractions.SaveAsync(new DocumentExtraction(captured, "p", "n", "text"), CancellationToken.None);
+        Assert.Equal(1000, (await attempts.GetAsync("discovery", CancellationToken.None))!.Discovery!.Urls.Length);
+        var history = await new GetDocumentHistory(new PostgresDocumentHistoryStore(factory))
+            .ExecuteAsync(request.SourceId, request.Url);
+        var observation = Assert.Single(history.Observations);
+        Assert.Null(observation.Attempt.Discovery);
+        Assert.Equal("text", Assert.Single(observation.Extractions).Text);
+    }
+
+    [Fact]
+    public async Task CliComparesInspectsAndListsHistoryWithExplicitIncompatibility()
+    {
+        var before = new DocumentExtraction(await ImportAsync("Old policy."), "p", "n", "Old policy.");
+        var after = new DocumentExtraction(await ImportAsync("New policy."), "p", "n", "New policy.");
+        await extractions.SaveAsync(before, CancellationToken.None);
+        await extractions.SaveAsync(after, CancellationToken.None);
+        var output = await HostProcess.RunAsync(connectionString, "documents", "compare", before.ExtractionId, after.ExtractionId);
+        Assert.Equal(0, output.ExitCode);
+        using var comparison = JsonDocument.Parse(output.Output);
+        var id = comparison.RootElement.GetProperty("comparisonId").GetString()!;
+        var inspection = await HostProcess.RunAsync(connectionString, "documents", "comparison", id);
+        Assert.Equal(0, inspection.ExitCode);
+        Assert.Equal(output.Output, inspection.Output);
+        var history = await HostProcess.RunAsync(connectionString, "documents", "history", before.SourceAttempt.SourceId, before.SourceAttempt.RequestedUrl);
+        Assert.Equal(0, history.ExitCode);
+        using var historyJson = JsonDocument.Parse(history.Output);
+        Assert.Equal(2, historyJson.RootElement.GetProperty("observations").GetArrayLength());
+        var upgraded = new DocumentExtraction(after.SourceAttempt, "p2", "n", "New policy.");
+        await extractions.SaveAsync(upgraded, CancellationToken.None);
+        var incompatible = await HostProcess.RunAsync(connectionString, "documents", "compare", before.ExtractionId, upgraded.ExtractionId);
+        Assert.Equal(1, incompatible.ExitCode);
+        using var failure = JsonDocument.Parse(incompatible.Output);
+        Assert.Equal("incompatible", failure.RootElement.GetProperty("status").GetString());
+        Assert.Empty(failure.RootElement.GetProperty("hunks").EnumerateArray());
+    }
+
     private static CollectionConfiguration ProfileConfiguration() => new()
     {
         Version = 2,
@@ -217,7 +432,7 @@ public sealed class PostgresDocumentExtractionStoreTests(PostgresCollection post
         }]
     };
 
-    private async Task<CapturedAttemptResult> ImportAsync(string text, string contentType = "text/plain; charset=utf-8")
+    private async Task<CapturedAttemptResult> ImportAsync(string text, string contentType = "text/plain; charset=utf-8", string? etag = null)
     {
         var bytes = Encoding.UTF8.GetBytes(text);
         var hash = Convert.ToHexStringLower(SHA256.HashData(bytes));
@@ -229,7 +444,7 @@ public sealed class PostgresDocumentExtractionStoreTests(PostgresCollection post
         {
             BytesReceived = bytes.Length,
             Capture = new CaptureArtifact { Sha256 = hash, RelativePath = hash + ".gz", ByteLength = bytes.Length },
-            Response = new HttpResponseMetadata { StatusCode = 200, ContentType = contentType, ContentEncodings = [] }
+            Response = new HttpResponseMetadata { StatusCode = 200, ContentType = contentType, ETag = etag, ContentEncodings = [] }
         };
         var imported = await attempts.ImportAtomicallyAsync(CollectionAttemptImporter.CreateImport(
             Guid.NewGuid().ToString("N"), request, result), CancellationToken.None);

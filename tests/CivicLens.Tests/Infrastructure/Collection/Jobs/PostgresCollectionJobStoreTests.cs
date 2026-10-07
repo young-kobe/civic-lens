@@ -131,7 +131,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
     }
 
     [Fact]
-    public async Task ListingBatchesAttemptsWithoutWaitingForCoordinationLock()
+    public async Task GetAndListReadJobAttemptsWithoutWaitingForCoordinationLock()
     {
         var first = await EnqueueClaimAsync("first", Definition());
         var initial = await jobs.TryStartAttemptAsync(first.Lease, root, default);
@@ -153,14 +153,22 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
         await command.ExecuteNonQueryAsync();
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         var listed = await reader.ListAsync(100, timeout.Token);
+        var fetched = await reader.GetAsync(first.Job.JobId, timeout.Token);
 
-        Assert.Equal(2, counter.Count);
+        Assert.Equal(4, counter.Count);
         Assert.Equal(new[] { empty.JobId, first.Job.JobId }, listed.Select(job => job.JobId));
         Assert.Empty(listed[0].Attempts);
         Assert.Equal(new[] { initial.Attempt.AttemptId, retry.Attempt!.AttemptId },
             listed[1].Attempts.Select(attempt => attempt.AttemptId));
         Assert.NotNull(listed[1].Attempts[0].Resolution);
         Assert.Null(listed[1].Attempts[1].Resolution);
+        Assert.NotNull(fetched);
+        Assert.Equal(first.Job.JobId, fetched.JobId);
+        Assert.Equal(CollectionJobState.Running, fetched.State);
+        Assert.Equal(new[] { initial.Attempt.AttemptId, retry.Attempt.AttemptId },
+            fetched.Attempts.Select(attempt => attempt.AttemptId));
+        Assert.NotNull(fetched.Attempts[0].Resolution);
+        Assert.Null(fetched.Attempts[1].Resolution);
         var limited = Assert.Single(await reader.ListAsync(1, timeout.Token));
         Assert.Equal(empty.JobId, limited.JobId);
         Assert.Empty(limited.Attempts);

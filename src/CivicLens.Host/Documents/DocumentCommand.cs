@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Documents;
 using CivicLens.Collection.Contracts;
@@ -8,15 +9,49 @@ namespace CivicLens.Host.Documents;
 
 internal static class DocumentCommand
 {
+    private static readonly JsonSerializerOptions OutputJsonOptions = new(CollectionProtocol.JsonOptions)
+    {
+        Converters =
+        {
+            new JsonStringEnumConverter<CivicLens.Core.Documents.DocumentComparisonStatus>(JsonNamingPolicy.CamelCase,
+                allowIntegerValues: false)
+        }
+    };
+
     public static bool Matches(string[] args) => args is ["documents", "extract", _, _] or ["documents", "extract", _, _, _] or
-        ["documents", "get", _] or ["documents", "cite", _, _, _];
+        ["documents", "get", _] or ["documents", "cite", _, _, _] or
+        ["documents", "history", _, _] or ["documents", "compare", _, _] or ["documents", "comparison", _];
 
     public static async Task<int> ExecuteAsync(string[] args, ICollectionAttemptStore attempts,
         IDocumentTextExtractor extractor, IDocumentExtractionStore extractions, CancellationToken cancellationToken,
-        CollectionConfiguration? configuration = null)
+        CollectionConfiguration? configuration = null, IDocumentHistoryStore? history = null,
+        IDocumentComparisonStore? comparisons = null)
     {
         try
         {
+            if (args is ["documents", "history", var sourceId, var requestedUrl])
+            {
+                Write(await new GetDocumentHistory(history ?? throw new InvalidOperationException("History store is required."))
+                    .ExecuteAsync(sourceId, requestedUrl, cancellationToken: cancellationToken));
+                return 0;
+            }
+            if (args is ["documents", "compare", var beforeId, var afterId])
+            {
+                var comparison = await new CompareDocuments(extractions,
+                    comparisons ?? throw new InvalidOperationException("Comparison store is required."))
+                    .ExecuteAsync(beforeId, afterId, cancellationToken);
+                Write(comparison);
+                return comparison.Status == CivicLens.Core.Documents.DocumentComparisonStatus.Complete ? 0 : 1;
+            }
+            if (args is ["documents", "comparison", var comparisonId])
+            {
+                var comparison = await new GetDocumentComparison(
+                    comparisons ?? throw new InvalidOperationException("Comparison store is required."))
+                    .ExecuteAsync(comparisonId, cancellationToken);
+                if (comparison is null) { Console.Error.WriteLine("Comparison was not found."); return 2; }
+                Write(comparison);
+                return 0;
+            }
             if (args is ["documents", "extract", _, _] or ["documents", "extract", _, _, _])
             {
                 var handler = new ExtractDocument(attempts, extractor, extractions);
@@ -58,9 +93,14 @@ internal static class DocumentCommand
             Console.Error.WriteLine("Citation offsets must be nonnegative UTF-16 integers with positive length.");
             return 2;
         }
+        catch (DocumentHistoryLimitException exception)
+        {
+            Console.Error.WriteLine(exception.Message);
+            return 1;
+        }
         catch (ArgumentException)
         {
-            Console.Error.WriteLine("Invalid document input. Check the captured attempt, extraction ID, artifact path, or citation span.");
+            Console.Error.WriteLine("Invalid document input. Check the document identity, evidence IDs, artifact path, or citation span.");
             return 2;
         }
         catch (Exception exception) when (exception is InvalidDataException or NotSupportedException)
@@ -70,5 +110,5 @@ internal static class DocumentCommand
         }
     }
 
-    private static void Write<T>(T value) => Console.WriteLine(JsonSerializer.Serialize(value, CollectionProtocol.JsonOptions));
+    private static void Write<T>(T value) => Console.WriteLine(JsonSerializer.Serialize(value, OutputJsonOptions));
 }

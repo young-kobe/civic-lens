@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text;
 using System.Security.Cryptography;
+using System.Data.Common;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Discovery;
 using CivicLens.Application.Collection.Jobs;
@@ -8,6 +9,7 @@ using CivicLens.Collection.Contracts;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Collection.Jobs;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Npgsql;
@@ -80,6 +82,53 @@ public sealed class PostgresDiscoveryAdmissionTests(PostgresCollection postgres)
         {
             ArticleTemplate = Template() with { MaxBytes = 11 }
         }, default));
+    }
+
+    [Fact]
+    public async Task AdmissionChecksExistingCandidatesWithOneQueryAndReplaysWithoutRechecking()
+    {
+        var urls = Enumerable.Range(0, 40)
+            .Select(index => $"https://example.test/articles/{index:D2}")
+            .ToArray();
+        var firstAttempt = await SaveFeedAsync(urls.Take(10).ToArray());
+        var firstBatch = await jobs.AdmitAsync(new DiscoveryAdmissionRequest(firstAttempt, "candidate-seed",
+            Template(), new DiscoveryAdmissionPolicy()), default);
+        Assert.Equal(10, firstBatch.AdmittedCount);
+
+        var attempt = await SaveFeedAsync(urls);
+        var counter = new CandidateSelectCounter();
+        var countedFactory = new PooledDbContextFactory<CollectionAttemptDbContext>(
+            new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString)
+                .AddInterceptors(counter).Options);
+        var countedJobs = new PostgresCollectionJobStore(countedFactory);
+        var request = new DiscoveryAdmissionRequest(attempt, "candidate-mixed", Template(), new DiscoveryAdmissionPolicy { MaxJobs = 40 });
+
+        var admitted = await countedJobs.AdmitAsync(request, default);
+        Assert.Equal(10, admitted.DuplicateCount);
+        Assert.Equal(30, admitted.AdmittedCount);
+        Assert.Equal(urls.Skip(10), admitted.Jobs.Select(job => job.Url));
+        Assert.Equal(1, counter.CandidateSelectCount);
+
+        var replay = await countedJobs.AdmitAsync(request, default);
+        Assert.Equal(admitted.Jobs, replay.Jobs);
+        Assert.Equal(admitted.DeferredCount, replay.DeferredCount);
+        Assert.Equal(admitted.DuplicateCount, replay.DuplicateCount);
+        Assert.Equal(1, counter.CandidateSelectCount);
+    }
+
+    private sealed class CandidateSelectCounter : DbCommandInterceptor
+    {
+        public int CandidateSelectCount { get; private set; }
+
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(DbCommand command,
+            CommandEventData eventData, InterceptionResult<DbDataReader> result,
+            CancellationToken cancellationToken = default)
+        {
+            if (command.CommandText.TrimStart().StartsWith("SELECT", StringComparison.OrdinalIgnoreCase) &&
+                command.CommandText.Contains("collection_candidate_jobs", StringComparison.Ordinal))
+                CandidateSelectCount++;
+            return ValueTask.FromResult(result);
+        }
     }
 
     [Fact]

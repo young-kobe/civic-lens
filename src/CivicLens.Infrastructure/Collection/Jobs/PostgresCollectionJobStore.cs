@@ -80,12 +80,22 @@ public sealed partial class PostgresCollectionJobStore(IDbContextFactory<Collect
         }, cancellationToken);
     }
 
-    public Task<CollectionJobRecord?> GetAsync(string jobId, CancellationToken cancellationToken) =>
-        TransactionAsync(async (db, _) =>
+    public async Task<CollectionJobRecord?> GetAsync(string jobId, CancellationToken cancellationToken)
+    {
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
+        var row = await db.Set<JobRow>().AsNoTracking()
+            .SingleOrDefaultAsync(row => row.JobId == jobId, cancellationToken);
+        if (row is null)
         {
-            var row = await db.Set<JobRow>().SingleOrDefaultAsync(row => row.JobId == jobId, cancellationToken);
-            return row is null ? null : await ToRecordAsync(db, row, cancellationToken);
-        }, cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return null;
+        }
+
+        var record = await ToRecordAsync(db, row, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return record;
+    }
 
     public async Task<IReadOnlyList<CollectionJobRecord>> ListAsync(int limit, CancellationToken cancellationToken)
     {

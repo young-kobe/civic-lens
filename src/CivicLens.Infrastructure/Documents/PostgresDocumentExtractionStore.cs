@@ -38,7 +38,8 @@ public sealed class PostgresDocumentExtractionStore(IDbContextFactory<Collection
         // As with collection imports, serialize the read/compare/write decision in one short transaction.
         await db.Database.ExecuteSqlRawAsync(
             "SELECT pg_advisory_xact_lock(hashtextextended('civic-lens-document-extractions', 0))", cancellationToken);
-        var imported = await PostgresCollectionAttemptStore.GetAsync(db, extraction.SourceAttempt.AttemptId, cancellationToken);
+        var imported = await PostgresCollectionAttemptStore.GetAsync(db, extraction.SourceAttempt.AttemptId, cancellationToken,
+            includeDiscovery: false);
         if (imported?.AttemptResult is not CapturedAttemptResult captured || !captured.Equals(extraction.SourceAttempt))
             throw new InvalidOperationException("Extraction provenance does not match an imported captured attempt.");
 
@@ -66,15 +67,23 @@ public sealed class PostgresDocumentExtractionStore(IDbContextFactory<Collection
         return extraction;
     }
 
-    private static async Task<DocumentExtraction?> ReadAsync(CollectionAttemptDbContext db, string extractionId,
+    internal static async Task<DocumentExtraction?> ReadAsync(CollectionAttemptDbContext db, string extractionId,
         CancellationToken cancellationToken)
     {
         var row = await db.Set<DocumentExtractionRow>().AsNoTracking()
             .SingleOrDefaultAsync(candidate => candidate.ExtractionId == extractionId, cancellationToken);
         if (row is null) return null;
-        var imported = await PostgresCollectionAttemptStore.GetAsync(db, row.AttemptId, cancellationToken);
+        var imported = await PostgresCollectionAttemptStore.GetAsync(db, row.AttemptId, cancellationToken,
+            includeDiscovery: false);
         if (imported?.AttemptResult is not CapturedAttemptResult captured)
             throw new InvalidOperationException("Stored extraction has no captured source attempt.");
+        return FromRow(row, captured);
+    }
+
+    internal static DocumentExtraction FromRow(DocumentExtractionRow row, CapturedAttemptResult captured)
+    {
+        if (row.AttemptId != captured.AttemptId)
+            throw new InvalidOperationException("Stored extraction provenance does not match its captured attempt.");
         DocumentExtraction extraction;
         try
         {

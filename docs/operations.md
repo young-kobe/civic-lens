@@ -245,7 +245,23 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- do
 
 This command uses the profile assigned to the imported attempt's source ID. It reports the profile ID and revision alongside the extraction ID. Missing assignments, missing/ambiguous content regions, a profile that excludes its own root, and non-HTML content fail without falling back to whole-body extraction. Selectors support one tag name, `#id`, or `.class`; they do not support combinations, attributes, or pseudo-classes. Inspect output with `documents get` to verify the selected content before relying on a profile.
 
-Changing selectors or exclusions produces a new immutable extraction identity even for the same capture. Earlier text, profiles, and citations remain readable; profiles are never retroactively attached to older records. Processing an already captured source is allowed after its coverage ends or it is disabled. Selection does not prove substantive change or grant publication approval. Version comparisons remain future work and must use matching processing settings on both sides.
+Changing selectors or exclusions produces a new immutable extraction identity even for the same capture. Earlier text, profiles, and citations remain readable; profiles are never retroactively attached to older records. Processing an already captured source is allowed after its coverage ends or it is disabled. Selection does not prove substantive change or grant publication approval. Version comparisons require matching processing settings on both sides.
+
+### Inspect history and compare text
+
+Run `db migrate` to apply `DocumentComparisons` and `DocumentHistoryLookupIndex`, then use:
+
+```sh
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- documents history <source-id> <exact-requested-url>
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- documents compare <before-extraction-id> <after-extraction-id>
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- documents comparison <comparison-id>
+```
+
+History retains checks and extraction revisions, groups consecutive equal text within each processing stream, and preserves reversions. Failed/missing evidence breaks grouping. Resolved 304 checks reuse the earlier captured extraction. Histories exceeding the documented observation, extraction, or text budgets fail explicitly; pagination is not yet implemented.
+
+`compare` stores a deterministic result bound to both extractions and the algorithm/settings versions. It returns exit 0 for a complete comparison and exit 1 with a retained `incompatible` or `limitExceeded` result otherwise. `comparison` inspects that retained result and returns exit 0 when found. No hunks means unchanged only when status is `complete`. Text ranges use UTF-16 offsets; use `documents cite` with the corresponding extraction ID and positive range length to inspect exact quotations. A zero-length range denotes an insertion/deletion point, not a quotation.
+
+When processing versions or profiles differ, explicitly rerun `documents extract` on both original captured attempt IDs using the same current settings/configuration, then compare those new extraction IDs. Earlier extractions, citations, and comparisons remain retained. These commands do not judge substantive significance, approve evidence, or publish anything.
 
 ### Remaining operations
 

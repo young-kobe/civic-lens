@@ -27,11 +27,11 @@ public sealed class PostgresCollectionAttemptStore(IDbContextFactory<CollectionA
     }
 
     internal static async Task<StoredCollectionAttempt?> GetAsync(CollectionAttemptDbContext db, string attemptId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, bool includeDiscovery = true)
     {
         var row = await db.Attempts.AsNoTracking().SingleOrDefaultAsync(
             candidate => candidate.AttemptId == attemptId, cancellationToken);
-        return row is null ? null : await ReadStoredAttemptAsync(db, row, cancellationToken);
+        return row is null ? null : await ReadStoredAttemptAsync(db, row, cancellationToken, includeDiscovery);
     }
 
     public static PostgresCollectionAttemptStore FromConnectionString(string connectionString)
@@ -151,8 +151,8 @@ public sealed class PostgresCollectionAttemptStore(IDbContextFactory<CollectionA
         return rows.Select(row => (CapturedAttemptResult)FromRow(row, lengths[row.CaptureSha256!])).ToList();
     }
 
-    private static async Task<StoredCollectionAttempt> ReadStoredAttemptAsync(CollectionAttemptDbContext db,
-        AttemptRow row, CancellationToken cancellationToken)
+    internal static async Task<StoredCollectionAttempt> ReadStoredAttemptAsync(CollectionAttemptDbContext db,
+        AttemptRow row, CancellationToken cancellationToken, bool includeDiscovery = true)
     {
         var captureLength = row.CaptureSha256 is null ? null : await db.Captures.AsNoTracking()
             .Where(capture => capture.Sha256 == row.CaptureSha256).Select(capture => (long?)capture.ByteLength)
@@ -167,12 +167,48 @@ public sealed class PostgresCollectionAttemptStore(IDbContextFactory<CollectionA
                 .Select(capture => (long?)capture.ByteLength).SingleAsync(cancellationToken);
             prior = (CapturedAttemptResult)FromRow(priorRow, priorLength);
         }
-        var discoveryRow = await db.Set<DiscoveryRow>().AsNoTracking()
-            .SingleOrDefaultAsync(item => item.AttemptId == row.AttemptId, cancellationToken);
+        var discoveryRow = includeDiscovery ? await db.Set<DiscoveryRow>().AsNoTracking()
+            .SingleOrDefaultAsync(item => item.AttemptId == row.AttemptId, cancellationToken) : null;
         var discovery = discoveryRow is null ? null : new DiscoveryEvidence(
             JsonSerializer.Deserialize<CollectionRequest>(discoveryRow.RequestJson, CollectionProtocol.JsonOptions)!,
             JsonSerializer.Deserialize<DiscoveryResult>(discoveryRow.DiscoveryJson, CollectionProtocol.JsonOptions)!);
         return new StoredCollectionAttempt(result, row.HasSentValidators ? ReadSentValidators(row) : null, prior, discovery, row.RobotsCrawlDelayMilliseconds);
+    }
+
+    internal static async Task<IReadOnlyList<StoredCollectionAttempt>> ReadEvidenceAsync(CollectionAttemptDbContext db,
+        IReadOnlyList<AttemptRow> rows, CancellationToken cancellationToken)
+    {
+        var retainedRows = rows.ToDictionary(row => row.AttemptId, StringComparer.Ordinal);
+        var missingPriorIds = rows.Select(row => row.PriorCaptureAttemptId)
+            .Where(id => id is not null && !retainedRows.ContainsKey(id)).Distinct(StringComparer.Ordinal).ToArray();
+        if (missingPriorIds.Length > 0)
+        {
+            var priorRows = await db.Attempts.AsNoTracking().Where(row => missingPriorIds.Contains(row.AttemptId))
+                .ToListAsync(cancellationToken);
+            foreach (var priorRow in priorRows) retainedRows.Add(priorRow.AttemptId, priorRow);
+        }
+        var hashes = retainedRows.Values.Select(row => row.CaptureSha256).Where(hash => hash is not null)
+            .Distinct(StringComparer.Ordinal).ToArray();
+        var lengths = await db.Captures.AsNoTracking().Where(row => hashes.Contains(row.Sha256))
+            .ToDictionaryAsync(row => row.Sha256, row => row.ByteLength, StringComparer.Ordinal, cancellationToken);
+        var results = new Dictionary<string, CollectionAttemptResult>(StringComparer.Ordinal);
+        foreach (var row in retainedRows.Values)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            results.Add(row.AttemptId, FromRow(row, row.CaptureSha256 is null ? null : lengths[row.CaptureSha256]));
+        }
+        var evidence = new List<StoredCollectionAttempt>(rows.Count);
+        foreach (var row in rows)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var prior = row.PriorCaptureAttemptId is null ? null :
+                results[row.PriorCaptureAttemptId] as CapturedAttemptResult
+                    ?? throw new InvalidOperationException("Stored prior evidence is not a captured attempt.");
+            evidence.Add(new StoredCollectionAttempt(results[row.AttemptId],
+                row.HasSentValidators ? ReadSentValidators(row) : null, prior,
+                robotsCrawlDelayMilliseconds: row.RobotsCrawlDelayMilliseconds));
+        }
+        return evidence;
     }
 
     private static AttemptRow ToRow(CollectionAttemptResult result, CapturedAttemptResult? prior,
