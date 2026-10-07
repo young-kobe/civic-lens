@@ -327,6 +327,37 @@ public sealed class PostgresDocumentExtractionStoreTests(PostgresCollection post
     }
 
     [Fact]
+    public async Task HistoryIndexSupportsLongUrlsAndKeepsSourceAndOutcomeBoundaries()
+    {
+        var suffix = string.Concat(Enumerable.Range(0, 100).Select(index =>
+            Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(index.ToString(System.Globalization.CultureInfo.InvariantCulture))))));
+        var request = Request() with { Url = "https://example.test/pages/" + suffix };
+        var failed = Receipt(request) with
+        {
+            Outcome = CollectionOutcome.Failed,
+            FailureCode = CollectionFailureCode.TransportError,
+            Capture = null,
+            Response = null,
+            BytesReceived = 0
+        };
+        await attempts.ImportAtomicallyAsync(CollectionAttemptImporter.CreateImport("long-failed", request, failed), default);
+        var otherSource = request with { SourceId = "other-source" };
+        await attempts.ImportAtomicallyAsync(CollectionAttemptImporter.CreateImport("long-captured", otherSource, Receipt(otherSource)), default);
+        var reader = new GetDocumentHistory(new PostgresDocumentHistoryStore(factory));
+        var history = await reader.ExecuteAsync(request.SourceId, request.Url);
+        Assert.Equal("long-failed", Assert.Single(history.Observations).Attempt.AttemptResult.AttemptId);
+        var otherHistory = await reader.ExecuteAsync(otherSource.SourceId, otherSource.Url);
+        Assert.Equal("long-captured", Assert.Single(otherHistory.Observations).Attempt.AttemptResult.AttemptId);
+        Assert.Empty((await reader.ExecuteAsync(request.SourceId, request.Url + "x")).Observations);
+        await using var db = await factory.CreateDbContextAsync();
+        var indexDefinition = await db.Database.SqlQuery<string>($"""
+            SELECT indexdef AS "Value" FROM pg_indexes
+            WHERE schemaname = {schema} AND indexname = 'ix_collection_attempts_history_url'
+            """).SingleAsync();
+        Assert.Contains("USING hash (requested_url)", indexDefinition, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task HistoryTimestampTiesUseOrdinalUtf16AttemptOrder()
     {
         var request = Request();

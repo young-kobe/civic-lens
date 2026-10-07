@@ -63,5 +63,7 @@ internal sealed class AttemptRowConfiguration : IEntityTypeConfiguration<Attempt
             .HasDatabaseName("ix_collection_attempts_prior_capture").HasFilter("outcome = 'captured'");
         builder.HasIndex(row => row.CaptureSha256).HasDatabaseName("ix_collection_attempts_capture");
         builder.HasIndex(row => row.PriorCaptureAttemptId).HasDatabaseName("ix_collection_attempts_prior_capture_link");
+        builder.HasIndex(row => row.RequestedUrl).HasMethod("hash")
+            .HasDatabaseName("ix_collection_attempts_history_url");
     }
 }

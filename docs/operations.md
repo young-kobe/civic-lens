@@ -249,7 +249,7 @@ Changing selectors or exclusions produces a new immutable extraction identity ev
 
 ### Inspect history and compare text
 
-Run `db migrate` to apply `DocumentComparisons`, then use:
+Run `db migrate` to apply `DocumentComparisons` and `DocumentHistoryLookupIndex`, then use:
 
 ```sh
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- documents history <source-id> <exact-requested-url>
