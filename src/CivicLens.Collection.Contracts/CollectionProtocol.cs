@@ -5,7 +5,10 @@ namespace CivicLens.Collection.Contracts;
 
 public static class CollectionProtocol
 {
-    public const int Version = 3;
+    public const int Version = 4;
+    public const int PreviousVersion = 3;
+    // Includes JSON escaping for up to 1,000 URLs of 4,096 characters plus response metadata.
+    public const int MaximumFeedReceiptSize = 32 * 1024 * 1024;
 
     static CollectionProtocol() => JsonOptions.MakeReadOnly(populateMissingResolver: true);
     public static JsonSerializerOptions JsonOptions { get; } = new(JsonSerializerDefaults.Web)
@@ -18,7 +21,9 @@ public static class CollectionProtocol
         Converters =
         {
             new JsonStringEnumConverter<CollectionOutcome>(JsonNamingPolicy.CamelCase, allowIntegerValues: false),
-            new JsonStringEnumConverter<CollectionFailureCode>(JsonNamingPolicy.CamelCase, allowIntegerValues: false)
+            new JsonStringEnumConverter<CollectionFailureCode>(JsonNamingPolicy.CamelCase, allowIntegerValues: false),
+            new JsonStringEnumConverter<CollectionMode>(JsonNamingPolicy.CamelCase, allowIntegerValues: false),
+            new JsonStringEnumConverter<FeedDiscoveryStatus>(JsonNamingPolicy.CamelCase, allowIntegerValues: false)
         }
     };
 }

@@ -17,7 +17,7 @@ public sealed class CollectorProcess(string collectorAssembly, string dotnetExec
         if (!File.Exists(assembly))
             throw new FileNotFoundException("Build the collector before collecting.", assembly);
         Directory.CreateDirectory(request.ArtifactDirectory);
-        // Serialize invocations sharing this capture directory. There is no durable scheduler yet.
+        // Serialize direct invocations sharing this capture directory; managed jobs add database coordination.
         await using var lease = new FileStream(Path.Combine(request.ArtifactDirectory, ".collector.lock"),
             FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
         var manifest = Path.Combine(request.ArtifactDirectory, $".request-{Guid.NewGuid():N}.json");
@@ -39,7 +39,8 @@ public sealed class CollectorProcess(string collectorAssembly, string dotnetExec
             using var process = Process.Start(start) ?? throw new IOException("Could not start collector.");
             using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             deadline.CancelAfter(TimeSpan.FromSeconds(request.TimeoutSeconds + 5));
-            var stdout = ReadBoundedAsync(process.StandardOutput, 65_536, deadline.Token);
+            var outputLimit = request.Mode == CollectionMode.Feed ? CollectionProtocol.MaximumFeedReceiptSize : 65_536;
+            var stdout = ReadBoundedAsync(process.StandardOutput, outputLimit, deadline.Token);
             var stderr = ReadBoundedAsync(process.StandardError, 65_536, deadline.Token);
             // A malformed child must not deadlock the parent by filling either redirected pipe.
             _ = stdout.ContinueWith(_ => deadline.Cancel(), CancellationToken.None,

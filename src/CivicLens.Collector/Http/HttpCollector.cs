@@ -83,7 +83,11 @@ public sealed class HttpCollector : IDisposable
                 }
                 if (response.StatusCode != HttpStatusCode.OK) return Result(CollectionOutcome.Failed, CollectionFailureCode.HttpError);
                 var artifact = await SaveBoundedAsync(response, request, () => bytes, n => bytes += n, token);
-                return Result(CollectionOutcome.Captured, capture: artifact);
+                var discovery = request.Mode == CollectionMode.Feed
+                    ? await FeedParser.ParseCaptureAsync(Path.Combine(request.ArtifactDirectory, artifact.RelativePath), request,
+                        current.AbsoluteUri, responseMetadata!.ContentEncodings, token)
+                    : null;
+                return Result(CollectionOutcome.Captured, capture: artifact, discovery: discovery);
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { return Result(CollectionOutcome.Failed, CollectionFailureCode.Cancelled); }
@@ -99,10 +103,11 @@ public sealed class HttpCollector : IDisposable
         }
 
         CollectionResult Result(CollectionOutcome outcome, CollectionFailureCode? failure = null,
-            CaptureArtifact? capture = null, long? retry = null)
+            CaptureArtifact? capture = null, long? retry = null, FeedDiscoveryResult? discovery = null)
         {
             var result = new CollectionResult
             {
+                Version = request.Version,
                 JobId = request.JobId,
                 SourceId = request.SourceId,
                 RequestedUrl = request.Url,
@@ -112,6 +117,7 @@ public sealed class HttpCollector : IDisposable
                 Response = responseMetadata,
                 SentValidators = sentValidators,
                 Capture = capture,
+                Discovery = discovery,
                 BytesReceived = bytes,
                 RequestCount = requests,
                 FailureCode = failure,
