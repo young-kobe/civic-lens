@@ -11,7 +11,7 @@ public sealed class DocumentExtraction
     private static readonly UTF8Encoding StrictUtf8 = new(false, true);
 
     public DocumentExtraction(CapturedAttemptResult sourceAttempt, string parserVersion,
-        string normalizationVersion, string text)
+        string normalizationVersion, string text, DocumentContentProfile? profile = null)
     {
         ArgumentNullException.ThrowIfNull(sourceAttempt);
         ValidateVersion(parserVersion, nameof(parserVersion));
@@ -32,14 +32,16 @@ public sealed class DocumentExtraction
         ParserVersion = parserVersion;
         NormalizationVersion = normalizationVersion;
         Text = text;
+        Profile = profile;
         TextSha256 = Convert.ToHexStringLower(SHA256.HashData(textBytes));
-        ExtractionId = ComputeExtractionId(sourceAttempt.AttemptId, parserVersion, normalizationVersion);
+        ExtractionId = ComputeExtractionId(sourceAttempt.AttemptId, parserVersion, normalizationVersion, profile);
     }
 
     public CapturedAttemptResult SourceAttempt { get; }
     public string ParserVersion { get; }
     public string NormalizationVersion { get; }
     public string Text { get; }
+    public DocumentContentProfile? Profile { get; }
     public string TextSha256 { get; }
     public string ExtractionId { get; }
 
@@ -49,12 +51,15 @@ public sealed class DocumentExtraction
             throw new ArgumentException("Version must contain 1 to 128 characters.", parameterName);
     }
 
-    private static string ComputeExtractionId(string attemptId, string parserVersion, string normalizationVersion)
+    private static string ComputeExtractionId(string attemptId, string parserVersion, string normalizationVersion,
+        DocumentContentProfile? profile)
     {
         using var buffer = new MemoryStream();
         WriteFramed(buffer, attemptId);
         WriteFramed(buffer, parserVersion);
         WriteFramed(buffer, normalizationVersion);
+        if (profile is not null)
+            WriteFramed(buffer, profile.RevisionId);
         return Convert.ToHexStringLower(SHA256.HashData(buffer.ToArray()));
     }
 

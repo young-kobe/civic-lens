@@ -9,6 +9,7 @@ public sealed record WatchedSourceConfiguration
     public required string Id { get; init; }
     public string[]? PersonIds { get; init; }
     public SourceCoverageConfiguration[]? Coverage { get; init; }
+    public string? DocumentProfileId { get; init; }
     public required string Url { get; init; }
     public required string AllowedOrigin { get; init; }
     public required string AllowedPathPrefix { get; init; }

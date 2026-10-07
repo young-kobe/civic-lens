@@ -2,6 +2,7 @@ using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
 using CivicLens.Core.Collection;
+using CivicLens.Core.Documents;
 using CivicLens.Infrastructure.Documents;
 
 namespace CivicLens.Tests.Infrastructure.Documents;
@@ -95,6 +96,100 @@ public sealed class CaptureDocumentTextExtractorTests
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
             capture.Extractor.ExtractAsync(capture.Attempt, capture.Root, source.Token));
+    }
+
+    [Fact]
+    public async Task ProfileSelectsOneBodyRootAndIgnoresNavigationChanges()
+    {
+        var profile = new DocumentContentProfile("story", "#article", []);
+        await using var first = await TestCapture.CreateAsync(Encoding.UTF8.GetBytes(
+            "<nav>Old navigation</nav><main id=article><h1>Story title</h1><p>Evidence text</p></main>"), "text/html");
+        await using var second = await TestCapture.CreateAsync(Encoding.UTF8.GetBytes(
+            "<nav>New navigation</nav><main id=article><h1>Story title</h1><p>Evidence text</p></main>"), "text/html");
+
+        var firstText = await first.Extractor.ExtractAsync(first.Attempt, first.Root, profile, CancellationToken.None);
+        var secondText = await second.Extractor.ExtractAsync(second.Attempt, second.Root, profile, CancellationToken.None);
+
+        Assert.Equal("Story title\nEvidence text", firstText);
+        Assert.Equal(firstText, secondText);
+    }
+
+    [Fact]
+    public async Task NullProfilePreservesBodyExtractionAndVersionLabels()
+    {
+        await using var capture = await TestCapture.CreateAsync(Encoding.UTF8.GetBytes(
+            "<head><title>not body</title></head><body><nav>Navigation</nav><main>Story</main></body>"), "text/html");
+
+        var text = await capture.Extractor.ExtractAsync(capture.Attempt, capture.Root, null, CancellationToken.None);
+
+        Assert.Equal("Navigation\nStory", text);
+        Assert.Equal("capture-text-v1", capture.Extractor.ParserVersion);
+        Assert.Equal("body-text-v1", capture.Extractor.NormalizationVersion);
+    }
+
+    [Fact]
+    public async Task ProfileSupportsSharedTagAndClassSelectorsAndExclusions()
+    {
+        var profile = new DocumentContentProfile("story", "article", [".metadata", "#share"]);
+        await using var capture = await TestCapture.CreateAsync(Encoding.UTF8.GetBytes(
+            "<body><article><p>First <span class=metadata>author</span> paragraph</p>" +
+            "<div class=metadata>hidden block</div><p>Second <b id=share>shared</b> paragraph</p></article></body>"), "text/html");
+
+        var text = await capture.Extractor.ExtractAsync(capture.Attempt, capture.Root, profile, CancellationToken.None);
+
+        Assert.Equal("First paragraph\nSecond paragraph", text);
+    }
+
+    [Fact]
+    public async Task ProfileRequiresExactlyOneMatchAndDoesNotFallback()
+    {
+        await using var missing = await TestCapture.CreateAsync(Encoding.UTF8.GetBytes("<p>fallback text</p>"), "text/html");
+        await Assert.ThrowsAsync<InvalidDataException>(() => missing.Extractor.ExtractAsync(missing.Attempt, missing.Root,
+            new DocumentContentProfile("story", "article", []), CancellationToken.None));
+
+        await using var ambiguous = await TestCapture.CreateAsync(Encoding.UTF8.GetBytes("<article>a</article><article>b</article>"), "text/html");
+        await Assert.ThrowsAsync<InvalidDataException>(() => ambiguous.Extractor.ExtractAsync(ambiguous.Attempt, ambiguous.Root,
+            new DocumentContentProfile("story", "article", []), CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task ProfileRejectsExcludedRootsAndForbiddenContentRoots()
+    {
+        await using var excluded = await TestCapture.CreateAsync(Encoding.UTF8.GetBytes("<main id=story>text</main>"), "text/html");
+        await Assert.ThrowsAsync<InvalidDataException>(() => excluded.Extractor.ExtractAsync(excluded.Attempt, excluded.Root,
+            new DocumentContentProfile("story", "#story", ["#story"]), CancellationToken.None));
+
+        await using var forbidden = await TestCapture.CreateAsync(Encoding.UTF8.GetBytes("<script id=story>bad</script>"), "text/html");
+        await Assert.ThrowsAsync<InvalidDataException>(() => forbidden.Extractor.ExtractAsync(forbidden.Attempt, forbidden.Root,
+            new DocumentContentProfile("story", "#story", []), CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task ProfilePreservesBoundariesAroundRemovedInlineAndBlockElements()
+    {
+        var profile = new DocumentContentProfile("story", "main", [".removed"]);
+        await using var capture = await TestCapture.CreateAsync(Encoding.UTF8.GetBytes(
+            "<main>A<span class=removed>inline</span>B<div class=removed>block</div>C</main>"), "text/html");
+
+        Assert.Equal("A B\nC", await capture.Extractor.ExtractAsync(capture.Attempt, capture.Root, profile, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task ProfileAppliesOnlyToHtml()
+    {
+        await using var capture = await TestCapture.CreateAsync(Encoding.UTF8.GetBytes("plain text"), "text/plain");
+
+        await Assert.ThrowsAsync<NotSupportedException>(() => capture.Extractor.ExtractAsync(capture.Attempt,
+            capture.Root, new DocumentContentProfile("story", "main", []), CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task ClassSelectorsUseHtmlWhitespaceAndExactClassNames()
+    {
+        await using var capture = await TestCapture.CreateAsync(Encoding.UTF8.GetBytes(
+            "<main class='policy&#160;other'>wrong</main><article class='x\tpolicy\ny'>selected</article>"), "text/html; charset=utf-8");
+        var profile = new DocumentContentProfile("policy", ".policy", []);
+        Assert.Equal("selected", await capture.Extractor.ExtractAsync(capture.Attempt, capture.Root, profile, CancellationToken.None));
     }
 
     [Theory]
