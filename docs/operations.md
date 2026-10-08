@@ -315,7 +315,7 @@ Creating a draft explicitly selects a complete changed comparison. Saves retain 
 
 History currently supports at most 64 revisions and 128 decisions per record, with 64 outstanding concerns and 64 citations per revision. Limit exhaustion rejects writes and requires future history-pagination work; do not discard history to continue. Browsing comparisons may return an empty batch with a continuation if the batch contains only unchanged/incompatible/limited results. Use the continuation rather than treating that batch as an exhaustive absence of changes.
 
-Auth0 tenant login/logout and the production reverse proxy still require live verification. Offline tests validate subject authorization and HTTP workflows with isolated test signing keys; they do not exercise a live Auth0 tenant. Hetzner/Terraform provisioning, durable workers, production backup restoration, and publication remain pending.
+Auth0 tenant login/logout and the production reverse proxy still require live verification. Offline tests validate subject authorization and HTTP workflows with isolated test signing keys; they do not exercise a live Auth0 tenant. Hetzner/Terraform provisioning, worker service management, production backup restoration, and publication remain pending.
 
 ### Remaining operations
 
