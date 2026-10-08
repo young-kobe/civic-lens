@@ -16,6 +16,7 @@ internal sealed class PersistedEvidenceProcessingRow
     public long? LeaseExpiresAt { get; set; }
     public int Attempts { get; set; }
     public long? RetryAt { get; set; }
+    public string? PredecessorAttemptId { get; set; }
     public string? ExtractionId { get; set; }
     public string? ComparisonId { get; set; }
     public EvidenceProcessingOutcome? Outcome { get; set; }

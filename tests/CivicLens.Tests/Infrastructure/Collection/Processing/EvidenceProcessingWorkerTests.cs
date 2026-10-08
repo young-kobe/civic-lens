@@ -64,6 +64,13 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
     {
         var beforeJob = await CollectAsync("earlier", "Earlier wording.");
         var afterJob = await CollectAsync("later", "Later wording.");
+        // Simulate a legacy/recovered job completed before atomic preparation registration.
+        await using (var connection = new NpgsqlConnection(connectionString))
+        {
+            await connection.OpenAsync();
+            await using var command = new NpgsqlCommand("DELETE FROM evidence_processing WHERE attempt_id = 'prepare'", connection);
+            await command.ExecuteNonQueryAsync();
+        }
         var beforeAttempt = Assert.Single(beforeJob.Attempts).AttemptId;
         var afterAttempt = Assert.Single(afterJob.Attempts).AttemptId;
         _ = await processing.EnsureAsync(afterJob.JobId, afterAttempt, "source", Url, default);
@@ -73,8 +80,9 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
         _ = await worker.ExecuteAsync(artifactRoot, 20, TimeSpan.FromSeconds(60), default); // Extract later capture.
         _ = await worker.ExecuteAsync(artifactRoot, 20, TimeSpan.FromSeconds(60), default); // It must defer, not baseline.
         var deferred = await processing.GetByAttemptIdAsync(afterAttempt, default);
-        Assert.Equal(EvidenceProcessingStatus.RetryWaiting, deferred!.Status);
-        Assert.Equal("priorEvidencePending", deferred.ErrorCode);
+        Assert.Equal(EvidenceProcessingStatus.WaitingForPredecessor, deferred!.Status);
+        Assert.Equal(beforeAttempt, deferred.PredecessorAttemptId);
+        Assert.Null(deferred.RetryAt);
         Assert.Null(await processing.GetByAttemptIdAsync(beforeAttempt, default));
 
         var recoveredWorker = Worker(processing);
@@ -107,6 +115,56 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
         Assert.Equal(EvidenceProcessingOutcome.Changed, completed.Outcome);
         var comparison = await comparisons.GetAsync(completed.ComparisonId!, default);
         Assert.Equal(manualExtraction.ExtractionId, comparison!.BeforeExtractionId);
+        Assert.NotEmpty(comparison.Hunks);
+    }
+
+    [Fact]
+    public async Task OnceWorkerDrainsCollectionThroughPreparationExtractionAndComparison()
+    {
+        var definition = ConfiguredDefinition();
+        var job = await jobs.EnqueueAsync(definition, "pipeline-once", default);
+        var runner = new RunCollectionJob(jobs, attempts, new FileCollectionReceiptHandoffStore(artifactRoot),
+            new CaptureArtifactVerifier(), new FixtureCollector("Pipeline wording.", fail: false,
+                Interlocked.Increment(ref observationTick)));
+        var pipeline = new CollectionJobWorker(PostgresCollectionWorkerQueue.FromConnectionString(connectionString),
+            runner, Worker(processing));
+
+        var result = await pipeline.ExecuteAsync(artifactRoot, once: true, batchSize: 20,
+            leaseDuration: TimeSpan.FromSeconds(60));
+
+        Assert.Equal(1, result.JobsVisited);
+        var completedJob = await jobs.GetAsync(job.JobId, default);
+        Assert.Equal(CollectionJobState.Succeeded, completedJob!.State);
+        var attemptId = Assert.Single(completedJob.Attempts).AttemptId;
+        var record = await processing.GetByAttemptIdAsync(attemptId, default);
+        Assert.Equal(EvidenceProcessingStatus.Succeeded, record!.Status);
+        Assert.Equal(EvidenceProcessingOutcome.Baseline, record.Outcome);
+        Assert.NotNull(await extractions.GetAsync(record.ExtractionId!, default));
+    }
+
+    [Fact]
+    public async Task ComparisonReloadsHistoryAfterPredecessorReportsReady()
+    {
+        var beforeJob = await CollectAsync("fresh-before", "Earlier wording.");
+        var beforeAttempt = Assert.Single(beforeJob.Attempts).AttemptId;
+        _ = await processing.EnsureAsync(beforeJob.JobId, beforeAttempt, "source", Url, default);
+        var before = await ProcessUntilTerminalAsync(Worker(processing), beforeJob.JobId, beforeAttempt);
+        Assert.Equal(EvidenceProcessingOutcome.Baseline, before.Outcome);
+
+        var afterJob = await CollectAsync("fresh-after", "Later wording.");
+        var afterAttempt = Assert.Single(afterJob.Attempts).AttemptId;
+        _ = await processing.EnsureAsync(afterJob.JobId, afterAttempt, "source", Url, default);
+        var hiddenPreparation = new PreparationScanGate(processing) { Hidden = true };
+        var staleHistory = new StalePredecessorHistoryStore(
+            PostgresDocumentHistoryStore.FromConnectionString(connectionString), beforeAttempt);
+        var worker = Worker(hiddenPreparation, staleHistory);
+        _ = await worker.ExecuteAsync(artifactRoot, 20, TimeSpan.FromSeconds(60), default);
+        var completed = await ProcessUntilTerminalAsync(worker, afterJob.JobId, afterAttempt);
+
+        Assert.Equal(EvidenceProcessingOutcome.Changed, completed.Outcome);
+        Assert.True(staleHistory.ReadCount >= 2);
+        var comparison = await comparisons.GetAsync(completed.ComparisonId!, default);
+        Assert.Equal(before.ExtractionId, comparison!.BeforeExtractionId);
         Assert.NotEmpty(comparison.Hunks);
     }
 
@@ -147,7 +205,8 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
         var runner = new RunCollectionJob(jobs, attempts, new FileCollectionReceiptHandoffStore(artifactRoot),
             new CaptureArtifactVerifier(), collector);
         var result = await runner.ExecuteAsync(job.JobId, artifactRoot, TimeSpan.FromSeconds(60), default);
-        Assert.Contains(result.Status, new[] { CollectionJobRunStatus.Completed, CollectionJobRunStatus.AttemptFailed });
+        Assert.True(result.Status is CollectionJobRunStatus.Completed or CollectionJobRunStatus.AttemptFailed,
+            $"Collection returned {result.Status}: {result.BlockReason}, retry {result.RetryAt:O}.");
         return (await jobs.GetAsync(job.JobId, default))!;
     }
 
@@ -166,8 +225,8 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
         throw new InvalidOperationException($"Processing attempt '{attemptId}' did not reach a terminal state.");
     }
 
-    private EvidenceProcessingWorker Worker(IEvidenceProcessingStore processingStore) => new(jobs, attempts, jobs,
-        processingStore, extract, new GetDocumentHistory(PostgresDocumentHistoryStore.FromConnectionString(connectionString)),
+    private EvidenceProcessingWorker Worker(IEvidenceProcessingStore processingStore, IDocumentHistoryStore? historyStore = null) => new(jobs, attempts, jobs,
+        processingStore, extract, new GetDocumentHistory(historyStore ?? PostgresDocumentHistoryStore.FromConnectionString(connectionString)),
         new CompareDocuments(extractions, comparisons));
 
     private CollectionJobDefinition ConfiguredDefinition(string? etag = null)
@@ -279,8 +338,24 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
         public Task EnsurePreparationAsync(string jobId, string sourceId, string requestedUrl, CancellationToken cancellationToken) => inner.EnsurePreparationAsync(jobId, sourceId, requestedUrl, cancellationToken);
         public Task<EvidenceProcessingClaim?> TryClaimAsync(string jobId, string attemptId, TimeSpan leaseDuration, CancellationToken cancellationToken) => inner.TryClaimAsync(jobId, attemptId, leaseDuration, cancellationToken);
         public Task<bool> RenewAsync(EvidenceProcessingClaim claim, TimeSpan leaseDuration, CancellationToken cancellationToken) => inner.RenewAsync(claim, leaseDuration, cancellationToken);
-        public Task<bool> DeferAsync(EvidenceProcessingClaim claim, DateTimeOffset retryAt, CancellationToken cancellationToken) => inner.DeferAsync(claim, retryAt, cancellationToken);
+        public Task<bool> WaitForPredecessorAsync(EvidenceProcessingClaim claim, string predecessorAttemptId, CancellationToken cancellationToken) => inner.WaitForPredecessorAsync(claim, predecessorAttemptId, cancellationToken);
         public Task<bool> CheckpointAsync(EvidenceProcessingCheckpoint checkpoint, CancellationToken cancellationToken) => inner.CheckpointAsync(checkpoint, cancellationToken);
         public Task<bool> ReleaseAsync(EvidenceProcessingClaim claim, CancellationToken cancellationToken) => inner.ReleaseAsync(claim, cancellationToken);
+    }
+
+    private sealed class StalePredecessorHistoryStore(IDocumentHistoryStore inner, string predecessorAttemptId)
+        : IDocumentHistoryStore
+    {
+        public int ReadCount { get; private set; }
+
+        public async Task<IReadOnlyList<DocumentHistoryObservation>> GetAsync(string sourceId, string requestedUrl,
+            int maximumObservations, CancellationToken cancellationToken)
+        {
+            var observations = await inner.GetAsync(sourceId, requestedUrl, maximumObservations, cancellationToken);
+            if (ReadCount++ != 0) return observations;
+            return observations.Select(observation => observation.Attempt.AttemptResult.AttemptId == predecessorAttemptId
+                ? observation with { Extractions = [] }
+                : observation).ToArray();
+        }
     }
 }

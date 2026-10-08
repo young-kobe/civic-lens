@@ -15,7 +15,8 @@ public interface IEvidenceProcessingStore
     Task<EvidenceProcessingClaim?> TryClaimAsync(string jobId, string attemptId, TimeSpan leaseDuration,
         CancellationToken cancellationToken);
     Task<bool> RenewAsync(EvidenceProcessingClaim claim, TimeSpan leaseDuration, CancellationToken cancellationToken);
-    Task<bool> DeferAsync(EvidenceProcessingClaim claim, DateTimeOffset retryAt, CancellationToken cancellationToken);
+    Task<bool> WaitForPredecessorAsync(EvidenceProcessingClaim claim, string predecessorAttemptId,
+        CancellationToken cancellationToken);
     Task<bool> CheckpointAsync(EvidenceProcessingCheckpoint checkpoint, CancellationToken cancellationToken);
     Task<bool> ReleaseAsync(EvidenceProcessingClaim claim, CancellationToken cancellationToken);
 }

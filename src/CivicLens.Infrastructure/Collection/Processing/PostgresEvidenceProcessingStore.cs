@@ -82,13 +82,19 @@ public sealed class PostgresEvidenceProcessingStore(
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(attemptId);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        var owner = await db.Set<JobAttemptRow>().AsNoTracking()
-            .Where(row => row.AttemptId == attemptId).Select(row => new { row.JobId }).SingleOrDefaultAsync(cancellationToken);
+        return await IsAwaitingPreparationAsync(db, attemptId, cancellationToken);
+    }
+
+    private static async Task<bool> IsAwaitingPreparationAsync(CollectionAttemptDbContext db, string attemptId,
+        CancellationToken cancellationToken)
+    {
+        var owner = await (from attempt in db.Set<JobAttemptRow>().AsNoTracking()
+                           join job in db.Set<JobRow>().AsNoTracking() on attempt.JobId equals job.JobId
+                           where attempt.AttemptId == attemptId
+                           select new { job.JobId, job.State }).SingleOrDefaultAsync(cancellationToken);
         if (owner is null) return false;
-        var job = await db.Set<JobRow>().AsNoTracking().Where(row => row.JobId == owner.JobId)
-            .Select(row => new { row.State }).SingleAsync(cancellationToken);
-        if (job.State != Application.Collection.Jobs.CollectionJobState.Succeeded) return
-            job.State is Application.Collection.Jobs.CollectionJobState.Pending or
+        if (owner.State != Application.Collection.Jobs.CollectionJobState.Succeeded)
+            return owner.State is Application.Collection.Jobs.CollectionJobState.Pending or
                 Application.Collection.Jobs.CollectionJobState.Running or
                 Application.Collection.Jobs.CollectionJobState.WaitingToRetry;
         var preparation = await db.Set<PersistedEvidenceProcessingRow>().AsNoTracking()
@@ -216,7 +222,7 @@ public sealed class PostgresEvidenceProcessingStore(
         var changed = await db.Database.ExecuteSqlInterpolatedAsync($$"""
             UPDATE evidence_processing SET
                 stage = {{checkpoint.Stage.ToString()}}, status = {{checkpoint.Status.ToString()}},
-                attempts = CASE WHEN {{checkpoint.Stage != checkpoint.ExpectedStage || checkpoint.Status == EvidenceProcessingStatus.RetryWaiting && checkpoint.ErrorCode == "priorEvidencePending"}} THEN 0 ELSE attempts END,
+                attempts = CASE WHEN {{checkpoint.Stage != checkpoint.ExpectedStage}} THEN 0 ELSE attempts END,
                 extraction_id = {{effectiveExtractionId}}, comparison_id = {{effectiveComparisonId}},
                 outcome = {{checkpoint.Outcome?.ToString()}}, error_code = {{checkpoint.ErrorCode}}, retry_at = {{checkpoint.RetryAt?.UtcTicks}},
                 admitted_count = {{checkpoint.AdmittedCount}}, deferred_count = {{checkpoint.DeferredCount}},
@@ -246,17 +252,42 @@ public sealed class PostgresEvidenceProcessingStore(
             """, cancellationToken) == 1;
     }
 
-    public async Task<bool> DeferAsync(EvidenceProcessingClaim claim, DateTimeOffset retryAt,
+    public async Task<bool> WaitForPredecessorAsync(EvidenceProcessingClaim claim, string predecessorAttemptId,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(claim);
-        var checkpoint = new EvidenceProcessingCheckpoint(claim.Record.JobId, claim.Record.AttemptId,
-            claim.Record.Stage, EvidenceProcessingStatus.Running, claim.LeaseToken, claim.Fence,
-            claim.Record.Stage, EvidenceProcessingStatus.RetryWaiting, ErrorCode: "priorEvidencePending",
-            RetryAt: retryAt);
-        var changed = await CheckpointAsync(checkpoint, cancellationToken);
+        ArgumentException.ThrowIfNullOrWhiteSpace(predecessorAttemptId);
+        if (predecessorAttemptId.Length > 128) throw new ArgumentException("Attempt ID exceeds its storage bound.", nameof(predecessorAttemptId));
+        if (claim.Record.Stage != EvidenceProcessingStage.Comparison)
+            throw new ArgumentException("Only comparison work can wait for a predecessor.", nameof(claim));
+
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
+        await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(9911, hashtext({predecessorAttemptId}))", cancellationToken);
+
+        var predecessor = await db.Set<PersistedEvidenceProcessingRow>().AsNoTracking()
+            .SingleOrDefaultAsync(row => row.AttemptId == predecessorAttemptId, cancellationToken);
+        var waiting = predecessor is null
+            ? await IsAwaitingPreparationAsync(db, predecessorAttemptId, cancellationToken)
+            : predecessor.ExtractionId is null && predecessor.Status is EvidenceProcessingStatus.Pending or
+                EvidenceProcessingStatus.Running or EvidenceProcessingStatus.RetryWaiting or
+                EvidenceProcessingStatus.WaitingForPredecessor;
+        var changed = await ParkOrRequeueAsync(db, claim, predecessorAttemptId, waiting, cancellationToken);
+        if (changed) await transaction.CommitAsync(cancellationToken);
         return changed;
     }
+
+    private static async Task<bool> ParkOrRequeueAsync(CollectionAttemptDbContext db, EvidenceProcessingClaim claim,
+        string predecessorAttemptId, bool waiting, CancellationToken cancellationToken) =>
+        await db.Database.ExecuteSqlInterpolatedAsync($$"""
+            UPDATE evidence_processing SET status = {{(waiting ? "WaitingForPredecessor" : "Pending")}},
+                predecessor_attempt_id = {{(waiting ? predecessorAttemptId : null)}}, attempts = GREATEST(attempts - 1, 0),
+                error_code = NULL, retry_at = NULL, lease_token = NULL, lease_expires_at = NULL
+            WHERE job_id = {{claim.Record.JobId}} AND attempt_id = {{claim.Record.AttemptId}} AND
+                stage = 'Comparison' AND status = 'Running' AND lease_token = {{claim.LeaseToken}} AND
+                fence = {{claim.Fence}} AND lease_expires_at >
+                ((EXTRACT(EPOCH FROM clock_timestamp())::numeric * 10000000 + 621355968000000000)::bigint)
+            """, cancellationToken) == 1;
 
     public async Task<bool> ReleaseAsync(EvidenceProcessingClaim claim, CancellationToken cancellationToken)
     {
@@ -274,7 +305,7 @@ public sealed class PostgresEvidenceProcessingStore(
         row.AttemptId, row.SourceId, row.RequestedUrl, row.Stage, row.Status, row.LeaseToken, row.Fence,
         row.Attempts, row.RetryAt is { } retry ? new DateTimeOffset(retry, TimeSpan.Zero) : null,
         row.ExtractionId, row.ComparisonId, row.Outcome, row.ErrorCode, row.AdmittedCount, row.DeferredCount,
-        row.DuplicateCount);
+        row.DuplicateCount, row.PredecessorAttemptId);
 
     private static async Task<DateTime> ReadDatabaseNowAsync(CollectionAttemptDbContext db, CancellationToken cancellationToken)
     {

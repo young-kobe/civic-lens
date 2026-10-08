@@ -1,99 +1,182 @@
+using CivicLens.Application.Collection.Processing;
+
 namespace CivicLens.Application.Collection.Jobs;
 
-/// <summary>Polls a bounded durable queue and runs its jobs sequentially through the fenced job runner.</summary>
+/// <summary>Drains durable collection and evidence work, then waits for a database wakeup.</summary>
 public sealed class CollectionJobWorker(ICollectionWorkerQueue queue, RunCollectionJob runner,
-    CivicLens.Application.Collection.Processing.EvidenceProcessingWorker? evidenceProcessor = null)
+    EvidenceProcessingWorker? evidenceProcessor = null, ICollectionPipelineWakeup? wakeup = null)
 {
     public const int DefaultBatchSize = 20;
     public const int MaximumBatchSize = 100;
-    public static readonly TimeSpan DefaultPollInterval = TimeSpan.FromSeconds(2);
     public static readonly TimeSpan DefaultLeaseDuration = TimeSpan.FromSeconds(60);
+    private static readonly TimeSpan FailureBackoff = TimeSpan.FromSeconds(2);
 
     public async Task<CollectionJobWorkerResult> ExecuteAsync(string artifactDirectory, bool once,
-        int batchSize = DefaultBatchSize, TimeSpan? pollInterval = null, TimeSpan? leaseDuration = null,
+        int batchSize = DefaultBatchSize, TimeSpan? leaseDuration = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(artifactDirectory);
         if (batchSize is < 1 or > MaximumBatchSize) throw new ArgumentOutOfRangeException(nameof(batchSize));
-        var interval = pollInterval ?? DefaultPollInterval;
-        if (interval < TimeSpan.FromMilliseconds(250) || interval > TimeSpan.FromSeconds(60))
-            throw new ArgumentOutOfRangeException(nameof(pollInterval), "Poll interval must be from 250 milliseconds to 60 seconds.");
+        if (!once && wakeup is null)
+            throw new InvalidOperationException("Continuous pipeline work requires a durable wakeup provider.");
         var lease = leaseDuration ?? DefaultLeaseDuration;
         if (lease < TimeSpan.FromMilliseconds(30))
             throw new ArgumentOutOfRangeException(nameof(leaseDuration), "Lease duration must be at least 30 milliseconds.");
 
+        var wakeupFailures = once ? 0 : await ConnectUntilAvailableAsync(wakeup!, cancellationToken);
         var passes = 0;
         var visited = 0;
         var jobFailures = 0;
         var queueFailures = 0;
-        CollectionWorkerCursor? cursor = null;
+        do
+        {
+            var drain = await DrainAsync(artifactDirectory, batchSize, lease, cancellationToken);
+            passes += drain.Passes;
+            visited += drain.JobsVisited;
+            jobFailures += drain.JobFailures;
+            queueFailures += drain.QueueFailures;
+            if (once || cancellationToken.IsCancellationRequested) break;
+            try
+            {
+                wakeupFailures += await WaitForWorkAsync(wakeup!,
+                    drain.QueueFailures > 0 || drain.JobFailures > 0, cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { break; }
+        }
+        while (!cancellationToken.IsCancellationRequested);
+
+        return new(passes, visited, jobFailures, queueFailures + wakeupFailures);
+    }
+
+    private async Task<CollectionJobWorkerResult> DrainAsync(string artifactDirectory, int batchSize,
+        TimeSpan lease, CancellationToken cancellationToken)
+    {
+        var passes = 0;
+        var visited = 0;
+        var failures = 0;
+        var queueFailures = 0;
         while (!cancellationToken.IsCancellationRequested)
         {
             passes++;
-            CollectionWorkerQueuePage page;
-            try
+            var progress = 0;
+            CollectionWorkerCursor? cursor = null;
+            var queueFailed = false;
+            do
             {
-                page = await queue.GetEligibleJobIdsAsync(cursor, batchSize, cancellationToken);
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                break;
-            }
-            catch (Exception exception) when (IsRecoverable(exception))
-            {
-                queueFailures++;
-                if (once) break;
-                await DelayAsync(interval, cancellationToken);
-                continue;
-            }
-
-            foreach (var jobId in page.JobIds)
-            {
-                if (cancellationToken.IsCancellationRequested) break;
-                visited++;
+                CollectionWorkerQueuePage page;
                 try
                 {
-                    var result = await runner.ExecuteAsync(jobId, artifactDirectory, lease, cancellationToken);
-                    if ((result.Status is CollectionJobRunStatus.AttemptFailed or CollectionJobRunStatus.ImportPending or
-                         CollectionJobRunStatus.RecoveryBlocked or CollectionJobRunStatus.LostOwnership) ||
-                        result.Job?.State == CollectionJobState.Failed)
-                        jobFailures++;
-                }
-                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-                {
-                    break;
-                }
-                catch (Exception exception) when (IsRecoverable(exception))
-                {
-                    jobFailures++;
-                }
-            }
-
-            if (evidenceProcessor is not null && !cancellationToken.IsCancellationRequested)
-            {
-                try
-                {
-                    var failures = await evidenceProcessor.ExecuteAsync(artifactDirectory, batchSize,
-                        lease, cancellationToken);
-                    jobFailures += failures;
+                    page = await queue.GetEligibleJobIdsAsync(cursor, batchSize, cancellationToken);
                 }
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { break; }
-                catch (Exception exception) when (IsRecoverable(exception)) { jobFailures++; }
+                catch (Exception exception) when (IsRecoverable(exception))
+                {
+                    queueFailures++;
+                    queueFailed = true;
+                    break;
+                }
+
+                foreach (var jobId in page.JobIds)
+                {
+                    if (cancellationToken.IsCancellationRequested) break;
+                    visited++;
+                    try
+                    {
+                        var result = await runner.ExecuteAsync(jobId, artifactDirectory, lease, cancellationToken);
+                        if (IsProgress(result.Status))
+                            progress++;
+                        if (IsFailure(result)) failures++;
+                    }
+                    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { break; }
+                    catch (Exception exception) when (IsRecoverable(exception)) { failures++; }
+                }
+
+                if (evidenceProcessor is not null && !cancellationToken.IsCancellationRequested)
+                {
+                    var result = await ProcessEvidenceAsync(artifactDirectory, batchSize, lease, cancellationToken);
+                    progress += result.ProgressCount;
+                    failures += result.Failures;
+                }
+
+                cursor = page.NextCursor;
+            }
+            while (cursor is not null && !cancellationToken.IsCancellationRequested);
+
+            if (queueFailed && evidenceProcessor is not null && !cancellationToken.IsCancellationRequested)
+            {
+                var result = await ProcessEvidenceAsync(artifactDirectory, batchSize, lease, cancellationToken);
+                progress += result.ProgressCount;
+                failures += result.Failures;
             }
 
-            if (once) break;
-            cursor = page.NextCursor;
-            await DelayAsync(interval, cancellationToken);
+            if (queueFailed || progress == 0 || cancellationToken.IsCancellationRequested) break;
         }
 
-        return new(passes, visited, jobFailures, queueFailures);
+        return new(passes, visited, failures, queueFailures);
     }
 
-    private static async Task DelayAsync(TimeSpan interval, CancellationToken cancellationToken)
+    private async Task<EvidenceProcessingWorkerResult> ProcessEvidenceAsync(string artifactDirectory, int batchSize,
+        TimeSpan lease, CancellationToken cancellationToken)
     {
-        try { await Task.Delay(interval, cancellationToken); }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
+        try
+        {
+            return await evidenceProcessor!.ExecuteAsync(artifactDirectory, batchSize, lease, cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { return new(0, 0); }
+        catch (Exception exception) when (IsRecoverable(exception)) { return new(0, 1); }
     }
+
+    private static async Task<int> WaitForWorkAsync(ICollectionPipelineWakeup wakeup, bool reconnect,
+        CancellationToken cancellationToken)
+    {
+        var failures = 0;
+        if (!reconnect)
+        {
+            try
+            {
+                await wakeup.WaitAsync(cancellationToken);
+                return failures;
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+            catch (Exception exception) when (IsRecoverable(exception))
+            {
+                failures++;
+            }
+        }
+
+        await Task.Delay(FailureBackoff, cancellationToken);
+        return failures + await ConnectUntilAvailableAsync(wakeup, cancellationToken);
+    }
+
+    private static async Task<int> ConnectUntilAvailableAsync(ICollectionPipelineWakeup wakeup,
+        CancellationToken cancellationToken)
+    {
+        var failures = 0;
+        while (true)
+        {
+            try
+            {
+                await wakeup.ConnectAsync(cancellationToken);
+                return failures;
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+            catch (Exception exception) when (IsRecoverable(exception))
+            {
+                failures++;
+                await Task.Delay(FailureBackoff, cancellationToken);
+            }
+        }
+    }
+
+    private static bool IsFailure(CollectionJobRunResult result) =>
+        result.Status is CollectionJobRunStatus.AttemptFailed or CollectionJobRunStatus.ImportPending or
+            CollectionJobRunStatus.RecoveryBlocked ||
+        result.Job?.State == CollectionJobState.Failed;
+
+    private static bool IsProgress(CollectionJobRunStatus status) => status is
+        CollectionJobRunStatus.Completed or CollectionJobRunStatus.AttemptFailed or
+        CollectionJobRunStatus.Reconciled or CollectionJobRunStatus.Exhausted or
+        CollectionJobRunStatus.Cancelled;
 
     private static bool IsRecoverable(Exception exception) =>
         exception is not OutOfMemoryException and not StackOverflowException;

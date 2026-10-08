@@ -6,11 +6,12 @@ namespace CivicLens.Tests.Application.Collection.Jobs;
 public sealed class CollectionJobWorkerTests
 {
     [Fact]
-    public async Task EmptyQueueAwaitsCancellablePollDelayInsteadOfSpinning()
+    public async Task EmptyQueueWaitsForDurableWakeupInsteadOfPolling()
     {
         var queue = new SequenceQueue((_, _) => Task.FromResult(new CollectionWorkerQueuePage([], null)));
         var runner = new RunCollectionJob(new RecordingJobStore(), null!, null!, null!, null!);
-        var worker = new CollectionJobWorker(queue, runner);
+        var wakeup = new FakeWakeup(async token => await Task.Delay(Timeout.Infinite, token));
+        var worker = new CollectionJobWorker(queue, runner, wakeup: wakeup);
         using var cancellation = new CancellationTokenSource();
         var cancelTask = Task.Run(async () =>
         {
@@ -19,12 +20,33 @@ public sealed class CollectionJobWorkerTests
         });
 
         var result = await worker.ExecuteAsync(Path.GetTempPath(), once: false,
-            pollInterval: TimeSpan.FromMilliseconds(250), cancellationToken: cancellation.Token);
+            cancellationToken: cancellation.Token);
         await cancelTask;
 
         Assert.Equal(1, result.Passes);
         Assert.Single(queue.CursorHistory);
         Assert.Equal(0, result.JobsVisited);
+        Assert.Equal(1, wakeup.ConnectCount);
+        Assert.Equal(1, wakeup.WaitCount);
+    }
+
+    [Fact]
+    public async Task ConnectsBeforeInitialScanSoAnArrivingNotificationCannotBeMissed()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var wakeup = new FakeWakeup(_ => { cancellation.Cancel(); return Task.CompletedTask; });
+        var queue = new SequenceQueue((_, _) =>
+        {
+            Assert.True(wakeup.IsConnected);
+            return Task.FromResult(new CollectionWorkerQueuePage([], null));
+        });
+        var worker = new CollectionJobWorker(queue,
+            new RunCollectionJob(new RecordingJobStore(), null!, null!, null!, null!), wakeup: wakeup);
+
+        _ = await worker.ExecuteAsync(Path.GetTempPath(), once: false, cancellationToken: cancellation.Token);
+
+        Assert.Equal(1, wakeup.ConnectCount);
+        Assert.Equal(1, wakeup.WaitCount);
     }
 
     [Fact]
@@ -44,22 +66,20 @@ public sealed class CollectionJobWorkerTests
                 Assert.Equal(cursor, receivedCursor);
                 return Task.FromResult(new CollectionWorkerQueuePage(["later-job"], null));
             }
-            Assert.Null(receivedCursor);
-            cancellation.Cancel();
-            return Task.FromResult(new CollectionWorkerQueuePage([], null));
+            throw new InvalidOperationException("The cursor scan should end after the last page.");
         });
         var jobs = new RecordingJobStore();
-        var worker = new CollectionJobWorker(queue, new RunCollectionJob(jobs, null!, null!, null!, null!));
+        var wakeup = new FakeWakeup(token => { cancellation.Cancel(); return Task.CompletedTask; });
+        var worker = new CollectionJobWorker(queue, new RunCollectionJob(jobs, null!, null!, null!, null!), wakeup: wakeup);
 
         var result = await worker.ExecuteAsync(Path.GetTempPath(), once: false,
-            pollInterval: TimeSpan.FromMilliseconds(250), cancellationToken: cancellation.Token);
+            cancellationToken: cancellation.Token);
 
         Assert.Equal(["blocked-a", "blocked-b", "later-job"], jobs.ClaimedJobIds);
         Assert.Equal(3, result.JobsVisited);
-        Assert.Equal(3, queue.CursorHistory.Count);
+        Assert.Equal(2, queue.CursorHistory.Count);
         Assert.Null(queue.CursorHistory[0]);
         Assert.Equal(cursor, queue.CursorHistory[1]);
-        Assert.Null(queue.CursorHistory[2]);
         Assert.Equal(0, result.JobFailures);
     }
 
@@ -67,28 +87,26 @@ public sealed class CollectionJobWorkerTests
     public async Task QueueAndPerJobFailuresDoNotStopLaterWorkOrSpin()
     {
         using var cancellation = new CancellationTokenSource();
-        var queueTimes = new List<DateTimeOffset>();
         var queue = new SequenceQueue((_, callNumber) =>
         {
-            queueTimes.Add(DateTimeOffset.UtcNow);
             if (callNumber == 1) throw new IOException("temporary queue failure");
             if (callNumber == 2)
                 return Task.FromResult(new CollectionWorkerQueuePage(["fails-on-claim", "later-job"], null));
-            cancellation.Cancel();
             return Task.FromResult(new CollectionWorkerQueuePage([], null));
         });
         var jobs = new RecordingJobStore("fails-on-claim");
-        var worker = new CollectionJobWorker(queue, new RunCollectionJob(jobs, null!, null!, null!, null!));
+        var wakeup = new FakeWakeup(token => { cancellation.Cancel(); return Task.CompletedTask; });
+        var worker = new CollectionJobWorker(queue, new RunCollectionJob(jobs, null!, null!, null!, null!), wakeup: wakeup);
 
         var result = await worker.ExecuteAsync(Path.GetTempPath(), once: false,
-            pollInterval: TimeSpan.FromMilliseconds(250), cancellationToken: cancellation.Token);
+            cancellationToken: cancellation.Token);
 
         Assert.Equal(["fails-on-claim", "later-job"], jobs.ClaimedJobIds);
         Assert.Equal(2, result.JobsVisited);
         Assert.Equal(1, result.QueueFailures);
         Assert.Equal(1, result.JobFailures);
         Assert.Equal(3, queue.CursorHistory.Count);
-        Assert.True(queueTimes[1] - queueTimes[0] >= TimeSpan.FromMilliseconds(150));
+        Assert.Equal(1, wakeup.WaitCount);
     }
 
     [Fact]
@@ -108,6 +126,16 @@ public sealed class CollectionJobWorkerTests
             CursorHistory.Add(cursor);
             return next(cursor, CursorHistory.Count);
         }
+    }
+
+    private sealed class FakeWakeup(Func<CancellationToken, Task> wait) : ICollectionPipelineWakeup
+    {
+        public int ConnectCount { get; private set; }
+        public int WaitCount { get; private set; }
+        public bool IsConnected { get; private set; }
+        public Task ConnectAsync(CancellationToken cancellationToken) { ConnectCount++; IsConnected = true; return Task.CompletedTask; }
+        public Task WaitAsync(CancellationToken cancellationToken) { WaitCount++; return wait(cancellationToken); }
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 
     private sealed class RecordingJobStore(params string[] failingJobIds) : ICollectionJobStore

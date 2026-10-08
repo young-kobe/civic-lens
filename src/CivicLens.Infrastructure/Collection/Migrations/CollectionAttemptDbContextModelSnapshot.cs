@@ -35,6 +35,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                 b.Property<long?>("LeaseExpiresAt").HasColumnType("bigint").HasColumnName("lease_expires_at");
                 b.Property<int>("Attempts").HasColumnType("integer").HasColumnName("attempts");
                 b.Property<long?>("RetryAt").HasColumnType("bigint").HasColumnName("retry_at");
+                b.Property<string>("PredecessorAttemptId").HasMaxLength(128).HasColumnType("character varying(128)").HasColumnName("predecessor_attempt_id");
                 b.Property<string>("ExtractionId").HasMaxLength(64).HasColumnType("character varying(64)").HasColumnName("extraction_id");
                 b.Property<string>("ComparisonId").HasMaxLength(64).HasColumnType("character varying(64)").HasColumnName("comparison_id");
                 b.Property<string>("Outcome").HasColumnType("text").HasColumnName("outcome");
@@ -45,12 +46,13 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                 b.HasKey("JobId", "AttemptId");
                 b.HasIndex("JobId", "Stage", "Status");
                 b.HasIndex("Status", "ObservedAtUtcTicks", "AttemptId", "JobId");
+                b.HasIndex("PredecessorAttemptId", "Status");
                 b.ToTable("evidence_processing", t =>
                 {
                     t.HasCheckConstraint("ck_evidence_processing_fence", "fence >= 0 AND attempts >= 0");
                     t.HasCheckConstraint("ck_evidence_processing_lease", "(lease_token IS NULL) = (lease_expires_at IS NULL)");
                     t.HasCheckConstraint("ck_evidence_processing_stage", "stage IN ('Preparation','Extraction','Comparison','Complete')");
-                    t.HasCheckConstraint("ck_evidence_processing_status", "status IN ('Pending','Running','RetryWaiting','Succeeded','Blocked','Failed')");
+                    t.HasCheckConstraint("ck_evidence_processing_status", "status IN ('Pending','Running','RetryWaiting','WaitingForPredecessor','Succeeded','Blocked','Failed')");
                     t.HasCheckConstraint("ck_evidence_processing_evidence_ids", "(extraction_id IS NULL OR extraction_id ~ '^[0-9a-f]{64}$') AND (comparison_id IS NULL OR comparison_id ~ '^[0-9a-f]{64}$')");
                     t.HasCheckConstraint("ck_evidence_processing_counts", "admitted_count >= 0 AND deferred_count >= 0 AND duplicate_count >= 0");
                 });

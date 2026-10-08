@@ -186,7 +186,8 @@ public sealed class SourcesModel(ReviewActorAccessor actors, CollectionWorkspace
         {
             var pages = records[job.JobId].Where(record => record.AttemptId != "prepare").ToArray();
             var record = pages.FirstOrDefault(record => record.Outcome == EvidenceProcessingOutcome.Changed)
-                ?? pages.FirstOrDefault(record => record.Status is EvidenceProcessingStatus.Pending or EvidenceProcessingStatus.Running or EvidenceProcessingStatus.RetryWaiting)
+                ?? pages.FirstOrDefault(record => record.Status is EvidenceProcessingStatus.Pending or EvidenceProcessingStatus.Running or
+                    EvidenceProcessingStatus.RetryWaiting or EvidenceProcessingStatus.WaitingForPredecessor)
                 ?? pages.FirstOrDefault() ?? records[job.JobId].FirstOrDefault();
             summaries[job.JobId] = DescribeProcessing(job, record);
         }
@@ -207,6 +208,8 @@ public sealed class SourcesModel(ReviewActorAccessor actors, CollectionWorkspace
             }, null, true, false);
         if (record.Status == EvidenceProcessingStatus.RetryWaiting)
             return new("Waiting to retry", "Preparation will resume automatically.", null, false, true);
+        if (record.Status == EvidenceProcessingStatus.WaitingForPredecessor)
+            return new("Preparing comparison", "Waiting for earlier evidence to finish preparing.", null, false, true);
         if (record.Status is EvidenceProcessingStatus.Pending or EvidenceProcessingStatus.Running)
             return new(record.Stage switch
             {

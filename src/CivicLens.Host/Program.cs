@@ -144,7 +144,8 @@ try
             new ExtractDocument(attempts, new CaptureDocumentTextExtractor(), extractions),
             new GetDocumentHistory(PostgresDocumentHistoryStore.FromConnectionString(connectionString)),
             new CompareDocuments(extractions, comparisons));
-        return await CollectionWorkerCommand.ExecuteAsync(args, queue, jobs, attempts, cancellation.Token, processing);
+        await using var wakeup = PostgresCollectionPipelineWakeup.FromConnectionString(connectionString);
+        return await CollectionWorkerCommand.ExecuteAsync(args, queue, jobs, attempts, cancellation.Token, processing, wakeup);
     }
 
     if (DocumentCommand.Matches(args))

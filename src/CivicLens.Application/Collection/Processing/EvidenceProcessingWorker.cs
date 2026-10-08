@@ -17,40 +17,53 @@ public sealed class EvidenceProcessingWorker(
     GetDocumentHistory history,
     CompareDocuments compare)
 {
-    private EvidenceProcessingCursor? preparationCursor;
+    private bool preparationReconciled;
     public const int MaximumBatchSize = 100;
     private const int MaximumAttempts = 5;
 
-    public async Task<int> ExecuteAsync(string artifactRoot, int batchSize, TimeSpan leaseDuration,
+    public async Task<EvidenceProcessingWorkerResult> ExecuteAsync(string artifactRoot, int batchSize, TimeSpan leaseDuration,
         CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(artifactRoot);
         if (batchSize is < 1 or > MaximumBatchSize) throw new ArgumentOutOfRangeException(nameof(batchSize));
         var failures = 0;
-        var preparation = await processing.GetPreparationJobIdsAsync(preparationCursor, batchSize, cancellationToken);
-        preparationCursor = preparation.NextCursor;
-        foreach (var jobId in preparation.JobIds)
+        var progress = 0;
+        if (!preparationReconciled)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            try
+            EvidenceProcessingCursor? cursor = null;
+            do
             {
-                var job = await jobs.GetAsync(jobId, cancellationToken);
-                if (job is { State: CollectionJobState.Succeeded })
-                    await processing.EnsurePreparationAsync(jobId, job.Definition.SourceId, job.Definition.Url, cancellationToken);
+                var preparation = await processing.GetPreparationJobIdsAsync(cursor, batchSize, cancellationToken);
+                cursor = preparation.NextCursor;
+                foreach (var jobId in preparation.JobIds)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    try
+                    {
+                        var job = await jobs.GetAsync(jobId, cancellationToken);
+                        if (job is { State: CollectionJobState.Succeeded })
+                            await processing.EnsurePreparationAsync(jobId, job.Definition.SourceId, job.Definition.Url, cancellationToken);
+                    }
+                    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+                    catch (Exception exception) when (IsRecoverable(exception)) { failures++; }
+                }
             }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
-            catch (Exception exception) when (IsRecoverable(exception)) { failures++; }
+            while (cursor is not null);
+            preparationReconciled = failures == 0;
         }
 
         var eligible = await processing.GetEligibleAsync(batchSize, cancellationToken);
         foreach (var record in eligible)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            try { await ProcessAsync(record, artifactRoot, leaseDuration, cancellationToken); }
+            try
+            {
+                if (await ProcessAsync(record, artifactRoot, leaseDuration, cancellationToken)) progress++;
+            }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
             catch (Exception exception) when (IsRecoverable(exception)) { failures++; }
         }
-        return failures;
+        return new(progress, failures);
     }
 
     private async Task PrepareAsync(EvidenceProcessingClaim claim, CancellationToken cancellationToken)
@@ -114,11 +127,11 @@ public sealed class EvidenceProcessingWorker(
             duplicateCount: duplicates);
     }
 
-    private async Task ProcessAsync(EvidenceProcessingRecord record, string artifactRoot,
+    private async Task<bool> ProcessAsync(EvidenceProcessingRecord record, string artifactRoot,
         TimeSpan leaseDuration, CancellationToken cancellationToken)
     {
         var claim = await processing.TryClaimAsync(record.JobId, record.AttemptId, leaseDuration, cancellationToken);
-        if (claim is null) return;
+        if (claim is null) return false;
         using var ownership = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         var heartbeat = RenewLeaseAsync(claim, leaseDuration, ownership);
         try
@@ -128,6 +141,7 @@ public sealed class EvidenceProcessingWorker(
         catch (OperationCanceledException) when (ownership.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
         {
             // Ownership was fenced by another worker. The stale worker cannot checkpoint.
+            return false;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -146,7 +160,7 @@ public sealed class EvidenceProcessingWorker(
                     ErrorCode: SafeErrorCode(exception));
                 using var recovery = new CancellationTokenSource(TimeSpan.FromSeconds(5));
                 _ = await processing.CheckpointAsync(checkpoint, recovery.Token);
-                return;
+                return true;
             }
             var retry = claim.Record.Attempts < MaximumAttempts;
             var status = retry ? EvidenceProcessingStatus.RetryWaiting : EvidenceProcessingStatus.Failed;
@@ -163,6 +177,7 @@ public sealed class EvidenceProcessingWorker(
             ownership.Cancel();
             try { await heartbeat; } catch (OperationCanceledException) { }
         }
+        return true;
     }
 
     private async Task AdvanceAsync(EvidenceProcessingClaim claim, string artifactRoot, CancellationToken cancellationToken)
@@ -210,47 +225,44 @@ public sealed class EvidenceProcessingWorker(
 
         if (record.Stage != EvidenceProcessingStage.Comparison || record.ExtractionId is null)
             throw new InvalidDataException("Processing checkpoint has an invalid stage or missing extraction.");
-        var validatedHistory = await history.ExecuteAsync(record.SourceId, record.RequestedUrl,
-            GetDocumentHistory.MaximumObservations, cancellationToken);
-        var observations = validatedHistory.Observations;
-        var currentIndex = -1;
-        for (var index = 0; index < observations.Length; index++)
-            if (observations[index].Attempt.AttemptResult.AttemptId == record.AttemptId) currentIndex = index;
-        if (currentIndex < 0) throw new InvalidDataException("Captured page is missing from retained document history.");
-        var current = observations[currentIndex].Extractions.SingleOrDefault(item => item.ExtractionId == record.ExtractionId)
-            ?? throw new InvalidDataException("Processing extraction is missing from retained history.");
-        if (currentIndex == 0)
+        var snapshot = await ReadComparisonHistoryAsync(record, cancellationToken);
+        var predecessorAttemptId = snapshot.PreviousCapture?.AttemptId;
+        if (predecessorAttemptId is not null &&
+            await IsPredecessorPendingAsync(predecessorAttemptId, cancellationToken))
+        {
+            if (!await processing.WaitForPredecessorAsync(claim, predecessorAttemptId, cancellationToken))
+                throw new OperationCanceledException("Processing lease was lost.");
+            return;
+        }
+        // Readiness and history are separate transactions. Reload after readiness so a just-committed
+        // predecessor extraction cannot be missed by the snapshot read above.
+        snapshot = await ReadComparisonHistoryAsync(record, cancellationToken);
+        if (snapshot.PreviousCapture?.AttemptId != predecessorAttemptId)
+        {
+            if (!await processing.ReleaseAsync(claim, cancellationToken))
+                throw new OperationCanceledException("Processing lease was lost.");
+            return;
+        }
+        if (snapshot.Previous is null)
         {
             await CompleteAsync(claim, EvidenceProcessingStage.Complete, EvidenceProcessingStatus.Succeeded,
                 EvidenceProcessingOutcome.Baseline, null, cancellationToken);
             return;
         }
-
-        var previous = observations[currentIndex - 1];
-        var previousCapture = previous.Attempt.PriorCapturedAttempt ??
-            previous.Attempt.AttemptResult as CapturedAttemptResult;
-        var priorProcessing = previousCapture is null ? null :
-            await processing.GetByAttemptIdAsync(previousCapture.AttemptId, cancellationToken);
-        if (priorProcessing?.Status is EvidenceProcessingStatus.Pending or EvidenceProcessingStatus.Running or
-            EvidenceProcessingStatus.RetryWaiting || priorProcessing is null && previousCapture is not null &&
-            await processing.IsAwaitingPreparationAsync(previousCapture.AttemptId, cancellationToken))
-        {
-            if (!await processing.DeferAsync(claim, DateTimeOffset.UtcNow.AddSeconds(2), cancellationToken))
-                throw new OperationCanceledException("Processing lease was lost.");
-            return;
-        }
-        var previousExtraction = previousCapture is null ? null : previous.Extractions.FirstOrDefault(item =>
-            item.SourceAttempt.AttemptId == previousCapture.AttemptId &&
-            item.ParserVersion == current.ParserVersion && item.NormalizationVersion == current.NormalizationVersion &&
-            ((item.Profile is null && current.Profile is null) || item.Profile?.Matches(current.Profile) == true));
+        var previousExtraction = snapshot.PreviousCapture is null ? null : snapshot.Previous.Extractions.FirstOrDefault(item =>
+            item.SourceAttempt.AttemptId == snapshot.PreviousCapture.AttemptId &&
+            item.ParserVersion == snapshot.Current.ParserVersion &&
+            item.NormalizationVersion == snapshot.Current.NormalizationVersion &&
+            ((item.Profile is null && snapshot.Current.Profile is null) ||
+             item.Profile?.Matches(snapshot.Current.Profile) == true));
         if (previousExtraction is null)
         {
             await CompleteAsync(claim, EvidenceProcessingStage.Complete, EvidenceProcessingStatus.Succeeded,
                 EvidenceProcessingOutcome.Baseline,
-                previousCapture is null ? "historyGap" : "incompatibleHistory", cancellationToken);
+                snapshot.PreviousCapture is null ? "historyGap" : "incompatibleHistory", cancellationToken);
             return;
         }
-        var comparison = await compare.CompareAsync(previousExtraction, current, cancellationToken);
+        var comparison = await compare.CompareAsync(previousExtraction, snapshot.Current, cancellationToken);
         if (comparison.Status != DocumentComparisonStatus.Complete)
         {
             await CompleteAsync(claim, EvidenceProcessingStage.Complete, EvidenceProcessingStatus.Blocked,
@@ -262,6 +274,39 @@ public sealed class EvidenceProcessingWorker(
         await CompleteAsync(claim, EvidenceProcessingStage.Complete, EvidenceProcessingStatus.Succeeded,
             comparison.Hunks.IsEmpty ? EvidenceProcessingOutcome.Unchanged : EvidenceProcessingOutcome.Changed,
             null, cancellationToken, saved.ComparisonId);
+    }
+
+    private async Task<ComparisonHistorySnapshot> ReadComparisonHistoryAsync(EvidenceProcessingRecord record,
+        CancellationToken cancellationToken)
+    {
+        var documentHistory = await history.ExecuteAsync(record.SourceId, record.RequestedUrl,
+            GetDocumentHistory.MaximumObservations, cancellationToken);
+        var currentIndex = -1;
+        for (var index = 0; index < documentHistory.Observations.Length; index++)
+            if (documentHistory.Observations[index].Attempt.AttemptResult.AttemptId == record.AttemptId)
+                currentIndex = index;
+        if (currentIndex < 0) throw new InvalidDataException("Captured page is missing from retained document history.");
+        var currentObservation = documentHistory.Observations[currentIndex];
+        var current = currentObservation.Extractions.SingleOrDefault(item => item.ExtractionId == record.ExtractionId)
+            ?? throw new InvalidDataException("Processing extraction is missing from retained history.");
+        var previous = currentIndex == 0 ? null : documentHistory.Observations[currentIndex - 1];
+        var previousCapture = previous?.Attempt.PriorCapturedAttempt ??
+            previous?.Attempt.AttemptResult as CapturedAttemptResult;
+        return new(current, previous, previousCapture);
+    }
+
+    private sealed record ComparisonHistorySnapshot(Core.Documents.DocumentExtraction Current,
+        DocumentHistoryObservation? Previous, CapturedAttemptResult? PreviousCapture);
+
+    private async Task<bool> IsPredecessorPendingAsync(string predecessorAttemptId,
+        CancellationToken cancellationToken)
+    {
+        var predecessor = await processing.GetByAttemptIdAsync(predecessorAttemptId, cancellationToken);
+        if (predecessor?.ExtractionId is not null) return false;
+        if (predecessor?.Status is EvidenceProcessingStatus.Pending or EvidenceProcessingStatus.Running or
+            EvidenceProcessingStatus.RetryWaiting or EvidenceProcessingStatus.WaitingForPredecessor)
+            return true;
+        return predecessor is null && await processing.IsAwaitingPreparationAsync(predecessorAttemptId, cancellationToken);
     }
 
     private async Task CompleteAsync(EvidenceProcessingClaim claim, EvidenceProcessingStage stage,
