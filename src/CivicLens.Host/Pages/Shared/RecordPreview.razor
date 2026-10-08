@@ -1,0 +1,36 @@
+@using Microsoft.AspNetCore.Components
+
+<article class="review-preview">
+    <div class="review-preview-heading"><span>Proposed public record · Revision @RevisionNumber</span><span>Not published</span></div>
+    <h2>@Headline</h2>
+    <p>@Summary</p>
+    @if (!string.IsNullOrWhiteSpace(Significance))
+    {
+        <section><h3>Why it matters</h3><p>@Significance</p></section>
+    }
+    @if (!string.IsNullOrWhiteSpace(Limits))
+    {
+        <section><h3>What the evidence cannot establish</h3><p>@Limits</p></section>
+    }
+    <dl class="review-preview-meta">
+        <div><dt>Source institution</dt><dd>@Institution</dd></div>
+        <div><dt>Actual change date</dt><dd>@ChangeDate</dd></div>
+        <div><dt>Observed</dt><dd>@Observed</dd></div>
+        <div><dt>Official links</dt><dd>@OfficialLinks</dd></div>
+        <div><dt>Issues</dt><dd>@Issues</dd></div>
+    </dl>
+    <div class="review-preview-limitation">Observation dates show when the versions were captured. They do not establish the exact time or reason for a source edit.</div>
+</article>
+
+@code {
+    [Parameter] public int RevisionNumber { get; set; }
+    [Parameter, EditorRequired] public string Headline { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string Summary { get; set; } = string.Empty;
+    [Parameter] public string? Significance { get; set; }
+    [Parameter] public string? Limits { get; set; }
+    [Parameter, EditorRequired] public string Institution { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string ChangeDate { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string Observed { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string OfficialLinks { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string Issues { get; set; } = string.Empty;
+}

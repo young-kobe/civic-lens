@@ -54,27 +54,26 @@
     <div class="review-columns">
         <section class="review-column" aria-labelledby="preview-title">
             <h2 id="preview-title">Reader preview</h2>
-            <article class="review-preview">
-                <div class="review-preview-heading"><span>Proposed public record · Revision @revision.RevisionNumber</span><span>Not published</span></div>
-                <h2>@(string.IsNullOrWhiteSpace(Model.Input.Headline) ? "Your headline will appear here" : Model.Input.Headline)</h2>
-                <p>@(string.IsNullOrWhiteSpace(Model.Input.Summary) ? "Add a plain-language summary of what the evidence establishes." : Model.Input.Summary)</p>
-                @if (!string.IsNullOrWhiteSpace(Model.Input.Significance))
-                {
-                    <section><h3>Why it matters</h3><p>@Model.Input.Significance</p></section>
-                }
-                @if (!string.IsNullOrWhiteSpace(Model.Input.Limits))
-                {
-                    <section><h3>What the evidence cannot establish</h3><p>@Model.Input.Limits</p></section>
-                }
-                <dl class="review-preview-meta">
-                    <div><dt>Source institution</dt><dd>@(string.IsNullOrWhiteSpace(Model.Input.Institution) ? "Add the institution named by the source" : Model.Input.Institution)</dd></div>
-                    <div><dt>Actual change date</dt><dd>@(string.IsNullOrWhiteSpace(Model.Input.ChangeDate) ? "Not established" : Model.Input.ChangeDate)</dd></div>
-                    <div><dt>Observed</dt><dd>@Model.BeforeObservedAtUtc?.ToString("yyyy-MM-dd HH:mm 'UTC'") before; @Model.AfterObservedAtUtc?.ToString("yyyy-MM-dd HH:mm 'UTC'") after</dd></div>
-                    <div><dt>Official links</dt><dd>@((Model.Input.OfficialIds?.Length ?? 0) == 0 ? "None selected" : string.Join(", ", Model.Input.OfficialIds ?? []))</dd></div>
-                    <div><dt>Issues</dt><dd>@((Model.Input.IssueIds?.Length ?? 0) == 0 ? "None selected" : string.Join(", ", Model.Input.IssueIds ?? []))</dd></div>
-                </dl>
-                <div class="review-preview-limitation">Observation dates show when the versions were captured. They do not establish the exact time or reason for a source edit.</div>
-            </article>
+            @{
+                var previewHeadline = string.IsNullOrWhiteSpace(Model.Input.Headline) ? "Your headline will appear here" : Model.Input.Headline;
+                var previewSummary = string.IsNullOrWhiteSpace(Model.Input.Summary) ? "Add a plain-language summary of what the evidence establishes." : Model.Input.Summary;
+                var previewInstitution = string.IsNullOrWhiteSpace(Model.Input.Institution) ? "Add the institution named by the source" : Model.Input.Institution;
+                var previewChangeDate = string.IsNullOrWhiteSpace(Model.Input.ChangeDate) ? "Not established" : Model.Input.ChangeDate;
+                var previewObserved = $"{Model.BeforeObservedAtUtc?.ToString("yyyy-MM-dd HH:mm 'UTC'")} before; {Model.AfterObservedAtUtc?.ToString("yyyy-MM-dd HH:mm 'UTC'")} after";
+                var previewOfficialLinks = (Model.Input.OfficialIds?.Length ?? 0) == 0 ? "None selected" : string.Join(", ", Model.Input.OfficialIds ?? []);
+                var previewIssues = (Model.Input.IssueIds?.Length ?? 0) == 0 ? "None selected" : string.Join(", ", Model.Input.IssueIds ?? []);
+            }
+            <component type="typeof(RecordPreview)" render-mode="Static"
+                       param-RevisionNumber="@revision.RevisionNumber"
+                       param-Headline="@previewHeadline"
+                       param-Summary="@previewSummary"
+                       param-Significance="@Model.Input.Significance"
+                       param-Limits="@Model.Input.Limits"
+                       param-Institution="@previewInstitution"
+                       param-ChangeDate="@previewChangeDate"
+                       param-Observed="@previewObserved"
+                       param-OfficialLinks="@previewOfficialLinks"
+                       param-Issues="@previewIssues" />
 
             <form method="post" asp-page-handler="Save" class="review-editor-form" data-unsaved-form data-recovered-unsaved="@Model.HasUnsavedInput.ToString().ToLowerInvariant()">
                 <input type="hidden" name="draftId" value="@revision.DraftId" />
