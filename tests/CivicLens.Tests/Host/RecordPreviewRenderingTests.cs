@@ -35,7 +35,7 @@ public sealed class RecordPreviewRenderingTests
         });
 
         Assert.Contains("<article class=\"review-preview\">", html, StringComparison.Ordinal);
-        Assert.Contains("Proposed public record · Revision 3", html, StringComparison.Ordinal);
+        Assert.Contains("Proposed public record &#xB7; Revision 3", html, StringComparison.Ordinal);
         Assert.Contains("&lt;script&gt;alert(&#x27;headline&#x27;)&lt;/script&gt;", html, StringComparison.Ordinal);
         Assert.DoesNotContain("<script>", html, StringComparison.Ordinal);
         Assert.DoesNotContain("Why it matters", html, StringComparison.Ordinal);

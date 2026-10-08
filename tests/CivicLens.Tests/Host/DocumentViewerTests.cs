@@ -110,11 +110,16 @@ public sealed class DocumentViewerTests(PostgresCollection postgres) : IAsyncLif
         Assert.Contains(text, WebUtility.HtmlDecode(html));
         var document = await new HtmlParser().ParseDocumentAsync(html);
         Assert.Equal(text, document.QuerySelector(".evidence-text")!.TextContent);
-        Assert.Empty(document.QuerySelectorAll("script"));
+        Assert.All(document.QuerySelectorAll("script"), script =>
+        {
+            Assert.Empty(script.TextContent);
+            Assert.Contains(script.GetAttribute("src")?.Split('?')[0], new[] { "/review.js", "/diff.js", "/search.js", "/sources.js" });
+        });
         Assert.Contains(extraction.ExtractionId, html);
         Assert.True(response.Headers.CacheControl?.NoStore);
         Assert.Contains("default-src", response.Headers.GetValues("Content-Security-Policy").Single());
         Assert.Contains("form-action 'self'", response.Headers.GetValues("Content-Security-Policy").Single());
+        Assert.Contains("script-src 'self'", response.Headers.GetValues("Content-Security-Policy").Single());
         using var stylesheet = await client.GetAsync("/css/site.css");
         Assert.Equal(HttpStatusCode.OK, stylesheet.StatusCode);
         var start = text.IndexOf("\U0001F600", StringComparison.Ordinal);

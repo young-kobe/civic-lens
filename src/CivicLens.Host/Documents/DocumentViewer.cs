@@ -116,7 +116,7 @@ internal static class DocumentViewer
     private static void SetSecurityHeaders(HttpResponse response)
     {
         response.Headers["Cache-Control"] = "no-store";
-        response.Headers["Content-Security-Policy"] = "default-src 'none'; style-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
+        response.Headers["Content-Security-Policy"] = "default-src 'none'; style-src 'self'; script-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
         response.Headers["Referrer-Policy"] = "no-referrer";
         response.Headers["X-Content-Type-Options"] = "nosniff";
         response.Headers["X-Frame-Options"] = "DENY";

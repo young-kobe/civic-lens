@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.IO.Compression;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -12,6 +13,7 @@ using AngleSharp.Html.Parser;
 using AngleSharp.Dom;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Jobs;
+using CivicLens.Application.Collection.Processing;
 using CivicLens.Application.Documents;
 using CivicLens.Core.Review;
 using CivicLens.Collection.Contracts;
@@ -19,6 +21,7 @@ using CivicLens.Core.Collection;
 using CivicLens.Core.Documents;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Collection.Jobs;
+using CivicLens.Infrastructure.Collection.Processing;
 using CivicLens.Infrastructure.Documents;
 using CivicLens.Tests.Infrastructure.Collection;
 using Npgsql;
@@ -170,7 +173,7 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
         Assert.Equal(HttpStatusCode.Redirect, created.StatusCode);
         var editorUrl = created.Headers.Location!.ToString();
         var editor = await GetDocumentAsync(editorUrl);
-        Assert.Equal("Your headline will appear here", editor.QuerySelector("article.review-preview h2")!.TextContent);
+        Assert.Equal("Untitled public record", editor.QuerySelector("#saved-approval-target h2")!.TextContent);
         var save = editor.QuerySelector("form[data-unsaved-form]")!;
         var fields = Fields(save);
         Set(fields, "Input.Headline", "Saved headline");
@@ -202,12 +205,84 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
     }
 
     [Fact]
+    public async Task SavedApprovalTargetKeepsSavedAccountAndCitationsSeparateFromRecoveredUnsavedInputAsync()
+    {
+        const string untrustedSource = "<img src=x onerror=alert(1)>";
+        var before = await SaveExtractionAsync("Earlier wording.\n");
+        var after = await SaveExtractionAsync(untrustedSource + "\n");
+        var comparison = await comparisons.SaveAsync(DocumentComparison.Create(before, after), default);
+        client.DefaultRequestHeaders.Add("Cookie", CreateCookie("auth0|owner"));
+
+        var comparisonPage = await GetDocumentAsync("/Documents/Comparison?comparisonId=" + comparison.ComparisonId);
+        Assert.NotNull(comparisonPage.QuerySelector(".review-shell"));
+        Assert.Equal(2, comparisonPage.QuerySelectorAll(".diff-passage").Length);
+        var create = comparisonPage.QuerySelector("form[action*='Create']")!;
+        using var missingToken = await client.PostAsync(create.GetAttribute("action"), new FormUrlEncodedContent(
+            Fields(create).Where(field => field.Key != "__RequestVerificationToken")));
+        Assert.Equal(HttpStatusCode.BadRequest, missingToken.StatusCode);
+        using var created = await client.PostAsync(create.GetAttribute("action"), Form(create));
+        Assert.Equal(HttpStatusCode.Redirect, created.StatusCode);
+        using var replay = await client.PostAsync(create.GetAttribute("action"), Form(create));
+        Assert.Equal(created.Headers.Location, replay.Headers.Location);
+        var editorUrl = created.Headers.Location!.ToString();
+        var editor = await GetDocumentAsync(editorUrl);
+        var save = editor.QuerySelector("form[data-unsaved-form]")!;
+        var fields = Fields(save);
+        Set(fields, "Input.Headline", "Saved public account");
+        Set(fields, "Input.Summary", "A saved summary for review.");
+        Set(fields, "Input.Institution", "Example Office");
+        fields.RemoveAll(field => field.Key == "Input.EvidenceSelection");
+        var evidenceOptions = editor.QuerySelectorAll("input[name='Input.EvidenceSelection']");
+        var earlierEvidence = evidenceOptions.Single(input => input.ParentElement!.TextContent.Contains("Earlier wording", StringComparison.Ordinal));
+        var laterEvidence = evidenceOptions.Single(input => input.ParentElement!.TextContent.Contains(untrustedSource, StringComparison.Ordinal));
+        fields.Add(new("Input.EvidenceSelection", earlierEvidence.GetAttribute("value")!));
+        fields.Add(new("Input.EvidenceSelection", laterEvidence.GetAttribute("value")!));
+
+        using var saved = await client.PostAsync(save.GetAttribute("action"), new FormUrlEncodedContent(fields));
+        Assert.Equal(HttpStatusCode.Redirect, saved.StatusCode);
+        editor = await GetDocumentAsync(editorUrl);
+        var savedTarget = editor.QuerySelector("#saved-approval-target")!;
+        var savedCitations = editor.QuerySelector("#saved-citation-title")!.ParentElement!;
+        Assert.Contains("Saved public account", savedTarget.TextContent, StringComparison.Ordinal);
+        Assert.Contains("A saved summary for review.", savedTarget.TextContent, StringComparison.Ordinal);
+        Assert.Contains("later version", savedCitations.TextContent, StringComparison.Ordinal);
+        Assert.Contains("earlier version", savedCitations.TextContent, StringComparison.Ordinal);
+        Assert.Contains("Earlier wording", editor.QuerySelector(".review-evidence-column")!.TextContent, StringComparison.Ordinal);
+        Assert.Contains("&lt;img src=x onerror=alert(1)&gt;", savedCitations.InnerHtml, StringComparison.Ordinal);
+        Assert.DoesNotContain("<img", savedCitations.InnerHtml, StringComparison.Ordinal);
+        var citationLinks = savedCitations.QuerySelectorAll("a[href*='/Documents/Citation']");
+        Assert.Contains(citationLinks, link => link.GetAttribute("href")!.Contains(before.ExtractionId, StringComparison.Ordinal));
+        Assert.Contains(citationLinks, link => link.GetAttribute("href")!.Contains(after.ExtractionId, StringComparison.Ordinal));
+        Assert.Equal("false", editor.QuerySelector("#unsaved-record-preview")!.GetAttribute("data-recovered-unsaved"));
+        Assert.Contains("Software checks", editor.QuerySelector("#decision-title")!.ParentElement!.TextContent, StringComparison.Ordinal);
+        Assert.Contains("You must judge", editor.QuerySelector("#decision-title")!.ParentElement!.TextContent, StringComparison.Ordinal);
+        Assert.Contains("keeps this account private", editor.QuerySelector(".review-approval-target")!.TextContent, StringComparison.Ordinal);
+        Assert.Contains("publishing is a separate future process", editor.QuerySelector(".review-approval-target")!.TextContent, StringComparison.Ordinal);
+
+        // Submit the pre-save form again to simulate a stale editor after its first save.
+        Set(fields, "Input.Headline", "Recovered unsaved public account");
+        Set(fields, "idempotencyKey", Guid.NewGuid().ToString("N"));
+        using var stale = await client.PostAsync(save.GetAttribute("action"), new FormUrlEncodedContent(fields));
+        Assert.Equal(HttpStatusCode.Conflict, stale.StatusCode);
+        var conflict = await new HtmlParser().ParseDocumentAsync(await stale.Content.ReadAsStringAsync());
+        Assert.Equal("Recovered unsaved public account", conflict.QuerySelector("#Input_Headline")!.GetAttribute("value"));
+        Assert.Equal("true", conflict.QuerySelector("#unsaved-record-preview")!.GetAttribute("data-recovered-unsaved"));
+        var conflictSavedTarget = conflict.QuerySelector("#saved-approval-target")!;
+        Assert.Contains("Saved public account", conflictSavedTarget.TextContent, StringComparison.Ordinal);
+        Assert.DoesNotContain("Recovered unsaved public account", conflictSavedTarget.TextContent, StringComparison.Ordinal);
+        Assert.Contains(after.ExtractionId, conflict.QuerySelector("#saved-citation-title")!.ParentElement!.InnerHtml, StringComparison.Ordinal);
+        Assert.True(conflict.QuerySelector("#decision-controls")!.HasAttribute("disabled"));
+    }
+
+    [Fact]
     public async Task SourceControlsRequireOwnerAndCsrfAndEnqueueIdempotently()
     {
         client.DefaultRequestHeaders.Add("Cookie", CreateCookie("auth0|friend"));
         using var denied = await client.GetAsync("/Review/Sources");
         Assert.Equal(HttpStatusCode.Redirect, denied.StatusCode);
         Assert.Contains("access-denied", denied.Headers.Location!.ToString());
+        using var deniedActivity = await client.GetAsync("/Review/Sources?handler=Activity");
+        Assert.Equal(HttpStatusCode.Redirect, deniedActivity.StatusCode);
         client.DefaultRequestHeaders.Remove("Cookie");
         client.DefaultRequestHeaders.Add("Cookie", CreateCookie("auth0|owner"));
         var page = await GetDocumentAsync("/Review/Sources");
@@ -224,12 +299,85 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
         var store = PostgresCollectionJobStore.FromConnectionString(connectionString);
         var job = Assert.Single(await store.ListAsync(50, default));
         Assert.Empty(job.Attempts);
-        var detail = await GetDocumentAsync(queued.Headers.Location!.ToString());
-        Assert.Contains("No attempt yet", detail.Body!.TextContent);
+        using var activity = await client.GetAsync("/Review/Sources?handler=Activity");
+        Assert.Equal(HttpStatusCode.OK, activity.StatusCode);
+        Assert.Contains("connect-src 'self'", activity.Headers.GetValues("Content-Security-Policy").Single());
+        using var activityJson = JsonDocument.Parse(await activity.Content.ReadAsStringAsync());
+        var reportedJob = activityJson.RootElement.GetProperty("jobs").EnumerateArray().Single();
+        Assert.Equal(job.JobId, reportedJob.GetProperty("jobId").GetString());
+        Assert.Equal("Queued", reportedJob.GetProperty("label").GetString());
+        Assert.True(reportedJob.GetProperty("canStop").GetBoolean());
+        var detail = await GetDocumentAsync("/Review/Sources?jobId=" + job.JobId);
+        Assert.Contains("This check is waiting to start", detail.Body!.TextContent);
+        Assert.Null(detail.QuerySelector("form[action*='Recollect']"));
         var cancel = detail.QuerySelector("form[action*='Cancel']")!;
         using var cancelled = await client.PostAsync(cancel.GetAttribute("action"), Form(cancel));
         Assert.Equal(HttpStatusCode.Redirect, cancelled.StatusCode);
         Assert.Equal(CivicLens.Application.Collection.Jobs.CollectionJobState.Cancelled, (await store.GetAsync(job.JobId, default))!.State);
+    }
+
+    [Fact]
+    public async Task CheckAutomaticallyPreparesEvidenceAndSendsLaterChangesToReviewAsync()
+    {
+        client.DefaultRequestHeaders.Add("Cookie", CreateCookie("auth0|owner"));
+        var jobs = PostgresCollectionJobStore.FromConnectionString(connectionString);
+        var processing = PostgresEvidenceProcessingStore.FromConnectionString(connectionString);
+        var collector = new CapturedFixtureCollector("<html><body><main>Deadline: October 15.</main></body></html>");
+        var runner = new RunCollectionJob(jobs, attempts, new FileCollectionReceiptHandoffStore(keyDirectory),
+            new CaptureArtifactVerifier(), collector);
+        var worker = new EvidenceProcessingWorker(jobs, attempts, jobs, processing,
+            new ExtractDocument(attempts, new CaptureDocumentTextExtractor(), extractions),
+            new GetDocumentHistory(PostgresDocumentHistoryStore.FromConnectionString(connectionString)), new CompareDocuments(extractions, comparisons));
+
+        async Task<EvidenceProcessingRecord> CheckAsync()
+        {
+            var page = await GetDocumentAsync("/Review/Sources");
+            var check = page.QuerySelector("form[action*='Collect']")!;
+            Assert.Equal("Check", check.QuerySelector("button")!.TextContent.Trim());
+            using var queued = await client.PostAsync(check.GetAttribute("action"), Form(check));
+            Assert.Equal(HttpStatusCode.Redirect, queued.StatusCode);
+            var job = (await jobs.ListAsync(50, default))[0];
+            for (var pass = 0; pass < 24; pass++)
+            {
+                _ = await runner.ExecuteAsync(job.JobId, keyDirectory, TimeSpan.FromSeconds(60));
+                _ = await worker.ExecuteAsync(keyDirectory, 20, TimeSpan.FromSeconds(60), default);
+                var progress = (await processing.GetByJobIdsAsync([job.JobId], default))
+                    .SingleOrDefault(record => record.AttemptId != "prepare");
+                if (progress?.Status is EvidenceProcessingStatus.Succeeded or EvidenceProcessingStatus.Blocked or EvidenceProcessingStatus.Failed)
+                    return progress;
+                await Task.Delay(250);
+            }
+            throw new InvalidOperationException("The bounded source check did not complete.");
+        }
+
+        var baseline = await CheckAsync();
+        Assert.Equal(EvidenceProcessingOutcome.Baseline, baseline.Outcome);
+        var firstQueue = await GetDocumentAsync("/Review");
+        Assert.Null(firstQueue.QuerySelector("form[action*='Create']"));
+        collector.Html = "<html><body><main>Deadline: October 30.</main></body></html>";
+        var changed = await CheckAsync();
+        Assert.Equal(EvidenceProcessingOutcome.Changed, changed.Outcome);
+        Assert.NotNull(changed.ComparisonId);
+        var sources = await GetDocumentAsync("/Review/Sources");
+        Assert.Contains("Ready for review", sources.Body!.TextContent);
+        var review = sources.QuerySelector($"form input[name='comparisonId'][value='{changed.ComparisonId}']")!.ParentElement!;
+        using var created = await client.PostAsync(review.GetAttribute("action"), Form(review));
+        Assert.Equal(HttpStatusCode.Redirect, created.StatusCode);
+        Assert.StartsWith("/Review/", created.Headers.Location!.ToString(), StringComparison.Ordinal);
+        var editor = await GetDocumentAsync(created.Headers.Location.ToString());
+        Assert.Contains("October 15", editor.Body!.TextContent);
+        Assert.Contains("October 30", editor.Body.TextContent);
+        // Replaying a finished processing pass preserves exactly one comparison and evidence outcome.
+        _ = await worker.ExecuteAsync(keyDirectory, 20, TimeSpan.FromSeconds(60), default);
+        var repeated = (await processing.GetByJobIdsAsync([changed.JobId], default)).Single(record => record.AttemptId == changed.AttemptId);
+        Assert.Equal(changed.ComparisonId, repeated.ComparisonId);
+        var unchanged = await CheckAsync();
+        Assert.Equal(EvidenceProcessingOutcome.Unchanged, unchanged.Outcome);
+        Assert.NotNull(unchanged.ComparisonId);
+        var unchangedComparison = await comparisons.GetAsync(unchanged.ComparisonId, default);
+        Assert.Empty(unchangedComparison!.Hunks);
+        var finalQueue = await GetDocumentAsync("/Review");
+        Assert.DoesNotContain(unchanged.ComparisonId, finalQueue.Body!.InnerHtml, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -241,8 +389,8 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
         var values = Fields(collect);
         Set(values, "requestKey", Guid.NewGuid().ToString("N"));
         using var queued = await client.PostAsync(collect.GetAttribute("action"), new FormUrlEncodedContent(values));
-        var jobId = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(new Uri(client.BaseAddress!, queued.Headers.Location!).Query)["jobId"].ToString();
         var jobs = PostgresCollectionJobStore.FromConnectionString(connectionString);
+        var jobId = (await jobs.ListAsync(50, default))[0].JobId;
         var job = (await jobs.GetAsync(jobId, default))!;
         const string attemptId = "aabbccddeeff00112233445566778899";
         var request = job.Definition.CreateRequest(attemptId, keyDirectory);
@@ -288,8 +436,8 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
         var fields = Fields(form);
         Set(fields, "requestKey", Guid.NewGuid().ToString("N"));
         using var queued = await client.PostAsync(form.GetAttribute("action"), new FormUrlEncodedContent(fields));
-        var jobId = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(new Uri(client.BaseAddress!, queued.Headers.Location!).Query)["jobId"].ToString();
         var jobStore = PostgresCollectionJobStore.FromConnectionString(connectionString);
+        var jobId = (await jobStore.ListAsync(50, default))[0].JobId;
         var savedJob = (await jobStore.GetAsync(jobId, default))!;
         var invalidDefinition = JsonSerializer.Serialize(savedJob.Definition with { MaxRequests = 0 }, CollectionProtocol.JsonOptions);
         await using (var connection = new NpgsqlConnection(connectionString))
@@ -403,5 +551,25 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
             Capture = new CaptureArtifact { Sha256 = hash, RelativePath = hash + ".gz", ByteLength = bytes.Length }
         };
         return await attempts.ImportAtomicallyAsync(CollectionAttemptImporter.CreateImport(attemptId, request, receipt), default);
+    }
+
+    private sealed class CapturedFixtureCollector(string html) : ICollectorProcess
+    {
+        public string Html { get; set; } = html;
+
+        public async Task<CollectionResult> RunAsync(CollectionRequest request, CancellationToken cancellationToken)
+        {
+            var bytes = Encoding.UTF8.GetBytes(Html);
+            var hash = Convert.ToHexStringLower(SHA256.HashData(bytes));
+            await using (var file = File.Create(Path.Combine(request.ArtifactDirectory, hash + ".gz")))
+            await using (var gzip = new GZipStream(file, CompressionLevel.Fastest))
+                await gzip.WriteAsync(bytes, cancellationToken);
+            return Receipt(request) with
+            {
+                BytesReceived = bytes.Length,
+                Response = new HttpResponseMetadata { StatusCode = 200, ContentType = "text/html; charset=utf-8", ContentEncodings = [] },
+                Capture = new CaptureArtifact { Sha256 = hash, RelativePath = hash + ".gz", ByteLength = bytes.Length }
+            };
+        }
     }
 }

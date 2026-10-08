@@ -1,1 +1,1 @@
-@{ Layout = "_Layout"; }
+@{ Layout = User.Identity?.IsAuthenticated == true ? "/Pages/Review/_ReviewLayout.cshtml" : "/Pages/Shared/_Layout.cshtml"; }

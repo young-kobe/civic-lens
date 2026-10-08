@@ -43,6 +43,7 @@ textarea, input, select { caret-color: var(--ink); }
 
 .review-columns { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(360px, .95fr); align-items: start; gap: 28px; }
 .review-column { min-width: 0; }
+.workspace-search { display: block; width: min(100%, 36rem); min-height: 44px; margin-top: 8px; padding: 9px 11px; border: 1px solid var(--control-border); border-radius: var(--radius); background: var(--paper); color: var(--ink); }
 .review-column > h2 { margin-bottom: 18px; }
 .review-preview { padding: 22px 24px; border: 1px solid var(--line); background: var(--paper); }
 .review-preview-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 18px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
@@ -142,6 +143,10 @@ textarea, input, select { caret-color: var(--ink); }
 .review-decision { margin-top: 42px; padding-top: 28px; border-top: 1px solid var(--line); }
 .review-back { display: inline-block; margin-bottom: 18px; font-size: .86rem; }
 .review-conflict-compare { margin: 0 0 30px; padding: 18px 20px; background: var(--ground); }
+.review-approval-target { margin: 0 0 34px; padding-bottom: 28px; border-bottom: 1px solid var(--line); }
+.review-approval-target > p { max-width: 74ch; }
+.review-approval-target .review-bound-citations { margin-top: 22px; }
+.review-saved-citations a { display: inline-block; margin-top: 6px; }
 .review-conflict-compare .review-pair { margin: 13px 0; }
 .review-conflict-compare article { min-width: 0; padding: 15px; background: var(--paper); }
 .review-conflict-compare p { overflow-wrap: anywhere; }
@@ -206,4 +211,38 @@ textarea, input, select { caret-color: var(--ink); }
     .collection-version { grid-template-columns: 1fr 1fr; }
     .collection-version > div { grid-column: 1 / -1; }
     .collection-source { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+}
+
+/* Sources puts collection and preparation outcomes in one compact work list. */
+.sources-workflow { margin: -12px 0 28px; }
+.sources-section-heading { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(220px, 340px); align-items: end; gap: 14px; margin-bottom: 8px; }
+.sources-section-heading h2 { margin: 0; }
+.sources-section-heading .workspace-search { margin: 0; }
+.sources-search-status { min-height: 1.3em; margin: 0 0 4px; }
+.sources-source { grid-template-columns: minmax(0, 1fr) auto; }
+.sources-source-copy { min-width: 0; }
+.sources-source-copy > p { margin: 0 0 4px; }
+.sources-source-copy > .review-meta { margin-bottom: 5px; }
+.sources-result { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; color: var(--muted); font-size: .84rem; }
+.sources-result .review-state { flex: none; }
+.sources-activity { margin-top: 34px; }
+.sources-activity .sources-section-heading { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+.sources-activity .sources-section-heading p { margin: 4px 0 0; }
+.sources-activity-item { grid-template-columns: minmax(0, 1fr) auto; }
+.sources-activity-item h3 { overflow-wrap: anywhere; }
+.sources-activity-item p { margin: 0; }
+.sources-activity-actions { display: flex; align-items: center; justify-content: end; }
+.sources-troubleshooting { border-top: 1px solid var(--line); }
+.sources-troubleshooting > summary { width: fit-content; padding: 13px 0; color: var(--accent); font-size: .86rem; font-weight: 650; cursor: pointer; }
+.sources-troubleshooting[open] > div { padding-top: 10px; }
+@media (max-width: 760px) {
+    .sources-section-heading { grid-template-columns: minmax(0, 1fr); align-items: start; }
+    .sources-section-heading .workspace-search { width: 100%; }
+    .sources-source, .sources-activity-item { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+    .sources-source form, .sources-activity-actions { justify-self: start; }
+}
+@media (max-width: 520px) {
+    .sources-workflow { margin-top: -8px; }
+    .sources-activity .sources-section-heading { align-items: flex-start; gap: 10px; }
+    .sources-activity .sources-section-heading > .review-button { flex: none; }
 }
