@@ -328,6 +328,19 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
     private static async Task<DocumentChangeReview> ReadAggregateAsync(CollectionAttemptDbContext db,
         DocumentChangeDraftRow draft, CancellationToken cancellationToken)
     {
+        var revisions = await ReadRevisionsAsync(db, draft, cancellationToken);
+        var verified = await ReadVerifiedComparisonAsync(db, draft.ComparisonId, cancellationToken)
+            ?? throw new InvalidOperationException("Retained draft comparison is no longer valid.");
+        foreach (var revision in revisions) ValidateRevisionAgainstEvidence(revision, verified);
+        var decisions = await ReadDecisionsAsync(db, draft, cancellationToken);
+        ValidateDecisionHistory(draft.DraftId, revisions, decisions);
+        var concerns = DocumentChangeReviewPolicy.GetUnresolvedConcerns(decisions);
+        return new(draft.DraftId, revisions[^1], draft.ReviewStateVersion, revisions, decisions, concerns);
+    }
+
+    private static async Task<ImmutableArray<DocumentChangeDraftRevision>> ReadRevisionsAsync(
+        CollectionAttemptDbContext db, DocumentChangeDraftRow draft, CancellationToken cancellationToken)
+    {
         var revisionRows = await db.Set<DocumentChangeRevisionRow>().AsNoTracking()
             .Where(row => row.DraftId == draft.DraftId).OrderBy(row => row.RevisionNumber)
             .Take(DocumentChangeReviewPolicy.MaximumRevisionsPerDraft + 1).ToArrayAsync(cancellationToken);
@@ -340,9 +353,13 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
             throw new InvalidOperationException("Stored draft revision history is inconsistent.");
         if (revisions.Any(revision => revision.ComparisonId != draft.ComparisonId))
             throw new InvalidOperationException("A saved revision changed its bound comparison.");
-        var verified = await ReadVerifiedComparisonAsync(db, draft.ComparisonId, cancellationToken)
-            ?? throw new InvalidOperationException("Retained draft comparison is no longer valid.");
-        foreach (var revision in revisions) ValidateRevisionAgainstEvidence(revision, verified);
+        foreach (var revision in revisions) ValidateRevisionShape(revision);
+        return revisions;
+    }
+
+    private static async Task<ImmutableArray<ReviewDecision>> ReadDecisionsAsync(
+        CollectionAttemptDbContext db, DocumentChangeDraftRow draft, CancellationToken cancellationToken)
+    {
         var decisionRows = await db.Set<ReviewDecisionRow>().AsNoTracking()
             .Where(row => row.DraftId == draft.DraftId).OrderBy(row => row.ReviewStateVersion)
             .Take(DocumentChangeReviewPolicy.MaximumDecisionsPerDraft + 1).ToArrayAsync(cancellationToken);
@@ -359,44 +376,35 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
         if (decisions.Length != draft.ReviewStateVersion ||
             decisions.Select((decision, index) => decision.ReviewStateVersion == index + 1).Any(valid => !valid))
             throw new InvalidOperationException("Stored review decision history is inconsistent.");
+        return decisions;
+    }
+
+    private static void ValidateDecisionHistory(string draftId,
+        ImmutableArray<DocumentChangeDraftRevision> revisions, ImmutableArray<ReviewDecision> decisions)
+    {
         var priorDecisions = ImmutableArray<ReviewDecision>.Empty;
         foreach (var decision in decisions)
         {
-            if (decision.RevisionNumber > revisions.Length)
+            if (decision.RevisionNumber < 1 || decision.RevisionNumber > revisions.Length)
                 throw new InvalidOperationException("Stored decision references a missing revision.");
             var targetRevision = revisions[decision.RevisionNumber - 1];
             var priorConcerns = DocumentChangeReviewPolicy.GetUnresolvedConcerns(priorDecisions);
-            var historicalReview = new DocumentChangeReview(draft.DraftId, targetRevision,
+            var historicalReview = new DocumentChangeReview(draftId, targetRevision,
                 priorDecisions.Length, revisions.Take(decision.RevisionNumber).ToImmutableArray(),
                 priorDecisions, priorConcerns);
             DocumentChangeReviewPolicy.ValidateDecision(historicalReview, decision);
             if (decision.Kind == ReviewDecisionKind.Approve) targetRevision.ValidateForApproval();
             priorDecisions = priorDecisions.Add(decision);
         }
-        var concerns = DocumentChangeReviewPolicy.GetUnresolvedConcerns(decisions);
-        return new(draft.DraftId, revisions[^1], draft.ReviewStateVersion, revisions, decisions, concerns);
     }
 
     private static async Task<DocumentChangeReviewListItem> ReadListItemAsync(CollectionAttemptDbContext db,
         DocumentChangeDraftRow draft, CancellationToken cancellationToken)
     {
-        var currentRevision = await ReadRevisionAsync(db, draft.DraftId, draft.CurrentRevisionNumber, cancellationToken);
-        ValidateRevisionShape(currentRevision);
-        if (currentRevision.ComparisonId != draft.ComparisonId)
-            throw new InvalidOperationException("Current revision has a different comparison binding.");
-        var rows = await db.Set<ReviewDecisionRow>().AsNoTracking()
-            .Where(row => row.DraftId == draft.DraftId).OrderBy(row => row.ReviewStateVersion)
-            .Take(DocumentChangeReviewPolicy.MaximumDecisionsPerDraft + 1).ToArrayAsync(cancellationToken);
-        if (rows.Length > DocumentChangeReviewPolicy.MaximumDecisionsPerDraft || rows.Length != draft.ReviewStateVersion)
-            throw new InvalidOperationException("Stored review decision history is inconsistent or exceeds its limit.");
-        var decisions = rows.Select(row =>
-        {
-            var decision = Deserialize<ReviewDecision>(row.DecisionJson, "decision");
-            if (decision.DecisionId != row.DecisionId || decision.DraftId != draft.DraftId ||
-                decision.RevisionNumber != row.RevisionNumber || decision.ReviewStateVersion != row.ReviewStateVersion)
-                throw new InvalidOperationException("Stored decision identity is inconsistent.");
-            return decision;
-        }).ToImmutableArray();
+        var revisions = await ReadRevisionsAsync(db, draft, cancellationToken);
+        var decisions = await ReadDecisionsAsync(db, draft, cancellationToken);
+        ValidateDecisionHistory(draft.DraftId, revisions, decisions);
+        var currentRevision = revisions[^1];
         var concerns = DocumentChangeReviewPolicy.GetUnresolvedConcerns(decisions);
         var status = DocumentChangeReviewPolicy.GetCurrentStatus(currentRevision, decisions, concerns);
         return new(draft.DraftId, currentRevision, draft.ReviewStateVersion, status, concerns.Length);

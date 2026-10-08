@@ -165,6 +165,37 @@ public sealed class PostgresDocumentChangeReviewStoreTests(PostgresCollection po
         Assert.Equal(actor.Subject, detail.CurrentRevision.AuthorSubject);
     }
 
+    [Fact]
+    public async Task QueueRejectsApprovalThatDoesNotResolveRetainedConcern()
+    {
+        var comparison = await SaveComparisonAsync();
+        var actor = new ReviewActor("auth0|owner", ReviewRole.Owner);
+        var catalog = new ReviewCatalog([], []);
+        var revision = await new CreateDocumentChangeDraft(reviews).ExecuteAsync(actor,
+            new(comparison.ComparisonId, "create"));
+        revision = await new SaveDocumentChangeDraft(reviews, catalog).ExecuteAsync(actor,
+            new(revision.DraftId, 1, "Headline", "Summary", null, null, "Institution",
+                null, null, [], [], revision.Citations, "save"));
+        var decide = new DecideDocumentChangeReview(reviews, catalog);
+        var concern = await decide.ExecuteAsync(actor,
+            new(revision.DraftId, 2, 0, ReviewDecisionKind.RequestChanges, "Check context.", [], "concern"));
+        var approval = await decide.ExecuteAsync(actor,
+            new(revision.DraftId, 2, 1, ReviewDecisionKind.Approve, "Context checked.", [concern.DecisionId], "approve"));
+
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand("""
+            UPDATE document_change_review_decisions
+            SET decision_json = jsonb_set(decision_json::jsonb, '{resolvedDecisionIds}', '[]'::jsonb)::text
+            WHERE decision_id = @id
+            """, connection);
+        command.Parameters.AddWithValue("id", approval.DecisionId);
+        Assert.Equal(1, await command.ExecuteNonQueryAsync());
+
+        await Assert.ThrowsAsync<ArgumentException>(() => reviews.GetAsync(revision.DraftId, default));
+        await Assert.ThrowsAsync<ArgumentException>(() => reviews.ListAsync(null, 10, default));
+    }
+
     private async Task<CivicLens.Core.Documents.DocumentComparison> SaveComparisonAsync()
     {
         var before = new CivicLens.Core.Documents.DocumentExtraction(await ImportAsync("Policy before."), "parser", "normalizer", "Policy before.");
