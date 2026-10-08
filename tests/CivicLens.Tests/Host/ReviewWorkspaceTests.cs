@@ -170,6 +170,7 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
         Assert.Equal(HttpStatusCode.Redirect, created.StatusCode);
         var editorUrl = created.Headers.Location!.ToString();
         var editor = await GetDocumentAsync(editorUrl);
+        Assert.Equal("Your headline will appear here", editor.QuerySelector("article.review-preview h2")!.TextContent);
         var save = editor.QuerySelector("form[data-unsaved-form]")!;
         var fields = Fields(save);
         Set(fields, "Input.Headline", "Saved headline");
