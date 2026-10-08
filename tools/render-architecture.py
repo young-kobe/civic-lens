@@ -11,7 +11,7 @@ VIEWS = [
         "description": "Target workflow. Configuration, bounded watched-page collection, verified captures, and the Postgres import adapter are implemented; CLI migration, collection/import, and saved receipt recovery are implemented; managed durable jobs and RSS/Atom plus HTML discovery with explicit bounded article admission are implemented; immutable document text extraction, versioned content profiles, and exact local citations are implemented; derived text histories and contextual comparisons are implemented; authenticated document-change drafting, immutable revisions, and version-bound review are implemented; analysis and publication remain planned.",
         "nodes": [
             ("config", "Coverage configuration", "People, dated roles, sources, issues and policies; one authoritative configuration path."),
-            ("app", "C# application", "Owns durable jobs, aggregate budgets, retries and orchestration."),
+            ("app", "C# application", "Owns durable collection jobs, aggregate budgets, retries, and a persisted evidence preparation state machine."),
             ("collector", "C# collector", "Separate executable. Bounded HTTP/feed/HTML discovery and immutable captures; no database or AI."),
             ("evidence", "Evidence store", "Local Postgres import adapter and content-addressed files are implemented. CLI migration, collection/import, and filesystem receipt handoff/replay are implemented. Immutable versioned text extraction, reusable content profiles, and exact local citations are implemented. Derived document histories and immutable contextual comparisons are implemented; substantive-change judgments remain planned."),
             ("analysis", "Selective analysis", "Deterministic records first; evaluated classification and evidence extraction only where useful."),
@@ -25,7 +25,7 @@ VIEWS = [
         "title": "Project dependencies (implemented)",
         "description": "Arrows mean references. These project boundaries are checked by xUnit tests.",
         "nodes": [
-            ("host", "Host", "CLI and separate collection worker, local read-only evidence viewer, and authenticated source preparation and draft/review workspace; MCP remains planned."),
+            ("host", "Host", "CLI and background worker for collection and durable automatic evidence preparation, local evidence viewer, and authenticated draft/review workspace; MCP remains planned."),
             ("infra", "Infrastructure", "Collector process execution, capture verification, and EF Core/Npgsql persistence. References Application."),
             ("app", "Application", "Use cases and external interfaces; no infrastructure reference."),
             ("core", "Core", "Domain invariants. No project or third-party dependencies."),

@@ -18,6 +18,12 @@ The first document-change review workflow is implemented: browse saved compariso
 
 After MVP functionality and UI are satisfactory, prepare the application for the agreed Hetzner production deployment using containers, persistent PostgreSQL/capture storage, Terraform, and CI. Serve versioned static public releases on the same CPX21 through a separate static file server. Before exposing the shared workspace, verify access controls, controlled migrations, worker restart/recovery, Hetzner off-server backups and restoration, and operation with the developer workstation off. Select the Hetzner backup destination based on cost and recovery requirements. Infrastructure is not implemented yet. Single-host downtime is accepted initially; public serving must remain independent of the operational application, worker, and database.
 
+## Reviewer and public experience
+
+Make the source-to-review path understandable to a nontechnical reviewer, with automatic evidence preparation within explicit collection limits, dynamic search across retained evidence and review records, and integrated visual comparison. The shared workspace shell, centralized theme enforcement, reusable diff view, and direct comparison-to-review draft action are implemented. Automatic preparation in the existing worker and the Sources activity dashboard are implemented. Global search and expanded reviewer source visibility remain pending decisions.
+
+For MVP, add a dynamic SVG visualization of collection and AI processing driven by actual retained process state, with clear waiting, failure, recovery, and budget-limit states and reduced-motion support. Keep AI stages explicitly unavailable until implemented. Public reader pages must preserve the same editorial identity and shared presentation components while exposing published accounts and evidence only.
+
 ## 1. Collection and evidence
 
 Automatic stored-validator selection and periodic source scheduling remain future work. The explicit queue worker dispatches already admitted jobs; it does not create recurring jobs. Persistent robots caching and cross-origin robots redirects are outside the current collection policy. Add only packages needed for these capabilities.
@@ -41,6 +47,8 @@ Implement offices, dated terms, institutional source ownership, authoritative ac
 Acceptance: every statement/action has exact inspectable provenance. Quotation validity and interpretation are separate checks. Human review is bound to the reviewed version. Adding/removing tracked officials requires no code changes and retains history.
 
 ## 4. Classification and evaluation
+
+Use retained evidence and attributed review history to build task-specific validation/golden sets and training or fine-tuning datasets for our own models. This is planned work. Editorial approval establishes suitability of a particular account for publication; it does not automatically establish a golden label or eligibility for model training. Before dataset export, agree task labels, example eligibility, source-use permissions, versioned provenance, correction handling, and separate training/validation/test splits that prevent related document versions from leaking across splits.
 
 Benchmark Clef and Flash against deterministic and generation baselines. An early bounded experiment may happen during phase 1. Establish reviewed fixtures and held-out evaluations before enforcing admission. Add task-specific budgets/cache keys, decision explanations, skipped-document sampling, and local evaluation MCP.
 
