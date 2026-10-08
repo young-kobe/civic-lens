@@ -4,6 +4,7 @@
     <IsTestProject>true</IsTestProject>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="../../src/CivicLens.Host/CivicLens.Host.csproj" />
     <ProjectReference Include="../../src/CivicLens.Application/CivicLens.Application.csproj" />
     <ProjectReference Include="../../src/CivicLens.Infrastructure/CivicLens.Infrastructure.csproj" />
     <ProjectReference Include="../../src/CivicLens.Collector/CivicLens.Collector.csproj" />

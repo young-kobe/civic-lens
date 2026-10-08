@@ -1,0 +1,117 @@
+@page "/Review"
+@model CivicLens.Host.Pages.Review.IndexModel
+@using CivicLens.Core.Review
+@{
+    ViewData["Title"] = "Review queue";
+}
+<header class="review-heading">
+    <div>
+        <h1>Review the proposed public record.</h1>
+        <p>Start with a saved document comparison that contains a text change, or continue a draft already in review.</p>
+    </div>
+</header>
+@if (Model.Error is not null)
+{
+    <div class="review-error" role="alert">@Model.Error</div>
+}
+@if (Model.Status is not null)
+{
+    <p class="review-status @(Model.IsError ? "error" : "success")" role="status">@Model.Status</p>
+}
+
+<section aria-labelledby="drafts-title">
+    <h2 id="drafts-title">Drafts in review</h2>
+    @if (Model.Reviews is { Items.Length: > 0 })
+    {
+        <div class="review-list">
+        @foreach (var review in Model.Reviews.Items)
+        {
+            var state = review.CurrentStatus switch
+            {
+                DocumentChangeReviewStatus.AwaitingReviewWithConcerns => $"{review.UnresolvedConcernCount} outstanding concerns",
+                DocumentChangeReviewStatus.Approved => "Approved for publication",
+                DocumentChangeReviewStatus.ChangesRequested => "Changes requested",
+                DocumentChangeReviewStatus.ApprovalWithdrawn => "Approval withdrawn",
+                _ => "Awaiting review"
+            };
+            var stateClass = review.CurrentStatus switch
+            {
+                DocumentChangeReviewStatus.AwaitingReviewWithConcerns or DocumentChangeReviewStatus.ChangesRequested => "concern",
+                DocumentChangeReviewStatus.Approved => "approved",
+                DocumentChangeReviewStatus.ApprovalWithdrawn => "withdrawn",
+                _ => ""
+            };
+            <article class="review-list-item">
+                <div>
+                    <div class="review-meta"><span class="review-state @stateClass">@state</span><span>Revision @review.CurrentRevision.RevisionNumber</span><span>@review.CurrentRevision.CreatedAtUtc.ToString("yyyy-MM-dd 'UTC'")</span></div>
+                    <h3>@(string.IsNullOrWhiteSpace(review.CurrentRevision.Headline) ? "Untitled draft" : review.CurrentRevision.Headline)</h3>
+                    <p>@(string.IsNullOrWhiteSpace(review.CurrentRevision.Summary) ? "Add a plain-language summary before approval." : review.CurrentRevision.Summary)</p>
+                </div>
+                <a class="review-button" asp-page="/Review/Editor" asp-route-draftId="@review.DraftId">Open draft</a>
+            </article>
+        }
+        </div>
+    }
+    else
+    {
+        <p class="review-empty">No saved drafts yet. Choose a comparison below to start a public-record draft.</p>
+    }
+    @if (Model.Reviews?.NextCursor is not null)
+    {
+        <a class="review-button" asp-page="/Review/Index" asp-route-reviewCursor="@Model.Reviews.NextCursor">More drafts</a>
+    }
+</section>
+
+<section class="review-section-spaced" aria-labelledby="comparisons-title">
+    <h2 id="comparisons-title">Saved document changes</h2>
+    <p class="review-help">Only complete saved comparisons with changed text are shown. Creating a draft makes an immutable first revision for you to edit.</p>
+    @if (Model.Comparisons is { Items.Length: > 0 })
+    {
+        <div class="review-list">
+        @foreach (var item in Model.Comparisons.Items)
+        {
+            var comparison = item.Comparison;
+            <article class="review-list-item">
+                <div>
+                    <div class="review-meta"><span>@item.SourceId</span><span>Observed @item.BeforeObservedAtUtc.ToString("yyyy-MM-dd HH:mm 'UTC'") and @item.AfterObservedAtUtc.ToString("yyyy-MM-dd HH:mm 'UTC'")</span></div>
+                    <h3>@item.RequestedUrl</h3>
+                    <p>@comparison.Hunks.Length changed passage(s). Compare the exact retained wording before drafting.</p>
+                    @foreach (var hunk in comparison.Hunks.Take(2))
+                    {
+                        <div class="review-pair review-pair-spaced">
+                            <div class="review-passage"><h4>Before</h4><p><span>@EncodedEvidence.From(hunk.BeforeText)</span></p></div>
+                            <div class="review-passage"><h4>After</h4><p><span>@EncodedEvidence.From(hunk.AfterText)</span></p></div>
+                        </div>
+                    }
+                    @if (comparison.Hunks.Length > 2)
+                    {
+                        <p class="review-help">Showing the first two of @comparison.Hunks.Length changed passages.</p>
+                    }
+                    <details class="review-details">
+                        <summary>Source details</summary>
+                        <dl class="review-ids">
+                            <div><dt>Requested URL</dt><dd>@item.RequestedUrl</dd></div>
+                            <div><dt>Before URL</dt><dd>@item.BeforeFinalUrl</dd></div>
+                            <div><dt>After URL</dt><dd>@item.AfterFinalUrl</dd></div>
+                            <div><dt>Comparison ID</dt><dd>@comparison.ComparisonId</dd></div>
+                        </dl>
+                    </details>
+                </div>
+                <form method="post" asp-page-handler="Create">
+                    <input type="hidden" name="comparisonId" value="@comparison.ComparisonId" />
+                    <input type="hidden" name="idempotencyKey" value="@Model.IdempotencyKeys[comparison.ComparisonId]" />
+                    <button class="review-button review-button-primary" type="submit">Create draft</button>
+                </form>
+            </article>
+        }
+        </div>
+    }
+    else
+    {
+        <p class="review-empty">No eligible saved comparisons are available right now.</p>
+    }
+    @if (Model.Comparisons?.NextCursor is not null)
+    {
+        <a class="review-button" asp-page="/Review/Index" asp-route-comparisonCursor="@Model.Comparisons.NextCursor">More comparisons</a>
+    }
+</section>
