@@ -263,10 +263,61 @@ History retains checks and extraction revisions, groups consecutive equal text w
 
 When processing versions or profiles differ, explicitly rerun `documents extract` on both original captured attempt IDs using the same current settings/configuration, then compare those new extraction IDs. Earlier extractions, citations, and comparisons remain retained. These commands do not judge substantive significance, approve evidence, or publish anything.
 
+### Inspect evidence in the local viewer
+
+After configuring `CIVIC_LENS_DATABASE` and explicitly applying migrations, start:
+
+```sh
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- viewer
+# Optional alternative port:
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- viewer 5081
+```
+
+Open `http://127.0.0.1:5080/` (or the selected port). Use a source ID and exact requested URL to open history, an extraction ID from `documents extract` to inspect text, or a comparison ID from `documents compare` to inspect an already saved result. History links its extractions; comparisons link both extractions and exact changed-passage citations. You can also enter a UTF-16 start offset and positive length on an extraction page. Text selection alone does not calculate offsets in this initial viewer.
+
+The viewer reads existing evidence only. Use the CLI for migrations, collection, extraction, and creation of comparisons. The viewer does not require a capture-directory argument because it reads retained extractions from Postgres. It preserves failed checks and missing evidence and reports history/comparison limits explicitly. Empty comparisons mean unchanged only when the saved status is complete. Empty histories do not establish source inactivity.
+
+The listener binds only to `127.0.0.1`; ambient ASP.NET URL and Kestrel endpoint settings do not widen it. The process serves its own compiled pages and copied static assets even when launched from another working directory. Stop it with Ctrl+C. It is a local operational tool, not a public website or a multi-user authenticated service. No approvals or publication actions are available. Database outages and corrupt retained evidence produce a sanitized unavailable response; inspect database connectivity and applied migrations locally rather than exposing provider details in the browser.
+
+### Authenticated document-change review
+
+`review [port]` starts the separate editorial workspace on IPv4 loopback (default 5081). Unlike `viewer`, it supports draft and decision mutations and requires Auth0 configuration. It does not collect, migrate, publish, or manage access accounts through the UI. Apply `db migrate` explicitly before starting it; the additive `DocumentChangeReview` migration retains draft pointers, immutable revisions, decisions, and replay receipts.
+
+Configure these environment variables through the deployment's protected environment/secret mechanism, not command-line arguments or committed files:
+
+| Variable | Meaning |
+|---|---|
+| `CIVIC_LENS_DATABASE` | Existing operational PostgreSQL connection string |
+| `CIVIC_LENS_REVIEW_ORIGIN` | Exact external HTTPS origin, without a path, query, or credentials |
+| `CIVIC_LENS_AUTH0_AUTHORITY` | Auth0 tenant/custom-domain HTTPS origin |
+| `CIVIC_LENS_AUTH0_CLIENT_ID` | Regular Web Application client ID |
+| `CIVIC_LENS_AUTH0_CLIENT_SECRET` | Auth0 client secret |
+| `CIVIC_LENS_REVIEW_OWNER` | Exact Auth0 `sub` of the owner |
+| `CIVIC_LENS_REVIEW_REVIEWERS` | Optional comma-separated additional reviewer subject IDs |
+| `CIVIC_LENS_REVIEW_KEY_DIRECTORY` | Absolute persistent directory for ASP.NET data-protection keys |
+| `CIVIC_LENS_REVIEW_ISSUES` | Optional comma-separated configured issue IDs |
+| `CIVIC_LENS_REVIEW_OFFICIALS` | Optional comma-separated configured official IDs |
+
+Set the Auth0 allowed callback URL to `<CIVIC_LENS_REVIEW_ORIGIN>/signin-oidc`. Configure an HTTPS reverse proxy on the same host to forward to loopback and preserve the configured external Host header, including its port if nonstandard. The workspace rejects other Host values, pins its effective scheme to HTTPS, ignores ambient listener configuration, and does not trust forwarded headers. The initial listener expects a same-host proxy; isolated container networking requires an explicitly reviewed deployment configuration. Public access must terminate HTTPS at the proxy. Local workstation testing also requires a local HTTPS proxy and an allowed Auth0 callback; there is no unauthenticated review mode.
+
+The application accepts only configured subjects, even if other users can authenticate at Auth0. Both owner and reviewer may draft, self-approve, request changes, and withdraw an effective approval. Publishing and access-management UI are not implemented. Change the server subject configuration and restart to change access; previously issued cookies are rechecked against that configuration. Signing out clears the application session; it does not end the Auth0 identity-provider session. Cookies are secure, HttpOnly, non-sliding, and expire after eight hours. Keys persist across restarts; on Unix the application restricts the key directory to its owner. Keys are not encrypted by the application at rest, so protect the persistent volume and its backups as credentials.
+
+```sh
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- review 5081
+```
+
+Open `/Review` through the configured HTTPS origin. The queue browses saved comparisons and drafts; an empty queue requires collecting, extracting, and comparing evidence through existing commands. It does not contain demonstration records. `/Evidence` opens the supporting lookup; exact retained versions and citations remain authenticated. The old `viewer` command cannot access `/Review` routes.
+
+Creating a draft explicitly selects a complete changed comparison. Saves retain immutable authored revisions. Actual change dates require a selected exact citation; dates of observation are displayed separately. Approval requires headline, summary, institution, at least one valid citation, and explicit resolution of all outstanding concerns. Concurrent saves/decisions return conflicts; stale unsaved edits remain visible, and decisions are disabled until the saved revision is reloaded or edits are saved. Review decisions do not publish anything.
+
+History currently supports at most 64 revisions and 128 decisions per record, with 64 outstanding concerns and 64 citations per revision. Limit exhaustion rejects writes and requires future history-pagination work; do not discard history to continue. Browsing comparisons may return an empty batch with a continuation if the batch contains only unchanged/incompatible/limited results. Use the continuation rather than treating that batch as an exhaustive absence of changes.
+
+Auth0 tenant login/logout and the production reverse proxy still require live verification. Offline tests validate subject authorization and HTTP workflows with isolated test signing keys; they do not exercise a live Auth0 tenant. Hetzner/Terraform provisioning, durable workers, production backup restoration, and publication remain pending.
+
 ### Remaining operations
 
 Runtime data belongs in ignored .runtime/; generated publication and evaluation artifacts in ignored artifacts/. Never commit credentials or copy operational directories from the legacy repository. There is currently no deploy command and no public endpoint.
 
 Core collection-import decisions and the Application fresh/replay handlers share evidence mapping and atomic Postgres imports. The host exposes receipt-only `collect`, database-backed `collect-import`, and explicit receipt recovery. Managed jobs add explicit lifecycle execution; background scheduling remains planned.
 
-Review, backup/restore, publication, rollback, and MCP runbooks will be added here when implemented. Do not treat target architecture descriptions as executable procedures.
+Production backup/restore, publication, rollback, and MCP runbooks will be added here when implemented. Do not treat target architecture descriptions as executable procedures.

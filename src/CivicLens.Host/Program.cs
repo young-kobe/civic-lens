@@ -9,6 +9,7 @@ using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Collection.Jobs;
 using CivicLens.Host.Collection;
 using CivicLens.Host.Documents;
+using CivicLens.Host.Review;
 using CivicLens.Infrastructure.Documents;
 
 if (args is [] or ["--help"] or ["help"])
@@ -36,6 +37,9 @@ if (args is [] or ["--help"] or ["help"])
           documents history <source-id> <exact-requested-url>
           documents compare <before-extraction-id> <after-extraction-id>
           documents comparison <comparison-id>
+          viewer [port]
+          review [port]
+        The local document viewer binds only to 127.0.0.1 and defaults to port 5080.
         New admissions default to today in UTC; existing keys retain their saved date when --as-of is omitted.
         --as-of selects eligibility, not historical fetching or attribution.
         feeds get/admit remain aliases for discovery get/admit.
@@ -53,6 +57,37 @@ if (args is ["status"])
 {
     Console.WriteLine(FoundationStatus.Description);
     return 0;
+}
+
+if (args.Length > 0 && args[0] == "viewer")
+{
+    if (args.Length > 2 || (args.Length == 2 &&
+        (!int.TryParse(args[1], NumberStyles.None, CultureInfo.InvariantCulture, out var requestedPort) ||
+         requestedPort is < 1 or > 65535)))
+    {
+        Console.Error.WriteLine("Use viewer [port], where port is an integer from 1 through 65535.");
+        return 2;
+    }
+
+    var port = args.Length == 1 ? 5080 : int.Parse(args[1], CultureInfo.InvariantCulture);
+    using var viewerCancellation = new CancellationTokenSource();
+    Console.CancelKeyPress += (_, e) => { e.Cancel = true; viewerCancellation.Cancel(); };
+    return await DocumentViewer.RunAsync(port, viewerCancellation.Token);
+}
+
+if (args.Length > 0 && args[0] == "review")
+{
+    if (args.Length > 2 || (args.Length == 2 &&
+        (!int.TryParse(args[1], NumberStyles.None, CultureInfo.InvariantCulture, out var requestedPort) ||
+         requestedPort is < 1 or > 65535)))
+    {
+        Console.Error.WriteLine("Use review [port], where port is an integer from 1 through 65535.");
+        return 2;
+    }
+    var port = args.Length == 1 ? 5081 : int.Parse(args[1], CultureInfo.InvariantCulture);
+    using var reviewCancellation = new CancellationTokenSource();
+    Console.CancelKeyPress += (_, e) => { e.Cancel = true; reviewCancellation.Cancel(); };
+    return await ReviewWorkspace.RunAsync(port, reviewCancellation.Token);
 }
 
 var coverageAsOf = DateOnly.FromDateTime(DateTime.UtcNow);

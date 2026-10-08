@@ -4,11 +4,19 @@
 
 The MVP delivers the full product proposition: officials' statements, authoritative actions, substantive document changes, and evidence-backed weekly briefs. A document-change-only release is an intermediate milestone, not the MVP.
 
-Initial coverage may be small, but all four capabilities must work end to end: collect evidence, retain exact inspectable provenance, review proposed output, and publish a static release that remains usable while the local application is off. Human approval must bind to the exact evidence version; model output never constitutes approval. Statements and actions must support reviewed relationships and timelines, document changes must distinguish substantive edits from navigation churn and parser upgrades, and weekly briefs must use verified citations and explicit coverage cutoffs.
+The initial audience is regular citizens seeking transparency in U.S. national politics. Follow the [approved editorial experience](architecture.md#approved-editorial-experience-target): readable reviewed accounts lead to inspectable evidence, and private review presents the proposed public record beside its sources. State and local coverage are possible future extensions. The editorial flow is agreed; themes and visual styling remain refinable.
+
+Initial coverage may be small, but all four capabilities must work end to end: collect evidence, retain exact inspectable provenance, review proposed output, and publish a static release that remains usable during an operational application outage. Human approval must bind to the exact evidence version; model output never constitutes approval. Statements and actions must support reviewed relationships and timelines, document changes must distinguish substantive edits from navigation churn and parser upgrades, and weekly briefs must use verified citations and explicit coverage cutoffs.
 
 The phases below sequence delivery toward this goal. Completing collection or document changes alone does not satisfy it. Classification gates remain conditional on evaluation evidence rather than a prerequisite for shipping all four capabilities.
 
 Phase 0, the watched-page tracer, version 6 collection contracts with v3-v5 recovery support, Core collection-import rules, the Application collection/import handler, the Postgres adapter with its initial migration, CLI database setup and collection/import, durable receipt handoff/replay, and managed jobs with fenced ownership, aggregate budgets, retries, cancellation, and origin pacing/backoff, plus RSS/Atom and scoped HTML discovery with explicit bounded article admission are implemented. Bounded robots handling and durable crawl-delay pacing are implemented. Configuration v2 dated coverage/names and immutable configuration revisions bound to managed jobs are also implemented. The following is remaining planned work, not available functionality. Remove completed work and update the current architecture/operations references; Git preserves previous plans.
+
+## Next delivery milestone
+
+The first document-change review workflow is implemented: browse saved comparisons, create drafts, inspect preview/evidence, save immutable revisions, and record attributed approval, requested changes, or withdrawal. Next implement a separate publication action and static release from exact approved revisions, then complete statements/actions and weekly briefs. Reach MVP functionality, correctness, and a sufficient citizen/reviewer UI locally before configuring Auth0 or production infrastructure. AI is not a prerequisite. Keep the approved editorial UI direction and [review rules](architecture.md#approved-document-change-review-rules).
+
+After MVP functionality and UI are satisfactory, prepare the application for the agreed Hetzner production deployment using containers, persistent PostgreSQL/capture storage, Terraform, and CI. Before exposing the shared workspace, verify access controls, controlled migrations, worker restart/recovery, off-server backups and restoration, and operation with the developer workstation off. Choose backup/static-hosting providers based on cost and recovery requirements; AWS is optional. Infrastructure is not implemented yet. Single-host downtime is accepted initially; independent public serving remains required.
 
 ## 1. Collection and evidence
 
@@ -18,9 +26,13 @@ Acceptance: add an official through configuration; collect one feed and watched 
 
 ## 2. Document changes and review foundation
 
-Immutable text extraction, persisted parser/normalization versions, reusable versioned source profiles, and exact local citation spans are implemented. Profiles select one HTML content region and exclude configured subregions without rewriting earlier extractions or citations. Derived document history and immutable bounded contextual comparisons are implemented, including explicit CLI creation and inspection. Implement the local evidence viewer, version-bound human review, first static publication, and read-only local MCP inspection. Comparisons must use compatible parser, normalization, and profile revisions; reprocess both captures when settings change. Profile selection can remove known navigation regions but does not itself identify substantive changes.
+Immutable text extraction, persisted parser/normalization versions, reusable versioned source profiles, and exact local citation spans are implemented. Profiles select one HTML content region and exclude configured subregions without rewriting earlier extractions or citations. Derived document history and immutable bounded contextual comparisons are implemented, including explicit CLI creation and inspection. The local read-only evidence viewer is implemented with history, extraction, saved-comparison, and citation lookup. Version-bound human review is implemented. Implement first static publication and read-only local MCP inspection. Comparisons must use compatible parser, normalization, and profile revisions; reprocess both captures when settings change. Profile selection can remove known navigation regions but does not itself identify substantive changes.
 
-Acceptance: inspect and publish a real substantive edit with both versions and valid citations. Navigation churn and parser upgrades cannot masquerade as source changes. Public output remains usable with the local application off.
+The authenticated review workspace provides proposed public records and version-bound review. Add the first static publication. The first public document-change record must explain the change and its limits in plain language, with both versions and citations accessible from the account. Keep document history available for investigation. Preserve the implemented decision and persistence semantics in shared Application handlers; the throwaway prototype remains the UI reference, not a substitute for these contracts.
+
+The first drafting workflow starts from an operator-selected saved comparison and retains an immutable revision on each explicit save. Preserve explicit authorization for the owner and an additional drafter/reviewer; live Auth0 wiring and verification are deferred to the deployment stage. Only the owner can publish or manage access initially. Either authorized operator may approve their own draft; decisions remain individually attributed. Host the shared workspace on Hetzner; implement authentication and authorization before replacing the current loopback-only access policy.
+
+Acceptance: inspect and publish a real substantive edit with both versions and valid citations. Navigation churn and parser upgrades cannot masquerade as source changes. A reader can distinguish observation time from an established event/edit time and see relevant evidence gaps. A reviewer can assess the proposed public wording beside its sources; changes to approved content or evidence require review of the new version. Approval alone does not publish. Public output remains usable during an operational application outage.
 
 ## 3. Statements and actions
 
@@ -42,6 +54,6 @@ Acceptance: publish an issue brief with verified citation links, explicit sample
 
 ## 6. Public MCP and operational readiness
 
-Implement the separate public Worker over publication artifacts/search index; add source health, backup/restore, release switching, rollback, and deployment automation.
+Implement the separate public MCP deployment over publication artifacts/search index; add source health, backup/restore, release switching, rollback, and deployment automation. Configure and verify Auth0 and the Hetzner/Terraform infrastructure at this stage, after local MVP functionality, correctness, and UI quality are satisfactory.
 
 Acceptance: public tools never access operational data, mutate records, crawl, or invoke models. Website/MCP use the same release. Demonstrate restore, rollback, release-pinned reads, pagination, bounded traffic behavior, and visible coverage gaps.

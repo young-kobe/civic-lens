@@ -1,0 +1,11 @@
+@page
+@model CitationModel
+@{ ViewData["Title"] = "Citation"; }
+<p class="back"><a asp-page="/Index">← Evidence lookup</a></p>
+@if (Model.Error is not null) { <section class="notice @(Model.IsMissing ? "" : "error")" role="alert"><h1>@Model.ErrorTitle</h1><p>@Model.Error</p>@if (Model.Span is null) { <p><a asp-page="/Documents/Extraction" asp-route-extractionId="@Model.ExtractionId">Return to extraction</a></p> }</section> }
+else if (Model.Span is { } span)
+{
+    <header class="page-heading"><h1>Exact citation</h1><p>This quote is retained verbatim from the extraction.</p></header>
+    <dl class="identity"><dt>Extraction</dt><dd><a asp-page="/Documents/Extraction" asp-route-extractionId="@span.ExtractionId"><code>@span.ExtractionId</code></a></dd><dt>Start</dt><dd>@span.Start</dd><dt>Length</dt><dd>@span.Length UTF-16 units</dd></dl>
+    <blockquote class="quote"><pre><span>@EncodedEvidence.From(span.Quote)</span></pre></blockquote>
+}

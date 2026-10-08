@@ -560,6 +560,144 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         });
                 });
 
+            modelBuilder.Entity("CivicLens.Infrastructure.Review.Persistence.DocumentChangeDraftRow", b =>
+                {
+                    b.Property<string>("DraftId")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("draft_id");
+
+                    b.Property<string>("ComparisonId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("comparison_id");
+
+                    b.Property<long>("CreatedAtUtcTicks")
+                        .HasColumnType("bigint")
+                        .HasColumnName("created_at_utc_ticks");
+
+                    b.Property<int>("CurrentRevisionNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("current_revision_number");
+
+                    b.Property<int>("ReviewStateVersion")
+                        .HasColumnType("integer")
+                        .HasColumnName("review_state_version");
+
+                    b.HasKey("DraftId");
+
+                    b.HasIndex("ComparisonId");
+
+                    b.ToTable("document_change_drafts", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_document_change_drafts_id", "draft_id ~ '^[0-9a-f]{32}$'");
+
+                            t.HasCheckConstraint("ck_document_change_drafts_versions", "current_revision_number >= 1 AND review_state_version >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Review.Persistence.DocumentChangeRevisionRow", b =>
+                {
+                    b.Property<string>("DraftId")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("draft_id");
+
+                    b.Property<int>("RevisionNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("revision_number");
+
+                    b.Property<string>("RevisionJson")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("revision_json");
+
+                    b.HasKey("DraftId", "RevisionNumber");
+
+                    b.ToTable("document_change_revisions", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_document_change_revisions_number", "revision_number >= 1");
+                        });
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Review.Persistence.ReviewDecisionRow", b =>
+                {
+                    b.Property<string>("DecisionId")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("decision_id");
+
+                    b.Property<string>("DecisionJson")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("decision_json");
+
+                    b.Property<string>("DraftId")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("draft_id");
+
+                    b.Property<int>("ReviewStateVersion")
+                        .HasColumnType("integer")
+                        .HasColumnName("review_state_version");
+
+                    b.Property<int>("RevisionNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("revision_number");
+
+                    b.HasKey("DecisionId");
+
+                    b.HasIndex("DraftId", "ReviewStateVersion")
+                        .IsUnique();
+
+                    b.HasIndex("DraftId", "RevisionNumber");
+
+                    b.ToTable("document_change_review_decisions", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_document_change_review_decisions_id", "decision_id ~ '^[0-9a-f]{32}$'");
+
+                            t.HasCheckConstraint("ck_document_change_review_decisions_versions", "revision_number >= 1 AND review_state_version >= 1");
+                        });
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Review.Persistence.ReviewIdempotencyRow", b =>
+                {
+                    b.Property<string>("ActorSubject")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("actor_subject");
+
+                    b.Property<string>("Operation")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("operation");
+
+                    b.Property<string>("IdempotencyKey")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("idempotency_key");
+
+                    b.Property<string>("PayloadHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("payload_hash");
+
+                    b.Property<string>("ResultJson")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("result_json");
+
+                    b.HasKey("ActorSubject", "Operation", "IdempotencyKey");
+
+                    b.ToTable("document_change_review_idempotency", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_document_change_review_idempotency_hash", "payload_hash ~ '^[0-9a-f]{64}$'");
+                        });
+                });
+
             modelBuilder.Entity("CivicLens.Infrastructure.Collection.Discovery.DiscoveryAdmissionBatchRow", b =>
                 {
                     b.HasOne("CivicLens.Infrastructure.Collection.Discovery.DiscoveryRow", null)
@@ -650,6 +788,33 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.HasOne("CivicLens.Infrastructure.Collection.Persistence.AttemptRow", null)
                         .WithMany()
                         .HasForeignKey("AttemptId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Review.Persistence.DocumentChangeDraftRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.Documents.Persistence.DocumentComparisonRow", null)
+                        .WithMany()
+                        .HasForeignKey("ComparisonId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Review.Persistence.DocumentChangeRevisionRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.Review.Persistence.DocumentChangeDraftRow", null)
+                        .WithMany()
+                        .HasForeignKey("DraftId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Review.Persistence.ReviewDecisionRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.Review.Persistence.DocumentChangeRevisionRow", null)
+                        .WithMany()
+                        .HasForeignKey("DraftId", "RevisionNumber")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

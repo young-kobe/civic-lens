@@ -92,7 +92,12 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
     [Fact]
     public async Task SettlementWorksWithOnePooledConnection()
     {
-        var pooled = new NpgsqlConnectionStringBuilder(connectionString) { MaxPoolSize = 1, Timeout = 3 }.ConnectionString;
+        var pooled = new NpgsqlConnectionStringBuilder(connectionString)
+        {
+            Pooling = true,
+            MaxPoolSize = 1,
+            Timeout = 3
+        }.ConnectionString;
         jobs = PostgresCollectionJobStore.FromConnectionString(pooled);
         var claim = await EnqueueClaimAsync("single-connection", Definition());
         var start = await jobs.TryStartAttemptAsync(claim.Lease, root, default);

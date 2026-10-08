@@ -37,7 +37,7 @@ public sealed class PostgresCollectionAttemptStoreTests(PostgresCollection postg
         await store.MigrateAsync();
         await using var db = await factory.CreateDbContextAsync();
         Assert.Empty(await db.Database.GetPendingMigrationsAsync());
-        Assert.Equal(9, (await db.Database.GetAppliedMigrationsAsync()).Count());
+        Assert.Equal(db.Database.GetMigrations().Order(), (await db.Database.GetAppliedMigrationsAsync()).Order());
         Assert.False(db.Database.HasPendingModelChanges());
     }
 
@@ -435,7 +435,11 @@ public sealed class PostgresCollection : IAsyncLifetime
         .WithPassword("civic_lens")
         .Build();
 
-    public string ConnectionString => container.GetConnectionString();
+    // Each test schema has its own connection string, so idle pools would accumulate across the suite.
+    public string ConnectionString => new NpgsqlConnectionStringBuilder(container.GetConnectionString())
+    {
+        Pooling = false
+    }.ConnectionString;
     public Task InitializeAsync() => container.StartAsync();
     public Task DisposeAsync() => container.DisposeAsync().AsTask();
 }

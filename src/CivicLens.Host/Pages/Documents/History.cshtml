@@ -1,0 +1,32 @@
+@page
+@model HistoryModel
+@using CivicLens.Core.Collection
+@{ ViewData["Title"] = "Document history"; }
+<p class="back"><a asp-page="/Index">← Evidence lookup</a></p>
+@if (Model.Error is not null) { <section class="notice error" role="alert"><h1>@Model.ErrorTitle</h1><p>@Model.Error</p></section> }
+else if (Model.History is not null)
+{
+    <header class="page-heading"><h1>Document history</h1><p>All retained observations for this exact source and requested URL.</p></header>
+    <dl class="identity"><dt>Source ID</dt><dd>@Model.SourceId</dd><dt>Requested URL</dt><dd class="break-all">@Model.RequestedUrl</dd></dl>
+    @if (Model.History.Observations.IsEmpty) { <p class="notice">No observations were found for this exact source and URL. Check the identifiers; an empty history does not establish that the source was unchanged.</p> }
+    @if (Model.History.Observations.Length == HistoryModel.Limit) { <p class="notice">Showing the bounded history limit of @HistoryModel.Limit observations. A larger history cannot be represented here yet.</p> }
+    <section class="history-list" aria-label="Observations">
+    @foreach (var item in Model.History.Observations.Reverse())
+    {
+        var attempt = item.Attempt.AttemptResult;
+        var outcome = attempt switch { CapturedAttemptResult => "Captured", NotModifiedAttemptResult => "Not modified", FailedAttemptResult failed => $"Failed · {failed.FailureCode}", DeferredAttemptResult deferred => $"Deferred · {deferred.FailureCode}", _ => "Unknown outcome" };
+        <article class="observation">
+            <div class="observation-top"><h2>@outcome</h2><time datetime="@attempt.ObservedAt.ToString("O")">Observed UTC @attempt.ObservedAt.ToUniversalTime().ToString("yyyy-MM-dd HH:mm:ss 'UTC'")</time></div>
+            <p class="record-id">Attempt <code>@attempt.AttemptId</code></p>
+            @if (attempt.Response is { } response) { <p>HTTP @response.StatusCode @if (!string.IsNullOrEmpty(response.ContentType)) { <span>· @response.ContentType</span> }</p> }
+            @if (item.Attempt.PriorCapturedAttempt is { } prior) { <p>304 refers to prior capture attempt <code>@prior.AttemptId</code> · SHA-256 <code>@prior.Capture.Sha256</code> · @prior.Capture.ByteLength bytes; its extractions are listed below when available.</p> }
+            @if (attempt is CapturedAttemptResult captured) { <p>Capture <code>@captured.Capture.Sha256</code> · @captured.Capture.ByteLength bytes</p> }
+            @if (item.Extractions.IsEmpty) { <p class="muted">No extraction is retained for this observation.</p> }
+            else
+            {
+                <ul class="extraction-links">@foreach (var extraction in item.Extractions) { <li><a asp-page="/Documents/Extraction" asp-route-extractionId="@extraction.ExtractionId">Open extraction <code>@extraction.ExtractionId</code></a><span>@extraction.ParserVersion · @extraction.NormalizationVersion@if (extraction.Profile is not null) { <span> · profile @extraction.Profile.Id</span> }</span></li> }</ul>
+            }
+        </article>
+    }
+    </section>
+}
