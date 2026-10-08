@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Jobs;
+using CivicLens.Application.Collection.Processing;
 using CivicLens.Collection.Contracts;
 using CivicLens.Infrastructure.Collection;
 
@@ -24,7 +25,8 @@ internal static class CollectionWorkerCommand
     }
 
     public static async Task<int> ExecuteAsync(string[] arguments, ICollectionWorkerQueue queue,
-        ICollectionJobStore jobs, ICollectionAttemptStore evidence, CancellationToken cancellationToken)
+        ICollectionJobStore jobs, ICollectionAttemptStore evidence, CancellationToken cancellationToken,
+        EvidenceProcessingWorker? evidenceProcessor = null)
     {
         ValidateArguments(arguments);
         var collectorPath = Path.GetFullPath(arguments[1]);
@@ -33,7 +35,7 @@ internal static class CollectionWorkerCommand
             new CaptureArtifactVerifier(), new CollectorProcess(collectorPath,
                 Environment.GetEnvironmentVariable("DOTNET_HOST_PATH") ?? "dotnet"));
         var once = arguments.Length == 4;
-        var result = await new CollectionJobWorker(queue, runner).ExecuteAsync(artifactRoot, once,
+        var result = await new CollectionJobWorker(queue, runner, evidenceProcessor).ExecuteAsync(artifactRoot, once,
             cancellationToken: cancellationToken);
         Console.WriteLine(JsonSerializer.Serialize(result, JsonOptions));
         return result.JobFailures == 0 && result.QueueFailures == 0 ? 0 : 1;

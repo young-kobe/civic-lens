@@ -1,7 +1,8 @@
 namespace CivicLens.Application.Collection.Jobs;
 
 /// <summary>Polls a bounded durable queue and runs its jobs sequentially through the fenced job runner.</summary>
-public sealed class CollectionJobWorker(ICollectionWorkerQueue queue, RunCollectionJob runner)
+public sealed class CollectionJobWorker(ICollectionWorkerQueue queue, RunCollectionJob runner,
+    CivicLens.Application.Collection.Processing.EvidenceProcessingWorker? evidenceProcessor = null)
 {
     public const int DefaultBatchSize = 20;
     public const int MaximumBatchSize = 100;
@@ -66,6 +67,18 @@ public sealed class CollectionJobWorker(ICollectionWorkerQueue queue, RunCollect
                 {
                     jobFailures++;
                 }
+            }
+
+            if (evidenceProcessor is not null && !cancellationToken.IsCancellationRequested)
+            {
+                try
+                {
+                    var failures = await evidenceProcessor.ExecuteAsync(artifactDirectory, batchSize,
+                        lease, cancellationToken);
+                    jobFailures += failures;
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { break; }
+                catch (Exception exception) when (IsRecoverable(exception)) { jobFailures++; }
             }
 
             if (once) break;

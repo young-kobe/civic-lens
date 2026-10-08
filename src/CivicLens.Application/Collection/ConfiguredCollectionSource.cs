@@ -23,14 +23,14 @@ public sealed class ConfiguredCollectionSource
         PrepareDefinition(ReadSource(), currentDate, existing, article: false);
 
     public DiscoveryAdmissionRequest CreateDiscoveryAdmission(string attemptId, string idempotencyKey,
-        DateOnly currentDate, CollectionJobDefinition? existingTemplate = null)
+        DateOnly currentDate, CollectionJobDefinition? existingTemplate = null, bool recheckKnownCandidates = false)
     {
         var source = ReadSource();
         if (source.Mode is not (CollectionMode.Feed or CollectionMode.Html))
             throw new ArgumentException("Admission requires a configured feed or HTML discovery source.");
         var template = PrepareDefinition(source, currentDate, existingTemplate, article: true);
         var request = new DiscoveryAdmissionRequest(attemptId, idempotencyKey, template,
-            source.AdmissionPolicy ?? new DiscoveryAdmissionPolicy(), source.Mode);
+            source.AdmissionPolicy ?? new DiscoveryAdmissionPolicy(), source.Mode, recheckKnownCandidates);
         request.Validate();
         return request;
     }

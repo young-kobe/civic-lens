@@ -196,7 +196,8 @@ internal static class ReviewWorkspace
                 var history = PostgresDocumentHistoryStore.FromConnectionString(connectionString);
                 return new CollectionWorkspace(collection.Configuration, collection.ArtifactRoot, jobs, jobs,
                     new ExtractDocument(attempts, new CaptureDocumentTextExtractor(), extractions), extractions,
-                    new CompareDocuments(extractions, comparisons), new GetDocumentHistory(history), attempts);
+                    new CompareDocuments(extractions, comparisons), new GetDocumentHistory(history), attempts,
+                    CivicLens.Infrastructure.Collection.Processing.PostgresEvidenceProcessingStore.FromConnectionString(connectionString));
             });
         }
     }
@@ -207,7 +208,7 @@ internal static class ReviewWorkspace
     private static void SetHeaders(HttpResponse response)
     {
         response.Headers.CacheControl = "no-store";
-        response.Headers.ContentSecurityPolicy = "default-src 'none'; style-src 'self'; script-src 'self'; img-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
+        response.Headers.ContentSecurityPolicy = "default-src 'none'; style-src 'self'; script-src 'self'; connect-src 'self'; img-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
         response.Headers["Referrer-Policy"] = "no-referrer";
         response.Headers.XContentTypeOptions = "nosniff";
         response.Headers.XFrameOptions = "DENY";

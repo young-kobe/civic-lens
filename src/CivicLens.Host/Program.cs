@@ -5,9 +5,12 @@ using CivicLens.Application;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Application.Collection.Discovery;
+using CivicLens.Application.Collection.Processing;
 using CivicLens.Collection.Contracts;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Collection.Jobs;
+using CivicLens.Infrastructure.Collection.Processing;
+using CivicLens.Application.Documents;
 using CivicLens.Host.Collection;
 using CivicLens.Host.Documents;
 using CivicLens.Host.Review;
@@ -133,7 +136,15 @@ try
         var attempts = CreateDatabase();
         var queue = PostgresCollectionWorkerQueue.FromConnectionString(Environment.GetEnvironmentVariable("CIVIC_LENS_DATABASE")!);
         executing = true;
-        return await CollectionWorkerCommand.ExecuteAsync(args, queue, jobs, attempts, cancellation.Token);
+        var connectionString = Environment.GetEnvironmentVariable("CIVIC_LENS_DATABASE")!;
+        var extractions = PostgresDocumentExtractionStore.FromConnectionString(connectionString);
+        var comparisons = PostgresDocumentComparisonStore.FromConnectionString(connectionString);
+        var processing = new EvidenceProcessingWorker(jobs, attempts, jobs,
+            PostgresEvidenceProcessingStore.FromConnectionString(connectionString),
+            new ExtractDocument(attempts, new CaptureDocumentTextExtractor(), extractions),
+            new GetDocumentHistory(PostgresDocumentHistoryStore.FromConnectionString(connectionString)),
+            new CompareDocuments(extractions, comparisons));
+        return await CollectionWorkerCommand.ExecuteAsync(args, queue, jobs, attempts, cancellation.Token, processing);
     }
 
     if (DocumentCommand.Matches(args))
