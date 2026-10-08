@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using System.Text;
 using AngleSharp.Dom;
 using AngleSharp.Html.Parser;
+using AngleSharp.Html.Parser.Tokens;
 using CivicLens.Application.Documents;
 using CivicLens.Core.Collection;
 using CivicLens.Core.Documents;
@@ -26,7 +27,7 @@ public sealed class CaptureDocumentTextExtractor : IDocumentTextExtractor
     private static readonly HashSet<string> IgnoredElements = new(StringComparer.Ordinal)
         { "script", "style", "template", "noscript" };
 
-    public string ParserVersion => "capture-text-v1";
+    public string ParserVersion => "capture-text-v2";
     public string NormalizationVersion => "body-text-v1";
 
     public async Task<string> ExtractAsync(CapturedAttemptResult attempt, string artifactRoot,
@@ -327,17 +328,38 @@ public sealed class CaptureDocumentTextExtractor : IDocumentTextExtractor
                 createdElements.Clear();
                 if (htmlToken.Type == HtmlTokenType.EndTag)
                 {
-                    if (openElements.Count > 0 && openElements[^1] == htmlToken.Name)
-                        openElements.RemoveAt(openElements.Count - 1);
+                    CloseThroughMatchingAncestor(openElements, htmlToken.Name);
                 }
                 else if (htmlToken.Type == HtmlTokenType.StartTag && !IsVoidElement(htmlToken.Name))
                 {
+                    if (htmlToken is HtmlTagToken { IsSelfClosing: true } &&
+                        (htmlToken.Name is "svg" or "math" || openElements.Contains("svg") || openElements.Contains("math"))) return;
+                    if (ClosesParagraph(htmlToken.Name)) CloseNearestParagraph(openElements);
                     openElements.Add(htmlToken.Name);
                     if (openElements.Count > MaximumTreeDepth) throw new InvalidDataException("HTML nesting limit exceeded.");
                 }
             }
         });
     }
+
+    private static void CloseThroughMatchingAncestor(List<string> openElements, string name)
+    {
+        var matchingIndex = openElements.LastIndexOf(name);
+        if (matchingIndex >= 0) openElements.RemoveRange(matchingIndex, openElements.Count - matchingIndex);
+    }
+
+    private static void CloseNearestParagraph(List<string> openElements)
+    {
+        // Do not apply HTML paragraph rules inside SVG or MathML foreign content.
+        if (openElements.Contains("svg", StringComparer.Ordinal) || openElements.Contains("math", StringComparer.Ordinal)) return;
+        var paragraphIndex = openElements.LastIndexOf("p");
+        if (paragraphIndex >= 0) openElements.RemoveRange(paragraphIndex, openElements.Count - paragraphIndex);
+    }
+
+    private static bool ClosesParagraph(string name) => name is "address" or "article" or "aside" or "blockquote" or
+        "details" or "div" or "dl" or "fieldset" or "figcaption" or "figure" or "footer" or "form" or
+        "h1" or "h2" or "h3" or "h4" or "h5" or "h6" or "header" or "hr" or "main" or "menu" or
+        "nav" or "ol" or "p" or "pre" or "section" or "table" or "ul";
 
     private static bool IsVoidElement(string name) => name is "area" or "base" or "br" or "col" or "embed" or
         "hr" or "img" or "input" or "link" or "meta" or "param" or "source" or "track" or "wbr";

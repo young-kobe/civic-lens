@@ -145,6 +145,76 @@ public sealed class CollectorTests
         Assert.Empty(result.Discovery.Urls);
     }
 
+    [Theory]
+    [InlineData(CollectionProtocol.RobotsVersion, DiscoveryStatus.LimitExceeded)]
+    [InlineData(CollectionProtocol.TolerantHtmlRecoveryVersion, DiscoveryStatus.Parsed)]
+    public async Task TolerantHtmlRecoveryClosesOmittedParagraphsOnlyForItsProtocolVersion(int version,
+        DiscoveryStatus expectedStatus)
+    {
+        using var directory = new TemporaryDirectory();
+        var html = string.Concat(Enumerable.Range(0, 70).Select(index => $"<p>Paragraph {index}")) +
+            "<a href='/watch/story'>story</a>";
+        using var collector = new HttpCollector(new QueueHandler(
+            _ => Response(HttpStatusCode.NotFound), _ => Response(HttpStatusCode.OK, html)));
+
+        var result = await collector.FetchAsync(Request(directory.Path) with
+        {
+            Version = version,
+            Mode = CollectionMode.Html,
+            MaxBytes = 10_000
+        });
+
+        Assert.Equal(CollectionOutcome.Captured, result.Outcome);
+        Assert.Equal(version, result.Version);
+        Assert.Equal(1, result.RobotsRequestCount);
+        Assert.Equal(expectedStatus, result.Discovery!.Status);
+        if (expectedStatus == DiscoveryStatus.Parsed)
+            Assert.Equal("https://example.test/watch/story", Assert.Single(result.Discovery.Urls));
+        else
+            Assert.Empty(result.Discovery.Urls);
+    }
+
+    [Fact]
+    public async Task TolerantHtmlRecoveryClosesMismatchedAncestorsAndIgnoresStrayEndTags()
+    {
+        using var directory = new TemporaryDirectory();
+        var html = "<section><div><span>before</div></span></not-open>" +
+            string.Concat(Enumerable.Range(0, 70).Select(index => $"<p>Paragraph {index}")) +
+            "<a href='/watch/story'>story</a>";
+        using var collector = new HttpCollector(new QueueHandler(
+            _ => Response(HttpStatusCode.NotFound), _ => Response(HttpStatusCode.OK, html)));
+
+        var result = await collector.FetchAsync(Request(directory.Path) with
+        {
+            Mode = CollectionMode.Html,
+            MaxBytes = 10_000
+        });
+
+        Assert.Equal(CollectionOutcome.Captured, result.Outcome);
+        Assert.Equal(DiscoveryStatus.Parsed, result.Discovery!.Status);
+        Assert.Equal("https://example.test/watch/story", Assert.Single(result.Discovery.Urls));
+    }
+
+    [Fact]
+    public async Task TolerantHtmlRecoveryStillRejectsADeepRepairedTree()
+    {
+        using var directory = new TemporaryDirectory();
+        var html = string.Concat(Enumerable.Repeat("<div>", 65)) + "<a href='/watch/story'>story</a>" +
+            string.Concat(Enumerable.Repeat("</div>", 65));
+        using var collector = new HttpCollector(new QueueHandler(
+            _ => Response(HttpStatusCode.NotFound), _ => Response(HttpStatusCode.OK, html)));
+
+        var result = await collector.FetchAsync(Request(directory.Path) with
+        {
+            Mode = CollectionMode.Html,
+            MaxBytes = 10_000
+        });
+
+        Assert.Equal(CollectionOutcome.Captured, result.Outcome);
+        Assert.Equal(DiscoveryStatus.LimitExceeded, result.Discovery!.Status);
+        Assert.Empty(result.Discovery.Urls);
+    }
+
     [Fact]
     public async Task HtmlDiscoveryRejectsUnknownEncodingWithoutLosingCapture()
     {
@@ -325,6 +395,20 @@ public sealed class CollectorTests
         });
         Assert.Equal(DiscoveryStatus.Parsed, result.Discovery!.Status);
         Assert.Equal("https://example.test/watch/story", Assert.Single(result.Discovery.Urls));
+    }
+
+    [Theory]
+    [InlineData(6, DiscoveryStatus.LimitExceeded)]
+    [InlineData(7, DiscoveryStatus.Parsed)]
+    public async Task SelfClosingSvgSiblingsDoNotAccumulateLexicalDepthInVersionSeven(int version, DiscoveryStatus expected)
+    {
+        using var directory = new TemporaryDirectory();
+        var html = "<svg>" + string.Concat(Enumerable.Repeat("<path d='M0 0' />", 100)) + "</svg><a href='/watch/story'>story</a>";
+        using var collector = new HttpCollector(new QueueHandler(_ => Response(HttpStatusCode.NotFound), _ => Response(HttpStatusCode.OK, html)));
+        var result = await collector.FetchAsync(Request(directory.Path) with { Version = version, Mode = CollectionMode.Html, MaxBytes = 10_000 });
+        Assert.Equal(expected, result.Discovery!.Status);
+        if (expected == DiscoveryStatus.Parsed) Assert.Equal("https://example.test/watch/story", Assert.Single(result.Discovery.Urls));
+        else Assert.Empty(result.Discovery.Urls);
     }
 
     [Theory]

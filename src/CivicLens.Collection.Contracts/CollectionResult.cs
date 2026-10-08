@@ -96,11 +96,11 @@ public sealed record CollectionResult
             throw new InvalidDataException("Collector result observation metadata is invalid.");
     }
 
-    private int ContentRequestCount => Version >= 6 ? RequestCount - RobotsRequestCount!.Value : Math.Max(0, RequestCount - 1);
+    private int ContentRequestCount => Version >= CollectionProtocol.RobotsVersion ? RequestCount - RobotsRequestCount!.Value : Math.Max(0, RequestCount - 1);
 
     private void ValidateRobotsAccounting()
     {
-        if (Version < 6)
+        if (Version < CollectionProtocol.RobotsVersion)
         {
             if (RobotsRequestCount is not null || RobotsCrawlDelayMilliseconds is not null || FailureCode == CollectionFailureCode.CrawlDelay)
                 throw new InvalidDataException("Robots accounting requires collection protocol version 6.");
@@ -173,13 +173,13 @@ public sealed record CollectionResult
             throw new InvalidDataException("Deferred result has invalid failure metadata.");
         if (FailureCode == CollectionFailureCode.RateLimited && Response?.StatusCode == 429 && ContentRequestCount >= 1)
             return;
-        if (Version >= 6 && FailureCode == CollectionFailureCode.CrawlDelay &&
+        if (Version >= CollectionProtocol.RobotsVersion && FailureCode == CollectionFailureCode.CrawlDelay &&
             Math.Max(request.MinDelayMilliseconds, RobotsCrawlDelayMilliseconds ?? 0) > 0 &&
             RetryAfterSeconds >= (Math.Max(request.MinDelayMilliseconds, RobotsCrawlDelayMilliseconds ?? 0) + 999) / 1000 &&
             RobotsRequestCount > 0 &&
             (Response is null || Response.StatusCode is >= 300 and < 400))
             return;
-        if (Version >= 6 && FailureCode is CollectionFailureCode.RateLimited or CollectionFailureCode.RobotsUnavailable &&
+        if (Version >= CollectionProtocol.RobotsVersion && FailureCode is CollectionFailureCode.RateLimited or CollectionFailureCode.RobotsUnavailable &&
             ContentRequestCount == 0 && RobotsRequestCount > 0 && Response is null)
             return;
         throw new InvalidDataException("Deferred result requires rate limiting, robots unavailability, or crawl delay.");

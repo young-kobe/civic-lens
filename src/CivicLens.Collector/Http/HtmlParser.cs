@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using AngleSharp.Dom;
 using AngleSharp.Html.Parser;
+using AngleSharp.Html.Parser.Tokens;
 using CivicLens.Collection.Contracts;
 
 namespace CivicLens.Collector.Http;
@@ -54,7 +55,8 @@ internal static class HtmlParser
 
                 // AngleSharp does not fetch linked resources. This parser only builds a tree from
                 // the already captured representation; scripts are never executed.
-                using var document = await CreateParser(token).ParseDocumentAsync(html, token);
+                using var document = await CreateParser(token,
+                    request.Version >= CollectionProtocol.TolerantHtmlRecoveryVersion).ParseDocumentAsync(html, token);
                 token.ThrowIfCancellationRequested();
                 ValidateTreeDepth(document, token);
                 var finalUrl = new Uri(responseUrl);
@@ -187,7 +189,8 @@ internal static class HtmlParser
         _ => (null, 0)
     };
 
-    private static AngleSharp.Html.Parser.HtmlParser CreateParser(CancellationToken cancellationToken)
+    private static AngleSharp.Html.Parser.HtmlParser CreateParser(CancellationToken cancellationToken,
+        bool tolerateOptionalParagraphClosures)
     {
         var tokens = 0;
         var elements = 0;
@@ -208,19 +211,42 @@ internal static class HtmlParser
                 createdElements.Clear();
                 if (htmlToken.Type == HtmlTokenType.EndTag)
                 {
-                    if (openElements.Count > 0 && openElements[^1] == htmlToken.Name)
+                    if (tolerateOptionalParagraphClosures)
+                        CloseThroughMatchingAncestor(openElements, htmlToken.Name);
+                    else if (openElements.Count > 0 && openElements[^1] == htmlToken.Name)
                         openElements.RemoveAt(openElements.Count - 1);
                 }
                 else if (htmlToken.Type == HtmlTokenType.StartTag && !IsVoidElement(htmlToken.Name))
                 {
-                    // A conservative lexical bound also covers malformed markup whose
-                    // optional end tags a browser would implicitly close.
+                    if (tolerateOptionalParagraphClosures && htmlToken is HtmlTagToken { IsSelfClosing: true } &&
+                        (htmlToken.Name is "svg" or "math" || openElements.Contains("svg") || openElements.Contains("math"))) return;
+                    if (tolerateOptionalParagraphClosures && ClosesParagraph(htmlToken.Name))
+                        CloseNearestParagraph(openElements);
                     openElements.Add(htmlToken.Name);
                     if (openElements.Count > MaximumOpenElements) throw new MarkupLimitException();
                 }
             }
         });
     }
+
+    private static void CloseThroughMatchingAncestor(List<string> openElements, string name)
+    {
+        var matchingIndex = openElements.LastIndexOf(name);
+        if (matchingIndex >= 0) openElements.RemoveRange(matchingIndex, openElements.Count - matchingIndex);
+    }
+
+    private static void CloseNearestParagraph(List<string> openElements)
+    {
+        // Paragraph-like tags inside SVG/MathML are foreign content and can nest as elements.
+        if (openElements.Contains("svg", StringComparer.Ordinal) || openElements.Contains("math", StringComparer.Ordinal)) return;
+        var paragraphIndex = openElements.LastIndexOf("p");
+        if (paragraphIndex >= 0) openElements.RemoveRange(paragraphIndex, openElements.Count - paragraphIndex);
+    }
+
+    private static bool ClosesParagraph(string name) => name is "address" or "article" or "aside" or "blockquote" or
+        "details" or "div" or "dl" or "fieldset" or "figcaption" or "figure" or "footer" or "form" or
+        "h1" or "h2" or "h3" or "h4" or "h5" or "h6" or "header" or "hr" or "main" or "menu" or
+        "nav" or "ol" or "p" or "pre" or "section" or "table" or "ul";
 
     private static void ValidateAncestorDepth(IElement element)
     {
