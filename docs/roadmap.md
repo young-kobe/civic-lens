@@ -20,7 +20,7 @@ After MVP functionality and UI are satisfactory, prepare the application for the
 
 ## 1. Collection and evidence
 
-Automatic stored-validator selection and background scheduling remain future work. Persistent robots caching and cross-origin robots redirects are outside the current collection policy. Add only packages needed for these capabilities.
+Automatic stored-validator selection and periodic source scheduling remain future work. The explicit queue worker dispatches already admitted jobs; it does not create recurring jobs. Persistent robots caching and cross-origin robots redirects are outside the current collection policy. Add only packages needed for these capabilities.
 
 Acceptance: add an official through configuration; collect one feed and watched page; demonstrate cancellation/restart without duplicate imports, conditional 304 handling, 429 backoff, bounded discovery, and explicit incomplete-download errors. Validate registry behavior with hundreds of fixture identities without issuing hundreds of live requests.
 

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Globalization;
+using System.Runtime.InteropServices;
 using CivicLens.Application;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Jobs;
@@ -28,6 +29,7 @@ if (args is [] or ["--help"] or ["help"])
           jobs get <job-id>
           jobs list [limit]
           jobs cancel <job-id>
+          worker <collector.dll> <artifact-directory> [--once]
           discovery get <attempt-id>
           discovery admit <config.json> <source-id> <attempt-id> <idempotency-key> [--as-of yyyy-MM-dd]
           documents extract <captured-attempt-id> <artifact-directory>
@@ -108,7 +110,8 @@ if (args.Contains("--as-of", StringComparer.Ordinal))
 
 if (args is not (["db", "migrate"] or ["validate", _] or ["collect", _, _, _, _] or ["collect-import", _, _, _, _]
     or ["feeds" or "discovery", "get", _] or ["feeds" or "discovery", "admit", _, _, _, _]
-    or ["receipts", "list", _] or ["receipts", "replay", _, _]) && !CollectionJobCommand.Matches(args) && !DocumentCommand.Matches(args))
+    or ["receipts", "list", _] or ["receipts", "replay", _, _]) && !CollectionJobCommand.Matches(args) &&
+    !CollectionWorkerCommand.Matches(args) && !DocumentCommand.Matches(args))
 {
     Console.Error.WriteLine("Unknown command. Use --help.");
     return 2;
@@ -121,6 +124,18 @@ var replaying = args is ["receipts", "replay", _, _];
 var importing = args[0] == "collect-import" || replaying;
 try
 {
+    if (CollectionWorkerCommand.Matches(args))
+    {
+        using var terminate = OperatingSystem.IsWindows() ? null : PosixSignalRegistration.Create(PosixSignal.SIGTERM,
+            context => { context.Cancel = true; cancellation.Cancel(); });
+        CollectionWorkerCommand.ValidateArguments(args);
+        var jobs = CreateJobs();
+        var attempts = CreateDatabase();
+        var queue = PostgresCollectionWorkerQueue.FromConnectionString(Environment.GetEnvironmentVariable("CIVIC_LENS_DATABASE")!);
+        executing = true;
+        return await CollectionWorkerCommand.ExecuteAsync(args, queue, jobs, attempts, cancellation.Token);
+    }
+
     if (DocumentCommand.Matches(args))
     {
         var documentConfiguration = args is ["documents", "extract", var documentConfigPath, _, _]
