@@ -182,6 +182,44 @@ Discovery collection also works through `jobs enqueue` and `jobs run`; inspect t
 
 Candidates, capture identity, and attempt evidence commit atomically. If import fails, use the existing `receipts replay` commands; no new fetch is required. If admission acknowledgment is lost, repeat its exact key and configuration; omit the date to reuse the saved one, or supply that same date explicitly. Older v3 page, v4 page/feed, and v5 page/feed/HTML handoffs remain recoverable after upgrading; HTML discovery requires v5 or later. The migration renames existing discovery/admission tables while preserving their evidence, URL bindings, and batch replay records. Schema changes still require explicit `db migrate`.
 
+## Federal source pilot
+
+`config/federal-pilot.json` contains a deliberately small live-source configuration for Elizabeth Warren and Ted Cruz. It is a collection pilot, not representative national coverage. The coverage start date records when this project began monitoring these sources, not when either senator took office. Office press releases establish what an office published; claims about enacted legislation or completed government actions require corroborating authoritative records before publication.
+
+| Source ID | Purpose |
+|---|---|
+| `elizabeth-warren-press` | Official newsroom listing; version 7 applies tolerant HTML recovery to its retained markup; refresh the capture and inspect candidates before admission |
+| `ted-cruz-press` | Official newsroom listing; parsed candidates include navigation and pagination, so prefer the RSS source for article admission |
+| `ted-cruz-press-feed` | RSS endpoint advertised by the official newsroom; bounded admission of linked article jobs |
+| `elizabeth-warren-pilot-article-1` | Explicit education-oversight release; `capture-text-v2` with the `warren-article` profile extracts its retained capture |
+| `elizabeth-warren-pilot-article-2` | Explicit heating-assistance release; `capture-text-v2` with the `warren-article` profile extracts its retained capture |
+
+Each job permits at most two attempts, five requests and 2 MB per attempt, with a 60-second attempt timeout and at least 1.5 seconds between content requests. A discovery admission permits at most two article jobs and reserves their complete retry allowances: 20 requests, 8 MB, and 240 seconds. Another explicit admission authorizes another batch; these are not lifetime coverage caps. The worker is a separate explicit command and does not start with the Host.
+
+Build both executables and configure `CIVIC_LENS_DATABASE` as above. For the already configured local development database, source the ignored `.runtime/database/connection.env` file. Start with the RSS source:
+
+```sh
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- validate config/federal-pilot.json
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- jobs enqueue config/federal-pilot.json ted-cruz-press-feed <new-check-key>
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- jobs run <job-id> src/CivicLens.Collector/bin/Release/net10.0/CivicLens.Collector.dll .runtime/captures
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- discovery get <captured-attempt-id>
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- discovery admit config/federal-pilot.json ted-cruz-press-feed <captured-attempt-id> <new-admission-key>
+```
+
+Inspect discovery before admission. Run each admitted job explicitly, then extract its captured article with the configured content profile:
+
+```sh
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- jobs run <article-job-id> src/CivicLens.Collector/bin/Release/net10.0/CivicLens.Collector.dll .runtime/captures
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- documents extract config/federal-pilot.json <article-attempt-id> .runtime/captures
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- documents get <extraction-id>
+```
+
+The `senate-main` profile retains the main article region and excludes navigation, modal, sharing, and previous/next controls. Inspect selected text before relying on a profile. Its exact revision is retained with each extraction; changing the profile does not rewrite old text. The `warren-article` profile selects the article template. Version 7 collection and `capture-text-v2` extraction use tolerant HTML recovery while retaining token, decoded-input, and DOM-depth limits.
+
+The bounded pilot verified captures of both newsroom pages, the RSS feed, and two articles per office, with readable text retained for both offices. A version 7 worker pass captured the Warren listing and parsed 16 candidate links. Both retained Warren articles also extract successfully under `capture-text-v2`. These checks establish compatibility with those responses, not future source availability. Failed processing must not be interpreted as no activity.
+
+First captures are baselines. Do not compare different articles to fabricate a change, or mistake a changed extraction profile for a source edit. A document-change candidate requires two compatible extractions of the same source and exact requested URL and a complete comparison containing changed text. The review queue can therefore remain empty while real evidence is already stored. Use the authenticated evidence viewer to inspect extraction IDs. No evidence is approved or published by collection.
+
 ## Recover saved receipts
 
 `collect-import` saves a versioned handoff in `<artifact-directory>/.pending/` after the collector receipt and capture have been verified and before importing into Postgres. The directory also contains the hash-named gzip captures. Database outages and missing migrations leave the saved handoff available for replay. Missing or invalid database configuration is still rejected before collection.
@@ -300,6 +338,10 @@ Configure these environment variables through the deployment's protected environ
 | `CIVIC_LENS_REVIEW_KEY_DIRECTORY` | Absolute persistent directory for ASP.NET data-protection keys |
 | `CIVIC_LENS_REVIEW_ISSUES` | Optional comma-separated configured issue IDs |
 | `CIVIC_LENS_REVIEW_OFFICIALS` | Optional comma-separated configured official IDs |
+| `CIVIC_LENS_COLLECTION_CONFIG` | Optional absolute path to the collection configuration for the owner Sources page |
+| `CIVIC_LENS_CAPTURE_DIRECTORY` | Optional absolute artifact root for collection and extraction in the Sources page; configure with the collection config |
+
+Set both collection variables or leave both unset. Setting only one prevents the authenticated application from starting because it cannot safely configure the Sources page.
 
 Set the Auth0 allowed callback URL to `<CIVIC_LENS_REVIEW_ORIGIN>/signin-oidc`. Configure an HTTPS reverse proxy on the same host to forward to loopback and preserve the configured external Host header, including its port if nonstandard. The workspace rejects other Host values, pins its effective scheme to HTTPS, ignores ambient listener configuration, and does not trust forwarded headers. The initial listener expects a same-host proxy; isolated container networking requires an explicitly reviewed deployment configuration. Public access must terminate HTTPS at the proxy. Local workstation testing also requires a local HTTPS proxy and an allowed Auth0 callback; there is no unauthenticated review mode.
 
@@ -309,7 +351,7 @@ The application accepts only configured subjects, even if other users can authen
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- review 5081
 ```
 
-Open `/Review` through the configured HTTPS origin. The queue browses saved comparisons and drafts; an empty queue requires collecting, extracting, and comparing evidence through existing commands. It does not contain demonstration records. `/Evidence` opens the supporting lookup; exact retained versions and citations remain authenticated. The old `viewer` command cannot access `/Review` routes.
+Open `/Review` through the configured HTTPS origin. The queue browses saved comparisons and drafts; an empty queue requires collecting, extracting, and comparing evidence. When both collection environment settings are configured, `/Review/Sources` lets the owner enqueue configured sources, cancel jobs, admit candidates from retained discovery attempts, extract captured attempts, compare saved versions, and recollect a retained article URL using current settings. A separately launched `worker` executes queued HTTP work. The page does not create arbitrary URLs or claim worker liveness. It does not contain demonstration records. `/Evidence` opens the supporting lookup; exact retained versions and citations remain authenticated. The old `viewer` command cannot access `/Review` routes.
 
 Creating a draft explicitly selects a complete changed comparison. Saves retain immutable authored revisions. Actual change dates require a selected exact citation; dates of observation are displayed separately. Approval requires headline, summary, institution, at least one valid citation, and explicit resolution of all outstanding concerns. Concurrent saves/decisions return conflicts; stale unsaved edits remain visible, and decisions are disabled until the saved revision is reloaded or edits are saved. Review decisions do not publish anything.
 

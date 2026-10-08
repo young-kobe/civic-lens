@@ -7,13 +7,18 @@ using System.Net;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using AngleSharp.Html.Parser;
 using AngleSharp.Dom;
 using CivicLens.Application.Collection;
+using CivicLens.Application.Collection.Jobs;
+using CivicLens.Application.Documents;
+using CivicLens.Core.Review;
 using CivicLens.Collection.Contracts;
 using CivicLens.Core.Collection;
 using CivicLens.Core.Documents;
 using CivicLens.Infrastructure.Collection;
+using CivicLens.Infrastructure.Collection.Jobs;
 using CivicLens.Infrastructure.Documents;
 using CivicLens.Tests.Infrastructure.Collection;
 using Npgsql;
@@ -75,6 +80,17 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
         start.Environment["CIVIC_LENS_REVIEW_OWNER"] = "auth0|owner";
         start.Environment["CIVIC_LENS_REVIEW_REVIEWERS"] = "auth0|friend";
         start.Environment["CIVIC_LENS_REVIEW_KEY_DIRECTORY"] = keyDirectory;
+        Directory.CreateDirectory(keyDirectory);
+        var collectionPath = Path.Combine(keyDirectory, "sources.json");
+        await File.WriteAllTextAsync(collectionPath, """
+            {"version":2,"people":[{"id":"person","name":"Test Official"}],
+             "documentProfiles":[{"id":"main","selector":"main"}],
+             "sources":[{"id":"source","coverage":[{"personId":"person"}],
+               "url":"https://example.test/pages/a","allowedOrigin":"https://example.test",
+               "allowedPathPrefix":"/pages","documentProfileId":"main"}]}
+            """);
+        start.Environment["CIVIC_LENS_COLLECTION_CONFIG"] = collectionPath;
+        start.Environment["CIVIC_LENS_CAPTURE_DIRECTORY"] = keyDirectory;
         process = Process.Start(start)!;
         output = process.StandardOutput.ReadToEndAsync();
         error = process.StandardError.ReadToEndAsync();
@@ -184,6 +200,136 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
         Assert.Equal(HttpStatusCode.OK, evidence.StatusCode);
     }
 
+    [Fact]
+    public async Task SourceControlsRequireOwnerAndCsrfAndEnqueueIdempotently()
+    {
+        client.DefaultRequestHeaders.Add("Cookie", CreateCookie("auth0|friend"));
+        using var denied = await client.GetAsync("/Review/Sources");
+        Assert.Equal(HttpStatusCode.Redirect, denied.StatusCode);
+        Assert.Contains("access-denied", denied.Headers.Location!.ToString());
+        client.DefaultRequestHeaders.Remove("Cookie");
+        client.DefaultRequestHeaders.Add("Cookie", CreateCookie("auth0|owner"));
+        var page = await GetDocumentAsync("/Review/Sources");
+        Assert.Contains("Test Official", page.Body!.TextContent);
+        var form = page.QuerySelector("form[action*='Collect']")!;
+        var fields = Fields(form);
+        var withoutToken = fields.Where(item => item.Key != "__RequestVerificationToken");
+        using var forged = await client.PostAsync(form.GetAttribute("action"), new FormUrlEncodedContent(withoutToken));
+        Assert.Equal(HttpStatusCode.BadRequest, forged.StatusCode);
+        using var queued = await client.PostAsync(form.GetAttribute("action"), new FormUrlEncodedContent(fields));
+        using var repeated = await client.PostAsync(form.GetAttribute("action"), new FormUrlEncodedContent(fields));
+        Assert.Equal(HttpStatusCode.Redirect, queued.StatusCode);
+        Assert.Equal(queued.Headers.Location, repeated.Headers.Location);
+        var store = PostgresCollectionJobStore.FromConnectionString(connectionString);
+        var job = Assert.Single(await store.ListAsync(50, default));
+        Assert.Empty(job.Attempts);
+        var detail = await GetDocumentAsync(queued.Headers.Location!.ToString());
+        Assert.Contains("No attempt yet", detail.Body!.TextContent);
+        var cancel = detail.QuerySelector("form[action*='Cancel']")!;
+        using var cancelled = await client.PostAsync(cancel.GetAttribute("action"), Form(cancel));
+        Assert.Equal(HttpStatusCode.Redirect, cancelled.StatusCode);
+        Assert.Equal(CivicLens.Application.Collection.Jobs.CollectionJobState.Cancelled, (await store.GetAsync(job.JobId, default))!.State);
+    }
+
+    [Fact]
+    public async Task RecoveredImportedEvidenceWithoutReceiptStillShowsExtractionAndRecollectControls()
+    {
+        client.DefaultRequestHeaders.Add("Cookie", CreateCookie("auth0|owner"));
+        var sourcePage = await GetDocumentAsync("/Review/Sources");
+        var collect = sourcePage.QuerySelector("form[action*='Collect']")!;
+        var values = Fields(collect);
+        Set(values, "requestKey", Guid.NewGuid().ToString("N"));
+        using var queued = await client.PostAsync(collect.GetAttribute("action"), new FormUrlEncodedContent(values));
+        var jobId = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(new Uri(client.BaseAddress!, queued.Headers.Location!).Query)["jobId"].ToString();
+        var jobs = PostgresCollectionJobStore.FromConnectionString(connectionString);
+        var job = (await jobs.GetAsync(jobId, default))!;
+        const string attemptId = "aabbccddeeff00112233445566778899";
+        var request = job.Definition.CreateRequest(attemptId, keyDirectory);
+        var imported = await SaveImportedAttemptAsync(request, attemptId, "Retained article text.\n");
+        var started = DateTimeOffset.UtcNow.AddMinutes(-1).UtcDateTime.Ticks;
+        var completed = DateTimeOffset.UtcNow.UtcDateTime.Ticks;
+        var resolution = JsonSerializer.Serialize(new CollectionAttemptResolution(
+            CollectionJobAttemptOutcome.Succeeded, null, "EvidenceAlreadyImported"), CollectionProtocol.JsonOptions);
+        var requestJson = JsonSerializer.Serialize(request, CollectionProtocol.JsonOptions);
+        await using (var connection = new NpgsqlConnection(connectionString))
+        {
+            await connection.OpenAsync();
+            await using var command = new NpgsqlCommand("""
+                INSERT INTO collection_job_attempts (attempt_id, job_id, sequence, request_json, started_at, resolution_json, completed_at)
+                VALUES (@attempt, @job, 1, @request, @started, @resolution, @completed);
+                UPDATE collection_jobs SET state = 'Succeeded' WHERE job_id = @job;
+                """, connection);
+            command.Parameters.AddWithValue("attempt", attemptId);
+            command.Parameters.AddWithValue("job", jobId);
+            command.Parameters.AddWithValue("request", requestJson);
+            command.Parameters.AddWithValue("started", started);
+            command.Parameters.AddWithValue("resolution", resolution);
+            command.Parameters.AddWithValue("completed", completed);
+            await command.ExecuteNonQueryAsync();
+        }
+
+        using var response = await client.GetAsync("/Review/Sources?jobId=" + jobId);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var document = await new HtmlParser().ParseDocumentAsync(await response.Content.ReadAsStringAsync());
+        Assert.Contains("Imported evidence is retained; the transport receipt is unavailable.", document.Body!.TextContent);
+        Assert.Contains(imported.AttemptResult.ObservedAt.ToString("yyyy-MM-dd HH:mm:ss 'UTC'"), document.Body.TextContent);
+        Assert.Contains(document.QuerySelectorAll("form[action*='Extract']"), form =>
+            form.QuerySelector("input[name='attemptId']")?.GetAttribute("value") == attemptId);
+        Assert.NotNull(document.QuerySelector("form[action*='Recollect']"));
+    }
+
+    [Fact]
+    public async Task CorruptPersistedJobDefinitionReturnsSanitizedServiceUnavailable()
+    {
+        client.DefaultRequestHeaders.Add("Cookie", CreateCookie("auth0|owner"));
+        var sourcePage = await GetDocumentAsync("/Review/Sources");
+        var form = sourcePage.QuerySelector("form[action*='Collect']")!;
+        var fields = Fields(form);
+        Set(fields, "requestKey", Guid.NewGuid().ToString("N"));
+        using var queued = await client.PostAsync(form.GetAttribute("action"), new FormUrlEncodedContent(fields));
+        var jobId = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(new Uri(client.BaseAddress!, queued.Headers.Location!).Query)["jobId"].ToString();
+        var jobStore = PostgresCollectionJobStore.FromConnectionString(connectionString);
+        var savedJob = (await jobStore.GetAsync(jobId, default))!;
+        var invalidDefinition = JsonSerializer.Serialize(savedJob.Definition with { MaxRequests = 0 }, CollectionProtocol.JsonOptions);
+        await using (var connection = new NpgsqlConnection(connectionString))
+        {
+            await connection.OpenAsync();
+            await using var command = new NpgsqlCommand("UPDATE collection_jobs SET definition_json = @definition WHERE job_id = @job", connection);
+            command.Parameters.AddWithValue("definition", invalidDefinition);
+            command.Parameters.AddWithValue("job", jobId);
+            await command.ExecuteNonQueryAsync();
+        }
+
+        using var response = await client.GetAsync("/Review/Sources?jobId=" + jobId);
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+        Assert.Contains("The operation could not be confirmed.", body);
+        Assert.DoesNotContain("JsonException", body);
+        Assert.DoesNotContain("Stored job definition", body);
+    }
+
+    [Fact]
+    public async Task PreparationRejectsOtherDocumentsAndReversedObservations()
+    {
+        var configuration = JsonSerializer.Deserialize<CollectionConfiguration>(
+            await File.ReadAllTextAsync(Path.Combine(keyDirectory, "sources.json")), CollectionProtocol.JsonOptions)!;
+        var store = PostgresCollectionJobStore.FromConnectionString(connectionString);
+        var workspace = new CollectionWorkspace(configuration, keyDirectory, store, store,
+            new ExtractDocument(attempts, new CaptureDocumentTextExtractor(), extractions), extractions,
+            new CompareDocuments(extractions, comparisons), new GetDocumentHistory(PostgresDocumentHistoryStore.FromConnectionString(connectionString)), attempts);
+        var actor = new ReviewActor("auth0|owner", ReviewRole.Owner);
+        var job = await workspace.EnqueueAsync(actor, "source", Guid.NewGuid().ToString("N"), default);
+        var before = await SaveExtractionAsync("Earlier wording.");
+        var after = await SaveExtractionAsync("Later wording.");
+        var other = await SaveExtractionAsync("Different document.", Request() with { Url = "https://example.test/pages/b" });
+        await Assert.ThrowsAsync<ArgumentException>(() => workspace.CompareAsync(actor, job.JobId, after.ExtractionId, before.ExtractionId, default));
+        await Assert.ThrowsAsync<ArgumentException>(() => workspace.CompareAsync(actor, job.JobId, before.ExtractionId, other.ExtractionId, default));
+        await Assert.ThrowsAsync<ArgumentException>(() => workspace.ExtractAsync(actor, job.JobId, before.SourceAttempt.AttemptId, default));
+        var comparison = await workspace.CompareAsync(actor, job.JobId, before.ExtractionId, after.ExtractionId, default);
+        Assert.Equal(DocumentComparisonStatus.Complete, comparison.Status);
+        Assert.NotEmpty(comparison.Hunks);
+    }
+
     private async Task<IDocument> GetDocumentAsync(string url)
     {
         using var response = await client.GetAsync(url);
@@ -229,9 +375,9 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
         return "__Host-CivicLens.Review=" + new TicketDataFormat(protector).Protect(ticket);
     }
 
-    private async Task<DocumentExtraction> SaveExtractionAsync(string text)
+    private async Task<DocumentExtraction> SaveExtractionAsync(string text, CollectionRequest? requestOverride = null)
     {
-        var request = Request();
+        var request = requestOverride ?? Request();
         var bytes = Encoding.UTF8.GetBytes(text);
         var hash = Convert.ToHexStringLower(SHA256.HashData(bytes));
         var receipt = Receipt(request) with
@@ -244,5 +390,17 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
         var extraction = new DocumentExtraction((CapturedAttemptResult)imported.AttemptResult,
             "parser-v1", "normalization-v1", text);
         return await extractions.SaveAsync(extraction, default);
+    }
+
+    private async Task<CollectionImportDecision> SaveImportedAttemptAsync(CollectionRequest request, string attemptId, string text)
+    {
+        var bytes = Encoding.UTF8.GetBytes(text);
+        var hash = Convert.ToHexStringLower(SHA256.HashData(bytes));
+        var receipt = Receipt(request) with
+        {
+            BytesReceived = bytes.Length,
+            Capture = new CaptureArtifact { Sha256 = hash, RelativePath = hash + ".gz", ByteLength = bytes.Length }
+        };
+        return await attempts.ImportAtomicallyAsync(CollectionAttemptImporter.CreateImport(attemptId, request, receipt), default);
     }
 }

@@ -210,3 +210,21 @@ textarea, input, select { caret-color: var(--review-blue); }
     .review-actions { align-items: stretch; flex-direction: column; }
     .review-actions .review-button { width: 100%; }
 }
+/* Collection extends the editorial workspace with explicit preparation controls. */
+.collection-source h3, .collection-url { overflow-wrap: anywhere; }
+.collection-section-heading { display: flex; gap: 20px; align-items: start; justify-content: space-between; }
+.collection-attempt { padding: 20px 0; border-top: 1px solid var(--review-line); }
+.collection-candidates { max-height: 320px; overflow: auto; padding-left: 24px; overflow-wrap: anywhere; }
+.collection-candidates li { margin-bottom: 9px; }
+.collection-version-picker { margin: 16px 0; padding: 0; border: 0; min-width: 0; }
+.collection-version-picker legend { margin-bottom: 12px; font-weight: 650; }
+.collection-version { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 18px; padding: 16px 0; border-top: 1px solid var(--review-line); }
+.collection-version label { display: flex; gap: 7px; align-items: start; }
+.collection-version input { width: auto; margin-top: 5px; accent-color: var(--review-blue); }
+.collection-detail { scroll-margin-top: 20px; }
+@media (max-width: 640px) {
+    .collection-section-heading { flex-direction: column; gap: 8px; }
+    .collection-version { grid-template-columns: 1fr 1fr; }
+    .collection-version > div { grid-column: 1 / -1; }
+    .collection-source { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+}

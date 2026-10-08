@@ -25,7 +25,7 @@ VIEWS = [
         "title": "Project dependencies (implemented)",
         "description": "Arrows mean references. These project boundaries are checked by xUnit tests.",
         "nodes": [
-            ("host", "Host", "CLI, local read-only evidence viewer, and authenticated Razor Pages draft/review workspace; MCP remains planned."),
+            ("host", "Host", "CLI and separate collection worker, local read-only evidence viewer, and authenticated source preparation and draft/review workspace; MCP remains planned."),
             ("infra", "Infrastructure", "Collector process execution, capture verification, and EF Core/Npgsql persistence. References Application."),
             ("app", "Application", "Use cases and external interfaces; no infrastructure reference."),
             ("core", "Core", "Domain invariants. No project or third-party dependencies."),
