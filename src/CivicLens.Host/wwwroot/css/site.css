@@ -4,6 +4,7 @@ body { margin: 0; line-height: 1.55; }
 a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: .18em; overflow-wrap: anywhere; }
 a:hover { color: var(--ink); }
 a:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+.masthead :focus-visible { --focus: var(--paper); }
 ::selection { color: var(--ink); background: var(--wash); }
 input, button { font: inherit; }
 ::placeholder { color: var(--muted); opacity: 1; }

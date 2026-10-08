@@ -9,6 +9,7 @@ button, a { touch-action: manipulation; }
 a { color: var(--accent); text-underline-offset: .22em; overflow-wrap: anywhere; }
 a:hover { color: var(--ink); }
 :focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+.review-rail :focus-visible { --focus: var(--paper); }
 textarea, input, select { caret-color: var(--ink); }
 [hidden] { display: none !important; }
 
