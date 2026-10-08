@@ -435,7 +435,11 @@ public sealed class PostgresCollection : IAsyncLifetime
         .WithPassword("civic_lens")
         .Build();
 
-    public string ConnectionString => container.GetConnectionString();
+    // Each test schema has its own connection string, so idle pools would accumulate across the suite.
+    public string ConnectionString => new NpgsqlConnectionStringBuilder(container.GetConnectionString())
+    {
+        Pooling = false
+    }.ConnectionString;
     public Task InitializeAsync() => container.StartAsync();
     public Task DisposeAsync() => container.DisposeAsync().AsTask();
 }
