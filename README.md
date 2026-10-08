@@ -10,6 +10,8 @@ Immutable document text extraction is also available: local commands verify impo
 
 The separate `review [port]` command provides an Auth0-protected editorial queue and draft editor with immutable revisions, exact evidence bindings, version-checked review decisions, and explicit concern resolution. It requires an HTTPS reverse proxy and configured identities; it does not publish.
 
+The chosen UI direction uses reusable Razor components for presentation while retaining the current Razor Pages routes and handlers during migration. The planned release builder will render public components to standalone static HTML from published data. Visual themes remain open; the temporary mockups are decision aids, not production pages.
+
 [The federal pilot](docs/operations.md#federal-source-pilot) configures official Senate sources for Elizabeth Warren and Ted Cruz. Collection can be managed through CLI jobs or the owner-only Sources page. Captured pages and readable extractions are separate outcomes; a first observation establishes a baseline, not a document change.
 
 Production hosting is agreed for the existing Hetzner CPX21, with Terraform-managed infrastructure and CI deployment independent of the developer workstation. This deployment remains planned; see [production hosting](docs/architecture.md#approved-production-hosting-planned).
