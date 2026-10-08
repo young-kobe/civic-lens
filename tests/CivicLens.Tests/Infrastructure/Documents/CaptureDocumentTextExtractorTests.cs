@@ -18,7 +18,7 @@ public sealed class CaptureDocumentTextExtractorTests
         var text = await capture.Extractor.ExtractAsync(capture.Attempt, capture.Root, CancellationToken.None);
 
         Assert.Equal("café  title\nsecond line", text);
-        Assert.Equal("capture-text-v1", capture.Extractor.ParserVersion);
+        Assert.Equal("capture-text-v2", capture.Extractor.ParserVersion);
         Assert.Equal("body-text-v1", capture.Extractor.NormalizationVersion);
     }
 
@@ -33,6 +33,39 @@ public sealed class CaptureDocumentTextExtractorTests
         var text = await capture.Extractor.ExtractAsync(capture.Attempt, capture.Root, CancellationToken.None);
 
         Assert.Equal("One two\nfirst part\nlast", text);
+    }
+
+    [Fact]
+    public async Task ExtractsHtmlWithOmittedParagraphAndMismatchedAncestorEndTags()
+    {
+        await using var capture = await TestCapture.CreateAsync(Encoding.UTF8.GetBytes(
+            "<div><section><p>first<p>second</section></div><p>tail</p>"), "text/html; charset=utf-8");
+
+        var text = await capture.Extractor.ExtractAsync(capture.Attempt, capture.Root, CancellationToken.None);
+
+        Assert.Equal("first\nsecond\ntail", text);
+    }
+
+    [Fact]
+    public async Task DoesNotApplyOptionalParagraphClosuresInsideSvgForeignContent()
+    {
+        await using var capture = await TestCapture.CreateAsync(Encoding.UTF8.GetBytes(
+            "<svg><p>one<p>two</p></p></svg>"), "text/html; charset=utf-8");
+
+        var text = await capture.Extractor.ExtractAsync(capture.Attempt, capture.Root, CancellationToken.None);
+
+        Assert.Equal("one\ntwo", text);
+    }
+
+    [Fact]
+    public async Task StillRejectsHtmlWhoseRepairedTreeExceedsDepthLimit()
+    {
+        var markup = string.Concat(Enumerable.Repeat("<div>", 65)) + "nested" +
+            string.Concat(Enumerable.Repeat("</div>", 65));
+        await using var capture = await TestCapture.CreateAsync(Encoding.UTF8.GetBytes(markup), "text/html; charset=utf-8");
+
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            capture.Extractor.ExtractAsync(capture.Attempt, capture.Root, CancellationToken.None));
     }
 
     [Fact]
@@ -123,7 +156,7 @@ public sealed class CaptureDocumentTextExtractorTests
         var text = await capture.Extractor.ExtractAsync(capture.Attempt, capture.Root, null, CancellationToken.None);
 
         Assert.Equal("Navigation\nStory", text);
-        Assert.Equal("capture-text-v1", capture.Extractor.ParserVersion);
+        Assert.Equal("capture-text-v2", capture.Extractor.ParserVersion);
         Assert.Equal("body-text-v1", capture.Extractor.NormalizationVersion);
     }
 
@@ -221,6 +254,18 @@ public sealed class CaptureDocumentTextExtractorTests
         var incomplete = Compress(Encoding.UTF8.GetBytes("text"))[..^4];
         await using var truncated = await TestCapture.CreateAsync(incomplete, "text/plain", ["gzip"]);
         await Assert.ThrowsAsync<InvalidDataException>(() => truncated.Extractor.ExtractAsync(truncated.Attempt, truncated.Root, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task SelfClosingForeignSiblingsAreShallowButHtmlIntegrationContentStillHasDepthLimits()
+    {
+        var icons = "<svg>" + string.Concat(Enumerable.Repeat("<path d='M0 0' />", 100)) + "</svg><main>Retained article.</main>";
+        await using var capture = await TestCapture.CreateAsync(Encoding.UTF8.GetBytes(icons), "text/html");
+        Assert.Equal("Retained article.", await capture.Extractor.ExtractAsync(capture.Attempt, capture.Root,
+            new DocumentContentProfile("article", "main", []), CancellationToken.None));
+        var nested = "<svg><foreignObject>" + string.Concat(Enumerable.Repeat("<div/>", 65)) + "text";
+        await using var hostile = await TestCapture.CreateAsync(Encoding.UTF8.GetBytes(nested), "text/html");
+        await Assert.ThrowsAsync<InvalidDataException>(() => hostile.Extractor.ExtractAsync(hostile.Attempt, hostile.Root, CancellationToken.None));
     }
 
     [Fact]

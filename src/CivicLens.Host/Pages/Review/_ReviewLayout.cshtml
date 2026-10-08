@@ -1,3 +1,4 @@
+@inject CivicLens.Host.Review.ReviewActorAccessor ReviewActors
 <!doctype html>
 <html lang="en">
 <head>
@@ -18,6 +19,10 @@
             <p class="review-rail-copy">Review the public record<br />with its evidence close by.</p>
             <nav class="review-nav" aria-label="Review workspace">
                 <a asp-page="/Review/Index" aria-current="@(ViewContext.RouteData.Values["page"]?.ToString() == "/Review/Index" ? "page" : null)">Review queue</a>
+                @if (ReviewActors.GetActor(User).Role == CivicLens.Core.Review.ReviewRole.Owner)
+                {
+                    <a asp-page="/Review/Sources" aria-current="@(ViewContext.RouteData.Values["page"]?.ToString() == "/Review/Sources" ? "page" : null)">Sources and collection</a>
+                }
             </nav>
             <div class="review-rail-bottom">
                 <p>Private editorial workspace.<br />Approval and publication are separate.</p>

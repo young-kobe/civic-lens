@@ -1,0 +1,149 @@
+@page "/Review/Sources"
+@model CivicLens.Host.Pages.Review.SourcesModel
+@using CivicLens.Application.Collection.Jobs
+@using CivicLens.Collection.Contracts
+@using CivicLens.Core.Documents
+@using CivicLens.Core.Collection
+@{
+    ViewData["Title"] = "Sources and collection";
+}
+<header class="review-heading">
+    <div><h1>Build the evidence record.</h1><p>Collect official sources, inspect what was retained, and prepare versions for review.</p></div>
+    <a class="review-button" asp-page="/Review/Sources" asp-route-jobId="@Model.SelectedJob?.JobId">Refresh status</a>
+</header>
+@if (Model.Error is not null) { <p class="review-error" role="alert">@Model.Error</p> }
+@if (Model.Message is not null) { <p class="review-status success" role="status">@Model.Message</p> }
+@if (Model.Configuration is { } configuration)
+{
+    <p class="review-banner">Collection runs in a separate worker. Queued work survives closing this tab. A completed capture is not a reviewed claim, and nothing here publishes a record.</p>
+    <section aria-labelledby="sources-title">
+        <h2 id="sources-title">Configured sources</h2>
+        <p class="review-help">Owner controls. Each collection uses the source's saved request, retry, and pacing limits.</p>
+        <div class="review-list">
+        @foreach (var source in configuration.Sources)
+        {
+            var mode = source.Mode switch { CollectionMode.Feed => "Article feed", CollectionMode.Html => "Newsroom links", _ => "Watched page" };
+            <article class="review-list-item collection-source">
+                <div><div class="review-meta"><span>@mode</span><span>@(source.Enabled ? "Enabled" : "Disabled")</span></div>
+                    <h3>@Model.SourceLabel(source)</h3>
+                    <p><a href="@source.Url" rel="noreferrer">@CivicLens.Host.Pages.Review.SourcesModel.DocumentLabel(source.Url)</a></p>
+                    <p class="collection-url">@(new Uri(source.Url).Host) · Up to @(source.JobPolicy?.MaxAttempts ?? 3) attempts, @source.MaxRequests requests per attempt</p>
+                </div>
+                <form method="post" asp-page-handler="Collect">
+                    <input type="hidden" name="sourceId" value="@source.Id" />
+                    <input type="hidden" name="requestKey" value="@Model.SourceRequestKey(source.Id)" />
+                    <button class="review-button review-button-primary" type="submit" disabled="@(!source.Enabled)">Collect now</button>
+                </form>
+            </article>
+        }
+        </div>
+    </section>
+    @if (Model.SelectedJob is { } selected)
+    {
+        var source = configuration.Sources.SingleOrDefault(item => item.Id == selected.Definition.SourceId);
+        <section class="review-section-spaced collection-detail" aria-labelledby="selected-title">
+            <div class="collection-section-heading"><div><h2 id="selected-title">Selected collection</h2><p class="collection-url"><a href="@selected.Definition.Url" rel="noreferrer">@CivicLens.Host.Pages.Review.SourcesModel.DocumentLabel(selected.Definition.Url)</a></p></div><span class="review-state">@CivicLens.Host.Pages.Review.SourcesModel.StateLabel(selected)</span></div>
+            <p class="review-help">Queued @selected.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") · @selected.Attempts.Count attempt(s) · @selected.ReservedRequests / @(selected.Definition.Policy.MaxTotalRequests ?? selected.Definition.MaxRequests * selected.Definition.Policy.MaxAttempts) requests charged or reserved</p>
+            @if (selected.RetryAt is { } retry) { <p class="review-help">Eligible to retry after @retry.ToString("yyyy-MM-dd HH:mm:ss 'UTC'"). Source pacing may delay it further.</p> }
+            @if (selected.State is CollectionJobState.Pending or CollectionJobState.Running or CollectionJobState.WaitingToRetry)
+            {
+                <form method="post" asp-page-handler="Cancel"><input type="hidden" name="jobId" value="@selected.JobId" /><button class="review-button review-button-danger" type="submit">Request cancellation</button></form>
+                <p class="review-help">If work stays queued, check that the worker is running. This page does not report worker liveness.</p>
+            }
+            @if (selected.Attempts.Count == 0) { <p class="review-empty">No attempt yet. Refresh after the worker has picked up this job.</p> }
+            @foreach (var attempt in selected.Attempts.Reverse())
+            {
+                var receipt = attempt.Resolution?.Receipt;
+                var retained = Model.RetainedAttempts.GetValueOrDefault(attempt.AttemptId);
+                var discovery = retained?.Discovery?.ToResult() ?? receipt?.Discovery;
+                var captured = retained?.AttemptResult is CapturedAttemptResult || receipt?.Outcome == CollectionOutcome.Captured;
+                <article class="collection-attempt">
+                    <h3>Attempt started @attempt.StartedAt.ToString("yyyy-MM-dd HH:mm:ss 'UTC'")</h3>
+                    @if (receipt is null)
+                    {
+                        @if (retained is not null)
+                        {
+                            <p>Imported evidence is retained; the transport receipt is unavailable.</p>
+                            <p class="review-help">Observed @retained.AttemptResult.ObservedAt.ToString("yyyy-MM-dd HH:mm:ss 'UTC'")</p>
+                        }
+                        else
+                        {
+                            <p>@(attempt.Resolution is null ? "No settled result yet. Work may be active or awaiting recovery." : "No transport receipt is available. Inspect document history for any imported evidence.")</p>
+                            @if (attempt.Resolution?.ErrorCode is { } error) { <p class="review-help">Recorded outcome: @error</p> }
+                        }
+                    }
+                    else
+                    {
+                        <p>Result: <strong>@receipt.Outcome</strong> · @receipt.RequestCount request(s) · @receipt.BytesReceived.ToString("N0") bytes received</p>
+                        @if (receipt.FailureCode is { } failure) { <p class="review-status warning">Collection reported @failure. This is a coverage gap, not evidence of no activity.</p> }
+                        @if (receipt.Outcome == CollectionOutcome.NotModified) { <p class="review-help">The server reported no modification. Inspect the earlier captured observation in document history.</p> }
+                    }
+                        @if (discovery is not null)
+                        {
+                            <p>Link discovery: <strong>@discovery.Status</strong> · @discovery.Urls.Length candidate(s)</p>
+                            @if (discovery.Status == DiscoveryStatus.Parsed && discovery.Urls.Length > 0 && source?.Mode is CollectionMode.Feed or CollectionMode.Html)
+                            {
+                                <details class="review-details"><summary>Inspect discovered links before admission</summary><ol class="collection-candidates">@foreach (var url in discovery.Urls) { <li><a href="@url" rel="noreferrer">@url</a></li> }</ol></details>
+                                <form method="post" asp-page-handler="Admit">
+                                    <input type="hidden" name="jobId" value="@selected.JobId" /><input type="hidden" name="attemptId" value="@attempt.AttemptId" /><input type="hidden" name="requestKey" value="@(Model.RequestKey ?? Guid.NewGuid().ToString("N"))" />
+                                    <button class="review-button" type="submit">Queue next article batch (up to @(source.AdmissionPolicy?.MaxJobs ?? 10))</button>
+                                </form>
+                                <p class="review-help">Each new batch authorizes its configured budget. Previously admitted URLs are deduplicated. Navigation links can be candidates; admission does not assess editorial relevance.</p>
+                            }
+                            else if (discovery.Status != DiscoveryStatus.Parsed) { <p class="review-status warning">The response was retained, but discovery did not complete. No partial candidate list was admitted.</p> }
+                        }
+                        @if (captured && source?.DocumentProfileId is not null && discovery is null)
+                        {
+                            <form method="post" asp-page-handler="Extract"><input type="hidden" name="jobId" value="@selected.JobId" /><input type="hidden" name="attemptId" value="@attempt.AttemptId" /><button class="review-button" type="submit">Extract readable text</button></form>
+                            <p class="review-help">Uses the current configured content profile. Earlier extractions remain intact.</p>
+                        }
+                </article>
+            }
+            @if (selected.Definition.Mode == CollectionMode.Page)
+            {
+                <form method="post" asp-page-handler="Recollect"><input type="hidden" name="jobId" value="@selected.JobId" /><input type="hidden" name="requestKey" value="@(Model.RequestKey ?? Guid.NewGuid().ToString("N"))" /><button class="review-button" type="submit">Collect this page again</button></form>
+                <p class="review-help">Queues a new observation of this exact URL using current source limits and coverage. It does not assume the page changed.</p>
+            }
+            <h3>Saved text versions</h3>
+            @if (Model.HistoryError is not null) { <p class="review-status warning" role="alert">@Model.HistoryError</p> }
+            else if (Model.History is { } history)
+            {
+                var versions = history.Observations.SelectMany(item => item.Extractions).DistinctBy(item => item.ExtractionId).OrderByDescending(item => item.SourceAttempt.ObservedAt).ToArray();
+                @if (versions.Length == 0) { <p class="review-empty">No readable text retained for this URL yet. Extract a captured article above.</p> }
+                else
+                {
+                    <p class="review-help">Select an earlier and a later observation of this exact URL. Processing versions and content profiles must match. One observation is a baseline; it cannot establish a change.</p>
+                    <form method="post" asp-page-handler="Compare">
+                        <input type="hidden" name="jobId" value="@selected.JobId" />
+                        <fieldset class="collection-version-picker"><legend>Choose versions to compare</legend>
+                        @foreach (var version in versions)
+                        {
+                            <div class="collection-version">
+                                <div><a asp-page="/Documents/Extraction" asp-route-extractionId="@version.ExtractionId">Observed @version.SourceAttempt.ObservedAt.ToString("yyyy-MM-dd HH:mm:ss 'UTC'")</a><p class="review-help">@version.Text.Length.ToString("N0") text units · @version.ParserVersion · profile @(version.Profile?.RevisionId[..8] ?? "none")</p></div>
+                                <label><input type="radio" name="beforeId" value="@version.ExtractionId" required /> Earlier</label>
+                                <label><input type="radio" name="afterId" value="@version.ExtractionId" required /> Later</label>
+                            </div>
+                        }
+                        </fieldset>
+                        <button class="review-button review-button-primary" type="submit" disabled="@(versions.Length < 2)">Compare selected versions</button>
+                    </form>
+                }
+            }
+            <details class="review-details"><summary>Collection identifiers</summary><dl class="review-ids"><div><dt>Job ID</dt><dd>@selected.JobId</dd></div><div><dt>Source ID</dt><dd>@selected.Definition.SourceId</dd></div></dl></details>
+        </section>
+    }
+    <section class="review-section-spaced" aria-labelledby="jobs-title">
+        <h2 id="jobs-title">Recent collection jobs</h2>
+        <p class="review-help">Latest @CivicLens.Application.Collection.CollectionWorkspace.RecentJobLimit jobs across all sources. Refresh to load new results. Collection completion does not guarantee discovery or extraction succeeded.</p>
+        @if (Model.Jobs.Count == 0) { <p class="review-empty">No collection jobs yet. Choose a configured source above to establish a baseline.</p> }
+        <div class="review-list">
+        @foreach (var job in Model.Jobs)
+        {
+            <article class="review-list-item collection-source">
+                <div><div class="review-meta"><span class="review-state">@CivicLens.Host.Pages.Review.SourcesModel.StateLabel(job)</span><span>@job.CreatedAt.ToString("yyyy-MM-dd HH:mm 'UTC'")</span></div><h3>@CivicLens.Host.Pages.Review.SourcesModel.DocumentLabel(job.Definition.Url)</h3><p>@job.Definition.SourceId · @job.Attempts.Count attempt(s)</p></div>
+                <a class="review-button" asp-page="/Review/Sources" asp-route-jobId="@job.JobId" asp-fragment="selected-title">Inspect collection</a>
+            </article>
+        }
+        </div>
+    </section>
+}

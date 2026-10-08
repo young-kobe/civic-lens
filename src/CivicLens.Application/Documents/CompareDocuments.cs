@@ -14,6 +14,12 @@ public sealed class CompareDocuments(IDocumentExtractionStore extractions, IDocu
             ?? throw new ArgumentException("Before extraction was not found.", nameof(beforeExtractionId));
         var after = await extractions.GetAsync(afterExtractionId, cancellationToken)
             ?? throw new ArgumentException("After extraction was not found.", nameof(afterExtractionId));
+        return await ExecuteAsync(before, after, cancellationToken);
+    }
+
+    internal async Task<DocumentComparison> ExecuteAsync(DocumentExtraction before, DocumentExtraction after,
+        CancellationToken cancellationToken)
+    {
         var comparison = DocumentComparison.Create(before, after, cancellationToken);
         return await comparisons.SaveAsync(comparison, cancellationToken);
     }

@@ -37,7 +37,7 @@ public sealed class CollectionProtocolTests
     [InlineData(-1)]
     [InlineData(0)]
     [InlineData(3)]
-    public void VersionSixRejectsMissingOrImpossibleRobotsAccounting(int? robotsRequests)
+    public void VersionSevenRejectsMissingOrImpossibleRobotsAccounting(int? robotsRequests)
     {
         var request = Request();
         Assert.Throws<InvalidDataException>(() => (Receipt(request) with
@@ -109,10 +109,10 @@ public sealed class CollectionProtocolTests
     public void ScopeAllowsExactPathOrDescendants(string url) => (Request() with { Url = url }).Validate();
 
     [Fact]
-    public void VersionSixIsCurrentAndVersionThreeRemainsValidForPageRecovery()
+    public void VersionSevenIsCurrentAndVersionThreeRemainsValidForPageRecovery()
     {
         var requestJson = JsonSerializer.Serialize(Request(), CollectionProtocol.JsonOptions);
-        Assert.Contains("\"version\":6", requestJson, StringComparison.Ordinal);
+        Assert.Contains("\"version\":7", requestJson, StringComparison.Ordinal);
         var resultJson = JsonSerializer.Serialize(Receipt(Request()), CollectionProtocol.JsonOptions);
         Assert.Contains("\"failureCode\":null", resultJson, StringComparison.Ordinal);
         var roundTrip = JsonSerializer.Serialize(JsonSerializer.Deserialize<CollectionResult>(resultJson, CollectionProtocol.JsonOptions), CollectionProtocol.JsonOptions);
@@ -125,16 +125,32 @@ public sealed class CollectionProtocolTests
         Assert.Throws<ArgumentException>(() => (v3Request with { MaxCandidates = 5 }).Validate());
         foreach (var version in new[] { 1, 2 })
         {
-            var oldRequest = requestJson.Replace("\"version\":6", $"\"version\":{version}", StringComparison.Ordinal);
+            var oldRequest = requestJson.Replace("\"version\":7", $"\"version\":{version}", StringComparison.Ordinal);
             Assert.Throws<ArgumentException>(() => JsonSerializer.Deserialize<CollectionRequest>(oldRequest, CollectionProtocol.JsonOptions)!.Validate());
             Assert.Throws<InvalidDataException>(() => (Receipt(Request()) with { Version = version }).ValidateAgainst(Request()));
         }
     }
 
+    [Fact]
+    public void VersionSixRequestAndReceiptRemainValidForRecovery()
+    {
+        var request = Request() with { Version = 6 };
+        var requestJson = JsonSerializer.Serialize(request, CollectionProtocol.JsonOptions);
+        var recoveredRequest = JsonSerializer.Deserialize<CollectionRequest>(requestJson, CollectionProtocol.JsonOptions)!;
+        recoveredRequest.Validate();
+        Assert.Equal(6, recoveredRequest.Version);
+
+        var receiptJson = JsonSerializer.Serialize(Receipt(request), CollectionProtocol.JsonOptions);
+        var recoveredReceipt = JsonSerializer.Deserialize<CollectionResult>(receiptJson, CollectionProtocol.JsonOptions)!;
+        recoveredReceipt.ValidateAgainst(recoveredRequest);
+        Assert.Equal(6, recoveredReceipt.Version);
+        Assert.Equal(1, recoveredReceipt.RobotsRequestCount);
+    }
+
     [Theory]
-    [InlineData("\"version\":6", "\"version\":99")]
-    [InlineData("\"version\":6", "\"version\":6,\"version\":6")]
-    [InlineData("\"version\":6", "\"version\":6,\"extra\":true")]
+    [InlineData("\"version\":7", "\"version\":99")]
+    [InlineData("\"version\":7", "\"version\":7,\"version\":7")]
+    [InlineData("\"version\":7", "\"version\":7,\"extra\":true")]
     [InlineData("\"sourceId\":\"source\"", "\"sourceId\":null")]
     public void MalformedOrUnsupportedWireContractsAreRejected(string original, string replacement)
     {

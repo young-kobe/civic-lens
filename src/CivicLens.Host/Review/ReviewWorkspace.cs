@@ -1,7 +1,10 @@
 using System.Net;
+using CivicLens.Application.Collection;
 using CivicLens.Application.Documents;
 using CivicLens.Application.Review;
 using CivicLens.Infrastructure.Documents;
+using CivicLens.Infrastructure.Collection;
+using CivicLens.Infrastructure.Collection.Jobs;
 using CivicLens.Infrastructure.Review;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -181,6 +184,21 @@ internal static class ReviewWorkspace
         services.AddScoped<GetDocumentChangeReview>();
         services.AddScoped<ListDocumentChangeReviews>();
         services.AddScoped<ListEligibleDocumentComparisons>();
+        var collection = ReviewCollectionSettings.FromEnvironment();
+        if (collection is not null)
+        {
+            services.AddScoped(_ =>
+            {
+                var jobs = PostgresCollectionJobStore.FromConnectionString(connectionString);
+                var attempts = PostgresCollectionAttemptStore.FromConnectionString(connectionString);
+                var extractions = PostgresDocumentExtractionStore.FromConnectionString(connectionString);
+                var comparisons = PostgresDocumentComparisonStore.FromConnectionString(connectionString);
+                var history = PostgresDocumentHistoryStore.FromConnectionString(connectionString);
+                return new CollectionWorkspace(collection.Configuration, collection.ArtifactRoot, jobs, jobs,
+                    new ExtractDocument(attempts, new CaptureDocumentTextExtractor(), extractions), extractions,
+                    new CompareDocuments(extractions, comparisons), new GetDocumentHistory(history), attempts);
+            });
+        }
     }
 
     private static string[] ReadIds(string name) => (Environment.GetEnvironmentVariable(name) ?? "")

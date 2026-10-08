@@ -1,0 +1,176 @@
+{
+  "version": 2,
+  "people": [
+    {
+      "id": "elizabeth-warren",
+      "name": "Elizabeth Warren"
+    },
+    {
+      "id": "ted-cruz",
+      "name": "Ted Cruz"
+    }
+  ],
+  "sources": [
+    {
+      "id": "elizabeth-warren-press",
+      "coverage": [
+        {
+          "personId": "elizabeth-warren",
+          "startsOn": "2026-10-08"
+        }
+      ],
+      "url": "https://www.warren.senate.gov/newsroom/press-releases/",
+      "allowedOrigin": "https://www.warren.senate.gov",
+      "allowedPathPrefix": "/newsroom/press-releases",
+      "mode": "html",
+      "maxCandidates": 100,
+      "enabled": true,
+      "maxRequests": 5,
+      "maxBytes": 2000000,
+      "timeoutSeconds": 60,
+      "minDelayMilliseconds": 1500,
+      "jobPolicy": {
+        "maxAttempts": 2,
+        "initialRetryDelaySeconds": 60,
+        "maximumRetryDelaySeconds": 3600
+      },
+      "admissionPolicy": {
+        "maxJobs": 2,
+        "maxTotalRequests": 20,
+        "maxTotalBytes": 8000000,
+        "maxTotalTimeoutSeconds": 240
+      },
+      "documentProfileId": "warren-article"
+    },
+    {
+      "id": "ted-cruz-press",
+      "coverage": [
+        {
+          "personId": "ted-cruz",
+          "startsOn": "2026-10-08"
+        }
+      ],
+      "url": "https://www.cruz.senate.gov/newsroom/press-releases",
+      "allowedOrigin": "https://www.cruz.senate.gov",
+      "allowedPathPrefix": "/newsroom/press-releases",
+      "mode": "html",
+      "maxCandidates": 100,
+      "enabled": true,
+      "maxRequests": 5,
+      "maxBytes": 2000000,
+      "timeoutSeconds": 60,
+      "minDelayMilliseconds": 1500,
+      "jobPolicy": {
+        "maxAttempts": 2,
+        "initialRetryDelaySeconds": 60,
+        "maximumRetryDelaySeconds": 3600
+      },
+      "admissionPolicy": {
+        "maxJobs": 2,
+        "maxTotalRequests": 20,
+        "maxTotalBytes": 8000000,
+        "maxTotalTimeoutSeconds": 240
+      },
+      "documentProfileId": "senate-main"
+    },
+    {
+      "id": "ted-cruz-press-feed",
+      "coverage": [
+        {
+          "personId": "ted-cruz",
+          "startsOn": "2026-10-08"
+        }
+      ],
+      "url": "https://www.cruz.senate.gov/rss/press-releases",
+      "allowedOrigin": "https://www.cruz.senate.gov",
+      "allowedPathPrefix": "/",
+      "mode": "feed",
+      "maxCandidates": 100,
+      "enabled": true,
+      "maxRequests": 5,
+      "maxBytes": 2000000,
+      "timeoutSeconds": 60,
+      "minDelayMilliseconds": 1500,
+      "jobPolicy": {
+        "maxAttempts": 2,
+        "initialRetryDelaySeconds": 60,
+        "maximumRetryDelaySeconds": 3600
+      },
+      "admissionPolicy": {
+        "maxJobs": 2,
+        "maxTotalRequests": 20,
+        "maxTotalBytes": 8000000,
+        "maxTotalTimeoutSeconds": 240
+      },
+      "documentProfileId": "senate-main"
+    },
+    {
+      "id": "elizabeth-warren-pilot-article-1",
+      "coverage": [
+        {
+          "personId": "elizabeth-warren",
+          "startsOn": "2026-10-08"
+        }
+      ],
+      "url": "https://www.warren.senate.gov/newsroom/press-releases/following-push-by-warren-education-department-watchdog-opens-investigation-into-trump-administrations-dismantling-of-department/",
+      "allowedOrigin": "https://www.warren.senate.gov",
+      "allowedPathPrefix": "/newsroom/press-releases",
+      "mode": "page",
+      "enabled": true,
+      "maxRequests": 5,
+      "maxBytes": 2000000,
+      "timeoutSeconds": 60,
+      "minDelayMilliseconds": 1500,
+      "jobPolicy": {
+        "maxAttempts": 2,
+        "initialRetryDelaySeconds": 60,
+        "maximumRetryDelaySeconds": 3600
+      },
+      "documentProfileId": "warren-article"
+    },
+    {
+      "id": "elizabeth-warren-pilot-article-2",
+      "coverage": [
+        {
+          "personId": "elizabeth-warren",
+          "startsOn": "2026-10-08"
+        }
+      ],
+      "url": "https://www.warren.senate.gov/newsroom/press-releases/as-trumps-war-in-iran-drives-up-heating-oil-prices-warren-lynch-trahan-lawmakers-demand-administration-provide-relief-for-skyrocketing-winter-heating-bills/",
+      "allowedOrigin": "https://www.warren.senate.gov",
+      "allowedPathPrefix": "/newsroom/press-releases",
+      "mode": "page",
+      "enabled": true,
+      "maxRequests": 5,
+      "maxBytes": 2000000,
+      "timeoutSeconds": 60,
+      "minDelayMilliseconds": 1500,
+      "jobPolicy": {
+        "maxAttempts": 2,
+        "initialRetryDelaySeconds": 60,
+        "maximumRetryDelaySeconds": 3600
+      },
+      "documentProfileId": "warren-article"
+    }
+  ],
+  "documentProfiles": [
+    {
+      "id": "senate-main",
+      "selector": "main",
+      "excludedSelectors": [
+        "nav",
+        ".BootstrapModal",
+        ".ShareButtons",
+        ".ArticleNav"
+      ]
+    },
+    {
+      "id": "warren-article",
+      "selector": ".elementor-location-single",
+      "excludedSelectors": [
+        "nav",
+        ".noprint"
+      ]
+    }
+  ]
+}
