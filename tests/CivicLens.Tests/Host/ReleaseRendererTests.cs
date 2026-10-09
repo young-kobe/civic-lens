@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using AngleSharp.Html.Parser;
 using CivicLens.Host.Publication;
 using CivicLens.Publication.Contracts;
 
@@ -41,6 +42,17 @@ public sealed class ReleaseRendererTests
         }
 
         Assert.All(open, tag => Assert.Matches(new Regex(@"\sopen[\s>=]"), tag));
+    }
+
+    [Fact]
+    public async Task FullVersionsKeepALeadingNewlineBecauseThePageMustMatchTheApprovedEvidence()
+    {
+        var record = Record("\n" + BeforeText, "\n" + AfterText);
+
+        var html = await new ReleaseRenderer().RenderRecordAsync(record, CancellationToken.None);
+
+        var shown = new HtmlParser().ParseDocument(html).QuerySelectorAll("pre.public-text").Select(pre => pre.TextContent);
+        Assert.Equal([record.Before.Text, record.After.Text], shown);
     }
 
     [Fact]
@@ -183,10 +195,10 @@ public sealed class ReleaseRendererTests
         return match.Groups[1].Value;
     }
 
-    private static PublishedDocumentChange Record()
+    private static PublishedDocumentChange Record(string beforeText = BeforeText, string afterText = AfterText)
     {
-        var oldRule = BeforeText.IndexOf("<b>rule</b>", StringComparison.Ordinal);
-        var newRule = AfterText.IndexOf("rule & scope", StringComparison.Ordinal);
+        var oldRule = beforeText.IndexOf("<b>rule</b>", StringComparison.Ordinal);
+        var newRule = afterText.IndexOf("rule & scope", StringComparison.Ordinal);
         return new PublishedDocumentChange
         {
             RecordId = new string('c', 32),
@@ -200,7 +212,7 @@ public sealed class ReleaseRendererTests
             ChangeDateEvidence = new PublishedCitation
             {
                 ExtractionId = AfterId,
-                Start = AfterText.IndexOf("Keep this.", StringComparison.Ordinal),
+                Start = afterText.IndexOf("Keep this.", StringComparison.Ordinal),
                 Length = "Keep this.".Length,
                 Quote = "Keep this."
             },
@@ -211,23 +223,23 @@ public sealed class ReleaseRendererTests
                 ExtractionId = BeforeId,
                 Url = "https://example.gov/before",
                 ObservedAtUtc = new DateTimeOffset(2026, 4, 2, 9, 30, 0, TimeSpan.Zero),
-                Text = BeforeText
+                Text = beforeText
             },
             After = new PublishedDocumentVersion
             {
                 ExtractionId = AfterId,
                 Url = "https://example.gov/after",
                 ObservedAtUtc = new DateTimeOffset(2026, 5, 3, 10, 45, 0, TimeSpan.Zero),
-                Text = AfterText
+                Text = afterText
             },
             Changes =
             [
                 new PublishedChange
                 {
-                    BeforeStart = 0, BeforeLength = BeforeText.Length - 11,
-                    AfterStart = 0, AfterLength = AfterText.Length - 11,
-                    BeforeContextStart = BeforeText.Length - 10, BeforeContextLength = 10,
-                    AfterContextStart = AfterText.Length - 10, AfterContextLength = 10,
+                    BeforeStart = 0, BeforeLength = beforeText.Length - 11,
+                    AfterStart = 0, AfterLength = afterText.Length - 11,
+                    BeforeContextStart = beforeText.Length - 10, BeforeContextLength = 10,
+                    AfterContextStart = afterText.Length - 10, AfterContextLength = 10,
                     WordEdits = []
                 }
             ],
