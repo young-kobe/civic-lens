@@ -171,6 +171,78 @@ public sealed class FileReleaseDirectoryTests : IDisposable
         Assert.True(Directory.Exists(Path.Combine(root, "releases", second)));
     }
 
+    [Fact]
+    public async Task LinkedFilesShareStorageWithTheBaseReleaseSoDiskDoesNotGrowPerRelease()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        var baseName = await BuildReleaseAsync(1, "one");
+        await using var staging = await releases.BeginAsync(default);
+        await staging.LinkFileAsync(baseName, "records/a.json", default);
+        var linkedName = await staging.CompleteAsync(2, default);
+
+        var source = Path.Combine(root, "releases", baseName, "records", "a.json");
+        var linked = Path.Combine(root, "releases", linkedName, "records", "a.json");
+        Assert.Equal("{}", await File.ReadAllTextAsync(linked));
+        Assert.Null(new FileInfo(linked).LinkTarget);
+        await File.AppendAllTextAsync(source, "x");
+        Assert.Equal("{}x", await File.ReadAllTextAsync(linked));
+        Assert.True(File.GetUnixFileMode(linked).HasFlag(UnixFileMode.OtherRead));
+    }
+
+    [Theory]
+    [InlineData("../escape.json")]
+    [InlineData("/etc/passwd")]
+    [InlineData("")]
+    public async Task LinkingRejectsPathsThatCouldEscapeTheRelease(string relativePath)
+    {
+        var baseName = await BuildReleaseAsync(1, "one");
+        await using var staging = await releases.BeginAsync(default);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => staging.LinkFileAsync(baseName, relativePath, default));
+    }
+
+    [Theory]
+    [InlineData("../releases")]
+    [InlineData("current")]
+    public async Task LinkingRejectsMalformedSourceDirectoryNames(string directoryName)
+    {
+        await using var staging = await releases.BeginAsync(default);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => staging.LinkFileAsync(directoryName, "records/a.json", default));
+    }
+
+    [Fact]
+    public async Task LinkingAMissingSourceIsCorruptBaseDataNotBadInput()
+    {
+        var baseName = await BuildReleaseAsync(1, "one");
+        await using var staging = await releases.BeginAsync(default);
+
+        await Assert.ThrowsAsync<InvalidDataException>(() => staging.LinkFileAsync(baseName, "records/missing.json", default));
+        await Assert.ThrowsAsync<InvalidDataException>(() => staging.LinkFileAsync(baseName, "records", default));
+    }
+
+    [Fact]
+    public async Task LinkingNeverOverwritesAnExistingFile()
+    {
+        var baseName = await BuildReleaseAsync(1, "one");
+        await using var staging = await releases.BeginAsync(default);
+        await staging.WriteFileAsync("records/a.json", new byte[] { 2 }, default);
+
+        await Assert.ThrowsAnyAsync<IOException>(() => staging.LinkFileAsync(baseName, "records/a.json", default));
+    }
+
+    [Fact]
+    public async Task LinkingRejectsSymlinkSourcesSoAReleaseCannotExposeFilesOutsideItself()
+    {
+        var baseName = await BuildReleaseAsync(1, "one");
+        var outside = Path.Combine(root, "secret.txt");
+        File.WriteAllText(outside, "secret");
+        File.CreateSymbolicLink(Path.Combine(root, "releases", baseName, "leak.txt"), outside);
+        await using var staging = await releases.BeginAsync(default);
+
+        await Assert.ThrowsAsync<InvalidDataException>(() => staging.LinkFileAsync(baseName, "leak.txt", default));
+    }
+
     private async Task<string> BuildReleaseAsync(int number, string manifest)
     {
         await using var staging = await releases.BeginAsync(default);

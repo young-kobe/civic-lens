@@ -121,6 +121,8 @@ internal sealed class FakeReleaseDirectory : IReleaseDirectory
 {
     public Dictionary<string, Dictionary<string, byte[]>> Directories { get; } = [];
     public List<string> WriteOrder { get; } = [];
+    public List<(string SourceDirectory, string RelativePath)> Links { get; } = [];
+    public List<string> ReadPaths { get; } = [];
     public List<string> Deleted { get; } = [];
     public List<string> Activated { get; } = [];
     public int BeginCount { get; private set; }
@@ -134,7 +136,11 @@ internal sealed class FakeReleaseDirectory : IReleaseDirectory
     }
 
     public Task<byte[]> ReadFileAsync(string directoryName, string relativePath, int maximumBytes,
-        CancellationToken cancellationToken) => Task.FromResult(Directories[directoryName][relativePath]);
+        CancellationToken cancellationToken)
+    {
+        ReadPaths.Add(relativePath);
+        return Task.FromResult(Directories[directoryName][relativePath]);
+    }
 
     public Task DeleteAsync(string directoryName, CancellationToken cancellationToken)
     {
@@ -161,6 +167,13 @@ internal sealed class FakeReleaseDirectory : IReleaseDirectory
         {
             files[relativePath] = content.ToArray();
             owner.WriteOrder.Add(relativePath);
+            return Task.CompletedTask;
+        }
+
+        public Task LinkFileAsync(string sourceDirectoryName, string relativePath, CancellationToken cancellationToken)
+        {
+            files[relativePath] = owner.Directories[sourceDirectoryName][relativePath];
+            owner.Links.Add((sourceDirectoryName, relativePath));
             return Task.CompletedTask;
         }
 

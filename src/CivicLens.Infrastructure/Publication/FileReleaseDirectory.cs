@@ -33,7 +33,7 @@ public sealed class FileReleaseDirectory : IReleaseDirectory
         CancellationToken cancellationToken)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(maximumBytes, 1);
-        var path = ResolveWithoutLinks(directoryName, relativePath);
+        var path = ReleasePaths.ResolveWithoutLinks(rootPath, directoryName, relativePath);
         await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, FileOptions.Asynchronous);
         if (stream.Length > maximumBytes) throw new InvalidDataException("Release file exceeds the allowed size.");
         var buffer = new byte[stream.Length];
@@ -90,26 +90,4 @@ public sealed class FileReleaseDirectory : IReleaseDirectory
 
     private string ReleasePath(string directoryName) =>
         Path.Combine(rootPath, ReleasePaths.ReleasesFolder, directoryName);
-
-    private string ResolveWithoutLinks(string directoryName, string relativePath)
-    {
-        ReleasePaths.RequireDirectoryName(directoryName);
-        var segments = ReleasePaths.SplitRelativePath(relativePath);
-        var path = ReleasePath(directoryName);
-        RejectLink(path);
-        foreach (var segment in segments)
-        {
-            path = Path.Combine(path, segment);
-            RejectLink(path);
-        }
-
-        return path;
-    }
-
-    private static void RejectLink(string path)
-    {
-        var info = new FileInfo(path);
-        if (info.LinkTarget is not null) throw new InvalidDataException("Release content must not contain symlinks.");
-        if (!info.Exists && !Directory.Exists(path)) throw new FileNotFoundException("Release file was not found.", path);
-    }
 }

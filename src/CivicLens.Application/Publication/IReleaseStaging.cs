@@ -4,5 +4,7 @@ public interface IReleaseStaging : IAsyncDisposable
 {
     Task WriteFileAsync(string relativePath, ReadOnlyMemory<byte> content, CancellationToken cancellationToken);
 
+    Task LinkFileAsync(string sourceDirectoryName, string relativePath, CancellationToken cancellationToken);
+
     Task<string> CompleteAsync(int releaseNumber, CancellationToken cancellationToken);
 }

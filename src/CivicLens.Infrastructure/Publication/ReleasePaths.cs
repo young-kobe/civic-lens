@@ -31,6 +31,21 @@ internal static partial class ReleasePaths
         return segments;
     }
 
+    public static string ResolveWithoutLinks(string rootPath, string directoryName, string relativePath)
+    {
+        RequireDirectoryName(directoryName);
+        var segments = SplitRelativePath(relativePath);
+        var path = Path.Combine(rootPath, ReleasesFolder, directoryName);
+        RejectLink(path);
+        foreach (var segment in segments)
+        {
+            path = Path.Combine(path, segment);
+            RejectLink(path);
+        }
+
+        return path;
+    }
+
     public static void MakeReadable(string path, bool isDirectory)
     {
         if (OperatingSystem.IsWindows()) return;
@@ -42,6 +57,13 @@ internal static partial class ReleasePaths
         if (Directory.Exists(path)) return;
         Directory.CreateDirectory(path);
         MakeReadable(path, isDirectory: true);
+    }
+
+    private static void RejectLink(string path)
+    {
+        var info = new FileInfo(path);
+        if (info.LinkTarget is not null) throw new InvalidDataException("Release content must not contain symlinks.");
+        if (!info.Exists && !Directory.Exists(path)) throw new FileNotFoundException("Release file was not found.", path);
     }
 
     [GeneratedRegex("^[0-9]{6}-[0-9a-f]{32}$")]

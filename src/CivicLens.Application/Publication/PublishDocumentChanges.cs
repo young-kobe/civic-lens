@@ -79,8 +79,9 @@ public sealed class PublishDocumentChanges(IPublicationStore publications, IRele
         var entries = new List<PublishedRecordEntry>();
         foreach (var entry in carried)
         {
-            var (json, record) = await previous.ReadRecordAsync(entry, cancellationToken);
-            entries.Add(await WriteRecordAsync(staging, record, json, cancellationToken));
+            await staging.LinkFileAsync(previous.DirectoryName!, PublicationProtocol.RecordDataPath(entry.RecordId), cancellationToken);
+            await staging.LinkFileAsync(previous.DirectoryName!, PublicationProtocol.RecordPagePath(entry.RecordId), cancellationToken);
+            entries.Add(entry);
         }
         foreach (var review in additions)
         {

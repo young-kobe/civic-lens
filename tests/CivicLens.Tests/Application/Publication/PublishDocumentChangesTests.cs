@@ -162,6 +162,7 @@ public sealed class PublishDocumentChangesTests
         scenario.Releases.Active = one.DirectoryName;
         scenario.Clock.Now = firstTime.AddDays(7);
         var third = scenario.AddDraft('c');
+        scenario.Releases.Links.Clear();
 
         var three = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k3", third));
 
@@ -169,6 +170,8 @@ public sealed class PublishDocumentChangesTests
         var manifest = ReadManifest(scenario, three.DirectoryName);
         Assert.Equal([third, first], manifest.Records.Select(entry => entry.RecordId));
         Assert.Equal(firstTime, manifest.Records[1].FirstPublishedAtUtc);
+        Assert.All(scenario.Releases.Links, link => Assert.Equal(one.DirectoryName, link.SourceDirectory));
+        Assert.Equal(2, scenario.Releases.Links.Count);
     }
 
     [Fact]
@@ -216,6 +219,8 @@ public sealed class PublishDocumentChangesTests
         var originalJson = scenario.Releases.Directories[one.DirectoryName][PublicationProtocol.RecordDataPath(first)];
         scenario.Clock.Now = firstTime.AddDays(7);
         var second = scenario.AddDraft('b');
+        scenario.Releases.WriteOrder.Clear();
+        scenario.Releases.ReadPaths.Clear();
 
         var two = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k2", second));
 
@@ -225,7 +230,14 @@ public sealed class PublishDocumentChangesTests
         Assert.Equal([second, first], manifest.Records.Select(entry => entry.RecordId));
         Assert.Equal(firstTime, manifest.Records[1].FirstPublishedAtUtc);
         Assert.Equal(originalJson, scenario.Releases.Directories[two.DirectoryName][PublicationProtocol.RecordDataPath(first)]);
-        Assert.Contains(PublicationProtocol.RecordPagePath(first), scenario.Releases.Directories[two.DirectoryName].Keys);
+        Assert.Equal(
+            [(one.DirectoryName, PublicationProtocol.RecordDataPath(first)), (one.DirectoryName, PublicationProtocol.RecordPagePath(first))],
+            scenario.Releases.Links.TakeLast(2));
+        Assert.DoesNotContain(PublicationProtocol.RecordDataPath(first), scenario.Releases.WriteOrder);
+        Assert.DoesNotContain(PublicationProtocol.RecordPagePath(first), scenario.Releases.WriteOrder);
+        Assert.Contains(PublicationProtocol.RecordDataPath(second), scenario.Releases.WriteOrder);
+        Assert.Contains(PublicationProtocol.RecordPagePath(second), scenario.Releases.WriteOrder);
+        Assert.Equal([PublicationProtocol.ManifestPath], scenario.Releases.ReadPaths);
         Assert.Equal(new ReviewStateExpectation(second, 1, 1), Assert.Single(scenario.Publications.LastCommit!.AddedRecords));
         Assert.Equal(2, scenario.Publications.LastCommit.Records.Length);
     }
