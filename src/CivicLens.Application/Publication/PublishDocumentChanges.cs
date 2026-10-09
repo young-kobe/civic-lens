@@ -24,20 +24,21 @@ public sealed class PublishDocumentChanges(IPublicationStore publications, IRele
         if (replay is not null) return replay;
 
         var now = clock.GetUtcNow();
-        var previous = await PreviousRelease.LoadAsync(releases, await publications.GetLatestAsync(cancellationToken), cancellationToken);
+        var latest = await publications.GetLatestAsync(cancellationToken);
+        var previous = await PreviousRelease.LoadAsync(releases, publications, latest, cancellationToken);
         var additions = await LoadAdditionsAsync(draftIds, previous, cancellationToken);
         var carried = previous.Entries.Where(entry => !draftIds.Contains(entry.RecordId)).ToList();
         if (carried.Count + additions.Count > PublicationProtocol.MaximumRecordsPerRelease)
             throw new ArgumentException("The release would exceed the maximum record count.", nameof(request));
 
-        var number = previous.ReleaseNumber + 1;
+        var number = (latest?.ReleaseNumber ?? 0) + 1;
         var (directory, entries) = await StageAsync(number, now, previous, carried, additions, cancellationToken);
         var commit = new PublicationCommit(number, directory, now,
             [.. entries.Select(entry => new PublishedRevisionBinding(entry.RecordId, entry.RevisionNumber))],
             [.. additions.Select(review => new ReviewStateExpectation(review.DraftId,
                 review.CurrentRevision.RevisionNumber, review.ReviewStateVersion))]);
         var summary = await CommitAsync(actor, commit, request.IdempotencyKey, payloadHash, cancellationToken);
-        await releases.ActivateAsync(directory, cancellationToken);
+        await releases.ActivateAsync(summary.DirectoryName, cancellationToken);
         return summary;
     }
 
@@ -125,14 +126,18 @@ public sealed class PublishDocumentChanges(IPublicationStore publications, IRele
     private async Task<PublicationReleaseSummary> CommitAsync(ReviewActor actor, PublicationCommit commit,
         string idempotencyKey, string payloadHash, CancellationToken cancellationToken)
     {
+        PublicationReleaseSummary summary;
         try
         {
-            return await publications.CommitAsync(actor.Subject, commit, idempotencyKey, payloadHash, cancellationToken);
+            summary = await publications.CommitAsync(actor.Subject, commit, idempotencyKey, payloadHash, cancellationToken);
         }
-        catch (PublicationConflictException)
+        catch (Exception exception) when (exception is PublicationConflictException or ArgumentException)
         {
             await releases.DeleteAsync(commit.DirectoryName, CancellationToken.None);
             throw;
         }
+        if (summary.DirectoryName != commit.DirectoryName)
+            await releases.DeleteAsync(commit.DirectoryName, CancellationToken.None);
+        return summary;
     }
 }

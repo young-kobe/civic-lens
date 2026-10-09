@@ -55,6 +55,7 @@ public sealed record PublishedDocumentChange
             : citation.ExtractionId == After.ExtractionId ? After.Text
             : throw new InvalidDataException("Published citation must cite one of the record's versions.");
         if (citation.Length <= 0 || !IsRange(text, citation.Start, citation.Length) ||
+            SplitsSurrogatePair(text, citation.Start) || SplitsSurrogatePair(text, citation.Start + citation.Length) ||
             !string.Equals(text.Substring(citation.Start, citation.Length), citation.Quote, StringComparison.Ordinal))
             throw new InvalidDataException("Published citation quote does not match its offsets.");
     }
@@ -80,6 +81,9 @@ public sealed record PublishedDocumentChange
                 !IsRange(After.Text, edit.AfterStart, edit.AfterLength)))
             throw new InvalidDataException("Published change offsets are outside their texts.");
     }
+
+    private static bool SplitsSurrogatePair(string text, int index) =>
+        index > 0 && index < text.Length && char.IsHighSurrogate(text[index - 1]) && char.IsLowSurrogate(text[index]);
 
     private static bool IsRange(string text, int start, int length) =>
         start >= 0 && length >= 0 && start <= text.Length - length;

@@ -138,7 +138,7 @@ public sealed partial class PostgresPublicationStore(IDbContextFactory<Collectio
             candidate.IdempotencyKey == idempotencyKey, cancellationToken);
         if (row is null) return null;
         if (row.PayloadHash != payloadHash)
-            throw new PublicationConflictException("Idempotency key was already used with a different request payload.");
+            throw new ArgumentException("Idempotency key was already used with a different request payload.");
         return JsonSerializer.Deserialize<PublicationReleaseSummary>(row.ResultJson, JsonOptions)
             ?? throw new InvalidOperationException("Stored publication result is invalid.");
     }

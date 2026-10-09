@@ -9,7 +9,6 @@ namespace CivicLens.Host.Publication;
 
 public sealed class ReleaseRenderer : IReleaseRenderer
 {
-    // The components inject no services, so one empty provider serves every render.
     private static readonly ServiceProvider Services = new ServiceCollection().BuildServiceProvider();
 
     public IReadOnlyList<ReleaseAsset> Assets { get; } = PublicAssets.Load();

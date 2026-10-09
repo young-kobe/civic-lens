@@ -59,7 +59,6 @@
     [Parameter, EditorRequired] public string ViewId { get; set; } = string.Empty;
     [Parameter] public string? BeforeExtractionId { get; set; }
     [Parameter] public string? AfterExtractionId { get; set; }
-    // Without a script the toggle does nothing, so diff.js unhides it.
     [Parameter] public bool HideToggleUntilScripted { get; set; }
     [Parameter] public int MaximumPassages { get; set; } = int.MaxValue;
 

@@ -2,10 +2,6 @@ namespace CivicLens.Host.Publication;
 
 internal sealed record CitedRange(string AnchorId, int Start, int Length);
 
-public sealed record TextRun(string Text, IReadOnlyList<RunMark> Marks);
-
-public sealed record RunMark(string AnchorId, bool CarriesAnchor);
-
 internal static class CitedText
 {
     public static IReadOnlyList<TextRun> Split(string text, IReadOnlyList<CitedRange> ranges)

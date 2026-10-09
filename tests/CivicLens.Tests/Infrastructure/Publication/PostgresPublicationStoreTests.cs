@@ -1,22 +1,18 @@
 using System.Collections.Immutable;
-using System.IO.Compression;
 using System.Security.Cryptography;
-using System.Text;
-using CivicLens.Application.Collection;
 using CivicLens.Application.Publication;
 using CivicLens.Application.Review;
-using CivicLens.Collection.Contracts;
 using CivicLens.Core.Review;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Documents;
 using CivicLens.Infrastructure.Publication;
 using CivicLens.Infrastructure.Review;
+using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Host;
 using CivicLens.Tests.Infrastructure.Collection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Npgsql;
-using static CivicLens.Tests.Fixtures.CollectionFixtures;
 
 namespace CivicLens.Tests.Infrastructure.Publication;
 
@@ -34,6 +30,7 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
     private PostgresDocumentComparisonStore comparisons = null!;
     private PostgresDocumentChangeReviewStore reviews = null!;
     private PostgresPublicationStore publications = null!;
+    private ComparisonSeeder seeder = null!;
 
     public async Task InitializeAsync()
     {
@@ -53,6 +50,7 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
         comparisons = new PostgresDocumentComparisonStore(factory);
         reviews = new PostgresDocumentChangeReviewStore(factory);
         publications = new PostgresPublicationStore(factory);
+        seeder = new ComparisonSeeder(attempts, extractions, comparisons, captureRoot);
         await attempts.MigrateAsync();
         Directory.CreateDirectory(captureRoot);
     }
@@ -138,9 +136,9 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
 
         Assert.Equal(first, await publications.FindReplayAsync(Owner.Subject, "key", Hash(1), default));
         Assert.Equal(first, await publications.CommitAsync(Owner.Subject, Commit(2, draft, 1, 0), "key", Hash(1), default));
-        await Assert.ThrowsAsync<PublicationConflictException>(() =>
+        await Assert.ThrowsAsync<ArgumentException>(() =>
             publications.FindReplayAsync(Owner.Subject, "key", Hash(2), default));
-        await Assert.ThrowsAsync<PublicationConflictException>(() =>
+        await Assert.ThrowsAsync<ArgumentException>(() =>
             publications.CommitAsync(Owner.Subject, Commit(2, draft, 1, 0), "key", Hash(2), default));
         Assert.Null(await publications.FindReplayAsync("auth0|other", "key", Hash(2), default));
         Assert.Single(await publications.ListAsync(10, default));
@@ -178,7 +176,7 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
 
     private async Task<DocumentChangeDraftRevision> CreateDraftAsync()
     {
-        var comparison = await SaveComparisonAsync();
+        var comparison = await seeder.SaveAsync("Policy before.", "Policy after.");
         return await new CreateDocumentChangeDraft(reviews).ExecuteAsync(Owner, new(comparison.ComparisonId, "create-key"));
     }
 
@@ -186,32 +184,4 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
         new SaveDocumentChangeDraft(reviews, new ReviewCatalog([], [])).ExecuteAsync(Owner,
             new(draft.DraftId, 1, "Policy update", "The policy changed.", null, null, "Example Office",
                 null, null, [], [], draft.Citations, "save-key"));
-
-    private async Task<CivicLens.Core.Documents.DocumentComparison> SaveComparisonAsync()
-    {
-        var before = new CivicLens.Core.Documents.DocumentExtraction(await ImportAsync("Policy before."), "parser", "normalizer", "Policy before.");
-        var after = new CivicLens.Core.Documents.DocumentExtraction(await ImportAsync("Policy after."), "parser", "normalizer", "Policy after.");
-        await extractions.SaveAsync(before, CancellationToken.None);
-        await extractions.SaveAsync(after, CancellationToken.None);
-        return await comparisons.SaveAsync(CivicLens.Core.Documents.DocumentComparison.Create(before, after), CancellationToken.None);
-    }
-
-    private async Task<CivicLens.Core.Collection.CapturedAttemptResult> ImportAsync(string text)
-    {
-        var bytes = Encoding.UTF8.GetBytes(text);
-        var hash = Convert.ToHexStringLower(SHA256.HashData(bytes));
-        await using (var file = File.Create(Path.Combine(captureRoot, hash + ".gz")))
-        await using (var gzip = new GZipStream(file, CompressionLevel.SmallestSize))
-            await gzip.WriteAsync(bytes);
-        var request = Request() with { JobId = Guid.NewGuid().ToString("N"), ArtifactDirectory = captureRoot };
-        var receipt = Receipt(request) with
-        {
-            BytesReceived = bytes.Length,
-            Capture = new CaptureArtifact { Sha256 = hash, RelativePath = hash + ".gz", ByteLength = bytes.Length },
-            Response = new HttpResponseMetadata { StatusCode = 200, ContentType = "text/plain; charset=utf-8", ContentEncodings = [] }
-        };
-        var result = await attempts.ImportAtomicallyAsync(CollectionAttemptImporter.CreateImport(
-            request.JobId, request, receipt), CancellationToken.None);
-        return (CivicLens.Core.Collection.CapturedAttemptResult)result.AttemptResult;
-    }
 }

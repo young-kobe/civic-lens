@@ -80,6 +80,8 @@ internal sealed class FakePublicationStore : IPublicationStore
     public List<PublicationReleaseSummary> Committed { get; } = [];
     public PublicationCommit? LastCommit { get; private set; }
     public bool ConflictOnCommit { get; set; }
+    public Exception? FailOnCommit { get; set; }
+    public PublicationReleaseSummary? ConcurrentWinner { get; set; }
 
     public Task<PublicationReleaseSummary?> GetLatestAsync(CancellationToken cancellationToken) =>
         Task.FromResult(Committed.LastOrDefault());
@@ -94,7 +96,7 @@ internal sealed class FakePublicationStore : IPublicationStore
         string payloadHash, CancellationToken cancellationToken)
     {
         if (!receipts.TryGetValue((actorSubject, idempotencyKey), out var receipt)) return Task.FromResult<PublicationReleaseSummary?>(null);
-        if (receipt.Hash != payloadHash) throw new PublicationConflictException("Key reused with a different request.");
+        if (receipt.Hash != payloadHash) throw new ArgumentException("Key reused with a different request.");
         return Task.FromResult<PublicationReleaseSummary?>(receipt.Summary);
     }
 
@@ -102,6 +104,8 @@ internal sealed class FakePublicationStore : IPublicationStore
         string idempotencyKey, string payloadHash, CancellationToken cancellationToken)
     {
         if (ConflictOnCommit) throw new PublicationConflictException("Review state changed.");
+        if (FailOnCommit is not null) throw FailOnCommit;
+        if (ConcurrentWinner is not null) return Task.FromResult(ConcurrentWinner);
         LastCommit = commit;
         var summary = new PublicationReleaseSummary(commit.ReleaseNumber, commit.DirectoryName, commit.PublishedAtUtc, commit.Records.Length);
         Committed.Add(summary);
@@ -121,7 +125,7 @@ internal sealed class FakeReleaseDirectory : IReleaseDirectory
     public List<string> Activated { get; } = [];
     public int BeginCount { get; private set; }
     public int DiscardedStagings { get; set; }
-    public string? Active { get; private set; }
+    public string? Active { get; set; }
 
     public Task<IReleaseStaging> BeginAsync(CancellationToken cancellationToken)
     {

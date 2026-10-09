@@ -8,30 +8,29 @@ internal sealed class PreviousRelease
     private readonly IReleaseDirectory releases;
     private readonly string? directoryName;
 
-    private PreviousRelease(IReleaseDirectory releases, string? directoryName, int releaseNumber,
-        IReadOnlyList<PublishedRecordEntry> entries)
+    private PreviousRelease(IReleaseDirectory releases, string? directoryName, IReadOnlyList<PublishedRecordEntry> entries)
     {
         this.releases = releases;
         this.directoryName = directoryName;
-        ReleaseNumber = releaseNumber;
         Entries = entries;
     }
 
-    public int ReleaseNumber { get; }
     public IReadOnlyList<PublishedRecordEntry> Entries { get; }
 
-    public static async Task<PreviousRelease> LoadAsync(IReleaseDirectory releases, PublicationReleaseSummary? latest,
-        CancellationToken cancellationToken)
+    public static async Task<PreviousRelease> LoadAsync(IReleaseDirectory releases, IPublicationStore publications,
+        PublicationReleaseSummary? latest, CancellationToken cancellationToken)
     {
-        if (latest is null) return new(releases, null, 0, []);
-        var bytes = await releases.ReadFileAsync(latest.DirectoryName, PublicationProtocol.ManifestPath,
+        if (latest is null) return new(releases, null, []);
+        var directory = await releases.GetActiveAsync(cancellationToken) ?? latest.DirectoryName;
+        var bytes = await releases.ReadFileAsync(directory, PublicationProtocol.ManifestPath,
             PublicationProtocol.MaximumRecordFileBytes, cancellationToken);
         var manifest = JsonSerializer.Deserialize<PublicationRelease>(bytes, PublicationProtocol.JsonOptions)
             ?? throw new InvalidDataException("Release manifest is empty.");
         manifest.Validate();
-        if (manifest.ReleaseNumber != latest.ReleaseNumber)
-            throw new InvalidDataException("Release manifest number does not match the recorded release.");
-        return new(releases, latest.DirectoryName, latest.ReleaseNumber, manifest.Records);
+        var recorded = await publications.GetAsync(manifest.ReleaseNumber, cancellationToken);
+        if (recorded?.DirectoryName != directory)
+            throw new InvalidDataException("Release manifest does not match a recorded release.");
+        return new(releases, directory, manifest.Records);
     }
 
     public PublishedRecordEntry? Find(string recordId) =>

@@ -16,7 +16,6 @@
     [Parameter, EditorRequired] public PublishedDocumentVersion Version { get; set; } = default!;
     [Parameter, EditorRequired] public IReadOnlyList<TextRun> Runs { get; set; } = default!;
 
-    // Citations may overlap, so each covering citation adds a nested mark.
     private static RenderFragment Run(TextRun run, int depth) => builder =>
     {
         if (depth == run.Marks.Count)

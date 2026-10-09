@@ -120,6 +120,75 @@ public sealed class PublishDocumentChangesTests
     }
 
     [Fact]
+    public async Task InvalidCommitDeletesTheBuiltDirectoryBecauseNothingWasRecorded()
+    {
+        var scenario = new PublicationScenario();
+        var draft = scenario.AddDraft('a');
+        scenario.Publications.FailOnCommit = new ArgumentException("Invalid commit.");
+
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k", draft)));
+
+        Assert.Single(scenario.Releases.Deleted);
+        Assert.Empty(scenario.Releases.Directories);
+        Assert.Empty(scenario.Releases.Activated);
+    }
+
+    [Fact]
+    public async Task ConcurrentReplayWinnerKeepsItsReleaseAndTheLosingDirectoryIsDeleted()
+    {
+        var scenario = new PublicationScenario();
+        var draft = scenario.AddDraft('a');
+        var winner = new PublicationReleaseSummary(1, "winner", scenario.Clock.Now, 1);
+        scenario.Publications.ConcurrentWinner = winner;
+
+        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k", draft));
+
+        Assert.Equal(winner, summary);
+        var built = Assert.Single(scenario.Releases.Deleted);
+        Assert.DoesNotContain(built, scenario.Releases.Directories.Keys);
+        Assert.Equal(["winner"], scenario.Releases.Activated);
+    }
+
+    [Fact]
+    public async Task PublishingAfterRollbackBuildsOnTheActiveReleaseSoRolledBackRecordsStayWithdrawn()
+    {
+        var scenario = new PublicationScenario();
+        var first = scenario.AddDraft('a');
+        var firstTime = scenario.Clock.Now;
+        var one = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1", first));
+        var second = scenario.AddDraft('b');
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k2", second));
+        scenario.Releases.Active = one.DirectoryName;
+        scenario.Clock.Now = firstTime.AddDays(7);
+        var third = scenario.AddDraft('c');
+
+        var three = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k3", third));
+
+        Assert.Equal(3, three.ReleaseNumber);
+        var manifest = ReadManifest(scenario, three.DirectoryName);
+        Assert.Equal([third, first], manifest.Records.Select(entry => entry.RecordId));
+        Assert.Equal(firstTime, manifest.Records[1].FirstPublishedAtUtc);
+    }
+
+    [Fact]
+    public async Task UnrecordedActiveDirectoryIsRejectedBeforeAnythingIsBuilt()
+    {
+        var scenario = new PublicationScenario();
+        var first = scenario.AddDraft('a');
+        var one = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1", first));
+        scenario.Releases.Directories["unrecorded"] = scenario.Releases.Directories[one.DirectoryName];
+        scenario.Releases.Active = "unrecorded";
+        var begins = scenario.Releases.BeginCount;
+
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k2", scenario.AddDraft('b'))));
+
+        Assert.Equal(begins, scenario.Releases.BeginCount);
+        Assert.Equal("unrecorded", scenario.Releases.Active);
+    }
+
+    [Fact]
     public async Task ReplayReturnsTheOriginalReleaseWithoutBuildingAnotherOne()
     {
         var scenario = new PublicationScenario();

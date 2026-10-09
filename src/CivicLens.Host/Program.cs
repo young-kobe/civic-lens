@@ -16,6 +16,10 @@ using CivicLens.Host.Documents;
 using CivicLens.Host.Publication;
 using CivicLens.Host.Review;
 using CivicLens.Infrastructure.Documents;
+using CivicLens.Application.Publication;
+using CivicLens.Core.Review;
+using CivicLens.Infrastructure.Publication;
+using CivicLens.Infrastructure.Review;
 
 if (args is [] or ["--help"] or ["help"])
 {
@@ -159,9 +163,31 @@ try
 
     if (ReleaseCommand.Matches(args))
     {
-        // The integrator builds the stores and handlers here and calls ReleaseCommand.ExecuteAsync.
-        Console.Error.WriteLine("Release commands are not available in this build.");
-        return 1;
+        var connectionString = Environment.GetEnvironmentVariable("CIVIC_LENS_DATABASE");
+        var releaseRoot = Environment.GetEnvironmentVariable("CIVIC_LENS_RELEASE_DIRECTORY");
+        var ownerSubject = Environment.GetEnvironmentVariable("CIVIC_LENS_REVIEW_OWNER");
+        if (string.IsNullOrWhiteSpace(connectionString) || string.IsNullOrWhiteSpace(releaseRoot) ||
+            string.IsNullOrWhiteSpace(ownerSubject))
+            throw new ArgumentException("Release commands require CIVIC_LENS_DATABASE, CIVIC_LENS_RELEASE_DIRECTORY, and CIVIC_LENS_REVIEW_OWNER.");
+        var officialNames = new Dictionary<string, string>(StringComparer.Ordinal);
+        if (args is ["releases", "publish", ..])
+        {
+            var configurationPath = Environment.GetEnvironmentVariable("CIVIC_LENS_COLLECTION_CONFIG");
+            if (string.IsNullOrWhiteSpace(configurationPath) || !Path.IsPathFullyQualified(configurationPath))
+                throw new ArgumentException("Publishing requires CIVIC_LENS_COLLECTION_CONFIG to name an absolute configuration path.");
+            var releaseConfiguration = await ReadConfigurationAsync(configurationPath, cancellation.Token);
+            foreach (var person in releaseConfiguration.People) officialNames.Add(person.Id, person.Name);
+        }
+        var publications = PostgresPublicationStore.FromConnectionString(connectionString);
+        var releases = new FileReleaseDirectory(releaseRoot);
+        var publish = new PublishDocumentChanges(publications, releases, new ReleaseRenderer(),
+            PostgresDocumentChangeReviewStore.FromConnectionString(connectionString),
+            PostgresDocumentExtractionStore.FromConnectionString(connectionString),
+            new PublicationCatalog(officialNames), TimeProvider.System);
+        executing = true;
+        return await ReleaseCommand.ExecuteAsync(args, publish, new ListPublicationReleases(publications, releases),
+            new ActivatePublicationRelease(publications, releases), new ReviewActor(ownerSubject, ReviewRole.Owner),
+            cancellation.Token);
     }
 
     if (DocumentCommand.Matches(args))
