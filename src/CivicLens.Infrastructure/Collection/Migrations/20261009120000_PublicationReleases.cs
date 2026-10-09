@@ -29,7 +29,7 @@ public partial class PublicationReleases : Migration
                 table.CheckConstraint("ck_publication_releases_number", "release_number BETWEEN 1 AND 999999");
                 table.CheckConstraint("ck_publication_releases_directory", "directory_name ~ '^[0-9]{6}-[0-9a-f]{32}$'");
                 table.CheckConstraint("ck_publication_releases_published", "published_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
-                table.CheckConstraint("ck_publication_releases_count", "record_count BETWEEN 0 AND 256");
+                table.CheckConstraint("ck_publication_releases_count", "record_count BETWEEN 0 AND 2000");
             });
 
         migrationBuilder.CreateIndex(

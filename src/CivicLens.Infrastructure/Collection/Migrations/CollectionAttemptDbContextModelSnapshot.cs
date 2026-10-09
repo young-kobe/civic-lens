@@ -779,7 +779,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.ToTable("publication_releases", null, t =>
                         {
-                            t.HasCheckConstraint("ck_publication_releases_count", "record_count BETWEEN 0 AND 256");
+                            t.HasCheckConstraint("ck_publication_releases_count", "record_count BETWEEN 0 AND 2000");
 
                             t.HasCheckConstraint("ck_publication_releases_directory", "directory_name ~ '^[0-9]{6}-[0-9a-f]{32}$'");
 

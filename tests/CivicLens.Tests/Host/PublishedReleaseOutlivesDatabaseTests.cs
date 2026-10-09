@@ -57,7 +57,7 @@ public sealed class PublishedReleaseOutlivesDatabaseTests : IAsyncLifetime
         Assert.Equal(summary.ReleaseNumber, manifest.ReleaseNumber);
         Assert.Equal("Mayor Example", Assert.Single(record.Officials).Name);
 
-        var indexPage = Path.Combine(current, PublicationProtocol.IndexPagePath);
+        var indexPage = Path.Combine(current, PublicationProtocol.IndexPagePath(1));
         var recordPage = Path.Combine(current, PublicationProtocol.RecordPagePath(entry.RecordId));
         AssertLocalLinksResolve(current, indexPage);
         AssertLocalLinksResolve(current, recordPage);

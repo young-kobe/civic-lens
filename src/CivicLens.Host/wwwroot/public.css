@@ -26,6 +26,8 @@ a:hover { color: var(--ink); }
 .public-records li { padding: 1rem 0; border-bottom: 1px solid var(--line); }
 .public-records a { font-size: 1.1rem; font-weight: 650; }
 .public-records span { display: block; margin-top: .2rem; color: var(--muted); font-size: .88rem; }
+.public-pager { display: flex; gap: 1rem; align-items: baseline; margin-top: 1.5rem; font-size: .92rem; }
+.public-pager span { color: var(--muted); }
 
 .public-citations { margin: 0; padding-left: 1.4rem; }
 .public-citations li { margin-bottom: 1.25rem; }

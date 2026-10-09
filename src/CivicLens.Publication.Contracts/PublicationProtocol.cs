@@ -7,10 +7,12 @@ public static class PublicationProtocol
 {
     public const int SchemaVersion = 1;
     public const string ManifestPath = "release.json";
-    public const string IndexPagePath = "index.html";
-    public const int MaximumRecordsPerRelease = 256;
+    public const int MaximumRecordsPerRelease = 2000;
+    public const int IndexPageSize = 50;
     public const int MaximumRecordFileBytes = 16 * 1024 * 1024;
 
+    public static string IndexPagePath(int page) => page == 1 ? "index.html" : $"page-{page}.html";
+    public static int IndexPageCount(int recordCount) => Math.Max(1, (recordCount + IndexPageSize - 1) / IndexPageSize);
     public static string RecordDataPath(string recordId) => $"records/{recordId}.json";
     public static string RecordPagePath(string recordId) => $"records/{recordId}.html";
 

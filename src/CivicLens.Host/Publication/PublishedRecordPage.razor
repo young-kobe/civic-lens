@@ -4,7 +4,7 @@
 @using Microsoft.AspNetCore.Components
 
 <PublicPage Title="@Record.Headline" RootPath="../">
-    <p class="public-back"><a href="@("../" + PublicationProtocol.IndexPagePath)">All published records</a></p>
+    <p class="public-back"><a href="@("../" + PublicationProtocol.IndexPagePath(1))">All published records</a></p>
     <h1 class="public-kicker">Document change record</h1>
     <RecordPreview PreviewLabel="@($"Published record · Revision {Record.RevisionNumber}")"
                    PrivateNotice=""

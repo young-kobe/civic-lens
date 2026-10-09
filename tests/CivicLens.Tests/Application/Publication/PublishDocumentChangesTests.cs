@@ -50,8 +50,44 @@ public sealed class PublishDocumentChangesTests
 
         var order = scenario.Releases.WriteOrder;
         Assert.Equal(PublicationProtocol.ManifestPath, order[^1]);
-        Assert.Equal(PublicationProtocol.IndexPagePath, order[^2]);
+        Assert.Equal(PublicationProtocol.IndexPagePath(1), order[^2]);
         Assert.True(order.IndexOf(PublicationProtocol.RecordDataPath(draft)) < order.IndexOf("assets/site.css"));
+    }
+
+    [Fact]
+    public async Task EveryIndexPageIsWrittenBeforeTheManifestSoALongReleaseIsNeverTruncated()
+    {
+        var scenario = new PublicationScenario();
+        scenario.SeedRelease(119, withFiles: true);
+        var draft = scenario.AddDraft('a');
+        scenario.Releases.WriteOrder.Clear();
+
+        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k", draft));
+
+        Assert.Equal(120, summary.RecordCount);
+        var order = scenario.Releases.WriteOrder;
+        Assert.Equal(
+            [PublicationProtocol.IndexPagePath(1), "page-2.html", "page-3.html", PublicationProtocol.ManifestPath],
+            order.TakeLast(4));
+        Assert.Equal("index.html", PublicationProtocol.IndexPagePath(1));
+        Assert.DoesNotContain("page-4.html", order);
+        Assert.Contains("<html>index 3 120</html>", System.Text.Encoding.UTF8.GetString(
+            scenario.Releases.Directories[summary.DirectoryName]["page-3.html"]));
+    }
+
+    [Fact]
+    public async Task RejectsMoreRecordsThanTheCapBeforeAnythingIsBuilt()
+    {
+        var scenario = new PublicationScenario();
+        scenario.SeedRelease(PublicationProtocol.MaximumRecordsPerRelease, withFiles: false);
+        var draft = scenario.AddDraft('a');
+
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k", draft)));
+
+        Assert.Equal(0, scenario.Releases.BeginCount);
+        Assert.Single(scenario.Publications.Committed);
+        Assert.Empty(scenario.Releases.Activated);
     }
 
     [Theory]

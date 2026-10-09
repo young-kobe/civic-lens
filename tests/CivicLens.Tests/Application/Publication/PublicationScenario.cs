@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Text.Json;
 using CivicLens.Application.Documents;
 using CivicLens.Application.Publication;
 using CivicLens.Application.Review;
@@ -24,6 +25,37 @@ internal sealed class PublicationScenario
 
     public PublishDocumentChanges Publisher() => new(Publications, Releases, new FakeRenderer(), Reviews, Extractions,
         new PublicationCatalog(OfficialNames), Clock);
+
+    public void SeedRelease(int recordCount, bool withFiles)
+    {
+        var entries = Enumerable.Range(0, recordCount).Select(index => new PublishedRecordEntry
+        {
+            RecordId = index.ToString("x32"),
+            RevisionNumber = 1,
+            Headline = $"Seeded {index}",
+            FirstPublishedAtUtc = ApprovedAt.AddMinutes(-index)
+        }).ToArray();
+        var manifest = new PublicationRelease
+        {
+            SchemaVersion = PublicationProtocol.SchemaVersion,
+            ReleaseNumber = 1,
+            PublishedAtUtc = ApprovedAt,
+            Records = entries
+        };
+        var files = new Dictionary<string, byte[]>
+        {
+            [PublicationProtocol.ManifestPath] = JsonSerializer.SerializeToUtf8Bytes(manifest, PublicationProtocol.JsonOptions)
+        };
+        if (withFiles)
+            foreach (var entry in entries)
+            {
+                files[PublicationProtocol.RecordDataPath(entry.RecordId)] = [];
+                files[PublicationProtocol.RecordPagePath(entry.RecordId)] = [];
+            }
+        Releases.Directories["seeded"] = files;
+        Releases.Active = "seeded";
+        Publications.Committed.Add(new(1, "seeded", ApprovedAt, recordCount));
+    }
 
     public static PublishDocumentChangesRequest Request(string key, params string[] draftIds) => new([.. draftIds], key);
 
@@ -69,8 +101,8 @@ internal sealed class FakeRenderer : IReleaseRenderer
     public IReadOnlyList<ReleaseAsset> Assets { get; } = [new("assets/site.css", [1, 2, 3])];
     public Task<string> RenderRecordAsync(PublishedDocumentChange record, CancellationToken cancellationToken) =>
         Task.FromResult($"<html>{record.RecordId}</html>");
-    public Task<string> RenderIndexAsync(PublicationRelease release, CancellationToken cancellationToken) =>
-        Task.FromResult($"<html>index {release.Records.Length}</html>");
+    public Task<string> RenderIndexAsync(PublicationRelease release, int page, CancellationToken cancellationToken) =>
+        Task.FromResult($"<html>index {page} {release.Records.Length}</html>");
 }
 
 internal sealed class FakePublicationStore : IPublicationStore

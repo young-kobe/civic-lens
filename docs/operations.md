@@ -379,7 +379,7 @@ To check that the public pages work without the operational application, stop th
 python3 -m http.server 8090 --bind 127.0.0.1 --directory "$CIVIC_LENS_RELEASE_DIRECTORY/current"
 ```
 
-Open `http://127.0.0.1:8090/`. The index lists the published records; each record page shows the account, the changes, the citations, and both full document versions. The production static server remains a deployment decision.
+Open `http://127.0.0.1:8090/`. The site holds at most 2,000 published records. The index shows 50 records per page, with links to the previous and next pages. Each record page shows the account, the changes, the citations, and both full document versions. The production static server remains a deployment decision.
 
 ### Remaining operations
 

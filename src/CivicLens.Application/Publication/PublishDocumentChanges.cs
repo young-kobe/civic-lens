@@ -101,8 +101,11 @@ public sealed class PublishDocumentChanges(IPublicationStore publications, IRele
         manifest.Validate();
         foreach (var asset in renderer.Assets)
             await staging.WriteFileAsync(asset.RelativePath, asset.Content, cancellationToken);
-        var index = await renderer.RenderIndexAsync(manifest, cancellationToken);
-        await staging.WriteFileAsync(PublicationProtocol.IndexPagePath, Encoding.UTF8.GetBytes(index), cancellationToken);
+        for (var page = 1; page <= PublicationProtocol.IndexPageCount(entries.Count); page++)
+        {
+            var index = await renderer.RenderIndexAsync(manifest, page, cancellationToken);
+            await staging.WriteFileAsync(PublicationProtocol.IndexPagePath(page), Encoding.UTF8.GetBytes(index), cancellationToken);
+        }
         await staging.WriteFileAsync(PublicationProtocol.ManifestPath,
             JsonSerializer.SerializeToUtf8Bytes(manifest, PublicationProtocol.JsonOptions), cancellationToken);
         return (await staging.CompleteAsync(number, cancellationToken), entries);

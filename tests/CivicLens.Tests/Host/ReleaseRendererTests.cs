@@ -91,13 +91,48 @@ public sealed class ReleaseRendererTests
             ]
         };
 
-        var html = await new ReleaseRenderer().RenderIndexAsync(release, CancellationToken.None);
+        var html = await new ReleaseRenderer().RenderIndexAsync(release, 1, CancellationToken.None);
 
         Assert.Contains($"href=\"records/{new string('c', 32)}.html\"", html, StringComparison.Ordinal);
         Assert.Contains("Headline &lt;i&gt;one&lt;/i&gt;", html, StringComparison.Ordinal);
         Assert.Contains("Release 4", html, StringComparison.Ordinal);
         Assert.Contains("href=\"assets/theme.css\"", html, StringComparison.Ordinal);
         Assert.DoesNotContain("Private", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("Page 1 of", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("rel=\"prev\"", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("rel=\"next\"", html, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(1, 50, 0, "Page 1 of 3", false, "page-2.html")]
+    [InlineData(2, 50, 50, "Page 2 of 3", true, "page-3.html")]
+    [InlineData(3, 20, 100, "Page 3 of 3", true, null)]
+    public async Task IndexPageShowsOnlyItsSliceInManifestOrderWithPagerLinksWhereTheyApply(
+        int page, int expectedCount, int firstIndex, string label, bool hasPrevious, string? next)
+    {
+        var release = ReleaseOf(120);
+
+        var html = await new ReleaseRenderer().RenderIndexAsync(release, page, CancellationToken.None);
+
+        var shown = Regex.Matches(html, "href=\"records/([0-9a-f]{32})\\.html\"").Select(match => match.Groups[1].Value).ToList();
+        Assert.Equal(release.Records.Skip(firstIndex).Take(expectedCount).Select(entry => entry.RecordId), shown);
+        Assert.Contains(label, html, StringComparison.Ordinal);
+        Assert.Equal(hasPrevious, html.Contains("rel=\"prev\"", StringComparison.Ordinal));
+        if (hasPrevious)
+            Assert.Contains(page == 2 ? "rel=\"prev\" href=\"index.html\"" : "rel=\"prev\" href=\"page-2.html\"", html, StringComparison.Ordinal);
+        Assert.Equal(next is not null, html.Contains("rel=\"next\"", StringComparison.Ordinal));
+        if (next is not null) Assert.Contains($"rel=\"next\" href=\"{next}\"", html, StringComparison.Ordinal);
+        Assert.Contains("href=\"assets/theme.css\"", html, StringComparison.Ordinal);
+        Assert.DoesNotMatch(new Regex("(?:href|src)=\"(?:/|//|https?:)"), html);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(4)]
+    public async Task IndexPageRejectsAPageOutsideTheRelease(int page)
+    {
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
+            new ReleaseRenderer().RenderIndexAsync(ReleaseOf(120), page, CancellationToken.None));
     }
 
     [Fact]
@@ -108,6 +143,20 @@ public sealed class ReleaseRendererTests
         Assert.Contains(assets, asset => asset.RelativePath == "assets/theme.css" && asset.Content.Length > 0);
         Assert.Contains(assets, asset => asset.RelativePath == "assets/diff.js" && asset.Content.Length > 0);
     }
+
+    private static PublicationRelease ReleaseOf(int count) => new()
+    {
+        SchemaVersion = PublicationProtocol.SchemaVersion,
+        ReleaseNumber = 4,
+        PublishedAtUtc = new DateTimeOffset(2026, 5, 11, 8, 0, 0, TimeSpan.Zero),
+        Records = [.. Enumerable.Range(0, count).Select(index => new PublishedRecordEntry
+        {
+            RecordId = index.ToString("x32"),
+            RevisionNumber = 1,
+            Headline = $"Headline {index}",
+            FirstPublishedAtUtc = new DateTimeOffset(2026, 5, 11, 8, 0, 0, TimeSpan.Zero).AddMinutes(-index)
+        })]
+    };
 
     private static string MarkedText(string html, string id)
     {
