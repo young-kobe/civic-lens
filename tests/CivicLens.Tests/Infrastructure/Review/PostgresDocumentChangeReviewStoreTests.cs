@@ -3,6 +3,7 @@ using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using CivicLens.Application.Publication;
 using CivicLens.Application.Review;
 using CivicLens.Application.Collection;
 using CivicLens.Collection.Contracts;
@@ -223,22 +224,36 @@ public sealed class PostgresDocumentChangeReviewStoreTests(PostgresCollection po
     }
 
     [Fact]
-    public async Task PublicationReadUsesTheSameQueryCountForOneDraftAndSixtyFourSoLargeReleasesStayCheap()
+    public async Task PublicationReadAcceptsTheLargestPublishWithTheSameQueryCountAsOneDraft()
     {
-        var drafts = await CreateDraftsAsync(64);
+        var drafts = await CreateDraftsAsync(PublishDocumentChanges.MaximumDrafts);
         var counter = new ReadCommandCounter();
-        var counted = new PostgresDocumentChangeReviewStore(new PooledDbContextFactory<CollectionAttemptDbContext>(
-            new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString)
-                .AddInterceptors(counter).Options));
+        var counted = CountedStore(counter);
 
         await counted.GetForPublicationAsync([drafts[0].DraftId], default);
         var singleDraftReads = counter.ReadCount;
         counter.ReadCount = 0;
         var batch = await counted.GetForPublicationAsync([.. drafts.Select(draft => draft.DraftId)], default);
 
-        Assert.Equal(64, batch.Count);
+        Assert.Equal(PublishDocumentChanges.MaximumDrafts, batch.Count);
         Assert.Equal(singleDraftReads, counter.ReadCount);
         Assert.InRange(counter.ReadCount, 1, 7);
+    }
+
+    [Fact]
+    public async Task ReviewListUsesTheSameQueryCountForOneDraftAndAFullPageSoTheQueueStaysCheap()
+    {
+        await CreateDraftsAsync(20);
+        var counter = new ReadCommandCounter();
+        var counted = CountedStore(counter);
+
+        await counted.ListAsync(null, 1, default);
+        var singleDraftReads = counter.ReadCount;
+        counter.ReadCount = 0;
+        var page = await counted.ListAsync(null, 20, default);
+
+        Assert.Equal(20, page.Items.Length);
+        Assert.Equal(singleDraftReads, counter.ReadCount);
     }
 
     [Fact]
@@ -303,6 +318,11 @@ public sealed class PostgresDocumentChangeReviewStoreTests(PostgresCollection po
         try { return await task; }
         catch (DocumentChangeReviewConflictException exception) { return exception; }
     }
+
+    private PostgresDocumentChangeReviewStore CountedStore(ReadCommandCounter counter) =>
+        new(new PooledDbContextFactory<CollectionAttemptDbContext>(
+            new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString)
+                .AddInterceptors(counter).Options));
 
     private sealed class ReadCommandCounter : DbCommandInterceptor
     {

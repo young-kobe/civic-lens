@@ -201,11 +201,13 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
         var rows = await db.Set<DocumentChangeDraftRow>().AsNoTracking()
             .Where(row => cursor == null || string.Compare(row.DraftId, cursor) > 0)
             .OrderBy(row => row.DraftId).Take(limit + 1).ToArrayAsync(cancellationToken);
-        var hasMore = rows.Length > limit;
-        var items = ImmutableArray.CreateBuilder<DocumentChangeReviewListItem>(Math.Min(limit, rows.Length));
-        foreach (var row in rows.Take(limit)) items.Add(await ReadListItemAsync(db, row, cancellationToken));
+        var page = rows.Take(limit).ToArray();
+        var ids = page.Select(row => row.DraftId).ToArray();
+        var revisions = await ReadRevisionRowsAsync(db, ids, cancellationToken);
+        var decisions = await ReadDecisionRowsAsync(db, ids, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
-        return new(items.ToImmutable(), hasMore ? rows[limit - 1].DraftId : null);
+        var items = page.Select(row => ToListItem(row, revisions[row.DraftId], decisions[row.DraftId])).ToImmutableArray();
+        return new(items, rows.Length > limit ? rows[limit - 1].DraftId : null);
     }
 
     public async Task<EligibleDocumentComparisonPage> ListEligibleComparisonsAsync(string? cursor, int limit,
@@ -401,10 +403,6 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
         return rows.ToLookup(row => row.DraftId, StringComparer.Ordinal);
     }
 
-    private static async Task<ImmutableArray<DocumentChangeDraftRevision>> ReadRevisionsAsync(
-        CollectionAttemptDbContext db, DocumentChangeDraftRow draft, CancellationToken cancellationToken) =>
-        ParseRevisions(draft, (await ReadRevisionRowsAsync(db, [draft.DraftId], cancellationToken))[draft.DraftId]);
-
     private static ImmutableArray<DocumentChangeDraftRevision> ParseRevisions(DocumentChangeDraftRow draft,
         IEnumerable<DocumentChangeRevisionRow> rows)
     {
@@ -421,10 +419,6 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
         foreach (var revision in revisions) ValidateRevisionShape(revision);
         return revisions;
     }
-
-    private static async Task<ImmutableArray<ReviewDecision>> ReadDecisionsAsync(
-        CollectionAttemptDbContext db, DocumentChangeDraftRow draft, CancellationToken cancellationToken) =>
-        ParseDecisions(draft, (await ReadDecisionRowsAsync(db, [draft.DraftId], cancellationToken))[draft.DraftId]);
 
     private static ImmutableArray<ReviewDecision> ParseDecisions(DocumentChangeDraftRow draft,
         IEnumerable<ReviewDecisionRow> rows)
@@ -465,11 +459,11 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
         }
     }
 
-    private static async Task<DocumentChangeReviewListItem> ReadListItemAsync(CollectionAttemptDbContext db,
-        DocumentChangeDraftRow draft, CancellationToken cancellationToken)
+    private static DocumentChangeReviewListItem ToListItem(DocumentChangeDraftRow draft,
+        IEnumerable<DocumentChangeRevisionRow> revisionRows, IEnumerable<ReviewDecisionRow> decisionRows)
     {
-        var revisions = await ReadRevisionsAsync(db, draft, cancellationToken);
-        var decisions = await ReadDecisionsAsync(db, draft, cancellationToken);
+        var revisions = ParseRevisions(draft, revisionRows);
+        var decisions = ParseDecisions(draft, decisionRows);
         ValidateDecisionHistory(draft.DraftId, revisions, decisions);
         var currentRevision = revisions[^1];
         var concerns = DocumentChangeReviewPolicy.GetUnresolvedConcerns(decisions);

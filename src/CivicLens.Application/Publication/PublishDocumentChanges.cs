@@ -10,6 +10,8 @@ namespace CivicLens.Application.Publication;
 public sealed class PublishDocumentChanges(IPublicationStore publications, IReleaseDirectory releases,
     IReleaseRenderer renderer, IDocumentChangeReviewStore reviews, PublicationCatalog catalog, TimeProvider clock)
 {
+    public const int MaximumDrafts = 64;
+
     private readonly PublishedRecordBuilder builder = new(catalog);
 
     public async Task<PublicationReleaseSummary> ExecuteAsync(ReviewActor actor, PublishDocumentChangesRequest request,
@@ -57,8 +59,8 @@ public sealed class PublishDocumentChanges(IPublicationStore publications, IRele
         ArgumentNullException.ThrowIfNull(request);
         ReviewValidation.ValidateIdempotencyKey(request.IdempotencyKey);
         var ids = request.DraftIds;
-        if (ids.IsDefaultOrEmpty || ids.Length > 64)
-            throw new ArgumentException("Select 1 to 64 drafts to publish.", nameof(request));
+        if (ids.IsDefaultOrEmpty || ids.Length > MaximumDrafts)
+            throw new ArgumentException($"Select 1 to {MaximumDrafts} drafts to publish.", nameof(request));
         foreach (var id in ids) ReviewValidation.ValidateDraftId(id);
         if (ids.Distinct(StringComparer.Ordinal).Count() != ids.Length)
             throw new ArgumentException("Selected drafts must be distinct.", nameof(request));
