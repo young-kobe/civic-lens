@@ -10,7 +10,6 @@ public sealed class ReleaseCommandTests
     [InlineData("releases", "publish", "key")]
     [InlineData("releases", "list", "abc")]
     [InlineData("releases", "list", "0")]
-    [InlineData("releases", "list", "101")]
     [InlineData("releases", "list", "5", "6")]
     [InlineData("releases", "activate")]
     [InlineData("releases", "activate", "x")]
@@ -24,6 +23,27 @@ public sealed class ReleaseCommandTests
         var exit = await ReleaseCommand.ExecuteAsync(args, null!, null!, null!, owner, CancellationToken.None);
 
         Assert.Equal(2, exit);
+    }
+
+    [Fact]
+    public async Task OutOfRangeListLimitShowsTheHandlerRuleToTheOwner()
+    {
+        var owner = new ReviewActor("auth0|owner", ReviewRole.Owner);
+        var list = new ListPublicationReleases(null!, null!);
+        var error = new StringWriter();
+        var original = Console.Error;
+        Console.SetError(error);
+        try
+        {
+            var exit = await ReleaseCommand.ExecuteAsync(["releases", "list", "101"], null!, list, null!, owner, CancellationToken.None);
+
+            Assert.Equal(2, exit);
+            Assert.Contains("Page limit must be from 1 to 100.", error.ToString(), StringComparison.Ordinal);
+        }
+        finally
+        {
+            Console.SetError(original);
+        }
     }
 
     [Fact]

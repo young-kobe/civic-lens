@@ -44,7 +44,8 @@ public sealed class PublicationReleaseHandlersTests
             .ExecuteAsync(PublicationScenario.Reviewer, 10);
 
         Assert.Single(list.Releases);
-        Assert.Equal("release-1", list.ActiveDirectoryName);
+        Assert.Equal(1, list.ActiveReleaseNumber);
+        Assert.Equal("release-1", list.ServedDirectoryName);
     }
 
     [Theory]

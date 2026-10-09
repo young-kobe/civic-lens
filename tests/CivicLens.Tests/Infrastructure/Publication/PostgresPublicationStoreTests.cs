@@ -98,7 +98,7 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
 
         await Assert.ThrowsAsync<PublicationConflictException>(() =>
             publications.CommitAsync(Owner.Subject, Commit(1, draft.DraftId, 1, 0), "key", Hash(1), default));
-        Assert.Null(await publications.GetLatestAsync(default));
+        Assert.Equal(new PublicationState(0, null), await publications.GetStateAsync(default));
     }
 
     [Fact]
@@ -152,12 +152,33 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
             await publications.CommitAsync(Owner.Subject, Commit(number, draft, 1, 0), $"key-{number}", Hash(number), default);
 
         Assert.Equal([3, 2], (await publications.ListAsync(2, default)).Select(release => release.ReleaseNumber));
-        Assert.Equal(3, (await publications.GetLatestAsync(default))!.ReleaseNumber);
-        var second = await publications.GetAsync(2, default);
-        Assert.Equal(PublishedAt, second!.PublishedAtUtc);
+        var second = (await publications.ListAsync(2, default))[1];
+        Assert.Equal(PublishedAt, second.PublishedAtUtc);
         Assert.Equal(1, second.RecordCount);
-        Assert.Null(await publications.GetAsync(9, default));
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => publications.ListAsync(0, default));
+    }
+
+    [Fact]
+    public async Task EachCommitBecomesTheActiveReleaseSoAFailedLinkSwapCannotHideIt()
+    {
+        var draft = await CreateDraftAsync();
+        await publications.CommitAsync(Owner.Subject, Commit(1, draft, 1, 0), "key-1", Hash(1), default);
+        var second = await publications.CommitAsync(Owner.Subject, Commit(2, draft, 1, 0), "key-2", Hash(2), default);
+
+        Assert.Equal(new PublicationState(2, second), await publications.GetStateAsync(default));
+    }
+
+    [Fact]
+    public async Task RollbackKeepsTheLatestNumberButMovesTheActiveRelease()
+    {
+        var draft = await CreateDraftAsync();
+        var first = await publications.CommitAsync(Owner.Subject, Commit(1, draft, 1, 0), "key-1", Hash(1), default);
+        await publications.CommitAsync(Owner.Subject, Commit(2, draft, 1, 0), "key-2", Hash(2), default);
+
+        Assert.Equal(first, await publications.ActivateAsync(1, default));
+        Assert.Equal(new PublicationState(2, first), await publications.GetStateAsync(default));
+        await Assert.ThrowsAsync<ArgumentException>(() => publications.ActivateAsync(9, default));
+        Assert.Equal(first, (await publications.GetStateAsync(default)).Active);
     }
 
     private static PublicationCommit Commit(int number, string draftId, int revision, int reviewStateVersion) => new(number,

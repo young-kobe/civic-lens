@@ -15,20 +15,18 @@ internal sealed class PreviousRelease
 
     public IReadOnlyList<PublishedRecordEntry> Entries { get; }
 
-    public static async Task<PreviousRelease> LoadAsync(IReleaseDirectory releases, IPublicationStore publications,
-        PublicationReleaseSummary? latest, CancellationToken cancellationToken)
+    public static async Task<PreviousRelease> LoadAsync(IReleaseDirectory releases, PublicationReleaseSummary? active,
+        CancellationToken cancellationToken)
     {
-        if (latest is null) return new(null, []);
-        var directory = await releases.GetActiveAsync(cancellationToken) ?? latest.DirectoryName;
-        var bytes = await releases.ReadFileAsync(directory, PublicationProtocol.ManifestPath,
+        if (active is null) return new(null, []);
+        var bytes = await releases.ReadFileAsync(active.DirectoryName, PublicationProtocol.ManifestPath,
             PublicationProtocol.MaximumRecordFileBytes, cancellationToken);
         var manifest = JsonSerializer.Deserialize<PublicationRelease>(bytes, PublicationProtocol.JsonOptions)
             ?? throw new InvalidDataException("Release manifest is empty.");
         manifest.Validate();
-        var recorded = await publications.GetAsync(manifest.ReleaseNumber, cancellationToken);
-        if (recorded?.DirectoryName != directory)
-            throw new InvalidDataException("Release manifest does not match a recorded release.");
-        return new(directory, manifest.Records);
+        if (manifest.ReleaseNumber != active.ReleaseNumber)
+            throw new InvalidDataException("Release manifest does not match the active release.");
+        return new(active.DirectoryName, manifest.Records);
     }
 
     public PublishedRecordEntry? Find(string recordId) =>

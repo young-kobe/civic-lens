@@ -158,13 +158,11 @@ public sealed class FileReleaseDirectoryTests : IDisposable
     }
 
     [Fact]
-    public async Task TheActiveReleaseCannotBeDeletedButAnEarlierOneCan()
+    public async Task DeletingRemovesOnlyTheNamedRelease()
     {
         var first = await BuildReleaseAsync(1, "one");
         var second = await BuildReleaseAsync(2, "two");
-        await releases.ActivateAsync(second, default);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => releases.DeleteAsync(second, default));
         await releases.DeleteAsync(first, default);
 
         Assert.False(Directory.Exists(Path.Combine(root, "releases", first)));

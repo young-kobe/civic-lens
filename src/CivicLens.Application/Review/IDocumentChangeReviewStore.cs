@@ -17,7 +17,8 @@ public interface IDocumentChangeReviewStore
         CancellationToken cancellationToken);
 
     Task<DocumentChangeReview?> GetAsync(string draftId, CancellationToken cancellationToken);
-    Task<EligibleDocumentComparison?> GetEligibleComparisonAsync(string comparisonId, CancellationToken cancellationToken);
+    Task<IReadOnlyDictionary<string, PublishableDocumentChange>> GetForPublicationAsync(
+        IReadOnlyCollection<string> draftIds, CancellationToken cancellationToken);
     Task<DocumentChangeReviewPage> ListAsync(string? cursor, int limit, CancellationToken cancellationToken);
     Task<EligibleDocumentComparisonPage> ListEligibleComparisonsAsync(string? cursor, int limit,
         CancellationToken cancellationToken);

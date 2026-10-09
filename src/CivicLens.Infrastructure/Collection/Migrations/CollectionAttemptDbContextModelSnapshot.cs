@@ -759,6 +759,10 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("character varying(64)")
                         .HasColumnName("directory_name");
 
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
                     b.Property<long>("PublishedAtUtcTicks")
                         .HasColumnType("bigint")
                         .HasColumnName("published_at_utc_ticks");
@@ -776,6 +780,10 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.HasIndex("DirectoryName")
                         .IsUnique();
+
+                    b.HasIndex("IsActive")
+                        .IsUnique()
+                        .HasFilter("is_active");
 
                     b.ToTable("publication_releases", null, t =>
                         {

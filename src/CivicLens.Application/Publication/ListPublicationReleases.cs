@@ -9,8 +9,9 @@ public sealed class ListPublicationReleases(IPublicationStore publications, IRel
         CancellationToken cancellationToken = default)
     {
         ReviewAuthorization.RequireReviewer(actor);
-        if (limit is < 1 or > 100) throw new ArgumentOutOfRangeException(nameof(limit), "Limit must be from 1 to 100.");
+        ReviewValidation.ValidatePage(null, limit);
         var items = await publications.ListAsync(limit, cancellationToken);
-        return new(items, await releases.GetActiveAsync(cancellationToken));
+        var state = await publications.GetStateAsync(cancellationToken);
+        return new(items, state.Active?.ReleaseNumber, await releases.GetActiveAsync(cancellationToken));
     }
 }

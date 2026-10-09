@@ -25,6 +25,24 @@ public sealed class ReleaseRendererTests
         Assert.Contains("href=\"#cite-2\"", html, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("cite-1")]
+    [InlineData("cite-2")]
+    [InlineData("cite-change-date")]
+    public async Task CitedTextIsNeverInsideAClosedDetailsElementSoLinksWorkWithoutScript(string anchor)
+    {
+        var html = await new ReleaseRenderer().RenderRecordAsync(Record(), CancellationToken.None);
+        var before = html[..html.IndexOf($"id=\"{anchor}\"", StringComparison.Ordinal)];
+        var open = new Stack<string>();
+        foreach (Match tag in Regex.Matches(before, "<details[^>]*>|</details>"))
+        {
+            if (tag.Value == "</details>") open.Pop();
+            else open.Push(tag.Value);
+        }
+
+        Assert.All(open, tag => Assert.Matches(new Regex(@"\sopen[\s>=]"), tag));
+    }
+
     [Fact]
     public async Task RecordPageIsPublicStaticAndRelative()
     {

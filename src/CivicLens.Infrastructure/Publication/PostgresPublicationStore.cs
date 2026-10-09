@@ -27,20 +27,13 @@ public sealed partial class PostgresPublicationStore(IDbContextFactory<Collectio
         return new(new PooledDbContextFactory<CollectionAttemptDbContext>(options));
     }
 
-    public async Task<PublicationReleaseSummary?> GetLatestAsync(CancellationToken cancellationToken)
+    public async Task<PublicationState> GetStateAsync(CancellationToken cancellationToken)
     {
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        var row = await db.Set<PublicationReleaseRow>().AsNoTracking()
-            .OrderByDescending(candidate => candidate.ReleaseNumber).FirstOrDefaultAsync(cancellationToken);
-        return row is null ? null : ToSummary(row);
-    }
-
-    public async Task<PublicationReleaseSummary?> GetAsync(int releaseNumber, CancellationToken cancellationToken)
-    {
-        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        var row = await db.Set<PublicationReleaseRow>().AsNoTracking()
-            .SingleOrDefaultAsync(candidate => candidate.ReleaseNumber == releaseNumber, cancellationToken);
-        return row is null ? null : ToSummary(row);
+        var releases = db.Set<PublicationReleaseRow>().AsNoTracking();
+        var latest = await releases.MaxAsync(row => (int?)row.ReleaseNumber, cancellationToken) ?? 0;
+        var active = await releases.SingleOrDefaultAsync(row => row.IsActive, cancellationToken);
+        return new(latest, active is null ? null : ToSummary(active));
     }
 
     public async Task<IReadOnlyList<PublicationReleaseSummary>> ListAsync(int limit, CancellationToken cancellationToken)
@@ -51,6 +44,20 @@ public sealed partial class PostgresPublicationStore(IDbContextFactory<Collectio
         var rows = await db.Set<PublicationReleaseRow>().AsNoTracking()
             .OrderByDescending(candidate => candidate.ReleaseNumber).Take(limit).ToListAsync(cancellationToken);
         return rows.Select(ToSummary).ToList();
+    }
+
+    public async Task<PublicationReleaseSummary> ActivateAsync(int releaseNumber, CancellationToken cancellationToken)
+    {
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        await using var transaction = await PostgresDocumentChangeReviewStore.BeginWriteAsync(db, cancellationToken);
+        var row = await db.Set<PublicationReleaseRow>().AsNoTracking()
+            .SingleOrDefaultAsync(candidate => candidate.ReleaseNumber == releaseNumber, cancellationToken)
+            ?? throw new ArgumentException($"Release {releaseNumber} has not been committed.", nameof(releaseNumber));
+        await ClearActiveAsync(db, cancellationToken);
+        await db.Set<PublicationReleaseRow>().Where(candidate => candidate.ReleaseNumber == releaseNumber)
+            .ExecuteUpdateAsync(update => update.SetProperty(candidate => candidate.IsActive, true), cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return ToSummary(row);
     }
 
     public async Task<PublicationReleaseSummary?> FindReplayAsync(string actorSubject, string idempotencyKey,
@@ -77,6 +84,7 @@ public sealed partial class PostgresPublicationStore(IDbContextFactory<Collectio
 
         await RequireNextReleaseNumberAsync(db, commit.ReleaseNumber, cancellationToken);
         await RequireUnchangedReviewStateAsync(db, commit.AddedRecords, cancellationToken);
+        await ClearActiveAsync(db, cancellationToken);
         var summary = new PublicationReleaseSummary(commit.ReleaseNumber, commit.DirectoryName,
             commit.PublishedAtUtc, commit.Records.Length);
         db.Add(ToRow(actorSubject, commit));
@@ -104,6 +112,10 @@ public sealed partial class PostgresPublicationStore(IDbContextFactory<Collectio
             throw new PublicationConflictException("Another release already took this number or directory.");
         }
     }
+
+    private static Task ClearActiveAsync(CollectionAttemptDbContext db, CancellationToken cancellationToken) =>
+        db.Set<PublicationReleaseRow>().Where(row => row.IsActive)
+            .ExecuteUpdateAsync(update => update.SetProperty(row => row.IsActive, false), cancellationToken);
 
     private static async Task RequireNextReleaseNumberAsync(CollectionAttemptDbContext db, int releaseNumber,
         CancellationToken cancellationToken)
@@ -150,7 +162,8 @@ public sealed partial class PostgresPublicationStore(IDbContextFactory<Collectio
         ActorSubject = actorSubject,
         PublishedAtUtcTicks = commit.PublishedAtUtc.UtcTicks,
         RecordCount = commit.Records.Length,
-        RecordsJson = JsonSerializer.Serialize(commit.Records, JsonOptions)
+        RecordsJson = JsonSerializer.Serialize(commit.Records, JsonOptions),
+        IsActive = true
     };
 
     private static PublicationReleaseSummary ToSummary(PublicationReleaseRow row) => new(row.ReleaseNumber,
@@ -161,8 +174,8 @@ public sealed partial class PostgresPublicationStore(IDbContextFactory<Collectio
         ArgumentNullException.ThrowIfNull(commit);
         ArgumentOutOfRangeException.ThrowIfLessThan(commit.ReleaseNumber, 1);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(commit.ReleaseNumber, 999_999);
-        if (!DirectoryNamePattern().IsMatch(commit.DirectoryName) ||
-            !commit.DirectoryName.StartsWith($"{commit.ReleaseNumber:D6}-", StringComparison.Ordinal))
+        ReleasePaths.RequireDirectoryName(commit.DirectoryName);
+        if (!commit.DirectoryName.StartsWith($"{commit.ReleaseNumber:D6}-", StringComparison.Ordinal))
             throw new ArgumentException("Release directory name does not match the release number.", nameof(commit));
         if (commit.Records.IsDefault || commit.AddedRecords.IsDefault)
             throw new ArgumentException("Release records are required.", nameof(commit));
@@ -179,9 +192,6 @@ public sealed partial class PostgresPublicationStore(IDbContextFactory<Collectio
         if (!HashPattern().IsMatch(hash ?? string.Empty))
             throw new ArgumentException("Payload hash must be a lowercase SHA-256 value.", nameof(hash));
     }
-
-    [GeneratedRegex("^[0-9]{6}-[0-9a-f]{32}$")]
-    private static partial Regex DirectoryNamePattern();
 
     [GeneratedRegex("^[0-9a-f]{64}$")]
     private static partial Regex HashPattern();

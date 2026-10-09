@@ -1,6 +1,5 @@
 using System.Collections.Immutable;
 using System.Text.Json;
-using CivicLens.Application.Documents;
 using CivicLens.Application.Publication;
 using CivicLens.Application.Review;
 using CivicLens.Core.Collection;
@@ -20,10 +19,9 @@ internal sealed class PublicationScenario
     public FakePublicationStore Publications { get; } = new();
     public FakeReleaseDirectory Releases { get; } = new();
     public FakeReviewStore Reviews { get; } = new();
-    public FakeExtractionStore Extractions { get; } = new();
     public Dictionary<string, string> OfficialNames { get; } = new() { ["mayor"] = "Mayor Example" };
 
-    public PublishDocumentChanges Publisher() => new(Publications, Releases, new FakeRenderer(), Reviews, Extractions,
+    public PublishDocumentChanges Publisher() => new(Publications, Releases, new FakeRenderer(), Reviews,
         new PublicationCatalog(OfficialNames), Clock);
 
     public void SeedRelease(int recordCount, bool withFiles)
@@ -55,6 +53,7 @@ internal sealed class PublicationScenario
         Releases.Directories["seeded"] = files;
         Releases.Active = "seeded";
         Publications.Committed.Add(new(1, "seeded", ApprovedAt, recordCount));
+        Publications.ActiveReleaseNumber = 1;
     }
 
     public static PublishDocumentChangesRequest Request(string key, params string[] draftIds) => new([.. draftIds], key);
@@ -66,17 +65,16 @@ internal sealed class PublicationScenario
         var before = Extraction($"alpha\nold {id}\nomega\n", $"before-{id}");
         var after = Extraction($"alpha\nnew {id}\nomega\n", $"after-{id}");
         var comparison = DocumentComparison.Create(before, after);
-        Extractions.Items[before.ExtractionId] = before;
-        Extractions.Items[after.ExtractionId] = after;
-        Reviews.Comparisons[comparison.ComparisonId] = new EligibleDocumentComparison("source", "https://example.test/",
+        var eligible = new EligibleDocumentComparison("source", "https://example.test/",
             "https://example.test/before", "https://example.test/after", ApprovedAt.AddDays(-9), ApprovedAt.AddDays(-1), comparison);
 
         var revision = new DocumentChangeDraftRevision(draftId, 1, comparison.ComparisonId, "author", ApprovedAt,
             $"Headline {id}", "Summary", null, null, "City Council", null, null, [.. officialIds ?? []], ["housing"],
             [new(before.ExtractionId, citationStart, 5)]);
         var all = decisions ?? [Decision(draftId, 1, ReviewDecisionKind.Approve)];
-        Reviews.Items[draftId] = new(draftId, revision, all.Length, [revision], all,
+        var review = new DocumentChangeReview(draftId, revision, all.Length, [revision], all,
             DocumentChangeReviewPolicy.GetUnresolvedConcerns(all));
+        Reviews.Items[draftId] = new(review, eligible, before, after);
         return draftId;
     }
 
@@ -115,11 +113,19 @@ internal sealed class FakePublicationStore : IPublicationStore
     public Exception? FailOnCommit { get; set; }
     public PublicationReleaseSummary? ConcurrentWinner { get; set; }
 
-    public Task<PublicationReleaseSummary?> GetLatestAsync(CancellationToken cancellationToken) =>
-        Task.FromResult(Committed.LastOrDefault());
+    public int? ActiveReleaseNumber { get; set; }
 
-    public Task<PublicationReleaseSummary?> GetAsync(int releaseNumber, CancellationToken cancellationToken) =>
-        Task.FromResult(Committed.FirstOrDefault(item => item.ReleaseNumber == releaseNumber));
+    public Task<PublicationState> GetStateAsync(CancellationToken cancellationToken) =>
+        Task.FromResult(new PublicationState(Committed.Select(item => item.ReleaseNumber).DefaultIfEmpty().Max(),
+            Committed.SingleOrDefault(item => item.ReleaseNumber == ActiveReleaseNumber)));
+
+    public Task<PublicationReleaseSummary> ActivateAsync(int releaseNumber, CancellationToken cancellationToken)
+    {
+        var summary = Committed.SingleOrDefault(item => item.ReleaseNumber == releaseNumber)
+            ?? throw new ArgumentException($"Release {releaseNumber} has not been committed.");
+        ActiveReleaseNumber = releaseNumber;
+        return Task.FromResult(summary);
+    }
 
     public Task<IReadOnlyList<PublicationReleaseSummary>> ListAsync(int limit, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<PublicationReleaseSummary>>([.. Committed.AsEnumerable().Reverse().Take(limit)]);
@@ -141,6 +147,7 @@ internal sealed class FakePublicationStore : IPublicationStore
         LastCommit = commit;
         var summary = new PublicationReleaseSummary(commit.ReleaseNumber, commit.DirectoryName, commit.PublishedAtUtc, commit.Records.Length);
         Committed.Add(summary);
+        ActiveReleaseNumber = summary.ReleaseNumber;
         receipts[(actorSubject, idempotencyKey)] = (payloadHash, summary);
         return Task.FromResult(summary);
     }
@@ -160,6 +167,8 @@ internal sealed class FakeReleaseDirectory : IReleaseDirectory
     public int BeginCount { get; private set; }
     public int DiscardedStagings { get; set; }
     public string? Active { get; set; }
+    public Exception? FailOnDelete { get; set; }
+    public Exception? FailOnActivate { get; set; }
 
     public Task<IReleaseStaging> BeginAsync(CancellationToken cancellationToken)
     {
@@ -176,6 +185,7 @@ internal sealed class FakeReleaseDirectory : IReleaseDirectory
 
     public Task DeleteAsync(string directoryName, CancellationToken cancellationToken)
     {
+        if (FailOnDelete is not null) throw FailOnDelete;
         Directories.Remove(directoryName);
         Deleted.Add(directoryName);
         return Task.CompletedTask;
@@ -183,6 +193,7 @@ internal sealed class FakeReleaseDirectory : IReleaseDirectory
 
     public Task ActivateAsync(string directoryName, CancellationToken cancellationToken)
     {
+        if (FailOnActivate is not null) throw FailOnActivate;
         Active = directoryName;
         Activated.Add(directoryName);
         return Task.CompletedTask;
@@ -227,18 +238,20 @@ internal sealed class FakeReleaseDirectory : IReleaseDirectory
 
 internal sealed class FakeReviewStore : IDocumentChangeReviewStore
 {
-    public Dictionary<string, DocumentChangeReview> Items { get; } = [];
-    public Dictionary<string, EligibleDocumentComparison> Comparisons { get; } = [];
+    public Dictionary<string, PublishableDocumentChange> Items { get; } = [];
     public int ReadCount { get; private set; }
 
-    public Task<DocumentChangeReview?> GetAsync(string draftId, CancellationToken cancellationToken)
+    public Task<IReadOnlyDictionary<string, PublishableDocumentChange>> GetForPublicationAsync(
+        IReadOnlyCollection<string> draftIds, CancellationToken cancellationToken)
     {
         ReadCount++;
-        return Task.FromResult(Items.GetValueOrDefault(draftId));
+        IReadOnlyDictionary<string, PublishableDocumentChange> found = draftIds.Where(Items.ContainsKey)
+            .ToDictionary(id => id, id => Items[id]);
+        return Task.FromResult(found);
     }
 
-    public Task<EligibleDocumentComparison?> GetEligibleComparisonAsync(string comparisonId, CancellationToken cancellationToken) =>
-        Task.FromResult(Comparisons.GetValueOrDefault(comparisonId));
+    public Task<DocumentChangeReview?> GetAsync(string draftId, CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
 
     public Task<DocumentChangeDraftRevision> CreateAsync(string actorSubject, DocumentChangeDraftRevision revision,
         string idempotencyKey, string payloadHash, CancellationToken cancellationToken) => throw new NotSupportedException();
@@ -257,15 +270,4 @@ internal sealed class FakeReviewStore : IDocumentChangeReviewStore
 
     public Task<EligibleDocumentComparisonPage> ListEligibleComparisonsAsync(string? cursor, int limit,
         CancellationToken cancellationToken) => throw new NotSupportedException();
-}
-
-internal sealed class FakeExtractionStore : IDocumentExtractionStore
-{
-    public Dictionary<string, DocumentExtraction> Items { get; } = [];
-
-    public Task<DocumentExtraction?> GetAsync(string extractionId, CancellationToken cancellationToken) =>
-        Task.FromResult(Items.GetValueOrDefault(extractionId));
-
-    public Task<DocumentExtraction> SaveAsync(DocumentExtraction extraction, CancellationToken cancellationToken) =>
-        throw new NotSupportedException();
 }

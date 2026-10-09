@@ -1,4 +1,3 @@
-using CivicLens.Application.Documents;
 using CivicLens.Application.Review;
 using CivicLens.Core.Documents;
 using CivicLens.Core.Review;
@@ -6,8 +5,7 @@ using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Application.Publication;
 
-internal sealed class PublishedRecordBuilder(IDocumentChangeReviewStore reviews, IDocumentExtractionStore extractions,
-    PublicationCatalog catalog)
+internal sealed class PublishedRecordBuilder(PublicationCatalog catalog)
 {
     public static void RequirePublishable(DocumentChangeReview review)
     {
@@ -18,14 +16,11 @@ internal sealed class PublishedRecordBuilder(IDocumentChangeReviewStore reviews,
                 $"Draft {review.DraftId} is not approved or has unresolved concerns.", nameof(review));
     }
 
-    public async Task<PublishedDocumentChange> BuildAsync(DocumentChangeReview review,
-        PublishedRecordEntry? previous, DateTimeOffset now, CancellationToken cancellationToken)
+    public PublishedDocumentChange Build(PublishableDocumentChange change, PublishedRecordEntry? previous,
+        DateTimeOffset now)
     {
+        var (review, comparison, before, after) = change;
         var revision = review.CurrentRevision;
-        var comparison = await reviews.GetEligibleComparisonAsync(revision.ComparisonId, cancellationToken)
-            ?? throw new InvalidDataException($"Comparison for draft {review.DraftId} is missing.");
-        var before = await LoadExtractionAsync(comparison.Comparison.BeforeExtractionId, cancellationToken);
-        var after = await LoadExtractionAsync(comparison.Comparison.AfterExtractionId, cancellationToken);
 
         var record = new PublishedDocumentChange
         {
@@ -61,15 +56,6 @@ internal sealed class PublishedRecordBuilder(IDocumentChangeReviewStore reviews,
         };
         record.Validate();
         return record;
-    }
-
-    private async Task<DocumentExtraction> LoadExtractionAsync(string extractionId, CancellationToken cancellationToken)
-    {
-        var extraction = await extractions.GetAsync(extractionId, cancellationToken)
-            ?? throw new InvalidDataException("A compared extraction is missing.");
-        if (extraction.ExtractionId != extractionId)
-            throw new InvalidDataException("A retained extraction does not match its comparison.");
-        return extraction;
     }
 
     private PublishedOfficial[] MapOfficials(DocumentChangeReview review) =>

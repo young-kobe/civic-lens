@@ -21,6 +21,8 @@ internal sealed class PublicationReleaseRowConfiguration : IEntityTypeConfigurat
         builder.Property(row => row.PublishedAtUtcTicks).HasColumnName("published_at_utc_ticks").IsRequired();
         builder.Property(row => row.RecordCount).HasColumnName("record_count").IsRequired();
         builder.Property(row => row.RecordsJson).HasColumnName("records_json").IsRequired();
+        builder.Property(row => row.IsActive).HasColumnName("is_active").IsRequired();
         builder.HasIndex(row => row.DirectoryName).IsUnique();
+        builder.HasIndex(row => row.IsActive).IsUnique().HasFilter("is_active");
     }
 }

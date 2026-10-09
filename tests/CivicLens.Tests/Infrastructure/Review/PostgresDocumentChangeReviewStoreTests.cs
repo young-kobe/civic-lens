@@ -1,6 +1,8 @@
+using System.Data.Common;
 using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using CivicLens.Application.Review;
 using CivicLens.Application.Collection;
 using CivicLens.Collection.Contracts;
@@ -11,6 +13,7 @@ using CivicLens.Infrastructure.Review;
 using CivicLens.Tests.Host;
 using CivicLens.Tests.Infrastructure.Collection;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Npgsql;
 using static CivicLens.Tests.Fixtures.CollectionFixtures;
@@ -196,6 +199,77 @@ public sealed class PostgresDocumentChangeReviewStoreTests(PostgresCollection po
         await Assert.ThrowsAsync<ArgumentException>(() => reviews.ListAsync(null, 10, default));
     }
 
+    [Fact]
+    public async Task PublicationReadReturnsTheSameVerifiedReviewAsTheSingleDraftRead()
+    {
+        var drafts = await CreateDraftsAsync(3);
+        var missing = new string('f', 32);
+
+        var batch = await reviews.GetForPublicationAsync([.. drafts.Select(draft => draft.DraftId), missing], default);
+
+        Assert.Equal(3, batch.Count);
+        Assert.False(batch.ContainsKey(missing));
+        foreach (var draft in drafts)
+        {
+            var change = batch[draft.DraftId];
+            var single = await reviews.GetAsync(draft.DraftId, default);
+            Assert.Equal(JsonSerializer.Serialize(single), JsonSerializer.Serialize(change.Review));
+            Assert.Equal(draft.ComparisonId, change.Comparison.Comparison.ComparisonId);
+            Assert.Equal(change.Comparison.Comparison.BeforeExtractionId, change.Before.ExtractionId);
+            Assert.Equal(change.Comparison.Comparison.AfterExtractionId, change.After.ExtractionId);
+            Assert.Equal("Policy before.", change.Before.Text);
+            Assert.Equal("Policy after.", change.After.Text);
+        }
+    }
+
+    [Fact]
+    public async Task PublicationReadUsesTheSameQueryCountForOneDraftAndSixtyFourSoLargeReleasesStayCheap()
+    {
+        var drafts = await CreateDraftsAsync(64);
+        var counter = new ReadCommandCounter();
+        var counted = new PostgresDocumentChangeReviewStore(new PooledDbContextFactory<CollectionAttemptDbContext>(
+            new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString)
+                .AddInterceptors(counter).Options));
+
+        await counted.GetForPublicationAsync([drafts[0].DraftId], default);
+        var singleDraftReads = counter.ReadCount;
+        counter.ReadCount = 0;
+        var batch = await counted.GetForPublicationAsync([.. drafts.Select(draft => draft.DraftId)], default);
+
+        Assert.Equal(64, batch.Count);
+        Assert.Equal(singleDraftReads, counter.ReadCount);
+        Assert.InRange(counter.ReadCount, 1, 7);
+    }
+
+    [Fact]
+    public async Task PublicationReadRejectsTamperedComparisonLikeTheSingleDraftReadSoAlteredEvidenceIsNeverPublished()
+    {
+        var drafts = await CreateDraftsAsync(2);
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            "UPDATE document_comparisons SET settings_version = 'tampered' WHERE comparison_id = @id", connection);
+        command.Parameters.AddWithValue("id", drafts[1].ComparisonId);
+        Assert.Equal(1, await command.ExecuteNonQueryAsync());
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => reviews.GetAsync(drafts[1].DraftId, default));
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            reviews.GetForPublicationAsync([.. drafts.Select(draft => draft.DraftId)], default));
+    }
+
+    private async Task<List<DocumentChangeDraftRevision>> CreateDraftsAsync(int count)
+    {
+        var actor = new ReviewActor("auth0|owner", ReviewRole.Owner);
+        var create = new CreateDocumentChangeDraft(reviews);
+        var drafts = new List<DocumentChangeDraftRevision>(count);
+        for (var index = 0; index < count; index++)
+        {
+            var comparison = await SaveComparisonAsync();
+            drafts.Add(await create.ExecuteAsync(actor, new(comparison.ComparisonId, "create-" + index)));
+        }
+        return drafts;
+    }
+
     private async Task<CivicLens.Core.Documents.DocumentComparison> SaveComparisonAsync()
     {
         var before = new CivicLens.Core.Documents.DocumentExtraction(await ImportAsync("Policy before."), "parser", "normalizer", "Policy before.");
@@ -228,6 +302,19 @@ public sealed class PostgresDocumentChangeReviewStoreTests(PostgresCollection po
     {
         try { return await task; }
         catch (DocumentChangeReviewConflictException exception) { return exception; }
+    }
+
+    private sealed class ReadCommandCounter : DbCommandInterceptor
+    {
+        public int ReadCount { get; set; }
+
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(DbCommand command,
+            CommandEventData eventData, InterceptionResult<DbDataReader> result,
+            CancellationToken cancellationToken = default)
+        {
+            ReadCount++;
+            return ValueTask.FromResult(result);
+        }
     }
 
 }

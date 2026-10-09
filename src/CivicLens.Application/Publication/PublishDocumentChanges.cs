@@ -1,7 +1,6 @@
 using System.Collections.Immutable;
 using System.Text;
 using System.Text.Json;
-using CivicLens.Application.Documents;
 using CivicLens.Application.Review;
 using CivicLens.Core.Review;
 using CivicLens.Publication.Contracts;
@@ -9,10 +8,9 @@ using CivicLens.Publication.Contracts;
 namespace CivicLens.Application.Publication;
 
 public sealed class PublishDocumentChanges(IPublicationStore publications, IReleaseDirectory releases,
-    IReleaseRenderer renderer, IDocumentChangeReviewStore reviews, IDocumentExtractionStore extractions,
-    PublicationCatalog catalog, TimeProvider clock)
+    IReleaseRenderer renderer, IDocumentChangeReviewStore reviews, PublicationCatalog catalog, TimeProvider clock)
 {
-    private readonly PublishedRecordBuilder builder = new(reviews, extractions, catalog);
+    private readonly PublishedRecordBuilder builder = new(catalog);
 
     public async Task<PublicationReleaseSummary> ExecuteAsync(ReviewActor actor, PublishDocumentChangesRequest request,
         CancellationToken cancellationToken = default)
@@ -21,25 +19,37 @@ public sealed class PublishDocumentChanges(IPublicationStore publications, IRele
         var draftIds = ValidateRequest(request);
         var payloadHash = ReviewValidation.HashPayload(request);
         var replay = await publications.FindReplayAsync(actor.Subject, request.IdempotencyKey, payloadHash, cancellationToken);
-        if (replay is not null) return replay;
+        if (replay is not null)
+        {
+            await ServeActiveReleaseAsync(cancellationToken);
+            return replay;
+        }
 
         var now = clock.GetUtcNow();
-        var latest = await publications.GetLatestAsync(cancellationToken);
-        var previous = await PreviousRelease.LoadAsync(releases, publications, latest, cancellationToken);
+        var state = await publications.GetStateAsync(cancellationToken);
+        var previous = await PreviousRelease.LoadAsync(releases, state.Active, cancellationToken);
         var additions = await LoadAdditionsAsync(draftIds, previous, cancellationToken);
         var carried = previous.Entries.Where(entry => !draftIds.Contains(entry.RecordId)).ToList();
         if (carried.Count + additions.Count > PublicationProtocol.MaximumRecordsPerRelease)
             throw new ArgumentException("The release would exceed the maximum record count.", nameof(request));
 
-        var number = (latest?.ReleaseNumber ?? 0) + 1;
+        var number = state.LatestReleaseNumber + 1;
         var (directory, entries) = await StageAsync(number, now, previous, carried, additions, cancellationToken);
         var commit = new PublicationCommit(number, directory, now,
             [.. entries.Select(entry => new PublishedRevisionBinding(entry.RecordId, entry.RevisionNumber))],
-            [.. additions.Select(review => new ReviewStateExpectation(review.DraftId,
-                review.CurrentRevision.RevisionNumber, review.ReviewStateVersion))]);
+            [.. additions.Select(addition => new ReviewStateExpectation(addition.Review.DraftId,
+                addition.Review.CurrentRevision.RevisionNumber, addition.Review.ReviewStateVersion))]);
         var summary = await CommitAsync(actor, commit, request.IdempotencyKey, payloadHash, cancellationToken);
-        await releases.ActivateAsync(summary.DirectoryName, cancellationToken);
+        if (summary.DirectoryName == directory) await releases.ActivateAsync(directory, cancellationToken);
+        else await ServeActiveReleaseAsync(cancellationToken);
         return summary;
+    }
+
+    private async Task ServeActiveReleaseAsync(CancellationToken cancellationToken)
+    {
+        var active = (await publications.GetStateAsync(cancellationToken)).Active
+            ?? throw new InvalidDataException("A release was committed but none is active.");
+        await releases.ActivateAsync(active.DirectoryName, cancellationToken);
     }
 
     private static ImmutableArray<string> ValidateRequest(PublishDocumentChangesRequest request)
@@ -55,24 +65,25 @@ public sealed class PublishDocumentChanges(IPublicationStore publications, IRele
         return ids;
     }
 
-    private async Task<List<DocumentChangeReview>> LoadAdditionsAsync(ImmutableArray<string> draftIds,
+    private async Task<List<PublishableDocumentChange>> LoadAdditionsAsync(ImmutableArray<string> draftIds,
         PreviousRelease previous, CancellationToken cancellationToken)
     {
-        var additions = new List<DocumentChangeReview>(draftIds.Length);
+        var found = await reviews.GetForPublicationAsync(draftIds, cancellationToken);
+        var additions = new List<PublishableDocumentChange>(draftIds.Length);
         foreach (var draftId in draftIds)
         {
-            var review = await reviews.GetAsync(draftId, cancellationToken)
+            var addition = found.GetValueOrDefault(draftId)
                 ?? throw new ArgumentException($"Draft {draftId} does not exist.", nameof(draftIds));
-            PublishedRecordBuilder.RequirePublishable(review);
-            if (previous.Find(draftId)?.RevisionNumber == review.CurrentRevision.RevisionNumber)
+            PublishedRecordBuilder.RequirePublishable(addition.Review);
+            if (previous.Find(draftId)?.RevisionNumber == addition.Review.CurrentRevision.RevisionNumber)
                 throw new ArgumentException($"Draft {draftId} is already published at its current revision.", nameof(draftIds));
-            additions.Add(review);
+            additions.Add(addition);
         }
         return additions;
     }
 
     private async Task<(string Directory, List<PublishedRecordEntry> Entries)> StageAsync(int number, DateTimeOffset now,
-        PreviousRelease previous, List<PublishedRecordEntry> carried, List<DocumentChangeReview> additions,
+        PreviousRelease previous, List<PublishedRecordEntry> carried, List<PublishableDocumentChange> additions,
         CancellationToken cancellationToken)
     {
         await using var staging = await releases.BeginAsync(cancellationToken);
@@ -83,9 +94,9 @@ public sealed class PublishDocumentChanges(IPublicationStore publications, IRele
             await staging.LinkFileAsync(previous.DirectoryName!, PublicationProtocol.RecordPagePath(entry.RecordId), cancellationToken);
             entries.Add(entry);
         }
-        foreach (var review in additions)
+        foreach (var addition in additions)
         {
-            var record = await builder.BuildAsync(review, previous.Find(review.DraftId), now, cancellationToken);
+            var record = builder.Build(addition, previous.Find(addition.Review.DraftId), now);
             var json = JsonSerializer.SerializeToUtf8Bytes(record, PublicationProtocol.JsonOptions);
             entries.Add(await WriteRecordAsync(staging, record, json, cancellationToken));
         }
@@ -137,11 +148,21 @@ public sealed class PublishDocumentChanges(IPublicationStore publications, IRele
         }
         catch (Exception exception) when (exception is PublicationConflictException or ArgumentException)
         {
-            await releases.DeleteAsync(commit.DirectoryName, CancellationToken.None);
+            await DiscardAsync(commit.DirectoryName);
             throw;
         }
-        if (summary.DirectoryName != commit.DirectoryName)
-            await releases.DeleteAsync(commit.DirectoryName, CancellationToken.None);
+        if (summary.DirectoryName != commit.DirectoryName) await DiscardAsync(commit.DirectoryName);
         return summary;
+    }
+
+    private async Task DiscardAsync(string directoryName)
+    {
+        try
+        {
+            await releases.DeleteAsync(directoryName, CancellationToken.None);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+        }
     }
 }

@@ -21,7 +21,8 @@ public partial class PublicationReleases : Migration
                 actor_subject = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: false),
                 published_at_utc_ticks = table.Column<long>(type: "bigint", nullable: false),
                 record_count = table.Column<int>(type: "integer", nullable: false),
-                records_json = table.Column<string>(type: "text", nullable: false)
+                records_json = table.Column<string>(type: "text", nullable: false),
+                is_active = table.Column<bool>(type: "boolean", nullable: false)
             },
             constraints: table =>
             {
@@ -37,6 +38,13 @@ public partial class PublicationReleases : Migration
             table: "publication_releases",
             column: "directory_name",
             unique: true);
+
+        migrationBuilder.CreateIndex(
+            name: "IX_publication_releases_is_active",
+            table: "publication_releases",
+            column: "is_active",
+            unique: true,
+            filter: "is_active");
     }
 
     protected override void Down(MigrationBuilder migrationBuilder)

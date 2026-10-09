@@ -19,6 +19,7 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
     : IDocumentChangeReviewStore
 {
     private const int MaximumPageSize = 100;
+    private const int MaximumPublicationDrafts = 64;
     private const int ComparisonScanSize = 500;
     private const string CreateOperation = "create";
     private const string SaveOperation = "save";
@@ -178,6 +179,20 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
         return result;
     }
 
+    public async Task<IReadOnlyDictionary<string, PublishableDocumentChange>> GetForPublicationAsync(
+        IReadOnlyCollection<string> draftIds, CancellationToken cancellationToken)
+    {
+        ValidateDraftIds(draftIds);
+        var ids = draftIds.ToArray();
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
+        var drafts = await db.Set<DocumentChangeDraftRow>().AsNoTracking()
+            .Where(row => ids.Contains(row.DraftId)).ToArrayAsync(cancellationToken);
+        var result = await ReadAggregatesAsync(db, drafts, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return result;
+    }
+
     public async Task<DocumentChangeReviewPage> ListAsync(string? cursor, int limit, CancellationToken cancellationToken)
     {
         ValidatePage(cursor, limit);
@@ -191,17 +206,6 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
         foreach (var row in rows.Take(limit)) items.Add(await ReadListItemAsync(db, row, cancellationToken));
         await transaction.CommitAsync(cancellationToken);
         return new(items.ToImmutable(), hasMore ? rows[limit - 1].DraftId : null);
-    }
-
-    public async Task<EligibleDocumentComparison?> GetEligibleComparisonAsync(string comparisonId,
-        CancellationToken cancellationToken)
-    {
-        ValidateHash(comparisonId, nameof(comparisonId));
-        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
-        var result = await ReadEligibleComparisonAsync(db, comparisonId, cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-        return result;
     }
 
     public async Task<EligibleDocumentComparisonPage> ListEligibleComparisonsAsync(string? cursor, int limit,
@@ -237,14 +241,32 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
         DocumentExtraction Before, DocumentExtraction After);
 
     private static async Task<VerifiedComparison?> ReadVerifiedComparisonAsync(CollectionAttemptDbContext db,
-        string comparisonId, CancellationToken cancellationToken)
+        string comparisonId, CancellationToken cancellationToken) =>
+        (await ReadVerifiedComparisonsAsync(db, [comparisonId], cancellationToken)).GetValueOrDefault(comparisonId);
+
+    private static async Task<Dictionary<string, VerifiedComparison>> ReadVerifiedComparisonsAsync(
+        CollectionAttemptDbContext db, string[] comparisonIds, CancellationToken cancellationToken)
     {
-        var row = await db.Set<DocumentComparisonRow>().AsNoTracking()
-            .SingleOrDefaultAsync(candidate => candidate.ComparisonId == comparisonId, cancellationToken);
-        if (row is null) return null;
-        var before = await PostgresDocumentExtractionStore.ReadAsync(db, row.BeforeExtractionId, cancellationToken)
+        var rows = await db.Set<DocumentComparisonRow>().AsNoTracking()
+            .Where(row => comparisonIds.Contains(row.ComparisonId)).ToArrayAsync(cancellationToken);
+        var extractionIds = rows.SelectMany(row => new[] { row.BeforeExtractionId, row.AfterExtractionId })
+            .Distinct(StringComparer.Ordinal).ToArray();
+        var extractions = await PostgresDocumentExtractionStore.ReadManyAsync(db, extractionIds, cancellationToken);
+        var verified = new Dictionary<string, VerifiedComparison>(StringComparer.Ordinal);
+        foreach (var row in rows)
+        {
+            var comparison = VerifyComparison(row, extractions, cancellationToken);
+            if (comparison is not null) verified.Add(row.ComparisonId, comparison);
+        }
+        return verified;
+    }
+
+    private static VerifiedComparison? VerifyComparison(DocumentComparisonRow row,
+        Dictionary<string, DocumentExtraction> extractions, CancellationToken cancellationToken)
+    {
+        var before = extractions.GetValueOrDefault(row.BeforeExtractionId)
             ?? throw new InvalidOperationException("Comparison's before extraction is missing.");
-        var after = await PostgresDocumentExtractionStore.ReadAsync(db, row.AfterExtractionId, cancellationToken)
+        var after = extractions.GetValueOrDefault(row.AfterExtractionId)
             ?? throw new InvalidOperationException("Comparison's after extraction is missing.");
         var comparison = DocumentComparison.Create(before, after, cancellationToken);
         if (row.ComparisonId != comparison.ComparisonId || row.AlgorithmVersion != comparison.AlgorithmVersion ||
@@ -326,24 +348,67 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
     }
 
     private static async Task<DocumentChangeReview> ReadAggregateAsync(CollectionAttemptDbContext db,
-        DocumentChangeDraftRow draft, CancellationToken cancellationToken)
+        DocumentChangeDraftRow draft, CancellationToken cancellationToken) =>
+        (await ReadAggregatesAsync(db, [draft], cancellationToken))[draft.DraftId].Review;
+
+    private static async Task<Dictionary<string, PublishableDocumentChange>> ReadAggregatesAsync(
+        CollectionAttemptDbContext db, DocumentChangeDraftRow[] drafts, CancellationToken cancellationToken)
     {
-        var revisions = await ReadRevisionsAsync(db, draft, cancellationToken);
-        var verified = await ReadVerifiedComparisonAsync(db, draft.ComparisonId, cancellationToken)
+        if (drafts.Length == 0) return [];
+        var draftIds = drafts.Select(draft => draft.DraftId).ToArray();
+        var revisions = await ReadRevisionRowsAsync(db, draftIds, cancellationToken);
+        var decisions = await ReadDecisionRowsAsync(db, draftIds, cancellationToken);
+        var comparisonIds = drafts.Select(draft => draft.ComparisonId).Distinct(StringComparer.Ordinal).ToArray();
+        var comparisons = await ReadVerifiedComparisonsAsync(db, comparisonIds, cancellationToken);
+        return drafts.ToDictionary(draft => draft.DraftId,
+            draft => BuildAggregate(draft, revisions[draft.DraftId], decisions[draft.DraftId], comparisons),
+            StringComparer.Ordinal);
+    }
+
+    private static PublishableDocumentChange BuildAggregate(DocumentChangeDraftRow draft,
+        IEnumerable<DocumentChangeRevisionRow> revisionRows, IEnumerable<ReviewDecisionRow> decisionRows,
+        Dictionary<string, VerifiedComparison> comparisons)
+    {
+        var revisions = ParseRevisions(draft, revisionRows);
+        var verified = comparisons.GetValueOrDefault(draft.ComparisonId)
             ?? throw new InvalidOperationException("Retained draft comparison is no longer valid.");
         foreach (var revision in revisions) ValidateRevisionAgainstEvidence(revision, verified);
-        var decisions = await ReadDecisionsAsync(db, draft, cancellationToken);
+        var decisions = ParseDecisions(draft, decisionRows);
         ValidateDecisionHistory(draft.DraftId, revisions, decisions);
         var concerns = DocumentChangeReviewPolicy.GetUnresolvedConcerns(decisions);
-        return new(draft.DraftId, revisions[^1], draft.ReviewStateVersion, revisions, decisions, concerns);
+        var review = new DocumentChangeReview(draft.DraftId, revisions[^1], draft.ReviewStateVersion, revisions,
+            decisions, concerns);
+        return new(review, verified.Summary, verified.Before, verified.After);
+    }
+
+    private static async Task<ILookup<string, DocumentChangeRevisionRow>> ReadRevisionRowsAsync(
+        CollectionAttemptDbContext db, string[] draftIds, CancellationToken cancellationToken)
+    {
+        var rows = await db.Set<DocumentChangeRevisionRow>().AsNoTracking()
+            .Where(row => draftIds.Contains(row.DraftId)).OrderBy(row => row.DraftId).ThenBy(row => row.RevisionNumber)
+            .Take(draftIds.Length * (DocumentChangeReviewPolicy.MaximumRevisionsPerDraft + 1))
+            .ToArrayAsync(cancellationToken);
+        return rows.ToLookup(row => row.DraftId, StringComparer.Ordinal);
+    }
+
+    private static async Task<ILookup<string, ReviewDecisionRow>> ReadDecisionRowsAsync(
+        CollectionAttemptDbContext db, string[] draftIds, CancellationToken cancellationToken)
+    {
+        var rows = await db.Set<ReviewDecisionRow>().AsNoTracking()
+            .Where(row => draftIds.Contains(row.DraftId)).OrderBy(row => row.DraftId).ThenBy(row => row.ReviewStateVersion)
+            .Take(draftIds.Length * (DocumentChangeReviewPolicy.MaximumDecisionsPerDraft + 1))
+            .ToArrayAsync(cancellationToken);
+        return rows.ToLookup(row => row.DraftId, StringComparer.Ordinal);
     }
 
     private static async Task<ImmutableArray<DocumentChangeDraftRevision>> ReadRevisionsAsync(
-        CollectionAttemptDbContext db, DocumentChangeDraftRow draft, CancellationToken cancellationToken)
+        CollectionAttemptDbContext db, DocumentChangeDraftRow draft, CancellationToken cancellationToken) =>
+        ParseRevisions(draft, (await ReadRevisionRowsAsync(db, [draft.DraftId], cancellationToken))[draft.DraftId]);
+
+    private static ImmutableArray<DocumentChangeDraftRevision> ParseRevisions(DocumentChangeDraftRow draft,
+        IEnumerable<DocumentChangeRevisionRow> rows)
     {
-        var revisionRows = await db.Set<DocumentChangeRevisionRow>().AsNoTracking()
-            .Where(row => row.DraftId == draft.DraftId).OrderBy(row => row.RevisionNumber)
-            .Take(DocumentChangeReviewPolicy.MaximumRevisionsPerDraft + 1).ToArrayAsync(cancellationToken);
+        var revisionRows = rows.ToArray();
         if (revisionRows.Length > DocumentChangeReviewPolicy.MaximumRevisionsPerDraft)
             throw new InvalidOperationException("Stored draft revision history exceeds its limit.");
         var revisions = revisionRows.Select(row => Deserialize<DocumentChangeDraftRevision>(row.RevisionJson, "revision"))
@@ -358,11 +423,13 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
     }
 
     private static async Task<ImmutableArray<ReviewDecision>> ReadDecisionsAsync(
-        CollectionAttemptDbContext db, DocumentChangeDraftRow draft, CancellationToken cancellationToken)
+        CollectionAttemptDbContext db, DocumentChangeDraftRow draft, CancellationToken cancellationToken) =>
+        ParseDecisions(draft, (await ReadDecisionRowsAsync(db, [draft.DraftId], cancellationToken))[draft.DraftId]);
+
+    private static ImmutableArray<ReviewDecision> ParseDecisions(DocumentChangeDraftRow draft,
+        IEnumerable<ReviewDecisionRow> rows)
     {
-        var decisionRows = await db.Set<ReviewDecisionRow>().AsNoTracking()
-            .Where(row => row.DraftId == draft.DraftId).OrderBy(row => row.ReviewStateVersion)
-            .Take(DocumentChangeReviewPolicy.MaximumDecisionsPerDraft + 1).ToArrayAsync(cancellationToken);
+        var decisionRows = rows.ToArray();
         if (decisionRows.Length > DocumentChangeReviewPolicy.MaximumDecisionsPerDraft)
             throw new InvalidOperationException("Stored review decision history exceeds its limit.");
         var decisions = decisionRows.Select(row =>
@@ -471,6 +538,13 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
     {
         if (value is not { Length: 32 } || value.Any(c => c is not (>= '0' and <= '9') and not (>= 'a' and <= 'f')))
             throw new ArgumentException("Draft ID is invalid.", nameof(value));
+    }
+
+    private static void ValidateDraftIds(IReadOnlyCollection<string> values)
+    {
+        ArgumentNullException.ThrowIfNull(values);
+        if (values.Count is < 1 or > MaximumPublicationDrafts) throw new ArgumentOutOfRangeException(nameof(values));
+        foreach (var value in values) ValidateDraftId(value);
     }
 
     private static void ValidateHash(string value, string parameterName)

@@ -182,7 +182,6 @@ try
         var releases = new FileReleaseDirectory(releaseRoot);
         var publish = new PublishDocumentChanges(publications, releases, new ReleaseRenderer(),
             PostgresDocumentChangeReviewStore.FromConnectionString(connectionString),
-            PostgresDocumentExtractionStore.FromConnectionString(connectionString),
             new PublicationCatalog(officialNames), TimeProvider.System);
         executing = true;
         return await ReleaseCommand.ExecuteAsync(args, publish, new ListPublicationReleases(publications, releases),

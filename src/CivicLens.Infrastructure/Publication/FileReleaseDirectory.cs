@@ -41,13 +41,13 @@ public sealed class FileReleaseDirectory : IReleaseDirectory
         return buffer;
     }
 
-    public async Task DeleteAsync(string directoryName, CancellationToken cancellationToken)
+    public Task DeleteAsync(string directoryName, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         ReleasePaths.RequireDirectoryName(directoryName);
-        if (await GetActiveAsync(cancellationToken) == directoryName)
-            throw new InvalidOperationException("The active release cannot be deleted.");
         var path = ReleasePath(directoryName);
         if (Directory.Exists(path)) Directory.Delete(path, recursive: true);
+        return Task.CompletedTask;
     }
 
     public Task ActivateAsync(string directoryName, CancellationToken cancellationToken)
