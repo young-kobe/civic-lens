@@ -27,6 +27,6 @@
     @if (comparison.Status == DocumentComparisonStatus.Complete && comparison.Hunks.IsEmpty) { <p class="notice">No text differences were found in this complete comparison.</p> }
     @if (!comparison.Hunks.IsEmpty)
     {
-        <component type="typeof(DocumentComparisonView)" render-mode="Static" param-Comparison="@comparison" />
+        <component type="typeof(DocumentComparisonView)" render-mode="Static" param-Hunks="@comparison.Hunks" param-ViewId="@comparison.ComparisonId" param-BeforeExtractionId="@comparison.BeforeExtractionId" param-AfterExtractionId="@comparison.AfterExtractionId" />
     }
 }

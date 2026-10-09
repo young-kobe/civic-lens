@@ -76,7 +76,7 @@
                     <div class="review-meta"><span>Source change</span><span>Observed @item.BeforeObservedAtUtc.ToString("yyyy-MM-dd HH:mm 'UTC'") and @item.AfterObservedAtUtc.ToString("yyyy-MM-dd HH:mm 'UTC'")</span></div>
                     <h3>@CivicLens.Host.Pages.Review.SourcesModel.DocumentLabel(item.RequestedUrl)</h3>
                     <p>@comparison.Hunks.Length changed passage(s). Compare the exact retained wording before drafting.</p>
-                    <component type="typeof(DocumentComparisonView)" render-mode="Static" param-Comparison="@comparison" param-MaximumPassages="2" />
+                    <component type="typeof(DocumentComparisonView)" render-mode="Static" param-Hunks="@comparison.Hunks" param-ViewId="@comparison.ComparisonId" param-BeforeExtractionId="@comparison.BeforeExtractionId" param-AfterExtractionId="@comparison.AfterExtractionId" param-MaximumPassages="2" />
                     @if (comparison.Hunks.Length > 2)
                     {
                         <p class="review-help">Showing the first two of @comparison.Hunks.Length changed passages.</p>

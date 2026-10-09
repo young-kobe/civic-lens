@@ -13,6 +13,7 @@ using CivicLens.Infrastructure.Collection.Processing;
 using CivicLens.Application.Documents;
 using CivicLens.Host.Collection;
 using CivicLens.Host.Documents;
+using CivicLens.Host.Publication;
 using CivicLens.Host.Review;
 using CivicLens.Infrastructure.Documents;
 
@@ -42,6 +43,9 @@ if (args is [] or ["--help"] or ["help"])
           documents history <source-id> <exact-requested-url>
           documents compare <before-extraction-id> <after-extraction-id>
           documents comparison <comparison-id>
+          releases publish <idempotency-key> <draft-id>...
+          releases list [limit]
+          releases activate <release-number>
           viewer [port]
           review [port]
         The local document viewer binds only to 127.0.0.1 and defaults to port 5080.
@@ -114,7 +118,7 @@ if (args.Contains("--as-of", StringComparer.Ordinal))
 if (args is not (["db", "migrate"] or ["validate", _] or ["collect", _, _, _, _] or ["collect-import", _, _, _, _]
     or ["feeds" or "discovery", "get", _] or ["feeds" or "discovery", "admit", _, _, _, _]
     or ["receipts", "list", _] or ["receipts", "replay", _, _]) && !CollectionJobCommand.Matches(args) &&
-    !CollectionWorkerCommand.Matches(args) && !DocumentCommand.Matches(args))
+    !CollectionWorkerCommand.Matches(args) && !DocumentCommand.Matches(args) && !ReleaseCommand.Matches(args))
 {
     Console.Error.WriteLine("Unknown command. Use --help.");
     return 2;
@@ -151,6 +155,13 @@ try
             new CompareDocuments(extractions, comparisons));
         await using var wakeup = PostgresCollectionPipelineWakeup.FromConnectionString(connectionString);
         return await CollectionWorkerCommand.ExecuteAsync(args, queue, jobs, attempts, cancellation.Token, processing, wakeup, jobs);
+    }
+
+    if (ReleaseCommand.Matches(args))
+    {
+        // The integrator builds the stores and handlers here and calls ReleaseCommand.ExecuteAsync.
+        Console.Error.WriteLine("Release commands are not available in this build.");
+        return 1;
     }
 
     if (DocumentCommand.Matches(args))

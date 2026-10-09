@@ -1,0 +1,61 @@
+@using CivicLens.Host.Pages
+@using CivicLens.Host.Pages.Shared
+@using CivicLens.Publication.Contracts
+@using Microsoft.AspNetCore.Components
+
+<PublicPage Title="@Record.Headline" RootPath="../">
+    <p class="public-back"><a href="@("../" + PublicationProtocol.IndexPagePath)">All published records</a></p>
+    <h1 class="public-kicker">Document change record</h1>
+    <RecordPreview PreviewLabel="@($"Published record · Revision {Record.RevisionNumber}")"
+                   PrivateNotice=""
+                   RevisionNumber="Record.RevisionNumber"
+                   Headline="@Record.Headline"
+                   Summary="@Record.Summary"
+                   Significance="@Record.Significance"
+                   Limits="@Record.Limits"
+                   Institution="@Record.Institution"
+                   ChangeDate="@(Record.ChangeDate is { } date ? PublishedRecordView.Day(date) : string.Empty)"
+                   Observed="@($"Earlier version {PublishedRecordView.Moment(Record.Before.ObservedAtUtc)}; later version {PublishedRecordView.Moment(Record.After.ObservedAtUtc)}")"
+                   OfficialLinks="@(Record.Officials.Length == 0 ? "None" : string.Join(", ", Record.Officials.Select(official => official.Name)))"
+                   Issues="@(Record.IssueIds.Length == 0 ? "None" : string.Join(", ", Record.IssueIds))"
+                   PublicationDates="@($"Approved {PublishedRecordView.Moment(Record.ApprovedAtUtc)}; first published {PublishedRecordView.Moment(Record.FirstPublishedAtUtc)}")" />
+
+    <section class="public-section" aria-labelledby="changes-title">
+        <h2 id="changes-title">What changed</h2>
+        <DocumentComparisonView Hunks="PublishedRecordView.Hunks(Record)" ViewId="@Record.RecordId" HideToggleUntilScripted="true" />
+    </section>
+
+    <section class="public-section" aria-labelledby="citations-title">
+        <h2 id="citations-title">Citations</h2>
+        <p>Each quote is the exact text of the source version. Follow the link to see it marked in the full version.</p>
+        <ol class="public-citations">
+            @for (var i = 0; i < Record.Citations.Length; i++)
+            {
+                <li>@Citation(Record.Citations[i], PublishedRecordView.CitationAnchor(i))</li>
+            }
+        </ol>
+        @if (Record.ChangeDateEvidence is { } evidence)
+        {
+            <h3>Evidence for the actual change date</h3>
+            @Citation(evidence, PublishedRecordView.ChangeDateAnchor)
+        }
+    </section>
+
+    <section class="public-section" aria-labelledby="versions-title">
+        <h2 id="versions-title">Full versions</h2>
+        <PublishedVersionSection Heading="Earlier version" Version="Record.Before"
+                                 Runs="CitedText.Split(Record.Before.Text, PublishedRecordView.RangesIn(Record, Record.Before))" />
+        <PublishedVersionSection Heading="Later version" Version="Record.After"
+                                 Runs="CitedText.Split(Record.After.Text, PublishedRecordView.RangesIn(Record, Record.After))" />
+    </section>
+</PublicPage>
+
+@code {
+    [Parameter, EditorRequired] public PublishedDocumentChange Record { get; set; } = default!;
+
+    private RenderFragment Citation(PublishedCitation citation, string anchor) =>
+        @<text>
+            <blockquote>@EncodedEvidence.Markup(citation.Quote)</blockquote>
+            <p>From the @(citation.ExtractionId == Record.Before.ExtractionId ? "earlier" : "later") version. <a href="#@anchor">Show in the full version</a></p>
+        </text>;
+}

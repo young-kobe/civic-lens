@@ -1,0 +1,41 @@
+* { box-sizing: border-box; }
+html { min-width: 320px; }
+body { margin: 0; line-height: 1.6; }
+[hidden] { display: none !important; }
+a { color: var(--accent); text-underline-offset: .2em; overflow-wrap: anywhere; }
+a:hover { color: var(--ink); }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+::selection { background: var(--wash); color: var(--ink); }
+
+.public-header { padding: .9rem max(1.25rem, calc((100vw - 56rem) / 2)); background: var(--rail); }
+.public-brand { color: var(--paper); font-size: 1.2rem; font-weight: 750; letter-spacing: -.03em; text-decoration: none; }
+.public-brand:hover { color: var(--paper); text-decoration: underline; }
+.public-header :focus-visible { --focus: var(--paper); }
+.public-main { width: min(100% - 2rem, 56rem); margin: 0 auto; padding: clamp(1.5rem, 5vw, 3.5rem) 0; }
+.public-footer { padding: 1rem max(1rem, calc((100vw - 56rem) / 2)); border-top: 1px solid var(--line); color: var(--muted); font-size: .88rem; }
+
+.public-kicker { margin: 0 0 .75rem; color: var(--muted); font-size: .82rem; font-weight: 650; }
+.public-title { margin: 0 0 .5rem; font-size: clamp(1.8rem, 5vw, 2.6rem); line-height: 1.12; letter-spacing: -.03em; }
+.public-lede { max-width: 62ch; margin: 0 0 2rem; color: var(--muted); }
+.public-back { margin: 0 0 1.25rem; font-size: .92rem; }
+.public-section { margin-top: 2.5rem; }
+.public-section > h2 { margin: 0 0 .6rem; font-size: 1.25rem; line-height: 1.25; }
+.public-section > p { max-width: 68ch; }
+
+.public-records { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--line); }
+.public-records li { padding: 1rem 0; border-bottom: 1px solid var(--line); }
+.public-records a { font-size: 1.1rem; font-weight: 650; }
+.public-records span { display: block; margin-top: .2rem; color: var(--muted); font-size: .88rem; }
+
+.public-citations { margin: 0; padding-left: 1.4rem; }
+.public-citations li { margin-bottom: 1.25rem; }
+.public-citations blockquote { margin: 0 0 .4rem; padding: .6rem .9rem; border-left: 3px solid var(--control-border); background: var(--ground); overflow-wrap: anywhere; white-space: pre-wrap; }
+.public-citations p { margin: 0; color: var(--muted); font-size: .9rem; }
+
+.public-version { margin-top: 1rem; border: 1px solid var(--line); background: var(--paper); }
+.public-version > summary { padding: .8rem 1rem; font-weight: 650; cursor: pointer; }
+.public-version-body { padding: 0 1rem 1rem; }
+.public-version-body p { margin: 0 0 .75rem; color: var(--muted); font-size: .9rem; }
+.public-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; line-height: 1.55; }
+.public-text mark { background: var(--warning-bg); color: var(--ink); outline: 1px solid var(--warning); }
+.public-text mark:target { background: var(--wash); outline-width: 2px; }
