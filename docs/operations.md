@@ -218,7 +218,7 @@ The `senate-main` profile retains the main article region and excludes navigatio
 
 The bounded pilot verified captures of both newsroom pages, the RSS feed, and two articles per office, with readable text retained for both offices. A version 7 worker pass captured the Warren listing and parsed 16 candidate links. Both retained Warren articles also extract successfully under `capture-text-v2`. These checks establish compatibility with those responses, not future source availability. Failed processing must not be interpreted as no activity.
 
-First captures are baselines. Do not compare different articles to fabricate a change, or mistake a changed extraction profile for a source edit. A document-change candidate requires two compatible extractions of the same source and exact requested URL and a complete comparison containing changed text. The review queue can therefore remain empty while real evidence is already stored. Use the authenticated evidence viewer to inspect extraction IDs. No evidence is approved or published by collection.
+First captures are baselines. Do not compare different articles to fabricate a change, or mistake a changed extraction profile for a source edit. A document-change candidate requires two compatible extractions of the same source and exact requested URL and a complete comparison containing changed text. The review queue can therefore remain empty while real evidence is already stored. Use the evidence pages in the review workspace, or `documents history`, to inspect extraction IDs. No evidence is approved or published by collection.
 
 ## Recover saved receipts
 
@@ -304,25 +304,13 @@ History retains checks and extraction revisions, groups consecutive equal text w
 
 When processing versions or profiles differ, explicitly rerun `documents extract` on both original captured attempt IDs using the same current settings/configuration, then compare those new extraction IDs. Earlier extractions, citations, and comparisons remain retained. These commands do not judge substantive significance, approve evidence, or publish anything.
 
-### Inspect evidence in the local viewer
+### Inspect evidence in the review workspace
 
-After configuring `CIVIC_LENS_DATABASE` and explicitly applying migrations, start:
-
-```sh
-dotnet run --no-build --configuration Release --project src/CivicLens.Host -- viewer
-# Optional alternative port:
-dotnet run --no-build --configuration Release --project src/CivicLens.Host -- viewer 5081
-```
-
-Open `http://127.0.0.1:5080/` (or the selected port). Use a source ID and exact requested URL to open history, an extraction ID from `documents extract` to inspect text, or a comparison ID from `documents compare` to inspect an already saved result. History links its extractions; comparisons link both extractions and exact changed-passage citations. You can also enter a UTF-16 start offset and positive length on an extraction page. Text selection alone does not calculate offsets in this initial viewer.
-
-The viewer reads existing evidence only. Use the CLI for migrations, collection, extraction, and creation of comparisons. The viewer does not require a capture-directory argument because it reads retained extractions from Postgres. It preserves failed checks and missing evidence and reports history/comparison limits explicitly. Empty comparisons mean unchanged only when the saved status is complete. Empty histories do not establish source inactivity.
-
-The listener binds only to `127.0.0.1`; ambient ASP.NET URL and Kestrel endpoint settings do not widen it. The process serves its own compiled pages and copied static assets even when launched from another working directory. Stop it with Ctrl+C. It is a local operational tool, not a public website or a multi-user authenticated service. No approvals or publication actions are available. Database outages and corrupt retained evidence produce a sanitized unavailable response; inspect database connectivity and applied migrations locally rather than exposing provider details in the browser.
+The review workspace shows retained evidence on pages under `/Documents`: saved comparison, saved text, cited passage, and saved versions. Open them from links in Review and Sources. These pages read existing evidence only. Use the CLI or the worker for migrations, collection, extraction, and comparisons. The pages show failed checks, missing evidence, and history or comparison limits explicitly. Empty comparisons mean unchanged only when the saved status is complete. Empty histories do not establish source inactivity. Storage failures produce a sanitized unavailable response.
 
 ### Authenticated document-change review
 
-`review [port]` starts the separate editorial workspace on IPv4 loopback (default 5081). Unlike `viewer`, it supports draft and decision mutations and requires Auth0 configuration. It does not collect, migrate, publish, or manage access accounts through the UI. Apply `db migrate` explicitly before starting it; the additive `DocumentChangeReview` migration retains draft pointers, immutable revisions, decisions, and replay receipts.
+`review [port]` starts the separate editorial workspace on IPv4 loopback (default 5081). It supports draft and decision mutations and requires Auth0 configuration. It does not collect, migrate, publish, or manage access accounts through the UI. Apply `db migrate` explicitly before starting it; the additive `DocumentChangeReview` migration retains draft pointers, immutable revisions, decisions, and replay receipts.
 
 Configure these environment variables through the deployment's protected environment/secret mechanism, not command-line arguments or committed files:
 
@@ -339,9 +327,8 @@ Configure these environment variables through the deployment's protected environ
 | `CIVIC_LENS_REVIEW_ISSUES` | Optional comma-separated configured issue IDs |
 | `CIVIC_LENS_REVIEW_OFFICIALS` | Optional comma-separated configured official IDs |
 | `CIVIC_LENS_COLLECTION_CONFIG` | Optional absolute path to the collection configuration for the owner Sources page |
-| `CIVIC_LENS_CAPTURE_DIRECTORY` | Optional absolute artifact root for collection and extraction in the Sources page; configure with the collection config |
 
-Set both collection variables or leave both unset. Setting only one prevents the authenticated application from starting because it cannot safely configure the Sources page.
+Without the collection configuration, the Sources page reports that source checks are not set up. The worker, not the workspace, reads and writes captures.
 
 Set the Auth0 allowed callback URL to `<CIVIC_LENS_REVIEW_ORIGIN>/signin-oidc`. Configure an HTTPS reverse proxy on the same host to forward to loopback and preserve the configured external Host header, including its port if nonstandard. The workspace rejects other Host values, pins its effective scheme to HTTPS, ignores ambient listener configuration, and does not trust forwarded headers. The initial listener expects a same-host proxy; isolated container networking requires an explicitly reviewed deployment configuration. Public access must terminate HTTPS at the proxy. Local workstation testing also requires a local HTTPS proxy and an allowed Auth0 callback; there is no unauthenticated review mode.
 
@@ -351,7 +338,7 @@ The application accepts only configured subjects, even if other users can authen
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- review 5081
 ```
 
-Open `/Review` through the configured HTTPS origin. The inbox lists saved changed comparisons and drafts. With collection settings configured, `/Review/Sources` offers the owner Check, recent activity, and Review for prepared changes. Keep the separate `worker` running: it collects articles, extracts readable text, and prepares comparisons automatically. Activity refreshes while the page is visible; connection failures show a reconnect notice. A baseline or unchanged observation does not enter review. Manual cancellation, admission, extraction, comparison, and article recollection remain under troubleshooting. The page accepts configured sources and retained article URLs only, contains no demonstration records, and does not claim worker liveness. `/Evidence` opens the authenticated supporting lookup. The old `viewer` command cannot access review routes.
+Open `/Review` through the configured HTTPS origin. The dashboard lists new changes, drafts, source health, and recent activity. With collection settings configured, `/Review/Sources` is an interactive owner-only page. It lists configured sources with the health of their latest check, offers Check now, and lists recent checks with Stop for active checks and Start draft for found changes. Check details open in a side panel with each attempt, retry timing, Check again for a tracked page URL, and a link to all saved versions. Keep the separate `worker` running: it collects articles, extracts readable text, and prepares comparisons automatically. The page refreshes every 5 seconds while a check is active and every 30 seconds otherwise; connection failures show a reconnect notice. A baseline or unchanged observation does not enter review. Article admission, extraction, and comparison run only in the worker or the CLI. The page accepts configured sources and retained article URLs only, contains no demonstration records, and does not claim worker liveness. Evidence pages under `/Documents` (saved comparison, saved text, cited passage, and saved versions) open from links in Review and Sources.
 
 Creating a draft explicitly selects a complete changed comparison. Saves retain immutable authored revisions. Actual change dates require a selected exact citation; dates of observation are displayed separately. Approval requires headline, summary, institution, at least one valid citation, and explicit resolution of all outstanding concerns. Concurrent saves/decisions return conflicts; stale unsaved edits remain visible, and decisions are disabled until the saved revision is reloaded or edits are saved. Review decisions do not publish anything.
 
