@@ -1,13 +1,16 @@
+using CivicLens.Application.Review;
 using CivicLens.Core.Review;
 
 namespace CivicLens.Application.Publication;
 
 public sealed class ListPublicationReleases(IPublicationStore publications, IReleaseDirectory releases)
 {
-    public Task<PublicationReleaseList> ExecuteAsync(ReviewActor actor, int limit,
+    public async Task<PublicationReleaseList> ExecuteAsync(ReviewActor actor, int limit,
         CancellationToken cancellationToken = default)
     {
-        _ = (publications, releases);
-        throw new NotImplementedException();
+        ReviewAuthorization.RequireReviewer(actor);
+        if (limit is < 1 or > 100) throw new ArgumentOutOfRangeException(nameof(limit), "Limit must be from 1 to 100.");
+        var items = await publications.ListAsync(limit, cancellationToken);
+        return new(items, await releases.GetActiveAsync(cancellationToken));
     }
 }

@@ -14,6 +14,13 @@ internal static class ReviewAuthorization
         if (string.IsNullOrWhiteSpace(actor.Subject) || actor.Subject.Length > 256 || !actor.CanReview || !Enum.IsDefined(actor.Role))
             throw new UnauthorizedAccessException("The authenticated subject is not authorized for editorial review.");
     }
+
+    public static void RequireOwner(ReviewActor actor)
+    {
+        ArgumentNullException.ThrowIfNull(actor);
+        if (string.IsNullOrWhiteSpace(actor.Subject) || actor.Subject.Length > 256 || actor.Role != ReviewRole.Owner)
+            throw new UnauthorizedAccessException("The authenticated subject is not authorized to publish.");
+    }
 }
 
 internal static class ReviewValidation
