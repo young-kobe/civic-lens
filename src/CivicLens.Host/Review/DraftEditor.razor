@@ -1,0 +1,288 @@
+@page "/Review/{DraftId}"
+@using CivicLens.Core.Review
+
+@if (review is null)
+{
+    <TopBarTitle Crumbs="Crumbs" />
+    <div class="content">
+        @if (error is not null)
+        {
+            <Notice Tone="Tone.Bad">@error</Notice>
+        }
+        @if (notFound)
+        {
+            <Panel Label="Draft not found">
+                <EmptyState Title="Draft not found" Text="This draft does not exist, or its link is not valid.">
+                    <Action><Button Href="/Review">Go to Review</Button></Action>
+                </EmptyState>
+            </Panel>
+            <form @formname="save" @onsubmit="SaveAsync" hidden></form>
+            <form @formname="decide" @onsubmit="DecideAsync" hidden></form>
+        }
+    </div>
+}
+else
+{
+    var revision = Revision;
+    var status = CurrentStatus;
+    var concerns = review.UnresolvedConcerns;
+    <TopBarTitle Crumbs="Crumbs" />
+    <div class="content">
+        <PageHeader Title="@Headline" Meta="HeaderMeta(status, concerns.Length)" />
+
+        @if (error is not null)
+        {
+            <Notice Tone="Tone.Bad">@error</Notice>
+        }
+        @if (statusMessage is not null)
+        {
+            <Notice Tone="@(isConflict ? Tone.Warn : Tone.Ok)" Dismissible="@(!isConflict)">@statusMessage</Notice>
+        }
+        @if (concerns.Length > 0)
+        {
+            <Notice Tone="Tone.Warn">Approval is blocked. @(concerns.Length == 1 ? "Resolve the open concern below first." : $"Resolve the {concerns.Length} open concerns below first.")</Notice>
+        }
+
+        @if (isDraftConflict && Input is not null)
+        {
+            <Panel Title="Compare the latest saved revision with your wording" Id="conflict-compare" Padded="true">
+                <div class="split">
+                    <RecordView Headline="@($"Saved revision {revision.RevisionNumber}: {DraftStatusDisplay.DraftName(revision.Headline)}")"
+                                Summary="@revision.Summary" Significance="@revision.Significance" Limits="@revision.Limits" Facts="SavedFacts">
+                        <ul class="choices">
+                            @foreach (var citation in savedCitations)
+                            {
+                                <li><CitationQuote Label="@citation.Label" Quote="@citation.Quote" /></li>
+                            }
+                        </ul>
+                    </RecordView>
+                    <RecordView Headline="@($"Your unsaved wording: {DraftStatusDisplay.DraftName(Input.Headline ?? "")}")"
+                                Summary="@Input.Summary" Significance="@Input.Significance" Limits="@Input.Limits" Facts="UnsavedFacts">
+                        <ul class="choices">
+                            @foreach (var option in UnsavedEvidence)
+                            {
+                                <li><CitationQuote Label="@option.Label" Quote="@option.Quote" /></li>
+                            }
+                        </ul>
+                    </RecordView>
+                </div>
+                <p class="muted small">The form still holds your wording. Saving again makes a new revision on top of the latest saved one.</p>
+            </Panel>
+        }
+
+        <div class="split">
+            <Panel Label="Account" Padded="true">
+                <TabSet Label="Account views" Selected="@SelectedTab" Tabs="AccountTabs">
+                    <TabPane Key="saved" Label="@($"Saved revision {revision.RevisionNumber}")">
+                        <RecordView Id="saved-approval-target" Headline="@Headline" Summary="@revision.Summary"
+                                    Significance="@revision.Significance" Limits="@revision.Limits" Facts="SavedFacts" />
+                        <section class="stack" id="saved-citations" aria-labelledby="saved-citations-title">
+                            <h3 id="saved-citations-title">Saved citations</h3>
+                            @if (revision.Citations.Length == 0)
+                            {
+                                <Notice Tone="Tone.Bad">No exact source passages are bound to this saved revision.</Notice>
+                            }
+                            else if (UnverifiedCitations > 0)
+                            {
+                                <Notice Tone="Tone.Bad">Some saved citations do not match the retained text. Evidence is missing from this view. Do not approve until this is fixed.</Notice>
+                            }
+                            <ul class="choices">
+                                @foreach (var citation in savedCitations)
+                                {
+                                    var binding = citation.Binding;
+                                    <li>
+                                        <CitationQuote Label="@citation.Label" Quote="@citation.Quote" Link="@citation.Link">
+                                            <a href="@DocumentComparisonView.CitationHref(binding.ExtractionId, binding.Start, binding.Length)">Exact citation</a>
+                                            <a href="@($"/Documents/Extraction?extractionId={binding.ExtractionId}")">Full text</a>
+                                        </CitationQuote>
+                                    </li>
+                                }
+                            </ul>
+                        </section>
+                    </TabPane>
+                    <TabPane Key="edit" Label="Edit wording">
+                        @if (Input is not null)
+                        {
+                            <form id="draft-form" class="form" method="post" @formname="save" @onsubmit="SaveAsync"
+                                  data-unsaved-form data-recovered-unsaved="@(hasUnsavedInput ? "true" : "false")">
+                                <AntiforgeryToken />
+                                <input type="hidden" name="expectedRevisionNumber" value="@revision.RevisionNumber" />
+                                <input type="hidden" name="idempotencyKey" value="@saveKey" />
+                                <Field Label="Headline" For="Input_Headline" Hint="Up to 256 characters.">
+                                    <input id="Input_Headline" class="headline" name="Input.Headline" value="@Input.Headline" maxlength="256" aria-describedby="Input_Headline-hint" />
+                                </Field>
+                                <Field Label="Plain-language summary" For="Input_Summary" Hint="Say what the retained source shows. Keep the order of events apart from their cause.">
+                                    <textarea id="Input_Summary" name="Input.Summary" maxlength="8000" aria-describedby="Input_Summary-hint" value="@Input.Summary"></textarea>
+                                </Field>
+                                <Field Label="Why it matters" For="Input_Significance" Optional="true">
+                                    <textarea id="Input_Significance" name="Input.Significance" maxlength="4000" value="@Input.Significance"></textarea>
+                                </Field>
+                                <Field Label="Limits and uncertainty" For="Input_Limits" Optional="true">
+                                    <textarea id="Input_Limits" name="Input.Limits" maxlength="4000" value="@Input.Limits"></textarea>
+                                </Field>
+                                <div class="field-row">
+                                    <Field Label="Institution" For="Input_Institution" Hint="The institution that published the source.">
+                                        <input id="Input_Institution" name="Input.Institution" value="@Input.Institution" maxlength="256" aria-describedby="Input_Institution-hint" />
+                                    </Field>
+                                    <Field Label="Change date" For="Input_ChangeDate" Optional="true" Hint="Leave it empty unless the source shows a date apart from the capture times.">
+                                        <input id="Input_ChangeDate" name="Input.ChangeDate" type="date" value="@Input.ChangeDate" aria-describedby="Input_ChangeDate-hint" />
+                                    </Field>
+                                </div>
+                                <Field Label="Date evidence" For="Input_DateEvidenceSelection" Hint="If you enter a change date, choose the passage that supports it. That passage is added to the citations.">
+                                    <select id="Input_DateEvidenceSelection" name="Input.DateEvidenceSelection" aria-describedby="Input_DateEvidenceSelection-hint">
+                                        <option value="" selected="@string.IsNullOrEmpty(Input.DateEvidenceSelection)">No change date</option>
+                                        @foreach (var option in evidenceOptions)
+                                        {
+                                            <option value="@option.Key" selected="@(option.Key == Input.DateEvidenceSelection)">@option.Label</option>
+                                        }
+                                    </select>
+                                </Field>
+                                <FieldSet Legend="Officials" Hint="@(OfficialIds.Length == 0 ? "No officials are configured." : null)">
+                                    <div class="chips">
+                                        @foreach (var id in OfficialIds)
+                                        {
+                                            <Chip Name="Input.OfficialIds" Value="@id" Text="@id" Checked="@(Input.OfficialIds?.Contains(id) == true)" />
+                                        }
+                                    </div>
+                                </FieldSet>
+                                <FieldSet Legend="Issues" Hint="@(IssueIds.Length == 0 ? "No issues are configured." : null)">
+                                    <div class="chips">
+                                        @foreach (var id in IssueIds)
+                                        {
+                                            <Chip Name="Input.IssueIds" Value="@id" Text="@id" Checked="@(Input.IssueIds?.Contains(id) == true)" />
+                                        }
+                                    </div>
+                                </FieldSet>
+                                <FieldSet Legend="Evidence" Aside="up to 64 passages" Hint="Choose the exact changed passages that support the account.">
+                                    @if (comparison is not null && comparison.Hunks.Length > PreselectedPassageLimit)
+                                    {
+                                        <Notice>The first revision starts with passages from 32 changes. Add any other passages that matter before you save.</Notice>
+                                    }
+                                    @if (evidenceOptions.Length == 0)
+                                    {
+                                        <Notice Tone="Tone.Bad">This comparison has no changed passage to cite.</Notice>
+                                    }
+                                    <ul class="choices">
+                                        @foreach (var option in evidenceOptions)
+                                        {
+                                            <li>
+                                                <Choice Name="Input.EvidenceSelection" Value="@option.Key" Label="@option.Label" Link="@option.Link"
+                                                        Checked="@(Input.EvidenceSelection?.Contains(option.Key) == true)">
+                                                    <span class="quote">@EncodedEvidence.Markup(option.Quote)</span>
+                                                </Choice>
+                                            </li>
+                                        }
+                                    </ul>
+                                </FieldSet>
+                                <div class="actions">
+                                    <Button Variant="ButtonVariant.Primary" Type="submit">Save revision @(revision.RevisionNumber + 1)</Button>
+                                    <span class="actions-hint">Approval applies only to saved wording.</span>
+                                </div>
+                            </form>
+                        }
+                    </TabPane>
+                </TabSet>
+            </Panel>
+
+            <Panel Title="Evidence" Id="evidence" Padded="true" Raised="true" Class="split-sticky">
+                @if (comparison is not null)
+                {
+                    <p class="small muted">Earlier version captured @ObservedText(before). Later version captured @ObservedText(after). Capture times are not edit times.</p>
+                    @if (comparison.Hunks.IsEmpty)
+                    {
+                        <Notice>This saved comparison has no text differences.</Notice>
+                    }
+                    else
+                    {
+                        <DocumentComparisonView Hunks="comparison.Hunks" ViewId="@comparison.ComparisonId"
+                                                BeforeExtractionId="@comparison.BeforeExtractionId" AfterExtractionId="@comparison.AfterExtractionId" />
+                    }
+                    <p class="row small">
+                        <a href="@($"/Documents/Extraction?extractionId={comparison.BeforeExtractionId}")">Full earlier text</a>
+                        <a href="@($"/Documents/Extraction?extractionId={comparison.AfterExtractionId}")">Full later text</a>
+                    </p>
+                    <TechnicalDetails Items="TechnicalItems" />
+                }
+            </Panel>
+        </div>
+
+        <Panel Title="@($"Decide on revision {revision.RevisionNumber}")" Id="decision" Padded="true">
+            <ul class="checklist">
+                <li>Is this a substantive edit, not navigation churn or a processing difference?</li>
+                <li>Do the citations support every claim?</li>
+                <li>Are capture times kept apart from the edit date?</li>
+            </ul>
+            @if (concerns.Length > 0)
+            {
+                <FieldSet Legend="Open concerns" Hint="Select each concern you resolved, and say how in the note.">
+                    <ul class="choices">
+                        @foreach (var concern in concerns)
+                        {
+                            <li>
+                                <Choice Name="Decision.ResolvedDecisionIds" Value="@concern.DecisionId" Form="decision-form"
+                                        Label="@(string.IsNullOrWhiteSpace(concern.Note) ? "Concern without a note" : concern.Note)">
+                                    <span class="muted small">Raised on revision @concern.RevisionNumber</span>
+                                </Choice>
+                            </li>
+                        }
+                    </ul>
+                </FieldSet>
+            }
+            <Notice Tone="Tone.Warn" id="decision-unsaved-warning" hidden="@CanDecide">Save your edits or reload the saved revision before you decide. Decisions apply only to saved wording.</Notice>
+            <form id="decision-form" class="form" method="post" @formname="decide" @onsubmit="DecideAsync">
+                <AntiforgeryToken />
+                <FieldSet Id="decision-controls" Legend="@($"Decision on saved revision {revision.RevisionNumber}")" Disabled="@(!CanDecide)">
+                    <input type="hidden" name="expectedRevisionNumber" value="@revision.RevisionNumber" />
+                    <input type="hidden" name="expectedReviewStateVersion" value="@review.ReviewStateVersion" />
+                    <input type="hidden" name="idempotencyKey" value="@decisionKey" />
+                    <Field Label="Note" For="Decision_Note" Hint="Requesting changes and withdrawing approval need a reason. Resolving concerns needs a note.">
+                        <textarea id="Decision_Note" class="plain" name="Decision.Note" maxlength="4000" aria-describedby="Decision_Note-hint" value="@Decision?.Note"></textarea>
+                    </Field>
+                    <div class="actions">
+                        @if (status != DocumentChangeReviewStatus.Approved)
+                        {
+                            <Button Variant="ButtonVariant.Primary" Type="submit" name="kind" value="Approve">Approve</Button>
+                        }
+                        <Button Type="submit" name="kind" value="RequestChanges">Request changes</Button>
+                        @if (status == DocumentChangeReviewStatus.Approved)
+                        {
+                            <Button Variant="ButtonVariant.Danger" Type="submit" name="kind" value="WithdrawApproval">Withdraw approval</Button>
+                        }
+                        <span class="actions-hint">Approval keeps the account private.</span>
+                    </div>
+                </FieldSet>
+            </form>
+        </Panel>
+
+        <Panel Title="History" Id="history">
+            <DataTable Items="History" Caption="Revisions and decisions">
+                <Head>
+                    <th class="time">When</th>
+                    <th>Event</th>
+                    <th>By</th>
+                    <th>Note</th>
+                </Head>
+                <Row Context="entry">
+                    <td class="time"><Timestamp Value="entry.When" Format="TimestampFormat.Full" /></td>
+                    <td>
+                        @if (entry.Decision is { } decision)
+                        {
+                            <StatusBadge Tone="DraftStatusDisplay.Tone(decision)" Text="@DraftStatusDisplay.Label(decision)" />
+                        }
+                        @entry.Event
+                    </td>
+                    <td>@Who(entry.ActorSubject)</td>
+                    <td>@entry.Note</td>
+                </Row>
+            </DataTable>
+        </Panel>
+    </div>
+}
+
+@code {
+    private RenderFragment HeaderMeta(DocumentChangeReviewStatus status, int concerns) =>
+        @<text>
+            <StatusBadge Tone="DraftStatusDisplay.Tone(status)" Text="@DraftStatusDisplay.Label(status, concerns)" />
+            <span class="muted small">Revision @Revision.RevisionNumber, saved @Moment.Full(Revision.CreatedAtUtc)</span>
+        </text>;
+}
