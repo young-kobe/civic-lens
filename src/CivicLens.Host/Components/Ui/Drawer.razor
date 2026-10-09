@@ -1,0 +1,30 @@
+<div class="scrim" @onclick="OnClose"></div>
+<aside class="drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title" tabindex="-1" @ref="element" @onkeydown="CloseOnEscapeAsync">
+    <header class="drawer-head">
+        <div>
+            <h2 id="drawer-title">@Title</h2>
+            @if (Subtitle is not null)
+            {
+                <p>@Subtitle</p>
+            }
+        </div>
+        <Button Variant="ButtonVariant.Quiet" Small="true" OnClick="OnClose">Close</Button>
+    </header>
+    <div class="drawer-body">@ChildContent</div>
+</aside>
+
+@code {
+    private ElementReference element;
+
+    [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+    [Parameter] public string? Subtitle { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender) await element.FocusAsync();
+    }
+
+    private Task CloseOnEscapeAsync(KeyboardEventArgs args) => args.Key == "Escape" ? OnClose.InvokeAsync() : Task.CompletedTask;
+}

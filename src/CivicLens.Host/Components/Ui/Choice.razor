@@ -1,0 +1,21 @@
+<label class="choice" data-link="@Link">
+    <input type="@(Radio ? "radio" : "checkbox")" name="@Name" value="@Value" checked="@Checked" form="@Form" />
+    <span>
+        @if (Label is not null)
+        {
+            <span class="choice-label">@Label</span>
+        }
+        @ChildContent
+    </span>
+</label>
+
+@code {
+    [Parameter, EditorRequired] public string Name { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string Value { get; set; } = string.Empty;
+    [Parameter] public string? Label { get; set; }
+    [Parameter] public bool Checked { get; set; }
+    [Parameter] public bool Radio { get; set; }
+    [Parameter] public string? Form { get; set; }
+    [Parameter] public string? Link { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

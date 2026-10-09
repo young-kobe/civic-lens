@@ -1,0 +1,25 @@
+@inject NavigationManager Navigation
+
+<a class="nav-link" href="@Href" aria-current="@(IsCurrent ? "page" : null)">
+    <Icon Name="Icon" />
+    @Text
+</a>
+
+@code {
+    [Parameter, EditorRequired] public string Href { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string Text { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public IconName Icon { get; set; }
+    /// <summary>Paths that also mark this link current, for pages reached from it.</summary>
+    [Parameter] public IReadOnlyList<string> Sections { get; set; } = [];
+
+    private bool IsCurrent
+    {
+        get
+        {
+            var path = "/" + Navigation.ToBaseRelativePath(Navigation.Uri).Split('?', '#')[0];
+            return Sections.Prepend(Href).Any(section =>
+                path.Equals(section, StringComparison.OrdinalIgnoreCase) ||
+                path.StartsWith(section.TrimEnd('/') + "/", StringComparison.OrdinalIgnoreCase));
+        }
+    }
+}

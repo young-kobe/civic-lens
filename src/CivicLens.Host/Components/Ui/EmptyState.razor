@@ -1,0 +1,14 @@
+<div class="empty">
+    <h3>@Title</h3>
+    @if (Text is not null)
+    {
+        <p>@Text</p>
+    }
+    @Action
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+    [Parameter] public string? Text { get; set; }
+    [Parameter] public RenderFragment? Action { get; set; }
+}

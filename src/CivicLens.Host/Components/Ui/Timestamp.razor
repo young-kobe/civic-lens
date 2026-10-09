@@ -1,0 +1,13 @@
+<time datetime="@Moment.Machine(Value)" title="@Moment.Full(Value)">@Text</time>
+
+@code {
+    [Parameter, EditorRequired] public DateTimeOffset Value { get; set; }
+    [Parameter] public TimestampFormat Format { get; set; } = TimestampFormat.Short;
+
+    private string Text => Format switch
+    {
+        TimestampFormat.Day => Moment.Day(Value),
+        TimestampFormat.Full => Moment.Full(Value),
+        _ => Moment.Short(Value)
+    };
+}

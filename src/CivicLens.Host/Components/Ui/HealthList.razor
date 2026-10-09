@@ -1,0 +1,14 @@
+<ul class="health">
+    @foreach (var item in Items)
+    {
+        <li class="health-@ToneClass.Suffix(item.Tone)">
+            <span class="health-dot" aria-hidden="true"></span>
+            <span class="health-name">@item.Name<small>@item.Detail</small></span>
+            <span class="health-time">@if (item.Time is { } time) { <Timestamp Value="time" /> }</span>
+        </li>
+    }
+</ul>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<HealthItem> Items { get; set; } = [];
+}

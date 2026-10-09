@@ -1,0 +1,7 @@
+<div class="stack" role="tabpanel" data-pane="@Key" aria-label="@Label">@ChildContent</div>
+
+@code {
+    [Parameter, EditorRequired] public string Key { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string Label { get; set; } = string.Empty;
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

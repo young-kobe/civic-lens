@@ -1,6 +1,6 @@
 using System.Collections.Immutable;
-using System.Globalization;
 using CivicLens.Core.Documents;
+using CivicLens.Host.Components.Evidence;
 using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Host.Publication;
@@ -10,11 +10,6 @@ internal static class PublishedRecordView
     public const string ChangeDateAnchor = "cite-change-date";
 
     public static string CitationAnchor(int index) => $"cite-{index + 1}";
-
-    public static string Moment(DateTimeOffset value) =>
-        value.UtcDateTime.ToString("yyyy-MM-dd HH:mm 'UTC'", CultureInfo.InvariantCulture);
-
-    public static string Day(DateOnly value) => value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 
     public static ImmutableArray<DocumentComparisonHunk> Hunks(PublishedDocumentChange record) =>
         [.. record.Changes.Select(change => new DocumentComparisonHunk(

@@ -1,0 +1,16 @@
+<div class="stack" data-tabset data-selected="@Selected">
+    <div class="tabs" role="tablist" aria-label="@Label">
+        @foreach (var tab in Tabs)
+        {
+            <button class="tab" type="button" role="tab" data-tab="@tab.Key" aria-selected="@((tab.Key == Selected).ToString().ToLowerInvariant())">@tab.Label</button>
+        }
+    </div>
+    @ChildContent
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Label { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public IReadOnlyList<TabDefinition> Tabs { get; set; } = [];
+    [Parameter, EditorRequired] public string Selected { get; set; } = string.Empty;
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

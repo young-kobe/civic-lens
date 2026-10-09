@@ -1,0 +1,22 @@
+@using Microsoft.AspNetCore.Components.Rendering
+
+<div class="doc-text" role="region" aria-label="@Label" tabindex="0">@foreach (var run in Runs) { @Run(run, 0) }</div>
+
+@code {
+    [Parameter, EditorRequired] public string Label { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public IReadOnlyList<TextRun> Runs { get; set; } = [];
+
+    private static RenderFragment Run(TextRun run, int depth) => builder =>
+    {
+        if (depth == run.Marks.Count)
+        {
+            builder.AddContent(0, EncodedEvidence.Markup(run.Text));
+            return;
+        }
+        var mark = run.Marks[depth];
+        builder.OpenElement(1, "mark");
+        if (mark.CarriesAnchor) builder.AddAttribute(2, "id", mark.AnchorId);
+        builder.AddContent(3, Run(run, depth + 1));
+        builder.CloseElement();
+    };
+}

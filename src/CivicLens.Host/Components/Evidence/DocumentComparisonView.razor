@@ -1,0 +1,70 @@
+@using System.Collections.Immutable
+@using CivicLens.Core.Documents
+
+<div class="comparison" data-layout="redline">
+    @if (Heading is not null || ShowLayoutSwitch)
+    {
+        <div class="comparison-head">
+            @Heading
+            @if (ShowLayoutSwitch)
+            {
+                <div class="segmented" role="group" aria-label="Comparison layout" data-layout-switch hidden>
+                    <button class="segmented-item" type="button" data-layout-choice="redline" aria-pressed="true">Redline</button>
+                    <button class="segmented-item" type="button" data-layout-choice="side" aria-pressed="false">Side by side</button>
+                </div>
+            }
+        </div>
+    }
+    <div>
+        @for (var index = 0; index < Shown; index++)
+        {
+            var hunk = Hunks[index];
+            var key = LinkKey(ViewId, index);
+            <article class="hunk" aria-label="@($"Changed passage {index + 1} of {Hunks.Length}")">
+                <div class="hunk-meta">
+                    <span>Passage @(index + 1) of @Hunks.Length</span>
+                    @if (BeforeExtractionId is not null && AfterExtractionId is not null)
+                    {
+                        <span class="row">
+                            @if (hunk.BeforeLength > 0)
+                            {
+                                <a href="@CitationHref(BeforeExtractionId, hunk.BeforeStart, hunk.BeforeLength)">Earlier passage</a>
+                            }
+                            @if (hunk.AfterLength > 0)
+                            {
+                                <a href="@CitationHref(AfterExtractionId, hunk.AfterStart, hunk.AfterLength)">Later passage</a>
+                            }
+                        </span>
+                    }
+                </div>
+                <p class="redline" data-link="@key"><RedlineText Segments="Redline.Build(hunk)" /></p>
+                <div class="side-by-side" data-link="@key">
+                    <div class="side-before"><h4>Before</h4>@EncodedEvidence.Markup(hunk.BeforeLength == 0 ? "No text here before the change." : hunk.BeforeText)</div>
+                    <div class="side-after"><h4>After</h4>@EncodedEvidence.Markup(hunk.AfterLength == 0 ? "No text here after the change." : hunk.AfterText)</div>
+                </div>
+            </article>
+        }
+    </div>
+    @if (Shown < Hunks.Length)
+    {
+        <p class="muted small">Showing @Shown of @Hunks.Length changed passages.</p>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public ImmutableArray<DocumentComparisonHunk> Hunks { get; set; }
+    [Parameter, EditorRequired] public string ViewId { get; set; } = string.Empty;
+    [Parameter] public string? BeforeExtractionId { get; set; }
+    [Parameter] public string? AfterExtractionId { get; set; }
+    [Parameter] public int MaximumPassages { get; set; } = int.MaxValue;
+    [Parameter] public bool ShowLayoutSwitch { get; set; } = true;
+    [Parameter] public RenderFragment? Heading { get; set; }
+
+    private int Shown => Math.Min(Hunks.Length, MaximumPassages);
+
+    /// <summary>Links a passage to the citations drawn from it, so pointing at either outlines both.</summary>
+    public static string LinkKey(string viewId, int hunkIndex) => $"{viewId}-passage-{hunkIndex + 1}";
+
+    public static string CitationHref(string extractionId, int start, int length) =>
+        $"/Documents/Citation?extractionId={Uri.EscapeDataString(extractionId)}&start={start}&length={length}";
+}

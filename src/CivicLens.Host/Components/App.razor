@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <base href="/" />
+    <link rel="preload" href="@Assets["fonts/instrument-sans.woff2"]" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="@Assets["css/theme.css"]" />
+    <link rel="stylesheet" href="@Assets["css/app.css"]" />
+    <script src="@Assets["js/theme.js"]"></script>
+    <HeadOutlet />
+</head>
+<body>
+    <Routes />
+    <div id="components-reconnect-modal" role="status" aria-live="polite">
+        <span class="reconnect-show">Reconnecting to the workspace…</span>
+        <span class="reconnect-failed">Connection lost. Reload the page to continue.</span>
+        <span class="reconnect-rejected">This page expired. Reload the page to continue.</span>
+    </div>
+    <script src="_framework/blazor.web.js" autostart="false"></script>
+    <script src="@Assets["js/app.js"]"></script>
+</body>
+</html>

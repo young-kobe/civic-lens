@@ -1,0 +1,6 @@
+<span class="badge badge-@ToneClass.Suffix(Tone)">@Text</span>
+
+@code {
+    [Parameter] public Tone Tone { get; set; }
+    [Parameter, EditorRequired] public string Text { get; set; } = string.Empty;
+}

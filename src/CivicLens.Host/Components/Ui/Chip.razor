@@ -1,0 +1,8 @@
+<label class="chip"><input type="checkbox" name="@Name" value="@Value" checked="@Checked" />@Text</label>
+
+@code {
+    [Parameter, EditorRequired] public string Name { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string Value { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string Text { get; set; } = string.Empty;
+    [Parameter] public bool Checked { get; set; }
+}

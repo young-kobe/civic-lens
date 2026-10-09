@@ -1,0 +1,16 @@
+<nav class="pager" aria-label="@Label">
+    <span>@Summary</span>
+    <div class="pager-links">
+        <Button Small="true" Href="@NewerHref" Disabled="@(NewerHref is null)" rel="@(NewerHref is null ? null : "prev")">@NewerText</Button>
+        <Button Small="true" Href="@OlderHref" Disabled="@(OlderHref is null)" rel="@(OlderHref is null ? null : "next")">@OlderText</Button>
+    </div>
+</nav>
+
+@code {
+    [Parameter, EditorRequired] public string Label { get; set; } = string.Empty;
+    [Parameter] public string? Summary { get; set; }
+    [Parameter] public string? NewerHref { get; set; }
+    [Parameter] public string? OlderHref { get; set; }
+    [Parameter] public string NewerText { get; set; } = "Newer";
+    [Parameter] public string OlderText { get; set; } = "Older";
+}

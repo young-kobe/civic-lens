@@ -1,0 +1,6 @@
+<div class="panel stats" role="group" aria-label="@Label">@ChildContent</div>
+
+@code {
+    [Parameter, EditorRequired] public string Label { get; set; } = string.Empty;
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}
