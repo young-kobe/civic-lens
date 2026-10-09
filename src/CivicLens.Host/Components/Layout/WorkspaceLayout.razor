@@ -8,7 +8,7 @@
     <aside class="rail">
         <a class="brand" href="/Review"><BrandMark />Civic Lens</a>
         <nav class="nav" aria-label="Workspace">
-            <RailLink Href="/Review" Text="Review" Icon="IconName.Review" Sections="ReviewSections" />
+            <RailLink Href="/Review" Text="Review" Icon="IconName.Review" Sections="ReviewSections" Excluding="SourcesSection" />
             @if (role == ReviewRole.Owner)
             {
                 <RailLink Href="/Review/Sources" Text="Sources" Icon="IconName.Sources" />
@@ -38,6 +38,7 @@
     public const string CrumbsSection = "topbar-crumbs";
 
     private static readonly IReadOnlyList<string> ReviewSections = ["/Documents"];
+    private static readonly IReadOnlyList<string> SourcesSection = ["/Review/Sources"];
     private ReviewRole role;
 
     [CascadingParameter] private Task<AuthenticationState>? AuthenticationState { get; set; }

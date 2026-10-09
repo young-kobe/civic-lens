@@ -40,9 +40,9 @@
                         <DataTable Items="changes.Items" Caption="New changes">
                             <Head>
                                 <th>Document</th>
-                                <th class="hide-narrow">Source</th>
+                                <th class="fit hide-narrow">Source</th>
                                 <th class="time">Observed</th>
-                                <th class="num">Passages</th>
+                                <th class="num hide-narrow">Passages</th>
                                 <th class="act"><span class="visually-hidden">Action</span></th>
                             </Head>
                             <Row Context="item">
@@ -53,9 +53,9 @@
                                         <RedlineExcerpt Hunk="item.Comparison.Hunks[0]" />
                                     }
                                 </td>
-                                <td class="hide-narrow">@SourceLabels.Name(configuration, item.SourceId)</td>
+                                <td class="fit hide-narrow">@SourceLabels.Name(configuration, item.SourceId)</td>
                                 <td class="time"><Timestamp Value="item.AfterObservedAtUtc" /></td>
-                                <td class="num">@item.Comparison.Hunks.Length</td>
+                                <td class="num hide-narrow">@item.Comparison.Hunks.Length</td>
                                 <td class="act">
                                     <Button Variant="ButtonVariant.Primary" Small="true" Type="submit" form="start-draft" name="comparisonId" value="@item.Comparison.ComparisonId">Start draft</Button>
                                 </td>
@@ -71,11 +71,8 @@
                                 </EmptyState>
                             </Empty>
                         </DataTable>
-                        @if (changes.NewerCursor is not null || changes.OlderCursor is not null)
-                        {
-                            <Pager Label="New changes pages" Summary="@Count(overview.NewChanges, "new change", "new changes")"
-                                   NewerHref="@ChangesHref(changes.NewerCursor)" OlderHref="@ChangesHref(changes.OlderCursor)" />
-                        }
+                        <Pager Label="New changes pages" Summary="@Count(overview.NewChanges, "new change", "new changes")"
+                               NewerHref="@ChangesHref(changes.NewerCursor)" OlderHref="@ChangesHref(changes.OlderCursor)" />
                     </ChildContent>
                 </Panel>
 
@@ -104,10 +101,7 @@
                                 <EmptyState Title="@DraftsEmpty.Title" Text="@DraftsEmpty.Text" />
                             </Empty>
                         </DataTable>
-                        @if (drafts.NewerCursor is not null || drafts.OlderCursor is not null)
-                        {
-                            <Pager Label="Draft pages" NewerHref="@DraftsHref(drafts.NewerCursor)" OlderHref="@DraftsHref(drafts.OlderCursor)" />
-                        }
+                        <Pager Label="Draft pages" NewerHref="@DraftsHref(drafts.NewerCursor)" OlderHref="@DraftsHref(drafts.OlderCursor)" />
                     </ChildContent>
                 </Panel>
             </div>

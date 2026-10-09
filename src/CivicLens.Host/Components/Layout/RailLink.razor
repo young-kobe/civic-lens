@@ -10,15 +10,14 @@
     [Parameter, EditorRequired] public string Text { get; set; } = string.Empty;
     [Parameter, EditorRequired] public IconName Icon { get; set; }
     [Parameter] public IReadOnlyList<string> Sections { get; set; } = [];
+    [Parameter] public IReadOnlyList<string> Excluding { get; set; } = [];
 
-    private bool IsCurrent
+    private bool IsCurrent => Sections.Prepend(Href).Any(IsWithin) && !Excluding.Any(IsWithin);
+
+    private bool IsWithin(string section)
     {
-        get
-        {
-            var path = "/" + Navigation.ToBaseRelativePath(Navigation.Uri).Split('?', '#')[0];
-            return Sections.Prepend(Href).Any(section =>
-                path.Equals(section, StringComparison.OrdinalIgnoreCase) ||
-                path.StartsWith(section.TrimEnd('/') + "/", StringComparison.OrdinalIgnoreCase));
-        }
+        var path = "/" + Navigation.ToBaseRelativePath(Navigation.Uri).Split('?', '#')[0];
+        return path.Equals(section, StringComparison.OrdinalIgnoreCase) ||
+            path.StartsWith(section.TrimEnd('/') + "/", StringComparison.OrdinalIgnoreCase);
     }
 }

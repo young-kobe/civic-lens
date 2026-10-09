@@ -34,7 +34,7 @@
         <ComparisonStatusNotice Comparison="comparison" />
         @if (!comparison.Hunks.IsEmpty)
         {
-            <Panel Title="Changes">
+            <Panel Title="Changes" Padded="true">
                 <Aside>
                     <a href="@EvidenceLinks.Extraction(comparison.BeforeExtractionId)">Earlier saved text</a>
                     <a href="@EvidenceLinks.Extraction(comparison.AfterExtractionId)">Later saved text</a>

@@ -231,7 +231,7 @@ else
             <Notice Tone="Tone.Warn" id="decision-unsaved-warning" hidden="@CanDecide">Save your edits or reload the saved revision before you decide. Decisions apply only to saved wording.</Notice>
             <form id="decision-form" class="form" method="post" @formname="decide" @onsubmit="DecideAsync">
                 <AntiforgeryToken />
-                <FieldSet Id="decision-controls" Legend="@($"Decision on saved revision {revision.RevisionNumber}")" Disabled="@(!CanDecide)">
+                <FieldSet Id="decision-controls" Legend="Your decision" Disabled="@(!CanDecide)">
                     <input type="hidden" name="expectedRevisionNumber" value="@revision.RevisionNumber" />
                     <input type="hidden" name="expectedReviewStateVersion" value="@review.ReviewStateVersion" />
                     <input type="hidden" name="idempotencyKey" value="@decisionKey" />
@@ -259,11 +259,11 @@ else
                 <Head>
                     <th class="time">When</th>
                     <th>Event</th>
-                    <th>By</th>
+                    <th class="hide-narrow">By</th>
                     <th>Note</th>
                 </Head>
                 <Row Context="entry">
-                    <td class="time"><Timestamp Value="entry.When" Format="TimestampFormat.Full" /></td>
+                    <td class="time"><Timestamp Value="entry.When" /></td>
                     <td>
                         @if (entry.Decision is { } decision)
                         {
@@ -271,7 +271,7 @@ else
                         }
                         @entry.Event
                     </td>
-                    <td>@Who(entry.ActorSubject)</td>
+                    <td class="hide-narrow">@Who(entry.ActorSubject)</td>
                     <td>@entry.Note</td>
                 </Row>
             </DataTable>

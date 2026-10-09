@@ -33,7 +33,7 @@
                         <th class="hide-narrow">Official</th>
                         <th class="hide-narrow">Type</th>
                         <th>Status</th>
-                        <th>Last check</th>
+                        <th class="hide-narrow">Last check</th>
                         <th class="act"><span class="visually-hidden">Action</span></th>
                     </Head>
                     <Row>
@@ -42,7 +42,7 @@
                         <td class="hide-narrow">@row.Officials</td>
                         <td class="hide-narrow">@row.Type</td>
                         <td><StatusBadge Tone="status.Tone" Text="@status.Label" /></td>
-                        <td class="time">
+                        <td class="time hide-narrow">
                             @if (row.Health.LastCheckedAt is { } checkedAt)
                             {
                                 <Timestamp Value="checkedAt" />

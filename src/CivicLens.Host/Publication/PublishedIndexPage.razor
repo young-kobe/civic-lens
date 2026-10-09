@@ -11,12 +11,9 @@
             </Row>
             <Empty><EmptyState Title="No records yet" Text="This release has no records." /></Empty>
         </DataTable>
-        @if (PageCount > 1)
-        {
-            <Pager Label="Pages" Summary="@($"Page {Page} of {PageCount}")" NewerText="Previous" OlderText="Next"
-                   NewerHref="@(Page > 1 ? PublicationProtocol.IndexPagePath(Page - 1) : null)"
-                   OlderHref="@(Page < PageCount ? PublicationProtocol.IndexPagePath(Page + 1) : null)" />
-        }
+        <Pager Label="Pages" Summary="@($"Page {Page} of {PageCount}")" NewerText="Previous" OlderText="Next"
+               NewerHref="@(Page > 1 ? PublicationProtocol.IndexPagePath(Page - 1) : null)"
+               OlderHref="@(Page < PageCount ? PublicationProtocol.IndexPagePath(Page + 1) : null)" />
     </Panel>
 </PublicPage>
 
