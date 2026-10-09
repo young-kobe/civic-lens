@@ -21,8 +21,8 @@ public sealed class PublicationReleaseHandlersTests
     public async Task OwnerCanRollBackToAnEarlierCommittedRelease()
     {
         var scenario = new PublicationScenario();
-        await scenario.Publications.CommitAsync("owner", new(1, "release-1", Time, [], []), "a", "h", default);
-        await scenario.Publications.CommitAsync("owner", new(2, "release-2", Time, [], []), "b", "h", default);
+        await scenario.Publications.CommitAsync("owner", new(1, null, "release-1", Time, [], []), "a", "h", default);
+        await scenario.Publications.CommitAsync("owner", new(2, 1, "release-2", Time, [], []), "b", "h", default);
         var handler = new ActivatePublicationRelease(scenario.Publications, scenario.Releases);
 
         var summary = await handler.ExecuteAsync(PublicationScenario.Owner, 1);
@@ -32,10 +32,23 @@ public sealed class PublicationReleaseHandlersTests
     }
 
     [Fact]
+    public async Task ActivationServesTheRecordedActiveReleaseSoAnOlderRollbackCannotUndoANewerOne()
+    {
+        var scenario = new PublicationScenario();
+        await scenario.Publications.CommitAsync("owner", new(1, null, "release-1", Time, [], []), "a", "h", default);
+        await scenario.Publications.CommitAsync("owner", new(2, 1, "release-2", Time, [], []), "b", "h", default);
+        scenario.Publications.BeforeServe = () => scenario.Publications.ActiveReleaseNumber = 2;
+
+        await new ActivatePublicationRelease(scenario.Publications, scenario.Releases).ExecuteAsync(PublicationScenario.Owner, 1);
+
+        Assert.Equal("release-2", scenario.Releases.Active);
+    }
+
+    [Fact]
     public async Task ReviewerCannotActivateAReleaseButCanListThem()
     {
         var scenario = new PublicationScenario();
-        await scenario.Publications.CommitAsync("owner", new(1, "release-1", Time, [], []), "a", "h", default);
+        await scenario.Publications.CommitAsync("owner", new(1, null, "release-1", Time, [], []), "a", "h", default);
         await scenario.Releases.ActivateAsync("release-1", default);
 
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>

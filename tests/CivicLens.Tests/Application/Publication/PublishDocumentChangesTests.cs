@@ -217,6 +217,20 @@ public sealed class PublishDocumentChangesTests
     }
 
     [Fact]
+    public async Task PublishServesTheRecordedActiveReleaseSoAnOlderPublishCannotUndoANewerActivation()
+    {
+        var scenario = new PublicationScenario();
+        scenario.SeedRelease(1, withFiles: true);
+        scenario.Publications.BeforeServe = () => scenario.Publications.ActiveReleaseNumber = 1;
+
+        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
+            PublicationScenario.Request("k", scenario.AddDraft('a')));
+
+        Assert.Equal(2, summary.ReleaseNumber);
+        Assert.Equal(["seeded"], scenario.Releases.Activated);
+    }
+
+    [Fact]
     public async Task RetryAfterAFailedActivationServesTheCommittedRelease()
     {
         var scenario = new PublicationScenario();
@@ -282,6 +296,7 @@ public sealed class PublishDocumentChangesTests
         var three = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k3", third));
 
         Assert.Equal(3, three.ReleaseNumber);
+        Assert.Equal(one.ReleaseNumber, scenario.Publications.LastCommit!.BaseReleaseNumber);
         var manifest = ReadManifest(scenario, three.DirectoryName);
         Assert.Equal([third, first], manifest.Records.Select(entry => entry.RecordId));
         Assert.Equal(firstTime, manifest.Records[1].FirstPublishedAtUtc);

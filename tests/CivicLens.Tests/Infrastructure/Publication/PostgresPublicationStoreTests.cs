@@ -181,8 +181,60 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
         Assert.Equal(first, (await publications.GetStateAsync(default)).Active);
     }
 
-    private static PublicationCommit Commit(int number, string draftId, int revision, int reviewStateVersion) => new(number,
-        $"{number:D6}-{Guid.NewGuid():N}", PublishedAt, [new(draftId, revision)], [new(draftId, revision, reviewStateVersion)]);
+    [Fact]
+    public async Task ReleaseBuiltBeforeARollbackIsRejectedSoItCannotRestoreWithdrawnRecords()
+    {
+        var draft = await CreateDraftAsync();
+        await publications.CommitAsync(Owner.Subject, Commit(1, draft, 1, 0), "key-1", Hash(1), default);
+        await publications.CommitAsync(Owner.Subject, Commit(2, draft, 1, 0), "key-2", Hash(2), default);
+        var rolledBack = await publications.ActivateAsync(1, default);
+
+        await Assert.ThrowsAsync<PublicationConflictException>(() =>
+            publications.CommitAsync(Owner.Subject, Commit(3, 2, draft.DraftId, 1, 0), "stale", Hash(3), default));
+        Assert.Equal(new PublicationState(2, rolledBack), await publications.GetStateAsync(default));
+        var third = await publications.CommitAsync(Owner.Subject, Commit(3, 1, draft.DraftId, 1, 0), "fresh", Hash(4), default);
+        Assert.Equal(third, (await publications.GetStateAsync(default)).Active);
+    }
+
+    [Fact]
+    public async Task ActivationWaitsForAnInFlightLinkSwapSoTheLinkEndsAtTheRecordedRelease()
+    {
+        var draft = await CreateDraftAsync();
+        var first = await publications.CommitAsync(Owner.Subject, Commit(1, draft, 1, 0), "key-1", Hash(1), default);
+        var second = await publications.CommitAsync(Owner.Subject, Commit(2, draft, 1, 0), "key-2", Hash(2), default);
+        var served = new List<string>();
+        Task<PublicationReleaseSummary>? rollback = null;
+
+        await publications.ServeActiveAsync(async (directory, _) =>
+        {
+            rollback = publications.ActivateAsync(1, default);
+            await Task.Delay(TimeSpan.FromMilliseconds(300));
+            Assert.False(rollback.IsCompleted);
+            served.Add(directory);
+        }, default);
+        await rollback!;
+        await publications.ServeActiveAsync((directory, _) => { served.Add(directory); return Task.CompletedTask; }, default);
+
+        Assert.Equal([second.DirectoryName, first.DirectoryName], served);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(2)]
+    public async Task BaseReleaseMustPrecedeTheNewRelease(int baseNumber)
+    {
+        var draft = await CreateDraftAsync();
+
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            publications.CommitAsync(Owner.Subject, Commit(2, baseNumber, draft.DraftId, 1, 0), "key", Hash(1), default));
+    }
+
+    private static PublicationCommit Commit(int number, string draftId, int revision, int reviewStateVersion) =>
+        Commit(number, number == 1 ? null : number - 1, draftId, revision, reviewStateVersion);
+
+    private static PublicationCommit Commit(int number, int? baseNumber, string draftId, int revision,
+        int reviewStateVersion) => new(number, baseNumber, $"{number:D6}-{Guid.NewGuid():N}", PublishedAt,
+        [new(draftId, revision)], [new(draftId, revision, reviewStateVersion)]);
 
     private static PublicationCommit Commit(int number, DocumentChangeDraftRevision draft, int revision, int reviewStateVersion) =>
         Commit(number, draft.DraftId, revision, reviewStateVersion);

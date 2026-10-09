@@ -37,21 +37,20 @@ public sealed class PublishDocumentChanges(IPublicationStore publications, IRele
 
         var number = state.LatestReleaseNumber + 1;
         var (directory, entries) = await StageAsync(number, now, previous, carried, additions, cancellationToken);
-        var commit = new PublicationCommit(number, directory, now,
+        var commit = new PublicationCommit(number, state.Active?.ReleaseNumber, directory, now,
             [.. entries.Select(entry => new PublishedRevisionBinding(entry.RecordId, entry.RevisionNumber))],
             [.. additions.Select(addition => new ReviewStateExpectation(addition.Review.DraftId,
                 addition.Review.CurrentRevision.RevisionNumber, addition.Review.ReviewStateVersion))]);
         var summary = await CommitAsync(actor, commit, request.IdempotencyKey, payloadHash, cancellationToken);
-        if (summary.DirectoryName == directory) await releases.ActivateAsync(directory, cancellationToken);
-        else await ServeActiveReleaseAsync(cancellationToken);
+        await ServeActiveReleaseAsync(cancellationToken);
         return summary;
     }
 
+    // Reads the active release again under the publication lock, so an older command cannot serve a stale release.
     private async Task ServeActiveReleaseAsync(CancellationToken cancellationToken)
     {
-        var active = (await publications.GetStateAsync(cancellationToken)).Active
+        _ = await publications.ServeActiveAsync(releases.ActivateAsync, cancellationToken)
             ?? throw new InvalidDataException("A release was committed but none is active.");
-        await releases.ActivateAsync(active.DirectoryName, cancellationToken);
     }
 
     private static ImmutableArray<string> ValidateRequest(PublishDocumentChangesRequest request)

@@ -60,6 +60,19 @@ public sealed partial class PostgresPublicationStore(IDbContextFactory<Collectio
         return ToSummary(row);
     }
 
+    public async Task<PublicationReleaseSummary?> ServeActiveAsync(Func<string, CancellationToken, Task> serve,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(serve);
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        await using var transaction = await PostgresDocumentChangeReviewStore.BeginWriteAsync(db, cancellationToken);
+        var active = await db.Set<PublicationReleaseRow>().AsNoTracking()
+            .SingleOrDefaultAsync(row => row.IsActive, cancellationToken);
+        if (active is not null) await serve(active.DirectoryName, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return active is null ? null : ToSummary(active);
+    }
+
     public async Task<PublicationReleaseSummary?> FindReplayAsync(string actorSubject, string idempotencyKey,
         string payloadHash, CancellationToken cancellationToken)
     {
@@ -82,7 +95,7 @@ public sealed partial class PostgresPublicationStore(IDbContextFactory<Collectio
             return replay;
         }
 
-        await RequireNextReleaseNumberAsync(db, commit.ReleaseNumber, cancellationToken);
+        await RequireUnchangedReleasesAsync(db, commit, cancellationToken);
         await RequireUnchangedReviewStateAsync(db, commit.AddedRecords, cancellationToken);
         await ClearActiveAsync(db, cancellationToken);
         var summary = new PublicationReleaseSummary(commit.ReleaseNumber, commit.DirectoryName,
@@ -117,13 +130,17 @@ public sealed partial class PostgresPublicationStore(IDbContextFactory<Collectio
         db.Set<PublicationReleaseRow>().Where(row => row.IsActive)
             .ExecuteUpdateAsync(update => update.SetProperty(row => row.IsActive, false), cancellationToken);
 
-    private static async Task RequireNextReleaseNumberAsync(CollectionAttemptDbContext db, int releaseNumber,
+    private static async Task RequireUnchangedReleasesAsync(CollectionAttemptDbContext db, PublicationCommit commit,
         CancellationToken cancellationToken)
     {
-        var latest = await db.Set<PublicationReleaseRow>().AsNoTracking()
-            .MaxAsync(candidate => (int?)candidate.ReleaseNumber, cancellationToken) ?? 0;
-        if (latest != releaseNumber - 1)
+        var releases = db.Set<PublicationReleaseRow>().AsNoTracking();
+        var latest = await releases.MaxAsync(candidate => (int?)candidate.ReleaseNumber, cancellationToken) ?? 0;
+        if (latest != commit.ReleaseNumber - 1)
             throw new PublicationConflictException("Another release was committed first. Rebuild from the latest release.");
+        var active = await releases.Where(candidate => candidate.IsActive)
+            .Select(candidate => (int?)candidate.ReleaseNumber).SingleOrDefaultAsync(cancellationToken);
+        if (active != commit.BaseReleaseNumber)
+            throw new PublicationConflictException("The active release changed after the release was built. Rebuild it.");
     }
 
     private static async Task RequireUnchangedReviewStateAsync(CollectionAttemptDbContext db,
@@ -174,6 +191,8 @@ public sealed partial class PostgresPublicationStore(IDbContextFactory<Collectio
         ArgumentNullException.ThrowIfNull(commit);
         ArgumentOutOfRangeException.ThrowIfLessThan(commit.ReleaseNumber, 1);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(commit.ReleaseNumber, 999_999);
+        if (commit.BaseReleaseNumber < 1 || commit.BaseReleaseNumber >= commit.ReleaseNumber)
+            throw new ArgumentException("The base release must precede the new release.", nameof(commit));
         ReleasePaths.RequireDirectoryName(commit.DirectoryName);
         if (!commit.DirectoryName.StartsWith($"{commit.ReleaseNumber:D6}-", StringComparison.Ordinal))
             throw new ArgumentException("Release directory name does not match the release number.", nameof(commit));

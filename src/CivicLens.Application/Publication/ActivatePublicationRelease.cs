@@ -11,7 +11,7 @@ public sealed class ActivatePublicationRelease(IPublicationStore publications, I
         ReviewAuthorization.RequireOwner(actor);
         if (releaseNumber < 1) throw new ArgumentOutOfRangeException(nameof(releaseNumber), "Release number must be at least 1.");
         var summary = await publications.ActivateAsync(releaseNumber, cancellationToken);
-        await releases.ActivateAsync(summary.DirectoryName, cancellationToken);
+        await publications.ServeActiveAsync(releases.ActivateAsync, cancellationToken);
         return summary;
     }
 }

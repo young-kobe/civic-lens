@@ -114,6 +114,7 @@ internal sealed class FakePublicationStore : IPublicationStore
     public PublicationReleaseSummary? ConcurrentWinner { get; set; }
 
     public int? ActiveReleaseNumber { get; set; }
+    public Action? BeforeServe { get; set; }
 
     public Task<PublicationState> GetStateAsync(CancellationToken cancellationToken) =>
         Task.FromResult(new PublicationState(Committed.Select(item => item.ReleaseNumber).DefaultIfEmpty().Max(),
@@ -125,6 +126,15 @@ internal sealed class FakePublicationStore : IPublicationStore
             ?? throw new ArgumentException($"Release {releaseNumber} has not been committed.");
         ActiveReleaseNumber = releaseNumber;
         return Task.FromResult(summary);
+    }
+
+    public async Task<PublicationReleaseSummary?> ServeActiveAsync(Func<string, CancellationToken, Task> serve,
+        CancellationToken cancellationToken)
+    {
+        BeforeServe?.Invoke();
+        var active = Committed.SingleOrDefault(item => item.ReleaseNumber == ActiveReleaseNumber);
+        if (active is not null) await serve(active.DirectoryName, cancellationToken);
+        return active;
     }
 
     public Task<IReadOnlyList<PublicationReleaseSummary>> ListAsync(int limit, CancellationToken cancellationToken) =>
