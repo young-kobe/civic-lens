@@ -21,6 +21,8 @@ public sealed class CollectionJobWorker(ICollectionWorkerQueue queue, RunCollect
         if (!once && wakeup is null)
             throw new InvalidOperationException("Continuous pipeline work requires a durable wakeup provider.");
         var lease = leaseDuration ?? DefaultLeaseDuration;
+        if (evidenceProcessor is not null)
+            EvidenceProcessingPolicy.ValidateLeaseDuration(lease);
         if (lease < TimeSpan.FromMilliseconds(30))
             throw new ArgumentOutOfRangeException(nameof(leaseDuration), "Lease duration must be at least 30 milliseconds.");
 

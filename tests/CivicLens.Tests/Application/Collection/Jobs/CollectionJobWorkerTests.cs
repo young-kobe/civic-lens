@@ -1,5 +1,6 @@
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Jobs;
+using CivicLens.Application.Collection.Processing;
 
 namespace CivicLens.Tests.Application.Collection.Jobs;
 
@@ -134,6 +135,41 @@ public sealed class CollectionJobWorkerTests
     public void DefaultLeaseMatchesExistingManualJobRunner()
     {
         Assert.Equal(TimeSpan.FromSeconds(60), CollectionJobWorker.DefaultLeaseDuration);
+    }
+
+    [Theory]
+    [InlineData(0.999)]
+    [InlineData(600.001)]
+    public async Task InvalidPipelineLeaseIsRejectedBeforeAnyWork(double seconds)
+    {
+        var queue = new SequenceQueue((_, _) => throw new InvalidOperationException("Queue should not be read."));
+        var store = new RecordingJobStore();
+        var schedules = new RecordingScheduleStore(1);
+        var wakeup = new FakeWakeup(_ => throw new InvalidOperationException("Wakeup should not connect."));
+        var processor = new EvidenceProcessingWorker(null!, null!, null!, null!, null!, null!, null!);
+        var worker = new CollectionJobWorker(queue, new RunCollectionJob(store, null!, null!, null!, null!),
+            processor, wakeup, schedules);
+
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => worker.ExecuteAsync(Path.GetTempPath(),
+            once: false, leaseDuration: TimeSpan.FromSeconds(seconds)));
+
+        Assert.Empty(queue.CursorHistory);
+        Assert.Empty(store.ClaimedJobIds);
+        Assert.Equal(0, schedules.AdmissionCount);
+        Assert.Equal(0, wakeup.ConnectCount);
+    }
+
+    [Fact]
+    public async Task CollectionOnlyWorkerRetainsThirtyMillisecondLease()
+    {
+        var queue = new SequenceQueue((_, _) => Task.FromResult(new CollectionWorkerQueuePage([], null)));
+        var worker = new CollectionJobWorker(queue,
+            new RunCollectionJob(new RecordingJobStore(), null!, null!, null!, null!));
+
+        _ = await worker.ExecuteAsync(Path.GetTempPath(), once: true,
+            leaseDuration: TimeSpan.FromMilliseconds(30));
+
+        Assert.Single(queue.CursorHistory);
     }
 
     private sealed class SequenceQueue(Func<CollectionWorkerCursor?, int, Task<CollectionWorkerQueuePage>> next)

@@ -5,5 +5,5 @@ public sealed record EvidenceProcessingCheckpoint(
     EvidenceProcessingStatus ExpectedStatus, string LeaseToken, long Fence,
     EvidenceProcessingStage Stage, EvidenceProcessingStatus Status,
     string? ExtractionId = null, string? ComparisonId = null,
-    EvidenceProcessingOutcome? Outcome = null, string? ErrorCode = null, DateTimeOffset? RetryAt = null,
+    EvidenceProcessingOutcome? Outcome = null, string? ErrorCode = null, TimeSpan? RetryDelay = null,
     int AdmittedCount = 0, int DeferredCount = 0, int DuplicateCount = 0);

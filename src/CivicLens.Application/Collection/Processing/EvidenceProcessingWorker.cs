@@ -25,6 +25,7 @@ public sealed class EvidenceProcessingWorker(
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(artifactRoot);
         if (batchSize is < 1 or > MaximumBatchSize) throw new ArgumentOutOfRangeException(nameof(batchSize));
+        EvidenceProcessingPolicy.ValidateLeaseDuration(leaseDuration);
         var failures = 0;
         var progress = 0;
         var eligible = await processing.GetEligibleAsync(batchSize, cancellationToken);
@@ -139,11 +140,11 @@ public sealed class EvidenceProcessingWorker(
             }
             var retry = claim.Record.Attempts < MaximumAttempts;
             var status = retry ? EvidenceProcessingStatus.RetryWaiting : EvidenceProcessingStatus.Failed;
-            var delay = TimeSpan.FromSeconds(Math.Min(300, Math.Pow(2, claim.Record.Attempts)));
+            var delay = TimeSpan.FromSeconds(Math.Min(EvidenceProcessingPolicy.MaximumRetryDelay.TotalSeconds, Math.Pow(2, claim.Record.Attempts)));
             var update = new EvidenceProcessingCheckpoint(record.JobId, record.AttemptId, claim.Record.Stage,
                 EvidenceProcessingStatus.Running, claim.LeaseToken, claim.Fence, claim.Record.Stage, status,
                 Outcome: retry ? null : EvidenceProcessingOutcome.Failed,
-                ErrorCode: SafeErrorCode(exception), RetryAt: retry ? DateTimeOffset.UtcNow.Add(delay) : null);
+                ErrorCode: SafeErrorCode(exception), RetryDelay: retry ? delay : null);
             using var retryTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
             _ = await processing.CheckpointAsync(update, retryTimeout.Token);
         }
@@ -300,7 +301,7 @@ public sealed class EvidenceProcessingWorker(
     private async Task RenewLeaseAsync(EvidenceProcessingClaim claim, TimeSpan leaseDuration,
         CancellationTokenSource ownership)
     {
-        var interval = TimeSpan.FromTicks(Math.Max(TimeSpan.FromSeconds(1).Ticks, leaseDuration.Ticks / 3));
+        var interval = TimeSpan.FromTicks(leaseDuration.Ticks / 3);
         while (!ownership.IsCancellationRequested)
         {
             try { await Task.Delay(interval, ownership.Token); }

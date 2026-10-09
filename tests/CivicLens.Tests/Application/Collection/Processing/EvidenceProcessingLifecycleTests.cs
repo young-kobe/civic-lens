@@ -49,4 +49,25 @@ public sealed class EvidenceProcessingLifecycleTests
         var valid = malformed with { ErrorCode = "configurationUnavailable" };
         Assert.True(EvidenceProcessingLifecycle.CanTransition(record, valid));
     }
+
+    [Fact]
+    public void RetryCheckpointRequiresBoundedNonnegativeDelayAndNoDelayForOtherStates()
+    {
+        var record = new EvidenceProcessingRecord("job", "attempt", "source", "https://example.test/",
+            EvidenceProcessingStage.Extraction, EvidenceProcessingStatus.Running, "lease", 1, 1, null,
+            null, null, null, null);
+        var retry = new EvidenceProcessingCheckpoint("job", "attempt", record.Stage, record.Status,
+            "lease", 1, record.Stage, EvidenceProcessingStatus.RetryWaiting, ErrorCode: "temporaryFailure",
+            RetryDelay: TimeSpan.Zero);
+
+        Assert.True(EvidenceProcessingLifecycle.CanTransition(record, retry));
+        Assert.True(EvidenceProcessingLifecycle.CanTransition(record,
+            retry with { RetryDelay = EvidenceProcessingPolicy.MaximumRetryDelay }));
+        Assert.False(EvidenceProcessingLifecycle.CanTransition(record, retry with { RetryDelay = TimeSpan.FromTicks(-1) }));
+        Assert.False(EvidenceProcessingLifecycle.CanTransition(record, retry with
+        { RetryDelay = EvidenceProcessingPolicy.MaximumRetryDelay + TimeSpan.FromTicks(1) }));
+        Assert.False(EvidenceProcessingLifecycle.CanTransition(record, retry with { RetryDelay = null }));
+        Assert.False(EvidenceProcessingLifecycle.CanTransition(record, retry with
+        { Status = EvidenceProcessingStatus.Failed, Outcome = EvidenceProcessingOutcome.Failed }));
+    }
 }

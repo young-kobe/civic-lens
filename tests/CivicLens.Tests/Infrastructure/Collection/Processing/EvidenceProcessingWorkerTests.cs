@@ -158,6 +158,55 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
     }
 
     [Fact]
+    public async Task OneSecondLeaseIsRenewedWhileComparisonWorkIsStillBlocked()
+    {
+        var job = await CollectAsync("short-lease", "Short lease wording.");
+        var attemptId = Assert.Single(job.Attempts).AttemptId;
+        var worker = Worker(processing);
+        _ = await worker.ExecuteAsync(artifactRoot, 20, TimeSpan.FromSeconds(60), default);
+        _ = await worker.ExecuteAsync(artifactRoot, 20, TimeSpan.FromSeconds(60), default);
+        var record = await processing.GetByAttemptIdAsync(attemptId, default);
+        Assert.Equal(EvidenceProcessingStage.Comparison, record!.Stage);
+        Assert.Equal(EvidenceProcessingStatus.Pending, record.Status);
+
+        var historyGate = new GatedDocumentHistoryStore(
+            PostgresDocumentHistoryStore.FromConnectionString(connectionString));
+        var observedProcessing = new ObservedEvidenceProcessingStore(processing);
+        var blockedWorker = Worker(observedProcessing, historyGate);
+        var execution = blockedWorker.ExecuteAsync(artifactRoot, 20, TimeSpan.FromSeconds(1), default);
+        try
+        {
+            await historyGate.Entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            var renewed = await observedProcessing.Renewed.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+            // The store only reports success while the database lease is still live.
+            Assert.True(renewed);
+        }
+        finally
+        {
+            historyGate.Release.TrySetResult();
+        }
+
+        await execution.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal(EvidenceProcessingStatus.Succeeded,
+            (await processing.GetByAttemptIdAsync(attemptId, default))!.Status);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(601)]
+    public async Task InvalidLeaseDurationIsRejectedBeforeReadingEligibleWork(int seconds)
+    {
+        var observedProcessing = new ObservedEvidenceProcessingStore(processing);
+        var worker = Worker(observedProcessing);
+
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
+            worker.ExecuteAsync(artifactRoot, 20, TimeSpan.FromSeconds(seconds), default));
+
+        Assert.Equal(0, observedProcessing.EligibleReads);
+    }
+
+    [Fact]
     public async Task ResolvedNotModifiedObservationUsesItsLinkedCaptureAndFailedObservationStartsHistoryGap()
     {
         var captured = await CollectAsync("before-304", "Before conditional check.");
@@ -328,5 +377,70 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
                 ? observation with { Extractions = [] }
                 : observation).ToArray();
         }
+    }
+
+    private sealed class GatedDocumentHistoryStore(IDocumentHistoryStore inner) : IDocumentHistoryStore
+    {
+        private int calls;
+        public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public async Task<IReadOnlyList<DocumentHistoryObservation>> GetAsync(string sourceId, string requestedUrl,
+            int maximumObservations, CancellationToken cancellationToken)
+        {
+            if (Interlocked.Increment(ref calls) == 1)
+            {
+                Entered.TrySetResult();
+                await Release.Task.WaitAsync(cancellationToken);
+            }
+            return await inner.GetAsync(sourceId, requestedUrl, maximumObservations, cancellationToken);
+        }
+    }
+
+    private sealed class ObservedEvidenceProcessingStore(IEvidenceProcessingStore inner) : IEvidenceProcessingStore
+    {
+        private int eligibleReads;
+        public int EligibleReads => Volatile.Read(ref eligibleReads);
+        public TaskCompletionSource<bool> Renewed { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public Task<IReadOnlyList<EvidenceProcessingRecord>> GetEligibleAsync(int limit, CancellationToken cancellationToken)
+        {
+            Interlocked.Increment(ref eligibleReads);
+            return inner.GetEligibleAsync(limit, cancellationToken);
+        }
+
+        public Task<EvidenceProcessingRecord?> GetByAttemptIdAsync(string attemptId, CancellationToken cancellationToken) =>
+            inner.GetByAttemptIdAsync(attemptId, cancellationToken);
+
+        public Task<bool> IsAwaitingPreparationAsync(string attemptId, CancellationToken cancellationToken) =>
+            inner.IsAwaitingPreparationAsync(attemptId, cancellationToken);
+
+        public Task<IReadOnlyList<EvidenceProcessingRecord>> GetByJobIdsAsync(IReadOnlyList<string> jobIds,
+            CancellationToken cancellationToken) => inner.GetByJobIdsAsync(jobIds, cancellationToken);
+
+        public Task<EvidenceProcessingRecord> EnsureAsync(string jobId, string attemptId, string sourceId,
+            string requestedUrl, CancellationToken cancellationToken) =>
+            inner.EnsureAsync(jobId, attemptId, sourceId, requestedUrl, cancellationToken);
+
+        public Task<EvidenceProcessingClaim?> TryClaimAsync(string jobId, string attemptId, TimeSpan leaseDuration,
+            CancellationToken cancellationToken) => inner.TryClaimAsync(jobId, attemptId, leaseDuration, cancellationToken);
+
+        public async Task<bool> RenewAsync(EvidenceProcessingClaim claim, TimeSpan leaseDuration,
+            CancellationToken cancellationToken)
+        {
+            var renewed = await inner.RenewAsync(claim, leaseDuration, cancellationToken);
+            Renewed.TrySetResult(renewed);
+            return renewed;
+        }
+
+        public Task<bool> WaitForPredecessorAsync(EvidenceProcessingClaim claim, string predecessorAttemptId,
+            CancellationToken cancellationToken) =>
+            inner.WaitForPredecessorAsync(claim, predecessorAttemptId, cancellationToken);
+
+        public Task<bool> CheckpointAsync(EvidenceProcessingCheckpoint checkpoint, CancellationToken cancellationToken) =>
+            inner.CheckpointAsync(checkpoint, cancellationToken);
+
+        public Task<bool> ReleaseAsync(EvidenceProcessingClaim claim, CancellationToken cancellationToken) =>
+            inner.ReleaseAsync(claim, cancellationToken);
     }
 }

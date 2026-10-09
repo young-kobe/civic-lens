@@ -16,7 +16,7 @@ public static class EvidenceProcessingLifecycle
             (EvidenceProcessingStage.Extraction, EvidenceProcessingStage.Complete, EvidenceProcessingStatus.Blocked) => true,
             (EvidenceProcessingStage.Comparison, EvidenceProcessingStage.Complete, EvidenceProcessingStatus.Succeeded) => true,
             (EvidenceProcessingStage.Comparison, EvidenceProcessingStage.Complete, EvidenceProcessingStatus.Blocked) => true,
-            (_, _, EvidenceProcessingStatus.RetryWaiting) => update.Stage == record.Stage && update.RetryAt is not null,
+            (_, _, EvidenceProcessingStatus.RetryWaiting) => update.Stage == record.Stage && update.RetryDelay is not null,
             (_, _, EvidenceProcessingStatus.Failed) => update.Stage == record.Stage,
             _ => false
         };
@@ -32,12 +32,13 @@ public static class EvidenceProcessingLifecycle
     {
         if (update.ErrorCode is not null && (update.ErrorCode.Length > 128 || string.IsNullOrWhiteSpace(update.ErrorCode)))
             return false;
-        if (update.Status != EvidenceProcessingStatus.RetryWaiting && update.RetryAt is not null)
+        if (update.Status != EvidenceProcessingStatus.RetryWaiting && update.RetryDelay is not null)
             return false;
         return update.Status switch
         {
             EvidenceProcessingStatus.Pending => update.Outcome is null && update.ErrorCode is null,
-            EvidenceProcessingStatus.RetryWaiting => update.Outcome is null && update.ErrorCode is not null && update.RetryAt is not null,
+            EvidenceProcessingStatus.RetryWaiting => update.Outcome is null && update.ErrorCode is not null &&
+                update.RetryDelay is { } delay && delay >= TimeSpan.Zero && delay <= EvidenceProcessingPolicy.MaximumRetryDelay,
             EvidenceProcessingStatus.Blocked => update.Outcome == EvidenceProcessingOutcome.Blocked && update.ErrorCode is not null,
             EvidenceProcessingStatus.Failed => update.Outcome == EvidenceProcessingOutcome.Failed && update.ErrorCode is not null,
             EvidenceProcessingStatus.Succeeded when stage == EvidenceProcessingStage.Preparation => update.Outcome == EvidenceProcessingOutcome.Prepared,

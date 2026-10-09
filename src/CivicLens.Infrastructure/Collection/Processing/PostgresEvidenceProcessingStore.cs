@@ -120,8 +120,7 @@ public sealed class PostgresEvidenceProcessingStore(
     public async Task<EvidenceProcessingClaim?> TryClaimAsync(string jobId, string attemptId, TimeSpan leaseDuration,
         CancellationToken cancellationToken)
     {
-        if (leaseDuration < TimeSpan.FromSeconds(1) || leaseDuration > TimeSpan.FromMinutes(10))
-            throw new ArgumentOutOfRangeException(nameof(leaseDuration));
+        EvidenceProcessingPolicy.ValidateLeaseDuration(leaseDuration);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         var token = Guid.NewGuid().ToString("N");
         var changed = await db.Database.ExecuteSqlInterpolatedAsync($$"""
@@ -183,7 +182,10 @@ public sealed class PostgresEvidenceProcessingStore(
                 stage = {{checkpoint.Stage.ToString()}}, status = {{checkpoint.Status.ToString()}},
                 attempts = CASE WHEN {{checkpoint.Stage != checkpoint.ExpectedStage}} THEN 0 ELSE attempts END,
                 extraction_id = {{effectiveExtractionId}}, comparison_id = {{effectiveComparisonId}},
-                outcome = {{checkpoint.Outcome?.ToString()}}, error_code = {{checkpoint.ErrorCode}}, retry_at = {{checkpoint.RetryAt?.UtcTicks}},
+                outcome = {{checkpoint.Outcome?.ToString()}}, error_code = {{checkpoint.ErrorCode}},
+                retry_at = CASE WHEN {{checkpoint.Status == EvidenceProcessingStatus.RetryWaiting}}
+                    THEN ((EXTRACT(EPOCH FROM clock_timestamp())::numeric * 10000000 + 621355968000000000)::bigint) + {{checkpoint.RetryDelay?.Ticks ?? 0}}
+                    ELSE NULL END,
                 admitted_count = {{checkpoint.AdmittedCount}}, deferred_count = {{checkpoint.DeferredCount}},
                 duplicate_count = {{checkpoint.DuplicateCount}}, lease_token = NULL, lease_expires_at = NULL
             WHERE job_id = {{checkpoint.JobId}} AND attempt_id = {{checkpoint.AttemptId}} AND
@@ -199,8 +201,7 @@ public sealed class PostgresEvidenceProcessingStore(
     public async Task<bool> RenewAsync(EvidenceProcessingClaim claim, TimeSpan leaseDuration, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(claim);
-        if (leaseDuration < TimeSpan.FromSeconds(1) || leaseDuration > TimeSpan.FromMinutes(10))
-            throw new ArgumentOutOfRangeException(nameof(leaseDuration));
+        EvidenceProcessingPolicy.ValidateLeaseDuration(leaseDuration);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         return await db.Database.ExecuteSqlInterpolatedAsync($$"""
             UPDATE evidence_processing SET lease_expires_at =

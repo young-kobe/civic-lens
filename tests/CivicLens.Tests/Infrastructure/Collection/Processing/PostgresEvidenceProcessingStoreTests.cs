@@ -53,6 +53,15 @@ public sealed class PostgresEvidenceProcessingStoreTests(PostgresCollection post
             EvidenceProcessingStatus.Running, original.LeaseToken, original.Fence, EvidenceProcessingStage.Comparison,
             EvidenceProcessingStatus.Pending, ExtractionId: ExtractionId("attempt"));
         Assert.False(await store.CheckpointAsync(stale, default));
+        var staleRetry = stale with
+        {
+            Stage = EvidenceProcessingStage.Extraction,
+            Status = EvidenceProcessingStatus.RetryWaiting,
+            ExtractionId = null,
+            ErrorCode = "temporaryStoreFailure",
+            RetryDelay = TimeSpan.FromSeconds(30)
+        };
+        Assert.False(await store.CheckpointAsync(staleRetry, default));
         var current = stale with { LeaseToken = recovered.LeaseToken, Fence = recovered.Fence };
         var currentRecord = Assert.Single(await store.GetByJobIdsAsync(["job"], default));
         Assert.True(EvidenceProcessingLifecycle.CanTransition(currentRecord, current));
@@ -226,9 +235,9 @@ public sealed class PostgresEvidenceProcessingStoreTests(PostgresCollection post
         }
 
         await CompletePrepAsync("job-0", EvidenceProcessingOutcome.Prepared, 2, 3, 4);
-        await DeferPrepAsync("job-1", DateTimeOffset.UtcNow.AddMinutes(-1));
-        await DeferPrepAsync("job-2", DateTimeOffset.UtcNow.AddMinutes(1));
-        await DeferPrepAsync("job-3", DateTimeOffset.UtcNow.AddMinutes(-1));
+        await DeferPrepAsync("job-1", TimeSpan.Zero);
+        await DeferPrepAsync("job-2", TimeSpan.FromMinutes(1));
+        await DeferPrepAsync("job-3", TimeSpan.Zero);
 
         var eligible = await store.GetEligibleAsync(1, default);
         Assert.Equal("job-1", Assert.Single(eligible).JobId);
@@ -311,14 +320,38 @@ public sealed class PostgresEvidenceProcessingStoreTests(PostgresCollection post
         Assert.True(await store.CheckpointAsync(checkpoint, default));
     }
 
-    private async Task DeferPrepAsync(string jobId, DateTimeOffset retryAt)
+    [Fact]
+    public async Task RetryCheckpointUsesDatabaseTimeAndRetainsComputedRetryAt()
+    {
+        await InsertSuccessfulJobAsync("retry-job", DateTimeOffset.UtcNow.UtcTicks);
+        await InsertPreparationAsync("retry-job", "source", "https://example.test/feed");
+        var before = await ReadDatabaseNowTicksAsync();
+        var delay = TimeSpan.FromSeconds(30);
+        await DeferPrepAsync("retry-job", delay);
+        var after = await ReadDatabaseNowTicksAsync();
+        var persisted = Assert.Single(await store.GetByJobIdsAsync(["retry-job"], default));
+
+        Assert.NotNull(persisted.RetryAt);
+        Assert.InRange(persisted.RetryAt.Value.UtcTicks, before + delay.Ticks, after + delay.Ticks);
+        Assert.Empty(await store.GetEligibleAsync(10, default));
+    }
+
+    private async Task DeferPrepAsync(string jobId, TimeSpan retryDelay)
     {
         var claim = await store.TryClaimAsync(jobId, "prepare", TimeSpan.FromSeconds(30), default);
         Assert.NotNull(claim);
         var checkpoint = new EvidenceProcessingCheckpoint(jobId, "prepare", EvidenceProcessingStage.Preparation,
             EvidenceProcessingStatus.Running, claim.LeaseToken, claim.Fence, EvidenceProcessingStage.Preparation,
-            EvidenceProcessingStatus.RetryWaiting, ErrorCode: "temporaryStoreFailure", RetryAt: retryAt);
+            EvidenceProcessingStatus.RetryWaiting, ErrorCode: "temporaryStoreFailure", RetryDelay: retryDelay);
         Assert.True(await store.CheckpointAsync(checkpoint, default));
+    }
+
+    private async Task<long> ReadDatabaseNowTicksAsync()
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand("SELECT ((EXTRACT(EPOCH FROM clock_timestamp())::numeric * 10000000 + 621355968000000000)::bigint)", connection);
+        return (long)(await command.ExecuteScalarAsync())!;
     }
 
     private async Task InsertSuccessfulJobAsync(string jobId, long createdAt)

@@ -14,6 +14,10 @@ public interface IEvidenceProcessingStore
     Task<bool> RenewAsync(EvidenceProcessingClaim claim, TimeSpan leaseDuration, CancellationToken cancellationToken);
     Task<bool> WaitForPredecessorAsync(EvidenceProcessingClaim claim, string predecessorAttemptId,
         CancellationToken cancellationToken);
+    /// <summary>
+    /// Applies a lifecycle-valid checkpoint only while its fenced lease is current.
+    /// Derives retry deadlines from RetryDelay using the same authoritative clock as claim eligibility.
+    /// </summary>
     Task<bool> CheckpointAsync(EvidenceProcessingCheckpoint checkpoint, CancellationToken cancellationToken);
     Task<bool> ReleaseAsync(EvidenceProcessingClaim claim, CancellationToken cancellationToken);
 }
