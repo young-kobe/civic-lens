@@ -1,9 +1,5 @@
 namespace CivicLens.Infrastructure.Review;
 
-/// <summary>
-/// The single owner of the SQL that defines which comparisons are new changes and which drafts are approved.
-/// Both the lists and the overview counts compose these fragments, so they cannot drift apart.
-/// </summary>
 internal static class ReviewQueries
 {
     // JSON status 0 is DocumentComparisonStatus.Complete. The partial index ix_document_comparisons_eligible uses the same test.

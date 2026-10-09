@@ -5,7 +5,6 @@ using CivicLens.Core.Review;
 
 namespace CivicLens.Application.Activity;
 
-/// <summary>Newest review events for any reviewer; the owner also sees collection events when collection is configured.</summary>
 public sealed class GetRecentActivity(IDocumentChangeReviewStore reviews, ICollectionJobStore? jobs = null,
     IEvidenceProcessingStore? processing = null)
 {

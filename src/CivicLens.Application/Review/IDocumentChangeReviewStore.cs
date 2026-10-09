@@ -25,6 +25,5 @@ public interface IDocumentChangeReviewStore
     Task<EligibleDocumentComparisonPage> ListEligibleComparisonsAsync(PageCursor? cursor, int limit,
         CancellationToken cancellationToken);
     Task<ReviewOverview> GetOverviewAsync(CancellationToken cancellationToken);
-    /// <summary>The newest <paramref name="limit"/> events of each kind, unordered across kinds.</summary>
     Task<IReadOnlyList<ReviewActivityEvent>> ListRecentActivityAsync(int limit, CancellationToken cancellationToken);
 }

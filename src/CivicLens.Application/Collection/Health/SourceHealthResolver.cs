@@ -68,7 +68,6 @@ internal static class SourceHealthResolver
         }
     }
 
-    /// <summary>A changed page wins, then any unfinished page, then the first page; the job's own "prepare" record is the last resort.</summary>
     private static EvidenceProcessingRecord? SelectRecord(EvidenceProcessingRecord[] all)
     {
         var pages = all.Where(record => record.AttemptId != "prepare").ToArray();

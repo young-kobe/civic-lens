@@ -7,10 +7,6 @@ namespace CivicLens.Application.Activity;
 
 public enum ActivityKind { DraftCreated, RevisionSaved, DecisionRecorded, CheckStarted, CheckFailed, ChangeFound }
 
-/// <summary>
-/// Review kinds set ActorSubject, DraftId and Headline (plus DecisionKind for DecisionRecorded).
-/// Collection kinds set SourceId and JobId (plus ComparisonId for ChangeFound). Unused fields are null.
-/// </summary>
 public sealed record ActivityEvent(ActivityKind Kind, DateTimeOffset OccurredAt, string? ActorSubject,
     string? DraftId, string? Headline, ReviewDecisionKind? DecisionKind, string? SourceId, string? JobId,
     string? ComparisonId)

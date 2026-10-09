@@ -10,7 +10,6 @@ namespace CivicLens.Infrastructure.Collection.Jobs;
 
 public sealed partial class PostgresCollectionJobStore
 {
-    // Display order is newest first, ties by job ID ascending. Moving newer reads the reverse order.
     public async Task<CollectionJobPage> ListPageAsync(PageCursor? cursor, int limit, CancellationToken cancellationToken)
     {
         PageLimit.Validate(limit);

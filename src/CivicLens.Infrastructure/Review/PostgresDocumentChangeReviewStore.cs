@@ -298,7 +298,6 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
             _ => throw new ArgumentOutOfRangeException(nameof(filter))
         }).AsNoTracking();
 
-    // Display order is newest first. Moving newer reads the reverse order; KeysetSlice restores display order.
     private static IQueryable<DocumentChangeDraftRow> KeysetDrafts(IQueryable<DocumentChangeDraftRow> rows, PageCursor? cursor)
     {
         if (cursor is null) return rows.OrderByDescending(row => row.CreatedAtUtcTicks).ThenByDescending(row => row.DraftId);

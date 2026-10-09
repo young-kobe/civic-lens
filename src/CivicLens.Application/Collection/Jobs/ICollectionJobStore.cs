@@ -11,9 +11,7 @@ public interface ICollectionJobStore
         CancellationToken cancellationToken);
     Task<CollectionJobRecord?> GetAsync(string jobId, CancellationToken cancellationToken);
     Task<IReadOnlyList<CollectionJobRecord>> ListAsync(int limit, CancellationToken cancellationToken);
-    /// <summary>Jobs newest first, ordered by creation time then job ID.</summary>
     Task<CollectionJobPage> ListPageAsync(PageCursor? cursor, int limit, CancellationToken cancellationToken);
-    /// <summary>The newest job per target whose source ID and URL both match; targets with no job are omitted.</summary>
     Task<IReadOnlyList<CollectionJobRecord>> ListLatestBySourceAsync(IReadOnlyCollection<SourceCheckTarget> targets,
         CancellationToken cancellationToken);
     Task<CollectionJobActivity> ListActivityAsync(int limit, CancellationToken cancellationToken);

@@ -8,7 +8,6 @@ using CivicLens.Core.Review;
 
 namespace CivicLens.Application.Collection;
 
-/// <summary>Owner-authorized source checks using server-configured sources and storage.</summary>
 public sealed class CollectionWorkspace
 {
     public const int RecentJobLimit = PageLimit.Default;
@@ -51,7 +50,6 @@ public sealed class CollectionWorkspace
         var pageCursor = PageCursor.Parse(cursor);
         var page = await jobs.ListPageAsync(pageCursor, limit, cancellationToken);
         var recentJobs = page.Items;
-        // Only the newest page can answer "latest check" for a source; older pages are never reused for health.
         var targets = SourceTargets();
         var latest = await ReadLatestJobsAsync(targets, pageCursor is null ? recentJobs : [], cancellationToken);
         var selected = jobId is null ? null : await ReadSelectedJobAsync(recentJobs, jobId, cancellationToken);

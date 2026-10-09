@@ -2,7 +2,6 @@ using System.Globalization;
 
 namespace CivicLens.Application.Paging;
 
-/// <summary>Opaque keyset position: a direction plus the (time, id) key of the row the client last saw.</summary>
 public sealed record PageCursor(PageDirection Direction, long Ticks, string Id)
 {
     private const int MaximumLength = 256;

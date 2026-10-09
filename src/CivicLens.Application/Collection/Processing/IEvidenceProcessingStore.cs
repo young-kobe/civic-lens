@@ -7,7 +7,6 @@ public interface IEvidenceProcessingStore
     Task<bool> IsAwaitingPreparationAsync(string attemptId, CancellationToken cancellationToken);
     Task<IReadOnlyList<EvidenceProcessingRecord>> GetByJobIdsAsync(IReadOnlyList<string> jobIds,
         CancellationToken cancellationToken);
-    /// <summary>Changed outcomes, newest observation first.</summary>
     Task<IReadOnlyList<CollectionChangeEvent>> ListRecentChangesAsync(int limit, CancellationToken cancellationToken);
     Task<EvidenceProcessingRecord> EnsureAsync(string jobId, string attemptId, string sourceId, string requestedUrl,
         CancellationToken cancellationToken);
