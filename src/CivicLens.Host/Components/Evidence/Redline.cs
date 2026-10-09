@@ -2,7 +2,6 @@ using CivicLens.Core.Documents;
 
 namespace CivicLens.Host.Components.Evidence;
 
-/// <summary>Turns a saved comparison hunk into reading-order segments: unchanged context, then struck and inserted words.</summary>
 public static class Redline
 {
     public static IReadOnlyList<RedlineSegment> Build(DocumentComparisonHunk hunk)
@@ -15,7 +14,6 @@ public static class Redline
         return segments;
     }
 
-    /// <summary>The changed words with a little unchanged text on each side, for one-line previews.</summary>
     public static IReadOnlyList<RedlineSegment> Excerpt(DocumentComparisonHunk hunk, int surroundingLength)
     {
         var change = new List<RedlineSegment>();
@@ -39,7 +37,6 @@ public static class Redline
             return;
         }
 
-        // Word edits use document offsets. Unchanged text between edits is identical in both versions.
         var afterCursor = 0;
         foreach (var edit in hunk.WordEdits)
         {

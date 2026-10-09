@@ -48,7 +48,7 @@ internal static class ReviewWorkspace
                 WebRootPath = Path.Combine(AppContext.BaseDirectory, "wwwroot")
             });
             builder.Configuration.Sources.Clear();
-            // Serves framework scripts such as blazor.web.js from a build output; published output contains them directly.
+            // Build output lacks framework scripts such as blazor.web.js; publish output includes them.
             builder.WebHost.UseStaticWebAssets();
             builder.Logging.ClearProviders();
             builder.WebHost.ConfigureKestrel(options =>

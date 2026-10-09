@@ -9,7 +9,6 @@
     [Parameter, EditorRequired] public string Href { get; set; } = string.Empty;
     [Parameter, EditorRequired] public string Text { get; set; } = string.Empty;
     [Parameter, EditorRequired] public IconName Icon { get; set; }
-    /// <summary>Paths that also mark this link current, for pages reached from it.</summary>
     [Parameter] public IReadOnlyList<string> Sections { get; set; } = [];
 
     private bool IsCurrent

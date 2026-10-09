@@ -5,63 +5,87 @@ namespace CivicLens.Tests.Architecture;
 public sealed class PresentationArchitectureTests
 {
     private static readonly string HostRoot = Path.Combine(FindRoot(), "src", "CivicLens.Host");
+    private static readonly string ComponentsRoot = Path.Combine(HostRoot, "Components");
+
+    // Documents that own <html>: the workspace document and the published-page document.
+    private static readonly string[] DocumentShells =
+    [
+        Path.Combine(ComponentsRoot, "App.razor"),
+        Path.Combine(HostRoot, "Publication", "PublicPage.razor")
+    ];
 
     [Fact]
-    public void ThemeColorsHaveOneOwnerAndPagesCannotIntroduceInlineStyles()
+    public void ThemeColorsHaveOneOwnerSoBothThemesStayComplete()
     {
-        var assets = Path.Combine(HostRoot, "wwwroot");
-        foreach (var file in Directory.GetFiles(assets, "*.css", SearchOption.AllDirectories))
+        foreach (var file in StyleSheets().Where(file => Path.GetFileName(file) != "theme.css"))
         {
-            if (Path.GetFileName(file) == "theme.css") continue;
-            Assert.False(Regex.IsMatch(File.ReadAllText(file), @"#[0-9a-fA-F]{3,8}\b|\b(?:rgba?|hsla?)\(", RegexOptions.IgnoreCase),
-                $"{file} must use the shared theme's color tokens.");
-            foreach (Match declaration in Regex.Matches(File.ReadAllText(file),
+            var text = File.ReadAllText(file);
+            Assert.False(Regex.IsMatch(text, @"#[0-9a-fA-F]{3,8}\b|\b(?:rgba?|hsla?)\(", RegexOptions.IgnoreCase),
+                $"{file} must use the theme's color tokens.");
+            foreach (Match declaration in Regex.Matches(text,
                 @"(?:color|background(?:-color)?|fill|stroke|caret-color|border-color|outline-color)\s*:\s*([a-z-]+)\s*;", RegexOptions.IgnoreCase))
             {
                 Assert.Contains(declaration.Groups[1].Value.ToLowerInvariant(),
-                    new[] { "transparent", "currentcolor", "inherit", "initial", "unset", "revert", "canvastext" });
-            }
-        }
-
-        foreach (var file in Directory.GetFiles(Path.Combine(HostRoot, "Pages"), "*", SearchOption.AllDirectories)
-            .Where(file => file.EndsWith(".cshtml", StringComparison.Ordinal) || file.EndsWith(".razor", StringComparison.Ordinal)))
-        {
-            Assert.False(Regex.IsMatch(File.ReadAllText(file), @"<style\b|\bstyle\s*=", RegexOptions.IgnoreCase),
-                $"{file} must use shared stylesheets.");
-            if (file != Path.Combine(HostRoot, "Pages", "Shared", "_Layout.cshtml"))
-            {
-                Assert.False(Regex.IsMatch(File.ReadAllText(file), @"<html\b|<link\b", RegexOptions.IgnoreCase),
-                    $"{file} must inherit the shared workspace shell and assets.");
+                    new[] { "none", "transparent", "currentcolor", "inherit", "initial", "unset", "revert", "canvastext" });
             }
         }
     }
 
     [Fact]
-    public void WorkspaceShellAndThemeAssetsHaveOneLayoutOwner()
+    public void EveryDarkThemeTokenAlsoHasALightDefault()
     {
-        var layouts = Directory.GetFiles(Path.Combine(HostRoot, "Pages"), "*Layout.cshtml", SearchOption.AllDirectories);
-        var shell = Path.Combine(HostRoot, "Pages", "Shared", "_Layout.cshtml");
-        Assert.Contains("css/theme.css", File.ReadAllText(shell), StringComparison.Ordinal);
-        Assert.Contains("review-shell", File.ReadAllText(shell), StringComparison.Ordinal);
-        foreach (var layout in layouts.Where(layout => layout != shell))
-        {
-            var text = File.ReadAllText(layout);
-            Assert.DoesNotContain("<html", text, StringComparison.OrdinalIgnoreCase);
-            Assert.DoesNotContain("<link", text, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("/Pages/Shared/_Layout.cshtml", text, StringComparison.Ordinal);
-        }
+        var theme = File.ReadAllText(Path.Combine(HostRoot, "wwwroot", "css", "theme.css"));
+        var lightBlock = theme[..theme.IndexOf("@media (prefers-color-scheme: dark)", StringComparison.Ordinal)];
+        var light = Tokens(lightBlock);
+        foreach (var token in Tokens(theme[lightBlock.Length..]))
+            Assert.Contains(token, light);
     }
 
     [Fact]
-    public void EvidenceAndEditorialDiffsUseTheSharedRenderer()
+    public void MarkupCannotStyleItselfSoComponentsStayTheOnlyStyleOwners()
     {
-        foreach (var relativePath in new[] { "Documents/Comparison.cshtml", "Review/Editor.cshtml", "Review/Index.cshtml" })
+        foreach (var file in Markup())
         {
-            var text = File.ReadAllText(Path.Combine(HostRoot, "Pages", relativePath));
-            Assert.Contains("typeof(DocumentComparisonView)", text, StringComparison.Ordinal);
-            Assert.DoesNotContain("<DocumentComparisonView", text, StringComparison.Ordinal);
+            var text = File.ReadAllText(file);
+            Assert.False(Regex.IsMatch(text, @"<style\b|\bstyle\s*=", RegexOptions.IgnoreCase), $"{file} must use the shared stylesheet.");
+            if (DocumentShells.Contains(file)) continue;
+            Assert.False(Regex.IsMatch(text, @"<html\b|<link\b|<script\b", RegexOptions.IgnoreCase),
+                $"{file} must inherit its document shell and assets.");
+        }
+        Assert.Empty(Directory.GetFiles(HostRoot, "*.razor.css", SearchOption.AllDirectories));
+        Assert.Empty(Directory.GetFiles(HostRoot, "*.cshtml", SearchOption.AllDirectories));
+    }
+
+    [Fact]
+    public void ShellsLoadTheSameThemeSoTheWorkspaceAndPublishedPagesMatch()
+    {
+        Assert.Contains("ThemeToggle", File.ReadAllText(DocumentShells[1]), StringComparison.Ordinal);
+        Assert.Contains("ThemeToggle", File.ReadAllText(Path.Combine(ComponentsRoot, "Layout", "WorkspaceLayout.razor")), StringComparison.Ordinal);
+        Assert.Contains("css/theme.css", File.ReadAllText(DocumentShells[0]), StringComparison.Ordinal);
+        Assert.Contains("assets/css/theme.css", File.ReadAllText(Path.Combine(HostRoot, "Publication", "PublicAssets.cs")), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PagesShowChangesThroughTheSharedComparisonComponent()
+    {
+        foreach (var file in Markup().Where(file => !file.StartsWith(ComponentsRoot, StringComparison.Ordinal)))
+        {
+            var text = File.ReadAllText(file);
+            Assert.DoesNotContain("<del", text, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("<ins", text, StringComparison.OrdinalIgnoreCase);
         }
     }
+
+    private static IEnumerable<string> StyleSheets() =>
+        Directory.GetFiles(Path.Combine(HostRoot, "wwwroot"), "*.css", SearchOption.AllDirectories);
+
+    private static IEnumerable<string> Markup() =>
+        Directory.GetFiles(HostRoot, "*.razor", SearchOption.AllDirectories)
+            .Where(file => !file.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal) &&
+                           !file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal));
+
+    private static HashSet<string> Tokens(string css) =>
+        [.. Regex.Matches(css, @"(--[a-z0-9-]+)\s*:").Select(match => match.Groups[1].Value)];
 
     private static string FindRoot()
     {

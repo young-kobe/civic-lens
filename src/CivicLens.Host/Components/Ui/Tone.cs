@@ -1,6 +1,5 @@
 namespace CivicLens.Host.Components.Ui;
 
-/// <summary>Meaning carried by color: status badges, stats, notices, health dots, and feed markers.</summary>
 public enum Tone
 {
     Neutral,

@@ -2,7 +2,6 @@ using System.Globalization;
 
 namespace CivicLens.Host.Components.Ui;
 
-/// <summary>The one owner of displayed times. Every displayed time is UTC.</summary>
 public static class Moment
 {
     public static string Short(DateTimeOffset value) => Format(value, "d MMM, HH:mm");

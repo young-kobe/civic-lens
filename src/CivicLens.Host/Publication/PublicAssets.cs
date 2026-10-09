@@ -3,7 +3,6 @@ using CivicLens.Application.Publication;
 
 namespace CivicLens.Host.Publication;
 
-/// <summary>The workspace's own stylesheets, scripts, and fonts, copied into every release.</summary>
 internal static class PublicAssets
 {
     public static readonly IReadOnlyList<string> Stylesheets = ["assets/css/theme.css", "assets/css/app.css"];

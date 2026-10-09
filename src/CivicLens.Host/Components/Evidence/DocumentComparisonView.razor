@@ -62,7 +62,6 @@
 
     private int Shown => Math.Min(Hunks.Length, MaximumPassages);
 
-    /// <summary>Links a passage to the citations drawn from it, so pointing at either outlines both.</summary>
     public static string LinkKey(string viewId, int hunkIndex) => $"{viewId}-passage-{hunkIndex + 1}";
 
     public static string CitationHref(string extractionId, int start, int length) =>
