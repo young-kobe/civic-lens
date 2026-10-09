@@ -1,0 +1,115 @@
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+using CivicLens.Application.Publication;
+using CivicLens.Publication.Contracts;
+
+namespace CivicLens.Infrastructure.Publication;
+
+public sealed class FileReleaseDirectory : IReleaseDirectory
+{
+    private readonly string rootPath;
+
+    public FileReleaseDirectory(string rootPath)
+    {
+        if (string.IsNullOrWhiteSpace(rootPath) || !Path.IsPathRooted(rootPath))
+            throw new ArgumentException("The release root must be an absolute path.", nameof(rootPath));
+        this.rootPath = Path.GetFullPath(rootPath);
+    }
+
+    private string CurrentPath => Path.Combine(rootPath, ReleasePaths.CurrentLink);
+
+    public Task<IReleaseStaging> BeginAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        ReleasePaths.CreateReadableDirectory(rootPath);
+        var staging = Path.Combine(rootPath, ReleasePaths.StagingFolder);
+        ReleasePaths.CreateReadableDirectory(staging);
+        var path = Path.Combine(staging, Guid.NewGuid().ToString("N"));
+        ReleasePaths.CreateReadableDirectory(path);
+        return Task.FromResult<IReleaseStaging>(new FileReleaseStaging(rootPath, path));
+    }
+
+    public async Task<byte[]> ReadFileAsync(string directoryName, string relativePath, int maximumBytes,
+        CancellationToken cancellationToken)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(maximumBytes, 1);
+        var path = ResolveWithoutLinks(directoryName, relativePath);
+        await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, FileOptions.Asynchronous);
+        if (stream.Length > maximumBytes) throw new InvalidDataException("Release file exceeds the allowed size.");
+        var buffer = new byte[stream.Length];
+        await stream.ReadExactlyAsync(buffer, cancellationToken);
+        return buffer;
+    }
+
+    public async Task DeleteAsync(string directoryName, CancellationToken cancellationToken)
+    {
+        ReleasePaths.RequireDirectoryName(directoryName);
+        if (await GetActiveAsync(cancellationToken) == directoryName)
+            throw new InvalidOperationException("The active release cannot be deleted.");
+        var path = ReleasePath(directoryName);
+        if (Directory.Exists(path)) Directory.Delete(path, recursive: true);
+    }
+
+    public Task ActivateAsync(string directoryName, CancellationToken cancellationToken)
+    {
+        if (OperatingSystem.IsWindows()) throw new PlatformNotSupportedException("Release activation needs symlink rename.");
+        cancellationToken.ThrowIfCancellationRequested();
+        ReleasePaths.RequireDirectoryName(directoryName);
+        if (!File.Exists(Path.Combine(ReleasePath(directoryName), PublicationProtocol.ManifestPath)))
+            throw new InvalidOperationException("Only a complete release can be activated.");
+
+        var temporary = Path.Combine(rootPath, $".current-{Guid.NewGuid():N}");
+        File.CreateSymbolicLink(temporary, $"{ReleasePaths.ReleasesFolder}/{directoryName}");
+        if (RenameNative(temporary, CurrentPath) != 0)
+        {
+            var error = Marshal.GetLastPInvokeError();
+            File.Delete(temporary);
+            throw new Win32Exception(error);
+        }
+
+        return Task.CompletedTask;
+    }
+
+#pragma warning disable SYSLIB1054
+    [DllImport("libc", EntryPoint = "rename", SetLastError = true, CharSet = CharSet.Ansi)]
+    private static extern int RenameNative(string oldPath, string newPath);
+#pragma warning restore SYSLIB1054
+
+    public Task<string?> GetActiveAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var target = new FileInfo(CurrentPath).LinkTarget;
+        if (target is null) return Task.FromResult<string?>(null);
+        var prefix = ReleasePaths.ReleasesFolder + "/";
+        if (!target.StartsWith(prefix, StringComparison.Ordinal))
+            throw new InvalidOperationException("The current release link is malformed.");
+        var name = target[prefix.Length..];
+        ReleasePaths.RequireDirectoryName(name);
+        return Task.FromResult<string?>(name);
+    }
+
+    private string ReleasePath(string directoryName) =>
+        Path.Combine(rootPath, ReleasePaths.ReleasesFolder, directoryName);
+
+    private string ResolveWithoutLinks(string directoryName, string relativePath)
+    {
+        ReleasePaths.RequireDirectoryName(directoryName);
+        var segments = ReleasePaths.SplitRelativePath(relativePath);
+        var path = ReleasePath(directoryName);
+        RejectLink(path);
+        foreach (var segment in segments)
+        {
+            path = Path.Combine(path, segment);
+            RejectLink(path);
+        }
+
+        return path;
+    }
+
+    private static void RejectLink(string path)
+    {
+        var info = new FileInfo(path);
+        if (info.LinkTarget is not null) throw new InvalidDataException("Release content must not contain symlinks.");
+        if (!info.Exists && !Directory.Exists(path)) throw new FileNotFoundException("Release file was not found.", path);
+    }
+}

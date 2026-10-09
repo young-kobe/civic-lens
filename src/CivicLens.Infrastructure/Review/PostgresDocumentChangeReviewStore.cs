@@ -444,7 +444,7 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
             ResultJson = resultJson
         });
 
-    private static async Task<Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction> BeginWriteAsync(
+    internal static async Task<Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction> BeginWriteAsync(
         CollectionAttemptDbContext db, CancellationToken cancellationToken)
     {
         var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
