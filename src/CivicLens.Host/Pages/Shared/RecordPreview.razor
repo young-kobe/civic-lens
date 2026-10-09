@@ -1,7 +1,7 @@
 @using Microsoft.AspNetCore.Components
 
-<article class="review-preview">
-    <div class="review-preview-heading"><span>Proposed public record · Revision @RevisionNumber</span><span>Not published</span></div>
+<article id="@PreviewId" class="review-preview">
+    <div class="review-preview-heading"><span>@(string.IsNullOrWhiteSpace(PreviewLabel) ? $"Proposed public record · Revision {RevisionNumber}" : PreviewLabel)</span><span>Private · not published</span></div>
     <h2>@Headline</h2>
     <p>@Summary</p>
     @if (!string.IsNullOrWhiteSpace(Significance))
@@ -24,6 +24,8 @@
 
 @code {
     [Parameter] public int RevisionNumber { get; set; }
+    [Parameter] public string PreviewLabel { get; set; } = string.Empty;
+    [Parameter] public string? PreviewId { get; set; }
     [Parameter, EditorRequired] public string Headline { get; set; } = string.Empty;
     [Parameter, EditorRequired] public string Summary { get; set; } = string.Empty;
     [Parameter] public string? Significance { get; set; }

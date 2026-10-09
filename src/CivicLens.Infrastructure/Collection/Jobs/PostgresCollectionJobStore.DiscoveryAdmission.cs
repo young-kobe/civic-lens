@@ -22,10 +22,21 @@ public sealed partial class PostgresCollectionJobStore : IDiscoveryAdmissionStor
             cancellationToken);
     }
 
+    public Task<DiscoveryAdmissionResult> AdmitAutomaticCheckAsync(ConfiguredCollectionSource source, string attemptId,
+        string idempotencyKey, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        return AdmitAsync(idempotencyKey,
+            (existing, currentDate) => source.CreateDiscoveryAdmission(attemptId, idempotencyKey, currentDate,
+                existing, recheckKnownCandidates: true), cancellationToken);
+    }
+
     public Task<DiscoveryAdmissionResult> AdmitAsync(DiscoveryAdmissionRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
         request.Validate();
+        if (request.RecheckKnownCandidates)
+            throw new ArgumentException("Rechecking known candidates is reserved for automatic source checks.", nameof(request));
         return AdmitAsync(request.IdempotencyKey, (_, _) => request, cancellationToken);
     }
 
@@ -41,9 +52,12 @@ public sealed partial class PostgresCollectionJobStore : IDiscoveryAdmissionStor
             var savedTemplate = batch is null ? null : ReadAdmissionTemplate(batch.InputJson);
             var request = prepareRequest(savedTemplate, DateOnly.FromDateTime(now.UtcDateTime));
             // Keep the old feed input shape so durable batch replays created before this generalization still match.
-            var inputJson = request.ExpectedDiscoveryMode == CollectionMode.Feed
-                ? Write(new LegacyAdmissionInput(request.AttemptId, request.ArticleTemplate, request.Policy))
-                : Write(new AdmissionInput(request.AttemptId, request.ArticleTemplate, request.Policy, request.ExpectedDiscoveryMode));
+            var inputJson = request.RecheckKnownCandidates
+                ? Write(new AutomaticAdmissionInput(request.AttemptId, request.ArticleTemplate, request.Policy,
+                    request.ExpectedDiscoveryMode, request.RecheckKnownCandidates))
+                : request.ExpectedDiscoveryMode == CollectionMode.Feed
+                    ? Write(new LegacyAdmissionInput(request.AttemptId, request.ArticleTemplate, request.Policy))
+                    : Write(new AdmissionInput(request.AttemptId, request.ArticleTemplate, request.Policy, request.ExpectedDiscoveryMode));
             if (batch is not null)
             {
                 if (batch.InputJson != inputJson && !MatchesLegacyAdmission(batch.InputJson, request))
@@ -88,11 +102,22 @@ public sealed partial class PostgresCollectionJobStore : IDiscoveryAdmissionStor
                 urlsByCandidateHash[hash] = url;
                 candidateHashes[index] = hash;
             }
+            if (request.RecheckKnownCandidates && candidateHashes.Length > 0)
+                _ = await db.Database.ExecuteSqlInterpolatedAsync($"""
+                    SELECT pg_advisory_xact_lock(hashtext({request.ArticleTemplate.SourceId}), hashtext(candidate_hash))
+                    FROM unnest({candidateHashes}) AS candidates(candidate_hash)
+                    ORDER BY candidate_hash
+                    """, cancellationToken);
             var existingCandidates = candidateHashes.Length == 0
                 ? []
                 : await db.Set<DiscoveryCandidateJobRow>()
                     .Where(row => candidateHashes.Contains(row.CandidateHash))
                     .ToDictionaryAsync(row => row.CandidateHash, cancellationToken);
+            var existingJobIds = existingCandidates.Values.Select(candidate => candidate.JobId).ToArray();
+            var existingJobs = !request.RecheckKnownCandidates || existingJobIds.Length == 0
+                ? new Dictionary<string, JobRow>(StringComparer.Ordinal) :
+                await db.Set<JobRow>().Where(row => existingJobIds.Contains(row.JobId))
+                    .ToDictionaryAsync(row => row.JobId, cancellationToken);
             var candidateIndex = 0;
             foreach (var url in discovery.Urls)
             {
@@ -103,8 +128,17 @@ public sealed partial class PostgresCollectionJobStore : IDiscoveryAdmissionStor
                     if (!string.Equals(existing.SourceId, request.ArticleTemplate.SourceId, StringComparison.Ordinal) ||
                         !string.Equals(existing.Url, url, StringComparison.Ordinal))
                         throw new InvalidDataException("Discovery candidate URL hash collision detected.");
-                    duplicates++;
-                    continue;
+                    if (!request.RecheckKnownCandidates)
+                    {
+                        duplicates++;
+                        continue;
+                    }
+                    var knownJob = existingJobs[existing.JobId];
+                    if (knownJob.State is not (CollectionJobState.Succeeded or CollectionJobState.Failed or CollectionJobState.Cancelled))
+                    {
+                        duplicates++;
+                        continue;
+                    }
                 }
 
                 var definition = request.ArticleTemplate with { Url = url };
@@ -125,13 +159,16 @@ public sealed partial class PostgresCollectionJobStore : IDiscoveryAdmissionStor
                     State = CollectionJobState.Pending,
                     CreatedAt = Ticks(now)
                 });
-                db.Add(new DiscoveryCandidateJobRow
-                {
-                    SourceId = definition.SourceId,
-                    CandidateHash = hash,
-                    Url = url,
-                    JobId = jobId
-                });
+                if (existingCandidates.TryGetValue(hash, out var candidateRow))
+                    candidateRow.JobId = jobId;
+                else
+                    db.Add(new DiscoveryCandidateJobRow
+                    {
+                        SourceId = definition.SourceId,
+                        CandidateHash = hash,
+                        Url = url,
+                        JobId = jobId
+                    });
                 jobs.Add(new DiscoveryAdmissionJob(jobId, url));
                 reservedRequests = checked(reservedRequests + reservation.Requests);
                 reservedBytes = checked(reservedBytes + reservation.Bytes);
@@ -187,4 +224,6 @@ public sealed partial class PostgresCollectionJobStore : IDiscoveryAdmissionStor
     private sealed record LegacyAdmissionInput(string AttemptId, CollectionJobDefinition ArticleTemplate, DiscoveryAdmissionPolicy Policy);
     private sealed record AdmissionInput(string AttemptId, CollectionJobDefinition ArticleTemplate, DiscoveryAdmissionPolicy Policy,
         CollectionMode ExpectedDiscoveryMode);
+    private sealed record AutomaticAdmissionInput(string AttemptId, CollectionJobDefinition ArticleTemplate,
+        DiscoveryAdmissionPolicy Policy, CollectionMode ExpectedDiscoveryMode, bool RecheckKnownCandidates);
 }

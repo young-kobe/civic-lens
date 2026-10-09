@@ -8,7 +8,8 @@ public sealed record DiscoveryAdmissionRequest(
     string IdempotencyKey,
     CollectionJobDefinition ArticleTemplate,
     DiscoveryAdmissionPolicy Policy,
-    CollectionMode ExpectedDiscoveryMode = CollectionMode.Feed)
+    CollectionMode ExpectedDiscoveryMode = CollectionMode.Feed,
+    bool RecheckKnownCandidates = false)
 {
     public void Validate()
     {

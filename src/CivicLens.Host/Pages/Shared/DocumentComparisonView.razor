@@ -1,0 +1,67 @@
+@using CivicLens.Core.Documents
+@using CivicLens.Host.Pages
+@using Microsoft.AspNetCore.Components
+@using System.Text.Encodings.Web
+
+<section class="diff-view" data-diff-view>
+    <div class="diff-controls">
+        <p>Each passage shows the retained text before and after the change. Surrounding text is shown separately.</p>
+        <button type="button" class="diff-toggle" data-diff-toggle aria-pressed="false">
+            <span data-diff-toggle-label>Show passages side by side</span>
+        </button>
+    </div>
+    <div class="diff-hunks">
+        @for (var i = 0; i < Math.Min(Comparison.Hunks.Length, MaximumPassages); i++)
+        {
+            var hunk = Comparison.Hunks[i];
+            var headingId = $"diff-{Comparison.ComparisonId}-{i}";
+            <article class="diff-hunk" aria-labelledby="@headingId">
+                <h3 id="@headingId">Changed passage @(i + 1)</h3>
+                <div class="diff-contexts">
+                    @if (!string.IsNullOrEmpty(hunk.BeforeContext))
+                    {
+                        <div class="diff-context"><h4>Before context</h4><pre><span>@Evidence(hunk.BeforeContext)</span></pre></div>
+                    }
+                    @if (!string.IsNullOrEmpty(hunk.AfterContext))
+                    {
+                        <div class="diff-context"><h4>After context</h4><pre><span>@Evidence(hunk.AfterContext)</span></pre></div>
+                    }
+                </div>
+                <div class="diff-pair">
+                    <section class="diff-passage diff-removed" aria-label="Removed text">
+                        <h4><span class="diff-sign" aria-hidden="true">−</span> Removed · Before</h4>
+                        <pre><span>@Evidence(hunk.BeforeLength == 0 ? "No text at this insertion point." : hunk.BeforeText)</span></pre>
+                        @if (hunk.BeforeLength > 0)
+                        {
+                            <a href="/Documents/Citation?extractionId=@Comparison.BeforeExtractionId&amp;start=@hunk.BeforeStart&amp;length=@hunk.BeforeLength">Inspect exact before passage</a>
+                        }
+                    </section>
+                    <section class="diff-passage diff-added" aria-label="Added text">
+                        <h4><span class="diff-sign" aria-hidden="true">+</span> Added · After</h4>
+                        <pre><span>@Evidence(hunk.AfterLength == 0 ? "No text at this deletion point." : hunk.AfterText)</span></pre>
+                        @if (hunk.AfterLength > 0)
+                        {
+                            <a href="/Documents/Citation?extractionId=@Comparison.AfterExtractionId&amp;start=@hunk.AfterStart&amp;length=@hunk.AfterLength">Inspect exact after passage</a>
+                        }
+                    </section>
+                </div>
+                <details class="diff-technical">
+                    <summary>Evidence positions</summary>
+                    <p>Before: offset @hunk.BeforeStart, length @hunk.BeforeLength. After: offset @hunk.AfterStart, length @hunk.AfterLength.</p>
+                </details>
+            </article>
+        }
+    </div>
+</section>
+
+@code {
+    [Parameter, EditorRequired] public DocumentComparison Comparison { get; set; } = default!;
+    [Parameter] public int MaximumPassages { get; set; } = int.MaxValue;
+
+    private static MarkupString Evidence(string value)
+    {
+        using var writer = new StringWriter();
+        EncodedEvidence.From(value).WriteTo(writer, HtmlEncoder.Default);
+        return new MarkupString(writer.ToString());
+    }
+}

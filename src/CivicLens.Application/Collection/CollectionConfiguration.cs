@@ -73,6 +73,12 @@ public sealed record CollectionConfiguration
             request.Validate();
             source.JobPolicy?.Validate(request);
             source.AdmissionPolicy?.Validate();
+            if (source.CheckIntervalSeconds is { } interval && interval is
+                < WatchedSourceConfiguration.MinimumCheckIntervalSeconds or
+                > WatchedSourceConfiguration.MaximumCheckIntervalSeconds)
+                throw new ArgumentException($"Source '{source.Id}' check interval must be from " +
+                    $"{WatchedSourceConfiguration.MinimumCheckIntervalSeconds} to " +
+                    $"{WatchedSourceConfiguration.MaximumCheckIntervalSeconds} seconds.");
         }
     }
 

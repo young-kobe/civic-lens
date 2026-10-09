@@ -59,6 +59,38 @@ public sealed class ConfigurationTests
         Assert.Throws<ArgumentException>(duplicateSources.Validate);
     }
 
+    [Theory]
+    [InlineData(null, 3600)]
+    [InlineData(60, 60)]
+    [InlineData(604800, 604800)]
+    public void SourceCheckIntervalUsesHourlyDefaultAndAcceptsBoundaries(int? configuredSeconds, int expectedSeconds)
+    {
+        var configuration = ValidConfiguration([new PersonConfiguration { Id = "person", Name = "Official" }], ["person"]);
+        configuration = configuration with
+        {
+            Sources = [configuration.Sources[0] with { CheckIntervalSeconds = configuredSeconds }]
+        };
+
+        configuration.Validate();
+
+        Assert.Equal(expectedSeconds, configuration.Sources[0].ResolveCheckIntervalSeconds());
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(59)]
+    [InlineData(604801)]
+    public void SourceCheckIntervalRejectsValuesOutsideSupportedRange(int configuredSeconds)
+    {
+        var configuration = ValidConfiguration([new PersonConfiguration { Id = "person", Name = "Official" }], ["person"]);
+        configuration = configuration with
+        {
+            Sources = [configuration.Sources[0] with { CheckIntervalSeconds = configuredSeconds }]
+        };
+
+        Assert.Throws<ArgumentException>(configuration.Validate);
+    }
+
     [Fact]
     public void DisabledSourcesStillRequireValidMembershipAndRequestScope()
     {

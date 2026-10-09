@@ -116,6 +116,62 @@ public sealed class PostgresDiscoveryAdmissionTests(PostgresCollection postgres)
         Assert.Equal(1, counter.CandidateSelectCount);
     }
 
+    [Fact]
+    public async Task AutomaticSourceCheckRequeuesTerminalKnownUrlOnceWithinItsBatchBudget()
+    {
+        var url = "https://example.test/articles/known";
+        var firstAttempt = await SaveFeedAsync([url]);
+        var first = await jobs.AdmitAsync(new DiscoveryAdmissionRequest(firstAttempt, "manual-seed", Template(),
+            new DiscoveryAdmissionPolicy()), default);
+        var initialJob = Assert.Single(first.Jobs);
+        Assert.NotNull(await jobs.CancelAsync(initialJob.JobId, default));
+
+        var template = Template();
+        var configuration = new CollectionConfiguration
+        {
+            People = [new PersonConfiguration { Id = "person", Name = "Official" }],
+            Sources = [new WatchedSourceConfiguration
+            {
+                Id = "source", PersonIds = ["person"], Url = template.Url,
+                AllowedOrigin = template.AllowedOrigin, AllowedPathPrefix = template.AllowedPathPrefix,
+                Mode = CollectionMode.Feed, MaxRequests = template.MaxRequests, MaxBytes = template.MaxBytes,
+                TimeoutSeconds = template.TimeoutSeconds, MinDelayMilliseconds = template.MinDelayMilliseconds,
+                JobPolicy = template.Policy,
+                AdmissionPolicy = new DiscoveryAdmissionPolicy { MaxJobs = 1 }
+            }]
+        };
+        var configured = new ConfiguredCollectionSource(configuration, "source", new DateOnly(2026, 10, 8));
+        var secondAttempt = await SaveFeedAsync([url]);
+        var next = await jobs.AdmitAutomaticCheckAsync(configured, secondAttempt, "automatic-check-two", default);
+        var replay = await jobs.AdmitAutomaticCheckAsync(configured, secondAttempt, "automatic-check-two", default);
+        Assert.Single(next.Jobs);
+        Assert.Equal(1, next.AdmittedCount);
+        Assert.Equal(0, next.DuplicateCount);
+        Assert.Equal(next.Jobs, replay.Jobs);
+
+        var nextJob = Assert.Single(next.Jobs);
+        var activeAttempt = await SaveFeedAsync([url]);
+        var activeDuplicate = await jobs.AdmitAutomaticCheckAsync(configured, activeAttempt, "automatic-check-active", default);
+        Assert.Equal(0, activeDuplicate.AdmittedCount);
+        Assert.Equal(1, activeDuplicate.DuplicateCount);
+        Assert.NotNull(await jobs.CancelAsync(nextJob.JobId, default));
+        var thirdAttempt = await SaveFeedAsync([url]);
+        var fourthAttempt = await SaveFeedAsync([url]);
+        var concurrent = await Task.WhenAll(
+            jobs.AdmitAutomaticCheckAsync(configured, thirdAttempt, "automatic-check-three", default),
+            jobs.AdmitAutomaticCheckAsync(configured, fourthAttempt, "automatic-check-four", default));
+        Assert.Equal(1, concurrent.Sum(result => result.AdmittedCount));
+        Assert.Equal(1, concurrent.Sum(result => result.DuplicateCount));
+        var newlyAdmitted = Assert.Single(concurrent.SelectMany(result => result.Jobs));
+        Assert.NotNull(await jobs.CancelAsync(newlyAdmitted.JobId, default));
+
+        var fifthAttempt = await SaveFeedAsync([url]);
+        var capped = await jobs.AdmitAutomaticCheckAsync(configured, fifthAttempt, "automatic-check-five", default);
+        Assert.Equal(1, capped.AdmittedCount);
+        Assert.Equal(0, capped.DeferredCount);
+        Assert.Equal(0, capped.DuplicateCount);
+    }
+
     private sealed class CandidateSelectCounter : DbCommandInterceptor
     {
         public int CandidateSelectCount { get; private set; }

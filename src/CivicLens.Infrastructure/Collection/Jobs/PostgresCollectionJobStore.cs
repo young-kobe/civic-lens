@@ -13,7 +13,8 @@ using Npgsql;
 namespace CivicLens.Infrastructure.Collection.Jobs;
 
 /// <summary>Atomic job ownership, collection admission, and recovery accounting using database time.</summary>
-public sealed partial class PostgresCollectionJobStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory) : ICollectionJobStore
+public sealed partial class PostgresCollectionJobStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory) :
+    ICollectionJobStore, ICollectionScheduleStore
 {
     private const string LockName = "civic-lens-collection-jobs";
 
@@ -183,11 +184,8 @@ public sealed partial class PostgresCollectionJobStore(IDbContextFactory<Collect
             return new CollectionJobStartResult(CollectionJobStartStatus.Exhausted);
         }
         var originKey = NormalizeOrigin(definition.AllowedOrigin);
-        var origin = await db.Set<JobOriginRow>().SingleOrDefaultAsync(item => item.Origin == originKey, cancellationToken);
-        if (origin?.UnresolvedAttemptId is not null) return Blocked(CollectionJobBlockReason.AttemptUnresolved);
-        if (origin?.NotBefore > Ticks(now)) return Blocked(CollectionJobBlockReason.OriginBackoff, FromTicks(origin.NotBefore));
-        var slot = await db.Set<CollectorSlotRow>().SingleOrDefaultAsync(cancellationToken);
-        if (slot?.ExpiresAt > Ticks(now)) return Blocked(CollectionJobBlockReason.CollectorBusy, FromTicks(slot.ExpiresAt));
+        var (origin, slot, admissionBlock) = await ReadAdmissionAvailabilityAsync(db, originKey, now, cancellationToken);
+        if (admissionBlock is not null) return admissionBlock;
 
         var attempt = new JobAttemptRow
         {
@@ -293,8 +291,48 @@ public sealed partial class PostgresCollectionJobStore(IDbContextFactory<Collect
             if (row is null) return false;
             row.LeaseToken = null;
             row.LeaseExpiresAt = null;
+            // A release removes the lease deadline. Carry any timed barrier in the notification:
+            // it may expire before this transaction commits, after a listener's last queue scan.
+            var notification = await ReadReleaseNotificationAsync(db, row, now, cancellationToken);
+            if (notification is not null)
+                await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_notify('civic_lens_work', {notification})", cancellationToken);
             return true;
         }, cancellationToken);
+
+    private static async Task<string?> ReadReleaseNotificationAsync(CollectionAttemptDbContext db, JobRow job,
+        DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        if (job.State is CollectionJobState.Succeeded or CollectionJobState.Failed or CollectionJobState.Cancelled)
+            return null;
+        if (await db.Set<JobAttemptRow>().AnyAsync(attempt => attempt.JobId == job.JobId &&
+                attempt.ResolutionJson == null, cancellationToken))
+            return "changed";
+        if (job.RetryAt > Ticks(now)) return job.RetryAt.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        string origin;
+        try { origin = NormalizeOrigin(ReadDefinition(job.DefinitionJson).AllowedOrigin); }
+        catch (Exception exception) when (exception is InvalidDataException or JsonException or ArgumentException)
+        {
+            // Invalid retained settings must not prevent releasing ownership for recovery.
+            return "changed";
+        }
+        var availability = await ReadAdmissionAvailabilityAsync(db, origin, now, cancellationToken);
+        return availability.Block is null ? "changed" :
+            availability.Block.RetryAt?.UtcTicks.ToString(System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    private static async Task<(JobOriginRow? Origin, CollectorSlotRow? Slot, CollectionJobStartResult? Block)>
+        ReadAdmissionAvailabilityAsync(CollectionAttemptDbContext db, string originKey, DateTimeOffset now,
+            CancellationToken cancellationToken)
+    {
+        var origin = await db.Set<JobOriginRow>().SingleOrDefaultAsync(item => item.Origin == originKey, cancellationToken);
+        if (origin?.UnresolvedAttemptId is not null)
+            return (origin, null, Blocked(CollectionJobBlockReason.AttemptUnresolved));
+        if (origin?.NotBefore > Ticks(now))
+            return (origin, null, Blocked(CollectionJobBlockReason.OriginBackoff, FromTicks(origin.NotBefore)));
+        var slot = await db.Set<CollectorSlotRow>().SingleOrDefaultAsync(cancellationToken);
+        return (origin, slot, slot?.ExpiresAt > Ticks(now)
+            ? Blocked(CollectionJobBlockReason.CollectorBusy, FromTicks(slot.ExpiresAt)) : null);
+    }
 
     private static void ValidateResolution(CollectionAttemptResolution resolution, CollectionRequest request)
     {

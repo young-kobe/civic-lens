@@ -4,27 +4,29 @@
 @{ ViewData["Title"] = "Saved comparison"; }
 <p class="back"><a asp-page="/Index">← Evidence lookup</a></p>
 @if (Model.Error is not null) { <section class="notice @(Model.IsMissing ? "" : "error")" role="alert"><h1>@Model.ErrorTitle</h1><p>@Model.Error</p></section> }
-else if (Model.Comparison is { } comparison)
+@if (Model.ReviewStatus is not null) { <p class="notice error" role="alert">@Model.ReviewStatus</p> }
+@if (Model.Comparison is { } comparison)
 {
     var statusLabel = comparison.Status switch { DocumentComparisonStatus.Complete => "Complete", DocumentComparisonStatus.Incompatible => "Incompatible extractions", DocumentComparisonStatus.LimitExceeded => "Comparison limit exceeded", _ => "Unknown status" };
     <header class="page-heading"><h1>Saved document comparison</h1><p class="status">@statusLabel</p><p>@(comparison.Status == DocumentComparisonStatus.Complete ? "A complete text comparison. Text differences do not establish significance." : comparison.Reason)</p></header>
-    <dl class="identity"><dt>Comparison ID</dt><dd><code>@comparison.ComparisonId</code></dd><dt>Before</dt><dd><a asp-page="/Documents/Extraction" asp-route-extractionId="@comparison.BeforeExtractionId"><code>@comparison.BeforeExtractionId</code></a></dd><dt>After</dt><dd><a asp-page="/Documents/Extraction" asp-route-extractionId="@comparison.AfterExtractionId"><code>@comparison.AfterExtractionId</code></a></dd><dt>Algorithm</dt><dd>@comparison.AlgorithmVersion</dd><dt>Settings</dt><dd>@comparison.SettingsVersion</dd></dl>
+    @if (Model.CanCreateReview && comparison.Status == DocumentComparisonStatus.Complete && !comparison.Hunks.IsEmpty)
+    {
+        <section class="comparison-review-action" aria-labelledby="review-action-title">
+            <h2 id="review-action-title">Start a review from this comparison</h2>
+            <p>This opens a private draft with no wording added. You will write and review the account against these retained passages.</p>
+            <form method="post" asp-page-handler="Create">
+                <input type="hidden" name="comparisonId" value="@comparison.ComparisonId" />
+                <input type="hidden" name="idempotencyKey" value="@Model.CreateIdempotencyKey" />
+                <button type="submit">Create review draft</button>
+            </form>
+        </section>
+    }
+    <details class="comparison-evidence-details"><summary>Comparison and evidence identifiers</summary>
+        <dl class="identity"><dt>Comparison ID</dt><dd><code>@comparison.ComparisonId</code></dd><dt>Before</dt><dd><a asp-page="/Documents/Extraction" asp-route-extractionId="@comparison.BeforeExtractionId"><code>@comparison.BeforeExtractionId</code></a></dd><dt>After</dt><dd><a asp-page="/Documents/Extraction" asp-route-extractionId="@comparison.AfterExtractionId"><code>@comparison.AfterExtractionId</code></a></dd><dt>Algorithm</dt><dd>@comparison.AlgorithmVersion</dd><dt>Settings</dt><dd>@comparison.SettingsVersion</dd></dl>
+    </details>
     @if (comparison.Status == DocumentComparisonStatus.Complete && comparison.Hunks.IsEmpty) { <p class="notice">No text differences were found in this complete comparison.</p> }
     @if (!comparison.Hunks.IsEmpty)
     {
-        <section class="hunks" aria-label="Changed ranges">
-        @for (var i = 0; i < comparison.Hunks.Length; i++)
-        {
-            var hunk = comparison.Hunks[i];
-            <article class="hunk"><h2>Changed passage @(@i + 1)</h2>
-                @if (hunk.BeforeContext.Length > 0) { <div class="context"><h3>Before context</h3><pre><span>@EncodedEvidence.From(hunk.BeforeContext)</span></pre></div> }
-                <div class="change-grid">
-                    <section><h3>Before · offset @hunk.BeforeStart</h3><pre class="changed-text"><span>@EncodedEvidence.From(hunk.BeforeLength == 0 ? "No text at this insertion point." : hunk.BeforeText)</span></pre>@if (hunk.BeforeLength > 0) { <a asp-page="/Documents/Citation" asp-route-extractionId="@comparison.BeforeExtractionId" asp-route-start="@hunk.BeforeStart" asp-route-length="@hunk.BeforeLength">Cite this before passage</a> }</section>
-                    <section><h3>After · offset @hunk.AfterStart</h3><pre class="changed-text"><span>@EncodedEvidence.From(hunk.AfterLength == 0 ? "No text at this deletion point." : hunk.AfterText)</span></pre>@if (hunk.AfterLength > 0) { <a asp-page="/Documents/Citation" asp-route-extractionId="@comparison.AfterExtractionId" asp-route-start="@hunk.AfterStart" asp-route-length="@hunk.AfterLength">Cite this after passage</a> }</section>
-                </div>
-                @if (hunk.AfterContext.Length > 0) { <div class="context"><h3>After context</h3><pre><span>@EncodedEvidence.From(hunk.AfterContext)</span></pre></div> }
-            </article>
-        }
-        </section>
+        <component type="typeof(DocumentComparisonView)" render-mode="Static" param-Comparison="@comparison" />
     }
 }

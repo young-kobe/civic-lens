@@ -21,6 +21,43 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("CivicLens.Infrastructure.Collection.Processing.PersistedEvidenceProcessingRow", b =>
+            {
+                b.Property<string>("JobId").IsRequired().HasMaxLength(128).HasColumnType("character varying(128)").HasColumnName("job_id");
+                b.Property<string>("AttemptId").IsRequired().HasMaxLength(128).HasColumnType("character varying(128)").HasColumnName("attempt_id");
+                b.Property<string>("SourceId").IsRequired().HasMaxLength(128).HasColumnType("character varying(128)").HasColumnName("source_id");
+                b.Property<string>("RequestedUrl").IsRequired().HasMaxLength(4096).HasColumnType("character varying(4096)").HasColumnName("requested_url");
+                b.Property<long?>("ObservedAtUtcTicks").HasColumnType("bigint").HasColumnName("observed_at_utc_ticks");
+                b.Property<string>("Stage").IsRequired().HasColumnType("text").HasColumnName("stage");
+                b.Property<string>("Status").IsRequired().HasColumnType("text").HasColumnName("status");
+                b.Property<string>("LeaseToken").HasMaxLength(64).HasColumnType("character varying(64)").HasColumnName("lease_token");
+                b.Property<long>("Fence").HasColumnType("bigint").HasColumnName("fence");
+                b.Property<long?>("LeaseExpiresAt").HasColumnType("bigint").HasColumnName("lease_expires_at");
+                b.Property<int>("Attempts").HasColumnType("integer").HasColumnName("attempts");
+                b.Property<long?>("RetryAt").HasColumnType("bigint").HasColumnName("retry_at");
+                b.Property<string>("PredecessorAttemptId").HasMaxLength(128).HasColumnType("character varying(128)").HasColumnName("predecessor_attempt_id");
+                b.Property<string>("ExtractionId").HasMaxLength(64).HasColumnType("character varying(64)").HasColumnName("extraction_id");
+                b.Property<string>("ComparisonId").HasMaxLength(64).HasColumnType("character varying(64)").HasColumnName("comparison_id");
+                b.Property<string>("Outcome").HasColumnType("text").HasColumnName("outcome");
+                b.Property<string>("ErrorCode").HasMaxLength(128).HasColumnType("character varying(128)").HasColumnName("error_code");
+                b.Property<int>("AdmittedCount").HasColumnType("integer").HasColumnName("admitted_count");
+                b.Property<int>("DeferredCount").HasColumnType("integer").HasColumnName("deferred_count");
+                b.Property<int>("DuplicateCount").HasColumnType("integer").HasColumnName("duplicate_count");
+                b.HasKey("JobId", "AttemptId");
+                b.HasIndex("JobId", "Stage", "Status");
+                b.HasIndex("Status", "ObservedAtUtcTicks", "AttemptId", "JobId");
+                b.HasIndex("PredecessorAttemptId", "Status");
+                b.ToTable("evidence_processing", t =>
+                {
+                    t.HasCheckConstraint("ck_evidence_processing_fence", "fence >= 0 AND attempts >= 0");
+                    t.HasCheckConstraint("ck_evidence_processing_lease", "(lease_token IS NULL) = (lease_expires_at IS NULL)");
+                    t.HasCheckConstraint("ck_evidence_processing_stage", "stage IN ('Preparation','Extraction','Comparison','Complete')");
+                    t.HasCheckConstraint("ck_evidence_processing_status", "status IN ('Pending','Running','RetryWaiting','WaitingForPredecessor','Succeeded','Blocked','Failed')");
+                    t.HasCheckConstraint("ck_evidence_processing_evidence_ids", "(extraction_id IS NULL OR extraction_id ~ '^[0-9a-f]{64}$') AND (comparison_id IS NULL OR comparison_id ~ '^[0-9a-f]{64}$')");
+                    t.HasCheckConstraint("ck_evidence_processing_counts", "admitted_count >= 0 AND deferred_count >= 0 AND duplicate_count >= 0");
+                });
+            });
+
             modelBuilder.Entity("CivicLens.Infrastructure.Collection.Discovery.DiscoveryAdmissionBatchRow", b =>
                 {
                     b.Property<string>("IdempotencyKey")
@@ -221,6 +258,48 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.HasIndex("UnresolvedAttemptId");
 
                     b.ToTable("collection_job_origins", (string)null);
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Collection.Jobs.Persistence.CollectionScheduleRow", b =>
+                {
+                    b.Property<string>("SourceId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("source_id");
+
+                    b.Property<string>("ConfigurationRevisionId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("configuration_revision_id");
+
+                    b.Property<string>("ConfigurationJson")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("configuration_json");
+
+                    b.Property<int>("IntervalSeconds")
+                        .HasColumnType("integer")
+                        .HasColumnName("interval_seconds");
+
+                    b.Property<long>("NextDueUtcTicks")
+                        .HasColumnType("bigint")
+                        .HasColumnName("next_due_utc_ticks");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("boolean")
+                        .HasColumnName("enabled");
+
+                    b.HasKey("SourceId");
+
+                    b.HasIndex("Enabled", "NextDueUtcTicks", "SourceId");
+
+                    b.ToTable("collection_source_schedules", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_collection_source_schedules_revision", "configuration_revision_id ~ '^[0-9a-f]{64}$'");
+                            t.HasCheckConstraint("ck_collection_source_schedules_interval", "interval_seconds BETWEEN 60 AND 604800");
+                            t.HasCheckConstraint("ck_collection_source_schedules_due", "next_due_utc_ticks BETWEEN 0 AND 3155378975999999999");
+                        });
                 });
 
             modelBuilder.Entity("CivicLens.Infrastructure.Collection.Jobs.Persistence.JobRow", b =>

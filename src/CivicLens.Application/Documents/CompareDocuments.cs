@@ -20,7 +20,13 @@ public sealed class CompareDocuments(IDocumentExtractionStore extractions, IDocu
     internal async Task<DocumentComparison> ExecuteAsync(DocumentExtraction before, DocumentExtraction after,
         CancellationToken cancellationToken)
     {
-        var comparison = DocumentComparison.Create(before, after, cancellationToken);
-        return await comparisons.SaveAsync(comparison, cancellationToken);
+        var comparison = await CompareAsync(before, after, cancellationToken);
+        return await SaveAsync(comparison, cancellationToken);
     }
+
+    internal Task<DocumentComparison> CompareAsync(DocumentExtraction before, DocumentExtraction after,
+        CancellationToken cancellationToken) => Task.FromResult(DocumentComparison.Create(before, after, cancellationToken));
+
+    internal Task<DocumentComparison> SaveAsync(DocumentComparison comparison, CancellationToken cancellationToken) =>
+        comparisons.SaveAsync(comparison, cancellationToken);
 }

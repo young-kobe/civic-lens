@@ -1,3 +1,7 @@
+@{
+    var isReviewWorkspace = User.Identity?.IsAuthenticated == true;
+    var currentPage = ViewContext.RouteData.Values["page"]?.ToString();
+}
 <!doctype html>
 <html lang="en">
 <head>
@@ -7,10 +11,46 @@
     <title>@ViewData["Title"] · Civic Lens</title>
     <link rel="stylesheet" href="~/css/theme.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/review.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/diff.css" asp-append-version="true" />
 </head>
 <body>
-    <header class="masthead"><a class="brand" asp-page="/Index">Civic Lens</a><span>Local evidence workspace</span></header>
-    <main>@RenderBody()</main>
-    <footer>Local workspace · Retained source evidence</footer>
+    <a class="review-skip" href="#review-main">Skip to workspace</a>
+    <div class="review-shell">
+        <aside class="review-rail">
+            <a class="review-brand" href="@(isReviewWorkspace ? "/Review" : "/")" aria-label="Civic Lens workspace home">
+                <svg viewBox="0 0 38 34" fill="none" aria-hidden="true"><circle cx="15" cy="15" r="12" stroke="currentColor" stroke-width="3" /><path d="M24 24 34 32M15 7v16M7 15h16" stroke="currentColor" stroke-width="3" /></svg>
+                <span>Civic Lens</span>
+            </a>
+            <p class="review-rail-copy">Reviewed accounts.<br />Evidence you can inspect.</p>
+            <nav class="review-nav" aria-label="Workspace">
+                @if (isReviewWorkspace)
+                {
+                    <a asp-page="/Review/Index" aria-current="@(currentPage == "/Review/Index" ? "page" : null)">Review queue</a>
+                    @if (ViewData["CanCollect"] is true)
+                    {
+                        <a asp-page="/Review/Sources" aria-current="@(currentPage == "/Review/Sources" ? "page" : null)">Sources</a>
+                    }
+                }
+                <a href="@(isReviewWorkspace ? "/Evidence" : "/")" aria-current="@(currentPage == "/Index" || currentPage?.StartsWith("/Documents/", StringComparison.Ordinal) == true ? "page" : null)">Evidence library</a>
+            </nav>
+            <div class="review-rail-bottom">
+                <p>@(isReviewWorkspace ? "Private editorial workspace. Approval keeps an account private." : "Local evidence workspace. Saved evidence is read only.")</p>
+                @if (isReviewWorkspace)
+                {
+                    <form method="post" asp-page="/Review/Logout"><button class="review-logout" type="submit">Sign out</button></form>
+                }
+            </div>
+        </aside>
+        <main class="review-main" id="review-main" tabindex="-1">
+            <div class="review-topline"><span>U.S. national coverage / @(isReviewWorkspace ? "Editorial workspace" : "Retained evidence")</span><a href="@(isReviewWorkspace ? "/Evidence" : "/")">Evidence library</a></div>
+            <div class="review-content">@RenderBody()</div>
+            <footer class="review-footer">Civic Lens · @(isReviewWorkspace ? "Internal review workspace · Review does not publish a record" : "Local viewer · Retained source evidence")</footer>
+        </main>
+    </div>
+    <script src="~/review.js" asp-append-version="true" defer></script>
+    <script src="~/diff.js" asp-append-version="true" defer></script>
+    <script src="~/search.js" asp-append-version="true" defer></script>
+    <script src="~/sources.js" asp-append-version="true" defer></script>
 </body>
 </html>

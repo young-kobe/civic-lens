@@ -21,7 +21,7 @@
     <header class="review-heading">
         <div>
             <h1>@(string.IsNullOrWhiteSpace(revision.Headline) ? "Untitled public record" : revision.Headline)</h1>
-            <p>Revision @revision.RevisionNumber · @if (Model.Review.UnresolvedConcerns.Length > 0) { <span class="review-state concern">@Model.Review.UnresolvedConcerns.Length outstanding concern(s)</span> } else if (latestDecision?.Kind == ReviewDecisionKind.Approve) { <span class="review-state approved">Approved for publication</span> } else if (latestDecision?.Kind == ReviewDecisionKind.WithdrawApproval) { <span class="review-state withdrawn">Approval withdrawn</span> } else { <span class="review-state">Awaiting review</span> }</p>
+            <p>Revision @revision.RevisionNumber · @if (Model.Review.UnresolvedConcerns.Length > 0) { <span class="review-state concern">@Model.Review.UnresolvedConcerns.Length outstanding concern(s)</span> } else if (latestDecision?.Kind == ReviewDecisionKind.Approve) { <span class="review-state approved">Approved by reviewer · still private</span> } else if (latestDecision?.Kind == ReviewDecisionKind.WithdrawApproval) { <span class="review-state withdrawn">Approval withdrawn</span> } else { <span class="review-state">Awaiting review</span> }</p>
         </div>
     </header>
 
@@ -51,35 +51,62 @@
         </section>
     }
 
-    <div class="review-columns">
-        <section class="review-column" aria-labelledby="preview-title">
-            <h2 id="preview-title">Reader preview</h2>
-            @{
-                var previewHeadline = string.IsNullOrWhiteSpace(Model.Input.Headline) ? "Your headline will appear here" : Model.Input.Headline;
-                var previewSummary = string.IsNullOrWhiteSpace(Model.Input.Summary) ? "Add a plain-language summary of what the evidence establishes." : Model.Input.Summary;
-                var previewInstitution = string.IsNullOrWhiteSpace(Model.Input.Institution) ? "Add the institution named by the source" : Model.Input.Institution;
-                var previewChangeDate = string.IsNullOrWhiteSpace(Model.Input.ChangeDate) ? "Not established" : Model.Input.ChangeDate;
-                var previewObserved = $"{Model.BeforeObservedAtUtc?.ToString("yyyy-MM-dd HH:mm 'UTC'")} before; {Model.AfterObservedAtUtc?.ToString("yyyy-MM-dd HH:mm 'UTC'")} after";
-                var previewOfficialLinks = (Model.Input.OfficialIds?.Length ?? 0) == 0 ? "None selected" : string.Join(", ", Model.Input.OfficialIds ?? []);
-                var previewIssues = (Model.Input.IssueIds?.Length ?? 0) == 0 ? "None selected" : string.Join(", ", Model.Input.IssueIds ?? []);
+    <section class="review-approval-target" aria-labelledby="approval-target-title">
+        <h2 id="approval-target-title">Document-change account to approve</h2>
+        <p>This is a manually drafted account of a change between two retained versions of the same source. Review the saved wording and selected passages below as the proposed account readers would see.</p>
+        <p>Approval records a reviewer decision for revision @revision.RevisionNumber and its saved citations. It keeps this account private; publishing is a separate future process.</p>
+        <component type="typeof(RecordPreview)" render-mode="Static"
+                   param-PreviewId="@("saved-approval-target")"
+                   param-PreviewLabel="@($"Saved approval target · Revision {revision.RevisionNumber}")"
+                   param-RevisionNumber="@revision.RevisionNumber"
+                   param-Headline="@(string.IsNullOrWhiteSpace(revision.Headline) ? "Untitled public record" : revision.Headline)"
+                   param-Summary="@revision.Summary"
+                   param-Significance="@revision.Significance"
+                   param-Limits="@revision.Limits"
+                   param-Institution="@revision.Institution"
+                   param-ChangeDate="@(revision.ChangeDate?.ToString("yyyy-MM-dd") ?? "Not established")"
+                   param-Observed="@($"{Model.BeforeObservedAtUtc?.ToString("yyyy-MM-dd HH:mm 'UTC'")} earlier; {Model.AfterObservedAtUtc?.ToString("yyyy-MM-dd HH:mm 'UTC'")} later")"
+                   param-OfficialLinks="@(revision.OfficialIds.Length == 0 ? "None selected" : string.Join(", ", revision.OfficialIds))"
+                   param-Issues="@(revision.IssueIds.Length == 0 ? "None selected" : string.Join(", ", revision.IssueIds))" />
+        <section class="review-bound-citations" aria-labelledby="saved-citation-title">
+            <h3 id="saved-citation-title">Exact saved citations for this revision</h3>
+            @if (revision.Citations.Length == 0)
+            {
+                <p class="review-error">No exact source passages are bound to this saved revision.</p>
             }
-            <component type="typeof(RecordPreview)" render-mode="Static"
-                       param-RevisionNumber="@revision.RevisionNumber"
-                       param-Headline="@previewHeadline"
-                       param-Summary="@previewSummary"
-                       param-Significance="@Model.Input.Significance"
-                       param-Limits="@Model.Input.Limits"
-                       param-Institution="@previewInstitution"
-                       param-ChangeDate="@previewChangeDate"
-                       param-Observed="@previewObserved"
-                       param-OfficialLinks="@previewOfficialLinks"
-                       param-Issues="@previewIssues" />
+            else if (Model.Citations.Length != revision.Citations.Length)
+            {
+                <p class="review-error">Not all saved citations could be verified against retained text, so some evidence is missing from this view.</p>
+            }
+            else
+            {
+                <ol class="review-saved-citations">
+                @for (var index = 0; index < revision.Citations.Length; index++)
+                {
+                    var binding = revision.Citations[index];
+                    var span = Model.Citations[index];
+                    var version = binding.ExtractionId == Model.Comparison?.BeforeExtractionId ? "earlier version" : binding.ExtractionId == Model.Comparison?.AfterExtractionId ? "later version" : "retained source text";
+                    var side = revision.ChangeDateEvidence == binding ? $"Date evidence · {version}" : version;
+                    <li>
+                        <strong>@side</strong>
+                        <span>@EncodedEvidence.From(span.Quote)</span>
+                        <a asp-page="/Documents/Citation" asp-route-extractionId="@binding.ExtractionId" asp-route-start="@binding.Start" asp-route-length="@binding.Length">Inspect this exact citation</a>
+                        <a asp-page="/Documents/Extraction" asp-route-extractionId="@binding.ExtractionId">Read complete @version</a>
+                    </li>
+                }
+                </ol>
+            }
+        </section>
+    </section>
 
-            <form method="post" asp-page-handler="Save" class="review-editor-form" data-unsaved-form data-recovered-unsaved="@Model.HasUnsavedInput.ToString().ToLowerInvariant()">
+    <div class="review-columns">
+        <section class="review-column" aria-labelledby="editor-title">
+            <h2 id="editor-title">Edit public wording</h2>
+            <p class="review-help">Fields below contain your editable wording, including any recovered unsaved changes. Save to create a new revision before it can be approved.</p>
+            <form id="unsaved-record-preview" method="post" asp-page-handler="Save" class="review-editor-form" data-unsaved-form data-recovered-unsaved="@Model.HasUnsavedInput.ToString().ToLowerInvariant()">
                 <input type="hidden" name="draftId" value="@revision.DraftId" />
                 <input type="hidden" name="expectedRevisionNumber" value="@revision.RevisionNumber" />
                 <input type="hidden" name="idempotencyKey" value="@Model.SaveIdempotencyKey" />
-                <h2>Edit public wording</h2>
                 <div class="review-field"><label asp-for="Input.Headline">Public headline</label><input asp-for="Input.Headline" maxlength="256" /><small>Maximum 256 characters.</small></div>
                 <div class="review-field"><label asp-for="Input.Summary">Plain-language summary</label><textarea asp-for="Input.Summary" maxlength="8000"></textarea><small>Describe what the retained source establishes and keep chronology separate from causation.</small></div>
                 <div class="review-field"><label asp-for="Input.Significance">Why it matters <span class="review-help">(optional)</span></label><textarea asp-for="Input.Significance" maxlength="4000"></textarea></div>
@@ -165,18 +192,14 @@
             @if (Model.Comparison is not null)
             {
                 <p class="review-help">A text difference does not establish that the edit is substantive. Read both versions and check the surrounding source text.</p>
-                @foreach (var hunk in Model.Comparison.Hunks)
+                <p class="review-help">Earlier version observed @Model.BeforeObservedAtUtc?.ToString("yyyy-MM-dd HH:mm 'UTC'"); later version observed @Model.AfterObservedAtUtc?.ToString("yyyy-MM-dd HH:mm 'UTC'"). Observation times do not establish when the source changed.</p>
+                @if (Model.Comparison.Hunks.IsEmpty)
                 {
-                    <article class="review-evidence">
-                        <div class="review-pair">
-                            <div class="review-passage"><h3>Before · @Model.BeforeObservedAtUtc?.ToString("yyyy-MM-dd HH:mm 'UTC'")</h3><p><span>@EncodedEvidence.From(hunk.BeforeText.Length == 0 ? "No text at this insertion point." : hunk.BeforeText)</span></p></div>
-                            <div class="review-passage"><h3>After · @Model.AfterObservedAtUtc?.ToString("yyyy-MM-dd HH:mm 'UTC'")</h3><p><span>@EncodedEvidence.From(hunk.AfterText.Length == 0 ? "No text at this deletion point." : hunk.AfterText)</span></p></div>
-                        </div>
-                        @if (hunk.BeforeContext.Length > 0 || hunk.AfterContext.Length > 0)
-                        {
-                            <details class="review-details"><summary>Read surrounding context</summary><div class="review-pair"><div class="review-passage"><h3>Before context</h3><p><span>@EncodedEvidence.From(hunk.BeforeContext)</span></p></div><div class="review-passage"><h3>After context</h3><p><span>@EncodedEvidence.From(hunk.AfterContext)</span></p></div></div></details>
-                        }
-                    </article>
+                    <p class="review-banner">This saved comparison contains no text differences.</p>
+                }
+                else
+                {
+                    <component type="typeof(DocumentComparisonView)" render-mode="Static" param-Comparison="@Model.Comparison" />
                 }
                 <p><a asp-page="/Documents/Extraction" asp-route-extractionId="@Model.Comparison.BeforeExtractionId">Read complete earlier version</a> · <a asp-page="/Documents/Extraction" asp-route-extractionId="@Model.Comparison.AfterExtractionId">Read complete later version</a></p>
                 <details class="review-details"><summary>Comparison and source identifiers</summary>
@@ -195,7 +218,14 @@
     </div>
 
     <section class="review-decision" aria-labelledby="decision-title">
-        <h2 id="decision-title">Review this exact revision</h2>
+        <h2 id="decision-title">Review saved revision @revision.RevisionNumber</h2>
+        <p>Software checks that saved citation spans match retained text and that this decision names the current revision. You must judge whether the wording, attribution, date, significance, and stated limits are supported by those sources.</p>
+        <ul>
+            <li>Does the account describe a substantive source change rather than navigation churn or a processing difference?</li>
+            <li>Do the selected passages support the summary, attribution, and any explanation of why the change matters?</li>
+            <li>Are observation dates distinguished from an established edit date, and are evidence gaps and uncertainty clear?</li>
+        </ul>
+        <p>Approving means you judge this saved account to be an accurate, evidence-supported description of a substantive document change. It remains private. Approval does not publish it or certify it as a model evaluation or training example.</p>
                 @if (Model.Review.UnresolvedConcerns.Length > 0)
         {
             <fieldset class="review-fieldset">
@@ -222,7 +252,7 @@
             <div class="review-actions">
                 @if (latestDecision?.Kind != ReviewDecisionKind.Approve)
                 {
-                    <button class="review-button review-button-primary" type="submit" name="kind" value="Approve">Approve revision</button>
+                        <button class="review-button review-button-primary" type="submit" name="kind" value="Approve">Approve</button>
                 }
                 <button class="review-button" type="submit" name="kind" value="RequestChanges">Request changes</button>
                 @if (latestDecision?.Kind == ReviewDecisionKind.Approve)

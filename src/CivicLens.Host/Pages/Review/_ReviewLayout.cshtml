@@ -1,43 +1,6 @@
 @inject CivicLens.Host.Review.ReviewActorAccessor ReviewActors
-<!doctype html>
-<html lang="en">
-<head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="color-scheme" content="light" />
-    <title>@ViewData["Title"] · Civic Lens review</title>
-    <link rel="stylesheet" href="~/css/theme.css" asp-append-version="true" />
-    <link rel="stylesheet" href="~/review.css" asp-append-version="true" />
-</head>
-<body>
-    <a class="review-skip" href="#review-main">Skip to review workspace</a>
-    <div class="review-shell">
-        <aside class="review-rail">
-            <a class="review-brand" asp-page="/Review/Index" aria-label="Civic Lens review home">
-                <svg viewBox="0 0 38 34" fill="none" aria-hidden="true"><circle cx="15" cy="15" r="12" stroke="currentColor" stroke-width="3" /><path d="M24 24 34 32M15 7v16M7 15h16" stroke="currentColor" stroke-width="3" /></svg>
-                <span>Civic Lens</span>
-            </a>
-            <p class="review-rail-copy">Review the public record<br />with its evidence close by.</p>
-            <nav class="review-nav" aria-label="Review workspace">
-                <a asp-page="/Review/Index" aria-current="@(ViewContext.RouteData.Values["page"]?.ToString() == "/Review/Index" ? "page" : null)">Review queue</a>
-                @if (ReviewActors.GetActor(User).Role == CivicLens.Core.Review.ReviewRole.Owner)
-                {
-                    <a asp-page="/Review/Sources" aria-current="@(ViewContext.RouteData.Values["page"]?.ToString() == "/Review/Sources" ? "page" : null)">Sources and collection</a>
-                }
-            </nav>
-            <div class="review-rail-bottom">
-                <p>Private editorial workspace.<br />Approval and publication are separate.</p>
-                <form method="post" asp-page="/Review/Logout">
-                    <button class="review-logout" type="submit">Sign out</button>
-                </form>
-            </div>
-        </aside>
-        <main class="review-main" id="review-main" tabindex="-1">
-            <div class="review-topline"><span>U.S. national coverage / Editorial review</span><a href="/Evidence">Evidence viewer</a></div>
-            <div class="review-content">@RenderBody()</div>
-            <footer class="review-footer">Civic Lens · Internal review workspace · Review does not publish a record</footer>
-        </main>
-    </div>
-    <script src="~/review.js" asp-append-version="true" defer></script>
-</body>
-</html>
+@{
+    Layout = "/Pages/Shared/_Layout.cshtml";
+    ViewData["CanCollect"] = ReviewActors.GetActor(User).Role == CivicLens.Core.Review.ReviewRole.Owner;
+}
+@RenderBody()

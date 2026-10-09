@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using CivicLens.Application.Collection.Discovery;
 using CivicLens.Application.Collection.Jobs;
+using CivicLens.Application.Collection.Processing;
 using CivicLens.Application.Documents;
 using CivicLens.Core.Documents;
 using CivicLens.Core.Review;
@@ -21,10 +22,12 @@ public sealed class CollectionWorkspace
     private readonly CompareDocuments compare;
     private readonly GetDocumentHistory history;
     private readonly ICollectionAttemptStore attempts;
+    private readonly IEvidenceProcessingStore? processing;
 
     public CollectionWorkspace(CollectionConfiguration configuration, string artifactRoot, ICollectionJobStore jobs,
         IDiscoveryAdmissionStore discovery, ExtractDocument extract, IDocumentExtractionStore extractions,
-        CompareDocuments compare, GetDocumentHistory history, ICollectionAttemptStore attempts)
+        CompareDocuments compare, GetDocumentHistory history, ICollectionAttemptStore attempts,
+        IEvidenceProcessingStore? processing = null)
     {
         revision = CollectionConfigurationRevision.Create(configuration);
         if (!Path.IsPathFullyQualified(artifactRoot)) throw new ArgumentException("Artifact root must be absolute.", nameof(artifactRoot));
@@ -36,6 +39,7 @@ public sealed class CollectionWorkspace
         this.compare = compare;
         this.history = history;
         this.attempts = attempts;
+        this.processing = processing;
     }
 
     public CollectionConfiguration GetConfiguration(ReviewActor actor)
@@ -49,9 +53,11 @@ public sealed class CollectionWorkspace
         RequireOwner(actor);
         if (jobId is not null) ValidateJobId(jobId);
         var recentJobs = await jobs.ListAsync(RecentJobLimit, cancellationToken);
+        var progress = processing is null ? [] : await processing.GetByJobIdsAsync(
+            recentJobs.Select(job => job.JobId).ToArray(), cancellationToken);
         if (jobId is null)
             return new CollectionWorkspaceSources(recentJobs, null,
-                new Dictionary<string, StoredCollectionAttempt>(StringComparer.Ordinal), null, false, false);
+                new Dictionary<string, StoredCollectionAttempt>(StringComparer.Ordinal), null, false, false, progress);
 
         var job = recentJobs.SingleOrDefault(item => item.JobId == jobId)
             ?? await jobs.GetAsync(jobId, cancellationToken)
@@ -99,7 +105,7 @@ public sealed class CollectionWorkspace
         }
 
         return new CollectionWorkspaceSources(recentJobs, job, retainedAttempts, documentHistory,
-            historyLimitExceeded, historyUnavailable);
+            historyLimitExceeded, historyUnavailable, progress);
     }
 
     public async Task<CollectionJobRecord> GetJobAsync(ReviewActor actor, string jobId, CancellationToken cancellationToken)
