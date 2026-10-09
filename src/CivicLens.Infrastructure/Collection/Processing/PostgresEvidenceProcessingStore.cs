@@ -52,6 +52,20 @@ public sealed class PostgresEvidenceProcessingStore(
         return rows.Select(ToRecord).ToArray();
     }
 
+    public async Task<IReadOnlyList<CollectionChangeEvent>> ListRecentChangesAsync(int limit,
+        CancellationToken cancellationToken)
+    {
+        if (limit is < 1 or > 100) throw new ArgumentOutOfRangeException(nameof(limit));
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        var rows = await db.Set<PersistedEvidenceProcessingRow>().AsNoTracking()
+            .Where(row => row.Outcome == EvidenceProcessingOutcome.Changed && row.ObservedAtUtcTicks != null &&
+                row.ComparisonId != null)
+            .OrderByDescending(row => row.ObservedAtUtcTicks).ThenBy(row => row.AttemptId).ThenBy(row => row.JobId)
+            .Take(limit).ToArrayAsync(cancellationToken);
+        return rows.Select(row => new CollectionChangeEvent(row.JobId, row.SourceId, row.ComparisonId!,
+            new DateTimeOffset(row.ObservedAtUtcTicks!.Value, TimeSpan.Zero))).ToArray();
+    }
+
     public async Task<EvidenceProcessingRecord?> GetByAttemptIdAsync(string attemptId, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(attemptId);

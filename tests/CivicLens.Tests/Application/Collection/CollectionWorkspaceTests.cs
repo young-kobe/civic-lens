@@ -1,3 +1,4 @@
+using CivicLens.Application.Paging;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Application.Documents;
@@ -22,7 +23,8 @@ public sealed class CollectionWorkspaceTests
         var workspace = new CollectionWorkspace(configuration, Path.GetTempPath(), null!, null!, null!, null!, null!, null!, null!);
         var actor = new ReviewActor(subject, role);
         Assert.Throws<UnauthorizedAccessException>(() => workspace.GetConfiguration(actor));
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => workspace.GetSourcesAsync(actor, null, default));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => workspace.GetSourcesAsync(actor, null, null));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => workspace.GetSourceHealthAsync(actor, default));
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => workspace.EnqueueAsync(actor, "source", "bad", default));
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => workspace.CancelAsync(actor, "bad", default));
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => workspace.RecollectAsync(actor, "bad", "bad", default));
@@ -106,11 +108,12 @@ public sealed class CollectionWorkspaceTests
         var retained = new AttemptsStore(Captured(attemptId, "https://example.test/news"));
         var workspace = Workspace(jobs, retained, new HistoryStore([]));
 
-        var result = await workspace.GetSourcesAsync(Owner, selected.JobId, default);
+        var result = await workspace.GetSourcesAsync(Owner, selected.JobId, null);
 
         Assert.Same(selected, result.SelectedJob);
         Assert.Equal(0, jobs.GetCalls);
         Assert.Equal(1, jobs.ListCalls);
+        Assert.Equal(0, jobs.LatestCalls);
         Assert.Equal(new[] { attemptId }, retained.ReadIds);
         Assert.Contains(attemptId, result.RetainedAttempts.Keys);
     }
@@ -128,7 +131,7 @@ public sealed class CollectionWorkspaceTests
         var history = new HistoryStore([new DocumentHistoryObservation(stored, [])]);
         var attempts = new AttemptsStore(stored);
 
-        var result = await Workspace(jobs, attempts, history).GetSourcesAsync(Owner, selected.JobId, default);
+        var result = await Workspace(jobs, attempts, history).GetSourcesAsync(Owner, selected.JobId, null);
 
         Assert.Empty(attempts.ReadIds);
         Assert.Same(stored, result.RetainedAttempts[attemptId]);
@@ -148,7 +151,7 @@ public sealed class CollectionWorkspaceTests
         var retained = new AttemptsStore(Captured("attempt-one", "https://example.test/news/other"));
         var workspace = Workspace(jobs, retained, new HistoryStore([]));
 
-        await Assert.ThrowsAsync<InvalidDataException>(() => workspace.GetSourcesAsync(Owner, selected.JobId, default));
+        await Assert.ThrowsAsync<InvalidDataException>(() => workspace.GetSourcesAsync(Owner, selected.JobId, null));
         Assert.Equal(1, jobs.GetCalls);
         Assert.Equal(1, jobs.ListCalls);
         Assert.Equal(new[] { "attempt-one" }, retained.ReadIds);
@@ -168,7 +171,7 @@ public sealed class CollectionWorkspaceTests
         var denied = new ReviewActor("auth0|reader", ReviewRole.Reviewer);
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => workspace.GetSourcesAsync(denied, selected.JobId, default));
         Assert.Equal(0, jobs.ListCalls);
-        var result = await workspace.GetSourcesAsync(Owner, selected.JobId, default);
+        var result = await workspace.GetSourcesAsync(Owner, selected.JobId, null);
 
         Assert.True(result.HistoryUnavailable);
         Assert.Null(result.History);
@@ -262,6 +265,9 @@ public sealed class CollectionWorkspaceTests
         public Task<CollectionJobRecord> EnqueueAsync(CollectionJobDefinition definition, string idempotencyKey, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<CollectionJobRecord?> GetAsync(string jobId, CancellationToken cancellationToken) => Task.FromResult<CollectionJobRecord?>(jobId == job.JobId ? job : null);
         public Task<IReadOnlyList<CollectionJobRecord>> ListAsync(int limit, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<CollectionJobPage> ListPageAsync(PageCursor? cursor, int limit, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<IReadOnlyList<CollectionJobRecord>> ListLatestBySourceAsync(IReadOnlyCollection<SourceCheckTarget> targets, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<CollectionJobActivity> ListActivityAsync(int limit, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<CollectionJobRecord?> CancelAsync(string jobId, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<CollectionJobClaim?> TryClaimAsync(string jobId, TimeSpan leaseDuration, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<CollectionJobRenewal> RenewAsync(CollectionJobLease jobLease, CollectionCollectorLease? collectorLease, TimeSpan leaseDuration, CancellationToken cancellationToken) => throw new NotSupportedException();
@@ -274,13 +280,21 @@ public sealed class CollectionWorkspaceTests
     private sealed class CountingJobStore(IReadOnlyList<CollectionJobRecord> recent, CollectionJobRecord? older = null) : ICollectionJobStore
     {
         public int ListCalls { get; private set; }
+        public int LatestCalls { get; private set; }
         public int GetCalls { get; private set; }
-        public Task<IReadOnlyList<CollectionJobRecord>> ListAsync(int limit, CancellationToken cancellationToken)
+        public Task<IReadOnlyList<CollectionJobRecord>> ListAsync(int limit, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<CollectionJobPage> ListPageAsync(PageCursor? cursor, int limit, CancellationToken cancellationToken)
         {
             ListCalls++;
             Assert.Equal(CollectionWorkspace.RecentJobLimit, limit);
-            return Task.FromResult(recent);
+            return Task.FromResult(new CollectionJobPage(recent, null, null));
         }
+        public Task<IReadOnlyList<CollectionJobRecord>> ListLatestBySourceAsync(IReadOnlyCollection<SourceCheckTarget> targets, CancellationToken cancellationToken)
+        {
+            LatestCalls++;
+            return Task.FromResult<IReadOnlyList<CollectionJobRecord>>([]);
+        }
+        public Task<CollectionJobActivity> ListActivityAsync(int limit, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<CollectionJobRecord?> GetAsync(string jobId, CancellationToken cancellationToken)
         {
             GetCalls++;

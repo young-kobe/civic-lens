@@ -13,6 +13,7 @@ internal sealed class DocumentChangeRevisionRowConfiguration : IEntityTypeConfig
         builder.Property(row => row.DraftId).HasColumnName("draft_id").HasMaxLength(32);
         builder.Property(row => row.RevisionNumber).HasColumnName("revision_number");
         builder.Property(row => row.RevisionJson).HasColumnName("revision_json").IsRequired();
+        builder.Property(row => row.CreatedAtUtcTicks).HasColumnName("created_at_utc_ticks").IsRequired();
         builder.HasOne<DocumentChangeDraftRow>().WithMany().HasForeignKey(row => row.DraftId)
             .OnDelete(DeleteBehavior.Restrict);
     }

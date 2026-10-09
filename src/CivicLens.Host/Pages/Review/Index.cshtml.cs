@@ -29,8 +29,8 @@ public sealed class IndexModel(ListEligibleDocumentComparisons listComparisons,
         try
         {
             var actor = actorAccessor.GetActor(User);
-            Comparisons = await listComparisons.ExecuteAsync(actor, comparisonCursor, PageSize, cancellationToken);
-            Reviews = await listReviews.ExecuteAsync(actor, reviewCursor, PageSize, cancellationToken);
+            Comparisons = await listComparisons.ExecuteAsync(actor, comparisonCursor, PageSize, cancellationToken: cancellationToken);
+            Reviews = await listReviews.ExecuteAsync(actor, reviewCursor, PageSize, cancellationToken: cancellationToken);
             foreach (var item in Comparisons.Items)
                 IdempotencyKeys[item.Comparison.ComparisonId] = Guid.NewGuid().ToString("N");
         }

@@ -1,9 +1,11 @@
 using System.Security.Cryptography;
 using System.Text;
 using CivicLens.Application.Collection.Discovery;
+using CivicLens.Application.Collection.Health;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Application.Collection.Processing;
 using CivicLens.Application.Documents;
+using CivicLens.Application.Paging;
 using CivicLens.Core.Documents;
 using CivicLens.Core.Review;
 
@@ -12,7 +14,8 @@ namespace CivicLens.Application.Collection;
 /// <summary>Owner-authorized collection and evidence preparation using server-configured sources and storage.</summary>
 public sealed class CollectionWorkspace
 {
-    public const int RecentJobLimit = 50;
+    public const int RecentJobLimit = PageLimit.Default;
+    private const int MaximumProgressBatch = 100;
     private readonly CollectionConfigurationRevision revision;
     private readonly string artifactRoot;
     private readonly ICollectionJobStore jobs;
@@ -48,16 +51,33 @@ public sealed class CollectionWorkspace
         return revision.ReadConfiguration();
     }
 
-    public async Task<CollectionWorkspaceSources> GetSourcesAsync(ReviewActor actor, string? jobId, CancellationToken cancellationToken)
+    public async Task<SourceHealthReport> GetSourceHealthAsync(ReviewActor actor, CancellationToken cancellationToken)
+    {
+        RequireOwner(actor);
+        var targets = SourceTargets();
+        var latest = await ReadLatestJobsAsync(targets, [], cancellationToken);
+        var progress = await ReadProgressAsync(latest, cancellationToken);
+        return SourceHealthResolver.Report(targets, latest, progress);
+    }
+
+    public async Task<CollectionWorkspaceSources> GetSourcesAsync(ReviewActor actor, string? jobId, string? cursor,
+        int limit = PageLimit.Default, CancellationToken cancellationToken = default)
     {
         RequireOwner(actor);
         if (jobId is not null) ValidateJobId(jobId);
-        var recentJobs = await jobs.ListAsync(RecentJobLimit, cancellationToken);
-        var progress = processing is null ? [] : await processing.GetByJobIdsAsync(
-            recentJobs.Select(job => job.JobId).ToArray(), cancellationToken);
+        PageLimit.Validate(limit);
+        var pageCursor = PageCursor.Parse(cursor);
+        var page = await jobs.ListPageAsync(pageCursor, limit, cancellationToken);
+        var recentJobs = page.Items;
+        // Only the newest page can answer "latest check" for a source; older pages are never reused for health.
+        var targets = SourceTargets();
+        var latest = await ReadLatestJobsAsync(targets, pageCursor is null ? recentJobs : [], cancellationToken);
+        var progress = await ReadProgressAsync(recentJobs.Concat(latest), cancellationToken);
+        var health = SourceHealthResolver.Report(targets, latest, progress);
         if (jobId is null)
             return new CollectionWorkspaceSources(recentJobs, null,
-                new Dictionary<string, StoredCollectionAttempt>(StringComparer.Ordinal), null, false, false, progress);
+                new Dictionary<string, StoredCollectionAttempt>(StringComparer.Ordinal), null, false, false, progress,
+                page.NewerCursor, page.OlderCursor, health);
 
         var job = recentJobs.SingleOrDefault(item => item.JobId == jobId)
             ?? await jobs.GetAsync(jobId, cancellationToken)
@@ -105,7 +125,35 @@ public sealed class CollectionWorkspace
         }
 
         return new CollectionWorkspaceSources(recentJobs, job, retainedAttempts, documentHistory,
-            historyLimitExceeded, historyUnavailable, progress);
+            historyLimitExceeded, historyUnavailable, progress, page.NewerCursor, page.OlderCursor, health);
+    }
+
+    private SourceCheckTarget[] SourceTargets() => revision.ReadConfiguration().Sources
+        .Select(source => new SourceCheckTarget(source.Id, source.Url)).ToArray();
+
+    private async Task<IReadOnlyList<CollectionJobRecord>> ReadLatestJobsAsync(SourceCheckTarget[] targets,
+        IReadOnlyList<CollectionJobRecord> loaded, CancellationToken cancellationToken)
+    {
+        var latest = new List<CollectionJobRecord>();
+        var missing = new List<SourceCheckTarget>();
+        foreach (var target in targets)
+        {
+            var job = loaded.FirstOrDefault(candidate => SourceHealthResolver.Matches(candidate, target));
+            if (job is null) missing.Add(target);
+            else latest.Add(job);
+        }
+        if (missing.Count > 0) latest.AddRange(await jobs.ListLatestBySourceAsync(missing, cancellationToken));
+        return latest;
+    }
+
+    private async Task<IReadOnlyList<EvidenceProcessingRecord>> ReadProgressAsync(IEnumerable<CollectionJobRecord> read,
+        CancellationToken cancellationToken)
+    {
+        if (processing is null) return [];
+        var progress = new List<EvidenceProcessingRecord>();
+        foreach (var ids in read.Select(job => job.JobId).Distinct(StringComparer.Ordinal).Chunk(MaximumProgressBatch))
+            progress.AddRange(await processing.GetByJobIdsAsync(ids, cancellationToken));
+        return progress;
     }
 
     public async Task<CollectionJobRecord> GetJobAsync(ReviewActor actor, string jobId, CancellationToken cancellationToken)

@@ -166,7 +166,7 @@ public sealed class SourcesModel(ReviewActorAccessor actors, CollectionWorkspace
     private async Task LoadAsync(CollectionWorkspace service, ReviewActor actor, string? jobId, CancellationToken cancellationToken)
     {
         Configuration = service.GetConfiguration(actor);
-        var result = await service.GetSourcesAsync(actor, jobId, cancellationToken);
+        var result = await service.GetSourcesAsync(actor, jobId, null, CollectionWorkspace.RecentJobLimit, cancellationToken);
         Jobs = result.Jobs;
         Processing = BuildProcessing(result);
         SelectedJob = result.SelectedJob;

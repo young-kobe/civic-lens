@@ -1,6 +1,7 @@
 using System.Data;
 using System.Collections.Immutable;
 using System.Text.Json;
+using CivicLens.Application.Paging;
 using CivicLens.Application.Review;
 using CivicLens.Collection.Contracts;
 using CivicLens.Core.Documents;
@@ -20,7 +21,6 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
 {
     private const int MaximumPageSize = 100;
     private const int MaximumPublicationDrafts = 64;
-    private const int ComparisonScanSize = 500;
     private const string CreateOperation = "create";
     private const string SaveOperation = "save";
     private const string DecideOperation = "decide";
@@ -65,7 +65,13 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
             ReviewStateVersion = 0,
             CreatedAtUtcTicks = DateTimeOffset.UtcNow.UtcTicks
         });
-        db.Add(new DocumentChangeRevisionRow { DraftId = revision.DraftId, RevisionNumber = 1, RevisionJson = revisionJson });
+        db.Add(new DocumentChangeRevisionRow
+        {
+            DraftId = revision.DraftId,
+            RevisionNumber = 1,
+            RevisionJson = revisionJson,
+            CreatedAtUtcTicks = revision.CreatedAtUtc.UtcTicks
+        });
         AddIdempotency(db, actorSubject, CreateOperation, idempotencyKey, payloadHash, revisionJson);
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
@@ -104,7 +110,8 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
         {
             DraftId = revision.DraftId,
             RevisionNumber = revision.RevisionNumber,
-            RevisionJson = revisionJson
+            RevisionJson = revisionJson,
+            CreatedAtUtcTicks = revision.CreatedAtUtc.UtcTicks
         });
         draft.CurrentRevisionNumber = revision.RevisionNumber;
         AddIdempotency(db, actorSubject, SaveOperation, idempotencyKey, payloadHash, revisionJson);
@@ -157,7 +164,9 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
             DraftId = decision.DraftId,
             RevisionNumber = decision.RevisionNumber,
             ReviewStateVersion = decision.ReviewStateVersion,
-            DecisionJson = json
+            DecisionJson = json,
+            Kind = decision.Kind,
+            CreatedAtUtcTicks = decision.CreatedAtUtc.UtcTicks
         });
         draft.ReviewStateVersion = decision.ReviewStateVersion;
         AddIdempotency(db, actorSubject, DecideOperation, idempotencyKey, payloadHash, json);
@@ -193,46 +202,136 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
         return result;
     }
 
-    public async Task<DocumentChangeReviewPage> ListAsync(string? cursor, int limit, CancellationToken cancellationToken)
+    public async Task<DocumentChangeReviewPage> ListAsync(PageCursor? cursor, int limit, DraftStatusFilter filter,
+        CancellationToken cancellationToken)
     {
-        ValidatePage(cursor, limit);
+        ValidatePage(limit);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
-        var rows = await db.Set<DocumentChangeDraftRow>().AsNoTracking()
-            .Where(row => cursor == null || string.Compare(row.DraftId, cursor) > 0)
-            .OrderBy(row => row.DraftId).Take(limit + 1).ToArrayAsync(cancellationToken);
-        var page = rows.Take(limit).ToArray();
-        var ids = page.Select(row => row.DraftId).ToArray();
+        var fetched = await KeysetDrafts(DraftsWhere(db, filter), cursor).Take(limit + 1).ToArrayAsync(cancellationToken);
+        var slice = KeysetSlice<DocumentChangeDraftRow>.Create(fetched, limit, cursor, row => (row.CreatedAtUtcTicks, row.DraftId));
+        var ids = slice.Items.Select(row => row.DraftId).ToArray();
         var revisions = await ReadRevisionRowsAsync(db, ids, cancellationToken);
         var decisions = await ReadDecisionRowsAsync(db, ids, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
-        var items = page.Select(row => ToListItem(row, revisions[row.DraftId], decisions[row.DraftId])).ToImmutableArray();
-        return new(items, rows.Length > limit ? rows[limit - 1].DraftId : null);
+        var items = slice.Items.Select(row => ToListItem(row, revisions[row.DraftId], decisions[row.DraftId])).ToImmutableArray();
+        return new(items, slice.NewerCursor, slice.OlderCursor);
     }
 
-    public async Task<EligibleDocumentComparisonPage> ListEligibleComparisonsAsync(string? cursor, int limit,
+    public async Task<EligibleDocumentComparisonPage> ListEligibleComparisonsAsync(PageCursor? cursor, int limit,
         CancellationToken cancellationToken)
     {
-        ValidatePage(cursor, limit);
+        ValidatePage(limit);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
-        var items = ImmutableArray.CreateBuilder<EligibleDocumentComparison>(limit);
-        var scanSize = Math.Min(ComparisonScanSize, limit * 4);
-        var rows = await db.Set<DocumentComparisonRow>().AsNoTracking()
-            .Where(row => cursor == null || string.Compare(row.ComparisonId, cursor) > 0)
-            .OrderBy(row => row.ComparisonId).Take(scanSize + 1).ToArrayAsync(cancellationToken);
-        string? nextCursor = null;
-        var consumed = 0;
-        foreach (var row in rows.Take(scanSize))
-        {
-            var item = await ReadEligibleComparisonAsync(db, row.ComparisonId, cancellationToken);
-            if (item is not null) items.Add(item);
-            consumed++;
-            if (items.Count == limit) break;
-        }
-        if (consumed < rows.Length) nextCursor = rows[consumed - 1].ComparisonId;
+        var keys = from comparison in db.Set<DocumentComparisonRow>().FromSqlRaw(ReviewQueries.EligibleComparisons)
+                   join extraction in db.Set<DocumentExtractionRow>() on comparison.AfterExtractionId equals extraction.ExtractionId
+                   join attempt in db.Attempts on extraction.AttemptId equals attempt.AttemptId
+                   select new EligibleKey { ComparisonId = comparison.ComparisonId, ObservedTicks = attempt.ObservedAtUtcTicks };
+        var fetched = await KeysetComparisons(keys.AsNoTracking(), cursor).Take(limit + 1).ToArrayAsync(cancellationToken);
+        var slice = KeysetSlice<EligibleKey>.Create(fetched, limit, cursor, key => (key.ObservedTicks, key.ComparisonId));
+        var verified = await ReadVerifiedComparisonsAsync(db, slice.Items.Select(key => key.ComparisonId).ToArray(), cancellationToken);
         await transaction.CommitAsync(cancellationToken);
-        return new(items.ToImmutable(), nextCursor);
+        var items = slice.Items.Select(key => verified.GetValueOrDefault(key.ComparisonId)?.Summary)
+            .OfType<EligibleDocumentComparison>().ToImmutableArray();
+        return new(items, slice.NewerCursor, slice.OlderCursor);
+    }
+
+    public async Task<ReviewOverview> GetOverviewAsync(CancellationToken cancellationToken)
+    {
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        var counts = await db.Database.SqlQueryRaw<OverviewCounts>(ReviewQueries.Overview).SingleAsync(cancellationToken);
+        return new(counts.NewChanges, counts.DraftsNeedingAction, counts.ApprovedDrafts);
+    }
+
+    public async Task<IReadOnlyList<ReviewActivityEvent>> ListRecentActivityAsync(int limit, CancellationToken cancellationToken)
+    {
+        ValidatePage(limit);
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
+        var drafts = await db.Set<DocumentChangeDraftRow>().AsNoTracking().OrderByDescending(row => row.CreatedAtUtcTicks)
+            .ThenByDescending(row => row.DraftId).Take(limit).ToArrayAsync(cancellationToken);
+        var saved = await db.Set<DocumentChangeRevisionRow>().AsNoTracking().Where(row => row.RevisionNumber > 1)
+            .OrderByDescending(row => row.CreatedAtUtcTicks).ThenByDescending(row => row.DraftId)
+            .ThenByDescending(row => row.RevisionNumber).Take(limit).ToArrayAsync(cancellationToken);
+        var decided = await db.Set<ReviewDecisionRow>().AsNoTracking().OrderByDescending(row => row.CreatedAtUtcTicks)
+            .ThenByDescending(row => row.DecisionId).Take(limit).ToArrayAsync(cancellationToken);
+        var revisions = await ReadActivityRevisionsAsync(db, drafts, decided, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return
+        [
+            .. drafts.Select(row => ToActivity(ReviewActivityKind.DraftCreated, row.CreatedAtUtcTicks, revisions[(row.DraftId, 1)])),
+            .. saved.Select(row => ToActivity(ReviewActivityKind.RevisionSaved, row.CreatedAtUtcTicks,
+                Deserialize<DocumentChangeDraftRevision>(row.RevisionJson, "revision"))),
+            .. decided.Select(row => ToDecisionActivity(row, revisions[(row.DraftId, row.RevisionNumber)]))
+        ];
+    }
+
+    private static async Task<Dictionary<(string DraftId, int RevisionNumber), DocumentChangeDraftRevision>> ReadActivityRevisionsAsync(
+        CollectionAttemptDbContext db, DocumentChangeDraftRow[] drafts, ReviewDecisionRow[] decisions,
+        CancellationToken cancellationToken)
+    {
+        var wanted = drafts.Select(row => (row.DraftId, RevisionNumber: 1))
+            .Concat(decisions.Select(row => (row.DraftId, row.RevisionNumber))).ToHashSet();
+        var draftIds = wanted.Select(key => key.DraftId).Distinct().ToArray();
+        var numbers = wanted.Select(key => key.RevisionNumber).Distinct().ToArray();
+        var rows = await db.Set<DocumentChangeRevisionRow>().AsNoTracking()
+            .Where(row => draftIds.Contains(row.DraftId) && numbers.Contains(row.RevisionNumber))
+            .ToArrayAsync(cancellationToken);
+        return rows.Where(row => wanted.Contains((row.DraftId, row.RevisionNumber))).ToDictionary(
+            row => (row.DraftId, row.RevisionNumber), row => Deserialize<DocumentChangeDraftRevision>(row.RevisionJson, "revision"));
+    }
+
+    private static ReviewActivityEvent ToActivity(ReviewActivityKind kind, long ticks, DocumentChangeDraftRevision revision) =>
+        new(kind, new DateTimeOffset(ticks, TimeSpan.Zero), revision.AuthorSubject, revision.DraftId, revision.Headline, null);
+
+    private static ReviewActivityEvent ToDecisionActivity(ReviewDecisionRow row, DocumentChangeDraftRevision revision) =>
+        new(ReviewActivityKind.DecisionRecorded, new DateTimeOffset(row.CreatedAtUtcTicks, TimeSpan.Zero),
+            Deserialize<ReviewDecision>(row.DecisionJson, "decision").ActorSubject, row.DraftId, revision.Headline, row.Kind);
+
+    private static IQueryable<DocumentChangeDraftRow> DraftsWhere(CollectionAttemptDbContext db, DraftStatusFilter filter) =>
+        (filter switch
+        {
+            DraftStatusFilter.All => db.Set<DocumentChangeDraftRow>(),
+            DraftStatusFilter.NeedsAction => db.Set<DocumentChangeDraftRow>().FromSqlRaw(ReviewQueries.NeedsActionDrafts),
+            DraftStatusFilter.Approved => db.Set<DocumentChangeDraftRow>().FromSqlRaw(ReviewQueries.ApprovedDrafts),
+            _ => throw new ArgumentOutOfRangeException(nameof(filter))
+        }).AsNoTracking();
+
+    // Display order is newest first. Moving newer reads the reverse order; KeysetSlice restores display order.
+    private static IQueryable<DocumentChangeDraftRow> KeysetDrafts(IQueryable<DocumentChangeDraftRow> rows, PageCursor? cursor)
+    {
+        if (cursor is null) return rows.OrderByDescending(row => row.CreatedAtUtcTicks).ThenByDescending(row => row.DraftId);
+        var (ticks, id) = (cursor.Ticks, cursor.Id);
+        return cursor.Direction == PageDirection.Older
+            ? rows.Where(row => row.CreatedAtUtcTicks < ticks || row.CreatedAtUtcTicks == ticks && string.Compare(row.DraftId, id) < 0)
+                .OrderByDescending(row => row.CreatedAtUtcTicks).ThenByDescending(row => row.DraftId)
+            : rows.Where(row => row.CreatedAtUtcTicks > ticks || row.CreatedAtUtcTicks == ticks && string.Compare(row.DraftId, id) > 0)
+                .OrderBy(row => row.CreatedAtUtcTicks).ThenBy(row => row.DraftId);
+    }
+
+    private static IQueryable<EligibleKey> KeysetComparisons(IQueryable<EligibleKey> keys, PageCursor? cursor)
+    {
+        if (cursor is null) return keys.OrderByDescending(key => key.ObservedTicks).ThenByDescending(key => key.ComparisonId);
+        var (ticks, id) = (cursor.Ticks, cursor.Id);
+        return cursor.Direction == PageDirection.Older
+            ? keys.Where(key => key.ObservedTicks < ticks || key.ObservedTicks == ticks && string.Compare(key.ComparisonId, id) < 0)
+                .OrderByDescending(key => key.ObservedTicks).ThenByDescending(key => key.ComparisonId)
+            : keys.Where(key => key.ObservedTicks > ticks || key.ObservedTicks == ticks && string.Compare(key.ComparisonId, id) > 0)
+                .OrderBy(key => key.ObservedTicks).ThenBy(key => key.ComparisonId);
+    }
+
+    private sealed record EligibleKey
+    {
+        public string ComparisonId { get; init; } = "";
+        public long ObservedTicks { get; init; }
+    }
+
+    private sealed class OverviewCounts
+    {
+        public int NewChanges { get; set; }
+        public int DraftsNeedingAction { get; set; }
+        public int ApprovedDrafts { get; set; }
     }
 
     private static async Task<EligibleDocumentComparison?> ReadEligibleComparisonAsync(CollectionAttemptDbContext db,
@@ -547,10 +646,9 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
             throw new ArgumentException("Identifier must be a lowercase SHA-256 value.", parameterName);
     }
 
-    private static void ValidatePage(string? cursor, int limit)
+    private static void ValidatePage(int limit)
     {
         if (limit is < 1 or > MaximumPageSize) throw new ArgumentOutOfRangeException(nameof(limit));
-        if (cursor is not null && (cursor.Length == 0 || cursor.Length > 256)) throw new ArgumentException("Cursor is invalid.", nameof(cursor));
     }
 
     private static void ValidateText(string? value, int max, string name)

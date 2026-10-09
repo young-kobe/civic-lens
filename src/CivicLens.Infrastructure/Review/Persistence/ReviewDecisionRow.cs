@@ -1,3 +1,5 @@
+using CivicLens.Core.Review;
+
 namespace CivicLens.Infrastructure.Review.Persistence;
 
 internal sealed class ReviewDecisionRow
@@ -7,4 +9,6 @@ internal sealed class ReviewDecisionRow
     public int RevisionNumber { get; set; }
     public int ReviewStateVersion { get; set; }
     public string DecisionJson { get; set; } = string.Empty;
+    public ReviewDecisionKind Kind { get; set; }
+    public long CreatedAtUtcTicks { get; set; }
 }

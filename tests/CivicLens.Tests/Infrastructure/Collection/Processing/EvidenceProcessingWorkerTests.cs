@@ -403,6 +403,9 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
         public int EligibleReads => Volatile.Read(ref eligibleReads);
         public TaskCompletionSource<bool> Renewed { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
+        public Task<IReadOnlyList<CollectionChangeEvent>> ListRecentChangesAsync(int limit, CancellationToken cancellationToken) =>
+            inner.ListRecentChangesAsync(limit, cancellationToken);
+
         public Task<IReadOnlyList<EvidenceProcessingRecord>> GetEligibleAsync(int limit, CancellationToken cancellationToken)
         {
             Interlocked.Increment(ref eligibleReads);
