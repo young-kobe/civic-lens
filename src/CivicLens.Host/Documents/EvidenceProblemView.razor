@@ -1,0 +1,12 @@
+<Notice Tone="Problem.Tone" Title="@Problem.Title">@Problem.Text</Notice>
+<Panel Label="@Problem.Title">
+    <EmptyState Title="Nothing to show" Text="Saved evidence opens from links in Review and Sources.">
+        <Action>
+            <Button Href="/Review">Go to Review</Button>
+        </Action>
+    </EmptyState>
+</Panel>
+
+@code {
+    [Parameter, EditorRequired] public EvidenceProblem Problem { get; set; } = default!;
+}

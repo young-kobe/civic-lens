@@ -42,6 +42,7 @@ public sealed class ReviewWorkspaceHost(PostgresCollection postgres)
     public PostgresCollectionAttemptStore Attempts { get; private set; } = null!;
     public PostgresDocumentExtractionStore Extractions { get; private set; } = null!;
     public PostgresDocumentComparisonStore Comparisons { get; private set; } = null!;
+    public string OfficialName { get; init; } = "Test Official";
 
     public async Task StartAsync()
     {
@@ -84,15 +85,14 @@ public sealed class ReviewWorkspaceHost(PostgresCollection postgres)
         start.Environment["CIVIC_LENS_REVIEW_KEY_DIRECTORY"] = KeyDirectory;
         Directory.CreateDirectory(KeyDirectory);
         var collectionPath = Path.Combine(KeyDirectory, "sources.json");
-        await File.WriteAllTextAsync(collectionPath, """
-            {"version":2,"people":[{"id":"person","name":"Test Official"}],
+        await File.WriteAllTextAsync(collectionPath, $$"""
+            {"version":2,"people":[{"id":"person","name":{{JsonSerializer.Serialize(OfficialName)}}}],
              "documentProfiles":[{"id":"main","selector":"main"}],
              "sources":[{"id":"source","coverage":[{"personId":"person"}],
                "url":"https://example.test/pages/a","allowedOrigin":"https://example.test",
                "allowedPathPrefix":"/pages","documentProfileId":"main"}]}
             """);
         start.Environment["CIVIC_LENS_COLLECTION_CONFIG"] = collectionPath;
-        start.Environment["CIVIC_LENS_CAPTURE_DIRECTORY"] = KeyDirectory;
         process = Process.Start(start)!;
         output = process.StandardOutput.ReadToEndAsync();
         error = process.StandardError.ReadToEndAsync();

@@ -119,6 +119,29 @@ public sealed class SourceHealthTests
         Assert.Equal(SourceCheckState.Checking, result.Health!.Sources.Single(item => item.SourceId == "checking").State);
     }
 
+    // Recent checks show each check's own result, while the source row shows only its latest check.
+    [Fact]
+    public async Task EachListedCheckKeepsItsOwnResultAndSourceHealthNamesTheLatestCheck()
+    {
+        var newer = Job("changed", CollectionJobState.Succeeded);
+        var older = Job("changed", CollectionJobState.Failed);
+        var store = new FixedJobStore { Page = [newer, older] };
+        var processing = new FixedProcessingStore
+        {
+            Records = [Record(newer, "page", EvidenceProcessingStatus.Succeeded, EvidenceProcessingOutcome.Changed, new string('e', 64))]
+        };
+
+        var result = await Workspace(store, processing).GetSourcesAsync(Owner, null, null, 10, default);
+
+        Assert.Equal(SourceCheckState.ChangeFound, result.ChecksByJobId[newer.JobId].State);
+        Assert.Equal(new string('e', 64), result.ChecksByJobId[newer.JobId].ComparisonId);
+        Assert.Equal(SourceCheckState.Failed, result.ChecksByJobId[older.JobId].State);
+        Assert.True(result.ChecksByJobId[older.JobId].NeedsAttention);
+        var source = result.Health.Sources.Single(item => item.SourceId == "changed");
+        Assert.Equal(newer.JobId, source.JobId);
+        Assert.False(source.NeedsAttention);
+    }
+
     [Fact]
     public async Task SourcesRejectsTamperedCursorAsInvalidInputBeforeReading()
     {
@@ -163,7 +186,7 @@ public sealed class SourceHealthTests
         null, Created, completedAt);
 
     private static CollectionWorkspace Workspace(FixedJobStore jobs, FixedProcessingStore processing) =>
-        new(Configuration, Path.GetTempPath(), jobs, null!, null!, null!, null!, null!, null!, processing);
+        new(Configuration, jobs, null!, processing);
 
     private static string Url(string sourceId) => "https://example.test/news/" + sourceId;
 

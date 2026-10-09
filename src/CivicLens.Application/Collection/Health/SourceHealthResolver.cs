@@ -15,6 +15,14 @@ internal static class SourceHealthResolver
         return new(health, health.Count(item => item.NeedsAttention));
     }
 
+    public static IReadOnlyDictionary<string, SourceHealth> ByJob(IEnumerable<CollectionJobRecord> jobs,
+        IReadOnlyList<EvidenceProcessingRecord> processing)
+    {
+        var records = processing.ToLookup(record => record.JobId, StringComparer.Ordinal);
+        return jobs.DistinctBy(job => job.JobId).ToDictionary(job => job.JobId,
+            job => Resolve(job.Definition.SourceId, job, records), StringComparer.Ordinal);
+    }
+
     public static bool Matches(CollectionJobRecord job, SourceCheckTarget target) =>
         job.Definition.SourceId == target.SourceId && job.Definition.Url == target.Url;
 
@@ -32,7 +40,7 @@ internal static class SourceHealthResolver
         };
 
         SourceHealth New(SourceCheckState state, DateTimeOffset? retryAt = null, string? comparisonId = null,
-            bool needsAttention = false) => new(sourceId, state, checkedAt, retryAt, comparisonId, needsAttention);
+            bool needsAttention = false) => new(sourceId, state, checkedAt, retryAt, comparisonId, needsAttention, job.JobId);
 
         SourceHealth FromProcessing(CollectionJobRecord succeeded, EvidenceProcessingRecord? record)
         {

@@ -1,8 +1,8 @@
 <nav class="pager" aria-label="@Label">
     <span>@Summary</span>
     <div class="pager-links">
-        <Button Small="true" Href="@NewerHref" Disabled="@(NewerHref is null)" rel="@(NewerHref is null ? null : "prev")">@NewerText</Button>
-        <Button Small="true" Href="@OlderHref" Disabled="@(OlderHref is null)" rel="@(OlderHref is null ? null : "next")">@OlderText</Button>
+        <Button Small="true" Href="@NewerHref" OnClick="OnNewer" Disabled="@(NewerHref is null && !OnNewer.HasDelegate)" rel="@(NewerHref is null ? null : "prev")">@NewerText</Button>
+        <Button Small="true" Href="@OlderHref" OnClick="OnOlder" Disabled="@(OlderHref is null && !OnOlder.HasDelegate)" rel="@(OlderHref is null ? null : "next")">@OlderText</Button>
     </div>
 </nav>
 
@@ -11,6 +11,8 @@
     [Parameter] public string? Summary { get; set; }
     [Parameter] public string? NewerHref { get; set; }
     [Parameter] public string? OlderHref { get; set; }
+    [Parameter] public EventCallback OnNewer { get; set; }
+    [Parameter] public EventCallback OnOlder { get; set; }
     [Parameter] public string NewerText { get; set; } = "Newer";
     [Parameter] public string OlderText { get; set; } = "Older";
 }

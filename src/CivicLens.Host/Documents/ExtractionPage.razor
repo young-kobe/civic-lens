@@ -1,0 +1,58 @@
+@page "/Documents/Extraction"
+@using CivicLens.Application.Documents
+@using CivicLens.Core.Documents
+@inject IDocumentExtractionStore Extractions
+
+<TopBarTitle Crumbs="Crumbs" />
+
+<div class="content">
+    <PageHeader Title="Saved text" Lede="Text kept from one observation of this page.">
+        <Actions>
+            @if (extraction is not null)
+            {
+                <Button Href="@EvidenceLinks.History(extraction.SourceAttempt.SourceId, extraction.SourceAttempt.RequestedUrl)">All saved versions</Button>
+            }
+        </Actions>
+    </PageHeader>
+    @if (problem is not null)
+    {
+        <EvidenceProblemView Problem="problem" />
+    }
+    else if (extraction is not null)
+    {
+        <Panel Padded="true" Label="About this text">
+            <Facts Items="EvidenceFacts.For(extraction)" />
+            <TechnicalDetails Items="EvidenceFacts.Identifiers(extraction)" />
+        </Panel>
+        <Panel Title="Text">
+            <DocumentText Label="Saved text" Runs="@([new TextRun(extraction.Text, [])])" />
+        </Panel>
+    }
+</div>
+
+@code {
+    private static readonly IReadOnlyList<Crumb> Crumbs = [new("Review", "/Review"), new("Saved text")];
+    private DocumentExtraction? extraction;
+    private EvidenceProblem? problem;
+
+    [CascadingParameter] private HttpContext HttpContext { get; set; } = default!;
+    [SupplyParameterFromQuery] private string? ExtractionId { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        problem = await LoadAsync();
+        if (problem is not null) EvidenceProblem.SetStatus(HttpContext.Response, problem.StatusCode);
+    }
+
+    private async Task<EvidenceProblem?> LoadAsync()
+    {
+        if (!EvidenceProblem.IsHash(ExtractionId)) return EvidenceProblem.Invalid;
+        try
+        {
+            extraction = await Extractions.GetAsync(ExtractionId!, HttpContext.RequestAborted);
+            return extraction is null ? EvidenceProblem.Missing("Saved text") : null;
+        }
+        catch (OperationCanceledException) when (HttpContext.RequestAborted.IsCancellationRequested) { throw; }
+        catch (Exception) { return EvidenceProblem.Unavailable; }
+    }
+}

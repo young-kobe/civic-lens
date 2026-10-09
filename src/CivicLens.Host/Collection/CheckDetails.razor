@@ -1,0 +1,60 @@
+@using CivicLens.Application.Collection
+@using CivicLens.Application.Collection.Health
+@using CivicLens.Application.Collection.Jobs
+@using CivicLens.Collection.Contracts
+
+<Drawer Title="@SourceLabels.Document(Job.Definition.Url)" Subtitle="@Subtitle" OnClose="OnClose">
+    <div class="stack">
+        <div class="row">
+            <StatusBadge Tone="Status.Tone" Text="@Status.Label" />
+            <span class="muted small">@AttemptsUsed</span>
+        </div>
+        <p>@SourceStatusDisplay.Detail(Check)</p>
+        @if (Job.Attempts.Count == 0)
+        {
+            <p class="muted">This check is waiting to start. Its attempts appear here when the collector picks it up.</p>
+        }
+        else
+        {
+            <ActivityFeed Items="CheckTimeline.Build(Job, Retained)" />
+        }
+        @if (Job.RetryAt is { } retryAt)
+        {
+            <p class="small">The next attempt starts after <Timestamp Value="retryAt" Format="TimestampFormat.Full" />. Source pacing may delay it.</p>
+        }
+        @if (Check.State == SourceCheckState.Checking && Check.RetryAt is { } resumeAt)
+        {
+            <p class="small">Text preparation starts again after <Timestamp Value="resumeAt" Format="TimestampFormat.Full" />.</p>
+        }
+        <div class="row">
+            @if (IsActive)
+            {
+                <Button Variant="ButtonVariant.Danger" Disabled="Busy" OnClick="OnStop">Stop</Button>
+            }
+            else if (Job.Definition.Mode == CollectionMode.Page)
+            {
+                <Button Disabled="Busy" OnClick="OnCheckAgain">Check again</Button>
+            }
+            <a href="@Documents.EvidenceLinks.History(Job.Definition.SourceId, Job.Definition.Url)">All saved versions of this page</a>
+        </div>
+        <TechnicalDetails Items="@([("Job ID", Job.JobId), ("Source ID", Job.Definition.SourceId)])" />
+    </div>
+</Drawer>
+
+@code {
+    [Parameter, EditorRequired] public CollectionJobRecord Job { get; set; } = default!;
+    [Parameter, EditorRequired] public SourceHealth Check { get; set; } = default!;
+    [Parameter, EditorRequired] public IReadOnlyDictionary<string, StoredCollectionAttempt> Retained { get; set; } = default!;
+    [Parameter] public bool Busy { get; set; }
+    [Parameter] public EventCallback OnStop { get; set; }
+    [Parameter] public EventCallback OnCheckAgain { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private SourceStatus Status => SourceStatusDisplay.Status(Check);
+
+    private bool IsActive => SourcesPage.IsActive(Job);
+
+    private string Subtitle => $"{SourceLabels.Type(Job.Definition.Mode)} check, queued {Moment.Full(Job.CreatedAt)}";
+
+    private string AttemptsUsed => $"{Job.Attempts.Count} of {Job.Definition.Policy.MaxAttempts} attempts used";
+}

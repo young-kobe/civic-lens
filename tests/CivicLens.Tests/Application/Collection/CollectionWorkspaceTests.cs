@@ -17,10 +17,10 @@ public sealed class CollectionWorkspaceTests
     [InlineData(ReviewRole.Reviewer, "auth0|friend")]
     [InlineData(ReviewRole.Owner, "")]
     [InlineData((ReviewRole)99, "auth0|owner")]
-    public async Task EveryCollectionAndPreparationEntryPointRejectsUnauthorizedActorsBeforeStorage(ReviewRole role, string subject)
+    public async Task EveryCollectionEntryPointRejectsUnauthorizedActorsBeforeStorage(ReviewRole role, string subject)
     {
         var configuration = new CollectionConfiguration { Version = 2, People = [], Sources = [] };
-        var workspace = new CollectionWorkspace(configuration, Path.GetTempPath(), null!, null!, null!, null!, null!, null!, null!);
+        var workspace = new CollectionWorkspace(configuration, null!, null!);
         var actor = new ReviewActor(subject, role);
         Assert.Throws<UnauthorizedAccessException>(() => workspace.GetConfiguration(actor));
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => workspace.GetSourcesAsync(actor, null, null));
@@ -28,9 +28,6 @@ public sealed class CollectionWorkspaceTests
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => workspace.EnqueueAsync(actor, "source", "bad", default));
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => workspace.CancelAsync(actor, "bad", default));
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => workspace.RecollectAsync(actor, "bad", "bad", default));
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => workspace.AdmitArticlesAsync(actor, "bad", "bad", "bad", default));
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => workspace.ExtractAsync(actor, "bad", "bad", default));
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => workspace.CompareAsync(actor, "bad", "bad", "bad", default));
     }
 
     [Fact]
@@ -52,7 +49,7 @@ public sealed class CollectionWorkspaceTests
             MinDelayMilliseconds = 2200,
             AllowedPathPrefix = "/news"
         };
-        var workspace = new CollectionWorkspace(Configuration(currentSource), Path.GetTempPath(), jobs, null!, null!, null!, null!, null!, null!);
+        var workspace = new CollectionWorkspace(Configuration(currentSource), jobs, null!);
 
         await workspace.RecollectAsync(Owner, oldJob.JobId, "0123456789abcdef0123456789abcdef", default);
         await workspace.RecollectAsync(Owner, oldJob.JobId, "0123456789abcdef0123456789abcdef", default);
@@ -86,7 +83,7 @@ public sealed class CollectionWorkspaceTests
             AllowedPathPrefix = "/news"
         };
         var jobs = new RecordingJobStore(prior);
-        var workspace = new CollectionWorkspace(Configuration(currentSource), Path.GetTempPath(), jobs, null!, null!, null!, null!, null!, null!);
+        var workspace = new CollectionWorkspace(Configuration(currentSource), jobs, null!);
 
         await Assert.ThrowsAsync<ArgumentException>(() => workspace.RecollectAsync(Owner, prior.JobId,
             "0123456789abcdef0123456789abcdef", default));
@@ -106,7 +103,7 @@ public sealed class CollectionWorkspaceTests
         };
         var jobs = new CountingJobStore([selected]);
         var retained = new AttemptsStore(Captured(attemptId, "https://example.test/news"));
-        var workspace = Workspace(jobs, retained, new HistoryStore([]));
+        var workspace = Workspace(jobs, retained);
 
         var result = await workspace.GetSourcesAsync(Owner, selected.JobId, null);
 
@@ -116,25 +113,6 @@ public sealed class CollectionWorkspaceTests
         Assert.Equal(0, jobs.LatestCalls);
         Assert.Equal(new[] { attemptId }, retained.ReadIds);
         Assert.Contains(attemptId, result.RetainedAttempts.Keys);
-    }
-
-    [Fact]
-    public async Task SourcesReusesPageAttemptAlreadyLoadedForHistory()
-    {
-        var attemptId = "attempt-one";
-        var request = Request(attemptId);
-        var definition = CollectionJobDefinition.FromConfiguration(Configuration(Source(CollectionMode.Page,
-            "https://example.test/news", 2)), "source");
-        var selected = Job(definition) with { Attempts = [JobAttempt(attemptId, request)] };
-        var jobs = new CountingJobStore([selected]);
-        var stored = Captured(attemptId, "https://example.test/news");
-        var history = new HistoryStore([new DocumentHistoryObservation(stored, [])]);
-        var attempts = new AttemptsStore(stored);
-
-        var result = await Workspace(jobs, attempts, history).GetSourcesAsync(Owner, selected.JobId, null);
-
-        Assert.Empty(attempts.ReadIds);
-        Assert.Same(stored, result.RetainedAttempts[attemptId]);
     }
 
     [Fact]
@@ -149,7 +127,7 @@ public sealed class CollectionWorkspaceTests
         };
         var jobs = new CountingJobStore([], selected);
         var retained = new AttemptsStore(Captured("attempt-one", "https://example.test/news/other"));
-        var workspace = Workspace(jobs, retained, new HistoryStore([]));
+        var workspace = Workspace(jobs, retained);
 
         await Assert.ThrowsAsync<InvalidDataException>(() => workspace.GetSourcesAsync(Owner, selected.JobId, null));
         Assert.Equal(1, jobs.GetCalls);
@@ -158,46 +136,19 @@ public sealed class CollectionWorkspaceTests
     }
 
     [Fact]
-    public async Task SourcesPreservesHistoryUnavailableStateAndOwnerIsCheckedBeforeReads()
+    public async Task OwnerIsCheckedBeforeSourceReads()
     {
         var definition = CollectionJobDefinition.FromConfiguration(Configuration(Source(CollectionMode.Page,
             "https://example.test/news", 2)), "source");
         var selected = Job(definition) with { Attempts = [JobAttempt("attempt-one", Request("attempt-one"))] };
         var jobs = new CountingJobStore([selected]);
         var retained = new AttemptsStore(Captured("attempt-one", "https://example.test/news"));
-        var history = new HistoryStore([], new IOException("storage unavailable"));
-        var workspace = Workspace(jobs, retained, history);
+        var workspace = Workspace(jobs, retained);
 
         var denied = new ReviewActor("auth0|reader", ReviewRole.Reviewer);
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => workspace.GetSourcesAsync(denied, selected.JobId, default));
         Assert.Equal(0, jobs.ListCalls);
-        var result = await workspace.GetSourcesAsync(Owner, selected.JobId, null);
-
-        Assert.True(result.HistoryUnavailable);
-        Assert.Null(result.History);
-        Assert.Equal(new[] { "attempt-one" }, retained.ReadIds);
-    }
-
-    [Fact]
-    public async Task CompareLoadsEachExtractionOnceBeforeSavingComparison()
-    {
-        var definition = CollectionJobDefinition.FromConfiguration(Configuration(Source(CollectionMode.Page,
-            "https://example.test/news", 2)), "source");
-        var job = Job(definition);
-        var before = Extraction("before", DateTimeOffset.UnixEpoch);
-        var after = Extraction("after", DateTimeOffset.UnixEpoch.AddDays(1));
-        var extractions = new CountingExtractionStore(before, after);
-        var comparisons = new ComparisonStore();
-        var jobs = new CountingJobStore([], job);
-        var workspace = new CollectionWorkspace(Configuration(Source(CollectionMode.Page,
-            "https://example.test/news", 2)), Path.GetTempPath(), jobs, null!, null!, extractions,
-            new CompareDocuments(extractions, comparisons), new GetDocumentHistory(new HistoryStore([])),
-            new AttemptsStore(null));
-
-        var comparison = await workspace.CompareAsync(Owner, job.JobId, before.ExtractionId, after.ExtractionId, default);
-
-        Assert.Same(comparison, comparisons.Saved);
-        Assert.Equal(new[] { before.ExtractionId, after.ExtractionId }, extractions.ReadIds);
+        Assert.Empty(retained.ReadIds);
     }
 
     private static CollectionConfiguration Configuration(WatchedSourceConfiguration source) => new()
@@ -221,9 +172,8 @@ public sealed class CollectionWorkspaceTests
         "0123456789abcdef0123456789abcdef", definition, "old-key", CollectionJobState.Succeeded,
         DateTimeOffset.UtcNow, null, false, 0, 0, 0, []);
 
-    private static CollectionWorkspace Workspace(CountingJobStore jobs, AttemptsStore attempts, HistoryStore history) =>
-        new(Configuration(Source(CollectionMode.Page, "https://example.test/news", 2)), Path.GetTempPath(),
-            jobs, null!, null!, null!, null!, new GetDocumentHistory(history), attempts);
+    private static CollectionWorkspace Workspace(CountingJobStore jobs, AttemptsStore attempts) =>
+        new(Configuration(Source(CollectionMode.Page, "https://example.test/news", 2)), jobs, attempts);
 
     private static CollectionJobAttempt JobAttempt(string id, CollectionRequest request) =>
         new(id, request, null, DateTimeOffset.UtcNow, null);
@@ -241,14 +191,6 @@ public sealed class CollectionWorkspaceTests
     private static StoredCollectionAttempt Captured(string id, string url) => new(
         new CapturedAttemptResult(id, "source", url, url, DateTimeOffset.UtcNow,
             new CollectionResponse(200, null, null, "text/plain", []), new CaptureIdentity(new string('a', 64), 1)), null, null);
-
-    private static DocumentExtraction Extraction(string text, DateTimeOffset observedAt)
-    {
-        var attempt = new CapturedAttemptResult(text, "source", "https://example.test/news", "https://example.test/news",
-            observedAt, new CollectionResponse(200, null, null, "text/plain", []),
-            new CaptureIdentity(new string('b', 64), 1));
-        return new DocumentExtraction(attempt, "parser-v1", "normalization-v1", text);
-    }
 
     private sealed class RecordingJobStore(CollectionJobRecord job) : ICollectionJobStore
     {
@@ -320,35 +262,5 @@ public sealed class CollectionWorkspaceTests
             return Task.FromResult(result?.AttemptResult.AttemptId == attemptId ? result : null);
         }
         public Task<CollectionImportDecision> ImportAtomicallyAsync(CollectionAttemptImport attempt, CancellationToken cancellationToken) => throw new NotSupportedException();
-    }
-
-    private sealed class HistoryStore(IReadOnlyList<DocumentHistoryObservation> observations, Exception? failure = null) : IDocumentHistoryStore
-    {
-        public Task<IReadOnlyList<DocumentHistoryObservation>> GetAsync(string sourceId, string requestedUrl,
-            int maximumObservations, CancellationToken cancellationToken) => failure is null
-                ? Task.FromResult(observations)
-                : Task.FromException<IReadOnlyList<DocumentHistoryObservation>>(failure);
-    }
-
-    private sealed class CountingExtractionStore(params DocumentExtraction[] values) : IDocumentExtractionStore
-    {
-        public List<string> ReadIds { get; } = [];
-        public Task<DocumentExtraction?> GetAsync(string extractionId, CancellationToken cancellationToken)
-        {
-            ReadIds.Add(extractionId);
-            return Task.FromResult(values.SingleOrDefault(value => value.ExtractionId == extractionId));
-        }
-        public Task<DocumentExtraction> SaveAsync(DocumentExtraction extraction, CancellationToken cancellationToken) => Task.FromResult(extraction);
-    }
-
-    private sealed class ComparisonStore : IDocumentComparisonStore
-    {
-        public DocumentComparison? Saved { get; private set; }
-        public Task<DocumentComparison?> GetAsync(string comparisonId, CancellationToken cancellationToken) => Task.FromResult(Saved);
-        public Task<DocumentComparison> SaveAsync(DocumentComparison comparison, CancellationToken cancellationToken)
-        {
-            Saved = comparison;
-            return Task.FromResult(comparison);
-        }
     }
 }

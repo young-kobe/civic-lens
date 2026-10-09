@@ -8,6 +8,6 @@ public enum SourceCheckState { NeverChecked, Checking, Failed, Cancelled, Change
 
 /// <summary>ComparisonId is set only for ChangeFound. NeedsAttention is true only for terminal failures.</summary>
 public sealed record SourceHealth(string SourceId, SourceCheckState State, DateTimeOffset? LastCheckedAt,
-    DateTimeOffset? RetryAt, string? ComparisonId, bool NeedsAttention);
+    DateTimeOffset? RetryAt, string? ComparisonId, bool NeedsAttention, string? JobId = null);
 
 public sealed record SourceHealthReport(IReadOnlyList<SourceHealth> Sources, int AttentionCount);

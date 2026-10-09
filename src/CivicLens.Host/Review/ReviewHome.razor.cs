@@ -3,6 +3,7 @@ using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Health;
 using CivicLens.Application.Review;
 using CivicLens.Core.Review;
+using CivicLens.Host.Collection;
 using CivicLens.Host.Components.Layout;
 using CivicLens.Host.Components.Ui;
 using Microsoft.AspNetCore.Components;
@@ -119,7 +120,7 @@ public sealed partial class ReviewHome
     {
         var who = item.ActorSubject == actor!.Subject ? "You" : "A reviewer";
         var draft = string.IsNullOrWhiteSpace(item.Headline) ? "an untitled draft" : $"“{item.Headline}”";
-        var source = item.SourceId is null ? "a source" : SourceDisplay.Name(configuration, item.SourceId);
+        var source = item.SourceId is null ? "a source" : SourceLabels.Name(configuration, item.SourceId);
         return item.Kind switch
         {
             ActivityKind.DraftCreated => new($"{who} started {draft}.", item.OccurredAt, Tone.Neutral),

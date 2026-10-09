@@ -1,0 +1,21 @@
+@using CivicLens.Core.Documents
+
+@switch (Comparison.Status)
+{
+    case DocumentComparisonStatus.Incompatible:
+        <Notice Tone="Tone.Warn" Title="These versions cannot be compared">The two saved texts were made with incompatible processing settings.</Notice>
+        break;
+    case DocumentComparisonStatus.LimitExceeded:
+        <Notice Tone="Tone.Warn" Title="This change is too large to compare">The texts are larger than the comparison limit, so no passages are shown.</Notice>
+        break;
+    case DocumentComparisonStatus.Complete when Comparison.Hunks.IsEmpty:
+        <Notice Title="No text changed">The two saved texts are the same.</Notice>
+        break;
+    default:
+        <p class="muted small">Text differences alone do not show that a change matters.</p>
+        break;
+}
+
+@code {
+    [Parameter, EditorRequired] public DocumentComparison Comparison { get; set; } = default!;
+}

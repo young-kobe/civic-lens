@@ -1,6 +1,7 @@
 @page "/Review"
 @using CivicLens.Application.Review
 @using CivicLens.Core.Review
+@using CivicLens.Host.Collection
 
 <TopBarTitle Crumbs="Crumbs" />
 
@@ -46,13 +47,13 @@
                             </Head>
                             <Row Context="item">
                                 <td>
-                                    <a class="cell-title" href="@($"/Documents/Comparison?comparisonId={item.Comparison.ComparisonId}")">@SourceDisplay.Document(item.RequestedUrl)</a>
+                                    <a class="cell-title" href="@($"/Documents/Comparison?comparisonId={item.Comparison.ComparisonId}")">@SourceLabels.Document(item.RequestedUrl)</a>
                                     @if (item.Comparison.Hunks.Length > 0)
                                     {
                                         <RedlineExcerpt Hunk="item.Comparison.Hunks[0]" />
                                     }
                                 </td>
-                                <td class="hide-narrow">@SourceDisplay.Name(configuration, item.SourceId)</td>
+                                <td class="hide-narrow">@SourceLabels.Name(configuration, item.SourceId)</td>
                                 <td class="time"><Timestamp Value="item.AfterObservedAtUtc" /></td>
                                 <td class="num">@item.Comparison.Hunks.Length</td>
                                 <td class="act">
@@ -117,7 +118,7 @@
                     <Panel Title="Source health" Id="source-health">
                         <Aside><a href="/Review/Sources">All sources</a></Aside>
                         <ChildContent>
-                            <HealthList Items="health.Sources.Select(item => SourceDisplay.Health(configuration, item)).ToArray()" />
+                            <HealthList Items="health.Sources.Select(item => SourceStatusDisplay.Item(SourceLabels.Name(configuration, item.SourceId), item)).ToArray()" />
                         </ChildContent>
                     </Panel>
                 }
