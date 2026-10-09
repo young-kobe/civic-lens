@@ -741,6 +741,62 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         });
                 });
 
+            modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.PublicationReleaseRow", b =>
+                {
+                    b.Property<int>("ReleaseNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("release_number");
+
+                    b.Property<string>("ActorSubject")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("actor_subject");
+
+                    b.Property<string>("DirectoryName")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("directory_name");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<long>("PublishedAtUtcTicks")
+                        .HasColumnType("bigint")
+                        .HasColumnName("published_at_utc_ticks");
+
+                    b.Property<int>("RecordCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("record_count");
+
+                    b.Property<string>("RecordsJson")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("records_json");
+
+                    b.HasKey("ReleaseNumber");
+
+                    b.HasIndex("DirectoryName")
+                        .IsUnique();
+
+                    b.HasIndex("IsActive")
+                        .IsUnique()
+                        .HasFilter("is_active");
+
+                    b.ToTable("publication_releases", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_publication_releases_count", "record_count BETWEEN 0 AND 2000");
+
+                            t.HasCheckConstraint("ck_publication_releases_directory", "directory_name ~ '^[0-9]{6}-[0-9a-f]{32}$'");
+
+                            t.HasCheckConstraint("ck_publication_releases_number", "release_number BETWEEN 1 AND 999999");
+
+                            t.HasCheckConstraint("ck_publication_releases_published", "published_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
+                        });
+                });
+
             modelBuilder.Entity("CivicLens.Infrastructure.Review.Persistence.ReviewIdempotencyRow", b =>
                 {
                     b.Property<string>("ActorSubject")

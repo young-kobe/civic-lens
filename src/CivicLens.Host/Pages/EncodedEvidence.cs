@@ -1,4 +1,5 @@
 using System.Text.Encodings.Web;
+using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Html;
 
 namespace CivicLens.Host.Pages;
@@ -26,4 +27,11 @@ public sealed class EncodedEvidence(string value) : IHtmlContent
     }
 
     public static EncodedEvidence From(string value) => new(value);
+
+    public static MarkupString Markup(string value)
+    {
+        using var writer = new StringWriter();
+        From(value).WriteTo(writer, HtmlEncoder.Default);
+        return new MarkupString(writer.ToString());
+    }
 }

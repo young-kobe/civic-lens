@@ -80,6 +80,23 @@ public sealed class PostgresDocumentExtractionStore(IDbContextFactory<Collection
         return FromRow(row, captured);
     }
 
+    internal static async Task<Dictionary<string, DocumentExtraction>> ReadManyAsync(CollectionAttemptDbContext db,
+        string[] extractionIds, CancellationToken cancellationToken)
+    {
+        var rows = await db.Set<DocumentExtractionRow>().AsNoTracking()
+            .Where(row => extractionIds.Contains(row.ExtractionId)).ToArrayAsync(cancellationToken);
+        var attemptIds = rows.Select(row => row.AttemptId).Distinct(StringComparer.Ordinal).ToArray();
+        var attemptRows = await db.Attempts.AsNoTracking()
+            .Where(row => attemptIds.Contains(row.AttemptId)).ToListAsync(cancellationToken);
+        var captured = (await PostgresCollectionAttemptStore.ReadEvidenceAsync(db, attemptRows, cancellationToken))
+            .Select(attempt => attempt.AttemptResult).OfType<CapturedAttemptResult>()
+            .ToDictionary(attempt => attempt.AttemptId, StringComparer.Ordinal);
+        return rows.ToDictionary(row => row.ExtractionId, row => FromRow(row,
+            captured.GetValueOrDefault(row.AttemptId)
+                ?? throw new InvalidOperationException("Stored extraction has no captured source attempt.")),
+            StringComparer.Ordinal);
+    }
+
     internal static DocumentExtraction FromRow(DocumentExtractionRow row, CapturedAttemptResult captured)
     {
         if (row.AttemptId != captured.AttemptId)

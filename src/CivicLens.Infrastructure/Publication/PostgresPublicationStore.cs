@@ -1,0 +1,217 @@
+using System.Collections.Immutable;
+using System.Text.Json;
+using System.Text.RegularExpressions;
+using CivicLens.Application.Publication;
+using CivicLens.Infrastructure.Collection;
+using CivicLens.Infrastructure.Publication.Persistence;
+using CivicLens.Infrastructure.Review;
+using CivicLens.Infrastructure.Review.Persistence;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Npgsql;
+
+namespace CivicLens.Infrastructure.Publication;
+
+public sealed partial class PostgresPublicationStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory)
+    : IPublicationStore
+{
+    private const string PublishOperation = "publish-release";
+    private const int MaximumPageSize = 100;
+    private const string UniqueViolation = PostgresErrorCodes.UniqueViolation;
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+
+    public static PostgresPublicationStore FromConnectionString(string connectionString)
+    {
+        _ = PostgresCollectionAttemptStore.FromConnectionString(connectionString);
+        var options = new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options;
+        return new(new PooledDbContextFactory<CollectionAttemptDbContext>(options));
+    }
+
+    public async Task<PublicationState> GetStateAsync(CancellationToken cancellationToken)
+    {
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        var releases = db.Set<PublicationReleaseRow>().AsNoTracking();
+        var latest = await releases.MaxAsync(row => (int?)row.ReleaseNumber, cancellationToken) ?? 0;
+        var active = await releases.SingleOrDefaultAsync(row => row.IsActive, cancellationToken);
+        return new(latest, active is null ? null : ToSummary(active));
+    }
+
+    public async Task<IReadOnlyList<PublicationReleaseSummary>> ListAsync(int limit, CancellationToken cancellationToken)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(limit, 1);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(limit, MaximumPageSize);
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        var rows = await db.Set<PublicationReleaseRow>().AsNoTracking()
+            .OrderByDescending(candidate => candidate.ReleaseNumber).Take(limit).ToListAsync(cancellationToken);
+        return rows.Select(ToSummary).ToList();
+    }
+
+    public async Task<PublicationReleaseSummary> ActivateAsync(int releaseNumber, CancellationToken cancellationToken)
+    {
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        await using var transaction = await PostgresDocumentChangeReviewStore.BeginWriteAsync(db, cancellationToken);
+        var row = await db.Set<PublicationReleaseRow>().AsNoTracking()
+            .SingleOrDefaultAsync(candidate => candidate.ReleaseNumber == releaseNumber, cancellationToken)
+            ?? throw new ArgumentException($"Release {releaseNumber} has not been committed.", nameof(releaseNumber));
+        await ClearActiveAsync(db, cancellationToken);
+        await db.Set<PublicationReleaseRow>().Where(candidate => candidate.ReleaseNumber == releaseNumber)
+            .ExecuteUpdateAsync(update => update.SetProperty(candidate => candidate.IsActive, true), cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return ToSummary(row);
+    }
+
+    public async Task<PublicationReleaseSummary?> ServeActiveAsync(Func<string, CancellationToken, Task> serve,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(serve);
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        await using var transaction = await PostgresDocumentChangeReviewStore.BeginWriteAsync(db, cancellationToken);
+        var active = await db.Set<PublicationReleaseRow>().AsNoTracking()
+            .SingleOrDefaultAsync(row => row.IsActive, cancellationToken);
+        if (active is not null) await serve(active.DirectoryName, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return active is null ? null : ToSummary(active);
+    }
+
+    public async Task<PublicationReleaseSummary?> FindReplayAsync(string actorSubject, string idempotencyKey,
+        string payloadHash, CancellationToken cancellationToken)
+    {
+        ValidateActorAndIdempotency(actorSubject, idempotencyKey, payloadHash);
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        return await ReadReplayAsync(db, actorSubject, idempotencyKey, payloadHash, cancellationToken);
+    }
+
+    public async Task<PublicationReleaseSummary> CommitAsync(string actorSubject, PublicationCommit commit,
+        string idempotencyKey, string payloadHash, CancellationToken cancellationToken)
+    {
+        ValidateActorAndIdempotency(actorSubject, idempotencyKey, payloadHash);
+        ValidateCommit(commit);
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        await using var transaction = await PostgresDocumentChangeReviewStore.BeginWriteAsync(db, cancellationToken);
+        var replay = await ReadReplayAsync(db, actorSubject, idempotencyKey, payloadHash, cancellationToken);
+        if (replay is not null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+            return replay;
+        }
+
+        await RequireUnchangedReleasesAsync(db, commit, cancellationToken);
+        await RequireUnchangedReviewStateAsync(db, commit.AddedRecords, cancellationToken);
+        await ClearActiveAsync(db, cancellationToken);
+        var summary = new PublicationReleaseSummary(commit.ReleaseNumber, commit.DirectoryName,
+            commit.PublishedAtUtc, commit.Records.Length);
+        db.Add(ToRow(actorSubject, commit));
+        db.Add(new ReviewIdempotencyRow
+        {
+            ActorSubject = actorSubject,
+            Operation = PublishOperation,
+            IdempotencyKey = idempotencyKey,
+            PayloadHash = payloadHash,
+            ResultJson = JsonSerializer.Serialize(summary, JsonOptions)
+        });
+        await SaveAsync(db, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return summary;
+    }
+
+    private static async Task SaveAsync(CollectionAttemptDbContext db, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException exception) when (exception.InnerException is PostgresException { SqlState: UniqueViolation })
+        {
+            throw new PublicationConflictException("Another release already took this number or directory.");
+        }
+    }
+
+    private static Task ClearActiveAsync(CollectionAttemptDbContext db, CancellationToken cancellationToken) =>
+        db.Set<PublicationReleaseRow>().Where(row => row.IsActive)
+            .ExecuteUpdateAsync(update => update.SetProperty(row => row.IsActive, false), cancellationToken);
+
+    private static async Task RequireUnchangedReleasesAsync(CollectionAttemptDbContext db, PublicationCommit commit,
+        CancellationToken cancellationToken)
+    {
+        var releases = db.Set<PublicationReleaseRow>().AsNoTracking();
+        var latest = await releases.MaxAsync(candidate => (int?)candidate.ReleaseNumber, cancellationToken) ?? 0;
+        if (latest != commit.ReleaseNumber - 1)
+            throw new PublicationConflictException("Another release was committed first. Rebuild from the latest release.");
+        var active = await releases.Where(candidate => candidate.IsActive)
+            .Select(candidate => (int?)candidate.ReleaseNumber).SingleOrDefaultAsync(cancellationToken);
+        if (active != commit.BaseReleaseNumber)
+            throw new PublicationConflictException("The active release changed after the release was built. Rebuild it.");
+    }
+
+    private static async Task RequireUnchangedReviewStateAsync(CollectionAttemptDbContext db,
+        ImmutableArray<ReviewStateExpectation> expectations, CancellationToken cancellationToken)
+    {
+        if (expectations.IsEmpty) return;
+        var ids = expectations.Select(expectation => expectation.DraftId).ToArray();
+        var drafts = await db.Set<DocumentChangeDraftRow>().AsNoTracking()
+            .Where(row => ids.Contains(row.DraftId)).ToDictionaryAsync(row => row.DraftId, cancellationToken);
+        foreach (var expectation in expectations)
+        {
+            if (!drafts.TryGetValue(expectation.DraftId, out var draft) ||
+                draft.CurrentRevisionNumber != expectation.RevisionNumber ||
+                draft.ReviewStateVersion != expectation.ReviewStateVersion)
+                throw new PublicationConflictException("Review state changed after the release was built. Rebuild it.");
+        }
+    }
+
+    private static async Task<PublicationReleaseSummary?> ReadReplayAsync(CollectionAttemptDbContext db,
+        string actorSubject, string idempotencyKey, string payloadHash, CancellationToken cancellationToken)
+    {
+        var row = await db.Set<ReviewIdempotencyRow>().AsNoTracking().SingleOrDefaultAsync(candidate =>
+            candidate.ActorSubject == actorSubject && candidate.Operation == PublishOperation &&
+            candidate.IdempotencyKey == idempotencyKey, cancellationToken);
+        if (row is null) return null;
+        if (row.PayloadHash != payloadHash)
+            throw new ArgumentException("Idempotency key was already used with a different request payload.");
+        return JsonSerializer.Deserialize<PublicationReleaseSummary>(row.ResultJson, JsonOptions)
+            ?? throw new InvalidOperationException("Stored publication result is invalid.");
+    }
+
+    private static PublicationReleaseRow ToRow(string actorSubject, PublicationCommit commit) => new()
+    {
+        ReleaseNumber = commit.ReleaseNumber,
+        DirectoryName = commit.DirectoryName,
+        ActorSubject = actorSubject,
+        PublishedAtUtcTicks = commit.PublishedAtUtc.UtcTicks,
+        RecordCount = commit.Records.Length,
+        RecordsJson = JsonSerializer.Serialize(commit.Records, JsonOptions),
+        IsActive = true
+    };
+
+    private static PublicationReleaseSummary ToSummary(PublicationReleaseRow row) => new(row.ReleaseNumber,
+        row.DirectoryName, new DateTimeOffset(row.PublishedAtUtcTicks, TimeSpan.Zero), row.RecordCount);
+
+    private static void ValidateCommit(PublicationCommit commit)
+    {
+        ArgumentNullException.ThrowIfNull(commit);
+        ArgumentOutOfRangeException.ThrowIfLessThan(commit.ReleaseNumber, 1);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(commit.ReleaseNumber, 999_999);
+        if (commit.BaseReleaseNumber < 1 || commit.BaseReleaseNumber >= commit.ReleaseNumber)
+            throw new ArgumentException("The base release must precede the new release.", nameof(commit));
+        ReleasePaths.RequireDirectoryName(commit.DirectoryName);
+        if (!commit.DirectoryName.StartsWith($"{commit.ReleaseNumber:D6}-", StringComparison.Ordinal))
+            throw new ArgumentException("Release directory name does not match the release number.", nameof(commit));
+        if (commit.Records.IsDefault || commit.AddedRecords.IsDefault)
+            throw new ArgumentException("Release records are required.", nameof(commit));
+        if (commit.PublishedAtUtc.Offset != TimeSpan.Zero)
+            throw new ArgumentException("Publish time must be UTC.", nameof(commit));
+    }
+
+    private static void ValidateActorAndIdempotency(string actorSubject, string key, string hash)
+    {
+        if (string.IsNullOrWhiteSpace(actorSubject) || actorSubject.Length > 256)
+            throw new ArgumentException("Actor subject is invalid.", nameof(actorSubject));
+        if (string.IsNullOrWhiteSpace(key) || key.Length > 256)
+            throw new ArgumentException("Idempotency key is invalid.", nameof(key));
+        if (!HashPattern().IsMatch(hash ?? string.Empty))
+            throw new ArgumentException("Payload hash must be a lowercase SHA-256 value.", nameof(hash));
+    }
+
+    [GeneratedRegex("^[0-9a-f]{64}$")]
+    private static partial Regex HashPattern();
+}

@@ -355,16 +355,38 @@ Open `/Review` through the configured HTTPS origin. The inbox lists saved change
 
 Creating a draft explicitly selects a complete changed comparison. Saves retain immutable authored revisions. Actual change dates require a selected exact citation; dates of observation are displayed separately. Approval requires headline, summary, institution, at least one valid citation, and explicit resolution of all outstanding concerns. Concurrent saves/decisions return conflicts; stale unsaved edits remain visible, and decisions are disabled until the saved revision is reloaded or edits are saved. Review decisions do not publish anything.
 
-The editor shows the saved document-change account and its exact selected passages as the approval target, separately from editable or recovered unsaved wording. Reviewers judge substantive change, wording, attribution, dates, interpretation, and evidence limits; automatic citation and revision checks establish integrity, not semantic correctness. Approved accounts remain private while publication is unimplemented. Approval does not designate a golden label or a model training example.
+The editor shows the saved document-change account and its exact selected passages as the approval target, separately from editable or recovered unsaved wording. Reviewers judge substantive change, wording, attribution, dates, interpretation, and evidence limits; automatic citation and revision checks establish integrity, not semantic correctness. Approved accounts remain private until the owner publishes them. Approval does not designate a golden label or a model training example.
 
 History currently supports at most 64 revisions and 128 decisions per record, with 64 outstanding concerns and 64 citations per revision. Limit exhaustion rejects writes and requires future history-pagination work; do not discard history to continue. Browsing comparisons may return an empty batch with a continuation if the batch contains only unchanged/incompatible/limited results. Use the continuation rather than treating that batch as an exhaustive absence of changes.
 
-Auth0 tenant login/logout and the production reverse proxy still require live verification. Offline tests validate subject authorization and HTTP workflows with isolated test signing keys; they do not exercise a live Auth0 tenant. Hetzner/Terraform provisioning, worker service management, production backup restoration, and publication remain pending.
+Auth0 tenant login/logout and the production reverse proxy still require live verification. Offline tests validate subject authorization and HTTP workflows with isolated test signing keys; they do not exercise a live Auth0 tenant. Hetzner/Terraform provisioning, worker service management, production backup restoration, and a workspace publish action remain pending.
+
+### Publish a static release
+
+Publication is a local owner command. Set `CIVIC_LENS_DATABASE`, `CIVIC_LENS_REVIEW_OWNER` (the owner subject recorded on the release), and `CIVIC_LENS_RELEASE_DIRECTORY` (an absolute path, for example `$PWD/.runtime/releases`). Publishing also needs `CIVIC_LENS_COLLECTION_CONFIG`, an absolute configuration path that supplies officials' display names. The command trusts the local operator, who already holds database credentials.
+
+```sh
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases publish <idempotency-key> <draft-id> [<draft-id>...]
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases list [limit]
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases activate <release-number>
+```
+
+`publish` adds or replaces each selected record's current revision. The revision must be approved with no unresolved concerns. The new release also keeps every record from the active release as hard links to that release's files. Disk grows with published records, not with the number of releases. The command builds the release in `staging/` and moves it to a unique directory under `releases/`. It then records the release as active in Postgres and points the relative `current` link at the release that Postgres records as active. The link swap holds the same Postgres lock as release commits, so overlapping commands cannot leave the link on an older release. A concurrent review decision, draft save, other release, or rollback makes the commit fail with exit code 1. The built directory is deleted and nothing is activated. Invalid input or a non-owner actor exits with code 2 and prints the rule that failed.
+
+Repeat the same key and drafts to receive the original result. The repeat also points the link at the recorded active release, so it repairs a link swap that failed after the commit. To roll back, activate an earlier release number. The next `publish` builds on the active release, so records added after it are not carried forward. `list` shows `activeReleaseNumber`, which is the release Postgres records as active, and `servedDirectoryName`, which is the release that the link serves. If they differ, run `releases activate` with the active release number. Releases are never deleted automatically.
+
+To check that the public pages work without the operational application, stop the review workspace, worker, and Postgres, then serve the active release with a plain static server:
+
+```sh
+python3 -m http.server 8090 --bind 127.0.0.1 --directory "$CIVIC_LENS_RELEASE_DIRECTORY/current"
+```
+
+Open `http://127.0.0.1:8090/`. The site holds at most 2,000 published records. The index shows 50 records per page, with links to the previous and next pages. Each record page shows the account, the changes, the citations, and both full document versions. The production static server remains a deployment decision.
 
 ### Remaining operations
 
-Runtime data belongs in ignored .runtime/; generated publication and evaluation artifacts in ignored artifacts/. Never commit credentials or copy operational directories from the legacy repository. There is currently no deploy command and no public endpoint.
+Runtime data belongs in ignored .runtime/; generated publication and evaluation artifacts in ignored artifacts/. Never commit credentials or copy operational directories from the legacy repository. There is currently no deploy command and no public endpoint. Published releases live under the configured release directory, not in the repository.
 
 Core collection-import decisions and the Application fresh/replay handlers share evidence mapping and atomic Postgres imports. The host exposes receipt-only `collect`, database-backed `collect-import`, and explicit receipt recovery. Managed jobs add explicit lifecycle execution; background scheduling remains planned.
 
-Production backup/restore, publication, rollback, and MCP runbooks will be added here when implemented. Do not treat target architecture descriptions as executable procedures.
+Production backup/restore and MCP runbooks will be added here when implemented. Do not treat target architecture descriptions as executable procedures.

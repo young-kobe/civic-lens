@@ -13,8 +13,13 @@ using CivicLens.Infrastructure.Collection.Processing;
 using CivicLens.Application.Documents;
 using CivicLens.Host.Collection;
 using CivicLens.Host.Documents;
+using CivicLens.Host.Publication;
 using CivicLens.Host.Review;
 using CivicLens.Infrastructure.Documents;
+using CivicLens.Application.Publication;
+using CivicLens.Core.Review;
+using CivicLens.Infrastructure.Publication;
+using CivicLens.Infrastructure.Review;
 
 if (args is [] or ["--help"] or ["help"])
 {
@@ -42,6 +47,9 @@ if (args is [] or ["--help"] or ["help"])
           documents history <source-id> <exact-requested-url>
           documents compare <before-extraction-id> <after-extraction-id>
           documents comparison <comparison-id>
+          releases publish <idempotency-key> <draft-id>...
+          releases list [limit]
+          releases activate <release-number>
           viewer [port]
           review [port]
         The local document viewer binds only to 127.0.0.1 and defaults to port 5080.
@@ -114,7 +122,7 @@ if (args.Contains("--as-of", StringComparer.Ordinal))
 if (args is not (["db", "migrate"] or ["validate", _] or ["collect", _, _, _, _] or ["collect-import", _, _, _, _]
     or ["feeds" or "discovery", "get", _] or ["feeds" or "discovery", "admit", _, _, _, _]
     or ["receipts", "list", _] or ["receipts", "replay", _, _]) && !CollectionJobCommand.Matches(args) &&
-    !CollectionWorkerCommand.Matches(args) && !DocumentCommand.Matches(args))
+    !CollectionWorkerCommand.Matches(args) && !DocumentCommand.Matches(args) && !ReleaseCommand.Matches(args))
 {
     Console.Error.WriteLine("Unknown command. Use --help.");
     return 2;
@@ -151,6 +159,34 @@ try
             new CompareDocuments(extractions, comparisons));
         await using var wakeup = PostgresCollectionPipelineWakeup.FromConnectionString(connectionString);
         return await CollectionWorkerCommand.ExecuteAsync(args, queue, jobs, attempts, cancellation.Token, processing, wakeup, jobs);
+    }
+
+    if (ReleaseCommand.Matches(args))
+    {
+        var connectionString = Environment.GetEnvironmentVariable("CIVIC_LENS_DATABASE");
+        var releaseRoot = Environment.GetEnvironmentVariable("CIVIC_LENS_RELEASE_DIRECTORY");
+        var ownerSubject = Environment.GetEnvironmentVariable("CIVIC_LENS_REVIEW_OWNER");
+        if (string.IsNullOrWhiteSpace(connectionString) || string.IsNullOrWhiteSpace(releaseRoot) ||
+            string.IsNullOrWhiteSpace(ownerSubject))
+            throw new ArgumentException("Release commands require CIVIC_LENS_DATABASE, CIVIC_LENS_RELEASE_DIRECTORY, and CIVIC_LENS_REVIEW_OWNER.");
+        var officialNames = new Dictionary<string, string>(StringComparer.Ordinal);
+        if (args is ["releases", "publish", ..])
+        {
+            var configurationPath = Environment.GetEnvironmentVariable("CIVIC_LENS_COLLECTION_CONFIG");
+            if (string.IsNullOrWhiteSpace(configurationPath) || !Path.IsPathFullyQualified(configurationPath))
+                throw new ArgumentException("Publishing requires CIVIC_LENS_COLLECTION_CONFIG to name an absolute configuration path.");
+            var releaseConfiguration = await ReadConfigurationAsync(configurationPath, cancellation.Token);
+            foreach (var person in releaseConfiguration.People) officialNames.Add(person.Id, person.Name);
+        }
+        var publications = PostgresPublicationStore.FromConnectionString(connectionString);
+        var releases = new FileReleaseDirectory(releaseRoot);
+        var publish = new PublishDocumentChanges(publications, releases, new ReleaseRenderer(),
+            PostgresDocumentChangeReviewStore.FromConnectionString(connectionString),
+            new PublicationCatalog(officialNames), TimeProvider.System);
+        executing = true;
+        return await ReleaseCommand.ExecuteAsync(args, publish, new ListPublicationReleases(publications, releases),
+            new ActivatePublicationRelease(publications, releases), new ReviewActor(ownerSubject, ReviewRole.Owner),
+            cancellation.Token);
     }
 
     if (DocumentCommand.Matches(args))

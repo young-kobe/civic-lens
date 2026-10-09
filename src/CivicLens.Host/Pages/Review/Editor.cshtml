@@ -199,7 +199,7 @@
                 }
                 else
                 {
-                    <component type="typeof(DocumentComparisonView)" render-mode="Static" param-Comparison="@Model.Comparison" />
+                    <component type="typeof(DocumentComparisonView)" render-mode="Static" param-Hunks="@Model.Comparison.Hunks" param-ViewId="@Model.Comparison.ComparisonId" param-BeforeExtractionId="@Model.Comparison.BeforeExtractionId" param-AfterExtractionId="@Model.Comparison.AfterExtractionId" />
                 }
                 <p><a asp-page="/Documents/Extraction" asp-route-extractionId="@Model.Comparison.BeforeExtractionId">Read complete earlier version</a> · <a asp-page="/Documents/Extraction" asp-route-extractionId="@Model.Comparison.AfterExtractionId">Read complete later version</a></p>
                 <details class="review-details"><summary>Comparison and source identifiers</summary>

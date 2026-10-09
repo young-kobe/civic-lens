@@ -1,0 +1,27 @@
+@using CivicLens.Publication.Contracts
+@using Microsoft.AspNetCore.Components
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <title>@Title · Civic Lens</title>
+    @foreach (var stylesheet in PublicAssets.Stylesheets)
+    {
+        <link rel="stylesheet" href="@(RootPath + stylesheet)" />
+    }
+    <script src="@(RootPath + PublicAssets.Script)" defer></script>
+</head>
+<body>
+    <header class="public-header"><a class="public-brand" href="@(RootPath + PublicationProtocol.IndexPagePath(1))">Civic Lens</a></header>
+    <main class="public-main">@ChildContent</main>
+    <footer class="public-footer">Civic Lens · Each record shows its sources and the exact text it cites.</footer>
+</body>
+</html>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+    [Parameter] public string RootPath { get; set; } = string.Empty;
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

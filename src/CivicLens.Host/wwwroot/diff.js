@@ -2,6 +2,7 @@ document.querySelectorAll("[data-diff-view]").forEach((view) => {
     const button = view.querySelector("[data-diff-toggle]");
     const label = view.querySelector("[data-diff-toggle-label]");
     if (!button || !label) return;
+    button.hidden = false;
 
     button.addEventListener("click", () => {
         const showSideBySide = button.getAttribute("aria-pressed") !== "true";

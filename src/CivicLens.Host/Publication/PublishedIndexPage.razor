@@ -1,0 +1,44 @@
+@using CivicLens.Publication.Contracts
+@using Microsoft.AspNetCore.Components
+
+<PublicPage Title="Published records">
+    <h1 class="public-title">Published records</h1>
+    <p class="public-lede">Release @Release.ReleaseNumber, published @PublishedRecordView.Moment(Release.PublishedAtUtc).</p>
+    @if (Release.Records.Length == 0)
+    {
+        <p>This release has no records.</p>
+    }
+    else
+    {
+        <ol class="public-records">
+            @foreach (var entry in Release.Records.Skip((Page - 1) * PublicationProtocol.IndexPageSize).Take(PublicationProtocol.IndexPageSize))
+            {
+                <li>
+                    <a href="@PublicationProtocol.RecordPagePath(entry.RecordId)">@entry.Headline</a>
+                    <span>First published @PublishedRecordView.Moment(entry.FirstPublishedAtUtc)</span>
+                </li>
+            }
+        </ol>
+    }
+    @if (PageCount > 1)
+    {
+        <nav class="public-pager" aria-label="Pages">
+            @if (Page > 1)
+            {
+                <a rel="prev" href="@PublicationProtocol.IndexPagePath(Page - 1)">Previous</a>
+            }
+            <span>Page @Page of @PageCount</span>
+            @if (Page < PageCount)
+            {
+                <a rel="next" href="@PublicationProtocol.IndexPagePath(Page + 1)">Next</a>
+            }
+        </nav>
+    }
+</PublicPage>
+
+@code {
+    [Parameter, EditorRequired] public PublicationRelease Release { get; set; } = default!;
+    [Parameter, EditorRequired] public int Page { get; set; }
+
+    private int PageCount => PublicationProtocol.IndexPageCount(Release.Records.Length);
+}
