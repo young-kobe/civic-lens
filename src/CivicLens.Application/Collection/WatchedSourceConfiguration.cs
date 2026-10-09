@@ -6,6 +6,12 @@ namespace CivicLens.Application.Collection;
 
 public sealed record WatchedSourceConfiguration
 {
+    public const int DefaultCheckIntervalSeconds = 3600;
+    public const int MinimumCheckIntervalSeconds = 60;
+    public const int MaximumCheckIntervalSeconds = 604800;
+
+    public int ResolveCheckIntervalSeconds() => CheckIntervalSeconds ?? DefaultCheckIntervalSeconds;
+
     public required string Id { get; init; }
     public string[]? PersonIds { get; init; }
     public SourceCoverageConfiguration[]? Coverage { get; init; }
@@ -21,6 +27,7 @@ public sealed record WatchedSourceConfiguration
     public long MaxBytes { get; init; } = 2_000_000;
     public int TimeoutSeconds { get; init; } = 30;
     public int MinDelayMilliseconds { get; init; } = 1000;
+    public int? CheckIntervalSeconds { get; init; }
     public string? ETag { get; init; }
     public DateTimeOffset? LastModified { get; init; }
     public CollectionJobPolicy? JobPolicy { get; init; }

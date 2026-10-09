@@ -13,7 +13,8 @@ using Npgsql;
 namespace CivicLens.Infrastructure.Collection.Jobs;
 
 /// <summary>Atomic job ownership, collection admission, and recovery accounting using database time.</summary>
-public sealed partial class PostgresCollectionJobStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory) : ICollectionJobStore
+public sealed partial class PostgresCollectionJobStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory) :
+    ICollectionJobStore, ICollectionScheduleStore
 {
     private const string LockName = "civic-lens-collection-jobs";
 

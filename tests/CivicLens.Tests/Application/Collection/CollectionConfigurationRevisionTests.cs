@@ -67,7 +67,23 @@ public sealed class CollectionConfigurationRevisionTests
         var revision = new CollectionConfigurationRevision(id, json);
 
         Assert.Equal(json, revision.Json);
+        Assert.DoesNotContain("checkIntervalSeconds", revision.Json, StringComparison.Ordinal);
         Assert.Equal(id, CollectionConfigurationRevision.Create(revision.ReadConfiguration()).Id);
+    }
+
+    [Fact]
+    public void ExplicitSourceIntervalChangesConfigurationRevision()
+    {
+        var configuration = Configuration(["person"]);
+        var defaultRevision = CollectionConfigurationRevision.Create(configuration);
+        var configuredRevision = CollectionConfigurationRevision.Create(configuration with
+        {
+            Sources = [configuration.Sources[0] with { CheckIntervalSeconds = 1800 }]
+        });
+
+        Assert.NotEqual(defaultRevision.Id, configuredRevision.Id);
+        Assert.Contains("\"checkIntervalSeconds\":1800", configuredRevision.Json, StringComparison.Ordinal);
+        Assert.Equal(1800, configuredRevision.ReadConfiguration().Sources[0].ResolveCheckIntervalSeconds());
     }
 
     private static CollectionConfiguration Configuration(string[] personIds) => new()

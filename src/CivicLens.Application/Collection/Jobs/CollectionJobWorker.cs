@@ -4,7 +4,8 @@ namespace CivicLens.Application.Collection.Jobs;
 
 /// <summary>Drains durable collection and evidence work, then waits for a database wakeup.</summary>
 public sealed class CollectionJobWorker(ICollectionWorkerQueue queue, RunCollectionJob runner,
-    EvidenceProcessingWorker? evidenceProcessor = null, ICollectionPipelineWakeup? wakeup = null)
+    EvidenceProcessingWorker? evidenceProcessor = null, ICollectionPipelineWakeup? wakeup = null,
+    ICollectionScheduleStore? schedules = null)
 {
     public const int DefaultBatchSize = 20;
     public const int MaximumBatchSize = 100;
@@ -59,6 +60,23 @@ public sealed class CollectionJobWorker(ICollectionWorkerQueue queue, RunCollect
         {
             passes++;
             var progress = 0;
+            var scheduleFailed = false;
+            if (schedules is not null)
+            {
+                try
+                {
+                    var advanced = await schedules.AdvanceDueAsync(batchSize, cancellationToken);
+                    if (advanced is < 0 || advanced > batchSize)
+                        throw new InvalidOperationException("Schedule store exceeded the requested admission bound.");
+                    progress += advanced;
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { break; }
+                catch (Exception exception) when (IsRecoverable(exception))
+                {
+                    failures++;
+                    scheduleFailed = true;
+                }
+            }
             CollectionWorkerCursor? cursor = null;
             var queueFailed = false;
             do
@@ -109,7 +127,7 @@ public sealed class CollectionJobWorker(ICollectionWorkerQueue queue, RunCollect
                 failures += result.Failures;
             }
 
-            if (queueFailed || progress == 0 || cancellationToken.IsCancellationRequested) break;
+            if (queueFailed || scheduleFailed || progress == 0 || cancellationToken.IsCancellationRequested) break;
         }
 
         return new(passes, visited, failures, queueFailures);

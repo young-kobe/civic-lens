@@ -106,6 +106,8 @@ public sealed class PostgresCollectionPipelineWakeup(string connectionString) : 
                  WHERE expires_at IS NOT NULL
                 UNION ALL
                 SELECT not_before FROM collection_job_origins
+                UNION ALL
+                SELECT next_due_utc_ticks FROM collection_source_schedules WHERE enabled
             )
             SELECT database_now.ticks, min(deadlines.ticks) - database_now.ticks
               FROM database_now LEFT JOIN deadlines ON deadlines.ticks > @watermark

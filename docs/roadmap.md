@@ -26,7 +26,7 @@ For MVP, add a dynamic SVG visualization of collection and AI processing driven 
 
 ## 1. Collection and evidence
 
-Automatic stored-validator selection and periodic source scheduling remain future work. The explicit queue worker dispatches already admitted jobs; it does not create recurring jobs. Persistent robots caching and cross-origin robots redirects are outside the current collection policy. Add only packages needed for these capabilities.
+Automatic stored-validator selection remains future work. The durable engine schedules hourly source checks with per-source cadence and coalesced catch-up, then advances evidence to review. Engine-wide spending ceilings, global backlog limits, weighted source fairness, live configuration reload, and a unified operational health view still need explicit policies and implementation. Persistent robots caching and cross-origin robots redirects are outside the current collection policy. Add only packages needed for these capabilities.
 
 Acceptance: add an official through configuration; collect one feed and watched page; demonstrate cancellation/restart without duplicate imports, conditional 304 handling, 429 backoff, bounded discovery, and explicit incomplete-download errors. Validate registry behavior with hundreds of fixture identities without issuing hundreds of live requests.
 

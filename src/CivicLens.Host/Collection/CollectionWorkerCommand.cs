@@ -26,7 +26,8 @@ internal static class CollectionWorkerCommand
 
     public static async Task<int> ExecuteAsync(string[] arguments, ICollectionWorkerQueue queue,
         ICollectionJobStore jobs, ICollectionAttemptStore evidence, CancellationToken cancellationToken,
-        EvidenceProcessingWorker? evidenceProcessor = null, ICollectionPipelineWakeup? wakeup = null)
+        EvidenceProcessingWorker? evidenceProcessor = null, ICollectionPipelineWakeup? wakeup = null,
+        ICollectionScheduleStore? schedules = null)
     {
         ValidateArguments(arguments);
         var collectorPath = Path.GetFullPath(arguments[1]);
@@ -35,7 +36,7 @@ internal static class CollectionWorkerCommand
             new CaptureArtifactVerifier(), new CollectorProcess(collectorPath,
                 Environment.GetEnvironmentVariable("DOTNET_HOST_PATH") ?? "dotnet"));
         var once = arguments.Length == 4;
-        var result = await new CollectionJobWorker(queue, runner, evidenceProcessor, wakeup).ExecuteAsync(artifactRoot, once,
+        var result = await new CollectionJobWorker(queue, runner, evidenceProcessor, wakeup, schedules).ExecuteAsync(artifactRoot, once,
             cancellationToken: cancellationToken);
         Console.WriteLine(JsonSerializer.Serialize(result, JsonOptions));
         return result.JobFailures == 0 && result.QueueFailures == 0 ? 0 : 1;

@@ -24,23 +24,6 @@ public sealed class PostgresEvidenceProcessingStore(
         return new(new PooledDbContextFactory<CollectionAttemptDbContext>(options));
     }
 
-    public async Task<EvidenceProcessingPage> GetPreparationJobIdsAsync(EvidenceProcessingCursor? cursor, int limit,
-        CancellationToken cancellationToken)
-    {
-        if (limit is < 1 or > 100) throw new ArgumentOutOfRangeException(nameof(limit));
-        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        var query = db.Set<JobRow>().AsNoTracking().Where(job => job.State == Application.Collection.Jobs.CollectionJobState.Succeeded &&
-            !db.Set<PersistedEvidenceProcessingRow>().Any(row => row.JobId == job.JobId && row.AttemptId == "prepare"));
-        if (cursor is not null)
-            query = query.Where(job => job.CreatedAt > cursor.CreatedAtUtcTicks ||
-                job.CreatedAt == cursor.CreatedAtUtcTicks && string.Compare(job.JobId, cursor.JobId) > 0);
-        var rows = await query.OrderBy(job => job.CreatedAt).ThenBy(job => job.JobId)
-            .Take(limit + 1).Select(job => new { job.JobId, job.CreatedAt }).ToArrayAsync(cancellationToken);
-        var count = Math.Min(rows.Length, limit);
-        return new(rows.Take(count).Select(row => row.JobId).ToArray(), rows.Length > limit
-            ? new EvidenceProcessingCursor(rows[count - 1].CreatedAt, rows[count - 1].JobId) : null);
-    }
-
     public async Task<IReadOnlyList<EvidenceProcessingRecord>> GetByJobIdsAsync(IReadOnlyList<string> jobIds,
         CancellationToken cancellationToken)
     {
@@ -132,30 +115,6 @@ public sealed class PostgresEvidenceProcessingStore(
             throw new InvalidDataException("Processing identity was replayed with different source evidence.");
         await transaction.CommitAsync(cancellationToken);
         return ToRecord(row);
-    }
-
-    public async Task EnsurePreparationAsync(string jobId, string sourceId, string requestedUrl,
-        CancellationToken cancellationToken)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(jobId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(sourceId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(requestedUrl);
-        if (jobId.Length > 128 || sourceId.Length > 128 || requestedUrl.Length > 4096)
-            throw new ArgumentException("Preparation identity exceeds its storage bound.");
-        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        var jobSucceeded = await db.Set<JobRow>().AnyAsync(row => row.JobId == jobId &&
-            row.State == Application.Collection.Jobs.CollectionJobState.Succeeded, cancellationToken);
-        if (!jobSucceeded) return;
-        await db.Database.ExecuteSqlInterpolatedAsync($"""
-            INSERT INTO evidence_processing (job_id, attempt_id, source_id, requested_url, stage, status, fence,
-                attempts, admitted_count, deferred_count, duplicate_count)
-            VALUES ({jobId}, 'prepare', {sourceId}, {requestedUrl}, 'Preparation', 'Pending', 0, 0, 0, 0, 0)
-            ON CONFLICT (job_id, attempt_id) DO NOTHING
-            """, cancellationToken);
-        var row = await db.Set<PersistedEvidenceProcessingRow>().AsNoTracking().SingleAsync(
-            candidate => candidate.JobId == jobId && candidate.AttemptId == "prepare", cancellationToken);
-        if (row.SourceId != sourceId || row.RequestedUrl != requestedUrl)
-            throw new InvalidDataException("Preparation identity was replayed with different job settings.");
     }
 
     public async Task<EvidenceProcessingClaim?> TryClaimAsync(string jobId, string attemptId, TimeSpan leaseDuration,

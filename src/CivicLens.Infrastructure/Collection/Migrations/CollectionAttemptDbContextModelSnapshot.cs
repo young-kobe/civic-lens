@@ -260,6 +260,48 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.ToTable("collection_job_origins", (string)null);
                 });
 
+            modelBuilder.Entity("CivicLens.Infrastructure.Collection.Jobs.Persistence.CollectionScheduleRow", b =>
+                {
+                    b.Property<string>("SourceId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("source_id");
+
+                    b.Property<string>("ConfigurationRevisionId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("configuration_revision_id");
+
+                    b.Property<string>("ConfigurationJson")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("configuration_json");
+
+                    b.Property<int>("IntervalSeconds")
+                        .HasColumnType("integer")
+                        .HasColumnName("interval_seconds");
+
+                    b.Property<long>("NextDueUtcTicks")
+                        .HasColumnType("bigint")
+                        .HasColumnName("next_due_utc_ticks");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("boolean")
+                        .HasColumnName("enabled");
+
+                    b.HasKey("SourceId");
+
+                    b.HasIndex("Enabled", "NextDueUtcTicks", "SourceId");
+
+                    b.ToTable("collection_source_schedules", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_collection_source_schedules_revision", "configuration_revision_id ~ '^[0-9a-f]{64}$'");
+                            t.HasCheckConstraint("ck_collection_source_schedules_interval", "interval_seconds BETWEEN 60 AND 604800");
+                            t.HasCheckConstraint("ck_collection_source_schedules_due", "next_due_utc_ticks BETWEEN 0 AND 3155378975999999999");
+                        });
+                });
+
             modelBuilder.Entity("CivicLens.Infrastructure.Collection.Jobs.Persistence.JobRow", b =>
                 {
                     b.Property<string>("JobId")

@@ -17,7 +17,6 @@ public sealed class EvidenceProcessingWorker(
     GetDocumentHistory history,
     CompareDocuments compare)
 {
-    private bool preparationReconciled;
     public const int MaximumBatchSize = 100;
     private const int MaximumAttempts = 5;
 
@@ -28,30 +27,6 @@ public sealed class EvidenceProcessingWorker(
         if (batchSize is < 1 or > MaximumBatchSize) throw new ArgumentOutOfRangeException(nameof(batchSize));
         var failures = 0;
         var progress = 0;
-        if (!preparationReconciled)
-        {
-            EvidenceProcessingCursor? cursor = null;
-            do
-            {
-                var preparation = await processing.GetPreparationJobIdsAsync(cursor, batchSize, cancellationToken);
-                cursor = preparation.NextCursor;
-                foreach (var jobId in preparation.JobIds)
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    try
-                    {
-                        var job = await jobs.GetAsync(jobId, cancellationToken);
-                        if (job is { State: CollectionJobState.Succeeded })
-                            await processing.EnsurePreparationAsync(jobId, job.Definition.SourceId, job.Definition.Url, cancellationToken);
-                    }
-                    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
-                    catch (Exception exception) when (IsRecoverable(exception)) { failures++; }
-                }
-            }
-            while (cursor is not null);
-            preparationReconciled = failures == 0;
-        }
-
         var eligible = await processing.GetEligibleAsync(batchSize, cancellationToken);
         foreach (var record in eligible)
         {

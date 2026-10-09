@@ -50,6 +50,27 @@ public sealed class CollectionJobWorkerTests
     }
 
     [Fact]
+    public async Task DueSourcesAreAdmittedBeforeQueueScanAndOnceDrainsTheAdmittedBatch()
+    {
+        var schedules = new RecordingScheduleStore(1, 0);
+        var queue = new SequenceQueue((_, callNumber) =>
+        {
+            Assert.True(schedules.AdmissionCount >= callNumber);
+            return Task.FromResult(callNumber == 1
+                ? new CollectionWorkerQueuePage(["scheduled-job"], null)
+                : new CollectionWorkerQueuePage([], null));
+        });
+        var worker = new CollectionJobWorker(queue,
+            new RunCollectionJob(new RecordingJobStore(), null!, null!, null!, null!), schedules: schedules);
+
+        var result = await worker.ExecuteAsync(Path.GetTempPath(), once: true, batchSize: 7);
+
+        Assert.Equal(1, result.JobsVisited);
+        Assert.Equal(2, schedules.AdmissionCount);
+        Assert.Equal([7, 7], schedules.Limits);
+    }
+
+    [Fact]
     public async Task CursorPassesClaimedPageAndWrapsAfterLaterJobsAreVisited()
     {
         var cursor = new CollectionWorkerCursor(10, "job-b");
@@ -136,6 +157,22 @@ public sealed class CollectionJobWorkerTests
         public Task ConnectAsync(CancellationToken cancellationToken) { ConnectCount++; IsConnected = true; return Task.CompletedTask; }
         public Task WaitAsync(CancellationToken cancellationToken) { WaitCount++; return wait(cancellationToken); }
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
+
+    private sealed class RecordingScheduleStore(params int[] admissions) : ICollectionScheduleStore
+    {
+        public int AdmissionCount { get; private set; }
+        public List<int> Limits { get; } = [];
+
+        public Task SynchronizeAsync(CollectionConfiguration configuration, CancellationToken cancellationToken) =>
+            Task.CompletedTask;
+
+        public Task<int> AdvanceDueAsync(int limit, CancellationToken cancellationToken)
+        {
+            Limits.Add(limit);
+            var index = AdmissionCount++;
+            return Task.FromResult(index < admissions.Length ? admissions[index] : 0);
+        }
     }
 
     private sealed class RecordingJobStore(params string[] failingJobIds) : ICollectionJobStore

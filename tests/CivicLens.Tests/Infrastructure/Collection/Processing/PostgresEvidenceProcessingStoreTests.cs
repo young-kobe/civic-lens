@@ -131,7 +131,7 @@ public sealed class PostgresEvidenceProcessingStoreTests(PostgresCollection post
     public async Task FullBatchOfParkedComparisonsLeavesCapacityForPreparation()
     {
         await SeedCapturedAttemptAsync("prior-job", "prior-attempt", "senator-page", "https://example.test/page");
-        await store.EnsurePreparationAsync("prior-job", "senator-page", "https://example.test/page", default);
+        await InsertPreparationAsync("prior-job", "senator-page", "https://example.test/page");
         var claims = new List<EvidenceProcessingClaim>();
         for (var index = 0; index < 3; index++)
         {
@@ -164,7 +164,7 @@ public sealed class PostgresEvidenceProcessingStoreTests(PostgresCollection post
     public async Task ConcurrentPreparationCompletionCannotLoseDependencyRelease()
     {
         await SeedCapturedAttemptAsync("prior-job", "prior-attempt", "senator-page", "https://example.test/page");
-        await store.EnsurePreparationAsync("prior-job", "senator-page", "https://example.test/page", default);
+        await InsertPreparationAsync("prior-job", "senator-page", "https://example.test/page");
         await SeedCapturedAttemptAsync("current-job", "current-attempt", "senator-page", "https://example.test/page");
         _ = await store.EnsureAsync("current-job", "current-attempt", "senator-page", "https://example.test/page", default);
         await AdvanceCurrentToComparisonAsync();
@@ -220,14 +220,10 @@ public sealed class PostgresEvidenceProcessingStoreTests(PostgresCollection post
     public async Task PreparationBacklogIsBoundedAndReplaysOnlyRetryableMarkers()
     {
         for (var index = 0; index < 4; index++)
+        {
             await InsertSuccessfulJobAsync($"job-{index}", DateTimeOffset.UtcNow.UtcTicks + index);
-        var backlog = await store.GetPreparationJobIdsAsync(null, 2, default);
-        Assert.Equal(new[] { "job-0", "job-1" }, backlog.JobIds);
-        Assert.NotNull(backlog.NextCursor);
-        var nextBacklog = await store.GetPreparationJobIdsAsync(backlog.NextCursor, 2, default);
-        Assert.Equal(new[] { "job-2", "job-3" }, nextBacklog.JobIds);
-        foreach (var jobId in backlog.JobIds.Concat(nextBacklog.JobIds))
-            await store.EnsurePreparationAsync(jobId, "source", "https://example.test/feed", default);
+            await InsertPreparationAsync($"job-{index}", "source", "https://example.test/feed");
+        }
 
         await CompletePrepAsync("job-0", EvidenceProcessingOutcome.Prepared, 2, 3, 4);
         await DeferPrepAsync("job-1", DateTimeOffset.UtcNow.AddMinutes(-1));
@@ -265,6 +261,21 @@ public sealed class PostgresEvidenceProcessingStoreTests(PostgresCollection post
         Assert.Equal(EvidenceProcessingStatus.Pending, preparation.Status);
         Assert.Equal("senator-page", preparation.SourceId);
         Assert.Equal("https://example.test/page", preparation.RequestedUrl);
+    }
+
+    private async Task InsertPreparationAsync(string jobId, string sourceId, string url)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand("""
+            INSERT INTO evidence_processing (job_id, attempt_id, source_id, requested_url, stage, status,
+                fence, attempts, admitted_count, deferred_count, duplicate_count)
+            VALUES (@job, 'prepare', @source, @url, 'Preparation', 'Pending', 0, 0, 0, 0, 0)
+            """, connection);
+        command.Parameters.AddWithValue("job", jobId);
+        command.Parameters.AddWithValue("source", sourceId);
+        command.Parameters.AddWithValue("url", url);
+        await command.ExecuteNonQueryAsync();
     }
 
     private async Task ExpireLeaseAsync(string jobId, string attemptId)
