@@ -114,6 +114,7 @@ internal static class ReviewWorkspace
             });
             app.MapGet("/Review/Logout", () => Results.StatusCode(StatusCodes.Status405MethodNotAllowed));
             app.MapPost("/Review/Logout", (Delegate)SignOutAsync).WithMetadata(new RequireAntiforgeryTokenAttribute());
+            app.MapBlazorHub(options => options.CloseOnAuthenticationExpiration = true).WithOrder(-1);
             app.MapRazorComponents<App>().AddInteractiveServerRenderMode();
             using var registration = cancellationToken.Register(app.Lifetime.StopApplication);
             await app.StartAsync(cancellationToken);

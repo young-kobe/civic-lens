@@ -163,14 +163,14 @@ public sealed class ReviewWorkspaceHost(PostgresCollection postgres)
         fields.Add(new(name, value));
     }
 
-    public string CreateCookie(string subject)
+    public string CreateCookie(string subject, TimeSpan? lifetime = null)
     {
         // Only this test harness holds the isolated signing keys. Production has no test-login mode.
         var provider = DataProtectionProvider.Create(new DirectoryInfo(KeyDirectory),
             options => options.SetApplicationName("CivicLens.Review"));
         var protector = provider.CreateProtector("Microsoft.AspNetCore.Authentication.Cookies.CookieAuthenticationMiddleware", "Cookies", "v2");
         var ticket = new AuthenticationTicket(new ClaimsPrincipal(new ClaimsIdentity([new Claim("sub", subject)], "Cookies")),
-            new AuthenticationProperties { IssuedUtc = DateTimeOffset.UtcNow, ExpiresUtc = DateTimeOffset.UtcNow.AddMinutes(10) },
+            new AuthenticationProperties { IssuedUtc = DateTimeOffset.UtcNow, ExpiresUtc = DateTimeOffset.UtcNow.Add(lifetime ?? TimeSpan.FromMinutes(10)) },
             CookieAuthenticationDefaults.AuthenticationScheme);
         return "__Host-CivicLens.Review=" + new TicketDataFormat(protector).Protect(ticket);
     }

@@ -1,4 +1,6 @@
 using System.Net;
+using System.Net.WebSockets;
+using System.Text;
 using System.Text.Json;
 using AngleSharp.Html.Parser;
 using CivicLens.Application.Collection;
@@ -96,6 +98,39 @@ public sealed class SourcesPageTests(PostgresCollection postgres) : IAsyncLifeti
         Assert.Equal(HttpStatusCode.OK, script.StatusCode);
         using var negotiate = await Host.Client.PostAsync("/_blazor/negotiate?negotiateVersion=1", null);
         Assert.Equal(HttpStatusCode.OK, negotiate.StatusCode);
+    }
+
+    // An open Sources page must lose its live connection when the sign-in expires, so no later read or action runs on a stale sign-in.
+    [Fact]
+    public async Task InteractiveConnectionClosesWhenTheSignInExpires()
+    {
+        await StartAsync("auth0|owner");
+        var cookie = Host.CreateCookie("auth0|owner", TimeSpan.FromSeconds(4));
+        Host.Client.DefaultRequestHeaders.Remove("Cookie");
+        Host.Client.DefaultRequestHeaders.Add("Cookie", cookie);
+        using var negotiate = await Host.Client.PostAsync("/_blazor/negotiate?negotiateVersion=1", null);
+        using var body = JsonDocument.Parse(await negotiate.Content.ReadAsStringAsync());
+        using var socket = new ClientWebSocket();
+        socket.Options.SetRequestHeader("Cookie", cookie);
+        socket.Options.SetRequestHeader("Host", "review.example.test");
+        var uri = new UriBuilder(Host.Client.BaseAddress!)
+        {
+            Scheme = "ws",
+            Path = "/_blazor",
+            Query = "id=" + body.RootElement.GetProperty("connectionToken").GetString()
+        }.Uri;
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(12));
+        await socket.ConnectAsync(uri, deadline.Token);
+        await socket.SendAsync("{\"protocol\":\"blazorpack\",\"version\":1}\u001e"u8.ToArray(), WebSocketMessageType.Text, true, deadline.Token);
+        var buffer = new byte[4096];
+        var handshake = await socket.ReceiveAsync(buffer, deadline.Token);
+        Assert.Equal("{}\u001e", Encoding.UTF8.GetString(buffer, 0, handshake.Count));
+
+        try
+        {
+            while ((await socket.ReceiveAsync(buffer, deadline.Token)).MessageType != WebSocketMessageType.Close) { }
+        }
+        catch (WebSocketException) { }
     }
 
     // A repeated click or a retry after an unknown outcome must not queue a second check.

@@ -112,6 +112,28 @@
             if (element) setLinked(element.dataset.link, linked);
         });
     }
+    const focusable = "a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([tabindex='-1'])";
+    const openDialog = () => document.querySelector("[role='dialog'][aria-modal='true']");
+    document.addEventListener("keydown", event => {
+        const dialog = openDialog();
+        if (event.key !== "Tab" || !dialog) return;
+        const stops = all(focusable, dialog).filter(element => element.offsetParent !== null);
+        const active = document.activeElement;
+        if (stops.length === 0) {
+            event.preventDefault();
+            dialog.focus();
+        } else if (event.shiftKey && (active === stops[0] || active === dialog || !dialog.contains(active))) {
+            event.preventDefault();
+            stops.at(-1).focus();
+        } else if (!event.shiftKey && (active === stops.at(-1) || !dialog.contains(active))) {
+            event.preventDefault();
+            stops[0].focus();
+        }
+    });
+    document.addEventListener("focusin", event => {
+        const dialog = openDialog();
+        if (dialog && event.target instanceof Node && !dialog.contains(event.target)) dialog.focus();
+    });
     document.addEventListener("scroll", event => {
         const wrap = event.target;
         if (wrap instanceof Element && wrap.classList.contains("table-wrap-scroll"))
