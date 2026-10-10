@@ -1,3 +1,5 @@
+using CivicLens.Core.Review;
+
 namespace CivicLens.Host.Review;
 
 public sealed record ReviewWorkspaceSettings(
@@ -12,13 +14,20 @@ public sealed record ReviewWorkspaceSettings(
         var reviewers = (Environment.GetEnvironmentVariable("CIVIC_LENS_REVIEW_REVIEWERS") ?? "")
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .ToHashSet(StringComparer.Ordinal);
-        if (owner.Length > 256 || reviewers.Count > 20 || reviewers.Any(value => value.Length > 256))
-            throw new ArgumentException("Review subject configuration exceeds its limits.");
+        ValidateSubjects(owner, reviewers);
         var directory = Required("CIVIC_LENS_REVIEW_KEY_DIRECTORY");
         if (!Path.IsPathFullyQualified(directory))
             throw new ArgumentException("CIVIC_LENS_REVIEW_KEY_DIRECTORY must be an absolute persistent path.");
         return new(origin, authority, Required("CIVIC_LENS_AUTH0_CLIENT_ID"),
             Required("CIVIC_LENS_AUTH0_CLIENT_SECRET"), owner, reviewers, directory);
+    }
+
+    public static void ValidateSubjects(string owner, IReadOnlySet<string> reviewers)
+    {
+        if (owner.Length > 256 || reviewers.Count > 20 || reviewers.Any(value => value.Length > 256))
+            throw new ArgumentException("Review subject configuration exceeds its limits.");
+        if (ReviewAuthor.IsAnalysis(owner) || reviewers.Any(ReviewAuthor.IsAnalysis))
+            throw new ArgumentException("The AI drafter's subject cannot be an owner or a reviewer.");
     }
 
     private static Uri ReadHttpsOrigin(string name)

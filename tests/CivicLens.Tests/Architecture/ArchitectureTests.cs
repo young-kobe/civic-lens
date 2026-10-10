@@ -1,3 +1,5 @@
+using System.Reflection.Metadata;
+using System.Reflection.PortableExecutable;
 using System.Xml.Linq;
 
 namespace CivicLens.Tests.Architecture;
@@ -36,12 +38,31 @@ public sealed class ArchitectureTests
             Assert.Empty(xml.Descendants("Reference")); // No binary references bypassing the project graph.
 
             string[] allowedPackages = name == "CivicLens.Infrastructure"
-                ? ["AngleSharp", "Microsoft.EntityFrameworkCore", "Microsoft.EntityFrameworkCore.Design", "Microsoft.EntityFrameworkCore.Relational", "Npgsql.EntityFrameworkCore.PostgreSQL"]
+                ? ["AngleSharp", "Anthropic", "Microsoft.EntityFrameworkCore", "Microsoft.EntityFrameworkCore.Design", "Microsoft.EntityFrameworkCore.Relational", "Npgsql.EntityFrameworkCore.PostgreSQL"]
                 : name == "CivicLens.Collector" ? ["AngleSharp"]
                 : name == "CivicLens.Host" ? ["Microsoft.AspNetCore.Authentication.OpenIdConnect"] : [];
             Assert.Equal(allowedPackages.Order(), xml.Descendants("PackageReference")
                 .Select(element => element.Attribute("Include")!.Value).Order());
         }
+    }
+
+    [Fact]
+    public void OnlyInfrastructureReferencesTheModelSdkAssembly()
+    {
+        var referencing = Directory.GetFiles(AppContext.BaseDirectory, "CivicLens.*.dll")
+            .Where(path => !Path.GetFileName(path).StartsWith("CivicLens.Tests", StringComparison.Ordinal))
+            .Where(path => ReferencedAssemblies(path).Contains("Anthropic"))
+            .Select(path => Path.GetFileNameWithoutExtension(path)!).ToArray();
+
+        Assert.Equal(["CivicLens.Infrastructure"], referencing);
+    }
+
+    private static HashSet<string> ReferencedAssemblies(string path)
+    {
+        using var stream = File.OpenRead(path);
+        using var reader = new PEReader(stream);
+        var metadata = reader.GetMetadataReader();
+        return [.. metadata.AssemblyReferences.Select(handle => metadata.GetString(metadata.GetAssemblyReference(handle).Name))];
     }
 
     [Fact]

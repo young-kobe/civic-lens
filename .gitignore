@@ -12,6 +12,7 @@ artifacts/
 .idea/
 .agents/
 .codex/
+.claude/
 .aws/
 *.user
 *.log

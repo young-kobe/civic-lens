@@ -13,7 +13,7 @@ dotnet format CivicLens.slnx --verify-no-changes --no-restore
 python3 tools/render-architecture.py --check
 ```
 
-For a database-free test run, use `dotnet test CivicLens.slnx --configuration Release --no-build --filter 'Category!=Postgres'`. This excludes the Postgres adapter and CLI database integration tests and is not a substitute for the full required check. Testcontainers requires Docker socket access; an agent sandbox may need an execution override for Docker and local test sockets. Missing Docker fails the full suite rather than silently skipping database checks. The Postgres image is pinned by tag and digest in the test fixture; its first run and the Testcontainers cleanup container may require image downloads.
+Tests never call the paid Claude API. They use a fake model at the drafting port. The one live test, in category `LiveAi`, is skipped unless you set `CIVIC_LENS_LIVE_AI=1` and `ANTHROPIC_API_KEY`; see [AI drafting](#ai-drafting-of-document-change-accounts). CI does not set them. For a database-free test run, use `dotnet test CivicLens.slnx --configuration Release --no-build --filter 'Category!=Postgres'`. This excludes the Postgres adapter and CLI database integration tests and is not a substitute for the full required check. Testcontainers requires Docker socket access; an agent sandbox may need an execution override for Docker and local test sockets. Missing Docker fails the full suite rather than silently skipping database checks. The Postgres image is pinned by tag and digest in the test fixture; its first run and the Testcontainers cleanup container may require image downloads.
 
 `dotnet run --project src/CivicLens.Host -- status` describes implemented capabilities. `dotnet run --project src/CivicLens.Collector -- --help` describes the manifest-driven collector. Unsupported commands return nonzero exit codes.
 
@@ -352,6 +352,49 @@ The editor shows the saved document-change account and its exact selected passag
 History currently supports at most 64 revisions and 128 decisions per record, with 64 outstanding concerns and 64 citations per revision. Limit exhaustion rejects writes and requires future history-pagination work; do not discard history to continue. Browsing comparisons may return an empty batch with a continuation if the batch contains only unchanged/incompatible/limited results. Use the continuation rather than treating that batch as an exhaustive absence of changes.
 
 Auth0 tenant login/logout and the production reverse proxy still require live verification. Offline tests validate subject authorization and HTTP workflows with isolated test signing keys; they do not exercise a live Auth0 tenant. Hetzner/Terraform provisioning, worker service management, and production backup restoration remain pending.
+
+### AI drafting of document-change accounts
+
+The `worker` command drafts AI accounts of changed comparisons. [Architecture](architecture.md#ai-drafting-of-document-change-accounts-implemented) holds the rules. Set both variables below in the worker's protected environment to turn drafting on. If you set only one, the worker stops with exit code 2.
+
+| Variable | Meaning |
+|---|---|
+| `ANTHROPIC_API_KEY` | Claude API key |
+| `CIVIC_LENS_ANALYSIS_DAILY_TOKENS` | Daily token limit for all drafting calls, per UTC day |
+| `CIVIC_LENS_ANALYSIS_RUN_TOKENS` | Optional limit for one call's reservation (default 120,000; at most the daily limit) |
+| `CIVIC_LENS_ANALYSIS_CONCURRENCY` | Optional number of calls at the same time (default 2, 1 to 4) |
+| `CIVIC_LENS_REVIEW_ISSUES`, `CIVIC_LENS_REVIEW_OFFICIALS` | The same IDs that the review host reads |
+
+`db migrate` queues every earlier changed comparison that has no draft. The first worker run can spend up to the daily limit on those changes. Start with a low daily limit. Check the first drafts, and then raise the limit.
+
+With `--once`, the worker drains collection first and then drafting. A second JSON line reports the drafting result. Drafting failures give exit code 1.
+
+The New changes panel shows whether drafting is on, off, or paused. It also shows the state of each new change.
+
+| Shown state | Action |
+|---|---|
+| Waiting for budget | Wait for the next UTC day, or raise the limit and restart the worker. |
+| Too large for AI | Start the draft by hand. |
+| AI declined, Citations rejected, Output rejected, Output too long, Request rejected, Retries used up | Start the draft by hand, or requeue the entry. |
+| Paused: key rejected, billing problem, or model not available | Fix the key, the credit, or the model access. Then restart the worker. |
+| Paused: the Claude API is failing | Wait. The worker tries again by itself. |
+
+To requeue failed entries, run one of these commands as the owner. They need `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`.
+
+```sh
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- analyses requeue <comparison-id>
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- analyses requeue --all
+```
+
+An AI draft is revision 1 by the AI drafter. Check every sentence and citation against the evidence. If the editor flags an unverified change date, check it, tick Date checked, and save a revision before you approve.
+
+To check the adapter against the real API, run one paid call on request only:
+
+```sh
+CIVIC_LENS_LIVE_AI=1 ANTHROPIC_API_KEY=... dotnet test CivicLens.slnx --configuration Release --no-build --filter 'Category=LiveAi'
+```
+
+The test refuses to call if the reservation is over 25,000 tokens.
 
 ### Publish a static release
 

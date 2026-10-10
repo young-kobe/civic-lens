@@ -1,7 +1,11 @@
 using System.Net;
 using AngleSharp.Dom;
 using AngleSharp.Html.Parser;
+using CivicLens.Application.Analysis;
 using CivicLens.Core.Documents;
+using CivicLens.Infrastructure.Analysis;
+using CivicLens.Infrastructure.Review;
+using CivicLens.Tests.Fixtures;
 using CivicLens.Infrastructure.Publication;
 using CivicLens.Tests.Infrastructure.Collection;
 using static CivicLens.Tests.Host.ReviewWorkspaceHost;
@@ -80,6 +84,46 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
         Assert.Equal([editorUrl], DraftUrls(home));
         Assert.Equal("No new changes", home.QuerySelector(".empty h3")!.TextContent);
         Assert.Contains("You started an untitled draft.", home.QuerySelector(".feed")!.TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AnAiDraftIsLabeledAndAReviewerSaveKeepsItsExactCitationsAsync()
+    {
+        var comparison = await SaveComparisonAsync("Deadline: October 15 for all applicants.\n", "Deadline: October 30 for all applicants.\n");
+        SignIn(Owner);
+        var home = await host.GetDocumentAsync("/Review");
+        Assert.Contains("Queued", home.QuerySelector("[aria-labelledby='new-changes']")!.TextContent, StringComparison.Ordinal);
+        Assert.Contains("AI drafting status is unknown", home.Body!.TextContent, StringComparison.Ordinal);
+        var analysis = PostgresDocumentChangeAnalysisStore.FromConnectionString(host.ConnectionString);
+        var status = PostgresDocumentChangeAnalysisStatusStore.FromConnectionString(host.ConnectionString);
+        await status.RecordStartAsync(null, default);
+        Assert.Contains("AI drafting is off", (await host.GetDocumentAsync("/Review")).Body!.TextContent, StringComparison.Ordinal);
+        await status.RecordStartAsync(50_000, default);
+        Assert.Contains("AI drafting is on. Daily limit: 50,000 tokens.", (await host.GetDocumentAsync("/Review")).Body!.TextContent,
+            StringComparison.Ordinal);
+        var model = new FakeDocumentChangeDraftingModel().Draft(FakeDocumentChangeDraftingModel.Output(("h1", "after", "October 30")));
+        await new DocumentChangeAnalysisWorker(analysis, status, model, new DocumentChangeAnalysisSettings(1_000_000, concurrency: 1),
+            new DocumentChangeAnalysisCatalog([], []), TimeProvider.System).ExecuteAsync(once: true);
+        var draftId = Assert.Single(await analysis.GetByComparisonIdsAsync([comparison.ComparisonId], default)).DraftId!;
+        var reviews = PostgresDocumentChangeReviewStore.FromConnectionString(host.ConnectionString);
+        var aiCitations = (await reviews.GetAsync(draftId, default))!.CurrentRevision.Citations;
+
+        var editor = await host.GetDocumentAsync("/Review/" + draftId);
+        var text = editor.Body!.TextContent;
+        Assert.Contains("The AI drafter wrote this revision", text, StringComparison.Ordinal);
+        Assert.Contains("AI draft written", text, StringComparison.Ordinal);
+        Assert.Contains(DocumentChangeDraftingTask.Model, text, StringComparison.Ordinal);
+
+        var fields = Fields(editor.QuerySelector("#draft-form")!);
+        Set(fields, "Input.Headline", "Reviewer headline");
+        using var saved = await host.Client.PostAsync("/Review/" + draftId, new FormUrlEncodedContent(fields));
+        Assert.Equal(HttpStatusCode.Redirect, saved.StatusCode);
+
+        var revision = (await reviews.GetAsync(draftId, default))!.CurrentRevision;
+        Assert.Equal((2, Owner, "Reviewer headline"), (revision.RevisionNumber, revision.AuthorSubject, revision.Headline));
+        Assert.Equal(aiCitations.ToArray(), revision.Citations.ToArray());
+        Assert.DoesNotContain("The AI drafter wrote this revision", (await host.GetDocumentAsync("/Review/" + draftId)).Body!.TextContent,
+            StringComparison.Ordinal);
     }
 
     [Fact]

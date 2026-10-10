@@ -38,6 +38,10 @@ else
         {
             <Notice Tone="@(isConflict ? Tone.Warn : Tone.Ok)" Dismissible="@(!isConflict)">@statusMessage</Notice>
         }
+        @if (IsAiRevision)
+        {
+            <Notice Tone="Tone.Warn">The AI drafter wrote this revision. It is not a human decision. Check every sentence, date, and citation against the evidence before you approve it.</Notice>
+        }
         @if (concerns.Length > 0)
         {
             <Notice Tone="Tone.Warn">Approval is blocked. @(concerns.Length == 1 ? "Resolve the open concern below first." : $"Resolve the {concerns.Length} open concerns below first.")</Notice>
@@ -108,21 +112,26 @@ else
                                 <AntiforgeryToken />
                                 <input type="hidden" name="expectedRevisionNumber" value="@revision.RevisionNumber" />
                                 <input type="hidden" name="idempotencyKey" value="@saveKey" />
-                                <Field Label="Headline" For="Input_Headline" Hint="Up to 256 characters.">
-                                    <input id="Input_Headline" class="headline" name="Input.Headline" value="@Input.Headline" maxlength="256" aria-describedby="Input_Headline-hint" />
+                                <Field Label="Headline" For="Input_Headline" Hint="@($"Up to {DocumentChangeDraftRevision.MaximumHeadlineLength} characters.")">
+                                    <input id="Input_Headline" class="headline" name="Input.Headline" value="@Input.Headline" maxlength="@DocumentChangeDraftRevision.MaximumHeadlineLength" aria-describedby="Input_Headline-hint" />
                                 </Field>
                                 <Field Label="Plain-language summary" For="Input_Summary" Hint="Say what the retained source shows. Keep the order of events apart from their cause.">
-                                    <textarea id="Input_Summary" name="Input.Summary" maxlength="8000" aria-describedby="Input_Summary-hint" value="@Input.Summary"></textarea>
+                                    <textarea id="Input_Summary" name="Input.Summary" maxlength="@DocumentChangeDraftRevision.MaximumSummaryLength" aria-describedby="Input_Summary-hint" value="@Input.Summary"></textarea>
                                 </Field>
                                 <Field Label="Why it matters" For="Input_Significance" Optional="true">
-                                    <textarea id="Input_Significance" name="Input.Significance" maxlength="4000" value="@Input.Significance"></textarea>
+                                    <textarea id="Input_Significance" name="Input.Significance" maxlength="@DocumentChangeDraftRevision.MaximumSignificanceLength" value="@Input.Significance"></textarea>
                                 </Field>
                                 <Field Label="Limits and uncertainty" For="Input_Limits" Optional="true">
-                                    <textarea id="Input_Limits" name="Input.Limits" maxlength="4000" value="@Input.Limits"></textarea>
+                                    <textarea id="Input_Limits" name="Input.Limits" maxlength="@DocumentChangeDraftRevision.MaximumLimitsLength" value="@Input.Limits"></textarea>
                                 </Field>
+                                @if (HasUnconfirmedAiChangeDate)
+                                {
+                                    <Notice Tone="Tone.Warn" id="unconfirmed-change-date">Unverified change date. The AI drafter proposed it. Check it against its cited passage, then tick Date checked and save. A save without the tick removes the date. Approval stays blocked until a person saves.</Notice>
+                                    <Chip Name="Input.ChangeDateChecked" Value="true" Text="Date checked" Checked="@(Input.ChangeDateChecked == true)" />
+                                }
                                 <div class="field-row">
                                     <Field Label="Institution" For="Input_Institution" Hint="The institution that published the source.">
-                                        <input id="Input_Institution" name="Input.Institution" value="@Input.Institution" maxlength="256" aria-describedby="Input_Institution-hint" />
+                                        <input id="Input_Institution" name="Input.Institution" value="@Input.Institution" maxlength="@DocumentChangeDraftRevision.MaximumInstitutionLength" aria-describedby="Input_Institution-hint" />
                                     </Field>
                                     <Field Label="Change date" For="Input_ChangeDate" Optional="true" Hint="Leave it empty unless the source shows a date apart from the capture times.">
                                         <input id="Input_ChangeDate" name="Input.ChangeDate" type="date" value="@Input.ChangeDate" aria-describedby="Input_ChangeDate-hint" />
@@ -153,7 +162,7 @@ else
                                         }
                                     </div>
                                 </FieldSet>
-                                <FieldSet Legend="Evidence" Aside="up to 64 passages" Hint="Choose the exact changed passages that support the account.">
+                                <FieldSet Legend="Evidence" Aside="@($"up to {DocumentChangeDraftRevision.MaximumCitations} passages")" Hint="Choose the exact changed passages that support the account.">
                                     @if (comparison is not null && comparison.Hunks.Length > PreselectedPassageLimit)
                                     {
                                         <Notice>The first revision starts with passages from 32 changes. Add any other passages that matter before you save.</Notice>

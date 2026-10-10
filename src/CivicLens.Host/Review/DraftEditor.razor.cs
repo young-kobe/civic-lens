@@ -1,7 +1,9 @@
 using System.Collections.Immutable;
 using System.Globalization;
+using CivicLens.Application.Analysis;
 using CivicLens.Application.Documents;
 using CivicLens.Application.Review;
+using CivicLens.Core.Analysis;
 using CivicLens.Core.Documents;
 using CivicLens.Core.Review;
 using CivicLens.Host.Components.Evidence;
@@ -16,13 +18,13 @@ public sealed partial class DraftEditor
 {
     private const string SaveForm = "save";
     private const string DecideForm = "decide";
-    private const int MaximumCitations = 64;
     private const int PreselectedPassageLimit = 32;
 
     private readonly string saveKey = Guid.NewGuid().ToString("N");
     private readonly string decisionKey = Guid.NewGuid().ToString("N");
     private ReviewActor actor = default!;
     private DocumentChangeReview? review;
+    private AnalysisRun? draftRun;
     private DocumentComparison? comparison;
     private DocumentExtraction? before;
     private DocumentExtraction? after;
@@ -42,6 +44,7 @@ public sealed partial class DraftEditor
     [Inject] private SaveDocumentChangeDraft SaveDraft { get; set; } = default!;
     [Inject] private DecideDocumentChangeReview DecideReview { get; set; } = default!;
     [Inject] private ReviewCatalog Catalog { get; set; } = default!;
+    [Inject] private GetDocumentChangeAnalysisRun GetRun { get; set; } = default!;
     [Inject] private IDocumentExtractionStore Extractions { get; set; } = default!;
     [Inject] private NavigationManager Navigation { get; set; } = default!;
 
@@ -93,6 +96,8 @@ public sealed partial class DraftEditor
                 ShowNotFound();
                 return;
             }
+            if (ReviewAuthor.IsAnalysis(review.Revisions[0].AuthorSubject))
+                draftRun = await GetRun.ExecuteAsync(actor, DraftId, RequestAborted);
             comparison = await GetComparison.ExecuteAsync(Revision.ComparisonId, RequestAborted);
             if (comparison is null)
             {
@@ -100,10 +105,10 @@ public sealed partial class DraftEditor
                 Input ??= DraftInput.From(Revision, []);
                 return;
             }
-            evidenceOptions = EvidenceOption.Build(comparison);
-            Input ??= DraftInput.From(Revision, evidenceOptions);
             before = await Extractions.GetAsync(comparison.BeforeExtractionId, RequestAborted);
             after = await Extractions.GetAsync(comparison.AfterExtractionId, RequestAborted);
+            evidenceOptions = EvidenceOption.Build(comparison, Revision.Citations, before, after);
+            Input ??= DraftInput.From(Revision, evidenceOptions);
             savedCitations = await VerifyCitationsAsync();
         }
         catch (OperationCanceledException) when (RequestAborted.IsCancellationRequested) { throw; }
@@ -223,21 +228,21 @@ public sealed partial class DraftEditor
                 ?? throw new ArgumentException("Select the retained passage that supports the actual change date.");
             if (!citations.Contains(selected.Citation))
             {
-                if (citations.Length >= MaximumCitations) throw new ArgumentException("Remove a citation before binding the change-date evidence.");
+                if (citations.Length >= DocumentChangeDraftRevision.MaximumCitations) throw new ArgumentException("Remove a citation before binding the change-date evidence.");
                 citations = citations.Add(selected.Citation);
             }
             changeDateEvidence = selected.Citation;
         }
         return new SaveDocumentChangeDraftRequest(DraftId, SaveExpectedRevision, input.Headline ?? "", input.Summary ?? "",
             EmptyToNull(input.Significance), EmptyToNull(input.Limits), input.Institution ?? "", changeDate, changeDateEvidence,
-            [.. input.OfficialIds ?? []], [.. input.IssueIds ?? []], citations, SaveKey ?? "");
+            [.. input.OfficialIds ?? []], [.. input.IssueIds ?? []], citations, SaveKey ?? "", input.ChangeDateChecked == true);
     }
 
     private ImmutableArray<DocumentChangeCitation> ResolveCitations(string[]? keys)
     {
         var selections = keys ?? [];
-        if (selections.Length > MaximumCitations || selections.Distinct(StringComparer.Ordinal).Count() != selections.Length)
-            throw new ArgumentException($"Select no more than {MaximumCitations} distinct evidence passages.");
+        if (selections.Length > DocumentChangeDraftRevision.MaximumCitations || selections.Distinct(StringComparer.Ordinal).Count() != selections.Length)
+            throw new ArgumentException($"Select no more than {DocumentChangeDraftRevision.MaximumCitations} distinct evidence passages.");
         return [.. selections.Select(key => (FindOption(key)
             ?? throw new ArgumentException("An evidence selection is no longer available. Refresh and choose it again.")).Citation)];
     }
@@ -336,13 +341,27 @@ public sealed partial class DraftEditor
         ("Later final URL", after?.SourceAttempt.FinalUrl ?? "Unknown"),
         ("Comparison ID", Revision.ComparisonId),
         ("Earlier extraction", comparison!.BeforeExtractionId),
-        ("Later extraction", comparison.AfterExtractionId)
+        ("Later extraction", comparison.AfterExtractionId),
+        .. DraftRunItems
+    ];
+
+    private bool IsAiRevision => ReviewAuthor.IsAnalysis(Revision.AuthorSubject);
+
+    private bool HasUnconfirmedAiChangeDate => IsAiRevision && Revision.ChangeDate is not null;
+
+    private IEnumerable<(string Label, string Value)> DraftRunItems => draftRun is null ? [] :
+    [
+        ("AI draft model", draftRun.Model),
+        ("AI prompt version", draftRun.PromptVersion),
+        ("AI analysis run", draftRun.RunId),
+        ("AI tokens", $"{draftRun.Usage.InputTokens:N0} input, {draftRun.Usage.OutputTokens:N0} output")
     ];
 
     private IReadOnlyList<HistoryEntry> History =>
     [
         .. review!.Revisions.Select(item => new HistoryEntry(item.CreatedAtUtc,
-            item.RevisionNumber == 1 ? "Draft started" : $"Revision {item.RevisionNumber} saved", null,
+            item.RevisionNumber > 1 ? $"Revision {item.RevisionNumber} saved"
+                : ReviewAuthor.IsAnalysis(item.AuthorSubject) ? "AI draft written" : "Draft started", null,
             item.AuthorSubject, DraftStatusDisplay.DraftName(item.Headline)))
             .Concat(review.Decisions.Select(item => new HistoryEntry(item.CreatedAtUtc, $"on revision {item.RevisionNumber}",
                 item.Kind, item.ActorSubject, DecisionNote(item))))
@@ -356,7 +375,8 @@ public sealed partial class DraftEditor
         var count => $"{decision.Note} Resolved {count} concerns."
     };
 
-    private string Who(string subject) => subject == actor.Subject ? "You" : "Another reviewer";
+    private string Who(string subject) => ReviewAuthor.IsAnalysis(subject) ? "AI drafter"
+        : subject == actor.Subject ? "You" : "Another reviewer";
 
     public sealed class DraftInput
     {
@@ -370,6 +390,7 @@ public sealed partial class DraftEditor
         public string[]? EvidenceSelection { get; set; } = [];
         public string[]? OfficialIds { get; set; } = [];
         public string[]? IssueIds { get; set; } = [];
+        public bool? ChangeDateChecked { get; set; }
 
         internal static DraftInput From(DocumentChangeDraftRevision revision, ImmutableArray<EvidenceOption> options) => new()
         {
@@ -412,6 +433,35 @@ public sealed partial class DraftEditor
                         new DocumentChangeCitation(comparison.AfterExtractionId, hunk.AfterStart, hunk.AfterLength), link));
             }
             return options.ToImmutable();
+        }
+
+        public static ImmutableArray<EvidenceOption> Build(DocumentComparison comparison,
+            ImmutableArray<DocumentChangeCitation> saved, DocumentExtraction? before, DocumentExtraction? after)
+        {
+            var options = Build(comparison).ToBuilder();
+            foreach (var citation in saved.Where(citation => options.All(option => option.Citation != citation)))
+            {
+                var earlier = citation.ExtractionId == comparison.BeforeExtractionId;
+                var extraction = earlier ? before : after;
+                if (extraction is null || citation.Start < 0 || citation.Start > extraction.Text.Length - citation.Length) continue;
+                var index = ContainingHunk(comparison, citation, earlier);
+                options.Add(new($"{(earlier ? "xb" : "xa")}:{citation.Start}:{citation.Length}",
+                    $"{(earlier ? "Earlier" : "Later")} text, cited passage{(index is { } number ? $" in passage {number + 1}" : "")}",
+                    extraction.Text.Substring(citation.Start, citation.Length), citation,
+                    DocumentComparisonView.LinkKey(comparison.ComparisonId, index ?? 0)));
+            }
+            return options.ToImmutable();
+        }
+
+        private static int? ContainingHunk(DocumentComparison comparison, DocumentChangeCitation citation, bool earlier)
+        {
+            for (var index = 0; index < comparison.Hunks.Length; index++)
+            {
+                var hunk = comparison.Hunks[index];
+                var (start, text) = earlier ? (hunk.BeforeContextStart, hunk.BeforeContext) : (hunk.AfterContextStart, hunk.AfterContext);
+                if (citation.Start >= start && citation.Start + citation.Length <= start + text.Length) return index;
+            }
+            return null;
         }
     }
 
