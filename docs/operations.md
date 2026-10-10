@@ -19,6 +19,10 @@ For a database-free test run, use `dotnet test CivicLens.slnx --configuration Re
 
 Generate the self-contained architecture explorer with `python3 tools/render-architecture.py`; open artifacts/architecture.html in a browser. The HTML requires no remote assets or network access. The same script updates the Mermaid blocks in architecture.md. `--check` detects diagram drift without changing files.
 
+## Local development
+
+The Makefile wraps the local commands. Run `make help` to list them. It reads `.runtime/database/connection.env`, `.runtime/database/postgres.env`, and `.runtime/review/connection.env`, and uses the Caddy binary in `.runtime/tools/caddy`. These files are local and ignored by Git. `make review` builds, starts Postgres, applies migrations, and runs the HTTPS proxy, review workspace, and worker. Set `DOTNET` when the SDK is not on `PATH`.
+
 ## Dependency changes
 
 Update explicit package versions, run `dotnet restore --force-evaluate`, review and commit packages.lock.json changes, then run the checks above. CI restores in locked mode. Update global.json deliberately when adopting an SDK patch or feature band.
