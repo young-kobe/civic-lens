@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using CivicLens.Application.Publication;
+using CivicLens.Core.Review;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Publication.Persistence;
 using CivicLens.Infrastructure.Review;
@@ -85,6 +86,8 @@ public sealed partial class PostgresPublicationStore(IDbContextFactory<Collectio
         string idempotencyKey, string payloadHash, CancellationToken cancellationToken)
     {
         ValidateActorAndIdempotency(actorSubject, idempotencyKey, payloadHash);
+        if (ReviewAuthor.IsAnalysis(actorSubject))
+            throw new UnauthorizedAccessException("A model author cannot publish.");
         ValidateCommit(commit);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         await using var transaction = await PostgresDocumentChangeReviewStore.BeginWriteAsync(db, cancellationToken);

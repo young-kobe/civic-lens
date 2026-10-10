@@ -4,13 +4,12 @@ namespace CivicLens.Application.Collection.Jobs;
 
 /// <summary>Drains durable collection and evidence work, then waits for a database wakeup.</summary>
 public sealed class CollectionJobWorker(ICollectionWorkerQueue queue, RunCollectionJob runner,
-    EvidenceProcessingWorker? evidenceProcessor = null, ICollectionPipelineWakeup? wakeup = null,
+    EvidenceProcessingWorker? evidenceProcessor = null, IWorkerWakeup? wakeup = null,
     ICollectionScheduleStore? schedules = null)
 {
     public const int DefaultBatchSize = 20;
     public const int MaximumBatchSize = 100;
     public static readonly TimeSpan DefaultLeaseDuration = TimeSpan.FromSeconds(60);
-    private static readonly TimeSpan FailureBackoff = TimeSpan.FromSeconds(2);
 
     public async Task<CollectionJobWorkerResult> ExecuteAsync(string artifactDirectory, bool once,
         int batchSize = DefaultBatchSize, TimeSpan? leaseDuration = null,
@@ -26,7 +25,7 @@ public sealed class CollectionJobWorker(ICollectionWorkerQueue queue, RunCollect
         if (lease < TimeSpan.FromMilliseconds(30))
             throw new ArgumentOutOfRangeException(nameof(leaseDuration), "Lease duration must be at least 30 milliseconds.");
 
-        var wakeupFailures = once ? 0 : await ConnectUntilAvailableAsync(wakeup!, cancellationToken);
+        var wakeupFailures = once ? 0 : await WorkerLoop.ConnectUntilAvailableAsync(wakeup!, cancellationToken);
         var passes = 0;
         var visited = 0;
         var jobFailures = 0;
@@ -41,7 +40,7 @@ public sealed class CollectionJobWorker(ICollectionWorkerQueue queue, RunCollect
             if (once || cancellationToken.IsCancellationRequested) break;
             try
             {
-                wakeupFailures += await WaitForWorkAsync(wakeup!,
+                wakeupFailures += await WorkerLoop.WaitForWorkAsync(wakeup!,
                     drain.QueueFailures > 0 || drain.JobFailures > 0, cancellationToken);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { break; }
@@ -73,7 +72,7 @@ public sealed class CollectionJobWorker(ICollectionWorkerQueue queue, RunCollect
                     progress += advanced;
                 }
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { break; }
-                catch (Exception exception) when (IsRecoverable(exception))
+                catch (Exception exception) when (WorkerLoop.IsRecoverable(exception))
                 {
                     failures++;
                     scheduleFailed = true;
@@ -89,7 +88,7 @@ public sealed class CollectionJobWorker(ICollectionWorkerQueue queue, RunCollect
                     page = await queue.GetEligibleJobIdsAsync(cursor, batchSize, cancellationToken);
                 }
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { break; }
-                catch (Exception exception) when (IsRecoverable(exception))
+                catch (Exception exception) when (WorkerLoop.IsRecoverable(exception))
                 {
                     queueFailures++;
                     queueFailed = true;
@@ -108,7 +107,7 @@ public sealed class CollectionJobWorker(ICollectionWorkerQueue queue, RunCollect
                         if (IsFailure(result)) failures++;
                     }
                     catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { break; }
-                    catch (Exception exception) when (IsRecoverable(exception)) { failures++; }
+                    catch (Exception exception) when (WorkerLoop.IsRecoverable(exception)) { failures++; }
                 }
 
                 if (evidenceProcessor is not null && !cancellationToken.IsCancellationRequested)
@@ -143,49 +142,7 @@ public sealed class CollectionJobWorker(ICollectionWorkerQueue queue, RunCollect
             return await evidenceProcessor!.ExecuteAsync(artifactDirectory, batchSize, lease, cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { return new(0, 0); }
-        catch (Exception exception) when (IsRecoverable(exception)) { return new(0, 1); }
-    }
-
-    private static async Task<int> WaitForWorkAsync(ICollectionPipelineWakeup wakeup, bool reconnect,
-        CancellationToken cancellationToken)
-    {
-        var failures = 0;
-        if (!reconnect)
-        {
-            try
-            {
-                await wakeup.WaitAsync(cancellationToken);
-                return failures;
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
-            catch (Exception exception) when (IsRecoverable(exception))
-            {
-                failures++;
-            }
-        }
-
-        await Task.Delay(FailureBackoff, cancellationToken);
-        return failures + await ConnectUntilAvailableAsync(wakeup, cancellationToken);
-    }
-
-    private static async Task<int> ConnectUntilAvailableAsync(ICollectionPipelineWakeup wakeup,
-        CancellationToken cancellationToken)
-    {
-        var failures = 0;
-        while (true)
-        {
-            try
-            {
-                await wakeup.ConnectAsync(cancellationToken);
-                return failures;
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
-            catch (Exception exception) when (IsRecoverable(exception))
-            {
-                failures++;
-                await Task.Delay(FailureBackoff, cancellationToken);
-            }
-        }
+        catch (Exception exception) when (WorkerLoop.IsRecoverable(exception)) { return new(0, 1); }
     }
 
     private static bool IsFailure(CollectionJobRunResult result) =>
@@ -197,7 +154,4 @@ public sealed class CollectionJobWorker(ICollectionWorkerQueue queue, RunCollect
         CollectionJobRunStatus.Completed or CollectionJobRunStatus.AttemptFailed or
         CollectionJobRunStatus.Reconciled or CollectionJobRunStatus.Exhausted or
         CollectionJobRunStatus.Cancelled;
-
-    private static bool IsRecoverable(Exception exception) =>
-        exception is not OutOfMemoryException and not StackOverflowException;
 }

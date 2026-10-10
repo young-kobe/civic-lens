@@ -75,6 +75,7 @@ public sealed class ReviewWorkspaceHost(PostgresCollection postgres)
         start.ArgumentList.Add(assembly);
         start.ArgumentList.Add("review");
         start.ArgumentList.Add(port.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        foreach (var name in HostProcess.DraftingVariables) start.Environment.Remove(name);
         start.Environment["CIVIC_LENS_DATABASE"] = ConnectionString;
         start.Environment["ASPNETCORE_URLS"] = "http://0.0.0.0:1";
         start.Environment["Kestrel__Endpoints__Injected__Url"] = "http://0.0.0.0:1";

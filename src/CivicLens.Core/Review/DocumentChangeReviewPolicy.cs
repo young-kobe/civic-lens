@@ -44,6 +44,8 @@ public static class DocumentChangeReviewPolicy
             decision.ResolvedDecisionIds.IsDefault || decision.ResolvedDecisionIds.Length > 64 ||
             decision.ResolvedDecisionIds.Distinct(StringComparer.Ordinal).Count() != decision.ResolvedDecisionIds.Length)
             throw new ArgumentException("Review decision is invalid.", nameof(decision));
+        if (ReviewAuthor.IsAnalysis(decision.ActorSubject))
+            throw new ArgumentException("A model author cannot record a review decision.", nameof(decision));
         if (decision.Note is { Length: > 4_000 } || decision.Note?.Contains('\0') == true)
             throw new ArgumentException("Review note is invalid.", nameof(decision));
         if ((decision.Kind is ReviewDecisionKind.RequestChanges or ReviewDecisionKind.WithdrawApproval) && string.IsNullOrWhiteSpace(decision.Note))

@@ -1,4 +1,5 @@
 using CivicLens.Application.Activity;
+using CivicLens.Application.Analysis;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Health;
 using CivicLens.Application.Publication;
@@ -25,6 +26,8 @@ public sealed partial class ReviewHome
     private CollectionConfiguration? configuration;
     private ReviewOverview? overview;
     private EligibleDocumentComparisonPage? changes;
+    private IReadOnlyDictionary<string, DocumentChangeAnalysisRecord> analyses = new Dictionary<string, DocumentChangeAnalysisRecord>();
+    private DocumentChangeAnalysisStatus? analysisStatus;
     private DocumentChangeReviewPage? drafts;
     private SourceHealthReport? health;
     private IReadOnlyList<FeedItem> activity = [];
@@ -34,6 +37,8 @@ public sealed partial class ReviewHome
     [Inject] private IServiceProvider Services { get; set; } = default!;
     [Inject] private GetReviewOverview GetOverview { get; set; } = default!;
     [Inject] private ListEligibleDocumentComparisons ListChanges { get; set; } = default!;
+    [Inject] private ListDocumentChangeAnalyses ListAnalyses { get; set; } = default!;
+    [Inject] private GetDocumentChangeAnalysisStatus GetAnalysisStatus { get; set; } = default!;
     [Inject] private ListDocumentChangeReviews ListDrafts { get; set; } = default!;
     [Inject] private GetRecentActivity GetActivity { get; set; } = default!;
     [Inject] private CreateDocumentChangeDraft CreateDraft { get; set; } = default!;
@@ -83,6 +88,9 @@ public sealed partial class ReviewHome
             var collection = actor.Role == ReviewRole.Owner ? Services.GetService<CollectionWorkspace>() : null;
             overview = await GetOverview.ExecuteAsync(actor, cancellationToken);
             changes = await ListChanges.ExecuteAsync(actor, ChangesCursor, PageSize, cancellationToken);
+            analyses = await ListAnalyses.ExecuteAsync(actor,
+                [.. changes.Items.Select(item => item.Comparison.ComparisonId)], cancellationToken);
+            analysisStatus = await GetAnalysisStatus.ExecuteAsync(actor, cancellationToken);
             drafts = await ListDrafts.ExecuteAsync(actor, DraftsCursor, PageSize, Filter, cancellationToken);
             if (collection is not null)
             {
@@ -123,13 +131,15 @@ public sealed partial class ReviewHome
             return "/Review/" + revision.DraftId;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+        catch (DocumentChangeDraftExistsException existing) { return "/Review/" + existing.DraftId; }
         catch (ArgumentException) { return "/Review?status=invalid"; }
         catch (Exception) { return "/Review?status=unavailable"; }
     }
 
     private FeedItem Describe(ActivityEvent item)
     {
-        var who = item.ActorSubject == actor!.Subject ? "You" : "A reviewer";
+        var who = ReviewAuthor.IsAnalysis(item.ActorSubject) ? "The AI drafter"
+            : item.ActorSubject == actor!.Subject ? "You" : "A reviewer";
         var draft = string.IsNullOrWhiteSpace(item.Headline) ? "an untitled draft" : $"“{item.Headline}”";
         var source = item.SourceId is null ? "a source" : SourceLabels.Name(configuration, item.SourceId);
         return item.Kind switch

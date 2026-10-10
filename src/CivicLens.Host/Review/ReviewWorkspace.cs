@@ -1,9 +1,11 @@
 using System.Net;
 using CivicLens.Application.Activity;
+using CivicLens.Application.Analysis;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Documents;
 using CivicLens.Application.Publication;
 using CivicLens.Application.Review;
+using CivicLens.Infrastructure.Analysis;
 using CivicLens.Infrastructure.Documents;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Collection.Jobs;
@@ -196,8 +198,13 @@ internal static class ReviewWorkspace
         services.AddScoped<GetDocumentHistory>();
         services.AddScoped<GetDocumentComparison>();
         services.AddScoped<GetDocumentCitation>();
-        services.AddSingleton(new ReviewCatalog(ReadIds("CIVIC_LENS_REVIEW_ISSUES"), ReadIds("CIVIC_LENS_REVIEW_OFFICIALS")));
+        services.AddSingleton(ReadCatalog());
         services.AddSingleton<IDocumentChangeReviewStore>(PostgresDocumentChangeReviewStore.FromConnectionString(connectionString));
+        services.AddSingleton<IDocumentChangeAnalysisStore>(PostgresDocumentChangeAnalysisStore.FromConnectionString(connectionString));
+        services.AddScoped<ListDocumentChangeAnalyses>();
+        services.AddScoped<GetDocumentChangeAnalysisRun>();
+        services.AddSingleton<IDocumentChangeAnalysisStatusStore>(PostgresDocumentChangeAnalysisStatusStore.FromConnectionString(connectionString));
+        services.AddScoped<GetDocumentChangeAnalysisStatus>();
         services.AddScoped<CreateDocumentChangeDraft>();
         services.AddScoped<SaveDocumentChangeDraft>();
         services.AddScoped<DecideDocumentChangeReview>();
@@ -237,6 +244,9 @@ internal static class ReviewWorkspace
             provider.GetRequiredService<IDocumentChangeReviewStore>(), new PublicationCatalog(officialNames), TimeProvider.System));
         services.AddScoped<ListPublishableDocumentChanges>();
     }
+
+    internal static ReviewCatalog ReadCatalog() =>
+        new(ReadIds("CIVIC_LENS_REVIEW_ISSUES"), ReadIds("CIVIC_LENS_REVIEW_OFFICIALS"));
 
     private static string[] ReadIds(string name) => (Environment.GetEnvironmentVariable(name) ?? "")
         .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
