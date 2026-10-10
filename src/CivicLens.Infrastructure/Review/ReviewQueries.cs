@@ -23,6 +23,18 @@ internal static class ReviewQueries
     public const string ApprovedDrafts = "SELECT d.* FROM document_change_drafts d WHERE " + IsApproved;
     public const string NeedsActionDrafts = "SELECT d.* FROM document_change_drafts d WHERE NOT " + IsApproved;
 
+    // Releases store their records as a JSON array of draft and revision bindings. The active release is the published state.
+    public const string UnpublishedApprovedDrafts = """
+        WITH active AS (
+            SELECT e ->> 'draftId' AS draft_id, (e ->> 'revisionNumber')::int AS revision_number
+            FROM publication_releases r CROSS JOIN LATERAL jsonb_array_elements(r.records_json::jsonb) e
+            WHERE r.is_active)
+        SELECT d.draft_id AS "DraftId", d.current_revision_number AS "CurrentRevisionNumber",
+               d.created_at_utc_ticks AS "CreatedAtUtcTicks", a.revision_number AS "PublishedRevisionNumber"
+        FROM document_change_drafts d LEFT JOIN active a ON a.draft_id = d.draft_id
+        WHERE
+        """ + " " + IsApproved;
+
     public const string Overview = "SELECT (SELECT count(*) FROM (" + EligibleComparisons + ") e)::int AS \"NewChanges\", " +
         "(SELECT count(*) FROM (" + NeedsActionDrafts + ") n)::int AS \"DraftsNeedingAction\", " +
         "(SELECT count(*) FROM (" + ApprovedDrafts + ") a)::int AS \"ApprovedDrafts\"";

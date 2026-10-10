@@ -237,6 +237,26 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
         return new(items, slice.NewerCursor, slice.OlderCursor);
     }
 
+    public async Task<IReadOnlyList<UnpublishedApprovedDraft>> ListUnpublishedApprovedDraftsAsync(int limit,
+        CancellationToken cancellationToken)
+    {
+        ValidatePage(limit);
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
+        var keys = await db.Database.SqlQueryRaw<UnpublishedKey>(ReviewQueries.UnpublishedApprovedDrafts)
+            .Where(key => key.PublishedRevisionNumber == null || key.PublishedRevisionNumber != key.CurrentRevisionNumber)
+            .OrderByDescending(key => key.CreatedAtUtcTicks).ThenByDescending(key => key.DraftId)
+            .Take(limit).ToArrayAsync(cancellationToken);
+        var ids = keys.Select(key => key.DraftId).ToArray();
+        var drafts = await db.Set<DocumentChangeDraftRow>().AsNoTracking()
+            .Where(row => ids.Contains(row.DraftId)).ToDictionaryAsync(row => row.DraftId, StringComparer.Ordinal, cancellationToken);
+        var revisions = await ReadRevisionRowsAsync(db, ids, cancellationToken);
+        var decisions = await ReadDecisionRowsAsync(db, ids, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return [.. keys.Select(key => new UnpublishedApprovedDraft(
+            ToListItem(drafts[key.DraftId], revisions[key.DraftId], decisions[key.DraftId]), key.PublishedRevisionNumber))];
+    }
+
     public async Task<ReviewOverview> GetOverviewAsync(CancellationToken cancellationToken)
     {
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
@@ -324,6 +344,14 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
     {
         public string ComparisonId { get; init; } = "";
         public long ObservedTicks { get; init; }
+    }
+
+    private sealed class UnpublishedKey
+    {
+        public string DraftId { get; set; } = "";
+        public int CurrentRevisionNumber { get; set; }
+        public long CreatedAtUtcTicks { get; set; }
+        public int? PublishedRevisionNumber { get; set; }
     }
 
     private sealed class OverviewCounts

@@ -1,6 +1,7 @@
 using CivicLens.Application.Activity;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Health;
+using CivicLens.Application.Publication;
 using CivicLens.Application.Review;
 using CivicLens.Core.Review;
 using CivicLens.Host.Collection;
@@ -60,12 +61,21 @@ public sealed partial class ReviewHome
     {
         "invalid" => "Choose a new change to start a draft.",
         "unavailable" => "The draft could not be started. Refresh the page and try again.",
+        "published" => ReleaseNumber is { } number ? $"Release {number} is published." : "The release is published.",
+        "publish-invalid" => "The selection could not be published. Choose drafts again.",
+        "publish-conflict" => "Drafts or releases changed while you reviewed them. Check the list and try again.",
+        "publish-forbidden" => "Only the owner can publish.",
+        "publish-unavailable" => "The release could not be published. Refresh the page and try again.",
         _ => null
     };
+
+    private Tone StatusTone => Status == "published" ? Tone.Ok : Tone.Bad;
 
     protected override async Task OnInitializedAsync()
     {
         actor = Actors.GetActor((await AuthenticationState).User);
+        canPublish = actor.Role == ReviewRole.Owner && Services.GetService<PublishDocumentChanges>() is not null;
+        publishingOff = actor.Role == ReviewRole.Owner && !canPublish;
         if (HttpMethods.IsPost(HttpContext.Request.Method)) return;
         var cancellationToken = HttpContext.RequestAborted;
         try
@@ -79,6 +89,7 @@ public sealed partial class ReviewHome
                 configuration = collection.GetConfiguration(actor);
                 health = await collection.GetSourceHealthAsync(actor, cancellationToken);
             }
+            if (canPublish) await LoadPublicationAsync(cancellationToken);
             activity = (await GetActivity.ExecuteAsync(actor, cancellationToken: cancellationToken)).Select(Describe).ToArray();
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }

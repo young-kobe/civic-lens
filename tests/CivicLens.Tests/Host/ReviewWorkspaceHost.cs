@@ -35,6 +35,7 @@ public sealed class ReviewWorkspaceHost(PostgresCollection postgres)
     private readonly string schema = "review_web_" + Guid.NewGuid().ToString("N");
     public HttpClient Client { get; } = new(new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false }) { Timeout = TimeSpan.FromSeconds(15) };
     public string KeyDirectory { get; } = Path.Combine(Path.GetTempPath(), "civic-review-keys-" + Guid.NewGuid().ToString("N"));
+    public string ReleaseDirectory => Path.Combine(KeyDirectory, "releases");
     private Process? process;
     private Task<string>? output;
     private Task<string>? error;
@@ -43,6 +44,7 @@ public sealed class ReviewWorkspaceHost(PostgresCollection postgres)
     public PostgresDocumentExtractionStore Extractions { get; private set; } = null!;
     public PostgresDocumentComparisonStore Comparisons { get; private set; } = null!;
     public string OfficialName { get; init; } = "Test Official";
+    public bool Publishing { get; init; } = true;
 
     public async Task StartAsync()
     {
@@ -93,6 +95,7 @@ public sealed class ReviewWorkspaceHost(PostgresCollection postgres)
                "allowedPathPrefix":"/pages","documentProfileId":"main"}]}
             """);
         start.Environment["CIVIC_LENS_COLLECTION_CONFIG"] = collectionPath;
+        if (Publishing) start.Environment["CIVIC_LENS_RELEASE_DIRECTORY"] = ReleaseDirectory;
         process = Process.Start(start)!;
         output = process.StandardOutput.ReadToEndAsync();
         error = process.StandardError.ReadToEndAsync();

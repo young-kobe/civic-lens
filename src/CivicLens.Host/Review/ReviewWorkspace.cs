@@ -2,11 +2,14 @@ using System.Net;
 using CivicLens.Application.Activity;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Documents;
+using CivicLens.Application.Publication;
 using CivicLens.Application.Review;
 using CivicLens.Infrastructure.Documents;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Collection.Jobs;
+using CivicLens.Infrastructure.Publication;
 using CivicLens.Infrastructure.Review;
+using CivicLens.Host.Publication;
 using CivicLens.Host.Components;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
@@ -216,7 +219,23 @@ internal static class ReviewWorkspace
                 PostgresCollectionJobStore.FromConnectionString(connectionString),
                 PostgresCollectionAttemptStore.FromConnectionString(connectionString),
                 CivicLens.Infrastructure.Collection.Processing.PostgresEvidenceProcessingStore.FromConnectionString(connectionString)));
+            ConfigurePublication(services, connectionString, collection);
         }
+    }
+
+    // The owner publish section needs a release directory and the configured official names.
+    private static void ConfigurePublication(IServiceCollection services, string connectionString,
+        ReviewCollectionSettings collection)
+    {
+        var releaseRoot = Environment.GetEnvironmentVariable("CIVIC_LENS_RELEASE_DIRECTORY");
+        if (releaseRoot is null) return;
+        var publications = PostgresPublicationStore.FromConnectionString(connectionString);
+        var releases = new FileReleaseDirectory(releaseRoot);
+        var officialNames = collection.Configuration.People.ToDictionary(person => person.Id, person => person.Name, StringComparer.Ordinal);
+        services.AddScoped(_ => new ListPublicationReleases(publications, releases));
+        services.AddScoped(provider => new PublishDocumentChanges(publications, releases, new ReleaseRenderer(),
+            provider.GetRequiredService<IDocumentChangeReviewStore>(), new PublicationCatalog(officialNames), TimeProvider.System));
+        services.AddScoped<ListPublishableDocumentChanges>();
     }
 
     private static string[] ReadIds(string name) => (Environment.GetEnvironmentVariable(name) ?? "")

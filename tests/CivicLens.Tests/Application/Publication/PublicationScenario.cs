@@ -285,6 +285,18 @@ internal sealed class FakeReviewStore : IDocumentChangeReviewStore
     public Task<ReviewOverview> GetOverviewAsync(CancellationToken cancellationToken) =>
         throw new NotSupportedException();
 
+    public List<UnpublishedApprovedDraft> Unpublished { get; } = [];
+    public int UnpublishedLimit { get; private set; }
+    public int UnpublishedReadCount { get; private set; }
+
+    public Task<IReadOnlyList<UnpublishedApprovedDraft>> ListUnpublishedApprovedDraftsAsync(int limit,
+        CancellationToken cancellationToken)
+    {
+        UnpublishedReadCount++;
+        UnpublishedLimit = limit;
+        return Task.FromResult<IReadOnlyList<UnpublishedApprovedDraft>>([.. Unpublished.Take(limit)]);
+    }
+
     public List<ReviewActivityEvent> Activity { get; } = [];
 
     public Task<IReadOnlyList<ReviewActivityEvent>> ListRecentActivityAsync(int limit,

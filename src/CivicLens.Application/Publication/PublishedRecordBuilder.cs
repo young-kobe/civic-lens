@@ -7,11 +7,14 @@ namespace CivicLens.Application.Publication;
 
 internal sealed class PublishedRecordBuilder(PublicationCatalog catalog)
 {
+    public static bool IsPublishable(DocumentChangeReviewStatus status, int unresolvedConcernCount) =>
+        status == DocumentChangeReviewStatus.Approved && unresolvedConcernCount == 0;
+
     public static void RequirePublishable(DocumentChangeReview review)
     {
         var status = DocumentChangeReviewPolicy.GetCurrentStatus(review.CurrentRevision, review.Decisions,
             review.UnresolvedConcerns);
-        if (status != DocumentChangeReviewStatus.Approved || !review.UnresolvedConcerns.IsEmpty)
+        if (!IsPublishable(status, review.UnresolvedConcerns.Length))
             throw new ArgumentException(
                 $"Draft {review.DraftId} is not approved or has unresolved concerns.", nameof(review));
     }

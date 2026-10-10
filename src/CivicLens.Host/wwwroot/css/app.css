@@ -113,6 +113,7 @@ form.inline { display: inline; margin: 0; }
 .table .act .btn:not(.btn-primary) { opacity: .75; }
 .table tr:hover .act .btn, .table tr:focus-within .act .btn { opacity: 1; }
 .table .time { color: var(--ink-2); white-space: nowrap; }
+.table input[type="checkbox"] { accent-color: var(--ink); }
 .cell-title { display: block; max-width: 60ch; color: var(--ink); font-weight: 600; text-decoration: none; }
 a.cell-title:hover { text-decoration: underline; }
 .cell-sub { display: block; max-width: 60ch; margin-top: 2px; overflow: hidden; color: var(--muted); font-size: var(--t-xs); text-overflow: ellipsis; white-space: nowrap; }

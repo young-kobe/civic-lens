@@ -19,6 +19,10 @@ For a database-free test run, use `dotnet test CivicLens.slnx --configuration Re
 
 Generate the self-contained architecture explorer with `python3 tools/render-architecture.py`; open artifacts/architecture.html in a browser. The HTML requires no remote assets or network access. The same script updates the Mermaid blocks in architecture.md. `--check` detects diagram drift without changing files.
 
+## Local development
+
+The Makefile wraps the local commands. Run `make help` to list them. It reads `.runtime/database/connection.env`, `.runtime/database/postgres.env`, and `.runtime/review/connection.env`, and uses the Caddy binary in `.runtime/tools/caddy`. These files are local and ignored by Git. `make review` builds, starts Postgres, applies migrations, and runs the HTTPS proxy, review workspace, and worker. Set `DOTNET` when the SDK is not on `PATH`.
+
 ## Dependency changes
 
 Update explicit package versions, run `dotnet restore --force-evaluate`, review and commit packages.lock.json changes, then run the checks above. CI restores in locked mode. Update global.json deliberately when adopting an SDK patch or feature band.
@@ -310,7 +314,7 @@ The review workspace shows retained evidence on pages under `/Documents`: saved 
 
 ### Authenticated document-change review
 
-`review [port]` starts the separate editorial workspace on IPv4 loopback (default 5081). It supports draft and decision mutations and requires Auth0 configuration. It does not collect, migrate, publish, or manage access accounts through the UI. Apply `db migrate` explicitly before starting it; the additive `DocumentChangeReview` migration retains draft pointers, immutable revisions, decisions, and replay receipts.
+`review [port]` starts the separate editorial workspace on IPv4 loopback (default 5081). It supports draft and decision mutations and requires Auth0 configuration. It does not collect, migrate, or manage access accounts through the UI. The owner can publish selected drafts from the Review home page. Apply `db migrate` explicitly before starting it; the additive `DocumentChangeReview` migration retains draft pointers, immutable revisions, decisions, and replay receipts.
 
 Configure these environment variables through the deployment's protected environment/secret mechanism, not command-line arguments or committed files:
 
@@ -327,8 +331,9 @@ Configure these environment variables through the deployment's protected environ
 | `CIVIC_LENS_REVIEW_ISSUES` | Optional comma-separated configured issue IDs |
 | `CIVIC_LENS_REVIEW_OFFICIALS` | Optional comma-separated configured official IDs |
 | `CIVIC_LENS_COLLECTION_CONFIG` | Optional absolute path to the collection configuration for the owner Sources page |
+| `CIVIC_LENS_RELEASE_DIRECTORY` | Optional absolute path to the release root. With the collection configuration, it enables the owner publish section |
 
-Without the collection configuration, the Sources page reports that source checks are not set up. The worker, not the workspace, reads and writes captures.
+Without the collection configuration, the Sources page reports that source checks are not set up. The worker, not the workspace, reads and writes captures. The publish section needs both the collection configuration, for officials' display names, and the release directory. Without them, the owner sees a notice that publishing is off.
 
 Set the Auth0 allowed callback URL to `<CIVIC_LENS_REVIEW_ORIGIN>/signin-oidc`. Configure an HTTPS reverse proxy on the same host to forward to loopback and preserve the configured external Host header, including its port if nonstandard. The workspace rejects other Host values, pins its effective scheme to HTTPS, ignores ambient listener configuration, and does not trust forwarded headers. The initial listener expects a same-host proxy; isolated container networking requires an explicitly reviewed deployment configuration. Public access must terminate HTTPS at the proxy. Local workstation testing also requires a local HTTPS proxy and an allowed Auth0 callback; there is no unauthenticated review mode.
 
@@ -346,11 +351,13 @@ The editor shows the saved document-change account and its exact selected passag
 
 History currently supports at most 64 revisions and 128 decisions per record, with 64 outstanding concerns and 64 citations per revision. Limit exhaustion rejects writes and requires future history-pagination work; do not discard history to continue. Browsing comparisons may return an empty batch with a continuation if the batch contains only unchanged/incompatible/limited results. Use the continuation rather than treating that batch as an exhaustive absence of changes.
 
-Auth0 tenant login/logout and the production reverse proxy still require live verification. Offline tests validate subject authorization and HTTP workflows with isolated test signing keys; they do not exercise a live Auth0 tenant. Hetzner/Terraform provisioning, worker service management, production backup restoration, and a workspace publish action remain pending.
+Auth0 tenant login/logout and the production reverse proxy still require live verification. Offline tests validate subject authorization and HTTP workflows with isolated test signing keys; they do not exercise a live Auth0 tenant. Hetzner/Terraform provisioning, worker service management, and production backup restoration remain pending.
 
 ### Publish a static release
 
-Publication is a local owner command. Set `CIVIC_LENS_DATABASE`, `CIVIC_LENS_REVIEW_OWNER` (the owner subject recorded on the release), and `CIVIC_LENS_RELEASE_DIRECTORY` (an absolute path, for example `$PWD/.runtime/releases`). Publishing also needs `CIVIC_LENS_COLLECTION_CONFIG`, an absolute configuration path that supplies officials' display names. The command trusts the local operator, who already holds database credentials.
+The owner can also publish from the Review home page. Select drafts in the Publish section and choose Review selection. The summary lists each headline as new or a replacement, and shows the release number. Choose Publish to confirm. The page lists recent releases read-only. Rollback stays in the CLI.
+
+The CLI is a local owner command. Set `CIVIC_LENS_DATABASE`, `CIVIC_LENS_REVIEW_OWNER` (the owner subject recorded on the release), and `CIVIC_LENS_RELEASE_DIRECTORY` (an absolute path, for example `$PWD/.runtime/releases`). Publishing also needs `CIVIC_LENS_COLLECTION_CONFIG`, an absolute configuration path that supplies officials' display names. The command trusts the local operator, who already holds database credentials.
 
 ```sh
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases publish <idempotency-key> <draft-id> [<draft-id>...]

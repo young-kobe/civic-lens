@@ -229,6 +229,35 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
             publications.CommitAsync(Owner.Subject, Commit(2, baseNumber, draft.DraftId, 1, 0), "key", Hash(1), default));
     }
 
+    [Fact]
+    public async Task ReadyListFollowsTheActiveReleaseSoNewAndReplacementDraftsShowAndPublishedOnesDoNot()
+    {
+        var neverPublished = await CreateApprovedDraftAsync("a");
+        var replaced = await CreateApprovedDraftAsync("b");
+        var current = await CreateApprovedDraftAsync("c");
+        var onlyInOldRelease = await CreateApprovedDraftAsync("d");
+        var notApproved = await CreateDraftAsync("e");
+        var withdrawn = await CreateApprovedDraftAsync("f");
+        await Decide(withdrawn, 1, ReviewDecisionKind.WithdrawApproval, "Wrong source.");
+        await CommitAsync(1, null, replaced, current, onlyInOldRelease);
+        await CommitAsync(2, 1, replaced, current);
+        var revised = await SaveRevisionAsync(replaced, "b2");
+        await Decide(revised, 1, ReviewDecisionKind.Approve);
+
+        var ready = await reviews.ListUnpublishedApprovedDraftsAsync(10, default);
+
+        Assert.Equivalent(new Dictionary<string, int?>
+        {
+            [neverPublished.DraftId] = null,
+            [replaced.DraftId] = replaced.RevisionNumber,
+            [onlyInOldRelease.DraftId] = null
+        }, ready.ToDictionary(item => item.Draft.DraftId, item => item.PublishedRevisionNumber));
+        Assert.Equal(revised.RevisionNumber, ready.Single(item => item.Draft.DraftId == replaced.DraftId).Draft.CurrentRevision.RevisionNumber);
+        Assert.DoesNotContain(ready, item => item.Draft.DraftId == current.DraftId || item.Draft.DraftId == notApproved.DraftId ||
+            item.Draft.DraftId == withdrawn.DraftId);
+        Assert.Single(await reviews.ListUnpublishedApprovedDraftsAsync(1, default));
+    }
+
     private static PublicationCommit Commit(int number, string draftId, int revision, int reviewStateVersion) =>
         Commit(number, number == 1 ? null : number - 1, draftId, revision, reviewStateVersion);
 
@@ -245,6 +274,38 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
     {
         try { return await action(); }
         catch (PublicationConflictException exception) { return exception; }
+    }
+
+    private async Task<DocumentChangeDraftRevision> CreateDraftAsync(string name)
+    {
+        var comparison = await seeder.SaveAsync($"{name} before.", $"{name} after.");
+        return await new CreateDocumentChangeDraft(reviews).ExecuteAsync(Owner, new(comparison.ComparisonId, $"create-{name}"));
+    }
+
+    private async Task<DocumentChangeDraftRevision> CreateApprovedDraftAsync(string name)
+    {
+        var saved = await SaveRevisionAsync(await CreateDraftAsync(name), name + "1");
+        await Decide(saved, 0, ReviewDecisionKind.Approve);
+        return saved;
+    }
+
+    private async Task<DocumentChangeDraftRevision> SaveRevisionAsync(DocumentChangeDraftRevision draft, string name) =>
+        await new SaveDocumentChangeDraft(reviews, new ReviewCatalog([], [])).ExecuteAsync(Owner,
+            new(draft.DraftId, draft.RevisionNumber, $"Headline {name}", "The policy changed.", null, null, "Example Office",
+                null, null, [], [], draft.Citations, $"save-{name}"));
+
+    private Task<ReviewDecision> Decide(DocumentChangeDraftRevision draft, int stateVersion, ReviewDecisionKind kind,
+        string? note = null) =>
+        new DecideDocumentChangeReview(reviews, new ReviewCatalog([], [])).ExecuteAsync(Owner,
+            new(draft.DraftId, draft.RevisionNumber, stateVersion, kind, note, [],
+                $"decide-{draft.DraftId}-{draft.RevisionNumber}-{stateVersion}"));
+
+    private async Task CommitAsync(int number, int? baseNumber, params DocumentChangeDraftRevision[] drafts)
+    {
+        var records = drafts.Select(draft => new PublishedRevisionBinding(draft.DraftId, draft.RevisionNumber)).ToImmutableArray();
+        var expectations = drafts.Select(draft => new ReviewStateExpectation(draft.DraftId, draft.RevisionNumber, 1)).ToImmutableArray();
+        await publications.CommitAsync(Owner.Subject, new(number, baseNumber, $"{number:D6}-{Guid.NewGuid():N}", PublishedAt,
+            records, expectations), $"commit-{number}", Hash(number), default);
     }
 
     private async Task<DocumentChangeDraftRevision> CreateDraftAsync()
