@@ -6,6 +6,7 @@ using CivicLens.Application.Collection.Jobs;
 using CivicLens.Collection.Contracts;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Collection.Jobs;
+using CivicLens.Tests.Fixtures;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -463,6 +464,74 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
         await using var count = new NpgsqlCommand("SELECT count(*) FROM collection_job_attempts WHERE job_id = @id", connection);
         count.Parameters.AddWithValue("id", claim.Job.JobId);
         Assert.Equal(0L, await count.ExecuteScalarAsync());
+    }
+
+    [Fact]
+    public async Task JobPagesWalkOlderThenNewerOverTheSameRowsEvenWhenCreationTimesTie()
+    {
+        var ids = new List<string>();
+        for (var index = 0; index < 7; index++) ids.Add((await jobs.EnqueueAsync(Definition(), "page-" + index, default)).JobId);
+        // Three jobs share each creation time, so only the job ID tie-breaker (ascending) separates them.
+        var keyed = ids.Select((id, index) => (Id: id, Ticks: 5_000L + index / 3)).ToArray();
+        foreach (var key in keyed) await SqlAsync($"UPDATE collection_jobs SET created_at = {key.Ticks} WHERE job_id = '{key.Id}'");
+        var expected = keyed.OrderByDescending(key => key.Ticks).ThenBy(key => key.Id, StringComparer.Ordinal)
+            .Select(key => key.Id).ToArray();
+
+        var walk = await PageWalk.RunAsync(async cursor =>
+        {
+            var page = await jobs.ListPageAsync(cursor, 2, default);
+            return (page.Items.Select(job => job.JobId).ToArray(), page.NewerCursor, page.OlderCursor);
+        });
+
+        walk.AssertExact(expected);
+    }
+
+    [Fact]
+    public async Task JobPageRejectsLimitOutsideBounds()
+    {
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => jobs.ListPageAsync(null, 0, default));
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => jobs.ListPageAsync(null, 101, default));
+    }
+
+    [Fact]
+    public async Task LatestBySourceReturnsTheNewestJobForTheExactSourceAndUrlOnly()
+    {
+        var older = await jobs.EnqueueAsync(Definition() with { SourceId = "a" }, "a-old", default);
+        var newer = await jobs.EnqueueAsync(Definition() with { SourceId = "a" }, "a-new", default);
+        var article = await jobs.EnqueueAsync(Definition() with { SourceId = "a", Url = "https://example.test/page/article" }, "a-article", default);
+        var other = await jobs.EnqueueAsync(Definition() with { SourceId = "b" }, "b-only", default);
+        await SqlAsync($"UPDATE collection_jobs SET created_at = 100 WHERE job_id = '{older.JobId}'");
+        await SqlAsync($"UPDATE collection_jobs SET created_at = 200 WHERE job_id = '{newer.JobId}'");
+        await SqlAsync($"UPDATE collection_jobs SET created_at = 300 WHERE job_id = '{article.JobId}'");
+        await SqlAsync($"UPDATE collection_jobs SET created_at = 50 WHERE job_id = '{other.JobId}'");
+
+        var latest = await jobs.ListLatestBySourceAsync([
+            new("a", "https://example.test/page"), new("b", "https://example.test/page"), new("c", "https://example.test/page")], default);
+
+        Assert.Equal(new[] { newer.JobId, other.JobId }.Order(), latest.Select(job => job.JobId).Order());
+        Assert.Empty(await jobs.ListLatestBySourceAsync([], default));
+    }
+
+    [Fact]
+    public async Task ActivityListsNewestStartsAndFailuresByFailureTime()
+    {
+        var oldFailure = await jobs.EnqueueAsync(Definition() with { SourceId = "old-failure" }, "old-failure", default);
+        var lateFailure = await jobs.EnqueueAsync(Definition() with { SourceId = "late-failure" }, "late-failure", default);
+        var running = await jobs.EnqueueAsync(Definition() with { SourceId = "fine" }, "fine", default);
+        await SqlAsync($"UPDATE collection_jobs SET created_at = 100, state = 'Failed' WHERE job_id = '{oldFailure.JobId}'");
+        await SqlAsync($"UPDATE collection_jobs SET created_at = 50, state = 'Failed' WHERE job_id = '{lateFailure.JobId}'");
+        await SqlAsync($"UPDATE collection_jobs SET created_at = 200 WHERE job_id = '{running.JobId}'");
+        // The job created first failed last: failure time, not creation time, orders failures.
+        await SqlAsync($"INSERT INTO collection_job_attempts (attempt_id, job_id, sequence, request_json, started_at, resolution_json, completed_at) " +
+            $"VALUES ('late-attempt', '{lateFailure.JobId}', 1, '{{}}', 60, '{{}}', 900)");
+
+        var activity = await jobs.ListActivityAsync(2, default);
+
+        Assert.Equal(["fine", "old-failure"], activity.Started.Select(item => item.SourceId));
+        Assert.Equal(new DateTimeOffset(200, TimeSpan.Zero), activity.Started[0].OccurredAt);
+        Assert.Equal(["late-failure", "old-failure"], activity.Failed.Select(item => item.SourceId));
+        Assert.Equal(new DateTimeOffset(900, TimeSpan.Zero), activity.Failed[0].OccurredAt);
+        Assert.Equal(new DateTimeOffset(100, TimeSpan.Zero), activity.Failed[1].OccurredAt);
     }
 
     private async Task<CollectionJobClaim> EnqueueClaimAsync(string key, CollectionJobDefinition definition)

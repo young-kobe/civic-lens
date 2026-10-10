@@ -1,39 +1,20 @@
 @using CivicLens.Publication.Contracts
-@using Microsoft.AspNetCore.Components
 
 <PublicPage Title="Published records">
-    <h1 class="public-title">Published records</h1>
-    <p class="public-lede">Release @Release.ReleaseNumber, published @PublishedRecordView.Moment(Release.PublishedAtUtc).</p>
-    @if (Release.Records.Length == 0)
-    {
-        <p>This release has no records.</p>
-    }
-    else
-    {
-        <ol class="public-records">
-            @foreach (var entry in Release.Records.Skip((Page - 1) * PublicationProtocol.IndexPageSize).Take(PublicationProtocol.IndexPageSize))
-            {
-                <li>
-                    <a href="@PublicationProtocol.RecordPagePath(entry.RecordId)">@entry.Headline</a>
-                    <span>First published @PublishedRecordView.Moment(entry.FirstPublishedAtUtc)</span>
-                </li>
-            }
-        </ol>
-    }
-    @if (PageCount > 1)
-    {
-        <nav class="public-pager" aria-label="Pages">
-            @if (Page > 1)
-            {
-                <a rel="prev" href="@PublicationProtocol.IndexPagePath(Page - 1)">Previous</a>
-            }
-            <span>Page @Page of @PageCount</span>
-            @if (Page < PageCount)
-            {
-                <a rel="next" href="@PublicationProtocol.IndexPagePath(Page + 1)">Next</a>
-            }
-        </nav>
-    }
+    <PageHeader Title="Published records" Lede="@($"Release {Release.ReleaseNumber}, published {Moment.Full(Release.PublishedAtUtc)}.")" />
+    <Panel Label="Records">
+        <DataTable Items="PageRecords" Caption="Published records">
+            <Head><th>Record</th><th class="fit num hide-narrow">First published</th></Head>
+            <Row Context="entry">
+                <td><a class="cell-title" href="@PublicationProtocol.RecordPagePath(entry.RecordId)">@entry.Headline</a></td>
+                <td class="time fit num hide-narrow"><Timestamp Value="entry.FirstPublishedAtUtc" Format="TimestampFormat.Day" /></td>
+            </Row>
+            <Empty><EmptyState Title="No records yet" Text="This release has no records." /></Empty>
+        </DataTable>
+        <Pager Label="Pages" Summary="@($"Page {Page} of {PageCount}")" NewerText="Previous" OlderText="Next"
+               NewerHref="@(Page > 1 ? PublicationProtocol.IndexPagePath(Page - 1) : null)"
+               OlderHref="@(Page < PageCount ? PublicationProtocol.IndexPagePath(Page + 1) : null)" />
+    </Panel>
 </PublicPage>
 
 @code {
@@ -41,4 +22,7 @@
     [Parameter, EditorRequired] public int Page { get; set; }
 
     private int PageCount => PublicationProtocol.IndexPageCount(Release.Records.Length);
+
+    private IReadOnlyList<PublishedRecordEntry> PageRecords =>
+        [.. Release.Records.Skip((Page - 1) * PublicationProtocol.IndexPageSize).Take(PublicationProtocol.IndexPageSize)];
 }

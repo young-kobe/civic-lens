@@ -1,3 +1,5 @@
+using CivicLens.Application.Paging;
+
 namespace CivicLens.Application.Collection.Jobs;
 
 public interface ICollectionJobStore
@@ -9,6 +11,10 @@ public interface ICollectionJobStore
         CancellationToken cancellationToken);
     Task<CollectionJobRecord?> GetAsync(string jobId, CancellationToken cancellationToken);
     Task<IReadOnlyList<CollectionJobRecord>> ListAsync(int limit, CancellationToken cancellationToken);
+    Task<CollectionJobPage> ListPageAsync(PageCursor? cursor, int limit, CancellationToken cancellationToken);
+    Task<IReadOnlyList<CollectionJobRecord>> ListLatestBySourceAsync(IReadOnlyCollection<SourceCheckTarget> targets,
+        CancellationToken cancellationToken);
+    Task<CollectionJobActivity> ListActivityAsync(int limit, CancellationToken cancellationToken);
     Task<CollectionJobRecord?> CancelAsync(string jobId, CancellationToken cancellationToken);
     Task<CollectionJobClaim?> TryClaimAsync(string jobId, TimeSpan leaseDuration, CancellationToken cancellationToken);
     Task<CollectionJobRenewal> RenewAsync(CollectionJobLease jobLease, CollectionCollectorLease? collectorLease,

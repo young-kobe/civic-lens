@@ -1,0 +1,17 @@
+@if (Href is null)
+{
+    <div class="@CssClass"><span class="stat-value">@Value</span><span class="stat-label">@Label</span></div>
+}
+else
+{
+    <a class="@CssClass" href="@Href"><span class="stat-value">@Value</span><span class="stat-label">@Label</span></a>
+}
+
+@code {
+    [Parameter, EditorRequired] public int Value { get; set; }
+    [Parameter, EditorRequired] public string Label { get; set; } = string.Empty;
+    [Parameter] public Tone Tone { get; set; }
+    [Parameter] public string? Href { get; set; }
+
+    private string CssClass => $"stat stat-{ToneClass.Suffix(Tone)}";
+}

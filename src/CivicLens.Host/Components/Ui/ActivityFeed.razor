@@ -1,0 +1,14 @@
+<ol class="@(Flush ? "feed feed-flush" : "feed")">
+    @foreach (var item in Items)
+    {
+        <li class="feed-@ToneClass.Suffix(item.Tone)">
+            <span>@item.Text</span>
+            <span class="feed-time"><Timestamp Value="item.Time" /></span>
+        </li>
+    }
+</ol>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<FeedItem> Items { get; set; } = [];
+    [Parameter] public bool Flush { get; set; }
+}

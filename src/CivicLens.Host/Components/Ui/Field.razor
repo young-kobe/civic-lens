@@ -1,0 +1,23 @@
+<div class="field">
+    <label class="field-label" for="@For">@Label@if (Optional) { <span class="field-optional"> optional</span> }</label>
+    @ChildContent
+    @if (Error is not null)
+    {
+        <span class="field-error">@Error</span>
+    }
+    @if (Hint is not null)
+    {
+        <span class="field-hint" id="@HintId">@Hint</span>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Label { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string For { get; set; } = string.Empty;
+    [Parameter] public string? Hint { get; set; }
+    [Parameter] public string? Error { get; set; }
+    [Parameter] public bool Optional { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    public string HintId => $"{For}-hint";
+}

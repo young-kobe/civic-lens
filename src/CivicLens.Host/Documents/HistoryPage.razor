@@ -1,0 +1,85 @@
+@page "/Documents/History"
+@using CivicLens.Application.Documents
+@inject GetDocumentHistory Histories
+
+<TopBarTitle Crumbs="Crumbs" />
+
+<div class="content">
+    <PageHeader Title="Saved versions" Lede="Every observation of this page, newest first." />
+    @if (problem is not null)
+    {
+        <EvidenceProblemView Problem="problem" />
+    }
+    else if (history is not null)
+    {
+        @if (history.Observations.Length == Limit)
+        {
+            <Notice Title="Only part of the history is shown">This page shows the first @Limit observations. Older ones are not listed.</Notice>
+        }
+        <Panel Title="Observations">
+            <Aside>@SourceLabel</Aside>
+            <ChildContent>
+                <DataTable Items="Rows" Caption="Observations" Context="item" Scroll="true">
+                    <Head>
+                        <th>Observed</th>
+                        <th>Outcome</th>
+                        <th class="act"><span class="visually-hidden">Saved text</span></th>
+                    </Head>
+                    <Row>
+                        @{ var attempt = item.Attempt.AttemptResult; var outcome = ObservationDisplay.Outcome(attempt); }
+                        <td class="time"><Timestamp Value="attempt.ObservedAt" Format="TimestampFormat.Full" /></td>
+                        <td><StatusBadge Tone="outcome.Tone" Text="@outcome.Label" /><span class="cell-sub">@ObservationDisplay.Detail(attempt)</span></td>
+                        <td class="act">
+                            @if (item.Extractions.IsEmpty)
+                            {
+                                <span class="muted small">No saved text</span>
+                            }
+                            @foreach (var extraction in item.Extractions)
+                            {
+                                <Button Small="true" Href="@EvidenceLinks.Extraction(extraction.ExtractionId)">Saved text</Button>
+                            }
+                        </td>
+                    </Row>
+                    <Empty>
+                        <EmptyState Title="No observations yet" Text="Nothing was found for this source and exact URL. An empty history does not show that the page stayed the same." />
+                    </Empty>
+                </DataTable>
+            </ChildContent>
+        </Panel>
+        <TechnicalDetails Summary="Processing versions" Items="@([("Source ID", SourceId!), ("Requested URL", RequestedUrl!), .. ObservationDisplay.Versions(history)])" />
+    }
+</div>
+
+@code {
+    private const int Limit = GetDocumentHistory.MaximumObservations;
+    private static readonly IReadOnlyList<Crumb> Crumbs = [new("Review", "/Review"), new("Saved versions")];
+    private DocumentHistory? history;
+    private EvidenceProblem? problem;
+
+    [CascadingParameter] private HttpContext HttpContext { get; set; } = default!;
+    [SupplyParameterFromQuery] private string? SourceId { get; set; }
+    [SupplyParameterFromQuery] private string? RequestedUrl { get; set; }
+
+    private IReadOnlyList<DocumentHistoryObservation> Rows => history!.Observations.Reverse().ToArray();
+
+    private string SourceLabel => Collection.SourceLabels.Location(RequestedUrl!);
+
+    protected override async Task OnInitializedAsync()
+    {
+        problem = await LoadAsync();
+        if (problem is not null) EvidenceProblem.SetStatus(HttpContext.Response, problem.StatusCode);
+    }
+
+    private async Task<EvidenceProblem?> LoadAsync()
+    {
+        if (string.IsNullOrWhiteSpace(SourceId) || string.IsNullOrWhiteSpace(RequestedUrl)) return EvidenceProblem.Invalid;
+        try
+        {
+            history = await Histories.ExecuteAsync(SourceId, RequestedUrl, Limit, HttpContext.RequestAborted);
+            return null;
+        }
+        catch (OperationCanceledException) when (HttpContext.RequestAborted.IsCancellationRequested) { throw; }
+        catch (DocumentHistoryLimitException) { return EvidenceProblem.HistoryTooLarge; }
+        catch (Exception) { return EvidenceProblem.Unavailable; }
+    }
+}

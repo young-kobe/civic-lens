@@ -1,0 +1,32 @@
+<section class="@CssClass" aria-labelledby="@(Title is null ? null : HeadingId)" aria-label="@(Title is null ? Label : null)" @attributes="AdditionalAttributes">
+    @if (Title is not null)
+    {
+        <div class="panel-head">
+            <h2 id="@HeadingId">@Title</h2>
+            @if (Aside is not null)
+            {
+                <div class="panel-aside">@Aside</div>
+            }
+        </div>
+    }
+    @ChildContent
+</section>
+
+@code {
+    [Parameter] public string? Title { get; set; }
+    [Parameter] public string? Id { get; set; }
+    [Parameter] public string? Label { get; set; }
+    [Parameter] public RenderFragment? Aside { get; set; }
+    [Parameter] public bool Padded { get; set; }
+    [Parameter] public bool Raised { get; set; }
+    [Parameter] public string? Class { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter(CaptureUnmatchedValues = true)] public IReadOnlyDictionary<string, object>? AdditionalAttributes { get; set; }
+
+    private string HeadingId => Id ?? $"panel-{Title?.ToLowerInvariant().Replace(' ', '-')}";
+
+    private string CssClass => string.Join(' ', new[]
+    {
+        "panel", Padded ? "panel-padded" : null, Raised ? "panel-raised" : null, Class
+    }.Where(value => value is not null));
+}

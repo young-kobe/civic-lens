@@ -1,0 +1,7 @@
+@using CivicLens.Publication.Contracts
+
+<p class="muted small">Observed @Moment.Full(Version.ObservedAtUtc). Source: <a href="@Version.Url" rel="noopener noreferrer nofollow">@Version.Url</a></p>
+
+@code {
+    [Parameter, EditorRequired] public PublishedDocumentVersion Version { get; set; } = default!;
+}

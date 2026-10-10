@@ -1,0 +1,17 @@
+<nav class="segmented" aria-label="@Label">
+    @foreach (var tab in Tabs)
+    {
+        <a class="segmented-item" href="@tab.Href" aria-current="@(tab.Selected ? "true" : null)">
+            @tab.Label
+            @if (tab.Count is { } count)
+            {
+                <span class="segmented-count">@count</span>
+            }
+        </a>
+    }
+</nav>
+
+@code {
+    [Parameter, EditorRequired] public string Label { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public IReadOnlyList<FilterTab> Tabs { get; set; } = [];
+}

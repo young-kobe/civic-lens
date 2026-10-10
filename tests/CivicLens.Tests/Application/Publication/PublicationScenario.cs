@@ -1,3 +1,4 @@
+using CivicLens.Application.Paging;
 using System.Collections.Immutable;
 using System.Text.Json;
 using CivicLens.Application.Publication;
@@ -275,9 +276,17 @@ internal sealed class FakeReviewStore : IDocumentChangeReviewStore
         ImmutableHashSet<string> allowedOfficialIds, ImmutableHashSet<string> allowedIssueIds,
         CancellationToken cancellationToken) => throw new NotSupportedException();
 
-    public Task<DocumentChangeReviewPage> ListAsync(string? cursor, int limit, CancellationToken cancellationToken) =>
+    public Task<DocumentChangeReviewPage> ListAsync(PageCursor? cursor, int limit, DraftStatusFilter filter,
+        CancellationToken cancellationToken) => throw new NotSupportedException();
+
+    public Task<EligibleDocumentComparisonPage> ListEligibleComparisonsAsync(PageCursor? cursor, int limit,
+        CancellationToken cancellationToken) => throw new NotSupportedException();
+
+    public Task<ReviewOverview> GetOverviewAsync(CancellationToken cancellationToken) =>
         throw new NotSupportedException();
 
-    public Task<EligibleDocumentComparisonPage> ListEligibleComparisonsAsync(string? cursor, int limit,
-        CancellationToken cancellationToken) => throw new NotSupportedException();
+    public List<ReviewActivityEvent> Activity { get; } = [];
+
+    public Task<IReadOnlyList<ReviewActivityEvent>> ListRecentActivityAsync(int limit,
+        CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<ReviewActivityEvent>>(Activity);
 }

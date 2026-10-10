@@ -118,7 +118,7 @@ public sealed class PublishedReleaseOutlivesDatabaseTests : IAsyncLifetime
     {
         var document = new HtmlParser().ParseDocument(File.ReadAllText(recordPage));
         var quotes = document.QuerySelectorAll("blockquote").Select(quote => quote.TextContent).ToList();
-        var versions = document.QuerySelectorAll("pre.public-text").Select(text => text.TextContent).ToList();
+        var versions = document.QuerySelectorAll(".doc-text").Select(text => text.TextContent).ToList();
 
         Assert.All(record.Citations, citation => Assert.Contains(citation.Quote, quotes));
         Assert.Equal([record.Before.Text, record.After.Text], versions);

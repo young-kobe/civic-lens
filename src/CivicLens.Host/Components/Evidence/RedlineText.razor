@@ -1,0 +1,22 @@
+@foreach (var segment in Segments)
+{
+    @switch (segment.Kind)
+    {
+        case RedlineKind.Context:
+            <span class="redline-context">@EncodedEvidence.Markup(segment.Text)</span>
+            break;
+        case RedlineKind.Removed:
+            <del><span class="visually-hidden">Removed: </span>@EncodedEvidence.Markup(segment.Text)</del>
+            break;
+        case RedlineKind.Added:
+            <ins><span class="visually-hidden">Added: </span>@EncodedEvidence.Markup(segment.Text)</ins>
+            break;
+        default:
+            @EncodedEvidence.Markup(segment.Text)
+            break;
+    }
+}
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<RedlineSegment> Segments { get; set; } = [];
+}

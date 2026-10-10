@@ -1,0 +1,6 @@
+@using CivicLens.Core.Documents
+<span class="cell-sub"><RedlineText Segments="Redline.Excerpt(Hunk, 32)" /></span>
+
+@code {
+    [Parameter, EditorRequired] public DocumentComparisonHunk Hunk { get; set; } = default!;
+}

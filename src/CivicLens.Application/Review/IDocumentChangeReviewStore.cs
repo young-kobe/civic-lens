@@ -1,3 +1,4 @@
+using CivicLens.Application.Paging;
 using CivicLens.Core.Review;
 using System.Collections.Immutable;
 
@@ -19,7 +20,10 @@ public interface IDocumentChangeReviewStore
     Task<DocumentChangeReview?> GetAsync(string draftId, CancellationToken cancellationToken);
     Task<IReadOnlyDictionary<string, PublishableDocumentChange>> GetForPublicationAsync(
         IReadOnlyCollection<string> draftIds, CancellationToken cancellationToken);
-    Task<DocumentChangeReviewPage> ListAsync(string? cursor, int limit, CancellationToken cancellationToken);
-    Task<EligibleDocumentComparisonPage> ListEligibleComparisonsAsync(string? cursor, int limit,
+    Task<DocumentChangeReviewPage> ListAsync(PageCursor? cursor, int limit, DraftStatusFilter filter,
         CancellationToken cancellationToken);
+    Task<EligibleDocumentComparisonPage> ListEligibleComparisonsAsync(PageCursor? cursor, int limit,
+        CancellationToken cancellationToken);
+    Task<ReviewOverview> GetOverviewAsync(CancellationToken cancellationToken);
+    Task<IReadOnlyList<ReviewActivityEvent>> ListRecentActivityAsync(int limit, CancellationToken cancellationToken);
 }

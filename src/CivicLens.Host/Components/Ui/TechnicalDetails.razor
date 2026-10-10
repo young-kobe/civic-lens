@@ -1,0 +1,15 @@
+<details class="tech">
+    <summary>@Summary</summary>
+    <dl>
+        @foreach (var (label, value) in Items)
+        {
+            <dt>@label</dt>
+            <dd>@value</dd>
+        }
+    </dl>
+</details>
+
+@code {
+    [Parameter] public string Summary { get; set; } = "Identifiers";
+    [Parameter, EditorRequired] public IReadOnlyList<(string Label, string Value)> Items { get; set; } = [];
+}

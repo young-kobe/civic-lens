@@ -287,6 +287,44 @@ public sealed class PostgresEvidenceProcessingStoreTests(PostgresCollection post
         await command.ExecuteNonQueryAsync();
     }
 
+    [Fact]
+    public async Task RecentChangesListOnlyChangedOutcomesNewestObservationFirst()
+    {
+        var comparisonA = new string('a', 64);
+        var comparisonB = new string('b', 64);
+        foreach (var (job, outcome, comparison, ticks) in new[]
+        {
+            ("older-change", "Changed", comparisonA, 200L),
+            ("newer-change", "Changed", comparisonB, 300L),
+            ("no-change", "Unchanged", comparisonA, 400L),
+            ("baseline", "Baseline", null, 500L)
+        })
+        {
+            await SeedCapturedAttemptAsync(job, "attempt-" + job, "source-" + job, "https://example.test/" + job);
+            await store.EnsureAsync(job, "attempt-" + job, "source-" + job, "https://example.test/" + job, default);
+            await using var connection = new NpgsqlConnection(connectionString);
+            await connection.OpenAsync();
+            await using var command = new NpgsqlCommand("""
+                UPDATE evidence_processing SET outcome = @outcome, comparison_id = @comparison, observed_at_utc_ticks = @ticks
+                 WHERE job_id = @job AND attempt_id <> 'prepare'
+                """, connection);
+            command.Parameters.AddWithValue("outcome", outcome);
+            command.Parameters.AddWithValue("comparison", (object?)comparison ?? DBNull.Value);
+            command.Parameters.AddWithValue("ticks", ticks);
+            command.Parameters.AddWithValue("job", job);
+            Assert.Equal(1, await command.ExecuteNonQueryAsync());
+        }
+
+        var changes = await store.ListRecentChangesAsync(10, default);
+        var limited = await store.ListRecentChangesAsync(1, default);
+
+        Assert.Equal(["newer-change", "older-change"], changes.Select(item => item.JobId));
+        Assert.Equal([comparisonB, comparisonA], changes.Select(item => item.ComparisonId));
+        Assert.Equal("source-newer-change", changes[0].SourceId);
+        Assert.Equal(new DateTimeOffset(300, TimeSpan.Zero), changes[0].OccurredAt);
+        Assert.Equal("newer-change", Assert.Single(limited).JobId);
+    }
+
     private async Task ExpireLeaseAsync(string jobId, string attemptId)
     {
         await using var connection = new NpgsqlConnection(connectionString);

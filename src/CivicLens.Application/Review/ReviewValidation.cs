@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using CivicLens.Application.Paging;
 using CivicLens.Core.Review;
 
 namespace CivicLens.Application.Review;
@@ -111,10 +112,9 @@ internal static class ReviewValidation
     public static string HashPayload<T>(T payload) => Convert.ToHexStringLower(
         SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(payload))));
 
-    public static void ValidatePage(string? cursor, int limit)
+    public static PageCursor? ValidatePage(string? cursor, int limit)
     {
-        if (limit is < 1 or > 100) throw new ArgumentOutOfRangeException(nameof(limit), "Page limit must be from 1 to 100.");
-        if (cursor is not null && (cursor.Length > 256 || cursor.Length == 0))
-            throw new ArgumentException("Page cursor must contain 1 to 256 characters.", nameof(cursor));
+        PageLimit.Validate(limit);
+        return PageCursor.Parse(cursor);
     }
 }

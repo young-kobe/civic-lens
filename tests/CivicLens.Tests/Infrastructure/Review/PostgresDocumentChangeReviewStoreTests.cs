@@ -3,6 +3,7 @@ using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using CivicLens.Application.Paging;
 using CivicLens.Application.Publication;
 using CivicLens.Application.Review;
 using CivicLens.Application.Collection;
@@ -17,6 +18,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Npgsql;
+using CivicLens.Tests.Fixtures;
 using static CivicLens.Tests.Fixtures.CollectionFixtures;
 
 namespace CivicLens.Tests.Infrastructure.Review;
@@ -130,14 +132,13 @@ public sealed class PostgresDocumentChangeReviewStoreTests(PostgresCollection po
             if (changed) expected.Add(comparison.ComparisonId);
         }
         var actual = new List<string>();
-        string? cursor = null;
+        PageCursor? cursor = null;
         var pages = 0;
         do
         {
             var page = await reviews.ListEligibleComparisonsAsync(cursor, 1, default);
             actual.AddRange(page.Items.Select(item => item.Comparison.ComparisonId));
-            Assert.True(page.NextCursor is null || string.CompareOrdinal(page.NextCursor, cursor) > 0);
-            cursor = page.NextCursor;
+            cursor = PageCursor.Parse(page.OlderCursor);
             Assert.True(++pages <= 12);
         } while (cursor is not null);
         Assert.Equal(expected.Order(), actual.Order());
@@ -197,7 +198,7 @@ public sealed class PostgresDocumentChangeReviewStoreTests(PostgresCollection po
         Assert.Equal(1, await command.ExecuteNonQueryAsync());
 
         await Assert.ThrowsAsync<ArgumentException>(() => reviews.GetAsync(revision.DraftId, default));
-        await Assert.ThrowsAsync<ArgumentException>(() => reviews.ListAsync(null, 10, default));
+        await Assert.ThrowsAsync<ArgumentException>(() => reviews.ListAsync(null, 10, DraftStatusFilter.All, default));
     }
 
     [Fact]
@@ -247,10 +248,10 @@ public sealed class PostgresDocumentChangeReviewStoreTests(PostgresCollection po
         var counter = new ReadCommandCounter();
         var counted = CountedStore(counter);
 
-        await counted.ListAsync(null, 1, default);
+        await counted.ListAsync(null, 1, DraftStatusFilter.All, default);
         var singleDraftReads = counter.ReadCount;
         counter.ReadCount = 0;
-        var page = await counted.ListAsync(null, 20, default);
+        var page = await counted.ListAsync(null, 20, DraftStatusFilter.All, default);
 
         Assert.Equal(20, page.Items.Length);
         Assert.Equal(singleDraftReads, counter.ReadCount);
@@ -270,6 +271,211 @@ public sealed class PostgresDocumentChangeReviewStoreTests(PostgresCollection po
         await Assert.ThrowsAsync<InvalidOperationException>(() => reviews.GetAsync(drafts[1].DraftId, default));
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             reviews.GetForPublicationAsync([.. drafts.Select(draft => draft.DraftId)], default));
+    }
+
+    [Fact]
+    public async Task DraftPagesWalkOlderThenNewerOverTheSameRowsEvenWhenTimestampsTie()
+    {
+        var drafts = await CreateDraftsAsync(7);
+        // Three drafts share each timestamp, so only the id tie-breaker separates them.
+        var keyed = drafts.Select((draft, index) => (draft.DraftId, Ticks: 5_000L + index / 3)).ToArray();
+        await SetDraftTicksAsync(keyed);
+        var expected = keyed.OrderByDescending(key => key.Ticks).ThenByDescending(key => key.DraftId, StringComparer.Ordinal)
+            .Select(key => key.DraftId).ToArray();
+
+        var walk = await PageWalk.RunAsync(async cursor =>
+        {
+            var page = await reviews.ListAsync(cursor, 2, DraftStatusFilter.All, default);
+            return (page.Items.Select(item => item.DraftId).ToArray(), page.NewerCursor, page.OlderCursor);
+        });
+
+        walk.AssertExact(expected);
+    }
+
+    [Fact]
+    public async Task ComparisonPagesWalkOlderThenNewerOverTheSameRowsEvenWhenTimestampsTie()
+    {
+        var ids = new List<string>();
+        for (var index = 0; index < 7; index++) ids.Add((await SaveComparisonAsync()).ComparisonId);
+        var keyed = ids.Select((id, index) => (Id: id, Ticks: 7_000L + index / 3)).ToArray();
+        foreach (var key in keyed) await SetAfterObservedTicksAsync(key.Id, key.Ticks);
+        var expected = keyed.OrderByDescending(key => key.Ticks).ThenByDescending(key => key.Id, StringComparer.Ordinal)
+            .Select(key => key.Id).ToArray();
+
+        var walk = await PageWalk.RunAsync(async cursor =>
+        {
+            var page = await reviews.ListEligibleComparisonsAsync(cursor, 2, default);
+            return (page.Items.Select(item => item.Comparison.ComparisonId).ToArray(), page.NewerCursor, page.OlderCursor);
+        });
+
+        walk.AssertExact(expected);
+    }
+
+    [Fact]
+    public async Task ComparisonsThatAlreadyHaveADraftAreNotNewChanges()
+    {
+        var drafted = await SaveComparisonAsync();
+        var open = await SaveComparisonAsync();
+        await new CreateDocumentChangeDraft(reviews).ExecuteAsync(new("auth0|owner", ReviewRole.Owner), new(drafted.ComparisonId, "key"));
+
+        var page = await reviews.ListEligibleComparisonsAsync(null, 10, default);
+
+        Assert.Equal(open.ComparisonId, Assert.Single(page.Items).Comparison.ComparisonId);
+        Assert.Equal(1, (await reviews.GetOverviewAsync(default)).NewChanges);
+    }
+
+    // The newest drafts are approved. If the filter ran after the limit, the first needs-action page would come back short.
+    [Fact]
+    public async Task StatusFilterAppliesBeforeTheLimitAndNeedsActionIsEveryStatusButApproved()
+    {
+        var seeded = await SeedEveryStatusAsync();
+
+        var needsAction = await reviews.ListAsync(null, 2, DraftStatusFilter.NeedsAction, default);
+        var approved = await reviews.ListAsync(null, 1, DraftStatusFilter.Approved, default);
+
+        Assert.Equal([seeded.ChangesRequested, seeded.Withdrawn], needsAction.Items.Select(item => item.DraftId));
+        Assert.Equal(DocumentChangeReviewStatus.ChangesRequested, needsAction.Items[0].CurrentStatus);
+        Assert.Equal(DocumentChangeReviewStatus.ApprovalWithdrawn, needsAction.Items[1].CurrentStatus);
+        Assert.NotNull(needsAction.OlderCursor);
+        var rest = await reviews.ListAsync(PageCursor.Parse(needsAction.OlderCursor), 10, DraftStatusFilter.NeedsAction, default);
+        Assert.Equal([DocumentChangeReviewStatus.AwaitingReviewWithConcerns, DocumentChangeReviewStatus.AwaitingReview],
+            rest.Items.Select(item => item.CurrentStatus));
+        Assert.Null(rest.OlderCursor);
+        Assert.Equal(seeded.ApprovedNewest, Assert.Single(approved.Items).DraftId);
+        Assert.NotNull(approved.OlderCursor);
+        var all = await reviews.ListAsync(null, 10, DraftStatusFilter.All, default);
+        Assert.Equal(6, all.Items.Length);
+    }
+
+    [Fact]
+    public async Task OverviewCountsEqualTheTotalsOfTheirLists()
+    {
+        await SeedEveryStatusAsync();
+        await SaveComparisonAsync();
+        await SaveComparisonAsync();
+
+        var overview = await reviews.GetOverviewAsync(default);
+
+        var newChanges = await CountAsync(async cursor =>
+        {
+            var page = await reviews.ListEligibleComparisonsAsync(cursor, 1, default);
+            return (page.Items.Length, page.OlderCursor);
+        });
+        var needsAction = await CountAsync(async cursor =>
+        {
+            var page = await reviews.ListAsync(cursor, 3, DraftStatusFilter.NeedsAction, default);
+            return (page.Items.Length, page.OlderCursor);
+        });
+        var approved = await CountAsync(async cursor =>
+        {
+            var page = await reviews.ListAsync(cursor, 1, DraftStatusFilter.Approved, default);
+            return (page.Items.Length, page.OlderCursor);
+        });
+        Assert.Equal(new ReviewOverview(2, 4, 2), overview);
+        Assert.Equal((overview.NewChanges, overview.DraftsNeedingAction, overview.ApprovedDrafts), (newChanges, needsAction, approved));
+    }
+
+    [Fact]
+    public async Task RecentActivityTakesTheNewestOfEachKindWithActorAndHeadline()
+    {
+        var seeded = await SeedEveryStatusAsync();
+
+        var events = await reviews.ListRecentActivityAsync(2, default);
+
+        Assert.Equal(2, events.Count(item => item.Kind == ReviewActivityKind.DraftCreated));
+        Assert.Equal(2, events.Count(item => item.Kind == ReviewActivityKind.RevisionSaved));
+        Assert.Equal(2, events.Count(item => item.Kind == ReviewActivityKind.DecisionRecorded));
+        var created = events.Where(item => item.Kind == ReviewActivityKind.DraftCreated).OrderByDescending(item => item.OccurredAt).ToArray();
+        Assert.Equal([seeded.ApprovedNewest, seeded.ApprovedOlder], created.Select(item => item.DraftId));
+        Assert.All(events, item => Assert.Equal("auth0|owner", item.ActorSubject));
+        Assert.All(events.Where(item => item.Kind != ReviewActivityKind.DraftCreated), item => Assert.Equal("Headline", item.Headline));
+        Assert.All(events.Where(item => item.Kind == ReviewActivityKind.DecisionRecorded), item => Assert.NotNull(item.DecisionKind));
+        Assert.All(events.Where(item => item.Kind != ReviewActivityKind.DecisionRecorded), item => Assert.Null(item.DecisionKind));
+    }
+
+    [Fact]
+    public async Task ListReadCountDoesNotGrowWithPageSizeOrFilter()
+    {
+        await SeedEveryStatusAsync();
+        var counter = new ReadCommandCounter();
+        var counted = CountedStore(counter);
+
+        await counted.ListAsync(null, 1, DraftStatusFilter.NeedsAction, default);
+        var single = counter.ReadCount;
+        counter.ReadCount = 0;
+        await counted.ListAsync(null, 20, DraftStatusFilter.All, default);
+
+        Assert.Equal(single, counter.ReadCount);
+    }
+
+    private sealed record SeededStatuses(string ApprovedNewest, string ApprovedOlder, string ChangesRequested,
+        string Withdrawn, string WithConcerns, string Awaiting);
+
+    // Oldest to newest: awaiting, awaiting with concerns, approval withdrawn, changes requested, approved, approved.
+    private async Task<SeededStatuses> SeedEveryStatusAsync()
+    {
+        var actor = new ReviewActor("auth0|owner", ReviewRole.Owner);
+        var catalog = new ReviewCatalog([], []);
+        var save = new SaveDocumentChangeDraft(reviews, catalog);
+        var decide = new DecideDocumentChangeReview(reviews, catalog);
+        var drafts = await CreateDraftsAsync(6);
+        await SetDraftTicksAsync(drafts.Select((draft, index) => (draft.DraftId, Ticks: 9_000L + index)).ToArray());
+
+        async Task<DocumentChangeDraftRevision> Edit(DocumentChangeDraftRevision draft, int from, string key) =>
+            await save.ExecuteAsync(actor, new(draft.DraftId, from, "Headline", "Summary", null, null, "Institution",
+                null, null, [], [], draft.Citations, key));
+
+        var concerned = await Edit(drafts[1], 1, "edit-1");
+        await decide.ExecuteAsync(actor, new(concerned.DraftId, 2, 0, ReviewDecisionKind.RequestChanges, "Context missing.", [], "concern-1"));
+        await Edit(concerned, 2, "edit-1b");
+        var withdrawn = await Edit(drafts[2], 1, "edit-2");
+        await decide.ExecuteAsync(actor, new(withdrawn.DraftId, 2, 0, ReviewDecisionKind.Approve, null, [], "approve-2"));
+        await decide.ExecuteAsync(actor, new(withdrawn.DraftId, 2, 1, ReviewDecisionKind.WithdrawApproval, "Wrong date.", [], "withdraw-2"));
+        var requested = await Edit(drafts[3], 1, "edit-3");
+        await decide.ExecuteAsync(actor, new(requested.DraftId, 2, 0, ReviewDecisionKind.RequestChanges, "Needs sources.", [], "request-3"));
+        foreach (var index in new[] { 4, 5 })
+        {
+            var approved = await Edit(drafts[index], 1, "edit-" + index);
+            await decide.ExecuteAsync(actor, new(approved.DraftId, 2, 0, ReviewDecisionKind.Approve, null, [], "approve-" + index));
+        }
+        return new(drafts[5].DraftId, drafts[4].DraftId, drafts[3].DraftId, drafts[2].DraftId, drafts[1].DraftId, drafts[0].DraftId);
+    }
+
+    private static async Task<int> CountAsync(Func<PageCursor?, Task<(int Count, string? Older)>> read)
+    {
+        var total = 0;
+        PageCursor? cursor = null;
+        for (var guard = 0; guard < 50; guard++)
+        {
+            var (count, older) = await read(cursor);
+            total += count;
+            if (older is null) return total;
+            cursor = PageCursor.Parse(older);
+        }
+        throw new InvalidOperationException("Paging did not end.");
+    }
+
+    private async Task SetDraftTicksAsync((string DraftId, long Ticks)[] keys)
+    {
+        foreach (var key in keys)
+            await SqlAsync("UPDATE document_change_drafts SET created_at_utc_ticks = @ticks WHERE draft_id = @id",
+                ("ticks", key.Ticks), ("id", key.DraftId));
+    }
+
+    private Task SetAfterObservedTicksAsync(string comparisonId, long ticks) => SqlAsync("""
+        UPDATE collection_attempts SET observed_at_utc_ticks = @ticks
+         WHERE attempt_id IN (SELECT e.attempt_id FROM document_extractions e
+                              JOIN document_comparisons c ON c.after_extraction_id = e.extraction_id
+                              WHERE c.comparison_id = @id)
+        """, ("ticks", ticks), ("id", comparisonId));
+
+    private async Task SqlAsync(string sql, params (string Name, object Value)[] parameters)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(sql, connection);
+        foreach (var (name, value) in parameters) command.Parameters.AddWithValue(name, value);
+        Assert.True(await command.ExecuteNonQueryAsync() > 0);
     }
 
     private async Task<List<DocumentChangeDraftRevision>> CreateDraftsAsync(int count)

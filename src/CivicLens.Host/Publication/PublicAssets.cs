@@ -5,13 +5,16 @@ namespace CivicLens.Host.Publication;
 
 internal static class PublicAssets
 {
-    public static readonly IReadOnlyList<string> Stylesheets =
-        ["assets/theme.css", "assets/preview.css", "assets/diff.css", "assets/public.css"];
+    public static readonly IReadOnlyList<string> Stylesheets = ["assets/css/theme.css", "assets/css/app.css"];
 
-    public const string Script = "assets/diff.js";
+    public const string ThemeScript = "assets/js/theme.js";
+
+    public const string Script = "assets/js/app.js";
+
+    private static readonly IReadOnlyList<string> Fonts = ["assets/fonts/instrument-sans.woff2", "assets/fonts/newsreader.woff2"];
 
     public static IReadOnlyList<ReleaseAsset> Load() =>
-        [.. Stylesheets.Append(Script).Select(path => new ReleaseAsset(path, Read(path)))];
+        [.. Stylesheets.Append(ThemeScript).Append(Script).Concat(Fonts).Select(path => new ReleaseAsset(path, Read(path)))];
 
     private static byte[] Read(string path)
     {

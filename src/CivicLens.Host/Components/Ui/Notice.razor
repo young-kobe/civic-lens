@@ -1,0 +1,24 @@
+<div class="notice notice-@ToneClass.Suffix(Tone)" role="@(Tone is Tone.Bad or Tone.Warn ? "alert" : "status")" @attributes="AdditionalAttributes">
+    @if (Title is not null)
+    {
+        <strong>@Title</strong>
+    }
+    <span>@ChildContent</span>
+    @if (OnDismiss.HasDelegate)
+    {
+        <button class="notice-dismiss" type="button" aria-label="Dismiss" @onclick="OnDismiss">×</button>
+    }
+    else if (Dismissible)
+    {
+        <button class="notice-dismiss" type="button" data-dismiss aria-label="Dismiss">×</button>
+    }
+</div>
+
+@code {
+    [Parameter] public Tone Tone { get; set; }
+    [Parameter] public string? Title { get; set; }
+    [Parameter] public bool Dismissible { get; set; }
+    [Parameter] public EventCallback OnDismiss { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter(CaptureUnmatchedValues = true)] public IReadOnlyDictionary<string, object>? AdditionalAttributes { get; set; }
+}

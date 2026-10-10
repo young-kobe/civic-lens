@@ -1,0 +1,119 @@
+@page "/Review/Sources"
+@rendermode InteractiveServer
+@using CivicLens.Application.Collection.Jobs
+
+<TopBarTitle Crumbs="Crumbs" />
+
+<div class="content">
+    <PageHeader Title="Sources" Lede="Enabled sources are checked every hour. Changes go to Review." />
+
+    @if (notice is not null)
+    {
+        <Notice Tone="notice.Tone" OnDismiss="DismissNotice">@notice.Text</Notice>
+    }
+
+    @if (rows is not null)
+    {
+        <Panel Title="Official sources">
+            <Aside>@SourceCount</Aside>
+            <ChildContent>
+                <Toolbar>
+                    <input class="search" type="search" aria-label="Find a source" placeholder="Find a source"
+                           @bind="query" @bind:event="oninput" @bind:after="ShowFirstPage" />
+                    <div class="segmented" role="group" aria-label="Show sources">
+                        <button class="segmented-item" type="button" aria-pressed="@Pressed(!attentionOnly)" @onclick="() => ShowAttention(false)">All</button>
+                        <button class="segmented-item" type="button" aria-pressed="@Pressed(attentionOnly)" @onclick="() => ShowAttention(true)">
+                            Needs attention <span class="segmented-count">@AttentionCount</span>
+                        </button>
+                    </div>
+                </Toolbar>
+                <DataTable Items="SourcePage" Caption="Official sources" Context="row">
+                    <Head>
+                        <th>Source</th>
+                        <th class="hide-narrow">Official</th>
+                        <th class="hide-narrow">Type</th>
+                        <th>Status</th>
+                        <th class="hide-narrow">Last check</th>
+                        <th class="act"><span class="visually-hidden">Action</span></th>
+                    </Head>
+                    <Row>
+                        @{ var status = SourceStatusDisplay.Status(row.Health); }
+                        <td><span class="cell-title">@row.Label</span><span class="cell-sub">@row.Location</span></td>
+                        <td class="hide-narrow">@row.Officials</td>
+                        <td class="hide-narrow">@row.Type</td>
+                        <td><StatusBadge Tone="status.Tone" Text="@status.Label" /></td>
+                        <td class="time hide-narrow">
+                            @if (row.Health.LastCheckedAt is { } checkedAt)
+                            {
+                                <Timestamp Value="checkedAt" />
+                            }
+                        </td>
+                        <td class="act">
+                            @if (row.Health.NeedsAttention && row.Health.JobId is { } jobId)
+                            {
+                                <Button Small="true" Disabled="busy" OnClick="() => OpenDetailsAsync(jobId)">Details</Button>
+                            }
+                            else
+                            {
+                                <Button Small="true" Disabled="@(busy || !row.CanCheck)" OnClick="() => CheckNowAsync(row)">Check now</Button>
+                            }
+                        </td>
+                    </Row>
+                    <Empty>
+                        <EmptyState Title="No sources match" Text="Change the search or show all sources." />
+                    </Empty>
+                </DataTable>
+                <Pager Label="Source pages" Summary="@SourcePageSummary" NewerText="Previous" OlderText="Next"
+                       OnNewer="@(sourcePage > 0 ? EventCallback.Factory.Create(this, ShowPreviousPage) : default)"
+                       OnOlder="@(HasNextSourcePage ? EventCallback.Factory.Create(this, ShowNextPage) : default)" />
+            </ChildContent>
+        </Panel>
+    }
+
+    @if (sources is { } loaded)
+    {
+        <Panel Title="Recent checks">
+            <Aside>Live</Aside>
+            <ChildContent>
+                <DataTable Items="loaded.Jobs" Caption="Recent checks" Scroll="true" RowClass="RowClass" Context="job">
+                    <Head>
+                        <th>Document</th>
+                        <th>Result</th>
+                        <th>Started</th>
+                        <th class="act"><span class="visually-hidden">Action</span></th>
+                    </Head>
+                    <Row>
+                        @{ var check = loaded.ChecksByJobId[job.JobId]; var result = SourceStatusDisplay.Status(check); }
+                        <td><span class="cell-title">@SourceLabels.Document(job.Definition.Url)</span><span class="cell-sub">@SourceStatusDisplay.Detail(check)</span></td>
+                        <td><StatusBadge Tone="result.Tone" Text="@result.Label" /></td>
+                        <td class="time"><Timestamp Value="job.CreatedAt" /></td>
+                        <td class="act">
+                            @if (IsActive(job))
+                            {
+                                <Button Variant="ButtonVariant.Quiet" Small="true" Disabled="busy" OnClick="() => StopAsync(job.JobId)">Stop</Button>
+                            }
+                            else if (check.ComparisonId is { } comparisonId)
+                            {
+                                <Button Variant="ButtonVariant.Primary" Small="true" Disabled="busy" OnClick="() => StartDraftAsync(comparisonId)">Start draft</Button>
+                            }
+                            else
+                            {
+                                <Button Small="true" Disabled="busy" OnClick="() => OpenDetailsAsync(job.JobId)">Details</Button>
+                            }
+                        </td>
+                    </Row>
+                    <Empty>
+                        <EmptyState Title="No checks yet" Text="Choose Check now on a source. Its text is prepared for review on its own." />
+                    </Empty>
+                </DataTable>
+                <Pager Label="Recent check pages" NewerHref="@JobsHref(loaded.NewerCursor)" OlderHref="@JobsHref(loaded.OlderCursor)" />
+            </ChildContent>
+        </Panel>
+
+        @if (loaded.SelectedJob is { } selected)
+        {
+            <CheckDetails Job="selected" Check="loaded.ChecksByJobId[selected.JobId]" Retained="loaded.RetainedAttempts" Busy="busy"
+                          OnStop="() => StopAsync(selected.JobId)" OnCheckAgain="() => CheckAgainAsync(selected.JobId)" OnClose="CloseDetails" />
+        }
+    }
+</div>

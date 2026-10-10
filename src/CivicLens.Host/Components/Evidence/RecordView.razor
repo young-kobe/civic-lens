@@ -1,0 +1,35 @@
+<article class="record" id="@Id">
+    @if (HeadingLevel == 1)
+    {
+        <h1 class="record-headline">@Headline</h1>
+    }
+    else
+    {
+        <h2 class="record-headline">@Headline</h2>
+    }
+    @if (!string.IsNullOrWhiteSpace(Summary))
+    {
+        <p class="record-lede">@Summary</p>
+    }
+    @if (!string.IsNullOrWhiteSpace(Significance))
+    {
+        <section><h3>Why it matters</h3><p class="record-body">@Significance</p></section>
+    }
+    @if (!string.IsNullOrWhiteSpace(Limits))
+    {
+        <section><h3>What the evidence cannot establish</h3><p class="record-body">@Limits</p></section>
+    }
+    <Facts Items="Facts" />
+    @ChildContent
+</article>
+
+@code {
+    [Parameter, EditorRequired] public string Headline { get; set; } = string.Empty;
+    [Parameter] public string? Summary { get; set; }
+    [Parameter] public string? Significance { get; set; }
+    [Parameter] public string? Limits { get; set; }
+    [Parameter] public IReadOnlyList<Fact> Facts { get; set; } = [];
+    [Parameter] public int HeadingLevel { get; set; } = 2;
+    [Parameter] public string? Id { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

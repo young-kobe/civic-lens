@@ -1,0 +1,133 @@
+@page "/Documents/Comparison"
+@using CivicLens.Application.Documents
+@using CivicLens.Application.Review
+@using CivicLens.Core.Documents
+@using CivicLens.Host.Collection
+@using CivicLens.Host.Review
+@inject GetDocumentComparison Comparisons
+@inject IDocumentExtractionStore Extractions
+@inject CreateDocumentChangeDraft CreateDraft
+@inject ReviewActorAccessor Actors
+@inject NavigationManager Navigation
+
+<TopBarTitle Crumbs="Crumbs" />
+
+<div class="content">
+    @if (comparison is not null && before is not null && after is not null)
+    {
+        <PageHeader Title="@SourceLabels.Document(after.SourceAttempt.RequestedUrl)" Meta="ObservationTimes(before, after)">
+            <Actions>
+                @if (CanStartDraft)
+                {
+                    <form method="post" class="inline" @formname="start-draft" @onsubmit="StartDraftAsync">
+                        <AntiforgeryToken />
+                        <input type="hidden" name="IdempotencyKey" value="@IdempotencyKey" />
+                        <Button Variant="ButtonVariant.Primary" Type="submit">Start draft</Button>
+                    </form>
+                }
+            </Actions>
+        </PageHeader>
+        @if (draftProblem is not null)
+        {
+            <Notice Tone="Tone.Bad" Title="No draft was created">@draftProblem</Notice>
+        }
+        <ComparisonStatusNotice Comparison="comparison" />
+        @if (!comparison.Hunks.IsEmpty)
+        {
+            <Panel Title="Changes" Padded="true">
+                <Aside>
+                    <a href="@EvidenceLinks.Extraction(comparison.BeforeExtractionId)">Earlier saved text</a>
+                    <a href="@EvidenceLinks.Extraction(comparison.AfterExtractionId)">Later saved text</a>
+                </Aside>
+                <ChildContent>
+                    <DocumentComparisonView Hunks="comparison.Hunks" ViewId="@comparison.ComparisonId"
+                                            BeforeExtractionId="@comparison.BeforeExtractionId" AfterExtractionId="@comparison.AfterExtractionId" />
+                </ChildContent>
+            </Panel>
+        }
+        <TechnicalDetails Items="@([("Comparison ID", comparison.ComparisonId), ("Earlier extraction ID", comparison.BeforeExtractionId), ("Later extraction ID", comparison.AfterExtractionId), ("Algorithm", comparison.AlgorithmVersion), ("Settings", comparison.SettingsVersion)])" />
+    }
+    else
+    {
+        <PageHeader Title="Saved comparison" />
+        @if (problem is not null)
+        {
+            <EvidenceProblemView Problem="problem" />
+        }
+    }
+</div>
+
+@code {
+    private static readonly IReadOnlyList<Crumb> Crumbs = [new("Review", "/Review"), new("Saved comparison")];
+    private DocumentComparison? comparison;
+    private DocumentExtraction? before;
+    private DocumentExtraction? after;
+    private EvidenceProblem? problem;
+    private string? draftProblem;
+
+    [CascadingParameter] private HttpContext HttpContext { get; set; } = default!;
+    [SupplyParameterFromQuery] private string? ComparisonId { get; set; }
+    [SupplyParameterFromForm(FormName = "start-draft")] private string? IdempotencyKey { get; set; }
+
+    private bool CanStartDraft => comparison is { Status: DocumentComparisonStatus.Complete, Hunks.IsEmpty: false };
+
+    private CancellationToken Aborted => HttpContext.RequestAborted;
+
+    private static RenderFragment ObservationTimes(DocumentExtraction earlier, DocumentExtraction later) =>
+        @<text>
+            <span>Earlier version <Timestamp Value="earlier.SourceAttempt.ObservedAt" Format="TimestampFormat.Full" /></span>
+            <span>Later version <Timestamp Value="later.SourceAttempt.ObservedAt" Format="TimestampFormat.Full" /></span>
+        </text>;
+
+    protected override async Task OnInitializedAsync()
+    {
+        IdempotencyKey ??= Guid.NewGuid().ToString("N");
+        await ShowAsync();
+    }
+
+    private async Task StartDraftAsync()
+    {
+        try
+        {
+            var actor = Actors.GetActor(HttpContext.User);
+            var draft = await CreateDraft.ExecuteAsync(actor, new CreateDocumentChangeDraftRequest(comparison!.ComparisonId, IdempotencyKey!), Aborted);
+            Navigation.NavigateTo($"/Review/{draft.DraftId}");
+        }
+        catch (OperationCanceledException) when (Aborted.IsCancellationRequested) { throw; }
+        catch (ArgumentException)
+        {
+            FailDraft(StatusCodes.Status400BadRequest, "This comparison cannot start a draft. Go back to Review to choose a change that can.");
+        }
+        catch (Exception exception) when (exception is not NavigationException)
+        {
+            FailDraft(StatusCodes.Status503ServiceUnavailable, "The draft could not be created. Try again.");
+        }
+    }
+
+    private void FailDraft(int statusCode, string message)
+    {
+        draftProblem = message;
+        EvidenceProblem.SetStatus(HttpContext.Response, statusCode);
+    }
+
+    private async Task ShowAsync()
+    {
+        problem = await LoadAsync();
+        if (problem is not null) EvidenceProblem.SetStatus(HttpContext.Response, problem.StatusCode);
+    }
+
+    private async Task<EvidenceProblem?> LoadAsync()
+    {
+        if (!EvidenceProblem.IsHash(ComparisonId)) return EvidenceProblem.Invalid;
+        try
+        {
+            comparison = await Comparisons.ExecuteAsync(ComparisonId!, Aborted);
+            if (comparison is null) return EvidenceProblem.Missing("Comparison");
+            before = await Extractions.GetAsync(comparison.BeforeExtractionId, Aborted);
+            after = await Extractions.GetAsync(comparison.AfterExtractionId, Aborted);
+            return before is null || after is null ? EvidenceProblem.Unavailable : null;
+        }
+        catch (OperationCanceledException) when (Aborted.IsCancellationRequested) { throw; }
+        catch (Exception) { return EvidenceProblem.Unavailable; }
+    }
+}

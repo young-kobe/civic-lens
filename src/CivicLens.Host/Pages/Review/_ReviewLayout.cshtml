@@ -1,6 +1,0 @@
-@inject CivicLens.Host.Review.ReviewActorAccessor ReviewActors
-@{
-    Layout = "/Pages/Shared/_Layout.cshtml";
-    ViewData["CanCollect"] = ReviewActors.GetActor(User).Role == CivicLens.Core.Review.ReviewRole.Owner;
-}
-@RenderBody()

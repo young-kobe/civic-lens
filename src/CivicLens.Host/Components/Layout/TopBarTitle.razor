@@ -1,0 +1,23 @@
+<PageTitle>@($"{Crumbs[^1].Text} · Civic Lens")</PageTitle>
+<SectionContent SectionName="@WorkspaceLayout.CrumbsSection">
+    @for (var index = 0; index < Crumbs.Count; index++)
+    {
+        var crumb = Crumbs[index];
+        @if (index > 0)
+        {
+            <span aria-hidden="true">/</span>
+        }
+        @if (index == Crumbs.Count - 1)
+        {
+            <span aria-current="page">@crumb.Text</span>
+        }
+        else
+        {
+            <a href="@crumb.Href">@crumb.Text</a>
+        }
+    }
+</SectionContent>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<Crumb> Crumbs { get; set; } = [];
+}

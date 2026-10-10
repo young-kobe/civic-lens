@@ -1,4 +1,5 @@
 using System.Net;
+using CivicLens.Application.Activity;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Documents;
 using CivicLens.Application.Review;
@@ -6,6 +7,8 @@ using CivicLens.Infrastructure.Documents;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Collection.Jobs;
 using CivicLens.Infrastructure.Review;
+using CivicLens.Host.Components;
+using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
@@ -45,6 +48,8 @@ internal static class ReviewWorkspace
                 WebRootPath = Path.Combine(AppContext.BaseDirectory, "wwwroot")
             });
             builder.Configuration.Sources.Clear();
+            // Build output lacks framework scripts such as blazor.web.js; publish output includes them.
+            builder.WebHost.UseStaticWebAssets();
             builder.Logging.ClearProviders();
             builder.WebHost.ConfigureKestrel(options =>
             {
@@ -66,7 +71,8 @@ internal static class ReviewWorkspace
                 options.DefaultPolicy = policy;
                 options.FallbackPolicy = policy;
             });
-            builder.Services.AddRazorPages(options => options.Conventions.AddPageRoute("/Index", "/Evidence"));
+            builder.Services.AddRazorComponents().AddInteractiveServerComponents();
+            builder.Services.AddCascadingAuthenticationState();
             ConfigureReviewServices(builder.Services, connectionString);
 
             await using var app = builder.Build();
@@ -93,10 +99,11 @@ internal static class ReviewWorkspace
                     }
                 }
             });
-            app.UseStaticFiles();
             app.UseRouting();
             app.UseAuthentication();
             app.UseAuthorization();
+            app.UseAntiforgery();
+            app.MapStaticAssets().AllowAnonymous();
             app.MapGet("/login", () => Results.Challenge(new AuthenticationProperties { RedirectUri = "/Review" },
                 [OpenIdConnectDefaults.AuthenticationScheme])).AllowAnonymous();
             app.MapGet("/access-denied", () => Results.Text("This account does not have editorial access.", statusCode: 403)).AllowAnonymous();
@@ -105,7 +112,10 @@ internal static class ReviewWorkspace
                 if (context.Request.Path == "/") context.Response.Redirect("/Review");
                 else await next();
             });
-            app.MapRazorPages();
+            app.MapGet("/Review/Logout", () => Results.StatusCode(StatusCodes.Status405MethodNotAllowed));
+            app.MapPost("/Review/Logout", (Delegate)SignOutAsync).WithMetadata(new RequireAntiforgeryTokenAttribute());
+            app.MapBlazorHub(options => options.CloseOnAuthenticationExpiration = true).WithOrder(-1);
+            app.MapRazorComponents<App>().AddInteractiveServerRenderMode();
             using var registration = cancellationToken.Register(app.Lifetime.StopApplication);
             await app.StartAsync(cancellationToken);
             Console.WriteLine($"Review workspace listening on loopback port {port}; HTTPS origin {settings.Origin.GetLeftPart(UriPartial.Authority)}.");
@@ -118,6 +128,13 @@ internal static class ReviewWorkspace
             Console.Error.WriteLine("Review workspace failed. Check configuration, persistent storage, and applied migrations.");
             return 1;
         }
+    }
+
+    private static async Task<IResult> SignOutAsync(HttpContext context)
+    {
+        if (context.Features.Get<IAntiforgeryValidationFeature>()?.IsValid != true) return Results.BadRequest();
+        await context.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+        return Results.Text("You have signed out of Civic Lens. Your identity-provider session may still be active.");
     }
 
     private static void ConfigureAuthentication(IServiceCollection services, ReviewWorkspaceSettings settings)
@@ -184,21 +201,21 @@ internal static class ReviewWorkspace
         services.AddScoped<GetDocumentChangeReview>();
         services.AddScoped<ListDocumentChangeReviews>();
         services.AddScoped<ListEligibleDocumentComparisons>();
+        services.AddScoped<GetReviewOverview>();
         var collection = ReviewCollectionSettings.FromEnvironment();
-        if (collection is not null)
+        if (collection is null)
         {
-            services.AddScoped(_ =>
-            {
-                var jobs = PostgresCollectionJobStore.FromConnectionString(connectionString);
-                var attempts = PostgresCollectionAttemptStore.FromConnectionString(connectionString);
-                var extractions = PostgresDocumentExtractionStore.FromConnectionString(connectionString);
-                var comparisons = PostgresDocumentComparisonStore.FromConnectionString(connectionString);
-                var history = PostgresDocumentHistoryStore.FromConnectionString(connectionString);
-                return new CollectionWorkspace(collection.Configuration, collection.ArtifactRoot, jobs, jobs,
-                    new ExtractDocument(attempts, new CaptureDocumentTextExtractor(), extractions), extractions,
-                    new CompareDocuments(extractions, comparisons), new GetDocumentHistory(history), attempts,
-                    CivicLens.Infrastructure.Collection.Processing.PostgresEvidenceProcessingStore.FromConnectionString(connectionString));
-            });
+            services.AddScoped(provider => new GetRecentActivity(provider.GetRequiredService<IDocumentChangeReviewStore>()));
+        }
+        else
+        {
+            services.AddScoped(provider => new GetRecentActivity(provider.GetRequiredService<IDocumentChangeReviewStore>(),
+                PostgresCollectionJobStore.FromConnectionString(connectionString),
+                CivicLens.Infrastructure.Collection.Processing.PostgresEvidenceProcessingStore.FromConnectionString(connectionString)));
+            services.AddScoped(_ => new CollectionWorkspace(collection.Configuration,
+                PostgresCollectionJobStore.FromConnectionString(connectionString),
+                PostgresCollectionAttemptStore.FromConnectionString(connectionString),
+                CivicLens.Infrastructure.Collection.Processing.PostgresEvidenceProcessingStore.FromConnectionString(connectionString)));
         }
     }
 
@@ -208,7 +225,7 @@ internal static class ReviewWorkspace
     private static void SetHeaders(HttpResponse response)
     {
         response.Headers.CacheControl = "no-store";
-        response.Headers.ContentSecurityPolicy = "default-src 'none'; style-src 'self'; script-src 'self'; connect-src 'self'; img-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
+        response.Headers.ContentSecurityPolicy = "default-src 'none'; style-src 'self'; script-src 'self'; connect-src 'self'; img-src 'self'; font-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'";
         response.Headers["Referrer-Policy"] = "no-referrer";
         response.Headers.XContentTypeOptions = "nosniff";
         response.Headers.XFrameOptions = "DENY";

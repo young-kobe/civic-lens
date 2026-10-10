@@ -1,26 +1,184 @@
+@font-face {
+    font-family: "Instrument Sans";
+    src: url("../fonts/instrument-sans.woff2") format("woff2");
+    font-weight: 400 700;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: "Newsreader";
+    src: url("../fonts/newsreader.woff2") format("woff2");
+    font-weight: 200 800;
+    font-style: normal;
+    font-display: swap;
+}
+
+:root {
+    --ui: "Instrument Sans", "Segoe UI", system-ui, sans-serif;
+    --read: "Newsreader", Charter, "Iowan Old Style", Georgia, serif;
+    --code: ui-monospace, "Cascadia Code", "SF Mono", Menlo, monospace;
+
+    --t-xs: .8125rem;
+    --t-sm: .875rem;
+    --t-base: .9375rem;
+    --t-md: 1.0625rem;
+    --t-lg: 1.1875rem;
+    --t-xl: 1.5rem;
+    --t-2xl: 1.875rem;
+
+    --s1: 4px;
+    --s2: 8px;
+    --s3: 12px;
+    --s4: 16px;
+    --s5: 24px;
+    --s6: 32px;
+    --s7: 48px;
+
+    --r-control: 6px;
+    --r-panel: 10px;
+    --measure: 66ch;
+    --content: 1320px;
+    --reading: 760px;
+    --rail-width: 220px;
+    --topbar-height: 60px;
+
+    --ease: cubic-bezier(.2, .7, .2, 1);
+    --fast: 120ms;
+    --med: 220ms;
+}
+
 :root {
     color-scheme: light;
-    color: var(--ink);
-    background: var(--paper);
-    font-family: "Segoe UI", system-ui, sans-serif;
-    font-synthesis: none;
-    text-rendering: optimizeLegibility;
-    --ink: #191919;
-    --muted: #5b5b5b;
-    --accent: #303030;
-    --rail: #202020;
-    --rail-hover: #41413f;
-    --paper: #fff;
-    --ground: #f5f5f4;
-    --wash: #ededeb;
-    --line: #d6d6d3;
-    --control-border: #777773;
-    --focus: #1d5f91;
-    --success: #21603e;
-    --success-bg: #e5f0e9;
-    --danger: #8d3434;
-    --danger-bg: #f5e8e6;
-    --warning: #704600;
-    --warning-bg: #fff2d9;
-    --radius: 3px;
+
+    --ground: #f2f3f5;
+    --surface: #ffffff;
+    --raised: #f7f8f9;
+    --ink: #1b1e22;
+    --ink-2: #3a4047;
+    --muted: #5f6670;
+    --line: #e1e4e8;
+    --line-strong: #c3c8ce;
+
+    --rail: #1b1e22;
+    --rail-top: #24282d;
+    --rail-ink: #eceef1;
+    --rail-muted: #9aa1aa;
+    --rail-line: #353a41;
+    --rail-hover: rgba(255, 255, 255, .04);
+    --rail-active: rgba(255, 255, 255, .07);
+    --rail-alert: #e0786f;
+    --rail-alert-halo: rgba(224, 120, 111, .18);
+
+    --primary: #1b1e22;
+    --primary-top: #30353b;
+    --primary-ink: #ffffff;
+    --focus: #1f5fbf;
+    --focus-halo: rgba(31, 95, 191, .2);
+
+    --del: #9e2b2b;
+    --del-bg: #fbeceb;
+    --ins: #1b6a43;
+    --ins-bg: #e3f2e8;
+    --warn: #7a4d00;
+    --warn-bg: #fcf0d9;
+    --info: #1f5fbf;
+    --info-bg: #e9f0fa;
+
+    --hairlight: rgba(255, 255, 255, .10);
+    --ring: 0 0 0 1px rgba(22, 27, 34, .08);
+    --e1: var(--ring), 0 1px 2px rgba(22, 27, 34, .05);
+    --e2: var(--ring), 0 2px 4px rgba(22, 27, 34, .05), 0 10px 24px -8px rgba(22, 27, 34, .14);
+    --e3: var(--ring), 0 4px 8px rgba(22, 27, 34, .08), 0 28px 56px -12px rgba(22, 27, 34, .28);
+    --shadow-control: 0 1px 1px rgba(22, 27, 34, .04);
+    --shadow-control-hover: 0 2px 6px -2px rgba(22, 27, 34, .14);
+    --shadow-primary: 0 1px 2px rgba(22, 27, 34, .25);
+    --shadow-primary-hover: 0 3px 10px -3px rgba(22, 27, 34, .45);
+    --shadow-stuck: 0 6px 8px -6px rgba(22, 27, 34, .25);
+    --scrim: rgba(22, 27, 34, .32);
 }
+
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+        color-scheme: dark;
+        --ground: #15171a;
+        --surface: #1d2024;
+        --raised: #24282d;
+        --ink: #e6e8eb;
+        --ink-2: #c3c8ce;
+        --muted: #8f96a0;
+        --line: #2e3238;
+        --line-strong: #474d55;
+        --rail: #101214;
+        --rail-top: #1a1d20;
+        --rail-ink: #e6e8eb;
+        --rail-muted: #8b929b;
+        --rail-line: #2a2e33;
+        --primary: #e6e8eb;
+        --primary-top: #ffffff;
+        --primary-ink: #15171a;
+        --focus: #7aa7f2;
+        --focus-halo: rgba(122, 167, 242, .28);
+        --del: #f2a6a1;
+        --del-bg: rgba(226, 88, 76, .16);
+        --ins: #8fd5a9;
+        --ins-bg: rgba(64, 176, 108, .16);
+        --warn: #efc678;
+        --warn-bg: rgba(222, 164, 46, .15);
+        --info: #8fb5f4;
+        --info-bg: rgba(98, 145, 232, .16);
+        --hairlight: rgba(255, 255, 255, .06);
+        --ring: 0 0 0 1px rgba(255, 255, 255, .07);
+        --e1: var(--ring), 0 1px 2px rgba(0, 0, 0, .3);
+        --e2: var(--ring), 0 2px 4px rgba(0, 0, 0, .3), 0 10px 24px -8px rgba(0, 0, 0, .5);
+        --e3: var(--ring), 0 4px 8px rgba(0, 0, 0, .35), 0 28px 56px -12px rgba(0, 0, 0, .7);
+        --shadow-control: 0 1px 1px rgba(0, 0, 0, .25);
+        --shadow-control-hover: 0 2px 6px -2px rgba(0, 0, 0, .5);
+        --shadow-primary: 0 1px 2px rgba(0, 0, 0, .5);
+        --shadow-primary-hover: 0 3px 10px -3px rgba(0, 0, 0, .7);
+        --shadow-stuck: 0 6px 8px -6px rgba(0, 0, 0, .6);
+        --scrim: rgba(0, 0, 0, .55);
+    }
+}
+
+:root[data-theme="dark"] {
+    color-scheme: dark;
+    --ground: #15171a;
+    --surface: #1d2024;
+    --raised: #24282d;
+    --ink: #e6e8eb;
+    --ink-2: #c3c8ce;
+    --muted: #8f96a0;
+    --line: #2e3238;
+    --line-strong: #474d55;
+    --rail: #101214;
+    --rail-top: #1a1d20;
+    --rail-ink: #e6e8eb;
+    --rail-muted: #8b929b;
+    --rail-line: #2a2e33;
+    --primary: #e6e8eb;
+    --primary-top: #ffffff;
+    --primary-ink: #15171a;
+    --focus: #7aa7f2;
+    --focus-halo: rgba(122, 167, 242, .28);
+    --del: #f2a6a1;
+    --del-bg: rgba(226, 88, 76, .16);
+    --ins: #8fd5a9;
+    --ins-bg: rgba(64, 176, 108, .16);
+    --warn: #efc678;
+    --warn-bg: rgba(222, 164, 46, .15);
+    --info: #8fb5f4;
+    --info-bg: rgba(98, 145, 232, .16);
+    --hairlight: rgba(255, 255, 255, .06);
+    --ring: 0 0 0 1px rgba(255, 255, 255, .07);
+    --e1: var(--ring), 0 1px 2px rgba(0, 0, 0, .3);
+    --e2: var(--ring), 0 2px 4px rgba(0, 0, 0, .3), 0 10px 24px -8px rgba(0, 0, 0, .5);
+    --e3: var(--ring), 0 4px 8px rgba(0, 0, 0, .35), 0 28px 56px -12px rgba(0, 0, 0, .7);
+    --shadow-control: 0 1px 1px rgba(0, 0, 0, .25);
+    --shadow-control-hover: 0 2px 6px -2px rgba(0, 0, 0, .5);
+    --shadow-primary: 0 1px 2px rgba(0, 0, 0, .5);
+    --shadow-primary-hover: 0 3px 10px -3px rgba(0, 0, 0, .7);
+    --shadow-stuck: 0 6px 8px -6px rgba(0, 0, 0, .6);
+    --scrim: rgba(0, 0, 0, .55);
+}
+

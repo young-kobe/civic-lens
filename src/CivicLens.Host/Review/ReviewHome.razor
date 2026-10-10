@@ -1,0 +1,132 @@
+@page "/Review"
+@using CivicLens.Application.Review
+@using CivicLens.Core.Review
+@using CivicLens.Host.Collection
+
+<TopBarTitle Crumbs="Crumbs" />
+
+<div class="content">
+    @if (StatusMessage is not null)
+    {
+        <Notice Tone="Tone.Bad" Dismissible="true">@StatusMessage</Notice>
+    }
+    @if (error is not null)
+    {
+        <Notice Tone="Tone.Bad">@error</Notice>
+    }
+
+    <form id="start-draft" method="post" @formname="start-draft" @onsubmit="StartDraftAsync">
+        <AntiforgeryToken />
+        <input type="hidden" name="idempotencyKey" value="@renderKey" />
+    </form>
+
+    @if (overview is not null && changes is not null && drafts is not null)
+    {
+        <StatStrip Label="Review summary">
+            <Stat Value="overview.NewChanges" Label="New changes" Href="#new-changes" />
+            <Stat Value="overview.DraftsNeedingAction" Label="Drafts need action" Tone="Tone.Warn" Href="/Review?drafts=needs-action#drafts" />
+            <Stat Value="overview.ApprovedDrafts" Label="Approved, private" Tone="Tone.Ok" Href="/Review?drafts=approved#drafts" />
+            @if (health is not null)
+            {
+                <Stat Value="health.AttentionCount" Label="Sources need attention" Tone="Tone.Bad" Href="/Review/Sources" />
+            }
+        </StatStrip>
+
+        <div class="dashboard">
+            <div class="dashboard-main">
+                <Panel Title="New changes" Id="new-changes">
+                    <Aside>A text change alone does not show significance.</Aside>
+                    <ChildContent>
+                        <DataTable Items="changes.Items" Caption="New changes">
+                            <Head>
+                                <th>Document</th>
+                                <th class="fit hide-narrow">Source</th>
+                                <th class="time">Observed</th>
+                                <th class="num hide-narrow">Passages</th>
+                                <th class="act"><span class="visually-hidden">Action</span></th>
+                            </Head>
+                            <Row Context="item">
+                                <td>
+                                    <a class="cell-title" href="@($"/Documents/Comparison?comparisonId={item.Comparison.ComparisonId}")">@SourceLabels.Document(item.RequestedUrl)</a>
+                                    @if (item.Comparison.Hunks.Length > 0)
+                                    {
+                                        <RedlineExcerpt Hunk="item.Comparison.Hunks[0]" />
+                                    }
+                                </td>
+                                <td class="fit hide-narrow">@SourceLabels.Name(configuration, item.SourceId)</td>
+                                <td class="time"><Timestamp Value="item.AfterObservedAtUtc" /></td>
+                                <td class="num hide-narrow">@item.Comparison.Hunks.Length</td>
+                                <td class="act">
+                                    <Button Variant="ButtonVariant.Primary" Small="true" Type="submit" form="start-draft" name="comparisonId" value="@item.Comparison.ComparisonId">Start draft</Button>
+                                </td>
+                            </Row>
+                            <Empty>
+                                <EmptyState Title="No new changes" Text="Sources are checked every hour. A first check saves a baseline. Later text changes show here.">
+                                    <Action>
+                                        @if (actor?.Role == ReviewRole.Owner)
+                                        {
+                                            <Button Href="/Review/Sources">Go to Sources</Button>
+                                        }
+                                    </Action>
+                                </EmptyState>
+                            </Empty>
+                        </DataTable>
+                        <Pager Label="New changes pages" Summary="@Count(overview.NewChanges, "new change", "new changes")"
+                               NewerHref="@ChangesHref(changes.NewerCursor)" OlderHref="@ChangesHref(changes.OlderCursor)" />
+                    </ChildContent>
+                </Panel>
+
+                <Panel Title="Drafts" Id="drafts">
+                    <Aside><FilterTabs Label="Filter drafts" Tabs="DraftTabs" /></Aside>
+                    <ChildContent>
+                        <DataTable Items="drafts.Items" Caption="Drafts">
+                            <Head>
+                                <th>Account</th>
+                                <th>Status</th>
+                                <th class="num hide-narrow">Revision</th>
+                                <th class="time">Updated</th>
+                                <th class="act"><span class="visually-hidden">Action</span></th>
+                            </Head>
+                            <Row Context="draft">
+                                <td>
+                                    <a class="cell-title" href="@($"/Review/{draft.DraftId}")">@DraftStatusDisplay.DraftName(draft.CurrentRevision.Headline)</a>
+                                    <span class="cell-sub">@(string.IsNullOrWhiteSpace(draft.CurrentRevision.Summary) ? "Add a plain-language summary before approval." : draft.CurrentRevision.Summary)</span>
+                                </td>
+                                <td><StatusBadge Tone="DraftStatusDisplay.Tone(draft.CurrentStatus)" Text="@DraftStatusDisplay.Label(draft.CurrentStatus, draft.UnresolvedConcernCount)" /></td>
+                                <td class="num hide-narrow">@draft.CurrentRevision.RevisionNumber</td>
+                                <td class="time"><Timestamp Value="draft.CurrentRevision.CreatedAtUtc" /></td>
+                                <td class="act"><Button Small="true" Href="@($"/Review/{draft.DraftId}")">Open</Button></td>
+                            </Row>
+                            <Empty>
+                                <EmptyState Title="@DraftsEmpty.Title" Text="@DraftsEmpty.Text" />
+                            </Empty>
+                        </DataTable>
+                        <Pager Label="Draft pages" NewerHref="@DraftsHref(drafts.NewerCursor)" OlderHref="@DraftsHref(drafts.OlderCursor)" />
+                    </ChildContent>
+                </Panel>
+            </div>
+
+            <div class="dashboard-side">
+                @if (health is not null)
+                {
+                    <Panel Title="Source health" Id="source-health">
+                        <Aside><a href="/Review/Sources">All sources</a></Aside>
+                        <ChildContent>
+                            <HealthList Items="health.Sources.Select(item => SourceStatusDisplay.Item(SourceLabels.Name(configuration, item.SourceId), item)).ToArray()" />
+                        </ChildContent>
+                    </Panel>
+                }
+                <Panel Title="Recent activity" Id="recent-activity">
+                    @if (activity.Count == 0)
+                    {
+                        <EmptyState Title="No activity yet" />
+                    }
+                    else
+                    {
+                        <ActivityFeed Items="activity" />
+                    }
+                </Panel>
+            </div>
+        </div>
+    }
+</div>

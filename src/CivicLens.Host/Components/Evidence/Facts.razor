@@ -1,0 +1,11 @@
+<dl class="facts">
+    @foreach (var fact in Items)
+    {
+        <dt>@fact.Label</dt>
+        <dd>@fact.Value</dd>
+    }
+</dl>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<Fact> Items { get; set; } = [];
+}

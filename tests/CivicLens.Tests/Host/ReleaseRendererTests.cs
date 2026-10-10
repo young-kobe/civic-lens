@@ -51,7 +51,7 @@ public sealed class ReleaseRendererTests
 
         var html = await new ReleaseRenderer().RenderRecordAsync(record, CancellationToken.None);
 
-        var shown = new HtmlParser().ParseDocument(html).QuerySelectorAll("pre.public-text").Select(pre => pre.TextContent);
+        var shown = new HtmlParser().ParseDocument(html).QuerySelectorAll(".doc-text").Select(text => text.TextContent);
         Assert.Equal([record.Before.Text, record.After.Text], shown);
     }
 
@@ -64,8 +64,8 @@ public sealed class ReleaseRendererTests
         Assert.Contains("<html lang=\"en\">", html, StringComparison.Ordinal);
         Assert.DoesNotContain("Private", html, StringComparison.Ordinal);
         Assert.DoesNotContain("not published", html, StringComparison.Ordinal);
-        Assert.Contains("href=\"../assets/theme.css\"", html, StringComparison.Ordinal);
-        Assert.Contains("src=\"../assets/diff.js\"", html, StringComparison.Ordinal);
+        Assert.Contains("href=\"../assets/css/theme.css\"", html, StringComparison.Ordinal);
+        Assert.Contains("src=\"../assets/js/app.js\"", html, StringComparison.Ordinal);
         Assert.Contains("href=\"../index.html\"", html, StringComparison.Ordinal);
         Assert.DoesNotMatch(new Regex("(?:href|src)=\"(?:/|//)"), html);
         Assert.Contains("rel=\"noopener noreferrer nofollow\"", html, StringComparison.Ordinal);
@@ -126,7 +126,7 @@ public sealed class ReleaseRendererTests
         Assert.Contains($"href=\"records/{new string('c', 32)}.html\"", html, StringComparison.Ordinal);
         Assert.Contains("Headline &lt;i&gt;one&lt;/i&gt;", html, StringComparison.Ordinal);
         Assert.Contains("Release 4", html, StringComparison.Ordinal);
-        Assert.Contains("href=\"assets/theme.css\"", html, StringComparison.Ordinal);
+        Assert.Contains("href=\"assets/css/theme.css\"", html, StringComparison.Ordinal);
         Assert.DoesNotContain("Private", html, StringComparison.Ordinal);
         Assert.DoesNotContain("Page 1 of", html, StringComparison.Ordinal);
         Assert.DoesNotContain("rel=\"prev\"", html, StringComparison.Ordinal);
@@ -147,12 +147,11 @@ public sealed class ReleaseRendererTests
         var shown = Regex.Matches(html, "href=\"records/([0-9a-f]{32})\\.html\"").Select(match => match.Groups[1].Value).ToList();
         Assert.Equal(release.Records.Skip(firstIndex).Take(expectedCount).Select(entry => entry.RecordId), shown);
         Assert.Contains(label, html, StringComparison.Ordinal);
-        Assert.Equal(hasPrevious, html.Contains("rel=\"prev\"", StringComparison.Ordinal));
-        if (hasPrevious)
-            Assert.Contains(page == 2 ? "rel=\"prev\" href=\"index.html\"" : "rel=\"prev\" href=\"page-2.html\"", html, StringComparison.Ordinal);
-        Assert.Equal(next is not null, html.Contains("rel=\"next\"", StringComparison.Ordinal));
-        if (next is not null) Assert.Contains($"rel=\"next\" href=\"{next}\"", html, StringComparison.Ordinal);
-        Assert.Contains("href=\"assets/theme.css\"", html, StringComparison.Ordinal);
+        var document = new HtmlParser().ParseDocument(html);
+        var previous = page == 2 ? "index.html" : "page-2.html";
+        Assert.Equal(hasPrevious ? previous : null, document.QuerySelector("a[rel='prev']")?.GetAttribute("href"));
+        Assert.Equal(next, document.QuerySelector("a[rel='next']")?.GetAttribute("href"));
+        Assert.Contains("href=\"assets/css/theme.css\"", html, StringComparison.Ordinal);
         Assert.DoesNotMatch(new Regex("(?:href|src)=\"(?:/|//|https?:)"), html);
     }
 
@@ -170,8 +169,9 @@ public sealed class ReleaseRendererTests
     {
         var assets = new ReleaseRenderer().Assets;
 
-        Assert.Contains(assets, asset => asset.RelativePath == "assets/theme.css" && asset.Content.Length > 0);
-        Assert.Contains(assets, asset => asset.RelativePath == "assets/diff.js" && asset.Content.Length > 0);
+        foreach (var path in new[] { "assets/css/theme.css", "assets/css/app.css", "assets/js/theme.js", "assets/js/app.js",
+                     "assets/fonts/instrument-sans.woff2", "assets/fonts/newsreader.woff2" })
+            Assert.Contains(assets, asset => asset.RelativePath == path && asset.Content.Length > 0);
     }
 
     private static PublicationRelease ReleaseOf(int count) => new()

@@ -687,6 +687,10 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("revision_number");
 
+                    b.Property<long>("CreatedAtUtcTicks")
+                        .HasColumnType("bigint")
+                        .HasColumnName("created_at_utc_ticks");
+
                     b.Property<string>("RevisionJson")
                         .IsRequired()
                         .HasColumnType("text")
@@ -707,6 +711,10 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("character varying(32)")
                         .HasColumnName("decision_id");
 
+                    b.Property<long>("CreatedAtUtcTicks")
+                        .HasColumnType("bigint")
+                        .HasColumnName("created_at_utc_ticks");
+
                     b.Property<string>("DecisionJson")
                         .IsRequired()
                         .HasColumnType("text")
@@ -717,6 +725,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)")
                         .HasColumnName("draft_id");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("kind");
 
                     b.Property<int>("ReviewStateVersion")
                         .HasColumnType("integer")
