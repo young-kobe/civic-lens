@@ -2,6 +2,7 @@ using System.Net;
 using AngleSharp.Dom;
 using AngleSharp.Html.Parser;
 using CivicLens.Core.Documents;
+using CivicLens.Infrastructure.Publication;
 using CivicLens.Tests.Infrastructure.Collection;
 using static CivicLens.Tests.Host.ReviewWorkspaceHost;
 
@@ -209,6 +210,127 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
         Assert.NotNull(owner.QuerySelector("a[href='/Review/Sources']"));
         Assert.Contains("Test Official", owner.QuerySelector("[aria-labelledby='source-health']")!.TextContent, StringComparison.Ordinal);
         Assert.Contains("Sources need attention", owner.QuerySelector(".stats")!.TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task OnlyTheOwnerSeesThePublishSectionAndTheReleaseHistoryAsync()
+    {
+        SignIn(Reviewer);
+        var reviewer = await host.GetDocumentAsync("/Review");
+        Assert.Null(reviewer.QuerySelector("#publish"));
+        Assert.Null(reviewer.QuerySelector("#releases"));
+        Assert.Null(reviewer.QuerySelector("#publish-confirm"));
+        Assert.DoesNotContain("Ready to publish", reviewer.QuerySelector(".stats")!.TextContent, StringComparison.Ordinal);
+
+        host.Client.DefaultRequestHeaders.Remove("Cookie");
+        SignIn(Owner);
+        var owner = await host.GetDocumentAsync("/Review");
+        Assert.Equal("0", StatValue(owner, "Ready to publish"));
+        Assert.Equal("#publish", owner.QuerySelectorAll("a.stat")
+            .Single(stat => stat.QuerySelector(".stat-label")!.TextContent == "Ready to publish").GetAttribute("href"));
+        Assert.Equal("Nothing is ready to publish", owner.QuerySelector("[aria-labelledby='publish'] .empty h3")!.TextContent);
+        Assert.Equal("No releases yet", owner.QuerySelector("[aria-labelledby='releases'] .empty h3")!.TextContent);
+        Assert.Null(owner.QuerySelector("[aria-labelledby='releases'] button, [aria-labelledby='releases'] form"));
+    }
+
+    [Fact]
+    public async Task OwnerLearnsWhyPublishingIsOffWhenNoReleaseDirectoryIsSetAsync()
+    {
+        // A silently missing section would leave the owner unsure whether publishing exists at all.
+        var unconfigured = new ReviewWorkspaceHost(postgres) { Publishing = false };
+        await unconfigured.StartAsync();
+        try
+        {
+            unconfigured.Client.DefaultRequestHeaders.Add("Cookie", unconfigured.CreateCookie(Owner));
+            var owner = await unconfigured.GetDocumentAsync("/Review");
+            Assert.Contains("CIVIC_LENS_RELEASE_DIRECTORY", owner.QuerySelector("#publish")!.TextContent, StringComparison.Ordinal);
+            Assert.Null(owner.QuerySelector("#publish-confirm"));
+
+            unconfigured.Client.DefaultRequestHeaders.Remove("Cookie");
+            unconfigured.Client.DefaultRequestHeaders.Add("Cookie", unconfigured.CreateCookie(Reviewer));
+            Assert.Null((await unconfigured.GetDocumentAsync("/Review")).QuerySelector("#publish"));
+        }
+        finally
+        {
+            await unconfigured.StopAsync();
+        }
+    }
+
+    [Fact]
+    public async Task SelectingShowsASummaryAndOnlyConfirmingPublishesAReleaseAsync()
+    {
+        await SaveComparisonAsync("Fee: 10 dollars.\n", "Fee: 12 dollars.\n");
+        SignIn(Owner);
+        var draftUrl = await StartFirstDraftAsync();
+        var draftId = draftUrl[("/Review/".Length)..];
+        await SaveReadyRevisionAsync(draftUrl, "Fee rose to 12 dollars");
+        using var approved = await DecideAsync(draftUrl, "Approve");
+        Assert.Equal(HttpStatusCode.Redirect, approved.StatusCode);
+        var publications = PostgresPublicationStore.FromConnectionString(host.ConnectionString);
+
+        var home = await host.GetDocumentAsync("/Review");
+        Assert.Equal("1", StatValue(home, "Ready to publish"));
+        var checkbox = home.QuerySelector("input[type=checkbox][name=publish]")!;
+        Assert.Equal(draftId, checkbox.GetAttribute("value"));
+        Assert.Null(home.QuerySelector("#publish-confirm input[name=draftIds]"));
+
+        // Choosing drafts is a read. The summary names each draft and the release it would build.
+        var summary = await host.GetDocumentAsync($"/Review?publish={draftId}");
+        var text = summary.QuerySelector("[aria-labelledby='publish']")!.TextContent;
+        Assert.Contains("Confirm release 1", text, StringComparison.Ordinal);
+        Assert.Contains("Fee rose to 12 dollars", text, StringComparison.Ordinal);
+        Assert.Contains("New", summary.QuerySelector("[aria-labelledby='publish'] tbody .badge")!.TextContent, StringComparison.Ordinal);
+        Assert.Equal(0, (await publications.GetStateAsync(default)).LatestReleaseNumber);
+
+        var confirm = Fields(summary.QuerySelector("#publish-confirm")!);
+        Assert.Equal([draftId], confirm.Where(field => field.Key == "draftIds").Select(field => field.Value));
+        using var published = await host.Client.PostAsync("/Review", new FormUrlEncodedContent(confirm));
+        Assert.Equal(HttpStatusCode.Redirect, published.StatusCode);
+        Assert.Equal("/Review?status=published&release=1", PathOf(published).Split('#')[0]);
+        Assert.Equal(1, (await publications.GetStateAsync(default)).Active!.ReleaseNumber);
+
+        // A repeated confirm replays the stored release instead of building a second one.
+        using var replay = await host.Client.PostAsync("/Review", new FormUrlEncodedContent(confirm));
+        Assert.Equal(HttpStatusCode.Redirect, replay.StatusCode);
+        Assert.Equal(1, (await publications.GetStateAsync(default)).LatestReleaseNumber);
+
+        home = await host.GetDocumentAsync("/Review?status=published&release=1");
+        Assert.Equal("Release 1 is published.", home.QuerySelector(".notice-ok")!.TextContent.Replace("×", "").Trim());
+        Assert.Equal("0", StatValue(home, "Ready to publish"));
+        var row = home.QuerySelector("[aria-labelledby='releases'] tbody tr")!.TextContent;
+        Assert.Contains("Active", row, StringComparison.Ordinal);
+
+        // A new revision of a published draft is offered again, marked as a replacement.
+        await SaveReadyRevisionAsync(draftUrl, "Fee rose to 12 dollars, effective now");
+        using var reapproved = await DecideAsync(draftUrl, "Approve");
+        Assert.Equal(HttpStatusCode.Redirect, reapproved.StatusCode);
+        var replacement = await host.GetDocumentAsync($"/Review?publish={draftId}");
+        Assert.Equal("Replacement", replacement.QuerySelector("[aria-labelledby='publish'] tbody .badge")!.TextContent);
+        Assert.Contains("Confirm release 2", replacement.QuerySelector("[aria-labelledby='publish']")!.TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ReviewerCannotPublishEvenWithAForgedPostAsync()
+    {
+        await SaveComparisonAsync("Fee: 10 dollars.\n", "Fee: 12 dollars.\n");
+        SignIn(Owner);
+        var draftUrl = await StartFirstDraftAsync();
+        await SaveReadyRevisionAsync(draftUrl, "Fee rose to 12 dollars");
+        using var approved = await DecideAsync(draftUrl, "Approve");
+        Assert.Equal(HttpStatusCode.Redirect, approved.StatusCode);
+        host.Client.DefaultRequestHeaders.Remove("Cookie");
+        SignIn(Reviewer);
+
+        // The reviewer holds a valid antiforgery token for their own page, but the page offers no publish form.
+        var home = await host.GetDocumentAsync("/Review");
+        var forged = Fields(home.QuerySelector("#start-draft")!);
+        forged.Add(new("_handler", "publish-confirm"));
+        forged.Add(new("draftIds", draftUrl[("/Review/".Length)..]));
+        using var response = await host.Client.PostAsync("/Review", new FormUrlEncodedContent(forged));
+
+        Assert.NotEqual(HttpStatusCode.Redirect, response.StatusCode);
+        var publications = PostgresPublicationStore.FromConnectionString(host.ConnectionString);
+        Assert.Equal(0, (await publications.GetStateAsync(default)).LatestReleaseNumber);
     }
 
     [Fact]
