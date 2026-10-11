@@ -2,6 +2,8 @@ using System.Text.Json;
 using System.Globalization;
 using System.Runtime.InteropServices;
 using CivicLens.Application;
+using CivicLens.Application.Analysis;
+using CivicLens.Infrastructure.Analysis;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Application.Collection.Discovery;
@@ -11,6 +13,7 @@ using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Collection.Jobs;
 using CivicLens.Infrastructure.Collection.Processing;
 using CivicLens.Application.Documents;
+using CivicLens.Host.Analysis;
 using CivicLens.Host.Collection;
 using CivicLens.Host.Documents;
 using CivicLens.Host.Publication;
@@ -47,6 +50,7 @@ if (args is [] or ["--help"] or ["help"])
           documents history <source-id> <exact-requested-url>
           documents compare <before-extraction-id> <after-extraction-id>
           documents comparison <comparison-id>
+          analyses requeue <comparison-id|--all>
           releases publish <idempotency-key> <draft-id>...
           releases list [limit]
           releases activate <release-number>
@@ -59,6 +63,7 @@ if (args is [] or ["--help"] or ["help"])
         collect and receipts list are database-free. collect-import saves a handoff before importing.
         receipts replay imports saved handoffs without collecting again; use the capture directory after relocation.
         jobs commands require the database. Each run reconciles prior work and performs at most one new fetch.
+        worker also drafts document-change accounts when CIVIC_LENS_ANALYSIS_DAILY_TOKENS and ANTHROPIC_API_KEY are set.
         documents commands require the database. Citations use UTF-16 offsets into immutable extracted text.
         Exit codes: 0 success, 1 failed/deferred collection or operational failure, 2 invalid input/configuration.
         """);
@@ -105,7 +110,8 @@ if (args.Contains("--as-of", StringComparer.Ordinal))
 if (args is not (["db", "migrate"] or ["validate", _] or ["collect", _, _, _, _] or ["collect-import", _, _, _, _]
     or ["feeds" or "discovery", "get", _] or ["feeds" or "discovery", "admit", _, _, _, _]
     or ["receipts", "list", _] or ["receipts", "replay", _, _]) && !CollectionJobCommand.Matches(args) &&
-    !CollectionWorkerCommand.Matches(args) && !DocumentCommand.Matches(args) && !ReleaseCommand.Matches(args))
+    !CollectionWorkerCommand.Matches(args) && !DocumentCommand.Matches(args) && !ReleaseCommand.Matches(args) &&
+    !AnalysisCommand.Matches(args))
 {
     Console.Error.WriteLine("Unknown command. Use --help.");
     return 2;
@@ -129,10 +135,13 @@ try
         var workerConfiguration = await ReadConfigurationAsync(configurationPath, cancellation.Token);
         var jobs = CreateJobs();
         var attempts = CreateDatabase();
-        var queue = PostgresCollectionWorkerQueue.FromConnectionString(Environment.GetEnvironmentVariable("CIVIC_LENS_DATABASE")!);
+        var connectionString = Environment.GetEnvironmentVariable("CIVIC_LENS_DATABASE")!;
+        var queue = PostgresCollectionWorkerQueue.FromConnectionString(connectionString);
+        var analysis = DocumentChangeAnalysisComposition.Create(connectionString, workerConfiguration);
+        await using var analysisWakeup = analysis.Wakeup;
         executing = true;
         await jobs.SynchronizeAsync(workerConfiguration, cancellation.Token);
-        var connectionString = Environment.GetEnvironmentVariable("CIVIC_LENS_DATABASE")!;
+        await analysis.RecordStartAsync(cancellation.Token);
         var extractions = PostgresDocumentExtractionStore.FromConnectionString(connectionString);
         var comparisons = PostgresDocumentComparisonStore.FromConnectionString(connectionString);
         var processing = new EvidenceProcessingWorker(jobs, attempts, jobs,
@@ -141,7 +150,19 @@ try
             new GetDocumentHistory(PostgresDocumentHistoryStore.FromConnectionString(connectionString)),
             new CompareDocuments(extractions, comparisons));
         await using var wakeup = PostgresCollectionPipelineWakeup.FromConnectionString(connectionString);
-        return await CollectionWorkerCommand.ExecuteAsync(args, queue, jobs, attempts, cancellation.Token, processing, wakeup, jobs);
+        return await CollectionWorkerCommand.ExecuteAsync(args, queue, jobs, attempts, cancellation.Token, processing, wakeup, jobs,
+            analysis.Worker);
+    }
+
+    if (AnalysisCommand.Matches(args))
+    {
+        var connectionString = Environment.GetEnvironmentVariable("CIVIC_LENS_DATABASE");
+        var ownerSubject = Environment.GetEnvironmentVariable("CIVIC_LENS_REVIEW_OWNER");
+        if (string.IsNullOrWhiteSpace(connectionString) || string.IsNullOrWhiteSpace(ownerSubject))
+            throw new ArgumentException("Analysis commands require CIVIC_LENS_DATABASE and CIVIC_LENS_REVIEW_OWNER.");
+        var requeue = new RequeueDocumentChangeAnalyses(PostgresDocumentChangeAnalysisStore.FromConnectionString(connectionString));
+        executing = true;
+        return await AnalysisCommand.ExecuteAsync(args, requeue, new ReviewActor(ownerSubject, ReviewRole.Owner), cancellation.Token);
     }
 
     if (ReleaseCommand.Matches(args))

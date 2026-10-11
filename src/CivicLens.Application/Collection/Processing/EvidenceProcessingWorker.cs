@@ -37,7 +37,7 @@ public sealed class EvidenceProcessingWorker(
                 if (await ProcessAsync(record, artifactRoot, leaseDuration, cancellationToken)) progress++;
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
-            catch (Exception exception) when (IsRecoverable(exception)) { failures++; }
+            catch (Exception exception) when (WorkerLoop.IsRecoverable(exception)) { failures++; }
         }
         return new(progress, failures);
     }
@@ -109,7 +109,7 @@ public sealed class EvidenceProcessingWorker(
         var claim = await processing.TryClaimAsync(record.JobId, record.AttemptId, leaseDuration, cancellationToken);
         if (claim is null) return false;
         using var ownership = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        var heartbeat = RenewLeaseAsync(claim, leaseDuration, ownership);
+        var heartbeat = WorkerLoop.RenewLeaseAsync(token => processing.RenewAsync(claim, leaseDuration, token), leaseDuration, ownership);
         try
         {
             await AdvanceAsync(claim, artifactRoot, ownership.Token);
@@ -125,7 +125,7 @@ public sealed class EvidenceProcessingWorker(
             try { _ = await processing.ReleaseAsync(claim, release.Token); } catch { }
             throw;
         }
-        catch (Exception exception) when (IsRecoverable(exception))
+        catch (Exception exception) when (WorkerLoop.IsRecoverable(exception))
         {
             if (IsPermanent(exception))
             {
@@ -298,36 +298,9 @@ public sealed class EvidenceProcessingWorker(
             throw new OperationCanceledException("Processing lease was lost.");
     }
 
-    private async Task RenewLeaseAsync(EvidenceProcessingClaim claim, TimeSpan leaseDuration,
-        CancellationTokenSource ownership)
-    {
-        var interval = TimeSpan.FromTicks(leaseDuration.Ticks / 3);
-        while (!ownership.IsCancellationRequested)
-        {
-            try { await Task.Delay(interval, ownership.Token); }
-            catch (OperationCanceledException) when (ownership.IsCancellationRequested) { return; }
-            bool renewed;
-            try { renewed = await processing.RenewAsync(claim, leaseDuration, ownership.Token); }
-            catch (OperationCanceledException) when (ownership.IsCancellationRequested) { return; }
-            catch (Exception exception) when (IsRecoverable(exception))
-            {
-                ownership.Cancel();
-                return;
-            }
-            if (!renewed)
-            {
-                ownership.Cancel();
-                return;
-            }
-        }
-    }
-
     private static string SafeErrorCode(Exception exception) => exception is DocumentHistoryLimitException
-        ? "historyLimitExceeded" : exception.GetType().Name.Length <= 128 ? exception.GetType().Name : "processingFailure";
+        ? "historyLimitExceeded" : WorkerLoop.ErrorCode(exception);
 
     private static bool IsPermanent(Exception exception) => exception is ArgumentException or InvalidDataException or
         DocumentHistoryLimitException;
-
-    private static bool IsRecoverable(Exception exception) =>
-        exception is not OutOfMemoryException and not StackOverflowException;
 }

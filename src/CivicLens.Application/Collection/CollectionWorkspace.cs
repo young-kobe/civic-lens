@@ -166,7 +166,8 @@ public sealed class CollectionWorkspace
 
     private static void RequireOwner(ReviewActor actor)
     {
-        if (actor is null || actor.Role != ReviewRole.Owner || string.IsNullOrWhiteSpace(actor.Subject) || actor.Subject.Length > 256)
+        if (actor is null || actor.Role != ReviewRole.Owner || string.IsNullOrWhiteSpace(actor.Subject) || actor.Subject.Length > 256 ||
+            ReviewAuthor.IsAnalysis(actor.Subject))
             throw new UnauthorizedAccessException("Collection operations require the owner.");
     }
 }

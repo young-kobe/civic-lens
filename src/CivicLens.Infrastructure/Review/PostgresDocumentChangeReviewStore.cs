@@ -50,28 +50,15 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
         }
 
         if (revision.RevisionNumber != 1) throw new InvalidOperationException("A draft must begin at revision one.");
-        if (revision.AuthorSubject != actorSubject)
+        if (revision.AuthorSubject != actorSubject || ReviewAuthor.IsAnalysis(actorSubject))
             throw new UnauthorizedAccessException("Revision author does not match the authenticated subject.");
+        var existingDraftId = await ReadDraftIdForComparisonAsync(db, revision.ComparisonId, cancellationToken);
+        if (existingDraftId is not null) throw new DocumentChangeDraftExistsException(existingDraftId);
         var eligible = await ReadEligibleComparisonAsync(db, revision.ComparisonId, cancellationToken)
             ?? throw new ArgumentException("Drafts must reference a complete comparison containing a text change.", nameof(revision));
         revision = revision with { Citations = CreateInitialCitations(eligible.Comparison) };
         await ValidateRevisionAgainstEvidenceAsync(db, revision, cancellationToken);
-        var revisionJson = Serialize(revision);
-        db.Add(new DocumentChangeDraftRow
-        {
-            DraftId = revision.DraftId,
-            ComparisonId = revision.ComparisonId,
-            CurrentRevisionNumber = 1,
-            ReviewStateVersion = 0,
-            CreatedAtUtcTicks = DateTimeOffset.UtcNow.UtcTicks
-        });
-        db.Add(new DocumentChangeRevisionRow
-        {
-            DraftId = revision.DraftId,
-            RevisionNumber = 1,
-            RevisionJson = revisionJson,
-            CreatedAtUtcTicks = revision.CreatedAtUtc.UtcTicks
-        });
+        var revisionJson = AddDraft(db, revision);
         AddIdempotency(db, actorSubject, CreateOperation, idempotencyKey, payloadHash, revisionJson);
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
@@ -79,7 +66,7 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
     }
 
     public async Task<DocumentChangeDraftRevision> SaveRevisionAsync(string actorSubject,
-        DocumentChangeDraftRevision revision, int expectedRevisionNumber, string idempotencyKey,
+        DocumentChangeDraftRevision revision, int expectedRevisionNumber, bool changeDateChecked, string idempotencyKey,
         string payloadHash, CancellationToken cancellationToken)
     {
         ValidateActorAndIdempotency(actorSubject, idempotencyKey, payloadHash);
@@ -100,10 +87,10 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
             throw new DocumentChangeReviewConflictException("The draft has a newer revision. Refresh before saving.");
         if (draft.CurrentRevisionNumber >= DocumentChangeReviewPolicy.MaximumRevisionsPerDraft)
             throw new ArgumentException("Draft revision history has reached its configured limit.");
-        if (revision.AuthorSubject != actorSubject)
+        if (revision.AuthorSubject != actorSubject || ReviewAuthor.IsAnalysis(actorSubject))
             throw new UnauthorizedAccessException("Revision author does not match the authenticated subject.");
         var current = await ReadRevisionAsync(db, revision.DraftId, draft.CurrentRevisionNumber, cancellationToken);
-        revision = revision with { ComparisonId = current.ComparisonId };
+        revision = revision.KeepingAiChangeDateOnlyIfChecked(current, changeDateChecked) with { ComparisonId = current.ComparisonId };
         await ValidateRevisionAgainstEvidenceAsync(db, revision, cancellationToken);
         var revisionJson = Serialize(revision);
         db.Add(new DocumentChangeRevisionRow
@@ -127,7 +114,7 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
     {
         ValidateActorAndIdempotency(actorSubject, idempotencyKey, payloadHash);
         ArgumentNullException.ThrowIfNull(decision);
-        if (decision.ActorSubject != actorSubject)
+        if (decision.ActorSubject != actorSubject || ReviewAuthor.IsAnalysis(actorSubject))
             throw new UnauthorizedAccessException("Decision actor does not match the authenticated subject.");
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         await using var transaction = await BeginWriteAsync(db, cancellationToken);
@@ -365,10 +352,10 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
         string comparisonId, CancellationToken cancellationToken) =>
         (await ReadVerifiedComparisonAsync(db, comparisonId, cancellationToken))?.Summary;
 
-    private sealed record VerifiedComparison(EligibleDocumentComparison Summary,
+    internal sealed record VerifiedComparison(EligibleDocumentComparison Summary,
         DocumentExtraction Before, DocumentExtraction After);
 
-    private static async Task<VerifiedComparison?> ReadVerifiedComparisonAsync(CollectionAttemptDbContext db,
+    internal static async Task<VerifiedComparison?> ReadVerifiedComparisonAsync(CollectionAttemptDbContext db,
         string comparisonId, CancellationToken cancellationToken) =>
         (await ReadVerifiedComparisonsAsync(db, [comparisonId], cancellationToken)).GetValueOrDefault(comparisonId);
 
@@ -407,6 +394,44 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
         return new(new(before.SourceAttempt.SourceId, before.SourceAttempt.RequestedUrl,
             before.SourceAttempt.FinalUrl, after.SourceAttempt.FinalUrl,
             before.SourceAttempt.ObservedAt, after.SourceAttempt.ObservedAt, comparison), before, after);
+    }
+
+    internal static Task<string?> ReadDraftIdForComparisonAsync(CollectionAttemptDbContext db, string comparisonId,
+        CancellationToken cancellationToken) => db.Set<DocumentChangeDraftRow>().AsNoTracking()
+            .Where(row => row.ComparisonId == comparisonId).OrderBy(row => row.CreatedAtUtcTicks).ThenBy(row => row.DraftId)
+            .Select(row => row.DraftId).FirstOrDefaultAsync(cancellationToken);
+
+    internal static async Task<bool> TryAddAnalysisDraftAsync(CollectionAttemptDbContext db,
+        DocumentChangeDraftRevision revision, CancellationToken cancellationToken)
+    {
+        if (revision.RevisionNumber != 1 || !ReviewAuthor.IsAnalysis(revision.AuthorSubject))
+            throw new InvalidOperationException("An analysis draft must be revision 1 by the analysis author.");
+        await AcquireReviewLockAsync(db, cancellationToken);
+        if (await ReadDraftIdForComparisonAsync(db, revision.ComparisonId, cancellationToken) is not null) return false;
+        await ValidateRevisionAgainstEvidenceAsync(db, revision, cancellationToken);
+        _ = AddDraft(db, revision);
+        return true;
+    }
+
+    private static string AddDraft(CollectionAttemptDbContext db, DocumentChangeDraftRevision revision)
+    {
+        var revisionJson = Serialize(revision);
+        db.Add(new DocumentChangeDraftRow
+        {
+            DraftId = revision.DraftId,
+            ComparisonId = revision.ComparisonId,
+            CurrentRevisionNumber = 1,
+            ReviewStateVersion = 0,
+            CreatedAtUtcTicks = revision.CreatedAtUtc.UtcTicks
+        });
+        db.Add(new DocumentChangeRevisionRow
+        {
+            DraftId = revision.DraftId,
+            RevisionNumber = 1,
+            RevisionJson = revisionJson,
+            CreatedAtUtcTicks = revision.CreatedAtUtc.UtcTicks
+        });
+        return revisionJson;
     }
 
     private static ImmutableArray<DocumentChangeCitation> CreateInitialCitations(DocumentComparison comparison)
@@ -458,19 +483,19 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
             revision.CreatedAtUtc.Offset != TimeSpan.Zero)
             throw new ArgumentException("Draft revision identity is invalid.", nameof(revision));
         ValidateHash(revision.ComparisonId, nameof(revision));
-        ValidateText(revision.Headline, 256, nameof(revision.Headline));
-        ValidateText(revision.Summary, 8_000, nameof(revision.Summary));
-        ValidateText(revision.Significance, 4_000, nameof(revision.Significance));
-        ValidateText(revision.Limits, 4_000, nameof(revision.Limits));
-        ValidateText(revision.Institution, 256, nameof(revision.Institution));
+        ValidateText(revision.Headline, DocumentChangeDraftRevision.MaximumHeadlineLength, nameof(revision.Headline));
+        ValidateText(revision.Summary, DocumentChangeDraftRevision.MaximumSummaryLength, nameof(revision.Summary));
+        ValidateText(revision.Significance, DocumentChangeDraftRevision.MaximumSignificanceLength, nameof(revision.Significance));
+        ValidateText(revision.Limits, DocumentChangeDraftRevision.MaximumLimitsLength, nameof(revision.Limits));
+        ValidateText(revision.Institution, DocumentChangeDraftRevision.MaximumInstitutionLength, nameof(revision.Institution));
         if ((revision.ChangeDate is null) != (revision.ChangeDateEvidence is null) ||
             revision.ChangeDateEvidence is not null && !revision.Citations.Contains(revision.ChangeDateEvidence))
             throw new ArgumentException("Change date must be bound to a citation included in the public evidence bindings.", nameof(revision));
         ValidateIds(revision.OfficialIds, nameof(revision.OfficialIds));
         ValidateIds(revision.IssueIds, nameof(revision.IssueIds));
-        if (revision.Citations.IsDefault || revision.Citations.Length > 64)
-            throw new ArgumentException("Revision must contain at most 64 citations.", nameof(revision));
-        if (revision.Citations.Any(citation => citation is null || citation.Start < 0 || citation.Length is <= 0 or > 8192) ||
+        if (revision.Citations.IsDefault || revision.Citations.Length > DocumentChangeDraftRevision.MaximumCitations)
+            throw new ArgumentException($"Revision must contain at most {DocumentChangeDraftRevision.MaximumCitations} citations.", nameof(revision));
+        if (revision.Citations.Any(citation => citation is null || citation.Start < 0 || citation.Length <= 0 || citation.Length > DocumentChangeDraftRevision.MaximumCitationLength) ||
             revision.Citations.Distinct().Count() != revision.Citations.Length)
             throw new ArgumentException("Citations must be distinct valid bounded spans.", nameof(revision));
     }
@@ -635,10 +660,13 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
         CollectionAttemptDbContext db, CancellationToken cancellationToken)
     {
         var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
-        await db.Database.ExecuteSqlRawAsync(
-            "SELECT pg_advisory_xact_lock(hashtextextended('civic-lens-document-change-review', 0))", cancellationToken);
+        await AcquireReviewLockAsync(db, cancellationToken);
         return transaction;
     }
+
+    private static Task AcquireReviewLockAsync(CollectionAttemptDbContext db, CancellationToken cancellationToken) =>
+        db.Database.ExecuteSqlRawAsync(
+            "SELECT pg_advisory_xact_lock(hashtextextended('civic-lens-document-change-review', 0))", cancellationToken);
 
     private static T Deserialize<T>(string json, string kind) => JsonSerializer.Deserialize<T>(json, JsonOptions)
         ?? throw new InvalidOperationException($"Stored {kind} is invalid.");
@@ -686,7 +714,7 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
 
     private static void ValidateIds(ImmutableArray<string> values, string name)
     {
-        if (values.IsDefault || values.Length > 64 || values.Any(string.IsNullOrWhiteSpace) ||
+        if (values.IsDefault || values.Length > DocumentChangeDraftRevision.MaximumSelections || values.Any(string.IsNullOrWhiteSpace) ||
             values.Any(value => value.Length > 128) || values.Distinct(StringComparer.Ordinal).Count() != values.Length)
             throw new ArgumentException("Stored editorial selections are invalid.", name);
     }

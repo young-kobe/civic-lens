@@ -12,14 +12,16 @@ internal static class ReviewAuthorization
     public static void RequireReviewer(ReviewActor actor)
     {
         ArgumentNullException.ThrowIfNull(actor);
-        if (string.IsNullOrWhiteSpace(actor.Subject) || actor.Subject.Length > 256 || !actor.CanReview || !Enum.IsDefined(actor.Role))
+        if (string.IsNullOrWhiteSpace(actor.Subject) || actor.Subject.Length > 256 || !actor.CanReview || !Enum.IsDefined(actor.Role) ||
+            ReviewAuthor.IsAnalysis(actor.Subject))
             throw new UnauthorizedAccessException("The authenticated subject is not authorized for editorial review.");
     }
 
     public static void RequireOwner(ReviewActor actor)
     {
         ArgumentNullException.ThrowIfNull(actor);
-        if (string.IsNullOrWhiteSpace(actor.Subject) || actor.Subject.Length > 256 || actor.Role != ReviewRole.Owner)
+        if (string.IsNullOrWhiteSpace(actor.Subject) || actor.Subject.Length > 256 || actor.Role != ReviewRole.Owner ||
+            ReviewAuthor.IsAnalysis(actor.Subject))
             throw new UnauthorizedAccessException("The authenticated subject is not authorized to publish.");
     }
 }
@@ -49,7 +51,8 @@ internal static class ReviewValidation
     public static ImmutableArray<string> ValidateSelections(ImmutableArray<string> values,
         ImmutableHashSet<string> allowed, string name)
     {
-        if (values.IsDefault || values.Length > 64) throw new ArgumentException("Selection must contain at most 64 values.", name);
+        if (values.IsDefault || values.Length > DocumentChangeDraftRevision.MaximumSelections)
+            throw new ArgumentException($"Selection must contain at most {DocumentChangeDraftRevision.MaximumSelections} values.", name);
         var result = ImmutableArray.CreateBuilder<string>(values.Length);
         var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var value in values)
@@ -63,12 +66,13 @@ internal static class ReviewValidation
 
     public static ImmutableArray<DocumentChangeCitation> ValidateCitations(ImmutableArray<DocumentChangeCitation> citations)
     {
-        if (citations.IsDefault || citations.Length > 64) throw new ArgumentException("At most 64 citations may be supplied.", nameof(citations));
+        if (citations.IsDefault || citations.Length > DocumentChangeDraftRevision.MaximumCitations)
+            throw new ArgumentException($"At most {DocumentChangeDraftRevision.MaximumCitations} citations may be supplied.", nameof(citations));
         foreach (var citation in citations)
         {
             ArgumentNullException.ThrowIfNull(citation);
             ValidateHash(citation.ExtractionId, nameof(citations));
-            if (citation.Start < 0 || citation.Length <= 0 || citation.Length > 8_192)
+            if (citation.Start < 0 || citation.Length <= 0 || citation.Length > DocumentChangeDraftRevision.MaximumCitationLength)
                 throw new ArgumentException("Citation range is invalid or exceeds the changed-text limit.", nameof(citations));
         }
         return citations;

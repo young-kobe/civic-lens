@@ -8,15 +8,15 @@ ROOT = Path(__file__).resolve().parents[1]
 VIEWS = [
     {
         "title": "Collection to publication (target)",
-        "description": "Target workflow. Configuration, bounded watched-page collection, verified captures, and the Postgres import adapter are implemented; CLI migration, collection/import, and saved receipt recovery are implemented; managed durable jobs and RSS/Atom plus HTML discovery with explicit bounded article admission are implemented; immutable document text extraction, versioned content profiles, and exact local citations are implemented; derived text histories and contextual comparisons are implemented; authenticated document-change drafting, immutable revisions, and version-bound review are implemented; analysis and publication remain planned.",
+        "description": "Target workflow. Configuration, bounded watched-page collection, verified captures, and the Postgres import adapter are implemented; CLI migration, collection/import, and saved receipt recovery are implemented; managed durable jobs and RSS/Atom plus HTML discovery with explicit bounded article admission are implemented; immutable document text extraction, versioned content profiles, and exact local citations are implemented; derived text histories and contextual comparisons are implemented; authenticated document-change drafting, immutable revisions, and version-bound review are implemented; AI drafting of document-change accounts is implemented; static release publication with atomic activation is implemented; classification, other analysis, and public MCP remain planned.",
         "nodes": [
             ("config", "Coverage configuration", "People, dated roles, sources, issues and policies; one authoritative configuration path."),
             ("app", "C# application", "Owns durable collection jobs, aggregate budgets, retries, and a persisted evidence preparation state machine."),
             ("collector", "C# collector", "Separate executable. Bounded HTTP/feed/HTML discovery and immutable captures; no database or AI."),
             ("evidence", "Evidence store", "Local Postgres import adapter and content-addressed files are implemented. CLI migration, collection/import, and filesystem receipt handoff/replay are implemented. Immutable versioned text extraction, reusable content profiles, and exact local citations are implemented. Derived document histories and immutable contextual comparisons are implemented; substantive-change judgments remain planned."),
-            ("analysis", "Selective analysis", "Deterministic records first; evaluated classification and evidence extraction only where useful."),
-            ("review", "Private review and MCP", "Auth0-protected draft/review workspace implemented. Human decisions bind to exact immutable revisions; publication remains planned."),
-            ("release", "Versioned release", "Approved records, static pages and search index. Validate citations before switching the active release."),
+            ("analysis", "Selective analysis", "AI drafting of document-change accounts is implemented through a separate durable queue and one model adapter. Deterministic records first; evaluated classification and evidence extraction only where useful remain planned."),
+            ("review", "Private review and MCP", "Auth0-protected draft/review workspace implemented. Human decisions bind to exact immutable revisions; the owner publishes approved revisions as static releases; MCP remains planned."),
+            ("release", "Versioned release", "Implemented: approved records as immutable static pages, verified before an atomic switch of the active release. A search index remains planned."),
             ("public", "Website and public MCP", "Read published releases only. Never crawl, call models or access private operational data."),
         ],
         "edges": [("config", "app"), ("app", "collector"), ("collector", "evidence"), ("evidence", "analysis"), ("analysis", "review"), ("review", "release"), ("release", "public")],
@@ -25,8 +25,8 @@ VIEWS = [
         "title": "Project dependencies (implemented)",
         "description": "Arrows mean references. These project boundaries are checked by xUnit tests.",
         "nodes": [
-            ("host", "Host", "CLI, durable notification-driven collection-to-review pipeline, authenticated Blazor review workspace, and static release builder; MCP remains planned."),
-            ("infra", "Infrastructure", "Collector process execution, capture verification, and EF Core/Npgsql persistence. References Application."),
+            ("host", "Host", "CLI, durable notification-driven collection-to-review pipeline with a separate AI drafting executor, authenticated Blazor review workspace, and static release builder; MCP remains planned."),
+            ("infra", "Infrastructure", "Collector process execution, capture verification, EF Core/Npgsql persistence, and the Claude API drafting adapter. References Application."),
             ("app", "Application", "Use cases and external interfaces; no infrastructure reference."),
             ("core", "Core", "Domain invariants. No project or third-party dependencies."),
             ("cc", "Collection.Contracts", "Versioned page/feed/HTML requests, capture/response metadata, bounded discovery and receipt validation. No dependencies."),

@@ -160,6 +160,10 @@ public sealed partial class SourcesPage : IAsyncDisposable
             Navigation.NavigateTo($"/Review/{draft.DraftId}", forceLoad: true);
         }
         catch (OperationCanceledException) when (disposal.IsCancellationRequested) { }
+        catch (DocumentChangeDraftExistsException existing)
+        {
+            Navigation.NavigateTo($"/Review/{existing.DraftId}", forceLoad: true);
+        }
         catch (ArgumentException)
         {
             notice = new("This change can no longer start a draft. Open Review to choose another change.", Tone.Warn);

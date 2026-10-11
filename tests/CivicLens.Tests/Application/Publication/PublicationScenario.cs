@@ -7,6 +7,7 @@ using CivicLens.Core.Collection;
 using CivicLens.Core.Documents;
 using CivicLens.Core.Review;
 using CivicLens.Publication.Contracts;
+using CivicLens.Tests.Fixtures;
 
 namespace CivicLens.Tests.Application.Publication;
 
@@ -87,12 +88,6 @@ internal sealed class PublicationScenario
         new(attemptId, "source", "https://example.test/", "https://example.test/", DateTimeOffset.UnixEpoch,
             new CollectionResponse(200, null, null, "text/html", []), new CaptureIdentity(new string('a', 64), 0)),
         "parser", "normalizer", text);
-}
-
-internal sealed class FakeClock(DateTimeOffset now) : TimeProvider
-{
-    public DateTimeOffset Now { get; set; } = now;
-    public override DateTimeOffset GetUtcNow() => Now;
 }
 
 internal sealed class FakeRenderer : IReleaseRenderer
@@ -268,8 +263,8 @@ internal sealed class FakeReviewStore : IDocumentChangeReviewStore
         string idempotencyKey, string payloadHash, CancellationToken cancellationToken) => throw new NotSupportedException();
 
     public Task<DocumentChangeDraftRevision> SaveRevisionAsync(string actorSubject, DocumentChangeDraftRevision revision,
-        int expectedRevisionNumber, string idempotencyKey, string payloadHash, CancellationToken cancellationToken) =>
-        throw new NotSupportedException();
+        int expectedRevisionNumber, bool changeDateChecked, string idempotencyKey, string payloadHash,
+        CancellationToken cancellationToken) => throw new NotSupportedException();
 
     public Task<ReviewDecision> DecideAsync(string actorSubject, ReviewDecision decision, int expectedRevisionNumber,
         int expectedReviewStateVersion, string idempotencyKey, string payloadHash,

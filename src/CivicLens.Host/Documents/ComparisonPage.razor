@@ -94,6 +94,10 @@
             Navigation.NavigateTo($"/Review/{draft.DraftId}");
         }
         catch (OperationCanceledException) when (Aborted.IsCancellationRequested) { throw; }
+        catch (DocumentChangeDraftExistsException existing)
+        {
+            Navigation.NavigateTo($"/Review/{existing.DraftId}");
+        }
         catch (ArgumentException)
         {
             FailDraft(StatusCodes.Status400BadRequest, "This comparison cannot start a draft. Go back to Review to choose a change that can.");

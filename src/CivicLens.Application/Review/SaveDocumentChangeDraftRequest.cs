@@ -7,4 +7,5 @@ public sealed record SaveDocumentChangeDraftRequest(string DraftId, int Expected
     string Headline, string Summary, string? Significance, string? Limits, string Institution,
     DateOnly? ChangeDate, DocumentChangeCitation? ChangeDateEvidence,
     ImmutableArray<string> OfficialIds, ImmutableArray<string> IssueIds,
-    ImmutableArray<DocumentChangeCitation> Citations, string IdempotencyKey);
+    ImmutableArray<DocumentChangeCitation> Citations, string IdempotencyKey,
+    bool ChangeDateChecked = false);

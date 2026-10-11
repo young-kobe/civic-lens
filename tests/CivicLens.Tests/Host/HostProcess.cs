@@ -7,8 +7,15 @@ internal static class HostProcess
     public static Task<(int ExitCode, string Output, string Error)> RunAsync(string? database, params string[] arguments) =>
         RunWithCollectorHostAsync(database, null, arguments);
 
-    public static async Task<(int ExitCode, string Output, string Error)> RunWithCollectorHostAsync(
-        string? database, string? collectorHost, params string[] arguments)
+    public static readonly string[] DraftingVariables =
+        ["ANTHROPIC_API_KEY", "CIVIC_LENS_ANALYSIS_DAILY_TOKENS", "CIVIC_LENS_ANALYSIS_RUN_TOKENS", "CIVIC_LENS_ANALYSIS_CONCURRENCY"];
+
+    public static Task<(int ExitCode, string Output, string Error)> RunWithCollectorHostAsync(
+        string? database, string? collectorHost, params string[] arguments) =>
+        RunWithEnvironmentAsync(database, collectorHost, new Dictionary<string, string>(), arguments);
+
+    public static async Task<(int ExitCode, string Output, string Error)> RunWithEnvironmentAsync(
+        string? database, string? collectorHost, IReadOnlyDictionary<string, string> environment, params string[] arguments)
     {
         var root = new DirectoryInfo(AppContext.BaseDirectory);
         while (root is not null && !File.Exists(Path.Combine(root.FullName, "CivicLens.slnx")))
@@ -25,6 +32,8 @@ internal static class HostProcess
         start.ArgumentList.Add(assembly);
         foreach (var argument in arguments) start.ArgumentList.Add(argument);
         start.Environment.Remove("CIVIC_LENS_DATABASE");
+        foreach (var name in DraftingVariables) start.Environment.Remove(name);
+        foreach (var (name, value) in environment) start.Environment[name] = value;
         if (database is not null) start.Environment["CIVIC_LENS_DATABASE"] = database;
         if (collectorHost is not null) start.Environment["DOTNET_HOST_PATH"] = collectorHost;
         using var process = Process.Start(start)!;

@@ -1,5 +1,6 @@
 @page "/Review"
 @using CivicLens.Application.Publication
+@using CivicLens.Host.Analysis
 @using CivicLens.Application.Review
 @using CivicLens.Core.Review
 @using CivicLens.Host.Collection
@@ -57,12 +58,15 @@
                 <Panel Title="New changes" Id="new-changes">
                     <Aside>A text change alone does not show significance.</Aside>
                     <ChildContent>
+                        @{ var draftingNotice = DocumentChangeAnalysisDisplay.Notice(analysisStatus, DateTimeOffset.UtcNow); }
+                        <Notice Tone="draftingNotice.Tone">@draftingNotice.Text</Notice>
                         <DataTable Items="changes.Items" Caption="New changes">
                             <Head>
                                 <th>Document</th>
                                 <th class="fit hide-narrow">Source</th>
                                 <th class="time">Observed</th>
                                 <th class="num hide-narrow">Passages</th>
+                                <th class="fit">AI draft</th>
                                 <th class="act"><span class="visually-hidden">Action</span></th>
                             </Head>
                             <Row Context="item">
@@ -76,6 +80,10 @@
                                 <td class="fit hide-narrow">@SourceLabels.Name(configuration, item.SourceId)</td>
                                 <td class="time"><Timestamp Value="item.AfterObservedAtUtc" /></td>
                                 <td class="num hide-narrow">@item.Comparison.Hunks.Length</td>
+                                <td class="fit">
+                                    @{ var changeDrafting = DocumentChangeAnalysisDisplay.For(analyses.GetValueOrDefault(item.Comparison.ComparisonId)); }
+                                    <StatusBadge Tone="changeDrafting.Tone" Text="@changeDrafting.Label" />
+                                </td>
                                 <td class="act">
                                     <Button Variant="ButtonVariant.Primary" Small="true" Type="submit" form="start-draft" name="comparisonId" value="@item.Comparison.ComparisonId">Start draft</Button>
                                 </td>

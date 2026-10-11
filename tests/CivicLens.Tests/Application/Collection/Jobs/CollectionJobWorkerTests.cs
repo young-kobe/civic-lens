@@ -1,3 +1,4 @@
+using CivicLens.Application;
 using CivicLens.Application.Paging;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Jobs;
@@ -186,7 +187,7 @@ public sealed class CollectionJobWorkerTests
         }
     }
 
-    private sealed class FakeWakeup(Func<CancellationToken, Task> wait) : ICollectionPipelineWakeup
+    private sealed class FakeWakeup(Func<CancellationToken, Task> wait) : IWorkerWakeup
     {
         public int ConnectCount { get; private set; }
         public int WaitCount { get; private set; }
