@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using System.Globalization;
+using System.Text.RegularExpressions;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using CivicLens.Core.Analysis;
@@ -152,7 +153,8 @@ public static class DocumentChangeDraftingResolver
 
     private static bool StatesDate(string quote, DateOnly date) =>
         new[] { "yyyy-MM-dd", "MMMM d, yyyy", "MMM d, yyyy", "MMM. d, yyyy", "d MMMM yyyy", "M/d/yyyy", "MM/dd/yyyy" }
-            .Any(format => quote.Contains(date.ToString(format, CultureInfo.InvariantCulture), StringComparison.OrdinalIgnoreCase));
+            .Any(format => Regex.IsMatch(quote, $@"(?<!\d){Regex.Escape(date.ToString(format, CultureInfo.InvariantCulture))}(?!\d)",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant));
 
     private static int? ParseHunkIndex(string? hunkId, int count)
     {

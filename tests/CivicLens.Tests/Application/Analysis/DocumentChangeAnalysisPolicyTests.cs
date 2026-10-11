@@ -21,6 +21,13 @@ public sealed class DocumentChangeAnalysisPolicyTests
     }
 
     [Fact]
+    public void ADailyLimitBelowTheDefaultRunLimitCapsTheRunLimitInsteadOfFailing()
+    {
+        Assert.Equal(50_000, new DocumentChangeAnalysisSettings(dailyTokenLimit: 50_000).RunTokenLimit);
+        Assert.Equal(DocumentChangeAnalysisSettings.DefaultRunTokenLimit, new DocumentChangeAnalysisSettings(1_000_000).RunTokenLimit);
+    }
+
+    [Fact]
     public void ALimitBelowTheSmallestReservationFailsAtStartup()
     {
         var minimum = DocumentChangeDraftingPrompt.MinimumReservation;

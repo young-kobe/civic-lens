@@ -19,7 +19,7 @@ internal sealed record DocumentChangeAnalysisConfiguration(DocumentChangeAnalysi
         if (string.IsNullOrWhiteSpace(daily) || string.IsNullOrWhiteSpace(apiKey))
             throw new ArgumentException($"AI drafting needs both {DailyTokensVariable} and {ApiKeyVariable}.");
         var settings = new DocumentChangeAnalysisSettings(ReadTokens(DailyTokensVariable)!.Value,
-            ReadTokens(RunTokensVariable) ?? DocumentChangeAnalysisSettings.DefaultRunTokenLimit,
+            ReadTokens(RunTokensVariable),
             ReadConcurrency() ?? DocumentChangeAnalysisSettings.DefaultConcurrency);
         return new(settings, apiKey);
     }

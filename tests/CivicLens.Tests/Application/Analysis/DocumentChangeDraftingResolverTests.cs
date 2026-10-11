@@ -94,6 +94,19 @@ public sealed class DocumentChangeDraftingResolverTests
     }
 
     [Theory]
+    [InlineData("Updated 11/5/2026.", "2026-01-05")]
+    [InlineData("Updated 21 May 2026.", "2026-05-01")]
+    [InlineData("Updated 2026-10-031.", "2026-10-03")]
+    public void AChangeDateMustMatchAWholeDateNotPartOfALongerOne(string line, string date)
+    {
+        var evidence = FakeDocumentChangeDraftingModel.Evidence("Deadline: October 15.\n", line + " Deadline: October 30.\n");
+        var result = Resolve(FakeDocumentChangeDraftingModel.Output("Headline", [("h1", "after", line)],
+            changeDate: new { date, citationIndex = 0 }), evidence);
+        Assert.Null(result.Revision);
+        Assert.Contains(result.Errors, error => error.Contains($"does not state {date}", StringComparison.Ordinal));
+    }
+
+    [Theory]
     [InlineData("not json")]
     [InlineData("{\"headline\":\"Only a headline\"}")]
     public void OutputThatDoesNotMatchTheSchemaIsRejected(string output)

@@ -6,15 +6,16 @@ public sealed record DocumentChangeAnalysisSettings
     public const int DefaultConcurrency = 2;
     public const int MaximumConcurrency = 4;
 
-    public DocumentChangeAnalysisSettings(long dailyTokenLimit, long runTokenLimit = DefaultRunTokenLimit, int concurrency = DefaultConcurrency)
+    public DocumentChangeAnalysisSettings(long dailyTokenLimit, long? runTokenLimit = null, int concurrency = DefaultConcurrency)
     {
         if (dailyTokenLimit < 1) throw new ArgumentOutOfRangeException(nameof(dailyTokenLimit));
+        runTokenLimit ??= Math.Min(DefaultRunTokenLimit, dailyTokenLimit);
         if (runTokenLimit < DocumentChangeDraftingPrompt.MinimumReservation || runTokenLimit > dailyTokenLimit)
             throw new ArgumentOutOfRangeException(nameof(runTokenLimit), runTokenLimit,
                 $"The run token limit must be from {DocumentChangeDraftingPrompt.MinimumReservation}, the smallest reservation, to the daily limit.");
         if (concurrency is < 1 or > MaximumConcurrency) throw new ArgumentOutOfRangeException(nameof(concurrency));
         DailyTokenLimit = dailyTokenLimit;
-        RunTokenLimit = runTokenLimit;
+        RunTokenLimit = runTokenLimit.Value;
         Concurrency = concurrency;
     }
 
