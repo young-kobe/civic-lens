@@ -408,6 +408,66 @@ public sealed class PostgresDocumentChangeReviewStoreTests(PostgresCollection po
         Assert.Equal(single, counter.ReadCount);
     }
 
+    [Fact]
+    public async Task StoredStatusEqualsThePolicyStatusAfterEveryKindOfWrite()
+    {
+        var actor = new ReviewActor("auth0|owner", ReviewRole.Owner);
+        var catalog = new ReviewCatalog([], []);
+        var save = new SaveDocumentChangeDraft(reviews, catalog);
+        var decide = new DecideDocumentChangeReview(reviews, catalog);
+        var comparison = await SaveComparisonAsync();
+        var draft = await new CreateDocumentChangeDraft(reviews).ExecuteAsync(actor, new(comparison.ComparisonId, "create"));
+        await AssertStoredStatusMatchesPolicyAsync(draft.DraftId, DocumentChangeReviewStatus.AwaitingReview);
+
+        var saved = await save.ExecuteAsync(actor, new(draft.DraftId, 1, "Headline", "Summary", null, null,
+            "Institution", null, null, [], [], draft.Citations, "save-1"));
+        await AssertStoredStatusMatchesPolicyAsync(draft.DraftId, DocumentChangeReviewStatus.AwaitingReview);
+
+        var concern = await decide.ExecuteAsync(actor, new(draft.DraftId, 2, 0, ReviewDecisionKind.RequestChanges, "Context missing.", [], "concern"));
+        await AssertStoredStatusMatchesPolicyAsync(draft.DraftId, DocumentChangeReviewStatus.ChangesRequested);
+
+        await save.ExecuteAsync(actor, new(draft.DraftId, 2, "Headline", "Summary edited", null, null,
+            "Institution", null, null, [], [], saved.Citations, "save-2"));
+        await AssertStoredStatusMatchesPolicyAsync(draft.DraftId, DocumentChangeReviewStatus.AwaitingReviewWithConcerns);
+
+        await decide.ExecuteAsync(actor, new(draft.DraftId, 3, 1, ReviewDecisionKind.Approve, "Resolved.", [concern.DecisionId], "approve"));
+        await AssertStoredStatusMatchesPolicyAsync(draft.DraftId, DocumentChangeReviewStatus.Approved);
+
+        await decide.ExecuteAsync(actor, new(draft.DraftId, 3, 2, ReviewDecisionKind.WithdrawApproval, "Wrong date.", [], "withdraw"));
+        await AssertStoredStatusMatchesPolicyAsync(draft.DraftId, DocumentChangeReviewStatus.ApprovalWithdrawn);
+
+        await save.ExecuteAsync(actor, new(draft.DraftId, 3, "Headline", "Summary again", null, null,
+            "Institution", null, null, [], [], saved.Citations, "save-3"));
+        await AssertStoredStatusMatchesPolicyAsync(draft.DraftId, DocumentChangeReviewStatus.AwaitingReviewWithConcerns);
+    }
+
+    [Fact]
+    public async Task ComparisonsStoreWhetherTheyHaveChangesSoNewChangesNeverReadJson()
+    {
+        var comparison = await SaveComparisonAsync();
+
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            "SELECT has_changes FROM document_comparisons WHERE comparison_id = @id", connection);
+        command.Parameters.AddWithValue("id", comparison.ComparisonId);
+        Assert.Equal(comparison.HasChanges(), (bool)(await command.ExecuteScalarAsync())!);
+        Assert.True(comparison.HasChanges());
+    }
+
+    private async Task AssertStoredStatusMatchesPolicyAsync(string draftId, DocumentChangeReviewStatus expected)
+    {
+        var review = await reviews.GetAsync(draftId, CancellationToken.None);
+        var policy = DocumentChangeReviewPolicy.GetCurrentStatus(review!.CurrentRevision, review.Decisions);
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand("SELECT review_status FROM document_change_drafts WHERE draft_id = @id", connection);
+        command.Parameters.AddWithValue("id", draftId);
+        var stored = (string)(await command.ExecuteScalarAsync())!;
+        Assert.Equal(expected, policy);
+        Assert.Equal(policy.ToString(), stored);
+    }
+
     private sealed record SeededStatuses(string ApprovedNewest, string ApprovedOlder, string ChangesRequested,
         string Withdrawn, string WithConcerns, string Awaiting);
 

@@ -9,6 +9,10 @@ public static class DocumentChangeReviewPolicy
     public const int MaximumDecisionsPerDraft = 128;
 
     public static DocumentChangeReviewStatus GetCurrentStatus(DocumentChangeDraftRevision currentRevision,
+        ImmutableArray<ReviewDecision> decisions) =>
+        GetCurrentStatus(currentRevision, decisions, GetUnresolvedConcerns(decisions));
+
+    public static DocumentChangeReviewStatus GetCurrentStatus(DocumentChangeDraftRevision currentRevision,
         ImmutableArray<ReviewDecision> decisions, ImmutableArray<ReviewDecision> unresolvedConcerns)
     {
         var latest = decisions.Where(item => item.RevisionNumber == currentRevision.RevisionNumber)

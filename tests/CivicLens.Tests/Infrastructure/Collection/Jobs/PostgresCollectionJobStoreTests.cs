@@ -382,8 +382,6 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
         Assert.Equal(CollectionJobStartStatus.Cancelled, (await jobs.TryStartAttemptAsync(cancelled.Lease, root, default)).Status);
     }
 
-    // The evidence queue must never miss a succeeded job and never queue it twice. One settlement method sets
-    // Succeeded, and it writes the preparation row in the same transaction.
     [Fact]
     public async Task SettlingACapturedJobQueuesOnePreparationRowAndReplayDoesNotAddAnother()
     {
@@ -461,7 +459,6 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
         Assert.Equal(1L, await PreparationCountAsync(claim.Job.JobId));
     }
 
-    // A queue row without its state change, or a state change without its queue row, would lose or repeat work.
     [Fact]
     public async Task FailedPreparationInsertRollsBackTheSettlement()
     {

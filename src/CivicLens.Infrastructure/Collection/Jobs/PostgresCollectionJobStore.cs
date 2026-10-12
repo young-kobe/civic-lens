@@ -285,8 +285,6 @@ public sealed partial class PostgresCollectionJobStore(IDbContextFactory<Collect
         return true;
     }, cancellationToken);
 
-    // SettleAttemptAsync is the only code path that sets a job to Succeeded. The preparation row joins that
-    // transaction, so the evidence queue never misses a succeeded job. ON CONFLICT keeps one row per job and attempt.
     private static async Task EnqueuePreparationAsync(CollectionAttemptDbContext db, JobRow job,
         CollectionJobDefinition definition, CancellationToken cancellationToken)
     {
@@ -380,9 +378,7 @@ public sealed partial class PostgresCollectionJobStore(IDbContextFactory<Collect
         command.CommandText = "SELECT pg_advisory_xact_lock(hashtextextended(@name, 0))";
         command.Parameters.Add(new NpgsqlParameter("name", LockName));
         await command.ExecuteNonQueryAsync(cancellationToken);
-        command.Parameters.Clear();
-        command.CommandText = "SELECT clock_timestamp()";
-        var now = new DateTimeOffset((DateTime)(await command.ExecuteScalarAsync(cancellationToken))!);
+        var now = (await DatabaseClock.ReadAsync(db, cancellationToken)).Offset;
         var result = await operation(db, now);
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);

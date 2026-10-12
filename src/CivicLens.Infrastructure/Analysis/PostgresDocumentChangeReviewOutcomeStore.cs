@@ -11,7 +11,6 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 
 namespace CivicLens.Infrastructure.Analysis;
 
-/// <summary>Reads AI drafts with their review history in keyset pages. Each page costs four queries, whatever its size.</summary>
 public sealed class PostgresDocumentChangeReviewOutcomeStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory)
     : IDocumentChangeReviewOutcomeStore
 {

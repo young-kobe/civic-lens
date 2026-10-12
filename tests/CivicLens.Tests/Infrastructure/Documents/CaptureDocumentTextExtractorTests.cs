@@ -25,7 +25,6 @@ public sealed class CaptureDocumentTextExtractorTests
     [Fact]
     public async Task ExtractionOutputMatchesPinnedParserAndNormalizationVersions()
     {
-        // Stored extractions are keyed by these versions. A change in text for the same input must get a new version.
         var bump = "Extraction output changed. Bump CaptureDocumentTextExtractor.ParserVersion or NormalizationVersion, " +
             "update the version table in docs/architecture.md, then update this test. Actual: ";
         await using var capture = await TestCapture.CreateAsync(Encoding.UTF8.GetBytes(

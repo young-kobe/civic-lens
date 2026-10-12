@@ -216,8 +216,6 @@ public sealed class CollectionProtocolTests
         Assert.Throws<InvalidDataException>(() => result.ValidateAgainst(request));
     }
 
-    // Version 8 receipts must say how many links were skipped, so a drop is never silent.
-    // Older receipts cannot claim a count, so replayed evidence keeps its original meaning.
     [Theory]
     [InlineData(8, null, DiscoveryStatus.Parsed)]
     [InlineData(8, -1, DiscoveryStatus.Parsed)]

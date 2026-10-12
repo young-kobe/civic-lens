@@ -24,7 +24,6 @@ public sealed class IssueConfigurationRevisionTests
     [Fact]
     public void RevisionJsonAndIdMatchThePinnedConfigurationVersion()
     {
-        // Stored revisions are keyed by the hash of this canonical JSON. A format change would orphan them.
         var revision = IssueConfigurationRevision.Create(Configuration(Issue()));
 
         Assert.Equal(1, Configuration().Version);

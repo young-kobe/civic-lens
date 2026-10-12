@@ -2,7 +2,6 @@ using System.Collections.Immutable;
 
 namespace CivicLens.Core.Review;
 
-/// <summary>Pure comparison of the reviewed fields of two revisions. Identity, author, and time are not fields.</summary>
 public static class DocumentChangeRevisionComparison
 {
     public static ImmutableArray<DocumentChangeField> ChangedFields(DocumentChangeDraftRevision original,

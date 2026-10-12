@@ -6,8 +6,6 @@ namespace CivicLens.Infrastructure;
 
 internal sealed class PostgresDeadlineWakeup(string connectionString, string channel, string deadlineQuery) : IWorkerWakeup
 {
-    private const string ClockTicksSql =
-        "(EXTRACT(EPOCH FROM clock_timestamp())::numeric * 10000000 + 621355968000000000)::bigint";
     private NpgsqlConnection? connection;
     private bool hasNotification;
     private long? notifiedDeadline;
@@ -80,7 +78,7 @@ internal sealed class PostgresDeadlineWakeup(string connectionString, string cha
         NpgsqlConnection listener, long watermark, CancellationToken cancellationToken)
     {
         await using var command = new NpgsqlCommand($"""
-            WITH database_now AS (SELECT {ClockTicksSql} AS ticks),
+            WITH database_now AS (SELECT {DatabaseClock.TicksSql} AS ticks),
             deadlines AS (
             {deadlineQuery}
             )
@@ -98,7 +96,7 @@ internal sealed class PostgresDeadlineWakeup(string connectionString, string cha
         CancellationToken cancellationToken)
     {
         await using var command = new NpgsqlCommand(
-            $"SELECT {ClockTicksSql}", listener);
+            $"SELECT {DatabaseClock.TicksSql}", listener);
         return Convert.ToInt64(await command.ExecuteScalarAsync(cancellationToken),
             System.Globalization.CultureInfo.InvariantCulture);
     }

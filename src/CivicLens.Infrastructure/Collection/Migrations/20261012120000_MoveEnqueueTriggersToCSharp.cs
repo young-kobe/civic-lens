@@ -6,10 +6,6 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace CivicLens.Infrastructure.Collection.Migrations;
 
-/// <summary>
-/// The C# stores now create analysis and preparation rows in the transaction that writes the triggering row.
-/// Wakeup and release triggers stay. No backfill is needed: the triggers ran until this migration.
-/// </summary>
 [DbContext(typeof(CollectionAttemptDbContext))]
 [Migration("20261012120000_MoveEnqueueTriggersToCSharp")]
 public partial class MoveEnqueueTriggersToCSharp : Migration

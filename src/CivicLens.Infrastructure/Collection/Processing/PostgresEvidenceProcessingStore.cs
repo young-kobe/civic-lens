@@ -10,6 +10,7 @@ using CivicLens.Infrastructure.Documents.Persistence;
 using CivicLens.Infrastructure.Documents;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Npgsql;
 
 namespace CivicLens.Infrastructure.Collection.Processing;
 
@@ -42,7 +43,7 @@ public sealed class PostgresEvidenceProcessingStore(
     {
         if (limit is < 1 or > 100) throw new ArgumentOutOfRangeException(nameof(limit));
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        var now = (await ReadDatabaseNowAsync(db, cancellationToken)).Ticks;
+        var now = (await DatabaseClock.ReadAsync(db, cancellationToken)).Ticks;
         var rows = await db.Set<PersistedEvidenceProcessingRow>().AsNoTracking()
             .Where(row => row.Status == EvidenceProcessingStatus.Pending ||
                  row.Status == EvidenceProcessingStatus.RetryWaiting && (row.RetryAt == null || row.RetryAt <= now) ||
@@ -137,14 +138,14 @@ public sealed class PostgresEvidenceProcessingStore(
         EvidenceProcessingPolicy.ValidateLeaseDuration(leaseDuration);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         var token = Guid.NewGuid().ToString("N");
-        var changed = await db.Database.ExecuteSqlInterpolatedAsync($$"""
-            UPDATE evidence_processing SET lease_token = {{token}}, lease_expires_at =
-                ((EXTRACT(EPOCH FROM clock_timestamp())::numeric * 10000000 + 621355968000000000)::bigint) + {{leaseDuration.Ticks}},
+        var changed = await db.Database.ExecuteSqlRawAsync($$"""
+            UPDATE evidence_processing SET lease_token = @token, lease_expires_at = {{DatabaseClock.TicksSql}} + @lease,
                 fence = fence + 1, attempts = attempts + 1, status = 'Running', retry_at = NULL
-            WHERE job_id = {{jobId}} AND attempt_id = {{attemptId}} AND
-                (status = 'Pending' OR status = 'RetryWaiting' AND (retry_at IS NULL OR retry_at <= ((EXTRACT(EPOCH FROM clock_timestamp())::numeric * 10000000 + 621355968000000000)::bigint)) OR
-                 status = 'Running' AND lease_expires_at <= ((EXTRACT(EPOCH FROM clock_timestamp())::numeric * 10000000 + 621355968000000000)::bigint))
-            """, cancellationToken);
+            WHERE job_id = @jobId AND attempt_id = @attemptId AND
+                (status = 'Pending' OR status = 'RetryWaiting' AND (retry_at IS NULL OR retry_at <= {{DatabaseClock.TicksSql}}) OR
+                 status = 'Running' AND lease_expires_at <= {{DatabaseClock.TicksSql}})
+            """, [new NpgsqlParameter("token", token), new NpgsqlParameter("lease", leaseDuration.Ticks),
+                new NpgsqlParameter("jobId", jobId), new NpgsqlParameter("attemptId", attemptId)], cancellationToken);
         if (changed != 1) return null;
         var row = await db.Set<PersistedEvidenceProcessingRow>().AsNoTracking().SingleAsync(
             candidate => candidate.JobId == jobId && candidate.AttemptId == attemptId && candidate.LeaseToken == token,
@@ -162,8 +163,9 @@ public sealed class PostgresEvidenceProcessingStore(
         var row = await db.Set<PersistedEvidenceProcessingRow>().AsNoTracking().SingleOrDefaultAsync(
             candidate => candidate.JobId == checkpoint.JobId && candidate.AttemptId == checkpoint.AttemptId,
             cancellationToken);
-        if (row is null ||
-            !EvidenceProcessingLifecycle.CanTransition(ToRecord(row), checkpoint)) return false;
+        if (row is null) return false;
+        var record = ToRecord(row);
+        if (!EvidenceProcessingLifecycle.CanTransition(record, checkpoint)) return false;
         var effectiveExtractionId = checkpoint.ExtractionId ?? row.ExtractionId;
         var effectiveComparisonId = checkpoint.ComparisonId ?? row.ComparisonId;
         if (effectiveExtractionId is not null)
@@ -191,21 +193,19 @@ public sealed class PostgresEvidenceProcessingStore(
                 checkpoint.Outcome is not (EvidenceProcessingOutcome.Changed or EvidenceProcessingOutcome.Unchanged))
                 return false;
         }
-        var changed = await db.Database.ExecuteSqlInterpolatedAsync($$"""
+        var attempts = EvidenceProcessingLifecycle.AttemptsAfter(record, checkpoint);
+        var now = (await DatabaseClock.ReadAsync(db, cancellationToken)).Ticks;
+        var retryAt = EvidenceProcessingLifecycle.RetryAtTicks(checkpoint, now);
+        var changed = await db.Database.ExecuteSqlInterpolatedAsync($"""
             UPDATE evidence_processing SET
-                stage = {{checkpoint.Stage.ToString()}}, status = {{checkpoint.Status.ToString()}},
-                attempts = CASE WHEN {{checkpoint.Stage != checkpoint.ExpectedStage}} THEN 0 ELSE attempts END,
-                extraction_id = {{effectiveExtractionId}}, comparison_id = {{effectiveComparisonId}},
-                outcome = {{checkpoint.Outcome?.ToString()}}, error_code = {{checkpoint.ErrorCode}},
-                retry_at = CASE WHEN {{checkpoint.Status == EvidenceProcessingStatus.RetryWaiting}}
-                    THEN ((EXTRACT(EPOCH FROM clock_timestamp())::numeric * 10000000 + 621355968000000000)::bigint) + {{checkpoint.RetryDelay?.Ticks ?? 0}}
-                    ELSE NULL END,
-                admitted_count = {{checkpoint.AdmittedCount}}, deferred_count = {{checkpoint.DeferredCount}},
-                duplicate_count = {{checkpoint.DuplicateCount}}, lease_token = NULL, lease_expires_at = NULL
-            WHERE job_id = {{checkpoint.JobId}} AND attempt_id = {{checkpoint.AttemptId}} AND
-                stage = {{checkpoint.ExpectedStage.ToString()}} AND status = {{checkpoint.ExpectedStatus.ToString()}} AND
-                lease_token = {{checkpoint.LeaseToken}} AND fence = {{checkpoint.Fence}} AND
-                lease_expires_at > ((EXTRACT(EPOCH FROM clock_timestamp())::numeric * 10000000 + 621355968000000000)::bigint)
+                stage = {checkpoint.Stage.ToString()}, status = {checkpoint.Status.ToString()},
+                attempts = {attempts}, extraction_id = {effectiveExtractionId}, comparison_id = {effectiveComparisonId},
+                outcome = {checkpoint.Outcome?.ToString()}, error_code = {checkpoint.ErrorCode}, retry_at = {retryAt},
+                admitted_count = {checkpoint.AdmittedCount}, deferred_count = {checkpoint.DeferredCount},
+                duplicate_count = {checkpoint.DuplicateCount}, lease_token = NULL, lease_expires_at = NULL
+            WHERE job_id = {checkpoint.JobId} AND attempt_id = {checkpoint.AttemptId} AND
+                stage = {checkpoint.ExpectedStage.ToString()} AND status = {checkpoint.ExpectedStatus.ToString()} AND
+                lease_token = {checkpoint.LeaseToken} AND fence = {checkpoint.Fence} AND lease_expires_at > {now}
             """, cancellationToken);
         if (changed != 1) return false;
         await transaction.CommitAsync(cancellationToken);
@@ -217,13 +217,13 @@ public sealed class PostgresEvidenceProcessingStore(
         ArgumentNullException.ThrowIfNull(claim);
         EvidenceProcessingPolicy.ValidateLeaseDuration(leaseDuration);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        return await db.Database.ExecuteSqlInterpolatedAsync($$"""
-            UPDATE evidence_processing SET lease_expires_at =
-                ((EXTRACT(EPOCH FROM clock_timestamp())::numeric * 10000000 + 621355968000000000)::bigint) + {{leaseDuration.Ticks}}
-            WHERE job_id = {{claim.Record.JobId}} AND attempt_id = {{claim.Record.AttemptId}} AND status = 'Running' AND
-                lease_token = {{claim.LeaseToken}} AND fence = {{claim.Fence}} AND lease_expires_at >
-                ((EXTRACT(EPOCH FROM clock_timestamp())::numeric * 10000000 + 621355968000000000)::bigint)
-            """, cancellationToken) == 1;
+        return await db.Database.ExecuteSqlRawAsync($$"""
+            UPDATE evidence_processing SET lease_expires_at = {{DatabaseClock.TicksSql}} + @lease
+            WHERE job_id = @jobId AND attempt_id = @attemptId AND status = 'Running' AND
+                lease_token = @token AND fence = @fence AND lease_expires_at > {{DatabaseClock.TicksSql}}
+            """, [new NpgsqlParameter("lease", leaseDuration.Ticks), new NpgsqlParameter("jobId", claim.Record.JobId),
+                new NpgsqlParameter("attemptId", claim.Record.AttemptId), new NpgsqlParameter("token", claim.LeaseToken),
+                new NpgsqlParameter("fence", claim.Fence)], cancellationToken) == 1;
     }
 
     public async Task<bool> WaitForPredecessorAsync(EvidenceProcessingClaim claim, string predecessorAttemptId,
@@ -252,27 +252,31 @@ public sealed class PostgresEvidenceProcessingStore(
     }
 
     private static async Task<bool> ParkOrRequeueAsync(CollectionAttemptDbContext db, EvidenceProcessingClaim claim,
-        string predecessorAttemptId, bool waiting, CancellationToken cancellationToken) =>
-        await db.Database.ExecuteSqlInterpolatedAsync($$"""
-            UPDATE evidence_processing SET status = {{(waiting ? "WaitingForPredecessor" : "Pending")}},
-                predecessor_attempt_id = {{(waiting ? predecessorAttemptId : null)}}, attempts = GREATEST(attempts - 1, 0),
+        string predecessorAttemptId, bool waiting, CancellationToken cancellationToken)
+    {
+        var attempts = EvidenceProcessingLifecycle.AttemptsAfterWaiting(claim.Record);
+        var now = (await DatabaseClock.ReadAsync(db, cancellationToken)).Ticks;
+        return await db.Database.ExecuteSqlInterpolatedAsync($"""
+            UPDATE evidence_processing SET status = {(waiting ? "WaitingForPredecessor" : "Pending")},
+                predecessor_attempt_id = {(waiting ? predecessorAttemptId : null)}, attempts = {attempts},
                 error_code = NULL, retry_at = NULL, lease_token = NULL, lease_expires_at = NULL
-            WHERE job_id = {{claim.Record.JobId}} AND attempt_id = {{claim.Record.AttemptId}} AND
-                stage = 'Comparison' AND status = 'Running' AND lease_token = {{claim.LeaseToken}} AND
-                fence = {{claim.Fence}} AND lease_expires_at >
-                ((EXTRACT(EPOCH FROM clock_timestamp())::numeric * 10000000 + 621355968000000000)::bigint)
+            WHERE job_id = {claim.Record.JobId} AND attempt_id = {claim.Record.AttemptId} AND
+                stage = 'Comparison' AND status = 'Running' AND lease_token = {claim.LeaseToken} AND
+                fence = {claim.Fence} AND lease_expires_at > {now}
             """, cancellationToken) == 1;
+    }
 
     public async Task<bool> ReleaseAsync(EvidenceProcessingClaim claim, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(claim);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        return await db.Database.ExecuteSqlInterpolatedAsync($$"""
+        return await db.Database.ExecuteSqlRawAsync($$"""
             UPDATE evidence_processing SET lease_token = NULL, lease_expires_at = NULL, status = 'Pending'
-            WHERE job_id = {{claim.Record.JobId}} AND attempt_id = {{claim.Record.AttemptId}} AND status = 'Running' AND
-                lease_token = {{claim.LeaseToken}} AND fence = {{claim.Fence}} AND lease_expires_at >
-                ((EXTRACT(EPOCH FROM clock_timestamp())::numeric * 10000000 + 621355968000000000)::bigint)
-            """, cancellationToken) == 1;
+            WHERE job_id = @jobId AND attempt_id = @attemptId AND status = 'Running' AND
+                lease_token = @token AND fence = @fence AND lease_expires_at > {{DatabaseClock.TicksSql}}
+            """, [new NpgsqlParameter("jobId", claim.Record.JobId), new NpgsqlParameter("attemptId", claim.Record.AttemptId),
+                new NpgsqlParameter("token", claim.LeaseToken), new NpgsqlParameter("fence", claim.Fence)],
+            cancellationToken) == 1;
     }
 
     private static EvidenceProcessingRecord ToRecord(PersistedEvidenceProcessingRow row) => new(row.JobId,
@@ -280,22 +284,6 @@ public sealed class PostgresEvidenceProcessingStore(
         row.Attempts, row.RetryAt is { } retry ? new DateTimeOffset(retry, TimeSpan.Zero) : null,
         row.ExtractionId, row.ComparisonId, row.Outcome, row.ErrorCode, row.AdmittedCount, row.DeferredCount,
         row.DuplicateCount, row.PredecessorAttemptId);
-
-    private static async Task<DateTime> ReadDatabaseNowAsync(CollectionAttemptDbContext db, CancellationToken cancellationToken)
-    {
-        var connection = db.Database.GetDbConnection();
-        var alreadyOpen = connection.State == ConnectionState.Open;
-        if (!alreadyOpen) await db.Database.OpenConnectionAsync(cancellationToken);
-        try
-        {
-            await using var command = connection.CreateCommand();
-            command.CommandText = "SELECT clock_timestamp()";
-            var value = await command.ExecuteScalarAsync(cancellationToken)
-                ?? throw new InvalidOperationException("Postgres did not return database time.");
-            return DateTime.SpecifyKind((DateTime)value, DateTimeKind.Utc);
-        }
-        finally { if (!alreadyOpen) await db.Database.CloseConnectionAsync(); }
-    }
 
     private static void ValidateIdentity(string jobId, string attemptId, string sourceId, string requestedUrl)
     {

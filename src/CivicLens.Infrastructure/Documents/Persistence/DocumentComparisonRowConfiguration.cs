@@ -16,6 +16,7 @@ internal sealed class DocumentComparisonRowConfiguration : IEntityTypeConfigurat
         builder.Property(row => row.AlgorithmVersion).HasColumnName("algorithm_version").HasMaxLength(128).IsRequired();
         builder.Property(row => row.SettingsVersion).HasColumnName("settings_version").HasMaxLength(128).IsRequired();
         builder.Property(row => row.ResultJson).HasColumnName("result_json").IsRequired();
+        builder.Property(row => row.HasChanges).HasColumnName("has_changes").IsRequired();
         builder.HasOne<DocumentExtractionRow>().WithMany().HasForeignKey(row => row.BeforeExtractionId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<DocumentExtractionRow>().WithMany().HasForeignKey(row => row.AfterExtractionId).OnDelete(DeleteBehavior.Restrict);
     }

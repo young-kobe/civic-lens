@@ -455,7 +455,6 @@ public sealed class CollectorTests
     }
 
     // House Drupal feeds declare an http xml:base and http item links on https sites.
-    // Version 8 must recover those items over https and count only the true drops.
     [Fact]
     public async Task FeedHttpLinksOnHttpsHostAreFetchedOverHttpsAndOtherDropsAreCounted()
     {

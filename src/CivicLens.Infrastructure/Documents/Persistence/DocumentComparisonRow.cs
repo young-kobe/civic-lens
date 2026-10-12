@@ -8,4 +8,5 @@ internal sealed class DocumentComparisonRow
     public string AlgorithmVersion { get; set; } = string.Empty;
     public string SettingsVersion { get; set; } = string.Empty;
     public string ResultJson { get; set; } = string.Empty;
+    public bool HasChanges { get; set; }
 }

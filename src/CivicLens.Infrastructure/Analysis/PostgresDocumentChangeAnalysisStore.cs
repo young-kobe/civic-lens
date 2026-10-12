@@ -25,7 +25,7 @@ public sealed class PostgresDocumentChangeAnalysisStore(IDbContextFactory<Collec
     {
         if (limit is < 1 or > DocumentChangeAnalysisPolicy.MaximumBatch) throw new ArgumentOutOfRangeException(nameof(limit));
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        var now = (await ReadClockAsync(db, cancellationToken)).Ticks;
+        var now = (await DatabaseClock.ReadAsync(db, cancellationToken)).Ticks;
         var rows = await db.Set<DocumentChangeAnalysisRow>().AsNoTracking()
             .Where(row => row.Task == DocumentChangeDraftingTask.Task && (row.Status == State.Pending ||
                 (row.Status == State.RetryWaiting || row.Status == State.WaitingForBudget) && row.RetryAt <= now ||
@@ -69,7 +69,7 @@ public sealed class PostgresDocumentChangeAnalysisStore(IDbContextFactory<Collec
     public async Task<long> GetChargedTodayAsync(CancellationToken cancellationToken)
     {
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        var day = (await ReadClockAsync(db, cancellationToken)).Day;
+        var day = (await DatabaseClock.ReadAsync(db, cancellationToken)).Day;
         return await db.Set<DocumentChangeAnalysisBudgetRow>().AsNoTracking().Where(row => row.DayUtc == day)
             .Select(row => row.ChargedTokens).SingleOrDefaultAsync(cancellationToken);
     }
@@ -83,7 +83,7 @@ public sealed class PostgresDocumentChangeAnalysisStore(IDbContextFactory<Collec
             WHERE task = {DocumentChangeDraftingTask.Task} AND status = 'Failed' AND (CAST({comparisonId} AS text) IS NULL OR comparison_id = {comparisonId})
             FOR UPDATE
             """).ToArrayAsync(cancellationToken);
-        var clock = await ReadClockAsync(db, cancellationToken);
+        var clock = await DatabaseClock.ReadAsync(db, cancellationToken);
         var requeued = 0;
         foreach (var row in rows.Where(row => Transition(row, Unclaimed(row, State.Pending), clock)))
         {
@@ -114,7 +114,7 @@ public sealed class PostgresDocumentChangeAnalysisStore(IDbContextFactory<Collec
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
         var row = await LockAsync(db, comparisonId, cancellationToken);
-        var clock = await ReadClockAsync(db, cancellationToken);
+        var clock = await DatabaseClock.ReadAsync(db, cancellationToken);
         if (row is null || !IsDue(row, clock.Ticks)) return null;
         if (row.Status == State.Running) Interrupt(db, row, clock.Ticks);
         if (!Transition(row, Unclaimed(row, State.Running), clock, leaseDuration))
@@ -139,7 +139,7 @@ public sealed class PostgresDocumentChangeAnalysisStore(IDbContextFactory<Collec
         var row = await LockAsync(db, claim.Record.ComparisonId, cancellationToken);
         if (row is null || !DocumentChangeAnalysisLifecycle.CanTransition(ToRecord(row),
                 DocumentChangeAnalysisCheckpoint.From(claim, State.Running))) return false;
-        row.LeaseExpiresAt = (await ReadClockAsync(db, cancellationToken)).Ticks + leaseDuration.Ticks;
+        row.LeaseExpiresAt = (await DatabaseClock.ReadAsync(db, cancellationToken)).Ticks + leaseDuration.Ticks;
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return true;
@@ -156,7 +156,7 @@ public sealed class PostgresDocumentChangeAnalysisStore(IDbContextFactory<Collec
         var wait = DocumentChangeAnalysisCheckpoint.From(claim, State.WaitingForBudget, DocumentChangeAnalysisErrorCodes.DailyTokenLimit);
         if (row is null || row.ReservedTokens != 0 || !DocumentChangeAnalysisLifecycle.CanTransition(ToRecord(row), wait))
             return DocumentChangeAnalysisReservation.LeaseLost;
-        var clock = await ReadClockAsync(db, cancellationToken);
+        var clock = await DatabaseClock.ReadAsync(db, cancellationToken);
         var day = await LockDayAsync(db, clock.Day, cancellationToken);
         var result = DocumentChangeAnalysisReservation.WaitingForBudget;
         if (day.ChargedTokens + tokens > dailyTokenLimit) _ = Transition(row, wait, clock);
@@ -186,7 +186,7 @@ public sealed class PostgresDocumentChangeAnalysisStore(IDbContextFactory<Collec
         if (row is null || !DocumentChangeAnalysisLifecycle.CanTransition(ToRecord(row), checkpoint)) return false;
         if (run is null ? row.ReservedTokens != 0 : run.RunId != row.PendingRunId || run.ComparisonId != row.ComparisonId)
             throw new InvalidOperationException("An analysis run must settle the reservation that it was made under.");
-        var clock = await ReadClockAsync(db, cancellationToken);
+        var clock = await DatabaseClock.ReadAsync(db, cancellationToken);
         if (checkpoint.Revision is not null)
         {
             if (run?.Outcome != AnalysisRunOutcome.Drafted) throw new ArgumentException("A draft needs its drafted run.", nameof(run));
@@ -222,7 +222,7 @@ public sealed class PostgresDocumentChangeAnalysisStore(IDbContextFactory<Collec
         var row = await LockAsync(db, claim.Record.ComparisonId, cancellationToken);
         var release = DocumentChangeAnalysisCheckpoint.From(claim, State.Pending);
         if (row is null || !DocumentChangeAnalysisLifecycle.CanTransition(ToRecord(row), release)) return false;
-        var clock = await ReadClockAsync(db, cancellationToken);
+        var clock = await DatabaseClock.ReadAsync(db, cancellationToken);
         if (row.ReservedTokens > 0) Interrupt(db, row, clock.Ticks);
         _ = Transition(row, release, clock);
         await db.SaveChangesAsync(cancellationToken);
@@ -237,14 +237,14 @@ public sealed class PostgresDocumentChangeAnalysisStore(IDbContextFactory<Collec
         var rows = await db.Set<DocumentChangeAnalysisRow>().FromSqlRaw(
             "SELECT * FROM document_change_analysis WHERE status = 'WaitingForBudget' FOR UPDATE")
             .Where(row => row.Task == DocumentChangeDraftingTask.Task).ToArrayAsync(cancellationToken);
-        var clock = await ReadClockAsync(db, cancellationToken);
+        var clock = await DatabaseClock.ReadAsync(db, cancellationToken);
         var released = rows.Count(row => Transition(row, Unclaimed(row, State.Pending), clock));
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return released;
     }
 
-    private static bool Transition(DocumentChangeAnalysisRow row, DocumentChangeAnalysisCheckpoint update, DatabaseClock clock,
+    private static bool Transition(DocumentChangeAnalysisRow row, DocumentChangeAnalysisCheckpoint update, DatabaseTime clock,
         TimeSpan? newLease = null)
     {
         if (!DocumentChangeAnalysisLifecycle.CanTransition(ToRecord(row), update)) return false;
@@ -319,18 +319,6 @@ public sealed class PostgresDocumentChangeAnalysisStore(IDbContextFactory<Collec
         return await db.Set<DocumentChangeAnalysisBudgetRow>().FromSqlInterpolated($"""
             SELECT * FROM document_change_analysis_budget WHERE day_utc = {day} FOR UPDATE
             """).SingleAsync(cancellationToken);
-    }
-
-    private static async Task<DatabaseClock> ReadClockAsync(CollectionAttemptDbContext db, CancellationToken cancellationToken) =>
-        await db.Database.SqlQueryRaw<DatabaseClock>("""
-            SELECT (EXTRACT(EPOCH FROM clock_timestamp())::numeric * 10000000 + 621355968000000000)::bigint AS "Ticks",
-                   (clock_timestamp() AT TIME ZONE 'UTC')::date AS "Day"
-            """).SingleAsync(cancellationToken);
-
-    private sealed class DatabaseClock
-    {
-        public long Ticks { get; set; }
-        public DateOnly Day { get; set; }
     }
 
     private static DocumentChangeAnalysisRecord ToRecord(DocumentChangeAnalysisRow row) => new(row.ComparisonId, row.Task,

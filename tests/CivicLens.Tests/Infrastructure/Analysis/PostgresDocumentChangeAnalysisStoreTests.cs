@@ -315,6 +315,7 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
 
         Assert.InRange(peak, 2, 3);
         Assert.Equal(4, await ScalarAsync<long>("SELECT count(*) FROM document_change_drafts"));
+        Assert.Equal(4, await ScalarAsync<long>("SELECT count(*) FROM document_change_drafts WHERE review_status = 'AwaitingReview'"));
     }
 
     private static void InterlockedMax(ref int target, int value)

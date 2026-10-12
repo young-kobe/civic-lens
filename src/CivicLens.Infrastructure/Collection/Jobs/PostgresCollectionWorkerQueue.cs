@@ -25,12 +25,7 @@ public sealed class PostgresCollectionWorkerQueue(IDbContextFactory<CollectionAt
         if (limit is < 1 or > MaximumPageSize) throw new ArgumentOutOfRangeException(nameof(limit));
         ValidateCursor(cursor);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        await db.Database.OpenConnectionAsync(cancellationToken);
-        await using var command = db.Database.GetDbConnection().CreateCommand();
-        command.CommandText = "SELECT clock_timestamp()";
-        var databaseNow = (DateTime)(await command.ExecuteScalarAsync(cancellationToken)
-            ?? throw new InvalidOperationException("Postgres did not return database time."));
-        var nowTicks = DateTime.SpecifyKind(databaseNow, DateTimeKind.Utc).Ticks;
+        var nowTicks = (await DatabaseClock.ReadAsync(db, cancellationToken)).Ticks;
 
         var query = db.Set<JobRow>().AsNoTracking().Where(row =>
             (row.LeaseExpiresAt == null || row.LeaseExpiresAt <= nowTicks) &&
@@ -47,7 +42,6 @@ public sealed class PostgresCollectionWorkerQueue(IDbContextFactory<CollectionAt
         var next = rows.Length > limit
             ? new CollectionWorkerCursor(rows[count - 1].CreatedAt, rows[count - 1].JobId)
             : null;
-        await db.Database.CloseConnectionAsync();
         return new(ids, next);
     }
 

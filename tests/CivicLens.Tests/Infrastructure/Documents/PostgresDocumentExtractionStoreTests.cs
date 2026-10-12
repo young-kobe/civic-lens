@@ -187,8 +187,6 @@ public sealed class PostgresDocumentExtractionStoreTests(PostgresCollection post
         await Assert.ThrowsAsync<InvalidOperationException>(() => extractions.GetAsync(original.ExtractionId, CancellationToken.None));
     }
 
-    // The analysis queue must never miss a changed comparison and never hold two entries for one.
-    // The entry joins the comparison's transaction, so both exist or neither does.
     [Fact]
     public async Task ChangedComparisonQueuesOneDraftAnalysisAndReplayDoesNotAddAnother()
     {

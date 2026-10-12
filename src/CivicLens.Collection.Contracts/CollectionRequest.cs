@@ -89,7 +89,6 @@ public sealed record CollectionRequest
             throw new ArgumentException("ETag must be a single entity tag.");
     }
 
-    // Version 8 fetches a same-host http link over https; earlier versions keep exact scheme scope.
     public Uri? ResolveCandidate(Uri url)
     {
         if (Allows(url)) return url;

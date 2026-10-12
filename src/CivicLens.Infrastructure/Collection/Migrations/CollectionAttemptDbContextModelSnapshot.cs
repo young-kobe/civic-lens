@@ -858,6 +858,10 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("character varying(64)")
                         .HasColumnName("before_extraction_id");
 
+                    b.Property<bool>("HasChanges")
+                        .HasColumnType("boolean")
+                        .HasColumnName("has_changes");
+
                     b.Property<string>("ResultJson")
                         .IsRequired()
                         .HasColumnType("text")
@@ -961,6 +965,12 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("review_state_version");
 
+                    b.Property<string>("ReviewStatus")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("review_status");
+
                     b.HasKey("DraftId");
 
                     b.HasIndex("ComparisonId");
@@ -968,6 +978,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.ToTable("document_change_drafts", null, t =>
                         {
                             t.HasCheckConstraint("ck_document_change_drafts_id", "draft_id ~ '^[0-9a-f]{32}$'");
+
+                            t.HasCheckConstraint("ck_document_change_drafts_review_status", "review_status IN ('AwaitingReview','AwaitingReviewWithConcerns','Approved','ChangesRequested','ApprovalWithdrawn')");
 
                             t.HasCheckConstraint("ck_document_change_drafts_versions", "current_revision_number >= 1 AND review_state_version >= 0");
                         });

@@ -9,8 +9,6 @@ namespace CivicLens.Infrastructure.Analysis;
 public sealed class PostgresDocumentChangeAnalysisStatusStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory)
     : IDocumentChangeAnalysisStatusStore
 {
-    private const string ClockTicksSql = "(EXTRACT(EPOCH FROM clock_timestamp())::numeric * 10000000 + 621355968000000000)::bigint";
-
     public static PostgresDocumentChangeAnalysisStatusStore FromConnectionString(string connectionString)
     {
         _ = PostgresCollectionAttemptStore.FromConnectionString(connectionString);
@@ -23,8 +21,7 @@ public sealed class PostgresDocumentChangeAnalysisStatusStore(IDbContextFactory<
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         var row = await db.Set<DocumentChangeAnalysisStatusRow>().AsNoTracking()
             .SingleOrDefaultAsync(candidate => candidate.Task == DocumentChangeDraftingTask.Task, cancellationToken);
-        return row is null ? null : new(row.DailyTokenLimit, new DateTimeOffset(row.RecordedAtUtcTicks, TimeSpan.Zero),
-            row.PausedReason, row.PausedUntilUtcTicks is { } until ? new DateTimeOffset(until, TimeSpan.Zero) : null);
+        return row is null ? null : ToStatus(row);
     }
 
     public async Task RecordStartAsync(long? dailyTokenLimit, CancellationToken cancellationToken)
@@ -33,7 +30,7 @@ public sealed class PostgresDocumentChangeAnalysisStatusStore(IDbContextFactory<
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         _ = await db.Database.ExecuteSqlInterpolatedAsync($"""
             INSERT INTO document_change_analysis_status (task, daily_token_limit, recorded_at_utc_ticks)
-            VALUES ({DocumentChangeDraftingTask.Task}, {dailyTokenLimit}, {await ReadTicksAsync(db, cancellationToken)})
+            VALUES ({DocumentChangeDraftingTask.Task}, {dailyTokenLimit}, {(await DatabaseClock.ReadAsync(db, cancellationToken)).Ticks})
             ON CONFLICT (task) DO UPDATE SET daily_token_limit = EXCLUDED.daily_token_limit,
                 recorded_at_utc_ticks = EXCLUDED.recorded_at_utc_ticks, paused_reason = NULL, paused_until_utc_ticks = NULL
             """, cancellationToken);
@@ -44,22 +41,35 @@ public sealed class PostgresDocumentChangeAnalysisStatusStore(IDbContextFactory<
         ArgumentException.ThrowIfNullOrWhiteSpace(reason);
         if (reason.Length > 64 || duration < TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(reason));
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        long? until = duration is { } pause ? await ReadTicksAsync(db, cancellationToken) + pause.Ticks : null;
-        _ = await db.Database.ExecuteSqlInterpolatedAsync($"""
-            UPDATE document_change_analysis_status SET paused_reason = {reason}, paused_until_utc_ticks = {until}
-            WHERE task = {DocumentChangeDraftingTask.Task} AND (paused_reason IS NULL OR paused_until_utc_ticks IS NOT NULL)
-            """, cancellationToken);
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        var row = await LockAsync(db, cancellationToken);
+        if (row is null || ToStatus(row).IsHardPaused) return;
+        var now = await DatabaseClock.ReadAsync(db, cancellationToken);
+        row.PausedReason = reason;
+        row.PausedUntilUtcTicks = duration is { } pause ? now.Ticks + pause.Ticks : null;
+        await db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
     }
 
     public async Task ClearOutagePauseAsync(CancellationToken cancellationToken)
     {
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        _ = await db.Database.ExecuteSqlInterpolatedAsync($"""
-            UPDATE document_change_analysis_status SET paused_reason = NULL, paused_until_utc_ticks = NULL
-            WHERE task = {DocumentChangeDraftingTask.Task} AND paused_until_utc_ticks IS NOT NULL
-            """, cancellationToken);
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        var row = await LockAsync(db, cancellationToken);
+        if (row is null || !ToStatus(row).IsTimedPaused) return;
+        row.PausedReason = null;
+        row.PausedUntilUtcTicks = null;
+        await db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
     }
 
-    private static Task<long> ReadTicksAsync(CollectionAttemptDbContext db, CancellationToken cancellationToken) =>
-        db.Database.SqlQueryRaw<long>($"SELECT {ClockTicksSql} AS \"Value\"").SingleAsync(cancellationToken);
+    // The row lock keeps the pause rule and its write in one step. A restart or a second pause cannot slip between them.
+    private static Task<DocumentChangeAnalysisStatusRow?> LockAsync(CollectionAttemptDbContext db,
+        CancellationToken cancellationToken) => db.Set<DocumentChangeAnalysisStatusRow>().FromSqlInterpolated($"""
+            SELECT * FROM document_change_analysis_status WHERE task = {DocumentChangeDraftingTask.Task} FOR UPDATE
+            """).SingleOrDefaultAsync(cancellationToken);
+
+    private static DocumentChangeAnalysisStatus ToStatus(DocumentChangeAnalysisStatusRow row) =>
+        new(row.DailyTokenLimit, new DateTimeOffset(row.RecordedAtUtcTicks, TimeSpan.Zero), row.PausedReason,
+            row.PausedUntilUtcTicks is { } until ? new DateTimeOffset(until, TimeSpan.Zero) : null);
 }

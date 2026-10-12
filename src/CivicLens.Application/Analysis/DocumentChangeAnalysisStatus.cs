@@ -5,5 +5,9 @@ public sealed record DocumentChangeAnalysisStatus(long? DailyTokenLimit, DateTim
 {
     public bool Enabled => DailyTokenLimit is not null;
 
+    public bool IsHardPaused => PausedReason is not null && PausedUntilUtc is null;
+
+    public bool IsTimedPaused => PausedUntilUtc is not null;
+
     public bool IsPaused(DateTimeOffset now) => PausedReason is not null && (PausedUntilUtc is null || PausedUntilUtc > now);
 }

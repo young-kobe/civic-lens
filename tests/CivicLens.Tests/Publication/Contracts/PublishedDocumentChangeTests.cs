@@ -33,7 +33,6 @@ public sealed class PublishedDocumentChangeTests
     [Fact]
     public void PublishedRecordJsonMatchesPinnedSchemaVersion()
     {
-        // Static releases store this JSON and readers parse it strictly. A shape change needs a new schema version.
         var record = Record(new() { ExtractionId = AfterId, Start = 1, Length = 2, Quote = "\U0001F600" });
         var json = System.Text.Json.JsonSerializer.Serialize(record, PublicationProtocol.JsonOptions);
 
