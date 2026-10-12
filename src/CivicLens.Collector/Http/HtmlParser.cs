@@ -1,4 +1,3 @@
-using System.IO.Compression;
 using System.Net.Http.Headers;
 using System.Text;
 using AngleSharp.Dom;
@@ -19,99 +18,47 @@ internal static class HtmlParser
     public static async Task<DiscoveryResult> ParseCaptureAsync(string capturePath, CollectionRequest request,
         string responseUrl, IReadOnlyList<string> encodings, string? contentType, CancellationToken token)
     {
+        var candidates = new DiscoveryCandidates(request);
         try
         {
             token.ThrowIfCancellationRequested();
-            await using var file = File.OpenRead(capturePath);
-            await using var storage = new GZipStream(file, CompressionMode.Decompress);
-            Stream decoded = storage;
-            var owned = new List<Stream>();
-            try
+            using var output = await CaptureDecoder.ReadDecodedAsync(capturePath, encodings, MaximumDecodedBytes, token);
+            token.ThrowIfCancellationRequested();
+            var bytes = output.ToArray();
+            var html = DecodeHtml(bytes, contentType);
+            token.ThrowIfCancellationRequested();
+
+            // AngleSharp does not fetch linked resources. This parser only builds a tree from
+            // the already captured representation; scripts are never executed.
+            using var document = await CreateParser(token,
+                request.Version >= CollectionProtocol.TolerantHtmlRecoveryVersion).ParseDocumentAsync(html, token);
+            token.ThrowIfCancellationRequested();
+            ValidateTreeDepth(document, token);
+            var finalUrl = new Uri(responseUrl);
+            var resolutionBase = FindBase(document, finalUrl);
+            foreach (var anchor in document.QuerySelectorAll("a[href]"))
             {
-                foreach (var encoding in encodings.Reverse())
-                {
-                    token.ThrowIfCancellationRequested();
-                    decoded = encoding.ToLowerInvariant() switch
-                    {
-                        "identity" => decoded,
-                        "gzip" => Own(new GZipStream(decoded, CompressionMode.Decompress), owned),
-                        "deflate" => Own(new ZLibStream(decoded, CompressionMode.Decompress), owned),
-                        "br" => Own(new BrotliStream(decoded, CompressionMode.Decompress), owned),
-                        _ => throw new UnsupportedEncodingException()
-                    };
-                    decoded = Own(new BoundedReadStream(decoded, MaximumDecodedBytes), owned);
-                }
-
-                using var bounded = new BoundedReadStream(decoded, MaximumDecodedBytes);
-                using var output = new MemoryStream();
-                await bounded.CopyToAsync(output, 81920, token);
-                // Validate every HTTP encoding layer, even if a downstream decoder stopped early.
-                foreach (var stage in owned.OfType<BoundedReadStream>().Reverse())
-                    await stage.CopyToAsync(Stream.Null, 81920, token);
                 token.ThrowIfCancellationRequested();
-                var bytes = output.ToArray();
-                var html = DecodeHtml(bytes, contentType);
-                token.ThrowIfCancellationRequested();
-
-                // AngleSharp does not fetch linked resources. This parser only builds a tree from
-                // the already captured representation; scripts are never executed.
-                using var document = await CreateParser(token,
-                    request.Version >= CollectionProtocol.TolerantHtmlRecoveryVersion).ParseDocumentAsync(html, token);
-                token.ThrowIfCancellationRequested();
-                ValidateTreeDepth(document, token);
-                var finalUrl = new Uri(responseUrl);
-                var resolutionBase = FindBase(document, finalUrl);
-                var urls = new List<string>();
-                var seen = new HashSet<string>(StringComparer.Ordinal);
-                var outOfScope = new HashSet<string>(StringComparer.Ordinal);
-                foreach (var anchor in document.QuerySelectorAll("a[href]"))
-                {
-                    token.ThrowIfCancellationRequested();
-                    if (anchor.NamespaceUri != HtmlNamespace) continue;
-                    var href = anchor.GetAttribute("href");
-                    if (string.IsNullOrWhiteSpace(href)) continue;
-                    if (href.Length > MaximumHrefLength) return Result(DiscoveryStatus.Invalid);
-                    if (!Uri.TryCreate(resolutionBase, href.Trim(), out var resolved))
-                        return Result(DiscoveryStatus.Invalid);
-                    resolved = WithoutFragment(resolved);
-                    var candidate = request.ResolveCandidate(resolved);
-                    if (candidate is null)
-                    {
-                        outOfScope.Add(resolved.AbsoluteUri);
-                        continue;
-                    }
-                    var value = candidate.AbsoluteUri;
-                    if (value.Length > MaximumHrefLength) return Result(DiscoveryStatus.Invalid);
-                    if (seen.Add(value)) urls.Add(value);
-                    if (urls.Count > request.MaxCandidates) return Result(DiscoveryStatus.LimitExceeded);
-                }
-
-                return new DiscoveryResult
-                {
-                    Status = DiscoveryStatus.Parsed,
-                    Urls = urls.ToArray(),
-                    OutOfScopeCount = CountFor(request, outOfScope.Count)
-                };
+                if (anchor.NamespaceUri != HtmlNamespace) continue;
+                var href = anchor.GetAttribute("href");
+                if (string.IsNullOrWhiteSpace(href)) continue;
+                if (href.Length > MaximumHrefLength) return candidates.Failed(DiscoveryStatus.Invalid);
+                if (!Uri.TryCreate(resolutionBase, href.Trim(), out var resolved))
+                    return candidates.Failed(DiscoveryStatus.Invalid);
+                var rejection = candidates.Admit(WithoutFragment(resolved));
+                if (rejection is not null) return candidates.Failed(rejection.Value);
             }
-            finally
-            {
-                foreach (var stream in owned.AsEnumerable().Reverse()) await stream.DisposeAsync();
-            }
+
+            return candidates.Parsed();
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
-        catch (UnsupportedEncodingException) { return Result(DiscoveryStatus.Unsupported); }
-        catch (UnsupportedCharsetException) { return Result(DiscoveryStatus.Unsupported); }
+        catch (UnsupportedEncodingException) { return candidates.Failed(DiscoveryStatus.Unsupported); }
+        catch (UnsupportedCharsetException) { return candidates.Failed(DiscoveryStatus.Unsupported); }
         catch (Exception exception) when (exception is DecoderFallbackException or InvalidDataException or IOException or BoundedStreamLimitException or MarkupLimitException)
         {
-            return Result(exception is BoundedStreamLimitException or MarkupLimitException ? DiscoveryStatus.LimitExceeded : DiscoveryStatus.Invalid);
+            return candidates.Failed(exception is BoundedStreamLimitException or MarkupLimitException ? DiscoveryStatus.LimitExceeded : DiscoveryStatus.Invalid);
         }
-
-        static Stream Own(Stream stream, List<Stream> owned) { owned.Add(stream); return stream; }
-        DiscoveryResult Result(DiscoveryStatus status) => new() { Status = status, Urls = [], OutOfScopeCount = CountFor(request, 0) };
     }
-
-    private static int? CountFor(CollectionRequest request, int count) =>
-        request.Version >= CollectionProtocol.SchemeUpgradeVersion ? count : null;
 
     private static Uri FindBase(AngleSharp.Dom.IDocument document, Uri responseUrl)
     {
@@ -286,26 +233,5 @@ internal static class HtmlParser
 
     private sealed class MarkupLimitException : Exception;
 
-    private sealed class UnsupportedEncodingException : Exception;
     private sealed class UnsupportedCharsetException : Exception;
-    private sealed class BoundedStreamLimitException : Exception;
-
-    private sealed class BoundedReadStream(Stream inner, long maximum) : Stream
-    {
-        private long read;
-        public override bool CanRead => true;
-        public override bool CanSeek => false;
-        public override bool CanWrite => false;
-        public override long Length => throw new NotSupportedException();
-        public override long Position { get => read; set => throw new NotSupportedException(); }
-        public override int Read(byte[] buffer, int offset, int count) => Check(inner.Read(buffer, offset, count));
-        public override int Read(Span<byte> buffer) => Check(inner.Read(buffer));
-        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default) => Check(await inner.ReadAsync(buffer, cancellationToken));
-        private int Check(int count) { read += count; if (read > maximum) throw new BoundedStreamLimitException(); return count; }
-        public override void Flush() { }
-        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
-        public override void SetLength(long value) => throw new NotSupportedException();
-        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
-        protected override void Dispose(bool disposing) { base.Dispose(disposing); }
-    }
 }

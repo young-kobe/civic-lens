@@ -220,7 +220,7 @@ public sealed partial class PostgresCollectionJobStore : IDiscoveryAdmissionStor
     internal static string HashCandidate(string sourceId, string url)
     {
         var identity = $"{sourceId.Length}:{sourceId}{url}";
-        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(identity))).ToLowerInvariant();
+        return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(identity)));
     }
 
     private sealed record LegacyAdmissionInput(string AttemptId, CollectionJobDefinition ArticleTemplate, DiscoveryAdmissionPolicy Policy);
