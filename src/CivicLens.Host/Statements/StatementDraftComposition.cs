@@ -28,7 +28,8 @@ internal sealed class StatementDraftComposition
         var status = PostgresAnalysisStatusStore.FromConnectionString(connectionString, StatementDraftTask.Task);
         var configuration = StatementDraftConfiguration.FromEnvironment();
         if (configuration is null) return new(status, null, null, null);
-        var wakeup = PostgresAnalysisWakeup.FromConnectionString(connectionString, PostgresStatementAnalysisStore.Table);
+        var wakeup = PostgresAnalysisWakeup.FromConnectionString(connectionString, PostgresStatementAnalysisStore.Table,
+            StatementDraftTask.Task);
         var step = new StatementDraftingStep(PostgresStatementDraftStore.FromConnectionString(connectionString),
             new AnthropicStatementDraftingModel(configuration.ApiKey), configuration.Settings);
         return new(status, configuration, new AnalysisWorker<StatementDraftRun>(step, status, TimeProvider.System, wakeup), wakeup);

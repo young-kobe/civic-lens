@@ -4,7 +4,8 @@ using Npgsql;
 
 namespace CivicLens.Infrastructure;
 
-internal sealed class PostgresDeadlineWakeup(string connectionString, string channel, string deadlineQuery) : IWorkerWakeup
+internal sealed class PostgresDeadlineWakeup(string connectionString, string channel, string deadlineQuery,
+    string? payloadFilter = null) : IWorkerWakeup
 {
     private NpgsqlConnection? connection;
     private bool hasNotification;
@@ -70,7 +71,7 @@ internal sealed class PostgresDeadlineWakeup(string connectionString, string cha
         if (long.TryParse(eventArgs.Payload, System.Globalization.NumberStyles.None,
                 System.Globalization.CultureInfo.InvariantCulture, out var ticks) && ticks > 0 && ticks <= DateTime.MaxValue.Ticks)
             notifiedDeadline = Math.Min(notifiedDeadline ?? long.MaxValue, ticks);
-        else
+        else if (payloadFilter is null || eventArgs.Payload == payloadFilter)
             hasNotification = true;
     }
 

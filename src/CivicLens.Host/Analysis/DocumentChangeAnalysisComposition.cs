@@ -31,7 +31,8 @@ internal sealed class DocumentChangeAnalysisComposition
         if (configuration is null) return new(status, null, null, null);
         var names = collection.People.ToDictionary(person => person.Id, person => person.Name, StringComparer.Ordinal);
         var catalog = DocumentChangeAnalysisCatalog.Create(ReviewWorkspace.ReadCatalog(), names);
-        var wakeup = PostgresAnalysisWakeup.FromConnectionString(connectionString, PostgresDocumentChangeAnalysisStore.Table);
+        var wakeup = PostgresAnalysisWakeup.FromConnectionString(connectionString, PostgresDocumentChangeAnalysisStore.Table,
+            DocumentChangeDraftingTask.Task);
         var step = new DocumentChangeDraftingStep(PostgresDocumentChangeAnalysisStore.FromConnectionString(connectionString),
             new AnthropicDocumentChangeDraftingModel(configuration.ApiKey), configuration.Settings, catalog);
         var worker = new AnalysisWorker<AnalysisRun>(step, status, TimeProvider.System, wakeup);

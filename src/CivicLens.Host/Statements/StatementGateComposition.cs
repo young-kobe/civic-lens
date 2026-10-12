@@ -33,7 +33,8 @@ internal sealed class StatementGateComposition
         if (configuration is null) return new(status, null, false, null, null);
         var rubric = StatementIssueRubric.FromEnvironment();
         if (rubric is null) return new(status, configuration, true, null, null);
-        var wakeup = PostgresAnalysisWakeup.FromConnectionString(connectionString, PostgresStatementAnalysisStore.Table);
+        var wakeup = PostgresAnalysisWakeup.FromConnectionString(connectionString, PostgresStatementAnalysisStore.Table,
+            StatementGateTask.Task);
         var step = new StatementGateStep(PostgresStatementAnalysisStore.FromConnectionString(connectionString),
             new AnthropicStatementGateModel(configuration.ApiKey), configuration.Settings, rubric);
         var worker = new AnalysisWorker<StatementGateRun>(step, status, TimeProvider.System, wakeup);
