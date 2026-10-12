@@ -96,6 +96,29 @@ public sealed class DocumentComparisonTests
         Assert.Empty(result.Hunks);
     }
 
+    private const string BumpMessage = "Comparison output or limits changed. Bump DocumentComparison.CurrentAlgorithmVersion " +
+        "or CurrentSettingsVersion, update the version table in docs/architecture.md, and keep the old implementation " +
+        "for historical reads. Then update this test. Actual: ";
+
+    [Fact]
+    public void ComparisonOutputAndSettingsMatchTheirPinnedVersions()
+    {
+        var result = DocumentComparison.Create(Extraction("one\nold word\nlast"), Extraction("one\nnew word\nlast"));
+        var actual = System.Text.Json.JsonSerializer.Serialize(result.Hunks);
+        var settings = new[]
+        {
+            DocumentComparison.MaximumLines, DocumentComparison.MaximumMatrixCells, DocumentComparison.MaximumChangedTextLength,
+            DocumentComparison.ContextLines, DocumentComparison.MaximumContextTextLength, DocumentComparison.MaximumWordTokens,
+            DocumentComparison.MaximumWordMatrixCells, DocumentComparison.MaximumTotalWordMatrixCells
+        };
+
+        Assert.Equal("line-lcs-context-v1", DocumentComparison.CurrentAlgorithmVersion);
+        Assert.Equal("bounded-lines-2000-cells-1000000-change-8192-context-1-word-tokens-512-cells-250000-total-1000000-v1",
+            DocumentComparison.CurrentSettingsVersion);
+        Assert.True(settings.SequenceEqual([2_000, 1_000_000, 8_192, 1, 8_192, 512, 250_000, 1_000_000]), BumpMessage + string.Join(",", settings));
+        Assert.True(actual == """[{"BeforeStart":4,"BeforeLength":9,"AfterStart":4,"AfterLength":9,"BeforeText":"old word\n","AfterText":"new word\n","BeforeContextStart":0,"BeforeContext":"one\nold word\nlast","AfterContextStart":0,"AfterContext":"one\nnew word\nlast","WordEdits":[{"BeforeStart":4,"BeforeLength":3,"AfterStart":4,"AfterLength":3}]}]""", BumpMessage + actual);
+    }
+
     private static DocumentExtraction Extraction(string text, string url = "https://example.test/") =>
         new(Attempt(Guid.NewGuid().ToString("N"), url), "parser", "normalizer", text);
 

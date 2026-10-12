@@ -23,6 +23,23 @@ public sealed class CaptureDocumentTextExtractorTests
     }
 
     [Fact]
+    public async Task ExtractionOutputMatchesPinnedParserAndNormalizationVersions()
+    {
+        // Stored extractions are keyed by these versions. A change in text for the same input must get a new version.
+        var bump = "Extraction output changed. Bump CaptureDocumentTextExtractor.ParserVersion or NormalizationVersion, " +
+            "update the version table in docs/architecture.md, then update this test. Actual: ";
+        await using var capture = await TestCapture.CreateAsync(Encoding.UTF8.GetBytes(
+            "<html><head><title>head</title></head><body><h1>Title&nbsp;  here</h1><p>one<p>two <b>bold</b>  \n spaced</p>" +
+            "<ul><li>a</li><li>b</li></ul><script>x()</script><div>end</div></body></html>"), "text/html; charset=utf-8");
+
+        var text = await capture.Extractor.ExtractAsync(capture.Attempt, capture.Root, CancellationToken.None);
+
+        Assert.Equal("capture-text-v2", capture.Extractor.ParserVersion);
+        Assert.Equal("body-text-v1", capture.Extractor.NormalizationVersion);
+        Assert.True(text == "Title here\none\ntwo bold spaced\na\nb\nend", bump + text.Replace("\n", "\\n"));
+    }
+
+    [Fact]
     public async Task ExtractsHtmlTextWithBlockSeparatorsAndSkipsNonVisibleElements()
     {
         await using var capture = await TestCapture.CreateAsync(Encoding.UTF8.GetBytes(
