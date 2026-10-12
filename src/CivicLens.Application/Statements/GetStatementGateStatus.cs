@@ -4,10 +4,10 @@ using CivicLens.Core.Review;
 
 namespace CivicLens.Application.Statements;
 
-public sealed record StatementGateStatusReport(DocumentChangeAnalysisStatus? Status, long ChargedToday,
+public sealed record StatementGateStatusReport(AnalysisStatus? Status, long ChargedToday,
     IReadOnlyDictionary<StatementGateView, int> Counts);
 
-public sealed class GetStatementGateStatus(IStatementAnalysisStore store, IDocumentChangeAnalysisStatusStore status)
+public sealed class GetStatementGateStatus(IStatementAnalysisStore store, IAnalysisStatusStore status)
 {
     public async Task<StatementGateStatusReport> ExecuteAsync(ReviewActor actor, CancellationToken cancellationToken = default)
     {

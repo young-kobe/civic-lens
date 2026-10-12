@@ -9,12 +9,12 @@ namespace CivicLens.Host.Statements;
 internal sealed class StatementGateComposition
 {
     public const string IssuesUnsetReason = "issuesConfigurationUnset";
-    private readonly IDocumentChangeAnalysisStatusStore status;
+    private readonly IAnalysisStatusStore status;
     private readonly long? dailyTokenLimit;
     private readonly bool issuesUnset;
 
-    private StatementGateComposition(IDocumentChangeAnalysisStatusStore status, StatementGateConfiguration? configuration,
-        bool issuesUnset, StatementGateWorker? worker, IWorkerWakeup? wakeup)
+    private StatementGateComposition(IAnalysisStatusStore status, StatementGateConfiguration? configuration,
+        bool issuesUnset, AnalysisWorker<StatementGateRun>? worker, IWorkerWakeup? wakeup)
     {
         this.status = status;
         dailyTokenLimit = configuration?.Settings.DailyTokenLimit;
@@ -23,19 +23,20 @@ internal sealed class StatementGateComposition
         Wakeup = wakeup;
     }
 
-    public StatementGateWorker? Worker { get; }
+    public AnalysisWorker<StatementGateRun>? Worker { get; }
     public IWorkerWakeup? Wakeup { get; }
 
     public static StatementGateComposition Create(string connectionString)
     {
-        var status = PostgresDocumentChangeAnalysisStatusStore.FromConnectionString(connectionString, StatementGateTask.Task);
+        var status = PostgresAnalysisStatusStore.FromConnectionString(connectionString, StatementGateTask.Task);
         var configuration = StatementGateConfiguration.FromEnvironment();
         if (configuration is null) return new(status, null, false, null, null);
         var rubric = StatementIssueRubric.FromEnvironment();
         if (rubric is null) return new(status, configuration, true, null, null);
-        var wakeup = PostgresStatementAnalysisWakeup.FromConnectionString(connectionString);
-        var worker = new StatementGateWorker(PostgresStatementAnalysisStore.FromConnectionString(connectionString), status,
-            new AnthropicStatementGateModel(configuration.ApiKey), configuration.Settings, rubric, TimeProvider.System, wakeup);
+        var wakeup = PostgresAnalysisWakeup.FromConnectionString(connectionString, PostgresStatementAnalysisStore.Table);
+        var step = new StatementGateStep(PostgresStatementAnalysisStore.FromConnectionString(connectionString),
+            new AnthropicStatementGateModel(configuration.ApiKey), configuration.Settings, rubric);
+        var worker = new AnalysisWorker<StatementGateRun>(step, status, TimeProvider.System, wakeup);
         return new(status, configuration, false, worker, wakeup);
     }
 

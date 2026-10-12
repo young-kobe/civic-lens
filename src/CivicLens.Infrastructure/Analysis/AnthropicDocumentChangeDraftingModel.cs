@@ -6,6 +6,6 @@ public sealed class AnthropicDocumentChangeDraftingModel(string apiKey, HttpClie
 {
     private readonly AnthropicStructuredCall call = new(apiKey, httpClient);
 
-    public Task<DocumentChangeDraftingResponse> DraftAsync(DocumentChangeDraftingRequest request, CancellationToken cancellationToken) =>
+    public Task<AnalysisModelResponse> DraftAsync(AnalysisModelRequest request, CancellationToken cancellationToken) =>
         call.SendAsync(request, cancellationToken);
 }

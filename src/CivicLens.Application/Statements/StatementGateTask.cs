@@ -1,3 +1,5 @@
+using CivicLens.Application.Analysis;
+
 namespace CivicLens.Application.Statements;
 
 public static class StatementGateTask
@@ -12,4 +14,6 @@ public static class StatementGateTask
     public const int MaximumPromptBytes = 100_000;
     public const int MaximumValidationPasses = 2;
     public const int MaximumQuoteLength = 2_000;
+
+    public static readonly AnalysisTaskIdentity Identity = new(Task, TaskVersion, Model, PromptVersion, SchemaVersion);
 }

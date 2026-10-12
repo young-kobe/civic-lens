@@ -4,11 +4,11 @@ using CivicLens.Core.Analysis;
 using CivicLens.Tests.Application.Analysis;
 using CivicLens.Tests.Fixtures;
 using static CivicLens.Tests.Fixtures.StatementGateFixtures;
-using State = CivicLens.Application.Analysis.DocumentChangeAnalysisState;
+using State = CivicLens.Application.Analysis.AnalysisState;
 
 namespace CivicLens.Tests.Application.Statements;
 
-public sealed class StatementGateWorkerTests
+public sealed class StatementGateStepTests
 {
     private const string Article = "The senator announced a rent cap for tenants. The office closes on Friday.";
 
@@ -22,7 +22,7 @@ public sealed class StatementGateWorkerTests
 
         var entry = store.Entries.Single();
         Assert.Equal((State.Succeeded, StatementGateReasons.Passed), (entry.Status, entry.ErrorCode));
-        Assert.Equal([entry.CandidateId], store.QueuedDrafts);
+        Assert.Equal([entry.SubjectId], store.QueuedDrafts);
         var run = Assert.Single(store.Runs);
         Assert.Equal((AnalysisRunOutcome.Classified, StatementGateReasons.Passed, Revision().Id), (run.Run.Outcome, run.Reason, run.IssueRevisionId));
         var quote = Assert.Single(run.Quotes);
@@ -56,7 +56,7 @@ public sealed class StatementGateWorkerTests
         await Worker(store, model, new StatementGateSettings(10_000_000, smallest, 1)).ExecuteAsync(once: true);
 
         Assert.Empty(model.Requests);
-        Assert.Equal([store.Entries.Single().CandidateId], store.QueuedDrafts);
+        Assert.Equal([store.Entries.Single().SubjectId], store.QueuedDrafts);
         var run = Assert.Single(store.Runs);
         Assert.Equal((AnalysisRunOutcome.Bypassed, StatementGateReasons.OverByteCap, 0L), (run.Run.Outcome, run.Reason, run.Run.ChargedTokens));
         Assert.Equal(StatementGateReasons.OverByteCap, store.Entries.Single().ErrorCode);
@@ -103,15 +103,15 @@ public sealed class StatementGateWorkerTests
         Assert.Equal(2, model.Requests.Count);
         var entry = store.Entries.Single();
         Assert.Equal((State.Succeeded, StatementGateReasons.FailedOpen), (entry.Status, entry.ErrorCode));
-        Assert.Equal([entry.CandidateId], store.QueuedDrafts);
+        Assert.Equal([entry.SubjectId], store.QueuedDrafts);
         Assert.Equal([AnalysisRunOutcome.OutputRejected, AnalysisRunOutcome.OutputRejected], store.Runs.Select(run => run.Run.Outcome));
         Assert.Equal([null, StatementGateReasons.FailedOpen], store.Runs.Select(run => run.Reason));
     }
 
     [Theory]
-    [InlineData(DocumentChangeDraftingFailure.AuthenticationFailed, "authenticationFailed")]
-    [InlineData(DocumentChangeDraftingFailure.BillingFailed, "billingFailed")]
-    public async Task AnAccountErrorPausesTheGateAndTheArticleWaitsWithoutADraft(DocumentChangeDraftingFailure failure, string reason)
+    [InlineData(AnalysisModelFailure.AuthenticationFailed, "authenticationFailed")]
+    [InlineData(AnalysisModelFailure.BillingFailed, "billingFailed")]
+    public async Task AnAccountErrorPausesTheGateAndTheArticleWaitsWithoutADraft(AnalysisModelFailure failure, string reason)
     {
         var store = new FakeStatementAnalysisStore(Article, Article + " More.");
         var status = new FakeAnalysisStatusStore();
@@ -129,7 +129,7 @@ public sealed class StatementGateWorkerTests
     public async Task ARateLimitRetriesDurablyAndIsNeverFailOpen()
     {
         var store = new FakeStatementAnalysisStore(Article);
-        var model = new FakeStatementGateModel().Fail(DocumentChangeDraftingFailure.RateLimited);
+        var model = new FakeStatementGateModel().Fail(AnalysisModelFailure.RateLimited);
 
         await Worker(store, model).ExecuteAsync(once: true);
 
@@ -169,8 +169,8 @@ public sealed class StatementGateWorkerTests
         Assert.Equal(StatementGateReasons.FailedOpen, store.Entries.Single().ErrorCode);
     }
 
-    private static StatementGateWorker Worker(FakeStatementAnalysisStore store, FakeStatementGateModel model,
+    private static AnalysisWorker<StatementGateRun> Worker(FakeStatementAnalysisStore store, FakeStatementGateModel model,
         StatementGateSettings? settings = null, FakeAnalysisStatusStore? status = null) =>
-        new(store, status ?? new FakeAnalysisStatusStore(), model, settings ?? new StatementGateSettings(10_000_000, concurrency: 1),
+        AnalysisWorkers.Gate(store, status ?? new FakeAnalysisStatusStore(), model, settings ?? new StatementGateSettings(10_000_000, concurrency: 1),
             Revision(), new FakeClock(DateTimeOffset.UnixEpoch));
 }

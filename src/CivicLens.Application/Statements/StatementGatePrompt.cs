@@ -1,6 +1,5 @@
 using System.Collections.Immutable;
 using System.Globalization;
-using System.Security.Cryptography;
 using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
@@ -38,7 +37,7 @@ public static class StatementGatePrompt
 
     public static long MinimumReservation => Encoding.UTF8.GetByteCount(Instructions) + (long)StatementGateTask.MaximumOutputTokens;
 
-    public static DocumentChangeDraftingRequest? Build(StatementGateEvidence evidence, StatementGateRubric rubric, int maximumBytes,
+    public static AnalysisModelRequest? Build(StatementGateEvidence evidence, StatementGateRubric rubric, int maximumBytes,
         ImmutableArray<string> previousErrors = default)
     {
         ArgumentNullException.ThrowIfNull(evidence);
@@ -48,8 +47,10 @@ public static class StatementGatePrompt
         var schema = BuildSchema(rubric);
         var bytes = Encoding.UTF8.GetByteCount(system) + Encoding.UTF8.GetByteCount(user) + Encoding.UTF8.GetByteCount(schema);
         if (bytes > maximumBytes) return null;
-        return new(StatementGateTask.Model, StatementGateTask.MaximumOutputTokens, system, user, schema,
-            HashRequest(system, user, schema), bytes + (long)StatementGateTask.MaximumOutputTokens, CacheSystemPrompt: true);
+        var hash = AnalysisPromptHash.Compute(StatementGateTask.Model, StatementGateTask.Effort,
+            StatementGateTask.MaximumOutputTokens, system, user, schema);
+        return new(StatementGateTask.Model, StatementGateTask.MaximumOutputTokens, system, user, schema, hash,
+            bytes + (long)StatementGateTask.MaximumOutputTokens, CacheSystemPrompt: true);
     }
 
     private static string BuildSystemPrompt(StatementGateRubric rubric) =>
@@ -127,18 +128,4 @@ public static class StatementGatePrompt
     }
 
     private static JsonObject Number() => new() { ["type"] = "number" };
-
-    private static string HashRequest(string system, string user, string schema)
-    {
-        var canonical = JsonSerializer.Serialize(new
-        {
-            model = StatementGateTask.Model,
-            effort = StatementGateTask.Effort,
-            maxTokens = StatementGateTask.MaximumOutputTokens,
-            system,
-            user,
-            schema
-        }, CompactJson);
-        return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(canonical)));
-    }
 }

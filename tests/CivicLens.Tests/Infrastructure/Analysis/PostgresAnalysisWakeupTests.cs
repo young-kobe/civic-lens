@@ -12,7 +12,7 @@ namespace CivicLens.Tests.Infrastructure.Analysis;
 
 [Collection(PostgresCollection.Name)]
 [Trait("Category", "Postgres")]
-public sealed class PostgresDocumentChangeAnalysisWakeupTests(PostgresCollection postgres) : IAsyncLifetime
+public sealed class PostgresAnalysisWakeupTests(PostgresCollection postgres) : IAsyncLifetime
 {
     private readonly string schema = "analysis_wakeup_" + Guid.NewGuid().ToString("N");
     private readonly string captureRoot = Path.Combine(Path.GetTempPath(), "civic-analysis-wakeup-" + Guid.NewGuid().ToString("N"));
@@ -38,10 +38,17 @@ public sealed class PostgresDocumentChangeAnalysisWakeupTests(PostgresCollection
         Directory.Delete(captureRoot, recursive: true);
     }
 
+    [Theory]
+    [InlineData("")]
+    [InlineData("document_change_analysis; DROP TABLE x")]
+    [InlineData("Statement_Analysis")]
+    public void AQueueTableNameWithAnythingButLowercaseLettersAndUnderscoresIsRefused(string table) =>
+        Assert.ThrowsAny<ArgumentException>(() => PostgresAnalysisWakeup.FromConnectionString(connectionString, table));
+
     [Fact]
     public async Task ANewlyQueuedChangeWakesTheListener()
     {
-        await using var wakeup = PostgresDocumentChangeAnalysisWakeup.FromConnectionString(connectionString);
+        await using var wakeup = PostgresAnalysisWakeup.FromConnectionString(connectionString, PostgresDocumentChangeAnalysisStore.Table);
         await wakeup.ConnectAsync(default);
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         var waiting = wakeup.WaitAsync(timeout.Token);
@@ -59,7 +66,7 @@ public sealed class PostgresDocumentChangeAnalysisWakeupTests(PostgresCollection
             UPDATE document_change_analysis SET status = 'Running', lease_token = 'lease', lease_expires_at = 9000000000000000000
             WHERE comparison_id = '{comparison.ComparisonId}'
             """);
-        await using var wakeup = PostgresDocumentChangeAnalysisWakeup.FromConnectionString(connectionString);
+        await using var wakeup = PostgresAnalysisWakeup.FromConnectionString(connectionString, PostgresDocumentChangeAnalysisStore.Table);
         await wakeup.ConnectAsync(default);
         await ExecuteAsync(connectionString, $"""
             UPDATE document_change_analysis SET lease_expires_at =

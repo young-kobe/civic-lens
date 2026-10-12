@@ -2,22 +2,16 @@ using CivicLens.Application.Analysis;
 using CivicLens.Infrastructure.Analysis.Persistence;
 using CivicLens.Infrastructure.Collection;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Infrastructure;
 
 namespace CivicLens.Infrastructure.Analysis;
 
-public sealed class PostgresDocumentChangeAnalysisStatusStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory,
-    string task = DocumentChangeDraftingTask.Task) : IDocumentChangeAnalysisStatusStore
+public sealed class PostgresAnalysisStatusStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory,
+    string task = DocumentChangeDraftingTask.Task) : IAnalysisStatusStore
 {
-    public static PostgresDocumentChangeAnalysisStatusStore FromConnectionString(string connectionString,
-        string task = DocumentChangeDraftingTask.Task)
-    {
-        _ = PostgresCollectionAttemptStore.FromConnectionString(connectionString);
-        var options = new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options;
-        return new(new PooledDbContextFactory<CollectionAttemptDbContext>(options), task);
-    }
+    public static PostgresAnalysisStatusStore FromConnectionString(string connectionString,
+        string task = DocumentChangeDraftingTask.Task) => new(AnalysisDbContextFactory.Create(connectionString), task);
 
-    public async Task<DocumentChangeAnalysisStatus?> GetAsync(CancellationToken cancellationToken)
+    public async Task<AnalysisStatus?> GetAsync(CancellationToken cancellationToken)
     {
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         var row = await db.Set<DocumentChangeAnalysisStatusRow>().AsNoTracking()
@@ -70,7 +64,7 @@ public sealed class PostgresDocumentChangeAnalysisStatusStore(IDbContextFactory<
             SELECT * FROM document_change_analysis_status WHERE task = {task} FOR UPDATE
             """).SingleOrDefaultAsync(cancellationToken);
 
-    private static DocumentChangeAnalysisStatus ToStatus(DocumentChangeAnalysisStatusRow row) =>
+    private static AnalysisStatus ToStatus(DocumentChangeAnalysisStatusRow row) =>
         new(row.DailyTokenLimit, new DateTimeOffset(row.RecordedAtUtcTicks, TimeSpan.Zero), row.PausedReason,
             row.PausedUntilUtcTicks is { } until ? new DateTimeOffset(until, TimeSpan.Zero) : null);
 }

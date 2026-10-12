@@ -1,6 +1,5 @@
 using System.Collections.Immutable;
 using System.Globalization;
-using System.Security.Cryptography;
 using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
@@ -41,7 +40,7 @@ public static class DocumentChangeDraftingPrompt
         Every confidence is a number from 0 to 1. Civic Lens records the values to calibrate them against human review. A person never sees them as a score and no rule acts on them. Use the full range honestly. Do not round toward 1.
         """;
 
-    public static DocumentChangeDraftingRequest? Build(DocumentChangeAnalysisEvidence evidence, DocumentChangeAnalysisCatalog catalog,
+    public static AnalysisModelRequest? Build(DocumentChangeAnalysisEvidence evidence, DocumentChangeAnalysisCatalog catalog,
         ImmutableArray<string> previousErrors = default)
     {
         ArgumentNullException.ThrowIfNull(evidence);
@@ -52,7 +51,8 @@ public static class DocumentChangeDraftingPrompt
         var schema = BuildSchema(hunks.Length, catalog);
         var bytes = Encoding.UTF8.GetByteCount(SystemPrompt) + Encoding.UTF8.GetByteCount(user) + Encoding.UTF8.GetByteCount(schema);
         if (bytes > DocumentChangeDraftingTask.MaximumPromptBytes) return null;
-        var hash = HashRequest(user, schema);
+        var hash = AnalysisPromptHash.Compute(DocumentChangeDraftingTask.Model, DocumentChangeDraftingTask.Effort,
+            DocumentChangeDraftingTask.MaximumOutputTokens, SystemPrompt, user, schema);
         return new(DocumentChangeDraftingTask.Model, DocumentChangeDraftingTask.MaximumOutputTokens,
             SystemPrompt, user, schema, hash, bytes + (long)DocumentChangeDraftingTask.MaximumOutputTokens);
     }
@@ -172,19 +172,5 @@ public static class DocumentChangeDraftingPrompt
             ["properties"] = new JsonObject { ["id"] = id, ["confidence"] = Number() }
         };
         return new JsonObject { ["type"] = "array", ["items"] = item };
-    }
-
-    private static string HashRequest(string user, string schema)
-    {
-        var canonical = JsonSerializer.Serialize(new
-        {
-            model = DocumentChangeDraftingTask.Model,
-            effort = DocumentChangeDraftingTask.Effort,
-            maxTokens = DocumentChangeDraftingTask.MaximumOutputTokens,
-            system = SystemPrompt,
-            user,
-            schema
-        }, CompactJson);
-        return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(canonical)));
     }
 }

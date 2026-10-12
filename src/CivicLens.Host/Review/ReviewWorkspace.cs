@@ -203,7 +203,7 @@ internal static class ReviewWorkspace
         services.AddSingleton<IDocumentChangeAnalysisStore>(PostgresDocumentChangeAnalysisStore.FromConnectionString(connectionString));
         services.AddScoped<ListDocumentChangeAnalyses>();
         services.AddScoped<GetDocumentChangeAnalysisRun>();
-        services.AddSingleton<IDocumentChangeAnalysisStatusStore>(PostgresDocumentChangeAnalysisStatusStore.FromConnectionString(connectionString));
+        services.AddSingleton<IAnalysisStatusStore>(PostgresAnalysisStatusStore.FromConnectionString(connectionString));
         services.AddScoped<GetDocumentChangeAnalysisStatus>();
         services.AddScoped<CreateDocumentChangeDraft>();
         services.AddScoped<SaveDocumentChangeDraft>();

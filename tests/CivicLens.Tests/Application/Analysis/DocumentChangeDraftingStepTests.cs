@@ -2,11 +2,11 @@ using CivicLens.Application;
 using CivicLens.Application.Analysis;
 using CivicLens.Core.Analysis;
 using CivicLens.Tests.Fixtures;
-using State = CivicLens.Application.Analysis.DocumentChangeAnalysisState;
+using State = CivicLens.Application.Analysis.AnalysisState;
 
 namespace CivicLens.Tests.Application.Analysis;
 
-public sealed class DocumentChangeAnalysisWorkerTests
+public sealed class DocumentChangeDraftingStepTests
 {
     private static readonly DocumentChangeAnalysisCatalog Catalog = new([], []);
 
@@ -41,10 +41,10 @@ public sealed class DocumentChangeAnalysisWorkerTests
     }
 
     [Theory]
-    [InlineData(DocumentChangeDraftingFailure.AuthenticationFailed, "authenticationFailed")]
-    [InlineData(DocumentChangeDraftingFailure.BillingFailed, "billingFailed")]
-    [InlineData(DocumentChangeDraftingFailure.ModelNotFound, "modelNotFound")]
-    public async Task AnAccountErrorPausesDraftingUntilRestartWithoutCostingTheEntryAnAttempt(DocumentChangeDraftingFailure failure,
+    [InlineData(AnalysisModelFailure.AuthenticationFailed, "authenticationFailed")]
+    [InlineData(AnalysisModelFailure.BillingFailed, "billingFailed")]
+    [InlineData(AnalysisModelFailure.ModelNotFound, "modelNotFound")]
+    public async Task AnAccountErrorPausesDraftingUntilRestartWithoutCostingTheEntryAnAttempt(AnalysisModelFailure failure,
         string reason)
     {
         var store = new FakeAnalysisStore(2);
@@ -64,9 +64,9 @@ public sealed class DocumentChangeAnalysisWorkerTests
         var store = new FakeAnalysisStore(4);
         var status = new FakeAnalysisStatusStore();
         var model = new FakeDocumentChangeDraftingModel()
-            .Fail(DocumentChangeDraftingFailure.ProviderUnavailable)
-            .Fail(DocumentChangeDraftingFailure.ConnectionFailed)
-            .Fail(DocumentChangeDraftingFailure.ProviderUnavailable);
+            .Fail(AnalysisModelFailure.ProviderUnavailable)
+            .Fail(AnalysisModelFailure.ConnectionFailed)
+            .Fail(AnalysisModelFailure.ProviderUnavailable);
 
         await Worker(store, model, status: status).ExecuteAsync(once: true);
 
@@ -74,7 +74,7 @@ public sealed class DocumentChangeAnalysisWorkerTests
         Assert.Equal([State.RetryWaiting, State.RetryWaiting, State.Pending, State.Pending],
             store.Entries.Select(entry => entry.Status));
         Assert.Equal(0, store.Entries[2].Attempts);
-        Assert.Equal(("providerOutage", (TimeSpan?)DocumentChangeAnalysisPolicy.InitialOutagePause), Assert.Single(status.Pauses));
+        Assert.Equal(("providerOutage", (TimeSpan?)AnalysisPolicy.InitialOutagePause), Assert.Single(status.Pauses));
     }
 
     [Fact]
@@ -114,7 +114,7 @@ public sealed class DocumentChangeAnalysisWorkerTests
         var status = new FakeAnalysisStatusStore();
         var model = new FakeDocumentChangeDraftingModel();
         for (var call = 0; call < 3; call++)
-            model.Reply((_, _) => throw new DocumentChangeDraftingException(DocumentChangeDraftingFailure.InvalidResponse));
+            model.Reply((_, _) => throw new AnalysisModelException(AnalysisModelFailure.InvalidResponse));
 
         await Worker(store, model, status: status).ExecuteAsync(once: true);
 
@@ -130,20 +130,20 @@ public sealed class DocumentChangeAnalysisWorkerTests
         var status = new FakeAnalysisStatusStore();
         var clock = new FakeClock(DateTimeOffset.UnixEpoch);
         var model = new FakeDocumentChangeDraftingModel();
-        for (var call = 0; call < 3; call++) model.Fail(DocumentChangeDraftingFailure.ProviderUnavailable);
+        for (var call = 0; call < 3; call++) model.Fail(AnalysisModelFailure.ProviderUnavailable);
         model.Draft(FakeDocumentChangeDraftingModel.Output(("h1", "after", "Item 2 new")));
-        for (var call = 0; call < 3; call++) model.Fail(DocumentChangeDraftingFailure.ConnectionFailed);
+        for (var call = 0; call < 3; call++) model.Fail(AnalysisModelFailure.ConnectionFailed);
         var worker = Worker(store, model, status: status, clock: clock);
 
         await worker.ExecuteAsync(once: true);
         await worker.ExecuteAsync(once: true);
         Assert.Equal(3, model.Requests.Count);
-        clock.Now += DocumentChangeAnalysisPolicy.InitialOutagePause;
+        clock.Now += AnalysisPolicy.InitialOutagePause;
         await worker.ExecuteAsync(once: true);
 
         Assert.Equal(7, model.Requests.Count);
         Assert.Equal(1, status.OutageClears);
-        Assert.Equal([DocumentChangeAnalysisPolicy.InitialOutagePause, DocumentChangeAnalysisPolicy.InitialOutagePause],
+        Assert.Equal([AnalysisPolicy.InitialOutagePause, AnalysisPolicy.InitialOutagePause],
             status.Pauses.Select(pause => pause.Duration!.Value));
     }
 
@@ -161,11 +161,12 @@ public sealed class DocumentChangeAnalysisWorkerTests
         Assert.Equal((State.Failed, "outputRejected"), (store.Entries.Single().Status, store.Entries.Single().ErrorCode));
     }
 
-    private static DocumentChangeAnalysisWorker Worker(FakeAnalysisStore store, FakeDocumentChangeDraftingModel model,
+    private static AnalysisWorker<AnalysisRun> Worker(FakeAnalysisStore store, FakeDocumentChangeDraftingModel model,
         DocumentChangeAnalysisSettings? settings = null, IWorkerWakeup? wakeup = null, FakeAnalysisStatusStore? status = null,
         FakeClock? clock = null) =>
-        new(store, status ?? new FakeAnalysisStatusStore(), model, settings ?? new DocumentChangeAnalysisSettings(10_000_000, concurrency: 1),
-            Catalog, clock ?? new FakeClock(DateTimeOffset.UnixEpoch), wakeup);
+        AnalysisWorkers.Drafting(store, status ?? new FakeAnalysisStatusStore(), model,
+            settings ?? new DocumentChangeAnalysisSettings(10_000_000, concurrency: 1), Catalog,
+            clock ?? new FakeClock(DateTimeOffset.UnixEpoch), wakeup);
 
     private sealed class FakeWakeup(Action onWait) : IWorkerWakeup
     {

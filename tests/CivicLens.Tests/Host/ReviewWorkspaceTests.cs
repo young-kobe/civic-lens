@@ -95,14 +95,14 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
         Assert.Contains("Queued", home.QuerySelector("[aria-labelledby='new-changes']")!.TextContent, StringComparison.Ordinal);
         Assert.Contains("AI drafting status is unknown", home.Body!.TextContent, StringComparison.Ordinal);
         var analysis = PostgresDocumentChangeAnalysisStore.FromConnectionString(host.ConnectionString);
-        var status = PostgresDocumentChangeAnalysisStatusStore.FromConnectionString(host.ConnectionString);
+        var status = PostgresAnalysisStatusStore.FromConnectionString(host.ConnectionString);
         await status.RecordStartAsync(null, default);
         Assert.Contains("AI drafting is off", (await host.GetDocumentAsync("/Review")).Body!.TextContent, StringComparison.Ordinal);
         await status.RecordStartAsync(50_000, default);
         Assert.Contains("AI drafting is on. Daily limit: 50,000 tokens.", (await host.GetDocumentAsync("/Review")).Body!.TextContent,
             StringComparison.Ordinal);
         var model = new FakeDocumentChangeDraftingModel().Draft(FakeDocumentChangeDraftingModel.Output(("h1", "after", "October 30")));
-        await new DocumentChangeAnalysisWorker(analysis, status, model, new DocumentChangeAnalysisSettings(1_000_000, concurrency: 1),
+        await AnalysisWorkers.Drafting(analysis, status, model, new DocumentChangeAnalysisSettings(1_000_000, concurrency: 1),
             new DocumentChangeAnalysisCatalog([], []), TimeProvider.System).ExecuteAsync(once: true);
         var draftId = Assert.Single(await analysis.GetByComparisonIdsAsync([comparison.ComparisonId], default)).DraftId!;
         var reviews = PostgresDocumentChangeReviewStore.FromConnectionString(host.ConnectionString);

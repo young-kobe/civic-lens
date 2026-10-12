@@ -1,17 +1,11 @@
-using System.IO.Compression;
-using System.Security.Cryptography;
-using System.Text;
-using CivicLens.Application.Collection;
-using CivicLens.Collection.Contracts;
-using CivicLens.Core.Collection;
 using CivicLens.Core.Documents;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Documents;
+using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Npgsql;
-using static CivicLens.Tests.Fixtures.CollectionFixtures;
 
 namespace CivicLens.Tests.Infrastructure.Statements;
 
@@ -25,6 +19,7 @@ public sealed class PostgresStatementCandidateRegistrationTests(PostgresCollecti
     private string connectionString = null!;
     private PostgresCollectionAttemptStore attempts = null!;
     private PostgresDocumentExtractionStore extractions = null!;
+    private StatementCandidateSeeder seeder = null!;
 
     public async Task InitializeAsync()
     {
@@ -35,6 +30,7 @@ public sealed class PostgresStatementCandidateRegistrationTests(PostgresCollecti
         attempts = new PostgresCollectionAttemptStore(factory);
         extractions = new PostgresDocumentExtractionStore(factory);
         await attempts.MigrateAsync();
+        seeder = new StatementCandidateSeeder(attempts, extractions, connectionString, root);
         Directory.CreateDirectory(root);
     }
 
@@ -47,7 +43,7 @@ public sealed class PostgresStatementCandidateRegistrationTests(PostgresCollecti
     [Fact]
     public async Task ExtractionFromADiscoveryAdmittedJobRegistersOneCandidateAndOnePendingGateRow()
     {
-        var attempt = await ImportAsync("Press release.", ArticleUrl, JobKind.DiscoveryAdmitted);
+        var attempt = await seeder.ImportAsync("Press release.", ArticleUrl, CandidateJobKind.DiscoveryAdmitted);
         var extraction = new DocumentExtraction(attempt, "parser-v1", "normalization-v1", "Press release.");
 
         await extractions.SaveAsync(extraction, CancellationToken.None);
@@ -59,7 +55,7 @@ public sealed class PostgresStatementCandidateRegistrationTests(PostgresCollecti
     [Fact]
     public async Task ExtractionFromAWatchedPageJobRegistersNoCandidate()
     {
-        var attempt = await ImportAsync("Policy page.", ArticleUrl, JobKind.WatchedPage);
+        var attempt = await seeder.ImportAsync("Policy page.", ArticleUrl, CandidateJobKind.WatchedPage);
 
         await extractions.SaveAsync(new DocumentExtraction(attempt, "p", "n", "Policy page."), CancellationToken.None);
 
@@ -70,7 +66,7 @@ public sealed class PostgresStatementCandidateRegistrationTests(PostgresCollecti
     [Fact]
     public async Task ExtractionWithoutAnyJobRegistersNoCandidate()
     {
-        var attempt = await ImportAsync("Imported by hand.", ArticleUrl, JobKind.None);
+        var attempt = await seeder.ImportAsync("Imported by hand.", ArticleUrl, CandidateJobKind.None);
 
         await extractions.SaveAsync(new DocumentExtraction(attempt, "p", "n", "Imported by hand."), CancellationToken.None);
 
@@ -80,11 +76,11 @@ public sealed class PostgresStatementCandidateRegistrationTests(PostgresCollecti
     [Fact]
     public async Task RefetchAndParserUpgradeForTheSameSourceAndUrlKeepTheFirstCandidate()
     {
-        var first = await ImportAsync("First text.", ArticleUrl, JobKind.DiscoveryAdmitted);
+        var first = await seeder.ImportAsync("First text.", ArticleUrl, CandidateJobKind.DiscoveryAdmitted);
         var firstExtraction = new DocumentExtraction(first, "parser-v1", "n", "First text.");
         await extractions.SaveAsync(firstExtraction, CancellationToken.None);
         await extractions.SaveAsync(new DocumentExtraction(first, "parser-v2", "n", "First text, reparsed."), CancellationToken.None);
-        var refetch = await ImportAsync("Edited text.", ArticleUrl, JobKind.DiscoveryAdmitted);
+        var refetch = await seeder.ImportAsync("Edited text.", ArticleUrl, CandidateJobKind.DiscoveryAdmitted);
 
         await extractions.SaveAsync(new DocumentExtraction(refetch, "parser-v2", "n", "Edited text."), CancellationToken.None);
 
@@ -96,8 +92,8 @@ public sealed class PostgresStatementCandidateRegistrationTests(PostgresCollecti
     [Fact]
     public async Task TheSameUrlOnADifferentSourceIsAnotherCandidate()
     {
-        var one = await ImportAsync("Text one.", ArticleUrl, JobKind.DiscoveryAdmitted, sourceId: "source-one");
-        var two = await ImportAsync("Text two.", ArticleUrl, JobKind.DiscoveryAdmitted, sourceId: "source-two");
+        var one = await seeder.ImportAsync("Text one.", ArticleUrl, CandidateJobKind.DiscoveryAdmitted, sourceId: "source-one");
+        var two = await seeder.ImportAsync("Text two.", ArticleUrl, CandidateJobKind.DiscoveryAdmitted, sourceId: "source-two");
 
         await extractions.SaveAsync(new DocumentExtraction(one, "p", "n", "Text one."), CancellationToken.None);
         await extractions.SaveAsync(new DocumentExtraction(two, "p", "n", "Text two."), CancellationToken.None);
@@ -112,7 +108,7 @@ public sealed class PostgresStatementCandidateRegistrationTests(PostgresCollecti
         for (var index = 0; index < 6; index++)
         {
             var text = "Version " + index;
-            saves.Add(new DocumentExtraction(await ImportAsync(text, ArticleUrl, JobKind.DiscoveryAdmitted), "p", "n", text));
+            saves.Add(new DocumentExtraction(await seeder.ImportAsync(text, ArticleUrl, CandidateJobKind.DiscoveryAdmitted), "p", "n", text));
         }
 
         await Task.WhenAll(saves.Select(extraction => extractions.SaveAsync(extraction, CancellationToken.None)));
@@ -130,7 +126,7 @@ public sealed class PostgresStatementCandidateRegistrationTests(PostgresCollecti
             CREATE TRIGGER trg_fail_gate BEFORE INSERT ON statement_analysis
             FOR EACH ROW EXECUTE FUNCTION fail_gate();
             """);
-        var attempt = await ImportAsync("Press release.", ArticleUrl, JobKind.DiscoveryAdmitted);
+        var attempt = await seeder.ImportAsync("Press release.", ArticleUrl, CandidateJobKind.DiscoveryAdmitted);
 
         await Assert.ThrowsAnyAsync<Exception>(() => extractions.SaveAsync(
             new DocumentExtraction(attempt, "p", "n", "Press release."), CancellationToken.None));
@@ -147,7 +143,7 @@ public sealed class PostgresStatementCandidateRegistrationTests(PostgresCollecti
         var notified = new TaskCompletionSource();
         listener.Notification += (_, _) => notified.TrySetResult();
         await ExecuteAsync(listener, "LISTEN civic_lens_analysis");
-        var attempt = await ImportAsync("Press release.", ArticleUrl, JobKind.DiscoveryAdmitted);
+        var attempt = await seeder.ImportAsync("Press release.", ArticleUrl, CandidateJobKind.DiscoveryAdmitted);
 
         await extractions.SaveAsync(new DocumentExtraction(attempt, "p", "n", "Press release."), CancellationToken.None);
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
@@ -155,41 +151,6 @@ public sealed class PostgresStatementCandidateRegistrationTests(PostgresCollecti
 
         await Task.WhenAny(notified.Task, waiting);
         Assert.True(notified.Task.IsCompleted, "Queueing a gate row must send the analysis wakeup.");
-    }
-
-    private enum JobKind { None, DiscoveryAdmitted, WatchedPage }
-
-    private async Task<CapturedAttemptResult> ImportAsync(string text, string url, JobKind kind, string sourceId = "source")
-    {
-        var bytes = Encoding.UTF8.GetBytes(text);
-        var hash = Convert.ToHexStringLower(SHA256.HashData(bytes));
-        await using (var file = File.Create(Path.Combine(root, hash + ".gz")))
-        await using (var gzip = new GZipStream(file, CompressionLevel.SmallestSize))
-            await gzip.WriteAsync(bytes);
-        var attemptId = Guid.NewGuid().ToString("N");
-        var request = Request() with { JobId = attemptId, SourceId = sourceId, Url = url, ArtifactDirectory = root };
-        var receipt = Receipt(request) with
-        {
-            BytesReceived = bytes.Length,
-            Capture = new CaptureArtifact { Sha256 = hash, RelativePath = hash + ".gz", ByteLength = bytes.Length },
-            Response = new HttpResponseMetadata { StatusCode = 200, ContentType = "text/plain; charset=utf-8", ContentEncodings = [] }
-        };
-        var imported = await attempts.ImportAtomicallyAsync(CollectionAttemptImporter.CreateImport(attemptId, request, receipt),
-            CancellationToken.None);
-        if (kind != JobKind.None) await SeedJobAttemptAsync(attemptId, kind);
-        return (CapturedAttemptResult)imported.AttemptResult;
-    }
-
-    private Task SeedJobAttemptAsync(string attemptId, JobKind kind)
-    {
-        var key = kind == JobKind.DiscoveryAdmitted ? "discovery-admission/" + attemptId : "watched-page/" + attemptId;
-        return ExecuteAsync(connectionString, $$"""
-            INSERT INTO collection_jobs (job_id, idempotency_key, definition_json, state, created_at, cancellation_requested,
-                charged_requests, charged_bytes, charged_seconds, lease_fence)
-            VALUES ('{{attemptId}}', '{{key}}', '{}', 'Succeeded', 0, false, 0, 0, 0, 0);
-            INSERT INTO collection_job_attempts (attempt_id, job_id, sequence, request_json, started_at)
-            VALUES ('{{attemptId}}', '{{attemptId}}', 1, '{}', 0);
-            """);
     }
 
     private async Task<List<(string Source, string Url, string Extraction, string Attempt)>> CandidatesAsync()

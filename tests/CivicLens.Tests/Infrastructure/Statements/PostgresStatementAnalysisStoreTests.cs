@@ -1,3 +1,4 @@
+using CivicLens.Application.Analysis;
 using CivicLens.Application.Statements;
 using CivicLens.Core.Review;
 using CivicLens.Infrastructure.Collection;
@@ -153,7 +154,7 @@ public sealed class PostgresStatementAnalysisStoreTests(PostgresCollection postg
         _ = await seeder.SeedAsync(Article + " two", "https://example.test/pages/two");
         _ = await seeder.SeedAsync(Article + " three", "https://example.test/pages/three");
         var model = new FakeStatementGateModel().Classify(Output([])).Classify(Output([], 0.8, (RentIssue, "a rent cap")))
-            .Fail(CivicLens.Application.Analysis.DocumentChangeDraftingFailure.RateLimited);
+            .Fail(CivicLens.Application.Analysis.AnalysisModelFailure.RateLimited);
         await Worker(model, Revision()).ExecuteAsync(once: true);
 
         var counts = await store.CountAsync(default);
@@ -166,9 +167,9 @@ public sealed class PostgresStatementAnalysisStoreTests(PostgresCollection postg
         Assert.Equal(Revision().Id, Assert.Single(skipped).IssueRevisionId);
     }
 
-    private StatementGateWorker Worker(FakeStatementGateModel model, CivicLens.Application.Issues.IssueConfigurationRevision revision,
+    private AnalysisWorker<StatementGateRun> Worker(FakeStatementGateModel model, CivicLens.Application.Issues.IssueConfigurationRevision revision,
         StatementGateSettings? settings = null) =>
-        new(store, new FakeAnalysisStatusStore(), model, settings ?? new StatementGateSettings(10_000_000, concurrency: 1),
+        AnalysisWorkers.Gate(store, new FakeAnalysisStatusStore(), model, settings ?? new StatementGateSettings(10_000_000, concurrency: 1),
             revision, TimeProvider.System);
 
     private async Task<string> RunIdAsync(string candidate) => await ScalarTextAsync(

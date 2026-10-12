@@ -1,6 +1,6 @@
 namespace CivicLens.Application.Analysis;
 
-public static class DocumentChangeAnalysisPolicy
+public static class AnalysisPolicy
 {
     public const int MaximumAttempts = 8;
     public const int MaximumBatch = 100;

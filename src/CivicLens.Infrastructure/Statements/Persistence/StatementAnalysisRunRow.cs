@@ -1,8 +1,9 @@
 using CivicLens.Core.Analysis;
+using CivicLens.Infrastructure.Analysis.Persistence;
 
 namespace CivicLens.Infrastructure.Statements.Persistence;
 
-internal sealed class StatementAnalysisRunRow
+internal sealed class StatementAnalysisRunRow : IAnalysisRunRow
 {
     public string RunId { get; set; } = string.Empty;
     public string CandidateId { get; set; } = string.Empty;
@@ -29,4 +30,10 @@ internal sealed class StatementAnalysisRunRow
     public string? ContextJson { get; set; }
     public long StartedAtUtcTicks { get; set; }
     public long FinishedAtUtcTicks { get; set; }
+
+    string IAnalysisRunRow.SubjectId
+    {
+        get => CandidateId;
+        set => CandidateId = value;
+    }
 }

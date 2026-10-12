@@ -4,5 +4,5 @@ namespace CivicLens.Application.Statements;
 
 public interface IStatementGateModel
 {
-    Task<DocumentChangeDraftingResponse> ClassifyAsync(DocumentChangeDraftingRequest request, CancellationToken cancellationToken);
+    Task<AnalysisModelResponse> ClassifyAsync(AnalysisModelRequest request, CancellationToken cancellationToken);
 }

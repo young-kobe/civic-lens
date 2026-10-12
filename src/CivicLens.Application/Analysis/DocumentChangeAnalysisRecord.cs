@@ -1,15 +1,14 @@
 namespace CivicLens.Application.Analysis;
 
-public enum DocumentChangeAnalysisState { Pending, Running, RetryWaiting, WaitingForBudget, Succeeded, Blocked, Failed }
-
 public sealed record DocumentChangeAnalysisRecord(
-    string ComparisonId,
+    string SubjectId,
     string Task,
-    DocumentChangeAnalysisState Status,
+    AnalysisState Status,
     string? LeaseToken,
     long Fence,
     int Attempts,
     DateTimeOffset? RetryAt,
     string? DraftId,
     string? ErrorCode,
-    string? RetryOfRunId = null);
+    string? RetryOfRunId = null)
+    : AnalysisRecord(SubjectId, Task, Status, LeaseToken, Fence, Attempts, RetryAt, ErrorCode, RetryOfRunId);

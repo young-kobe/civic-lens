@@ -147,8 +147,8 @@ public sealed class PostgresDocumentChangeReviewOutcomeStoreTests(PostgresCollec
         var output = FakeDocumentChangeDraftingModel.Output("Headline",
             [("h1", "after", withChangeDate ? "Updated October 3, 2026." : $"October {10 + number}")], changeDate: changeDate);
         var model = new FakeDocumentChangeDraftingModel().Draft(output);
-        var worker = new DocumentChangeAnalysisWorker(new PostgresDocumentChangeAnalysisStore(factory),
-            new PostgresDocumentChangeAnalysisStatusStore(factory), model, new DocumentChangeAnalysisSettings(10_000_000, concurrency: 1),
+        var worker = AnalysisWorkers.Drafting(new PostgresDocumentChangeAnalysisStore(factory),
+            new PostgresAnalysisStatusStore(factory), model, new DocumentChangeAnalysisSettings(10_000_000, concurrency: 1),
             new DocumentChangeAnalysisCatalog([], []), TimeProvider.System);
         await worker.ExecuteAsync(once: true);
         var entry = Assert.Single(await new PostgresDocumentChangeAnalysisStore(factory).GetByComparisonIdsAsync([comparison.ComparisonId], default));

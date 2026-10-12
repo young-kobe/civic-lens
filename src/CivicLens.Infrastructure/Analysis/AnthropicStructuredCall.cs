@@ -5,7 +5,7 @@ using Anthropic.Exceptions;
 using Anthropic.Models.Messages;
 using CivicLens.Application.Analysis;
 using CivicLens.Core.Analysis;
-using Failure = CivicLens.Application.Analysis.DocumentChangeDraftingFailure;
+using Failure = CivicLens.Application.Analysis.AnalysisModelFailure;
 
 namespace CivicLens.Infrastructure.Analysis;
 
@@ -29,7 +29,7 @@ internal sealed class AnthropicStructuredCall
         };
     }
 
-    public async Task<DocumentChangeDraftingResponse> SendAsync(DocumentChangeDraftingRequest request, CancellationToken cancellationToken)
+    public async Task<AnalysisModelResponse> SendAsync(AnalysisModelRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
         var parameters = new MessageCreateParams
@@ -57,16 +57,16 @@ internal sealed class AnthropicStructuredCall
             return new(stopReason, string.IsNullOrEmpty(text) ? null : text, tokens, message.ID);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
-        catch (AnthropicApiException exception) { throw new DocumentChangeDraftingException(ForStatus(exception.StatusCode), exception); }
-        catch (AnthropicIOException exception) { throw new DocumentChangeDraftingException(Failure.ConnectionFailed, exception); }
-        catch (AnthropicInvalidDataException exception) { throw new DocumentChangeDraftingException(Failure.InvalidResponse, exception); }
-        catch (JsonException exception) { throw new DocumentChangeDraftingException(Failure.InvalidResponse, exception); }
-        catch (AnthropicException exception) { throw new DocumentChangeDraftingException(Failure.ProviderUnavailable, exception); }
-        catch (OperationCanceledException exception) { throw new DocumentChangeDraftingException(Failure.ConnectionFailed, exception); }
-        catch (HttpRequestException exception) { throw new DocumentChangeDraftingException(Failure.ConnectionFailed, exception); }
+        catch (AnthropicApiException exception) { throw new AnalysisModelException(ForStatus(exception.StatusCode), exception); }
+        catch (AnthropicIOException exception) { throw new AnalysisModelException(Failure.ConnectionFailed, exception); }
+        catch (AnthropicInvalidDataException exception) { throw new AnalysisModelException(Failure.InvalidResponse, exception); }
+        catch (JsonException exception) { throw new AnalysisModelException(Failure.InvalidResponse, exception); }
+        catch (AnthropicException exception) { throw new AnalysisModelException(Failure.ProviderUnavailable, exception); }
+        catch (OperationCanceledException exception) { throw new AnalysisModelException(Failure.ConnectionFailed, exception); }
+        catch (HttpRequestException exception) { throw new AnalysisModelException(Failure.ConnectionFailed, exception); }
     }
 
-    private static MessageCreateParamsSystem SystemPrompt(DocumentChangeDraftingRequest request) => request.CacheSystemPrompt
+    private static MessageCreateParamsSystem SystemPrompt(AnalysisModelRequest request) => request.CacheSystemPrompt
         ? new List<TextBlockParam> { new() { Text = request.SystemPrompt, CacheControl = new CacheControlEphemeral() } }
         : request.SystemPrompt;
 

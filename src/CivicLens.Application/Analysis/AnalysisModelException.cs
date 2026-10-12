@@ -2,7 +2,7 @@ using CivicLens.Core.Analysis;
 
 namespace CivicLens.Application.Analysis;
 
-public enum DocumentChangeDraftingFailure
+public enum AnalysisModelFailure
 {
     RateLimited,
     ProviderUnavailable,
@@ -14,9 +14,9 @@ public enum DocumentChangeDraftingFailure
     InvalidResponse
 }
 
-public sealed class DocumentChangeDraftingException(DocumentChangeDraftingFailure kind, Exception? inner = null,
+public sealed class AnalysisModelException(AnalysisModelFailure kind, Exception? inner = null,
     AnalysisTokenUsage? usage = null) : Exception($"The drafting model call failed: {kind}.", inner)
 {
-    public DocumentChangeDraftingFailure Kind { get; } = kind;
+    public AnalysisModelFailure Kind { get; } = kind;
     public AnalysisTokenUsage? Usage { get; } = usage;
 }

@@ -18,7 +18,7 @@ internal sealed record StatementGateConfiguration(StatementGateSettings Settings
             throw new ArgumentException($"The statement gate needs both {DailyTokensVariable} and {ApiKeyVariable}.");
         var settings = new StatementGateSettings(DocumentChangeAnalysisConfiguration.ReadTokens(DailyTokensVariable)!.Value,
             DocumentChangeAnalysisConfiguration.ReadTokens(RunTokensVariable),
-            DocumentChangeAnalysisConfiguration.ReadConcurrency() ?? DocumentChangeAnalysisSettings.DefaultConcurrency);
+            DocumentChangeAnalysisConfiguration.ReadConcurrency() ?? AnalysisSettings.DefaultConcurrency);
         return new(settings, apiKey);
     }
 }

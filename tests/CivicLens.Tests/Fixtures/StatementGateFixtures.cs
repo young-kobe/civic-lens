@@ -55,30 +55,30 @@ internal static class StatementGateFixtures
 
 internal sealed class FakeStatementGateModel : IStatementGateModel
 {
-    private readonly Queue<Func<DocumentChangeDraftingRequest, Task<DocumentChangeDraftingResponse>>> replies = new();
-    private readonly List<DocumentChangeDraftingRequest> requests = [];
+    private readonly Queue<Func<AnalysisModelRequest, Task<AnalysisModelResponse>>> replies = new();
+    private readonly List<AnalysisModelRequest> requests = [];
     private readonly Lock gate = new();
 
-    public IReadOnlyList<DocumentChangeDraftingRequest> Requests
+    public IReadOnlyList<AnalysisModelRequest> Requests
     {
         get { lock (gate) return [.. requests]; }
     }
 
     public FakeStatementGateModel Classify(string outputJson) =>
-        Reply(_ => Task.FromResult(new DocumentChangeDraftingResponse("end_turn", outputJson, new(900, 100, 0, 0), "req_fixture")));
+        Reply(_ => Task.FromResult(new AnalysisModelResponse("end_turn", outputJson, new(900, 100, 0, 0), "req_fixture")));
 
-    public FakeStatementGateModel Fail(DocumentChangeDraftingFailure kind) =>
-        Reply(_ => throw new DocumentChangeDraftingException(kind));
+    public FakeStatementGateModel Fail(AnalysisModelFailure kind) =>
+        Reply(_ => throw new AnalysisModelException(kind));
 
-    public FakeStatementGateModel Reply(Func<DocumentChangeDraftingRequest, Task<DocumentChangeDraftingResponse>> reply)
+    public FakeStatementGateModel Reply(Func<AnalysisModelRequest, Task<AnalysisModelResponse>> reply)
     {
         lock (gate) replies.Enqueue(reply);
         return this;
     }
 
-    public Task<DocumentChangeDraftingResponse> ClassifyAsync(DocumentChangeDraftingRequest request, CancellationToken cancellationToken)
+    public Task<AnalysisModelResponse> ClassifyAsync(AnalysisModelRequest request, CancellationToken cancellationToken)
     {
-        Func<DocumentChangeDraftingRequest, Task<DocumentChangeDraftingResponse>> reply;
+        Func<AnalysisModelRequest, Task<AnalysisModelResponse>> reply;
         lock (gate)
         {
             requests.Add(request);

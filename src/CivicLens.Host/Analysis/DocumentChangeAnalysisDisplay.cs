@@ -2,8 +2,9 @@ using System.Globalization;
 using CivicLens.Application.Analysis;
 using CivicLens.Core.Analysis;
 using CivicLens.Host.Components.Ui;
-using Codes = CivicLens.Application.Analysis.DocumentChangeAnalysisErrorCodes;
-using State = CivicLens.Application.Analysis.DocumentChangeAnalysisState;
+using Codes = CivicLens.Application.Analysis.AnalysisErrorCodes;
+using DocumentCodes = CivicLens.Application.Analysis.DocumentChangeAnalysisErrorCodes;
+using State = CivicLens.Application.Analysis.AnalysisState;
 
 namespace CivicLens.Host.Analysis;
 
@@ -16,13 +17,13 @@ internal static class DocumentChangeAnalysisDisplay
         State.Running => (Tone.Live, "Drafting"),
         State.RetryWaiting => (Tone.Warn, $"Retry at {Time(record.RetryAt)}"),
         State.WaitingForBudget => (Tone.Warn, $"Waiting for budget until {Time(record.RetryAt)}"),
-        State.Blocked => (Tone.Warn, record.ErrorCode == Codes.InputLimitExceeded ? "Too large for AI" : "Evidence unavailable"),
+        State.Blocked => (Tone.Warn, record.ErrorCode == DocumentCodes.InputLimitExceeded ? "Too large for AI" : "Evidence unavailable"),
         State.Failed => (Tone.Bad, Failure(record.ErrorCode)),
         State.Succeeded => record.ErrorCode is null ? (Tone.Ok, "Drafted") : (Tone.Neutral, "Person drafting"),
         _ => (Tone.Neutral, "Unknown")
     };
 
-    public static (Tone Tone, string Text) Notice(DocumentChangeAnalysisStatus? status, DateTimeOffset now) => status switch
+    public static (Tone Tone, string Text) Notice(AnalysisStatus? status, DateTimeOffset now) => status switch
     {
         null => (Tone.Warn, "AI drafting status is unknown. The worker has not started since the upgrade."),
         _ when status.IsPaused(now) => (Tone.Bad, Paused(status.PausedReason!, status.PausedUntilUtc)),

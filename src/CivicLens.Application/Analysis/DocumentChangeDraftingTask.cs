@@ -12,4 +12,6 @@ public static class DocumentChangeDraftingTask
     public const int MaximumHunks = 64;
     public const int MaximumPromptBytes = 100_000;
     public const int MaximumValidationPasses = 2;
+
+    public static readonly AnalysisTaskIdentity Identity = new(Task, TaskVersion, Model, PromptVersion, SchemaVersion);
 }

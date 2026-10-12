@@ -27,7 +27,7 @@ public sealed partial class ReviewHome
     private ReviewOverview? overview;
     private EligibleDocumentComparisonPage? changes;
     private IReadOnlyDictionary<string, DocumentChangeAnalysisRecord> analyses = new Dictionary<string, DocumentChangeAnalysisRecord>();
-    private DocumentChangeAnalysisStatus? analysisStatus;
+    private AnalysisStatus? analysisStatus;
     private DocumentChangeReviewPage? drafts;
     private SourceHealthReport? health;
     private IReadOnlyList<FeedItem> activity = [];

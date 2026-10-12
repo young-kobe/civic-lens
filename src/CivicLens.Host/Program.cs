@@ -186,7 +186,7 @@ try
         if (string.IsNullOrWhiteSpace(connectionString) || string.IsNullOrWhiteSpace(ownerSubject))
             throw new ArgumentException("Statement commands require CIVIC_LENS_DATABASE and CIVIC_LENS_REVIEW_OWNER.");
         var gates = PostgresStatementAnalysisStore.FromConnectionString(connectionString);
-        var gateStatus = PostgresDocumentChangeAnalysisStatusStore.FromConnectionString(connectionString, StatementGateTask.Task);
+        var gateStatus = PostgresAnalysisStatusStore.FromConnectionString(connectionString, StatementGateTask.Task);
         var statements = new StatementCommand(new GetStatementGateStatus(gates, gateStatus), new ListStatementGates(gates),
             new GetStatementGateRun(gates), new RequeueStatementGates(gates), new RegateStatementCandidates(gates),
             new ReviewActor(ownerSubject, ReviewRole.Owner), args is ["statements", "regate", ..] ? StatementIssueRubric.FromEnvironment()?.Id : null);

@@ -9,31 +9,31 @@ namespace CivicLens.Tests.Fixtures;
 
 internal sealed class FakeDocumentChangeDraftingModel : IDocumentChangeDraftingModel
 {
-    private readonly Queue<Func<DocumentChangeDraftingRequest, CancellationToken, Task<DocumentChangeDraftingResponse>>> replies = new();
-    private readonly List<DocumentChangeDraftingRequest> requests = [];
+    private readonly Queue<Func<AnalysisModelRequest, CancellationToken, Task<AnalysisModelResponse>>> replies = new();
+    private readonly List<AnalysisModelRequest> requests = [];
     private readonly Lock gate = new();
 
-    public IReadOnlyList<DocumentChangeDraftingRequest> Requests
+    public IReadOnlyList<AnalysisModelRequest> Requests
     {
         get { lock (gate) return [.. requests]; }
     }
 
-    public FakeDocumentChangeDraftingModel Reply(Func<DocumentChangeDraftingRequest, CancellationToken, Task<DocumentChangeDraftingResponse>> reply)
+    public FakeDocumentChangeDraftingModel Reply(Func<AnalysisModelRequest, CancellationToken, Task<AnalysisModelResponse>> reply)
     {
         lock (gate) replies.Enqueue(reply);
         return this;
     }
 
-    public FakeDocumentChangeDraftingModel Reply(DocumentChangeDraftingResponse response) => Reply((_, _) => Task.FromResult(response));
+    public FakeDocumentChangeDraftingModel Reply(AnalysisModelResponse response) => Reply((_, _) => Task.FromResult(response));
 
     public FakeDocumentChangeDraftingModel Draft(string outputJson, long inputTokens = 900, long outputTokens = 300) =>
-        Reply(new DocumentChangeDraftingResponse("end_turn", outputJson, new(inputTokens, outputTokens, 0, 0), "req_fixture"));
+        Reply(new AnalysisModelResponse("end_turn", outputJson, new(inputTokens, outputTokens, 0, 0), "req_fixture"));
 
-    public FakeDocumentChangeDraftingModel Fail(DocumentChangeDraftingFailure kind) => Reply((_, _) => throw new DocumentChangeDraftingException(kind));
+    public FakeDocumentChangeDraftingModel Fail(AnalysisModelFailure kind) => Reply((_, _) => throw new AnalysisModelException(kind));
 
-    public Task<DocumentChangeDraftingResponse> DraftAsync(DocumentChangeDraftingRequest request, CancellationToken cancellationToken)
+    public Task<AnalysisModelResponse> DraftAsync(AnalysisModelRequest request, CancellationToken cancellationToken)
     {
-        Func<DocumentChangeDraftingRequest, CancellationToken, Task<DocumentChangeDraftingResponse>> reply;
+        Func<AnalysisModelRequest, CancellationToken, Task<AnalysisModelResponse>> reply;
         lock (gate)
         {
             requests.Add(request);

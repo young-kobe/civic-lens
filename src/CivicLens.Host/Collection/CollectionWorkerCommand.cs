@@ -7,6 +7,7 @@ using CivicLens.Application.Collection.Jobs;
 using CivicLens.Application.Collection.Processing;
 using CivicLens.Application.Statements;
 using CivicLens.Collection.Contracts;
+using CivicLens.Core.Analysis;
 using CivicLens.Infrastructure.Collection;
 
 namespace CivicLens.Host.Collection;
@@ -30,8 +31,8 @@ internal static class CollectionWorkerCommand
     public static async Task<int> ExecuteAsync(string[] arguments, ICollectionWorkerQueue queue,
         ICollectionJobStore jobs, ICollectionAttemptStore evidence, CancellationToken cancellationToken,
         EvidenceProcessingWorker? evidenceProcessor = null, IWorkerWakeup? wakeup = null,
-        ICollectionScheduleStore? schedules = null, DocumentChangeAnalysisWorker? drafting = null,
-        StatementGateWorker? gate = null)
+        ICollectionScheduleStore? schedules = null, AnalysisWorker<AnalysisRun>? drafting = null,
+        AnalysisWorker<StatementGateRun>? gate = null)
     {
         ValidateArguments(arguments);
         var collectorPath = Path.GetFullPath(arguments[1]);
@@ -49,9 +50,9 @@ internal static class CollectionWorkerCommand
         return result.JobFailures == 0 && result.QueueFailures == 0 && !analysisFailed ? 0 : 1;
     }
 
-    private static async Task<(CollectionJobWorkerResult Collection, DocumentChangeAnalysisWorkerResult? Drafting,
-        DocumentChangeAnalysisWorkerResult? Gate)> RunAsync(CollectionJobWorker collection, DocumentChangeAnalysisWorker? drafting,
-        StatementGateWorker? gate, string artifactRoot, bool once, CancellationToken cancellationToken)
+    private static async Task<(CollectionJobWorkerResult Collection, AnalysisWorkerResult? Drafting,
+        AnalysisWorkerResult? Gate)> RunAsync(CollectionJobWorker collection, AnalysisWorker<AnalysisRun>? drafting,
+        AnalysisWorker<StatementGateRun>? gate, string artifactRoot, bool once, CancellationToken cancellationToken)
     {
         if (once || drafting is null && gate is null)
         {
@@ -61,15 +62,15 @@ internal static class CollectionWorkerCommand
         }
         using var stop = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         var collectionTask = StopOnFailureAsync(collection.ExecuteAsync(artifactRoot, false, cancellationToken: stop.Token), stop);
-        var draftingTask = StopOnFailureAsync(drafting is null ? Task.FromResult<DocumentChangeAnalysisWorkerResult?>(null)
+        var draftingTask = StopOnFailureAsync(drafting is null ? Task.FromResult<AnalysisWorkerResult?>(null)
             : Widen(drafting.ExecuteAsync(once: false, stop.Token)), stop);
-        var gateTask = StopOnFailureAsync(gate is null ? Task.FromResult<DocumentChangeAnalysisWorkerResult?>(null)
+        var gateTask = StopOnFailureAsync(gate is null ? Task.FromResult<AnalysisWorkerResult?>(null)
             : Widen(gate.ExecuteAsync(once: false, stop.Token)), stop);
         await Task.WhenAll(collectionTask, draftingTask, gateTask);
         return (await collectionTask, await draftingTask, await gateTask);
     }
 
-    private static async Task<DocumentChangeAnalysisWorkerResult?> Widen(Task<DocumentChangeAnalysisWorkerResult> task) => await task;
+    private static async Task<AnalysisWorkerResult?> Widen(Task<AnalysisWorkerResult> task) => await task;
 
     private static async Task<T> StopOnFailureAsync<T>(Task<T> task, CancellationTokenSource stop)
     {

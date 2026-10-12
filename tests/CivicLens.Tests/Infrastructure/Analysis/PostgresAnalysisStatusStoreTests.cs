@@ -7,19 +7,19 @@ namespace CivicLens.Tests.Infrastructure.Analysis;
 
 [Collection(PostgresCollection.Name)]
 [Trait("Category", "Postgres")]
-public sealed class PostgresDocumentChangeAnalysisStatusStoreTests(PostgresCollection postgres) : IAsyncLifetime
+public sealed class PostgresAnalysisStatusStoreTests(PostgresCollection postgres) : IAsyncLifetime
 {
     private readonly string schema = "analysis_status_" + Guid.NewGuid().ToString("N");
-    private PostgresDocumentChangeAnalysisStatusStore status = null!;
-    private PostgresDocumentChangeAnalysisStatusStore gateStatus = null!;
+    private PostgresAnalysisStatusStore status = null!;
+    private PostgresAnalysisStatusStore gateStatus = null!;
 
     public async Task InitializeAsync()
     {
         await ExecuteAsync(postgres.ConnectionString, $"CREATE SCHEMA {schema}");
         var connectionString = new NpgsqlConnectionStringBuilder(postgres.ConnectionString) { SearchPath = schema, Pooling = false }.ConnectionString;
         await PostgresCollectionAttemptStore.FromConnectionString(connectionString).MigrateAsync();
-        status = PostgresDocumentChangeAnalysisStatusStore.FromConnectionString(connectionString);
-        gateStatus = PostgresDocumentChangeAnalysisStatusStore.FromConnectionString(connectionString, "gate");
+        status = PostgresAnalysisStatusStore.FromConnectionString(connectionString);
+        gateStatus = PostgresAnalysisStatusStore.FromConnectionString(connectionString, "gate");
     }
 
     public Task DisposeAsync() => ExecuteAsync(postgres.ConnectionString, $"DROP SCHEMA IF EXISTS {schema} CASCADE");

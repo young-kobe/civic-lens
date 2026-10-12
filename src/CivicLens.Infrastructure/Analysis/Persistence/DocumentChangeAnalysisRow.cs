@@ -2,11 +2,11 @@ using CivicLens.Application.Analysis;
 
 namespace CivicLens.Infrastructure.Analysis.Persistence;
 
-internal sealed class DocumentChangeAnalysisRow
+internal sealed class DocumentChangeAnalysisRow : IAnalysisRow
 {
     public string ComparisonId { get; set; } = string.Empty;
     public string Task { get; set; } = string.Empty;
-    public DocumentChangeAnalysisState Status { get; set; }
+    public AnalysisState Status { get; set; }
     public string? LeaseToken { get; set; }
     public long? LeaseExpiresAt { get; set; }
     public long Fence { get; set; }
@@ -21,4 +21,6 @@ internal sealed class DocumentChangeAnalysisRow
     public string? DraftId { get; set; }
     public string? ErrorCode { get; set; }
     public long CreatedAtUtcTicks { get; set; }
+
+    string IAnalysisRow.SubjectId => ComparisonId;
 }

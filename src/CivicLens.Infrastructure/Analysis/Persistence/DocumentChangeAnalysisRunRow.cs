@@ -2,7 +2,7 @@ using CivicLens.Core.Analysis;
 
 namespace CivicLens.Infrastructure.Analysis.Persistence;
 
-internal sealed class DocumentChangeAnalysisRunRow
+internal sealed class DocumentChangeAnalysisRunRow : IAnalysisRunRow
 {
     public string RunId { get; set; } = string.Empty;
     public string ComparisonId { get; set; } = string.Empty;
@@ -28,4 +28,10 @@ internal sealed class DocumentChangeAnalysisRunRow
     public int? RevisionNumber { get; set; }
     public long StartedAtUtcTicks { get; set; }
     public long FinishedAtUtcTicks { get; set; }
+
+    string IAnalysisRunRow.SubjectId
+    {
+        get => ComparisonId;
+        set => ComparisonId = value;
+    }
 }

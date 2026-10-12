@@ -8,6 +8,6 @@ public sealed class AnthropicStatementGateModel(string apiKey, HttpClient? httpC
 {
     private readonly AnthropicStructuredCall call = new(apiKey, httpClient);
 
-    public Task<DocumentChangeDraftingResponse> ClassifyAsync(DocumentChangeDraftingRequest request, CancellationToken cancellationToken) =>
+    public Task<AnalysisModelResponse> ClassifyAsync(AnalysisModelRequest request, CancellationToken cancellationToken) =>
         call.SendAsync(request, cancellationToken);
 }

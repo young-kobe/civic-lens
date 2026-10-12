@@ -3,7 +3,7 @@ using System.Text;
 using CivicLens.Application.Analysis;
 using CivicLens.Infrastructure.Analysis;
 using CivicLens.Tests.Fixtures;
-using Failure = CivicLens.Application.Analysis.DocumentChangeDraftingFailure;
+using Failure = CivicLens.Application.Analysis.AnalysisModelFailure;
 
 namespace CivicLens.Tests.Infrastructure.Analysis;
 
@@ -51,13 +51,13 @@ public sealed class AnthropicDocumentChangeDraftingModelTests
         Assert.Equal(Failure.InvalidResponse, failure.Kind);
     }
 
-    private static async Task<DocumentChangeDraftingException> CallAsync(Func<HttpRequestMessage, HttpResponseMessage> respond)
+    private static async Task<AnalysisModelException> CallAsync(Func<HttpRequestMessage, HttpResponseMessage> respond)
     {
         using var client = new HttpClient(new FixtureHandler(respond));
         var model = new AnthropicDocumentChangeDraftingModel("test-key", client);
         var request = DocumentChangeDraftingPrompt.Build(
             FakeDocumentChangeDraftingModel.Evidence("Fee: 10.\n", "Fee: 12.\n"), new DocumentChangeAnalysisCatalog([], []))!;
-        return await Assert.ThrowsAsync<DocumentChangeDraftingException>(() => model.DraftAsync(request, CancellationToken.None));
+        return await Assert.ThrowsAsync<AnalysisModelException>(() => model.DraftAsync(request, CancellationToken.None));
     }
 
     private sealed class FixtureHandler(Func<HttpRequestMessage, HttpResponseMessage> respond) : HttpMessageHandler
