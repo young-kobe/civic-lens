@@ -56,7 +56,7 @@ public sealed class ListPublishableDocumentChangesTests
     public async Task DraftThatIsNotApprovedIsNotReady()
     {
         var scenario = new PublicationScenario();
-        scenario.Reviews.Unpublished.Add(Candidate(scenario.AddDraft('a'), status: DocumentChangeReviewStatus.AwaitingReview));
+        scenario.Reviews.Unpublished.Add(Candidate(scenario.AddDraft('a'), status: ReviewStatus.AwaitingReview));
 
         var list = await new ListPublishableDocumentChanges(scenario.Reviews).ExecuteAsync(PublicationScenario.Owner);
 
@@ -91,7 +91,7 @@ public sealed class ListPublishableDocumentChangesTests
             PublicationScenario.Decision(new string('a', 32), 2, latest)
         ]);
         var review = scenario.Reviews.Items[draftId].Review;
-        var status = DocumentChangeReviewPolicy.GetCurrentStatus(review.CurrentRevision, review.Decisions, review.UnresolvedConcerns);
+        var status = ReviewPolicy.GetCurrentStatus(review.CurrentRevision.RevisionNumber, review.Decisions, review.UnresolvedConcerns);
         scenario.Reviews.Unpublished.Add(new(new(draftId, review.CurrentRevision, review.ReviewStateVersion, status,
             review.UnresolvedConcerns.Length), null));
 
@@ -104,7 +104,7 @@ public sealed class ListPublishableDocumentChangesTests
     }
 
     private static UnpublishedApprovedDraft Candidate(string draftId, int? publishedRevision = null,
-        DocumentChangeReviewStatus status = DocumentChangeReviewStatus.Approved)
+        ReviewStatus status = ReviewStatus.Approved)
     {
         var item = new DocumentChangeReviewListItem(draftId, new DocumentChangeDraftRevision(draftId, 1, "c", "author",
             PublicationScenario.ApprovedAt, $"Headline {draftId[0]}", "Summary", null, null, "City Council", null, null,

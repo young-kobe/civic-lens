@@ -66,8 +66,8 @@ public sealed partial class DraftEditor
     private CancellationToken RequestAborted => HttpContext.RequestAborted;
     private DocumentChangeDraftRevision Revision => review!.CurrentRevision;
     private bool CanDecide => !hasUnsavedInput && !isConflict && error is null;
-    private DocumentChangeReviewStatus CurrentStatus =>
-        DocumentChangeReviewPolicy.GetCurrentStatus(Revision, review!.Decisions, review.UnresolvedConcerns);
+    private ReviewStatus CurrentStatus =>
+        ReviewPolicy.GetCurrentStatus(Revision.RevisionNumber, review!.Decisions, review.UnresolvedConcerns);
     private ImmutableArray<string> OfficialIds => [.. Catalog.OfficialIds.Order(StringComparer.Ordinal)];
     private ImmutableArray<string> IssueIds => [.. Catalog.IssueIds.Order(StringComparer.Ordinal)];
     private int UnverifiedCitations => Revision.Citations.Length - savedCitations.Count;
@@ -191,7 +191,7 @@ public sealed partial class DraftEditor
         }
         catch (OperationCanceledException) when (RequestAborted.IsCancellationRequested) { throw; }
         catch (UnauthorizedAccessException) { return "/access-denied"; }
-        catch (DocumentChangeReviewConflictException)
+        catch (ReviewConflictException)
         {
             HttpContext.Response.StatusCode = StatusCodes.Status409Conflict;
             isConflict = true;
@@ -270,7 +270,7 @@ public sealed partial class DraftEditor
         }
         catch (OperationCanceledException) when (RequestAborted.IsCancellationRequested) { throw; }
         catch (UnauthorizedAccessException) { return "/access-denied"; }
-        catch (DocumentChangeReviewConflictException)
+        catch (ReviewConflictException)
         {
             HttpContext.Response.StatusCode = StatusCodes.Status409Conflict;
             isConflict = true;

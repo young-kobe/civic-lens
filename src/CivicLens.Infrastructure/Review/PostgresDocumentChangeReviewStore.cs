@@ -24,7 +24,6 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
     private const string CreateOperation = "create";
     private const string SaveOperation = "save";
     private const string DecideOperation = "decide";
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     public static PostgresDocumentChangeReviewStore FromConnectionString(string connectionString)
     {
@@ -37,75 +36,53 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
         DocumentChangeDraftRevision revision, string idempotencyKey, string payloadHash,
         CancellationToken cancellationToken)
     {
-        ValidateActorAndIdempotency(actorSubject, idempotencyKey, payloadHash);
+        ReviewIdempotency.ValidateRequest(actorSubject, idempotencyKey, payloadHash);
         ArgumentNullException.ThrowIfNull(revision);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        await using var transaction = await BeginWriteAsync(db, cancellationToken);
-        var replay = await ReadReplayAsync<DocumentChangeDraftRevision>(db, actorSubject, CreateOperation,
-            idempotencyKey, payloadHash, cancellationToken);
-        if (replay is not null)
-        {
-            await transaction.CommitAsync(cancellationToken);
-            return replay;
-        }
-
-        if (revision.RevisionNumber != 1) throw new InvalidOperationException("A draft must begin at revision one.");
-        if (revision.AuthorSubject != actorSubject || ReviewAuthor.IsAnalysis(actorSubject))
-            throw new UnauthorizedAccessException("Revision author does not match the authenticated subject.");
-        var existingDraftId = await ReadDraftIdForComparisonAsync(db, revision.ComparisonId, cancellationToken);
-        if (existingDraftId is not null) throw new DocumentChangeDraftExistsException(existingDraftId);
-        var eligible = await ReadEligibleComparisonAsync(db, revision.ComparisonId, cancellationToken)
-            ?? throw new ArgumentException("Drafts must reference a complete comparison containing a text change.", nameof(revision));
-        revision = revision with { Citations = CreateInitialCitations(eligible.Comparison) };
-        await ValidateRevisionAgainstEvidenceAsync(db, revision, cancellationToken);
-        var revisionJson = AddDraft(db, revision);
-        AddIdempotency(db, actorSubject, CreateOperation, idempotencyKey, payloadHash, revisionJson);
-        await db.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-        return revision;
+        return await ReviewIdempotency.WriteOnceAsync(db, ReviewWriteLock.DocumentChange, actorSubject, CreateOperation,
+            idempotencyKey, payloadHash, async () =>
+            {
+                if (revision.RevisionNumber != 1) throw new InvalidOperationException("A draft must begin at revision one.");
+                ReviewWriteRules.RequireRevisionAuthor(revision.AuthorSubject, actorSubject);
+                var existingDraftId = await ReadDraftIdForComparisonAsync(db, revision.ComparisonId, cancellationToken);
+                if (existingDraftId is not null) throw new DocumentChangeDraftExistsException(existingDraftId);
+                var eligible = await ReadEligibleComparisonAsync(db, revision.ComparisonId, cancellationToken)
+                    ?? throw new ArgumentException("Drafts must reference a complete comparison containing a text change.", nameof(revision));
+                var initial = revision with { Citations = CreateInitialCitations(eligible.Comparison) };
+                await ValidateRevisionAgainstEvidenceAsync(db, initial, cancellationToken);
+                AddDraft(db, initial);
+                return initial;
+            }, cancellationToken);
     }
 
     public async Task<DocumentChangeDraftRevision> SaveRevisionAsync(string actorSubject,
         DocumentChangeDraftRevision revision, int expectedRevisionNumber, bool changeDateChecked, string idempotencyKey,
         string payloadHash, CancellationToken cancellationToken)
     {
-        ValidateActorAndIdempotency(actorSubject, idempotencyKey, payloadHash);
+        ReviewIdempotency.ValidateRequest(actorSubject, idempotencyKey, payloadHash);
         ArgumentNullException.ThrowIfNull(revision);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        await using var transaction = await BeginWriteAsync(db, cancellationToken);
-        var replay = await ReadReplayAsync<DocumentChangeDraftRevision>(db, actorSubject, SaveOperation,
-            idempotencyKey, payloadHash, cancellationToken);
-        if (replay is not null)
-        {
-            await transaction.CommitAsync(cancellationToken);
-            return replay;
-        }
-
-        var draft = await db.Set<DocumentChangeDraftRow>().SingleOrDefaultAsync(row => row.DraftId == revision.DraftId, cancellationToken)
-            ?? throw new KeyNotFoundException("Document-change draft was not found.");
-        if (draft.CurrentRevisionNumber != expectedRevisionNumber || revision.RevisionNumber != expectedRevisionNumber + 1)
-            throw new DocumentChangeReviewConflictException("The draft has a newer revision. Refresh before saving.");
-        if (draft.CurrentRevisionNumber >= DocumentChangeReviewPolicy.MaximumRevisionsPerDraft)
-            throw new ArgumentException("Draft revision history has reached its configured limit.");
-        if (revision.AuthorSubject != actorSubject || ReviewAuthor.IsAnalysis(actorSubject))
-            throw new UnauthorizedAccessException("Revision author does not match the authenticated subject.");
-        var current = await ReadRevisionAsync(db, revision.DraftId, draft.CurrentRevisionNumber, cancellationToken);
-        revision = revision.KeepingAiChangeDateOnlyIfChecked(current, changeDateChecked) with { ComparisonId = current.ComparisonId };
-        await ValidateRevisionAgainstEvidenceAsync(db, revision, cancellationToken);
-        var revisionJson = Serialize(revision);
-        db.Add(new DocumentChangeRevisionRow
-        {
-            DraftId = revision.DraftId,
-            RevisionNumber = revision.RevisionNumber,
-            RevisionJson = revisionJson,
-            CreatedAtUtcTicks = revision.CreatedAtUtc.UtcTicks
-        });
-        draft.CurrentRevisionNumber = revision.RevisionNumber;
-        draft.ReviewStatus = await ReadStatusAfterSaveAsync(db, draft, revision, cancellationToken);
-        AddIdempotency(db, actorSubject, SaveOperation, idempotencyKey, payloadHash, revisionJson);
-        await db.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-        return revision;
+        return await ReviewIdempotency.WriteOnceAsync(db, ReviewWriteLock.DocumentChange, actorSubject, SaveOperation,
+            idempotencyKey, payloadHash, async () =>
+            {
+                var draft = await db.Set<DocumentChangeDraftRow>().SingleOrDefaultAsync(row => row.DraftId == revision.DraftId, cancellationToken)
+                    ?? throw new KeyNotFoundException("Document-change draft was not found.");
+                ReviewWriteRules.RequireSaveable(draft.CurrentRevisionNumber, expectedRevisionNumber, revision.RevisionNumber);
+                ReviewWriteRules.RequireRevisionAuthor(revision.AuthorSubject, actorSubject);
+                var current = await ReadRevisionAsync(db, revision.DraftId, draft.CurrentRevisionNumber, cancellationToken);
+                var saved = revision.KeepingAiChangeDateOnlyIfChecked(current, changeDateChecked) with { ComparisonId = current.ComparisonId };
+                await ValidateRevisionAgainstEvidenceAsync(db, saved, cancellationToken);
+                db.Add(new DocumentChangeRevisionRow
+                {
+                    DraftId = saved.DraftId,
+                    RevisionNumber = saved.RevisionNumber,
+                    RevisionJson = ReviewJson.Serialize(saved),
+                    CreatedAtUtcTicks = saved.CreatedAtUtc.UtcTicks
+                });
+                draft.CurrentRevisionNumber = saved.RevisionNumber;
+                draft.ReviewStatus = await ReadStatusAfterSaveAsync(db, draft, saved, cancellationToken);
+                return saved;
+            }, cancellationToken);
     }
 
     public async Task<ReviewDecision> DecideAsync(string actorSubject, ReviewDecision decision,
@@ -113,55 +90,41 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
         string payloadHash, ImmutableHashSet<string> allowedOfficialIds, ImmutableHashSet<string> allowedIssueIds,
         CancellationToken cancellationToken)
     {
-        ValidateActorAndIdempotency(actorSubject, idempotencyKey, payloadHash);
-        ArgumentNullException.ThrowIfNull(decision);
-        if (decision.ActorSubject != actorSubject || ReviewAuthor.IsAnalysis(actorSubject))
-            throw new UnauthorizedAccessException("Decision actor does not match the authenticated subject.");
+        ReviewIdempotency.ValidateRequest(actorSubject, idempotencyKey, payloadHash);
+        ReviewWriteRules.RequireDecisionActor(decision, actorSubject);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        await using var transaction = await BeginWriteAsync(db, cancellationToken);
-        var replay = await ReadReplayAsync<ReviewDecision>(db, actorSubject, DecideOperation,
-            idempotencyKey, payloadHash, cancellationToken);
-        if (replay is not null)
-        {
-            await transaction.CommitAsync(cancellationToken);
-            return replay;
-        }
+        return await ReviewIdempotency.WriteOnceAsync(db, ReviewWriteLock.DocumentChange, actorSubject, DecideOperation,
+            idempotencyKey, payloadHash, async () =>
+            {
+                var draft = await db.Set<DocumentChangeDraftRow>().SingleOrDefaultAsync(row => row.DraftId == decision.DraftId, cancellationToken)
+                    ?? throw new KeyNotFoundException("Document-change draft was not found.");
+                ReviewWriteRules.RequireDecidable(draft.CurrentRevisionNumber, draft.ReviewStateVersion, expectedRevisionNumber,
+                    expectedReviewStateVersion, decision);
 
-        var draft = await db.Set<DocumentChangeDraftRow>().SingleOrDefaultAsync(row => row.DraftId == decision.DraftId, cancellationToken)
-            ?? throw new KeyNotFoundException("Document-change draft was not found.");
-        if (draft.CurrentRevisionNumber != expectedRevisionNumber || decision.RevisionNumber != expectedRevisionNumber)
-            throw new DocumentChangeReviewConflictException("The draft has a newer revision. Refresh before deciding.");
-        if (draft.ReviewStateVersion != expectedReviewStateVersion || decision.ReviewStateVersion != expectedReviewStateVersion + 1)
-            throw new DocumentChangeReviewConflictException("Review state changed. Refresh before deciding.");
-        if (draft.ReviewStateVersion >= DocumentChangeReviewPolicy.MaximumDecisionsPerDraft)
-            throw new ArgumentException("Review decision history has reached its configured limit.");
+                var review = await ReadAggregateAsync(db, draft, cancellationToken);
+                ReviewPolicy.ValidateDecision(review.DraftId, review.CurrentRevision.RevisionNumber, review.ReviewStateVersion,
+                    review.Decisions, decision);
+                if (decision.Kind == ReviewDecisionKind.Approve &&
+                    (review.CurrentRevision.OfficialIds.Any(id => !allowedOfficialIds.Contains(id)) ||
+                     review.CurrentRevision.IssueIds.Any(id => !allowedIssueIds.Contains(id))))
+                    throw new ArgumentException("The saved revision includes selections that are no longer configured.");
+                if (decision.Kind == ReviewDecisionKind.Approve)
+                    await ValidateApprovalAsync(db, review.CurrentRevision, cancellationToken);
 
-        var review = await ReadAggregateAsync(db, draft, cancellationToken);
-        DocumentChangeReviewPolicy.ValidateDecision(review, decision);
-        if (decision.Kind == ReviewDecisionKind.Approve &&
-            (review.CurrentRevision.OfficialIds.Any(id => !allowedOfficialIds.Contains(id)) ||
-             review.CurrentRevision.IssueIds.Any(id => !allowedIssueIds.Contains(id))))
-            throw new ArgumentException("The saved revision includes selections that are no longer configured.");
-        if (decision.Kind == ReviewDecisionKind.Approve)
-            await ValidateApprovalAsync(db, review.CurrentRevision, cancellationToken);
-
-        var json = Serialize(decision);
-        db.Add(new ReviewDecisionRow
-        {
-            DecisionId = decision.DecisionId,
-            DraftId = decision.DraftId,
-            RevisionNumber = decision.RevisionNumber,
-            ReviewStateVersion = decision.ReviewStateVersion,
-            DecisionJson = json,
-            Kind = decision.Kind,
-            CreatedAtUtcTicks = decision.CreatedAtUtc.UtcTicks
-        });
-        draft.ReviewStateVersion = decision.ReviewStateVersion;
-        draft.ReviewStatus = DocumentChangeReviewPolicy.GetCurrentStatus(review.CurrentRevision, review.Decisions.Add(decision));
-        AddIdempotency(db, actorSubject, DecideOperation, idempotencyKey, payloadHash, json);
-        await db.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-        return decision;
+                db.Add(new ReviewDecisionRow
+                {
+                    DecisionId = decision.DecisionId,
+                    DraftId = decision.DraftId,
+                    RevisionNumber = decision.RevisionNumber,
+                    ReviewStateVersion = decision.ReviewStateVersion,
+                    DecisionJson = ReviewJson.Serialize(decision),
+                    Kind = decision.Kind,
+                    CreatedAtUtcTicks = decision.CreatedAtUtc.UtcTicks
+                });
+                draft.ReviewStateVersion = decision.ReviewStateVersion;
+                draft.ReviewStatus = ReviewPolicy.GetCurrentStatus(review.CurrentRevision.RevisionNumber, review.Decisions.Add(decision));
+                return decision;
+            }, cancellationToken);
     }
 
     public async Task<DocumentChangeReview?> GetAsync(string draftId, CancellationToken cancellationToken)
@@ -197,7 +160,7 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
         ValidatePage(limit);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
-        var fetched = await KeysetDrafts(DraftsWhere(db, filter), cursor).Take(limit + 1).ToArrayAsync(cancellationToken);
+        var fetched = await ReviewKeyset.Page(DraftsWhere(db, filter), cursor, row => row.CreatedAtUtcTicks, row => row.DraftId).Take(limit + 1).ToArrayAsync(cancellationToken);
         var slice = KeysetSlice<DocumentChangeDraftRow>.Create(fetched, limit, cursor, row => (row.CreatedAtUtcTicks, row.DraftId));
         var ids = slice.Items.Select(row => row.DraftId).ToArray();
         var revisions = await ReadRevisionRowsAsync(db, ids, cancellationToken);
@@ -217,7 +180,7 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
                    join extraction in db.Set<DocumentExtractionRow>() on comparison.AfterExtractionId equals extraction.ExtractionId
                    join attempt in db.Attempts on extraction.AttemptId equals attempt.AttemptId
                    select new EligibleKey { ComparisonId = comparison.ComparisonId, ObservedTicks = attempt.ObservedAtUtcTicks };
-        var fetched = await KeysetComparisons(keys.AsNoTracking(), cursor).Take(limit + 1).ToArrayAsync(cancellationToken);
+        var fetched = await ReviewKeyset.Page(keys.AsNoTracking(), cursor, key => key.ObservedTicks, key => key.ComparisonId).Take(limit + 1).ToArrayAsync(cancellationToken);
         var slice = KeysetSlice<EligibleKey>.Create(fetched, limit, cursor, key => (key.ObservedTicks, key.ComparisonId));
         var verified = await ReadVerifiedComparisonsAsync(db, slice.Items.Select(key => key.ComparisonId).ToArray(), cancellationToken);
         await transaction.CommitAsync(cancellationToken);
@@ -273,7 +236,7 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
         [
             .. drafts.Select(row => ToActivity(ReviewActivityKind.DraftCreated, row.CreatedAtUtcTicks, revisions[(row.DraftId, 1)])),
             .. saved.Select(row => ToActivity(ReviewActivityKind.RevisionSaved, row.CreatedAtUtcTicks,
-                Deserialize<DocumentChangeDraftRevision>(row.RevisionJson, "revision"))),
+                ReviewJson.Deserialize<DocumentChangeDraftRevision>(row.RevisionJson, "revision"))),
             .. decided.Select(row => ToDecisionActivity(row, revisions[(row.DraftId, row.RevisionNumber)]))
         ];
     }
@@ -290,7 +253,7 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
             .Where(row => draftIds.Contains(row.DraftId) && numbers.Contains(row.RevisionNumber))
             .ToArrayAsync(cancellationToken);
         return rows.Where(row => wanted.Contains((row.DraftId, row.RevisionNumber))).ToDictionary(
-            row => (row.DraftId, row.RevisionNumber), row => Deserialize<DocumentChangeDraftRevision>(row.RevisionJson, "revision"));
+            row => (row.DraftId, row.RevisionNumber), row => ReviewJson.Deserialize<DocumentChangeDraftRevision>(row.RevisionJson, "revision"));
     }
 
     private static ReviewActivityEvent ToActivity(ReviewActivityKind kind, long ticks, DocumentChangeDraftRevision revision) =>
@@ -298,7 +261,7 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
 
     private static ReviewActivityEvent ToDecisionActivity(ReviewDecisionRow row, DocumentChangeDraftRevision revision) =>
         new(ReviewActivityKind.DecisionRecorded, new DateTimeOffset(row.CreatedAtUtcTicks, TimeSpan.Zero),
-            Deserialize<ReviewDecision>(row.DecisionJson, "decision").ActorSubject, row.DraftId, revision.Headline, row.Kind);
+            ReviewJson.Deserialize<ReviewDecision>(row.DecisionJson, "decision").ActorSubject, row.DraftId, revision.Headline, row.Kind);
 
     private static IQueryable<DocumentChangeDraftRow> DraftsWhere(CollectionAttemptDbContext db, DraftStatusFilter filter) =>
         (filter switch
@@ -308,28 +271,6 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
             DraftStatusFilter.Approved => ReviewQueries.ApprovedDrafts(db),
             _ => throw new ArgumentOutOfRangeException(nameof(filter))
         }).AsNoTracking();
-
-    internal static IQueryable<DocumentChangeDraftRow> KeysetDrafts(IQueryable<DocumentChangeDraftRow> rows, PageCursor? cursor)
-    {
-        if (cursor is null) return rows.OrderByDescending(row => row.CreatedAtUtcTicks).ThenByDescending(row => row.DraftId);
-        var (ticks, id) = (cursor.Ticks, cursor.Id);
-        return cursor.Direction == PageDirection.Older
-            ? rows.Where(row => row.CreatedAtUtcTicks < ticks || row.CreatedAtUtcTicks == ticks && string.Compare(row.DraftId, id) < 0)
-                .OrderByDescending(row => row.CreatedAtUtcTicks).ThenByDescending(row => row.DraftId)
-            : rows.Where(row => row.CreatedAtUtcTicks > ticks || row.CreatedAtUtcTicks == ticks && string.Compare(row.DraftId, id) > 0)
-                .OrderBy(row => row.CreatedAtUtcTicks).ThenBy(row => row.DraftId);
-    }
-
-    private static IQueryable<EligibleKey> KeysetComparisons(IQueryable<EligibleKey> keys, PageCursor? cursor)
-    {
-        if (cursor is null) return keys.OrderByDescending(key => key.ObservedTicks).ThenByDescending(key => key.ComparisonId);
-        var (ticks, id) = (cursor.Ticks, cursor.Id);
-        return cursor.Direction == PageDirection.Older
-            ? keys.Where(key => key.ObservedTicks < ticks || key.ObservedTicks == ticks && string.Compare(key.ComparisonId, id) < 0)
-                .OrderByDescending(key => key.ObservedTicks).ThenByDescending(key => key.ComparisonId)
-            : keys.Where(key => key.ObservedTicks > ticks || key.ObservedTicks == ticks && string.Compare(key.ComparisonId, id) > 0)
-                .OrderBy(key => key.ObservedTicks).ThenBy(key => key.ComparisonId);
-    }
 
     private sealed record EligibleKey
     {
@@ -403,40 +344,38 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
     {
         if (revision.RevisionNumber != 1 || !ReviewAuthor.IsAnalysis(revision.AuthorSubject))
             throw new InvalidOperationException("An analysis draft must be revision 1 by the analysis author.");
-        await AcquireReviewLockAsync(db, cancellationToken);
+        await ReviewWriteLock.AcquireAsync(db, ReviewWriteLock.DocumentChange, cancellationToken);
         if (await ReadDraftIdForComparisonAsync(db, revision.ComparisonId, cancellationToken) is not null) return false;
         await ValidateRevisionAgainstEvidenceAsync(db, revision, cancellationToken);
-        _ = AddDraft(db, revision);
+        AddDraft(db, revision);
         return true;
     }
 
-    private static string AddDraft(CollectionAttemptDbContext db, DocumentChangeDraftRevision revision)
+    private static void AddDraft(CollectionAttemptDbContext db, DocumentChangeDraftRevision revision)
     {
-        var revisionJson = Serialize(revision);
         db.Add(new DocumentChangeDraftRow
         {
             DraftId = revision.DraftId,
             ComparisonId = revision.ComparisonId,
             CurrentRevisionNumber = 1,
             ReviewStateVersion = 0,
-            ReviewStatus = DocumentChangeReviewPolicy.GetCurrentStatus(revision, []),
+            ReviewStatus = ReviewPolicy.GetCurrentStatus(revision.RevisionNumber, []),
             CreatedAtUtcTicks = revision.CreatedAtUtc.UtcTicks
         });
         db.Add(new DocumentChangeRevisionRow
         {
             DraftId = revision.DraftId,
             RevisionNumber = 1,
-            RevisionJson = revisionJson,
+            RevisionJson = ReviewJson.Serialize(revision),
             CreatedAtUtcTicks = revision.CreatedAtUtc.UtcTicks
         });
-        return revisionJson;
     }
 
-    private static async Task<DocumentChangeReviewStatus> ReadStatusAfterSaveAsync(CollectionAttemptDbContext db,
+    private static async Task<ReviewStatus> ReadStatusAfterSaveAsync(CollectionAttemptDbContext db,
         DocumentChangeDraftRow draft, DocumentChangeDraftRevision savedRevision, CancellationToken cancellationToken)
     {
         var decisionRows = await ReadDecisionRowsAsync(db, [draft.DraftId], cancellationToken);
-        return DocumentChangeReviewPolicy.GetCurrentStatus(savedRevision, ParseDecisions(draft, decisionRows[draft.DraftId]));
+        return ReviewPolicy.GetCurrentStatus(savedRevision.RevisionNumber, ParseDecisions(draft, decisionRows[draft.DraftId]));
     }
 
     private static ImmutableArray<DocumentChangeCitation> CreateInitialCitations(DocumentComparison comparison)
@@ -533,7 +472,7 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
         foreach (var revision in revisions) ValidateRevisionAgainstEvidence(revision, verified);
         var decisions = ParseDecisions(draft, decisionRows);
         ValidateDecisionHistory(draft.DraftId, revisions, decisions);
-        var concerns = DocumentChangeReviewPolicy.GetUnresolvedConcerns(decisions);
+        var concerns = ReviewPolicy.GetUnresolvedConcerns(decisions);
         var review = new DocumentChangeReview(draft.DraftId, revisions[^1], draft.ReviewStateVersion, revisions,
             decisions, concerns);
         return new(review, verified.Summary, verified.Before, verified.After);
@@ -544,7 +483,7 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
     {
         var rows = await db.Set<DocumentChangeRevisionRow>().AsNoTracking()
             .Where(row => draftIds.Contains(row.DraftId)).OrderBy(row => row.DraftId).ThenBy(row => row.RevisionNumber)
-            .Take(draftIds.Length * (DocumentChangeReviewPolicy.MaximumRevisionsPerDraft + 1))
+            .Take(draftIds.Length * (ReviewPolicy.MaximumRevisionsPerRecord + 1))
             .ToArrayAsync(cancellationToken);
         return rows.ToLookup(row => row.DraftId, StringComparer.Ordinal);
     }
@@ -554,7 +493,7 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
     {
         var rows = await db.Set<ReviewDecisionRow>().AsNoTracking()
             .Where(row => draftIds.Contains(row.DraftId)).OrderBy(row => row.DraftId).ThenBy(row => row.ReviewStateVersion)
-            .Take(draftIds.Length * (DocumentChangeReviewPolicy.MaximumDecisionsPerDraft + 1))
+            .Take(draftIds.Length * (ReviewPolicy.MaximumDecisionsPerRecord + 1))
             .ToArrayAsync(cancellationToken);
         return rows.ToLookup(row => row.DraftId, StringComparer.Ordinal);
     }
@@ -563,9 +502,9 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
         IEnumerable<DocumentChangeRevisionRow> rows)
     {
         var revisionRows = rows.ToArray();
-        if (revisionRows.Length > DocumentChangeReviewPolicy.MaximumRevisionsPerDraft)
+        if (revisionRows.Length > ReviewPolicy.MaximumRevisionsPerRecord)
             throw new InvalidOperationException("Stored draft revision history exceeds its limit.");
-        var revisions = revisionRows.Select(row => Deserialize<DocumentChangeDraftRevision>(row.RevisionJson, "revision"))
+        var revisions = revisionRows.Select(row => ReviewJson.Deserialize<DocumentChangeDraftRevision>(row.RevisionJson, "revision"))
             .ToImmutableArray();
         if (revisions.IsEmpty || revisions.Length != draft.CurrentRevisionNumber ||
             revisions.Select((revision, index) => revision.RevisionNumber == index + 1 && revision.DraftId == draft.DraftId).Any(valid => !valid))
@@ -577,43 +516,12 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
     }
 
     private static ImmutableArray<ReviewDecision> ParseDecisions(DocumentChangeDraftRow draft,
-        IEnumerable<ReviewDecisionRow> rows)
-    {
-        var decisionRows = rows.ToArray();
-        if (decisionRows.Length > DocumentChangeReviewPolicy.MaximumDecisionsPerDraft)
-            throw new InvalidOperationException("Stored review decision history exceeds its limit.");
-        var decisions = decisionRows.Select(row =>
-        {
-            var decision = Deserialize<ReviewDecision>(row.DecisionJson, "decision");
-            if (decision.DecisionId != row.DecisionId || decision.DraftId != row.DraftId ||
-                decision.RevisionNumber != row.RevisionNumber || decision.ReviewStateVersion != row.ReviewStateVersion)
-                throw new InvalidOperationException("Stored decision identity is inconsistent.");
-            return decision;
-        }).ToImmutableArray();
-        if (decisions.Length != draft.ReviewStateVersion ||
-            decisions.Select((decision, index) => decision.ReviewStateVersion == index + 1).Any(valid => !valid))
-            throw new InvalidOperationException("Stored review decision history is inconsistent.");
-        return decisions;
-    }
+        IEnumerable<ReviewDecisionRow> rows) => ReviewDecisionHistory.Parse(draft.ReviewStateVersion, rows);
 
     private static void ValidateDecisionHistory(string draftId,
-        ImmutableArray<DocumentChangeDraftRevision> revisions, ImmutableArray<ReviewDecision> decisions)
-    {
-        var priorDecisions = ImmutableArray<ReviewDecision>.Empty;
-        foreach (var decision in decisions)
-        {
-            if (decision.RevisionNumber < 1 || decision.RevisionNumber > revisions.Length)
-                throw new InvalidOperationException("Stored decision references a missing revision.");
-            var targetRevision = revisions[decision.RevisionNumber - 1];
-            var priorConcerns = DocumentChangeReviewPolicy.GetUnresolvedConcerns(priorDecisions);
-            var historicalReview = new DocumentChangeReview(draftId, targetRevision,
-                priorDecisions.Length, revisions.Take(decision.RevisionNumber).ToImmutableArray(),
-                priorDecisions, priorConcerns);
-            DocumentChangeReviewPolicy.ValidateDecision(historicalReview, decision);
-            if (decision.Kind == ReviewDecisionKind.Approve) targetRevision.ValidateForApproval();
-            priorDecisions = priorDecisions.Add(decision);
-        }
-    }
+        ImmutableArray<DocumentChangeDraftRevision> revisions, ImmutableArray<ReviewDecision> decisions) =>
+        ReviewDecisionHistory.Validate(draftId, revisions.Length, decisions,
+            revisionNumber => revisions[revisionNumber - 1].ValidateForApproval());
 
     private static DocumentChangeReviewListItem ToListItem(DocumentChangeDraftRow draft,
         IEnumerable<DocumentChangeRevisionRow> revisionRows, IEnumerable<ReviewDecisionRow> decisionRows) =>
@@ -626,8 +534,8 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
         var decisions = ParseDecisions(draft, decisionRows);
         ValidateDecisionHistory(draft.DraftId, revisions, decisions);
         var currentRevision = revisions[^1];
-        var concerns = DocumentChangeReviewPolicy.GetUnresolvedConcerns(decisions);
-        var status = DocumentChangeReviewPolicy.GetCurrentStatus(currentRevision, decisions, concerns);
+        var concerns = ReviewPolicy.GetUnresolvedConcerns(decisions);
+        var status = ReviewPolicy.GetCurrentStatus(currentRevision.RevisionNumber, decisions, concerns);
         return (revisions[0], new(draft.DraftId, currentRevision, draft.ReviewStateVersion, status, concerns.Length));
     }
 
@@ -637,58 +545,10 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
         var row = await db.Set<DocumentChangeRevisionRow>().AsNoTracking()
             .SingleOrDefaultAsync(candidate => candidate.DraftId == draftId && candidate.RevisionNumber == revisionNumber, cancellationToken)
             ?? throw new InvalidOperationException("Current draft revision is missing.");
-        var revision = Deserialize<DocumentChangeDraftRevision>(row.RevisionJson, "revision");
+        var revision = ReviewJson.Deserialize<DocumentChangeDraftRevision>(row.RevisionJson, "revision");
         if (revision.DraftId != draftId || revision.RevisionNumber != revisionNumber)
             throw new InvalidOperationException("Stored revision identity is inconsistent.");
         return revision;
-    }
-
-    private static async Task<T?> ReadReplayAsync<T>(CollectionAttemptDbContext db, string actorSubject,
-        string operation, string idempotencyKey, string payloadHash, CancellationToken cancellationToken) where T : class
-    {
-        var row = await db.Set<ReviewIdempotencyRow>().AsNoTracking().SingleOrDefaultAsync(candidate =>
-            candidate.ActorSubject == actorSubject && candidate.Operation == operation &&
-            candidate.IdempotencyKey == idempotencyKey, cancellationToken);
-        if (row is null) return null;
-        if (row.PayloadHash != payloadHash)
-            throw new ArgumentException("Idempotency key was already used with a different request payload.");
-        return Deserialize<T>(row.ResultJson, "idempotency result");
-    }
-
-    private static void AddIdempotency(CollectionAttemptDbContext db, string actorSubject, string operation,
-        string idempotencyKey, string payloadHash, string resultJson) => db.Add(new ReviewIdempotencyRow
-        {
-            ActorSubject = actorSubject,
-            Operation = operation,
-            IdempotencyKey = idempotencyKey,
-            PayloadHash = payloadHash,
-            ResultJson = resultJson
-        });
-
-    internal static async Task<Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction> BeginWriteAsync(
-        CollectionAttemptDbContext db, CancellationToken cancellationToken)
-    {
-        var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
-        await AcquireReviewLockAsync(db, cancellationToken);
-        return transaction;
-    }
-
-    private static Task AcquireReviewLockAsync(CollectionAttemptDbContext db, CancellationToken cancellationToken) =>
-        db.Database.ExecuteSqlRawAsync(
-            "SELECT pg_advisory_xact_lock(hashtextextended('civic-lens-document-change-review', 0))", cancellationToken);
-
-    private static T Deserialize<T>(string json, string kind) => JsonSerializer.Deserialize<T>(json, JsonOptions)
-        ?? throw new InvalidOperationException($"Stored {kind} is invalid.");
-
-    private static string Serialize<T>(T value) => JsonSerializer.Serialize(value, JsonOptions);
-
-    private static void ValidateActorAndIdempotency(string actorSubject, string key, string hash)
-    {
-        if (string.IsNullOrWhiteSpace(actorSubject) || actorSubject.Length > 256)
-            throw new ArgumentException("Actor subject is invalid.", nameof(actorSubject));
-        if (string.IsNullOrWhiteSpace(key) || key.Length > 256)
-            throw new ArgumentException("Idempotency key is invalid.", nameof(key));
-        ValidateHash(hash, nameof(hash));
     }
 
     private static void ValidateDraftId(string value)

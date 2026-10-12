@@ -41,6 +41,8 @@ internal static class ReviewValidation
         return value;
     }
 
+    public static string ValidateCandidateId(string value) => ValidateHash(value, nameof(value));
+
     public static string ValidateDraftId(string value)
     {
         if (value is not { Length: 32 } || value.Any(c => c is not (>= '0' and <= '9') and not (>= 'a' and <= 'f')))
@@ -93,6 +95,18 @@ internal static class ReviewValidation
         if (evidence is not null && !citations.Contains(evidence))
             throw new ArgumentException("Change-date evidence must also be included in the public citations.");
         return evidence;
+    }
+
+    public static ReviewDecision CreateDecision(ReviewActor actor, string recordId, int expectedRevisionNumber,
+        int expectedReviewStateVersion, ReviewDecisionKind kind, string? note, ImmutableArray<string> resolvedDecisionIds)
+    {
+        if (expectedRevisionNumber < 1) throw new ArgumentOutOfRangeException(nameof(expectedRevisionNumber));
+        if (expectedReviewStateVersion < 0) throw new ArgumentOutOfRangeException(nameof(expectedReviewStateVersion));
+        if (!Enum.IsDefined(kind)) throw new ArgumentOutOfRangeException(nameof(kind));
+        var resolutions = ValidateDecisionIds(resolvedDecisionIds);
+        ValidateText(note, 4_000, nameof(note), allowEmpty: true);
+        return new ReviewDecision(Guid.NewGuid().ToString("N"), recordId, expectedRevisionNumber,
+            expectedReviewStateVersion + 1, kind, actor.Subject, note, resolutions, DateTimeOffset.UtcNow);
     }
 
     public static ImmutableArray<string> ValidateDecisionIds(ImmutableArray<string> ids)

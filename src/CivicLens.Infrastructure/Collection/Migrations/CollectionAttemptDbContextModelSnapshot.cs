@@ -1434,11 +1434,77 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("current_revision_number");
 
+                    b.Property<int>("ReviewStateVersion")
+                        .HasColumnType("integer")
+                        .HasColumnName("review_state_version");
+
+                    b.Property<string>("ReviewStatus")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("review_status");
+
                     b.HasKey("CandidateId");
 
                     b.ToTable("statement_drafts", null, t =>
                         {
+                            t.HasCheckConstraint("ck_statement_drafts_not_drafted", "(current_revision_number = 0) = (review_status = 'NotDrafted')");
+
+                            t.HasCheckConstraint("ck_statement_drafts_review_state_version", "review_state_version >= 0");
+
+                            t.HasCheckConstraint("ck_statement_drafts_review_status", "review_status IN ('NotDrafted','AwaitingReview','AwaitingReviewWithConcerns','Approved','ChangesRequested','ApprovalWithdrawn')");
+
                             t.HasCheckConstraint("ck_statement_drafts_revision", "current_revision_number >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Statements.Persistence.StatementReviewDecisionRow", b =>
+                {
+                    b.Property<string>("DecisionId")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("decision_id");
+
+                    b.Property<string>("CandidateId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("candidate_id");
+
+                    b.Property<long>("CreatedAtUtcTicks")
+                        .HasColumnType("bigint")
+                        .HasColumnName("created_at_utc_ticks");
+
+                    b.Property<string>("DecisionJson")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("decision_json");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("kind");
+
+                    b.Property<int>("ReviewStateVersion")
+                        .HasColumnType("integer")
+                        .HasColumnName("review_state_version");
+
+                    b.Property<int>("RevisionNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("revision_number");
+
+                    b.HasKey("DecisionId");
+
+                    b.HasIndex("CandidateId", "ReviewStateVersion")
+                        .IsUnique();
+
+                    b.HasIndex("CandidateId", "RevisionNumber");
+
+                    b.ToTable("statement_review_decisions", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_statement_review_decisions_id", "decision_id ~ '^[0-9a-f]{32}$'");
+
+                            t.HasCheckConstraint("ck_statement_review_decisions_versions", "revision_number >= 1 AND review_state_version >= 1");
                         });
                 });
 
@@ -1737,6 +1803,15 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .WithMany()
                         .HasForeignKey("RunId")
                         .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Statements.Persistence.StatementReviewDecisionRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.Statements.Persistence.StatementRevisionRow", null)
+                        .WithMany()
+                        .HasForeignKey("CandidateId", "RevisionNumber")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("CivicLens.Infrastructure.Statements.Persistence.StatementCandidateRow", b =>

@@ -2,7 +2,7 @@ using CivicLens.Core.Review;
 
 namespace CivicLens.Infrastructure.Review.Persistence;
 
-internal sealed class ReviewDecisionRow
+internal sealed class ReviewDecisionRow : IReviewDecisionRow
 {
     public string DecisionId { get; set; } = string.Empty;
     public string DraftId { get; set; } = string.Empty;
@@ -11,4 +11,6 @@ internal sealed class ReviewDecisionRow
     public string DecisionJson { get; set; } = string.Empty;
     public ReviewDecisionKind Kind { get; set; }
     public long CreatedAtUtcTicks { get; set; }
+
+    string IReviewDecisionRow.RecordId => DraftId;
 }

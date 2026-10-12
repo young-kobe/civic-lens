@@ -7,12 +7,12 @@ namespace CivicLens.Application.Publication;
 
 internal sealed class PublishedRecordBuilder(PublicationCatalog catalog)
 {
-    public static bool IsPublishable(DocumentChangeReviewStatus status, int unresolvedConcernCount) =>
-        status == DocumentChangeReviewStatus.Approved && unresolvedConcernCount == 0;
+    public static bool IsPublishable(ReviewStatus status, int unresolvedConcernCount) =>
+        status == ReviewStatus.Approved && unresolvedConcernCount == 0;
 
     public static void RequirePublishable(DocumentChangeReview review)
     {
-        var status = DocumentChangeReviewPolicy.GetCurrentStatus(review.CurrentRevision, review.Decisions,
+        var status = ReviewPolicy.GetCurrentStatus(review.CurrentRevision.RevisionNumber, review.Decisions,
             review.UnresolvedConcerns);
         if (!IsPublishable(status, review.UnresolvedConcerns.Length))
             throw new ArgumentException(

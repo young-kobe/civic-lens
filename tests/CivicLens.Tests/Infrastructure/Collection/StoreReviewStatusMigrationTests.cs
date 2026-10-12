@@ -56,11 +56,11 @@ public sealed class StoreReviewStatusMigrationTests(PostgresCollection postgres)
         var stored = await ReadStatusesAsync();
         foreach (var (key, history) in histories)
         {
-            var expected = DocumentChangeReviewPolicy.GetCurrentStatus(Revision(key, history.CurrentRevision),
+            var expected = ReviewPolicy.GetCurrentStatus(Revision(key, history.CurrentRevision).RevisionNumber,
                 [.. history.Decisions]);
             Assert.Equal(expected.ToString(), stored[Id(key)]);
         }
-        Assert.Equal(Enum.GetValues<DocumentChangeReviewStatus>().Length, stored.Values.Distinct().Count());
+        Assert.Equal(Enum.GetValues<ReviewStatus>().Count(status => status != ReviewStatus.NotDrafted), stored.Values.Distinct().Count());
     }
 
     [Fact]

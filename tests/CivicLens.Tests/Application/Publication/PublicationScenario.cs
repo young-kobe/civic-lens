@@ -75,7 +75,7 @@ internal sealed class PublicationScenario
             [new(before.ExtractionId, citationStart, 5)]);
         var all = decisions ?? [Decision(draftId, 1, ReviewDecisionKind.Approve)];
         var review = new DocumentChangeReview(draftId, revision, all.Length, [revision], all,
-            DocumentChangeReviewPolicy.GetUnresolvedConcerns(all));
+            ReviewPolicy.GetUnresolvedConcerns(all));
         Reviews.Items[draftId] = new(review, eligible, before, after);
         return draftId;
     }

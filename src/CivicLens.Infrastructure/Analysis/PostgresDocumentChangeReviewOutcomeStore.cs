@@ -29,7 +29,7 @@ public sealed class PostgresDocumentChangeReviewOutcomeStore(IDbContextFactory<C
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
         var aiDrafts = db.Set<DocumentChangeDraftRow>().AsNoTracking()
             .Where(draft => db.Set<DocumentChangeAnalysisRunRow>().Any(run => run.DraftId == draft.DraftId));
-        var fetched = await PostgresDocumentChangeReviewStore.KeysetDrafts(aiDrafts, cursor).Take(limit + 1).ToArrayAsync(cancellationToken);
+        var fetched = await ReviewKeyset.Page(aiDrafts, cursor, row => row.CreatedAtUtcTicks, row => row.DraftId).Take(limit + 1).ToArrayAsync(cancellationToken);
         var slice = KeysetSlice<DocumentChangeDraftRow>.Create(fetched, limit, cursor, row => (row.CreatedAtUtcTicks, row.DraftId));
         var ids = slice.Items.Select(row => row.DraftId).ToArray();
         var promptVersions = await db.Set<DocumentChangeAnalysisRunRow>().AsNoTracking()

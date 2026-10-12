@@ -85,7 +85,7 @@ public sealed class PostgresDocumentChangeReviewStoreTests(PostgresCollection po
         var competingSave = save.ExecuteAsync(actor, initialRequest with { Headline = "Competing edit", IdempotencyKey = "save-b" });
         var outcomes = await Task.WhenAll(ObserveAsync(firstSave), ObserveAsync(competingSave));
         Assert.Single(outcomes, outcome => outcome is DocumentChangeDraftRevision);
-        Assert.Single(outcomes, outcome => outcome is DocumentChangeReviewConflictException);
+        Assert.Single(outcomes, outcome => outcome is ReviewConflictException);
 
         var review = await reviews.GetAsync(first.DraftId, CancellationToken.None);
         Assert.NotNull(review);
@@ -334,11 +334,11 @@ public sealed class PostgresDocumentChangeReviewStoreTests(PostgresCollection po
         var approved = await reviews.ListAsync(null, 1, DraftStatusFilter.Approved, default);
 
         Assert.Equal([seeded.ChangesRequested, seeded.Withdrawn], needsAction.Items.Select(item => item.DraftId));
-        Assert.Equal(DocumentChangeReviewStatus.ChangesRequested, needsAction.Items[0].CurrentStatus);
-        Assert.Equal(DocumentChangeReviewStatus.ApprovalWithdrawn, needsAction.Items[1].CurrentStatus);
+        Assert.Equal(ReviewStatus.ChangesRequested, needsAction.Items[0].CurrentStatus);
+        Assert.Equal(ReviewStatus.ApprovalWithdrawn, needsAction.Items[1].CurrentStatus);
         Assert.NotNull(needsAction.OlderCursor);
         var rest = await reviews.ListAsync(PageCursor.Parse(needsAction.OlderCursor), 10, DraftStatusFilter.NeedsAction, default);
-        Assert.Equal([DocumentChangeReviewStatus.AwaitingReviewWithConcerns, DocumentChangeReviewStatus.AwaitingReview],
+        Assert.Equal([ReviewStatus.AwaitingReviewWithConcerns, ReviewStatus.AwaitingReview],
             rest.Items.Select(item => item.CurrentStatus));
         Assert.Null(rest.OlderCursor);
         Assert.Equal(seeded.ApprovedNewest, Assert.Single(approved.Items).DraftId);
@@ -417,28 +417,28 @@ public sealed class PostgresDocumentChangeReviewStoreTests(PostgresCollection po
         var decide = new DecideDocumentChangeReview(reviews, catalog);
         var comparison = await SaveComparisonAsync();
         var draft = await new CreateDocumentChangeDraft(reviews).ExecuteAsync(actor, new(comparison.ComparisonId, "create"));
-        await AssertStoredStatusMatchesPolicyAsync(draft.DraftId, DocumentChangeReviewStatus.AwaitingReview);
+        await AssertStoredStatusMatchesPolicyAsync(draft.DraftId, ReviewStatus.AwaitingReview);
 
         var saved = await save.ExecuteAsync(actor, new(draft.DraftId, 1, "Headline", "Summary", null, null,
             "Institution", null, null, [], [], draft.Citations, "save-1"));
-        await AssertStoredStatusMatchesPolicyAsync(draft.DraftId, DocumentChangeReviewStatus.AwaitingReview);
+        await AssertStoredStatusMatchesPolicyAsync(draft.DraftId, ReviewStatus.AwaitingReview);
 
         var concern = await decide.ExecuteAsync(actor, new(draft.DraftId, 2, 0, ReviewDecisionKind.RequestChanges, "Context missing.", [], "concern"));
-        await AssertStoredStatusMatchesPolicyAsync(draft.DraftId, DocumentChangeReviewStatus.ChangesRequested);
+        await AssertStoredStatusMatchesPolicyAsync(draft.DraftId, ReviewStatus.ChangesRequested);
 
         await save.ExecuteAsync(actor, new(draft.DraftId, 2, "Headline", "Summary edited", null, null,
             "Institution", null, null, [], [], saved.Citations, "save-2"));
-        await AssertStoredStatusMatchesPolicyAsync(draft.DraftId, DocumentChangeReviewStatus.AwaitingReviewWithConcerns);
+        await AssertStoredStatusMatchesPolicyAsync(draft.DraftId, ReviewStatus.AwaitingReviewWithConcerns);
 
         await decide.ExecuteAsync(actor, new(draft.DraftId, 3, 1, ReviewDecisionKind.Approve, "Resolved.", [concern.DecisionId], "approve"));
-        await AssertStoredStatusMatchesPolicyAsync(draft.DraftId, DocumentChangeReviewStatus.Approved);
+        await AssertStoredStatusMatchesPolicyAsync(draft.DraftId, ReviewStatus.Approved);
 
         await decide.ExecuteAsync(actor, new(draft.DraftId, 3, 2, ReviewDecisionKind.WithdrawApproval, "Wrong date.", [], "withdraw"));
-        await AssertStoredStatusMatchesPolicyAsync(draft.DraftId, DocumentChangeReviewStatus.ApprovalWithdrawn);
+        await AssertStoredStatusMatchesPolicyAsync(draft.DraftId, ReviewStatus.ApprovalWithdrawn);
 
         await save.ExecuteAsync(actor, new(draft.DraftId, 3, "Headline", "Summary again", null, null,
             "Institution", null, null, [], [], saved.Citations, "save-3"));
-        await AssertStoredStatusMatchesPolicyAsync(draft.DraftId, DocumentChangeReviewStatus.AwaitingReviewWithConcerns);
+        await AssertStoredStatusMatchesPolicyAsync(draft.DraftId, ReviewStatus.AwaitingReviewWithConcerns);
     }
 
     [Fact]
@@ -455,10 +455,10 @@ public sealed class PostgresDocumentChangeReviewStoreTests(PostgresCollection po
         Assert.True(comparison.HasChanges());
     }
 
-    private async Task AssertStoredStatusMatchesPolicyAsync(string draftId, DocumentChangeReviewStatus expected)
+    private async Task AssertStoredStatusMatchesPolicyAsync(string draftId, ReviewStatus expected)
     {
         var review = await reviews.GetAsync(draftId, CancellationToken.None);
-        var policy = DocumentChangeReviewPolicy.GetCurrentStatus(review!.CurrentRevision, review.Decisions);
+        var policy = ReviewPolicy.GetCurrentStatus(review!.CurrentRevision.RevisionNumber, review.Decisions);
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
         await using var command = new NpgsqlCommand("SELECT review_status FROM document_change_drafts WHERE draft_id = @id", connection);
@@ -582,7 +582,7 @@ public sealed class PostgresDocumentChangeReviewStoreTests(PostgresCollection po
     private static async Task<object> ObserveAsync(Task<DocumentChangeDraftRevision> task)
     {
         try { return await task; }
-        catch (DocumentChangeReviewConflictException exception) { return exception; }
+        catch (ReviewConflictException exception) { return exception; }
     }
 
     private PostgresDocumentChangeReviewStore CountedStore(ReadCommandCounter counter) =>

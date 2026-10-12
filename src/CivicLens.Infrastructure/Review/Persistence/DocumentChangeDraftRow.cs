@@ -8,6 +8,6 @@ internal sealed class DocumentChangeDraftRow
     public string ComparisonId { get; set; } = string.Empty;
     public int CurrentRevisionNumber { get; set; }
     public int ReviewStateVersion { get; set; }
-    public DocumentChangeReviewStatus ReviewStatus { get; set; }
+    public ReviewStatus ReviewStatus { get; set; }
     public long CreatedAtUtcTicks { get; set; }
 }

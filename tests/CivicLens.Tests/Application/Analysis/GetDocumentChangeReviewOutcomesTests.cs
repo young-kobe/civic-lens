@@ -12,7 +12,7 @@ public sealed class GetDocumentChangeReviewOutcomesTests
         new string('c', 64), ReviewAuthor.AnalysisSubject, DateTimeOffset.UnixEpoch, headline, "Summary", null, null, "Institution",
         null, null, [], [], [new(new string('a', 64), 0, 5)]);
 
-    private static AiDraftOutcome Outcome(string prompt, DocumentChangeReviewStatus status, string? editedHeadline = null)
+    private static AiDraftOutcome Outcome(string prompt, ReviewStatus status, string? editedHeadline = null)
     {
         var first = Revision();
         var current = editedHeadline is null ? first with { RevisionNumber = 2 } : Revision(editedHeadline) with { RevisionNumber = 2 };
@@ -23,9 +23,9 @@ public sealed class GetDocumentChangeReviewOutcomesTests
     public async Task OutcomesAreSplitByPromptVersionSoOnePromptChangeCanBeJudgedAlone()
     {
         var store = new FakeReviewOutcomeStore([
-            Outcome("v2", DocumentChangeReviewStatus.Approved),
-            Outcome("v1", DocumentChangeReviewStatus.Approved, "Edited"),
-            Outcome("v1", DocumentChangeReviewStatus.Approved)]);
+            Outcome("v2", ReviewStatus.Approved),
+            Outcome("v1", ReviewStatus.Approved, "Edited"),
+            Outcome("v1", ReviewStatus.Approved)]);
 
         var result = await new GetDocumentChangeReviewOutcomes(store).ExecuteAsync(Owner);
 
@@ -38,8 +38,8 @@ public sealed class GetDocumentChangeReviewOutcomesTests
     public async Task OnlyApprovedDraftsCountFieldEditsAndEveryFieldIsReported()
     {
         var store = new FakeReviewOutcomeStore([
-            Outcome("v1", DocumentChangeReviewStatus.Approved, "Edited"),
-            Outcome("v1", DocumentChangeReviewStatus.ChangesRequested, "Edited")]);
+            Outcome("v1", ReviewStatus.Approved, "Edited"),
+            Outcome("v1", ReviewStatus.ChangesRequested, "Edited")]);
 
         var result = Assert.Single(await new GetDocumentChangeReviewOutcomes(store).ExecuteAsync(Owner));
 
@@ -52,10 +52,10 @@ public sealed class GetDocumentChangeReviewOutcomesTests
     public async Task EveryNonApprovedStatusHasOneCounterAndConcernsFoldIntoAwaitingReview()
     {
         var store = new FakeReviewOutcomeStore([
-            Outcome("v1", DocumentChangeReviewStatus.AwaitingReview),
-            Outcome("v1", DocumentChangeReviewStatus.AwaitingReviewWithConcerns),
-            Outcome("v1", DocumentChangeReviewStatus.ChangesRequested),
-            Outcome("v1", DocumentChangeReviewStatus.ApprovalWithdrawn)]);
+            Outcome("v1", ReviewStatus.AwaitingReview),
+            Outcome("v1", ReviewStatus.AwaitingReviewWithConcerns),
+            Outcome("v1", ReviewStatus.ChangesRequested),
+            Outcome("v1", ReviewStatus.ApprovalWithdrawn)]);
 
         var result = Assert.Single(await new GetDocumentChangeReviewOutcomes(store).ExecuteAsync(Owner));
 
@@ -66,7 +66,7 @@ public sealed class GetDocumentChangeReviewOutcomesTests
     public async Task EveryPageIsReadWithTheMaximumLimitSoTheReadStaysBoundedAndComplete()
     {
         var store = new FakeReviewOutcomeStore([.. Enumerable.Range(0, PageLimit.Maximum * 2 + 1)
-            .Select(_ => Outcome("v1", DocumentChangeReviewStatus.AwaitingReview))]);
+            .Select(_ => Outcome("v1", ReviewStatus.AwaitingReview))]);
 
         var result = Assert.Single(await new GetDocumentChangeReviewOutcomes(store).ExecuteAsync(Owner));
 

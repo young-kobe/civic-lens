@@ -13,10 +13,10 @@ internal static class ReviewQueries
             !db.Set<DocumentChangeDraftRow>().Any(draft => draft.ComparisonId == comparison.ComparisonId));
 
     public static IQueryable<DocumentChangeDraftRow> ApprovedDrafts(CollectionAttemptDbContext db) =>
-        db.Set<DocumentChangeDraftRow>().AsNoTracking().Where(draft => draft.ReviewStatus == DocumentChangeReviewStatus.Approved);
+        db.Set<DocumentChangeDraftRow>().AsNoTracking().Where(draft => draft.ReviewStatus == ReviewStatus.Approved);
 
     public static IQueryable<DocumentChangeDraftRow> NeedsActionDrafts(CollectionAttemptDbContext db) =>
-        db.Set<DocumentChangeDraftRow>().AsNoTracking().Where(draft => draft.ReviewStatus != DocumentChangeReviewStatus.Approved);
+        db.Set<DocumentChangeDraftRow>().AsNoTracking().Where(draft => draft.ReviewStatus != ReviewStatus.Approved);
 
     // Published state comes from the active release, not the draft, so this stays a read query.
     public const string UnpublishedApprovedDrafts = """

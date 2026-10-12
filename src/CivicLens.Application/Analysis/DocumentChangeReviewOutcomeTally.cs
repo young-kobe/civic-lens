@@ -18,13 +18,13 @@ internal sealed class DocumentChangeReviewOutcomeTally(string promptVersion)
         drafts++;
         switch (outcome.Current.CurrentStatus)
         {
-            case DocumentChangeReviewStatus.Approved:
+            case ReviewStatus.Approved:
                 AddApproved(outcome);
                 break;
-            case DocumentChangeReviewStatus.ChangesRequested:
+            case ReviewStatus.ChangesRequested:
                 changesRequested++;
                 break;
-            case DocumentChangeReviewStatus.ApprovalWithdrawn:
+            case ReviewStatus.ApprovalWithdrawn:
                 approvalWithdrawn++;
                 break;
             default:

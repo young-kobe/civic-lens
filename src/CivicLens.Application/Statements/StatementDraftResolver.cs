@@ -31,8 +31,18 @@ public static class StatementDraftResolver
         if (errors.Count > 0) return Rejected(errors, citationErrors.Count > 0);
         var revision = new StatementDraftRevision(evidence.Article.CandidateId, 1, ReviewAuthor.AnalysisSubject, createdAtUtc,
             output.Headline, output.Summary, date?.Date, date?.Evidence, speakers, others, evidence.CarryOver.IssueIds,
-            evidence.CarryOver.PolicyAreaIds, quotations, BillNumberFinder.Find(extraction.Text));
-        return new(revision, [], false);
+            evidence.CarryOver.PolicyAreaIds, quotations, []);
+        return new(WithArticleDerivedFields(revision, extraction.Text), [], false);
+    }
+
+    public static StatementDraftRevision WithArticleDerivedFields(StatementDraftRevision revision, string articleText)
+    {
+        var quoted = new QuotedText(articleText);
+        return revision with
+        {
+            Quotations = [.. revision.Quotations.Select(quotation => quotation with { Kind = quoted.KindOf(quotation.Span.Start, quotation.Span.Length) })],
+            BillNumbers = BillNumberFinder.Find(articleText)
+        };
     }
 
     private static StatementDraftOutput? Parse(string outputJson)
@@ -83,7 +93,7 @@ public static class StatementDraftResolver
         foreach (var speaker in speakers)
         {
             CheckConfidence(speaker.Confidence, $"otherSpeakers confidence for \"{Shorten(speaker.Name)}\"", errors);
-            if (!IsPlainName(speaker.Name))
+            if (!StatementDraftRevision.IsPlainSpeakerName(speaker.Name))
                 errors.Add($"otherSpeakers holds \"{Shorten(speaker.Name)}\". A name has 1 to {StatementDraftRevision.MaximumOtherSpeakerLength} characters, no NUL character, and no space at either end.");
             else if (!articleText.Contains(speaker.Name, StringComparison.Ordinal))
                 AddCitationError($"The name \"{Shorten(speaker.Name)}\" in otherSpeakers does not occur in the article text.", errors, citationErrors);
@@ -91,10 +101,6 @@ public static class StatementDraftResolver
         }
         return [.. speakers.Select(speaker => speaker.Name)];
     }
-
-    private static bool IsPlainName(string? name) =>
-        !string.IsNullOrEmpty(name) && name.Length <= StatementDraftRevision.MaximumOtherSpeakerLength && !name.Contains('\0') &&
-        name == name.Trim();
 
     private static (DateOnly Date, StatementSpan Evidence)? ResolveDate(StatementDraftOutputDate? statementDate, DocumentExtraction extraction,
         List<string> errors, List<string> citationErrors)
@@ -125,7 +131,6 @@ public static class StatementDraftResolver
             errors.Add($"Give 1 to {StatementDraftRevision.MaximumQuotations} quotations.");
             return [];
         }
-        var quoted = new QuotedText(extraction.Text);
         var resolved = new List<StatementQuotation>(quotations.Length);
         for (var index = 0; index < quotations.Length; index++)
         {
@@ -135,7 +140,7 @@ public static class StatementDraftResolver
                 citationErrors);
             if (span is null) continue;
             if (resolved.Any(item => item.Span.Start == span.Start && item.Span.Length == span.Length)) errors.Add($"{label} repeats an earlier quotation.");
-            else resolved.Add(new(new(span.ExtractionId, span.Start, span.Length), quoted.KindOf(span.Start, span.Length)));
+            else resolved.Add(new(new(span.ExtractionId, span.Start, span.Length), StatementQuotationKind.ReleaseText));
         }
         return [.. resolved];
     }

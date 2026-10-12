@@ -11,14 +11,8 @@ public sealed class DecideDocumentChangeReview(IDocumentChangeReviewStore store,
         ArgumentNullException.ThrowIfNull(request);
         ReviewValidation.ValidateIdempotencyKey(request.IdempotencyKey);
         var draftId = ReviewValidation.ValidateDraftId(request.DraftId);
-        if (request.ExpectedRevisionNumber < 1) throw new ArgumentOutOfRangeException(nameof(request.ExpectedRevisionNumber));
-        if (request.ExpectedReviewStateVersion < 0) throw new ArgumentOutOfRangeException(nameof(request.ExpectedReviewStateVersion));
-        if (!Enum.IsDefined(request.Kind)) throw new ArgumentOutOfRangeException(nameof(request.Kind));
-        var resolutions = ReviewValidation.ValidateDecisionIds(request.ResolvedDecisionIds);
-        ReviewValidation.ValidateText(request.Note, 4_000, nameof(request.Note), allowEmpty: true);
-        var decision = new ReviewDecision(Guid.NewGuid().ToString("N"), draftId, request.ExpectedRevisionNumber,
-            request.ExpectedReviewStateVersion + 1, request.Kind, actor.Subject, request.Note,
-            resolutions, DateTimeOffset.UtcNow);
+        var decision = ReviewValidation.CreateDecision(actor, draftId, request.ExpectedRevisionNumber,
+            request.ExpectedReviewStateVersion, request.Kind, request.Note, request.ResolvedDecisionIds);
         return store.DecideAsync(actor.Subject, decision, request.ExpectedRevisionNumber,
             request.ExpectedReviewStateVersion, request.IdempotencyKey, ReviewValidation.HashPayload(request),
             catalog.OfficialIds, catalog.IssueIds, cancellationToken);

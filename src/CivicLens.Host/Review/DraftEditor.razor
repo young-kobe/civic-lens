@@ -248,12 +248,12 @@ else
                         <textarea id="Decision_Note" class="plain" name="Decision.Note" maxlength="4000" aria-describedby="Decision_Note-hint" value="@Decision?.Note"></textarea>
                     </Field>
                     <div class="actions">
-                        @if (status != DocumentChangeReviewStatus.Approved)
+                        @if (status != ReviewStatus.Approved)
                         {
                             <Button Variant="ButtonVariant.Primary" Type="submit" name="kind" value="Approve">Approve</Button>
                         }
                         <Button Type="submit" name="kind" value="RequestChanges">Request changes</Button>
-                        @if (status == DocumentChangeReviewStatus.Approved)
+                        @if (status == ReviewStatus.Approved)
                         {
                             <Button Variant="ButtonVariant.Danger" Type="submit" name="kind" value="WithdrawApproval">Withdraw approval</Button>
                         }
@@ -289,7 +289,7 @@ else
 }
 
 @code {
-    private RenderFragment HeaderMeta(DocumentChangeReviewStatus status, int concerns) =>
+    private RenderFragment HeaderMeta(ReviewStatus status, int concerns) =>
         @<text>
             <StatusBadge Tone="DraftStatusDisplay.Tone(status)" Text="@DraftStatusDisplay.Label(status, concerns)" />
             <span class="muted small">Revision @Revision.RevisionNumber, saved @Moment.Full(Revision.CreatedAtUtc)</span>
