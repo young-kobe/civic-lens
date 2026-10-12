@@ -18,6 +18,6 @@ internal static class AnalysisWorkers
         new(new StatementGateStep(store, model, settings, revision), status, clock);
 
     public static AnalysisWorker<StatementDraftRun> StatementDrafting(IStatementDraftStore store, IAnalysisStatusStore status,
-        IStatementDraftingModel model, StatementDraftSettings settings, StatementSpeakerRoster roster, TimeProvider clock) =>
-        new(new StatementDraftingStep(store, model, settings, roster), status, clock);
+        IStatementDraftingModel model, StatementDraftSettings settings, TimeProvider clock) =>
+        new(new StatementDraftingStep(store, model, settings), status, clock);
 }

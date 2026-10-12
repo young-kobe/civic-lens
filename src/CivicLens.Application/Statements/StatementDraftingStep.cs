@@ -6,8 +6,7 @@ using State = CivicLens.Application.Analysis.AnalysisState;
 
 namespace CivicLens.Application.Statements;
 
-public sealed class StatementDraftingStep(IStatementDraftStore store, IStatementDraftingModel model, StatementDraftSettings settings,
-    StatementSpeakerRoster roster) : IAnalysisTaskStep<StatementDraftRun>
+public sealed class StatementDraftingStep(IStatementDraftStore store, IStatementDraftingModel model, StatementDraftSettings settings) : IAnalysisTaskStep<StatementDraftRun>
 {
     public IAnalysisQueue<StatementDraftRun> Queue => store;
 
@@ -24,7 +23,7 @@ public sealed class StatementDraftingStep(IStatementDraftStore store, IStatement
             return await attempt.CompleteAsync(State.Blocked, StatementDraftErrorCodes.EvidenceUnavailable, cancellationToken);
         if (evidence.ExistingDraftId is not null)
             return await attempt.CompleteAsync(State.Succeeded, StatementDraftErrorCodes.HumanDraftExists, cancellationToken);
-        var officials = roster.OfficialsOn(evidence.Article.Extraction.SourceAttempt.SourceId, evidence.Article.FirstCapturedOn);
+        var officials = StatementSpeakerRoster.OfficialsOn(evidence.ConfigurationRevision, evidence.Article.Extraction.SourceAttempt.SourceId, evidence.Article.FirstCapturedOn);
         if (officials.IsEmpty)
             return await attempt.CompleteAsync(State.Blocked, StatementDraftErrorCodes.SpeakersUnavailable, cancellationToken);
         attempt.ContextJson = StatementDraftPrompt.SerializeContext(officials, evidence.CarryOver);

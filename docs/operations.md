@@ -451,7 +451,7 @@ CIVIC_LENS_LIVE_AI=1 ANTHROPIC_API_KEY=... dotnet test CivicLens.slnx --configur
 
 ### Statement drafting
 
-The `worker` command drafts a statement record for each candidate that the gate passed. [Architecture](architecture.md#statement-drafting-implemented) holds the rules. Statement drafting runs when both variables below are set in the worker's protected environment. A limit without `ANTHROPIC_API_KEY` stops the worker with exit code 2. The stage needs `CIVIC_LENS_COLLECTION_CONFIG`, which the worker always reads, because the source coverage gives the speakers. It does not need the issue file.
+The `worker` command drafts a statement record for each candidate that the gate passed. [Architecture](architecture.md#statement-drafting-implemented) holds the rules. Statement drafting runs when both variables below are set in the worker's protected environment. A limit without `ANTHROPIC_API_KEY` stops the worker with exit code 2. The speakers come from the configuration revision of the job that admitted the article, so the stage does not read the current collection configuration. It does not need the issue file.
 
 | Variable | Meaning |
 |---|---|
@@ -460,7 +460,7 @@ The `worker` command drafts a statement record for each candidate that the gate 
 | `CIVIC_LENS_STATEMENT_DRAFTING_RUN_TOKENS` | Optional limit for one call's reservation (default 120,000 or the daily limit, whichever is smaller). It also sets the article byte cap. |
 | `CIVIC_LENS_ANALYSIS_CONCURRENCY` | Optional number of calls at the same time, shared with the other stages (default 2, 1 to 4) |
 
-Drafting uses Claude Sonnet 5.5, which costs more than the gate model. Gate rows that passed before you set the limit become draft rows, and the first run can spend up to the daily limit on them. Start with a low limit. A candidate whose article is over the byte cap gets no model call. It gets a draft with no revision, and a person writes the record. A source that covers no official on the capture date blocks the entry as `speakersUnavailable`. Fix the coverage in the collection configuration, restart the worker, and requeue the entry.
+Drafting uses Claude Sonnet 5.5, which costs more than the gate model. Gate rows that passed before you set the limit become draft rows, and the first run can spend up to the daily limit on them. Start with a low limit. A candidate whose article is over the byte cap gets no model call. It gets a draft with no revision, and a person writes the record. An entry blocks as `speakersUnavailable` when the admitting job has no configuration revision, or when its revision has no covered official for the source on the capture date. A later change to the coverage does not change this result. The change applies only to articles that jobs admit after it.
 
 The commands below need `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`.
 

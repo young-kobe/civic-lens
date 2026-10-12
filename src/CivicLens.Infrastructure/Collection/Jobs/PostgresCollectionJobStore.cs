@@ -406,7 +406,7 @@ public sealed partial class PostgresCollectionJobStore(IDbContextFactory<Collect
     }
     private static string Write<T>(T value) => JsonSerializer.Serialize(value, CollectionProtocol.JsonOptions);
     private static T Read<T>(string value) => JsonSerializer.Deserialize<T>(value, CollectionProtocol.JsonOptions) ?? throw new InvalidDataException("Missing job data.");
-    private static CollectionJobDefinition ReadDefinition(string json)
+    internal static CollectionJobDefinition ReadDefinition(string json)
     {
         try
         {

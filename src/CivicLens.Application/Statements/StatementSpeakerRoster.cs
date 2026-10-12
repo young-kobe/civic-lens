@@ -4,23 +4,15 @@ using CivicLens.Application.Collection;
 
 namespace CivicLens.Application.Statements;
 
-public sealed class StatementSpeakerRoster
+public static class StatementSpeakerRoster
 {
-    private readonly CollectionConfiguration configuration;
-    private readonly Dictionary<string, WatchedSourceConfiguration> sources;
-    private readonly Dictionary<string, string> names;
-
-    public StatementSpeakerRoster(CollectionConfiguration configuration)
+    public static ImmutableArray<AnalysisOfficial> OfficialsOn(CollectionConfigurationRevision? revision, string sourceId, DateOnly date)
     {
-        ArgumentNullException.ThrowIfNull(configuration);
-        configuration.Validate();
-        this.configuration = configuration;
-        sources = configuration.Sources.ToDictionary(source => source.Id, StringComparer.Ordinal);
-        names = configuration.People.ToDictionary(person => person.Id, person => person.Name, StringComparer.Ordinal);
+        if (revision is null) return [];
+        var configuration = revision.ReadConfiguration();
+        var source = configuration.Sources.SingleOrDefault(candidate => candidate.Id == sourceId);
+        if (source is null) return [];
+        var names = configuration.People.ToDictionary(person => person.Id, person => person.Name, StringComparer.Ordinal);
+        return [.. configuration.CoveredPersonIdsOf(source, date).Select(id => new AnalysisOfficial(id, names[id]))];
     }
-
-    public ImmutableArray<AnalysisOfficial> OfficialsOn(string sourceId, DateOnly date) =>
-        sources.TryGetValue(sourceId, out var source)
-            ? [.. configuration.CoveredPersonIdsOf(source, date).Select(id => new AnalysisOfficial(id, names[id]))]
-            : [];
 }

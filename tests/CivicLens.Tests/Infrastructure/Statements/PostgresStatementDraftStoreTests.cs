@@ -1,5 +1,6 @@
 using System.Text.Json;
 using CivicLens.Application.Analysis;
+using CivicLens.Application.Collection.Jobs;
 using CivicLens.Application.Statements;
 using CivicLens.Core.Review;
 using CivicLens.Infrastructure.Collection;
@@ -176,12 +177,41 @@ public sealed class PostgresStatementDraftStoreTests(PostgresCollection postgres
         Assert.Equal("ck_statement_revisions_run", failure.ConstraintName);
     }
 
+    [Fact]
+    public async Task EachCandidateIsDraftedForTheSpeakersOfTheConfigurationThatAdmittedIt()
+    {
+        var admittedForMarkey = AdmittedDefinition(SoleCoverage(Markey));
+        var admittedForWarren = AdmittedDefinition(SoleCoverage(Warren));
+        var markey = await PassedCandidateAsync(Article + " one", "https://example.test/pages/one", admittedBy: admittedForMarkey);
+        var warren = await PassedCandidateAsync(Article + " two", "https://example.test/pages/two", admittedBy: admittedForWarren);
+        var model = new FakeStatementDraftingModel().Draft(Output()).Draft(Output());
+
+        await DraftingWorker(model).ExecuteAsync(once: true);
+
+        Assert.Equal(admittedForMarkey.ConfigurationRevision, (await drafts.ReadEvidenceAsync(markey, default))!.ConfigurationRevision);
+        Assert.Equal(admittedForWarren.ConfigurationRevision, (await drafts.ReadEvidenceAsync(warren, default))!.ConfigurationRevision);
+        Assert.Equal([Markey], await SpeakersAsync(markey));
+        Assert.Equal([Warren], await SpeakersAsync(warren));
+    }
+
+    [Fact]
+    public async Task AJobThatHasNoConfigurationRevisionBlocksTheDraftWithoutACall()
+    {
+        var candidate = await PassedCandidateAsync(admittedBy: LegacyDefinition());
+        var model = new FakeStatementDraftingModel();
+
+        await DraftingWorker(model).ExecuteAsync(once: true);
+
+        Assert.Empty(model.Requests);
+        Assert.Equal([("draft", "Blocked", "speakersUnavailable")], await QueueAsync(candidate, "draft"));
+    }
+
     private StatementGateSettings BigGate => new(10_000_000, StatementGatePrompt.MinimumReservation, 1);
 
     private async Task<string> PassedCandidateAsync(string article = Article, string url = "https://example.test/pages/a",
-        StatementGateSettings? gateSettings = null)
+        StatementGateSettings? gateSettings = null, CollectionJobDefinition? admittedBy = null)
     {
-        var candidate = await seeder.SeedAsync(article, url);
+        var candidate = await seeder.SeedAsync(article, url, admittedBy);
         var gateModel = new FakeStatementGateModel();
         if (gateSettings is null) gateModel.Classify(StatementGateFixtures.Output([HousingArea], 0.8, (RentIssue, "rent cap")));
         await AnalysisWorkers.Gate(gates, new FakeAnalysisStatusStore(), gateModel, gateSettings ?? new StatementGateSettings(10_000_000, concurrency: 1),
@@ -191,7 +221,7 @@ public sealed class PostgresStatementDraftStoreTests(PostgresCollection postgres
 
     private AnalysisWorker<StatementDraftRun> DraftingWorker(FakeStatementDraftingModel model, StatementDraftSettings? settings = null) =>
         AnalysisWorkers.StatementDrafting(drafts, new FakeAnalysisStatusStore(), model, settings ?? new StatementDraftSettings(10_000_000, concurrency: 1),
-            SoleWarrenRoster(), TimeProvider.System);
+            TimeProvider.System);
 
     private Task InsertDraftAsync(string candidate) => ExecuteAsync(connectionString,
         $"INSERT INTO statement_drafts (candidate_id, current_revision_number, created_at_utc_ticks) VALUES ('{candidate}', 0, 0)");
@@ -220,6 +250,12 @@ public sealed class PostgresStatementDraftStoreTests(PostgresCollection postgres
         await using var reader = await command.ExecuteReaderAsync();
         Assert.True(await reader.ReadAsync());
         return (reader.GetString(0), reader.GetString(1), reader.GetString(2));
+    }
+
+    private async Task<string[]> SpeakersAsync(string candidate)
+    {
+        var revision = JsonSerializer.Deserialize<JsonElement>(await TextAsync($"SELECT revision_json FROM statement_revisions WHERE candidate_id = '{candidate}'"));
+        return [.. revision.GetProperty("speakerOfficialIds").EnumerateArray().Select(id => id.GetString()!)];
     }
 
     private async Task<long> ScalarAsync(string sql)

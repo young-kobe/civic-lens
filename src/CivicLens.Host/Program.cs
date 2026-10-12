@@ -156,7 +156,7 @@ try
         await using var analysisWakeup = analysis.Wakeup;
         var gate = StatementGateComposition.Create(connectionString);
         await using var gateWakeup = gate.Wakeup;
-        var statementDrafting = StatementDraftComposition.Create(connectionString, workerConfiguration);
+        var statementDrafting = StatementDraftComposition.Create(connectionString);
         await using var statementDraftingWakeup = statementDrafting.Wakeup;
         executing = true;
         await jobs.SynchronizeAsync(workerConfiguration, cancellation.Token);

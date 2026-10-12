@@ -171,10 +171,26 @@ public sealed class StatementDraftingStepTests
     [Fact]
     public async Task ASourceThatCoversNoOfficialOnTheArticleDateBlocksTheEntryWithoutACall()
     {
-        var store = new FakeStatementDraftStore(DraftEvidence(observed: new DateTimeOffset(2026, 6, 1, 0, 0, 0, TimeSpan.Zero)));
+        var evidence = DraftEvidence(observed: new DateTimeOffset(2026, 6, 1, 0, 0, 0, TimeSpan.Zero)) with
+        {
+            ConfigurationRevision = SpeakerRevision(warrenEndsBefore: new DateOnly(2026, 1, 1))
+        };
+        var store = new FakeStatementDraftStore(evidence);
         var model = new FakeStatementDraftingModel();
 
-        await Worker(store, model, roster: Roster(warrenEndsBefore: new DateOnly(2026, 1, 1))).ExecuteAsync(once: true);
+        await Worker(store, model).ExecuteAsync(once: true);
+
+        Assert.Empty(model.Requests);
+        Assert.Equal((State.Blocked, "speakersUnavailable"), (store.Entries.Single().Status, store.Entries.Single().ErrorCode));
+    }
+
+    [Fact]
+    public async Task AJobWithoutAConfigurationRevisionBlocksTheEntryWithoutACall()
+    {
+        var store = new FakeStatementDraftStore(DraftEvidence() with { ConfigurationRevision = null });
+        var model = new FakeStatementDraftingModel();
+
+        await Worker(store, model).ExecuteAsync(once: true);
 
         Assert.Empty(model.Requests);
         Assert.Equal((State.Blocked, "speakersUnavailable"), (store.Entries.Single().Status, store.Entries.Single().ErrorCode));
@@ -239,7 +255,7 @@ public sealed class StatementDraftingStepTests
     }
 
     private static AnalysisWorker<StatementDraftRun> Worker(FakeStatementDraftStore store, FakeStatementDraftingModel model,
-        StatementDraftSettings? settings = null, FakeAnalysisStatusStore? status = null, StatementSpeakerRoster? roster = null) =>
+        StatementDraftSettings? settings = null, FakeAnalysisStatusStore? status = null) =>
         AnalysisWorkers.StatementDrafting(store, status ?? new FakeAnalysisStatusStore(), model,
-            settings ?? new StatementDraftSettings(10_000_000, concurrency: 1), roster ?? Roster(), new FakeClock(DateTimeOffset.UnixEpoch));
+            settings ?? new StatementDraftSettings(10_000_000, concurrency: 1), new FakeClock(DateTimeOffset.UnixEpoch));
 }

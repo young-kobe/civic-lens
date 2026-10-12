@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using System.Text.Json;
 using CivicLens.Application.Analysis;
 using CivicLens.Application.Collection;
+using CivicLens.Application.Collection.Jobs;
 using CivicLens.Application.Statements;
 using CivicLens.Core.Collection;
 
@@ -39,12 +40,19 @@ internal static class StatementDraftFixtures
         ]
     };
 
-    public static StatementSpeakerRoster Roster(DateOnly? warrenEndsBefore = null) => new(Configuration(warrenEndsBefore));
+    public static CollectionConfigurationRevision SpeakerRevision(DateOnly? warrenEndsBefore = null) =>
+        CollectionConfigurationRevision.Create(Configuration(warrenEndsBefore));
 
-    public static StatementSpeakerRoster SoleWarrenRoster() => new(Configuration() with
+    public static CollectionConfiguration SoleCoverage(string personId) => Configuration() with
     {
-        Sources = [Configuration().Sources[0] with { Coverage = [new() { PersonId = Warren }] }]
-    });
+        Sources = [Configuration().Sources[0] with { Coverage = [new() { PersonId = personId }] }]
+    };
+
+    public static CollectionJobDefinition AdmittedDefinition(CollectionConfiguration configuration) =>
+        CollectionJobDefinition.FromConfiguration(configuration, "source");
+
+    public static CollectionJobDefinition LegacyDefinition() =>
+        AdmittedDefinition(Configuration()) with { ConfigurationRevision = null, CoverageAsOf = null };
 
     public static ImmutableArray<AnalysisOfficial> Officials(params string[] ids) =>
         [.. ids.Select(id => new AnalysisOfficial(id, id == Warren ? "Elizabeth Warren" : "Ed Markey"))];
@@ -52,7 +60,7 @@ internal static class StatementDraftFixtures
     public static StatementDraftEvidence DraftEvidence(string text = Article, StatementGateCarryOver? carryOver = null, string? existingDraftId = null,
         DateTimeOffset? observed = null) =>
         new(StatementGateFixtures.Evidence(text, observed), carryOver ?? new(["rent-affordability"], ["housing-and-community-development"]),
-            existingDraftId);
+            existingDraftId, SpeakerRevision());
 
     public static string Output(string[]? speakers = null, (string Date, string Quote)? date = null, string[]? quotes = null,
         string[]? otherSpeakers = null, double confidence = 0.8, string headline = "Warren announces a rent cap") =>

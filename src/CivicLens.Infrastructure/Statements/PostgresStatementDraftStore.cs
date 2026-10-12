@@ -1,7 +1,10 @@
 using System.Linq.Expressions;
+using CivicLens.Application.Collection;
 using CivicLens.Application.Statements;
 using CivicLens.Infrastructure.Analysis;
 using CivicLens.Infrastructure.Collection;
+using CivicLens.Infrastructure.Collection.Jobs;
+using CivicLens.Infrastructure.Collection.Jobs.Persistence;
 using CivicLens.Infrastructure.Statements.Persistence;
 using Microsoft.EntityFrameworkCore;
 using State = CivicLens.Application.Analysis.AnalysisState;
@@ -42,7 +45,19 @@ public sealed class PostgresStatementDraftStore : PostgresAnalysisStore<Statemen
             .OrderByDescending(run => run.StartedAtUtcTicks).FirstOrDefaultAsync(cancellationToken);
         var existing = await db.Set<StatementDraftRow>().AsNoTracking().Where(row => row.CandidateId == candidateId)
             .Select(row => row.CandidateId).FirstOrDefaultAsync(cancellationToken);
-        return new(article, StatementGateCarryOver.From(gateRun is null ? null : StatementAnalysisQueueMapping.ToRun(gateRun)), existing);
+        var revision = await ReadAdmittingRevisionAsync(db, candidateId, cancellationToken);
+        return new(article, StatementGateCarryOver.From(gateRun is null ? null : StatementAnalysisQueueMapping.ToRun(gateRun)), existing, revision);
+    }
+
+    private static async Task<CollectionConfigurationRevision?> ReadAdmittingRevisionAsync(CollectionAttemptDbContext db, string candidateId,
+        CancellationToken cancellationToken)
+    {
+        var definitionJson = await (from candidate in db.Set<StatementCandidateRow>().AsNoTracking()
+                                    join jobAttempt in db.Set<JobAttemptRow>().AsNoTracking() on candidate.AttemptId equals jobAttempt.AttemptId
+                                    join job in db.Set<JobRow>().AsNoTracking() on jobAttempt.JobId equals job.JobId
+                                    where candidate.CandidateId == candidateId
+                                    select job.DefinitionJson).SingleOrDefaultAsync(cancellationToken);
+        return definitionJson is null ? null : PostgresCollectionJobStore.ReadDefinition(definitionJson).ConfigurationRevision;
     }
 
     public async Task<IReadOnlyList<StatementDraftListItem>> ListAsync(StatementDraftView? view, int limit, CancellationToken cancellationToken)
