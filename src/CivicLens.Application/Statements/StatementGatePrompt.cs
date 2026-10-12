@@ -1,25 +1,14 @@
 using System.Collections.Immutable;
 using System.Globalization;
 using System.Text;
-using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using System.Text.Json.Serialization;
 using CivicLens.Application.Analysis;
 
 namespace CivicLens.Application.Statements;
 
 public static class StatementGatePrompt
 {
-    private static readonly JsonSerializerOptions EvidenceJson = new()
-    {
-        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
-        WriteIndented = true,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
-    };
-
-    private static readonly JsonSerializerOptions CompactJson = new() { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
-
     private static readonly string Instructions = $"""
         You classify one article from a government source for Civic Lens, a nonpartisan transparency publication. Civic Lens tracks a short list of public issues. Your answer decides whether a draft statement record is prepared from the article. A human editor reviews every draft.
 
@@ -54,7 +43,7 @@ public static class StatementGatePrompt
     }
 
     private static string BuildSystemPrompt(StatementGateRubric rubric) =>
-        Instructions + "\n\nRubric:\n" + JsonSerializer.Serialize(rubric.ToDocument(), EvidenceJson);
+        Instructions + "\n\nRubric:\n" + JsonSerializer.Serialize(rubric.ToDocument(), AnalysisPromptText.EvidenceJson);
 
     private static string BuildUserPrompt(StatementGateEvidence evidence, ImmutableArray<string> previousErrors)
     {
@@ -66,11 +55,8 @@ public static class StatementGatePrompt
             firstCapturedOn = evidence.FirstCapturedOn.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
             text = evidence.Extraction.Text
         };
-        var builder = new StringBuilder("Article:\n").Append(JsonSerializer.Serialize(document, EvidenceJson));
-        if (previousErrors.IsDefaultOrEmpty) return builder.ToString();
-        builder.Append("\n\nYour previous answer was rejected for these reasons. Write a new answer that corrects them:\n");
-        foreach (var error in previousErrors) builder.Append("- ").Append(error).Append('\n');
-        return builder.ToString();
+        var builder = new StringBuilder("Article:\n").Append(JsonSerializer.Serialize(document, AnalysisPromptText.EvidenceJson));
+        return AnalysisPromptText.WithRejectionReasons(builder, previousErrors);
     }
 
     private static string BuildSchema(StatementGateRubric rubric)
@@ -116,6 +102,6 @@ public static class StatementGatePrompt
                 ["confidence"] = AnalysisSchema.Number()
             }
         };
-        return schema.ToJsonString(CompactJson);
+        return schema.ToJsonString(AnalysisPromptText.CompactJson);
     }
 }

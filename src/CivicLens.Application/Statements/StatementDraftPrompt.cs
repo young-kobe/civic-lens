@@ -1,10 +1,8 @@
 using System.Collections.Immutable;
 using System.Globalization;
 using System.Text;
-using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using System.Text.Json.Serialization;
 using CivicLens.Application.Analysis;
 using CivicLens.Core.Statements;
 
@@ -12,15 +10,6 @@ namespace CivicLens.Application.Statements;
 
 public static class StatementDraftPrompt
 {
-    private static readonly JsonSerializerOptions EvidenceJson = new()
-    {
-        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
-        WriteIndented = true,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
-    };
-
-    private static readonly JsonSerializerOptions CompactJson = new() { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
-
     private static readonly string SingleSpeakerInstructions = Instructions(
         "The user message also names the one official who speaks in this article. Civic Lens records that official as the speaker, so you do not choose a speaker.",
         "");
@@ -55,7 +44,7 @@ public static class StatementDraftPrompt
     }
 
     public static string SerializeContext(ImmutableArray<AnalysisOfficial> officials, StatementGateCarryOver carryOver) =>
-        JsonSerializer.Serialize(new { officials, issueIds = carryOver.IssueIds, policyAreaIds = carryOver.PolicyAreaIds }, CompactJson);
+        JsonSerializer.Serialize(new { officials, issueIds = carryOver.IssueIds, policyAreaIds = carryOver.PolicyAreaIds }, AnalysisPromptText.CompactJson);
 
     private static string Instructions(string officialsSentence, string speakerField) => $"""
         You draft a proposed public record of one statement for Civic Lens, a nonpartisan transparency publication. The statement is one article from a government source, such as a press release. A human editor reviews, edits, and approves every record. Your draft is never published as you write it.
@@ -87,11 +76,8 @@ public static class StatementDraftPrompt
             officials = officials.Select(official => new { id = official.Id, name = official.Name }),
             text = evidence.Article.Extraction.Text
         };
-        var builder = new StringBuilder("Article:\n").Append(JsonSerializer.Serialize(document, EvidenceJson));
-        if (previousErrors.IsDefaultOrEmpty) return builder.ToString();
-        builder.Append("\n\nYour previous answer was rejected for these reasons. Write a new answer that corrects them:\n");
-        foreach (var error in previousErrors) builder.Append("- ").Append(error).Append('\n');
-        return builder.ToString();
+        var builder = new StringBuilder("Article:\n").Append(JsonSerializer.Serialize(document, AnalysisPromptText.EvidenceJson));
+        return AnalysisPromptText.WithRejectionReasons(builder, previousErrors);
     }
 
     private static string BuildSchema(ImmutableArray<AnalysisOfficial> speakerChoices)
@@ -119,7 +105,7 @@ public static class StatementDraftPrompt
             ["required"] = required,
             ["properties"] = properties
         };
-        return schema.ToJsonString(CompactJson);
+        return schema.ToJsonString(AnalysisPromptText.CompactJson);
     }
 
     private static JsonObject StatementDate() => new()
