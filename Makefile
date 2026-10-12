@@ -12,6 +12,7 @@ COLLECTOR := src/CivicLens.Collector/bin/Release/net10.0/CivicLens.Collector.dll
 WITH_ENV := source .runtime/database/connection.env && source .runtime/review/connection.env &&
 
 export CIVIC_LENS_COLLECTION_CONFIG := $(CURDIR)/config/federal-pilot.json
+export CIVIC_LENS_ISSUES_CONFIG := $(CURDIR)/config/issues.json
 export CIVIC_LENS_CAPTURE_DIRECTORY := $(CURDIR)/.runtime/captures
 export CIVIC_LENS_RELEASE_DIRECTORY := $(CURDIR)/.runtime/releases
 

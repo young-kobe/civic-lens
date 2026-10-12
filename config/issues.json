@@ -1,0 +1,399 @@
+{
+  "version": 1,
+  "policyAreas": [
+    {
+      "id": "agriculture-and-food",
+      "name": "Agriculture and Food"
+    },
+    {
+      "id": "animals",
+      "name": "Animals"
+    },
+    {
+      "id": "armed-forces-and-national-security",
+      "name": "Armed Forces and National Security"
+    },
+    {
+      "id": "arts-culture-religion",
+      "name": "Arts, Culture, Religion"
+    },
+    {
+      "id": "civil-rights-and-liberties-minority-issues",
+      "name": "Civil Rights and Liberties, Minority Issues"
+    },
+    {
+      "id": "commerce",
+      "name": "Commerce"
+    },
+    {
+      "id": "congress",
+      "name": "Congress"
+    },
+    {
+      "id": "crime-and-law-enforcement",
+      "name": "Crime and Law Enforcement"
+    },
+    {
+      "id": "economics-and-public-finance",
+      "name": "Economics and Public Finance"
+    },
+    {
+      "id": "education",
+      "name": "Education"
+    },
+    {
+      "id": "emergency-management",
+      "name": "Emergency Management"
+    },
+    {
+      "id": "energy",
+      "name": "Energy"
+    },
+    {
+      "id": "environmental-protection",
+      "name": "Environmental Protection"
+    },
+    {
+      "id": "families",
+      "name": "Families"
+    },
+    {
+      "id": "finance-and-financial-sector",
+      "name": "Finance and Financial Sector"
+    },
+    {
+      "id": "foreign-trade-and-international-finance",
+      "name": "Foreign Trade and International Finance"
+    },
+    {
+      "id": "government-operations-and-politics",
+      "name": "Government Operations and Politics"
+    },
+    {
+      "id": "health",
+      "name": "Health"
+    },
+    {
+      "id": "housing-and-community-development",
+      "name": "Housing and Community Development"
+    },
+    {
+      "id": "immigration",
+      "name": "Immigration"
+    },
+    {
+      "id": "international-affairs",
+      "name": "International Affairs"
+    },
+    {
+      "id": "labor-and-employment",
+      "name": "Labor and Employment"
+    },
+    {
+      "id": "law",
+      "name": "Law"
+    },
+    {
+      "id": "native-americans",
+      "name": "Native Americans"
+    },
+    {
+      "id": "public-lands-and-natural-resources",
+      "name": "Public Lands and Natural Resources"
+    },
+    {
+      "id": "science-technology-communications",
+      "name": "Science, Technology, Communications"
+    },
+    {
+      "id": "social-sciences-and-history",
+      "name": "Social Sciences and History"
+    },
+    {
+      "id": "social-welfare",
+      "name": "Social Welfare"
+    },
+    {
+      "id": "sports-and-recreation",
+      "name": "Sports and Recreation"
+    },
+    {
+      "id": "taxation",
+      "name": "Taxation"
+    },
+    {
+      "id": "transportation-and-public-works",
+      "name": "Transportation and Public Works"
+    },
+    {
+      "id": "water-resources-development",
+      "name": "Water Resources Development"
+    }
+  ],
+  "issues": [
+    {
+      "id": "immigration-enforcement",
+      "name": "Immigration enforcement and the border",
+      "definition": "Federal policy and action on border security, immigration enforcement, detention, deportation, and asylum.",
+      "policyAreaIds": [
+        "immigration"
+      ],
+      "includes": [
+        "Border security and barriers",
+        "Interior enforcement, detention, and removals",
+        "Asylum and refugee admissions"
+      ],
+      "excludes": [
+        "Legal visa and work-permit programs with no enforcement aspect",
+        "Local events that do not concern federal policy"
+      ]
+    },
+    {
+      "id": "trade-and-tariffs",
+      "name": "Trade and tariffs",
+      "definition": "Tariffs, trade agreements, export controls, and their effects on prices and industries.",
+      "policyAreaIds": [
+        "foreign-trade-and-international-finance"
+      ],
+      "includes": [
+        "Tariff rates and exemptions",
+        "Trade agreements and negotiations",
+        "Export controls"
+      ],
+      "excludes": [
+        "General economic statements that do not mention trade policy"
+      ]
+    },
+    {
+      "id": "federal-budget",
+      "name": "Federal budget and debt",
+      "definition": "Federal spending levels, appropriations, shutdowns, the debt limit, and deficits.",
+      "policyAreaIds": [
+        "economics-and-public-finance"
+      ],
+      "includes": [
+        "Appropriations bills and continuing resolutions",
+        "Government shutdowns",
+        "Debt limit and deficit"
+      ],
+      "excludes": [
+        "Announcements of grants or projects for one district",
+        "Tax rates, which are a separate issue"
+      ]
+    },
+    {
+      "id": "federal-taxes",
+      "name": "Federal taxes",
+      "definition": "Federal tax law: individual and business rates, credits, deductions, and tax enforcement.",
+      "policyAreaIds": [
+        "taxation"
+      ],
+      "includes": [
+        "Tax rate and bracket changes",
+        "Tax credits and deductions",
+        "IRS funding and enforcement"
+      ],
+      "excludes": [
+        "State and local taxes",
+        "Tariffs, which are a separate issue"
+      ]
+    },
+    {
+      "id": "health-coverage",
+      "name": "Health coverage and costs",
+      "definition": "Access to and cost of health insurance and care, including Medicare, Medicaid, the ACA marketplaces, and drug prices.",
+      "policyAreaIds": [
+        "health",
+        "social-welfare"
+      ],
+      "includes": [
+        "Medicaid and Medicare policy",
+        "ACA marketplace subsidies",
+        "Prescription drug prices"
+      ],
+      "excludes": [
+        "Abortion and reproductive health, which are a separate issue",
+        "Public health events with no coverage or cost aspect"
+      ]
+    },
+    {
+      "id": "reproductive-health",
+      "name": "Abortion and reproductive health",
+      "definition": "Federal policy on abortion, contraception, IVF, and related court decisions.",
+      "policyAreaIds": [
+        "health",
+        "civil-rights-and-liberties-minority-issues"
+      ],
+      "includes": [
+        "Abortion access and restrictions",
+        "Contraception and IVF",
+        "Medication abortion regulation"
+      ],
+      "excludes": []
+    },
+    {
+      "id": "firearms",
+      "name": "Firearms",
+      "definition": "Federal firearms law and regulation, and responses to gun violence.",
+      "policyAreaIds": [
+        "crime-and-law-enforcement"
+      ],
+      "includes": [
+        "Background checks and purchase rules",
+        "Regulation of firearms and accessories",
+        "Federal gun violence programs"
+      ],
+      "excludes": [
+        "Crime statements that do not concern firearms policy"
+      ]
+    },
+    {
+      "id": "energy-and-climate",
+      "name": "Energy and climate",
+      "definition": "Energy production and prices, and climate and emissions policy.",
+      "policyAreaIds": [
+        "energy",
+        "environmental-protection"
+      ],
+      "includes": [
+        "Oil, gas, coal, nuclear, and renewable energy policy",
+        "Emissions rules and climate programs",
+        "Energy prices"
+      ],
+      "excludes": [
+        "Disaster response with no energy or climate policy aspect"
+      ]
+    },
+    {
+      "id": "federal-workforce",
+      "name": "Federal workforce and agencies",
+      "definition": "The size, structure, and independence of federal agencies and the civil service.",
+      "policyAreaIds": [
+        "government-operations-and-politics"
+      ],
+      "includes": [
+        "Agency closures, reorganizations, and layoffs",
+        "Civil service rules",
+        "Independence of agencies and inspectors general"
+      ],
+      "excludes": [
+        "Routine agency announcements"
+      ]
+    },
+    {
+      "id": "elections-and-voting",
+      "name": "Elections and voting",
+      "definition": "Federal rules for voting, election administration, and campaign finance.",
+      "policyAreaIds": [
+        "government-operations-and-politics",
+        "civil-rights-and-liberties-minority-issues"
+      ],
+      "includes": [
+        "Voter registration and identification rules",
+        "Election administration and certification",
+        "Campaign finance"
+      ],
+      "excludes": [
+        "A member's own campaign activity"
+      ]
+    },
+    {
+      "id": "foreign-policy-and-war",
+      "name": "Foreign policy and war",
+      "definition": "U.S. relations with other countries, military operations abroad, and decisions to go to war or end one.",
+      "policyAreaIds": [
+        "international-affairs",
+        "armed-forces-and-national-security"
+      ],
+      "includes": [
+        "Diplomacy, alliances, and treaties",
+        "U.S. military deployments, strikes, and operations abroad",
+        "War powers and authorizations for the use of military force",
+        "Foreign aid and sanctions",
+        "Conflicts that also match a narrower issue, such as Russia and Ukraine"
+      ],
+      "excludes": [
+        "Military pay, bases, and procurement with no foreign policy aspect",
+        "Trade and tariffs, which are a separate issue"
+      ]
+    },
+    {
+      "id": "russia-ukraine",
+      "name": "Russia and Ukraine",
+      "definition": "U.S. policy on the war in Ukraine, including aid, sanctions, and negotiations.",
+      "policyAreaIds": [
+        "international-affairs",
+        "armed-forces-and-national-security"
+      ],
+      "includes": [
+        "Military and economic aid to Ukraine",
+        "Sanctions on Russia",
+        "Ceasefire and peace negotiations"
+      ],
+      "excludes": []
+    },
+    {
+      "id": "middle-east-conflicts",
+      "name": "Middle East conflicts",
+      "definition": "U.S. policy on conflicts involving Israel, Gaza, Iran, and their neighbors.",
+      "policyAreaIds": [
+        "international-affairs",
+        "armed-forces-and-national-security"
+      ],
+      "includes": [
+        "Military aid and arms sales",
+        "Humanitarian aid",
+        "Ceasefire negotiations and U.S. military action"
+      ],
+      "excludes": []
+    },
+    {
+      "id": "artificial-intelligence",
+      "name": "Artificial intelligence",
+      "definition": "Federal policy on the development, use, and regulation of artificial intelligence.",
+      "policyAreaIds": [
+        "science-technology-communications"
+      ],
+      "includes": [
+        "AI safety and regulation",
+        "Government use of AI",
+        "Chips and computing policy tied to AI"
+      ],
+      "excludes": [
+        "General technology or broadband statements with no AI aspect"
+      ]
+    },
+    {
+      "id": "social-security",
+      "name": "Social Security",
+      "definition": "Social Security retirement and disability benefits, their funding, and their administration.",
+      "policyAreaIds": [
+        "social-welfare"
+      ],
+      "includes": [
+        "Benefit levels and eligibility",
+        "Trust fund solvency",
+        "Social Security Administration operations"
+      ],
+      "excludes": [
+        "Medicare, which is part of health coverage"
+      ]
+    },
+    {
+      "id": "food-assistance",
+      "name": "Food assistance",
+      "definition": "Federal food assistance programs such as SNAP and WIC.",
+      "policyAreaIds": [
+        "agriculture-and-food",
+        "social-welfare"
+      ],
+      "includes": [
+        "SNAP eligibility and funding",
+        "WIC and school meals"
+      ],
+      "excludes": [
+        "Farm subsidies with no food assistance aspect"
+      ]
+    }
+  ]
+}
