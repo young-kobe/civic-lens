@@ -51,6 +51,7 @@ if (args is [] or ["--help"] or ["help"])
           documents compare <before-extraction-id> <after-extraction-id>
           documents comparison <comparison-id>
           analyses requeue <comparison-id|--all>
+          analyses metrics
           releases publish <idempotency-key> <draft-id>...
           releases list [limit]
           releases activate <release-number>
@@ -161,8 +162,9 @@ try
         if (string.IsNullOrWhiteSpace(connectionString) || string.IsNullOrWhiteSpace(ownerSubject))
             throw new ArgumentException("Analysis commands require CIVIC_LENS_DATABASE and CIVIC_LENS_REVIEW_OWNER.");
         var requeue = new RequeueDocumentChangeAnalyses(PostgresDocumentChangeAnalysisStore.FromConnectionString(connectionString));
+        var outcomes = new GetDocumentChangeReviewOutcomes(PostgresDocumentChangeReviewOutcomeStore.FromConnectionString(connectionString));
         executing = true;
-        return await AnalysisCommand.ExecuteAsync(args, requeue, new ReviewActor(ownerSubject, ReviewRole.Owner), cancellation.Token);
+        return await AnalysisCommand.ExecuteAsync(args, requeue, outcomes, new ReviewActor(ownerSubject, ReviewRole.Owner), cancellation.Token);
     }
 
     if (ReleaseCommand.Matches(args))

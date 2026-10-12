@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using System.Text.Json;
 using CivicLens.Application.Analysis;
 using CivicLens.Core.Review;
@@ -6,11 +7,12 @@ namespace CivicLens.Host.Analysis;
 
 public static class AnalysisCommand
 {
-    private const string Usage = "Use analyses requeue <comparison-id> or analyses requeue --all.";
+    private const string Usage = "Use analyses requeue <comparison-id>, analyses requeue --all, or analyses metrics.";
 
     public static bool Matches(string[] args) => args is ["analyses", ..];
 
-    public static async Task<int> ExecuteAsync(string[] args, RequeueDocumentChangeAnalyses requeue, ReviewActor owner,
+    public static async Task<int> ExecuteAsync(string[] args, RequeueDocumentChangeAnalyses requeue,
+        GetDocumentChangeReviewOutcomes outcomes, ReviewActor owner,
         CancellationToken cancellationToken)
     {
         try
@@ -22,6 +24,9 @@ public static class AnalysisCommand
                     return 0;
                 case ["analyses", "requeue", var comparisonId]:
                     Write(await requeue.ExecuteAsync(owner, comparisonId, cancellationToken));
+                    return 0;
+                case ["analyses", "metrics"]:
+                    WriteMetrics(await outcomes.ExecuteAsync(owner, cancellationToken));
                     return 0;
                 default:
                     Console.Error.WriteLine(Usage);
@@ -41,4 +46,20 @@ public static class AnalysisCommand
     }
 
     private static void Write(int requeued) => Console.WriteLine(JsonSerializer.Serialize(new { requeued }));
+
+    private static void WriteMetrics(ImmutableArray<DocumentChangeReviewOutcomes> outcomes) =>
+        Console.WriteLine(JsonSerializer.Serialize(new
+        {
+            promptVersions = outcomes.Select(item => new
+            {
+                item.PromptVersion,
+                item.Drafts,
+                item.ApprovedUnchanged,
+                item.ApprovedEdited,
+                item.ChangesRequested,
+                item.ApprovalWithdrawn,
+                item.AwaitingReview,
+                fieldEdits = item.FieldEdits.ToDictionary(pair => JsonNamingPolicy.CamelCase.ConvertName(pair.Key.ToString()), pair => pair.Value)
+            })
+        }, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
 }

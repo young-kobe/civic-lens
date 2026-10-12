@@ -305,7 +305,7 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
             _ => throw new ArgumentOutOfRangeException(nameof(filter))
         }).AsNoTracking();
 
-    private static IQueryable<DocumentChangeDraftRow> KeysetDrafts(IQueryable<DocumentChangeDraftRow> rows, PageCursor? cursor)
+    internal static IQueryable<DocumentChangeDraftRow> KeysetDrafts(IQueryable<DocumentChangeDraftRow> rows, PageCursor? cursor)
     {
         if (cursor is null) return rows.OrderByDescending(row => row.CreatedAtUtcTicks).ThenByDescending(row => row.DraftId);
         var (ticks, id) = (cursor.Ticks, cursor.Id);
@@ -534,7 +534,7 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
         return new(review, verified.Summary, verified.Before, verified.After);
     }
 
-    private static async Task<ILookup<string, DocumentChangeRevisionRow>> ReadRevisionRowsAsync(
+    internal static async Task<ILookup<string, DocumentChangeRevisionRow>> ReadRevisionRowsAsync(
         CollectionAttemptDbContext db, string[] draftIds, CancellationToken cancellationToken)
     {
         var rows = await db.Set<DocumentChangeRevisionRow>().AsNoTracking()
@@ -544,7 +544,7 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
         return rows.ToLookup(row => row.DraftId, StringComparer.Ordinal);
     }
 
-    private static async Task<ILookup<string, ReviewDecisionRow>> ReadDecisionRowsAsync(
+    internal static async Task<ILookup<string, ReviewDecisionRow>> ReadDecisionRowsAsync(
         CollectionAttemptDbContext db, string[] draftIds, CancellationToken cancellationToken)
     {
         var rows = await db.Set<ReviewDecisionRow>().AsNoTracking()
@@ -611,7 +611,11 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
     }
 
     private static DocumentChangeReviewListItem ToListItem(DocumentChangeDraftRow draft,
-        IEnumerable<DocumentChangeRevisionRow> revisionRows, IEnumerable<ReviewDecisionRow> decisionRows)
+        IEnumerable<DocumentChangeRevisionRow> revisionRows, IEnumerable<ReviewDecisionRow> decisionRows) =>
+        ToValidatedListItem(draft, revisionRows, decisionRows).Item;
+
+    internal static (DocumentChangeDraftRevision First, DocumentChangeReviewListItem Item) ToValidatedListItem(
+        DocumentChangeDraftRow draft, IEnumerable<DocumentChangeRevisionRow> revisionRows, IEnumerable<ReviewDecisionRow> decisionRows)
     {
         var revisions = ParseRevisions(draft, revisionRows);
         var decisions = ParseDecisions(draft, decisionRows);
@@ -619,7 +623,7 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
         var currentRevision = revisions[^1];
         var concerns = DocumentChangeReviewPolicy.GetUnresolvedConcerns(decisions);
         var status = DocumentChangeReviewPolicy.GetCurrentStatus(currentRevision, decisions, concerns);
-        return new(draft.DraftId, currentRevision, draft.ReviewStateVersion, status, concerns.Length);
+        return (revisions[0], new(draft.DraftId, currentRevision, draft.ReviewStateVersion, status, concerns.Length));
     }
 
     private static async Task<DocumentChangeDraftRevision> ReadRevisionAsync(CollectionAttemptDbContext db,
