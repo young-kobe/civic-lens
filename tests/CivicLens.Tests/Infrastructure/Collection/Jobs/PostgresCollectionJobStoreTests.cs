@@ -382,6 +382,162 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
         Assert.Equal(CollectionJobStartStatus.Cancelled, (await jobs.TryStartAttemptAsync(cancelled.Lease, root, default)).Status);
     }
 
+    [Fact]
+    public async Task SettlingACapturedJobQueuesOnePreparationRowAndReplayDoesNotAddAnother()
+    {
+        var claim = await EnqueueClaimAsync("prepare-captured", Definition());
+        var start = await jobs.TryStartAttemptAsync(claim.Lease, root, default);
+        var receipt = await CapturedReceiptAsync(start.Attempt!.Request);
+        await CollectionAttemptImporter.ImportAsync(start.Attempt.AttemptId, start.Attempt.Request, receipt, evidence, default);
+        var resolution = CollectionJobLifecycle.Resolve(receipt);
+
+        Assert.Equal(0L, await PreparationCountAsync(claim.Job.JobId));
+        Assert.True(await jobs.SettleAttemptAsync(claim.Lease, start.Attempt.AttemptId, resolution, default));
+        Assert.True(await jobs.SettleAttemptAsync(claim.Lease, start.Attempt.AttemptId, resolution, default));
+
+        Assert.Equal(CollectionJobState.Succeeded, (await jobs.GetAsync(claim.Job.JobId, default))!.State);
+        Assert.Equal(1L, await PreparationCountAsync(claim.Job.JobId));
+        Assert.Equal(("source", "https://example.test/page", "Preparation", "Pending"), await PreparationValuesAsync(claim.Job.JobId));
+    }
+
+    [Fact]
+    public async Task SettlingWithoutAReceiptQueuesOnePreparationRow()
+    {
+        var claim = await EnqueueClaimAsync("prepare-no-receipt", Definition());
+        var start = await jobs.TryStartAttemptAsync(claim.Lease, root, default);
+        var receipt = await CapturedReceiptAsync(start.Attempt!.Request);
+        await CollectionAttemptImporter.ImportAsync(start.Attempt.AttemptId, start.Attempt.Request, receipt, evidence, default);
+        var resolution = new CollectionAttemptResolution(CollectionJobAttemptOutcome.Succeeded, null, "EvidenceAlreadyImported");
+
+        Assert.True(await jobs.SettleAttemptAsync(claim.Lease, start.Attempt.AttemptId, resolution, default));
+
+        Assert.Equal(CollectionJobState.Succeeded, (await jobs.GetAsync(claim.Job.JobId, default))!.State);
+        Assert.Equal(1L, await PreparationCountAsync(claim.Job.JobId));
+    }
+
+    [Fact]
+    public async Task SuccessAfterARetryQueuesOnePreparationRowAndFailureQueuesNone()
+    {
+        var retry = await EnqueueClaimAsync("prepare-retry", Definition());
+        var first = await jobs.TryStartAttemptAsync(retry.Lease, root, default);
+        await jobs.ReleaseCollectorAsync(retry.Lease, first.CollectorLease!, default);
+        Assert.True(await jobs.SettleAttemptAsync(retry.Lease, first.Attempt!.AttemptId,
+            new CollectionAttemptResolution(CollectionJobAttemptOutcome.Interrupted, null, "UnknownUsage"), default));
+        Assert.Equal(0L, await PreparationCountAsync(retry.Job.JobId));
+        await SqlAsync($"UPDATE collection_jobs SET retry_at = 0 WHERE job_id = '{retry.Job.JobId}'");
+        var second = await jobs.TryStartAttemptAsync(retry.Lease, root, default);
+        var receipt = await CapturedReceiptAsync(second.Attempt!.Request);
+        await CollectionAttemptImporter.ImportAsync(second.Attempt.AttemptId, second.Attempt.Request, receipt, evidence, default);
+        Assert.True(await jobs.SettleAttemptAsync(retry.Lease, second.Attempt.AttemptId, CollectionJobLifecycle.Resolve(receipt), default));
+        Assert.Equal(1L, await PreparationCountAsync(retry.Job.JobId));
+        await jobs.ReleaseCollectorAsync(retry.Lease, second.CollectorLease!, default);
+        await SqlAsync("UPDATE collection_job_origins SET not_before = 0");
+
+        var failed = await EnqueueClaimAsync("prepare-failed", Definition());
+        var start = await jobs.TryStartAttemptAsync(failed.Lease, root, default);
+        var notFound = ReceiptCollector.Result(start.Attempt!.Request, 404);
+        await CollectionAttemptImporter.ImportAsync(start.Attempt.AttemptId, start.Attempt.Request, notFound, evidence, default);
+        Assert.True(await jobs.SettleAttemptAsync(failed.Lease, start.Attempt.AttemptId, CollectionJobLifecycle.Resolve(notFound), default));
+        Assert.Equal(0L, await PreparationCountAsync(failed.Job.JobId));
+    }
+
+    [Fact]
+    public async Task ExistingPreparationRowIsKeptWhenAJobSucceeds()
+    {
+        var claim = await EnqueueClaimAsync("prepare-existing", Definition());
+        var start = await jobs.TryStartAttemptAsync(claim.Lease, root, default);
+        var receipt = await CapturedReceiptAsync(start.Attempt!.Request);
+        await CollectionAttemptImporter.ImportAsync(start.Attempt.AttemptId, start.Attempt.Request, receipt, evidence, default);
+        await SqlAsync($"""
+            INSERT INTO evidence_processing (job_id, attempt_id, source_id, requested_url, stage, status,
+                fence, attempts, admitted_count, deferred_count, duplicate_count)
+            VALUES ('{claim.Job.JobId}', 'prepare', 'source', 'https://example.test/page', 'Preparation', 'Pending', 0, 0, 0, 0, 0)
+            """);
+
+        Assert.True(await jobs.SettleAttemptAsync(claim.Lease, start.Attempt.AttemptId, CollectionJobLifecycle.Resolve(receipt), default));
+
+        Assert.Equal(1L, await PreparationCountAsync(claim.Job.JobId));
+    }
+
+    [Fact]
+    public async Task FailedPreparationInsertRollsBackTheSettlement()
+    {
+        var claim = await EnqueueClaimAsync("prepare-rollback", Definition());
+        var start = await jobs.TryStartAttemptAsync(claim.Lease, root, default);
+        var receipt = await CapturedReceiptAsync(start.Attempt!.Request);
+        await CollectionAttemptImporter.ImportAsync(start.Attempt.AttemptId, start.Attempt.Request, receipt, evidence, default);
+        await SqlAsync("""
+            CREATE FUNCTION fail_preparation() RETURNS trigger AS $$ BEGIN RAISE EXCEPTION 'preparation refused'; END; $$ LANGUAGE plpgsql;
+            CREATE TRIGGER trg_fail_preparation BEFORE INSERT ON evidence_processing
+            FOR EACH ROW EXECUTE FUNCTION fail_preparation();
+            """);
+
+        await Assert.ThrowsAnyAsync<Exception>(() => jobs.SettleAttemptAsync(claim.Lease, start.Attempt.AttemptId,
+            CollectionJobLifecycle.Resolve(receipt), default));
+
+        Assert.Equal(CollectionJobState.Running, (await jobs.GetAsync(claim.Job.JobId, default))!.State);
+        Assert.Equal(0L, await PreparationCountAsync(claim.Job.JobId));
+        await SqlAsync("DROP TRIGGER trg_fail_preparation ON evidence_processing");
+        Assert.True(await jobs.SettleAttemptAsync(claim.Lease, start.Attempt.AttemptId, CollectionJobLifecycle.Resolve(receipt), default));
+        Assert.Equal(1L, await PreparationCountAsync(claim.Job.JobId));
+    }
+
+    [Fact]
+    public async Task EnqueueTriggersAreGoneAndWakeupTriggersRemain()
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand("""
+            SELECT (SELECT count(*) FROM pg_proc WHERE proname IN
+                        ('civic_lens_register_document_change_analysis', 'civic_lens_create_successful_job_preparation')),
+                   (SELECT count(*) FROM pg_trigger WHERE tgname IN
+                        ('trg_document_comparisons_register_analysis', 'trg_collection_jobs_create_preparation')),
+                   (SELECT count(*) FROM pg_proc WHERE proname IN
+                        ('civic_lens_notify_work_change', 'civic_lens_notify_analysis_change', 'civic_lens_release_predecessor_waiters'))
+            """, connection);
+        await using var reader = await command.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        Assert.Equal((0L, 0L, 3L), (reader.GetInt64(0), reader.GetInt64(1), reader.GetInt64(2)));
+    }
+
+    private async Task<CollectionResult> CapturedReceiptAsync(CollectionRequest request)
+    {
+        var bytes = System.Text.Encoding.UTF8.GetBytes("Retained article text.\n");
+        var hash = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(bytes));
+        await using (var file = File.Create(Path.Combine(root, hash + ".gz")))
+        await using (var gzip = new System.IO.Compression.GZipStream(file, System.IO.Compression.CompressionLevel.SmallestSize))
+            await gzip.WriteAsync(bytes);
+        return ReceiptCollector.Result(request, 200) with
+        {
+            Outcome = CollectionOutcome.Captured,
+            BytesReceived = bytes.Length,
+            Capture = new CaptureArtifact { Sha256 = hash, RelativePath = hash + ".gz", ByteLength = bytes.Length },
+            Response = new HttpResponseMetadata { StatusCode = 200, ContentType = "text/plain; charset=utf-8", ContentEncodings = [] },
+            FailureCode = null
+        };
+    }
+
+    private async Task<long> PreparationCountAsync(string jobId)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand("SELECT count(*) FROM evidence_processing WHERE job_id = @id", connection);
+        command.Parameters.AddWithValue("id", jobId);
+        return (long)(await command.ExecuteScalarAsync())!;
+    }
+
+    private async Task<(string Source, string Url, string Stage, string Status)> PreparationValuesAsync(string jobId)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            "SELECT source_id, requested_url, stage, status FROM evidence_processing WHERE job_id = @id AND attempt_id = 'prepare'", connection);
+        command.Parameters.AddWithValue("id", jobId);
+        await using var reader = await command.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        return (reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetString(3));
+    }
+
     private RunCollectionJob Runner(ICollectorProcess collector) => new(jobs, evidence,
         new FileCollectionReceiptHandoffStore(root), new CaptureArtifactVerifier(), collector);
 

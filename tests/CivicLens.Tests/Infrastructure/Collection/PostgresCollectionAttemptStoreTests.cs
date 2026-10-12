@@ -83,17 +83,21 @@ public sealed class PostgresCollectionAttemptStoreTests(PostgresCollection postg
             Response: Metadata(200, null, null, "application/rss+xml", []),
             Capture: Artifact(new string('e', 64), 12)) with
         {
-            Discovery = new DiscoveryResult { Status = DiscoveryStatus.Parsed, Urls = urls }
+            Discovery = new DiscoveryResult { Status = DiscoveryStatus.Parsed, Urls = urls, OutOfScopeCount = 3 }
         };
         var import = CollectionAttemptImporter.CreateImport("feed", request, result);
         urls[0] = "https://example.test/mutated";
         await store.ImportAtomicallyAsync(import, CancellationToken.None);
         var retained = await store.GetAsync("feed", CancellationToken.None);
         Assert.Equal("https://example.test/article", Assert.Single(retained!.Discovery!.Urls));
+        Assert.Equal(3, retained.Discovery.OutOfScopeCount);
         Assert.Equal(ImportDisposition.DuplicateAttempt,
             (await store.ImportAtomicallyAsync(import, CancellationToken.None)).Disposition);
         await Assert.ThrowsAsync<InvalidOperationException>(() => store.ImportAtomicallyAsync(
             CollectionAttemptImporter.CreateImport("feed", request, result), CancellationToken.None));
+        var recounted = result with { Discovery = result.Discovery! with { Urls = ["https://example.test/article"], OutOfScopeCount = 4 } };
+        await Assert.ThrowsAsync<InvalidOperationException>(() => store.ImportAtomicallyAsync(
+            CollectionAttemptImporter.CreateImport("feed", request, recounted), CancellationToken.None));
 
         await using var db = await factory.CreateDbContextAsync();
         await db.Database.ExecuteSqlRawAsync("""

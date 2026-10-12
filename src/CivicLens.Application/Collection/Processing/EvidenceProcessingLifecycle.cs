@@ -22,6 +22,27 @@ public static class EvidenceProcessingLifecycle
         };
     }
 
+    public static int AttemptsAfter(EvidenceProcessingRecord record, EvidenceProcessingCheckpoint update)
+    {
+        ArgumentNullException.ThrowIfNull(record);
+        ArgumentNullException.ThrowIfNull(update);
+        return update.Stage == update.ExpectedStage ? record.Attempts : 0;
+    }
+
+    public static long? RetryAtTicks(EvidenceProcessingCheckpoint update, long databaseNowTicks)
+    {
+        ArgumentNullException.ThrowIfNull(update);
+        return update.Status == EvidenceProcessingStatus.RetryWaiting
+            ? databaseNowTicks + (update.RetryDelay?.Ticks ?? 0)
+            : null;
+    }
+
+    public static int AttemptsAfterWaiting(EvidenceProcessingRecord record)
+    {
+        ArgumentNullException.ThrowIfNull(record);
+        return Math.Max(record.Attempts - 1, 0);
+    }
+
     private static bool MatchesClaim(EvidenceProcessingRecord record, EvidenceProcessingCheckpoint update) =>
         record.Status == EvidenceProcessingStatus.Running && !string.IsNullOrWhiteSpace(record.LeaseToken) &&
         record.Fence > 0 && record.JobId == update.JobId && record.AttemptId == update.AttemptId &&

@@ -48,6 +48,13 @@ internal static class ReviewValidation
         return value;
     }
 
+    public static string ValidateRunId(string value)
+    {
+        if (value is not { Length: 32 } || value.Any(c => c is not (>= '0' and <= '9') and not (>= 'a' and <= 'f')))
+            throw new ArgumentException("Run ID is invalid.", nameof(value));
+        return value;
+    }
+
     public static ImmutableArray<string> ValidateSelections(ImmutableArray<string> values,
         ImmutableHashSet<string> allowed, string name)
     {

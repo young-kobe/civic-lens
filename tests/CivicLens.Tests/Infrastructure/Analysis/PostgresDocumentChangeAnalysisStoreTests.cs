@@ -59,14 +59,14 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
         await attempts.MigrateAsync();
         var comparison = await seeder.SaveAsync("Deadline: October 15.\n", "Deadline: October 30.\n");
         var queued = Assert.Single(await analysis.GetByComparisonIdsAsync([comparison.ComparisonId], default));
-        Assert.Equal(DocumentChangeAnalysisState.Pending, queued.Status);
+        Assert.Equal(AnalysisState.Pending, queued.Status);
         var model = new FakeDocumentChangeDraftingModel().Draft(FakeDocumentChangeDraftingModel.Output(("h1", "after", "October 30")));
 
         var result = await Worker(model).ExecuteAsync(once: true);
 
         Assert.Equal((1, 0), (result.ProgressCount, result.Failures));
         var entry = await EntryAsync(comparison);
-        Assert.Equal(DocumentChangeAnalysisState.Succeeded, entry.Status);
+        Assert.Equal(AnalysisState.Succeeded, entry.Status);
         var review = (await reviews.GetAsync(entry.DraftId!, default))!;
         var revision = Assert.Single(review.Revisions);
         Assert.Equal(ReviewAuthor.AnalysisSubject, revision.AuthorSubject);
@@ -111,7 +111,7 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
         await attempts.MigrateAsync();
         var comparison = await seeder.SaveAsync("Deadline: October 15.\n", "Updated October 3, 2026. Deadline: October 30.\n");
         var model = new FakeDocumentChangeDraftingModel().Draft(FakeDocumentChangeDraftingModel.Output("Headline",
-            [("h1", "after", "Updated October 3, 2026.")], changeDate: new { date = "2026-10-03", citationIndex = 0 }));
+            [("h1", "after", "Updated October 3, 2026.")], changeDate: new { date = "2026-10-03", citationIndex = 0, confidence = 0.9 }));
         await Worker(model).ExecuteAsync(once: true);
         var ai = (await reviews.GetAsync((await EntryAsync(comparison)).DraftId!, default))!.CurrentRevision;
         Assert.Equal(new DateOnly(2026, 10, 3), ai.ChangeDate);
@@ -136,16 +136,19 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
     [Fact]
     public async Task TheUpgradeBackfillsChangedComparisonsThatHaveNoDraft()
     {
-        await using (var db = await factory.CreateDbContextAsync())
-            await db.GetService<IMigrator>().MigrateAsync(PreviousMigration);
+        // The store now queues analysis itself, so comparisons written before the upgrade are made by
+        // migrating up, seeding, and migrating back down to the schema that had no analysis queue.
+        await attempts.MigrateAsync();
         var open = await seeder.SaveAsync("Fee: 10.\n", "Fee: 12.\n");
         var drafted = await seeder.SaveAsync("Rule A.\n", "Rule B.\n");
         _ = await new CreateDocumentChangeDraft(reviews).ExecuteAsync(Owner, new CreateDocumentChangeDraftRequest(drafted.ComparisonId, "k"));
+        await using (var db = await factory.CreateDbContextAsync())
+            await db.GetService<IMigrator>().MigrateAsync(PreviousMigration);
 
         await attempts.MigrateAsync();
 
         var entries = await analysis.GetByComparisonIdsAsync([open.ComparisonId, drafted.ComparisonId], default);
-        Assert.Equal([open.ComparisonId], entries.Select(entry => entry.ComparisonId));
+        Assert.Equal([open.ComparisonId], entries.Select(entry => entry.SubjectId));
     }
 
     [Fact]
@@ -153,12 +156,12 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
     {
         await attempts.MigrateAsync();
         var comparison = await seeder.SaveAsync("Text A.\n", "Text B.\n");
-        var model = new FakeDocumentChangeDraftingModel().Reply(new DocumentChangeDraftingResponse("refusal", null, FakeDocumentChangeDraftingModel.Usage(400, 20), null));
+        var model = new FakeDocumentChangeDraftingModel().Reply(new AnalysisModelResponse("refusal", null, FakeDocumentChangeDraftingModel.Usage(400, 20), null));
 
         await Worker(model).ExecuteAsync(once: true);
 
         var entry = await EntryAsync(comparison);
-        Assert.Equal((DocumentChangeAnalysisState.Failed, "refused", null), (entry.Status, entry.ErrorCode, entry.DraftId));
+        Assert.Equal((AnalysisState.Failed, "refused", null), (entry.Status, entry.ErrorCode, entry.DraftId));
         Assert.Single(model.Requests);
         Assert.Equal(["Refused"], await RunOutcomesAsync(comparison));
         Assert.Equal(420, await ChargedTodayAsync());
@@ -177,7 +180,7 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
         Assert.Equal(2, model.Requests.Count);
         Assert.Contains("does not occur", model.Requests[1].UserPrompt, StringComparison.Ordinal);
         var entry = await EntryAsync(comparison);
-        Assert.Equal((DocumentChangeAnalysisState.Failed, "citationRejected", null), (entry.Status, entry.ErrorCode, entry.DraftId));
+        Assert.Equal((AnalysisState.Failed, "citationRejected", null), (entry.Status, entry.ErrorCode, entry.DraftId));
         Assert.Equal(["CitationRejected", "CitationRejected"], await RunOutcomesAsync(comparison));
         Assert.Equal(1, await ScalarAsync<long>($"""
             SELECT count(*) FROM document_change_analysis_runs second JOIN document_change_analysis_runs first
@@ -197,7 +200,7 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
         await Worker(model).ExecuteAsync(once: true);
 
         var entry = await EntryAsync(comparison);
-        Assert.Equal(DocumentChangeAnalysisState.Succeeded, entry.Status);
+        Assert.Equal(AnalysisState.Succeeded, entry.Status);
         Assert.NotNull(entry.DraftId);
         Assert.Equal(["CitationRejected", "Drafted"], await RunOutcomesAsync(comparison));
     }
@@ -214,14 +217,14 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
             .ExecuteAsync(once: true);
 
         var waiting = await EntryAsync(comparison);
-        Assert.Equal(DocumentChangeAnalysisState.WaitingForBudget, waiting.Status);
+        Assert.Equal(AnalysisState.WaitingForBudget, waiting.Status);
         Assert.NotNull(waiting.RetryOfRunId);
         var model = new FakeDocumentChangeDraftingModel().Draft(FakeDocumentChangeDraftingModel.Output(("h1", "after", "October 30")));
         await Worker(model).ExecuteAsync(once: true);
 
         Assert.Contains("does not occur", Assert.Single(model.Requests).UserPrompt, StringComparison.Ordinal);
         var entry = await EntryAsync(comparison);
-        Assert.Equal((DocumentChangeAnalysisState.Succeeded, null), (entry.Status, entry.RetryOfRunId));
+        Assert.Equal((AnalysisState.Succeeded, null), (entry.Status, entry.RetryOfRunId));
         Assert.Equal(waiting.RetryOfRunId, (await analysis.GetDraftRunAsync(entry.DraftId!, default))!.PreviousRunId);
     }
 
@@ -241,7 +244,7 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
         await Worker(model).ExecuteAsync(once: true, shutdown.Token);
 
         var entry = await EntryAsync(comparison);
-        Assert.Equal((DocumentChangeAnalysisState.Pending, 1), (entry.Status, entry.Attempts));
+        Assert.Equal((AnalysisState.Pending, 1), (entry.Status, entry.Attempts));
         Assert.Equal(["Interrupted"], await RunOutcomesAsync(comparison));
         Assert.Equal(model.Requests[0].ReservedTokens, await ChargedTodayAsync());
     }
@@ -252,7 +255,7 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
         await attempts.MigrateAsync();
         var comparison = await seeder.SaveAsync("Text A.\n", "Text B.\n");
         await ScalarAsync<int>($"""
-            UPDATE document_change_analysis SET status = 'RetryWaiting', attempts = {DocumentChangeAnalysisPolicy.MaximumAttempts},
+            UPDATE document_change_analysis SET status = 'RetryWaiting', attempts = {AnalysisPolicy.MaximumAttempts},
                 error_code = 'rateLimited', retry_at = 0 WHERE comparison_id = '{comparison.ComparisonId}' RETURNING 0
             """);
         var model = new FakeDocumentChangeDraftingModel();
@@ -261,7 +264,7 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
 
         Assert.Empty(model.Requests);
         var entry = await EntryAsync(comparison);
-        Assert.Equal((DocumentChangeAnalysisState.Failed, "attemptsExhausted"), (entry.Status, entry.ErrorCode));
+        Assert.Equal((AnalysisState.Failed, "attemptsExhausted"), (entry.Status, entry.ErrorCode));
     }
 
     [Fact]
@@ -274,15 +277,15 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
             UPDATE document_change_analysis SET status = 'Failed', attempts = 3, error_code = 'refused'
             WHERE comparison_id = '{failed.ComparisonId}' RETURNING 0
             """);
-        var requeue = new RequeueDocumentChangeAnalyses(analysis);
+        var requeue = new RequeueAnalyses<AnalysisRun>(analysis);
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
             requeue.ExecuteAsync(new ReviewActor("auth0|friend", ReviewRole.Reviewer), null));
 
         Assert.Equal(1, await requeue.ExecuteAsync(Owner, null));
 
         var entry = await EntryAsync(failed);
-        Assert.Equal((DocumentChangeAnalysisState.Pending, 0, null), (entry.Status, entry.Attempts, entry.ErrorCode));
-        Assert.Equal(DocumentChangeAnalysisState.Pending, (await EntryAsync(pending)).Status);
+        Assert.Equal((AnalysisState.Pending, 0, null), (entry.Status, entry.Attempts, entry.ErrorCode));
+        Assert.Equal(AnalysisState.Pending, (await EntryAsync(pending)).Status);
         Assert.Equal(0, await requeue.ExecuteAsync(Owner, pending.ComparisonId));
     }
 
@@ -304,7 +307,7 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
                 var quote = request.UserPrompt.Contains("Item 0 new", StringComparison.Ordinal) ? "Item 0 new"
                     : request.UserPrompt.Contains("Item 1 new", StringComparison.Ordinal) ? "Item 1 new"
                     : request.UserPrompt.Contains("Item 2 new", StringComparison.Ordinal) ? "Item 2 new" : "Item 3 new";
-                return new DocumentChangeDraftingResponse("end_turn", FakeDocumentChangeDraftingModel.Output(("h1", "after", quote)),
+                return new AnalysisModelResponse("end_turn", FakeDocumentChangeDraftingModel.Output(("h1", "after", quote)),
                     FakeDocumentChangeDraftingModel.Usage(900, 300), null);
             });
 
@@ -312,6 +315,7 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
 
         Assert.InRange(peak, 2, 3);
         Assert.Equal(4, await ScalarAsync<long>("SELECT count(*) FROM document_change_drafts"));
+        Assert.Equal(4, await ScalarAsync<long>("SELECT count(*) FROM document_change_drafts WHERE review_status = 'AwaitingReview'"));
     }
 
     private static void InterlockedMax(ref int target, int value)
@@ -325,13 +329,13 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
     {
         await attempts.MigrateAsync();
         var comparison = await seeder.SaveAsync("Text A.\n", "Text B.\n");
-        var model = new FakeDocumentChangeDraftingModel().Fail(DocumentChangeDraftingFailure.RateLimited);
+        var model = new FakeDocumentChangeDraftingModel().Fail(AnalysisModelFailure.RateLimited);
 
         await Worker(model).ExecuteAsync(once: true);
 
 
         var entry = await EntryAsync(comparison);
-        Assert.Equal((DocumentChangeAnalysisState.RetryWaiting, "rateLimited", 1), (entry.Status, entry.ErrorCode, entry.Attempts));
+        Assert.Equal((AnalysisState.RetryWaiting, "rateLimited", 1), (entry.Status, entry.ErrorCode, entry.Attempts));
         Assert.InRange(entry.RetryAt!.Value - DateTimeOffset.UtcNow, TimeSpan.FromSeconds(20), TimeSpan.FromSeconds(31));
         Assert.Equal(["RateLimited"], await RunOutcomesAsync(comparison));
         Assert.Equal(0, await ChargedTodayAsync());
@@ -342,11 +346,11 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
     {
         await attempts.MigrateAsync();
         var comparison = await seeder.SaveAsync("Text A.\n", "Text B.\n");
-        var model = new FakeDocumentChangeDraftingModel().Fail(DocumentChangeDraftingFailure.ConnectionFailed);
+        var model = new FakeDocumentChangeDraftingModel().Fail(AnalysisModelFailure.ConnectionFailed);
 
         await Worker(model).ExecuteAsync(once: true);
 
-        Assert.Equal(DocumentChangeAnalysisState.RetryWaiting, (await EntryAsync(comparison)).Status);
+        Assert.Equal(AnalysisState.RetryWaiting, (await EntryAsync(comparison)).Status);
         Assert.Equal(model.Requests[0].ReservedTokens, await ChargedTodayAsync());
     }
 
@@ -364,18 +368,18 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
 
         Assert.Single(model.Requests);
         var waiting = await EntryAsync(second);
-        Assert.Equal((DocumentChangeAnalysisState.WaitingForBudget, "dailyTokenLimit"), (waiting.Status, waiting.ErrorCode));
+        Assert.Equal((AnalysisState.WaitingForBudget, "dailyTokenLimit"), (waiting.Status, waiting.ErrorCode));
         var tomorrow = new DateTimeOffset(DateTime.UtcNow.Date.AddDays(1), TimeSpan.Zero);
         Assert.Equal(tomorrow, waiting.RetryAt);
         Assert.Equal(1, await analysis.ReleaseBudgetWaitsAsync(default));
-        Assert.Equal(DocumentChangeAnalysisState.Pending, (await EntryAsync(second)).Status);
+        Assert.Equal(AnalysisState.Pending, (await EntryAsync(second)).Status);
     }
 
     [Fact]
     public async Task ConcurrentReservationsNeverPassTheDailyLimit()
     {
         await attempts.MigrateAsync();
-        var claims = new List<DocumentChangeAnalysisClaim>();
+        var claims = new List<AnalysisClaim>();
         for (var index = 0; index < 6; index++)
         {
             var comparison = await seeder.SaveAsync($"Item {index} old.\n", $"Item {index} new.\n");
@@ -385,8 +389,8 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
         var results = await Task.WhenAll(claims.Select(claim =>
             analysis.ReserveAsync(claim, Guid.NewGuid().ToString("N"), new string('f', 64), 1_000, 3_500, default)));
 
-        Assert.Equal(3, results.Count(result => result == DocumentChangeAnalysisReservation.Reserved));
-        Assert.Equal(3, results.Count(result => result == DocumentChangeAnalysisReservation.WaitingForBudget));
+        Assert.Equal(3, results.Count(result => result == AnalysisReservation.Reserved));
+        Assert.Equal(3, results.Count(result => result == AnalysisReservation.WaitingForBudget));
         Assert.Equal(3_000, await ChargedTodayAsync());
     }
 
@@ -397,7 +401,7 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
         var comparison = await seeder.SaveAsync("Text A.\n", "Text B.\n");
         var stale = (await analysis.TryClaimAsync(comparison.ComparisonId, TimeSpan.FromSeconds(1), default))!;
         var runId = Guid.NewGuid().ToString("N");
-        Assert.Equal(DocumentChangeAnalysisReservation.Reserved,
+        Assert.Equal(AnalysisReservation.Reserved,
             await analysis.ReserveAsync(stale, runId, new string('e', 64), 5_000, 100_000, default));
         await Task.Delay(TimeSpan.FromSeconds(1.5));
 
@@ -408,10 +412,10 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
         Assert.Equal(["Interrupted"], await RunOutcomesAsync(comparison));
         Assert.Equal(5_000, await ScalarAsync<long>($"SELECT charged_tokens FROM document_change_analysis_runs WHERE run_id = '{runId}'"));
         Assert.Equal(5_000, await ChargedTodayAsync());
-        var late = Run(stale.Record.ComparisonId, runId, AnalysisRunOutcome.RateLimited);
-        Assert.False(await analysis.CheckpointAsync(DocumentChangeAnalysisCheckpoint.From(stale, DocumentChangeAnalysisState.RetryWaiting,
+        var late = Run(stale.Record.SubjectId, runId, AnalysisRunOutcome.RateLimited);
+        Assert.False(await analysis.CheckpointAsync(DocumentChangeAnalysisCheckpoint.From(stale, AnalysisState.RetryWaiting,
             "rateLimited", TimeSpan.FromSeconds(30)), late, default));
-        Assert.Equal(DocumentChangeAnalysisReservation.LeaseLost,
+        Assert.Equal(AnalysisReservation.LeaseLost,
             await analysis.ReserveAsync(stale, Guid.NewGuid().ToString("N"), new string('e', 64), 5_000, 100_000, default));
         Assert.Single(await RunOutcomesAsync(comparison));
     }
@@ -428,7 +432,7 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
 
         Assert.Empty(model.Requests);
         var entry = await EntryAsync(comparison);
-        Assert.Equal((DocumentChangeAnalysisState.Succeeded, "humanDraftExists"), (entry.Status, entry.ErrorCode));
+        Assert.Equal((AnalysisState.Succeeded, "humanDraftExists"), (entry.Status, entry.ErrorCode));
     }
 
     [Fact]
@@ -441,14 +445,14 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
         {
             humanDraft = (await new CreateDocumentChangeDraft(reviews).ExecuteAsync(Owner,
                 new CreateDocumentChangeDraftRequest(comparison.ComparisonId, "during"))).DraftId;
-            return new DocumentChangeDraftingResponse("end_turn", FakeDocumentChangeDraftingModel.Output(("h1", "after", "October 30")),
+            return new AnalysisModelResponse("end_turn", FakeDocumentChangeDraftingModel.Output(("h1", "after", "October 30")),
                 FakeDocumentChangeDraftingModel.Usage(900, 300), null);
         });
 
         await Worker(model).ExecuteAsync(once: true);
 
         var entry = await EntryAsync(comparison);
-        Assert.Equal((DocumentChangeAnalysisState.Succeeded, "draftDiscarded", null), (entry.Status, entry.ErrorCode, entry.DraftId));
+        Assert.Equal((AnalysisState.Succeeded, "draftDiscarded", null), (entry.Status, entry.ErrorCode, entry.DraftId));
         Assert.Equal(["DraftDiscarded"], await RunOutcomesAsync(comparison));
         Assert.Equal(1, await ScalarAsync<long>(
             $"SELECT count(*) FROM document_change_drafts WHERE comparison_id = '{comparison.ComparisonId}'"));
@@ -468,7 +472,7 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
 
         Assert.Empty(model.Requests);
         var entry = await EntryAsync(comparison);
-        Assert.Equal((DocumentChangeAnalysisState.Blocked, "inputLimitExceeded"), (entry.Status, entry.ErrorCode));
+        Assert.Equal((AnalysisState.Blocked, "inputLimitExceeded"), (entry.Status, entry.ErrorCode));
     }
 
     [Fact]
@@ -481,7 +485,7 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
         await analysis.ReserveAsync(claim, runId, new string('e', 64), 5_000, 100_000, default);
         var run = Run(comparison.ComparisonId, runId, AnalysisRunOutcome.Refused);
 
-        var fail = DocumentChangeAnalysisCheckpoint.From(claim, DocumentChangeAnalysisState.Failed, "refused");
+        var fail = DocumentChangeAnalysisCheckpoint.From(claim, AnalysisState.Failed, "refused");
         Assert.True(await analysis.CheckpointAsync(fail, run, default));
         Assert.False(await analysis.CheckpointAsync(fail, run, default));
 
@@ -489,8 +493,8 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
         Assert.Equal(0, await ChargedTodayAsync());
     }
 
-    private DocumentChangeAnalysisWorker Worker(FakeDocumentChangeDraftingModel model, DocumentChangeAnalysisSettings? settings = null) =>
-        new(analysis, new PostgresDocumentChangeAnalysisStatusStore(factory), model,
+    private AnalysisWorker<AnalysisRun> Worker(FakeDocumentChangeDraftingModel model, DocumentChangeAnalysisSettings? settings = null) =>
+        AnalysisWorkers.Drafting(analysis, new PostgresAnalysisStatusStore(factory), model,
             settings ?? new DocumentChangeAnalysisSettings(10_000_000, concurrency: 1), Catalog, TimeProvider.System);
 
     private static AnalysisRun Run(string comparisonId, string runId, AnalysisRunOutcome outcome) => new(runId, comparisonId,

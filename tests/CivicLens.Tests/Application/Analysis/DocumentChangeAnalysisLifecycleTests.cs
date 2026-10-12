@@ -1,6 +1,6 @@
 using CivicLens.Application.Analysis;
 using CivicLens.Core.Review;
-using State = CivicLens.Application.Analysis.DocumentChangeAnalysisState;
+using State = CivicLens.Application.Analysis.AnalysisState;
 
 namespace CivicLens.Tests.Application.Analysis;
 

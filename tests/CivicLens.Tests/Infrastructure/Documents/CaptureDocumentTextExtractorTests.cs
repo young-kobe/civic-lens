@@ -4,6 +4,7 @@ using System.Text;
 using CivicLens.Core.Collection;
 using CivicLens.Core.Documents;
 using CivicLens.Infrastructure.Documents;
+using CivicLens.Tests.Fixtures;
 
 namespace CivicLens.Tests.Infrastructure.Documents;
 
@@ -20,6 +21,22 @@ public sealed class CaptureDocumentTextExtractorTests
         Assert.Equal("café  title\nsecond line", text);
         Assert.Equal("capture-text-v2", capture.Extractor.ParserVersion);
         Assert.Equal("body-text-v1", capture.Extractor.NormalizationVersion);
+    }
+
+    [Fact]
+    public async Task ExtractionOutputMatchesPinnedParserAndNormalizationVersions()
+    {
+        var bump = "Extraction output changed. Bump CaptureDocumentTextExtractor.ParserVersion or NormalizationVersion, " +
+            "update the version table in docs/architecture.md, then update this test. Actual: ";
+        await using var capture = await TestCapture.CreateAsync(Encoding.UTF8.GetBytes(
+            "<html><head><title>head</title></head><body><h1>Title&nbsp;  here</h1><p>one<p>two <b>bold</b>  \n spaced</p>" +
+            "<ul><li>a</li><li>b</li></ul><script>x()</script><div>end</div></body></html>"), "text/html; charset=utf-8");
+
+        var text = await capture.Extractor.ExtractAsync(capture.Attempt, capture.Root, CancellationToken.None);
+
+        Assert.Equal("capture-text-v2", capture.Extractor.ParserVersion);
+        Assert.Equal("body-text-v1", capture.Extractor.NormalizationVersion);
+        Assert.True(text == "Title here\none\ntwo bold spaced\na\nb\nend", bump + text.Replace("\n", "\\n"));
     }
 
     [Fact]
@@ -301,41 +318,5 @@ public sealed class CaptureDocumentTextExtractorTests
         using var output = new MemoryStream();
         using (var gzip = new GZipStream(output, CompressionLevel.SmallestSize, leaveOpen: true)) gzip.Write(bytes);
         return output.ToArray();
-    }
-
-    private sealed class TestCapture : IAsyncDisposable
-    {
-        private TestCapture(string root, byte[] entity, string contentType, IReadOnlyList<string> encodings)
-        {
-            Root = root;
-            Path = System.IO.Path.Combine(root, Convert.ToHexStringLower(SHA256.HashData(entity)) + ".gz");
-            Attempt = new CapturedAttemptResult("attempt", "source", "https://example.test/a", "https://example.test/a",
-                DateTimeOffset.UnixEpoch.AddSeconds(1),
-                new CollectionResponse(200, null, null, contentType, encodings),
-                new CaptureIdentity(Convert.ToHexStringLower(SHA256.HashData(entity)), entity.Length));
-        }
-
-        public string Root { get; }
-        public string Path { get; }
-        public CapturedAttemptResult Attempt { get; }
-        public CaptureDocumentTextExtractor Extractor { get; } = new();
-
-        public static async Task<TestCapture> CreateAsync(byte[] entity, string contentType,
-            IReadOnlyList<string>? encodings = null)
-        {
-            var root = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "civic-lens-extraction-" + Guid.NewGuid().ToString("N"));
-            Directory.CreateDirectory(root);
-            var capture = new TestCapture(root, entity, contentType, encodings ?? []);
-            await using var file = File.Create(capture.Path);
-            await using var gzip = new GZipStream(file, CompressionLevel.SmallestSize);
-            await gzip.WriteAsync(entity);
-            return capture;
-        }
-
-        public ValueTask DisposeAsync()
-        {
-            Directory.Delete(Root, recursive: true);
-            return ValueTask.CompletedTask;
-        }
     }
 }

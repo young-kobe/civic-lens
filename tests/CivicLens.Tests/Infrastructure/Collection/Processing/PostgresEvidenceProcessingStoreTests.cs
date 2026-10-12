@@ -249,29 +249,6 @@ public sealed class PostgresEvidenceProcessingStoreTests(PostgresCollection post
         Assert.Equal(4, summary.DuplicateCount);
     }
 
-    [Fact]
-    public async Task SuccessfulJobTransitionCreatesPreparationInSameDatabaseChange()
-    {
-        await using var connection = new NpgsqlConnection(connectionString);
-        await connection.OpenAsync();
-        await using var command = new NpgsqlCommand("""
-            INSERT INTO collection_jobs (job_id, idempotency_key, definition_json, state, created_at,
-                cancellation_requested, charged_requests, charged_bytes, charged_seconds, lease_fence)
-            VALUES ('new-job', 'key-new-job', '{"sourceId":"senator-page","url":"https://example.test/page"}',
-                'Pending', @created, FALSE, 0, 0, 0, 0);
-            UPDATE collection_jobs SET state = 'Succeeded' WHERE job_id = 'new-job';
-            """, connection);
-        command.Parameters.AddWithValue("created", DateTimeOffset.UtcNow.UtcTicks);
-        await command.ExecuteNonQueryAsync();
-
-        var preparation = Assert.Single(await store.GetByJobIdsAsync(["new-job"], default));
-        Assert.Equal("prepare", preparation.AttemptId);
-        Assert.Equal(EvidenceProcessingStage.Preparation, preparation.Stage);
-        Assert.Equal(EvidenceProcessingStatus.Pending, preparation.Status);
-        Assert.Equal("senator-page", preparation.SourceId);
-        Assert.Equal("https://example.test/page", preparation.RequestedUrl);
-    }
-
     private async Task InsertPreparationAsync(string jobId, string sourceId, string url)
     {
         await using var connection = new NpgsqlConnection(connectionString);

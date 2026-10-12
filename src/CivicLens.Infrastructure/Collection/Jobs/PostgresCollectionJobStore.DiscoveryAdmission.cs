@@ -13,6 +13,8 @@ namespace CivicLens.Infrastructure.Collection.Jobs;
 
 public sealed partial class PostgresCollectionJobStore : IDiscoveryAdmissionStore
 {
+    internal const string DiscoveryAdmissionKeyPrefix = "discovery-admission/";
+
     public Task<DiscoveryAdmissionResult> AdmitAsync(ConfiguredCollectionSource source, string attemptId,
         string idempotencyKey, CancellationToken cancellationToken)
     {
@@ -150,7 +152,7 @@ public sealed partial class PostgresCollectionJobStore : IDiscoveryAdmissionStor
                 }
 
                 var jobId = Guid.NewGuid().ToString("N");
-                var idempotencyKey = "discovery-admission/" + Guid.NewGuid().ToString("N");
+                var idempotencyKey = DiscoveryAdmissionKeyPrefix + Guid.NewGuid().ToString("N");
                 db.Add(new JobRow
                 {
                     JobId = jobId,
@@ -215,10 +217,10 @@ public sealed partial class PostgresCollectionJobStore : IDiscoveryAdmissionStor
             throw new ArgumentException("Article template must be an unvalidated Page job in the discovery source scope.");
     }
 
-    private static string HashCandidate(string sourceId, string url)
+    internal static string HashCandidate(string sourceId, string url)
     {
         var identity = $"{sourceId.Length}:{sourceId}{url}";
-        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(identity))).ToLowerInvariant();
+        return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(identity)));
     }
 
     private sealed record LegacyAdmissionInput(string AttemptId, CollectionJobDefinition ArticleTemplate, DiscoveryAdmissionPolicy Policy);

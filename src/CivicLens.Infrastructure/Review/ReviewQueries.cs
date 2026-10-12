@@ -1,29 +1,24 @@
+using CivicLens.Core.Review;
+using CivicLens.Infrastructure.Collection;
+using CivicLens.Infrastructure.Documents.Persistence;
+using CivicLens.Infrastructure.Review.Persistence;
+using Microsoft.EntityFrameworkCore;
+
 namespace CivicLens.Infrastructure.Review;
 
 internal static class ReviewQueries
 {
-    // JSON status 0 is DocumentComparisonStatus.Complete. The partial index ix_document_comparisons_eligible uses the same test.
-    private const string CompleteWithChanges = """
-        (c.result_json::jsonb ->> 'status') = '0' AND jsonb_array_length(c.result_json::jsonb -> 'hunks') > 0
-        """;
+    public static IQueryable<DocumentComparisonRow> EligibleComparisons(CollectionAttemptDbContext db) =>
+        db.Set<DocumentComparisonRow>().AsNoTracking().Where(comparison => comparison.HasChanges &&
+            !db.Set<DocumentChangeDraftRow>().Any(draft => draft.ComparisonId == comparison.ComparisonId));
 
-    private const string WithoutDraft =
-        "NOT EXISTS (SELECT 1 FROM document_change_drafts x WHERE x.comparison_id = c.comparison_id)";
+    public static IQueryable<DocumentChangeDraftRow> ApprovedDrafts(CollectionAttemptDbContext db) =>
+        db.Set<DocumentChangeDraftRow>().AsNoTracking().Where(draft => draft.ReviewStatus == DocumentChangeReviewStatus.Approved);
 
-    // The status is the kind of the newest decision on the current revision, exactly as DocumentChangeReviewPolicy reads it.
-    private const string IsApproved = """
-        COALESCE((SELECT r.kind FROM document_change_review_decisions r
-                   WHERE r.draft_id = d.draft_id AND r.revision_number = d.current_revision_number
-                   ORDER BY r.review_state_version DESC LIMIT 1) = 'Approve', false)
-        """;
+    public static IQueryable<DocumentChangeDraftRow> NeedsActionDrafts(CollectionAttemptDbContext db) =>
+        db.Set<DocumentChangeDraftRow>().AsNoTracking().Where(draft => draft.ReviewStatus != DocumentChangeReviewStatus.Approved);
 
-    public const string EligibleComparisons =
-        "SELECT c.* FROM document_comparisons c WHERE " + CompleteWithChanges + " AND " + WithoutDraft;
-
-    public const string ApprovedDrafts = "SELECT d.* FROM document_change_drafts d WHERE " + IsApproved;
-    public const string NeedsActionDrafts = "SELECT d.* FROM document_change_drafts d WHERE NOT " + IsApproved;
-
-    // Releases store their records as a JSON array of draft and revision bindings. The active release is the published state.
+    // Published state comes from the active release, not the draft, so this stays a read query.
     public const string UnpublishedApprovedDrafts = """
         WITH active AS (
             SELECT e ->> 'draftId' AS draft_id, (e ->> 'revisionNumber')::int AS revision_number
@@ -32,10 +27,6 @@ internal static class ReviewQueries
         SELECT d.draft_id AS "DraftId", d.current_revision_number AS "CurrentRevisionNumber",
                d.created_at_utc_ticks AS "CreatedAtUtcTicks", a.revision_number AS "PublishedRevisionNumber"
         FROM document_change_drafts d LEFT JOIN active a ON a.draft_id = d.draft_id
-        WHERE
-        """ + " " + IsApproved;
-
-    public const string Overview = "SELECT (SELECT count(*) FROM (" + EligibleComparisons + ") e)::int AS \"NewChanges\", " +
-        "(SELECT count(*) FROM (" + NeedsActionDrafts + ") n)::int AS \"DraftsNeedingAction\", " +
-        "(SELECT count(*) FROM (" + ApprovedDrafts + ") a)::int AS \"ApprovedDrafts\"";
+        WHERE d.review_status = 'Approved'
+        """;
 }

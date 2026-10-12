@@ -44,8 +44,11 @@ public sealed class DocumentChangeDraftingPromptTests
         var hunkIds = properties.GetProperty("citations").GetProperty("items").GetProperty("properties").GetProperty("hunkId")
             .GetProperty("enum").EnumerateArray().Select(item => item.GetString()!).ToArray();
         Assert.Equal(["h1", "h2"], hunkIds);
-        Assert.Equal(["warren"], properties.GetProperty("officialIds").GetProperty("items").GetProperty("enum")
+        var official = properties.GetProperty("officialIds").GetProperty("items");
+        Assert.Equal(["warren"], official.GetProperty("properties").GetProperty("id").GetProperty("enum")
             .EnumerateArray().Select(item => item.GetString()!));
+        Assert.Equal("number", official.GetProperty("properties").GetProperty("confidence").GetProperty("type").GetString());
+        Assert.Equal("number", properties.GetProperty("confidence").GetProperty("type").GetString());
     }
 
     [Fact]

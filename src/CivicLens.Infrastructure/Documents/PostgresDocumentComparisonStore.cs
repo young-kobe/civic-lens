@@ -60,11 +60,26 @@ public sealed class PostgresDocumentComparisonStore(IDbContextFactory<Collection
             AfterExtractionId = comparison.AfterExtractionId,
             AlgorithmVersion = comparison.AlgorithmVersion,
             SettingsVersion = comparison.SettingsVersion,
-            ResultJson = Serialize(comparison)
+            ResultJson = Serialize(comparison),
+            HasChanges = comparison.HasChanges()
         });
         await db.SaveChangesAsync(cancellationToken);
+        if (comparison.HasChanges())
+            await EnqueueDraftAnalysisAsync(db, comparison.ComparisonId, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return verified;
+    }
+
+    private static async Task EnqueueDraftAnalysisAsync(CollectionAttemptDbContext db, string comparisonId,
+        CancellationToken cancellationToken)
+    {
+        var now = (await DatabaseClock.ReadAsync(db, cancellationToken)).Ticks;
+        _ = await db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO document_change_analysis (comparison_id, task, status, fence, attempts,
+                reserved_tokens, created_at_utc_ticks)
+            VALUES ({comparisonId}, 'draft', 'Pending', 0, 0, 0, {now})
+            ON CONFLICT (comparison_id, task) DO NOTHING
+            """, cancellationToken);
     }
 
     private static async Task<DocumentComparison> ReconstructAsync(CollectionAttemptDbContext db, string beforeId,

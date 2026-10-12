@@ -6,6 +6,7 @@ using CivicLens.Core.Collection;
 using CivicLens.Core.Documents;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Documents.Persistence;
+using CivicLens.Infrastructure.Statements;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 
@@ -63,6 +64,7 @@ public sealed class PostgresDocumentExtractionStore(IDbContextFactory<Collection
             ProfileJson = SerializeProfile(extraction.Profile)
         });
         await db.SaveChangesAsync(cancellationToken);
+        await PostgresStatementCandidateRegistration.RegisterAsync(db, captured, extraction.ExtractionId, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return extraction;
     }

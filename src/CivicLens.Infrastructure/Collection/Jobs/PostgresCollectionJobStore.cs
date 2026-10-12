@@ -281,8 +281,23 @@ public sealed partial class PostgresCollectionJobStore(IDbContextFactory<Collect
         }
         origin.NotBefore = Math.Max(origin.NotBefore, Ticks(nextOrigin));
         origin.UnresolvedAttemptId = null;
+        if (job.State == CollectionJobState.Succeeded) await EnqueuePreparationAsync(db, job, definition, cancellationToken);
         return true;
     }, cancellationToken);
+
+    private static async Task EnqueuePreparationAsync(CollectionAttemptDbContext db, JobRow job,
+        CollectionJobDefinition definition, CancellationToken cancellationToken)
+    {
+        // Flush the state change first. The waiter-release triggers then see the same order as before.
+        await db.SaveChangesAsync(cancellationToken);
+        _ = await db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO evidence_processing (job_id, attempt_id, source_id, requested_url, stage, status,
+                fence, attempts, admitted_count, deferred_count, duplicate_count)
+            VALUES ({job.JobId}, 'prepare', {definition.SourceId}, {definition.Url}, 'Preparation', 'Pending',
+                0, 0, 0, 0, 0)
+            ON CONFLICT (job_id, attempt_id) DO NOTHING
+            """, cancellationToken);
+    }
 
     public Task<bool> ReleaseClaimAsync(CollectionJobLease jobLease, CancellationToken cancellationToken) =>
         TransactionAsync(async (db, now) =>
@@ -363,9 +378,7 @@ public sealed partial class PostgresCollectionJobStore(IDbContextFactory<Collect
         command.CommandText = "SELECT pg_advisory_xact_lock(hashtextextended(@name, 0))";
         command.Parameters.Add(new NpgsqlParameter("name", LockName));
         await command.ExecuteNonQueryAsync(cancellationToken);
-        command.Parameters.Clear();
-        command.CommandText = "SELECT clock_timestamp()";
-        var now = new DateTimeOffset((DateTime)(await command.ExecuteScalarAsync(cancellationToken))!);
+        var now = (await DatabaseClock.ReadAsync(db, cancellationToken)).Offset;
         var result = await operation(db, now);
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
@@ -393,7 +406,7 @@ public sealed partial class PostgresCollectionJobStore(IDbContextFactory<Collect
     }
     private static string Write<T>(T value) => JsonSerializer.Serialize(value, CollectionProtocol.JsonOptions);
     private static T Read<T>(string value) => JsonSerializer.Deserialize<T>(value, CollectionProtocol.JsonOptions) ?? throw new InvalidDataException("Missing job data.");
-    private static CollectionJobDefinition ReadDefinition(string json)
+    internal static CollectionJobDefinition ReadDefinition(string json)
     {
         try
         {

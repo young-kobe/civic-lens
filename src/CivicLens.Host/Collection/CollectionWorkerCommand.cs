@@ -29,7 +29,7 @@ internal static class CollectionWorkerCommand
     public static async Task<int> ExecuteAsync(string[] arguments, ICollectionWorkerQueue queue,
         ICollectionJobStore jobs, ICollectionAttemptStore evidence, CancellationToken cancellationToken,
         EvidenceProcessingWorker? evidenceProcessor = null, IWorkerWakeup? wakeup = null,
-        ICollectionScheduleStore? schedules = null, DocumentChangeAnalysisWorker? drafting = null)
+        ICollectionScheduleStore? schedules = null, IReadOnlyList<AnalysisStage>? analysis = null)
     {
         ValidateArguments(arguments);
         var collectorPath = Path.GetFullPath(arguments[1]);
@@ -39,27 +39,30 @@ internal static class CollectionWorkerCommand
                 Environment.GetEnvironmentVariable("DOTNET_HOST_PATH") ?? "dotnet"));
         var once = arguments.Length == 4;
         var collection = new CollectionJobWorker(queue, runner, evidenceProcessor, wakeup, schedules);
-        var (result, draftingResult) = await RunAsync(collection, drafting, artifactRoot, once, cancellationToken);
+        var (result, analysisResults) = await RunAsync(collection, analysis ?? [], artifactRoot, once, cancellationToken);
         Console.WriteLine(JsonSerializer.Serialize(result, JsonOptions));
-        if (draftingResult is not null) Console.WriteLine(JsonSerializer.Serialize(new { drafting = draftingResult }, JsonOptions));
-        var draftingFailed = draftingResult is { Failures: > 0 };
-        return result.JobFailures == 0 && result.QueueFailures == 0 && !draftingFailed ? 0 : 1;
+        foreach (var (name, analysisResult) in analysisResults)
+            Console.WriteLine(JsonSerializer.Serialize(new Dictionary<string, AnalysisWorkerResult> { [name] = analysisResult }, JsonOptions));
+        var analysisFailed = analysisResults.Any(item => item.Result.Failures > 0);
+        return result.JobFailures == 0 && result.QueueFailures == 0 && !analysisFailed ? 0 : 1;
     }
 
-    private static async Task<(CollectionJobWorkerResult Collection, DocumentChangeAnalysisWorkerResult? Drafting)> RunAsync(
-        CollectionJobWorker collection, DocumentChangeAnalysisWorker? drafting, string artifactRoot, bool once,
-        CancellationToken cancellationToken)
+    private static async Task<(CollectionJobWorkerResult Collection, IReadOnlyList<(string Name, AnalysisWorkerResult Result)> Analysis)> RunAsync(
+        CollectionJobWorker collection, IReadOnlyList<AnalysisStage> stages, string artifactRoot, bool once, CancellationToken cancellationToken)
     {
-        if (drafting is null || once)
+        if (once || stages.Count == 0)
         {
             var collected = await collection.ExecuteAsync(artifactRoot, once, cancellationToken: cancellationToken);
-            return (collected, drafting is null ? null : await drafting.ExecuteAsync(once: true, cancellationToken));
+            var results = new List<(string, AnalysisWorkerResult)>();
+            foreach (var stage in stages) results.Add((stage.Name, await stage.RunAsync(true, cancellationToken)));
+            return (collected, results);
         }
         using var stop = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         var collectionTask = StopOnFailureAsync(collection.ExecuteAsync(artifactRoot, false, cancellationToken: stop.Token), stop);
-        var draftingTask = StopOnFailureAsync(drafting.ExecuteAsync(once: false, stop.Token), stop);
-        await Task.WhenAll(collectionTask, draftingTask);
-        return (await collectionTask, await draftingTask);
+        var stageTasks = stages.Select(stage => StopOnFailureAsync(stage.RunAsync(false, stop.Token), stop)).ToArray();
+        List<Task> running = [collectionTask, .. stageTasks];
+        await Task.WhenAll(running);
+        return (await collectionTask, [.. stages.Select((stage, index) => (stage.Name, stageTasks[index].Result))]);
     }
 
     private static async Task<T> StopOnFailureAsync<T>(Task<T> task, CancellationTokenSource stop)

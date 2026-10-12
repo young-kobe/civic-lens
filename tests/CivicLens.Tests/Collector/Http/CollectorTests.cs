@@ -130,6 +130,19 @@ public sealed class CollectorTests
             "https://example.test/watch/articles/one?edition=2",
             "https://example.test/watch/two?x=1&y=2"
         }, result.Discovery.Urls);
+        Assert.Equal(1, result.Discovery.OutOfScopeCount);
+    }
+
+    [Fact]
+    public async Task HtmlModeFetchesSameHostHttpLinksOverHttpsAndCountsDistinctDrops()
+    {
+        using var directory = new TemporaryDirectory();
+        var html = "<html><body><a href='http://example.test/watch/a'>a</a><a href='https://example.test/watch/a'>same</a>" +
+            "<a href='mailto:press@example.test'>mail</a><a href='/other'>other</a><a href='/other#x'>other again</a></body></html>";
+        using var collector = new HttpCollector(new QueueHandler(_ => Response(HttpStatusCode.NotFound), _ => Response(HttpStatusCode.OK, html)));
+        var result = await collector.FetchAsync(Request(directory.Path) with { Mode = CollectionMode.Html, MaxBytes = 100_000 });
+        Assert.Equal(new[] { "https://example.test/watch/a" }, result.Discovery!.Urls);
+        Assert.Equal(2, result.Discovery.OutOfScopeCount);
     }
 
     [Fact]
@@ -438,10 +451,40 @@ public sealed class CollectorTests
         Assert.NotNull(result.Capture);
         Assert.Equal(DiscoveryStatus.Parsed, result.Discovery!.Status);
         Assert.Empty(result.Discovery.Urls);
+        Assert.Equal(1, result.Discovery.OutOfScopeCount);
+    }
+
+    // House Drupal feeds declare an http xml:base and http item links on https sites.
+    [Fact]
+    public async Task FeedHttpLinksOnHttpsHostAreFetchedOverHttpsAndOtherDropsAreCounted()
+    {
+        using var directory = new TemporaryDirectory();
+        var payload = Encoding.UTF8.GetBytes("<rss version='2.0' xml:base='http://example.test/'><channel>" +
+            "<item><link>http://example.test/watch/a</link></item>" +
+            "<item><link>watch/b</link></item>" +
+            "<item><link>http://example.test/node/3</link></item>" +
+            "<item><link>https://outside.test/watch/c</link></item></channel></rss>");
+        using var collector = new HttpCollector(new QueueHandler(_ => Response(HttpStatusCode.NotFound), _ => Response(HttpStatusCode.OK, payload)));
+        var result = await collector.FetchAsync(Request(directory.Path) with { Mode = CollectionMode.Feed });
+        Assert.Equal(DiscoveryStatus.Parsed, result.Discovery!.Status);
+        Assert.Equal(new[] { "https://example.test/watch/a", "https://example.test/watch/b" }, result.Discovery.Urls);
+        Assert.Equal(2, result.Discovery.OutOfScopeCount);
     }
 
     [Fact]
-    public async Task FeedRelativeLinksUseRedirectedResponseUrlAndXmlBaseIsUnsupported()
+    public async Task NestedXmlBaseResolvesFromTheOutermostElement()
+    {
+        using var directory = new TemporaryDirectory();
+        var payload = Encoding.UTF8.GetBytes("<feed xmlns='http://www.w3.org/2005/Atom' xml:base='https://example.test/watch/'>" +
+            "<entry xml:base='news/'><link href='story'/></entry></feed>");
+        using var collector = new HttpCollector(new QueueHandler(_ => Response(HttpStatusCode.NotFound), _ => Response(HttpStatusCode.OK, payload)));
+        var result = await collector.FetchAsync(Request(directory.Path) with { Mode = CollectionMode.Feed });
+        Assert.Equal(new[] { "https://example.test/watch/news/story" }, result.Discovery!.Urls);
+        Assert.Equal(0, result.Discovery.OutOfScopeCount);
+    }
+
+    [Fact]
+    public async Task FeedRelativeLinksUseRedirectedResponseUrlAndXmlBaseIsUnsupportedBeforeVersionEight()
     {
         using var directory = new TemporaryDirectory();
         var redirectedFeed = Encoding.UTF8.GetBytes("<rss version='2.0'><channel><item><link>story</link></item></channel></rss>");
@@ -454,7 +497,7 @@ public sealed class CollectorTests
         using var nextDirectory = new TemporaryDirectory();
         var xmlBase = Encoding.UTF8.GetBytes("<feed xmlns='http://www.w3.org/2005/Atom' xml:base='https://example.test/watch/'><entry><link href='story'/></entry></feed>");
         using var nextCollector = new HttpCollector(new QueueHandler(_ => Response(HttpStatusCode.NotFound), _ => Response(HttpStatusCode.OK, xmlBase)));
-        var unsupported = await nextCollector.FetchAsync(Request(nextDirectory.Path) with { Mode = CollectionMode.Feed });
+        var unsupported = await nextCollector.FetchAsync(Request(nextDirectory.Path) with { Version = 7, Mode = CollectionMode.Feed });
         Assert.Equal(DiscoveryStatus.Unsupported, unsupported.Discovery!.Status);
         Assert.Empty(unsupported.Discovery.Urls);
         Assert.NotNull(unsupported.Capture);

@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace CivicLens.Collection.Contracts;
 
 public enum DiscoveryStatus
@@ -12,6 +14,8 @@ public sealed record DiscoveryResult
 {
     public required DiscoveryStatus Status { get; init; }
     public required string[] Urls { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? OutOfScopeCount { get; init; }
 
     public void ValidateAgainst(CollectionRequest request)
     {
@@ -22,6 +26,8 @@ public sealed record DiscoveryResult
             throw new InvalidDataException("Discovery metadata is invalid.");
         if (Status != DiscoveryStatus.Parsed && Urls.Length != 0)
             throw new InvalidDataException("Failed discovery cannot contain candidates.");
+        if (!HasValidOutOfScopeCount(request.Version))
+            throw new InvalidDataException("Out-of-scope count is invalid for this protocol version.");
         if (Urls.Length > request.MaxCandidates)
             throw new InvalidDataException("Discovery exceeds the candidate limit.");
         var seen = new HashSet<string>(StringComparer.Ordinal);
@@ -31,5 +37,12 @@ public sealed record DiscoveryResult
                 !Uri.TryCreate(value, UriKind.Absolute, out var url) || !request.Allows(url) || !seen.Add(value))
                 throw new InvalidDataException("Discovery candidate is invalid, duplicated, or outside request scope.");
         }
+    }
+
+    private bool HasValidOutOfScopeCount(int version)
+    {
+        if (version < CollectionProtocol.SchemeUpgradeVersion) return OutOfScopeCount is null;
+        if (Status != DiscoveryStatus.Parsed) return OutOfScopeCount == 0;
+        return OutOfScopeCount >= 0;
     }
 }

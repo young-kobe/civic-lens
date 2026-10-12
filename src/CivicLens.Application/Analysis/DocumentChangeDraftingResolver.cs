@@ -1,23 +1,15 @@
 using System.Collections.Immutable;
 using System.Globalization;
-using System.Text.RegularExpressions;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using CivicLens.Core.Analysis;
 using CivicLens.Core.Documents;
 using CivicLens.Core.Review;
+using static CivicLens.Application.Analysis.AnalysisAnswerRules;
 
 namespace CivicLens.Application.Analysis;
 
 public static class DocumentChangeDraftingResolver
 {
-    private static readonly JsonSerializerOptions OutputJson = new(JsonSerializerDefaults.Web)
-    {
-        UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
-        RespectNullableAnnotations = true,
-        RespectRequiredConstructorParameters = true
-    };
-
     public static DocumentChangeDraftingResolution Resolve(string outputJson, DocumentChangeAnalysisEvidence evidence, DocumentChangeAnalysisCatalog catalog,
         string draftId, DateTimeOffset createdAtUtc)
     {
@@ -26,6 +18,7 @@ public static class DocumentChangeDraftingResolver
         var output = Parse(outputJson);
         if (output is null) return Rejected(["The output is not valid JSON for the draft schema."], citationErrors: false);
         var errors = new List<string>();
+        var citationErrors = new List<string>();
         CheckText(output.Headline, DocumentChangeDraftRevision.MaximumHeadlineLength, "headline", required: true, errors);
         CheckText(output.Summary, DocumentChangeDraftRevision.MaximumSummaryLength, "summary", required: true, errors);
         CheckText(output.Significance, DocumentChangeDraftRevision.MaximumSignificanceLength, "significance", required: false, errors);
@@ -33,14 +26,13 @@ public static class DocumentChangeDraftingResolver
         CheckText(output.Institution, DocumentChangeDraftRevision.MaximumInstitutionLength, "institution", required: true, errors);
         CheckSelections(output.OfficialIds, catalog.Officials.Select(official => official.Id), "officialIds", errors);
         CheckSelections(output.IssueIds, catalog.IssueIds, "issueIds", errors);
-        var textErrors = errors.Count;
-        var citations = ResolveCitations(output.Citations, evidence, errors);
-        var changeDate = ResolveChangeDate(output.ChangeDate, output.Citations, citations, errors);
-        var citationErrors = errors.Count > textErrors;
-        if (errors.Count > 0 || citations.IsDefault) return Rejected(errors, citationErrors);
+        CheckConfidence(output.Confidence, "confidence", errors);
+        var citations = ResolveCitations(output.Citations, evidence, errors, citationErrors);
+        var changeDate = ResolveChangeDate(output.ChangeDate, output.Citations, citations, errors, citationErrors);
+        if (errors.Count > 0 || citations.IsDefault) return Rejected(errors, citationErrors.Count > 0);
         var revision = new DocumentChangeDraftRevision(draftId, 1, evidence.Comparison.Comparison.ComparisonId,
             ReviewAuthor.AnalysisSubject, createdAtUtc, output.Headline, output.Summary, Normalize(output.Significance),
-            output.Limits, output.Institution, changeDate?.Date, changeDate?.Evidence, output.OfficialIds, output.IssueIds, citations);
+            output.Limits, output.Institution, changeDate?.Date, changeDate?.Evidence, Ids(output.OfficialIds), Ids(output.IssueIds), citations);
         return new(revision, [], false);
     }
 
@@ -50,13 +42,15 @@ public static class DocumentChangeDraftingResolver
         {
             var output = JsonSerializer.Deserialize<DocumentChangeDraftingOutput>(outputJson, OutputJson);
             if (output is null || output.OfficialIds.IsDefault || output.IssueIds.IsDefault || output.Citations.IsDefault) return null;
-            return output.Citations.Any(citation => citation is null) ? null : output;
+            var hasNull = output.Citations.Any(citation => citation is null) || output.OfficialIds.Any(item => item is null) ||
+                output.IssueIds.Any(item => item is null);
+            return hasNull ? null : output;
         }
         catch (JsonException) { return null; }
     }
 
     private static ImmutableArray<DocumentChangeCitation> ResolveCitations(ImmutableArray<DocumentChangeDraftingOutputCitation> citations,
-        DocumentChangeAnalysisEvidence evidence, List<string> errors)
+        DocumentChangeAnalysisEvidence evidence, List<string> errors, List<string> citationErrors)
     {
         if (citations.IsEmpty || citations.Length > DocumentChangeDraftRevision.MaximumCitations)
         {
@@ -66,7 +60,7 @@ public static class DocumentChangeDraftingResolver
         var resolved = ImmutableArray.CreateBuilder<DocumentChangeCitation>(citations.Length);
         for (var index = 0; index < citations.Length; index++)
         {
-            var citation = ResolveCitation(citations[index], index, evidence, errors);
+            var citation = ResolveCitation(citations[index], index, evidence, errors, citationErrors);
             if (citation is null) continue;
             if (resolved.Contains(citation)) errors.Add($"Citation {index} repeats an earlier citation.");
             else resolved.Add(citation);
@@ -75,13 +69,13 @@ public static class DocumentChangeDraftingResolver
     }
 
     private static DocumentChangeCitation? ResolveCitation(DocumentChangeDraftingOutputCitation citation, int index, DocumentChangeAnalysisEvidence evidence,
-        List<string> errors)
+        List<string> errors, List<string> citationErrors)
     {
         var hunks = evidence.Comparison.Comparison.Hunks;
         var hunkIndex = ParseHunkIndex(citation.HunkId, hunks.Length);
         if (hunkIndex is null)
         {
-            errors.Add($"Citation {index} names an unknown hunk \"{Shorten(citation.HunkId)}\".");
+            AddCitationError($"Citation {index} names an unknown hunk \"{Shorten(citation.HunkId)}\".", errors, citationErrors);
             return null;
         }
         var hunk = hunks[hunkIndex.Value];
@@ -93,34 +87,34 @@ public static class DocumentChangeDraftingResolver
         };
         if (window is null || extraction is null)
         {
-            errors.Add($"Citation {index} has side \"{Shorten(citation.Side)}\". Use \"before\" or \"after\".");
+            AddCitationError($"Citation {index} has side \"{Shorten(citation.Side)}\". Use \"before\" or \"after\".", errors, citationErrors);
             return null;
         }
         if (string.IsNullOrEmpty(citation.Quote) || citation.Quote.Length > DocumentChangeDraftRevision.MaximumCitationLength)
         {
-            errors.Add($"Citation {index} needs a quote of 1 to {DocumentChangeDraftRevision.MaximumCitationLength} characters.");
+            AddCitationError($"Citation {index} needs a quote of 1 to {DocumentChangeDraftRevision.MaximumCitationLength} characters.", errors, citationErrors);
             return null;
         }
-        return Locate(citation, index, window, windowStart, extraction, errors);
+        return Locate(citation, index, window, windowStart, extraction, errors, citationErrors);
     }
 
     private static DocumentChangeCitation? Locate(DocumentChangeDraftingOutputCitation citation, int index, string window, int windowStart,
-        DocumentExtraction extraction, List<string> errors)
+        DocumentExtraction extraction, List<string> errors, List<string> citationErrors)
     {
-        var first = window.IndexOf(citation.Quote, StringComparison.Ordinal);
-        if (first < 0)
+        var found = UniqueQuote.Find(window, citation.Quote, out var first);
+        if (found == UniqueQuoteResult.Missing)
         {
-            errors.Add($"Citation {index}: the quote \"{Shorten(citation.Quote)}\" does not occur in the {citation.Side} window of {citation.HunkId}.");
+            AddCitationError($"Citation {index}: the quote \"{Shorten(citation.Quote)}\" does not occur in the {citation.Side} window of {citation.HunkId}.", errors, citationErrors);
             return null;
         }
-        if (window.IndexOf(citation.Quote, first + 1, StringComparison.Ordinal) >= 0)
+        if (found == UniqueQuoteResult.Ambiguous)
         {
-            errors.Add($"Citation {index}: the quote \"{Shorten(citation.Quote)}\" occurs more than once in the {citation.Side} window of {citation.HunkId}. Quote a longer, unique passage.");
+            AddCitationError($"Citation {index}: the quote \"{Shorten(citation.Quote)}\" occurs more than once in the {citation.Side} window of {citation.HunkId}. Quote a longer, unique passage.", errors, citationErrors);
             return null;
         }
-        if (char.IsLowSurrogate(citation.Quote[0]) || char.IsHighSurrogate(citation.Quote[^1]))
+        if (found == UniqueQuoteResult.SplitsCharacter)
         {
-            errors.Add($"Citation {index}: the quote boundaries split a character. Quote whole characters.");
+            AddCitationError($"Citation {index}: the quote boundaries split a character. Quote whole characters.", errors, citationErrors);
             return null;
         }
         var span = new DocumentTextSpan(extraction, windowStart + first, citation.Quote.Length);
@@ -129,9 +123,11 @@ public static class DocumentChangeDraftingResolver
     }
 
     private static (DateOnly Date, DocumentChangeCitation Evidence)? ResolveChangeDate(DocumentChangeDraftingOutputChangeDate? changeDate,
-        ImmutableArray<DocumentChangeDraftingOutputCitation> quotes, ImmutableArray<DocumentChangeCitation> citations, List<string> errors)
+        ImmutableArray<DocumentChangeDraftingOutputCitation> quotes, ImmutableArray<DocumentChangeCitation> citations, List<string> errors,
+        List<string> citationErrors)
     {
         if (changeDate is null) return null;
+        CheckConfidence(changeDate.Confidence, "changeDate.confidence", errors);
         if (!DateOnly.TryParseExact(changeDate.Date, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
         {
             errors.Add("changeDate.date must be a calendar date in yyyy-MM-dd form.");
@@ -145,16 +141,11 @@ public static class DocumentChangeDraftingResolver
         }
         if (!StatesDate(quotes[changeDate.CitationIndex].Quote, date))
         {
-            errors.Add($"changeDate: citation {changeDate.CitationIndex} does not state {changeDate.Date}. Cite the passage that states the date.");
+            AddCitationError($"changeDate: citation {changeDate.CitationIndex} does not state {changeDate.Date}. Cite the passage that states the date.", errors, citationErrors);
             return null;
         }
         return (date, citations[changeDate.CitationIndex]);
     }
-
-    private static bool StatesDate(string quote, DateOnly date) =>
-        new[] { "yyyy-MM-dd", "MMMM d, yyyy", "MMM d, yyyy", "MMM. d, yyyy", "d MMMM yyyy", "M/d/yyyy", "MM/dd/yyyy" }
-            .Any(format => Regex.IsMatch(quote, $@"(?<!\d){Regex.Escape(date.ToString(format, CultureInfo.InvariantCulture))}(?!\d)",
-                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant));
 
     private static int? ParseHunkIndex(string? hunkId, int count)
     {
@@ -163,15 +154,7 @@ public static class DocumentChangeDraftingResolver
             number >= 1 && number <= count ? number - 1 : null;
     }
 
-    private static void CheckText(string? value, int maximumLength, string name, bool required, List<string> errors)
-    {
-        if (value is null && !required) return;
-        if (string.IsNullOrWhiteSpace(value) && required) errors.Add($"{name} is required.");
-        else if (value is not null && (value.Length > maximumLength || value.Contains('\0')))
-            errors.Add($"{name} must be at most {maximumLength} characters with no NUL character.");
-    }
-
-    private static void CheckSelections(ImmutableArray<string> values, IEnumerable<string> allowed, string name,
+    private static void CheckSelections(ImmutableArray<DocumentChangeDraftingOutputSelection> values, IEnumerable<string> allowed, string name,
         List<string> errors)
     {
         var allowedSet = allowed.ToHashSet(StringComparer.Ordinal);
@@ -180,24 +163,17 @@ public static class DocumentChangeDraftingResolver
             errors.Add($"{name} can hold at most {DocumentChangeDraftRevision.MaximumSelections} values.");
         foreach (var value in values)
         {
-            if (value is null || !allowedSet.Contains(value)) errors.Add($"{name} holds \"{Shorten(value)}\", which is not a listed ID.");
-            else if (!seen.Add(value)) errors.Add($"{name} repeats \"{value}\".");
+            CheckConfidence(value.Confidence, $"{name} confidence for \"{Shorten(value.Id)}\"", errors);
+            if (value.Id is null || !allowedSet.Contains(value.Id)) errors.Add($"{name} holds \"{Shorten(value.Id)}\", which is not a listed ID.");
+            else if (!seen.Add(value.Id)) errors.Add($"{name} repeats \"{value.Id}\".");
         }
     }
 
+    private static ImmutableArray<string> Ids(ImmutableArray<DocumentChangeDraftingOutputSelection> selections) =>
+        [.. selections.Select(selection => selection.Id)];
+
     private static string? Normalize(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
 
-    private static string Shorten(string? value) => Truncate(value ?? "", 80);
-
-    private static string Truncate(string value, int maximumLength)
-    {
-        if (value.Length <= maximumLength) return value;
-        var length = maximumLength - 3;
-        if (char.IsHighSurrogate(value[length - 1])) length--;
-        return value[..length] + "...";
-    }
-
     private static DocumentChangeDraftingResolution Rejected(IEnumerable<string> errors, bool citationErrors) =>
-        new(null, [.. errors.Take(AnalysisRun.MaximumValidationErrors)
-            .Select(error => Truncate(error, AnalysisRun.MaximumValidationErrorLength))], citationErrors);
+        new(null, Bound(errors), citationErrors);
 }

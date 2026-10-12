@@ -11,12 +11,15 @@ internal sealed class DocumentChangeDraftRowConfiguration : IEntityTypeConfigura
         {
             table.HasCheckConstraint("ck_document_change_drafts_id", "draft_id ~ '^[0-9a-f]{32}$'");
             table.HasCheckConstraint("ck_document_change_drafts_versions", "current_revision_number >= 1 AND review_state_version >= 0");
+            table.HasCheckConstraint("ck_document_change_drafts_review_status",
+                "review_status IN ('AwaitingReview','AwaitingReviewWithConcerns','Approved','ChangesRequested','ApprovalWithdrawn')");
         });
         builder.HasKey(row => row.DraftId);
         builder.Property(row => row.DraftId).HasColumnName("draft_id").HasMaxLength(32);
         builder.Property(row => row.ComparisonId).HasColumnName("comparison_id").HasMaxLength(64).IsRequired();
         builder.Property(row => row.CurrentRevisionNumber).HasColumnName("current_revision_number").IsRequired();
         builder.Property(row => row.ReviewStateVersion).HasColumnName("review_state_version").IsRequired();
+        builder.Property(row => row.ReviewStatus).HasColumnName("review_status").HasConversion<string>().HasMaxLength(32).IsRequired();
         builder.Property(row => row.CreatedAtUtcTicks).HasColumnName("created_at_utc_ticks").IsRequired();
         builder.HasOne<Documents.Persistence.DocumentComparisonRow>().WithMany()
             .HasForeignKey(row => row.ComparisonId).OnDelete(DeleteBehavior.Restrict);

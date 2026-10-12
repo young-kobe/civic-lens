@@ -1,6 +1,5 @@
 using System.Collections.Immutable;
 using System.Globalization;
-using System.Security.Cryptography;
 using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
@@ -32,13 +31,16 @@ public static class DocumentChangeDraftingPrompt
         - significance: why the change can matter, only when the evidence supports it. Otherwise null.
         - limits: what the evidence cannot establish, for example the exact time of the edit, the reason for it, or text outside the changed regions.
         - institution: the institution that publishes the page, as the source or the text identifies it. If that is not clear, name the web site.
-        - changeDate: only when the page text itself states the date of this change, for example "Updated October 3, 2026". Give the date as yyyy-MM-dd and the zero-based index of the citation that states it. Otherwise null.
-        - officialIds: listed officials whom the changed text names or directly concerns. Use only the listed IDs. Give an empty list when none apply.
-        - issueIds: listed issue IDs that the change directly concerns. Use only the listed IDs. Give an empty list when none apply.
+        - changeDate: only when the page text itself states the date of this change, for example "Updated October 3, 2026". Give the date as yyyy-MM-dd, the zero-based index of the citation that states it, and a confidence. The confidence is your probability that the date is the date of the change. Otherwise null.
+        - officialIds: listed officials whom the changed text names or directly concerns. Use only the listed IDs. Give each as an object with its id and a confidence. The confidence is your probability that this ID belongs on the record. Give an empty list when none apply.
+        - issueIds: listed issue IDs that the change directly concerns. Use only the listed IDs. Give each as an object with its id and a confidence, as for officialIds. Give an empty list when none apply.
         - citations: 1 to {DocumentChangeDraftRevision.MaximumCitations} quotes that support the account. Each citation gives a hunkId, a side ("before" or "after"), and a quote. Copy the quote exactly, character for character, from that side's window. Do not add, remove, or normalize characters. Choose a quote that occurs only once in that window. Prefer quotes from the changed text.
+        - confidence: your probability that a careful human reviewer would approve this account without changing its substance.
+
+        Every confidence is a number from 0 to 1. Civic Lens records the values to calibrate them against human review. A person never sees them as a score and no rule acts on them. Use the full range honestly. Do not round toward 1.
         """;
 
-    public static DocumentChangeDraftingRequest? Build(DocumentChangeAnalysisEvidence evidence, DocumentChangeAnalysisCatalog catalog,
+    public static AnalysisModelRequest? Build(DocumentChangeAnalysisEvidence evidence, DocumentChangeAnalysisCatalog catalog,
         ImmutableArray<string> previousErrors = default)
     {
         ArgumentNullException.ThrowIfNull(evidence);
@@ -49,7 +51,8 @@ public static class DocumentChangeDraftingPrompt
         var schema = BuildSchema(hunks.Length, catalog);
         var bytes = Encoding.UTF8.GetByteCount(SystemPrompt) + Encoding.UTF8.GetByteCount(user) + Encoding.UTF8.GetByteCount(schema);
         if (bytes > DocumentChangeDraftingTask.MaximumPromptBytes) return null;
-        var hash = HashRequest(user, schema);
+        var hash = AnalysisPromptHash.Compute(DocumentChangeDraftingTask.Model, DocumentChangeDraftingTask.Effort,
+            DocumentChangeDraftingTask.MaximumOutputTokens, SystemPrompt, user, schema);
         return new(DocumentChangeDraftingTask.Model, DocumentChangeDraftingTask.MaximumOutputTokens,
             SystemPrompt, user, schema, hash, bytes + (long)DocumentChangeDraftingTask.MaximumOutputTokens);
     }
@@ -97,12 +100,12 @@ public static class DocumentChangeDraftingPrompt
             ["type"] = "object",
             ["additionalProperties"] = false,
             ["required"] = new JsonArray("headline", "summary", "significance", "limits", "institution", "changeDate",
-                "officialIds", "issueIds", "citations"),
+                "officialIds", "issueIds", "citations", "confidence"),
             ["properties"] = new JsonObject
             {
                 ["headline"] = new JsonObject { ["type"] = "string" },
                 ["summary"] = new JsonObject { ["type"] = "string" },
-                ["significance"] = NullableString(),
+                ["significance"] = AnalysisSchema.NullableString(),
                 ["limits"] = new JsonObject { ["type"] = "string" },
                 ["institution"] = new JsonObject { ["type"] = "string" },
                 ["changeDate"] = new JsonObject
@@ -111,14 +114,16 @@ public static class DocumentChangeDraftingPrompt
                     {
                         ["type"] = "object",
                         ["additionalProperties"] = false,
-                        ["required"] = new JsonArray("date", "citationIndex"),
+                        ["required"] = new JsonArray("date", "citationIndex", "confidence"),
                         ["properties"] = new JsonObject
                         {
                             ["date"] = new JsonObject { ["type"] = "string" },
-                            ["citationIndex"] = new JsonObject { ["type"] = "integer" }
+                            ["citationIndex"] = new JsonObject { ["type"] = "integer" },
+                            ["confidence"] = AnalysisSchema.Number()
                         }
                     }, new JsonObject { ["type"] = "null" })
                 },
+                ["confidence"] = AnalysisSchema.Number(),
                 ["officialIds"] = IdArray(catalog.Officials.Select(official => official.Id)),
                 ["issueIds"] = IdArray(catalog.IssueIds),
                 ["citations"] = new JsonObject
@@ -147,30 +152,16 @@ public static class DocumentChangeDraftingPrompt
 
     private static string HunkId(int index) => "h" + (index + 1).ToString(CultureInfo.InvariantCulture);
 
-    private static JsonObject NullableString() => new()
-    {
-        ["anyOf"] = new JsonArray(new JsonObject { ["type"] = "string" }, new JsonObject { ["type"] = "null" })
-    };
-
     private static JsonObject IdArray(IEnumerable<string> ids)
     {
-        var values = ids.ToArray();
-        var item = new JsonObject { ["type"] = "string" };
-        if (values.Length > 0) item["enum"] = new JsonArray([.. values.Select(value => (JsonNode)value)]);
-        return new JsonObject { ["type"] = "array", ["items"] = item };
-    }
-
-    private static string HashRequest(string user, string schema)
-    {
-        var canonical = JsonSerializer.Serialize(new
+        var id = AnalysisSchema.IdString(ids);
+        var item = new JsonObject
         {
-            model = DocumentChangeDraftingTask.Model,
-            effort = DocumentChangeDraftingTask.Effort,
-            maxTokens = DocumentChangeDraftingTask.MaximumOutputTokens,
-            system = SystemPrompt,
-            user,
-            schema
-        }, CompactJson);
-        return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(canonical)));
+            ["type"] = "object",
+            ["additionalProperties"] = false,
+            ["required"] = new JsonArray("id", "confidence"),
+            ["properties"] = new JsonObject { ["id"] = id, ["confidence"] = AnalysisSchema.Number() }
+        };
+        return new JsonObject { ["type"] = "array", ["items"] = item };
     }
 }

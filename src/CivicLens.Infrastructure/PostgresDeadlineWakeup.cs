@@ -4,10 +4,9 @@ using Npgsql;
 
 namespace CivicLens.Infrastructure;
 
-internal sealed class PostgresDeadlineWakeup(string connectionString, string channel, string deadlineQuery) : IWorkerWakeup
+internal sealed class PostgresDeadlineWakeup(string connectionString, string channel, string deadlineQuery,
+    string? payloadFilter = null) : IWorkerWakeup
 {
-    private const string ClockTicksSql =
-        "(EXTRACT(EPOCH FROM clock_timestamp())::numeric * 10000000 + 621355968000000000)::bigint";
     private NpgsqlConnection? connection;
     private bool hasNotification;
     private long? notifiedDeadline;
@@ -72,7 +71,7 @@ internal sealed class PostgresDeadlineWakeup(string connectionString, string cha
         if (long.TryParse(eventArgs.Payload, System.Globalization.NumberStyles.None,
                 System.Globalization.CultureInfo.InvariantCulture, out var ticks) && ticks > 0 && ticks <= DateTime.MaxValue.Ticks)
             notifiedDeadline = Math.Min(notifiedDeadline ?? long.MaxValue, ticks);
-        else
+        else if (payloadFilter is null || eventArgs.Payload == payloadFilter)
             hasNotification = true;
     }
 
@@ -80,7 +79,7 @@ internal sealed class PostgresDeadlineWakeup(string connectionString, string cha
         NpgsqlConnection listener, long watermark, CancellationToken cancellationToken)
     {
         await using var command = new NpgsqlCommand($"""
-            WITH database_now AS (SELECT {ClockTicksSql} AS ticks),
+            WITH database_now AS (SELECT {DatabaseClock.TicksSql} AS ticks),
             deadlines AS (
             {deadlineQuery}
             )
@@ -98,7 +97,7 @@ internal sealed class PostgresDeadlineWakeup(string connectionString, string cha
         CancellationToken cancellationToken)
     {
         await using var command = new NpgsqlCommand(
-            $"SELECT {ClockTicksSql}", listener);
+            $"SELECT {DatabaseClock.TicksSql}", listener);
         return Convert.ToInt64(await command.ExecuteScalarAsync(cancellationToken),
             System.Globalization.CultureInfo.InvariantCulture);
     }

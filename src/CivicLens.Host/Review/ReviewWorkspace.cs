@@ -203,7 +203,7 @@ internal static class ReviewWorkspace
         services.AddSingleton<IDocumentChangeAnalysisStore>(PostgresDocumentChangeAnalysisStore.FromConnectionString(connectionString));
         services.AddScoped<ListDocumentChangeAnalyses>();
         services.AddScoped<GetDocumentChangeAnalysisRun>();
-        services.AddSingleton<IDocumentChangeAnalysisStatusStore>(PostgresDocumentChangeAnalysisStatusStore.FromConnectionString(connectionString));
+        services.AddSingleton<IAnalysisStatusStore>(PostgresAnalysisStatusStore.FromConnectionString(connectionString));
         services.AddScoped<GetDocumentChangeAnalysisStatus>();
         services.AddScoped<CreateDocumentChangeDraft>();
         services.AddScoped<SaveDocumentChangeDraft>();
@@ -245,8 +245,11 @@ internal static class ReviewWorkspace
         services.AddScoped<ListPublishableDocumentChanges>();
     }
 
+    private static readonly Lazy<string[]> IssueIds = new(() =>
+        ReviewIssueSettings.FromEnvironment().Configuration.Issues.Select(issue => issue.Id).ToArray());
+
     internal static ReviewCatalog ReadCatalog() =>
-        new(ReadIds("CIVIC_LENS_REVIEW_ISSUES"), ReadIds("CIVIC_LENS_REVIEW_OFFICIALS"));
+        new(IssueIds.Value, ReadIds("CIVIC_LENS_REVIEW_OFFICIALS"));
 
     private static string[] ReadIds(string name) => (Environment.GetEnvironmentVariable(name) ?? "")
         .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);

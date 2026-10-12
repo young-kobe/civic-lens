@@ -42,6 +42,8 @@ public sealed class DocumentComparison
     public string? Reason { get; }
     public ImmutableArray<DocumentComparisonHunk> Hunks { get; }
 
+    public bool HasChanges() => Status == DocumentComparisonStatus.Complete && !Hunks.IsEmpty;
+
     public static DocumentComparison Create(DocumentExtraction before, DocumentExtraction after,
         CancellationToken cancellationToken = default)
     {

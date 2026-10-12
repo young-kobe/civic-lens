@@ -9,31 +9,31 @@ namespace CivicLens.Tests.Fixtures;
 
 internal sealed class FakeDocumentChangeDraftingModel : IDocumentChangeDraftingModel
 {
-    private readonly Queue<Func<DocumentChangeDraftingRequest, CancellationToken, Task<DocumentChangeDraftingResponse>>> replies = new();
-    private readonly List<DocumentChangeDraftingRequest> requests = [];
+    private readonly Queue<Func<AnalysisModelRequest, CancellationToken, Task<AnalysisModelResponse>>> replies = new();
+    private readonly List<AnalysisModelRequest> requests = [];
     private readonly Lock gate = new();
 
-    public IReadOnlyList<DocumentChangeDraftingRequest> Requests
+    public IReadOnlyList<AnalysisModelRequest> Requests
     {
         get { lock (gate) return [.. requests]; }
     }
 
-    public FakeDocumentChangeDraftingModel Reply(Func<DocumentChangeDraftingRequest, CancellationToken, Task<DocumentChangeDraftingResponse>> reply)
+    public FakeDocumentChangeDraftingModel Reply(Func<AnalysisModelRequest, CancellationToken, Task<AnalysisModelResponse>> reply)
     {
         lock (gate) replies.Enqueue(reply);
         return this;
     }
 
-    public FakeDocumentChangeDraftingModel Reply(DocumentChangeDraftingResponse response) => Reply((_, _) => Task.FromResult(response));
+    public FakeDocumentChangeDraftingModel Reply(AnalysisModelResponse response) => Reply((_, _) => Task.FromResult(response));
 
     public FakeDocumentChangeDraftingModel Draft(string outputJson, long inputTokens = 900, long outputTokens = 300) =>
-        Reply(new DocumentChangeDraftingResponse("end_turn", outputJson, new(inputTokens, outputTokens, 0, 0), "req_fixture"));
+        Reply(new AnalysisModelResponse("end_turn", outputJson, new(inputTokens, outputTokens, 0, 0), "req_fixture"));
 
-    public FakeDocumentChangeDraftingModel Fail(DocumentChangeDraftingFailure kind) => Reply((_, _) => throw new DocumentChangeDraftingException(kind));
+    public FakeDocumentChangeDraftingModel Fail(AnalysisModelFailure kind) => Reply((_, _) => throw new AnalysisModelException(kind));
 
-    public Task<DocumentChangeDraftingResponse> DraftAsync(DocumentChangeDraftingRequest request, CancellationToken cancellationToken)
+    public Task<AnalysisModelResponse> DraftAsync(AnalysisModelRequest request, CancellationToken cancellationToken)
     {
-        Func<DocumentChangeDraftingRequest, CancellationToken, Task<DocumentChangeDraftingResponse>> reply;
+        Func<AnalysisModelRequest, CancellationToken, Task<AnalysisModelResponse>> reply;
         lock (gate)
         {
             requests.Add(request);
@@ -46,7 +46,7 @@ internal sealed class FakeDocumentChangeDraftingModel : IDocumentChangeDraftingM
         Output("Deadline moves to October 30", citations);
 
     public static string Output(string headline, (string HunkId, string Side, string Quote)[] citations,
-        string[]? officialIds = null, string[]? issueIds = null, object? changeDate = null) => JsonSerializer.Serialize(new
+        string[]? officialIds = null, string[]? issueIds = null, object? changeDate = null, double confidence = 0.8) => JsonSerializer.Serialize(new
         {
             headline,
             summary = "The page now gives a later deadline.",
@@ -54,9 +54,10 @@ internal sealed class FakeDocumentChangeDraftingModel : IDocumentChangeDraftingM
             limits = "The evidence does not show when or why the page changed.",
             institution = "Example Office",
             changeDate,
-            officialIds = officialIds ?? [],
-            issueIds = issueIds ?? [],
-            citations = citations.Select(citation => new { hunkId = citation.HunkId, side = citation.Side, quote = citation.Quote })
+            officialIds = (officialIds ?? []).Select(id => new { id, confidence = 0.7 }),
+            issueIds = (issueIds ?? []).Select(id => new { id, confidence = 0.6 }),
+            citations = citations.Select(citation => new { hunkId = citation.HunkId, side = citation.Side, quote = citation.Quote }),
+            confidence
         });
 
     public static DocumentChangeAnalysisEvidence Evidence(string beforeText, string afterText)

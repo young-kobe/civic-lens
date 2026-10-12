@@ -2,13 +2,13 @@ using CivicLens.Application.Analysis;
 
 namespace CivicLens.Tests.Application.Analysis;
 
-internal sealed class FakeAnalysisStatusStore : IDocumentChangeAnalysisStatusStore
+internal sealed class FakeAnalysisStatusStore : IAnalysisStatusStore
 {
     public List<(string Reason, TimeSpan? Duration)> Pauses { get; } = [];
     public int OutageClears { get; private set; }
 
-    public Task<DocumentChangeAnalysisStatus?> GetAsync(CancellationToken cancellationToken) =>
-        Task.FromResult<DocumentChangeAnalysisStatus?>(null);
+    public Task<AnalysisStatus?> GetAsync(CancellationToken cancellationToken) =>
+        Task.FromResult<AnalysisStatus?>(null);
 
     public Task RecordStartAsync(long? dailyTokenLimit, CancellationToken cancellationToken) => Task.CompletedTask;
 

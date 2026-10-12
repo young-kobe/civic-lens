@@ -24,7 +24,7 @@ internal sealed record DocumentChangeAnalysisConfiguration(DocumentChangeAnalysi
         return new(settings, apiKey);
     }
 
-    private static long? ReadTokens(string name)
+    internal static long? ReadTokens(string name)
     {
         var value = Environment.GetEnvironmentVariable(name);
         if (string.IsNullOrWhiteSpace(value)) return null;
@@ -33,7 +33,7 @@ internal sealed record DocumentChangeAnalysisConfiguration(DocumentChangeAnalysi
         return parsed;
     }
 
-    private static int? ReadConcurrency()
+    internal static int? ReadConcurrency()
     {
         var value = Environment.GetEnvironmentVariable(ConcurrencyVariable);
         if (string.IsNullOrWhiteSpace(value)) return null;
