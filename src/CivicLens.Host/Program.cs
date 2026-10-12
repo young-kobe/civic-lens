@@ -60,6 +60,10 @@ if (args is [] or ["--help"] or ["help"])
           statements run <run-id>
           statements requeue <candidate-id|--all>
           statements regate [--since yyyy-MM-dd]
+          statements draft status
+          statements draft list [drafted|over-cap|existing|pending|failed] [limit]
+          statements draft run <run-id>
+          statements draft requeue <candidate-id|--all>
           releases publish <idempotency-key> <draft-id>...
           releases list [limit]
           releases activate <release-number>
@@ -74,6 +78,7 @@ if (args is [] or ["--help"] or ["help"])
         jobs commands require the database. Each run reconciles prior work and performs at most one new fetch.
         worker also drafts document-change accounts when CIVIC_LENS_ANALYSIS_DAILY_TOKENS and ANTHROPIC_API_KEY are set.
         worker also gates statement candidates when CIVIC_LENS_STATEMENT_GATE_DAILY_TOKENS, ANTHROPIC_API_KEY, and CIVIC_LENS_ISSUES_CONFIG are set.
+        worker also drafts statements when CIVIC_LENS_STATEMENT_DRAFTING_DAILY_TOKENS and ANTHROPIC_API_KEY are set.
         documents commands require the database. Citations use UTF-16 offsets into immutable extracted text.
         Exit codes: 0 success, 1 failed/deferred collection or operational failure, 2 invalid input/configuration.
         """);
@@ -151,10 +156,13 @@ try
         await using var analysisWakeup = analysis.Wakeup;
         var gate = StatementGateComposition.Create(connectionString);
         await using var gateWakeup = gate.Wakeup;
+        var statementDrafting = StatementDraftComposition.Create(connectionString, workerConfiguration);
+        await using var statementDraftingWakeup = statementDrafting.Wakeup;
         executing = true;
         await jobs.SynchronizeAsync(workerConfiguration, cancellation.Token);
         await analysis.RecordStartAsync(cancellation.Token);
         await gate.RecordStartAsync(cancellation.Token);
+        await statementDrafting.RecordStartAsync(cancellation.Token);
         var extractions = PostgresDocumentExtractionStore.FromConnectionString(connectionString);
         var comparisons = PostgresDocumentComparisonStore.FromConnectionString(connectionString);
         var processing = new EvidenceProcessingWorker(jobs, attempts, jobs,
@@ -164,7 +172,12 @@ try
             new CompareDocuments(extractions, comparisons));
         await using var wakeup = PostgresCollectionPipelineWakeup.FromConnectionString(connectionString);
         return await CollectionWorkerCommand.ExecuteAsync(args, queue, jobs, attempts, cancellation.Token, processing, wakeup, jobs,
-            analysis.Worker, gate.Worker);
+            [.. new[]
+            {
+                AnalysisStage.For("drafting", analysis.Worker),
+                AnalysisStage.For("gate", gate.Worker),
+                AnalysisStage.For("statementDrafting", statementDrafting.Worker)
+            }.OfType<AnalysisStage>()]);
     }
 
     if (AnalysisCommand.Matches(args))
@@ -187,8 +200,12 @@ try
             throw new ArgumentException("Statement commands require CIVIC_LENS_DATABASE and CIVIC_LENS_REVIEW_OWNER.");
         var gates = PostgresStatementAnalysisStore.FromConnectionString(connectionString);
         var gateStatus = PostgresAnalysisStatusStore.FromConnectionString(connectionString, StatementGateTask.Task);
+        var statementDrafts = PostgresStatementDraftStore.FromConnectionString(connectionString);
+        var draftStatus = PostgresAnalysisStatusStore.FromConnectionString(connectionString, StatementDraftTask.StatusTask);
+        var draftCommands = new StatementDraftCommands(new GetStatementDraftStatus(statementDrafts, draftStatus),
+            new ListStatementDrafts(statementDrafts), new GetStatementDraftRun(statementDrafts), new RequeueStatementDrafts(statementDrafts));
         var statements = new StatementCommand(new GetStatementGateStatus(gates, gateStatus), new ListStatementGates(gates),
-            new GetStatementGateRun(gates), new RequeueStatementGates(gates), new RegateStatementCandidates(gates),
+            new GetStatementGateRun(gates), new RequeueStatementGates(gates), new RegateStatementCandidates(gates), draftCommands,
             new ReviewActor(ownerSubject, ReviewRole.Owner), args is ["statements", "regate", ..] ? StatementIssueRubric.FromEnvironment()?.Id : null);
         executing = true;
         return await statements.ExecuteAsync(args, cancellation.Token);

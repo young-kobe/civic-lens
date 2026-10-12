@@ -105,6 +105,11 @@ public sealed record CollectionConfiguration
         Validate();
         var source = Sources.FirstOrDefault(candidate => candidate is not null && candidate.Id == sourceId)
             ?? throw new ArgumentException($"Unknown source ID '{sourceId}'.", nameof(sourceId));
+        return CoveredPersonIdsOf(source, asOf);
+    }
+
+    public string[] CoveredPersonIdsOf(WatchedSourceConfiguration source, DateOnly asOf)
+    {
         IEnumerable<string> ids = Version == 1
             ? source.PersonIds!
             : source.Coverage!.Where(coverage => new DateRange(coverage.StartsOn, coverage.EndsBefore).Contains(asOf))

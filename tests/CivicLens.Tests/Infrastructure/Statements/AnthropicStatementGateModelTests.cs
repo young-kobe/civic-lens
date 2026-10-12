@@ -5,6 +5,7 @@ using CivicLens.Application.Analysis;
 using CivicLens.Application.Statements;
 using CivicLens.Infrastructure.Analysis;
 using CivicLens.Infrastructure.Statements;
+using CivicLens.Tests.Fixtures;
 using static CivicLens.Tests.Fixtures.StatementGateFixtures;
 
 namespace CivicLens.Tests.Infrastructure.Statements;
@@ -45,6 +46,21 @@ public sealed class AnthropicStatementGateModelTests
         await new AnthropicDocumentChangeDraftingModel("test-key", client).DraftAsync(request, CancellationToken.None);
 
         Assert.Equal(JsonValueKind.String, JsonDocument.Parse(handler.Body).RootElement.GetProperty("system").ValueKind);
+    }
+
+    [Fact]
+    public async Task StatementDraftingSendsAPlainSystemPromptAndNamesTheSonnetModel()
+    {
+        var handler = new CapturingHandler();
+        using var client = new HttpClient(handler);
+        var request = StatementDraftPrompt.Build(StatementDraftFixtures.DraftEvidence(), StatementDraftFixtures.Officials(StatementDraftFixtures.Warren),
+            StatementDraftTask.MaximumPromptBytes)!;
+
+        await new AnthropicStatementDraftingModel("test-key", client).DraftAsync(request, CancellationToken.None);
+
+        var body = JsonDocument.Parse(handler.Body).RootElement;
+        Assert.Equal("claude-sonnet-5-5", body.GetProperty("model").GetString());
+        Assert.Equal(JsonValueKind.String, body.GetProperty("system").ValueKind);
     }
 
     private sealed class CapturingHandler : HttpMessageHandler

@@ -92,9 +92,9 @@ public static class StatementGatePrompt
                         ["required"] = new JsonArray("id", "quote", "confidence"),
                         ["properties"] = new JsonObject
                         {
-                            ["id"] = IdString(rubric.Issues.Select(issue => issue.Id)),
+                            ["id"] = AnalysisSchema.IdString(rubric.Issues.Select(issue => issue.Id)),
                             ["quote"] = new JsonObject { ["type"] = "string" },
-                            ["confidence"] = Number()
+                            ["confidence"] = AnalysisSchema.Number()
                         }
                     }
                 },
@@ -108,24 +108,14 @@ public static class StatementGatePrompt
                         ["required"] = new JsonArray("id", "confidence"),
                         ["properties"] = new JsonObject
                         {
-                            ["id"] = IdString(rubric.PolicyAreas.Select(area => area.Id)),
-                            ["confidence"] = Number()
+                            ["id"] = AnalysisSchema.IdString(rubric.PolicyAreas.Select(area => area.Id)),
+                            ["confidence"] = AnalysisSchema.Number()
                         }
                     }
                 },
-                ["confidence"] = Number()
+                ["confidence"] = AnalysisSchema.Number()
             }
         };
         return schema.ToJsonString(CompactJson);
     }
-
-    private static JsonObject IdString(IEnumerable<string> ids)
-    {
-        var values = ids.ToArray();
-        var id = new JsonObject { ["type"] = "string" };
-        if (values.Length > 0) id["enum"] = new JsonArray([.. values.Select(value => (JsonNode)value)]);
-        return id;
-    }
-
-    private static JsonObject Number() => new() { ["type"] = "number" };
 }

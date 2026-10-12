@@ -1,5 +1,5 @@
-using System.Collections.Immutable;
 using CivicLens.Core.Analysis;
+using CivicLens.Core.Review;
 using Codes = CivicLens.Application.Analysis.DocumentChangeAnalysisErrorCodes;
 using State = CivicLens.Application.Analysis.AnalysisState;
 
@@ -26,47 +26,32 @@ public sealed class DocumentChangeDraftingStep(IDocumentChangeAnalysisStore stor
         if (evidence.ExistingDraftId is not null)
             return await attempt.CompleteAsync(State.Succeeded, Codes.HumanDraftExists, cancellationToken);
 
-        var number = 1;
-        string? previousRunId = null;
-        ImmutableArray<string> errors = default;
-        var rejectedCode = Codes.InputLimitExceeded;
-        if (attempt.Claim.Record.RetryOfRunId is { } retryOf)
+        var loop = new AnalysisValidationLoop<AnalysisRun, DocumentChangeDraftRevision>(this, attempt, AnalysisRunOutcome.Drafted,
+            DocumentChangeDraftingTask.MaximumValidationPasses,
+            errors => Bounded(DocumentChangeDraftingPrompt.Build(evidence, catalog, errors)), model.DraftAsync,
+            (json, run) => Resolve(json, evidence, run), store.GetRunAsync);
+        var result = await loop.RunAsync(cancellationToken);
+        return result.End switch
         {
-            var previous = await store.GetRunAsync(retryOf, cancellationToken)
-                ?? throw new InvalidDataException("The rejected run that a retry continues is missing.");
-            (number, previousRunId, errors, rejectedCode) = (2, previous.RunId, previous.ValidationErrors, AnalysisErrorCodes.ForOutcome(previous.Outcome));
-        }
-        var request = Bounded(DocumentChangeDraftingPrompt.Build(evidence, catalog, errors));
-        if (request is null)
-            return await attempt.CompleteAsync(number == 1 ? State.Blocked : State.Failed, rejectedCode, cancellationToken);
+            AnalysisLoopEnd.Accepted => await attempt.SettleAsync(result.Run!,
+                DocumentChangeAnalysisCheckpoint.From(attempt.Claim, State.Succeeded, revision: result.Accepted), cancellationToken),
+            AnalysisLoopEnd.Exhausted => await attempt.SettleAsync(result.Run!, State.Failed,
+                AnalysisErrorCodes.ForOutcome(result.Run!.Outcome), cancellationToken),
+            AnalysisLoopEnd.NotSent when result.Run is null => await attempt.CompleteAsync(State.Blocked, Codes.InputLimitExceeded,
+                cancellationToken),
+            AnalysisLoopEnd.NotSent => await attempt.CompleteAsync(State.Failed, AnalysisErrorCodes.ForOutcome(result.Run!.Outcome),
+                cancellationToken),
+            _ => result.Progress
+        };
+    }
 
-        while (true)
-        {
-            var call = await attempt.CallModelAsync(request, previousRunId, model.DraftAsync, cancellationToken);
-            if (call.Response is not { } response) return call.Progress;
-            var runId = attempt.RunId!;
-            var outcome = response.StopOutcome(AnalysisRunOutcome.Drafted);
-            var run = attempt.ResponseRun(outcome, response);
-            if (outcome != AnalysisRunOutcome.Drafted)
-                return await attempt.SettleAsync(run, State.Failed, AnalysisErrorCodes.ForOutcome(outcome), cancellationToken);
-
-            var resolution = DocumentChangeDraftingResolver.Resolve(response.OutputJson!, evidence, catalog,
-                Guid.NewGuid().ToString("N"), run.FinishedAtUtc);
-            if (resolution.Revision is not null)
-                return await attempt.SettleAsync(run,
-                    DocumentChangeAnalysisCheckpoint.From(attempt.Claim, State.Succeeded, revision: resolution.Revision), cancellationToken);
-            var rejected = run with
-            {
-                Outcome = resolution.HasCitationErrors ? AnalysisRunOutcome.CitationRejected : AnalysisRunOutcome.OutputRejected,
-                ValidationErrors = resolution.Errors
-            };
-            var retry = number < DocumentChangeDraftingTask.MaximumValidationPasses
-                ? Bounded(DocumentChangeDraftingPrompt.Build(evidence, catalog, resolution.Errors)) : null;
-            if (retry is null)
-                return await attempt.SettleAsync(rejected, State.Failed, AnalysisErrorCodes.ForOutcome(rejected.Outcome), cancellationToken);
-            if (!await attempt.SettleAsync(rejected, State.Running, null, cancellationToken)) return false;
-            (number, previousRunId, request) = (number + 1, runId, retry);
-        }
+    private AnalysisResolution<DocumentChangeDraftRevision> Resolve(string outputJson, DocumentChangeAnalysisEvidence evidence,
+        AnalysisRun run)
+    {
+        var resolution = DocumentChangeDraftingResolver.Resolve(outputJson, evidence, catalog, Guid.NewGuid().ToString("N"),
+            run.FinishedAtUtc);
+        return resolution.Revision is { } revision ? AnalysisResolution<DocumentChangeDraftRevision>.Accept(revision)
+            : AnalysisResolution<DocumentChangeDraftRevision>.Reject(resolution.Errors, resolution.HasCitationErrors);
     }
 
     private AnalysisModelRequest? Bounded(AnalysisModelRequest? request) =>

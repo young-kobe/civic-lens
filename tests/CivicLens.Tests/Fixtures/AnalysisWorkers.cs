@@ -16,4 +16,8 @@ internal static class AnalysisWorkers
     public static AnalysisWorker<StatementGateRun> Gate(IStatementAnalysisStore store, IAnalysisStatusStore status,
         IStatementGateModel model, StatementGateSettings settings, IssueConfigurationRevision revision, TimeProvider clock) =>
         new(new StatementGateStep(store, model, settings, revision), status, clock);
+
+    public static AnalysisWorker<StatementDraftRun> StatementDrafting(IStatementDraftStore store, IAnalysisStatusStore status,
+        IStatementDraftingModel model, StatementDraftSettings settings, StatementSpeakerRoster roster, TimeProvider clock) =>
+        new(new StatementDraftingStep(store, model, settings, roster), status, clock);
 }

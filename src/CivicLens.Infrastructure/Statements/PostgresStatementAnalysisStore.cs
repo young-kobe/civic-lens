@@ -34,7 +34,7 @@ public sealed class PostgresStatementAnalysisStore : PostgresAnalysisStore<State
         ArgumentException.ThrowIfNullOrWhiteSpace(runId);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         var row = await db.Set<StatementAnalysisRunRow>().AsNoTracking()
-            .SingleOrDefaultAsync(candidate => candidate.RunId == runId, cancellationToken);
+            .SingleOrDefaultAsync(candidate => candidate.RunId == runId && candidate.Task == StatementGateTask.Task, cancellationToken);
         return row is null ? null : StatementAnalysisQueueMapping.ToRun(row);
     }
 
@@ -42,6 +42,12 @@ public sealed class PostgresStatementAnalysisStore : PostgresAnalysisStore<State
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(candidateId);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        return await ReadArticleAsync(db, candidateId, cancellationToken);
+    }
+
+    internal static async Task<StatementGateEvidence?> ReadArticleAsync(CollectionAttemptDbContext db, string candidateId,
+        CancellationToken cancellationToken)
+    {
         var extractionId = await db.Set<StatementCandidateRow>().AsNoTracking().Where(row => row.CandidateId == candidateId)
             .Select(row => row.ExtractionId).SingleOrDefaultAsync(cancellationToken);
         if (extractionId is null) return null;
@@ -61,35 +67,15 @@ public sealed class PostgresStatementAnalysisStore : PostgresAnalysisStore<State
 
     public async Task<IReadOnlyList<StatementGateListItem>> ListAsync(StatementGateView? view, int limit, CancellationToken cancellationToken)
     {
-        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        var gates = db.Set<StatementAnalysisRow>().AsNoTracking().Where(row => row.Task == StatementGateTask.Task);
-        if (view is { } selected) gates = gates.Where(InView(selected));
-        var rows = await (from gate in gates
-                          join candidate in db.Set<StatementCandidateRow>().AsNoTracking() on gate.CandidateId equals candidate.CandidateId
-                          orderby gate.CreatedAtUtcTicks, gate.CandidateId
-                          select new { Gate = gate, candidate.SourceId, candidate.Url }).Take(limit).ToArrayAsync(cancellationToken);
-        var ids = rows.Select(row => row.Gate.CandidateId).ToArray();
-        var runs = await db.Set<StatementAnalysisRunRow>().AsNoTracking()
-            .Where(run => run.Task == StatementGateTask.Task && ids.Contains(run.CandidateId))
-            .Select(run => new { run.CandidateId, run.RunId, run.IssueRevisionId, run.StartedAtUtcTicks }).ToArrayAsync(cancellationToken);
-        var latest = runs.GroupBy(run => run.CandidateId).ToDictionary(group => group.Key,
-            group => group.OrderByDescending(run => run.StartedAtUtcTicks).First());
-        return [.. rows.Select(row => new StatementGateListItem(row.Gate.CandidateId, row.SourceId, row.Url, row.Gate.Status,
-            ViewOf(row.Gate), row.Gate.ErrorCode, row.Gate.Attempts, latest.GetValueOrDefault(row.Gate.CandidateId)?.RunId,
-            latest.GetValueOrDefault(row.Gate.CandidateId)?.IssueRevisionId))];
+        var entries = await StatementAnalysisListing.ListAsync(contextFactory, StatementGateTask.Task,
+            view is { } selected ? InView(selected) : null, limit, cancellationToken);
+        return [.. entries.Select(entry => new StatementGateListItem(entry.Row.CandidateId, entry.SourceId, entry.Url, entry.Row.Status,
+            ViewOf(entry.Row.Status, entry.Row.ErrorCode), entry.Row.ErrorCode, entry.Row.Attempts, entry.LatestRunId,
+            entry.LatestIssueRevisionId))];
     }
 
-    public async Task<IReadOnlyDictionary<StatementGateView, int>> CountAsync(CancellationToken cancellationToken)
-    {
-        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        var groups = await db.Set<StatementAnalysisRow>().AsNoTracking().Where(row => row.Task == StatementGateTask.Task)
-            .GroupBy(row => new { row.Status, row.ErrorCode }).Select(group => new { group.Key.Status, group.Key.ErrorCode, Count = group.Count() })
-            .ToArrayAsync(cancellationToken);
-        var counts = Enum.GetValues<StatementGateView>().ToDictionary(view => view, _ => 0);
-        foreach (var group in groups)
-            counts[ViewOf(group.Status, group.ErrorCode)] += group.Count;
-        return counts;
-    }
+    public Task<IReadOnlyDictionary<StatementGateView, int>> CountAsync(CancellationToken cancellationToken) =>
+        StatementAnalysisListing.CountAsync(contextFactory, StatementGateTask.Task, ViewOf, cancellationToken);
 
     private static async Task<HashSet<string>> CandidatesBoundToOlderRevisionAsync(CollectionAttemptDbContext db, string[] candidateIds,
         string issueRevisionId, CancellationToken cancellationToken)
@@ -123,8 +109,6 @@ public sealed class PostgresStatementAnalysisStore : PostgresAnalysisStore<State
         StatementGateView.OverCap => row => row.Status == State.Succeeded && row.ErrorCode == StatementGateReasons.OverByteCap,
         _ => row => row.Status == State.Failed || row.Status == State.Blocked
     };
-
-    private static StatementGateView ViewOf(StatementAnalysisRow row) => ViewOf(row.Status, row.ErrorCode);
 
     private static StatementGateView ViewOf(State status, string? errorCode) => status switch
     {

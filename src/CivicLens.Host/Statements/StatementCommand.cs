@@ -7,10 +7,13 @@ using CivicLens.Core.Review;
 namespace CivicLens.Host.Statements;
 
 internal sealed class StatementCommand(GetStatementGateStatus status, ListStatementGates list, GetStatementGateRun run,
-    RequeueStatementGates requeue, RegateStatementCandidates regate, ReviewActor owner, string? currentIssueRevisionId)
+    RequeueStatementGates requeue, RegateStatementCandidates regate, StatementDraftCommands drafts, ReviewActor owner,
+    string? currentIssueRevisionId)
 {
     private const string Usage = "Use statements status, statements list [passed|skipped|failed-open|over-cap|pending|failed] [limit], " +
-        "statements run <run-id>, statements requeue <candidate-id|--all>, or statements regate [--since yyyy-MM-dd].";
+        "statements run <run-id>, statements requeue <candidate-id|--all>, statements regate [--since yyyy-MM-dd], " +
+        "statements draft status, statements draft list [drafted|over-cap|existing|pending|failed] [limit], " +
+        "statements draft run <run-id>, or statements draft requeue <candidate-id|--all>.";
     private const int DefaultListLimit = 100;
     private static readonly JsonSerializerOptions JsonOptions = CreateJsonOptions();
 
@@ -50,6 +53,28 @@ internal sealed class StatementCommand(GetStatementGateStatus status, ListStatem
                 case ["statements", "regate", "--since", var since]:
                     Write(new { requeued = await RegateAsync(ParseDate(since), cancellationToken) });
                     return 0;
+                case ["statements", "draft", "status"]:
+                    Write(await drafts.Status.ExecuteAsync(owner, cancellationToken));
+                    return 0;
+                case ["statements", "draft", "list"]:
+                    Write(await drafts.List.ExecuteAsync(owner, null, DefaultListLimit, cancellationToken));
+                    return 0;
+                case ["statements", "draft", "list", var view]:
+                    Write(await drafts.List.ExecuteAsync(owner, ParseDraftView(view), DefaultListLimit, cancellationToken));
+                    return 0;
+                case ["statements", "draft", "list", var view, var limit]:
+                    Write(await drafts.List.ExecuteAsync(owner, ParseDraftView(view), ParseLimit(limit), cancellationToken));
+                    return 0;
+                case ["statements", "draft", "run", var runId]:
+                    Write(await drafts.Run.ExecuteAsync(owner, runId, cancellationToken)
+                        ?? throw new ArgumentException("No draft run has that ID."));
+                    return 0;
+                case ["statements", "draft", "requeue", "--all"]:
+                    Write(new { requeued = await drafts.Requeue.ExecuteAsync(owner, null, cancellationToken) });
+                    return 0;
+                case ["statements", "draft", "requeue", var candidateId]:
+                    Write(new { requeued = await drafts.Requeue.ExecuteAsync(owner, candidateId, cancellationToken) });
+                    return 0;
                 default:
                     Console.Error.WriteLine(Usage);
                     return 2;
@@ -80,6 +105,16 @@ internal sealed class StatementCommand(GetStatementGateStatus status, ListStatem
         "over-cap" => StatementGateView.OverCap,
         "pending" => StatementGateView.Pending,
         "failed" => StatementGateView.Failed,
+        _ => throw new ArgumentException(Usage)
+    };
+
+    private static StatementDraftView ParseDraftView(string text) => text switch
+    {
+        "drafted" => StatementDraftView.Drafted,
+        "over-cap" => StatementDraftView.OverCap,
+        "existing" => StatementDraftView.Existing,
+        "pending" => StatementDraftView.Pending,
+        "failed" => StatementDraftView.Failed,
         _ => throw new ArgumentException(Usage)
     };
 

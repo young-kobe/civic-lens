@@ -28,51 +28,31 @@ public sealed class StatementGateStep(IStatementAnalysisStore store, IStatementG
         attempt.ContextJson = rubric.ToContextJson();
         if (rubric.Issues.IsEmpty) return await BypassAsync(attempt, evidence, StatementGateReasons.NoTrackedIssue, null, cancellationToken);
 
-        var number = 1;
-        string? previousRunId = null;
-        ImmutableArray<string> errors = default;
-        if (attempt.Claim.Record.RetryOfRunId is { } retryOf)
+        var loop = new AnalysisValidationLoop<StatementGateRun, StatementGateResolution>(this, attempt, AnalysisRunOutcome.Classified,
+            StatementGateTask.MaximumValidationPasses, errors => StatementGatePrompt.Build(evidence, rubric, settings.PromptByteCap, errors),
+            model.ClassifyAsync, (json, _) => Resolve(json, evidence, rubric), async (runId, token) => (await store.GetRunAsync(runId, token))?.Run);
+        var result = await loop.RunAsync(cancellationToken);
+        return result.End switch
         {
-            var previous = await store.GetRunAsync(retryOf, cancellationToken)
-                ?? throw new InvalidDataException("The rejected run that a retry continues is missing.");
-            (number, previousRunId, errors) = (2, previous.Run.RunId, previous.Run.ValidationErrors);
-        }
-        var request = StatementGatePrompt.Build(evidence, rubric, settings.PromptByteCap, errors);
-        if (request is null)
-            return await BypassAsync(attempt, evidence, number == 1 ? StatementGateReasons.OverByteCap : StatementGateReasons.FailedOpen,
-                previousRunId, cancellationToken);
-
-        while (true)
-        {
-            var call = await attempt.CallModelAsync(request, previousRunId, model.ClassifyAsync, cancellationToken);
-            if (call.Response is not { } response) return call.Progress;
-            var runId = attempt.RunId!;
-            var outcome = response.StopOutcome(AnalysisRunOutcome.Classified);
-            var run = Wrap(attempt.ResponseRun(outcome, response));
-            if (outcome != AnalysisRunOutcome.Classified)
-                return await attempt.SettleAsync(run, State.Failed, AnalysisErrorCodes.ForOutcome(outcome), cancellationToken);
-
-            var resolution = StatementGateResolver.Resolve(response.OutputJson!, evidence, rubric);
-            if (resolution.IsValid)
-                return await attempt.SettleAsync(run with { Reason = resolution.Reason, Quotes = resolution.Quotes }, State.Succeeded,
-                    resolution.Reason, cancellationToken);
-
-            var rejected = run with
+            AnalysisLoopEnd.Accepted => await attempt.SettleAsync(Wrap(result.Run!) with
             {
-                Run = run.Run with
-                {
-                    Outcome = resolution.HasCitationErrors ? AnalysisRunOutcome.CitationRejected : AnalysisRunOutcome.OutputRejected,
-                    ValidationErrors = resolution.Errors
-                }
-            };
-            var retry = number < StatementGateTask.MaximumValidationPasses
-                ? StatementGatePrompt.Build(evidence, rubric, settings.PromptByteCap, resolution.Errors) : null;
-            if (retry is null)
-                return await attempt.SettleAsync(rejected with { Reason = StatementGateReasons.FailedOpen }, State.Succeeded,
-                    StatementGateReasons.FailedOpen, cancellationToken);
-            if (!await attempt.SettleAsync(rejected, State.Running, null, cancellationToken)) return false;
-            (number, previousRunId, request) = (number + 1, runId, retry);
-        }
+                Reason = result.Accepted!.Reason,
+                Quotes = result.Accepted!.Quotes
+            }, State.Succeeded, result.Accepted!.Reason, cancellationToken),
+            AnalysisLoopEnd.Exhausted => await attempt.SettleAsync(Wrap(result.Run!) with { Reason = StatementGateReasons.FailedOpen },
+                State.Succeeded, StatementGateReasons.FailedOpen, cancellationToken),
+            AnalysisLoopEnd.NotSent => await BypassAsync(attempt, evidence,
+                result.Run is null ? StatementGateReasons.OverByteCap : StatementGateReasons.FailedOpen, result.Run?.RunId, cancellationToken),
+            _ => result.Progress
+        };
+    }
+
+    private static AnalysisResolution<StatementGateResolution> Resolve(string outputJson, StatementGateEvidence evidence,
+        StatementGateRubric rubric)
+    {
+        var resolution = StatementGateResolver.Resolve(outputJson, evidence, rubric);
+        return resolution.IsValid ? AnalysisResolution<StatementGateResolution>.Accept(resolution)
+            : AnalysisResolution<StatementGateResolution>.Reject(resolution.Errors, resolution.HasCitationErrors);
     }
 
     private Task<bool> BypassAsync(IAnalysisAttempt<StatementGateRun> attempt, StatementGateEvidence evidence, string reason,

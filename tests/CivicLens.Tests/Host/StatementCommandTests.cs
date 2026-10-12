@@ -57,6 +57,52 @@ public sealed class StatementCommandTests(PostgresCollection postgres) : IAsyncL
     }
 
     [Fact]
+    public async Task DraftStatusReportsZeroCountsForEveryDraftOutcomeBeforeAnyCandidateExists()
+    {
+        var result = await RunAsync("auth0|owner", "statements", "draft", "status");
+
+        Assert.Equal(0, result.ExitCode);
+        foreach (var view in new[] { "pending", "drafted", "overCap", "existing", "failed" })
+            Assert.Contains($"\"{view}\":0", result.Output, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("drafted")]
+    [InlineData("over-cap")]
+    [InlineData("existing")]
+    [InlineData("pending")]
+    [InlineData("failed")]
+    public async Task DraftListAcceptsEachOutcomeFilter(string outcome)
+    {
+        var result = await RunAsync("auth0|owner", "statements", "draft", "list", outcome, "5");
+
+        Assert.Equal((0, "[]"), (result.ExitCode, result.Output.Trim()));
+    }
+
+    [Theory]
+    [InlineData("statements", "draft")]
+    [InlineData("statements", "draft", "list", "passed")]
+    [InlineData("statements", "draft", "requeue")]
+    public async Task BadDraftArgumentsShowTheUsage(params string[] arguments)
+    {
+        var result = await RunAsync("auth0|owner", arguments);
+
+        Assert.Equal(2, result.ExitCode);
+        Assert.Contains("statements draft status", result.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ADraftRunThatDoesNotExistIsRejectedAndRequeueReportsZero()
+    {
+        var run = await RunAsync("auth0|owner", "statements", "draft", "run", new string('a', 32));
+        var requeue = await RunAsync("auth0|owner", "statements", "draft", "requeue", "--all");
+
+        Assert.Equal(2, run.ExitCode);
+        Assert.Contains("No draft run", run.Error, StringComparison.Ordinal);
+        Assert.Equal((0, """{"requeued":0}"""), (requeue.ExitCode, requeue.Output.Trim()));
+    }
+
+    [Fact]
     public async Task ARunThatDoesNotExistIsRejected()
     {
         var result = await RunAsync("auth0|owner", "statements", "run", new string('a', 32));

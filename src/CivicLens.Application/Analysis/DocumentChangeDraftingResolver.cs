@@ -1,24 +1,15 @@
 using System.Collections.Immutable;
 using System.Globalization;
-using System.Text.RegularExpressions;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using CivicLens.Core.Analysis;
 using CivicLens.Core.Documents;
 using CivicLens.Core.Review;
+using static CivicLens.Application.Analysis.AnalysisAnswerRules;
 
 namespace CivicLens.Application.Analysis;
 
 public static class DocumentChangeDraftingResolver
 {
-    private static readonly JsonSerializerOptions OutputJson = new(JsonSerializerDefaults.Web)
-    {
-        NumberHandling = JsonNumberHandling.AllowNamedFloatingPointLiterals,
-        UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
-        RespectNullableAnnotations = true,
-        RespectRequiredConstructorParameters = true
-    };
-
     public static DocumentChangeDraftingResolution Resolve(string outputJson, DocumentChangeAnalysisEvidence evidence, DocumentChangeAnalysisCatalog catalog,
         string draftId, DateTimeOffset createdAtUtc)
     {
@@ -156,24 +147,11 @@ public static class DocumentChangeDraftingResolver
         return (date, citations[changeDate.CitationIndex]);
     }
 
-    private static bool StatesDate(string quote, DateOnly date) =>
-        new[] { "yyyy-MM-dd", "MMMM d, yyyy", "MMM d, yyyy", "MMM. d, yyyy", "d MMMM yyyy", "M/d/yyyy", "MM/dd/yyyy" }
-            .Any(format => Regex.IsMatch(quote, $@"(?<!\d){Regex.Escape(date.ToString(format, CultureInfo.InvariantCulture))}(?!\d)",
-                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant));
-
     private static int? ParseHunkIndex(string? hunkId, int count)
     {
         if (hunkId is not { Length: > 1 } || hunkId[0] != 'h' || hunkId[1] == '0') return null;
         return int.TryParse(hunkId.AsSpan(1), NumberStyles.None, CultureInfo.InvariantCulture, out var number) &&
             number >= 1 && number <= count ? number - 1 : null;
-    }
-
-    private static void CheckText(string? value, int maximumLength, string name, bool required, List<string> errors)
-    {
-        if (value is null && !required) return;
-        if (string.IsNullOrWhiteSpace(value) && required) errors.Add($"{name} is required.");
-        else if (value is not null && (value.Length > maximumLength || value.Contains('\0')))
-            errors.Add($"{name} must be at most {maximumLength} characters with no NUL character.");
     }
 
     private static void CheckSelections(ImmutableArray<DocumentChangeDraftingOutputSelection> values, IEnumerable<string> allowed, string name,
@@ -191,27 +169,11 @@ public static class DocumentChangeDraftingResolver
         }
     }
 
-    private static void CheckConfidence(double value, string name, List<string> errors)
-    {
-        if (!double.IsFinite(value) || value < 0 || value > 1) errors.Add($"{name} must be a number from 0 to 1.");
-    }
-
     private static ImmutableArray<string> Ids(ImmutableArray<DocumentChangeDraftingOutputSelection> selections) =>
         [.. selections.Select(selection => selection.Id)];
 
     private static string? Normalize(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
 
-    private static string Shorten(string? value) => Truncate(value ?? "", 80);
-
-    private static string Truncate(string value, int maximumLength)
-    {
-        if (value.Length <= maximumLength) return value;
-        var length = maximumLength - 3;
-        if (char.IsHighSurrogate(value[length - 1])) length--;
-        return value[..length] + "...";
-    }
-
     private static DocumentChangeDraftingResolution Rejected(IEnumerable<string> errors, bool citationErrors) =>
-        new(null, [.. errors.Take(AnalysisRun.MaximumValidationErrors)
-            .Select(error => Truncate(error, AnalysisRun.MaximumValidationErrorLength))], citationErrors);
+        new(null, Bound(errors), citationErrors);
 }

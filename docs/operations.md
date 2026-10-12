@@ -429,7 +429,7 @@ The `worker` command gates statement candidates. [Architecture](architecture.md#
 | `CIVIC_LENS_ANALYSIS_CONCURRENCY` | Optional number of calls at the same time, shared with drafting (default 2, 1 to 4) |
 | `CIVIC_LENS_ISSUES_CONFIG` | The issue file. Its revision ID binds each gate run. |
 
-The migration queued a gate row for every earlier candidate. The first run can spend up to the daily limit on them. Start with a low limit. With `--once`, the worker drains collection, then drafting, then the gate, and prints a third JSON line for the gate.
+The migration queued a gate row for every earlier candidate. The first run can spend up to the daily limit on them. Start with a low limit. With `--once`, the worker drains collection, then document-change drafting, then the gate, then statement drafting. It prints one more JSON line for each stage that runs.
 
 The commands below need `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`.
 
@@ -443,11 +443,37 @@ CIVIC_LENS_ISSUES_CONFIG=/abs/config/issues.json dotnet run --no-build --configu
 
 `status` prints the daily limit, any pause, the tokens charged today, and the count of candidates in each outcome. `list` takes `passed`, `skipped`, `failed-open`, `over-cap`, `pending`, or `failed`, and a limit up to 500 (default 100). `run` prints one run with its output, rubric revision, reason, and verified quote spans. `requeue` moves Failed gate rows back to Pending. `regate` moves skipped candidates back to Pending when their latest run used an older issue revision. Edit the issue file, then run `regate`, then let the worker run. No rubric change requeues anything by itself.
 
-To check the adapter and the prompt cache against the real API, run one paid test on request only. The test sends two requests and fails unless the second reads the cache.
+To check the adapter and the prompt cache against the real API, run one paid test on request only. The gate test sends two requests and fails unless the second reads the cache.
 
 ```sh
 CIVIC_LENS_LIVE_AI=1 ANTHROPIC_API_KEY=... dotnet test CivicLens.slnx --configuration Release --no-build --filter 'Category=LiveAi'
 ```
+
+### Statement drafting
+
+The `worker` command drafts a statement record for each candidate that the gate passed. [Architecture](architecture.md#statement-drafting-implemented) holds the rules. Statement drafting runs when both variables below are set in the worker's protected environment. A limit without `ANTHROPIC_API_KEY` stops the worker with exit code 2. The stage needs `CIVIC_LENS_COLLECTION_CONFIG`, which the worker always reads, because the source coverage gives the speakers. It does not need the issue file.
+
+| Variable | Meaning |
+|---|---|
+| `ANTHROPIC_API_KEY` | Claude API key, shared with the other stages |
+| `CIVIC_LENS_STATEMENT_DRAFTING_DAILY_TOKENS` | Daily token limit for statement drafting calls, per UTC day. It is separate from the gate and the document-change limits. |
+| `CIVIC_LENS_STATEMENT_DRAFTING_RUN_TOKENS` | Optional limit for one call's reservation (default 120,000 or the daily limit, whichever is smaller). It also sets the article byte cap. |
+| `CIVIC_LENS_ANALYSIS_CONCURRENCY` | Optional number of calls at the same time, shared with the other stages (default 2, 1 to 4) |
+
+Drafting uses Claude Sonnet 5.5, which costs more than the gate model. Gate rows that passed before you set the limit become draft rows, and the first run can spend up to the daily limit on them. Start with a low limit. A candidate whose article is over the byte cap gets no model call. It gets a draft with no revision, and a person writes the record. A source that covers no official on the capture date blocks the entry as `speakersUnavailable`. Fix the coverage in the collection configuration, restart the worker, and requeue the entry.
+
+The commands below need `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`.
+
+```sh
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- statements draft status
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- statements draft list over-cap 50
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- statements draft run <run-id>
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- statements draft requeue <candidate-id|--all>
+```
+
+`status` prints the daily limit, any pause, the tokens charged today, and the count of drafts in each outcome. `list` takes `drafted`, `over-cap`, `existing`, `pending`, or `failed`, and a limit up to 500 (default 100). `run` prints one run with its output, reason, and validation errors. `requeue` moves Failed and no other draft rows back to Pending. A requeue never changes a gate row. A paused or waiting stage follows the same table as document-change drafting: fix the key or the credit and restart the worker, or wait for the next UTC day.
+
+The opt-in live test for statement drafting sends one paid request. Run it with the command above.
 
 ### Publish a static release
 

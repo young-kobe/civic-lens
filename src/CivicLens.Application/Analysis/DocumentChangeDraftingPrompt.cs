@@ -105,7 +105,7 @@ public static class DocumentChangeDraftingPrompt
             {
                 ["headline"] = new JsonObject { ["type"] = "string" },
                 ["summary"] = new JsonObject { ["type"] = "string" },
-                ["significance"] = NullableString(),
+                ["significance"] = AnalysisSchema.NullableString(),
                 ["limits"] = new JsonObject { ["type"] = "string" },
                 ["institution"] = new JsonObject { ["type"] = "string" },
                 ["changeDate"] = new JsonObject
@@ -119,11 +119,11 @@ public static class DocumentChangeDraftingPrompt
                         {
                             ["date"] = new JsonObject { ["type"] = "string" },
                             ["citationIndex"] = new JsonObject { ["type"] = "integer" },
-                            ["confidence"] = Number()
+                            ["confidence"] = AnalysisSchema.Number()
                         }
                     }, new JsonObject { ["type"] = "null" })
                 },
-                ["confidence"] = Number(),
+                ["confidence"] = AnalysisSchema.Number(),
                 ["officialIds"] = IdArray(catalog.Officials.Select(official => official.Id)),
                 ["issueIds"] = IdArray(catalog.IssueIds),
                 ["citations"] = new JsonObject
@@ -152,24 +152,15 @@ public static class DocumentChangeDraftingPrompt
 
     private static string HunkId(int index) => "h" + (index + 1).ToString(CultureInfo.InvariantCulture);
 
-    private static JsonObject NullableString() => new()
-    {
-        ["anyOf"] = new JsonArray(new JsonObject { ["type"] = "string" }, new JsonObject { ["type"] = "null" })
-    };
-
-    private static JsonObject Number() => new() { ["type"] = "number" };
-
     private static JsonObject IdArray(IEnumerable<string> ids)
     {
-        var values = ids.ToArray();
-        var id = new JsonObject { ["type"] = "string" };
-        if (values.Length > 0) id["enum"] = new JsonArray([.. values.Select(value => (JsonNode)value)]);
+        var id = AnalysisSchema.IdString(ids);
         var item = new JsonObject
         {
             ["type"] = "object",
             ["additionalProperties"] = false,
             ["required"] = new JsonArray("id", "confidence"),
-            ["properties"] = new JsonObject { ["id"] = id, ["confidence"] = Number() }
+            ["properties"] = new JsonObject { ["id"] = id, ["confidence"] = AnalysisSchema.Number() }
         };
         return new JsonObject { ["type"] = "array", ["items"] = item };
     }
