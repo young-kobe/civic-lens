@@ -5,11 +5,12 @@ namespace CivicLens.Application.Statements;
 
 internal static class ArticleQuote
 {
-    public static DocumentTextSpan? Locate(DocumentExtraction extraction, string? quote, string label, int maximumLength, List<string> errors)
+    public static DocumentTextSpan? Locate(DocumentExtraction extraction, string? quote, string label, int maximumLength, List<string> errors,
+        List<string> citationErrors)
     {
         if (string.IsNullOrEmpty(quote) || quote.Length > maximumLength)
         {
-            errors.Add($"The quote for \"{label}\" needs 1 to {maximumLength} characters.");
+            AddCitationError($"The quote for \"{label}\" needs 1 to {maximumLength} characters.", errors, citationErrors);
             return null;
         }
         var problem = UniqueQuote.Find(extraction.Text, quote, out var start) switch
@@ -20,7 +21,7 @@ internal static class ArticleQuote
             _ => null
         };
         if (problem is null) return new DocumentTextSpan(extraction, start, quote.Length);
-        errors.Add($"The quote \"{Shorten(quote)}\" for \"{label}\" {problem}");
+        AddCitationError($"The quote \"{Shorten(quote)}\" for \"{label}\" {problem}", errors, citationErrors);
         return null;
     }
 }

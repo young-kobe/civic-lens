@@ -22,17 +22,55 @@ public sealed class StatementDraftResolverTests
     }
 
     [Theory]
-    [InlineData("2026-13-40", "WASHINGTON, October 3, 2026", "yyyy-MM-dd form")]
-    [InlineData("October 3, 2026", "WASHINGTON, October 3, 2026", "yyyy-MM-dd form")]
     [InlineData("2026-10-04", "WASHINGTON, October 3, 2026", "does not state 2026-10-04")]
     [InlineData("2026-10-03", "October 3, 2025", "does not occur in the article text")]
-    public void ADateThatIsMalformedOrNotStatedByItsExactQuoteIsRejectedAsACitationError(string date, string quote, string problem)
+    public void ADateThatTheArticleDoesNotStateIsRejectedAsACitationError(string date, string quote, string problem)
     {
         var resolution = Resolve(Output(date: (date, quote)));
 
         Assert.Null(resolution.Revision);
         Assert.True(resolution.HasCitationErrors);
         Assert.Contains(resolution.Errors, error => error.Contains(problem, StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("2026-13-40")]
+    [InlineData("October 3, 2026")]
+    public void ADateWithABadFormatIsAFieldErrorEvenWhenItsQuoteIsInTheArticle(string date)
+    {
+        var resolution = Resolve(Output(date: (date, "WASHINGTON, October 3, 2026")));
+
+        Assert.Null(resolution.Revision);
+        Assert.False(resolution.HasCitationErrors);
+        Assert.Contains(resolution.Errors, error => error.Contains("yyyy-MM-dd form", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void AQuotationCountOutsideTheLimitIsAFieldErrorNotACitationError()
+    {
+        var resolution = Resolve(Output(quotes: []));
+
+        Assert.False(resolution.HasCitationErrors);
+        Assert.Contains("Give 1 to 32 quotations.", resolution.Errors);
+    }
+
+    [Fact]
+    public void ASpeakerNameThatIsAbsentFromTheArticleIsACitationError()
+    {
+        var resolution = Resolve(Output(otherSpeakers: ["Nobody Named"]));
+
+        Assert.Null(resolution.Revision);
+        Assert.True(resolution.HasCitationErrors);
+        Assert.Contains(resolution.Errors, error => error.Contains("does not occur in the article text", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void AnImplausibleSpeakerNameIsAFieldErrorBecauseNoEvidenceCheckRuns()
+    {
+        var resolution = Resolve(Output(otherSpeakers: [" Jo Rivera"]));
+
+        Assert.Null(resolution.Revision);
+        Assert.False(resolution.HasCitationErrors);
     }
 
     [Theory]

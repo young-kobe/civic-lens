@@ -15,11 +15,11 @@ public static class StatementGateResolver
         var output = Parse(outputJson);
         if (output is null) return Rejected(["The output is not valid JSON for the gate schema."], citationErrors: false);
         var errors = new List<string>();
+        var citationErrors = new List<string>();
         CheckConfidence(output.Confidence, "confidence", errors);
         CheckPolicyAreas(output.PolicyAreas, rubric, errors);
-        var fieldErrors = errors.Count;
-        var quotes = ResolveIssues(output.TrackedIssues, evidence, rubric, errors);
-        if (errors.Count > 0) return Rejected(errors, citationErrors: errors.Count > fieldErrors);
+        var quotes = ResolveIssues(output.TrackedIssues, evidence, rubric, errors, citationErrors);
+        if (errors.Count > 0) return Rejected(errors, citationErrors.Count > 0);
         return new(quotes.IsEmpty ? StatementGateReasons.NoTrackedIssue : StatementGateReasons.Passed, quotes, [], false);
     }
 
@@ -47,7 +47,8 @@ public static class StatementGateResolver
     }
 
     private static ImmutableArray<StatementGateQuote> ResolveIssues(ImmutableArray<StatementGateOutputIssue> issues,
-        StatementGateEvidence evidence, StatementGateRubric rubric, List<string> errors)
+        StatementGateEvidence evidence, StatementGateRubric rubric, List<string> errors,
+        List<string> citationErrors)
     {
         var listed = rubric.Issues.Select(issue => issue.Id).ToHashSet(StringComparer.Ordinal);
         var seen = new HashSet<string>(StringComparer.Ordinal);
@@ -58,13 +59,14 @@ public static class StatementGateResolver
             if (issue.Id is null || !listed.Contains(issue.Id))
                 errors.Add($"trackedIssues holds \"{Shorten(issue.Id)}\", which is not a listed ID.");
             else if (!seen.Add(issue.Id)) errors.Add($"trackedIssues repeats \"{issue.Id}\".");
-            else if (Locate(issue, evidence.Extraction, errors) is { } quote) quotes.Add(quote);
+            else if (Locate(issue, evidence.Extraction, errors, citationErrors) is { } quote) quotes.Add(quote);
         }
         return quotes.ToImmutable();
     }
 
-    private static StatementGateQuote? Locate(StatementGateOutputIssue issue, DocumentExtraction extraction, List<string> errors) =>
-        ArticleQuote.Locate(extraction, issue.Quote, issue.Id, StatementGateTask.MaximumQuoteLength, errors) is { } span
+    private static StatementGateQuote? Locate(StatementGateOutputIssue issue, DocumentExtraction extraction, List<string> errors,
+        List<string> citationErrors) =>
+        ArticleQuote.Locate(extraction, issue.Quote, issue.Id, StatementGateTask.MaximumQuoteLength, errors, citationErrors) is { } span
             ? new(issue.Id, span.ExtractionId, span.Start, span.Length) : null;
 
     private static StatementGateResolution Rejected(IEnumerable<string> errors, bool citationErrors) =>

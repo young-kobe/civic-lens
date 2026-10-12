@@ -20,15 +20,15 @@ public static class StatementDraftResolver
         if (output is null) return Rejected(["The output is not valid JSON for the statement schema."], citationErrors: false);
         var extraction = evidence.Article.Extraction;
         var errors = new List<string>();
+        var citationErrors = new List<string>();
         CheckText(output.Headline, StatementDraftRevision.MaximumHeadlineLength, "headline", required: true, errors);
         CheckText(output.Summary, StatementDraftRevision.MaximumSummaryLength, "summary", required: true, errors);
         CheckConfidence(output.Confidence, "confidence", errors);
         var speakers = ResolveSpeakers(output.SpeakerOfficialIds, officials, errors);
-        var others = ResolveOtherSpeakers(output.OtherSpeakers, extraction.Text, errors);
-        var fieldErrors = errors.Count;
-        var date = ResolveDate(output.StatementDate, extraction, errors);
-        var quotations = ResolveQuotations(output.Quotations, extraction, errors);
-        if (errors.Count > 0) return Rejected(errors, citationErrors: errors.Count > fieldErrors);
+        var others = ResolveOtherSpeakers(output.OtherSpeakers, extraction.Text, errors, citationErrors);
+        var date = ResolveDate(output.StatementDate, extraction, errors, citationErrors);
+        var quotations = ResolveQuotations(output.Quotations, extraction, errors, citationErrors);
+        if (errors.Count > 0) return Rejected(errors, citationErrors.Count > 0);
         var revision = new StatementDraftRevision(evidence.Article.CandidateId, 1, ReviewAuthor.AnalysisSubject, createdAtUtc,
             output.Headline, output.Summary, date?.Date, date?.Evidence, speakers, others, evidence.CarryOver.IssueIds,
             evidence.CarryOver.PolicyAreaIds, quotations, BillNumberFinder.Find(extraction.Text));
@@ -75,7 +75,7 @@ public static class StatementDraftResolver
     }
 
     private static ImmutableArray<string> ResolveOtherSpeakers(ImmutableArray<StatementDraftOutputSpeaker> speakers, string articleText,
-        List<string> errors)
+        List<string> errors, List<string> citationErrors)
     {
         if (speakers.Length > StatementDraftRevision.MaximumOtherSpeakers)
             errors.Add($"otherSpeakers can hold at most {StatementDraftRevision.MaximumOtherSpeakers} names.");
@@ -86,7 +86,7 @@ public static class StatementDraftResolver
             if (!IsPlainName(speaker.Name))
                 errors.Add($"otherSpeakers holds \"{Shorten(speaker.Name)}\". A name has 1 to {StatementDraftRevision.MaximumOtherSpeakerLength} characters, no NUL character, and no space at either end.");
             else if (!articleText.Contains(speaker.Name, StringComparison.Ordinal))
-                errors.Add($"The name \"{Shorten(speaker.Name)}\" in otherSpeakers does not occur in the article text.");
+                AddCitationError($"The name \"{Shorten(speaker.Name)}\" in otherSpeakers does not occur in the article text.", errors, citationErrors);
             else if (!seen.Add(speaker.Name)) errors.Add($"otherSpeakers repeats \"{Shorten(speaker.Name)}\".");
         }
         return [.. speakers.Select(speaker => speaker.Name)];
@@ -97,7 +97,7 @@ public static class StatementDraftResolver
         name == name.Trim();
 
     private static (DateOnly Date, StatementSpan Evidence)? ResolveDate(StatementDraftOutputDate? statementDate, DocumentExtraction extraction,
-        List<string> errors)
+        List<string> errors, List<string> citationErrors)
     {
         if (statementDate is null) return null;
         CheckConfidence(statementDate.Confidence, "statementDate confidence", errors);
@@ -106,18 +106,19 @@ public static class StatementDraftResolver
             errors.Add("statementDate.date must be a calendar date in yyyy-MM-dd form.");
             return null;
         }
-        var span = ArticleQuote.Locate(extraction, statementDate.Quote, "statementDate", StatementDraftRevision.MaximumQuotationLength, errors);
+        var span = ArticleQuote.Locate(extraction, statementDate.Quote, "statementDate", StatementDraftRevision.MaximumQuotationLength, errors, citationErrors);
         if (span is null) return null;
         if (!StatesDate(span.Quote, date))
         {
-            errors.Add($"statementDate: the quote does not state {statementDate.Date}. Quote the passage that states the date.");
+            AddCitationError($"statementDate: the quote does not state {statementDate.Date}. Quote the passage that states the date.", errors,
+                citationErrors);
             return null;
         }
         return (date, new(span.ExtractionId, span.Start, span.Length));
     }
 
     private static ImmutableArray<StatementQuotation> ResolveQuotations(ImmutableArray<StatementDraftOutputQuotation> quotations,
-        DocumentExtraction extraction, List<string> errors)
+        DocumentExtraction extraction, List<string> errors, List<string> citationErrors)
     {
         if (quotations.IsEmpty || quotations.Length > StatementDraftRevision.MaximumQuotations)
         {
@@ -130,7 +131,8 @@ public static class StatementDraftResolver
         {
             var label = $"quotations[{index}]";
             CheckConfidence(quotations[index].Confidence, $"{label} confidence", errors);
-            var span = ArticleQuote.Locate(extraction, quotations[index].Quote, label, StatementDraftRevision.MaximumQuotationLength, errors);
+            var span = ArticleQuote.Locate(extraction, quotations[index].Quote, label, StatementDraftRevision.MaximumQuotationLength, errors,
+                citationErrors);
             if (span is null) continue;
             if (resolved.Any(item => item.Span.Start == span.Start && item.Span.Length == span.Length)) errors.Add($"{label} repeats an earlier quotation.");
             else resolved.Add(new(new(span.ExtractionId, span.Start, span.Length), quoted.KindOf(span.Start, span.Length)));

@@ -25,6 +25,12 @@ public static class AnalysisAnswerRules
         if (!double.IsFinite(value) || value < 0 || value > 1) errors.Add($"{name} must be a number from 0 to 1.");
     }
 
+    public static void AddCitationError(string message, List<string> errors, List<string> citationErrors)
+    {
+        errors.Add(message);
+        citationErrors.Add(message);
+    }
+
     public static void CheckText(string? value, int maximumLength, string name, bool required, List<string> errors)
     {
         if (value is null && !required) return;

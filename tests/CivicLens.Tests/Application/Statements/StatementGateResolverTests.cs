@@ -52,6 +52,23 @@ public sealed class StatementGateResolverTests
     }
 
     [Fact]
+    public void AnOutOfRangeConfidenceInsideTrackedIssuesIsAFieldErrorEvenWhenItsQuoteIsFound()
+    {
+        var result = StatementGateResolver.Resolve(Output([], 1.5, (RentIssue, "help tenants")), Evidence(Article), Rubric());
+
+        Assert.False(result.IsValid);
+        Assert.False(result.HasCitationErrors);
+    }
+
+    [Fact]
+    public void AnUnlistedIssueIdIsAFieldErrorNotACitationError()
+    {
+        var result = StatementGateResolver.Resolve(Output([], 0.5, (RetiredIssue, "rent cap freeze")), Evidence(Article), Rubric());
+
+        Assert.False(result.HasCitationErrors);
+    }
+
+    [Fact]
     public void ARepeatedIssueAndMalformedJsonAreRejected()
     {
         var repeated = StatementGateResolver.Resolve(Output([], 0.5, (RentIssue, "help tenants"), (RentIssue, "plan")), Evidence(Article), Rubric());

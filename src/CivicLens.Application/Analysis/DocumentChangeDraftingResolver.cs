@@ -18,6 +18,7 @@ public static class DocumentChangeDraftingResolver
         var output = Parse(outputJson);
         if (output is null) return Rejected(["The output is not valid JSON for the draft schema."], citationErrors: false);
         var errors = new List<string>();
+        var citationErrors = new List<string>();
         CheckText(output.Headline, DocumentChangeDraftRevision.MaximumHeadlineLength, "headline", required: true, errors);
         CheckText(output.Summary, DocumentChangeDraftRevision.MaximumSummaryLength, "summary", required: true, errors);
         CheckText(output.Significance, DocumentChangeDraftRevision.MaximumSignificanceLength, "significance", required: false, errors);
@@ -26,11 +27,9 @@ public static class DocumentChangeDraftingResolver
         CheckSelections(output.OfficialIds, catalog.Officials.Select(official => official.Id), "officialIds", errors);
         CheckSelections(output.IssueIds, catalog.IssueIds, "issueIds", errors);
         CheckConfidence(output.Confidence, "confidence", errors);
-        var textErrors = errors.Count;
-        var citations = ResolveCitations(output.Citations, evidence, errors);
-        var changeDate = ResolveChangeDate(output.ChangeDate, output.Citations, citations, errors);
-        var citationErrors = errors.Count > textErrors;
-        if (errors.Count > 0 || citations.IsDefault) return Rejected(errors, citationErrors);
+        var citations = ResolveCitations(output.Citations, evidence, errors, citationErrors);
+        var changeDate = ResolveChangeDate(output.ChangeDate, output.Citations, citations, errors, citationErrors);
+        if (errors.Count > 0 || citations.IsDefault) return Rejected(errors, citationErrors.Count > 0);
         var revision = new DocumentChangeDraftRevision(draftId, 1, evidence.Comparison.Comparison.ComparisonId,
             ReviewAuthor.AnalysisSubject, createdAtUtc, output.Headline, output.Summary, Normalize(output.Significance),
             output.Limits, output.Institution, changeDate?.Date, changeDate?.Evidence, Ids(output.OfficialIds), Ids(output.IssueIds), citations);
@@ -51,7 +50,7 @@ public static class DocumentChangeDraftingResolver
     }
 
     private static ImmutableArray<DocumentChangeCitation> ResolveCitations(ImmutableArray<DocumentChangeDraftingOutputCitation> citations,
-        DocumentChangeAnalysisEvidence evidence, List<string> errors)
+        DocumentChangeAnalysisEvidence evidence, List<string> errors, List<string> citationErrors)
     {
         if (citations.IsEmpty || citations.Length > DocumentChangeDraftRevision.MaximumCitations)
         {
@@ -61,7 +60,7 @@ public static class DocumentChangeDraftingResolver
         var resolved = ImmutableArray.CreateBuilder<DocumentChangeCitation>(citations.Length);
         for (var index = 0; index < citations.Length; index++)
         {
-            var citation = ResolveCitation(citations[index], index, evidence, errors);
+            var citation = ResolveCitation(citations[index], index, evidence, errors, citationErrors);
             if (citation is null) continue;
             if (resolved.Contains(citation)) errors.Add($"Citation {index} repeats an earlier citation.");
             else resolved.Add(citation);
@@ -70,13 +69,13 @@ public static class DocumentChangeDraftingResolver
     }
 
     private static DocumentChangeCitation? ResolveCitation(DocumentChangeDraftingOutputCitation citation, int index, DocumentChangeAnalysisEvidence evidence,
-        List<string> errors)
+        List<string> errors, List<string> citationErrors)
     {
         var hunks = evidence.Comparison.Comparison.Hunks;
         var hunkIndex = ParseHunkIndex(citation.HunkId, hunks.Length);
         if (hunkIndex is null)
         {
-            errors.Add($"Citation {index} names an unknown hunk \"{Shorten(citation.HunkId)}\".");
+            AddCitationError($"Citation {index} names an unknown hunk \"{Shorten(citation.HunkId)}\".", errors, citationErrors);
             return null;
         }
         var hunk = hunks[hunkIndex.Value];
@@ -88,34 +87,34 @@ public static class DocumentChangeDraftingResolver
         };
         if (window is null || extraction is null)
         {
-            errors.Add($"Citation {index} has side \"{Shorten(citation.Side)}\". Use \"before\" or \"after\".");
+            AddCitationError($"Citation {index} has side \"{Shorten(citation.Side)}\". Use \"before\" or \"after\".", errors, citationErrors);
             return null;
         }
         if (string.IsNullOrEmpty(citation.Quote) || citation.Quote.Length > DocumentChangeDraftRevision.MaximumCitationLength)
         {
-            errors.Add($"Citation {index} needs a quote of 1 to {DocumentChangeDraftRevision.MaximumCitationLength} characters.");
+            AddCitationError($"Citation {index} needs a quote of 1 to {DocumentChangeDraftRevision.MaximumCitationLength} characters.", errors, citationErrors);
             return null;
         }
-        return Locate(citation, index, window, windowStart, extraction, errors);
+        return Locate(citation, index, window, windowStart, extraction, errors, citationErrors);
     }
 
     private static DocumentChangeCitation? Locate(DocumentChangeDraftingOutputCitation citation, int index, string window, int windowStart,
-        DocumentExtraction extraction, List<string> errors)
+        DocumentExtraction extraction, List<string> errors, List<string> citationErrors)
     {
         var found = UniqueQuote.Find(window, citation.Quote, out var first);
         if (found == UniqueQuoteResult.Missing)
         {
-            errors.Add($"Citation {index}: the quote \"{Shorten(citation.Quote)}\" does not occur in the {citation.Side} window of {citation.HunkId}.");
+            AddCitationError($"Citation {index}: the quote \"{Shorten(citation.Quote)}\" does not occur in the {citation.Side} window of {citation.HunkId}.", errors, citationErrors);
             return null;
         }
         if (found == UniqueQuoteResult.Ambiguous)
         {
-            errors.Add($"Citation {index}: the quote \"{Shorten(citation.Quote)}\" occurs more than once in the {citation.Side} window of {citation.HunkId}. Quote a longer, unique passage.");
+            AddCitationError($"Citation {index}: the quote \"{Shorten(citation.Quote)}\" occurs more than once in the {citation.Side} window of {citation.HunkId}. Quote a longer, unique passage.", errors, citationErrors);
             return null;
         }
         if (found == UniqueQuoteResult.SplitsCharacter)
         {
-            errors.Add($"Citation {index}: the quote boundaries split a character. Quote whole characters.");
+            AddCitationError($"Citation {index}: the quote boundaries split a character. Quote whole characters.", errors, citationErrors);
             return null;
         }
         var span = new DocumentTextSpan(extraction, windowStart + first, citation.Quote.Length);
@@ -124,7 +123,8 @@ public static class DocumentChangeDraftingResolver
     }
 
     private static (DateOnly Date, DocumentChangeCitation Evidence)? ResolveChangeDate(DocumentChangeDraftingOutputChangeDate? changeDate,
-        ImmutableArray<DocumentChangeDraftingOutputCitation> quotes, ImmutableArray<DocumentChangeCitation> citations, List<string> errors)
+        ImmutableArray<DocumentChangeDraftingOutputCitation> quotes, ImmutableArray<DocumentChangeCitation> citations, List<string> errors,
+        List<string> citationErrors)
     {
         if (changeDate is null) return null;
         CheckConfidence(changeDate.Confidence, "changeDate.confidence", errors);
@@ -141,7 +141,7 @@ public static class DocumentChangeDraftingResolver
         }
         if (!StatesDate(quotes[changeDate.CitationIndex].Quote, date))
         {
-            errors.Add($"changeDate: citation {changeDate.CitationIndex} does not state {changeDate.Date}. Cite the passage that states the date.");
+            AddCitationError($"changeDate: citation {changeDate.CitationIndex} does not state {changeDate.Date}. Cite the passage that states the date.", errors, citationErrors);
             return null;
         }
         return (date, citations[changeDate.CitationIndex]);
