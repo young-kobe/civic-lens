@@ -18,7 +18,7 @@ public sealed class StatementAnalysisLifecycleTests
         var record = new AnalysisRecord(CandidateId, StatementGateTask.Task, State.Succeeded, null, 1, 0, null, reason);
         var requeue = new AnalysisCheckpoint(CandidateId, StatementGateTask.Task, State.Succeeded, null, 1, State.Pending);
 
-        Assert.Equal(allowed, StatementAnalysisLifecycle.Rules.CanTransition(record, requeue));
+        Assert.Equal(allowed, StatementAnalysisLifecycle.CanTransition(record, requeue));
     }
 
     [Theory]
@@ -31,14 +31,14 @@ public sealed class StatementAnalysisLifecycleTests
         var record = new AnalysisRecord(CandidateId, StatementGateTask.Task, State.Running, "lease", 1, 0, null, null);
         var settle = new AnalysisCheckpoint(CandidateId, StatementGateTask.Task, State.Running, "lease", 1, State.Succeeded, reason);
 
-        Assert.Equal(allowed, StatementAnalysisLifecycle.Rules.CanTransition(record, settle));
+        Assert.Equal(allowed, StatementAnalysisLifecycle.CanTransition(record, settle));
     }
 
     [Fact]
     public void ADocumentChangeEntryNeverReturnsFromSucceededToPending()
     {
-        var record = new AnalysisRecord(CandidateId, "draft", State.Succeeded, null, 1, 0, null, StatementGateReasons.NoTrackedIssue);
-        var requeue = new AnalysisCheckpoint(CandidateId, "draft", State.Succeeded, null, 1, State.Pending);
+        var record = new AnalysisRecord(CandidateId, DocumentChangeDraftingTask.Task, State.Succeeded, null, 1, 0, null, StatementGateReasons.NoTrackedIssue);
+        var requeue = new AnalysisCheckpoint(CandidateId, DocumentChangeDraftingTask.Task, State.Succeeded, null, 1, State.Pending);
 
         Assert.False(DocumentChangeAnalysisLifecycle.CanTransition(record, requeue));
     }

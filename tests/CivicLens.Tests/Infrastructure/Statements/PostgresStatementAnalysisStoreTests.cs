@@ -53,7 +53,7 @@ public sealed class PostgresStatementAnalysisStoreTests(PostgresCollection postg
 
         await Worker(model, Revision()).ExecuteAsync(once: true);
 
-        Assert.Equal([("gate", "Succeeded", "passed"), ("draft", "Pending", null)], await RowsAsync(candidate));
+        Assert.Equal([("gate", "Succeeded", "passed"), (StatementDraftTask.Task, "Pending", null)], await RowsAsync(candidate));
         var run = (await store.GetRunAsync(await RunIdAsync(candidate), default))!;
         Assert.Equal((Revision().Id, StatementGateReasons.Passed), (run.IssueRevisionId, run.Reason));
         Assert.Equal(Article.IndexOf("a rent cap", StringComparison.Ordinal), Assert.Single(run.Quotes).Start);
@@ -95,7 +95,7 @@ public sealed class PostgresStatementAnalysisStoreTests(PostgresCollection postg
         await Worker(model, Revision(), new StatementGateSettings(10_000_000, StatementGatePrompt.MinimumReservation, 1)).ExecuteAsync(once: true);
 
         Assert.Empty(model.Requests);
-        Assert.Equal([("gate", "Succeeded", "over-byte-cap"), ("draft", "Pending", null)], await RowsAsync(candidate));
+        Assert.Equal([("gate", "Succeeded", "over-byte-cap"), (StatementDraftTask.Task, "Pending", null)], await RowsAsync(candidate));
         Assert.Equal(0L, await store.GetChargedTodayAsync(default));
     }
 
@@ -107,7 +107,7 @@ public sealed class PostgresStatementAnalysisStoreTests(PostgresCollection postg
 
         await Worker(model, Revision()).ExecuteAsync(once: true);
 
-        Assert.Equal([("gate", "Succeeded", "gate-failed-open"), ("draft", "Pending", null)], await RowsAsync(candidate));
+        Assert.Equal([("gate", "Succeeded", "gate-failed-open"), (StatementDraftTask.Task, "Pending", null)], await RowsAsync(candidate));
         Assert.Equal(2L, await ScalarAsync("SELECT count(*) FROM statement_analysis_runs WHERE outcome IN ('OutputRejected','CitationRejected')"));
         Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM statement_analysis_runs WHERE reason = 'gate-failed-open'"));
     }
@@ -158,7 +158,7 @@ public sealed class PostgresStatementAnalysisStoreTests(PostgresCollection postg
         await Worker(model, Revision()).ExecuteAsync(once: true);
 
         var counts = await store.CountAsync(default);
-        var skipped = await new ListStatementGates(store).ExecuteAsync(Owner, StatementGateView.Skipped, 10);
+        var skipped = await new ListStatementAnalyses<StatementGateRun, StatementGateView, StatementGateListItem>(store).ExecuteAsync(Owner, StatementGateView.Skipped, 10);
 
         Assert.Equal(1, counts[StatementGateView.Skipped]);
         Assert.Equal(1, counts[StatementGateView.Passed]);
@@ -180,7 +180,7 @@ public sealed class PostgresStatementAnalysisStoreTests(PostgresCollection postg
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
         await using var command = new NpgsqlCommand(
-            $"SELECT task, status, error_code FROM statement_analysis WHERE candidate_id = '{candidate}' ORDER BY task DESC", connection);
+            $"SELECT task, status, error_code FROM statement_analysis WHERE candidate_id = '{candidate}' ORDER BY task", connection);
         await using var reader = await command.ExecuteReaderAsync();
         var rows = new List<(string, string, string?)>();
         while (await reader.ReadAsync()) rows.Add((reader.GetString(0), reader.GetString(1), reader.IsDBNull(2) ? null : reader.GetString(2)));

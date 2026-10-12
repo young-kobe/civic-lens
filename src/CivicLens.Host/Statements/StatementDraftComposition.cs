@@ -25,7 +25,7 @@ internal sealed class StatementDraftComposition
 
     public static StatementDraftComposition Create(string connectionString)
     {
-        var status = PostgresAnalysisStatusStore.FromConnectionString(connectionString, StatementDraftTask.StatusTask);
+        var status = PostgresAnalysisStatusStore.FromConnectionString(connectionString, StatementDraftTask.Task);
         var configuration = StatementDraftConfiguration.FromEnvironment();
         if (configuration is null) return new(status, null, null, null);
         var wakeup = PostgresAnalysisWakeup.FromConnectionString(connectionString, PostgresStatementAnalysisStore.Table);

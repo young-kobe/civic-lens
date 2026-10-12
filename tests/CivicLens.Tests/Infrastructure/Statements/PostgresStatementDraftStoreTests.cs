@@ -57,14 +57,14 @@ public sealed class PostgresStatementDraftStoreTests(PostgresCollection postgres
 
         await DraftingWorker(model).ExecuteAsync(once: true);
 
-        Assert.Equal([("draft", "Succeeded", null)], await QueueAsync(candidate, "draft"));
+        Assert.Equal([(StatementDraftTask.Task, "Succeeded", null)], await QueueAsync(candidate, StatementDraftTask.Task));
         Assert.Equal(1L, await ScalarAsync($"SELECT current_revision_number FROM statement_drafts WHERE candidate_id = '{candidate}'"));
-        var runId = await TextAsync($"SELECT run_id FROM statement_analysis_runs WHERE candidate_id = '{candidate}' AND task = 'draft'");
+        var runId = await TextAsync($"SELECT run_id FROM statement_analysis_runs WHERE candidate_id = '{candidate}' AND task = '{StatementDraftTask.Task}'");
         Assert.Equal(("Analysis", "civic-lens:analysis", runId), await RevisionAsync(candidate));
         var revision = JsonSerializer.Deserialize<JsonElement>(await TextAsync($"SELECT revision_json FROM statement_revisions WHERE candidate_id = '{candidate}'"));
         Assert.Equal(RentIssue, revision.GetProperty("issueIds")[0].GetString());
         Assert.Equal(HousingArea, revision.GetProperty("policyAreaIds")[0].GetString());
-        Assert.Equal(1_000L, await ScalarAsync("SELECT charged_tokens FROM statement_analysis_budget WHERE task = 'draft'"));
+        Assert.Equal(1_000L, await ScalarAsync($"SELECT charged_tokens FROM statement_analysis_budget WHERE task = '{StatementDraftTask.Task}'"));
         Assert.Equal(1_000L, await ScalarAsync("SELECT charged_tokens FROM statement_analysis_budget WHERE task = 'gate'"));
         var run = (await drafts.GetRunAsync(runId, default))!;
         Assert.Equal(model.Requests[0].InputHash, run.Run.InputHash);
@@ -80,10 +80,10 @@ public sealed class PostgresStatementDraftStoreTests(PostgresCollection postgres
         await DraftingWorker(model, new StatementDraftSettings(10_000_000, StatementDraftPrompt.MinimumReservation, 1)).ExecuteAsync(once: true);
 
         Assert.Empty(model.Requests);
-        Assert.Equal([("draft", "Succeeded", "over-byte-cap")], await QueueAsync(candidate, "draft"));
+        Assert.Equal([(StatementDraftTask.Task, "Succeeded", "over-byte-cap")], await QueueAsync(candidate, StatementDraftTask.Task));
         Assert.Equal(0L, await ScalarAsync($"SELECT current_revision_number FROM statement_drafts WHERE candidate_id = '{candidate}'"));
         Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM statement_revisions"));
-        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM statement_analysis_runs WHERE task = 'draft' AND outcome = 'Bypassed' AND reason = 'over-byte-cap' AND charged_tokens = 0"));
+        Assert.Equal(1L, await ScalarAsync($"SELECT count(*) FROM statement_analysis_runs WHERE task = '{StatementDraftTask.Task}' AND outcome = 'Bypassed' AND reason = 'over-byte-cap' AND charged_tokens = 0"));
     }
 
     [Fact]
@@ -96,9 +96,9 @@ public sealed class PostgresStatementDraftStoreTests(PostgresCollection postgres
         await DraftingWorker(again).ExecuteAsync(once: true);
 
         Assert.Empty(again.Requests);
-        Assert.Equal(0, await new RequeueStatementDrafts(drafts).ExecuteAsync(Owner, null));
+        Assert.Equal(0, await new RequeueAnalyses<StatementDraftRun>(drafts).ExecuteAsync(Owner, null));
         Assert.Equal((1L, 1L, 1L), (await ScalarAsync("SELECT count(*) FROM statement_drafts"), await ScalarAsync("SELECT count(*) FROM statement_revisions"),
-            await ScalarAsync("SELECT count(*) FROM statement_analysis_runs WHERE task = 'draft'")));
+            await ScalarAsync($"SELECT count(*) FROM statement_analysis_runs WHERE task = '{StatementDraftTask.Task}'")));
     }
 
     [Fact]
@@ -111,7 +111,7 @@ public sealed class PostgresStatementDraftStoreTests(PostgresCollection postgres
         await DraftingWorker(model).ExecuteAsync(once: true);
 
         Assert.Empty(model.Requests);
-        Assert.Equal([("draft", "Succeeded", "humanDraftExists")], await QueueAsync(candidate, "draft"));
+        Assert.Equal([(StatementDraftTask.Task, "Succeeded", "humanDraftExists")], await QueueAsync(candidate, StatementDraftTask.Task));
     }
 
     [Fact]
@@ -126,9 +126,9 @@ public sealed class PostgresStatementDraftStoreTests(PostgresCollection postgres
 
         await DraftingWorker(model).ExecuteAsync(once: true);
 
-        Assert.Equal([("draft", "Succeeded", "draftDiscarded")], await QueueAsync(candidate, "draft"));
+        Assert.Equal([(StatementDraftTask.Task, "Succeeded", "draftDiscarded")], await QueueAsync(candidate, StatementDraftTask.Task));
         Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM statement_revisions"));
-        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM statement_analysis_runs WHERE task = 'draft' AND outcome = 'DraftDiscarded'"));
+        Assert.Equal(1L, await ScalarAsync($"SELECT count(*) FROM statement_analysis_runs WHERE task = '{StatementDraftTask.Task}' AND outcome = 'DraftDiscarded'"));
     }
 
     [Fact]
@@ -137,14 +137,14 @@ public sealed class PostgresStatementDraftStoreTests(PostgresCollection postgres
         var candidate = await PassedCandidateAsync();
         var model = new FakeStatementDraftingModel().Draft("not json").Draft(Output(quotes: ["a rent freeze"]));
         await DraftingWorker(model).ExecuteAsync(once: true);
-        Assert.Equal([("draft", "Failed", "citationRejected"), ("gate", "Succeeded", "passed")], await QueueAsync(candidate));
+        Assert.Equal([("gate", "Succeeded", "passed"), (StatementDraftTask.Task, "Failed", "citationRejected")], await QueueAsync(candidate));
         Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM statement_drafts"));
 
-        var requeued = await new RequeueStatementDrafts(drafts).ExecuteAsync(Owner, candidate);
+        var requeued = await new RequeueAnalyses<StatementDraftRun>(drafts).ExecuteAsync(Owner, candidate);
         await DraftingWorker(new FakeStatementDraftingModel().Draft(Output())).ExecuteAsync(once: true);
 
         Assert.Equal(1, requeued);
-        Assert.Equal([("draft", "Succeeded", null), ("gate", "Succeeded", "passed")], await QueueAsync(candidate));
+        Assert.Equal([("gate", "Succeeded", "passed"), (StatementDraftTask.Task, "Succeeded", null)], await QueueAsync(candidate));
         Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM statement_revisions"));
     }
 
@@ -157,7 +157,7 @@ public sealed class PostgresStatementDraftStoreTests(PostgresCollection postgres
         await DraftingWorker(model).ExecuteAsync(once: true);
 
         var counts = await drafts.CountAsync(default);
-        var drafted = await new ListStatementDrafts(drafts).ExecuteAsync(Owner, StatementDraftView.Drafted, 10);
+        var drafted = await new ListStatementAnalyses<StatementDraftRun, StatementDraftView, StatementDraftListItem>(drafts).ExecuteAsync(Owner, StatementDraftView.Drafted, 10);
 
         Assert.Equal((1, 1, 0), (counts[StatementDraftView.Drafted], counts[StatementDraftView.Pending], counts[StatementDraftView.Failed]));
         Assert.Equal((null, "source"), (Assert.Single(drafted).Code, drafted[0].SourceId));
@@ -216,7 +216,7 @@ public sealed class PostgresStatementDraftStoreTests(PostgresCollection postgres
         await DraftingWorker(model).ExecuteAsync(once: true);
 
         Assert.Empty(model.Requests);
-        Assert.Equal([("draft", "Blocked", "speakersUnavailable")], await QueueAsync(candidate, "draft"));
+        Assert.Equal([(StatementDraftTask.Task, "Blocked", "speakersUnavailable")], await QueueAsync(candidate, StatementDraftTask.Task));
     }
 
     private StatementGateSettings BigGate => new(10_000_000, StatementGatePrompt.MinimumReservation, 1);

@@ -4,12 +4,11 @@ using CivicLens.Core.Review;
 
 namespace CivicLens.Application.Statements;
 
-public sealed record StatementGateStatusReport(AnalysisStatus? Status, long ChargedToday,
-    IReadOnlyDictionary<StatementGateView, int> Counts);
-
-public sealed class GetStatementGateStatus(IStatementAnalysisStore store, IAnalysisStatusStore status)
+public sealed class GetStatementAnalysisStatus<TRun, TView, TItem>(IStatementQueueStore<TRun, TView, TItem> store, IAnalysisStatusStore status)
+    where TRun : class
+    where TView : struct, Enum
 {
-    public async Task<StatementGateStatusReport> ExecuteAsync(ReviewActor actor, CancellationToken cancellationToken = default)
+    public async Task<StatementAnalysisStatusReport<TView>> ExecuteAsync(ReviewActor actor, CancellationToken cancellationToken = default)
     {
         ReviewAuthorization.RequireOwner(actor);
         return new(await status.GetAsync(cancellationToken), await store.GetChargedTodayAsync(cancellationToken),

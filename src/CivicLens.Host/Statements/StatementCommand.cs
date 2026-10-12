@@ -6,9 +6,9 @@ using CivicLens.Core.Review;
 
 namespace CivicLens.Host.Statements;
 
-internal sealed class StatementCommand(GetStatementGateStatus status, ListStatementGates list, GetStatementGateRun run,
-    RequeueStatementGates requeue, RegateStatementCandidates regate, StatementDraftCommands drafts, ReviewActor owner,
-    string? currentIssueRevisionId)
+internal sealed class StatementCommand(StatementQueueCommands<StatementGateRun, StatementGateView, StatementGateListItem> gates,
+    StatementQueueCommands<StatementDraftRun, StatementDraftView, StatementDraftListItem> drafts, RegateStatementCandidates regate,
+    ReviewActor owner, string? currentIssueRevisionId)
 {
     private const string Usage = "Use statements status, statements list [passed|skipped|failed-open|over-cap|pending|failed] [limit], " +
         "statements run <run-id>, statements requeue <candidate-id|--all>, statements regate [--since yyyy-MM-dd], " +
@@ -26,26 +26,26 @@ internal sealed class StatementCommand(GetStatementGateStatus status, ListStatem
             switch (args)
             {
                 case ["statements", "status"]:
-                    Write(await status.ExecuteAsync(owner, cancellationToken));
+                    Write(await gates.Status.ExecuteAsync(owner, cancellationToken));
                     return 0;
                 case ["statements", "list"]:
-                    Write(await list.ExecuteAsync(owner, null, DefaultListLimit, cancellationToken));
+                    Write(await gates.List.ExecuteAsync(owner, null, DefaultListLimit, cancellationToken));
                     return 0;
                 case ["statements", "list", var view]:
-                    Write(await list.ExecuteAsync(owner, ParseView(view), DefaultListLimit, cancellationToken));
+                    Write(await gates.List.ExecuteAsync(owner, ParseView(view), DefaultListLimit, cancellationToken));
                     return 0;
                 case ["statements", "list", var view, var limit]:
-                    Write(await list.ExecuteAsync(owner, ParseView(view), ParseLimit(limit), cancellationToken));
+                    Write(await gates.List.ExecuteAsync(owner, ParseView(view), ParseLimit(limit), cancellationToken));
                     return 0;
                 case ["statements", "run", var runId]:
-                    Write(await run.ExecuteAsync(owner, runId, cancellationToken)
+                    Write(await gates.Run.ExecuteAsync(owner, runId, cancellationToken)
                         ?? throw new ArgumentException("No gate run has that ID."));
                     return 0;
                 case ["statements", "requeue", "--all"]:
-                    Write(new { requeued = await requeue.ExecuteAsync(owner, null, cancellationToken) });
+                    Write(new { requeued = await gates.Requeue.ExecuteAsync(owner, null, cancellationToken) });
                     return 0;
                 case ["statements", "requeue", var candidateId]:
-                    Write(new { requeued = await requeue.ExecuteAsync(owner, candidateId, cancellationToken) });
+                    Write(new { requeued = await gates.Requeue.ExecuteAsync(owner, candidateId, cancellationToken) });
                     return 0;
                 case ["statements", "regate"]:
                     Write(new { requeued = await RegateAsync(null, cancellationToken) });

@@ -277,7 +277,7 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
             UPDATE document_change_analysis SET status = 'Failed', attempts = 3, error_code = 'refused'
             WHERE comparison_id = '{failed.ComparisonId}' RETURNING 0
             """);
-        var requeue = new RequeueDocumentChangeAnalyses(analysis);
+        var requeue = new RequeueAnalyses<AnalysisRun>(analysis);
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
             requeue.ExecuteAsync(new ReviewActor("auth0|friend", ReviewRole.Reviewer), null));
 

@@ -12,6 +12,7 @@ internal abstract class FakeAnalysisQueue<TRun> : IAnalysisQueue<TRun> where TRu
     protected List<AnalysisRecord> Items { get; } = [];
 
     public List<TRun> Runs { get; } = [];
+    public List<string?> Requeues { get; } = [];
     public long Charged { get; set; }
 
     public IReadOnlyList<AnalysisRecord> Entries
@@ -34,7 +35,11 @@ internal abstract class FakeAnalysisQueue<TRun> : IAnalysisQueue<TRun> where TRu
         lock (gate) return Task.FromResult(Charged);
     }
 
-    public Task<int> RequeueFailedAsync(string? subjectId, CancellationToken cancellationToken) => Task.FromResult(0);
+    public Task<int> RequeueFailedAsync(string? subjectId, CancellationToken cancellationToken)
+    {
+        lock (gate) Requeues.Add(subjectId);
+        return Task.FromResult(0);
+    }
 
     public Task<AnalysisClaim?> TryClaimAsync(string subjectId, TimeSpan leaseDuration, CancellationToken cancellationToken)
     {

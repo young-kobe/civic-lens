@@ -48,7 +48,7 @@ internal sealed class FakeStatementAnalysisStore : FakeAnalysisQueue<StatementGa
     }
 
     protected override bool CanTransition(AnalysisRecord record, AnalysisCheckpoint checkpoint) =>
-        StatementAnalysisLifecycle.Rules.CanTransition(record, checkpoint);
+        StatementAnalysisLifecycle.CanTransition(record, checkpoint);
 
     protected override AnalysisRun RunOf(StatementGateRun run) => run.Run;
 

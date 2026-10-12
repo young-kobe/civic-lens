@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using System.Text.Json;
 using CivicLens.Application.Analysis;
+using CivicLens.Core.Analysis;
 using CivicLens.Core.Review;
 
 namespace CivicLens.Host.Analysis;
@@ -11,7 +12,7 @@ public static class AnalysisCommand
 
     public static bool Matches(string[] args) => args is ["analyses", ..];
 
-    public static async Task<int> ExecuteAsync(string[] args, RequeueDocumentChangeAnalyses requeue,
+    public static async Task<int> ExecuteAsync(string[] args, RequeueAnalyses<AnalysisRun> requeue,
         GetDocumentChangeReviewOutcomes outcomes, ReviewActor owner,
         CancellationToken cancellationToken)
     {

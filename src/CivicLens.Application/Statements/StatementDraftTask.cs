@@ -4,8 +4,7 @@ namespace CivicLens.Application.Statements;
 
 public static class StatementDraftTask
 {
-    public const string Task = "draft";
-    public const string StatusTask = "statement-draft";
+    public const string Task = "statement-draft";
     public const string TaskVersion = "statement-draft-v1";
     public const string PromptVersion = "statement-draft-prompt-v1";
     public const string SchemaVersion = "statement-draft-schema-v1";

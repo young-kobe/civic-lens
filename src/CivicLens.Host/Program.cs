@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Runtime.InteropServices;
 using CivicLens.Application;
 using CivicLens.Application.Analysis;
+using CivicLens.Core.Analysis;
 using CivicLens.Infrastructure.Analysis;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Jobs;
@@ -186,7 +187,7 @@ try
         var ownerSubject = Environment.GetEnvironmentVariable("CIVIC_LENS_REVIEW_OWNER");
         if (string.IsNullOrWhiteSpace(connectionString) || string.IsNullOrWhiteSpace(ownerSubject))
             throw new ArgumentException("Analysis commands require CIVIC_LENS_DATABASE and CIVIC_LENS_REVIEW_OWNER.");
-        var requeue = new RequeueDocumentChangeAnalyses(PostgresDocumentChangeAnalysisStore.FromConnectionString(connectionString));
+        var requeue = new RequeueAnalyses<AnalysisRun>(PostgresDocumentChangeAnalysisStore.FromConnectionString(connectionString));
         var outcomes = new GetDocumentChangeReviewOutcomes(PostgresDocumentChangeReviewOutcomeStore.FromConnectionString(connectionString));
         executing = true;
         return await AnalysisCommand.ExecuteAsync(args, requeue, outcomes, new ReviewActor(ownerSubject, ReviewRole.Owner), cancellation.Token);
@@ -199,13 +200,12 @@ try
         if (string.IsNullOrWhiteSpace(connectionString) || string.IsNullOrWhiteSpace(ownerSubject))
             throw new ArgumentException("Statement commands require CIVIC_LENS_DATABASE and CIVIC_LENS_REVIEW_OWNER.");
         var gates = PostgresStatementAnalysisStore.FromConnectionString(connectionString);
-        var gateStatus = PostgresAnalysisStatusStore.FromConnectionString(connectionString, StatementGateTask.Task);
-        var statementDrafts = PostgresStatementDraftStore.FromConnectionString(connectionString);
-        var draftStatus = PostgresAnalysisStatusStore.FromConnectionString(connectionString, StatementDraftTask.StatusTask);
-        var draftCommands = new StatementDraftCommands(new GetStatementDraftStatus(statementDrafts, draftStatus),
-            new ListStatementDrafts(statementDrafts), new GetStatementDraftRun(statementDrafts), new RequeueStatementDrafts(statementDrafts));
-        var statements = new StatementCommand(new GetStatementGateStatus(gates, gateStatus), new ListStatementGates(gates),
-            new GetStatementGateRun(gates), new RequeueStatementGates(gates), new RegateStatementCandidates(gates), draftCommands,
+        var gateCommands = new StatementQueueCommands<StatementGateRun, StatementGateView, StatementGateListItem>(gates,
+            PostgresAnalysisStatusStore.FromConnectionString(connectionString, StatementGateTask.Task));
+        var draftCommands = new StatementQueueCommands<StatementDraftRun, StatementDraftView, StatementDraftListItem>(
+            PostgresStatementDraftStore.FromConnectionString(connectionString),
+            PostgresAnalysisStatusStore.FromConnectionString(connectionString, StatementDraftTask.Task));
+        var statements = new StatementCommand(gateCommands, draftCommands, new RegateStatementCandidates(gates),
             new ReviewActor(ownerSubject, ReviewRole.Owner), args is ["statements", "regate", ..] ? StatementIssueRubric.FromEnvironment()?.Id : null);
         executing = true;
         return await statements.ExecuteAsync(args, cancellation.Token);

@@ -11,8 +11,6 @@ namespace CivicLens.Infrastructure.Statements;
 
 internal sealed class StatementAnalysisQueueMapping : IAnalysisQueueMapping<StatementAnalysisRow, StatementGateRun>
 {
-    private const string DraftTask = "draft";
-
     public string Table => PostgresStatementAnalysisStore.Table;
 
     public string KeyColumn => "candidate_id";
@@ -26,7 +24,7 @@ internal sealed class StatementAnalysisQueueMapping : IAnalysisQueueMapping<Stat
     public AnalysisTaskIdentity Identity => StatementGateTask.Identity;
 
     public bool CanTransition(AnalysisRecord record, AnalysisCheckpoint checkpoint) =>
-        StatementAnalysisLifecycle.Rules.CanTransition(record, checkpoint);
+        StatementAnalysisLifecycle.CanTransition(record, checkpoint);
 
     public AnalysisRun RunOf(StatementGateRun run) => run.Run;
 
@@ -40,7 +38,7 @@ internal sealed class StatementAnalysisQueueMapping : IAnalysisQueueMapping<Stat
         if (checkpoint.Status != AnalysisState.Succeeded || !StatementGateReasons.QueuesDraft(checkpoint.ErrorCode)) return;
         _ = await db.Database.ExecuteSqlInterpolatedAsync($"""
             INSERT INTO statement_analysis (candidate_id, task, status, fence, attempts, reserved_tokens, created_at_utc_ticks)
-            VALUES ({row.CandidateId}, {DraftTask}, 'Pending', 0, 0, 0, {now})
+            VALUES ({row.CandidateId}, {StatementDraftTask.Task}, 'Pending', 0, 0, 0, {now})
             ON CONFLICT (candidate_id, task) DO NOTHING
             """, cancellationToken);
     }
