@@ -195,6 +195,19 @@ public sealed class PostgresStatementDraftStoreTests(PostgresCollection postgres
     }
 
     [Fact]
+    public async Task ACandidateAdmittedUnderTheSameRevisionReusesTheRevisionTheStoreAlreadyReadAndChecked()
+    {
+        var first = await PassedCandidateAsync(Article + " one", "https://example.test/pages/one");
+        var second = await PassedCandidateAsync(Article + " two", "https://example.test/pages/two");
+
+        var firstRevision = (await drafts.ReadEvidenceAsync(first, default))!.ConfigurationRevision;
+        var secondRevision = (await drafts.ReadEvidenceAsync(second, default))!.ConfigurationRevision;
+
+        Assert.NotNull(firstRevision);
+        Assert.Same(firstRevision, secondRevision);
+    }
+
+    [Fact]
     public async Task AJobThatHasNoConfigurationRevisionBlocksTheDraftWithoutACall()
     {
         var candidate = await PassedCandidateAsync(admittedBy: LegacyDefinition());

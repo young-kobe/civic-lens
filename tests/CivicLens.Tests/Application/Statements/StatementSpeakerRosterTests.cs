@@ -18,7 +18,7 @@ public sealed class StatementSpeakerRosterTests
         var revision = SpeakerRevision(warrenEndsBefore: new DateOnly(2026, 9, 1));
 
         Assert.Equal(["Ed Markey"],
-            StatementSpeakerRoster.OfficialsOn(revision, "source", new DateOnly(2026, 9, 1)).Select(official => official.Name).ToArray());
+            new StatementSpeakerRoster().OfficialsOn(revision, "source", new DateOnly(2026, 9, 1)).Select(official => official.Name).ToArray());
     }
 
     [Fact]
@@ -27,6 +27,19 @@ public sealed class StatementSpeakerRosterTests
     [Fact]
     public void NoRevisionCoversNobody() => Assert.Empty(OfficialIds(null, "source", "2026-09-01"));
 
+    [Fact]
+    public void ARevisionIsParsedOncePerIdSoLaterArticlesFromTheSameRevisionReuseTheConfiguration()
+    {
+        var roster = new StatementSpeakerRoster();
+        var revision = SpeakerRevision();
+        var configuration = roster.ConfigurationOf(revision);
+
+        roster.OfficialsOn(revision, "source", new DateOnly(2026, 9, 1));
+
+        Assert.Same(configuration, roster.ConfigurationOf(SpeakerRevision()));
+        Assert.NotSame(configuration, roster.ConfigurationOf(SpeakerRevision(warrenEndsBefore: new DateOnly(2026, 1, 1))));
+    }
+
     private static string[] OfficialIds(CollectionConfigurationRevision? revision, string sourceId, string date) =>
-        [.. StatementSpeakerRoster.OfficialsOn(revision, sourceId, DateOnly.Parse(date)).Select(official => official.Id)];
+        [.. new StatementSpeakerRoster().OfficialsOn(revision, sourceId, DateOnly.Parse(date)).Select(official => official.Id)];
 }

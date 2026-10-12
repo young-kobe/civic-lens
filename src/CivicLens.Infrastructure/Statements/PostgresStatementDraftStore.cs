@@ -1,4 +1,5 @@
 using System.Linq.Expressions;
+using System.Text.Json;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Statements;
 using CivicLens.Infrastructure.Analysis;
@@ -14,6 +15,7 @@ namespace CivicLens.Infrastructure.Statements;
 public sealed class PostgresStatementDraftStore : PostgresAnalysisStore<StatementDraftRun>, IStatementDraftStore
 {
     private readonly IDbContextFactory<CollectionAttemptDbContext> contextFactory;
+    private CollectionConfigurationRevision? lastRevision;
 
     public PostgresStatementDraftStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory)
         : this(contextFactory, new(contextFactory, new StatementDraftQueueMapping())) { }
@@ -49,7 +51,7 @@ public sealed class PostgresStatementDraftStore : PostgresAnalysisStore<Statemen
         return new(article, StatementGateCarryOver.From(gateRun is null ? null : StatementAnalysisQueueMapping.ToRun(gateRun)), existing, revision);
     }
 
-    private static async Task<CollectionConfigurationRevision?> ReadAdmittingRevisionAsync(CollectionAttemptDbContext db, string candidateId,
+    private async Task<CollectionConfigurationRevision?> ReadAdmittingRevisionAsync(CollectionAttemptDbContext db, string candidateId,
         CancellationToken cancellationToken)
     {
         var definitionJson = await (from candidate in db.Set<StatementCandidateRow>().AsNoTracking()
@@ -57,7 +59,31 @@ public sealed class PostgresStatementDraftStore : PostgresAnalysisStore<Statemen
                                     join job in db.Set<JobRow>().AsNoTracking() on jobAttempt.JobId equals job.JobId
                                     where candidate.CandidateId == candidateId
                                     select job.DefinitionJson).SingleOrDefaultAsync(cancellationToken);
-        return definitionJson is null ? null : PostgresCollectionJobStore.ReadDefinition(definitionJson).ConfigurationRevision;
+        return definitionJson is null ? null : ReadRevision(definitionJson);
+    }
+
+    private CollectionConfigurationRevision? ReadRevision(string definitionJson)
+    {
+        var memo = lastRevision;
+        if (memo is not null && memo.Id == ReadRevisionId(definitionJson)) return memo;
+        var revision = PostgresCollectionJobStore.ReadDefinition(definitionJson).ConfigurationRevision;
+        lastRevision = revision ?? memo;
+        return revision;
+    }
+
+    private static string? ReadRevisionId(string definitionJson)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(definitionJson);
+            return document.RootElement.TryGetProperty("configurationRevision", out var revision) &&
+                revision.ValueKind == JsonValueKind.Object && revision.TryGetProperty("id", out var id) &&
+                id.ValueKind == JsonValueKind.String ? id.GetString() : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 
     public async Task<IReadOnlyList<StatementDraftListItem>> ListAsync(StatementDraftView? view, int limit, CancellationToken cancellationToken)
