@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 
 namespace CivicLens.Infrastructure.Analysis;
 
-internal static class AnalysisDbContextFactory
+public static class AnalysisDbContextFactory
 {
     public static IDbContextFactory<CollectionAttemptDbContext> Create(string connectionString)
     {

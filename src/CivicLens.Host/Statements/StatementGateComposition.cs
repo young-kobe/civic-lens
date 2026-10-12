@@ -2,7 +2,9 @@ using CivicLens.Application;
 using CivicLens.Application.Analysis;
 using CivicLens.Application.Statements;
 using CivicLens.Infrastructure.Analysis;
+using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Statements;
+using Microsoft.EntityFrameworkCore;
 
 namespace CivicLens.Host.Statements;
 
@@ -26,16 +28,16 @@ internal sealed class StatementGateComposition
     public AnalysisWorker<StatementGateRun>? Worker { get; }
     public IWorkerWakeup? Wakeup { get; }
 
-    public static StatementGateComposition Create(string connectionString)
+    public static StatementGateComposition Create(IDbContextFactory<CollectionAttemptDbContext> contexts, string connectionString)
     {
-        var status = PostgresAnalysisStatusStore.FromConnectionString(connectionString, StatementGateTask.Task);
+        var status = new PostgresAnalysisStatusStore(contexts, StatementGateTask.Task);
         var configuration = StatementGateConfiguration.FromEnvironment();
         if (configuration is null) return new(status, null, false, null, null);
         var rubric = StatementIssueRubric.FromEnvironment();
         if (rubric is null) return new(status, configuration, true, null, null);
         var wakeup = PostgresAnalysisWakeup.FromConnectionString(connectionString, PostgresStatementAnalysisStore.Table,
             StatementGateTask.Task);
-        var step = new StatementGateStep(PostgresStatementAnalysisStore.FromConnectionString(connectionString),
+        var step = new StatementGateStep(new PostgresStatementAnalysisStore(contexts),
             new AnthropicStatementGateModel(configuration.ApiKey), configuration.Settings, rubric);
         var worker = new AnalysisWorker<StatementGateRun>(step, status, TimeProvider.System, wakeup);
         return new(status, configuration, false, worker, wakeup);

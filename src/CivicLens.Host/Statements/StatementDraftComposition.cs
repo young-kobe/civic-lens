@@ -2,7 +2,9 @@ using CivicLens.Application;
 using CivicLens.Application.Analysis;
 using CivicLens.Application.Statements;
 using CivicLens.Infrastructure.Analysis;
+using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Statements;
+using Microsoft.EntityFrameworkCore;
 
 namespace CivicLens.Host.Statements;
 
@@ -23,14 +25,14 @@ internal sealed class StatementDraftComposition
     public AnalysisWorker<StatementDraftRun>? Worker { get; }
     public IWorkerWakeup? Wakeup { get; }
 
-    public static StatementDraftComposition Create(string connectionString)
+    public static StatementDraftComposition Create(IDbContextFactory<CollectionAttemptDbContext> contexts, string connectionString)
     {
-        var status = PostgresAnalysisStatusStore.FromConnectionString(connectionString, StatementDraftTask.Task);
+        var status = new PostgresAnalysisStatusStore(contexts, StatementDraftTask.Task);
         var configuration = StatementDraftConfiguration.FromEnvironment();
         if (configuration is null) return new(status, null, null, null);
         var wakeup = PostgresAnalysisWakeup.FromConnectionString(connectionString, PostgresStatementAnalysisStore.Table,
             StatementDraftTask.Task);
-        var step = new StatementDraftingStep(PostgresStatementDraftStore.FromConnectionString(connectionString),
+        var step = new StatementDraftingStep(new PostgresStatementDraftStore(contexts),
             new AnthropicStatementDraftingModel(configuration.ApiKey), configuration.Settings);
         return new(status, configuration, new AnalysisWorker<StatementDraftRun>(step, status, TimeProvider.System, wakeup), wakeup);
     }

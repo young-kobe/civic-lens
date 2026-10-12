@@ -26,9 +26,6 @@ public sealed class PostgresStatementAnalysisStore : PostgresAnalysisStore<State
         this.queue = queue;
     }
 
-    public static PostgresStatementAnalysisStore FromConnectionString(string connectionString) =>
-        new(AnalysisDbContextFactory.Create(connectionString));
-
     public async Task<StatementGateRun?> GetRunAsync(string runId, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(runId);

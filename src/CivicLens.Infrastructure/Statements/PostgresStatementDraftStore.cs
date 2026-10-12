@@ -24,9 +24,6 @@ public sealed class PostgresStatementDraftStore : PostgresAnalysisStore<Statemen
         PostgresAnalysisQueue<StatementAnalysisRow, StatementAnalysisBudgetRow, StatementDraftRun> queue) : base(queue) =>
         this.contextFactory = contextFactory;
 
-    public static PostgresStatementDraftStore FromConnectionString(string connectionString) =>
-        new(AnalysisDbContextFactory.Create(connectionString));
-
     public async Task<StatementDraftRun?> GetRunAsync(string runId, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(runId);
