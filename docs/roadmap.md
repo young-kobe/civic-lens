@@ -66,9 +66,8 @@ Agreed decisions:
 - Speakers come from the source's coverage on the publication date. Other people quoted in a release are kept as named text, not linked identities.
 - Code marks each cited passage as a direct quotation (inside quotation marks in the source) or release text (the office's own voice). Code also finds bill numbers in the text for later matching with actions.
 - This slice includes publication: Publication.Contracts and the static pages gain statement records, so an approved statement publishes end to end.
-- `PostgresDocumentExtractionStore` registers a statement candidate in the same transaction as the extraction, when the attempt came from a candidate job and the source and admitted URL have no candidate yet.
-- The issue gate and statement drafting share one `statement_analysis` queue with a task column. A passed gate run inserts the drafting job.
-- The migration registers every admitted article that already has an extraction. The gate runs first, and the daily token limits spread the cost.
+- A passed gate run inserts the `draft` task row in `statement_analysis`. The `gate` rows already exist and stay Pending until a worker, the gate, and drafting are built.
+- The gate runs first on the backfilled candidates, and the daily token limits spread the cost.
 - A statement revision holds a headline, a summary, the statement date with an evidence quote, speaker official IDs (limited to the source's covered officials on that date), other speakers as named text, issue IDs, policy area IDs, and quotations. A quotation is an extraction span. Code sets each quotation's kind (direct quotation or release text) and finds the bill numbers. Confidence stays in the run output.
 
 Acceptance: every statement/action has exact inspectable provenance. Quotation validity and interpretation are separate checks. Human review is bound to the reviewed version. Adding/removing tracked officials requires no code changes and retains history.

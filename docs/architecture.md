@@ -438,6 +438,16 @@ Core/Analysis owns the immutable `AnalysisRun` and its outcomes. A run is a pred
 
 **Review outcomes.** `analyses metrics` reports how reviewers treat AI drafts, for each prompt version. It makes no model calls. A draft is an AI draft when an analysis run links to it. A person's draft is never counted. Core/Review owns `DocumentChangeRevisionComparison`, which lists the fields that differ between two revisions. Selections and citations compare as sets. An approved draft is unchanged when no field differs from revision 1. Application/Analysis tallies the outcomes. `AwaitingReviewWithConcerns` counts as awaiting review. Infrastructure reads AI drafts in keyset pages of 100. Each page costs four queries, whatever its size, and reuses the review store's history validation and `DocumentChangeReviewPolicy` for the status. The metrics are the base for later calibration of the stated confidence.
 
+### Statement candidate queue (implemented)
+
+A statement candidate is the first extraction of an article that discovery admission created. Watched pages are never candidates. Identity is the source plus the admitted URL, hashed as `PostgresCollectionJobStore.HashCandidate` hashes it for `collection_candidate_jobs`. A later fetch or a parser upgrade of the same source and URL never creates a second candidate.
+
+`PostgresDocumentExtractionStore.SaveAsync` calls `PostgresStatementCandidateRegistration` after it inserts a new extraction, in the same transaction. An attempt came from admission when its job, found through `collection_job_attempts`, has an idempotency key that starts with `discovery-admission/`. The registration inserts the candidate with `ON CONFLICT (candidate_id) DO NOTHING`. When that insert adds a row, it inserts the Pending `gate` row in `statement_analysis`. A failure rolls back the extraction, the candidate, and the gate row together.
+
+`statement_candidates` holds `candidate_id`, `source_id`, `url`, the first `extraction_id` (foreign key), its `attempt_id` (foreign key), and `created_at_utc_ticks` from `DatabaseClock`. `statement_analysis` is keyed by `(candidate_id, task)` and has the same lease, fence, attempts, retry, budget reservation, and pending run columns and check constraints as `document_change_analysis`. It has no `draft_id` column and no run table yet. Tasks are `gate` and `draft`; only `gate` rows exist. The trigger `trg_statement_analysis_notify` calls `civic_lens_notify_analysis_change`, so the future worker wakes on the same channel as the document-change worker. No worker, gate, or drafting exists yet, and rows stay Pending.
+
+The migration backfills one candidate for each admitted article that has an extraction, with a Pending gate row. The first extraction is the one whose attempt has the earliest observed time. Ties go to the lower attempt ID, then the lower extraction ID. An extraction has no stored creation time, so the observed time of its capture is the order.
+
 ### Planned analysis
 
 The data model will distinguish capture observations, immutable document versions, changes, statements, authoritative actions, proposed relationships, analysis runs, reviews, briefs, and publication releases. Evidence points to exact versioned text spans/page locations. Event time, publisher time, observed time, and last-checked time remain distinct.
