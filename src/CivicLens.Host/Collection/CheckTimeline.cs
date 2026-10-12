@@ -44,7 +44,7 @@ public static class CheckTimeline
         var requests = receipt.RequestCount == 1 ? "1 request" : $"{receipt.RequestCount} requests";
         var summary = receipt.Outcome switch
         {
-            CollectionOutcome.Captured when receipt.Discovery is { } discovery => $"Listing saved with {discovery.Urls.Length} links found",
+            CollectionOutcome.Captured when receipt.Discovery is { } discovery => $"Listing saved with {discovery.Urls.Length} links found{Skipped(discovery)}",
             CollectionOutcome.Captured => "Page saved",
             CollectionOutcome.NotModified => "The site reported no change since the last saved version",
             CollectionOutcome.Deferred => "Check put off",
@@ -53,6 +53,9 @@ public static class CheckTimeline
         if (receipt.FailureCode is not { } failure) return $"{summary} after {requests}.";
         return $"{summary}: {Failures.GetValueOrDefault(failure, "the response could not be used")}. {CoverageGap}";
     }
+
+    private static string Skipped(DiscoveryResult discovery) =>
+        discovery.OutOfScopeCount is > 0 and var count ? $" and {count} outside the source scope skipped" : "";
 
     private static Tone ToneOf(CollectionJobAttempt attempt, bool retained) => attempt.Resolution switch
     {

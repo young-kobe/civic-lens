@@ -89,6 +89,17 @@ public sealed record CollectionRequest
             throw new ArgumentException("ETag must be a single entity tag.");
     }
 
+    // Version 8 fetches a same-host http link over https; earlier versions keep exact scheme scope.
+    public Uri? ResolveCandidate(Uri url)
+    {
+        if (Allows(url)) return url;
+        if (Version < CollectionProtocol.SchemeUpgradeVersion || url is null || !url.IsAbsoluteUri ||
+            url.Scheme != Uri.UriSchemeHttp || !url.IsDefaultPort)
+            return null;
+        var upgraded = new UriBuilder(url) { Scheme = Uri.UriSchemeHttps, Port = -1 }.Uri;
+        return Allows(upgraded) ? upgraded : null;
+    }
+
     public bool Allows(Uri url)
     {
         if (url is null || !Uri.TryCreate(AllowedOrigin, UriKind.Absolute, out var origin) ||

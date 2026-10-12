@@ -12,6 +12,7 @@ internal static class FeedParser
     private const long MaximumDecodedCharacters = 10_000_000;
     private const int MaximumNodes = 100_000;
     private const int MaximumDepth = 64;
+    private static readonly XName XmlBase = XNamespace.Xml + "base";
 
     public static async Task<DiscoveryResult> ParseCaptureAsync(string capturePath, CollectionRequest request,
         string responseUrl, IReadOnlyList<string> encodings, string? contentType, CancellationToken token)
@@ -59,7 +60,8 @@ internal static class FeedParser
                 var document = await XDocument.LoadAsync(reader, LoadOptions.None, token);
                 var root = document.Root;
                 if (root is null) return Result(DiscoveryStatus.Invalid);
-                if (root.DescendantsAndSelf().Attributes().Any(attribute => attribute.Name == XNamespace.Xml + "base"))
+                if (request.Version < CollectionProtocol.SchemeUpgradeVersion &&
+                    root.DescendantsAndSelf().Attributes().Any(attribute => attribute.Name == XmlBase))
                     return Result(DiscoveryStatus.Unsupported);
                 var links = root.Name.LocalName switch
                 {
@@ -67,20 +69,32 @@ internal static class FeedParser
                     "feed" when root.Name == XName.Get("feed", "http://www.w3.org/2005/Atom") => ParseAtom(root),
                     _ => throw new UnsupportedFeedException()
                 };
+                var finalUrl = new Uri(responseUrl);
                 var urls = new List<string>();
                 var seen = new HashSet<string>(StringComparer.Ordinal);
-                foreach (var link in links)
+                var outOfScope = new HashSet<string>(StringComparer.Ordinal);
+                foreach (var (element, link) in links)
                 {
                     token.ThrowIfCancellationRequested();
-                    if (link.Length > 4096 || !Uri.TryCreate(new Uri(responseUrl), link, out var resolved))
+                    if (link.Length > 4096 || !Uri.TryCreate(ResolveBase(element, finalUrl), link, out var resolved))
                         return Result(DiscoveryStatus.Invalid);
-                    if (!request.Allows(resolved)) continue;
-                    var value = resolved.AbsoluteUri;
+                    var candidate = request.ResolveCandidate(resolved);
+                    if (candidate is null)
+                    {
+                        outOfScope.Add(resolved.AbsoluteUri);
+                        continue;
+                    }
+                    var value = candidate.AbsoluteUri;
                     if (value.Length > 4096) return Result(DiscoveryStatus.Invalid);
                     if (seen.Add(value)) urls.Add(value);
                     if (urls.Count > request.MaxCandidates) return Result(DiscoveryStatus.LimitExceeded);
                 }
-                return new DiscoveryResult { Status = DiscoveryStatus.Parsed, Urls = urls.ToArray() };
+                return new DiscoveryResult
+                {
+                    Status = DiscoveryStatus.Parsed,
+                    Urls = urls.ToArray(),
+                    OutOfScopeCount = CountFor(request, outOfScope.Count)
+                };
             }
             finally
             {
@@ -95,7 +109,23 @@ internal static class FeedParser
         }
 
         static Stream Own(Stream stream, List<Stream> owned) { owned.Add(stream); return stream; }
-        static DiscoveryResult Result(DiscoveryStatus status) => new() { Status = status, Urls = [] };
+        DiscoveryResult Result(DiscoveryStatus status) => new() { Status = status, Urls = [], OutOfScopeCount = CountFor(request, 0) };
+    }
+
+    private static int? CountFor(CollectionRequest request, int count) =>
+        request.Version >= CollectionProtocol.SchemeUpgradeVersion ? count : null;
+
+    private static Uri ResolveBase(XElement element, Uri responseUrl)
+    {
+        var resolved = responseUrl;
+        foreach (var value in element.AncestorsAndSelf().Reverse().Select(item => (string?)item.Attribute(XmlBase)))
+        {
+            if (value is null) continue;
+            if (value.Length > 4096 || !Uri.TryCreate(resolved, value.Trim(), out var next))
+                throw new InvalidDataException("Feed xml:base is invalid.");
+            resolved = next;
+        }
+        return resolved;
     }
 
     private static XmlReader CreateXmlReader(MemoryStream input, string? contentType)
@@ -139,17 +169,17 @@ internal static class FeedParser
         _ => (null, 0)
     };
 
-    private static IEnumerable<string> ParseRss(XElement root)
+    private static IEnumerable<(XElement Element, string Href)> ParseRss(XElement root)
     {
         foreach (var item in root.Elements("channel").Elements("item"))
             foreach (var link in item.Elements("link"))
             {
                 if (link.HasElements) throw new InvalidDataException("RSS links cannot contain nested markup.");
-                if (!string.IsNullOrWhiteSpace(link.Value)) yield return link.Value.Trim();
+                if (!string.IsNullOrWhiteSpace(link.Value)) yield return (link, link.Value.Trim());
             }
     }
 
-    private static IEnumerable<string> ParseAtom(XElement root)
+    private static IEnumerable<(XElement Element, string Href)> ParseAtom(XElement root)
     {
         XNamespace atom = "http://www.w3.org/2005/Atom";
         foreach (var entry in root.Elements(atom + "entry"))
@@ -159,7 +189,7 @@ internal static class FeedParser
                 if (string.IsNullOrEmpty(rel) || rel == "alternate")
                 {
                     var href = (string?)link.Attribute("href");
-                    if (!string.IsNullOrWhiteSpace(href)) yield return href.Trim();
+                    if (!string.IsNullOrWhiteSpace(href)) yield return (link, href.Trim());
                 }
             }
     }

@@ -22,6 +22,7 @@ internal static class DiscoveryCommand
             sourceId = attempt.AttemptResult.SourceId,
             mode = discovery.Request.Mode,
             discovery.Status,
+            discovery.OutOfScopeCount,
             discovery.Urls
         }, CollectionProtocol.JsonOptions));
         return 0;

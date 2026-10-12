@@ -63,6 +63,7 @@ internal static class HtmlParser
                 var resolutionBase = FindBase(document, finalUrl);
                 var urls = new List<string>();
                 var seen = new HashSet<string>(StringComparer.Ordinal);
+                var outOfScope = new HashSet<string>(StringComparer.Ordinal);
                 foreach (var anchor in document.QuerySelectorAll("a[href]"))
                 {
                     token.ThrowIfCancellationRequested();
@@ -73,14 +74,24 @@ internal static class HtmlParser
                     if (!Uri.TryCreate(resolutionBase, href.Trim(), out var resolved))
                         return Result(DiscoveryStatus.Invalid);
                     resolved = WithoutFragment(resolved);
-                    if (!request.Allows(resolved)) continue;
-                    var value = resolved.AbsoluteUri;
+                    var candidate = request.ResolveCandidate(resolved);
+                    if (candidate is null)
+                    {
+                        outOfScope.Add(resolved.AbsoluteUri);
+                        continue;
+                    }
+                    var value = candidate.AbsoluteUri;
                     if (value.Length > MaximumHrefLength) return Result(DiscoveryStatus.Invalid);
                     if (seen.Add(value)) urls.Add(value);
                     if (urls.Count > request.MaxCandidates) return Result(DiscoveryStatus.LimitExceeded);
                 }
 
-                return new DiscoveryResult { Status = DiscoveryStatus.Parsed, Urls = urls.ToArray() };
+                return new DiscoveryResult
+                {
+                    Status = DiscoveryStatus.Parsed,
+                    Urls = urls.ToArray(),
+                    OutOfScopeCount = CountFor(request, outOfScope.Count)
+                };
             }
             finally
             {
@@ -96,8 +107,11 @@ internal static class HtmlParser
         }
 
         static Stream Own(Stream stream, List<Stream> owned) { owned.Add(stream); return stream; }
-        static DiscoveryResult Result(DiscoveryStatus status) => new() { Status = status, Urls = [] };
+        DiscoveryResult Result(DiscoveryStatus status) => new() { Status = status, Urls = [], OutOfScopeCount = CountFor(request, 0) };
     }
+
+    private static int? CountFor(CollectionRequest request, int count) =>
+        request.Version >= CollectionProtocol.SchemeUpgradeVersion ? count : null;
 
     private static Uri FindBase(AngleSharp.Dom.IDocument document, Uri responseUrl)
     {

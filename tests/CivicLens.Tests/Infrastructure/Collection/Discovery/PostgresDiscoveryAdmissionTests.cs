@@ -411,7 +411,12 @@ public sealed class PostgresDiscoveryAdmissionTests(PostgresCollection postgres)
             RobotsRequestCount = version >= 6 ? 1 : null,
             RequestCount = 2,
             Capture = new CaptureArtifact { Sha256 = new string('a', 64), RelativePath = new string('a', 64) + ".gz", ByteLength = 10 },
-            Discovery = new DiscoveryResult { Status = status, Urls = urls }
+            Discovery = new DiscoveryResult
+            {
+                Status = status,
+                Urls = urls,
+                OutOfScopeCount = version >= CollectionProtocol.SchemeUpgradeVersion ? 0 : null
+            }
         };
         await CollectionAttemptImporter.ImportAsync(attemptId, request, result, attempts, default);
         return attemptId;
