@@ -1,0 +1,121 @@
+using CivicLens.Infrastructure.Collection;
+using CivicLens.Tests.Infrastructure.Collection;
+using Npgsql;
+
+namespace CivicLens.Tests.Host;
+
+[Collection(PostgresCollection.Name)]
+[Trait("Category", "Postgres")]
+public sealed class StatementCommandTests(PostgresCollection postgres) : IAsyncLifetime
+{
+    private readonly string schema = "statements_cli_" + Guid.NewGuid().ToString("N");
+    private string connectionString = null!;
+
+    public async Task InitializeAsync()
+    {
+        await ExecuteAsync(postgres.ConnectionString, $"CREATE SCHEMA {schema}");
+        connectionString = new NpgsqlConnectionStringBuilder(postgres.ConnectionString) { SearchPath = schema }.ConnectionString;
+        await PostgresCollectionAttemptStore.FromConnectionString(connectionString).MigrateAsync();
+    }
+
+    public Task DisposeAsync() => ExecuteAsync(postgres.ConnectionString, $"DROP SCHEMA IF EXISTS {schema} CASCADE");
+
+    [Fact]
+    public async Task StatusReportsZeroCountsForEveryOutcomeBeforeAnyCandidateExists()
+    {
+        var result = await RunAsync("auth0|owner", "statements", "status");
+
+        Assert.Equal(0, result.ExitCode);
+        foreach (var view in new[] { "pending", "passed", "skipped", "failedOpen", "overCap", "failed" })
+            Assert.Contains($"\"{view}\":0", result.Output, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("passed")]
+    [InlineData("skipped")]
+    [InlineData("failed-open")]
+    [InlineData("over-cap")]
+    [InlineData("pending")]
+    public async Task ListAcceptsEachOutcomeFilter(string outcome)
+    {
+        var result = await RunAsync("auth0|owner", "statements", "list", outcome, "5");
+
+        Assert.Equal((0, "[]"), (result.ExitCode, result.Output.Trim()));
+    }
+
+    [Theory]
+    [InlineData("statements")]
+    [InlineData("statements", "list", "unknown")]
+    [InlineData("statements", "requeue")]
+    [InlineData("statements", "regate", "--since")]
+    public async Task BadArgumentsShowTheUsage(params string[] arguments)
+    {
+        var result = await RunAsync("auth0|owner", arguments);
+
+        Assert.Equal(2, result.ExitCode);
+        Assert.Contains("Use statements status", result.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ARunThatDoesNotExistIsRejected()
+    {
+        var result = await RunAsync("auth0|owner", "statements", "run", new string('a', 32));
+
+        Assert.Equal(2, result.ExitCode);
+        Assert.Contains("No gate run", result.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RegateNeverRunsWithoutTheIssueConfigurationThatNamesTheCurrentRevision()
+    {
+        var result = await RunAsync("auth0|owner", "statements", "regate");
+
+        Assert.Equal(2, result.ExitCode);
+        Assert.Contains("CIVIC_LENS_ISSUES_CONFIG", result.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RequeueAndRegateReportZeroWhenNothingQualifies()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "civic-regate-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var issues = Path.Combine(directory, "issues.json");
+            await File.WriteAllTextAsync(issues, """{"version":1,"policyAreas":[],"issues":[]}""");
+            var requeue = await RunAsync("auth0|owner", "statements", "requeue", "--all");
+            var regate = await HostProcess.RunWithEnvironmentAsync(connectionString, null, new Dictionary<string, string>
+            {
+                ["CIVIC_LENS_REVIEW_OWNER"] = "auth0|owner",
+                ["CIVIC_LENS_ISSUES_CONFIG"] = issues
+            }, "statements", "regate", "--since", "2026-01-01");
+
+            Assert.Equal((0, """{"requeued":0}"""), (requeue.ExitCode, requeue.Output.Trim()));
+            Assert.Equal((0, """{"requeued":0}"""), (regate.ExitCode, regate.Output.Trim()));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task TheAiDrafterCannotActAsTheOwner()
+    {
+        var result = await RunAsync("civic-lens:analysis", "statements", "requeue", "--all");
+
+        Assert.Equal(2, result.ExitCode);
+    }
+
+    private Task<(int ExitCode, string Output, string Error)> RunAsync(string owner, params string[] arguments) =>
+        HostProcess.RunWithEnvironmentAsync(connectionString, null,
+            new Dictionary<string, string> { ["CIVIC_LENS_REVIEW_OWNER"] = owner }, arguments);
+
+    private static async Task ExecuteAsync(string connection, string sql)
+    {
+        await using var open = new NpgsqlConnection(connection);
+        await open.OpenAsync();
+        await using var command = new NpgsqlCommand(sql, open);
+        await command.ExecuteNonQueryAsync();
+    }
+}

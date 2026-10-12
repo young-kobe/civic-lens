@@ -1,10 +1,12 @@
+using CivicLens.Application.Analysis;
+
 namespace CivicLens.Infrastructure.Statements.Persistence;
 
 internal sealed class StatementAnalysisRow
 {
     public string CandidateId { get; set; } = string.Empty;
     public string Task { get; set; } = string.Empty;
-    public string Status { get; set; } = string.Empty;
+    public DocumentChangeAnalysisState Status { get; set; }
     public string? LeaseToken { get; set; }
     public long? LeaseExpiresAt { get; set; }
     public long Fence { get; set; }

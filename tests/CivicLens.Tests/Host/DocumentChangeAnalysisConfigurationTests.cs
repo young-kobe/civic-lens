@@ -39,6 +39,36 @@ public sealed class DocumentChangeAnalysisConfigurationTests
     }
 
     [Theory]
+    [InlineData("CIVIC_LENS_STATEMENT_GATE_DAILY_TOKENS", "100000", null)]
+    [InlineData("CIVIC_LENS_STATEMENT_GATE_DAILY_TOKENS", "not-a-number", "key-sentinel")]
+    public async Task TheWorkerRefusesAGateLimitWithoutAKeyOrWithAnInvalidLimit(string name, string value, string? key)
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "civic-gate-config-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var config = Path.Combine(directory, "config.json");
+            await File.WriteAllTextAsync(config, """
+                {"version":1,"people":[{"id":"person","name":"Fixture"}],"sources":[
+                  {"id":"source","personIds":["person"],"url":"https://example.test/page",
+                   "allowedOrigin":"https://example.test","allowedPathPrefix":"/page"}]}
+                """);
+            var environment = new Dictionary<string, string> { ["CIVIC_LENS_COLLECTION_CONFIG"] = config, [name] = value };
+            if (key is not null) environment["ANTHROPIC_API_KEY"] = key;
+
+            var result = await HostProcess.RunWithEnvironmentAsync(Database, null, environment,
+                "worker", Path.Combine(directory, "collector.dll"), Path.Combine(directory, "captures"), "--once");
+
+            Assert.Equal(2, result.ExitCode);
+            Assert.DoesNotContain("key-sentinel", result.Output + result.Error);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Theory]
     [InlineData("civic-lens:analysis", "")]
     [InlineData("auth0|owner", "auth0|friend,civic-lens:analysis")]
     public void TheAiDrafterSubjectCannotBeAnOwnerOrReviewer(string owner, string reviewers)

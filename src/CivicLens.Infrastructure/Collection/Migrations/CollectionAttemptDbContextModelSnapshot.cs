@@ -1155,6 +1155,29 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         });
                 });
 
+            modelBuilder.Entity("CivicLens.Infrastructure.Statements.Persistence.StatementAnalysisBudgetRow", b =>
+                {
+                    b.Property<DateOnly>("DayUtc")
+                        .HasColumnType("date")
+                        .HasColumnName("day_utc");
+
+                    b.Property<string>("Task")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("task");
+
+                    b.Property<long>("ChargedTokens")
+                        .HasColumnType("bigint")
+                        .HasColumnName("charged_tokens");
+
+                    b.HasKey("DayUtc", "Task");
+
+                    b.ToTable("statement_analysis_budget", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_statement_analysis_budget_charge", "charged_tokens >= 0");
+                        });
+                });
+
             modelBuilder.Entity("CivicLens.Infrastructure.Statements.Persistence.StatementAnalysisRow", b =>
                 {
                     b.Property<string>("CandidateId")
@@ -1247,6 +1270,152 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                             t.HasCheckConstraint("ck_statement_analysis_running", "(status = 'Running') = (lease_token IS NOT NULL)");
 
                             t.HasCheckConstraint("ck_statement_analysis_status", "status IN ('Pending','Running','RetryWaiting','WaitingForBudget','Succeeded','Blocked','Failed')");
+                        });
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Statements.Persistence.StatementAnalysisRunRow", b =>
+                {
+                    b.Property<string>("RunId")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("run_id");
+
+                    b.Property<long>("CacheReadTokens")
+                        .HasColumnType("bigint")
+                        .HasColumnName("cache_read_tokens");
+
+                    b.Property<long>("CacheWriteTokens")
+                        .HasColumnType("bigint")
+                        .HasColumnName("cache_write_tokens");
+
+                    b.Property<string>("CandidateId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("candidate_id");
+
+                    b.Property<long>("ChargedTokens")
+                        .HasColumnType("bigint")
+                        .HasColumnName("charged_tokens");
+
+                    b.Property<string>("ContextJson")
+                        .HasColumnType("text")
+                        .HasColumnName("context_json");
+
+                    b.Property<long>("FinishedAtUtcTicks")
+                        .HasColumnType("bigint")
+                        .HasColumnName("finished_at_utc_ticks");
+
+                    b.Property<string>("InputHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("input_hash");
+
+                    b.Property<long>("InputTokens")
+                        .HasColumnType("bigint")
+                        .HasColumnName("input_tokens");
+
+                    b.Property<string>("IssueRevisionId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("issue_revision_id");
+
+                    b.Property<string>("Model")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("model");
+
+                    b.Property<string>("Outcome")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("outcome");
+
+                    b.Property<string>("OutputJson")
+                        .HasColumnType("text")
+                        .HasColumnName("output_json");
+
+                    b.Property<long>("OutputTokens")
+                        .HasColumnType("bigint")
+                        .HasColumnName("output_tokens");
+
+                    b.Property<string>("PreviousRunId")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("previous_run_id");
+
+                    b.Property<string>("PromptVersion")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("prompt_version");
+
+                    b.Property<string>("ProviderRequestId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("provider_request_id");
+
+                    b.Property<string>("QuotesJson")
+                        .HasColumnType("text")
+                        .HasColumnName("quotes_json");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("reason");
+
+                    b.Property<string>("SchemaVersion")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("schema_version");
+
+                    b.Property<long>("StartedAtUtcTicks")
+                        .HasColumnType("bigint")
+                        .HasColumnName("started_at_utc_ticks");
+
+                    b.Property<string>("StopReason")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("stop_reason");
+
+                    b.Property<string>("Task")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("task");
+
+                    b.Property<string>("TaskVersion")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("task_version");
+
+                    b.Property<string>("ValidationJson")
+                        .HasColumnType("text")
+                        .HasColumnName("validation_json");
+
+                    b.HasKey("RunId");
+
+                    b.HasIndex("PreviousRunId");
+
+                    b.HasIndex("CandidateId", "Task", "StartedAtUtcTicks");
+
+                    b.ToTable("statement_analysis_runs", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_statement_analysis_runs_ids", "run_id ~ '^[0-9a-f]{32}$' AND input_hash ~ '^[0-9a-f]{64}$' AND (issue_revision_id IS NULL OR issue_revision_id ~ '^[0-9a-f]{64}$') AND (previous_run_id IS NULL OR previous_run_id ~ '^[0-9a-f]{32}$')");
+
+                            t.HasCheckConstraint("ck_statement_analysis_runs_outcome", "outcome IN ('Drafted','DraftDiscarded','CitationRejected','OutputRejected','Refused','OutputLimitReached','UnexpectedStop','RateLimited','ProviderUnavailable','AuthenticationFailed','ProviderRejected','ConnectionFailed','BillingFailed','ModelNotFound','ProcessingFailed','InvalidResponse','Interrupted','Classified','Bypassed')");
+
+                            t.HasCheckConstraint("ck_statement_analysis_runs_reason", "reason IS NULL OR reason IN ('passed','no-tracked-issue','over-byte-cap','gate-failed-open')");
+
+                            t.HasCheckConstraint("ck_statement_analysis_runs_revision", "issue_revision_id IS NOT NULL OR outcome = 'Interrupted'");
+
+                            t.HasCheckConstraint("ck_statement_analysis_runs_times", "finished_at_utc_ticks >= started_at_utc_ticks");
+
+                            t.HasCheckConstraint("ck_statement_analysis_runs_tokens", "input_tokens >= 0 AND output_tokens >= 0 AND cache_read_tokens >= 0 AND cache_write_tokens >= 0 AND charged_tokens >= input_tokens + output_tokens + cache_read_tokens + cache_write_tokens");
                         });
                 });
 
@@ -1454,6 +1623,20 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.HasOne("CivicLens.Infrastructure.Statements.Persistence.StatementCandidateRow", null)
                         .WithMany()
                         .HasForeignKey("CandidateId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Statements.Persistence.StatementAnalysisRunRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.Statements.Persistence.StatementAnalysisRunRow", null)
+                        .WithMany()
+                        .HasForeignKey("PreviousRunId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("CivicLens.Infrastructure.Statements.Persistence.StatementAnalysisRow", null)
+                        .WithMany()
+                        .HasForeignKey("CandidateId", "Task")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

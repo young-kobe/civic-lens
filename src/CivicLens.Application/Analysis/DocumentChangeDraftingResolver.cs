@@ -111,18 +111,18 @@ public static class DocumentChangeDraftingResolver
     private static DocumentChangeCitation? Locate(DocumentChangeDraftingOutputCitation citation, int index, string window, int windowStart,
         DocumentExtraction extraction, List<string> errors)
     {
-        var first = window.IndexOf(citation.Quote, StringComparison.Ordinal);
-        if (first < 0)
+        var found = UniqueQuote.Find(window, citation.Quote, out var first);
+        if (found == UniqueQuoteResult.Missing)
         {
             errors.Add($"Citation {index}: the quote \"{Shorten(citation.Quote)}\" does not occur in the {citation.Side} window of {citation.HunkId}.");
             return null;
         }
-        if (window.IndexOf(citation.Quote, first + 1, StringComparison.Ordinal) >= 0)
+        if (found == UniqueQuoteResult.Ambiguous)
         {
             errors.Add($"Citation {index}: the quote \"{Shorten(citation.Quote)}\" occurs more than once in the {citation.Side} window of {citation.HunkId}. Quote a longer, unique passage.");
             return null;
         }
-        if (char.IsLowSurrogate(citation.Quote[0]) || char.IsHighSurrogate(citation.Quote[^1]))
+        if (found == UniqueQuoteResult.SplitsCharacter)
         {
             errors.Add($"Citation {index}: the quote boundaries split a character. Quote whole characters.");
             return null;

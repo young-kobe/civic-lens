@@ -5,6 +5,7 @@ using CivicLens.Application.Analysis;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Application.Collection.Processing;
+using CivicLens.Application.Statements;
 using CivicLens.Collection.Contracts;
 using CivicLens.Infrastructure.Collection;
 
@@ -29,7 +30,8 @@ internal static class CollectionWorkerCommand
     public static async Task<int> ExecuteAsync(string[] arguments, ICollectionWorkerQueue queue,
         ICollectionJobStore jobs, ICollectionAttemptStore evidence, CancellationToken cancellationToken,
         EvidenceProcessingWorker? evidenceProcessor = null, IWorkerWakeup? wakeup = null,
-        ICollectionScheduleStore? schedules = null, DocumentChangeAnalysisWorker? drafting = null)
+        ICollectionScheduleStore? schedules = null, DocumentChangeAnalysisWorker? drafting = null,
+        StatementGateWorker? gate = null)
     {
         ValidateArguments(arguments);
         var collectorPath = Path.GetFullPath(arguments[1]);
@@ -39,28 +41,35 @@ internal static class CollectionWorkerCommand
                 Environment.GetEnvironmentVariable("DOTNET_HOST_PATH") ?? "dotnet"));
         var once = arguments.Length == 4;
         var collection = new CollectionJobWorker(queue, runner, evidenceProcessor, wakeup, schedules);
-        var (result, draftingResult) = await RunAsync(collection, drafting, artifactRoot, once, cancellationToken);
+        var (result, draftingResult, gateResult) = await RunAsync(collection, drafting, gate, artifactRoot, once, cancellationToken);
         Console.WriteLine(JsonSerializer.Serialize(result, JsonOptions));
         if (draftingResult is not null) Console.WriteLine(JsonSerializer.Serialize(new { drafting = draftingResult }, JsonOptions));
-        var draftingFailed = draftingResult is { Failures: > 0 };
-        return result.JobFailures == 0 && result.QueueFailures == 0 && !draftingFailed ? 0 : 1;
+        if (gateResult is not null) Console.WriteLine(JsonSerializer.Serialize(new { gate = gateResult }, JsonOptions));
+        var analysisFailed = draftingResult is { Failures: > 0 } || gateResult is { Failures: > 0 };
+        return result.JobFailures == 0 && result.QueueFailures == 0 && !analysisFailed ? 0 : 1;
     }
 
-    private static async Task<(CollectionJobWorkerResult Collection, DocumentChangeAnalysisWorkerResult? Drafting)> RunAsync(
-        CollectionJobWorker collection, DocumentChangeAnalysisWorker? drafting, string artifactRoot, bool once,
-        CancellationToken cancellationToken)
+    private static async Task<(CollectionJobWorkerResult Collection, DocumentChangeAnalysisWorkerResult? Drafting,
+        DocumentChangeAnalysisWorkerResult? Gate)> RunAsync(CollectionJobWorker collection, DocumentChangeAnalysisWorker? drafting,
+        StatementGateWorker? gate, string artifactRoot, bool once, CancellationToken cancellationToken)
     {
-        if (drafting is null || once)
+        if (once || drafting is null && gate is null)
         {
             var collected = await collection.ExecuteAsync(artifactRoot, once, cancellationToken: cancellationToken);
-            return (collected, drafting is null ? null : await drafting.ExecuteAsync(once: true, cancellationToken));
+            var drafted = drafting is null ? null : await drafting.ExecuteAsync(once: true, cancellationToken);
+            return (collected, drafted, gate is null ? null : await gate.ExecuteAsync(once: true, cancellationToken));
         }
         using var stop = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         var collectionTask = StopOnFailureAsync(collection.ExecuteAsync(artifactRoot, false, cancellationToken: stop.Token), stop);
-        var draftingTask = StopOnFailureAsync(drafting.ExecuteAsync(once: false, stop.Token), stop);
-        await Task.WhenAll(collectionTask, draftingTask);
-        return (await collectionTask, await draftingTask);
+        var draftingTask = StopOnFailureAsync(drafting is null ? Task.FromResult<DocumentChangeAnalysisWorkerResult?>(null)
+            : Widen(drafting.ExecuteAsync(once: false, stop.Token)), stop);
+        var gateTask = StopOnFailureAsync(gate is null ? Task.FromResult<DocumentChangeAnalysisWorkerResult?>(null)
+            : Widen(gate.ExecuteAsync(once: false, stop.Token)), stop);
+        await Task.WhenAll(collectionTask, draftingTask, gateTask);
+        return (await collectionTask, await draftingTask, await gateTask);
     }
+
+    private static async Task<DocumentChangeAnalysisWorkerResult?> Widen(Task<DocumentChangeAnalysisWorkerResult> task) => await task;
 
     private static async Task<T> StopOnFailureAsync<T>(Task<T> task, CancellationTokenSource stop)
     {

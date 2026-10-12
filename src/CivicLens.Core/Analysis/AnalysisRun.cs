@@ -23,8 +23,8 @@ public sealed record AnalysisRun(string RunId, string ComparisonId, string Task,
             throw new ArgumentException("Analysis run usage is invalid.");
         if (OutputJson is { Length: > MaximumOutputLength } || OutputJson?.Contains('\0') == true)
             throw new ArgumentException("Analysis run output is invalid.");
-        if ((Outcome is AnalysisRunOutcome.Drafted or AnalysisRunOutcome.DraftDiscarded) && OutputJson is null)
-            throw new ArgumentException("A drafted run must retain its structured output.");
+        if ((Outcome is AnalysisRunOutcome.Drafted or AnalysisRunOutcome.DraftDiscarded or AnalysisRunOutcome.Classified) && OutputJson is null)
+            throw new ArgumentException("A drafted or classified run must retain its structured output.");
         if (ValidationErrors.IsDefault || ValidationErrors.Length > MaximumValidationErrors ||
             ValidationErrors.Any(error => string.IsNullOrWhiteSpace(error) || error.Length > MaximumValidationErrorLength))
             throw new ArgumentException("Analysis run validation errors are invalid.");

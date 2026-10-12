@@ -6,21 +6,22 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 
 namespace CivicLens.Infrastructure.Analysis;
 
-public sealed class PostgresDocumentChangeAnalysisStatusStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory)
-    : IDocumentChangeAnalysisStatusStore
+public sealed class PostgresDocumentChangeAnalysisStatusStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory,
+    string task = DocumentChangeDraftingTask.Task) : IDocumentChangeAnalysisStatusStore
 {
-    public static PostgresDocumentChangeAnalysisStatusStore FromConnectionString(string connectionString)
+    public static PostgresDocumentChangeAnalysisStatusStore FromConnectionString(string connectionString,
+        string task = DocumentChangeDraftingTask.Task)
     {
         _ = PostgresCollectionAttemptStore.FromConnectionString(connectionString);
         var options = new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options;
-        return new(new PooledDbContextFactory<CollectionAttemptDbContext>(options));
+        return new(new PooledDbContextFactory<CollectionAttemptDbContext>(options), task);
     }
 
     public async Task<DocumentChangeAnalysisStatus?> GetAsync(CancellationToken cancellationToken)
     {
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         var row = await db.Set<DocumentChangeAnalysisStatusRow>().AsNoTracking()
-            .SingleOrDefaultAsync(candidate => candidate.Task == DocumentChangeDraftingTask.Task, cancellationToken);
+            .SingleOrDefaultAsync(candidate => candidate.Task == task, cancellationToken);
         return row is null ? null : ToStatus(row);
     }
 
@@ -30,7 +31,7 @@ public sealed class PostgresDocumentChangeAnalysisStatusStore(IDbContextFactory<
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         _ = await db.Database.ExecuteSqlInterpolatedAsync($"""
             INSERT INTO document_change_analysis_status (task, daily_token_limit, recorded_at_utc_ticks)
-            VALUES ({DocumentChangeDraftingTask.Task}, {dailyTokenLimit}, {(await DatabaseClock.ReadAsync(db, cancellationToken)).Ticks})
+            VALUES ({task}, {dailyTokenLimit}, {(await DatabaseClock.ReadAsync(db, cancellationToken)).Ticks})
             ON CONFLICT (task) DO UPDATE SET daily_token_limit = EXCLUDED.daily_token_limit,
                 recorded_at_utc_ticks = EXCLUDED.recorded_at_utc_ticks, paused_reason = NULL, paused_until_utc_ticks = NULL
             """, cancellationToken);
@@ -64,9 +65,9 @@ public sealed class PostgresDocumentChangeAnalysisStatusStore(IDbContextFactory<
     }
 
     // The row lock keeps the pause rule and its write in one step. A restart or a second pause cannot slip between them.
-    private static Task<DocumentChangeAnalysisStatusRow?> LockAsync(CollectionAttemptDbContext db,
+    private Task<DocumentChangeAnalysisStatusRow?> LockAsync(CollectionAttemptDbContext db,
         CancellationToken cancellationToken) => db.Set<DocumentChangeAnalysisStatusRow>().FromSqlInterpolated($"""
-            SELECT * FROM document_change_analysis_status WHERE task = {DocumentChangeDraftingTask.Task} FOR UPDATE
+            SELECT * FROM document_change_analysis_status WHERE task = {task} FOR UPDATE
             """).SingleOrDefaultAsync(cancellationToken);
 
     private static DocumentChangeAnalysisStatus ToStatus(DocumentChangeAnalysisStatusRow row) =>

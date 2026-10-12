@@ -18,6 +18,9 @@ using CivicLens.Host.Collection;
 using CivicLens.Host.Documents;
 using CivicLens.Host.Publication;
 using CivicLens.Host.Review;
+using CivicLens.Host.Statements;
+using CivicLens.Application.Statements;
+using CivicLens.Infrastructure.Statements;
 using CivicLens.Infrastructure.Documents;
 using CivicLens.Application.Publication;
 using CivicLens.Core.Review;
@@ -52,6 +55,11 @@ if (args is [] or ["--help"] or ["help"])
           documents comparison <comparison-id>
           analyses requeue <comparison-id|--all>
           analyses metrics
+          statements status
+          statements list [passed|skipped|failed-open|over-cap|pending|failed] [limit]
+          statements run <run-id>
+          statements requeue <candidate-id|--all>
+          statements regate [--since yyyy-MM-dd]
           releases publish <idempotency-key> <draft-id>...
           releases list [limit]
           releases activate <release-number>
@@ -65,6 +73,7 @@ if (args is [] or ["--help"] or ["help"])
         receipts replay imports saved handoffs without collecting again; use the capture directory after relocation.
         jobs commands require the database. Each run reconciles prior work and performs at most one new fetch.
         worker also drafts document-change accounts when CIVIC_LENS_ANALYSIS_DAILY_TOKENS and ANTHROPIC_API_KEY are set.
+        worker also gates statement candidates when CIVIC_LENS_STATEMENT_GATE_DAILY_TOKENS, ANTHROPIC_API_KEY, and CIVIC_LENS_ISSUES_CONFIG are set.
         documents commands require the database. Citations use UTF-16 offsets into immutable extracted text.
         Exit codes: 0 success, 1 failed/deferred collection or operational failure, 2 invalid input/configuration.
         """);
@@ -112,7 +121,7 @@ if (args is not (["db", "migrate"] or ["validate", _] or ["collect", _, _, _, _]
     or ["feeds" or "discovery", "get", _] or ["feeds" or "discovery", "admit", _, _, _, _]
     or ["receipts", "list", _] or ["receipts", "replay", _, _]) && !CollectionJobCommand.Matches(args) &&
     !CollectionWorkerCommand.Matches(args) && !DocumentCommand.Matches(args) && !ReleaseCommand.Matches(args) &&
-    !AnalysisCommand.Matches(args))
+    !AnalysisCommand.Matches(args) && !StatementCommand.Matches(args))
 {
     Console.Error.WriteLine("Unknown command. Use --help.");
     return 2;
@@ -140,9 +149,12 @@ try
         var queue = PostgresCollectionWorkerQueue.FromConnectionString(connectionString);
         var analysis = DocumentChangeAnalysisComposition.Create(connectionString, workerConfiguration);
         await using var analysisWakeup = analysis.Wakeup;
+        var gate = StatementGateComposition.Create(connectionString);
+        await using var gateWakeup = gate.Wakeup;
         executing = true;
         await jobs.SynchronizeAsync(workerConfiguration, cancellation.Token);
         await analysis.RecordStartAsync(cancellation.Token);
+        await gate.RecordStartAsync(cancellation.Token);
         var extractions = PostgresDocumentExtractionStore.FromConnectionString(connectionString);
         var comparisons = PostgresDocumentComparisonStore.FromConnectionString(connectionString);
         var processing = new EvidenceProcessingWorker(jobs, attempts, jobs,
@@ -152,7 +164,7 @@ try
             new CompareDocuments(extractions, comparisons));
         await using var wakeup = PostgresCollectionPipelineWakeup.FromConnectionString(connectionString);
         return await CollectionWorkerCommand.ExecuteAsync(args, queue, jobs, attempts, cancellation.Token, processing, wakeup, jobs,
-            analysis.Worker);
+            analysis.Worker, gate.Worker);
     }
 
     if (AnalysisCommand.Matches(args))
@@ -165,6 +177,21 @@ try
         var outcomes = new GetDocumentChangeReviewOutcomes(PostgresDocumentChangeReviewOutcomeStore.FromConnectionString(connectionString));
         executing = true;
         return await AnalysisCommand.ExecuteAsync(args, requeue, outcomes, new ReviewActor(ownerSubject, ReviewRole.Owner), cancellation.Token);
+    }
+
+    if (StatementCommand.Matches(args))
+    {
+        var connectionString = Environment.GetEnvironmentVariable("CIVIC_LENS_DATABASE");
+        var ownerSubject = Environment.GetEnvironmentVariable("CIVIC_LENS_REVIEW_OWNER");
+        if (string.IsNullOrWhiteSpace(connectionString) || string.IsNullOrWhiteSpace(ownerSubject))
+            throw new ArgumentException("Statement commands require CIVIC_LENS_DATABASE and CIVIC_LENS_REVIEW_OWNER.");
+        var gates = PostgresStatementAnalysisStore.FromConnectionString(connectionString);
+        var gateStatus = PostgresDocumentChangeAnalysisStatusStore.FromConnectionString(connectionString, StatementGateTask.Task);
+        var statements = new StatementCommand(new GetStatementGateStatus(gates, gateStatus), new ListStatementGates(gates),
+            new GetStatementGateRun(gates), new RequeueStatementGates(gates), new RegateStatementCandidates(gates),
+            new ReviewActor(ownerSubject, ReviewRole.Owner), args is ["statements", "regate", ..] ? StatementIssueRubric.FromEnvironment()?.Id : null);
+        executing = true;
+        return await statements.ExecuteAsync(args, cancellation.Token);
     }
 
     if (ReleaseCommand.Matches(args))

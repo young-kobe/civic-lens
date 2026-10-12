@@ -21,7 +21,7 @@ internal sealed class StatementAnalysisRowConfiguration : IEntityTypeConfigurati
         builder.HasKey(row => new { row.CandidateId, row.Task });
         builder.Property(row => row.CandidateId).HasColumnName("candidate_id").HasMaxLength(64);
         builder.Property(row => row.Task).HasColumnName("task").HasMaxLength(32);
-        builder.Property(row => row.Status).HasColumnName("status").HasMaxLength(32).IsRequired();
+        builder.Property(row => row.Status).HasColumnName("status").HasConversion<string>().HasMaxLength(32).IsRequired();
         builder.Property(row => row.LeaseToken).HasColumnName("lease_token").HasMaxLength(32);
         builder.Property(row => row.LeaseExpiresAt).HasColumnName("lease_expires_at");
         builder.Property(row => row.Fence).HasColumnName("fence");

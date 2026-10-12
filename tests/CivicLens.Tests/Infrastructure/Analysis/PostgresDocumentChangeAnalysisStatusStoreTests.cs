@@ -11,6 +11,7 @@ public sealed class PostgresDocumentChangeAnalysisStatusStoreTests(PostgresColle
 {
     private readonly string schema = "analysis_status_" + Guid.NewGuid().ToString("N");
     private PostgresDocumentChangeAnalysisStatusStore status = null!;
+    private PostgresDocumentChangeAnalysisStatusStore gateStatus = null!;
 
     public async Task InitializeAsync()
     {
@@ -18,6 +19,7 @@ public sealed class PostgresDocumentChangeAnalysisStatusStoreTests(PostgresColle
         var connectionString = new NpgsqlConnectionStringBuilder(postgres.ConnectionString) { SearchPath = schema, Pooling = false }.ConnectionString;
         await PostgresCollectionAttemptStore.FromConnectionString(connectionString).MigrateAsync();
         status = PostgresDocumentChangeAnalysisStatusStore.FromConnectionString(connectionString);
+        gateStatus = PostgresDocumentChangeAnalysisStatusStore.FromConnectionString(connectionString, "gate");
     }
 
     public Task DisposeAsync() => ExecuteAsync(postgres.ConnectionString, $"DROP SCHEMA IF EXISTS {schema} CASCADE");
@@ -34,6 +36,19 @@ public sealed class PostgresDocumentChangeAnalysisStatusStoreTests(PostgresColle
 
         await status.RecordStartAsync(null, default);
         Assert.False((await status.GetAsync(default))!.Enabled);
+    }
+
+    [Fact]
+    public async Task TheGateKeepsItsOwnStatusAndPauseBesideDrafting()
+    {
+        await status.RecordStartAsync(50_000, default);
+        await gateStatus.RecordStartAsync(7_000, default);
+
+        await gateStatus.RecordPauseAsync("issuesConfigurationUnset", null, default);
+
+        Assert.Null((await status.GetAsync(default))!.PausedReason);
+        var gate = (await gateStatus.GetAsync(default))!;
+        Assert.Equal((7_000L, "issuesConfigurationUnset"), (gate.DailyTokenLimit, gate.PausedReason));
     }
 
     [Fact]

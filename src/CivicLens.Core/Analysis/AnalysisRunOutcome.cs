@@ -18,5 +18,7 @@ public enum AnalysisRunOutcome
     ModelNotFound,
     ProcessingFailed,
     InvalidResponse,
-    Interrupted
+    Interrupted,
+    Classified,
+    Bypassed
 }

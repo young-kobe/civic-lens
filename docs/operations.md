@@ -417,6 +417,38 @@ CIVIC_LENS_LIVE_AI=1 ANTHROPIC_API_KEY=... dotnet test CivicLens.slnx --configur
 
 The test refuses to call if the reservation is over 25,000 tokens.
 
+### Statement issue gate
+
+The `worker` command gates statement candidates. [Architecture](architecture.md#issue-gate-implemented) holds the rules. The gate runs when all of these variables are set in the worker's protected environment. A limit without `ANTHROPIC_API_KEY` stops the worker with exit code 2. Without `CIVIC_LENS_ISSUES_CONFIG`, the gate stage does not run, and `statements status` shows the pause reason `issuesConfigurationUnset`.
+
+| Variable | Meaning |
+|---|---|
+| `ANTHROPIC_API_KEY` | Claude API key, shared with drafting |
+| `CIVIC_LENS_STATEMENT_GATE_DAILY_TOKENS` | Daily token limit for gate calls, per UTC day. It is separate from the drafting limit. |
+| `CIVIC_LENS_STATEMENT_GATE_RUN_TOKENS` | Optional limit for one call's reservation (default 120,000 or the daily limit, whichever is smaller). It also sets the article byte cap. |
+| `CIVIC_LENS_ANALYSIS_CONCURRENCY` | Optional number of calls at the same time, shared with drafting (default 2, 1 to 4) |
+| `CIVIC_LENS_ISSUES_CONFIG` | The issue file. Its revision ID binds each gate run. |
+
+The migration queued a gate row for every earlier candidate. The first run can spend up to the daily limit on them. Start with a low limit. With `--once`, the worker drains collection, then drafting, then the gate, and prints a third JSON line for the gate.
+
+The commands below need `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`.
+
+```sh
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- statements status
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- statements list skipped 50
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- statements run <run-id>
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- statements requeue <candidate-id|--all>
+CIVIC_LENS_ISSUES_CONFIG=/abs/config/issues.json dotnet run --no-build --configuration Release --project src/CivicLens.Host -- statements regate --since 2026-01-01
+```
+
+`status` prints the daily limit, any pause, the tokens charged today, and the count of candidates in each outcome. `list` takes `passed`, `skipped`, `failed-open`, `over-cap`, `pending`, or `failed`, and a limit up to 500 (default 100). `run` prints one run with its output, rubric revision, reason, and verified quote spans. `requeue` moves Failed gate rows back to Pending. `regate` moves skipped candidates back to Pending when their latest run used an older issue revision. Edit the issue file, then run `regate`, then let the worker run. No rubric change requeues anything by itself.
+
+To check the adapter and the prompt cache against the real API, run one paid test on request only. The test sends two requests and fails unless the second reads the cache.
+
+```sh
+CIVIC_LENS_LIVE_AI=1 ANTHROPIC_API_KEY=... dotnet test CivicLens.slnx --configuration Release --no-build --filter 'Category=LiveAi'
+```
+
 ### Publish a static release
 
 The owner can also publish from the Review home page. Select drafts in the Publish section and choose Review selection. The summary lists each headline as new or a replacement, and shows the release number. Choose Publish to confirm. The page lists recent releases read-only. Rollback stays in the CLI.

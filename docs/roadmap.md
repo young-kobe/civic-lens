@@ -58,17 +58,17 @@ Agreed decisions:
 - Issues use two layers. The 32 Congress.gov policy areas are the backbone; they link statements to bills, which carry one policy area each. A small configured list of tracked issues drives the gate and the issue pages. Each tracked issue has an id, a name, a written definition, its parent policy areas, and a dated active range. The definitions are the classification rubric. Verify the policy area names against the Congress.gov API before use.
 - Statements mirror the document-change feature: their own queue, runs, drafts, revisions, and review pages, in the same shape. They share only parts that already have one owner: the Core review actor and decision policy, the Anthropic adapter, the citation span checks, and the budget mechanics.
 - A statement candidate is the first extraction of an article admitted from a feed or HTML listing. Watched pages stay document-change sources only.
-- The issue gate and statement drafting each get their own daily token limit beside the document-change limit. The engine-wide ceiling stays with its pending policy work.
-- Classification runs bind to the `config/issues.json` revision as their rubric version. The first tracked-issue list is a proposal for the owner to edit before use.
-- The gate reads the full article text up to a byte cap. An article over the cap skips the gate and goes to drafting, so no article is dropped unseen. The gate uses Haiku 5.5 through the existing adapter until the bake-off.
-- The gate returns the matched tracked-issue and policy-area IDs. Each matched tracked issue carries one exact quote, which code checks like a draft citation.
+- Statement drafting gets its own daily token limit beside the issue gate and document-change limits. The engine-wide ceiling stays with its pending policy work.
+- The first tracked-issue list in `config/issues.json` is a proposal for the owner to edit before use.
 - A statement's identity is its admitted article: the source and the URL. A parser upgrade does not create a second statement, and a later edit to the article is a document change.
 - Speakers come from the source's coverage on the publication date. Other people quoted in a release are kept as named text, not linked identities.
 - Code marks each cited passage as a direct quotation (inside quotation marks in the source) or release text (the office's own voice). Code also finds bill numbers in the text for later matching with actions.
 - This slice includes publication: Publication.Contracts and the static pages gain statement records, so an approved statement publishes end to end.
-- A passed gate run inserts the `draft` task row in `statement_analysis`. The `gate` rows already exist and stay Pending until a worker, the gate, and drafting are built.
-- The gate runs first on the backfilled candidates, and the daily token limits spread the cost.
 - A statement revision holds a headline, a summary, the statement date with an evidence quote, speaker official IDs (limited to the source's covered officials on that date), other speakers as named text, issue IDs, policy area IDs, and quotations. A quotation is an extraction span. Code sets each quotation's kind (direct quotation or release text) and finds the bill numbers. Confidence stays in the run output.
+- Each analysis feature keeps its own queue table. The queue rules have one owner each in Application/Analysis: state transitions, budget reservation and charging, retry backoff, and the worker loop. A feature supplies only its task step and its table mapping.
+- When the source covers exactly one official on the article date, code sets that official as the speaker. When it covers several, the model chooses from them.
+- When the article text states no date, the draft has no statement date. The reviewer sets one before approval. No date is guessed.
+- An article over the drafting byte cap gets no AI draft. It records the code reason `over-byte-cap` and shows in review as not drafted, and a reviewer writes the draft.
 
 Acceptance: every statement/action has exact inspectable provenance. Quotation validity and interpretation are separate checks. Human review is bound to the reviewed version. Adding/removing tracked officials requires no code changes and retains history.
 
