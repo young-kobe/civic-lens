@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Text.Json;
 using CivicLens.Application.Analysis;
 using CivicLens.Core.Documents;
 using CivicLens.Core.Review;
@@ -62,11 +63,11 @@ public sealed class DocumentChangeDraftingResolverTests
         Assert.False(unknown.HasCitationErrors);
 
         var badDate = Resolve(FakeDocumentChangeDraftingModel.Output("Headline", [("h1", "after", "Updated 2026-10-03")],
-            changeDate: new { date = "2026-10-03", citationIndex = 4 }), evidence);
+            changeDate: new { date = "2026-10-03", citationIndex = 4, confidence = 0.9 }), evidence);
         Assert.Null(badDate.Revision);
 
         var dated = Resolve(FakeDocumentChangeDraftingModel.Output("Headline", [("h1", "after", "October 30"), ("h1", "after", "Updated 2026-10-03")],
-            officialIds: ["warren"], issueIds: ["housing"], changeDate: new { date = "2026-10-03", citationIndex = 1 }), evidence);
+            officialIds: ["warren"], issueIds: ["housing"], changeDate: new { date = "2026-10-03", citationIndex = 1, confidence = 0.9 }), evidence);
         var revision = Assert.IsType<DocumentChangeDraftRevision>(dated.Revision);
         Assert.Equal(new DateOnly(2026, 10, 3), revision.ChangeDate);
         Assert.Equal(revision.Citations[1], revision.ChangeDateEvidence);
@@ -83,11 +84,11 @@ public sealed class DocumentChangeDraftingResolverTests
     {
         var evidence = FakeDocumentChangeDraftingModel.Evidence("Deadline: October 15.\n", line + " Deadline: October 30.\n");
         var stated = Resolve(FakeDocumentChangeDraftingModel.Output("Headline", [("h1", "after", line)],
-            changeDate: new { date = "2026-10-03", citationIndex = 0 }), evidence);
+            changeDate: new { date = "2026-10-03", citationIndex = 0, confidence = 0.9 }), evidence);
         Assert.Equal(new DateOnly(2026, 10, 3), Assert.IsType<DocumentChangeDraftRevision>(stated.Revision).ChangeDate);
 
         var other = Resolve(FakeDocumentChangeDraftingModel.Output("Headline", [("h1", "after", line)],
-            changeDate: new { date = "2026-10-04", citationIndex = 0 }), evidence);
+            changeDate: new { date = "2026-10-04", citationIndex = 0, confidence = 0.9 }), evidence);
         Assert.Null(other.Revision);
         Assert.True(other.HasCitationErrors);
         Assert.Contains(other.Errors, error => error.Contains("does not state 2026-10-04", StringComparison.Ordinal));
@@ -101,7 +102,7 @@ public sealed class DocumentChangeDraftingResolverTests
     {
         var evidence = FakeDocumentChangeDraftingModel.Evidence("Deadline: October 15.\n", line + " Deadline: October 30.\n");
         var result = Resolve(FakeDocumentChangeDraftingModel.Output("Headline", [("h1", "after", line)],
-            changeDate: new { date, citationIndex = 0 }), evidence);
+            changeDate: new { date, citationIndex = 0, confidence = 0.9 }), evidence);
         Assert.Null(result.Revision);
         Assert.Contains(result.Errors, error => error.Contains($"does not state {date}", StringComparison.Ordinal));
     }
@@ -115,6 +116,55 @@ public sealed class DocumentChangeDraftingResolverTests
         var resolution = Resolve(output, evidence);
         Assert.Null(resolution.Revision);
         Assert.NotEmpty(resolution.Errors);
+    }
+
+    [Theory]
+    [InlineData("-0.1")]
+    [InlineData("1.1")]
+    [InlineData("\"NaN\"")]
+    public void AConfidenceOutsideZeroToOneOrNotFiniteRejectsTheDraft(string value)
+    {
+        var evidence = FakeDocumentChangeDraftingModel.Evidence("Updated 2026-10-03. Deadline: October 15.\n", "Updated 2026-10-03. Deadline: October 30.\n");
+        var changeDate = new { date = "2026-10-03", citationIndex = 0, confidence = 0.9 };
+        var citations = new[] { ("h1", "after", "Updated 2026-10-03") };
+        var valid = FakeDocumentChangeDraftingModel.Output("Headline", citations, ["warren"], ["housing"], changeDate);
+
+        foreach (var output in new[]
+        {
+            valid.Replace("\"confidence\":0.8", $"\"confidence\":{value}", StringComparison.Ordinal),
+            valid.Replace("\"confidence\":0.7", $"\"confidence\":{value}", StringComparison.Ordinal),
+            valid.Replace("\"confidence\":0.6", $"\"confidence\":{value}", StringComparison.Ordinal),
+            valid.Replace("\"confidence\":0.9", $"\"confidence\":{value}", StringComparison.Ordinal)
+        })
+        {
+            Assert.NotEqual(valid, output);
+            var resolution = Resolve(output, evidence);
+            Assert.Null(resolution.Revision);
+            Assert.Contains(resolution.Errors, error => error.Contains("from 0 to 1", StringComparison.Ordinal));
+        }
+    }
+
+    [Fact]
+    public void ConfidenceStaysInTheRunAndNeverEntersTheRevision()
+    {
+        var evidence = FakeDocumentChangeDraftingModel.Evidence("Updated 2026-10-03. Deadline: October 15.\n", "Updated 2026-10-03. Deadline: October 30.\n");
+        string Revision(double confidence, double dateConfidence) => JsonSerializer.Serialize(Assert.IsType<DocumentChangeDraftRevision>(Resolve(
+            FakeDocumentChangeDraftingModel.Output("Headline", [("h1", "after", "Updated 2026-10-03")], ["warren"], ["housing"],
+                new { date = "2026-10-03", citationIndex = 0, confidence = dateConfidence }, confidence), evidence).Revision));
+
+        var low = Revision(0, 0);
+        Assert.Equal(low, Revision(1, 1));
+        Assert.DoesNotContain("onfidence", low, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SelectionObjectsMapToTheIdListsOfTheRevision()
+    {
+        var evidence = FakeDocumentChangeDraftingModel.Evidence("Deadline: October 15.\n", "Deadline: October 30.\n");
+        var revision = Assert.IsType<DocumentChangeDraftRevision>(Resolve(FakeDocumentChangeDraftingModel.Output("Headline",
+            [("h1", "after", "October 30")], ["warren"], ["housing"]), evidence).Revision);
+        Assert.Equal(["warren"], revision.OfficialIds.ToArray());
+        Assert.Equal(["housing"], revision.IssueIds.ToArray());
     }
 
     private static DocumentChangeDraftingResolution Resolve(string output, DocumentChangeAnalysisEvidence evidence) =>

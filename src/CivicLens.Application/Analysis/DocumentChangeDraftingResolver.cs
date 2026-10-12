@@ -13,6 +13,7 @@ public static class DocumentChangeDraftingResolver
 {
     private static readonly JsonSerializerOptions OutputJson = new(JsonSerializerDefaults.Web)
     {
+        NumberHandling = JsonNumberHandling.AllowNamedFloatingPointLiterals,
         UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
         RespectNullableAnnotations = true,
         RespectRequiredConstructorParameters = true
@@ -33,6 +34,7 @@ public static class DocumentChangeDraftingResolver
         CheckText(output.Institution, DocumentChangeDraftRevision.MaximumInstitutionLength, "institution", required: true, errors);
         CheckSelections(output.OfficialIds, catalog.Officials.Select(official => official.Id), "officialIds", errors);
         CheckSelections(output.IssueIds, catalog.IssueIds, "issueIds", errors);
+        CheckConfidence(output.Confidence, "confidence", errors);
         var textErrors = errors.Count;
         var citations = ResolveCitations(output.Citations, evidence, errors);
         var changeDate = ResolveChangeDate(output.ChangeDate, output.Citations, citations, errors);
@@ -40,7 +42,7 @@ public static class DocumentChangeDraftingResolver
         if (errors.Count > 0 || citations.IsDefault) return Rejected(errors, citationErrors);
         var revision = new DocumentChangeDraftRevision(draftId, 1, evidence.Comparison.Comparison.ComparisonId,
             ReviewAuthor.AnalysisSubject, createdAtUtc, output.Headline, output.Summary, Normalize(output.Significance),
-            output.Limits, output.Institution, changeDate?.Date, changeDate?.Evidence, output.OfficialIds, output.IssueIds, citations);
+            output.Limits, output.Institution, changeDate?.Date, changeDate?.Evidence, Ids(output.OfficialIds), Ids(output.IssueIds), citations);
         return new(revision, [], false);
     }
 
@@ -50,7 +52,9 @@ public static class DocumentChangeDraftingResolver
         {
             var output = JsonSerializer.Deserialize<DocumentChangeDraftingOutput>(outputJson, OutputJson);
             if (output is null || output.OfficialIds.IsDefault || output.IssueIds.IsDefault || output.Citations.IsDefault) return null;
-            return output.Citations.Any(citation => citation is null) ? null : output;
+            var hasNull = output.Citations.Any(citation => citation is null) || output.OfficialIds.Any(item => item is null) ||
+                output.IssueIds.Any(item => item is null);
+            return hasNull ? null : output;
         }
         catch (JsonException) { return null; }
     }
@@ -132,6 +136,7 @@ public static class DocumentChangeDraftingResolver
         ImmutableArray<DocumentChangeDraftingOutputCitation> quotes, ImmutableArray<DocumentChangeCitation> citations, List<string> errors)
     {
         if (changeDate is null) return null;
+        CheckConfidence(changeDate.Confidence, "changeDate.confidence", errors);
         if (!DateOnly.TryParseExact(changeDate.Date, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
         {
             errors.Add("changeDate.date must be a calendar date in yyyy-MM-dd form.");
@@ -171,7 +176,7 @@ public static class DocumentChangeDraftingResolver
             errors.Add($"{name} must be at most {maximumLength} characters with no NUL character.");
     }
 
-    private static void CheckSelections(ImmutableArray<string> values, IEnumerable<string> allowed, string name,
+    private static void CheckSelections(ImmutableArray<DocumentChangeDraftingOutputSelection> values, IEnumerable<string> allowed, string name,
         List<string> errors)
     {
         var allowedSet = allowed.ToHashSet(StringComparer.Ordinal);
@@ -180,10 +185,19 @@ public static class DocumentChangeDraftingResolver
             errors.Add($"{name} can hold at most {DocumentChangeDraftRevision.MaximumSelections} values.");
         foreach (var value in values)
         {
-            if (value is null || !allowedSet.Contains(value)) errors.Add($"{name} holds \"{Shorten(value)}\", which is not a listed ID.");
-            else if (!seen.Add(value)) errors.Add($"{name} repeats \"{value}\".");
+            CheckConfidence(value.Confidence, $"{name} confidence for \"{Shorten(value.Id)}\"", errors);
+            if (value.Id is null || !allowedSet.Contains(value.Id)) errors.Add($"{name} holds \"{Shorten(value.Id)}\", which is not a listed ID.");
+            else if (!seen.Add(value.Id)) errors.Add($"{name} repeats \"{value.Id}\".");
         }
     }
+
+    private static void CheckConfidence(double value, string name, List<string> errors)
+    {
+        if (!double.IsFinite(value) || value < 0 || value > 1) errors.Add($"{name} must be a number from 0 to 1.");
+    }
+
+    private static ImmutableArray<string> Ids(ImmutableArray<DocumentChangeDraftingOutputSelection> selections) =>
+        [.. selections.Select(selection => selection.Id)];
 
     private static string? Normalize(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
 

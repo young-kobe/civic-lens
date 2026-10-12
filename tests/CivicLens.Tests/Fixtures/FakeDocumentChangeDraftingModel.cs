@@ -46,7 +46,7 @@ internal sealed class FakeDocumentChangeDraftingModel : IDocumentChangeDraftingM
         Output("Deadline moves to October 30", citations);
 
     public static string Output(string headline, (string HunkId, string Side, string Quote)[] citations,
-        string[]? officialIds = null, string[]? issueIds = null, object? changeDate = null) => JsonSerializer.Serialize(new
+        string[]? officialIds = null, string[]? issueIds = null, object? changeDate = null, double confidence = 0.8) => JsonSerializer.Serialize(new
         {
             headline,
             summary = "The page now gives a later deadline.",
@@ -54,9 +54,10 @@ internal sealed class FakeDocumentChangeDraftingModel : IDocumentChangeDraftingM
             limits = "The evidence does not show when or why the page changed.",
             institution = "Example Office",
             changeDate,
-            officialIds = officialIds ?? [],
-            issueIds = issueIds ?? [],
-            citations = citations.Select(citation => new { hunkId = citation.HunkId, side = citation.Side, quote = citation.Quote })
+            officialIds = (officialIds ?? []).Select(id => new { id, confidence = 0.7 }),
+            issueIds = (issueIds ?? []).Select(id => new { id, confidence = 0.6 }),
+            citations = citations.Select(citation => new { hunkId = citation.HunkId, side = citation.Side, quote = citation.Quote }),
+            confidence
         });
 
     public static DocumentChangeAnalysisEvidence Evidence(string beforeText, string afterText)
