@@ -423,17 +423,14 @@ public sealed class PostgresStatementReviewStoreTests(PostgresCollection postgre
     private async Task<string> PassedCandidateAsync()
     {
         var candidate = await CandidateAsync();
-        var gateModel = new FakeStatementGateModel().Classify(StatementGateFixtures.Output([HousingArea], 0.8, (RentIssue, "rent cap")));
-        await AnalysisWorkers.Gate(gates, new FakeAnalysisStatusStore(), gateModel, new StatementGateSettings(10_000_000, concurrency: 1),
-            Revision(), TimeProvider.System).ExecuteAsync(once: true);
+        await StatementAiDrafting.PassGateAsync(gates);
         return candidate;
     }
 
     private async Task<string> AiDraftedCandidateAsync()
     {
         var candidate = await PassedCandidateAsync();
-        var output = Output(date: ("2026-10-03", "October 3, 2026"));
-        await DraftingWorker(new FakeStatementDraftingModel().Draft(output)).ExecuteAsync(once: true);
+        await StatementAiDrafting.DraftAsync(drafts, Output(date: ("2026-10-03", "October 3, 2026")));
         return candidate;
     }
 

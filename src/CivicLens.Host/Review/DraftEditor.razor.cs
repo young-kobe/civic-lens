@@ -10,19 +10,13 @@ using CivicLens.Host.Components.Evidence;
 using CivicLens.Host.Components.Layout;
 using CivicLens.Host.Components.Ui;
 using Microsoft.AspNetCore.Components;
-using Microsoft.AspNetCore.Components.Authorization;
 
 namespace CivicLens.Host.Review;
 
 public sealed partial class DraftEditor
 {
-    private const string SaveForm = "save";
-    private const string DecideForm = "decide";
     private const int PreselectedPassageLimit = 32;
 
-    private readonly string saveKey = Guid.NewGuid().ToString("N");
-    private readonly string decisionKey = Guid.NewGuid().ToString("N");
-    private ReviewActor actor = default!;
     private DocumentChangeReview? review;
     private AnalysisRun? draftRun;
     private DocumentComparison? comparison;
@@ -30,14 +24,8 @@ public sealed partial class DraftEditor
     private DocumentExtraction? after;
     private ImmutableArray<EvidenceOption> evidenceOptions = [];
     private IReadOnlyList<SavedCitation> savedCitations = [];
-    private string? error;
-    private string? statusMessage;
-    private bool isConflict;
     private bool isDraftConflict;
-    private bool hasUnsavedInput;
-    private bool notFound;
 
-    [Inject] private ReviewActorAccessor Actors { get; set; } = default!;
     [Inject] private GetDocumentChangeReview GetReview { get; set; } = default!;
     [Inject] private GetDocumentComparison GetComparison { get; set; } = default!;
     [Inject] private GetDocumentCitation GetCitation { get; set; } = default!;
@@ -46,86 +34,48 @@ public sealed partial class DraftEditor
     [Inject] private ReviewCatalog Catalog { get; set; } = default!;
     [Inject] private GetDocumentChangeAnalysisRun GetRun { get; set; } = default!;
     [Inject] private IDocumentExtractionStore Extractions { get; set; } = default!;
-    [Inject] private NavigationManager Navigation { get; set; } = default!;
-
-    [CascadingParameter] private HttpContext HttpContext { get; set; } = default!;
-    [CascadingParameter] private Task<AuthenticationState> AuthenticationState { get; set; } = default!;
 
     [Parameter] public string DraftId { get; set; } = string.Empty;
-    [SupplyParameterFromQuery(Name = "status")] private string? Status { get; set; }
 
     [SupplyParameterFromForm(FormName = SaveForm)] private DraftInput? Input { get; set; }
-    [SupplyParameterFromForm(FormName = SaveForm, Name = "expectedRevisionNumber")] private int SaveExpectedRevision { get; set; }
-    [SupplyParameterFromForm(FormName = SaveForm, Name = "idempotencyKey")] private string? SaveKey { get; set; }
-    [SupplyParameterFromForm(FormName = DecideForm)] private DecisionInput? Decision { get; set; }
-    [SupplyParameterFromForm(FormName = DecideForm, Name = "expectedRevisionNumber")] private int DecideExpectedRevision { get; set; }
-    [SupplyParameterFromForm(FormName = DecideForm, Name = "expectedReviewStateVersion")] private int DecideExpectedStateVersion { get; set; }
-    [SupplyParameterFromForm(FormName = DecideForm, Name = "idempotencyKey")] private string? DecideKey { get; set; }
-    [SupplyParameterFromForm(FormName = DecideForm, Name = "kind")] private string? Kind { get; set; }
 
-    private CancellationToken RequestAborted => HttpContext.RequestAborted;
     private DocumentChangeDraftRevision Revision => review!.CurrentRevision;
-    private bool CanDecide => !hasUnsavedInput && !isConflict && error is null;
     private ReviewStatus CurrentStatus =>
         ReviewPolicy.GetCurrentStatus(Revision.RevisionNumber, review!.Decisions, review.UnresolvedConcerns);
     private ImmutableArray<string> OfficialIds => [.. Catalog.OfficialIds.Order(StringComparer.Ordinal)];
     private ImmutableArray<string> IssueIds => [.. Catalog.IssueIds.Order(StringComparer.Ordinal)];
     private int UnverifiedCitations => Revision.Citations.Length - savedCitations.Count;
 
-    protected override async Task OnInitializedAsync()
+    protected override Task LoadAsync() => LoadGuardedAsync(ReadRecordAsync);
+
+    private async Task ReadRecordAsync()
     {
-        actor = Actors.GetActor((await AuthenticationState).User);
-        if (!HttpMethods.IsPost(HttpContext.Request.Method)) statusMessage = StatusText();
-        await LoadAsync();
+        review = await GetReview.ExecuteAsync(actor, DraftId, RequestAborted);
+        if (review is null)
+        {
+            ShowNotFound();
+            return;
+        }
+        if (ReviewAuthor.IsAnalysis(review.Revisions[0].AuthorSubject))
+            draftRun = await GetRun.ExecuteAsync(actor, DraftId, RequestAborted);
+        comparison = await GetComparison.ExecuteAsync(Revision.ComparisonId, RequestAborted);
+        if (comparison is null)
+        {
+            error = "The saved comparison for this draft is unavailable. The wording still shows so you can recover it.";
+            Input ??= DraftInput.From(Revision, []);
+            return;
+        }
+        before = await Extractions.GetAsync(comparison.BeforeExtractionId, RequestAborted);
+        after = await Extractions.GetAsync(comparison.AfterExtractionId, RequestAborted);
+        evidenceOptions = EvidenceOption.Build(comparison, Revision.Citations, before, after);
+        Input ??= DraftInput.From(Revision, evidenceOptions);
+        savedCitations = await VerifyCitationsAsync();
     }
 
-    private string? StatusText() => Status switch
-    {
-        "saved" => "The new revision is saved. Review it before you record a decision.",
-        "decided" => "Your decision on this revision is saved.",
-        _ => null
-    };
-
-    private async Task LoadAsync()
-    {
-        try
-        {
-            review = await GetReview.ExecuteAsync(actor, DraftId, RequestAborted);
-            if (review is null)
-            {
-                ShowNotFound();
-                return;
-            }
-            if (ReviewAuthor.IsAnalysis(review.Revisions[0].AuthorSubject))
-                draftRun = await GetRun.ExecuteAsync(actor, DraftId, RequestAborted);
-            comparison = await GetComparison.ExecuteAsync(Revision.ComparisonId, RequestAborted);
-            if (comparison is null)
-            {
-                error = "The saved comparison for this draft is unavailable. The wording still shows so you can recover it.";
-                Input ??= DraftInput.From(Revision, []);
-                return;
-            }
-            before = await Extractions.GetAsync(comparison.BeforeExtractionId, RequestAborted);
-            after = await Extractions.GetAsync(comparison.AfterExtractionId, RequestAborted);
-            evidenceOptions = EvidenceOption.Build(comparison, Revision.Citations, before, after);
-            Input ??= DraftInput.From(Revision, evidenceOptions);
-            savedCitations = await VerifyCitationsAsync();
-        }
-        catch (OperationCanceledException) when (RequestAborted.IsCancellationRequested) { throw; }
-        catch (UnauthorizedAccessException) { Navigation.NavigateTo("/access-denied"); }
-        catch (ArgumentException) { ShowNotFound(); }
-        catch (Exception)
-        {
-            HttpContext.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
-            error ??= "The review workspace could not load this record. Refresh the page to try again.";
-        }
-    }
-
-    private void ShowNotFound()
+    protected override void ShowNotFound()
     {
         review = null;
-        notFound = true;
-        HttpContext.Response.StatusCode = StatusCodes.Status404NotFound;
+        base.ShowNotFound();
     }
 
     private async Task<IReadOnlyList<SavedCitation>> VerifyCitationsAsync()
@@ -174,43 +124,27 @@ public sealed partial class DraftEditor
     private static bool Covers(int start, int length, DocumentChangeCitation binding) =>
         binding.Start >= start && binding.Start + binding.Length <= start + length;
 
-    private async Task SaveAsync()
-    {
-        var target = await TrySaveAsync();
-        if (target is not null) Navigation.NavigateTo(target);
-    }
+    private async Task SaveAsync() => NavigateWhenSet(await TrySaveAsync());
 
     private async Task<string?> TrySaveAsync()
     {
         if (review is null) return null;
-        try
-        {
-            if (comparison is null) throw new ArgumentException("The saved comparison is unavailable.");
-            _ = await SaveDraft.ExecuteAsync(actor, BuildSaveRequest(Input ?? new DraftInput()), RequestAborted);
-            return $"/Review/{DraftId}?status=saved";
-        }
-        catch (OperationCanceledException) when (RequestAborted.IsCancellationRequested) { throw; }
-        catch (UnauthorizedAccessException) { return "/access-denied"; }
-        catch (ReviewConflictException)
-        {
-            HttpContext.Response.StatusCode = StatusCodes.Status409Conflict;
-            isConflict = true;
-            isDraftConflict = true;
-            statusMessage = "Someone saved a newer revision. Your wording is kept below. Compare both versions, then save again.";
-            await LoadAsync();
-        }
-        catch (ArgumentException)
-        {
-            HttpContext.Response.StatusCode = StatusCodes.Status400BadRequest;
-            error = "Some fields or selections are not valid. Correct them and save again.";
-        }
-        catch (Exception)
-        {
-            HttpContext.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
-            error = "The revision could not be saved. Your wording is kept in the form. Try again.";
-        }
-        hasUnsavedInput = true;
-        return null;
+        var target = await RunCommandAsync(PersistDraftAsync, SaveFailures, ReloadAfterSaveConflictAsync);
+        hasUnsavedInput = target is null;
+        return target;
+    }
+
+    private async Task<string> PersistDraftAsync()
+    {
+        if (comparison is null) throw new ArgumentException("The saved comparison is unavailable.");
+        _ = await SaveDraft.ExecuteAsync(actor, BuildSaveRequest(Input ?? new DraftInput()), RequestAborted);
+        return $"/Review/{DraftId}?status=saved";
+    }
+
+    private Task ReloadAfterSaveConflictAsync()
+    {
+        isDraftConflict = true;
+        return LoadAsync();
     }
 
     private SaveDocumentChangeDraftRequest BuildSaveRequest(DraftInput input)
@@ -250,50 +184,27 @@ public sealed partial class DraftEditor
     private EvidenceOption? FindOption(string? key) =>
         evidenceOptions.FirstOrDefault(option => string.Equals(option.Key, key, StringComparison.Ordinal));
 
-    private async Task DecideAsync()
-    {
-        var target = await TryDecideAsync();
-        if (target is not null) Navigation.NavigateTo(target);
-    }
+    private async Task DecideAsync() => NavigateWhenSet(await TryDecideAsync());
 
     private async Task<string?> TryDecideAsync()
     {
         if (review is null) return null;
-        try
-        {
-            if (!Enum.TryParse<ReviewDecisionKind>(Kind, ignoreCase: false, out var kind) || !Enum.IsDefined(kind))
-                throw new ArgumentException("Choose a valid review action.");
-            var request = new DecideDocumentChangeReviewRequest(DraftId, DecideExpectedRevision, DecideExpectedStateVersion,
-                kind, EmptyToNull(Decision?.Note), [.. Decision?.ResolvedDecisionIds ?? []], DecideKey ?? "");
-            _ = await DecideReview.ExecuteAsync(actor, request, RequestAborted);
-            return $"/Review/{DraftId}?status=decided";
-        }
-        catch (OperationCanceledException) when (RequestAborted.IsCancellationRequested) { throw; }
-        catch (UnauthorizedAccessException) { return "/access-denied"; }
-        catch (ReviewConflictException)
-        {
-            HttpContext.Response.StatusCode = StatusCodes.Status409Conflict;
-            isConflict = true;
-            statusMessage = "The revision or review state changed after you opened this page. Check the latest state before you record a decision.";
-            Input = null;
-            await LoadAsync();
-        }
-        catch (ArgumentException)
-        {
-            HttpContext.Response.StatusCode = StatusCodes.Status400BadRequest;
-            error = "The decision needs valid details. Requesting changes and withdrawing approval need a reason. Approval must resolve every open concern.";
-        }
-        catch (Exception)
-        {
-            HttpContext.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
-            error = "The decision could not be saved. The current review state shows below. Try again.";
-        }
-        return null;
+        return await RunCommandAsync(RecordDecisionAsync, DecideFailures, ReloadAfterDecideConflictAsync);
     }
 
-    private static string? EmptyToNull(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
+    private async Task<string> RecordDecisionAsync()
+    {
+        var request = new DecideDocumentChangeReviewRequest(DraftId, DecideExpectedRevision, DecideExpectedStateVersion,
+            ParseDecisionKind(Kind), EmptyToNull(Decision?.Note), [.. Decision?.ResolvedDecisionIds ?? []], DecideKey ?? "");
+        _ = await DecideReview.ExecuteAsync(actor, request, RequestAborted);
+        return $"/Review/{DraftId}?status=decided";
+    }
 
-    private string SelectedTab => hasUnsavedInput || isConflict ? "edit" : "saved";
+    private Task ReloadAfterDecideConflictAsync()
+    {
+        Input = null;
+        return LoadAsync();
+    }
 
     private IReadOnlyList<Crumb> Crumbs =>
         [new("Review", "/Review"), new(review is not null ? Headline : notFound ? "Draft not found" : "Draft")];
@@ -357,26 +268,9 @@ public sealed partial class DraftEditor
         ("AI tokens", $"{draftRun.Usage.InputTokens:N0} input, {draftRun.Usage.OutputTokens:N0} output")
     ];
 
-    private IReadOnlyList<HistoryEntry> History =>
-    [
-        .. review!.Revisions.Select(item => new HistoryEntry(item.CreatedAtUtc,
-            item.RevisionNumber > 1 ? $"Revision {item.RevisionNumber} saved"
-                : ReviewAuthor.IsAnalysis(item.AuthorSubject) ? "AI draft written" : "Draft started", null,
-            item.AuthorSubject, DraftStatusDisplay.DraftName(item.Headline)))
-            .Concat(review.Decisions.Select(item => new HistoryEntry(item.CreatedAtUtc, $"on revision {item.RevisionNumber}",
-                item.Kind, item.ActorSubject, DecisionNote(item))))
-            .OrderByDescending(item => item.When)
-    ];
-
-    private static string? DecisionNote(ReviewDecision decision) => decision.ResolvedDecisionIds.Length switch
-    {
-        0 => decision.Note,
-        1 => $"{decision.Note} Resolved 1 concern.",
-        var count => $"{decision.Note} Resolved {count} concerns."
-    };
-
-    private string Who(string subject) => ReviewAuthor.IsAnalysis(subject) ? "AI drafter"
-        : subject == actor.Subject ? "You" : "Another reviewer";
+    private IReadOnlyList<ReviewHistoryEntry> History => ReviewHistoryEntry.Newest(
+        review!.Revisions.Select(item => ReviewHistoryEntry.ForRevision(item.CreatedAtUtc, item.RevisionNumber, item.AuthorSubject, item.Headline)),
+        review.Decisions);
 
     public sealed class DraftInput
     {
@@ -408,12 +302,6 @@ public sealed partial class DraftEditor
 
         private static string KeyOf(DocumentChangeCitation? citation, ImmutableArray<EvidenceOption> options) =>
             options.FirstOrDefault(option => option.Citation == citation)?.Key ?? "";
-    }
-
-    public sealed class DecisionInput
-    {
-        public string? Note { get; set; }
-        public string[]? ResolvedDecisionIds { get; set; } = [];
     }
 
     internal sealed record EvidenceOption(string Key, string Label, string Quote, DocumentChangeCitation Citation, string Link)
@@ -466,7 +354,4 @@ public sealed partial class DraftEditor
     }
 
     private sealed record SavedCitation(DocumentChangeCitation Binding, string Quote, string Label, string? Link);
-
-    private sealed record HistoryEntry(DateTimeOffset When, string Event, ReviewDecisionKind? Decision, string ActorSubject,
-        string? Note);
 }

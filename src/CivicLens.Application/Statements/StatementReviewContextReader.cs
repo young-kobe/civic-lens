@@ -15,6 +15,6 @@ public sealed class StatementReviewContextReader(IStatementDraftStore evidence, 
             ?? throw new KeyNotFoundException("Statement candidate was not found.");
         var officials = roster.OfficialsOn(read.ConfigurationRevision, read.Article.Extraction.SourceAttempt.SourceId,
             read.Article.FirstCapturedOn);
-        return new(read.Article, new([.. officials.Select(official => official.Id)], issueIds, policyAreaIds));
+        return new(read.Article, new([.. officials.Select(official => official.Id)], issueIds, policyAreaIds), officials);
     }
 }

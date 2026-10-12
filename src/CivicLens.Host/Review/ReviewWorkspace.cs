@@ -4,13 +4,16 @@ using CivicLens.Application.Analysis;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Documents;
 using CivicLens.Application.Publication;
+using CivicLens.Application.Issues;
 using CivicLens.Application.Review;
+using CivicLens.Application.Statements;
 using CivicLens.Infrastructure.Analysis;
 using CivicLens.Infrastructure.Documents;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Collection.Jobs;
 using CivicLens.Infrastructure.Publication;
 using CivicLens.Infrastructure.Review;
+using CivicLens.Infrastructure.Statements;
 using CivicLens.Host.Publication;
 using CivicLens.Host.Components;
 using Microsoft.AspNetCore.Antiforgery;
@@ -212,6 +215,7 @@ internal static class ReviewWorkspace
         services.AddScoped<ListDocumentChangeReviews>();
         services.AddScoped<ListEligibleDocumentComparisons>();
         services.AddScoped<GetReviewOverview>();
+        ConfigureStatementReview(services, connectionString);
         var collection = ReviewCollectionSettings.FromEnvironment();
         if (collection is null)
         {
@@ -230,6 +234,21 @@ internal static class ReviewWorkspace
         }
     }
 
+    private static void ConfigureStatementReview(IServiceCollection services, string connectionString)
+    {
+        var contexts = AnalysisDbContextFactory.Create(connectionString);
+        services.AddSingleton<IStatementReviewStore>(new PostgresStatementReviewStore(contexts));
+        services.AddSingleton<IStatementDraftStore>(new PostgresStatementDraftStore(contexts));
+        services.AddSingleton(Issues.Value);
+        services.AddScoped<StatementReviewContextReader>();
+        services.AddScoped<CreateStatementDraft>();
+        services.AddScoped<SaveStatementDraft>();
+        services.AddScoped<DecideStatementReview>();
+        services.AddScoped<GetStatementReview>();
+        services.AddScoped<ListStatementReviews>();
+        services.AddScoped<ListStatementsNotInReview>();
+    }
+
     // The owner publish section needs a release directory and the configured official names.
     private static void ConfigurePublication(IServiceCollection services, string connectionString,
         ReviewCollectionSettings collection)
@@ -245,11 +264,10 @@ internal static class ReviewWorkspace
         services.AddScoped<ListPublishableDocumentChanges>();
     }
 
-    private static readonly Lazy<string[]> IssueIds = new(() =>
-        ReviewIssueSettings.FromEnvironment().Configuration.Issues.Select(issue => issue.Id).ToArray());
+    private static readonly Lazy<IssueConfiguration> Issues = new(() => ReviewIssueSettings.FromEnvironment().Configuration);
 
     internal static ReviewCatalog ReadCatalog() =>
-        new(IssueIds.Value, ReadIds("CIVIC_LENS_REVIEW_OFFICIALS"));
+        new(Issues.Value.Issues.Select(issue => issue.Id), ReadIds("CIVIC_LENS_REVIEW_OFFICIALS"));
 
     private static string[] ReadIds(string name) => (Environment.GetEnvironmentVariable(name) ?? "")
         .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);

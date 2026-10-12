@@ -26,6 +26,9 @@ public sealed class QuotedText
         Close(openedAt, text.Length);
     }
 
+    public IReadOnlyList<StatementSpan> Passages(string extractionId) =>
+        [.. regions.Select(region => new StatementSpan(extractionId, region.Start, region.End - region.Start))];
+
     public StatementQuotationKind KindOf(int start, int length)
     {
         if (start < 0 || length < 1) throw new ArgumentOutOfRangeException(nameof(start));

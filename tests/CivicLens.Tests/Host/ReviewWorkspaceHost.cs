@@ -15,6 +15,7 @@ using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Application.Collection.Processing;
 using CivicLens.Application.Documents;
+using CivicLens.Application.Issues;
 using CivicLens.Core.Review;
 using CivicLens.Collection.Contracts;
 using CivicLens.Core.Collection;
@@ -45,6 +46,7 @@ public sealed class ReviewWorkspaceHost(PostgresCollection postgres)
     public PostgresDocumentComparisonStore Comparisons { get; private set; } = null!;
     public string OfficialName { get; init; } = "Test Official";
     public bool Publishing { get; init; } = true;
+    public IssueConfiguration? Issues { get; init; }
 
     public async Task StartAsync()
     {
@@ -97,6 +99,12 @@ public sealed class ReviewWorkspaceHost(PostgresCollection postgres)
             """);
         start.Environment["CIVIC_LENS_COLLECTION_CONFIG"] = collectionPath;
         if (Publishing) start.Environment["CIVIC_LENS_RELEASE_DIRECTORY"] = ReleaseDirectory;
+        if (Issues is not null)
+        {
+            var issuesPath = Path.Combine(KeyDirectory, "issues.json");
+            await File.WriteAllTextAsync(issuesPath, JsonSerializer.Serialize(Issues, CollectionProtocol.JsonOptions));
+            start.Environment["CIVIC_LENS_ISSUES_CONFIG"] = issuesPath;
+        }
         process = Process.Start(start)!;
         output = process.StandardOutput.ReadToEndAsync();
         error = process.StandardError.ReadToEndAsync();
@@ -157,7 +165,7 @@ public sealed class ReviewWorkspaceHost(PostgresCollection postgres)
     public static FormUrlEncodedContent Form(IElement form) => new(Fields(form));
 
     public static List<KeyValuePair<string, string>> Fields(IElement form) => form.QuerySelectorAll("input[name], textarea[name]")
-        .Where(element => element.GetAttribute("type") != "checkbox" || element.HasAttribute("checked"))
+        .Where(element => element.GetAttribute("type") is not ("checkbox" or "radio") || element.HasAttribute("checked"))
         .Select(element => new KeyValuePair<string, string>(element.GetAttribute("name")!,
             element.LocalName == "textarea" ? element.TextContent : element.GetAttribute("value") ?? "")).ToList();
 

@@ -11,13 +11,14 @@ internal static class DraftStatusDisplay
         ReviewStatus.Approved => "Approved, private",
         ReviewStatus.ChangesRequested => "Changes requested",
         ReviewStatus.ApprovalWithdrawn => "Approval withdrawn",
+        ReviewStatus.NotDrafted => "Not drafted",
         _ => "Awaiting review"
     };
 
     public static Tone Tone(ReviewStatus status) => status switch
     {
         ReviewStatus.Approved => Components.Ui.Tone.Ok,
-        ReviewStatus.AwaitingReview => Components.Ui.Tone.Neutral,
+        ReviewStatus.AwaitingReview or ReviewStatus.NotDrafted => Components.Ui.Tone.Neutral,
         _ => Components.Ui.Tone.Warn
     };
 
