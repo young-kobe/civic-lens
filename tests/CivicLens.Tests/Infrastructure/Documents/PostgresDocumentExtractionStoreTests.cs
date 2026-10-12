@@ -187,6 +187,109 @@ public sealed class PostgresDocumentExtractionStoreTests(PostgresCollection post
         await Assert.ThrowsAsync<InvalidOperationException>(() => extractions.GetAsync(original.ExtractionId, CancellationToken.None));
     }
 
+    // The analysis queue must never miss a changed comparison and never hold two entries for one.
+    // The entry joins the comparison's transaction, so both exist or neither does.
+    [Fact]
+    public async Task ChangedComparisonQueuesOneDraftAnalysisAndReplayDoesNotAddAnother()
+    {
+        var comparison = await SaveComparisonAsync("Old policy.", "New policy.");
+        var comparisons = new PostgresDocumentComparisonStore(factory);
+        await Task.WhenAll(Enumerable.Range(0, 4).Select(_ => comparisons.SaveAsync(comparison, CancellationToken.None)));
+
+        var row = await AnalysisRowsAsync(comparison.ComparisonId);
+        Assert.Equal([("draft", "Pending", 0L, 0, 0L)], row);
+        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM document_change_analysis"));
+    }
+
+    [Fact]
+    public async Task ComparisonWithoutHunksOrWithoutACompleteResultQueuesNoAnalysis()
+    {
+        await SaveComparisonAsync("Same policy.", "Same policy.");
+        var comparisons = new PostgresDocumentComparisonStore(factory);
+        var before = new DocumentExtraction(await ImportAsync("Old."), "p", "n", "Old.");
+        var after = new DocumentExtraction(await ImportAsync("New."), "p2", "n", "New.");
+        await extractions.SaveAsync(before, CancellationToken.None);
+        await extractions.SaveAsync(after, CancellationToken.None);
+        var incompatible = await comparisons.SaveAsync(DocumentComparison.Create(before, after), CancellationToken.None);
+
+        Assert.Equal(DocumentComparisonStatus.Incompatible, incompatible.Status);
+        Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM document_change_analysis"));
+    }
+
+    [Fact]
+    public async Task ForgedComparisonSaveFailsAndQueuesNothing()
+    {
+        var comparison = await SaveComparisonAsync("Old policy.", "New policy.");
+        var comparisons = new PostgresDocumentComparisonStore(factory);
+        var forged = DocumentComparison.Create(new DocumentExtraction(
+            (await extractions.GetAsync(comparison.BeforeExtractionId, CancellationToken.None))!.SourceAttempt, "p", "n", "Forged."),
+            (await extractions.GetAsync(comparison.AfterExtractionId, CancellationToken.None))!);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => comparisons.SaveAsync(forged, CancellationToken.None));
+
+        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM document_comparisons"));
+        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM document_change_analysis"));
+    }
+
+    [Fact]
+    public async Task FailedAnalysisInsertRollsBackTheComparison()
+    {
+        await ExecuteAsync("""
+            CREATE FUNCTION fail_analysis() RETURNS trigger AS $$ BEGIN RAISE EXCEPTION 'analysis refused'; END; $$ LANGUAGE plpgsql;
+            CREATE TRIGGER trg_fail_analysis BEFORE INSERT ON document_change_analysis
+            FOR EACH ROW EXECUTE FUNCTION fail_analysis();
+            """);
+        var before = new DocumentExtraction(await ImportAsync("Old policy."), "p", "n", "Old policy.");
+        var after = new DocumentExtraction(await ImportAsync("New policy."), "p", "n", "New policy.");
+        await extractions.SaveAsync(before, CancellationToken.None);
+        await extractions.SaveAsync(after, CancellationToken.None);
+        var comparisons = new PostgresDocumentComparisonStore(factory);
+
+        await Assert.ThrowsAnyAsync<Exception>(() => comparisons.SaveAsync(DocumentComparison.Create(before, after), CancellationToken.None));
+
+        Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM document_comparisons"));
+        Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM document_change_analysis"));
+    }
+
+    private async Task<DocumentComparison> SaveComparisonAsync(string beforeText, string afterText)
+    {
+        var before = new DocumentExtraction(await ImportAsync(beforeText), "p", "n", beforeText);
+        var after = new DocumentExtraction(await ImportAsync(afterText), "p", "n", afterText);
+        await extractions.SaveAsync(before, CancellationToken.None);
+        await extractions.SaveAsync(after, CancellationToken.None);
+        return await new PostgresDocumentComparisonStore(factory)
+            .SaveAsync(DocumentComparison.Create(before, after), CancellationToken.None);
+    }
+
+    private async Task<List<(string Task, string Status, long Fence, int Attempts, long Reserved)>> AnalysisRowsAsync(string comparisonId)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            "SELECT task, status, fence, attempts, reserved_tokens FROM document_change_analysis WHERE comparison_id = @id", connection);
+        command.Parameters.AddWithValue("id", comparisonId);
+        await using var reader = await command.ExecuteReaderAsync();
+        var rows = new List<(string, string, long, int, long)>();
+        while (await reader.ReadAsync()) rows.Add((reader.GetString(0), reader.GetString(1), reader.GetInt64(2), reader.GetInt32(3), reader.GetInt64(4)));
+        return rows;
+    }
+
+    private async Task<long> ScalarAsync(string sql)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(sql, connection);
+        return (long)(await command.ExecuteScalarAsync())!;
+    }
+
+    private async Task ExecuteAsync(string sql)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(sql, connection);
+        await command.ExecuteNonQueryAsync();
+    }
+
     [Fact]
     public async Task ProfileMigrationPreservesExistingExtractionAndCitationIdentity()
     {
@@ -378,7 +481,8 @@ public sealed class PostgresDocumentExtractionStoreTests(PostgresCollection post
             Discovery = new DiscoveryResult
             {
                 Status = DiscoveryStatus.Parsed,
-                Urls = Enumerable.Range(0, 1000).Select(index => request.Url + "/" + index + new string('a', 3000)).ToArray()
+                Urls = Enumerable.Range(0, 1000).Select(index => request.Url + "/" + index + new string('a', 3000)).ToArray(),
+                OutOfScopeCount = 0
             }
         };
         var imported = await attempts.ImportAtomicallyAsync(CollectionAttemptImporter.CreateImport("discovery", request, receipt), CancellationToken.None);

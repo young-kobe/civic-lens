@@ -63,9 +63,23 @@ public sealed class PostgresDocumentComparisonStore(IDbContextFactory<Collection
             ResultJson = Serialize(comparison)
         });
         await db.SaveChangesAsync(cancellationToken);
+        if (comparison.Status == DocumentComparisonStatus.Complete && comparison.Hunks.Length > 0)
+            await EnqueueDraftAnalysisAsync(db, comparison.ComparisonId, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return verified;
     }
+
+    // The analysis queue must never miss a changed comparison. The row joins the comparison's transaction,
+    // so both commit or neither does. ON CONFLICT keeps one analysis row per comparison and task.
+    private static async Task EnqueueDraftAnalysisAsync(CollectionAttemptDbContext db, string comparisonId,
+        CancellationToken cancellationToken) =>
+        _ = await db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO document_change_analysis (comparison_id, task, status, fence, attempts,
+                reserved_tokens, created_at_utc_ticks)
+            VALUES ({comparisonId}, 'draft', 'Pending', 0, 0, 0,
+                (EXTRACT(EPOCH FROM clock_timestamp())::numeric * 10000000 + 621355968000000000)::bigint)
+            ON CONFLICT (comparison_id, task) DO NOTHING
+            """, cancellationToken);
 
     private static async Task<DocumentComparison> ReconstructAsync(CollectionAttemptDbContext db, string beforeId,
         string afterId, CancellationToken cancellationToken)

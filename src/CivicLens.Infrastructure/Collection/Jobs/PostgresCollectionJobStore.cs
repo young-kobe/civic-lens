@@ -281,8 +281,25 @@ public sealed partial class PostgresCollectionJobStore(IDbContextFactory<Collect
         }
         origin.NotBefore = Math.Max(origin.NotBefore, Ticks(nextOrigin));
         origin.UnresolvedAttemptId = null;
+        if (job.State == CollectionJobState.Succeeded) await EnqueuePreparationAsync(db, job, definition, cancellationToken);
         return true;
     }, cancellationToken);
+
+    // SettleAttemptAsync is the only code path that sets a job to Succeeded. The preparation row joins that
+    // transaction, so the evidence queue never misses a succeeded job. ON CONFLICT keeps one row per job and attempt.
+    private static async Task EnqueuePreparationAsync(CollectionAttemptDbContext db, JobRow job,
+        CollectionJobDefinition definition, CancellationToken cancellationToken)
+    {
+        // Flush the state change first. The waiter-release triggers then see the same order as before.
+        await db.SaveChangesAsync(cancellationToken);
+        _ = await db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO evidence_processing (job_id, attempt_id, source_id, requested_url, stage, status,
+                fence, attempts, admitted_count, deferred_count, duplicate_count)
+            VALUES ({job.JobId}, 'prepare', {definition.SourceId}, {definition.Url}, 'Preparation', 'Pending',
+                0, 0, 0, 0, 0)
+            ON CONFLICT (job_id, attempt_id) DO NOTHING
+            """, cancellationToken);
+    }
 
     public Task<bool> ReleaseClaimAsync(CollectionJobLease jobLease, CancellationToken cancellationToken) =>
         TransactionAsync(async (db, now) =>

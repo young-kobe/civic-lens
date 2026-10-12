@@ -82,9 +82,9 @@ New managed jobs retain `definition.configurationRevision` (hash ID and complete
 
 Changing coverage prevents new admissions but does not cancel jobs already admitted under an earlier snapshot. Use `jobs cancel` for that. Keep stable people in configuration when ending coverage. Direct collection/import checks eligibility but retains no registry revision with its receipt; use managed jobs to retain that decision. Configuration snapshots include the full registry and source settings, so keep secrets out of configuration and treat job inspection output as local operational data.
 
-Standalone collection accepts `CivicLens.Collector collect <manifest.json>` (or `dotnet <collector.dll> collect <manifest.json>`). Version 7 request fields are defined by `CollectionRequest` in Collection.Contracts: `version`, `jobId`, `sourceId`, `url`, `allowedOrigin`, `allowedPathPrefix`, and absolute `artifactDirectory`, plus optional bounded `maxRequests`, `maxBytes`, `timeoutSeconds`, `minDelayMilliseconds`, `eTag`, and `lastModified`. JSON names are case-sensitive. Use version 7 in new standalone manifests and rebuild host and collector together; version 1 and 2 collection messages are rejected. Registry configuration supports versions 1 and 2. Receipts report applied conditional headers in `sentValidators`, using serialized ETags and whole-second UTC dates; the field is null when no conditional headers were applied to the last attempted content request. Validators are explicit in standalone manifests; the host does not yet automatically replay stored validators. A 304 emits `notModified` without a capture. A 429 emits `deferred`, with optional `retryAfterSeconds`; wait before rerunning. HTTP failures, robots denial/unavailability, budget exhaustion, incomplete bodies, and cancellation are explicit failures rather than source deletion.
+Standalone collection accepts `CivicLens.Collector collect <manifest.json>` (or `dotnet <collector.dll> collect <manifest.json>`). Version 8 request fields are defined by `CollectionRequest` in Collection.Contracts: `version`, `jobId`, `sourceId`, `url`, `allowedOrigin`, `allowedPathPrefix`, and absolute `artifactDirectory`, plus optional bounded `maxRequests`, `maxBytes`, `timeoutSeconds`, `minDelayMilliseconds`, `eTag`, and `lastModified`. JSON names are case-sensitive. Use version 8 in new standalone manifests and rebuild host and collector together; version 1 and 2 collection messages are rejected. Registry configuration supports versions 1 and 2. Receipts report applied conditional headers in `sentValidators`, using serialized ETags and whole-second UTC dates; the field is null when no conditional headers were applied to the last attempted content request. Validators are explicit in standalone manifests; the host does not yet automatically replay stored validators. A 304 emits `notModified` without a capture. A 429 emits `deferred`, with optional `retryAfterSeconds`; wait before rerunning. HTTP failures, robots denial/unavailability, budget exhaustion, incomplete bodies, and cancellation are explicit failures rather than source deletion.
 
-Do not run concurrent collectors for the same origin. Host invocations sharing a capture directory are mutually exclusive, but separate directories and standalone invocations are not coordinated. Robots support and protocol limits are documented in [architecture](architecture.md#robots-policy-and-pacing). Version 6 and 7 support Allow exceptions, bounded same-origin robots redirects, compressed robots files, and crawl-delay. Version 7 adds tolerant HTML recovery; version 6 preserves its earlier HTML parsing behavior. Cross-origin redirects and persistent robots caching are unsupported. Versions 3-5 remain executable with their legacy robots redirect and pacing behavior. A killed child can leave `.capture-*.tmp`; these files are never valid captures and can be removed when no collector is running. Do not remove hash-named captures as temporary files. Use `collect-import` below for atomic evidence persistence. Use the receipt recovery commands below after an interrupted import. Use managed jobs below for cross-run admission, retry budgets, and origin pacing.
+Do not run concurrent collectors for the same origin. Host invocations sharing a capture directory are mutually exclusive, but separate directories and standalone invocations are not coordinated. Robots support and protocol limits are documented in [architecture](architecture.md#robots-policy-and-pacing). Versions 6-8 support Allow exceptions, bounded same-origin robots redirects, compressed robots files, and crawl-delay. Version 7 adds tolerant HTML recovery; version 6 preserves its earlier HTML parsing behavior. Version 8 fetches same-host `http` discovery links over `https`, supports feed `xml:base`, and reports `outOfScopeCount` in discovery results; `discovery get` prints it. Cross-origin redirects and persistent robots caching are unsupported. Versions 3-5 remain executable with their legacy robots redirect and pacing behavior. A killed child can leave `.capture-*.tmp`; these files are never valid captures and can be removed when no collector is running. Do not remove hash-named captures as temporary files. Use `collect-import` below for atomic evidence persistence. Use the receipt recovery commands below after an interrupted import. Use managed jobs below for cross-run admission, retry budgets, and origin pacing.
 
 ## Postgres adapter and migrations
 
@@ -117,7 +117,7 @@ Integration tests apply migrations against disposable Postgres instances and che
 
 ## Managed collection jobs
 
-Apply `db migrate` first, including the additive `RobotsCrawlDelay` migration when upgrading. Rebuild host and collector together to use version 7. Version 6 retains its robots and pacing behavior, and versions 3-6 remain executable and recoverable. Job commands require `CIVIC_LENS_DATABASE`. Enqueue snapshots the selected source and policy; later runs need neither the original configuration nor an enabled entry in a changed configuration.
+Apply `db migrate` first, including the additive `RobotsCrawlDelay` migration when upgrading. Rebuild host and collector together to use version 8. Version 6 retains its robots and pacing behavior, and versions 3-7 remain executable and recoverable. Jobs queued before an upgrade keep their recorded version. Job commands require `CIVIC_LENS_DATABASE`. Enqueue snapshots the selected source and policy; later runs need neither the original configuration nor an enabled entry in a changed configuration.
 
 ```sh
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- jobs enqueue config/example.json example-local-source check-2026-10-06
@@ -328,7 +328,7 @@ Configure these environment variables through the deployment's protected environ
 | `CIVIC_LENS_REVIEW_OWNER` | Exact Auth0 `sub` of the owner |
 | `CIVIC_LENS_REVIEW_REVIEWERS` | Optional comma-separated additional reviewer subject IDs |
 | `CIVIC_LENS_REVIEW_KEY_DIRECTORY` | Absolute persistent directory for ASP.NET data-protection keys |
-| `CIVIC_LENS_REVIEW_ISSUES` | Optional comma-separated configured issue IDs |
+| `CIVIC_LENS_ISSUES_CONFIG` | Optional absolute path to the tracked-issue file, at most 1 MB. Its issue IDs are the configured issues. Unset means no configured issues |
 | `CIVIC_LENS_REVIEW_OFFICIALS` | Optional comma-separated configured official IDs |
 | `CIVIC_LENS_COLLECTION_CONFIG` | Optional absolute path to the collection configuration for the owner Sources page |
 | `CIVIC_LENS_RELEASE_DIRECTORY` | Optional absolute path to the release root. With the collection configuration, it enables the owner publish section |
@@ -363,7 +363,9 @@ The `worker` command drafts AI accounts of changed comparisons. [Architecture](a
 | `CIVIC_LENS_ANALYSIS_DAILY_TOKENS` | Daily token limit for all drafting calls, per UTC day |
 | `CIVIC_LENS_ANALYSIS_RUN_TOKENS` | Optional limit for one call's reservation (default 120,000 or the daily limit, whichever is smaller; at most the daily limit) |
 | `CIVIC_LENS_ANALYSIS_CONCURRENCY` | Optional number of calls at the same time (default 2, 1 to 4) |
-| `CIVIC_LENS_REVIEW_ISSUES`, `CIVIC_LENS_REVIEW_OFFICIALS` | The same IDs that the review host reads |
+| `CIVIC_LENS_ISSUES_CONFIG`, `CIVIC_LENS_REVIEW_OFFICIALS` | The same issue file and official IDs that the review host reads |
+
+Tracked issues live in `config/issues.json`. The file has a `version` (only 1 is supported), a list of `policyAreas` (`id`, `name`), and a list of `issues`. Each issue has an `id`, `name`, `definition`, and at least one `policyAreaIds` entry. It may also have `includes`, `excludes`, `startsOn` (inclusive), and `endsBefore` (exclusive). IDs use lowercase words joined by hyphens, at most 128 characters. Policy area IDs and names are unique, and issue IDs are unique. Each policy area ID in an issue must exist and may appear once. List entries must be nonblank and unique within their list. The date range must be valid. The file holds at most 256 issues. The host reads and validates the file once at process start, and an invalid file stops startup.
 
 `db migrate` queues every earlier changed comparison that has no draft. The first worker run can spend up to the daily limit on those changes. Start with a low daily limit. Check the first drafts, and then raise the limit.
 
@@ -385,6 +387,25 @@ To requeue failed entries, run one of these commands as the owner. They need `CI
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- analyses requeue <comparison-id>
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- analyses requeue --all
 ```
+
+To see how reviewers treat AI drafts, run this command as the owner. It makes no model calls and prints one JSON document.
+
+```sh
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- analyses metrics
+```
+
+The document lists one entry for each prompt version. Drafts that a person started by hand are not counted.
+
+| Field | Meaning |
+|---|---|
+| drafts | AI drafts written with this prompt version. |
+| approvedUnchanged | Approved, and the approved revision holds the same values as revision 1. A re-save with the same values counts as unchanged. |
+| approvedEdited | Approved, and at least one field differs from revision 1. |
+| changesRequested, approvalWithdrawn | Drafts whose current status is that status. |
+| awaitingReview | Drafts that await review. This includes drafts that carry an unresolved concern from an earlier revision. |
+| fieldEdits | For approved drafts, how many differ from revision 1 in each field: headline, summary, significance, limits, institution, changeDate (date or its evidence), officialIds, issueIds, citations. Selections and citations compare as sets, so order does not matter. A citation is its extraction, start, and length. |
+
+Each draft is counted once, by its current status. A draft with a newer revision is judged on that revision.
 
 An AI draft is revision 1 by the AI drafter. Check every sentence and citation against the evidence. If the editor flags an unverified change date, check it, tick Date checked, and save a revision before you approve.
 

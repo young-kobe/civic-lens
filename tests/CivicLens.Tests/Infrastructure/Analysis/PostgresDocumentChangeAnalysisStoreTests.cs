@@ -111,7 +111,7 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
         await attempts.MigrateAsync();
         var comparison = await seeder.SaveAsync("Deadline: October 15.\n", "Updated October 3, 2026. Deadline: October 30.\n");
         var model = new FakeDocumentChangeDraftingModel().Draft(FakeDocumentChangeDraftingModel.Output("Headline",
-            [("h1", "after", "Updated October 3, 2026.")], changeDate: new { date = "2026-10-03", citationIndex = 0 }));
+            [("h1", "after", "Updated October 3, 2026.")], changeDate: new { date = "2026-10-03", citationIndex = 0, confidence = 0.9 }));
         await Worker(model).ExecuteAsync(once: true);
         var ai = (await reviews.GetAsync((await EntryAsync(comparison)).DraftId!, default))!.CurrentRevision;
         Assert.Equal(new DateOnly(2026, 10, 3), ai.ChangeDate);
@@ -136,11 +136,14 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
     [Fact]
     public async Task TheUpgradeBackfillsChangedComparisonsThatHaveNoDraft()
     {
-        await using (var db = await factory.CreateDbContextAsync())
-            await db.GetService<IMigrator>().MigrateAsync(PreviousMigration);
+        // The store now queues analysis itself, so comparisons written before the upgrade are made by
+        // migrating up, seeding, and migrating back down to the schema that had no analysis queue.
+        await attempts.MigrateAsync();
         var open = await seeder.SaveAsync("Fee: 10.\n", "Fee: 12.\n");
         var drafted = await seeder.SaveAsync("Rule A.\n", "Rule B.\n");
         _ = await new CreateDocumentChangeDraft(reviews).ExecuteAsync(Owner, new CreateDocumentChangeDraftRequest(drafted.ComparisonId, "k"));
+        await using (var db = await factory.CreateDbContextAsync())
+            await db.GetService<IMigrator>().MigrateAsync(PreviousMigration);
 
         await attempts.MigrateAsync();
 
