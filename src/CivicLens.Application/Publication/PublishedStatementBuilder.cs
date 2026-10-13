@@ -1,0 +1,67 @@
+using CivicLens.Application.Statements;
+using CivicLens.Core.Documents;
+using CivicLens.Core.Statements;
+using CivicLens.Publication.Contracts;
+
+namespace CivicLens.Application.Publication;
+
+internal sealed class PublishedStatementBuilder(PublishedRecordBuilder shared)
+{
+    public PublishedStatement Build(PublishableStatement statement, PublishedRecordEntry? previous, DateTimeOffset now)
+    {
+        var (review, url, extraction) = statement;
+        var revision = review.CurrentRevision!;
+        var record = new PublishedStatement
+        {
+            RecordId = review.CandidateId,
+            RevisionNumber = revision.RevisionNumber,
+            Headline = revision.Headline,
+            Summary = revision.Summary,
+            StatementDate = revision.StatementDate,
+            StatementDateEvidence = revision.StatementDateEvidence is null ? null : Cite(revision.StatementDateEvidence, extraction),
+            Speakers = shared.MapOfficials(PublishedRecordKind.Statement, review.CandidateId, revision.SpeakerOfficialIds),
+            OtherSpeakers = [.. revision.OtherSpeakers],
+            IssueIds = [.. revision.IssueIds],
+            PolicyAreaIds = [.. revision.PolicyAreaIds],
+            Quotations = [.. revision.Quotations.Select(quotation => Quote(quotation, extraction))],
+            BillNumbers = [.. revision.BillNumbers],
+            Source = new()
+            {
+                ExtractionId = extraction.ExtractionId,
+                Url = url,
+                ObservedAtUtc = extraction.SourceAttempt.ObservedAt,
+                Text = extraction.Text
+            },
+            ApprovedAtUtc = PublishedRecordBuilder.GetApprovalTime(revision.RevisionNumber, review.Decisions),
+            FirstPublishedAtUtc = previous?.FirstPublishedAtUtc ?? now
+        };
+        record.Validate();
+        return record;
+    }
+
+    private static PublishedCitation Cite(StatementSpan statementSpan, DocumentExtraction extraction)
+    {
+        var span = new DocumentTextSpan(extraction, statementSpan.Start, statementSpan.Length);
+        return new() { ExtractionId = span.ExtractionId, Start = span.Start, Length = span.Length, Quote = span.Quote };
+    }
+
+    private static PublishedQuotation Quote(StatementQuotation quotation, DocumentExtraction extraction)
+    {
+        var citation = Cite(quotation.Span, extraction);
+        return new()
+        {
+            ExtractionId = citation.ExtractionId,
+            Start = citation.Start,
+            Length = citation.Length,
+            Quote = citation.Quote,
+            Kind = KindOf(quotation.Kind)
+        };
+    }
+
+    private static PublishedQuotationKind KindOf(StatementQuotationKind kind) => kind switch
+    {
+        StatementQuotationKind.DirectQuotation => PublishedQuotationKind.DirectQuotation,
+        StatementQuotationKind.ReleaseText => PublishedQuotationKind.ReleaseText,
+        _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Quotation kind has no published form.")
+    };
+}

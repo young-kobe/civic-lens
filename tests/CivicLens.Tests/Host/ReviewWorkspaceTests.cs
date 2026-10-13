@@ -315,11 +315,11 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
         var home = await host.GetDocumentAsync("/Review");
         Assert.Equal("1", StatValue(home, "Ready to publish"));
         var checkbox = home.QuerySelector("input[type=checkbox][name=publish]")!;
-        Assert.Equal(draftId, checkbox.GetAttribute("value"));
-        Assert.Null(home.QuerySelector("#publish-confirm input[name=draftIds]"));
+        Assert.Equal($"documentChange:{draftId}", checkbox.GetAttribute("value"));
+        Assert.Null(home.QuerySelector("#publish-confirm input[name=records]"));
 
         // Choosing drafts is a read. The summary names each draft and the release it would build.
-        var summary = await host.GetDocumentAsync($"/Review?publish={draftId}");
+        var summary = await host.GetDocumentAsync($"/Review?publish=documentChange:{draftId}");
         var text = summary.QuerySelector("[aria-labelledby='publish']")!.TextContent;
         Assert.Contains("Confirm release 1", text, StringComparison.Ordinal);
         Assert.Contains("Fee rose to 12 dollars", text, StringComparison.Ordinal);
@@ -327,7 +327,7 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
         Assert.Equal(0, (await publications.GetStateAsync(default)).LatestReleaseNumber);
 
         var confirm = Fields(summary.QuerySelector("#publish-confirm")!);
-        Assert.Equal([draftId], confirm.Where(field => field.Key == "draftIds").Select(field => field.Value));
+        Assert.Equal([$"documentChange:{draftId}"], confirm.Where(field => field.Key == "records").Select(field => field.Value));
         using var published = await host.Client.PostAsync("/Review", new FormUrlEncodedContent(confirm));
         Assert.Equal(HttpStatusCode.Redirect, published.StatusCode);
         Assert.Equal("/Review?status=published&release=1", PathOf(published).Split('#')[0]);
@@ -348,7 +348,7 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
         await SaveReadyRevisionAsync(draftUrl, "Fee rose to 12 dollars, effective now");
         using var reapproved = await DecideAsync(draftUrl, "Approve");
         Assert.Equal(HttpStatusCode.Redirect, reapproved.StatusCode);
-        var replacement = await host.GetDocumentAsync($"/Review?publish={draftId}");
+        var replacement = await host.GetDocumentAsync($"/Review?publish=documentChange:{draftId}");
         Assert.Equal("Replacement", replacement.QuerySelector("[aria-labelledby='publish'] tbody .badge")!.TextContent);
         Assert.Contains("Confirm release 2", replacement.QuerySelector("[aria-labelledby='publish']")!.TextContent, StringComparison.Ordinal);
     }
@@ -369,7 +369,7 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
         var home = await host.GetDocumentAsync("/Review");
         var forged = Fields(home.QuerySelector("#start-draft")!);
         forged.Add(new("_handler", "publish-confirm"));
-        forged.Add(new("draftIds", draftUrl[("/Review/".Length)..]));
+        forged.Add(new("records", "documentChange:" + draftUrl[("/Review/".Length)..]));
         using var response = await host.Client.PostAsync("/Review", new FormUrlEncodedContent(forged));
 
         Assert.NotEqual(HttpStatusCode.Redirect, response.StatusCode);

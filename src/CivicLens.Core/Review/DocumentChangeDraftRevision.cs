@@ -19,8 +19,8 @@ public sealed record DocumentChangeDraftRevision(string DraftId, int RevisionNum
     public const int MaximumSelections = 64;
 
     public DocumentChangeDraftRevision KeepingAiChangeDateOnlyIfChecked(DocumentChangeDraftRevision previous, bool changeDateChecked) =>
-        ReviewAuthor.IsAnalysis(previous.AuthorSubject) && previous.ChangeDate is not null && ChangeDate == previous.ChangeDate &&
-        !changeDateChecked ? this with { ChangeDate = null, ChangeDateEvidence = null } : this;
+        AiProposedDate.IsUnconfirmedCarryOver(previous.AuthorSubject, previous.ChangeDate, ChangeDate, changeDateChecked)
+            ? this with { ChangeDate = null, ChangeDateEvidence = null } : this;
 
     public void ValidateForApproval()
     {
@@ -29,7 +29,6 @@ public sealed record DocumentChangeDraftRevision(string DraftId, int RevisionNum
             throw new ArgumentException("Approval requires a headline, summary, source institution, and at least one citation.");
         if ((ChangeDate is null) != (ChangeDateEvidence is null))
             throw new ArgumentException("An actual change date requires an exact evidence citation.");
-        if (ReviewAuthor.IsAnalysis(AuthorSubject) && ChangeDate is not null)
-            throw new ArgumentException("A person must confirm the AI-proposed change date by saving a revision before approval.");
+        AiProposedDate.RequireConfirmed(AuthorSubject, ChangeDate, "change date");
     }
 }

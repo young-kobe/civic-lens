@@ -133,6 +133,68 @@ public sealed class ReleaseRendererTests
         Assert.DoesNotContain("rel=\"next\"", html, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task StatementPageShowsSpeakersDateEvidenceKindLabelsAndMarksTheCitedSourceText()
+    {
+        var html = await new ReleaseRenderer().RenderStatementAsync(Statement(), CancellationToken.None);
+
+        var document = new HtmlParser().ParseDocument(html);
+        var facts = document.QuerySelectorAll(".facts dt").Zip(document.QuerySelectorAll(".facts dd"))
+            .ToDictionary(pair => pair.First.TextContent, pair => pair.Second.TextContent);
+        Assert.Equal("Jane <Doe>", facts["Speakers"]);
+        Assert.Equal("Aide One", facts["Other speakers"]);
+        Assert.Equal("2026-05-01", facts["Statement date"]);
+        Assert.Equal("housing, transit", facts["Issues"]);
+        Assert.Equal("None", facts["Policy areas"]);
+        Assert.Equal("HB 12", facts["Bill numbers"]);
+        Assert.Equal(["Direct quotation", "Release text"],
+            document.QuerySelectorAll("[aria-labelledby='quotations-title'] .badge").Select(badge => badge.TextContent));
+        Assert.Equal("<b>a rent cap</b>", document.QuerySelector("mark#cite-1")!.TextContent);
+        Assert.Equal("Signed 2026-05-01.", document.QuerySelector("mark#cite-2")!.TextContent);
+        Assert.Equal("Signed 2026-05-01.", document.QuerySelector("mark#cite-statement-date")!.TextContent);
+        Assert.Contains("Evidence for the statement date", html, StringComparison.Ordinal);
+        Assert.Contains("href=\"https://example.gov/story\"", html, StringComparison.Ordinal);
+        Assert.Contains("Observed 2026-05-03 10:45 UTC", html, StringComparison.Ordinal);
+        Assert.Contains("They do not show when or why the source changed.", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("<script>", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task StatementPageOmitsTheDateFactAndItsEvidenceWhenTheStatementHasNoEstablishedDate()
+    {
+        var html = await new ReleaseRenderer().RenderStatementAsync(
+            Statement() with { StatementDate = null, StatementDateEvidence = null }, CancellationToken.None);
+
+        Assert.DoesNotContain("Statement date", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("cite-statement-date", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task StatementPageRejectsAQuoteThatIsNotTheCitedSourceText()
+    {
+        var statement = Statement() with { Quotations = [Statement().Quotations[0] with { Quote = "invented words" }] };
+
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            new ReleaseRenderer().RenderStatementAsync(statement, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task IndexPageLabelsEachEntryWithItsKindSoReadersKnowWhatTheyOpen()
+    {
+        var release = ReleaseOf(2);
+        release = release with
+        {
+            Records = [release.Records[0], release.Records[1] with { Kind = PublishedRecordKind.Statement, RecordId = new string('d', 64) }]
+        };
+
+        var html = await new ReleaseRenderer().RenderIndexAsync(release, 1, CancellationToken.None);
+
+        var rows = new HtmlParser().ParseDocument(html).QuerySelectorAll("tbody tr")
+            .Select(row => (row.QuerySelector("a")!.GetAttribute("href"), row.QuerySelector(".badge")!.TextContent));
+        Assert.Equal([($"records/{release.Records[0].RecordId}.html", "Document change"),
+            ($"records/{new string('d', 64)}.html", "Statement")], rows);
+    }
+
     [Theory]
     [InlineData(1, 50, 0, "Page 1 of 3", false, "page-2.html")]
     [InlineData(2, 50, 50, "Page 2 of 3", true, "page-3.html")]
@@ -193,6 +255,41 @@ public sealed class ReleaseRendererTests
         var match = Regex.Match(html, $"<mark id=\"{id}\">(.*?)</mark>", RegexOptions.Singleline);
         Assert.True(match.Success, $"No mark with id {id}.");
         return match.Groups[1].Value;
+    }
+
+    private static PublishedStatement Statement()
+    {
+        const string text = "Jane said <b>a rent cap</b> helps tenants. Signed 2026-05-01. <script>x</script>";
+        var cap = text.IndexOf("<b>a rent cap</b>", StringComparison.Ordinal);
+        var signed = text.IndexOf("Signed 2026-05-01.", StringComparison.Ordinal);
+        return new PublishedStatement
+        {
+            RecordId = new string('e', 64),
+            RevisionNumber = 1,
+            Headline = "Doe backs a rent cap",
+            Summary = "Doe supports a cap.",
+            StatementDate = new DateOnly(2026, 5, 1),
+            StatementDateEvidence = new PublishedCitation { ExtractionId = AfterId, Start = signed, Length = 18, Quote = "Signed 2026-05-01." },
+            Speakers = [new PublishedOfficial { Id = "o1", Name = "Jane <Doe>" }],
+            OtherSpeakers = ["Aide One"],
+            IssueIds = ["housing", "transit"],
+            PolicyAreaIds = [],
+            BillNumbers = ["HB 12"],
+            Quotations =
+            [
+                new PublishedQuotation { ExtractionId = AfterId, Start = cap, Length = 17, Quote = "<b>a rent cap</b>", Kind = PublishedQuotationKind.DirectQuotation },
+                new PublishedQuotation { ExtractionId = AfterId, Start = signed, Length = 18, Quote = "Signed 2026-05-01.", Kind = PublishedQuotationKind.ReleaseText }
+            ],
+            Source = new PublishedDocumentVersion
+            {
+                ExtractionId = AfterId,
+                Url = "https://example.gov/story",
+                ObservedAtUtc = new DateTimeOffset(2026, 5, 3, 10, 45, 0, TimeSpan.Zero),
+                Text = text
+            },
+            ApprovedAtUtc = new DateTimeOffset(2026, 5, 10, 12, 0, 0, TimeSpan.Zero),
+            FirstPublishedAtUtc = new DateTimeOffset(2026, 5, 11, 8, 0, 0, TimeSpan.Zero)
+        };
     }
 
     private static PublishedDocumentChange Record(string beforeText = BeforeText, string afterText = AfterText)

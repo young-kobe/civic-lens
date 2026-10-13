@@ -237,7 +237,7 @@ public sealed class PostgresStatementDraftStoreTests(PostgresCollection postgres
             TimeProvider.System);
 
     private Task InsertDraftAsync(string candidate) => ExecuteAsync(connectionString,
-        $"INSERT INTO statement_drafts (candidate_id, current_revision_number, created_at_utc_ticks) VALUES ('{candidate}', 0, 0)");
+        $"INSERT INTO statement_drafts (candidate_id, current_revision_number, review_state_version, review_status, created_at_utc_ticks) VALUES ('{candidate}', 0, 0, 'NotDrafted', 0)");
 
     private async Task<List<(string Task, string Status, string? Code)>> QueueAsync(string candidate, string? task = null)
     {

@@ -69,6 +69,6 @@ internal static partial class ReleasePaths
     [GeneratedRegex("^[0-9]{6}-[0-9a-f]{32}$")]
     private static partial Regex DirectoryNamePattern();
 
-    [GeneratedRegex("^[a-z0-9._-]{1,64}$")]
+    [GeneratedRegex("^[a-z0-9._-]{1,80}$")]
     private static partial Regex SegmentPattern();
 }

@@ -2,28 +2,27 @@ using System.Collections.Immutable;
 
 namespace CivicLens.Core.Review;
 
-/// <summary>Pure review decision rules for immutable document-change records.</summary>
-public static class DocumentChangeReviewPolicy
+/// <summary>Pure review decision rules shared by every record type that people approve.</summary>
+public static class ReviewPolicy
 {
-    public const int MaximumRevisionsPerDraft = 64;
-    public const int MaximumDecisionsPerDraft = 128;
+    public const int MaximumRevisionsPerRecord = 64;
+    public const int MaximumDecisionsPerRecord = 128;
 
-    public static DocumentChangeReviewStatus GetCurrentStatus(DocumentChangeDraftRevision currentRevision,
-        ImmutableArray<ReviewDecision> decisions) =>
-        GetCurrentStatus(currentRevision, decisions, GetUnresolvedConcerns(decisions));
+    public static ReviewStatus GetCurrentStatus(int currentRevisionNumber, ImmutableArray<ReviewDecision> decisions) =>
+        GetCurrentStatus(currentRevisionNumber, decisions, GetUnresolvedConcerns(decisions));
 
-    public static DocumentChangeReviewStatus GetCurrentStatus(DocumentChangeDraftRevision currentRevision,
-        ImmutableArray<ReviewDecision> decisions, ImmutableArray<ReviewDecision> unresolvedConcerns)
+    public static ReviewStatus GetCurrentStatus(int currentRevisionNumber, ImmutableArray<ReviewDecision> decisions,
+        ImmutableArray<ReviewDecision> unresolvedConcerns)
     {
-        var latest = decisions.Where(item => item.RevisionNumber == currentRevision.RevisionNumber)
-            .OrderByDescending(item => item.ReviewStateVersion).FirstOrDefault();
+        if (currentRevisionNumber == 0) return ReviewStatus.NotDrafted;
+        var latest = LatestFor(decisions, currentRevisionNumber);
         if (latest is null)
-            return unresolvedConcerns.IsEmpty ? DocumentChangeReviewStatus.AwaitingReview : DocumentChangeReviewStatus.AwaitingReviewWithConcerns;
+            return unresolvedConcerns.IsEmpty ? ReviewStatus.AwaitingReview : ReviewStatus.AwaitingReviewWithConcerns;
         return latest.Kind switch
         {
-            ReviewDecisionKind.Approve => DocumentChangeReviewStatus.Approved,
-            ReviewDecisionKind.RequestChanges => DocumentChangeReviewStatus.ChangesRequested,
-            ReviewDecisionKind.WithdrawApproval => DocumentChangeReviewStatus.ApprovalWithdrawn,
+            ReviewDecisionKind.Approve => ReviewStatus.Approved,
+            ReviewDecisionKind.RequestChanges => ReviewStatus.ChangesRequested,
+            ReviewDecisionKind.WithdrawApproval => ReviewStatus.ApprovalWithdrawn,
             _ => throw new InvalidOperationException("Unknown review decision kind.")
         };
     }
@@ -36,13 +35,23 @@ public static class DocumentChangeReviewPolicy
             .Where(item => !resolved.Contains(item.DecisionId)).ToImmutableArray();
     }
 
-    public static void ValidateDecision(DocumentChangeReview review, ReviewDecision decision)
+    public static void ValidateDecision(string recordId, int currentRevisionNumber, int reviewStateVersion,
+        ImmutableArray<ReviewDecision> decisions, ReviewDecision decision)
     {
-        ArgumentNullException.ThrowIfNull(review);
         ArgumentNullException.ThrowIfNull(decision);
-        if (decision.DraftId != review.DraftId || decision.RevisionNumber != review.CurrentRevision.RevisionNumber ||
-            decision.ReviewStateVersion != review.ReviewStateVersion + 1)
+        if (decision.DraftId != recordId || decision.RevisionNumber != currentRevisionNumber ||
+            decision.ReviewStateVersion != reviewStateVersion + 1)
             throw new ArgumentException("Decision must target the current draft revision and review state.", nameof(decision));
+        ValidateDecisionFields(decision);
+        ValidateDecisionAgainstHistory(currentRevisionNumber, decisions, decision);
+    }
+
+    private static ReviewDecision? LatestFor(ImmutableArray<ReviewDecision> decisions, int revisionNumber) =>
+        decisions.Where(item => item.RevisionNumber == revisionNumber)
+            .OrderByDescending(item => item.ReviewStateVersion).FirstOrDefault();
+
+    private static void ValidateDecisionFields(ReviewDecision decision)
+    {
         if (decision.DecisionId is not { Length: 32 } || decision.DecisionId.Any(c => c is not (>= '0' and <= '9') and not (>= 'a' and <= 'f')) ||
             string.IsNullOrWhiteSpace(decision.ActorSubject) || decision.ActorSubject.Length > 256 || !Enum.IsDefined(decision.Kind) ||
             decision.ResolvedDecisionIds.IsDefault || decision.ResolvedDecisionIds.Length > 64 ||
@@ -56,7 +65,12 @@ public static class DocumentChangeReviewPolicy
             throw new ArgumentException("This decision requires a note.", nameof(decision));
         if (decision.Kind != ReviewDecisionKind.Approve && !decision.ResolvedDecisionIds.IsEmpty)
             throw new ArgumentException("Only approval may resolve concerns.", nameof(decision));
-        var currentConcerns = GetUnresolvedConcerns(review.Decisions);
+    }
+
+    private static void ValidateDecisionAgainstHistory(int currentRevisionNumber, ImmutableArray<ReviewDecision> decisions,
+        ReviewDecision decision)
+    {
+        var currentConcerns = GetUnresolvedConcerns(decisions);
         if ((decision.Kind is ReviewDecisionKind.RequestChanges or ReviewDecisionKind.WithdrawApproval) && currentConcerns.Length >= 64)
             throw new ArgumentException("Resolve outstanding concerns before adding another blocker.", nameof(decision));
         var outstanding = currentConcerns.Select(item => item.DecisionId).Order(StringComparer.Ordinal).ToArray();
@@ -65,12 +79,7 @@ public static class DocumentChangeReviewPolicy
             throw new ArgumentException("Approval must explicitly resolve every outstanding concern.", nameof(decision));
         if (decision.Kind == ReviewDecisionKind.Approve && outstanding.Length > 0 && string.IsNullOrWhiteSpace(decision.Note))
             throw new ArgumentException("Resolving concerns requires a resolution note.", nameof(decision));
-        if (decision.Kind == ReviewDecisionKind.WithdrawApproval)
-        {
-            var lastForRevision = review.Decisions.Where(item => item.RevisionNumber == decision.RevisionNumber)
-                .OrderByDescending(item => item.ReviewStateVersion).FirstOrDefault();
-            if (lastForRevision?.Kind != ReviewDecisionKind.Approve)
-                throw new ArgumentException("Approval can only be withdrawn while the current revision is approved.", nameof(decision));
-        }
+        if (decision.Kind == ReviewDecisionKind.WithdrawApproval && LatestFor(decisions, currentRevisionNumber)?.Kind != ReviewDecisionKind.Approve)
+            throw new ArgumentException("Approval can only be withdrawn while the current revision is approved.", nameof(decision));
     }
 }

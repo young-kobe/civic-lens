@@ -4,6 +4,7 @@ public enum IconName
 {
     Review,
     Sources,
+    Statements,
     Light,
     Dark,
     System,

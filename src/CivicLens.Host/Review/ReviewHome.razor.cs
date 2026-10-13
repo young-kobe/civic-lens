@@ -16,8 +16,6 @@ namespace CivicLens.Host.Review;
 public sealed partial class ReviewHome
 {
     private const int PageSize = 10;
-    private const string NeedsActionFilter = "needs-action";
-    private const string ApprovedFilter = "approved";
 
     private static readonly IReadOnlyList<Crumb> Crumbs = [new("Review")];
 
@@ -55,12 +53,7 @@ public sealed partial class ReviewHome
     [SupplyParameterFromForm(FormName = "start-draft", Name = "comparisonId")] private string? StartComparisonId { get; set; }
     [SupplyParameterFromForm(FormName = "start-draft", Name = "idempotencyKey")] private string? StartKey { get; set; }
 
-    private DraftStatusFilter Filter => DraftsFilterName switch
-    {
-        NeedsActionFilter => DraftStatusFilter.NeedsAction,
-        ApprovedFilter => DraftStatusFilter.Approved,
-        _ => DraftStatusFilter.All
-    };
+    private DraftStatusFilter Filter => DraftFilterNames.Parse(DraftsFilterName);
 
     private string? StatusMessage => Status switch
     {
@@ -79,7 +72,7 @@ public sealed partial class ReviewHome
     protected override async Task OnInitializedAsync()
     {
         actor = Actors.GetActor((await AuthenticationState).User);
-        canPublish = actor.Role == ReviewRole.Owner && Services.GetService<PublishDocumentChanges>() is not null;
+        canPublish = actor.Role == ReviewRole.Owner && Services.GetService<PublishRelease>() is not null;
         publishingOff = actor.Role == ReviewRole.Owner && !canPublish;
         if (HttpMethods.IsPost(HttpContext.Request.Method)) return;
         var cancellationToken = HttpContext.RequestAborted;
@@ -168,18 +161,13 @@ public sealed partial class ReviewHome
     private IReadOnlyList<FilterTab> DraftTabs => [
         new("All", Href(ChangesCursor, null, null, "drafts"), Filter == DraftStatusFilter.All,
             overview!.DraftsNeedingAction + overview.ApprovedDrafts),
-        new("Needs action", Href(ChangesCursor, NeedsActionFilter, null, "drafts"), Filter == DraftStatusFilter.NeedsAction,
+        new("Needs action", Href(ChangesCursor, DraftFilterNames.NeedsAction, null, "drafts"), Filter == DraftStatusFilter.NeedsAction,
             overview.DraftsNeedingAction),
-        new("Approved", Href(ChangesCursor, ApprovedFilter, null, "drafts"), Filter == DraftStatusFilter.Approved,
+        new("Approved", Href(ChangesCursor, DraftFilterNames.Approved, null, "drafts"), Filter == DraftStatusFilter.Approved,
             overview.ApprovedDrafts)
     ];
 
-    private string? FilterName => Filter switch
-    {
-        DraftStatusFilter.NeedsAction => NeedsActionFilter,
-        DraftStatusFilter.Approved => ApprovedFilter,
-        _ => null
-    };
+    private string? FilterName => DraftFilterNames.NameOf(Filter);
 
     private string? ChangesHref(string? cursor) =>
         cursor is null ? null : Href(cursor, FilterName, DraftsCursor, "new-changes");

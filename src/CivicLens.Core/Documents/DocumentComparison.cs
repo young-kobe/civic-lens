@@ -54,8 +54,8 @@ public sealed class DocumentComparison
         if (!IsCompatible(before, after))
             return new(id, before.ExtractionId, after.ExtractionId, DocumentComparisonStatus.Incompatible, "The extractions do not share source, requested URL, parser, normalization, and profile settings.", []);
 
-        var left = SplitLines(before.Text);
-        var right = SplitLines(after.Text);
+        var left = DocumentLines.Split(before.Text, MaximumLines);
+        var right = DocumentLines.Split(after.Text, MaximumLines);
         if (left.Length > MaximumLines || right.Length > MaximumLines || (long)(left.Length + 1) * (right.Length + 1) > MaximumMatrixCells)
             return new(id, before.ExtractionId, after.ExtractionId, DocumentComparisonStatus.LimitExceeded, "The extraction exceeds the configured line or comparison-cell limit.", []);
 
@@ -82,24 +82,8 @@ public sealed class DocumentComparison
         before.ParserVersion == after.ParserVersion && before.NormalizationVersion == after.NormalizationVersion &&
         ((before.Profile is null && after.Profile is null) || before.Profile?.Matches(after.Profile) == true);
 
-    private static ImmutableArray<Line> SplitLines(string text)
-    {
-        var lines = ImmutableArray.CreateBuilder<Line>();
-        var start = 0;
-        for (var index = 0; index < text.Length; index++)
-            if (text[index] == '\n')
-            {
-                lines.Add(new(start, index + 1 - start, text.Substring(start, index + 1 - start)));
-                start = index + 1;
-                if (lines.Count > MaximumLines) return lines.ToImmutable();
-            }
-        if (start < text.Length || text.Length == 0)
-            lines.Add(new(start, text.Length - start, text[start..]));
-        return lines.ToImmutable();
-    }
-
-    private static ImmutableArray<DocumentComparisonHunk>? BuildHunks(ImmutableArray<Line> left,
-        ImmutableArray<Line> right, int[] table, int width, CancellationToken cancellationToken)
+    private static ImmutableArray<DocumentComparisonHunk>? BuildHunks(ImmutableArray<DocumentLine> left,
+        ImmutableArray<DocumentLine> right, int[] table, int width, CancellationToken cancellationToken)
     {
         var output = ImmutableArray.CreateBuilder<DocumentComparisonHunk>();
         var remainingWordCells = MaximumTotalWordMatrixCells;
@@ -132,8 +116,8 @@ public sealed class DocumentComparison
         return output.ToImmutable();
     }
 
-    private static bool AddHunk(ImmutableArray<DocumentComparisonHunk>.Builder output, ImmutableArray<Line> left,
-        ImmutableArray<Line> right, int beforeFirst, int beforePast, int afterFirst, int afterPast,
+    private static bool AddHunk(ImmutableArray<DocumentComparisonHunk>.Builder output, ImmutableArray<DocumentLine> left,
+        ImmutableArray<DocumentLine> right, int beforeFirst, int beforePast, int afterFirst, int afterPast,
         ref int remainingWordCells, CancellationToken cancellationToken)
     {
         var beforeOffset = beforeFirst < left.Length ? left[beforeFirst].Start : (left.Length == 0 ? 0 : left[^1].Start + left[^1].Length);
@@ -217,19 +201,18 @@ public sealed class DocumentComparison
         return words;
     }
 
-    private static string Context(ImmutableArray<Line> lines, int first, int past)
+    private static string Context(ImmutableArray<DocumentLine> lines, int first, int past)
     {
         var start = Math.Max(0, first - ContextLines);
         var end = Math.Min(lines.Length, past + ContextLines);
         return string.Concat(lines.Skip(start).Take(end - start).Select(line => line.Text));
     }
 
-    private static int ContextStart(ImmutableArray<Line> lines, int first) =>
+    private static int ContextStart(ImmutableArray<DocumentLine> lines, int first) =>
         lines[Math.Max(0, first - ContextLines)].Start;
 
     private static string CreateId(string before, string after) =>
         Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes($"{CurrentAlgorithmVersion}\0{CurrentSettingsVersion}\0{before}\0{after}")));
 
-    private sealed record Line(int Start, int Length, string Text);
     private sealed record Word(string Value, int Start, int Length);
 }

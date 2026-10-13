@@ -1,0 +1,58 @@
+@using System.Collections.Immutable
+@using CivicLens.Core.Review
+
+<Panel Title="@($"Decide on revision {RevisionNumber}")" Id="decision" Padded="true">
+    @Checklist
+    @if (Concerns.Length > 0)
+    {
+        <FieldSet Legend="Open concerns" Hint="Select each concern you resolved, and say how in the note.">
+            <ul class="choices">
+                @foreach (var concern in Concerns)
+                {
+                    <li>
+                        <Choice Name="Decision.ResolvedDecisionIds" Value="@concern.DecisionId" Form="decision-form"
+                                Label="@(string.IsNullOrWhiteSpace(concern.Note) ? "Concern without a note" : concern.Note)">
+                            <span class="muted small">Raised on revision @concern.RevisionNumber</span>
+                        </Choice>
+                    </li>
+                }
+            </ul>
+        </FieldSet>
+    }
+    <Notice Tone="Tone.Warn" id="decision-unsaved-warning" hidden="@CanDecide">Save your edits or reload the saved revision before you decide. Decisions apply only to saved wording.</Notice>
+    <form id="decision-form" class="form" method="post" @formname="decide" @onsubmit="OnDecide">
+        <AntiforgeryToken />
+        <FieldSet Id="decision-controls" Legend="Your decision" Disabled="@(!CanDecide)">
+            <input type="hidden" name="expectedRevisionNumber" value="@RevisionNumber" />
+            <input type="hidden" name="expectedReviewStateVersion" value="@ReviewStateVersion" />
+            <input type="hidden" name="idempotencyKey" value="@IdempotencyKey" />
+            <Field Label="Note" For="Decision_Note" Hint="Requesting changes and withdrawing approval need a reason. Resolving concerns needs a note.">
+                <textarea id="Decision_Note" class="plain" name="Decision.Note" maxlength="4000" aria-describedby="Decision_Note-hint" value="@Note"></textarea>
+            </Field>
+            <div class="actions">
+                @if (Status != ReviewStatus.Approved)
+                {
+                    <Button Variant="ButtonVariant.Primary" Type="submit" name="kind" value="Approve">Approve</Button>
+                }
+                <Button Type="submit" name="kind" value="RequestChanges">Request changes</Button>
+                @if (Status == ReviewStatus.Approved)
+                {
+                    <Button Variant="ButtonVariant.Danger" Type="submit" name="kind" value="WithdrawApproval">Withdraw approval</Button>
+                }
+                <span class="actions-hint">Approval keeps the account private.</span>
+            </div>
+        </FieldSet>
+    </form>
+</Panel>
+
+@code {
+    [Parameter, EditorRequired] public int RevisionNumber { get; set; }
+    [Parameter, EditorRequired] public int ReviewStateVersion { get; set; }
+    [Parameter, EditorRequired] public ReviewStatus Status { get; set; }
+    [Parameter, EditorRequired] public ImmutableArray<ReviewDecision> Concerns { get; set; }
+    [Parameter, EditorRequired] public bool CanDecide { get; set; }
+    [Parameter, EditorRequired] public string IdempotencyKey { get; set; } = string.Empty;
+    [Parameter] public string? Note { get; set; }
+    [Parameter, EditorRequired] public EventCallback OnDecide { get; set; }
+    [Parameter] public RenderFragment? Checklist { get; set; }
+}

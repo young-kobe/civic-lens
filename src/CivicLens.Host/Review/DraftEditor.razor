@@ -1,4 +1,5 @@
 @page "/Review/{DraftId}"
+@inherits ReviewRecordPage
 @using CivicLens.Core.Review
 
 @if (review is null)
@@ -215,81 +216,23 @@ else
             </Panel>
         </div>
 
-        <Panel Title="@($"Decide on revision {revision.RevisionNumber}")" Id="decision" Padded="true">
-            <ul class="checklist">
-                <li>Is this a substantive edit, not navigation churn or a processing difference?</li>
-                <li>Do the citations support every claim?</li>
-                <li>Are capture times kept apart from the edit date?</li>
-            </ul>
-            @if (concerns.Length > 0)
-            {
-                <FieldSet Legend="Open concerns" Hint="Select each concern you resolved, and say how in the note.">
-                    <ul class="choices">
-                        @foreach (var concern in concerns)
-                        {
-                            <li>
-                                <Choice Name="Decision.ResolvedDecisionIds" Value="@concern.DecisionId" Form="decision-form"
-                                        Label="@(string.IsNullOrWhiteSpace(concern.Note) ? "Concern without a note" : concern.Note)">
-                                    <span class="muted small">Raised on revision @concern.RevisionNumber</span>
-                                </Choice>
-                            </li>
-                        }
-                    </ul>
-                </FieldSet>
-            }
-            <Notice Tone="Tone.Warn" id="decision-unsaved-warning" hidden="@CanDecide">Save your edits or reload the saved revision before you decide. Decisions apply only to saved wording.</Notice>
-            <form id="decision-form" class="form" method="post" @formname="decide" @onsubmit="DecideAsync">
-                <AntiforgeryToken />
-                <FieldSet Id="decision-controls" Legend="Your decision" Disabled="@(!CanDecide)">
-                    <input type="hidden" name="expectedRevisionNumber" value="@revision.RevisionNumber" />
-                    <input type="hidden" name="expectedReviewStateVersion" value="@review.ReviewStateVersion" />
-                    <input type="hidden" name="idempotencyKey" value="@decisionKey" />
-                    <Field Label="Note" For="Decision_Note" Hint="Requesting changes and withdrawing approval need a reason. Resolving concerns needs a note.">
-                        <textarea id="Decision_Note" class="plain" name="Decision.Note" maxlength="4000" aria-describedby="Decision_Note-hint" value="@Decision?.Note"></textarea>
-                    </Field>
-                    <div class="actions">
-                        @if (status != DocumentChangeReviewStatus.Approved)
-                        {
-                            <Button Variant="ButtonVariant.Primary" Type="submit" name="kind" value="Approve">Approve</Button>
-                        }
-                        <Button Type="submit" name="kind" value="RequestChanges">Request changes</Button>
-                        @if (status == DocumentChangeReviewStatus.Approved)
-                        {
-                            <Button Variant="ButtonVariant.Danger" Type="submit" name="kind" value="WithdrawApproval">Withdraw approval</Button>
-                        }
-                        <span class="actions-hint">Approval keeps the account private.</span>
-                    </div>
-                </FieldSet>
-            </form>
-        </Panel>
+        <ReviewDecisionPanel RevisionNumber="revision.RevisionNumber" ReviewStateVersion="review.ReviewStateVersion" Status="status"
+                             Concerns="concerns" CanDecide="CanDecide" IdempotencyKey="@decisionKey" Note="@Decision?.Note" OnDecide="DecideAsync">
+            <Checklist>
+                <ul class="checklist">
+                    <li>Is this a substantive edit, not navigation churn or a processing difference?</li>
+                    <li>Do the citations support every claim?</li>
+                    <li>Are capture times kept apart from the edit date?</li>
+                </ul>
+            </Checklist>
+        </ReviewDecisionPanel>
 
-        <Panel Title="History" Id="history">
-            <DataTable Items="History" Caption="Revisions and decisions">
-                <Head>
-                    <th class="time">When</th>
-                    <th>Event</th>
-                    <th class="hide-narrow">By</th>
-                    <th>Note</th>
-                </Head>
-                <Row Context="entry">
-                    <td class="time"><Timestamp Value="entry.When" /></td>
-                    <td>
-                        @if (entry.Decision is { } decision)
-                        {
-                            <StatusBadge Tone="DraftStatusDisplay.Tone(decision)" Text="@DraftStatusDisplay.Label(decision)" />
-                        }
-                        @entry.Event
-                    </td>
-                    <td class="hide-narrow">@Who(entry.ActorSubject)</td>
-                    <td>@entry.Note</td>
-                </Row>
-            </DataTable>
-        </Panel>
+        <ReviewHistoryPanel Entries="History" ViewerSubject="@actor.Subject" />
     </div>
 }
 
 @code {
-    private RenderFragment HeaderMeta(DocumentChangeReviewStatus status, int concerns) =>
+    private RenderFragment HeaderMeta(ReviewStatus status, int concerns) =>
         @<text>
             <StatusBadge Tone="DraftStatusDisplay.Tone(status)" Text="@DraftStatusDisplay.Label(status, concerns)" />
             <span class="muted small">Revision @Revision.RevisionNumber, saved @Moment.Full(Revision.CreatedAtUtc)</span>

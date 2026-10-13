@@ -2,11 +2,15 @@ using System.Collections.Immutable;
 using System.Security.Cryptography;
 using CivicLens.Application.Publication;
 using CivicLens.Application.Review;
+using CivicLens.Application.Statements;
 using CivicLens.Core.Review;
+using CivicLens.Core.Statements;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Documents;
 using CivicLens.Infrastructure.Publication;
 using CivicLens.Infrastructure.Review;
+using CivicLens.Infrastructure.Statements;
+using CivicLens.Publication.Contracts;
 using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Host;
 using CivicLens.Tests.Infrastructure.Collection;
@@ -30,6 +34,11 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
     private PostgresDocumentComparisonStore comparisons = null!;
     private PostgresDocumentChangeReviewStore reviews = null!;
     private PostgresPublicationStore publications = null!;
+    private PostgresStatementReviewStore statementReviews = null!;
+    private PostgresStatementDraftStore statementDrafts = null!;
+    private StatementCandidateSeeder statementSeeder = null!;
+    private string connectionString = null!;
+    private int statementCount;
     private ComparisonSeeder seeder = null!;
 
     public async Task InitializeAsync()
@@ -42,7 +51,7 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
             await command.ExecuteNonQueryAsync();
         }
 
-        var connectionString = new NpgsqlConnectionStringBuilder(postgres.ConnectionString) { SearchPath = schema, Pooling = false }.ConnectionString;
+        connectionString = new NpgsqlConnectionStringBuilder(postgres.ConnectionString) { SearchPath = schema, Pooling = false }.ConnectionString;
         factory = new PooledDbContextFactory<CollectionAttemptDbContext>(
             new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options);
         attempts = new PostgresCollectionAttemptStore(factory);
@@ -50,7 +59,10 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
         comparisons = new PostgresDocumentComparisonStore(factory);
         reviews = new PostgresDocumentChangeReviewStore(factory);
         publications = new PostgresPublicationStore(factory);
+        statementReviews = new PostgresStatementReviewStore(factory);
+        statementDrafts = new PostgresStatementDraftStore(factory);
         seeder = new ComparisonSeeder(attempts, extractions, comparisons, captureRoot);
+        statementSeeder = new StatementCandidateSeeder(attempts, extractions, connectionString, captureRoot);
         await attempts.MigrateAsync();
         Directory.CreateDirectory(captureRoot);
     }
@@ -230,6 +242,128 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
     }
 
     [Fact]
+    public async Task AStatementDecisionAfterTheBuildBlocksTheCommitBecauseApprovalMayHaveChanged()
+    {
+        var statement = await CreateApprovedStatementAsync();
+
+        await Assert.ThrowsAsync<PublicationConflictException>(() =>
+            publications.CommitAsync(Owner.Subject, StatementCommit(1, statement, reviewStateVersion: 0), "stale", Hash(1), default));
+        Assert.Equal(new PublicationState(0, null), await publications.GetStateAsync(default));
+        var committed = await publications.CommitAsync(Owner.Subject, StatementCommit(1, statement, reviewStateVersion: 1), "fresh", Hash(2), default);
+        Assert.Equal(1, committed.ReleaseNumber);
+    }
+
+    [Fact]
+    public async Task AStatementSavedAfterTheBuildBlocksTheCommitBecauseTheServedRevisionWouldBeStale()
+    {
+        var statement = await CreateApprovedStatementAsync();
+
+        await Assert.ThrowsAsync<PublicationConflictException>(() => publications.CommitAsync(Owner.Subject,
+            StatementCommit(1, statement, reviewStateVersion: 1, revision: 1), "stale", Hash(1), default));
+    }
+
+    [Fact]
+    public async Task ADocumentChangeIsNeverCheckedAgainstTheStatementTableBecauseTheKindPicksTheDraftTable()
+    {
+        var draft = await CreateApprovedDraftAsync("a");
+
+        await Assert.ThrowsAsync<PublicationConflictException>(() => publications.CommitAsync(Owner.Subject,
+            new(1, null, $"000001-{Guid.NewGuid():N}", PublishedAt, [new(PublishedRecordKind.Statement, draft.DraftId, 2)],
+                [new(PublishedRecordKind.Statement, draft.DraftId, 2, 1)]), "wrong-kind", Hash(1), default));
+    }
+
+    [Fact]
+    public async Task CommitWaitsForTheStatementLockBecauseAStatementDecisionMustNotSlipInDuringThePublish()
+    {
+        var statement = await CreateApprovedStatementAsync();
+        await using var holder = await HeldAdvisoryLock.AcquireAsync(connectionString, "civic-lens-statement-review");
+
+        var committing = publications.CommitAsync(Owner.Subject, StatementCommit(1, statement, reviewStateVersion: 1), "key", Hash(1), default);
+        await Task.Delay(400);
+        Assert.False(committing.IsCompleted);
+        await holder.DisposeAsync();
+
+        Assert.Equal(1, (await committing).ReleaseNumber);
+    }
+
+    [Fact]
+    public async Task ServingWaitsForTheDocumentChangeLockToo()
+    {
+        await using var holder = await HeldAdvisoryLock.AcquireAsync(connectionString, "civic-lens-document-change-review");
+
+        var serving = publications.ServeActiveAsync((_, _) => Task.CompletedTask, default);
+        await Task.Delay(400);
+        Assert.False(serving.IsCompleted);
+        await holder.DisposeAsync();
+
+        Assert.Null(await serving);
+    }
+
+    [Fact]
+    public async Task ReadyStatementListFollowsTheActiveReleaseByKindSoAPublishedStatementLeavesTheList()
+    {
+        var neverPublished = await CreateApprovedStatementAsync();
+        var published = await CreateApprovedStatementAsync();
+        await publications.CommitAsync(Owner.Subject, StatementCommit(1, published, reviewStateVersion: 1), "key", Hash(1), default);
+
+        var ready = await statementReviews.ListUnpublishedApprovedAsync(10, default);
+
+        Assert.Equal([neverPublished], ready.Select(item => item.Statement.CandidateId));
+        Assert.Null(ready[0].PublishedRevisionNumber);
+    }
+
+    [Fact]
+    public async Task APublishedStatementWithAnIdShapedLikeADraftDoesNotHideTheDocumentChange()
+    {
+        var draft = await CreateApprovedDraftAsync("a");
+        await InsertActiveReleaseAsync($$"""[{"kind":"statement","recordId":"{{draft.DraftId}}","revisionNumber":{{draft.RevisionNumber}}}]""");
+
+        var ready = await reviews.ListUnpublishedApprovedDraftsAsync(10, default);
+
+        var item = Assert.Single(ready);
+        Assert.Equal(draft.DraftId, item.Draft.DraftId);
+        Assert.Null(item.PublishedRevisionNumber);
+    }
+
+    [Fact]
+    public async Task ReleaseRowWrittenBeforeKindsExistedStillCountsItsDraftsAsPublishedDocumentChanges()
+    {
+        var draft = await CreateApprovedDraftAsync("a");
+        await InsertActiveReleaseAsync($$"""[{"draftId":"{{draft.DraftId}}","revisionNumber":{{draft.RevisionNumber}}}]""");
+
+        Assert.Empty(await reviews.ListUnpublishedApprovedDraftsAsync(10, default));
+    }
+
+    [Fact]
+    public async Task ReleaseRowWrittenNowCarriesTheKindOfEachRecordSoBothListsReadItBack()
+    {
+        var draft = await CreateApprovedDraftAsync("a");
+        var statement = await CreateApprovedStatementAsync();
+        await publications.CommitAsync(Owner.Subject, new(1, null, $"000001-{Guid.NewGuid():N}", PublishedAt,
+            [new(PublishedRecordKind.DocumentChange, draft.DraftId, draft.RevisionNumber), new(PublishedRecordKind.Statement, statement, 2)],
+            [new(PublishedRecordKind.DocumentChange, draft.DraftId, draft.RevisionNumber, 1),
+             new(PublishedRecordKind.Statement, statement, 2, 1)]), "key", Hash(1), default);
+
+        Assert.Empty(await reviews.ListUnpublishedApprovedDraftsAsync(10, default));
+        Assert.Empty(await statementReviews.ListUnpublishedApprovedAsync(10, default));
+    }
+
+    [Fact]
+    public async Task PublicationReadReturnsTheApprovedStatementWithItsExtractionAndUrlAndOmitsUnknownIds()
+    {
+        var statement = await CreateApprovedStatementAsync();
+        var unknown = new string('f', 64);
+
+        var found = await statementReviews.GetForPublicationAsync([statement, unknown], default);
+
+        var read = Assert.Single(found);
+        Assert.Equal(statement, read.Key);
+        Assert.Equal(ReviewStatus.Approved, read.Value.Review.CurrentStatus);
+        Assert.StartsWith("https://example.test/pages/", read.Value.Url, StringComparison.Ordinal);
+        Assert.Equal(read.Value.Review.CurrentRevision!.Quotations[0].Span.ExtractionId, read.Value.Extraction.ExtractionId);
+    }
+
+    [Fact]
     public async Task ReadyListFollowsTheActiveReleaseSoNewAndReplacementDraftsShowAndPublishedOnesDoNot()
     {
         var neverPublished = await CreateApprovedDraftAsync("a");
@@ -258,12 +392,49 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
         Assert.Single(await reviews.ListUnpublishedApprovedDraftsAsync(1, default));
     }
 
+    private static PublicationCommit StatementCommit(int number, string candidateId, int reviewStateVersion, int revision = 2) =>
+        new(number, number == 1 ? null : number - 1, $"{number:D6}-{Guid.NewGuid():N}", PublishedAt,
+            [new(PublishedRecordKind.Statement, candidateId, revision)],
+            [new(PublishedRecordKind.Statement, candidateId, revision, reviewStateVersion)]);
+
+    private async Task<string> CreateApprovedStatementAsync()
+    {
+        const string quote = "a rent cap for tenants";
+        var candidate = await statementSeeder.SeedAsync($"{StatementDraftFixtures.Article} Release {++statementCount}.",
+            $"https://example.test/pages/{statementCount}");
+        var reader = new StatementReviewContextReader(statementDrafts, new StatementSelectionResolver(StatementGateFixtures.Configuration()));
+        await new CreateStatementDraft(statementReviews).ExecuteAsync(Owner, new(candidate, "create-" + candidate[..8]));
+        var extraction = (await statementDrafts.ReadEvidenceAsync(candidate, default))!.Article.Extraction;
+        var span = new StatementSpan(extraction.ExtractionId, extraction.Text.IndexOf(quote, StringComparison.Ordinal), quote.Length);
+        await new SaveStatementDraft(statementReviews, reader).ExecuteAsync(Owner, new(candidate, 1, "Warren announces a rent cap",
+            "The senator announced a rent cap for tenants.", null, null, [StatementDraftFixtures.Warren], [],
+            [StatementGateFixtures.RentIssue], [StatementGateFixtures.HousingArea], [span], "save-" + candidate[..8]));
+        await new DecideStatementReview(statementReviews, reader).ExecuteAsync(Owner,
+            new(candidate, 2, 0, ReviewDecisionKind.Approve, null, [], "approve-" + candidate[..8]));
+        return candidate;
+    }
+
+    private async Task InsertActiveReleaseAsync(string recordsJson)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand("""
+            INSERT INTO publication_releases (release_number, directory_name, actor_subject, published_at_utc_ticks, record_count, records_json, is_active)
+            VALUES (1, @directory, 'auth0|owner', @ticks, 1, @records, true)
+            """, connection);
+        command.Parameters.AddWithValue("directory", $"000001-{Guid.NewGuid():N}");
+        command.Parameters.AddWithValue("ticks", PublishedAt.UtcTicks);
+        command.Parameters.AddWithValue("records", recordsJson);
+        await command.ExecuteNonQueryAsync();
+    }
+
     private static PublicationCommit Commit(int number, string draftId, int revision, int reviewStateVersion) =>
         Commit(number, number == 1 ? null : number - 1, draftId, revision, reviewStateVersion);
 
     private static PublicationCommit Commit(int number, int? baseNumber, string draftId, int revision,
         int reviewStateVersion) => new(number, baseNumber, $"{number:D6}-{Guid.NewGuid():N}", PublishedAt,
-        [new(draftId, revision)], [new(draftId, revision, reviewStateVersion)]);
+        [new(PublishedRecordKind.DocumentChange, draftId, revision)],
+        [new(PublishedRecordKind.DocumentChange, draftId, revision, reviewStateVersion)]);
 
     private static PublicationCommit Commit(int number, DocumentChangeDraftRevision draft, int revision, int reviewStateVersion) =>
         Commit(number, draft.DraftId, revision, reviewStateVersion);
@@ -302,8 +473,8 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
 
     private async Task CommitAsync(int number, int? baseNumber, params DocumentChangeDraftRevision[] drafts)
     {
-        var records = drafts.Select(draft => new PublishedRevisionBinding(draft.DraftId, draft.RevisionNumber)).ToImmutableArray();
-        var expectations = drafts.Select(draft => new ReviewStateExpectation(draft.DraftId, draft.RevisionNumber, 1)).ToImmutableArray();
+        var records = drafts.Select(draft => new PublishedRevisionBinding(PublishedRecordKind.DocumentChange, draft.DraftId, draft.RevisionNumber)).ToImmutableArray();
+        var expectations = drafts.Select(draft => new ReviewStateExpectation(PublishedRecordKind.DocumentChange, draft.DraftId, draft.RevisionNumber, 1)).ToImmutableArray();
         await publications.CommitAsync(Owner.Subject, new(number, baseNumber, $"{number:D6}-{Guid.NewGuid():N}", PublishedAt,
             records, expectations), $"commit-{number}", Hash(number), default);
     }

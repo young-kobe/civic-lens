@@ -1,0 +1,16 @@
+using System.Collections.Immutable;
+using CivicLens.Core.Statements;
+
+namespace CivicLens.Application.Statements;
+
+public sealed record StatementAllowedSelections(ImmutableHashSet<string> OfficialIds, ImmutableHashSet<string> IssueIds,
+    ImmutableHashSet<string> PolicyAreaIds)
+{
+    public void RequireAllowed(StatementDraftRevision revision)
+    {
+        ArgumentNullException.ThrowIfNull(revision);
+        if (revision.SpeakerOfficialIds.Any(id => !OfficialIds.Contains(id)) || revision.IssueIds.Any(id => !IssueIds.Contains(id)) ||
+            revision.PolicyAreaIds.Any(id => !PolicyAreaIds.Contains(id)))
+            throw new ArgumentException("The saved revision includes selections that are no longer configured.");
+    }
+}

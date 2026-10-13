@@ -8,6 +8,7 @@ using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Documents;
 using CivicLens.Infrastructure.Publication;
 using CivicLens.Infrastructure.Review;
+using CivicLens.Infrastructure.Statements;
 using CivicLens.Publication.Contracts;
 using CivicLens.Tests.Fixtures;
 using Microsoft.EntityFrameworkCore;
@@ -86,10 +87,10 @@ public sealed class PublishedReleaseOutlivesDatabaseTests : IAsyncLifetime
         await new DecideDocumentChangeReview(reviews, catalog).ExecuteAsync(Owner,
             new(saved.DraftId, 2, 0, ReviewDecisionKind.Approve, null, [], "approve"));
 
-        var publish = new PublishDocumentChanges(PostgresPublicationStore.FromConnectionString(connectionString),
-            new FileReleaseDirectory(releasesRoot), new ReleaseRenderer(), reviews,
+        var publish = new PublishRelease(PostgresPublicationStore.FromConnectionString(connectionString),
+            new FileReleaseDirectory(releasesRoot), new ReleaseRenderer(), reviews, new PostgresStatementReviewStore(factory),
             new PublicationCatalog(new Dictionary<string, string> { ["mayor"] = "Mayor Example" }), TimeProvider.System);
-        return await publish.ExecuteAsync(Owner, new PublishDocumentChangesRequest([saved.DraftId], "publish"));
+        return await publish.ExecuteAsync(Owner, new PublishReleaseRequest([new(PublishedRecordKind.DocumentChange, saved.DraftId)], "publish"));
     }
 
     private static T Deserialize<T>(string path) =>

@@ -1,6 +1,7 @@
 using System.Text;
 using CivicLens.Application.Publication;
 using CivicLens.Infrastructure.Publication;
+using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Tests.Infrastructure.Publication;
 
@@ -123,6 +124,23 @@ public sealed class FileReleaseDirectoryTests : IDisposable
 
         Assert.Equal(10, (await releases.ReadFileAsync(name, "release.json", 10, default)).Length);
         await Assert.ThrowsAsync<InvalidDataException>(() => releases.ReadFileAsync(name, "release.json", 9, default));
+    }
+
+    [Theory]
+    [InlineData(32)]
+    [InlineData(64)]
+    public async Task StagingAcceptsRecordFilesNamedByEitherRecordIdLengthBecauseAStatementIdFillsAPathSegment(int idLength)
+    {
+        var id = new string('a', idLength);
+        await using var staging = await releases.BeginAsync(default);
+
+        var failure = await Record.ExceptionAsync(async () =>
+        {
+            await staging.WriteFileAsync(PublicationProtocol.RecordDataPath(id), new byte[] { 1 }, default);
+            await staging.WriteFileAsync(PublicationProtocol.RecordPagePath(id), new byte[] { 1 }, default);
+        });
+
+        Assert.Null(failure);
     }
 
     [Fact]

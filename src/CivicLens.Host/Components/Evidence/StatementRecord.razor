@@ -1,0 +1,52 @@
+<RecordView Id="@Id" Headline="@Content.Headline" Summary="@Content.Summary" Facts="Facts">
+    @if (Content.DateEvidence is not null)
+    {
+        <section class="stack">
+            <h3>Statement date evidence</h3>
+            <CitationQuote Label="Statement date evidence" Quote="@Content.DateEvidence" />
+        </section>
+    }
+    <section class="stack">
+        <h3>Quotations</h3>
+        @if (Content.Quotations.Count == 0)
+        {
+            <Notice Tone="Tone.Bad">No quotation is bound to this revision.</Notice>
+        }
+        <ul class="choices">
+            @for (var index = 0; index < Content.Quotations.Count; index++)
+            {
+                var quotation = Content.Quotations[index];
+                <li>
+                    <CitationQuote Label="@($"Quotation {index + 1}")" Quote="@quotation.Text">
+                        @if (quotation.Kind is not null)
+                        {
+                            <StatusBadge Text="@quotation.Kind" />
+                        }
+                    </CitationQuote>
+                </li>
+            }
+        </ul>
+    </section>
+</RecordView>
+
+@code {
+    [Parameter, EditorRequired] public StatementRecordContent Content { get; set; } = default!;
+    [Parameter] public string? Id { get; set; }
+
+    private IReadOnlyList<Fact> Facts
+    {
+        get
+        {
+            List<Fact> facts =
+            [
+                new("Statement date", Content.StatementDate),
+                Fact.List("Speakers", Content.Speakers),
+                Fact.List("Other speakers", Content.OtherSpeakers),
+                Fact.List("Issues", Content.Issues),
+                Fact.List("Policy areas", Content.PolicyAreas)
+            ];
+            if (Content.BillNumbers is not null) facts.Add(Fact.List("Bill numbers", Content.BillNumbers));
+            return facts;
+        }
+    }
+}

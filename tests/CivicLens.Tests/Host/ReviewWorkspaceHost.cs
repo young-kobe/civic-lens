@@ -15,6 +15,7 @@ using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Application.Collection.Processing;
 using CivicLens.Application.Documents;
+using CivicLens.Application.Issues;
 using CivicLens.Core.Review;
 using CivicLens.Collection.Contracts;
 using CivicLens.Core.Collection;
@@ -43,8 +44,10 @@ public sealed class ReviewWorkspaceHost(PostgresCollection postgres)
     public PostgresCollectionAttemptStore Attempts { get; private set; } = null!;
     public PostgresDocumentExtractionStore Extractions { get; private set; } = null!;
     public PostgresDocumentComparisonStore Comparisons { get; private set; } = null!;
+    public string OfficialId { get; init; } = "person";
     public string OfficialName { get; init; } = "Test Official";
     public bool Publishing { get; init; } = true;
+    public IssueConfiguration? Issues { get; init; }
 
     public async Task StartAsync()
     {
@@ -89,14 +92,20 @@ public sealed class ReviewWorkspaceHost(PostgresCollection postgres)
         Directory.CreateDirectory(KeyDirectory);
         var collectionPath = Path.Combine(KeyDirectory, "sources.json");
         await File.WriteAllTextAsync(collectionPath, $$"""
-            {"version":2,"people":[{"id":"person","name":{{JsonSerializer.Serialize(OfficialName)}}}],
+            {"version":2,"people":[{"id":{{JsonSerializer.Serialize(OfficialId)}},"name":{{JsonSerializer.Serialize(OfficialName)}}}],
              "documentProfiles":[{"id":"main","selector":"main"}],
-             "sources":[{"id":"source","coverage":[{"personId":"person"}],
+             "sources":[{"id":"source","coverage":[{"personId":{{JsonSerializer.Serialize(OfficialId)}}}],
                "url":"https://example.test/pages/a","allowedOrigin":"https://example.test",
                "allowedPathPrefix":"/pages","documentProfileId":"main"}]}
             """);
         start.Environment["CIVIC_LENS_COLLECTION_CONFIG"] = collectionPath;
         if (Publishing) start.Environment["CIVIC_LENS_RELEASE_DIRECTORY"] = ReleaseDirectory;
+        if (Issues is not null)
+        {
+            var issuesPath = Path.Combine(KeyDirectory, "issues.json");
+            await File.WriteAllTextAsync(issuesPath, JsonSerializer.Serialize(Issues, CollectionProtocol.JsonOptions));
+            start.Environment["CIVIC_LENS_ISSUES_CONFIG"] = issuesPath;
+        }
         process = Process.Start(start)!;
         output = process.StandardOutput.ReadToEndAsync();
         error = process.StandardError.ReadToEndAsync();
@@ -157,7 +166,7 @@ public sealed class ReviewWorkspaceHost(PostgresCollection postgres)
     public static FormUrlEncodedContent Form(IElement form) => new(Fields(form));
 
     public static List<KeyValuePair<string, string>> Fields(IElement form) => form.QuerySelectorAll("input[name], textarea[name]")
-        .Where(element => element.GetAttribute("type") != "checkbox" || element.HasAttribute("checked"))
+        .Where(element => element.GetAttribute("type") is not ("checkbox" or "radio") || element.HasAttribute("checked"))
         .Select(element => new KeyValuePair<string, string>(element.GetAttribute("name")!,
             element.LocalName == "textarea" ? element.TextContent : element.GetAttribute("value") ?? "")).ToList();
 

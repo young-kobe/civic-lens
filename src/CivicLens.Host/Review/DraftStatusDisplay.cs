@@ -5,19 +5,20 @@ namespace CivicLens.Host.Review;
 
 internal static class DraftStatusDisplay
 {
-    public static string Label(DocumentChangeReviewStatus status, int openConcerns) => status switch
+    public static string Label(ReviewStatus status, int openConcerns) => status switch
     {
-        DocumentChangeReviewStatus.AwaitingReviewWithConcerns => openConcerns == 1 ? "1 open concern" : $"{openConcerns} open concerns",
-        DocumentChangeReviewStatus.Approved => "Approved, private",
-        DocumentChangeReviewStatus.ChangesRequested => "Changes requested",
-        DocumentChangeReviewStatus.ApprovalWithdrawn => "Approval withdrawn",
+        ReviewStatus.AwaitingReviewWithConcerns => openConcerns == 1 ? "1 open concern" : $"{openConcerns} open concerns",
+        ReviewStatus.Approved => "Approved, private",
+        ReviewStatus.ChangesRequested => "Changes requested",
+        ReviewStatus.ApprovalWithdrawn => "Approval withdrawn",
+        ReviewStatus.NotDrafted => "Not drafted",
         _ => "Awaiting review"
     };
 
-    public static Tone Tone(DocumentChangeReviewStatus status) => status switch
+    public static Tone Tone(ReviewStatus status) => status switch
     {
-        DocumentChangeReviewStatus.Approved => Components.Ui.Tone.Ok,
-        DocumentChangeReviewStatus.AwaitingReview => Components.Ui.Tone.Neutral,
+        ReviewStatus.Approved => Components.Ui.Tone.Ok,
+        ReviewStatus.AwaitingReview or ReviewStatus.NotDrafted => Components.Ui.Tone.Neutral,
         _ => Components.Ui.Tone.Warn
     };
 

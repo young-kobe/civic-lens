@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using CivicLens.Application.Review;
 using CivicLens.Core.Documents;
 using CivicLens.Core.Review;
@@ -7,17 +8,38 @@ namespace CivicLens.Application.Publication;
 
 internal sealed class PublishedRecordBuilder(PublicationCatalog catalog)
 {
-    public static bool IsPublishable(DocumentChangeReviewStatus status, int unresolvedConcernCount) =>
-        status == DocumentChangeReviewStatus.Approved && unresolvedConcernCount == 0;
+    public static bool IsPublishable(ReviewStatus status, int unresolvedConcernCount) =>
+        status == ReviewStatus.Approved && unresolvedConcernCount == 0;
 
-    public static void RequirePublishable(DocumentChangeReview review)
+    public static void RequirePublishable(PublishedRecordKind kind, string recordId, int revisionNumber,
+        ImmutableArray<ReviewDecision> decisions, ImmutableArray<ReviewDecision> unresolvedConcerns)
     {
-        var status = DocumentChangeReviewPolicy.GetCurrentStatus(review.CurrentRevision, review.Decisions,
-            review.UnresolvedConcerns);
-        if (!IsPublishable(status, review.UnresolvedConcerns.Length))
-            throw new ArgumentException(
-                $"Draft {review.DraftId} is not approved or has unresolved concerns.", nameof(review));
+        var status = ReviewPolicy.GetCurrentStatus(revisionNumber, decisions, unresolvedConcerns);
+        if (!IsPublishable(status, unresolvedConcerns.Length))
+            throw new ArgumentException($"{Noun(kind)} {recordId} is not approved or has unresolved concerns.");
     }
+
+    public static void RequireNotPublishedAt(PublishedRecordKind kind, string recordId, int revisionNumber, PreviousRelease previous)
+    {
+        if (previous.Find(kind, recordId)?.RevisionNumber == revisionNumber)
+            throw new ArgumentException($"{Noun(kind)} {recordId} is already published at its current revision.");
+    }
+
+    public static string Noun(PublishedRecordKind kind) => kind == PublishedRecordKind.Statement ? "Statement" : "Draft";
+
+    public static DateTimeOffset GetApprovalTime(int revisionNumber, ImmutableArray<ReviewDecision> decisions) =>
+        decisions
+            .Where(item => item.RevisionNumber == revisionNumber && item.Kind == ReviewDecisionKind.Approve)
+            .MaxBy(item => item.ReviewStateVersion)!.CreatedAtUtc;
+
+    public PublishedOfficial[] MapOfficials(PublishedRecordKind kind, string recordId, IEnumerable<string> officialIds) =>
+        [.. officialIds.Select(id => new PublishedOfficial
+        {
+            Id = id,
+            Name = catalog.OfficialNames.TryGetValue(id, out var name)
+                ? name
+                : throw new ArgumentException($"Official {id} in {Noun(kind).ToLowerInvariant()} {recordId} has no configured public name.")
+        })];
 
     public PublishedDocumentChange Build(PublishableDocumentChange change, PublishedRecordEntry? previous,
         DateTimeOffset now)
@@ -36,7 +58,7 @@ internal sealed class PublishedRecordBuilder(PublicationCatalog catalog)
             Institution = revision.Institution,
             ChangeDate = revision.ChangeDate,
             ChangeDateEvidence = revision.ChangeDateEvidence is null ? null : Cite(revision.ChangeDateEvidence, before, after),
-            Officials = MapOfficials(review),
+            Officials = MapOfficials(PublishedRecordKind.DocumentChange, review.DraftId, revision.OfficialIds),
             IssueIds = [.. revision.IssueIds],
             Before = new()
             {
@@ -54,26 +76,12 @@ internal sealed class PublishedRecordBuilder(PublicationCatalog catalog)
             },
             Changes = [.. comparison.Comparison.Hunks.Select(MapChange)],
             Citations = [.. revision.Citations.Select(citation => Cite(citation, before, after))],
-            ApprovedAtUtc = GetApprovalTime(review),
+            ApprovedAtUtc = GetApprovalTime(revision.RevisionNumber, review.Decisions),
             FirstPublishedAtUtc = previous?.FirstPublishedAtUtc ?? now
         };
         record.Validate();
         return record;
     }
-
-    private PublishedOfficial[] MapOfficials(DocumentChangeReview review) =>
-        [.. review.CurrentRevision.OfficialIds.Select(id => new PublishedOfficial
-        {
-            Id = id,
-            Name = catalog.OfficialNames.TryGetValue(id, out var name)
-                ? name
-                : throw new ArgumentException($"Official {id} in draft {review.DraftId} has no configured public name.")
-        })];
-
-    private static DateTimeOffset GetApprovalTime(DocumentChangeReview review) =>
-        review.Decisions
-            .Where(item => item.RevisionNumber == review.CurrentRevision.RevisionNumber && item.Kind == ReviewDecisionKind.Approve)
-            .MaxBy(item => item.ReviewStateVersion)!.CreatedAtUtc;
 
     private static PublishedCitation Cite(DocumentChangeCitation citation, DocumentExtraction before, DocumentExtraction after)
     {

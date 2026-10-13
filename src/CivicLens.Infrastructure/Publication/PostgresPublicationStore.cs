@@ -1,19 +1,20 @@
 using System.Collections.Immutable;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using CivicLens.Application.Publication;
 using CivicLens.Core.Review;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Publication.Persistence;
 using CivicLens.Infrastructure.Review;
 using CivicLens.Infrastructure.Review.Persistence;
+using CivicLens.Infrastructure.Statements.Persistence;
+using CivicLens.Publication.Contracts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Npgsql;
 
 namespace CivicLens.Infrastructure.Publication;
 
-public sealed partial class PostgresPublicationStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory)
+public sealed class PostgresPublicationStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory)
     : IPublicationStore
 {
     private const string PublishOperation = "publish-release";
@@ -50,7 +51,7 @@ public sealed partial class PostgresPublicationStore(IDbContextFactory<Collectio
     public async Task<PublicationReleaseSummary> ActivateAsync(int releaseNumber, CancellationToken cancellationToken)
     {
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        await using var transaction = await PostgresDocumentChangeReviewStore.BeginWriteAsync(db, cancellationToken);
+        await using var transaction = await ReviewWriteLock.BeginWriteAsync(db, ReviewWriteLock.AllInOrder, cancellationToken);
         var row = await db.Set<PublicationReleaseRow>().AsNoTracking()
             .SingleOrDefaultAsync(candidate => candidate.ReleaseNumber == releaseNumber, cancellationToken)
             ?? throw new ArgumentException($"Release {releaseNumber} has not been committed.", nameof(releaseNumber));
@@ -66,7 +67,7 @@ public sealed partial class PostgresPublicationStore(IDbContextFactory<Collectio
     {
         ArgumentNullException.ThrowIfNull(serve);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        await using var transaction = await PostgresDocumentChangeReviewStore.BeginWriteAsync(db, cancellationToken);
+        await using var transaction = await ReviewWriteLock.BeginWriteAsync(db, ReviewWriteLock.AllInOrder, cancellationToken);
         var active = await db.Set<PublicationReleaseRow>().AsNoTracking()
             .SingleOrDefaultAsync(row => row.IsActive, cancellationToken);
         if (active is not null) await serve(active.DirectoryName, cancellationToken);
@@ -77,21 +78,23 @@ public sealed partial class PostgresPublicationStore(IDbContextFactory<Collectio
     public async Task<PublicationReleaseSummary?> FindReplayAsync(string actorSubject, string idempotencyKey,
         string payloadHash, CancellationToken cancellationToken)
     {
-        ValidateActorAndIdempotency(actorSubject, idempotencyKey, payloadHash);
+        ReviewIdempotency.ValidateRequest(actorSubject, idempotencyKey, payloadHash);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        return await ReadReplayAsync(db, actorSubject, idempotencyKey, payloadHash, cancellationToken);
+        return await ReviewIdempotency.ReadReplayAsync<PublicationReleaseSummary>(db, actorSubject, PublishOperation, idempotencyKey,
+            payloadHash, cancellationToken);
     }
 
     public async Task<PublicationReleaseSummary> CommitAsync(string actorSubject, PublicationCommit commit,
         string idempotencyKey, string payloadHash, CancellationToken cancellationToken)
     {
-        ValidateActorAndIdempotency(actorSubject, idempotencyKey, payloadHash);
+        ReviewIdempotency.ValidateRequest(actorSubject, idempotencyKey, payloadHash);
         if (ReviewAuthor.IsAnalysis(actorSubject))
             throw new UnauthorizedAccessException("A model author cannot publish.");
         ValidateCommit(commit);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        await using var transaction = await PostgresDocumentChangeReviewStore.BeginWriteAsync(db, cancellationToken);
-        var replay = await ReadReplayAsync(db, actorSubject, idempotencyKey, payloadHash, cancellationToken);
+        await using var transaction = await ReviewWriteLock.BeginWriteAsync(db, ReviewWriteLock.AllInOrder, cancellationToken);
+        var replay = await ReviewIdempotency.ReadReplayAsync<PublicationReleaseSummary>(db, actorSubject, PublishOperation, idempotencyKey,
+            payloadHash, cancellationToken);
         if (replay is not null)
         {
             await transaction.CommitAsync(cancellationToken);
@@ -104,14 +107,7 @@ public sealed partial class PostgresPublicationStore(IDbContextFactory<Collectio
         var summary = new PublicationReleaseSummary(commit.ReleaseNumber, commit.DirectoryName,
             commit.PublishedAtUtc, commit.Records.Length);
         db.Add(ToRow(actorSubject, commit));
-        db.Add(new ReviewIdempotencyRow
-        {
-            ActorSubject = actorSubject,
-            Operation = PublishOperation,
-            IdempotencyKey = idempotencyKey,
-            PayloadHash = payloadHash,
-            ResultJson = JsonSerializer.Serialize(summary, JsonOptions)
-        });
+        ReviewIdempotency.Add(db, actorSubject, PublishOperation, idempotencyKey, payloadHash, ReviewJson.Serialize(summary));
         await SaveAsync(db, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return summary;
@@ -149,31 +145,35 @@ public sealed partial class PostgresPublicationStore(IDbContextFactory<Collectio
     private static async Task RequireUnchangedReviewStateAsync(CollectionAttemptDbContext db,
         ImmutableArray<ReviewStateExpectation> expectations, CancellationToken cancellationToken)
     {
-        if (expectations.IsEmpty) return;
-        var ids = expectations.Select(expectation => expectation.DraftId).ToArray();
-        var drafts = await db.Set<DocumentChangeDraftRow>().AsNoTracking()
-            .Where(row => ids.Contains(row.DraftId)).ToDictionaryAsync(row => row.DraftId, cancellationToken);
+        var current = await ReadCurrentReviewStatesAsync(db, expectations, cancellationToken);
         foreach (var expectation in expectations)
         {
-            if (!drafts.TryGetValue(expectation.DraftId, out var draft) ||
-                draft.CurrentRevisionNumber != expectation.RevisionNumber ||
-                draft.ReviewStateVersion != expectation.ReviewStateVersion)
+            if (!current.TryGetValue((expectation.Kind, expectation.RecordId), out var state) ||
+                state.RevisionNumber != expectation.RevisionNumber || state.ReviewStateVersion != expectation.ReviewStateVersion)
                 throw new PublicationConflictException("Review state changed after the release was built. Rebuild it.");
         }
     }
 
-    private static async Task<PublicationReleaseSummary?> ReadReplayAsync(CollectionAttemptDbContext db,
-        string actorSubject, string idempotencyKey, string payloadHash, CancellationToken cancellationToken)
+    private static async Task<Dictionary<(PublishedRecordKind Kind, string RecordId), (int RevisionNumber, int ReviewStateVersion)>>
+        ReadCurrentReviewStatesAsync(CollectionAttemptDbContext db, ImmutableArray<ReviewStateExpectation> expectations,
+            CancellationToken cancellationToken)
     {
-        var row = await db.Set<ReviewIdempotencyRow>().AsNoTracking().SingleOrDefaultAsync(candidate =>
-            candidate.ActorSubject == actorSubject && candidate.Operation == PublishOperation &&
-            candidate.IdempotencyKey == idempotencyKey, cancellationToken);
-        if (row is null) return null;
-        if (row.PayloadHash != payloadHash)
-            throw new ArgumentException("Idempotency key was already used with a different request payload.");
-        return JsonSerializer.Deserialize<PublicationReleaseSummary>(row.ResultJson, JsonOptions)
-            ?? throw new InvalidOperationException("Stored publication result is invalid.");
+        var current = new Dictionary<(PublishedRecordKind, string), (int, int)>();
+        var changeIds = IdsOf(expectations, PublishedRecordKind.DocumentChange);
+        var changes = await db.Set<DocumentChangeDraftRow>().AsNoTracking()
+            .Where(row => changeIds.Contains(row.DraftId)).ToArrayAsync(cancellationToken);
+        foreach (var row in changes)
+            current[(PublishedRecordKind.DocumentChange, row.DraftId)] = (row.CurrentRevisionNumber, row.ReviewStateVersion);
+        var statementIds = IdsOf(expectations, PublishedRecordKind.Statement);
+        var statements = await db.Set<StatementDraftRow>().AsNoTracking()
+            .Where(row => statementIds.Contains(row.CandidateId)).ToArrayAsync(cancellationToken);
+        foreach (var row in statements)
+            current[(PublishedRecordKind.Statement, row.CandidateId)] = (row.CurrentRevisionNumber, row.ReviewStateVersion);
+        return current;
     }
+
+    private static string[] IdsOf(ImmutableArray<ReviewStateExpectation> expectations, PublishedRecordKind kind) =>
+        [.. expectations.Where(expectation => expectation.Kind == kind).Select(expectation => expectation.RecordId)];
 
     private static PublicationReleaseRow ToRow(string actorSubject, PublicationCommit commit) => new()
     {
@@ -204,17 +204,4 @@ public sealed partial class PostgresPublicationStore(IDbContextFactory<Collectio
         if (commit.PublishedAtUtc.Offset != TimeSpan.Zero)
             throw new ArgumentException("Publish time must be UTC.", nameof(commit));
     }
-
-    private static void ValidateActorAndIdempotency(string actorSubject, string key, string hash)
-    {
-        if (string.IsNullOrWhiteSpace(actorSubject) || actorSubject.Length > 256)
-            throw new ArgumentException("Actor subject is invalid.", nameof(actorSubject));
-        if (string.IsNullOrWhiteSpace(key) || key.Length > 256)
-            throw new ArgumentException("Idempotency key is invalid.", nameof(key));
-        if (!HashPattern().IsMatch(hash ?? string.Empty))
-            throw new ArgumentException("Payload hash must be a lowercase SHA-256 value.", nameof(hash));
-    }
-
-    [GeneratedRegex("^[0-9a-f]{64}$")]
-    private static partial Regex HashPattern();
 }
