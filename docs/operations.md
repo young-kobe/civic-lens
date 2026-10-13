@@ -25,7 +25,7 @@ The Makefile wraps the local commands. Run `make help` to list them. It reads `.
 
 ## Dependency changes
 
-Update explicit package versions, run `dotnet restore --force-evaluate`, review and commit packages.lock.json changes, then run the checks above. CI restores in locked mode. Update global.json deliberately when adopting an SDK patch or feature band.
+Update explicit package versions, run `dotnet restore --force-evaluate`, review and commit packages.lock.json changes, then run the checks above. CI restores in locked mode. global.json pins the exact SDK with no roll forward, so CI and local builds use the same SDK. Update global.json deliberately when adopting an SDK patch or feature band. An SDK update can change implicit package versions, so run `dotnet restore --force-evaluate` after it and commit the lock file changes.
 
 ## Watched-page tracer
 
