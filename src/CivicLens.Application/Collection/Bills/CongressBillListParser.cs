@@ -20,7 +20,7 @@ public static class CongressBillListParser
         var wire = Deserialize(json);
         if (wire.Bills is null || wire.Pagination is null)
             throw new InvalidDataException("Bill list page must contain bills and pagination.");
-        if (wire.Bills.Length > BillStreamWindow.PageLimit)
+        if (wire.Bills.Length > BillPageQuery.PageLimit)
             throw new InvalidDataException("Bill list page holds more bills than the request limit.");
         var bills = wire.Bills.Select(ToItem).ToArray();
         return new CongressBillListPage(bills, ReadNext(wire.Pagination.Next, scope, window), BillStreamWindow.StartsPass(scope.Url));

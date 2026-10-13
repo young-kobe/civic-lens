@@ -59,6 +59,8 @@ public sealed class CongressBillParserTests
     [InlineData("\"introducedDate\":\"2025-01-03\",", "")]
     [InlineData("\"count\":71", "\"count\":-1")]
     [InlineData("\"bioguideId\":\"A000375\"", "\"bioguideId\":\" \"")]
+    [InlineData("\"bioguideId\":\"A000375\"", "\"bioguideId\":\" A000375\"")]
+    [InlineData("\"bioguideId\":\"A000375\"", "\"bioguideId\":\"a000375\"")]
     public void AnIncompleteFieldIsInvalidBecauseThePartialBillMustNotReachTheGate(string original, string replacement)
     {
         Assert.Throws<InvalidDataException>(() => Parse(Valid.Replace(original, replacement)));

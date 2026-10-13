@@ -5,11 +5,10 @@ using CivicLens.Application.Documents;
 using CivicLens.Collection.Contracts;
 using CivicLens.Core.Registry;
 using System.Text.Json.Serialization;
-using System.Text.RegularExpressions;
 
 namespace CivicLens.Application.Collection;
 
-public sealed partial record CollectionConfiguration
+public sealed record CollectionConfiguration
 {
     [JsonRequired]
     public int Version { get; init; } = 2;
@@ -156,7 +155,7 @@ public sealed partial record CollectionConfiguration
     private static void ValidateBillListAdmissionCapacity(WatchedSourceConfiguration source)
     {
         var policy = source.AdmissionPolicy ?? new DiscoveryAdmissionPolicy();
-        if (!policy.CanReserve(CollectionJobDefinition.FromSource(source), BillStreamWindow.PageLimit + 1))
+        if (!policy.CanReserve(CollectionJobDefinition.FromSource(source), BillPageQuery.PageLimit + 1))
             throw new ArgumentException($"Source '{source.Id}' admission policy must hold a full bill list page and its next-page job.");
     }
 
@@ -209,12 +208,9 @@ public sealed partial record CollectionConfiguration
     {
         if (person.BioguideId is null)
             return;
-        if (!BioguideIdPattern().IsMatch(person.BioguideId))
+        if (!BioguideId.IsValid(person.BioguideId))
             throw new ArgumentException($"Person '{person.Id}' has an invalid bioguide ID.");
         if (!bioguideIds.Add(person.BioguideId))
             throw new ArgumentException($"Duplicate bioguide ID '{person.BioguideId}'.");
     }
-
-    [GeneratedRegex(@"^[A-Z][0-9]{6}\z")]
-    private static partial Regex BioguideIdPattern();
 }

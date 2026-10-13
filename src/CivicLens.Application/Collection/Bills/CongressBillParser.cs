@@ -62,8 +62,8 @@ public static class CongressBillParser
         string.IsNullOrWhiteSpace(policyArea?.Name) ? null : policyArea.Name.Trim();
 
     private static string[] ReadSponsors(WireSponsor?[] sponsors) =>
-        sponsors.Select(sponsor => string.IsNullOrWhiteSpace(sponsor?.BioguideId)
-            ? throw new InvalidDataException("Bill sponsor has no bioguide ID.")
+        sponsors.Select(sponsor => sponsor?.BioguideId is null || !BioguideId.IsValid(sponsor.BioguideId)
+            ? throw new InvalidDataException("Bill sponsor has no valid bioguide ID.")
             : sponsor.BioguideId).Distinct(StringComparer.Ordinal).ToArray();
 
     private sealed record WireDetail(WireBill? Bill);

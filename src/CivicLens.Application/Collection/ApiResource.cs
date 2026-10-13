@@ -7,7 +7,9 @@ namespace CivicLens.Application.Collection;
 public enum ApiResource
 {
     BillList,
-    Bill
+    Bill,
+    BillCosponsors,
+    BillActions
 }
 
 public sealed class ApiResourceJsonConverter : JsonStringEnumConverter<ApiResource>

@@ -86,6 +86,8 @@ public sealed class BillStreamWindowTests
     [InlineData("&offset=250&limit=250&format=json&api_key=DEMO_KEY")]
     [InlineData("&offset=-250&limit=250&format=json")]
     [InlineData("&offset=250&offset=500&limit=250&format=json")]
+    [InlineData("&offset=0250&limit=250&format=json")]
+    [InlineData("&offset=00&limit=250&format=json")]
     [InlineData("&limit=250&format=json&congress")]
     public void AListUrlWithAnyOtherParameterHasNoWindowSoAJobCannotWidenItsPageOrCarryACredential(string parameters)
     {
