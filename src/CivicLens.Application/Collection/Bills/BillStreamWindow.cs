@@ -9,6 +9,8 @@ public readonly record struct BillStreamWindow(DateOnly FirstDay, DateOnly LastD
     public const int PageLimit = 250;
     private const string FromParameter = "fromDateTime";
     private const string ToParameter = "toDateTime";
+    private const string SortParameter = "sort";
+    private const string OldestUpdateFirst = "updateDate asc";
     private const string DateTimeFormat = "yyyy-MM-dd'T'HH:mm:ss'Z'";
     private static readonly TimeSpan ClosingDelay = TimeSpan.FromHours(6);
 
@@ -28,16 +30,20 @@ public readonly record struct BillStreamWindow(DateOnly FirstDay, DateOnly LastD
     {
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)) return null;
         var query = HttpUtility.ParseQueryString(uri.Query);
+        if (query[SortParameter] != OldestUpdateFirst) return null;
         if (!TryReadDay(query[FromParameter], out var from) || !TryReadDay(query[ToParameter], out var to)) return null;
         var window = new BillStreamWindow(from.AddDays(1), to.AddDays(-1));
         return window.FirstDay <= window.LastDay ? window : null;
     }
 
+    public static bool IsRequestUrl(string sourceUrl, string url) =>
+        url.StartsWith(sourceUrl + "?", StringComparison.Ordinal) && TryRead(url) is not null;
+
     public bool IsBehind(DateTimeOffset now) => LastDay < LastClosedDay(now);
 
     public string RequestUrl(string sourceUrl) =>
         $"{sourceUrl}?{FromParameter}={Format(FirstDay.AddDays(-1))}&{ToParameter}={Format(LastDay.AddDays(1))}" +
-        $"&limit={PageLimit}&format=json";
+        $"&{SortParameter}={HttpUtility.UrlEncode(OldestUpdateFirst)}&limit={PageLimit}&format=json";
 
     public bool Matches(string url) => TryRead(url) == this;
 

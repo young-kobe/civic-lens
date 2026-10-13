@@ -7,7 +7,7 @@ namespace CivicLens.Tests.Application.Collection.Bills;
 public sealed class CongressBillListParserTests
 {
     private static readonly BillStreamWindow Window = new(new DateOnly(2025, 1, 3), new DateOnly(2025, 1, 4));
-    private const string WindowQuery = "fromDateTime=2025-01-02T00:00:00Z&toDateTime=2025-01-05T00:00:00Z";
+    private const string WindowQuery = "fromDateTime=2025-01-02T00:00:00Z&sort=updateDate asc&toDateTime=2025-01-05T00:00:00Z";
 
     [Fact]
     public void ValidPageYieldsItemsWithDetailUrlsBuiltFromCongressTypeAndNumber()
@@ -84,7 +84,7 @@ public sealed class CongressBillListParserTests
     public void NextLinkForAnotherWindowIsRejectedBecauseTheCursorBelongsToOneWindow()
     {
         Assert.Throws<InvalidDataException>(() => Parse(PageWithNext(
-            "https://api.congress.gov/v3/bill?fromDateTime=2025-02-02T00:00:00Z&toDateTime=2025-02-05T00:00:00Z")));
+            "https://api.congress.gov/v3/bill?fromDateTime=2025-02-02T00:00:00Z&sort=updateDate asc&toDateTime=2025-02-05T00:00:00Z")));
     }
 
     private static string PageWithNext(string next) => "{\"bills\":[],\"pagination\":{\"next\":\"" + next + "\"}}";

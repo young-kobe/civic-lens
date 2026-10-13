@@ -48,9 +48,13 @@ public sealed class ConfiguredCollectionSource
         return request;
     }
 
-    public CollectionJobDefinition CreateApiJobDefinition(string url, DateOnly currentDate)
+    public CollectionJobDefinition CreateApiJobDefinition(ApiResource resource, string url, DateOnly currentDate)
     {
-        var definition = PrepareDefinition(ReadSource(), currentDate, null, article: false) with { Url = url };
+        var definition = PrepareDefinition(ReadSource(), currentDate, null, article: false) with
+        {
+            ApiResource = resource,
+            Url = url
+        };
         definition.Validate();
         return definition;
     }
@@ -62,14 +66,16 @@ public sealed class ConfiguredCollectionSource
         if (source.ApiParser != ApiParser.CongressBillList)
             throw new ArgumentException("Bill stream admission requires a configured Congress bill list source.");
         var template = PrepareDefinition(source, currentDate, null, article: false);
-        var details = page.Bills.Where(bill => bill.Congress >= source.MinimumCongress)
-            .Select(bill => new BillStreamJob(BillStreamJobKeys.Detail(SourceId, bill), template with { Url = bill.DetailUrl(source.Url) }));
-        var jobs = page.Next is null
-            ? details
-            : details.Append(new BillStreamJob(BillStreamJobKeys.NextPage(SourceId, listJobId), template with { Url = page.Next }));
+        var bills = page.Bills.Where(bill => bill.Congress >= source.MinimumCongress)
+            .Select(bill => new BillStreamJob(BillStreamJobKeys.Detail(SourceId, bill),
+                template with { ApiResource = ApiResource.Bill, Url = bill.DetailUrl(source.Url) }))
+            .DistinctBy(job => job.IdempotencyKey);
+        var nextPage = page.Next is null
+            ? null
+            : new BillStreamJob(BillStreamJobKeys.NextPage(SourceId, listJobId),
+                CreateApiJobDefinition(ApiResource.BillList, page.Next, currentDate));
         var policy = source.AdmissionPolicy ?? new DiscoveryAdmissionPolicy();
-        return new BillStreamAdmission(SourceId, policy, template, window,
-            [.. jobs.DistinctBy(job => job.IdempotencyKey)], EndsWindow: page.Next is null);
+        return new BillStreamAdmission(SourceId, policy, template, window, [.. bills], nextPage);
     }
 
     private CollectionJobDefinition PrepareDefinition(WatchedSourceConfiguration source, DateOnly currentDate,

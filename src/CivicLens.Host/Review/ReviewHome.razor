@@ -72,21 +72,18 @@
                             </Head>
                             <Row Context="item">
                                 <td>
-                                    <a class="cell-title" href="@($"/Documents/Comparison?comparisonId={item.Comparison.ComparisonId}")">@SourceLabels.Document(item.RequestedUrl)</a>
-                                    @if (item.Comparison.Hunks.Length > 0)
-                                    {
-                                        <RedlineExcerpt Hunk="item.Comparison.Hunks[0]" />
-                                    }
+                                    <a class="cell-title" href="@($"/Documents/Comparison?comparisonId={item.ComparisonId}")">@SourceLabels.Document(item.RequestedUrl)</a>
+                                    <RedlineExcerpt Hunk="item.FirstPassage" />
                                 </td>
                                 <td class="fit hide-narrow">@SourceLabels.Name(configuration, item.SourceId)</td>
-                                <td class="time"><Timestamp Value="item.AfterObservedAtUtc" /></td>
-                                <td class="num hide-narrow">@item.Comparison.Hunks.Length</td>
+                                <td class="time"><Timestamp Value="item.ObservedAtUtc" /></td>
+                                <td class="num hide-narrow">@item.PassageCount</td>
                                 <td class="fit">
-                                    @{ var changeDrafting = DocumentChangeAnalysisDisplay.For(analyses.GetValueOrDefault(item.Comparison.ComparisonId)); }
+                                    @{ var changeDrafting = DocumentChangeAnalysisDisplay.For(analyses.GetValueOrDefault(item.ComparisonId)); }
                                     <StatusBadge Tone="changeDrafting.Tone" Text="@changeDrafting.Label" />
                                 </td>
                                 <td class="act">
-                                    <Button Variant="ButtonVariant.Primary" Small="true" Type="submit" form="start-draft" name="comparisonId" value="@item.Comparison.ComparisonId">Start draft</Button>
+                                    <Button Variant="ButtonVariant.Primary" Small="true" Type="submit" form="start-draft" name="comparisonId" value="@item.ComparisonId">Start draft</Button>
                                 </td>
                             </Row>
                             <Empty>

@@ -175,14 +175,56 @@ public sealed class CongressBillSourceConfigurationTests
     public void WindowAndDetailJobsStayBoundToTheSourceWhileOtherUrlsAreRejected()
     {
         var configured = new ConfiguredCollectionSource(Configuration(), "congress-bills", Backfill);
-        var window = new BillStreamWindow(Backfill, Backfill);
+        var listUrl = new BillStreamWindow(Backfill, Backfill).RequestUrl("https://api.congress.gov/v3/bill");
+        const string detailUrl = "https://api.congress.gov/v3/bill/119/hr/1?format=json";
 
-        var listJob = configured.CreateApiJobDefinition(window.RequestUrl("https://api.congress.gov/v3/bill"), Backfill);
-        var detailJob = configured.CreateApiJobDefinition("https://api.congress.gov/v3/bill/119/hr/1?format=json", Backfill);
+        var listJob = configured.CreateApiJobDefinition(ApiResource.BillList, listUrl, Backfill);
+        var detailJob = configured.CreateApiJobDefinition(ApiResource.Bill, detailUrl, Backfill);
 
         Assert.Equal(CollectionMode.Api, listJob.Mode);
         Assert.Equal(CollectionCredentials.CongressGov, detailJob.Credential);
-        Assert.Throws<ArgumentException>(() => configured.CreateApiJobDefinition("https://api.congress.gov/v3/member", Backfill));
+        Assert.Throws<ArgumentException>(() => configured.CreateApiJobDefinition(ApiResource.Bill, "https://api.congress.gov/v3/member", Backfill));
+    }
+
+    [Theory]
+    [InlineData(ApiResource.Bill, "https://api.congress.gov/v3/bill?fromDateTime=2025-01-02T00:00:00Z&toDateTime=2025-01-04T00:00:00Z&sort=updateDate+asc&limit=250&format=json")]
+    [InlineData(ApiResource.BillList, "https://api.congress.gov/v3/bill/119/hr/1?format=json")]
+    [InlineData(ApiResource.Bill, "https://api.congress.gov/v3/bill/119/hr/01?format=json")]
+    [InlineData(ApiResource.Bill, "https://api.congress.gov/v3/bill/119/hr/1/actions?format=json")]
+    [InlineData(ApiResource.Bill, "https://api.congress.gov/v3/bill/119/xx/1?format=json")]
+    [InlineData(ApiResource.BillList, "https://api.congress.gov/v3/bill?fromDateTime=2025-01-02T00:00:00Z&toDateTime=2025-01-04T00:00:00Z&limit=250&format=json")]
+    public void AJobUrlMustHaveTheExactFormOfItsResourceSoTheWorkerNeverReadsItAsAnotherKind(ApiResource resource, string url)
+    {
+        var configured = new ConfiguredCollectionSource(Configuration(), "congress-bills", Backfill);
+
+        Assert.Throws<ArgumentException>(() => configured.CreateApiJobDefinition(resource, url, Backfill));
+    }
+
+    [Fact]
+    public void AResourceKindNeedsTheBillListSourceThatDefinesItsUrlForms()
+    {
+        var plain = CollectionJobDefinition.FromConfiguration(Configuration() with
+        {
+            Sources = [Configuration().Sources.Single() with
+            {
+                ApiParser = null,
+                MinimumCongress = null,
+                BackfillFrom = null,
+                Coverage = [new SourceCoverageConfiguration { PersonId = "with-id-a" }]
+            }]
+        }, "congress-bills", Backfill);
+
+        Assert.Throws<ArgumentException>(() => (plain with
+        {
+            ApiResource = ApiResource.Bill,
+            Url = "https://api.congress.gov/v3/bill/119/hr/1?format=json"
+        }).Validate());
+        Assert.Throws<ArgumentException>(() => (plain with
+        {
+            ConfigurationRevision = null,
+            CoverageAsOf = null,
+            ApiResource = ApiResource.Bill
+        }).Validate());
     }
 
     [Fact]

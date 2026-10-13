@@ -131,7 +131,8 @@ public sealed partial class PostgresCollectionJobStore
             case ApiParser.CongressBillList:
                 var cursor = await ReadCursorAsync(db, source.Id, cancellationToken);
                 var window = BillStreamWindow.Next(cursor, source.BackfillFrom!.Value, now);
-                return window is null ? null : configured.CreateApiJobDefinition(window.Value.RequestUrl(source.Url), currentDate);
+                return window is null ? null : configured.CreateApiJobDefinition(
+                    ApiResource.BillList, window.Value.RequestUrl(source.Url), currentDate);
             default:
                 throw new ArgumentOutOfRangeException(nameof(source));
         }
@@ -148,7 +149,7 @@ public sealed partial class PostgresCollectionJobStore
                  WHERE state IN ('Pending','Running','WaitingToRetry')
                    AND definition_json::jsonb ->> 'sourceId' = @source_id
                    AND (definition_json::jsonb ->> 'url' = @requested_url
-                        OR starts_with(definition_json::jsonb ->> 'url', @requested_url || '?')))
+                        OR definition_json::jsonb ->> 'apiResource' = 'billList'))
             """;
         command.Parameters.Add(new NpgsqlParameter("source_id", sourceId));
         command.Parameters.Add(new NpgsqlParameter("requested_url", requestedUrl));

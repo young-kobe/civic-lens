@@ -8,5 +8,8 @@ public sealed record BillStreamAdmission(
     DiscoveryAdmissionPolicy Policy,
     CollectionJobDefinition Template,
     BillStreamWindow Window,
-    IReadOnlyList<BillStreamJob> Jobs,
-    bool EndsWindow);
+    IReadOnlyList<BillStreamJob> Bills,
+    BillStreamJob? NextPage)
+{
+    public bool EndsWindow => NextPage is null;
+}

@@ -47,7 +47,7 @@ public sealed class BillStreamWindowTests
     {
         var window = new BillStreamWindow(Backfill, new DateOnly(2025, 1, 9));
 
-        Assert.Equal("https://api.congress.gov/v3/bill?fromDateTime=2025-01-02T00:00:00Z&toDateTime=2025-01-10T00:00:00Z&limit=250&format=json",
+        Assert.Equal("https://api.congress.gov/v3/bill?fromDateTime=2025-01-02T00:00:00Z&toDateTime=2025-01-10T00:00:00Z&sort=updateDate+asc&limit=250&format=json",
             window.RequestUrl("https://api.congress.gov/v3/bill"));
     }
 
@@ -58,6 +58,26 @@ public sealed class BillStreamWindowTests
 
         Assert.Equal(window, BillStreamWindow.TryRead(window.RequestUrl("https://api.congress.gov/v3/bill")));
         Assert.Null(BillStreamWindow.TryRead("https://api.congress.gov/v3/bill/119/hr/1?format=json"));
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("&sort=updateDate+desc")]
+    public void AListUrlWithoutOldestUpdateFirstOrderHasNoWindowBecauseItsPagesCouldSkipBills(string sort)
+    {
+        var url = "https://api.congress.gov/v3/bill?fromDateTime=2025-01-02T00:00:00Z&toDateTime=2025-01-10T00:00:00Z" +
+            sort + "&offset=250&limit=250&format=json";
+
+        Assert.Null(BillStreamWindow.TryRead(url));
+    }
+
+    [Fact]
+    public void TheNextLinkFormOfTheSortStillNamesTheWindow()
+    {
+        var url = "https://api.congress.gov/v3/bill?fromDateTime=2025-01-02T00:00:00Z&sort=updateDate asc" +
+            "&toDateTime=2025-01-10T00:00:00Z&offset=250&limit=250&format=json";
+
+        Assert.Equal(new BillStreamWindow(Backfill, new DateOnly(2025, 1, 9)), BillStreamWindow.TryRead(url));
     }
 
     [Fact]

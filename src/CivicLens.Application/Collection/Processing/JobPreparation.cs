@@ -80,40 +80,33 @@ public sealed class JobPreparation(
     private async Task<JobPreparationResult> PrepareApiAsync(CollectionJobRecord job, string artifactRoot,
         CancellationToken cancellationToken)
     {
-        var revision = job.Definition.ConfigurationRevision;
-        var parser = revision?.Configuration.Sources.Single(source => source.Id == job.Definition.SourceId).ApiParser;
-        switch (parser)
+        switch (job.Definition.ApiResource)
         {
             case null:
+            case ApiResource.Bill:
                 return JobPreparationResult.Prepared();
-            case ApiParser.CongressBillList:
-                return await PrepareBillListAsync(job, revision!, artifactRoot, cancellationToken);
+            case ApiResource.BillList:
+                var result = await AdmitBillListAsync(job, artifactRoot, cancellationToken);
+                return JobPreparationResult.Prepared(admitted: result.AdmittedCount, deferred: result.DeferredCount,
+                    duplicates: result.DuplicateCount);
             default:
                 throw new ArgumentOutOfRangeException(nameof(job));
         }
     }
 
-    private async Task<JobPreparationResult> PrepareBillListAsync(CollectionJobRecord job,
-        CollectionConfigurationRevision revision, string artifactRoot, CancellationToken cancellationToken)
-    {
-        var window = BillStreamWindow.TryRead(job.Definition.Url);
-        if (window is null) return JobPreparationResult.Prepared();
-        var result = await AdmitBillListAsync(job, revision, window.Value, artifactRoot, cancellationToken);
-        return JobPreparationResult.Prepared(admitted: result.AdmittedCount, deferred: result.DeferredCount,
-            duplicates: result.DuplicateCount);
-    }
-
-    private async Task<DiscoveryAdmissionResult> AdmitBillListAsync(CollectionJobRecord job,
-        CollectionConfigurationRevision revision, BillStreamWindow window, string artifactRoot,
+    private async Task<DiscoveryAdmissionResult> AdmitBillListAsync(CollectionJobRecord job, string artifactRoot,
         CancellationToken cancellationToken)
     {
+        var window = BillStreamWindow.TryRead(job.Definition.Url)
+            ?? throw new InvalidDataException("Bill list job URL has no window.");
         var jobAttempt = job.Attempts.Single(item => item.Resolution?.Outcome == CollectionJobAttemptOutcome.Succeeded);
         var stored = await attempts.GetAsync(jobAttempt.AttemptId, cancellationToken);
         if (stored?.AttemptResult is not CapturedAttemptResult captured)
             throw new InvalidDataException("Bill list attempt has no captured response.");
         var body = await bodies.ReadAsync(captured, artifactRoot, cancellationToken);
         var page = CongressBillListParser.Parse(body, jobAttempt.Request, window);
-        var configured = new ConfiguredCollectionSource(revision, job.Definition.SourceId, job.Definition.CoverageAsOf);
+        var configured = new ConfiguredCollectionSource(job.Definition.ConfigurationRevision!, job.Definition.SourceId,
+            job.Definition.CoverageAsOf);
         return await billAdmissions.AdmitListPageAsync(configured, job.JobId, window, page, cancellationToken);
     }
 

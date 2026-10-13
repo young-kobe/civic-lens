@@ -84,7 +84,7 @@ public sealed class PostgresBillStreamTests(PostgresCollection postgres) : IAsyn
     }
 
     [Fact]
-    public async Task ListPageAdmitsRecentBillsOnlyOnceAndLeavesTheCursorUntilTheLastPage()
+    public async Task ListPageAdmitsRecentBillsOnlyOnceAndLeavesTheCursorUntilAPassAdmitsNothingNew()
     {
         var source = Source();
         var window = new BillStreamWindow(Backfill, Backfill.AddDays(1));
@@ -105,8 +105,53 @@ public sealed class PostgresBillStreamTests(PostgresCollection postgres) : IAsyn
             new CongressBillListPage([Bill(119, 1), Bill(119, 3)], null), default);
         Assert.Equal(["https://api.congress.gov/v3/bill/119/hr/3?format=json"], last.Jobs.Select(job => job.Url));
         Assert.Equal(1, last.DuplicateCount);
-        Assert.Equal(window.LastDay, await ReadCursorAsync());
+        Assert.Null(await ReadCursorAsync());
         Assert.Equal(3, (await store.ListAsync(10, default)).Count);
+
+        await store.AdmitListPageAsync(source, "repeat-one", window, first, default);
+        Assert.Null(await ReadCursorAsync());
+        await store.AdmitListPageAsync(source, "repeat-two", window, new CongressBillListPage([Bill(119, 3)], null), default);
+        Assert.Equal(window.LastDay, await ReadCursorAsync());
+    }
+
+    [Fact]
+    public async Task ABillAdmittedOnAnEarlierPageKeepsTheWindowOpenAfterAQuietLastPage()
+    {
+        var window = new BillStreamWindow(Backfill, Backfill);
+        var next = window.RequestUrl(SourceUrl) + "&offset=250";
+
+        await store.AdmitListPageAsync(Source(), "page-one", window, new CongressBillListPage([Bill(119, 1)], next), default);
+        await store.AdmitListPageAsync(Source(), "page-two", window, new CongressBillListPage([], null), default);
+
+        Assert.Null(await ReadCursorAsync());
+        Assert.Equal(0, await ScalarAsync("SELECT pass_admitted_bills FROM bill_stream_cursors"));
+    }
+
+    [Fact]
+    public async Task AWindowThatAdmittedBillsIsListedAgainAtOnceEvenWhenCaughtUp()
+    {
+        await store.SynchronizeAsync(Configuration(), default);
+        await ExecuteAsync(connectionString, $"UPDATE collection_source_schedules SET next_due_utc_ticks = {DateTimeOffset.UtcNow.AddDays(1).UtcTicks}");
+        var caughtUp = new BillStreamWindow(Backfill, BillStreamWindow.LastClosedDay(DateTimeOffset.UtcNow));
+
+        await store.AdmitListPageAsync(Source(), "caught-up", caughtUp, new CongressBillListPage([Bill(119, 1)], null), default);
+
+        Assert.True(await ReadNextDueAsync() <= DateTimeOffset.UtcNow.UtcTicks);
+        Assert.Null(await ReadCursorAsync());
+    }
+
+    [Fact]
+    public async Task AnUnfinishedNextPageJobBlocksANewCheckOfTheSource()
+    {
+        await store.SynchronizeAsync(Configuration(), default);
+        var window = new BillStreamWindow(Backfill, Backfill);
+        await store.AdmitListPageAsync(Source(), "first-pass", window,
+            new CongressBillListPage([Bill(119, 1)], window.RequestUrl(SourceUrl) + "&offset=250"), default);
+        await ExecuteAsync(connectionString, "UPDATE collection_source_schedules SET next_due_utc_ticks = 0");
+
+        await store.AdvanceDueAsync(10, default);
+
+        Assert.DoesNotContain(await store.ListAsync(10, default), job => job.IdempotencyKey.StartsWith("scheduled-check/", StringComparison.Ordinal));
     }
 
     [Fact]

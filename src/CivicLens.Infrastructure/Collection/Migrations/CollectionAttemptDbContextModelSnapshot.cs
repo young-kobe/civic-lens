@@ -362,9 +362,13 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("character varying(128)")
                         .HasColumnName("source_id");
 
-                    b.Property<DateOnly>("LastProcessedDay")
+                    b.Property<DateOnly?>("LastProcessedDay")
                         .HasColumnType("date")
                         .HasColumnName("last_processed_day");
+
+                    b.Property<int>("PassAdmittedBills")
+                        .HasColumnType("integer")
+                        .HasColumnName("pass_admitted_bills");
 
                     b.Property<long>("UpdatedAtUtcTicks")
                         .HasColumnType("bigint")
@@ -374,6 +378,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.ToTable("bill_stream_cursors", null, t =>
                         {
+                            t.HasCheckConstraint("ck_bill_stream_cursors_pass_admitted_bills", "pass_admitted_bills >= 0");
+
                             t.HasCheckConstraint("ck_bill_stream_cursors_updated", "updated_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
                         });
                 });

@@ -137,7 +137,7 @@ public sealed class PostgresDocumentChangeReviewStoreTests(PostgresCollection po
         do
         {
             var page = await reviews.ListEligibleComparisonsAsync(cursor, 1, default);
-            actual.AddRange(page.Items.Select(item => item.Comparison.ComparisonId));
+            actual.AddRange(page.Items.Select(item => item.ComparisonId));
             cursor = PageCursor.Parse(page.OlderCursor);
             Assert.True(++pages <= 12);
         } while (cursor is not null);
@@ -305,7 +305,7 @@ public sealed class PostgresDocumentChangeReviewStoreTests(PostgresCollection po
         var walk = await PageWalk.RunAsync(async cursor =>
         {
             var page = await reviews.ListEligibleComparisonsAsync(cursor, 2, default);
-            return (page.Items.Select(item => item.Comparison.ComparisonId).ToArray(), page.NewerCursor, page.OlderCursor);
+            return (page.Items.Select(item => item.ComparisonId).ToArray(), page.NewerCursor, page.OlderCursor);
         });
 
         walk.AssertExact(expected);
@@ -320,8 +320,28 @@ public sealed class PostgresDocumentChangeReviewStoreTests(PostgresCollection po
 
         var page = await reviews.ListEligibleComparisonsAsync(null, 10, default);
 
-        Assert.Equal(open.ComparisonId, Assert.Single(page.Items).Comparison.ComparisonId);
+        Assert.Equal(open.ComparisonId, Assert.Single(page.Items).ComparisonId);
         Assert.Equal(1, (await reviews.GetOverviewAsync(default)).NewChanges);
+    }
+
+    [Fact]
+    public async Task NewChangesListReadsStoredPassagesWhileStartingADraftStillChecksTheEvidence()
+    {
+        var comparison = await SaveComparisonAsync();
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            "UPDATE document_comparisons SET settings_version = 'tampered' WHERE comparison_id = @id", connection);
+        command.Parameters.AddWithValue("id", comparison.ComparisonId);
+        Assert.Equal(1, await command.ExecuteNonQueryAsync());
+
+        var item = Assert.Single((await reviews.ListEligibleComparisonsAsync(null, 10, default)).Items);
+
+        Assert.Equal(comparison.Hunks.Length, item.PassageCount);
+        Assert.Equal((comparison.Hunks[0].BeforeText, comparison.Hunks[0].AfterText),
+            (item.FirstPassage.BeforeText, item.FirstPassage.AfterText));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => new CreateDocumentChangeDraft(reviews)
+            .ExecuteAsync(new("auth0|owner", ReviewRole.Owner), new(comparison.ComparisonId, "key")));
     }
 
     // The newest drafts are approved. If the filter ran after the limit, the first needs-action page would come back short.

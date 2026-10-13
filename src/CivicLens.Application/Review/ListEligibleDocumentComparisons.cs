@@ -5,7 +5,7 @@ namespace CivicLens.Application.Review;
 
 public sealed class ListEligibleDocumentComparisons(IDocumentChangeReviewStore store, ReviewCatalog catalog)
 {
-    public Task<EligibleDocumentComparisonPage> ExecuteAsync(ReviewActor actor, string? cursor,
+    public Task<NewDocumentChangePage> ExecuteAsync(ReviewActor actor, string? cursor,
         int limit = PageLimit.Default, CancellationToken cancellationToken = default)
     {
         ReviewAuthorization.RequireReviewer(actor);

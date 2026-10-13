@@ -170,23 +170,37 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
         return new(items, slice.NewerCursor, slice.OlderCursor);
     }
 
-    public async Task<EligibleDocumentComparisonPage> ListEligibleComparisonsAsync(PageCursor? cursor, int limit,
+    public async Task<NewDocumentChangePage> ListEligibleComparisonsAsync(PageCursor? cursor, int limit,
         CancellationToken cancellationToken)
     {
         ValidatePage(limit);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
-        var keys = from comparison in ReviewQueries.EligibleComparisons(db)
+        var rows = from comparison in ReviewQueries.EligibleComparisons(db)
                    join extraction in db.Set<DocumentExtractionRow>() on comparison.AfterExtractionId equals extraction.ExtractionId
                    join attempt in db.Attempts on extraction.AttemptId equals attempt.AttemptId
-                   select new EligibleKey { ComparisonId = comparison.ComparisonId, ObservedTicks = attempt.ObservedAtUtcTicks };
-        var fetched = await ReviewKeyset.Page(keys.AsNoTracking(), cursor, key => key.ObservedTicks, key => key.ComparisonId).Take(limit + 1).ToArrayAsync(cancellationToken);
-        var slice = KeysetSlice<EligibleKey>.Create(fetched, limit, cursor, key => (key.ObservedTicks, key.ComparisonId));
-        var verified = await ReadVerifiedComparisonsAsync(db, slice.Items.Select(key => key.ComparisonId).ToArray(), cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-        var items = slice.Items.Select(key => verified.GetValueOrDefault(key.ComparisonId)?.Summary)
-            .OfType<EligibleDocumentComparison>().ToImmutableArray();
-        return new(items, slice.NewerCursor, slice.OlderCursor);
+                   select new EligibleRow
+                   {
+                       ComparisonId = comparison.ComparisonId,
+                       ObservedTicks = attempt.ObservedAtUtcTicks,
+                       SourceId = attempt.SourceId,
+                       RequestedUrl = attempt.RequestedUrl,
+                       ResultJson = comparison.ResultJson
+                   };
+        var fetched = await ReviewKeyset.Page(rows.AsNoTracking(), cursor, row => row.ObservedTicks, row => row.ComparisonId).Take(limit + 1).ToArrayAsync(cancellationToken);
+        var slice = KeysetSlice<EligibleRow>.Create(fetched, limit, cursor, row => (row.ObservedTicks, row.ComparisonId));
+        return new([.. slice.Items.Select(ToNewChange)], slice.NewerCursor, slice.OlderCursor);
+    }
+
+    private static NewDocumentChange ToNewChange(EligibleRow row)
+    {
+        using var result = JsonDocument.Parse(row.ResultJson);
+        var hunks = result.RootElement.GetProperty("hunks");
+        if (hunks.GetArrayLength() == 0)
+            throw new InvalidOperationException("A stored comparison marked as changed has no passages.");
+        var firstPassage = hunks[0].Deserialize<DocumentComparisonHunk>(CollectionProtocol.JsonOptions)
+            ?? throw new InvalidOperationException("Stored comparison passage is missing.");
+        return new(row.ComparisonId, row.SourceId, row.RequestedUrl, new DateTimeOffset(row.ObservedTicks, TimeSpan.Zero),
+            hunks.GetArrayLength(), firstPassage);
     }
 
     public async Task<IReadOnlyList<UnpublishedApprovedDraft>> ListUnpublishedApprovedDraftsAsync(int limit,
@@ -272,10 +286,13 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
             _ => throw new ArgumentOutOfRangeException(nameof(filter))
         }).AsNoTracking();
 
-    private sealed record EligibleKey
+    private sealed record EligibleRow
     {
         public string ComparisonId { get; init; } = "";
         public long ObservedTicks { get; init; }
+        public string SourceId { get; init; } = "";
+        public string RequestedUrl { get; init; } = "";
+        public string ResultJson { get; init; } = "";
     }
 
     private sealed class UnpublishedKey

@@ -168,22 +168,23 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
     }
 
     [Fact]
-    public async Task BillListCaptureAdmitsItsBillJobsAndMovesTheCursorOnTheLastPage()
+    public async Task BillListCaptureAdmitsItsBillJobsAndKeepsTheCursorUntilAPassAdmitsNoNewBills()
     {
-        var job = await RunBillJobAsync(BillWindow.RequestUrl(BillSourceUrl), """{"bills":[{"congress":119,"type":"HR","number":"1","updateDate":"2025-01-03"},{"congress":118,"type":"HR","number":"2","updateDate":"2025-01-03"}],"pagination":{"count":2}}""");
+        var job = await RunBillJobAsync(ApiResource.BillList, BillWindow.RequestUrl(BillSourceUrl), """{"bills":[{"congress":119,"type":"HR","number":"1","updateDate":"2025-01-03"},{"congress":118,"type":"HR","number":"2","updateDate":"2025-01-03"}],"pagination":{"count":2}}""");
 
         var record = Assert.Single(await processing.GetByJobIdsAsync([job.JobId], default));
         Assert.Equal(EvidenceProcessingStatus.Succeeded, record.Status);
         Assert.Equal(1, record.AdmittedCount);
         var detail = Assert.Single(await jobs.ListAsync(10, default), item => item.JobId != job.JobId);
         Assert.Equal("https://api.congress.gov/v3/bill/119/hr/1?format=json", detail.Definition.Url);
-        Assert.Equal(BillWindow.LastDay, await ReadBillCursorAsync());
+        Assert.Equal(ApiResource.Bill, detail.Definition.ApiResource);
+        Assert.Null(await ReadBillCursorAsync());
     }
 
     [Fact]
     public async Task BillDetailCaptureCompletesWithoutAProcessingStageUntilItsParsersExist()
     {
-        var job = await RunBillJobAsync(BillSourceUrl + "/119/hr/1?format=json", """{"bill":{"congress":119}}""");
+        var job = await RunBillJobAsync(ApiResource.Bill, BillSourceUrl + "/119/hr/1?format=json", """{"bill":{"congress":119}}""");
 
         var record = Assert.Single(await processing.GetByJobIdsAsync([job.JobId], default));
         Assert.Equal(EvidenceProcessingStatus.Succeeded, record.Status);
@@ -195,7 +196,7 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
     [Fact]
     public async Task MalformedBillListCaptureBlocksPreparationAndLeavesTheCursorBehind()
     {
-        var job = await RunBillJobAsync(BillWindow.RequestUrl(BillSourceUrl), """{"bills":[{"congress":119,"type":"HR","number":"1"}],"pagination":{}}""");
+        var job = await RunBillJobAsync(ApiResource.BillList, BillWindow.RequestUrl(BillSourceUrl), """{"bills":[{"congress":119,"type":"HR","number":"1"}],"pagination":{}}""");
 
         var record = Assert.Single(await processing.GetByJobIdsAsync([job.JobId], default));
         Assert.Equal(EvidenceProcessingStatus.Blocked, record.Status);
@@ -430,11 +431,11 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
 
     private const string BillSourceUrl = "https://api.congress.gov/v3/bill";
 
-    private async Task<CollectionJobRecord> RunBillJobAsync(string url, string json)
+    private async Task<CollectionJobRecord> RunBillJobAsync(ApiResource resource, string url, string json)
     {
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var definition = new ConfiguredCollectionSource(CongressBillSourceConfigurationTests.Configuration(), "congress-bills", today)
-            .CreateApiJobDefinition(url, today);
+            .CreateApiJobDefinition(resource, url, today);
         var job = await jobs.EnqueueAsync(definition, "bill-list-once", default);
         var runner = new RunCollectionJob(jobs, attempts, new FileCollectionReceiptHandoffStore(artifactRoot),
             new CaptureArtifactVerifier(), new ApiFixtureCollector(json));
