@@ -72,7 +72,7 @@ public sealed partial class ReviewHome
     protected override async Task OnInitializedAsync()
     {
         actor = Actors.GetActor((await AuthenticationState).User);
-        canPublish = actor.Role == ReviewRole.Owner && Services.GetService<PublishDocumentChanges>() is not null;
+        canPublish = actor.Role == ReviewRole.Owner && Services.GetService<PublishRelease>() is not null;
         publishingOff = actor.Role == ReviewRole.Owner && !canPublish;
         if (HttpMethods.IsPost(HttpContext.Request.Method)) return;
         var cancellationToken = HttpContext.RequestAborted;

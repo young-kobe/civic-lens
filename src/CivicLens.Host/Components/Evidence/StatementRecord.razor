@@ -40,15 +40,13 @@
             List<Fact> facts =
             [
                 new("Statement date", Content.StatementDate),
-                new("Speakers", JoinOrNone(Content.Speakers)),
-                new("Other speakers", JoinOrNone(Content.OtherSpeakers)),
-                new("Issues", JoinOrNone(Content.Issues)),
-                new("Policy areas", JoinOrNone(Content.PolicyAreas))
+                Fact.List("Speakers", Content.Speakers),
+                Fact.List("Other speakers", Content.OtherSpeakers),
+                Fact.List("Issues", Content.Issues),
+                Fact.List("Policy areas", Content.PolicyAreas)
             ];
-            if (Content.BillNumbers is not null) facts.Add(new("Bill numbers", JoinOrNone(Content.BillNumbers)));
+            if (Content.BillNumbers is not null) facts.Add(Fact.List("Bill numbers", Content.BillNumbers));
             return facts;
         }
     }
-
-    private static string JoinOrNone(IReadOnlyList<string> values) => values.Count == 0 ? "None" : string.Join(", ", values);
 }

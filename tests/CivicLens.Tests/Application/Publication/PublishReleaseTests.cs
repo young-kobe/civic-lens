@@ -6,7 +6,7 @@ using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Tests.Application.Publication;
 
-public sealed class PublishDocumentChangesTests
+public sealed class PublishReleaseTests
 {
     [Fact]
     public async Task ReviewerCannotPublishBecauseOnlyTheOwnerSpeaksForTheSite()
@@ -36,8 +36,8 @@ public sealed class PublishDocumentChangesTests
         Assert.Equal("Mayor Example", Assert.Single(record.Officials).Name);
         Assert.Equal(PublicationScenario.ApprovedAt, record.ApprovedAtUtc);
         Assert.Equal(scenario.Clock.Now, record.FirstPublishedAtUtc);
-        Assert.Equal(new PublishedRevisionBinding(draft, 1), Assert.Single(scenario.Publications.LastCommit!.Records));
-        Assert.Equal(new ReviewStateExpectation(draft, 1, 1), Assert.Single(scenario.Publications.LastCommit.AddedRecords));
+        Assert.Equal(new PublishedRevisionBinding(PublishedRecordKind.DocumentChange, draft, 1), Assert.Single(scenario.Publications.LastCommit!.Records));
+        Assert.Equal(new ReviewStateExpectation(PublishedRecordKind.DocumentChange, draft, 1, 1), Assert.Single(scenario.Publications.LastCommit.AddedRecords));
     }
 
     [Fact]
@@ -51,7 +51,7 @@ public sealed class PublishDocumentChangesTests
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k", third, first, second));
 
         Assert.Equal(1, scenario.Reviews.ReadCount);
-        Assert.Equal([third, first, second], scenario.Publications.LastCommit!.AddedRecords.Select(added => added.DraftId));
+        Assert.Equal([third, first, second], scenario.Publications.LastCommit!.AddedRecords.Select(added => added.RecordId));
     }
 
     [Fact]
@@ -152,7 +152,7 @@ public sealed class PublishDocumentChangesTests
             scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k", draft)));
 
         Assert.Empty(scenario.Releases.Directories);
-        Assert.Equal(1, scenario.Releases.DiscardedStagings);
+        Assert.Equal(0, scenario.Releases.BeginCount);
     }
 
     [Fact]
@@ -367,7 +367,7 @@ public sealed class PublishDocumentChangesTests
         Assert.Contains(PublicationProtocol.RecordDataPath(second), scenario.Releases.WriteOrder);
         Assert.Contains(PublicationProtocol.RecordPagePath(second), scenario.Releases.WriteOrder);
         Assert.Equal([PublicationProtocol.ManifestPath], scenario.Releases.ReadPaths);
-        Assert.Equal(new ReviewStateExpectation(second, 1, 1), Assert.Single(scenario.Publications.LastCommit!.AddedRecords));
+        Assert.Equal(new ReviewStateExpectation(PublishedRecordKind.DocumentChange, second, 1, 1), Assert.Single(scenario.Publications.LastCommit!.AddedRecords));
         Assert.Equal(2, scenario.Publications.LastCommit.Records.Length);
     }
 

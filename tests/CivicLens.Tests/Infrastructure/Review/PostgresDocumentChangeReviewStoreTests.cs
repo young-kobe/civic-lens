@@ -227,7 +227,7 @@ public sealed class PostgresDocumentChangeReviewStoreTests(PostgresCollection po
     [Fact]
     public async Task PublicationReadAcceptsTheLargestPublishWithTheSameQueryCountAsOneDraft()
     {
-        var drafts = await CreateDraftsAsync(PublishDocumentChanges.MaximumDrafts);
+        var drafts = await CreateDraftsAsync(PublishRelease.MaximumRecords);
         var counter = new ReadCommandCounter();
         var counted = CountedStore(counter);
 
@@ -236,7 +236,7 @@ public sealed class PostgresDocumentChangeReviewStoreTests(PostgresCollection po
         counter.ReadCount = 0;
         var batch = await counted.GetForPublicationAsync([.. drafts.Select(draft => draft.DraftId)], default);
 
-        Assert.Equal(PublishDocumentChanges.MaximumDrafts, batch.Count);
+        Assert.Equal(PublishRelease.MaximumRecords, batch.Count);
         Assert.Equal(singleDraftReads, counter.ReadCount);
         Assert.InRange(counter.ReadCount, 1, 7);
     }

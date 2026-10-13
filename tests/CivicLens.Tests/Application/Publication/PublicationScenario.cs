@@ -1,11 +1,14 @@
 using CivicLens.Application.Paging;
 using System.Collections.Immutable;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using CivicLens.Application.Publication;
 using CivicLens.Application.Review;
 using CivicLens.Core.Collection;
 using CivicLens.Core.Documents;
 using CivicLens.Core.Review;
+using CivicLens.Core.Statements;
+using CivicLens.Tests.Application.Statements;
 using CivicLens.Publication.Contracts;
 using CivicLens.Tests.Fixtures;
 
@@ -21,9 +24,10 @@ internal sealed class PublicationScenario
     public FakePublicationStore Publications { get; } = new();
     public FakeReleaseDirectory Releases { get; } = new();
     public FakeReviewStore Reviews { get; } = new();
+    public FakeStatementReviewStore Statements { get; } = new();
     public Dictionary<string, string> OfficialNames { get; } = new() { ["mayor"] = "Mayor Example" };
 
-    public PublishDocumentChanges Publisher() => new(Publications, Releases, new FakeRenderer(), Reviews,
+    public PublishRelease Publisher() => new(Publications, Releases, new FakeRenderer(), Reviews, Statements,
         new PublicationCatalog(OfficialNames), Clock);
 
     public void SeedRelease(int recordCount, bool withFiles)
@@ -58,7 +62,36 @@ internal sealed class PublicationScenario
         Publications.ActiveReleaseNumber = 1;
     }
 
-    public static PublishDocumentChangesRequest Request(string key, params string[] draftIds) => new([.. draftIds], key);
+    public void SeedVersionOneRelease(string draftId)
+    {
+        var manifest = new JsonObject
+        {
+            ["schemaVersion"] = 1,
+            ["releaseNumber"] = 1,
+            ["publishedAtUtc"] = ApprovedAt,
+            ["records"] = new JsonArray(new JsonObject
+            {
+                ["recordId"] = draftId,
+                ["revisionNumber"] = 1,
+                ["headline"] = "Seeded by version one",
+                ["firstPublishedAtUtc"] = ApprovedAt
+            })
+        };
+        Releases.Directories["seeded"] = new()
+        {
+            [PublicationProtocol.ManifestPath] = JsonSerializer.SerializeToUtf8Bytes(manifest),
+            [PublicationProtocol.RecordDataPath(draftId)] = [],
+            [PublicationProtocol.RecordPagePath(draftId)] = []
+        };
+        Releases.Active = "seeded";
+        Publications.Committed.Add(new(1, "seeded", ApprovedAt, 1));
+        Publications.ActiveReleaseNumber = 1;
+    }
+
+    public static PublishReleaseRequest Request(string key, params string[] draftIds) =>
+        new([.. draftIds.Select(id => new PublishedRecordReference(PublishedRecordKind.DocumentChange, id))], key);
+
+    public static PublishReleaseRequest Request(string key, params PublishedRecordReference[] records) => new([.. records], key);
 
     public string AddDraft(char id, ImmutableArray<ReviewDecision>? decisions = null, string[]? officialIds = null,
         int citationStart = 6)
@@ -80,11 +113,26 @@ internal sealed class PublicationScenario
         return draftId;
     }
 
+    public string AddStatement(char id, ImmutableArray<ReviewDecision>? decisions = null, string[]? speakerIds = null)
+    {
+        var candidateId = new string(id, 64);
+        var extraction = Extraction($"Mayor said: housing matters.\nOther text {id}.\n", $"statement-{id}");
+        var revision = new StatementDraftRevision(candidateId, 1, "author", ApprovedAt, $"Statement {id}", "Summary", null, null,
+            [.. speakerIds ?? ["mayor"]], ["Council Member"], ["housing"], ["land-use"],
+            [new(new(extraction.ExtractionId, 12, 15), StatementQuotationKind.DirectQuotation)], ["HB 12"]);
+        var all = decisions ?? [Decision(candidateId, 1, ReviewDecisionKind.Approve)];
+        var concerns = ReviewPolicy.GetUnresolvedConcerns(all);
+        var review = new StatementReview(candidateId, revision, all.Length, ReviewPolicy.GetCurrentStatus(1, all, concerns),
+            [revision], all, concerns);
+        Statements.Publishable[candidateId] = new(review, "https://example.test/article", extraction);
+        return candidateId;
+    }
+
     public static ReviewDecision Decision(string draftId, int stateVersion, ReviewDecisionKind kind) =>
         new(new string((char)('a' + stateVersion), 32), draftId, 1, stateVersion, kind, "reviewer",
             kind == ReviewDecisionKind.Approve ? null : "Needs work.", [], ApprovedAt);
 
-    private static DocumentExtraction Extraction(string text, string attemptId) => new(
+    internal static DocumentExtraction Extraction(string text, string attemptId) => new(
         new(attemptId, "source", "https://example.test/", "https://example.test/", DateTimeOffset.UnixEpoch,
             new CollectionResponse(200, null, null, "text/html", []), new CaptureIdentity(new string('a', 64), 0)),
         "parser", "normalizer", text);
@@ -95,6 +143,8 @@ internal sealed class FakeRenderer : IReleaseRenderer
     public IReadOnlyList<ReleaseAsset> Assets { get; } = [new("assets/site.css", [1, 2, 3])];
     public Task<string> RenderRecordAsync(PublishedDocumentChange record, CancellationToken cancellationToken) =>
         Task.FromResult($"<html>{record.RecordId}</html>");
+    public Task<string> RenderStatementAsync(PublishedStatement record, CancellationToken cancellationToken) =>
+        Task.FromResult($"<html>statement {record.RecordId}</html>");
     public Task<string> RenderIndexAsync(PublicationRelease release, int page, CancellationToken cancellationToken) =>
         Task.FromResult($"<html>index {page} {release.Records.Length}</html>");
 }

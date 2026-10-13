@@ -477,19 +477,19 @@ The opt-in live test for statement drafting sends one paid request. Run it with 
 
 ### Publish a static release
 
-The owner can also publish from the Review home page. Select drafts in the Publish section and choose Review selection. The summary lists each headline as new or a replacement, and shows the release number. Choose Publish to confirm. The page lists recent releases read-only. Rollback stays in the CLI.
+The owner can also publish from the Review home page. Select records in the Publish section and choose Review selection. The list shows each record as a document change or a statement. The summary lists each headline with its kind, as new or a replacement, and shows the release number. Choose Publish to confirm. The page lists recent releases read-only. Rollback stays in the CLI.
 
 The CLI is a local owner command. Set `CIVIC_LENS_DATABASE`, `CIVIC_LENS_REVIEW_OWNER` (the owner subject recorded on the release), and `CIVIC_LENS_RELEASE_DIRECTORY` (an absolute path, for example `$PWD/.runtime/releases`). Publishing also needs `CIVIC_LENS_COLLECTION_CONFIG`, an absolute configuration path that supplies officials' display names. The command trusts the local operator, who already holds database credentials.
 
 ```sh
-dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases publish <idempotency-key> <draft-id> [<draft-id>...]
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases publish <idempotency-key> <kind>:<id> [<kind>:<id>...]
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases list [limit]
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases activate <release-number>
 ```
 
-`publish` adds or replaces each selected record's current revision. The revision must be approved with no unresolved concerns. The new release also keeps every record from the active release as hard links to that release's files. Disk grows with published records, not with the number of releases. The command builds the release in `staging/` and moves it to a unique directory under `releases/`. It then records the release as active in Postgres and points the relative `current` link at the release that Postgres records as active. The link swap holds the same Postgres lock as release commits, so overlapping commands cannot leave the link on an older release. A concurrent review decision, draft save, other release, or rollback makes the commit fail with exit code 1. The built directory is deleted and nothing is activated. Invalid input or a non-owner actor exits with code 2 and prints the rule that failed.
+Each record is written as `<kind>:<id>`. The kind is `documentChange` or `statement`. For example, use `documentChange:` and a 32-character draft ID, or `statement:` and a 64-character candidate ID. The command never guesses the kind from the ID. An unknown kind or a bad shape exits with code 2. `publish` adds or replaces each selected record's current revision. The revision must be approved with no unresolved concerns. The new release also keeps every record from the active release as hard links to that release's files. Disk grows with published records, not with the number of releases. The command builds the release in `staging/` and moves it to a unique directory under `releases/`. It then records the release as active in Postgres and points the relative `current` link at the release that Postgres records as active. The link swap holds the same Postgres lock as release commits, so overlapping commands cannot leave the link on an older release. A concurrent review decision, draft save, other release, or rollback makes the commit fail with exit code 1. The built directory is deleted and nothing is activated. Invalid input or a non-owner actor exits with code 2 and prints the rule that failed.
 
-Repeat the same key and drafts to receive the original result. The repeat also points the link at the recorded active release, so it repairs a link swap that failed after the commit. To roll back, activate an earlier release number. The next `publish` builds on the active release, so records added after it are not carried forward. `list` shows `activeReleaseNumber`, which is the release Postgres records as active, and `servedDirectoryName`, which is the release that the link serves. If they differ, run `releases activate` with the active release number. Releases are never deleted automatically.
+Repeat the same key and records to receive the original result. The repeat also points the link at the recorded active release, so it repairs a link swap that failed after the commit. To roll back, activate an earlier release number. The next `publish` builds on the active release, so records added after it are not carried forward. `list` shows `activeReleaseNumber`, which is the release Postgres records as active, and `servedDirectoryName`, which is the release that the link serves. If they differ, run `releases activate` with the active release number. Releases are never deleted automatically.
 
 To check that the public pages work without the operational application, stop the review workspace, worker, and Postgres, then serve the active release with a plain static server:
 
@@ -497,7 +497,7 @@ To check that the public pages work without the operational application, stop th
 python3 -m http.server 8090 --bind 127.0.0.1 --directory "$CIVIC_LENS_RELEASE_DIRECTORY/current"
 ```
 
-Open `http://127.0.0.1:8090/`. The site holds at most 2,000 published records. The index shows 50 records per page, with links to the previous and next pages. Each record page shows the account, the changes, the citations, and both full document versions. The production static server remains a deployment decision.
+Open `http://127.0.0.1:8090/`. The site holds at most 2,000 published records. The index shows 50 records per page, with links to the previous and next pages. A document change page shows the account, the changes, the citations, and both full document versions. A statement page shows the speakers, the statement date with its evidence, each quotation with its kind, and the full source text with the quotations marked. The index shows a kind label next to each headline. The production static server remains a deployment decision.
 
 ### Remaining operations
 

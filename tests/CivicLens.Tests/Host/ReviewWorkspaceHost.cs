@@ -44,6 +44,7 @@ public sealed class ReviewWorkspaceHost(PostgresCollection postgres)
     public PostgresCollectionAttemptStore Attempts { get; private set; } = null!;
     public PostgresDocumentExtractionStore Extractions { get; private set; } = null!;
     public PostgresDocumentComparisonStore Comparisons { get; private set; } = null!;
+    public string OfficialId { get; init; } = "person";
     public string OfficialName { get; init; } = "Test Official";
     public bool Publishing { get; init; } = true;
     public IssueConfiguration? Issues { get; init; }
@@ -91,9 +92,9 @@ public sealed class ReviewWorkspaceHost(PostgresCollection postgres)
         Directory.CreateDirectory(KeyDirectory);
         var collectionPath = Path.Combine(KeyDirectory, "sources.json");
         await File.WriteAllTextAsync(collectionPath, $$"""
-            {"version":2,"people":[{"id":"person","name":{{JsonSerializer.Serialize(OfficialName)}}}],
+            {"version":2,"people":[{"id":{{JsonSerializer.Serialize(OfficialId)}},"name":{{JsonSerializer.Serialize(OfficialName)}}}],
              "documentProfiles":[{"id":"main","selector":"main"}],
-             "sources":[{"id":"source","coverage":[{"personId":"person"}],
+             "sources":[{"id":"source","coverage":[{"personId":{{JsonSerializer.Serialize(OfficialId)}}}],
                "url":"https://example.test/pages/a","allowedOrigin":"https://example.test",
                "allowedPathPrefix":"/pages","documentProfileId":"main"}]}
             """);

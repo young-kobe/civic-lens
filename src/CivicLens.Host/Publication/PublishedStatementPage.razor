@@ -1,0 +1,36 @@
+@using CivicLens.Publication.Contracts
+
+<PublishedRecordFrame Headline="@Record.Headline" Summary="@Record.Summary" Facts="PublishedStatementView.Facts(Record)">
+    <Panel Title="Quotations" Id="quotations-title" Padded="true">
+        <p class="muted small">Each quote is the exact text of the source. Follow its link to see it marked in the full source text.</p>
+        <ul class="choices">
+            @for (var index = 0; index < Record.Quotations.Length; index++)
+            {
+                var quotation = Record.Quotations[index];
+                <li>
+                    <CitationQuote Label="@($"Quotation {index + 1}")" Quote="@quotation.Quote">
+                        <StatusBadge Text="@PublishedRecordLabels.Quotation(quotation.Kind)" />
+                        <a href="@("#" + PublishedRecordView.CitationAnchor(index))">Show in the full source text</a>
+                    </CitationQuote>
+                </li>
+            }
+            @if (Record.StatementDateEvidence is { } evidence)
+            {
+                <li>
+                    <CitationQuote Label="Evidence for the statement date" Quote="@evidence.Quote">
+                        <a href="@("#" + PublishedStatementView.StatementDateAnchor)">Show in the full source text</a>
+                    </CitationQuote>
+                </li>
+            }
+        </ul>
+    </Panel>
+
+    <Panel Title="Source text" Id="source-title" Padded="true">
+        <VersionSource Version="Record.Source" />
+        <DocumentText Label="Source text" Runs="CitedText.Split(Record.Source.Text, PublishedStatementView.Ranges(Record))" />
+    </Panel>
+</PublishedRecordFrame>
+
+@code {
+    [Parameter, EditorRequired] public PublishedStatement Record { get; set; } = default!;
+}

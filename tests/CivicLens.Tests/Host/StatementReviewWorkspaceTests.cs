@@ -1,12 +1,16 @@
 using System.Net;
 using AngleSharp.Dom;
 using AngleSharp.Html.Parser;
+using CivicLens.Application.Review;
 using CivicLens.Application.Statements;
+using CivicLens.Core.Documents;
 using CivicLens.Core.Review;
 using CivicLens.Core.Statements;
 using CivicLens.Infrastructure.Analysis;
 using CivicLens.Infrastructure.Documents;
+using CivicLens.Infrastructure.Review;
 using CivicLens.Infrastructure.Statements;
+using CivicLens.Publication.Contracts;
 using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
 using static CivicLens.Tests.Fixtures.StatementDraftFixtures;
@@ -22,7 +26,12 @@ public sealed class StatementReviewWorkspaceTests(PostgresCollection postgres) :
     private const string Reviewer = "auth0|friend";
     private const string Headline = "Warren announces a rent cap";
     private const string Quote = "a rent cap for tenants";
-    private readonly ReviewWorkspaceHost host = new(postgres) { Issues = StatementGateFixtures.Configuration() };
+    private readonly ReviewWorkspaceHost host = new(postgres)
+    {
+        Issues = StatementGateFixtures.Configuration(),
+        OfficialId = StatementDraftFixtures.Warren,
+        OfficialName = "Elizabeth Warren"
+    };
     private readonly string captureRoot = Path.Combine(Path.GetTempPath(), "civic-statement-pages-" + Guid.NewGuid().ToString("N"));
     private PostgresStatementAnalysisStore gates = null!;
     private PostgresStatementDraftStore drafts = null!;
@@ -138,6 +147,40 @@ public sealed class StatementReviewWorkspaceTests(PostgresCollection postgres) :
         var revision = (await reviews.GetAsync(candidate, default))!.Review.CurrentRevision!;
         Assert.Null(revision.StatementDate);
         Assert.Null(revision.StatementDateEvidence);
+    }
+
+    [Fact]
+    public async Task AMixedSelectionKeepsEachRecordKindThroughTheSummaryTheConfirmFormAndTheReleaseAsync()
+    {
+        var statement = await AiDraftedAsync();
+        SignIn(Owner);
+        var statementUrl = $"/Review/Statements/{statement}";
+        var fields = await SaveFieldsAsync(statementUrl);
+        fields.Add(new("Input.StatementDateChecked", "true"));
+        using var saved = await host.Client.PostAsync(statementUrl, new FormUrlEncodedContent(fields));
+        Assert.Equal(HttpStatusCode.Redirect, saved.StatusCode);
+        using var approved = await DecideAsync(statementUrl, "Approve");
+        Assert.Equal(HttpStatusCode.Redirect, approved.StatusCode);
+        var change = await ApprovedDocumentChangeAsync();
+
+        var home = await host.GetDocumentAsync("/Review");
+        var offered = home.QuerySelectorAll("input[name=publish]").Select(box => box.GetAttribute("value")).Order().ToList();
+        Assert.Equal([$"documentChange:{change}", $"statement:{statement}"], offered);
+        var kinds = home.QuerySelectorAll("[aria-labelledby='publish'] tbody tr").Select(row => row.QuerySelectorAll("td")[2].TextContent);
+        Assert.Equal(["Document change", "Statement"], kinds.Order());
+        var links = home.QuerySelectorAll("[aria-labelledby='publish'] a.cell-title").Select(link => link.GetAttribute("href"));
+        Assert.Contains($"/Review/Statements/{statement}", links);
+        Assert.Contains($"/Review/{change}", links);
+
+        var summary = await host.GetDocumentAsync("/Review?" + string.Join('&', offered.Select(value => "publish=" + Uri.EscapeDataString(value!))));
+        var confirm = Fields(summary.QuerySelector("#publish-confirm")!);
+        Assert.Equal(offered, confirm.Where(field => field.Key == "records").Select(field => field.Value).Order());
+        using var published = await host.Client.PostAsync("/Review", new FormUrlEncodedContent(confirm));
+        Assert.Equal(HttpStatusCode.Redirect, published.StatusCode);
+        Assert.Equal("/Review?status=published&release=1", PathOf(published).Split('#')[0]);
+        var current = Path.Combine(host.ReleaseDirectory, "current");
+        Assert.True(File.Exists(Path.Combine(current, PublicationProtocol.RecordPagePath(statement))));
+        Assert.True(File.Exists(Path.Combine(current, PublicationProtocol.RecordPagePath(change))));
     }
 
     [Fact]
@@ -301,6 +344,23 @@ public sealed class StatementReviewWorkspaceTests(PostgresCollection postgres) :
         await StatementAiDrafting.PassGateAsync(gates);
         await StatementAiDrafting.DraftAsync(drafts, Output(date: ("2026-10-03", "October 3, 2026")));
         return candidate;
+    }
+
+    private async Task<string> ApprovedDocumentChangeAsync()
+    {
+        var before = await host.SaveExtractionAsync("Fee: 10 dollars.\n");
+        var after = await host.SaveExtractionAsync("Fee: 12 dollars.\n");
+        var comparison = await host.Comparisons.SaveAsync(DocumentComparison.Create(before, after), default);
+        var store = PostgresDocumentChangeReviewStore.FromConnectionString(host.ConnectionString);
+        var catalog = new ReviewCatalog([StatementGateFixtures.RentIssue], [StatementDraftFixtures.Warren]);
+        var actor = new ReviewActor(Owner, ReviewRole.Owner);
+        var draft = await new CreateDocumentChangeDraft(store).ExecuteAsync(actor, new(comparison.ComparisonId, "create"));
+        var revision = await new SaveDocumentChangeDraft(store, catalog).ExecuteAsync(actor,
+            new(draft.DraftId, 1, "Fee rose to 12 dollars", "The fee increased.", null, "Only this page was compared.",
+                "City Council", null, null, [StatementDraftFixtures.Warren], [StatementGateFixtures.RentIssue], draft.Citations, "save"));
+        await new DecideDocumentChangeReview(store, catalog).ExecuteAsync(actor,
+            new(revision.DraftId, 2, 0, ReviewDecisionKind.Approve, null, [], "approve"));
+        return revision.DraftId;
     }
 
     private async Task<string> SkippedAsync()

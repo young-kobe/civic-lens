@@ -4,6 +4,7 @@
 @using CivicLens.Application.Review
 @using CivicLens.Core.Review
 @using CivicLens.Host.Collection
+@using CivicLens.Host.Publication
 
 <TopBarTitle Crumbs="Crumbs" />
 
@@ -31,7 +32,7 @@
             {
                 @foreach (var item in selection)
                 {
-                    <input type="hidden" name="draftIds" value="@item.DraftId" />
+                    <input type="hidden" name="records" value="@item.Reference" />
                 }
             }
         </form>
@@ -136,7 +137,7 @@
                 @if (ready is not null)
                 {
                     <Panel Title="Publish" Id="publish">
-                        <Aside>@(ready.HasMore ? $"First {PublishDocumentChanges.MaximumDrafts} shown" : Count(ready.Items.Length, "draft", "drafts"))</Aside>
+                        <Aside>@(ready.HasMore ? $"First {PublishRelease.MaximumRecords} shown" : Count(ready.Items.Length, "draft", "drafts"))</Aside>
                         <ChildContent>
                             @if (selectionStale)
                             {
@@ -151,10 +152,12 @@
                                     <Head>
                                         <th>Draft</th>
                                         <th>Kind</th>
+                                        <th>Status</th>
                                         <th class="num hide-narrow">Revision</th>
                                     </Head>
                                     <Row Context="item">
-                                        <td><a class="cell-title" href="@($"/Review/{item.DraftId}")">@DraftStatusDisplay.DraftName(item.Headline)</a></td>
+                                        <td><a class="cell-title" href="@RecordHref(item)">@DraftStatusDisplay.DraftName(item.Headline)</a></td>
+                                        <td>@PublishedRecordLabels.Kind(item.Kind)</td>
                                         <td><StatusBadge Tone="@(item.IsReplacement ? Tone.Warn : Tone.Ok)" Text="@(item.IsReplacement ? "Replacement" : "New")" /></td>
                                         <td class="num hide-narrow">@item.RevisionNumber</td>
                                     </Row>
@@ -172,11 +175,13 @@
                                         <th class="fit"><span class="visually-hidden">Select</span></th>
                                         <th>Draft</th>
                                         <th>Kind</th>
+                                        <th>Status</th>
                                         <th class="num hide-narrow">Revision</th>
                                     </Head>
                                     <Row Context="item">
-                                        <td class="fit"><input type="checkbox" form="publish-select" name="publish" value="@item.DraftId" aria-label="@($"Select {DraftStatusDisplay.DraftName(item.Headline)}")" /></td>
-                                        <td><a class="cell-title" href="@($"/Review/{item.DraftId}")">@DraftStatusDisplay.DraftName(item.Headline)</a></td>
+                                        <td class="fit"><input type="checkbox" form="publish-select" name="publish" value="@item.Reference" aria-label="@($"Select {DraftStatusDisplay.DraftName(item.Headline)}")" /></td>
+                                        <td><a class="cell-title" href="@RecordHref(item)">@DraftStatusDisplay.DraftName(item.Headline)</a></td>
+                                        <td>@PublishedRecordLabels.Kind(item.Kind)</td>
                                         <td><StatusBadge Tone="@(item.IsReplacement ? Tone.Warn : Tone.Ok)" Text="@(item.IsReplacement ? "Replacement" : "New")" /></td>
                                         <td class="num hide-narrow">@item.RevisionNumber</td>
                                     </Row>

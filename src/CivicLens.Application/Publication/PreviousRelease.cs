@@ -29,6 +29,6 @@ internal sealed class PreviousRelease
         return new(active.DirectoryName, manifest.Records);
     }
 
-    public PublishedRecordEntry? Find(string recordId) =>
-        Entries.FirstOrDefault(entry => entry.RecordId == recordId);
+    public PublishedRecordEntry? Find(PublishedRecordKind kind, string recordId) =>
+        Entries.FirstOrDefault(entry => entry.Kind == kind && entry.RecordId == recordId);
 }

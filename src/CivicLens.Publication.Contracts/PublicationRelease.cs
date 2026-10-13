@@ -9,12 +9,12 @@ public sealed record PublicationRelease
 
     public void Validate()
     {
-        if (SchemaVersion != PublicationProtocol.SchemaVersion || ReleaseNumber < 1 || Records is null ||
-            Records.Length > PublicationProtocol.MaximumRecordsPerRelease)
+        if (SchemaVersion is < PublicationProtocol.OldestReadableSchemaVersion or > PublicationProtocol.SchemaVersion ||
+            ReleaseNumber < 1 || Records is null || Records.Length > PublicationProtocol.MaximumRecordsPerRelease)
             throw new InvalidDataException("Release manifest is invalid.");
         foreach (var entry in Records) entry?.Validate();
         if (Records.Any(entry => entry is null) ||
-            Records.Select(entry => entry.RecordId).Distinct(StringComparer.Ordinal).Count() != Records.Length)
+            Records.Select(entry => (entry.Kind, entry.RecordId)).Distinct().Count() != Records.Length)
             throw new InvalidDataException("Release manifest records must be present and unique.");
     }
 }

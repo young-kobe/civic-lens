@@ -13,7 +13,7 @@ public static class ReleaseCommand
 
     public static bool Matches(string[] args) => args is ["releases", ..];
 
-    public static async Task<int> ExecuteAsync(string[] args, PublishDocumentChanges publish,
+    public static async Task<int> ExecuteAsync(string[] args, PublishRelease publish,
         ListPublicationReleases list, ActivatePublicationRelease activate, ReviewActor owner,
         CancellationToken cancellationToken)
     {
@@ -21,9 +21,10 @@ public static class ReleaseCommand
         {
             switch (args)
             {
-                case ["releases", "publish", var key, .. { Length: > 0 } draftIds]:
+                case ["releases", "publish", var key, .. { Length: > 0 } records]:
                     Write(await publish.ExecuteAsync(owner,
-                        new PublishDocumentChangesRequest([.. draftIds], key), cancellationToken));
+                        new PublishReleaseRequest(
+                            [.. records.Select(PublishedRecordReference.Parse)], key), cancellationToken));
                     return 0;
                 case ["releases", "list"]:
                     Write(await list.ExecuteAsync(owner, DefaultListLimit, cancellationToken));
@@ -35,7 +36,7 @@ public static class ReleaseCommand
                     Write(await activate.ExecuteAsync(owner, number, cancellationToken));
                     return 0;
                 default:
-                    Console.Error.WriteLine("Use releases publish <idempotency-key> <draft-id>..., releases list [limit], or releases activate <release-number>.");
+                    Console.Error.WriteLine("Use releases publish <idempotency-key> <kind>:<id>... (kind is documentChange or statement), releases list [limit], or releases activate <release-number>.");
                     return 2;
             }
         }

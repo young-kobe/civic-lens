@@ -1,9 +1,7 @@
 @using CivicLens.Publication.Contracts
 
-<PublicPage Title="@Record.Headline" RootPath="../">
-    <a class="back-link" href="@("../" + PublicationProtocol.IndexPagePath(1))">All records</a>
-    <RecordView HeadingLevel="1" Headline="@Record.Headline" Summary="@Record.Summary" Significance="@Record.Significance"
-                Limits="@Record.Limits" Facts="RecordFacts" />
+<PublishedRecordFrame Headline="@Record.Headline" Summary="@Record.Summary" Significance="@Record.Significance"
+                      Limits="@Record.Limits" Facts="RecordFacts">
 
     <Panel Title="What changed" Id="changes-title" Padded="true">
         <DocumentComparisonView Hunks="PublishedRecordView.Hunks(Record)" ViewId="@Record.RecordId" />
@@ -41,9 +39,7 @@
         <VersionSource Version="Record.After" />
         <DocumentText Label="Later version text" Runs="CitedText.Split(Record.After.Text, PublishedRecordView.RangesIn(Record, Record.After))" />
     </Panel>
-
-    <Caveat>Observation times show when each version was captured. They do not show when or why the source changed.</Caveat>
-</PublicPage>
+</PublishedRecordFrame>
 
 @code {
     [Parameter, EditorRequired] public PublishedDocumentChange Record { get; set; } = default!;
@@ -58,8 +54,8 @@
             var facts = new List<Fact> { new("Source institution", Record.Institution) };
             if (Record.ChangeDate is { } date) facts.Add(new("Actual change date", Moment.Iso(date)));
             facts.Add(new("Observed", $"Earlier version {Moment.Full(Record.Before.ObservedAtUtc)}; later version {Moment.Full(Record.After.ObservedAtUtc)}"));
-            facts.Add(new("Officials", Record.Officials.Length == 0 ? "None" : string.Join(", ", Record.Officials.Select(official => official.Name))));
-            facts.Add(new("Issues", Record.IssueIds.Length == 0 ? "None" : string.Join(", ", Record.IssueIds)));
+            facts.Add(Fact.List("Officials", Record.Officials.Select(official => official.Name)));
+            facts.Add(Fact.List("Issues", Record.IssueIds));
             facts.Add(new("Published", $"Approved {Moment.Full(Record.ApprovedAtUtc)}; first published {Moment.Full(Record.FirstPublishedAtUtc)}"));
             facts.Add(new("Revision", Record.RevisionNumber.ToString(System.Globalization.CultureInfo.InvariantCulture)));
             return facts;

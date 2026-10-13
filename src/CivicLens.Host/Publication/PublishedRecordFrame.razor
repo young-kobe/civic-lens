@@ -1,0 +1,18 @@
+@using CivicLens.Publication.Contracts
+
+<PublicPage Title="@Headline" RootPath="../">
+    <a class="back-link" href="@("../" + PublicationProtocol.IndexPagePath(1))">All records</a>
+    <RecordView HeadingLevel="1" Headline="@Headline" Summary="@Summary" Significance="@Significance"
+                Limits="@Limits" Facts="Facts" />
+    @ChildContent
+    <Caveat>Observation times show when each version was captured. They do not show when or why the source changed.</Caveat>
+</PublicPage>
+
+@code {
+    [Parameter, EditorRequired] public string Headline { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string Summary { get; set; } = string.Empty;
+    [Parameter] public string? Significance { get; set; }
+    [Parameter] public string? Limits { get; set; }
+    [Parameter, EditorRequired] public IReadOnlyList<Fact> Facts { get; set; } = [];
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

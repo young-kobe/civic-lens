@@ -18,15 +18,21 @@ internal static class ReviewQueries
     public static IQueryable<DocumentChangeDraftRow> NeedsActionDrafts(CollectionAttemptDbContext db) =>
         db.Set<DocumentChangeDraftRow>().AsNoTracking().Where(draft => draft.ReviewStatus != ReviewStatus.Approved);
 
-    // Published state comes from the active release, not the draft, so this stays a read query.
-    public const string UnpublishedApprovedDrafts = """
-        WITH active AS (
-            SELECT e ->> 'draftId' AS draft_id, (e ->> 'revisionNumber')::int AS revision_number
+    public const string ActivePublishedRecords = """
+        active AS (
+            SELECT COALESCE(e ->> 'kind', 'documentChange') AS kind, COALESCE(e ->> 'recordId', e ->> 'draftId') AS record_id,
+                   (e ->> 'revisionNumber')::int AS revision_number
             FROM publication_releases r CROSS JOIN LATERAL jsonb_array_elements(r.records_json::jsonb) e
             WHERE r.is_active)
+        """;
+
+    // Published state comes from the active release, not the draft, so this stays a read query.
+    public const string UnpublishedApprovedDrafts = $"""
+        WITH {ActivePublishedRecords}
         SELECT d.draft_id AS "DraftId", d.current_revision_number AS "CurrentRevisionNumber",
                d.created_at_utc_ticks AS "CreatedAtUtcTicks", a.revision_number AS "PublishedRevisionNumber"
-        FROM document_change_drafts d LEFT JOIN active a ON a.draft_id = d.draft_id
+        FROM document_change_drafts d
+        LEFT JOIN active a ON a.kind = 'documentChange' AND a.record_id = d.draft_id
         WHERE d.review_status = 'Approved'
         """;
 }

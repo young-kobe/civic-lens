@@ -3,9 +3,11 @@ using System.Data;
 using CivicLens.Application.Paging;
 using CivicLens.Application.Review;
 using CivicLens.Application.Statements;
+using CivicLens.Core.Documents;
 using CivicLens.Core.Review;
 using CivicLens.Core.Statements;
 using CivicLens.Infrastructure.Collection;
+using CivicLens.Infrastructure.Documents;
 using CivicLens.Infrastructure.Review;
 using CivicLens.Infrastructure.Statements.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -20,6 +22,7 @@ public sealed class PostgresStatementReviewStore(IDbContextFactory<CollectionAtt
     private const string CreateOperation = "statement-create";
     private const string SaveOperation = "statement-save";
     private const string DecideOperation = "statement-decide";
+    private const int MaximumPublicationCandidates = 64;
 
     public static PostgresStatementReviewStore FromConnectionString(string connectionString)
     {
@@ -161,6 +164,55 @@ public sealed class PostgresStatementReviewStore(IDbContextFactory<CollectionAtt
         return new([.. items], slice.NewerCursor, slice.OlderCursor);
     }
 
+    public async Task<IReadOnlyList<UnpublishedApprovedStatement>> ListUnpublishedApprovedAsync(int limit,
+        CancellationToken cancellationToken)
+    {
+        PageLimit.Validate(limit);
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
+        var keys = await db.Database.SqlQueryRaw<UnpublishedKey>(StatementReviewQueries.UnpublishedApproved)
+            .Where(key => key.PublishedRevisionNumber == null || key.PublishedRevisionNumber != key.CurrentRevisionNumber)
+            .OrderByDescending(key => key.CreatedAtUtcTicks).ThenByDescending(key => key.CandidateId)
+            .Take(limit).ToArrayAsync(cancellationToken);
+        var ids = keys.Select(key => key.CandidateId).ToArray();
+        var drafts = await ReadDraftsAsync(db, ids, cancellationToken);
+        var candidates = await ReadCandidatesAsync(db, ids, cancellationToken);
+        var revisions = await ReadRevisionRowsAsync(db, ids, cancellationToken);
+        var decisions = await ReadDecisionRowsAsync(db, ids, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return [.. keys.Select(key => new UnpublishedApprovedStatement(
+            ToListItem(drafts[key.CandidateId], candidates[key.CandidateId], revisions[key.CandidateId], decisions[key.CandidateId]),
+            key.PublishedRevisionNumber))];
+    }
+
+    public async Task<IReadOnlyDictionary<string, PublishableStatement>> GetForPublicationAsync(ImmutableArray<string> candidateIds,
+        CancellationToken cancellationToken)
+    {
+        if (candidateIds.IsDefaultOrEmpty || candidateIds.Length > MaximumPublicationCandidates)
+            throw new ArgumentOutOfRangeException(nameof(candidateIds));
+        var ids = candidateIds.ToArray();
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
+        var drafts = await ReadDraftsAsync(db, ids, cancellationToken);
+        var candidates = await ReadCandidatesAsync(db, ids, cancellationToken);
+        var revisions = await ReadRevisionRowsAsync(db, ids, cancellationToken);
+        var decisions = await ReadDecisionRowsAsync(db, ids, cancellationToken);
+        var extractions = await PostgresDocumentExtractionStore.ReadManyAsync(db,
+            [.. candidates.Values.Select(candidate => candidate.ExtractionId).Distinct(StringComparer.Ordinal)], cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return drafts.Values.ToDictionary(draft => draft.CandidateId, draft => ToPublishable(draft, candidates[draft.CandidateId],
+            extractions[candidates[draft.CandidateId].ExtractionId], revisions[draft.CandidateId], decisions[draft.CandidateId]),
+            StringComparer.Ordinal);
+    }
+
+    private sealed class UnpublishedKey
+    {
+        public string CandidateId { get; set; } = "";
+        public int CurrentRevisionNumber { get; set; }
+        public long CreatedAtUtcTicks { get; set; }
+        public int? PublishedRevisionNumber { get; set; }
+    }
+
     private sealed class NotInReviewKey
     {
         public string CandidateId { get; set; } = "";
@@ -257,6 +309,24 @@ public sealed class PostgresStatementReviewStore(IDbContextFactory<CollectionAtt
         var concerns = ReviewPolicy.GetUnresolvedConcerns(decisions);
         var status = ReviewPolicy.GetCurrentStatus(draft.CurrentRevisionNumber, decisions, concerns);
         return new(draft.CandidateId, revisions.IsEmpty ? null : revisions[^1], draft.ReviewStateVersion, status, revisions, decisions, concerns);
+    }
+
+    private static Task<Dictionary<string, StatementDraftRow>> ReadDraftsAsync(CollectionAttemptDbContext db, string[] candidateIds,
+        CancellationToken cancellationToken) =>
+        db.Set<StatementDraftRow>().AsNoTracking().Where(row => candidateIds.Contains(row.CandidateId))
+            .ToDictionaryAsync(row => row.CandidateId, StringComparer.Ordinal, cancellationToken);
+
+    private static Task<Dictionary<string, StatementCandidateRow>> ReadCandidatesAsync(CollectionAttemptDbContext db,
+        string[] candidateIds, CancellationToken cancellationToken) =>
+        db.Set<StatementCandidateRow>().AsNoTracking().Where(row => candidateIds.Contains(row.CandidateId))
+            .ToDictionaryAsync(row => row.CandidateId, StringComparer.Ordinal, cancellationToken);
+
+    private static PublishableStatement ToPublishable(StatementDraftRow draft, StatementCandidateRow candidate,
+        DocumentExtraction extraction, IEnumerable<StatementRevisionRow> revisionRows, IEnumerable<StatementReviewDecisionRow> decisionRows)
+    {
+        var review = BuildReview(draft, revisionRows, decisionRows);
+        foreach (var revision in review.Revisions) revision.ValidateAgainst(extraction);
+        return new(review, candidate.Url, extraction);
     }
 
     private static StatementReviewListItem ToListItem(StatementDraftRow draft, StatementCandidateRow candidate,

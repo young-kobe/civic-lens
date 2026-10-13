@@ -1,10 +1,13 @@
 using CivicLens.Application.Publication;
 using CivicLens.Application.Review;
+using CivicLens.Application.Statements;
 using CivicLens.Core.Review;
+using CivicLens.Core.Statements;
+using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Tests.Application.Publication;
 
-public sealed class ListPublishableDocumentChangesTests
+public sealed class ListPublishableTests
 {
     [Fact]
     public async Task ReviewerCannotReadTheReadyListBecauseOnlyTheOwnerPublishes()
@@ -13,7 +16,7 @@ public sealed class ListPublishableDocumentChangesTests
         scenario.Reviews.Unpublished.Add(Candidate(scenario.AddDraft('a')));
 
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
-            new ListPublishableDocumentChanges(scenario.Reviews).ExecuteAsync(PublicationScenario.Reviewer));
+            new ListPublishable(scenario.Reviews, scenario.Statements).ExecuteAsync(PublicationScenario.Reviewer));
 
         Assert.Equal(0, scenario.Reviews.UnpublishedReadCount);
     }
@@ -25,7 +28,7 @@ public sealed class ListPublishableDocumentChangesTests
         scenario.Reviews.Unpublished.Add(Candidate(scenario.AddDraft('a')));
         scenario.Reviews.Unpublished.Add(Candidate(scenario.AddDraft('b'), publishedRevision: 1));
 
-        var list = await new ListPublishableDocumentChanges(scenario.Reviews).ExecuteAsync(PublicationScenario.Owner);
+        var list = await new ListPublishable(scenario.Reviews, scenario.Statements).ExecuteAsync(PublicationScenario.Owner);
 
         var (added, replaced) = (list.Items[0], list.Items[1]);
         Assert.False(added.IsReplacement);
@@ -47,9 +50,9 @@ public sealed class ListPublishableDocumentChangesTests
             Draft = Candidate(blocked).Draft with { UnresolvedConcernCount = 1 }
         });
 
-        var list = await new ListPublishableDocumentChanges(scenario.Reviews).ExecuteAsync(PublicationScenario.Owner);
+        var list = await new ListPublishable(scenario.Reviews, scenario.Statements).ExecuteAsync(PublicationScenario.Owner);
 
-        Assert.Equal([clean], list.Items.Select(item => item.DraftId));
+        Assert.Equal([clean], list.Items.Select(item => item.RecordId));
     }
 
     [Fact]
@@ -58,7 +61,7 @@ public sealed class ListPublishableDocumentChangesTests
         var scenario = new PublicationScenario();
         scenario.Reviews.Unpublished.Add(Candidate(scenario.AddDraft('a'), status: ReviewStatus.AwaitingReview));
 
-        var list = await new ListPublishableDocumentChanges(scenario.Reviews).ExecuteAsync(PublicationScenario.Owner);
+        var list = await new ListPublishable(scenario.Reviews, scenario.Statements).ExecuteAsync(PublicationScenario.Owner);
 
         Assert.Empty(list.Items);
     }
@@ -67,14 +70,14 @@ public sealed class ListPublishableDocumentChangesTests
     public async Task ReadyListIsBoundedByWhatOnePublishAcceptsAndSaysWhenMoreExist()
     {
         var scenario = new PublicationScenario();
-        for (var index = 0; index <= PublishDocumentChanges.MaximumDrafts; index++)
+        for (var index = 0; index <= PublishRelease.MaximumRecords; index++)
             scenario.Reviews.Unpublished.Add(Candidate(index.ToString("x32")));
 
-        var list = await new ListPublishableDocumentChanges(scenario.Reviews).ExecuteAsync(PublicationScenario.Owner);
+        var list = await new ListPublishable(scenario.Reviews, scenario.Statements).ExecuteAsync(PublicationScenario.Owner);
 
-        Assert.Equal(PublishDocumentChanges.MaximumDrafts, list.Items.Length);
+        Assert.Equal(PublishRelease.MaximumRecords, list.Items.Length);
         Assert.True(list.HasMore);
-        Assert.Equal(PublishDocumentChanges.MaximumDrafts + 1, scenario.Reviews.UnpublishedLimit);
+        Assert.Equal(PublishRelease.MaximumRecords + 1, scenario.Reviews.UnpublishedLimit);
     }
 
     // A draft the page offers must never be refused by the publish handler, and the reverse.
@@ -95,12 +98,62 @@ public sealed class ListPublishableDocumentChangesTests
         scenario.Reviews.Unpublished.Add(new(new(draftId, review.CurrentRevision, review.ReviewStateVersion, status,
             review.UnresolvedConcerns.Length), null));
 
-        var listed = (await new ListPublishableDocumentChanges(scenario.Reviews).ExecuteAsync(PublicationScenario.Owner)).Items.Length == 1;
+        var listed = (await new ListPublishable(scenario.Reviews, scenario.Statements).ExecuteAsync(PublicationScenario.Owner)).Items.Length == 1;
         var published = await Record.ExceptionAsync(() =>
             scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k", draftId))) is null;
 
         Assert.Equal(publishable, listed);
         Assert.Equal(listed, published);
+    }
+
+    [Fact]
+    public async Task ListHoldsDocumentChangesAndStatementsEachWithItsKindAndReplacementState()
+    {
+        var scenario = new PublicationScenario();
+        scenario.Reviews.Unpublished.Add(Candidate(scenario.AddDraft('a')));
+        scenario.Statements.Unpublished.Add(StatementCandidate(scenario.AddStatement('b'), publishedRevision: 1));
+
+        var list = await new ListPublishable(scenario.Reviews, scenario.Statements).ExecuteAsync(PublicationScenario.Owner);
+
+        Assert.Equal([PublishedRecordKind.DocumentChange, PublishedRecordKind.Statement], list.Items.Select(item => item.Kind));
+        Assert.Equal([false, true], list.Items.Select(item => item.IsReplacement));
+        Assert.Equal(new string('b', 64), list.Items[1].RecordId);
+    }
+
+    [Fact]
+    public async Task StatementWithAnUnresolvedConcernIsNotReadyBecausePublishWouldRefuseIt()
+    {
+        var scenario = new PublicationScenario();
+        var blocked = StatementCandidate(scenario.AddStatement('b'));
+        scenario.Statements.Unpublished.Add(blocked with { Statement = blocked.Statement with { UnresolvedConcernCount = 1 } });
+
+        var list = await new ListPublishable(scenario.Reviews, scenario.Statements).ExecuteAsync(PublicationScenario.Owner);
+
+        Assert.Empty(list.Items);
+    }
+
+    [Fact]
+    public async Task TheTotalAcrossBothKindsIsBoundedByWhatOnePublishAcceptsAndSaysWhenMoreExist()
+    {
+        var scenario = new PublicationScenario();
+        for (var index = 0; index < 40; index++)
+        {
+            scenario.Reviews.Unpublished.Add(Candidate(index.ToString("x32")));
+            scenario.Statements.Unpublished.Add(StatementCandidate(index.ToString("x64")));
+        }
+
+        var list = await new ListPublishable(scenario.Reviews, scenario.Statements).ExecuteAsync(PublicationScenario.Owner);
+
+        Assert.Equal(PublishRelease.MaximumRecords, list.Items.Length);
+        Assert.True(list.HasMore);
+    }
+
+    private static UnpublishedApprovedStatement StatementCandidate(string candidateId, int? publishedRevision = null,
+        ReviewStatus status = ReviewStatus.Approved)
+    {
+        var revision = new StatementDraftRevision(candidateId, 1, "author", PublicationScenario.ApprovedAt, $"Statement {candidateId[0]}",
+            "Summary", null, null, [], [], [], [], [], []);
+        return new(new StatementReviewListItem(candidateId, "source", "https://example.test/", revision, 1, status, 0), publishedRevision);
     }
 
     private static UnpublishedApprovedDraft Candidate(string draftId, int? publishedRevision = null,

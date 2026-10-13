@@ -5,7 +5,8 @@ namespace CivicLens.Publication.Contracts;
 
 public static class PublicationProtocol
 {
-    public const int SchemaVersion = 1;
+    public const int SchemaVersion = 2;
+    public const int OldestReadableSchemaVersion = 1;
     public const string ManifestPath = "release.json";
     public const int MaximumRecordsPerRelease = 2000;
     public const int IndexPageSize = 50;
@@ -26,7 +27,9 @@ public static class PublicationProtocol
         UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow
     };
 
-    internal static bool IsRecordId(string? value) => IsLowerHex(value, 32);
+    internal static bool IsRecordId(PublishedRecordKind kind, string? value) =>
+        IsLowerHex(value, kind == PublishedRecordKind.Statement ? 64 : 32);
+
     internal static bool IsSha256(string? value) => IsLowerHex(value, 64);
 
     private static bool IsLowerHex(string? value, int length) =>

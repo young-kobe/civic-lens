@@ -292,12 +292,12 @@ public sealed class PostgresStatementReviewStoreTests(PostgresCollection postgre
     public async Task StatementWritesWaitForTheStatementLockAndIgnoreTheDocumentChangeLock()
     {
         var candidate = await CandidateAsync();
-        await using var holder = await HoldLockAsync("civic-lens-document-change-review");
+        await using var holder = await HeldAdvisoryLock.AcquireAsync(connectionString, "civic-lens-document-change-review");
         await Create.ExecuteAsync(Owner, new(candidate, "unblocked"));
         await holder.DisposeAsync();
 
         var other = await CandidateAsync();
-        await using var statementHolder = await HoldLockAsync("civic-lens-statement-review");
+        await using var statementHolder = await HeldAdvisoryLock.AcquireAsync(connectionString, "civic-lens-statement-review");
         var blocked = Create.ExecuteAsync(Owner, new(other, "blocked"));
         await Task.Delay(400);
         Assert.False(blocked.IsCompleted);
@@ -309,7 +309,7 @@ public sealed class PostgresStatementReviewStoreTests(PostgresCollection postgre
     public async Task AiSettlementWaitsForTheStatementLock()
     {
         var candidate = await PassedCandidateAsync();
-        await using var holder = await HoldLockAsync("civic-lens-statement-review");
+        await using var holder = await HeldAdvisoryLock.AcquireAsync(connectionString, "civic-lens-statement-review");
 
         var settling = DraftingWorker(new FakeStatementDraftingModel().Draft(Output())).ExecuteAsync(once: true);
         await Task.Delay(1_000);
@@ -521,30 +521,6 @@ public sealed class PostgresStatementReviewStoreTests(PostgresCollection postgre
         await using var command = new NpgsqlCommand(
             $"SELECT error_code FROM statement_analysis WHERE candidate_id = '{candidate}' AND task = '{StatementDraftTask.Task}'", connection);
         return await command.ExecuteScalarAsync() as string;
-    }
-
-    private async Task<AsyncDisposableLock> HoldLockAsync(string key)
-    {
-        var connection = new NpgsqlConnection(connectionString);
-        await connection.OpenAsync();
-        var transaction = await connection.BeginTransactionAsync();
-        await using var command = new NpgsqlCommand($"SELECT pg_advisory_xact_lock(hashtextextended('{key}', 0))", connection, transaction);
-        await command.ExecuteNonQueryAsync();
-        return new(connection, transaction);
-    }
-
-    private sealed class AsyncDisposableLock(NpgsqlConnection connection, NpgsqlTransaction transaction) : IAsyncDisposable
-    {
-        private bool released;
-
-        public async ValueTask DisposeAsync()
-        {
-            if (released) return;
-            released = true;
-            await transaction.CommitAsync();
-            await transaction.DisposeAsync();
-            await connection.DisposeAsync();
-        }
     }
 
     private async Task<long> ScalarAsync(string sql)

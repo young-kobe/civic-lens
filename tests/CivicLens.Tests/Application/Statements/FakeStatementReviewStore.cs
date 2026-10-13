@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using CivicLens.Application.Paging;
 using CivicLens.Application.Review;
 using CivicLens.Application.Statements;
@@ -56,5 +57,27 @@ internal sealed class FakeStatementReviewStore : IStatementReviewStore
     {
         ListedCursor = cursor?.Encode();
         return Task.FromResult(new StatementNotInReviewPage([], null, null));
+    }
+
+    public Dictionary<string, PublishableStatement> Publishable { get; } = [];
+    public List<UnpublishedApprovedStatement> Unpublished { get; } = [];
+    public int PublicationReadCount { get; private set; }
+    public int UnpublishedLimit { get; private set; }
+    public int UnpublishedReadCount { get; private set; }
+
+    public Task<IReadOnlyList<UnpublishedApprovedStatement>> ListUnpublishedApprovedAsync(int limit, CancellationToken cancellationToken)
+    {
+        UnpublishedReadCount++;
+        UnpublishedLimit = limit;
+        return Task.FromResult<IReadOnlyList<UnpublishedApprovedStatement>>([.. Unpublished.Take(limit)]);
+    }
+
+    public Task<IReadOnlyDictionary<string, PublishableStatement>> GetForPublicationAsync(ImmutableArray<string> candidateIds,
+        CancellationToken cancellationToken)
+    {
+        PublicationReadCount++;
+        IReadOnlyDictionary<string, PublishableStatement> found = candidateIds.Where(Publishable.ContainsKey)
+            .ToDictionary(id => id, id => Publishable[id]);
+        return Task.FromResult(found);
     }
 }

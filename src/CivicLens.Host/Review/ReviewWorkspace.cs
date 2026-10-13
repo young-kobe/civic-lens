@@ -260,9 +260,9 @@ internal static class ReviewWorkspace
         var releases = new FileReleaseDirectory(releaseRoot);
         var officialNames = collection.Configuration.People.ToDictionary(person => person.Id, person => person.Name, StringComparer.Ordinal);
         services.AddScoped(_ => new ListPublicationReleases(publications, releases));
-        services.AddScoped(provider => new PublishDocumentChanges(publications, releases, new ReleaseRenderer(),
-            provider.GetRequiredService<IDocumentChangeReviewStore>(), new PublicationCatalog(officialNames), TimeProvider.System));
-        services.AddScoped<ListPublishableDocumentChanges>();
+        services.AddScoped(provider => new PublishRelease(publications, releases, new ReleaseRenderer(),
+            provider.GetRequiredService<IDocumentChangeReviewStore>(), provider.GetRequiredService<IStatementReviewStore>(), new PublicationCatalog(officialNames), TimeProvider.System));
+        services.AddScoped<ListPublishable>();
     }
 
     private static readonly Lazy<IssueConfiguration> Issues = new(() => ReviewIssueSettings.FromEnvironment().Configuration);
