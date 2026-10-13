@@ -150,6 +150,9 @@ public sealed class ExtractDocumentTests
             }
             return Task.FromResult(text!);
         }
+
+        public Task<string> ExtractHtmlFragmentAsync(string markup, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
     }
 
     private sealed class ExtractionStore : IDocumentExtractionStore

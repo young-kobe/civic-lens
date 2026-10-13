@@ -10,4 +10,6 @@ public interface IDocumentTextExtractor
 
     Task<string> ExtractAsync(CapturedAttemptResult attempt, string artifactRoot, DocumentContentProfile? profile,
         CancellationToken cancellationToken);
+
+    Task<string> ExtractHtmlFragmentAsync(string markup, CancellationToken cancellationToken);
 }

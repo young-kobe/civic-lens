@@ -634,11 +634,130 @@ public sealed class PostgresBillStreamTests(PostgresCollection postgres) : IAsyn
         Assert.Equal(2, (await LinksAsync()).Count);
     }
 
+    [Fact]
+    public async Task ACoveredSponsorBillWithSummariesAdmitsASummariesFirstPageBesideItsActionsPage()
+    {
+        var detail = await EnqueueDetailAsync("detail");
+
+        var result = await AdmitDetailAsync(detail, DetailBill(UpdatedAt, cosponsors: 0, summaries: 2),
+            BillGateOutcome.Passed(BillGateReason.CoveredSponsor));
+
+        Assert.Equal(["https://api.congress.gov/v3/bill/119/hr/7/actions?format=json&limit=250",
+            "https://api.congress.gov/v3/bill/119/hr/7/summaries?format=json&limit=1"],
+            result.Jobs.Select(job => job.Url).Order());
+        Assert.Equal(2, (await LinksAsync()).Count(link => link.DetailJobId == detail));
+        Assert.Equal(2, await ScalarAsync("SELECT summary_count FROM bill_gates"));
+    }
+
+    [Fact]
+    public async Task APassedBillWithNoSummariesAdmitsNoSummariesPage()
+    {
+        var detail = await EnqueueDetailAsync("detail");
+
+        var result = await AdmitDetailAsync(detail, DetailBill(UpdatedAt, cosponsors: 0, summaries: 0),
+            BillGateOutcome.Passed(BillGateReason.CoveredSponsor));
+
+        Assert.DoesNotContain(result.Jobs, job => job.Url.Contains("/summaries?"));
+        Assert.Equal(0, await ScalarAsync("SELECT summary_count FROM bill_gates"));
+    }
+
+    [Theory]
+    [InlineData(BillGateReason.NoPolicyArea)]
+    [InlineData(BillGateReason.UntrackedPolicyArea)]
+    public async Task ABillTheGateMarksNotRelevantNeverAdmitsSummariesEvenWhenItHasThem(BillGateReason reason)
+    {
+        var detail = await EnqueueDetailAsync("detail");
+
+        var result = await AdmitDetailAsync(detail, DetailBill(UpdatedAt, cosponsors: 0, summaries: 4),
+            BillGateOutcome.NotRelevant(reason));
+
+        Assert.Empty(result.Jobs);
+    }
+
+    [Fact]
+    public async Task ABillThatPassesAtACosponsorPageAdmitsSummariesFromTheCountStoredAtDetail()
+    {
+        var detail = await EnqueueDetailAsync("detail");
+        var first = await AdmitDetailAsync(detail, DetailBill(UpdatedAt, cosponsors: 1, summaries: 3), BillGateOutcome.Pending);
+        Assert.Equal("cosponsors", Assert.Single(first.Jobs).Url.Split('/')[^1].Split('?')[0]);
+
+        var passed = await AdmitCosponsorPageAsync(first.Jobs.Single().JobId, Cosponsors(["A000001"], next: null));
+
+        Assert.Equal(("Passed", "CoveredCosponsor"), await GateOfAsync(detail));
+        Assert.Equal(["actions", "summaries"], passed.Jobs.Select(job => job.Url.Split('/')[^1].Split('?')[0]).Order());
+    }
+
+    [Fact]
+    public async Task ABillThatPassesAtACosponsorPageWithoutSummariesAdmitsOnlyActions()
+    {
+        var detail = await EnqueueDetailAsync("detail");
+        var first = await AdmitDetailAsync(detail, DetailBill(UpdatedAt, cosponsors: 1, summaries: 0), BillGateOutcome.Pending);
+
+        var passed = await AdmitCosponsorPageAsync(first.Jobs.Single().JobId, Cosponsors(["A000001"], next: null));
+
+        Assert.Contains("/actions?", Assert.Single(passed.Jobs).Url);
+    }
+
+    [Fact]
+    public async Task ABillThatStaysNotRelevantAtTheLastCosponsorPageAdmitsNoSummaries()
+    {
+        var detail = await EnqueueDetailAsync("detail");
+        var first = await AdmitDetailAsync(detail, DetailBill(UpdatedAt, cosponsors: 1, summaries: 3), BillGateOutcome.Pending);
+
+        var settled = await AdmitCosponsorPageAsync(first.Jobs.Single().JobId, Cosponsors(["Z000009"], next: null));
+
+        Assert.Empty(settled.Jobs);
+        Assert.DoesNotContain(await LinksAsync(), link => link.Key.Contains("/summaries/"));
+    }
+
+    [Fact]
+    public async Task SummaryPagesChainByTheirParentJobAndReplayingOneChangesNothing()
+    {
+        var detail = await EnqueueDetailAsync("detail");
+        var first = await AdmitDetailAsync(detail, DetailBill(UpdatedAt, cosponsors: 0, summaries: 2),
+            BillGateOutcome.Passed(BillGateReason.CoveredSponsor));
+        var summariesJob = first.Jobs.Single(job => job.Url.Contains("/summaries?")).JobId;
+        var page = new CongressBillSummariesPage([], SummariesNext(250));
+
+        var next = await store.AdmitSummariesPageAsync(Source(), summariesJob, page, default);
+
+        Assert.Equal(SummariesNext(250), next.Jobs.Single().Url);
+        Assert.Contains((BillStreamJobKeys.NextBillPage(SourceId, ApiResource.BillSummaries, summariesJob), detail),
+            (await LinksAsync()).Select(link => (link.Key, link.DetailJobId)));
+        var before = await CountsAsync();
+        var replay = await store.AdmitSummariesPageAsync(Source(), summariesJob, page, default);
+        Assert.Empty(replay.Jobs);
+        Assert.Equal(1, replay.DuplicateCount);
+        Assert.Equal(before, await CountsAsync());
+        var last = await store.AdmitSummariesPageAsync(Source(), next.Jobs.Single().JobId, new CongressBillSummariesPage([], null), default);
+        Assert.Empty(last.Jobs);
+    }
+
+    [Fact]
+    public async Task ASummariesPageJobWithoutALinkRowIsInvalidData()
+    {
+        var orphan = await EnqueueDetailAsync("orphan");
+
+        await Assert.ThrowsAsync<InvalidDataException>(() => store.AdmitSummariesPageAsync(Source(), orphan, new CongressBillSummariesPage([], null), default));
+    }
+
+    [Fact]
+    public async Task TheDatabaseRefusesANegativeSummaryCount()
+    {
+        var detail = await EnqueueDetailAsync("detail");
+        await AdmitDetailAsync(detail, DetailBill(UpdatedAt, cosponsors: 1), BillGateOutcome.Pending);
+
+        await Assert.ThrowsAsync<PostgresException>(() => ExecuteAsync(connectionString, "UPDATE bill_gates SET summary_count = -1"));
+    }
+
     private static readonly DateTimeOffset UpdatedAt = new(2025, 3, 3, 12, 0, 0, TimeSpan.Zero);
 
     private static CongressBill DetailBill(DateTimeOffset updatedAt, int cosponsors,
-        string? policyArea = BillGateFixtures.TrackedPolicyArea) =>
-        new(119, "hr", 7, "A bill", Backfill, updatedAt, policyArea, ["Z000009"], cosponsors, 1);
+        string? policyArea = BillGateFixtures.TrackedPolicyArea, int summaries = 0) =>
+        new(119, "hr", 7, "A bill", Backfill, updatedAt, policyArea, ["Z000009"], cosponsors, 1, summaries);
+
+    private static string SummariesNext(int offset) =>
+        $"https://api.congress.gov/v3/bill/119/hr/7/summaries?offset={offset}&limit=1&format=json";
 
     private static string CosponsorsNext(int offset) =>
         $"https://api.congress.gov/v3/bill/119/hr/7/cosponsors?offset={offset}&limit=250&format=json";

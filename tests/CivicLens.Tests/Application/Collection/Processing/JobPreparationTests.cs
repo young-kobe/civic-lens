@@ -21,6 +21,7 @@ public sealed class JobPreparationTests
     private const string DetailUrl = SourceUrl + "/119/hr/1?format=json";
     private const string CosponsorUrl = SourceUrl + "/119/hr/1/cosponsors?format=json&limit=250";
     private const string ActionsUrl = SourceUrl + "/119/hr/1/actions?format=json&limit=250";
+    private const string SummariesUrl = SourceUrl + "/119/hr/1/summaries?format=json&limit=1";
     private static readonly DateOnly Backfill = new(2025, 1, 3);
     private static readonly string ListUrl = new BillStreamWindow(Backfill, Backfill).RequestUrl(SourceUrl);
     private readonly RecordingBillAdmissions admissions = new();
@@ -67,6 +68,7 @@ public sealed class JobPreparationTests
     [InlineData(ApiResource.Bill, DetailUrl)]
     [InlineData(ApiResource.BillCosponsors, CosponsorUrl)]
     [InlineData(ApiResource.BillActions, ActionsUrl)]
+    [InlineData(ApiResource.BillSummaries, SummariesUrl)]
     public async Task AMalformedBillResponseIsInvalidDataSoTheWorkerBlocksThePermanentFailure(ApiResource resource, string url)
     {
         await Assert.ThrowsAsync<InvalidDataException>(() => Prepare(resource, url, """{"unexpected":true}""", BillGateFixtures.Revision()));
@@ -74,6 +76,7 @@ public sealed class JobPreparationTests
         Assert.Empty(admissions.Details);
         Assert.Empty(admissions.CosponsorPages);
         Assert.Empty(admissions.ActionPages);
+        Assert.Empty(admissions.SummaryPages);
     }
 
     [Fact]
@@ -97,6 +100,18 @@ public sealed class JobPreparationTests
 
         var call = Assert.Single(admissions.ActionPages);
         Assert.Equal(next, call.Page.Next);
+    }
+
+    [Fact]
+    public async Task ASummariesPageIsParsedAndPassedToTheStoreWithItsNextLink()
+    {
+        var next = SummariesUrl + "&offset=250";
+
+        _ = await Prepare(ApiResource.BillSummaries, SummariesUrl, Summaries(next), BillGateFixtures.Revision());
+
+        var call = Assert.Single(admissions.SummaryPages);
+        Assert.Equal(("job", next), (call.JobId, call.Page.Next));
+        Assert.Equal("173", Assert.Single(call.Page.Summaries).VersionCode);
     }
 
     [Fact]
@@ -133,6 +148,31 @@ public sealed class JobPreparationTests
         Assert.Equal((CongressBillActionsParser.Version, "congress-bill-render-v1", "attempt"),
             (saved.ParserVersion, saved.NormalizationVersion, saved.SourceAttempt.AttemptId));
         Assert.Equal("Bill: 119 hr 1\nAction 2025-01-03 09:30:00 [type IntroReferral] [code H11100] [source 2 House floor actions]: Introduced", saved.Text);
+    }
+
+    [Fact]
+    public async Task ASummariesPageIsExtractedOnceWithOneCombinedParserVersionAndTheSummaryConverted()
+    {
+        _ = await Prepare(ApiResource.BillSummaries, SummariesUrl, Summaries(null), BillGateFixtures.Revision());
+
+        var saved = Assert.Single(extractions.Saved);
+        Assert.Equal("congress-bill-summaries-v1+fake-parser+fake-normalization", CongressBillSummariesParser.ExtractionVersion(new FakeTextExtractor()));
+        Assert.Equal((CongressBillSummariesParser.ExtractionVersion(new FakeTextExtractor()), "congress-bill-render-v1", "attempt"),
+            (saved.ParserVersion, saved.NormalizationVersion, saved.SourceAttempt.AttemptId));
+        Assert.Equal("Bill: 119 hr 1\n\nSummary version: 173\nAction date: 2025-01-03\nAction: Introduced in House\n" +
+            "Updated: 2025-01-04T10:00:00Z\nText:\ntext of <p>First</p>", saved.Text);
+    }
+
+    [Fact]
+    public async Task ASummaryWhoseRenderedTextExceedsTheExtractionLimitFailsPreparationAndSavesNothing()
+    {
+        var fragment = new string('a', DocumentExtraction.MaximumTextLength);
+
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            Prepare(ApiResource.BillSummaries, SummariesUrl, Summaries(null), BillGateFixtures.Revision(), fragment));
+
+        Assert.Empty(extractions.Saved);
+        Assert.Empty(admissions.SummaryPages);
     }
 
     [Fact]
@@ -199,7 +239,8 @@ public sealed class JobPreparationTests
         { ApiResource.BillList, ListUrl, """{"bills":[],"pagination":{}}""" },
         { ApiResource.Bill, DetailUrl, Detail("Z000009", BillGateFixtures.TrackedPolicyArea, 0) },
         { ApiResource.BillCosponsors, CosponsorUrl, Cosponsors("Z000009", next: null) },
-        { ApiResource.BillActions, ActionsUrl, """{"actions":[],"pagination":{}}""" }
+        { ApiResource.BillActions, ActionsUrl, """{"actions":[],"pagination":{}}""" },
+        { ApiResource.BillSummaries, SummariesUrl, """{"summaries":[],"pagination":{}}""" }
     };
 
     [Fact]
@@ -221,8 +262,9 @@ public sealed class JobPreparationTests
     }
 
     private async Task<JobPreparationResult?> Prepare(ApiResource? resource, string url, string body,
-        IssueConfigurationRevision? issues)
+        IssueConfigurationRevision? issues, string? fragmentText = null)
     {
+        var textExtractor = new FakeTextExtractor(fragmentText);
         var configured = new ConfiguredCollectionSource(CongressBillSourceConfigurationTests.Configuration(), "congress-bills", Backfill);
         var definition = resource is null
             ? configured.CreateJobDefinition(Backfill)
@@ -232,7 +274,7 @@ public sealed class JobPreparationTests
         var job = new CollectionJobRecord("job", definition, "key", CollectionJobState.Succeeded, DateTimeOffset.UnixEpoch, null,
             false, 0, 0, 0, [attempt]);
         var preparation = new JobPreparation(new SingleJob(job), new CapturedAttempts(), new NoDiscoveryAdmissions(), admissions,
-            new FixedBody(body), processing, extractions, issues);
+            new FixedBody(body), processing, extractions, textExtractor, issues);
         return await preparation.PrepareAsync("job", "artifacts", default);
     }
 
@@ -240,8 +282,18 @@ public sealed class JobPreparationTests
         $$$"""
         {"bill":{"congress":119,"type":"HR","number":"1","title":"A bill","introducedDate":"2025-01-03",
          "updateDate":"{{{updateDate}}}","policyArea":{"name":"{{{policyArea}}}"},"sponsors":[{"bioguideId":"{{{sponsor}}}"}],
-         "cosponsors":{"countIncludingWithdrawnCosponsors":{{{cosponsors}}} },"actions":{"count":1} } }
+         "cosponsors":{"countIncludingWithdrawnCosponsors":{{{cosponsors}}} },"actions":{"count":1},"summaries":{"count":2} } }
         """;
+
+    private static string Summaries(string? next)
+    {
+        var nextJson = next is null ? "null" : $"\"{next}\"";
+        return $$$"""
+            {"summaries":[
+             {"versionCode":"173","actionDate":"2025-01-03","actionDesc":"Introduced in House","updateDate":"2025-01-04T10:00:00Z","text":"<p>First</p>"}],
+             "pagination":{"next":{{{nextJson}}}}}
+            """;
+    }
 
     private static string Cosponsors(string bioguideId, string? next)
     {
@@ -254,6 +306,7 @@ public sealed class JobPreparationTests
         public List<(string JobId, CongressBill Bill, BillGateOutcome Gate, string IssueRevisionId)> Details { get; } = [];
         public List<(string JobId, CongressBillCosponsorsPage Page)> CosponsorPages { get; } = [];
         public List<(string JobId, CongressBillActionsPage Page)> ActionPages { get; } = [];
+        public List<(string JobId, CongressBillSummariesPage Page)> SummaryPages { get; } = [];
         public bool DuplicatesOnly { get; set; }
 
         public Task<DiscoveryAdmissionResult> AdmitListPageAsync(ConfiguredCollectionSource source, string listJobId,
@@ -283,6 +336,25 @@ public sealed class JobPreparationTests
             ActionPages.Add((pageJobId, page));
             return Task.FromResult(new DiscoveryAdmissionResult([], 0, 0));
         }
+
+        public Task<DiscoveryAdmissionResult> AdmitSummariesPageAsync(ConfiguredCollectionSource source, string pageJobId,
+            CongressBillSummariesPage page, CancellationToken cancellationToken)
+        {
+            SummaryPages.Add((pageJobId, page));
+            return Task.FromResult(new DiscoveryAdmissionResult([], 0, 0));
+        }
+    }
+
+    private sealed class FakeTextExtractor(string? fragmentText = null) : IDocumentTextExtractor
+    {
+        public string ParserVersion => "fake-parser";
+        public string NormalizationVersion => "fake-normalization";
+
+        public Task<string> ExtractAsync(CapturedAttemptResult attempt, string artifactRoot, DocumentContentProfile? profile,
+            CancellationToken cancellationToken) => throw new NotSupportedException();
+
+        public Task<string> ExtractHtmlFragmentAsync(string markup, CancellationToken cancellationToken) =>
+            Task.FromResult(fragmentText ?? "text of " + markup);
     }
 
     private sealed class RecordingExtractions : IDocumentExtractionStore

@@ -101,7 +101,8 @@ public sealed record CollectionJobDefinition
         {
             Collection.ApiResource.BillList => BillStreamWindow.IsRequestUrl(source.Url, url),
             Collection.ApiResource.Bill => CongressBillListItem.IsDetailUrl(source.Url, url),
-            Collection.ApiResource.BillCosponsors or Collection.ApiResource.BillActions =>
+            Collection.ApiResource.BillCosponsors or Collection.ApiResource.BillActions or
+            Collection.ApiResource.BillSummaries =>
                 BillPageUrl.TryRead(source.Url, resource, url) is not null,
             _ => false
         };

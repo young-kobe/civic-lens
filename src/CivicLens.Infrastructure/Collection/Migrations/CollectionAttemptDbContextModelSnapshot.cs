@@ -431,6 +431,10 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("character varying(128)")
                         .HasColumnName("source_id");
 
+                    b.Property<int>("SummaryCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("summary_count");
+
                     b.Property<long>("UpdateDateUtcTicks")
                         .HasColumnType("bigint")
                         .HasColumnName("update_date_utc_ticks");
@@ -452,6 +456,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                             t.HasCheckConstraint("ck_bill_gates_issue_revision", "issue_revision_id ~ '^[0-9a-f]{64}$'");
 
                             t.HasCheckConstraint("ck_bill_gates_reason", "(decision = 'Pending' AND reason IS NULL) OR (decision = 'Passed' AND reason IS NOT NULL AND reason IN ('CoveredSponsor','TrackedPolicyArea','CoveredCosponsor')) OR (decision = 'NotRelevant' AND reason IS NOT NULL AND reason IN ('NoPolicyArea','UntrackedPolicyArea'))");
+
+                            t.HasCheckConstraint("ck_bill_gates_summary_count", "summary_count >= 0");
 
                             t.HasCheckConstraint("ck_bill_gates_update", "update_date_utc_ticks BETWEEN 0 AND 3155378975999999999");
                         });

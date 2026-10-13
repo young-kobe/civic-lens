@@ -63,6 +63,14 @@ public sealed class CaptureDocumentTextExtractor : IDocumentTextExtractor
         return text;
     }
 
+    public async Task<string> ExtractHtmlFragmentAsync(string markup, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(markup);
+        var text = await ExtractHtmlTextAsync(markup, null, cancellationToken);
+        ValidateText(text);
+        return text;
+    }
+
     private static string DecodePlainText(byte[] bytes, string? charset)
     {
         var (encoding, offset) = ReadBom(bytes);
@@ -88,6 +96,12 @@ public sealed class CaptureDocumentTextExtractor : IDocumentTextExtractor
         encoding ??= GetStrictEncoding("windows-1252");
         var markup = encoding.GetString(bytes, offset, bytes.Length - offset);
         cancellationToken.ThrowIfCancellationRequested();
+        return await ExtractHtmlTextAsync(markup, profile, cancellationToken);
+    }
+
+    private static async Task<string> ExtractHtmlTextAsync(string markup, DocumentContentProfile? profile,
+        CancellationToken cancellationToken)
+    {
         using var document = await CreateParser(cancellationToken).ParseDocumentAsync(markup, cancellationToken);
         ValidateTreeDepth(document, cancellationToken);
         return profile is null

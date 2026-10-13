@@ -20,8 +20,9 @@ public sealed partial class PostgresCollectionJobStore
         return TransactionAsync(async (db, now) =>
         {
             if (await IsGatedAsync(db, source.SourceId, bill, cancellationToken)) return NoAdmission with { DuplicateCount = 1 };
-            db.Add(NewGateRow(source.SourceId, detailJobId, bill, gate, issueRevisionId, now));
-            return await AdmitFollowOnsAsync(db, source, detailJobId, DetailFollowOns(source, bill, gate, now), now,
+            var row = NewGateRow(source.SourceId, detailJobId, bill, gate, issueRevisionId, now);
+            db.Add(row);
+            return await AdmitFollowOnsAsync(db, source, detailJobId, DetailFollowOns(source, bill, gate, row, now), now,
                 cancellationToken);
         }, cancellationToken);
     }
@@ -39,7 +40,7 @@ public sealed partial class PostgresCollectionJobStore
             if (page.Next is not null)
                 jobs.Add(source.CreateNextPageJob(ApiResource.BillCosponsors, pageJobId, page.Next, Today(now)));
             if (gate.Decision == BillGateDecision.Pending && SettleAtCosponsorPage(gate, page, source, now))
-                jobs.Add(ActionsFirstPage(source, gate, now));
+                jobs.AddRange(PassedFirstPages(source, gate, now));
             return await AdmitFollowOnsAsync(db, source, gate.DetailJobId, jobs, now, cancellationToken);
         }, cancellationToken);
     }
@@ -47,15 +48,28 @@ public sealed partial class PostgresCollectionJobStore
     public Task<DiscoveryAdmissionResult> AdmitActionsPageAsync(ConfiguredCollectionSource source, string pageJobId,
         CongressBillActionsPage page, CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(page);
+        return AdmitNextPageAsync(source, pageJobId, ApiResource.BillActions, page.Next, cancellationToken);
+    }
+
+    public Task<DiscoveryAdmissionResult> AdmitSummariesPageAsync(ConfiguredCollectionSource source, string pageJobId,
+        CongressBillSummariesPage page, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(page);
+        return AdmitNextPageAsync(source, pageJobId, ApiResource.BillSummaries, page.Next, cancellationToken);
+    }
+
+    private Task<DiscoveryAdmissionResult> AdmitNextPageAsync(ConfiguredCollectionSource source, string pageJobId,
+        ApiResource resource, string? next, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(source);
         ArgumentException.ThrowIfNullOrWhiteSpace(pageJobId);
         return TransactionAsync(async (db, now) =>
         {
             var detailJobId = await ReadDetailJobIdOfPageJobAsync(db, pageJobId, cancellationToken);
-            BillStreamJob[] jobs = page.Next is null
+            BillStreamJob[] jobs = next is null
                 ? []
-                : [source.CreateNextPageJob(ApiResource.BillActions, pageJobId, page.Next, Today(now))];
+                : [source.CreateNextPageJob(resource, pageJobId, next, Today(now))];
             return await AdmitFollowOnsAsync(db, source, detailJobId, jobs, now, cancellationToken);
         }, cancellationToken);
     }
@@ -75,13 +89,12 @@ public sealed partial class PostgresCollectionJobStore
     }
 
     private static List<BillStreamJob> DetailFollowOns(ConfiguredCollectionSource source, CongressBill bill,
-        BillGateOutcome gate, DateTimeOffset now)
+        BillGateOutcome gate, BillGateRow row, DateTimeOffset now)
     {
         var jobs = new List<BillStreamJob>();
         if (bill.CosponsorCount > 0)
             jobs.Add(source.CreateFirstPageJob(ApiResource.BillCosponsors, IdentityOf(bill), bill.UpdateDate, Today(now)));
-        if (gate.IsPassed)
-            jobs.Add(source.CreateFirstPageJob(ApiResource.BillActions, IdentityOf(bill), bill.UpdateDate, Today(now)));
+        if (gate.IsPassed) jobs.AddRange(PassedFirstPages(source, row, now));
         return jobs;
     }
 
@@ -97,8 +110,13 @@ public sealed partial class PostgresCollectionJobStore
         return outcome.IsPassed;
     }
 
-    private static BillStreamJob ActionsFirstPage(ConfiguredCollectionSource source, BillGateRow gate, DateTimeOffset now) =>
-        source.CreateFirstPageJob(ApiResource.BillActions, IdentityOf(gate), UpdateDateOf(gate), Today(now));
+    private static IEnumerable<BillStreamJob> PassedFirstPages(ConfiguredCollectionSource source, BillGateRow gate,
+        DateTimeOffset now)
+    {
+        yield return source.CreateFirstPageJob(ApiResource.BillActions, IdentityOf(gate), UpdateDateOf(gate), Today(now));
+        if (gate.SummaryCount > 0)
+            yield return source.CreateFirstPageJob(ApiResource.BillSummaries, IdentityOf(gate), UpdateDateOf(gate), Today(now));
+    }
 
     private static Task<bool> IsGatedAsync(CollectionAttemptDbContext db, string sourceId, CongressBill bill,
         CancellationToken cancellationToken)
@@ -119,6 +137,7 @@ public sealed partial class PostgresCollectionJobStore
             BillNumber = bill.Number,
             UpdateDateUtcTicks = bill.UpdateDate.UtcTicks,
             PolicyArea = bill.PolicyArea,
+            SummaryCount = bill.SummaryCount,
             IssueRevisionId = issueRevisionId,
             Decision = gate.Decision,
             Reason = gate.Reason,

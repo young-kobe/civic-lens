@@ -17,6 +17,7 @@ public sealed class JobPreparation(
     ICaptureBodyReader bodies,
     IEvidenceProcessingStore processing,
     IDocumentExtractionStore extractions,
+    IDocumentTextExtractor textExtractor,
     IssueConfigurationRevision? issues)
 {
     private const string NotModified = "notModified";
@@ -92,6 +93,7 @@ public sealed class JobPreparation(
             ApiResource.Bill => AdmitBillDetailAsync(job, artifactRoot, cancellationToken),
             ApiResource.BillCosponsors => AdmitCosponsorPageAsync(job, artifactRoot, cancellationToken),
             ApiResource.BillActions => AdmitActionsPageAsync(job, artifactRoot, cancellationToken),
+            ApiResource.BillSummaries => AdmitSummariesPageAsync(job, artifactRoot, cancellationToken),
             _ => throw new ArgumentOutOfRangeException(nameof(job))
         };
 
@@ -144,6 +146,22 @@ public sealed class JobPreparation(
         await SaveExtractionAsync(response.Captured, CongressBillActionsParser.Version, CongressBillRenderer.RenderActions(bill, page),
             cancellationToken);
         return PreparedFrom(await billAdmissions.AdmitActionsPageAsync(configured, job.JobId, page, cancellationToken));
+    }
+
+    private async Task<JobPreparationResult> AdmitSummariesPageAsync(CollectionJobRecord job, string artifactRoot,
+        CancellationToken cancellationToken)
+    {
+        var configured = ConfiguredSourceOf(job);
+        var bill = ReadPageBill(configured, job, ApiResource.BillSummaries);
+        var response = await ReadApiResponseAsync(job, artifactRoot, cancellationToken);
+        var page = CongressBillSummariesParser.Parse(response.Body, response.Request, configured.SourceUrl, bill);
+        var texts = new List<CongressBillSummaryText>();
+        foreach (var summary in page.Summaries)
+            texts.Add(new CongressBillSummaryText(summary, await textExtractor.ExtractHtmlFragmentAsync(summary.Html, cancellationToken)));
+        var parserVersion = CongressBillSummariesParser.ExtractionVersion(textExtractor);
+        await SaveExtractionAsync(response.Captured, parserVersion, CongressBillRenderer.RenderSummaries(bill, texts),
+            cancellationToken);
+        return PreparedFrom(await billAdmissions.AdmitSummariesPageAsync(configured, job.JobId, page, cancellationToken));
     }
 
     private static CongressBillListItem ReadPageBill(ConfiguredCollectionSource configured, CollectionJobRecord job,

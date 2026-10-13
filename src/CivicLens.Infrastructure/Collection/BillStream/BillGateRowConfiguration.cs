@@ -11,6 +11,7 @@ internal sealed class BillGateRowConfiguration : IEntityTypeConfiguration<BillGa
         builder.ToTable("bill_gates", table =>
         {
             table.HasCheckConstraint("ck_bill_gates_bill", "congress >= 1 AND bill_number >= 1");
+            table.HasCheckConstraint("ck_bill_gates_summary_count", "summary_count >= 0");
             table.HasCheckConstraint("ck_bill_gates_update", "update_date_utc_ticks BETWEEN 0 AND 3155378975999999999");
             table.HasCheckConstraint("ck_bill_gates_created", "created_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
             table.HasCheckConstraint("ck_bill_gates_decided",
@@ -28,6 +29,7 @@ internal sealed class BillGateRowConfiguration : IEntityTypeConfiguration<BillGa
         builder.Property(row => row.BillNumber).HasColumnName("bill_number");
         builder.Property(row => row.UpdateDateUtcTicks).HasColumnName("update_date_utc_ticks");
         builder.Property(row => row.PolicyArea).HasColumnName("policy_area");
+        builder.Property(row => row.SummaryCount).HasColumnName("summary_count");
         builder.Property(row => row.IssueRevisionId).HasColumnName("issue_revision_id").HasMaxLength(64);
         builder.Property(row => row.Decision).HasColumnName("decision").HasMaxLength(32)
             .HasConversion<string>();

@@ -11,7 +11,8 @@ public sealed class CongressBillParserTests
         {"bill":{"congress":119,"type":"HR","number":"1","title":"A bill","introducedDate":"2025-01-03",
          "updateDate":"2025-07-04T08:03:25Z","policyArea":{"name":"Taxation"},
          "sponsors":[{"bioguideId":"A000375","url":"https://evil.test/x"}],
-         "cosponsors":{"count":2,"countIncludingWithdrawnCosponsors":3,"url":"https://evil.test/c"},"actions":{"count":71,"url":"https://evil.test/a"}},
+         "cosponsors":{"count":2,"countIncludingWithdrawnCosponsors":3,"url":"https://evil.test/c"},"actions":{"count":71,"url":"https://evil.test/a"},
+         "summaries":{"count":5,"url":"https://evil.test/s"}},
          "request":{"billNumber":"1"}}
         """;
 
@@ -62,6 +63,22 @@ public sealed class CongressBillParserTests
     [InlineData("\"bioguideId\":\"A000375\"", "\"bioguideId\":\" A000375\"")]
     [InlineData("\"bioguideId\":\"A000375\"", "\"bioguideId\":\"a000375\"")]
     public void AnIncompleteFieldIsInvalidBecauseThePartialBillMustNotReachTheGate(string original, string replacement)
+    {
+        Assert.Throws<InvalidDataException>(() => Parse(Valid.Replace(original, replacement)));
+    }
+
+    [Fact]
+    public void TheSummaryCountDecidesWhetherASummariesPageIsFetchedSoAMissingObjectMeansZero()
+    {
+        Assert.Equal(5, Parse(Valid).SummaryCount);
+        Assert.Equal(0, Parse(Valid.Replace("\"summaries\":{\"count\":5,\"url\":\"https://evil.test/s\"}", "\"summaries\":null")).SummaryCount);
+    }
+
+    [Theory]
+    [InlineData("\"summaries\":{\"count\":5,", "\"summaries\":{\"count\":-1,")]
+    [InlineData("\"summaries\":{\"count\":5,", "\"summaries\":{\"count\":null,")]
+    [InlineData("\"summaries\":{\"count\":5,", "\"summaries\":{\"count\":\"many\",")]
+    public void AnInvalidSummaryCountIsInvalidBecauseItGatesAnExtraFetch(string original, string replacement)
     {
         Assert.Throws<InvalidDataException>(() => Parse(Valid.Replace(original, replacement)));
     }

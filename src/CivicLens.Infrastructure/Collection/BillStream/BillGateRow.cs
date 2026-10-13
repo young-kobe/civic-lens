@@ -11,6 +11,7 @@ internal sealed class BillGateRow
     public int BillNumber { get; set; }
     public long UpdateDateUtcTicks { get; set; }
     public string? PolicyArea { get; set; }
+    public int SummaryCount { get; set; }
     public string IssueRevisionId { get; set; } = "";
     public BillGateDecision Decision { get; set; }
     public BillGateReason? Reason { get; set; }

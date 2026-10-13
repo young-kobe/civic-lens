@@ -10,7 +10,7 @@ public sealed class CongressBillRendererTests
     private static CongressBill Bill(string title = "A bill", string? policyArea = "Immigration", string[]? sponsors = null,
         DateTimeOffset? updated = null) =>
         new(119, "hr", 1234, title, new DateOnly(2026, 3, 2), updated ?? new DateTimeOffset(2026, 10, 6, 14, 3, 0, TimeSpan.Zero),
-            policyArea, sponsors ?? ["L000595"], 12, 71);
+            policyArea, sponsors ?? ["L000595"], 12, 71, 3);
 
     [Fact]
     public void DetailIsOneFactPerLineInAFixedOrderSoEachFactIsACleanCitationSpan()
@@ -134,10 +134,40 @@ public sealed class CongressBillRendererTests
     }
 
     [Fact]
+    public void SummariesRenderOneBlockEachWithLabeledFactsAndAMultiLineTextAfterTheTextLabel()
+    {
+        var summaries = new[]
+        {
+            new CongressBillSummaryText(new CongressBillSummary("173", new DateOnly(2022, 2, 18), "Passed Senate",
+                new DateTimeOffset(2022, 2, 18, 11, 38, 41, TimeSpan.FromHours(-5)), "<p>x</p>"), "First line\nSecond line"),
+            new CongressBillSummaryText(new CongressBillSummary("00", new DateOnly(2022, 3, 1), "Introduced\nin Senate",
+                new DateTimeOffset(2022, 3, 1, 10, 0, 0, TimeSpan.Zero), ""), "")
+        };
+        const string expected = "Bill: 119 hr 1234\n\n" +
+            "Summary version: 173\nAction date: 2022-02-18\nAction: Passed Senate\nUpdated: 2022-02-18T16:38:41Z\nText:\nFirst line\nSecond line\n\n" +
+            "Summary version: 00\nAction date: 2022-03-01\nAction: Introduced in Senate\nUpdated: 2022-03-01T10:00:00Z\nText:";
+
+        Assert.Equal(expected, CongressBillRenderer.RenderSummaries(Item, summaries));
+    }
+
+    [Theory]
+    [InlineData("one\n\ntwo")]
+    [InlineData("one\r\ntwo")]
+    [InlineData("one\rtwo")]
+    public void SummaryTextWithABlankLineOrCarriageReturnIsInvalidBecauseABlankLineIsTheOnlyBlockSeparator(string text)
+    {
+        var summary = new CongressBillSummary("1", new DateOnly(2022, 1, 1), "a", DateTimeOffset.UnixEpoch, "");
+
+        Assert.Throws<InvalidDataException>(() =>
+            CongressBillRenderer.RenderSummaries(Item, [new CongressBillSummaryText(summary, text)]));
+    }
+
+    [Fact]
     public void AnEmptyPageStillNamesItsBillAndEndsWithoutWhitespace()
     {
         Assert.Equal("Bill: 119 hr 1234", CongressBillRenderer.RenderCosponsors(Item, new CongressBillCosponsorsPage([], null)));
         Assert.Equal("Bill: 119 hr 1234", CongressBillRenderer.RenderActions(Item, new CongressBillActionsPage([], null)));
+        Assert.Equal("Bill: 119 hr 1234", CongressBillRenderer.RenderSummaries(Item, []));
     }
 
     [Fact]

@@ -213,6 +213,11 @@ public sealed class CongressBillSourceConfigurationTests
     [InlineData(ApiResource.BillActions, "https://api.congress.gov/v3/bill/119/hr/01/actions?format=json&limit=250")]
     [InlineData(ApiResource.BillActions, "https://api.congress.gov/v3/bill/119/xx/1/actions?format=json&limit=250")]
     [InlineData(ApiResource.BillCosponsors, "https://api.congress.gov/v3/bill/119/hr/1/cosponsors/extra?format=json&limit=250")]
+    [InlineData(ApiResource.BillSummaries, "https://api.congress.gov/v3/bill/119/hr/1/actions?format=json&limit=250")]
+    [InlineData(ApiResource.BillActions, "https://api.congress.gov/v3/bill/119/hr/1/summaries?format=json&limit=1")]
+    [InlineData(ApiResource.BillSummaries, "https://api.congress.gov/v3/bill/119/hr/1?format=json")]
+    [InlineData(ApiResource.BillSummaries, "https://api.congress.gov/v3/bill/119/hr/1/summaries?format=json&limit=1&api_key=secret")]
+    [InlineData(ApiResource.BillSummaries, "https://api.congress.gov/v3/bill/119/hr/1/summaries?format=json&limit=250")]
     public void AJobUrlMustHaveTheExactFormOfItsResourceSoTheWorkerNeverReadsItAsAnotherKind(ApiResource resource, string url)
     {
         var configured = new ConfiguredCollectionSource(Configuration(), "congress-bills", Backfill);
@@ -225,6 +230,8 @@ public sealed class CongressBillSourceConfigurationTests
     [InlineData(ApiResource.BillCosponsors, "https://api.congress.gov/v3/bill/119/hres/1610/cosponsors?offset=250&limit=250&format=json")]
     [InlineData(ApiResource.BillActions, "https://api.congress.gov/v3/bill/119/hr/1/actions?format=json&limit=250")]
     [InlineData(ApiResource.BillActions, "https://api.congress.gov/v3/bill/119/hr/1/actions?limit=250&format=json&offset=500")]
+    [InlineData(ApiResource.BillSummaries, "https://api.congress.gov/v3/bill/117/s/3480/summaries?format=json&limit=1")]
+    [InlineData(ApiResource.BillSummaries, "https://api.congress.gov/v3/bill/117/s/3480/summaries?limit=1&format=json&offset=250")]
     public void FollowOnPageJobsAcceptTheFirstPageFormAndTheApiNextFormSoPagingNeedsNoRewrite(ApiResource resource, string url)
     {
         var configured = new ConfiguredCollectionSource(Configuration(), "congress-bills", Backfill);

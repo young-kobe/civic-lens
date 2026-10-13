@@ -15,6 +15,8 @@ public sealed class BillStreamJobKeysTests
             BillStreamJobKeys.FirstBillPage("congress-bills", ApiResource.BillCosponsors, Bill, UpdatedAt));
         Assert.Equal("bill-stream/congress-bills/actions/119/hr/7/2025-03-03T12:30:05Z",
             BillStreamJobKeys.FirstBillPage("congress-bills", ApiResource.BillActions, Bill, UpdatedAt));
+        Assert.Equal("bill-stream/congress-bills/summaries/119/hr/7/2025-03-03T12:30:05Z",
+            BillStreamJobKeys.FirstBillPage("congress-bills", ApiResource.BillSummaries, Bill, UpdatedAt));
     }
 
     [Fact]
@@ -34,6 +36,8 @@ public sealed class BillStreamJobKeysTests
         Assert.Equal("bill-stream/congress-bills/cosponsors/page/parent",
             BillStreamJobKeys.NextBillPage("congress-bills", ApiResource.BillCosponsors, "parent"));
         Assert.NotEqual(BillStreamJobKeys.NextBillPage("s", ApiResource.BillCosponsors, "parent"),
+            BillStreamJobKeys.NextBillPage("s", ApiResource.BillActions, "parent"));
+        Assert.NotEqual(BillStreamJobKeys.NextBillPage("s", ApiResource.BillSummaries, "parent"),
             BillStreamJobKeys.NextBillPage("s", ApiResource.BillActions, "parent"));
         Assert.NotEqual(BillStreamJobKeys.NextBillPage("s", ApiResource.BillActions, "one"),
             BillStreamJobKeys.NextBillPage("s", ApiResource.BillActions, "two"));
