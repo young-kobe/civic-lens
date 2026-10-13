@@ -70,7 +70,7 @@ Version 1 remains supported. For dated coverage use version 2, replace each sour
 }
 ```
 
-`startsOn` is inclusive and `endsBefore` exclusive; either may be omitted to leave that limit unspecified. A person's optional `names` array contains entries with `name` and the same optional date fields. Different names may overlap. Duplicate overlapping intervals for the same exact name or person/source are invalid; adjacent intervals are allowed. Coverage is our monitoring policy, not a claim about authorship, officeholding, or source ownership.
+`startsOn` is inclusive and `endsBefore` exclusive; either may be omitted to leave that limit unspecified. A person's optional `names` array contains entries with `name` and the same optional date fields. A version 2 person may also have a `bioguideId`, the Congress.gov member ID, for example `W000817`. It is one uppercase letter and six digits. Each ID belongs to one person. Different names may overlap. Duplicate overlapping intervals for the same exact name or person/source are invalid; adjacent intervals are allowed. Coverage is our monitoring policy, not a claim about authorship, officeholding, or source ownership.
 
 `collect`, `collect-import`, `jobs enqueue`, and `discovery admit` accept a trailing `--as-of yyyy-MM-dd`. Direct collection defaults to today's UTC date. New managed admissions default to the UTC database date inside their transaction. An enabled source must have coverage on the resolved date for new work. Repeating an existing key without `--as-of` returns its saved decision and date, even after coverage expires. Selecting a past date still fetches the current source; it does not request an archived page. For a reproducible managed admission:
 

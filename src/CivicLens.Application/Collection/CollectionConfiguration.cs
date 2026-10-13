@@ -2,10 +2,11 @@ using CivicLens.Application.Documents;
 using CivicLens.Collection.Contracts;
 using CivicLens.Core.Registry;
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 
 namespace CivicLens.Application.Collection;
 
-public sealed record CollectionConfiguration
+public sealed partial record CollectionConfiguration
 {
     [JsonRequired]
     public int Version { get; init; } = 1;
@@ -23,6 +24,7 @@ public sealed record CollectionConfiguration
             throw new ArgumentException("Document profiles require collection configuration version 2.");
 
         var peopleById = new Dictionary<string, PersonConfiguration>(StringComparer.Ordinal);
+        var bioguideIds = new HashSet<string>(StringComparer.Ordinal);
         foreach (var person in People)
         {
             if (person is null || string.IsNullOrWhiteSpace(person.Id) || string.IsNullOrWhiteSpace(person.Name))
@@ -30,6 +32,7 @@ public sealed record CollectionConfiguration
             if (Version == 1 && person.Names is not null)
                 throw new ArgumentException("Dated names require collection configuration version 2.");
             ValidateNames(person);
+            ValidateBioguideId(person, bioguideIds);
             if (!peopleById.TryAdd(person.Id, person))
                 throw new ArgumentException($"Duplicate person ID '{person.Id}'.");
         }
@@ -173,6 +176,21 @@ public sealed record CollectionConfiguration
             ranges.Add(range);
         }
     }
+
+    private void ValidateBioguideId(PersonConfiguration person, HashSet<string> bioguideIds)
+    {
+        if (person.BioguideId is null)
+            return;
+        if (Version == 1)
+            throw new ArgumentException("Bioguide IDs require collection configuration version 2.");
+        if (!BioguideIdPattern().IsMatch(person.BioguideId))
+            throw new ArgumentException($"Person '{person.Id}' has an invalid bioguide ID.");
+        if (!bioguideIds.Add(person.BioguideId))
+            throw new ArgumentException($"Duplicate bioguide ID '{person.BioguideId}'.");
+    }
+
+    [GeneratedRegex(@"^[A-Z][0-9]{6}\z")]
+    private static partial Regex BioguideIdPattern();
 
     private static CollectionRequest BuildRequest(WatchedSourceConfiguration source, string jobId, string artifactDirectory)
     {

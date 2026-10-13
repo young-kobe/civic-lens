@@ -72,6 +72,35 @@ public sealed class CollectionConfigurationRevisionTests
     }
 
     [Fact]
+    public void VersionTwoRevisionWithoutBioguideIdRetainsItsOriginalJsonAndId()
+    {
+        const string json = "{\"version\":2,\"people\":[{\"id\":\"person\",\"name\":\"Official\"}],\"sources\":[{\"id\":\"source\",\"coverage\":[{\"personId\":\"person\"}],\"url\":\"https://example.test/page\",\"allowedOrigin\":\"https://example.test\",\"allowedPathPrefix\":\"/\",\"mode\":\"page\",\"maxCandidates\":100,\"enabled\":true,\"maxRequests\":5,\"maxBytes\":2000000,\"timeoutSeconds\":30,\"minDelayMilliseconds\":1000}]}";
+        const string id = "58b41360ffe7248514604bf842588451d95d14c35acefccfe3d2507994273655";
+
+        var revision = new CollectionConfigurationRevision(id, json);
+
+        Assert.Equal(json, revision.Json);
+        Assert.DoesNotContain("bioguideId", revision.Json, StringComparison.Ordinal);
+        Assert.Equal(id, CollectionConfigurationRevision.Create(revision.ReadConfiguration()).Id);
+    }
+
+    [Fact]
+    public void BioguideIdSurvivesRevisionRoundTrip()
+    {
+        var configuration = new CollectionConfiguration
+        {
+            Version = 2,
+            People = [new PersonConfiguration { Id = "person", Name = "Official", BioguideId = "W000817" }],
+            Sources = [Configuration(["person"]).Sources[0] with { PersonIds = null, Coverage = [new SourceCoverageConfiguration { PersonId = "person" }] }]
+        };
+
+        var revision = CollectionConfigurationRevision.Create(configuration);
+
+        Assert.Contains("\"bioguideId\":\"W000817\"", revision.Json, StringComparison.Ordinal);
+        Assert.Equal("W000817", revision.ReadConfiguration().People[0].BioguideId);
+    }
+
+    [Fact]
     public void ExplicitSourceIntervalChangesConfigurationRevision()
     {
         var configuration = Configuration(["person"]);

@@ -222,6 +222,50 @@ public sealed class ConfigurationTests
         Assert.Throws<ArgumentException>(() => DatedConfiguration([new SourceCoverageConfiguration { PersonId = "one" }], duplicate).Validate());
     }
 
+    [Theory]
+    [InlineData("w000817")]
+    [InlineData("W00081")]
+    [InlineData("W0008177")]
+    [InlineData("WX00817")]
+    [InlineData(" W000817")]
+    [InlineData("W000817\n")]
+    [InlineData("")]
+    public void BioguideIdMustBeOneUppercaseLetterAndSixDigits(string bioguideId)
+    {
+        var person = new PersonConfiguration { Id = "one", Name = "One", BioguideId = bioguideId };
+
+        Assert.Throws<ArgumentException>(() => DatedConfiguration([new SourceCoverageConfiguration { PersonId = "one" }], person).Validate());
+    }
+
+    [Fact]
+    public void BioguideIdIsOptionalAndAcceptedInVersionTwo()
+    {
+        var person = new PersonConfiguration { Id = "one", Name = "One", BioguideId = "W000817" };
+
+        DatedConfiguration([new SourceCoverageConfiguration { PersonId = "one" }], person).Validate();
+    }
+
+    [Fact]
+    public void TwoPeopleCannotShareOneBioguideIdBecauseItNamesOneMember()
+    {
+        var configuration = DatedConfiguration([new SourceCoverageConfiguration { PersonId = "one" }],
+            new PersonConfiguration { Id = "one", Name = "One", BioguideId = "W000817" });
+        var shared = configuration with
+        {
+            People = [configuration.People[0], configuration.People[1] with { BioguideId = "W000817" }]
+        };
+
+        Assert.Throws<ArgumentException>(shared.Validate);
+    }
+
+    [Fact]
+    public void VersionOneRejectsBioguideIdBecauseOldRevisionsNeverCarriedIt()
+    {
+        var configuration = ValidConfiguration([new PersonConfiguration { Id = "person", Name = "Official", BioguideId = "W000817" }], ["person"]);
+
+        Assert.Throws<ArgumentException>(configuration.Validate);
+    }
+
     [Fact]
     public void VersionAndCoverageShapesAreStrictEvenForDisabledSources()
     {

@@ -3,11 +3,13 @@
   "people": [
     {
       "id": "elizabeth-warren",
-      "name": "Elizabeth Warren"
+      "name": "Elizabeth Warren",
+      "bioguideId": "W000817"
     },
     {
       "id": "ted-cruz",
-      "name": "Ted Cruz"
+      "name": "Ted Cruz",
+      "bioguideId": "C001098"
     }
   ],
   "sources": [
