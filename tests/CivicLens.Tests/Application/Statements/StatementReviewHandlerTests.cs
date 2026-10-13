@@ -18,7 +18,9 @@ public sealed class StatementReviewHandlerTests
     private readonly FakeStatementReviewStore store = new();
 
     private StatementReviewContextReader Reader() =>
-        new(new FakeStatementDraftStore(Evidence), StatementGateFixtures.Configuration());
+        new(new FakeStatementDraftStore(Evidence), new StatementSelectionResolver(StatementGateFixtures.Configuration()));
+
+    private static StatementSelectionResolver Resolver => new(StatementGateFixtures.Configuration());
 
     private static StatementSpan Span(string quoted) => new(Evidence.Article.Extraction.ExtractionId,
         Evidence.Article.Extraction.Text.IndexOf(quoted, StringComparison.Ordinal), quoted.Length);
@@ -131,7 +133,7 @@ public sealed class StatementReviewHandlerTests
             await Assert.ThrowsAsync<UnauthorizedAccessException>(() => new SaveStatementDraft(store, Reader()).ExecuteAsync(actor, Request()));
             await Assert.ThrowsAsync<UnauthorizedAccessException>(() => new DecideStatementReview(store, Reader()).ExecuteAsync(actor,
                 new(CandidateId, 1, 0, ReviewDecisionKind.Approve, null, [], "k")));
-            await Assert.ThrowsAsync<UnauthorizedAccessException>(() => new GetStatementReview(store).ExecuteAsync(actor, CandidateId));
+            await Assert.ThrowsAsync<UnauthorizedAccessException>(() => new GetStatementReview(store, Resolver).ExecuteAsync(actor, CandidateId));
             await Assert.ThrowsAsync<UnauthorizedAccessException>(() => new ListStatementReviews(store).ExecuteAsync(actor, null));
             await Assert.ThrowsAsync<UnauthorizedAccessException>(() => new ListStatementsNotInReview(store).ExecuteAsync(actor, null));
         }
@@ -164,7 +166,33 @@ public sealed class StatementReviewHandlerTests
     [InlineData("ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789")]
     public async Task CandidateIdsMustBeSha256Hex(string candidateId)
     {
-        await Assert.ThrowsAsync<ArgumentException>(() => new GetStatementReview(store).ExecuteAsync(Reviewer, candidateId));
+        await Assert.ThrowsAsync<ArgumentException>(() => new GetStatementReview(store, Resolver).ExecuteAsync(Reviewer, candidateId));
         await Assert.ThrowsAsync<ArgumentException>(() => new CreateStatementDraft(store).ExecuteAsync(Reviewer, new(candidateId, "k")));
+    }
+
+    [Fact]
+    public async Task GetReturnsTheSelectionsOfTheRevisionThatAdmittedTheArticleSoThePageNeedsNoSecondRead()
+    {
+        store.Read = new StatementReviewRead(new(CandidateId, null, 0, ReviewStatus.NotDrafted, [], [], []), "source", "https://example.test/a",
+            Evidence.Article.Extraction, null, StatementDraftFixtures.SpeakerRevision());
+
+        var detail = (await new GetStatementReview(store, Resolver).ExecuteAsync(Reviewer, CandidateId))!;
+
+        Assert.Equal([StatementDraftFixtures.Warren], detail.Allowed.OfficialIds);
+        Assert.Equal([StatementDraftFixtures.Warren], detail.Officials.Select(official => official.Id));
+        Assert.Contains(StatementGateFixtures.RentIssue, detail.Allowed.IssueIds);
+        Assert.Contains(StatementGateFixtures.HousingArea, detail.Allowed.PolicyAreaIds);
+    }
+
+    [Fact]
+    public async Task GetAllowsNoOfficialWhenTheAdmittingRevisionIsMissing()
+    {
+        store.Read = new StatementReviewRead(new(CandidateId, null, 0, ReviewStatus.NotDrafted, [], [], []), "source", "https://example.test/a",
+            Evidence.Article.Extraction, null, null);
+
+        var detail = (await new GetStatementReview(store, Resolver).ExecuteAsync(Reviewer, CandidateId))!;
+
+        Assert.Empty(detail.Allowed.OfficialIds);
+        Assert.Empty(detail.Officials);
     }
 }

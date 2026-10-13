@@ -4,5 +4,7 @@ namespace CivicLens.Application.Statements;
 
 public sealed record StatementGateEvidence(string CandidateId, DocumentExtraction Extraction)
 {
-    public DateOnly FirstCapturedOn => DateOnly.FromDateTime(Extraction.SourceAttempt.ObservedAt.UtcDateTime);
+    public DateOnly FirstCapturedOn => CapturedOn(Extraction);
+
+    public static DateOnly CapturedOn(DocumentExtraction extraction) => DateOnly.FromDateTime(extraction.SourceAttempt.ObservedAt.UtcDateTime);
 }

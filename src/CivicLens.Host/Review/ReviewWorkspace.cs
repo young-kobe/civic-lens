@@ -240,6 +240,7 @@ internal static class ReviewWorkspace
         services.AddSingleton<IStatementReviewStore>(new PostgresStatementReviewStore(contexts));
         services.AddSingleton<IStatementDraftStore>(new PostgresStatementDraftStore(contexts));
         services.AddSingleton(Issues.Value);
+        services.AddSingleton<StatementSelectionResolver>();
         services.AddScoped<StatementReviewContextReader>();
         services.AddScoped<CreateStatementDraft>();
         services.AddScoped<SaveStatementDraft>();

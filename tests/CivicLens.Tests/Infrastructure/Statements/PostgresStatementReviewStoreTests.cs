@@ -1,3 +1,4 @@
+using System.Data.Common;
 using CivicLens.Application.Analysis;
 using CivicLens.Application.Review;
 using CivicLens.Application.Statements;
@@ -10,6 +11,7 @@ using CivicLens.Tests.Application.Analysis;
 using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Npgsql;
 using static CivicLens.Tests.Fixtures.StatementDraftFixtures;
@@ -58,7 +60,7 @@ public sealed class PostgresStatementReviewStoreTests(PostgresCollection postgre
     private SaveStatementDraft Save => new(reviews, Reader(StatementGateFixtures.Configuration()));
     private DecideStatementReview Decide => new(reviews, Reader(StatementGateFixtures.Configuration()));
 
-    private StatementReviewContextReader Reader(CivicLens.Application.Issues.IssueConfiguration issues) => new(drafts, issues);
+    private StatementReviewContextReader Reader(CivicLens.Application.Issues.IssueConfiguration issues) => new(drafts, new StatementSelectionResolver(issues));
 
     [Fact]
     public async Task CreateStartsRevisionOneReplaysAndRefusesASecondDraft()
@@ -117,6 +119,40 @@ public sealed class PostgresStatementReviewStoreTests(PostgresCollection postgre
         Assert.Single(outcomes, outcome => outcome is StatementDraftRevision);
         Assert.Single(outcomes, outcome => outcome is ReviewConflictException);
         Assert.Equal(2L, await ScalarAsync($"SELECT current_revision_number FROM statement_drafts WHERE candidate_id = '{candidate}'"));
+    }
+
+    [Fact]
+    public async Task GetReadsTheAdmittingRevisionWithTheSameQueryCountForADraftedAndAnUndraftedCandidate()
+    {
+        var drafted = await ApprovableAsync();
+        var undrafted = await CandidateAsync();
+        var counter = new ReadCommandCounter();
+        var counted = new PostgresStatementReviewStore(new PooledDbContextFactory<CollectionAttemptDbContext>(
+            new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).AddInterceptors(counter).Options));
+
+        var read = await counted.GetAsync(drafted, default);
+        var draftedReads = counter.ReadCount;
+        counter.ReadCount = 0;
+        await counted.GetAsync(undrafted, default);
+
+        Assert.NotNull(read!.ConfigurationRevision);
+        Assert.Equal(draftedReads, counter.ReadCount);
+        Assert.InRange(counter.ReadCount, 1, 9);
+    }
+
+    [Fact]
+    public async Task GetReturnsTheAllowedSelectionsTheWriteHandlersWouldUse()
+    {
+        var candidate = await ApprovableAsync();
+        var get = new GetStatementReview(reviews, new StatementSelectionResolver(StatementGateFixtures.Configuration()));
+
+        var detail = (await get.ExecuteAsync(Owner, candidate))!;
+        var context = await Reader(StatementGateFixtures.Configuration()).ReadAsync(candidate, default);
+
+        Assert.Equal(context.Allowed.OfficialIds, detail.Allowed.OfficialIds);
+        Assert.Equal(context.Allowed.IssueIds, detail.Allowed.IssueIds);
+        Assert.Equal(context.Allowed.PolicyAreaIds, detail.Allowed.PolicyAreaIds);
+        Assert.Equal(context.Officials.Select(official => official.Id), detail.Officials.Select(official => official.Id));
     }
 
     [Fact]
@@ -361,7 +397,7 @@ public sealed class PostgresStatementReviewStoreTests(PostgresCollection postgre
     {
         var candidate = await ApprovableAsync();
         var undrafted = await CandidateAsync();
-        var get = new GetStatementReview(reviews);
+        var get = new GetStatementReview(reviews, new StatementSelectionResolver(StatementGateFixtures.Configuration()));
 
         var detail = (await get.ExecuteAsync(Owner, candidate))!;
         var notDrafted = (await get.ExecuteAsync(Owner, undrafted))!;
@@ -533,5 +569,18 @@ public sealed class PostgresStatementReviewStoreTests(PostgresCollection postgre
         await open.OpenAsync();
         await using var command = new NpgsqlCommand(sql, open);
         await command.ExecuteNonQueryAsync();
+    }
+
+    private sealed class ReadCommandCounter : DbCommandInterceptor
+    {
+        public int ReadCount { get; set; }
+
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(DbCommand command,
+            CommandEventData eventData, InterceptionResult<DbDataReader> result,
+            CancellationToken cancellationToken = default)
+        {
+            ReadCount++;
+            return ValueTask.FromResult(result);
+        }
     }
 }

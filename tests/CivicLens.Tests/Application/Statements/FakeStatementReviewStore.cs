@@ -41,8 +41,10 @@ internal sealed class FakeStatementReviewStore : IStatementReviewStore
         return Task.FromResult(decision);
     }
 
-    public Task<StatementReviewDetail?> GetAsync(string candidateId, CancellationToken cancellationToken) =>
-        Task.FromResult<StatementReviewDetail?>(null);
+    public StatementReviewRead? Read { get; set; }
+
+    public Task<StatementReviewRead?> GetAsync(string candidateId, CancellationToken cancellationToken) =>
+        Task.FromResult(Read);
 
     public Task<StatementReviewPage> ListAsync(PageCursor? cursor, int limit, DraftStatusFilter filter, CancellationToken cancellationToken)
     {

@@ -15,6 +15,8 @@ namespace CivicLens.Infrastructure.Statements;
 
 public sealed class PostgresStatementReviewStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory) : IStatementReviewStore
 {
+    private readonly AdmittingRevisionReader admittingRevisions = new();
+
     private const string CreateOperation = "statement-create";
     private const string SaveOperation = "statement-save";
     private const string DecideOperation = "statement-decide";
@@ -106,7 +108,7 @@ public sealed class PostgresStatementReviewStore(IDbContextFactory<CollectionAtt
             }, cancellationToken);
     }
 
-    public async Task<StatementReviewDetail?> GetAsync(string candidateId, CancellationToken cancellationToken)
+    public async Task<StatementReviewRead?> GetAsync(string candidateId, CancellationToken cancellationToken)
     {
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
@@ -120,10 +122,11 @@ public sealed class PostgresStatementReviewStore(IDbContextFactory<CollectionAtt
             ?? StatementDraftRows.NewDraft(candidateId, 0, candidate.CreatedAtUtcTicks);
         var revisions = await ReadRevisionRowsAsync(db, [candidateId], cancellationToken);
         var decisions = await ReadDecisionRowsAsync(db, [candidateId], cancellationToken);
+        var configurationRevision = await admittingRevisions.ReadAsync(db, candidateId, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         var review = BuildReview(draft, revisions[candidateId], decisions[candidateId]);
         foreach (var revision in review.Revisions) revision.ValidateAgainst(article.Extraction);
-        return new(review, candidate.SourceId, candidate.Url, article.Extraction, revisions[candidateId].FirstOrDefault()?.RunId);
+        return new(review, candidate.SourceId, candidate.Url, article.Extraction, revisions[candidateId].FirstOrDefault()?.RunId, configurationRevision);
     }
 
     public async Task<StatementReviewPage> ListAsync(PageCursor? cursor, int limit, DraftStatusFilter filter,

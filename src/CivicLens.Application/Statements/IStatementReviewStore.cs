@@ -17,7 +17,7 @@ public interface IStatementReviewStore
         int expectedReviewStateVersion, StatementAllowedSelections? approvalSelections, string idempotencyKey, string payloadHash,
         CancellationToken cancellationToken);
 
-    Task<StatementReviewDetail?> GetAsync(string candidateId, CancellationToken cancellationToken);
+    Task<StatementReviewRead?> GetAsync(string candidateId, CancellationToken cancellationToken);
 
     Task<StatementReviewPage> ListAsync(PageCursor? cursor, int limit, DraftStatusFilter filter, CancellationToken cancellationToken);
 

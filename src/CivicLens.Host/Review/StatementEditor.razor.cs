@@ -25,13 +25,11 @@ public sealed partial class StatementEditor
     private readonly string startKey = Guid.NewGuid().ToString("N");
     private StatementReviewDetail? detail;
     private StatementReview? review;
-    private StatementReviewContext? context;
     private StatementNames? names;
     private ImmutableArray<StatementSelectableSpan> spans = [];
     private bool isDraftConflict;
 
     [Inject] private GetStatementReview GetReview { get; set; } = default!;
-    [Inject] private StatementReviewContextReader ContextReader { get; set; } = default!;
     [Inject] private CreateStatementDraft CreateDraft { get; set; } = default!;
     [Inject] private SaveStatementDraft SaveDraft { get; set; } = default!;
     [Inject] private DecideStatementReview DecideReview { get; set; } = default!;
@@ -46,9 +44,9 @@ public sealed partial class StatementEditor
     private bool IsAiRevision => Revision?.AuthorKind == ReviewAuthorKind.Analysis;
     private bool HasUnconfirmedAiDate => IsAiRevision && Revision!.StatementDate is not null;
     private string ArticleText => detail!.Extraction.Text;
-    private ImmutableArray<AnalysisOfficial> Officials => context?.Officials ?? [];
-    private ImmutableArray<string> AllowedIssueIds => [.. context!.Allowed.IssueIds.Order(StringComparer.Ordinal)];
-    private ImmutableArray<string> AllowedPolicyAreaIds => [.. context!.Allowed.PolicyAreaIds.Order(StringComparer.Ordinal)];
+    private ImmutableArray<AnalysisOfficial> Officials => detail?.Officials ?? [];
+    private ImmutableArray<string> AllowedIssueIds => [.. detail!.Allowed.IssueIds.Order(StringComparer.Ordinal)];
+    private ImmutableArray<string> AllowedPolicyAreaIds => [.. detail!.Allowed.PolicyAreaIds.Order(StringComparer.Ordinal)];
     private string Headline => Revision is null ? "Not drafted" : DraftStatusDisplay.DraftName(Revision.Headline);
 
     private IReadOnlyList<Crumb> Crumbs =>
@@ -72,8 +70,7 @@ public sealed partial class StatementEditor
         }
         review = detail.Review;
         if (Revision is null) return;
-        context = await ContextReader.ReadAsync(CandidateId, RequestAborted);
-        names = new StatementNames(context.Officials, Issues);
+        names = new StatementNames(detail.Officials, Issues);
         spans = StatementSelectableSpans.Build(detail.Extraction, Revision);
         Input ??= StatementInput.From(Revision);
     }
