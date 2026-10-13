@@ -13,11 +13,11 @@ public static class SourceLabels
         return officials.Length == 0 ? Document(source.Url) : officials;
     }
 
-    public static string Officials(CollectionConfiguration configuration, WatchedSourceConfiguration source) =>
-        string.Join(", ", configuration.People
-            .Where(person => source.Coverage?.Any(item => item.PersonId == person.Id) == true ||
-                source.PersonIds?.Contains(person.Id) == true)
-            .Select(person => person.Name));
+    public static string Officials(CollectionConfiguration configuration, WatchedSourceConfiguration source)
+    {
+        var listed = configuration.ListedPersonIdsOf(source);
+        return string.Join(", ", configuration.People.Where(person => listed.Contains(person.Id)).Select(person => person.Name));
+    }
 
     public static string Document(string url)
     {

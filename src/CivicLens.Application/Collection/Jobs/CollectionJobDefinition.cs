@@ -83,7 +83,10 @@ public sealed record CollectionJobDefinition
 
         var configuration = ConfigurationRevision.ReadConfiguration();
         configuration.CreateRequest(SourceId, "validation-job", Path.GetFullPath("collection-artifacts"), CoverageAsOf);
-        var expected = FromSource(configuration.Sources.Single(source => source.Id == SourceId));
+        var source = configuration.Sources.Single(candidate => candidate.Id == SourceId);
+        var expected = FromSource(source);
+        if (source.ApiParser is not null && Url.StartsWith(source.Url, StringComparison.Ordinal))
+            expected = expected with { Url = Url };
         if (expected.Mode is CollectionMode.Feed or CollectionMode.Html && Mode == CollectionMode.Page)
             expected = expected with { Mode = CollectionMode.Page, Url = Url, ETag = null, LastModified = null };
         if (expected != this with { ConfigurationRevision = null, CoverageAsOf = null })

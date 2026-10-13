@@ -1,6 +1,4 @@
-using System.IO.Compression;
 using System.Net.Http.Headers;
-using System.Security.Cryptography;
 using System.Text;
 using AngleSharp.Dom;
 using AngleSharp.Html.Parser;
@@ -8,13 +6,13 @@ using AngleSharp.Html.Parser.Tokens;
 using CivicLens.Application.Documents;
 using CivicLens.Core.Collection;
 using CivicLens.Core.Documents;
+using CivicLens.Infrastructure.Collection;
 
 namespace CivicLens.Infrastructure.Documents;
 
 public sealed class CaptureDocumentTextExtractor : IDocumentTextExtractor
 {
     private const string HtmlNamespace = "http://www.w3.org/1999/xhtml";
-    private const int MaximumInputBytes = 10_000_000;
     private const int MaximumMarkupTokens = 100_000;
     private const int MaximumTreeDepth = 64;
     private const int MaximumTextLength = 2_000_000;
@@ -26,6 +24,8 @@ public sealed class CaptureDocumentTextExtractor : IDocumentTextExtractor
     };
     private static readonly HashSet<string> IgnoredElements = new(StringComparer.Ordinal)
         { "script", "style", "template", "noscript" };
+
+    private readonly CaptureBodyReader bodies = new();
 
     public string ParserVersion => "capture-text-v2";
     public string NormalizationVersion => "body-text-v1";
@@ -43,9 +43,7 @@ public sealed class CaptureDocumentTextExtractor : IDocumentTextExtractor
         if (!MediaTypeHeaderValue.TryParse(contentType, out var mediaType))
             throw new InvalidDataException("Capture has no valid content type.");
 
-        var path = Path.Combine(artifactRoot, attempt.Capture.Sha256 + ".gz");
-        var entity = await ReadAndVerifyCaptureAsync(path, attempt.Capture, cancellationToken);
-        var decoded = await DecodeContentAsync(entity, attempt.Response.ContentEncodings, cancellationToken);
+        var decoded = await bodies.ReadAsync(attempt, artifactRoot, cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
         string text;
         try
@@ -63,59 +61,6 @@ public sealed class CaptureDocumentTextExtractor : IDocumentTextExtractor
         }
         ValidateText(text);
         return text;
-    }
-
-    private static async Task<byte[]> ReadAndVerifyCaptureAsync(string path, CaptureIdentity identity,
-        CancellationToken cancellationToken)
-    {
-        var info = new FileInfo(path);
-        if (!info.Exists) throw new FileNotFoundException("Capture artifact was not found.", path);
-        if (info.Length > MaximumInputBytes) throw new InvalidDataException("Stored capture exceeds the input limit.");
-        await using var file = File.OpenRead(path);
-        await using var gzip = new GZipStream(file, CompressionMode.Decompress);
-        using var bounded = new BoundedReadStream(gzip, MaximumInputBytes);
-        using var output = new MemoryStream();
-        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-        var buffer = new byte[81920];
-        long length = 0;
-        while (true)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var count = await bounded.ReadAsync(buffer, cancellationToken);
-            if (count == 0) break;
-            length += count;
-            hash.AppendData(buffer, 0, count);
-            output.Write(buffer, 0, count);
-        }
-        if (length != identity.ByteLength || !CryptographicOperations.FixedTimeEquals(
-                hash.GetHashAndReset(), Convert.FromHexString(identity.Sha256)))
-            throw new InvalidDataException("Stored capture does not match its immutable identity.");
-        return output.ToArray();
-    }
-
-    private static async Task<byte[]> DecodeContentAsync(byte[] bytes, IReadOnlyList<string> encodings,
-        CancellationToken cancellationToken)
-    {
-        foreach (var encoding in encodings.Reverse())
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var normalized = encoding.Trim().ToLowerInvariant();
-            if (normalized == "identity") continue;
-            using var input = new MemoryStream(bytes, writable: false);
-            using Stream decoder = normalized switch
-            {
-                "gzip" => new GZipStream(input, CompressionMode.Decompress),
-                "deflate" => new ZLibStream(input, CompressionMode.Decompress),
-                "br" => new BrotliStream(input, CompressionMode.Decompress),
-                _ => throw new NotSupportedException("Content encoding is not supported.")
-            };
-            // Finish each encoding layer before starting the next so its trailer is validated.
-            using var bounded = new BoundedReadStream(decoder, MaximumInputBytes);
-            using var output = new MemoryStream();
-            await bounded.CopyToAsync(output, 81920, cancellationToken);
-            bytes = output.ToArray();
-        }
-        return bytes;
     }
 
     private static string DecodePlainText(byte[] bytes, string? charset)
@@ -415,22 +360,4 @@ public sealed class CaptureDocumentTextExtractor : IDocumentTextExtractor
         [0xff, 0xfe, ..] => (new UnicodeEncoding(false, false, true), 2),
         _ => (null, 0)
     };
-
-    private sealed class BoundedReadStream(Stream inner, long maximum) : Stream
-    {
-        private long read;
-        public override bool CanRead => true;
-        public override bool CanSeek => false;
-        public override bool CanWrite => false;
-        public override long Length => throw new NotSupportedException();
-        public override long Position { get => read; set => throw new NotSupportedException(); }
-        public override int Read(byte[] buffer, int offset, int count) => Check(inner.Read(buffer, offset, count));
-        public override int Read(Span<byte> buffer) => Check(inner.Read(buffer));
-        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default) => Check(await inner.ReadAsync(buffer, cancellationToken));
-        private int Check(int count) { read += count; if (read > maximum) throw new InvalidDataException("Decoded input exceeds the limit."); return count; }
-        public override void Flush() { }
-        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
-        public override void SetLength(long value) => throw new NotSupportedException();
-        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
-    }
 }

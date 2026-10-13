@@ -1,3 +1,4 @@
+using CivicLens.Application.Collection.Bills;
 using CivicLens.Application.Collection.Discovery;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Application.Documents;
@@ -12,6 +13,8 @@ public sealed class EvidenceProcessingWorker(
     ICollectionJobStore jobs,
     ICollectionAttemptStore attempts,
     IDiscoveryAdmissionStore admissions,
+    IBillStreamAdmissionStore billAdmissions,
+    ICaptureBodyReader bodies,
     IEvidenceProcessingStore processing,
     ExtractDocument extract,
     GetDocumentHistory history,
@@ -42,7 +45,7 @@ public sealed class EvidenceProcessingWorker(
         return new(progress, failures);
     }
 
-    private async Task PrepareAsync(EvidenceProcessingClaim claim, CancellationToken cancellationToken)
+    private async Task PrepareAsync(EvidenceProcessingClaim claim, string artifactRoot, CancellationToken cancellationToken)
     {
         var jobId = claim.Record.JobId;
         var job = await jobs.GetAsync(jobId, cancellationToken);
@@ -50,8 +53,7 @@ public sealed class EvidenceProcessingWorker(
         var definition = job.Definition;
         if (definition.Mode == CollectionMode.Api)
         {
-            await CompleteAsync(claim, EvidenceProcessingStage.Complete, EvidenceProcessingStatus.Succeeded,
-                EvidenceProcessingOutcome.Prepared, null, cancellationToken);
+            await PrepareApiAsync(claim, job, artifactRoot, cancellationToken);
             return;
         }
         if (definition.ConfigurationRevision is null || definition.CoverageAsOf is null)
@@ -107,6 +109,51 @@ public sealed class EvidenceProcessingWorker(
             preparationError is null || isNotModified ? EvidenceProcessingOutcome.Prepared : EvidenceProcessingOutcome.Blocked,
             preparationError, cancellationToken, admittedCount: admitted, deferredCount: deferred,
             duplicateCount: duplicates);
+    }
+
+    private async Task PrepareApiAsync(EvidenceProcessingClaim claim, CollectionJobRecord job, string artifactRoot,
+        CancellationToken cancellationToken)
+    {
+        var configuration = job.Definition.ConfigurationRevision?.ReadConfiguration();
+        var parser = configuration?.Sources.Single(source => source.Id == job.Definition.SourceId).ApiParser;
+        switch (parser)
+        {
+            case null:
+                await CompleteAsync(claim, EvidenceProcessingStage.Complete, EvidenceProcessingStatus.Succeeded,
+                    EvidenceProcessingOutcome.Prepared, null, cancellationToken);
+                break;
+            case ApiParser.CongressBillList:
+                await PrepareBillListAsync(claim, job, configuration!, artifactRoot, cancellationToken);
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(job));
+        }
+    }
+
+    private async Task PrepareBillListAsync(EvidenceProcessingClaim claim, CollectionJobRecord job,
+        CollectionConfiguration configuration, string artifactRoot, CancellationToken cancellationToken)
+    {
+        var window = BillStreamWindow.TryRead(job.Definition.Url);
+        var result = window is null
+            ? new DiscoveryAdmissionResult([], 0, 0)
+            : await AdmitBillListAsync(job, configuration, window.Value, artifactRoot, cancellationToken);
+        await CompleteAsync(claim, EvidenceProcessingStage.Complete, EvidenceProcessingStatus.Succeeded,
+            EvidenceProcessingOutcome.Prepared, null, cancellationToken, admittedCount: result.AdmittedCount,
+            deferredCount: result.DeferredCount, duplicateCount: result.DuplicateCount);
+    }
+
+    private async Task<DiscoveryAdmissionResult> AdmitBillListAsync(CollectionJobRecord job,
+        CollectionConfiguration configuration, BillStreamWindow window, string artifactRoot,
+        CancellationToken cancellationToken)
+    {
+        var jobAttempt = job.Attempts.Single(item => item.Resolution?.Outcome == CollectionJobAttemptOutcome.Succeeded);
+        var stored = await attempts.GetAsync(jobAttempt.AttemptId, cancellationToken);
+        if (stored?.AttemptResult is not CapturedAttemptResult captured)
+            throw new InvalidDataException("Bill list attempt has no captured response.");
+        var body = await bodies.ReadAsync(captured, artifactRoot, cancellationToken);
+        var page = CongressBillListParser.Parse(body, jobAttempt.Request, window);
+        var configured = new ConfiguredCollectionSource(configuration, job.Definition.SourceId, job.Definition.CoverageAsOf);
+        return await billAdmissions.AdmitListPageAsync(configured, job.JobId, window, page, cancellationToken);
     }
 
     private async Task<bool> ProcessAsync(EvidenceProcessingRecord record, string artifactRoot,
@@ -167,7 +214,7 @@ public sealed class EvidenceProcessingWorker(
         var record = claim.Record;
         if (record.Stage == EvidenceProcessingStage.Preparation)
         {
-            await PrepareAsync(claim, cancellationToken);
+            await PrepareAsync(claim, artifactRoot, cancellationToken);
             return;
         }
         var job = await jobs.GetAsync(record.JobId, cancellationToken)

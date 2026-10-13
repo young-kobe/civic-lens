@@ -1,3 +1,4 @@
+using CivicLens.Application.Collection.Bills;
 using CivicLens.Application.Collection.Discovery;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Collection.Contracts;
@@ -33,6 +34,31 @@ public sealed class ConfiguredCollectionSource
             source.AdmissionPolicy ?? new DiscoveryAdmissionPolicy(), source.Mode, recheckKnownCandidates);
         request.Validate();
         return request;
+    }
+
+    public CollectionJobDefinition CreateApiJobDefinition(string url, DateOnly currentDate)
+    {
+        var definition = PrepareDefinition(ReadSource(), currentDate, null, article: false) with { Url = url };
+        definition.Validate();
+        return definition;
+    }
+
+    public BillStreamAdmission CreateBillStreamAdmission(string listJobId, BillStreamWindow window,
+        CongressBillListPage page, DateOnly currentDate)
+    {
+        var source = ReadSource();
+        if (source.ApiParser != ApiParser.CongressBillList)
+            throw new ArgumentException("Bill stream admission requires a configured Congress bill list source.");
+        var template = PrepareDefinition(source, currentDate, null, article: false);
+        var details = page.Bills.Where(bill => bill.Congress >= source.MinimumCongress)
+            .Select(bill => new BillStreamJob(BillStreamJobKeys.Detail(SourceId, bill), template with { Url = bill.DetailUrl(source.Url) }));
+        var jobs = page.Next is null
+            ? details
+            : details.Append(new BillStreamJob(BillStreamJobKeys.NextPage(SourceId, listJobId), template with { Url = page.Next }));
+        var policy = source.AdmissionPolicy ?? new DiscoveryAdmissionPolicy();
+        policy.Validate();
+        return new BillStreamAdmission(SourceId, policy, window,
+            [.. jobs.DistinctBy(job => job.IdempotencyKey)], EndsWindow: page.Next is null);
     }
 
     private CollectionJobDefinition PrepareDefinition(WatchedSourceConfiguration source, DateOnly currentDate,

@@ -90,6 +90,18 @@ Do not run concurrent collectors for the same origin. Host invocations sharing a
 
 A source with mode `api` may name a `credential`. Today the only name is `congressGov`. The collector reads its key from the environment variable `CIVIC_LENS_CONGRESS_API_KEY`. Only the collector child process receives this variable. The host passes it on only when the request names the credential. Get a free key at api.congress.gov/sign-up. Set the variable in the protected environment of the process that starts the collector, such as the worker. Never put the key in configuration, manifests, command arguments, or committed files. If the variable is missing or blank, the check fails with `credentialUnavailable` and sends no request.
 
+### Congress.gov bill stream
+
+The source `congress-bills` in `config/federal-coverage.json` and `config/federal-pilot.json` follows the Congress.gov bill list. It ships with `enabled: false`. To enable it:
+
+1. Get a key at api.congress.gov/sign-up.
+2. Set `CIVIC_LENS_CONGRESS_API_KEY` in the protected environment of the worker. Do not put the key in configuration.
+3. Set `enabled` to `true` for `congress-bills` and restart the worker. A restart reads the configuration again.
+
+The source checks once a day. It starts at `backfillFrom` (2025-01-03) and works forward in windows of at most 7 closed UTC days. A day is closed 6 hours after it ends. After each finished window, the next window starts at once until the source reaches the last closed day. Each window can admit up to 250 bill detail jobs and up to one next page job, one list page at a time. Bills below `minimumCongress` (119) are skipped. A bill that was admitted with the same update date is not admitted again. This backfill sends many requests to Congress.gov, paced by `minDelayMilliseconds`, so it takes some time. Bill detail jobs only save the capture today. No parser reads them yet. The source row on the Sources page shows no check state yet, because its jobs use windowed URLs.
+
+If a list page is malformed, or the source `admissionPolicy` cannot hold a full page, preparation of that job is blocked and the cursor does not move. The next due check repeats the same window.
+
 ## Postgres adapter and migrations
 
 The Host exposes explicit schema migration and watched-page collection/import. Set `CIVIC_LENS_DATABASE` in your local environment to a Postgres connection string containing Host and Database, with authentication appropriate to your local server. Runtime commands require this variable and have no default database. Keep credentials out of committed files, command arguments, and captured output. The commands require a reachable Postgres server and sufficient database permissions; they do not install or start Postgres.

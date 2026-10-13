@@ -167,7 +167,7 @@ try
         await statementDrafting.RecordStartAsync(cancellation.Token);
         var extractions = PostgresDocumentExtractionStore.FromConnectionString(connectionString);
         var comparisons = PostgresDocumentComparisonStore.FromConnectionString(connectionString);
-        var processing = new EvidenceProcessingWorker(jobs, attempts, jobs,
+        var processing = new EvidenceProcessingWorker(jobs, attempts, jobs, jobs, new CaptureBodyReader(),
             PostgresEvidenceProcessingStore.FromConnectionString(connectionString),
             new ExtractDocument(attempts, new CaptureDocumentTextExtractor(), extractions),
             new GetDocumentHistory(PostgresDocumentHistoryStore.FromConnectionString(connectionString)),

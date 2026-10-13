@@ -35,6 +35,7 @@ public static class CollectionProtocol
             new JsonStringEnumConverter<CollectionOutcome>(JsonNamingPolicy.CamelCase, allowIntegerValues: false),
             new JsonStringEnumConverter<CollectionFailureCode>(JsonNamingPolicy.CamelCase, allowIntegerValues: false),
             new JsonStringEnumConverter<CollectionMode>(JsonNamingPolicy.CamelCase, allowIntegerValues: false),
+            new JsonStringEnumConverter<ApiParser>(JsonNamingPolicy.CamelCase, allowIntegerValues: false),
             new JsonStringEnumConverter<DiscoveryStatus>(JsonNamingPolicy.CamelCase, allowIntegerValues: false)
         }
     };

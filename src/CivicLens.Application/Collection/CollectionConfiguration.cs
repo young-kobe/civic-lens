@@ -56,6 +56,7 @@ public sealed partial record CollectionConfiguration
         {
             if (source is null || string.IsNullOrWhiteSpace(source.Id))
                 throw new ArgumentException("Every source must have an ID.");
+            ValidateApiParser(source);
             ValidateCoverageShape(source);
             ValidateCredentialVersion(source);
             if (!sourceIds.Add(source.Id))
@@ -70,7 +71,7 @@ public sealed partial record CollectionConfiguration
 
             if (Version == 1)
                 ValidateLegacyMembership(source, peopleById);
-            else
+            else if (source.ApiParser != ApiParser.CongressBillList)
                 ValidateDatedCoverage(source, peopleById);
 
             var request = BuildRequest(source, "validation-job", Path.GetFullPath("collection-artifacts"));
@@ -96,7 +97,7 @@ public sealed partial record CollectionConfiguration
         if (!source.Enabled)
             throw new ArgumentException($"Source '{sourceId}' is disabled.", nameof(sourceId));
         var effectiveDate = asOf ?? DateOnly.FromDateTime(DateTime.UtcNow);
-        if (Version == 2 && !source.Coverage!.Any(coverage => new DateRange(coverage.StartsOn, coverage.EndsBefore).Contains(effectiveDate)))
+        if (CoveredPersonIdsOf(source, effectiveDate).Length == 0)
             throw new ArgumentException($"Source '{sourceId}' has no active person coverage on {effectiveDate:yyyy-MM-dd}.", nameof(sourceId));
 
         var request = BuildRequest(source, jobId, artifactDirectory);
@@ -114,18 +115,60 @@ public sealed partial record CollectionConfiguration
 
     public string[] CoveredPersonIdsOf(WatchedSourceConfiguration source, DateOnly asOf)
     {
-        IEnumerable<string> ids = Version == 1
-            ? source.PersonIds!
-            : source.Coverage!.Where(coverage => new DateRange(coverage.StartsOn, coverage.EndsBefore).Contains(asOf))
-                .Select(coverage => coverage.PersonId);
+        IEnumerable<string> ids = source.ApiParser switch
+        {
+            ApiParser.CongressBillList => asOf < source.BackfillFrom ? [] : BioguidePersonIds(),
+            null when Version == 1 => source.PersonIds!,
+            null => source.Coverage!.Where(coverage => new DateRange(coverage.StartsOn, coverage.EndsBefore).Contains(asOf))
+                .Select(coverage => coverage.PersonId),
+            _ => throw new ArgumentOutOfRangeException(nameof(source))
+        };
         return ids.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
+    }
+
+    public string[] ListedPersonIdsOf(WatchedSourceConfiguration source) =>
+        source.ApiParser is null
+            ? [.. (source.PersonIds ?? source.Coverage!.Select(coverage => coverage.PersonId)).Distinct(StringComparer.Ordinal)]
+            : [];
+
+    private IEnumerable<string> BioguidePersonIds() =>
+        People.Where(person => person.BioguideId is not null).Select(person => person.Id);
+
+    private void ValidateApiParser(WatchedSourceConfiguration source)
+    {
+        if (source.ApiParser is null)
+        {
+            if (source.MinimumCongress is not null || source.BackfillFrom is not null)
+                throw new ArgumentException($"Source '{source.Id}' sets API parser options without an API parser.");
+            return;
+        }
+        if (Version == 1 || source.Mode != CollectionMode.Api)
+            throw new ArgumentException($"Source '{source.Id}' can set an API parser only in API mode with configuration version 2.");
+        if (source.Credential is null)
+            throw new ArgumentException($"Source '{source.Id}' needs a credential for its API parser.");
+        switch (source.ApiParser)
+        {
+            case ApiParser.CongressBillList:
+                ValidateCongressBillList(source);
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(source));
+        }
+    }
+
+    private static void ValidateCongressBillList(WatchedSourceConfiguration source)
+    {
+        if (source.MinimumCongress is not >= 1 || source.BackfillFrom is null)
+            throw new ArgumentException($"Source '{source.Id}' needs a minimum Congress of 1 or more and a backfill date.");
+        if (source.PersonIds is not null || source.Coverage is not null)
+            throw new ArgumentException($"Source '{source.Id}' covers every person with a bioguide ID and cannot list people.");
     }
 
     private void ValidateCoverageShape(WatchedSourceConfiguration source)
     {
         if (Version == 1 && (source.PersonIds is null || source.Coverage is not null))
             throw new ArgumentException("Version 1 sources require PersonIds and cannot define Coverage.");
-        if (Version == 2 && (source.PersonIds is not null || source.Coverage is null))
+        if (Version == 2 && source.ApiParser is null && (source.PersonIds is not null || source.Coverage is null))
             throw new ArgumentException("Version 2 sources require Coverage and cannot define PersonIds.");
     }
 

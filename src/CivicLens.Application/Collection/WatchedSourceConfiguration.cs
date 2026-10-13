@@ -21,6 +21,9 @@ public sealed record WatchedSourceConfiguration
     public required string AllowedPathPrefix { get; init; }
     public CollectionMode Mode { get; init; } = CollectionMode.Page;
     public string? Credential { get; init; }
+    public ApiParser? ApiParser { get; init; }
+    public int? MinimumCongress { get; init; }
+    public DateOnly? BackfillFrom { get; init; }
     public int MaxCandidates { get; init; } = 100;
     public DiscoveryAdmissionPolicy? AdmissionPolicy { get; init; }
     public bool Enabled { get; init; } = true;

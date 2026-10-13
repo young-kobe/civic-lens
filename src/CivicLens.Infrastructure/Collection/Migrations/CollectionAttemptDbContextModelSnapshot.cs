@@ -355,6 +355,29 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                 });
             });
 
+            modelBuilder.Entity("CivicLens.Infrastructure.Collection.BillStream.BillStreamCursorRow", b =>
+                {
+                    b.Property<string>("SourceId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("source_id");
+
+                    b.Property<DateOnly>("LastProcessedDay")
+                        .HasColumnType("date")
+                        .HasColumnName("last_processed_day");
+
+                    b.Property<long>("UpdatedAtUtcTicks")
+                        .HasColumnType("bigint")
+                        .HasColumnName("updated_at_utc_ticks");
+
+                    b.HasKey("SourceId");
+
+                    b.ToTable("bill_stream_cursors", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_bill_stream_cursors_updated", "updated_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
+                        });
+                });
+
             modelBuilder.Entity("CivicLens.Infrastructure.Collection.Discovery.DiscoveryAdmissionBatchRow", b =>
                 {
                     b.Property<string>("IdempotencyKey")

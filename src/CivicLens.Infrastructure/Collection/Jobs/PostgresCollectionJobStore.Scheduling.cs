@@ -1,4 +1,5 @@
 using CivicLens.Application.Collection;
+using CivicLens.Application.Collection.Bills;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Collection.Contracts;
 using CivicLens.Infrastructure.Collection.Jobs.Persistence;
@@ -105,7 +106,12 @@ public sealed partial class PostgresCollectionJobStore
                 }
 
                 var configuredSource = new ConfiguredCollectionSource(configuration, schedule.SourceId, currentDate);
-                var definition = configuredSource.CreateJobDefinition(currentDate);
+                var definition = await CreateScheduledDefinitionAsync(db, configuredSource, source, now, cancellationToken);
+                if (definition is null)
+                {
+                    schedule.NextDueUtcTicks = Ticks(now.AddSeconds(schedule.IntervalSeconds));
+                    continue;
+                }
                 var idempotencyKey = $"scheduled-check/{schedule.SourceId}/{schedule.NextDueUtcTicks}";
                 var row = new JobRow
                 {
@@ -123,6 +129,24 @@ public sealed partial class PostgresCollectionJobStore
         }, cancellationToken);
     }
 
+    private static async Task<CollectionJobDefinition?> CreateScheduledDefinitionAsync(CollectionAttemptDbContext db,
+        ConfiguredCollectionSource configured, WatchedSourceConfiguration source, DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var currentDate = DateOnly.FromDateTime(now.UtcDateTime);
+        switch (source.ApiParser)
+        {
+            case null:
+                return configured.CreateJobDefinition(currentDate);
+            case ApiParser.CongressBillList:
+                var cursor = await ReadCursorAsync(db, source.Id, cancellationToken);
+                var window = BillStreamWindow.Next(cursor, source.BackfillFrom!.Value, now);
+                return window is null ? null : configured.CreateApiJobDefinition(window.Value.RequestUrl(source.Url), currentDate);
+            default:
+                throw new ArgumentOutOfRangeException(nameof(source));
+        }
+    }
+
     private static async Task<bool> HasActiveRootJobAsync(CollectionAttemptDbContext db, string sourceId,
         string requestedUrl, CancellationToken cancellationToken)
     {
@@ -133,7 +157,8 @@ public sealed partial class PostgresCollectionJobStore
                 SELECT 1 FROM collection_jobs
                  WHERE state IN ('Pending','Running','WaitingToRetry')
                    AND definition_json::jsonb ->> 'sourceId' = @source_id
-                   AND definition_json::jsonb ->> 'url' = @requested_url)
+                   AND (definition_json::jsonb ->> 'url' = @requested_url
+                        OR starts_with(definition_json::jsonb ->> 'url', @requested_url || '?')))
             """;
         command.Parameters.Add(new NpgsqlParameter("source_id", sourceId));
         command.Parameters.Add(new NpgsqlParameter("requested_url", requestedUrl));

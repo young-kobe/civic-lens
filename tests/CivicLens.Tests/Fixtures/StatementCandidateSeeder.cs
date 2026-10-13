@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using CivicLens.Application.Collection;
+using CivicLens.Application.Collection.Bills;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Collection.Contracts;
 using CivicLens.Core.Collection;
@@ -14,7 +15,7 @@ using static CivicLens.Tests.Fixtures.CollectionFixtures;
 
 namespace CivicLens.Tests.Fixtures;
 
-internal enum CandidateJobKind { None, DiscoveryAdmitted, WatchedPage }
+internal enum CandidateJobKind { None, DiscoveryAdmitted, WatchedPage, BillStream }
 
 internal sealed class StatementCandidateSeeder(PostgresCollectionAttemptStore attempts, PostgresDocumentExtractionStore extractions,
     string connectionString, string captureRoot)
@@ -55,7 +56,13 @@ internal sealed class StatementCandidateSeeder(PostgresCollectionAttemptStore at
 
     private async Task SeedJobAttemptAsync(string attemptId, CandidateJobKind kind, string definitionJson)
     {
-        var key = kind == CandidateJobKind.DiscoveryAdmitted ? "discovery-admission/" + attemptId : "watched-page/" + attemptId;
+        var prefix = kind switch
+        {
+            CandidateJobKind.DiscoveryAdmitted => "discovery-admission/",
+            CandidateJobKind.BillStream => BillStreamJobKeys.Prefix,
+            _ => "watched-page/"
+        };
+        var key = prefix + attemptId;
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
         await using var command = new NpgsqlCommand("""

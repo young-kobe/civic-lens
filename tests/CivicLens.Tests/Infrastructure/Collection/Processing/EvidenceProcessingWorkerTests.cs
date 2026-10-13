@@ -2,6 +2,7 @@ using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
 using CivicLens.Application.Collection;
+using CivicLens.Application.Collection.Bills;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Application.Collection.Processing;
 using CivicLens.Application.Documents;
@@ -13,6 +14,7 @@ using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Collection.Jobs;
 using CivicLens.Infrastructure.Collection.Processing;
 using CivicLens.Infrastructure.Documents;
+using CivicLens.Tests.Application.Collection.Bills;
 using CivicLens.Tests.Infrastructure.Collection;
 using Npgsql;
 using Microsoft.EntityFrameworkCore;
@@ -133,7 +135,7 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
     }
 
     [Fact]
-    public async Task ApiCaptureCompletesItsJobWithoutAProcessingStageBecauseNoParserExistsYet()
+    public async Task ApiCaptureWithoutAParserCompletesItsJobWithoutAProcessingStage()
     {
         var configuration = Configuration();
         var apiSource = configuration.Sources[0] with
@@ -160,6 +162,42 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
         Assert.Equal(EvidenceProcessingStatus.Succeeded, record.Status);
         Assert.Equal(EvidenceProcessingStage.Complete, record.Stage);
         Assert.Null(record.ExtractionId);
+    }
+
+    [Fact]
+    public async Task BillListCaptureAdmitsItsBillJobsAndMovesTheCursorOnTheLastPage()
+    {
+        var job = await RunBillJobAsync(BillWindow.RequestUrl(BillSourceUrl), """{"bills":[{"congress":119,"type":"HR","number":"1","updateDate":"2025-01-03"},{"congress":118,"type":"HR","number":"2","updateDate":"2025-01-03"}],"pagination":{"count":2}}""");
+
+        var record = Assert.Single(await processing.GetByJobIdsAsync([job.JobId], default));
+        Assert.Equal(EvidenceProcessingStatus.Succeeded, record.Status);
+        Assert.Equal(1, record.AdmittedCount);
+        var detail = Assert.Single(await jobs.ListAsync(10, default), item => item.JobId != job.JobId);
+        Assert.Equal("https://api.congress.gov/v3/bill/119/hr/1?format=json", detail.Definition.Url);
+        Assert.Equal(BillWindow.LastDay, await ReadBillCursorAsync());
+    }
+
+    [Fact]
+    public async Task BillDetailCaptureCompletesWithoutAProcessingStageUntilItsParsersExist()
+    {
+        var job = await RunBillJobAsync(BillSourceUrl + "/119/hr/1?format=json", """{"bill":{"congress":119}}""");
+
+        var record = Assert.Single(await processing.GetByJobIdsAsync([job.JobId], default));
+        Assert.Equal(EvidenceProcessingStatus.Succeeded, record.Status);
+        Assert.Equal(EvidenceProcessingStage.Complete, record.Stage);
+        Assert.Equal(0, record.AdmittedCount);
+        Assert.Null(await ReadBillCursorAsync());
+    }
+
+    [Fact]
+    public async Task MalformedBillListCaptureBlocksPreparationAndLeavesTheCursorBehind()
+    {
+        var job = await RunBillJobAsync(BillWindow.RequestUrl(BillSourceUrl), """{"bills":[{"congress":119,"type":"HR","number":"1"}],"pagination":{}}""");
+
+        var record = Assert.Single(await processing.GetByJobIdsAsync([job.JobId], default));
+        Assert.Equal(EvidenceProcessingStatus.Blocked, record.Status);
+        Assert.Single(await jobs.ListAsync(10, default));
+        Assert.Null(await ReadBillCursorAsync());
     }
 
     [Fact]
@@ -293,7 +331,7 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
         throw new InvalidOperationException($"Processing attempt '{attemptId}' did not reach a terminal state.");
     }
 
-    private EvidenceProcessingWorker Worker(IEvidenceProcessingStore processingStore, IDocumentHistoryStore? historyStore = null) => new(jobs, attempts, jobs,
+    private EvidenceProcessingWorker Worker(IEvidenceProcessingStore processingStore, IDocumentHistoryStore? historyStore = null) => new(jobs, attempts, jobs, jobs, new CaptureBodyReader(),
         processingStore, extract, new GetDocumentHistory(historyStore ?? PostgresDocumentHistoryStore.FromConnectionString(connectionString)),
         new CompareDocuments(extractions, comparisons));
 
@@ -371,11 +409,37 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
         }
     }
 
-    private sealed class ApiFixtureCollector : ICollectorProcess
+    private static readonly BillStreamWindow BillWindow = new(new DateOnly(2025, 1, 3), new DateOnly(2025, 1, 4));
+
+    private const string BillSourceUrl = "https://api.congress.gov/v3/bill";
+
+    private async Task<CollectionJobRecord> RunBillJobAsync(string url, string json)
+    {
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var definition = new ConfiguredCollectionSource(CongressBillSourceConfigurationTests.Configuration(), "congress-bills", today)
+            .CreateApiJobDefinition(url, today);
+        var job = await jobs.EnqueueAsync(definition, "bill-list-once", default);
+        var runner = new RunCollectionJob(jobs, attempts, new FileCollectionReceiptHandoffStore(artifactRoot),
+            new CaptureArtifactVerifier(), new ApiFixtureCollector(json));
+        var pipeline = new CollectionJobWorker(PostgresCollectionWorkerQueue.FromConnectionString(connectionString),
+            runner, Worker(processing));
+        _ = await pipeline.ExecuteAsync(artifactRoot, once: true, batchSize: 20, leaseDuration: TimeSpan.FromSeconds(60));
+        return (await jobs.GetAsync(job.JobId, default))!;
+    }
+
+    private async Task<DateOnly?> ReadBillCursorAsync()
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand("SELECT last_processed_day FROM bill_stream_cursors", connection);
+        return await command.ExecuteScalarAsync() is DateOnly day ? day : null;
+    }
+
+    private sealed class ApiFixtureCollector(string body = "{\"member\":{\"bioguideId\":\"W000817\"}}") : ICollectorProcess
     {
         public async Task<CollectionResult> RunAsync(CollectionRequest request, CancellationToken cancellationToken)
         {
-            var json = Encoding.UTF8.GetBytes("{\"member\":{\"bioguideId\":\"W000817\"}}");
+            var json = Encoding.UTF8.GetBytes(body);
             var hash = Convert.ToHexStringLower(SHA256.HashData(json));
             await using (var file = File.Create(Path.Combine(request.ArtifactDirectory, hash + ".gz")))
             await using (var gzip = new GZipStream(file, CompressionLevel.Fastest))

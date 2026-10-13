@@ -153,6 +153,34 @@
         "maximumRetryDelaySeconds": 3600
       },
       "documentProfileId": "warren-article"
+    },
+    {
+      "id": "congress-bills",
+      "url": "https://api.congress.gov/v3/bill",
+      "allowedOrigin": "https://api.congress.gov",
+      "allowedPathPrefix": "/v3/bill",
+      "mode": "api",
+      "credential": "congressGov",
+      "apiParser": "congressBillList",
+      "minimumCongress": 119,
+      "backfillFrom": "2025-01-03",
+      "checkIntervalSeconds": 86400,
+      "enabled": false,
+      "maxRequests": 2,
+      "maxBytes": 1000000,
+      "timeoutSeconds": 20,
+      "minDelayMilliseconds": 1000,
+      "jobPolicy": {
+        "maxAttempts": 2,
+        "initialRetryDelaySeconds": 60,
+        "maximumRetryDelaySeconds": 3600
+      },
+      "admissionPolicy": {
+        "maxJobs": 251,
+        "maxTotalRequests": 1004,
+        "maxTotalBytes": 502000000,
+        "maxTotalTimeoutSeconds": 10040
+      }
     }
   ],
   "documentProfiles": [
