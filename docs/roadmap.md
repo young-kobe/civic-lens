@@ -8,6 +8,8 @@ The initial audience is regular citizens seeking transparency in U.S. national p
 
 Initial coverage may be small, but all four capabilities must work end to end: collect evidence, retain exact inspectable provenance, review proposed output, and publish a static release that remains usable during an operational application outage. Human approval must bind to the exact evidence version; model output never constitutes approval. Statements and actions must support reviewed relationships and timelines, document changes must distinguish substantive edits from navigation churn and parser upgrades, and weekly briefs must use verified citations and explicit coverage cutoffs.
 
+Public search is an MVP requirement. Readers must be able to search all published records from the public pages. An easy interface must let them filter by record kind, official, issue, policy area, date range, and source. Search reads the published release only, so it must keep working while the operational application is down. The search design is not decided. Keep it in mind when designing record contracts, so each record carries the fields that filters need.
+
 AI drafting and classification are MVP requirements. AI drafts document-change accounts, statement and action records, and weekly briefs. Reviewers edit, approve, and publish these drafts. A classification gate keeps navigation churn and other nonsubstantive changes out of review.
 
 Design for scale. The product needs rich detail in each record and broad coverage of officials, sources, and issues. Automate every step that does not need human judgment. The worker drafts each change that passes the gate; no operator starts it. Human approval remains the only manual step before publication, so review must handle a large volume (see [Reviewer and public experience](#reviewer-and-public-experience)).
@@ -29,6 +31,8 @@ Make the source-to-review path understandable to a nontechnical reviewer, with a
 Every published record keeps its own human approval of the exact revision. To handle volume, the review queue supports bulk actions, shows the automatic citation and classification checks beside each draft, and sorts the riskiest drafts first. A reviewer can approve a weekly brief together with the records it links, and each record still gets an attributed decision bound to its exact revision. Model output never approves or publishes.
 
 For MVP, add a dynamic SVG visualization of collection and AI processing driven by actual retained process state, with clear waiting, failure, recovery, and budget-limit states and reduced-motion support. Keep AI stages explicitly unavailable until implemented. Public reader pages must preserve the same editorial identity and shared presentation components while exposing published accounts and evidence only.
+
+Public search and filters are part of the reader experience for MVP. Results must show each record's kind, headline, officials, issues, and dates, and link to the record page. Filters must be easy to combine and easy to clear, and the page must work at phone width. Pending decisions: where the index is built and served, how large it can grow, and how it stays bounded as coverage grows.
 
 ## 1. Collection and evidence
 
