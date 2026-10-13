@@ -60,24 +60,26 @@ public sealed partial class PostgresCollectionJobStore(IDbContextFactory<Collect
         return TransactionAsync(async (db, now) =>
         {
             var existing = await db.Set<JobRow>().SingleOrDefaultAsync(row => row.IdempotencyKey == idempotencyKey, cancellationToken);
-            var savedDefinition = existing is null ? null : ReadDefinition(existing.DefinitionJson);
+            var savedDefinition = existing is null ? null : await ReadDefinitionAsync(db, existing, cancellationToken);
             var definition = prepareDefinition(savedDefinition, DateOnly.FromDateTime(now.UtcDateTime));
             if (existing is not null)
             {
                 if (!definition.MatchesReplayOf(savedDefinition!))
                     throw new ArgumentException("The idempotency key belongs to a different job definition.");
-                return await ToRecordAsync(db, existing, cancellationToken);
+                return await ToRecordAsync(db, existing, savedDefinition!, cancellationToken);
             }
             var row = new JobRow
             {
                 JobId = Guid.NewGuid().ToString("N"),
                 IdempotencyKey = idempotencyKey,
-                DefinitionJson = Write(definition),
+                DefinitionJson = StoredJobDefinition.Write(definition),
+                ConfigurationRevisionId = await new ConfigurationRevisionWriter(db, Ticks(now))
+                    .StoreAsync(definition.ConfigurationRevision, cancellationToken),
                 State = CollectionJobState.Pending,
                 CreatedAt = Ticks(now)
             };
             db.Add(row);
-            return await ToRecordAsync(db, row, cancellationToken);
+            return ToRecord(row, definition, []);
         }, cancellationToken);
     }
 
@@ -105,12 +107,9 @@ public sealed partial class PostgresCollectionJobStore(IDbContextFactory<Collect
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
         var rows = await db.Set<JobRow>().AsNoTracking().OrderByDescending(row => row.CreatedAt).ThenBy(row => row.JobId)
             .Take(limit).ToListAsync(cancellationToken);
-        var jobIds = rows.Select(row => row.JobId).ToArray();
-        var attempts = await db.Set<JobAttemptRow>().AsNoTracking().Where(attempt => jobIds.Contains(attempt.JobId))
-            .OrderBy(attempt => attempt.Sequence).ToListAsync(cancellationToken);
+        var records = await ToRecordsAsync(db, rows, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
-        var attemptsByJob = attempts.ToLookup(attempt => attempt.JobId);
-        return rows.Select(row => ToRecord(row, attemptsByJob[row.JobId])).ToArray();
+        return records;
     }
 
     public Task<CollectionJobRecord?> CancelAsync(string jobId, CancellationToken cancellationToken) =>
@@ -173,7 +172,7 @@ public sealed partial class PostgresCollectionJobStore(IDbContextFactory<Collect
             return Blocked(CollectionJobBlockReason.AttemptUnresolved);
         if (row.RetryAt > Ticks(now)) return Blocked(CollectionJobBlockReason.RetryNotDue, FromTicks(row.RetryAt));
 
-        var definition = ReadDefinition(row.DefinitionJson);
+        var definition = await ReadDefinitionAsync(db, row, cancellationToken);
         var request = definition.CreateRequest(Guid.NewGuid().ToString("N"), Path.GetFullPath(artifactDirectory));
         request.Validate();
         var count = await db.Set<JobAttemptRow>().CountAsync(attempt => attempt.JobId == row.JobId, cancellationToken);
@@ -232,7 +231,7 @@ public sealed partial class PostgresCollectionJobStore(IDbContextFactory<Collect
         if (job is null) return false;
         var attempt = await db.Set<JobAttemptRow>().SingleAsync(item => item.AttemptId == attemptId && item.JobId == job.JobId, cancellationToken);
         var request = Read<CollectionRequest>(attempt.RequestJson);
-        var definition = ReadDefinition(job.DefinitionJson);
+        var definition = await ReadDefinitionAsync(db, job, cancellationToken);
         ValidateResolution(resolution, request);
         var resolutionJson = Write(resolution);
         if (attempt.ResolutionJson is not null)
@@ -324,7 +323,7 @@ public sealed partial class PostgresCollectionJobStore(IDbContextFactory<Collect
             return "changed";
         if (job.RetryAt > Ticks(now)) return job.RetryAt.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
         string origin;
-        try { origin = NormalizeOrigin(ReadDefinition(job.DefinitionJson).AllowedOrigin); }
+        try { origin = NormalizeOrigin((await ReadDefinitionAsync(db, job, cancellationToken)).AllowedOrigin); }
         catch (Exception exception) when (exception is InvalidDataException or JsonException or ArgumentException)
         {
             // Invalid retained settings must not prevent releasing ownership for recovery.
@@ -406,19 +405,9 @@ public sealed partial class PostgresCollectionJobStore(IDbContextFactory<Collect
     }
     private static string Write<T>(T value) => JsonSerializer.Serialize(value, CollectionProtocol.JsonOptions);
     private static T Read<T>(string value) => JsonSerializer.Deserialize<T>(value, CollectionProtocol.JsonOptions) ?? throw new InvalidDataException("Missing job data.");
-    internal static CollectionJobDefinition ReadDefinition(string json)
-    {
-        try
-        {
-            var definition = Read<CollectionJobDefinition>(json);
-            definition.Validate();
-            return definition;
-        }
-        catch (Exception exception) when (exception is ArgumentException or JsonException)
-        {
-            throw new InvalidDataException("Stored job definition is invalid.", exception);
-        }
-    }
+    private static Task<CollectionJobDefinition> ReadDefinitionAsync(CollectionAttemptDbContext db, JobRow row,
+        CancellationToken cancellationToken) =>
+        StoredJobDefinition.ReadAsync(db, row.DefinitionJson, row.ConfigurationRevisionId, cancellationToken);
 
     private static DateTimeOffset AddDelay(DateTimeOffset now, TimeSpan delay) => delay > DateTimeOffset.MaxValue - now ? DateTimeOffset.MaxValue : now + delay;
     private static void ValidateLeaseDuration(TimeSpan duration)
@@ -431,14 +420,18 @@ public sealed partial class PostgresCollectionJobStore(IDbContextFactory<Collect
         row.ResolutionJson is null ? null : Read<CollectionAttemptResolution>(row.ResolutionJson),
         FromTicks(row.StartedAt)!.Value, FromTicks(row.CompletedAt));
 
-    private static async Task<CollectionJobRecord> ToRecordAsync(CollectionAttemptDbContext db, JobRow row, CancellationToken cancellationToken)
+    private static async Task<CollectionJobRecord> ToRecordAsync(CollectionAttemptDbContext db, JobRow row, CancellationToken cancellationToken) =>
+        await ToRecordAsync(db, row, await ReadDefinitionAsync(db, row, cancellationToken), cancellationToken);
+
+    private static async Task<CollectionJobRecord> ToRecordAsync(CollectionAttemptDbContext db, JobRow row,
+        CollectionJobDefinition definition, CancellationToken cancellationToken)
     {
         var attempts = await db.Set<JobAttemptRow>().Where(attempt => attempt.JobId == row.JobId).OrderBy(attempt => attempt.Sequence).ToListAsync(cancellationToken);
-        return ToRecord(row, attempts);
+        return ToRecord(row, definition, attempts);
     }
 
-    private static CollectionJobRecord ToRecord(JobRow row, IEnumerable<JobAttemptRow> attempts) =>
-        new(row.JobId, ReadDefinition(row.DefinitionJson), row.IdempotencyKey,
+    private static CollectionJobRecord ToRecord(JobRow row, CollectionJobDefinition definition, IEnumerable<JobAttemptRow> attempts) =>
+        new(row.JobId, definition, row.IdempotencyKey,
             row.State, FromTicks(row.CreatedAt)!.Value, FromTicks(row.RetryAt), row.CancellationRequested,
             row.ChargedRequests, row.ChargedBytes, row.ChargedSeconds, attempts.Select(ToAttempt).ToArray());
 }

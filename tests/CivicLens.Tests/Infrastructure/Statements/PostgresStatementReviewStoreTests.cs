@@ -130,6 +130,8 @@ public sealed class PostgresStatementReviewStoreTests(PostgresCollection postgre
         var counted = new PostgresStatementReviewStore(new PooledDbContextFactory<CollectionAttemptDbContext>(
             new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).AddInterceptors(counter).Options));
 
+        await counted.GetAsync(drafted, default);
+        counter.ReadCount = 0;
         var read = await counted.GetAsync(drafted, default);
         var draftedReads = counter.ReadCount;
         counter.ReadCount = 0;

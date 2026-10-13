@@ -18,6 +18,7 @@ public sealed partial class PostgresCollectionJobStore
         var snapshot = revision.ReadConfiguration();
         return TransactionAsync(async (db, now) =>
         {
+            await new ConfigurationRevisionWriter(db, Ticks(now)).StoreAsync(revision, cancellationToken);
             var existingRows = await db.Set<CollectionScheduleRow>().ToListAsync(cancellationToken);
             var rowsBySource = existingRows.ToDictionary(row => row.SourceId, StringComparer.Ordinal);
             var configuredSourceIds = new HashSet<string>(StringComparer.Ordinal);
@@ -31,7 +32,6 @@ public sealed partial class PostgresCollectionJobStore
                     {
                         SourceId = source.Id,
                         ConfigurationRevisionId = revision.Id,
-                        ConfigurationJson = revision.Json,
                         IntervalSeconds = intervalSeconds,
                         NextDueUtcTicks = source.Enabled ? Ticks(now) : Ticks(now.AddSeconds(intervalSeconds)),
                         Enabled = source.Enabled
@@ -43,7 +43,6 @@ public sealed partial class PostgresCollectionJobStore
                 var wasEnabled = row.Enabled;
                 var intervalChanged = row.IntervalSeconds != intervalSeconds;
                 row.ConfigurationRevisionId = revision.Id;
-                row.ConfigurationJson = revision.Json;
                 row.IntervalSeconds = intervalSeconds;
                 row.Enabled = source.Enabled;
                 if (source.Enabled && !wasEnabled)
@@ -69,19 +68,18 @@ public sealed partial class PostgresCollectionJobStore
                 .OrderBy(row => row.NextDueUtcTicks).ThenBy(row => row.SourceId)
                 .Take(limit).ToArrayAsync(cancellationToken);
             var currentDate = DateOnly.FromDateTime(now.UtcDateTime);
-            var configurationsByRevision = new Dictionary<string, (string Json, CollectionConfiguration Configuration)>(StringComparer.Ordinal);
+            var revisionWriter = new ConfigurationRevisionWriter(db, nowTicks);
+            var revisions = await StoredJobDefinition.LoadRevisionsAsync(db,
+                dueRows.Select(row => row.ConfigurationRevisionId), cancellationToken);
+            revisionWriter.MarkStored(revisions.Keys);
+            var configurationsByRevision = new Dictionary<string, CollectionConfiguration>(StringComparer.Ordinal);
             foreach (var schedule in dueRows)
             {
-                if (!configurationsByRevision.TryGetValue(schedule.ConfigurationRevisionId, out var cached))
+                if (!configurationsByRevision.TryGetValue(schedule.ConfigurationRevisionId, out var configuration))
                 {
-                    var revision = new CollectionConfigurationRevision(schedule.ConfigurationRevisionId,
-                        schedule.ConfigurationJson);
-                    cached = (schedule.ConfigurationJson, revision.ReadConfiguration());
-                    configurationsByRevision.Add(schedule.ConfigurationRevisionId, cached);
+                    configuration = StoredJobDefinition.Find(revisions, schedule.ConfigurationRevisionId).ReadConfiguration();
+                    configurationsByRevision.Add(schedule.ConfigurationRevisionId, configuration);
                 }
-                if (cached.Json != schedule.ConfigurationJson)
-                    throw new InvalidDataException("A schedule configuration revision has conflicting retained JSON.");
-                var configuration = cached.Configuration;
                 var source = configuration.Sources.SingleOrDefault(candidate => candidate.Id == schedule.SourceId);
                 if (source is null || !source.Enabled)
                 {
@@ -117,7 +115,8 @@ public sealed partial class PostgresCollectionJobStore
                 {
                     JobId = Guid.NewGuid().ToString("N"),
                     IdempotencyKey = idempotencyKey,
-                    DefinitionJson = Write(definition),
+                    DefinitionJson = StoredJobDefinition.Write(definition),
+                    ConfigurationRevisionId = await revisionWriter.StoreAsync(definition.ConfigurationRevision, cancellationToken),
                     State = CollectionJobState.Pending,
                     CreatedAt = nowTicks
                 };

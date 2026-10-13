@@ -15,11 +15,12 @@ internal sealed class CollectionScheduleRowConfiguration : IEntityTypeConfigurat
         });
         builder.Property(row => row.SourceId).HasColumnName("source_id").HasMaxLength(128);
         builder.Property(row => row.ConfigurationRevisionId).HasColumnName("configuration_revision_id").HasMaxLength(64);
-        builder.Property(row => row.ConfigurationJson).HasColumnName("configuration_json").IsRequired();
         builder.Property(row => row.IntervalSeconds).HasColumnName("interval_seconds");
         builder.Property(row => row.NextDueUtcTicks).HasColumnName("next_due_utc_ticks");
         builder.Property(row => row.Enabled).HasColumnName("enabled");
         builder.HasKey(row => row.SourceId);
         builder.HasIndex(row => new { row.Enabled, row.NextDueUtcTicks, row.SourceId });
+        builder.HasOne<ConfigurationRevisionRow>().WithMany().HasForeignKey(row => row.ConfigurationRevisionId)
+            .HasConstraintName("fk_collection_source_schedules_configuration_revision").OnDelete(DeleteBehavior.Restrict);
     }
 }

@@ -1,6 +1,7 @@
 using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Bills;
 using CivicLens.Application.Collection.Jobs;
@@ -70,8 +71,10 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
         var options = new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options;
         await using var db = new CollectionAttemptDbContext(options);
         await db.GetService<IMigrator>().MigrateAsync("20261008190000_DurableEvidenceProcessing");
-        var beforeJob = await CollectAsync("earlier", "Earlier wording.");
-        var afterJob = await CollectAsync("later", "Later wording.");
+        await db.Database.ExecuteSqlRawAsync("ALTER TABLE collection_jobs ADD COLUMN configuration_revision_id text");
+        var beforeJob = await CollectAsync("earlier", "Earlier wording.", legacySchema: true);
+        var afterJob = await CollectAsync("later", "Later wording.", legacySchema: true);
+        await db.Database.ExecuteSqlRawAsync("ALTER TABLE collection_jobs DROP COLUMN configuration_revision_id");
         var beforeAttempt = Assert.Single(beforeJob.Attempts).AttemptId;
         var afterAttempt = Assert.Single(afterJob.Attempts).AttemptId;
 
@@ -303,9 +306,11 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
         Assert.NotEmpty(earlierCapture.Attempts);
     }
 
-    private async Task<CollectionJobRecord> CollectAsync(string key, string? body, string? etag = null, bool fail = false)
+    private async Task<CollectionJobRecord> CollectAsync(string key, string? body, string? etag = null, bool fail = false,
+        bool legacySchema = false)
     {
-        var definition = ConfiguredDefinition(etag);
+        var configured = ConfiguredDefinition(etag);
+        var definition = legacySchema ? configured with { ConfigurationRevision = null, CoverageAsOf = null } : configured;
         var job = await jobs.EnqueueAsync(definition, key, default);
         var collector = new FixtureCollector(body, fail, Interlocked.Increment(ref observationTick));
         var runner = new RunCollectionJob(jobs, attempts, new FileCollectionReceiptHandoffStore(artifactRoot),
@@ -313,7 +318,19 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
         var result = await runner.ExecuteAsync(job.JobId, artifactRoot, TimeSpan.FromSeconds(60), default);
         Assert.True(result.Status is CollectionJobRunStatus.Completed or CollectionJobRunStatus.AttemptFailed,
             $"Collection returned {result.Status}: {result.BlockReason}, retry {result.RetryAt:O}.");
-        return (await jobs.GetAsync(job.JobId, default))!;
+        var record = (await jobs.GetAsync(job.JobId, default))!;
+        if (legacySchema) await StoreLegacyDefinitionAsync(job.JobId, configured);
+        return record;
+    }
+
+    private async Task StoreLegacyDefinitionAsync(string jobId, CollectionJobDefinition definition)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand("UPDATE collection_jobs SET definition_json = @definition WHERE job_id = @id", connection);
+        command.Parameters.AddWithValue("definition", JsonSerializer.Serialize(definition, CollectionProtocol.JsonOptions));
+        command.Parameters.AddWithValue("id", jobId);
+        await command.ExecuteNonQueryAsync();
     }
 
     private async Task<EvidenceProcessingRecord> ProcessUntilTerminalAsync(EvidenceProcessingWorker worker,

@@ -16,6 +16,7 @@ internal sealed class JobRowConfiguration : IEntityTypeConfiguration<JobRow>
         builder.Property(row => row.JobId).HasColumnName("job_id");
         builder.Property(row => row.IdempotencyKey).HasColumnName("idempotency_key");
         builder.Property(row => row.DefinitionJson).HasColumnName("definition_json");
+        builder.Property(row => row.ConfigurationRevisionId).HasColumnName("configuration_revision_id").HasMaxLength(64);
         builder.Property(row => row.State).HasColumnName("state");
         builder.Property(row => row.CreatedAt).HasColumnName("created_at");
         builder.Property(row => row.RetryAt).HasColumnName("retry_at");
@@ -33,5 +34,7 @@ internal sealed class JobRowConfiguration : IEntityTypeConfiguration<JobRow>
         builder.Property(row => row.State).HasConversion<string>();
         builder.HasIndex(row => row.IdempotencyKey).IsUnique();
         builder.HasIndex(row => new { row.CreatedAt, row.JobId });
+        builder.HasOne<ConfigurationRevisionRow>().WithMany().HasForeignKey(row => row.ConfigurationRevisionId)
+            .HasConstraintName("fk_collection_jobs_configuration_revision").OnDelete(DeleteBehavior.Restrict);
     }
 }

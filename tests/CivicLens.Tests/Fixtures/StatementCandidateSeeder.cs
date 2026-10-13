@@ -23,7 +23,8 @@ internal sealed class StatementCandidateSeeder(PostgresCollectionAttemptStore at
     public async Task<string> SeedAsync(string text, string url, CollectionJobDefinition? admittedBy = null)
     {
         var definition = admittedBy ?? StatementDraftFixtures.AdmittedDefinition(StatementDraftFixtures.SoleCoverage(StatementDraftFixtures.Warren));
-        var captured = await ImportAsync(text, url, CandidateJobKind.DiscoveryAdmitted, definitionJson: JsonSerializer.Serialize(definition, CollectionProtocol.JsonOptions));
+        var captured = await ImportAsync(text, url, CandidateJobKind.DiscoveryAdmitted, definitionJson: JsonSerializer.Serialize(definition with { ConfigurationRevision = null }, CollectionProtocol.JsonOptions),
+            revisionId: await StoreRevisionAsync(definition.ConfigurationRevision));
         await extractions.SaveAsync(new DocumentExtraction(captured, "parser", "normalizer", text), CancellationToken.None);
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
@@ -32,8 +33,23 @@ internal sealed class StatementCandidateSeeder(PostgresCollectionAttemptStore at
         return (string)(await command.ExecuteScalarAsync())!;
     }
 
+    private async Task<string?> StoreRevisionAsync(CollectionConfigurationRevision? revision)
+    {
+        if (revision is null) return null;
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand("""
+            INSERT INTO collection_configuration_revisions (revision_id, json, created_at)
+            VALUES (@id, @json, 0) ON CONFLICT (revision_id) DO NOTHING
+            """, connection);
+        command.Parameters.AddWithValue("id", revision.Id);
+        command.Parameters.AddWithValue("json", revision.Json);
+        await command.ExecuteNonQueryAsync();
+        return revision.Id;
+    }
+
     public async Task<CapturedAttemptResult> ImportAsync(string text, string url, CandidateJobKind kind, string sourceId = "source",
-        string definitionJson = "{}")
+        string definitionJson = "{}", string? revisionId = null)
     {
         var bytes = Encoding.UTF8.GetBytes(text);
         var hash = Convert.ToHexStringLower(SHA256.HashData(bytes));
@@ -50,11 +66,11 @@ internal sealed class StatementCandidateSeeder(PostgresCollectionAttemptStore at
         };
         var imported = await attempts.ImportAtomicallyAsync(CollectionAttemptImporter.CreateImport(attemptId, request, receipt),
             CancellationToken.None);
-        if (kind != CandidateJobKind.None) await SeedJobAttemptAsync(attemptId, kind, definitionJson);
+        if (kind != CandidateJobKind.None) await SeedJobAttemptAsync(attemptId, kind, definitionJson, revisionId);
         return (CapturedAttemptResult)imported.AttemptResult;
     }
 
-    private async Task SeedJobAttemptAsync(string attemptId, CandidateJobKind kind, string definitionJson)
+    private async Task SeedJobAttemptAsync(string attemptId, CandidateJobKind kind, string definitionJson, string? revisionId)
     {
         var prefix = kind switch
         {
@@ -66,15 +82,16 @@ internal sealed class StatementCandidateSeeder(PostgresCollectionAttemptStore at
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
         await using var command = new NpgsqlCommand("""
-            INSERT INTO collection_jobs (job_id, idempotency_key, definition_json, state, created_at, cancellation_requested,
-                charged_requests, charged_bytes, charged_seconds, lease_fence)
-            VALUES (@id, @key, @definition, 'Succeeded', 0, false, 0, 0, 0, 0);
+            INSERT INTO collection_jobs (job_id, idempotency_key, definition_json, configuration_revision_id, state, created_at,
+                cancellation_requested, charged_requests, charged_bytes, charged_seconds, lease_fence)
+            VALUES (@id, @key, @definition, @revision, 'Succeeded', 0, false, 0, 0, 0, 0);
             INSERT INTO collection_job_attempts (attempt_id, job_id, sequence, request_json, started_at)
             VALUES (@id, @id, 1, '{}', 0);
             """, connection);
         command.Parameters.AddWithValue("id", attemptId);
         command.Parameters.AddWithValue("key", key);
         command.Parameters.AddWithValue("definition", definitionJson);
+        command.Parameters.AddWithValue("revision", (object?)revisionId ?? DBNull.Value);
         await command.ExecuteNonQueryAsync();
     }
 }

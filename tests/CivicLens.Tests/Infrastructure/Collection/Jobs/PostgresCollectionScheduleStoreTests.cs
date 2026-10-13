@@ -49,6 +49,32 @@ public sealed class PostgresCollectionScheduleStoreTests(PostgresCollection post
     }
 
     [Fact]
+    public async Task EverySourceScheduleReferencesOneSharedRevisionInsteadOfCopyingIt()
+    {
+        var configuration = Configuration();
+        var first = configuration.Sources[0];
+        configuration = configuration with { Sources = [first, first with { Id = "second", Url = "https://example.test/second" }] };
+
+        await store.SynchronizeAsync(configuration, default);
+        await store.SynchronizeAsync(configuration, default);
+        await SetDueAsync("senate", DateTimeOffset.UtcNow.AddMinutes(-5).UtcTicks);
+        await SetDueAsync("second", DateTimeOffset.UtcNow.AddMinutes(-5).UtcTicks);
+
+        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM collection_configuration_revisions"));
+        Assert.Equal(1L, await ScalarAsync("SELECT count(DISTINCT configuration_revision_id) FROM collection_source_schedules"));
+        Assert.Equal(2, await store.AdvanceDueAsync(10, default));
+        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM collection_configuration_revisions"));
+    }
+
+    private async Task<object?> ScalarAsync(string sql)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(sql, connection);
+        return await command.ExecuteScalarAsync();
+    }
+
+    [Fact]
     public async Task RestartPreservesDueTimeAndCadenceChangeStartsNewInterval()
     {
         await store.SynchronizeAsync(Configuration(), default);
@@ -115,12 +141,13 @@ public sealed class PostgresCollectionScheduleStoreTests(PostgresCollection post
         await store.SynchronizeAsync(Configuration(), default);
         await SetDueAsync("senate", DateTimeOffset.UtcNow.AddMinutes(-5).UtcTicks);
         await ExecuteAsync("""
-            INSERT INTO collection_source_schedules (source_id, configuration_revision_id, configuration_json,
+            INSERT INTO collection_configuration_revisions (revision_id, json, created_at) VALUES (@revision, '{', 0);
+            INSERT INTO collection_source_schedules (source_id, configuration_revision_id,
                 interval_seconds, next_due_utc_ticks, enabled)
-            VALUES ('zz-invalid', @revision, '{', 3600, @due, TRUE)
+            VALUES ('zz-invalid', @revision, 3600, @due, TRUE)
             """, ("revision", Hash("{")), ("due", DateTimeOffset.UtcNow.AddMinutes(-1).UtcTicks));
 
-        await Assert.ThrowsAsync<ArgumentException>(() => store.AdvanceDueAsync(10, default));
+        await Assert.ThrowsAsync<InvalidDataException>(() => store.AdvanceDueAsync(10, default));
         Assert.Empty(await store.ListAsync(10, default));
         Assert.True(await ReadNextDueAsync("senate") < DateTimeOffset.UtcNow.UtcTicks);
     }

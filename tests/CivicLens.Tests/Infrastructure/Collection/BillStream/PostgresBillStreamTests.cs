@@ -224,6 +224,30 @@ public sealed class PostgresBillStreamTests(PostgresCollection postgres) : IAsyn
         Assert.Equal(0, result.DeferredCount);
     }
 
+    [Fact]
+    public async Task AFullPageStoresItsConfigurationRevisionOnceInsteadOfOncePerJob()
+    {
+        var window = new BillStreamWindow(Backfill, Backfill);
+        var page = new CongressBillListPage([.. Enumerable.Range(1, BillStreamWindow.PageLimit).Select(number => Bill(119, number))],
+            window.RequestUrl(SourceUrl) + "&offset=250");
+
+        var result = await store.AdmitListPageAsync(Source(), "full", window, page, default);
+
+        Assert.Equal(BillStreamWindow.PageLimit + 1, result.AdmittedCount);
+        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM collection_configuration_revisions"));
+        Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM collection_jobs WHERE definition_json::jsonb -> 'configurationRevision' IS NOT NULL"));
+        var expected = CollectionConfigurationRevision.Create(Configuration());
+        Assert.All(await store.ListAsync(100, default), job => Assert.Equal(expected, job.Definition.ConfigurationRevision));
+    }
+
+    private async Task<object?> ScalarAsync(string sql)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(sql, connection);
+        return await command.ExecuteScalarAsync();
+    }
+
     private static ConfiguredCollectionSource Source() => new(Configuration(), SourceId, Backfill.AddDays(400));
 
     private static CollectionConfiguration Configuration() => CongressBillSourceConfigurationTests.Configuration();

@@ -1,6 +1,5 @@
 using System.Data.Common;
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Collection.Contracts;
@@ -611,7 +610,8 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
         await connection.OpenAsync();
         await using (var update = new NpgsqlCommand("UPDATE collection_jobs SET definition_json = @definition WHERE job_id = @id", connection))
         {
-            update.Parameters.AddWithValue("definition", JsonSerializer.Serialize(invalid, CollectionProtocol.JsonOptions));
+            update.Parameters.AddWithValue("definition",
+                JsonSerializer.Serialize(invalid with { ConfigurationRevision = null }, CollectionProtocol.JsonOptions));
             update.Parameters.AddWithValue("id", claim.Job.JobId);
             await update.ExecuteNonQueryAsync();
         }
@@ -620,6 +620,84 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
         await using var count = new NpgsqlCommand("SELECT count(*) FROM collection_job_attempts WHERE job_id = @id", connection);
         count.Parameters.AddWithValue("id", claim.Job.JobId);
         Assert.Equal(0L, await count.ExecuteScalarAsync());
+    }
+
+    [Fact]
+    public async Task AJobReadsBackTheExactRevisionAndTheRowStoresOnlyItsId()
+    {
+        var definition = RevisionDefinition();
+
+        var job = await jobs.EnqueueAsync(definition, "revision-reference", default);
+
+        var read = await jobs.GetAsync(job.JobId, default);
+        Assert.Equal(definition.ConfigurationRevision, read!.Definition.ConfigurationRevision);
+        Assert.Equal(definition, read.Definition);
+        Assert.Equal(definition.ConfigurationRevision!.Id, await ScalarAsync("SELECT configuration_revision_id FROM collection_jobs"));
+        Assert.Null(await ScalarAsync("SELECT definition_json::jsonb ->> 'configurationRevision' FROM collection_jobs"));
+        Assert.Equal(definition.ConfigurationRevision.Json, await ScalarAsync("SELECT json FROM collection_configuration_revisions"));
+    }
+
+    [Fact]
+    public async Task JobsAdmittedFromOneRevisionShareOneStoredRevision()
+    {
+        var definition = RevisionDefinition();
+
+        await jobs.EnqueueAsync(definition, "shared-one", default);
+        await jobs.EnqueueAsync(definition, "shared-two", default);
+
+        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM collection_configuration_revisions"));
+        Assert.All(await jobs.ListAsync(10, default), job => Assert.Equal(definition.ConfigurationRevision, job.Definition.ConfigurationRevision));
+    }
+
+    [Fact]
+    public async Task ATamperedStoredRevisionFailsTheHashCheckInsteadOfBindingTheJobToDifferentSettings()
+    {
+        var job = await jobs.EnqueueAsync(RevisionDefinition(), "tampered-revision", default);
+        await ExecuteAsync("UPDATE collection_configuration_revisions SET json = json || ' '");
+
+        await Assert.ThrowsAsync<InvalidDataException>(() => jobs.GetAsync(job.JobId, default));
+    }
+
+    [Fact]
+    public async Task TheDatabaseRefusesToDeleteARevisionThatAJobStillNeeds()
+    {
+        var job = await jobs.EnqueueAsync(RevisionDefinition(), "referenced-revision", default);
+
+        var refused = await Assert.ThrowsAsync<PostgresException>(() => ExecuteAsync("DELETE FROM collection_configuration_revisions"));
+
+        Assert.Equal(PostgresErrorCodes.RestrictViolation, refused.SqlState);
+        Assert.NotNull((await jobs.GetAsync(job.JobId, default))!.Definition.ConfigurationRevision);
+    }
+
+    private static CollectionJobDefinition RevisionDefinition()
+    {
+        var configuration = new CollectionConfiguration
+        {
+            People = [new PersonConfiguration { Id = "person", Name = "Person" }],
+            Sources = [new WatchedSourceConfiguration
+            {
+                Id = "source", PersonIds = ["person"], Url = "https://example.test/page",
+                AllowedOrigin = "https://example.test", AllowedPathPrefix = "/"
+            }]
+        };
+        return CollectionJobDefinition.FromConfiguration(configuration, "source", new DateOnly(2026, 7, 1));
+    }
+
+    private async Task<object?> ScalarAsync(string sql)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(sql, connection);
+        var value = await command.ExecuteScalarAsync();
+        return value is DBNull ? null : value;
+    }
+
+    private async Task ExecuteAsync(string sql)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(sql, connection);
+        await command.ExecuteNonQueryAsync();
     }
 
     [Fact]

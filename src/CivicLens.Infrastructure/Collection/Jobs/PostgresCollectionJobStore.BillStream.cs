@@ -36,6 +36,7 @@ public sealed partial class PostgresCollectionJobStore : IBillStreamAdmissionSto
         var keys = admission.Jobs.Select(job => job.IdempotencyKey).ToArray();
         var knownKeys = (await db.Set<JobRow>().Where(row => keys.Contains(row.IdempotencyKey))
             .Select(row => row.IdempotencyKey).ToListAsync(cancellationToken)).ToHashSet(StringComparer.Ordinal);
+        var revisionWriter = new ConfigurationRevisionWriter(db, Ticks(now));
         var admitted = new List<DiscoveryAdmissionJob>();
         var deferred = 0;
         var requests = 0;
@@ -54,7 +55,8 @@ public sealed partial class PostgresCollectionJobStore : IBillStreamAdmissionSto
             {
                 JobId = jobId,
                 IdempotencyKey = job.IdempotencyKey,
-                DefinitionJson = Write(job.Definition),
+                DefinitionJson = StoredJobDefinition.Write(job.Definition),
+                ConfigurationRevisionId = await revisionWriter.StoreAsync(job.Definition.ConfigurationRevision, cancellationToken),
                 State = CollectionJobState.Pending,
                 CreatedAt = Ticks(now)
             });
