@@ -27,9 +27,9 @@ public sealed class PublishRelease
         this.releases = releases;
         this.renderer = renderer;
         this.clock = clock;
-        var builder = new PublishedRecordBuilder(catalog);
-        documentChanges = new(documentChangeReviews, renderer, builder);
-        statements = new(statementReviews, renderer, new(builder));
+        var rules = new PublishedRecordRules(catalog);
+        documentChanges = new(documentChangeReviews, renderer, new(rules));
+        statements = new(statementReviews, renderer, new(rules));
     }
 
     public async Task<PublicationReleaseSummary> ExecuteAsync(ReviewActor actor, PublishReleaseRequest request,

@@ -53,7 +53,7 @@ public sealed partial class ReviewHome
         {
             var publish = Services.GetRequiredService<PublishRelease>();
             if (ConfirmIds is not { Length: > 0 } || string.IsNullOrWhiteSpace(PublishKey))
-                throw new ArgumentException("Select drafts to publish.");
+                throw new ArgumentException("Select records to publish.");
             var release = await publish.ExecuteAsync(actor!, new PublishReleaseRequest(
                 [.. ConfirmIds.Select(PublishedRecordReference.Parse)], PublishKey),
                 cancellationToken);

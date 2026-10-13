@@ -5,7 +5,7 @@ using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Application.Publication;
 
-internal sealed class PublishedStatementBuilder(PublishedRecordBuilder shared)
+internal sealed class PublishedStatementBuilder(PublishedRecordRules rules)
 {
     public PublishedStatement Build(PublishableStatement statement, PublishedRecordEntry? previous, DateTimeOffset now)
     {
@@ -19,7 +19,7 @@ internal sealed class PublishedStatementBuilder(PublishedRecordBuilder shared)
             Summary = revision.Summary,
             StatementDate = revision.StatementDate,
             StatementDateEvidence = revision.StatementDateEvidence is null ? null : Cite(revision.StatementDateEvidence, extraction),
-            Speakers = shared.MapOfficials(PublishedRecordKind.Statement, review.CandidateId, revision.SpeakerOfficialIds),
+            Speakers = rules.MapOfficials(PublishedRecordKind.Statement, review.CandidateId, revision.SpeakerOfficialIds),
             OtherSpeakers = [.. revision.OtherSpeakers],
             IssueIds = [.. revision.IssueIds],
             PolicyAreaIds = [.. revision.PolicyAreaIds],
@@ -32,7 +32,7 @@ internal sealed class PublishedStatementBuilder(PublishedRecordBuilder shared)
                 ObservedAtUtc = extraction.SourceAttempt.ObservedAt,
                 Text = extraction.Text
             },
-            ApprovedAtUtc = PublishedRecordBuilder.GetApprovalTime(revision.RevisionNumber, review.Decisions),
+            ApprovedAtUtc = PublishedRecordRules.GetApprovalTime(revision.RevisionNumber, review.Decisions),
             FirstPublishedAtUtc = previous?.FirstPublishedAtUtc ?? now
         };
         record.Validate();

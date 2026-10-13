@@ -1,5 +1,4 @@
 using System.Collections.Immutable;
-using System.Text.Json;
 using CivicLens.Application.Review;
 using CivicLens.Publication.Contracts;
 
@@ -20,12 +19,12 @@ internal sealed class DocumentChangeRecordLoader(IDocumentChangeReviewStore revi
                 ?? throw new ArgumentException($"Draft {draftId} does not exist.", nameof(draftIds));
             var review = addition.Review;
             var revisionNumber = review.CurrentRevision.RevisionNumber;
-            PublishedRecordBuilder.RequirePublishable(PublishedRecordKind.DocumentChange, draftId, revisionNumber,
+            PublishedRecordRules.RequirePublishable(PublishedRecordKind.DocumentChange, draftId, revisionNumber,
                 review.Decisions, review.UnresolvedConcerns);
-            PublishedRecordBuilder.RequireNotPublishedAt(PublishedRecordKind.DocumentChange, draftId, revisionNumber, previous);
+            PublishedRecordRules.RequireNotPublishedAt(PublishedRecordKind.DocumentChange, draftId, revisionNumber, previous);
             var record = builder.Build(addition, previous.Find(PublishedRecordKind.DocumentChange, draftId), now);
-            pending.Add(new(PublishedRecordKind.DocumentChange, record.RecordId, record.RevisionNumber, review.ReviewStateVersion,
-                record.Headline, record.FirstPublishedAtUtc, JsonSerializer.SerializeToUtf8Bytes(record, PublicationProtocol.JsonOptions),
+            pending.Add(PendingRecord.Create(PublishedRecordKind.DocumentChange, review.ReviewStateVersion, record, record.RecordId,
+                record.RevisionNumber, record.Headline, record.FirstPublishedAtUtc,
                 await renderer.RenderRecordAsync(record, cancellationToken)));
         }
         return pending;

@@ -137,20 +137,20 @@
                 @if (ready is not null)
                 {
                     <Panel Title="Publish" Id="publish">
-                        <Aside>@(ready.HasMore ? $"First {PublishRelease.MaximumRecords} shown" : Count(ready.Items.Length, "draft", "drafts"))</Aside>
+                        <Aside>@(ready.HasMore ? $"First {PublishRelease.MaximumRecords} shown" : Count(ready.Items.Length, "record", "records"))</Aside>
                         <ChildContent>
                             @if (selectionStale)
                             {
-                                <Notice Tone="Tone.Warn">Some selected drafts are no longer ready to publish. Choose again.</Notice>
+                                <Notice Tone="Tone.Warn">Some selected records are no longer ready to publish. Choose again.</Notice>
                             }
                             @if (selection is not null)
                             {
                                 <Notice Tone="Tone.Warn" Title="@($"Confirm release {nextReleaseNumber}")">
-                                    This release holds the drafts below and every other record in the active release.
+                                    This release holds the records below and every other record in the active release.
                                 </Notice>
-                                <DataTable Items="selection" Caption="Selected drafts">
+                                <DataTable Items="selection" Caption="Selected records">
                                     <Head>
-                                        <th>Draft</th>
+                                        <th>Record</th>
                                         <th>Kind</th>
                                         <th>Status</th>
                                         <th class="num hide-narrow">Revision</th>
@@ -170,10 +170,10 @@
                             else
                             {
                                 <form id="publish-select" method="get" action="/Review#publish"></form>
-                                <DataTable Items="ready.Items" Caption="Drafts ready to publish">
+                                <DataTable Items="ready.Items" Caption="Records ready to publish">
                                     <Head>
                                         <th class="fit"><span class="visually-hidden">Select</span></th>
-                                        <th>Draft</th>
+                                        <th>Record</th>
                                         <th>Kind</th>
                                         <th>Status</th>
                                         <th class="num hide-narrow">Revision</th>
@@ -186,7 +186,7 @@
                                         <td class="num hide-narrow">@item.RevisionNumber</td>
                                     </Row>
                                     <Empty>
-                                        <EmptyState Title="Nothing is ready to publish" Text="Approved drafts show here until a release holds them. A new revision of a published draft shows as a replacement." />
+                                        <EmptyState Title="Nothing is ready to publish" Text="Approved records show here until a release holds them. A new revision of a published record shows as a replacement." />
                                     </Empty>
                                 </DataTable>
                                 @if (ready.Items.Length > 0)

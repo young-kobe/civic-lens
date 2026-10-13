@@ -159,17 +159,29 @@ public sealed class PostgresPublicationStore(IDbContextFactory<CollectionAttempt
             CancellationToken cancellationToken)
     {
         var current = new Dictionary<(PublishedRecordKind, string), (int, int)>();
-        var changeIds = IdsOf(expectations, PublishedRecordKind.DocumentChange);
+        await AddDocumentChangeStatesAsync(db, IdsOf(expectations, PublishedRecordKind.DocumentChange), current, cancellationToken);
+        await AddStatementStatesAsync(db, IdsOf(expectations, PublishedRecordKind.Statement), current, cancellationToken);
+        return current;
+    }
+
+    private static async Task AddDocumentChangeStatesAsync(CollectionAttemptDbContext db, string[] draftIds,
+        Dictionary<(PublishedRecordKind, string), (int, int)> current, CancellationToken cancellationToken)
+    {
+        if (draftIds.Length == 0) return;
         var changes = await db.Set<DocumentChangeDraftRow>().AsNoTracking()
-            .Where(row => changeIds.Contains(row.DraftId)).ToArrayAsync(cancellationToken);
+            .Where(row => draftIds.Contains(row.DraftId)).ToArrayAsync(cancellationToken);
         foreach (var row in changes)
             current[(PublishedRecordKind.DocumentChange, row.DraftId)] = (row.CurrentRevisionNumber, row.ReviewStateVersion);
-        var statementIds = IdsOf(expectations, PublishedRecordKind.Statement);
+    }
+
+    private static async Task AddStatementStatesAsync(CollectionAttemptDbContext db, string[] candidateIds,
+        Dictionary<(PublishedRecordKind, string), (int, int)> current, CancellationToken cancellationToken)
+    {
+        if (candidateIds.Length == 0) return;
         var statements = await db.Set<StatementDraftRow>().AsNoTracking()
-            .Where(row => statementIds.Contains(row.CandidateId)).ToArrayAsync(cancellationToken);
+            .Where(row => candidateIds.Contains(row.CandidateId)).ToArrayAsync(cancellationToken);
         foreach (var row in statements)
             current[(PublishedRecordKind.Statement, row.CandidateId)] = (row.CurrentRevisionNumber, row.ReviewStateVersion);
-        return current;
     }
 
     private static string[] IdsOf(ImmutableArray<ReviewStateExpectation> expectations, PublishedRecordKind kind) =>

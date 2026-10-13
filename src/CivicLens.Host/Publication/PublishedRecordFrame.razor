@@ -5,7 +5,7 @@
     <RecordView HeadingLevel="1" Headline="@Headline" Summary="@Summary" Significance="@Significance"
                 Limits="@Limits" Facts="Facts" />
     @ChildContent
-    <Caveat>Observation times show when each version was captured. They do not show when or why the source changed.</Caveat>
+    <Caveat>@Caveat</Caveat>
 </PublicPage>
 
 @code {
@@ -14,5 +14,6 @@
     [Parameter] public string? Significance { get; set; }
     [Parameter] public string? Limits { get; set; }
     [Parameter, EditorRequired] public IReadOnlyList<Fact> Facts { get; set; } = [];
+    [Parameter, EditorRequired] public string Caveat { get; set; } = string.Empty;
     [Parameter] public RenderFragment? ChildContent { get; set; }
 }

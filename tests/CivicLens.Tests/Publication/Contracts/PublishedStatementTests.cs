@@ -95,24 +95,29 @@ public sealed class PublishedStatementTests
     [Fact]
     public void RequiresAtLeastOneSpeakerBecauseAStatementWithoutAnOfficialIsNotTracked()
     {
-        Assert.Throws<InvalidDataException>((Statement() with { Speakers = [] }).Validate);
+        var error = Assert.Throws<InvalidDataException>((Statement() with { Speakers = [] }).Validate);
+
+        Assert.Equal("Published statement requires at least one speaker.", error.Message);
     }
 
     [Theory]
     [MemberData(nameof(BadLabels))]
-    public void RejectsBlankOrRepeatedLabels(PublishedStatement statement)
+    public void RejectsBlankOrRepeatedLabelsAndNamesTheFailingSet(PublishedStatement statement, string expectedMessage)
     {
-        Assert.Throws<InvalidDataException>(statement.Validate);
+        var error = Assert.Throws<InvalidDataException>(statement.Validate);
+
+        Assert.Equal(expectedMessage, error.Message);
     }
 
-    public static TheoryData<PublishedStatement> BadLabels() => new()
+    public static TheoryData<PublishedStatement, string> BadLabels() => new()
     {
-        Statement() with { IssueIds = ["housing", "housing"] },
-        Statement() with { PolicyAreaIds = [" "] },
-        Statement() with { OtherSpeakers = ["A", "A"] },
-        Statement() with { BillNumbers = [""] },
-        Statement() with { Speakers = [new() { Id = "mayor", Name = "A" }, new() { Id = "mayor", Name = "B" }] },
-        Statement() with { Speakers = [new() { Id = "mayor", Name = " " }] }
+        { Statement() with { IssueIds = null! }, "Published statement speakers or labels are missing." },
+        { Statement() with { Speakers = [new() { Id = "mayor", Name = " " }] }, "Published statement speakers require a name." },
+        { Statement() with { Speakers = [new() { Id = "mayor", Name = "A" }, new() { Id = "mayor", Name = "B" }] }, "Published statement speaker ids must be distinct and not blank." },
+        { Statement() with { OtherSpeakers = ["A", "A"] }, "Published statement other speakers must be distinct and not blank." },
+        { Statement() with { IssueIds = ["housing", "housing"] }, "Published statement issue ids must be distinct and not blank." },
+        { Statement() with { PolicyAreaIds = [" "] }, "Published statement policy area ids must be distinct and not blank." },
+        { Statement() with { BillNumbers = [""] }, "Published statement bill numbers must be distinct and not blank." }
     };
 
     [Theory]
