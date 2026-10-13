@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using AngleSharp.Html.Parser;
 using CivicLens.Application.Collection;
+using CivicLens.Application.Configuration;
 using CivicLens.Application.Collection.Health;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Collection.Contracts;
@@ -249,7 +250,7 @@ public sealed class SourcesPageTests(PostgresCollection postgres) : IAsyncLifeti
         await host.StartAsync();
         host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie(subject));
         var configuration = JsonSerializer.Deserialize<CollectionConfiguration>(
-            await File.ReadAllTextAsync(Path.Combine(host.KeyDirectory, "sources.json")), CollectionProtocol.JsonOptions)!;
+            await File.ReadAllTextAsync(Path.Combine(host.KeyDirectory, "sources.json")), ConfigurationJson.Options)!;
         return new CollectionWorkspace(configuration, Jobs, host.Attempts,
             PostgresEvidenceProcessingStore.FromConnectionString(host.ConnectionString));
     }

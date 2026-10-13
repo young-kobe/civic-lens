@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using CivicLens.Application.Paging;
 using CivicLens.Core.Review;
+using CivicLens.Core;
 
 namespace CivicLens.Application.Review;
 
@@ -36,23 +37,18 @@ internal static class ReviewValidation
 
     public static string ValidateHash(string value, string parameterName)
     {
-        if (value is not { Length: 64 } || value.Any(c => c is not (>= '0' and <= '9') and not (>= 'a' and <= 'f')))
+        if (!LowercaseHex.Is(value, 64))
             throw new ArgumentException("Identifier must be a lowercase SHA-256 value.", parameterName);
         return value;
     }
 
     public static string ValidateCandidateId(string value) => ValidateHash(value, nameof(value));
 
-    public static string ValidateDraftId(string value)
-    {
-        if (value is not { Length: 32 } || value.Any(c => c is not (>= '0' and <= '9') and not (>= 'a' and <= 'f')))
-            throw new ArgumentException("Draft ID is invalid.", nameof(value));
-        return value;
-    }
+    public static string ValidateDraftId(string value) => DocumentChangeDraftRevision.ValidateDraftId(value);
 
     public static string ValidateRunId(string value)
     {
-        if (value is not { Length: 32 } || value.Any(c => c is not (>= '0' and <= '9') and not (>= 'a' and <= 'f')))
+        if (!LowercaseHex.Is(value, 32))
             throw new ArgumentException("Run ID is invalid.", nameof(value));
         return value;
     }
@@ -116,7 +112,7 @@ internal static class ReviewValidation
         var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var id in ids)
         {
-            if (id is not { Length: 32 } || id.Any(c => c is not (>= '0' and <= '9') and not (>= 'a' and <= 'f')) || !seen.Add(id))
+            if (!LowercaseHex.Is(id, 32) || !seen.Add(id))
                 throw new ArgumentException("Decision ID is invalid or duplicated.", nameof(ids));
             result.Add(id);
         }

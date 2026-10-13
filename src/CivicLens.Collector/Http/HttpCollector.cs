@@ -113,7 +113,7 @@ public sealed class HttpCollector : IDisposable
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { return Result(CollectionOutcome.Failed, CollectionFailureCode.Cancelled); }
         catch (OperationCanceledException)
         {
-            return robotsPhase && request.Version >= CollectionProtocol.RobotsVersion
+            return robotsPhase
                 ? Result(CollectionOutcome.Deferred, CollectionFailureCode.RobotsUnavailable)
                 : Result(CollectionOutcome.Failed, CollectionFailureCode.Timeout);
         }
@@ -145,8 +145,8 @@ public sealed class HttpCollector : IDisposable
                 Discovery = discovery,
                 BytesReceived = bytes,
                 RequestCount = requests,
-                RobotsRequestCount = request.Version >= CollectionProtocol.RobotsVersion ? robotsRequests : null,
-                RobotsCrawlDelayMilliseconds = request.Version >= CollectionProtocol.RobotsVersion ? robotsCrawlDelayMilliseconds : null,
+                RobotsRequestCount = robotsRequests,
+                RobotsCrawlDelayMilliseconds = robotsCrawlDelayMilliseconds,
                 FailureCode = failure,
                 RetryAfterSeconds = retry
             };
@@ -165,23 +165,17 @@ public sealed class HttpCollector : IDisposable
                     robotsRequests++;
                     lastRequestAt = elapsed.Elapsed;
                 }, n => bytes += n, () => bytes, token, DelayBeforeRobotsRedirectAsync);
-                robotsCrawlDelayMilliseconds = request.Version >= CollectionProtocol.RobotsVersion
-                    ? rules.CrawlDelayMilliseconds
-                    : null;
+                robotsCrawlDelayMilliseconds = rules.CrawlDelayMilliseconds;
                 robotsPhase = false;
             }
             catch (RobotsException exception)
             {
-                if (request.Version < CollectionProtocol.RobotsVersion)
-                    return Result(CollectionOutcome.Failed, CollectionFailureCode.RobotsUnavailable);
                 return Result(exception.Deferred ? CollectionOutcome.Deferred : CollectionOutcome.Failed,
                     exception.FailureCode, retry: exception.RetryAfterSeconds);
             }
             catch (HttpRequestException)
             {
-                return request.Version >= CollectionProtocol.RobotsVersion
-                    ? Result(CollectionOutcome.Deferred, CollectionFailureCode.RobotsUnavailable)
-                    : Result(CollectionOutcome.Failed, CollectionFailureCode.RobotsUnavailable);
+                return Result(CollectionOutcome.Deferred, CollectionFailureCode.RobotsUnavailable);
             }
             if (!RobotsAllows(current.PathAndQuery)) return Result(CollectionOutcome.Failed, CollectionFailureCode.RobotsDenied);
             effectiveDelayMilliseconds = Math.Max((long)request.MinDelayMilliseconds, robotsCrawlDelayMilliseconds ?? 0);
@@ -194,11 +188,6 @@ public sealed class HttpCollector : IDisposable
         {
             var waitMilliseconds = effectiveDelayMilliseconds - (long)(elapsed.Elapsed - lastRequestAt).TotalMilliseconds;
             if (waitMilliseconds <= 0) return false;
-            if (request.Version < CollectionProtocol.RobotsVersion)
-            {
-                await Task.Delay(TimeSpan.FromMilliseconds(waitMilliseconds), token);
-                return false;
-            }
             var remainingMilliseconds = request.TimeoutSeconds * 1000L - (long)elapsed.Elapsed.TotalMilliseconds;
             if (waitMilliseconds >= remainingMilliseconds) return true;
             await Task.Delay(TimeSpan.FromMilliseconds(waitMilliseconds), token);
@@ -278,8 +267,6 @@ public sealed class HttpCollector : IDisposable
                     retryAfterSeconds: RetrySeconds(response.Headers.RetryAfter));
             if ((int)response.StatusCode is >= 300 and < 400)
             {
-                if (request.Version < CollectionProtocol.RobotsVersion)
-                    throw new RobotsException(CollectionFailureCode.RobotsUnavailable);
                 if (response.Headers.Location is null) throw new RobotsException(CollectionFailureCode.RobotsUnavailable);
                 Uri next;
                 try { next = response.Headers.Location.IsAbsoluteUri ? response.Headers.Location : new Uri(target, response.Headers.Location); }

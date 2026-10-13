@@ -30,8 +30,7 @@ internal static class HtmlParser
 
             // AngleSharp does not fetch linked resources. This parser only builds a tree from
             // the already captured representation; scripts are never executed.
-            using var document = await CreateParser(token,
-                request.Version >= CollectionProtocol.TolerantHtmlRecoveryVersion).ParseDocumentAsync(html, token);
+            using var document = await CreateParser(token).ParseDocumentAsync(html, token);
             token.ThrowIfCancellationRequested();
             ValidateTreeDepth(document, token);
             var finalUrl = new Uri(responseUrl);
@@ -150,8 +149,7 @@ internal static class HtmlParser
         _ => (null, 0)
     };
 
-    private static AngleSharp.Html.Parser.HtmlParser CreateParser(CancellationToken cancellationToken,
-        bool tolerateOptionalParagraphClosures)
+    private static AngleSharp.Html.Parser.HtmlParser CreateParser(CancellationToken cancellationToken)
     {
         var tokens = 0;
         var elements = 0;
@@ -171,17 +169,12 @@ internal static class HtmlParser
                 foreach (var element in createdElements) ValidateAncestorDepth(element);
                 createdElements.Clear();
                 if (htmlToken.Type == HtmlTokenType.EndTag)
-                {
-                    if (tolerateOptionalParagraphClosures)
-                        CloseThroughMatchingAncestor(openElements, htmlToken.Name);
-                    else if (openElements.Count > 0 && openElements[^1] == htmlToken.Name)
-                        openElements.RemoveAt(openElements.Count - 1);
-                }
+                    CloseThroughMatchingAncestor(openElements, htmlToken.Name);
                 else if (htmlToken.Type == HtmlTokenType.StartTag && !IsVoidElement(htmlToken.Name))
                 {
-                    if (tolerateOptionalParagraphClosures && htmlToken is HtmlTagToken { IsSelfClosing: true } &&
+                    if (htmlToken is HtmlTagToken { IsSelfClosing: true } &&
                         (htmlToken.Name is "svg" or "math" || openElements.Contains("svg") || openElements.Contains("math"))) return;
-                    if (tolerateOptionalParagraphClosures && ClosesParagraph(htmlToken.Name))
+                    if (ClosesParagraph(htmlToken.Name))
                         CloseNearestParagraph(openElements);
                     openElements.Add(htmlToken.Name);
                     if (openElements.Count > MaximumOpenElements) throw new MarkupLimitException();

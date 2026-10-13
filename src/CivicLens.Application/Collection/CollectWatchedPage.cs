@@ -4,12 +4,11 @@ namespace CivicLens.Application.Collection;
 
 public sealed class CollectWatchedPage(ICollectorProcess collector)
 {
-    public async Task<CollectionResult> ExecuteAsync(CollectionConfiguration configuration, string sourceId,
-        string artifactDirectory, CancellationToken cancellationToken = default, DateOnly? asOf = null)
+    public async Task<CollectionResult> ExecuteAsync(PreparedCollectionAttempt attempt, CancellationToken cancellationToken = default)
     {
-        var request = configuration.CreateRequest(sourceId, Guid.NewGuid().ToString("N"), Path.GetFullPath(artifactDirectory), asOf);
-        var result = await collector.RunAsync(request, cancellationToken);
-        result.ValidateAgainst(request);
+        ArgumentNullException.ThrowIfNull(attempt);
+        var result = await collector.RunAsync(attempt.Request, cancellationToken);
+        result.ValidateAgainst(attempt.Request);
         return result;
     }
 }

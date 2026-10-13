@@ -16,26 +16,20 @@ public sealed record DiscoveryAdmissionPolicy
             throw new ArgumentException("Discovery admission limits are outside supported bounds.");
     }
 
-    public bool TryReserve(CollectionJobDefinition template, int admittedJobs, int usedRequests, long usedBytes,
-        int usedSeconds, out DiscoveryAdmissionReservation reservation)
+    public DiscoveryAdmissionBudget OpenBudget(CollectionJobDefinition template)
     {
         ArgumentNullException.ThrowIfNull(template);
-        Validate();
-        if (admittedJobs < 0 || usedRequests < 0 || usedBytes < 0 || usedSeconds < 0)
-            throw new ArgumentOutOfRangeException(nameof(admittedJobs), "Previously reserved discovery budgets cannot be negative.");
-        template.Validate();
         var request = template.CreateRequest("discovery-admission-validation", Path.GetFullPath("collection-artifacts"));
-        var requests = template.Policy.ResolveMaxTotalRequests(request);
-        var bytes = template.Policy.ResolveMaxTotalBytes(request);
-        var seconds = template.Policy.ResolveMaxTotalTimeoutSeconds(request);
-        if (admittedJobs >= MaxJobs || requests > MaxTotalRequests - usedRequests ||
-            bytes > MaxTotalBytes - usedBytes || seconds > MaxTotalTimeoutSeconds - usedSeconds)
-        {
-            reservation = default;
-            return false;
-        }
+        return new DiscoveryAdmissionBudget(this, template.Policy.ResolveMaxTotalRequests(request),
+            template.Policy.ResolveMaxTotalBytes(request), template.Policy.ResolveMaxTotalTimeoutSeconds(request));
+    }
 
-        reservation = new DiscoveryAdmissionReservation(requests, bytes, seconds);
+    public bool CanReserve(CollectionJobDefinition template, int jobs)
+    {
+        var budget = OpenBudget(template);
+        for (var reserved = 0; reserved < jobs; reserved++)
+            if (!budget.TryReserve())
+                return false;
         return true;
     }
 }

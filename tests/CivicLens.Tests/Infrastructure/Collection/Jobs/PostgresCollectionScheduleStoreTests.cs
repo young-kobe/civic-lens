@@ -128,7 +128,7 @@ public sealed class PostgresCollectionScheduleStoreTests(PostgresCollection post
     [Fact]
     public async Task NoCoverageOnDatabaseAdmissionDateConsumesSlotWithoutCreatingJob()
     {
-        await store.SynchronizeAsync(Configuration(version: 2, coverageStartsOn: DateOnly.MaxValue), default);
+        await store.SynchronizeAsync(Configuration(coverageStartsOn: DateOnly.MaxValue), default);
 
         Assert.Equal(1, await store.AdvanceDueAsync(10, default));
         Assert.Empty(await store.ListAsync(10, default));
@@ -155,7 +155,7 @@ public sealed class PostgresCollectionScheduleStoreTests(PostgresCollection post
     [Fact]
     public async Task SkippedDueSlotsDoNotStrandEligibleSourcesBeyondFirstBatch()
     {
-        var configuration = Configuration(version: 2, coverageStartsOn: DateOnly.MaxValue);
+        var configuration = Configuration(coverageStartsOn: DateOnly.MaxValue);
         var first = configuration.Sources[0];
         configuration = configuration with
         {
@@ -185,17 +185,16 @@ public sealed class PostgresCollectionScheduleStoreTests(PostgresCollection post
     }
 
     private static CollectionConfiguration Configuration(int intervalSeconds = WatchedSourceConfiguration.DefaultCheckIntervalSeconds,
-        bool enabled = true, bool withSource = true, int version = 1, DateOnly? coverageStartsOn = null)
+        bool enabled = true, bool withSource = true, DateOnly? coverageStartsOn = null)
     {
         var source = new WatchedSourceConfiguration
         {
             Id = "senate",
-            PersonIds = version == 1 ? ["person"] : null,
-            Coverage = version == 2 ? [new SourceCoverageConfiguration
+            Coverage = [new SourceCoverageConfiguration
             {
                 PersonId = "person",
                 StartsOn = coverageStartsOn ?? DateOnly.MinValue
-            }] : null,
+            }],
             Url = "https://example.test/senate",
             AllowedOrigin = "https://example.test",
             AllowedPathPrefix = "/",
@@ -205,7 +204,6 @@ public sealed class PostgresCollectionScheduleStoreTests(PostgresCollection post
         };
         return new CollectionConfiguration
         {
-            Version = version,
             People = [new PersonConfiguration { Id = "person", Name = "Person" }],
             Sources = withSource ? [source] : []
         };

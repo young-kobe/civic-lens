@@ -30,10 +30,8 @@ public sealed record CollectionJobDefinition
         DateOnly? asOf = null)
     {
         var revision = CollectionConfigurationRevision.Create(configuration);
-        var snapshot = revision.ReadConfiguration();
         var effectiveDate = asOf ?? DateOnly.FromDateTime(DateTime.UtcNow);
-        snapshot.CreateRequest(sourceId, "validation-job", Path.GetFullPath("collection-artifacts"), effectiveDate);
-        var definition = FromSource(snapshot.Sources.Single(source => source.Id == sourceId)) with
+        var definition = FromSource(revision.Configuration.EligibleSource(sourceId, effectiveDate)) with
         {
             ConfigurationRevision = revision,
             CoverageAsOf = effectiveDate
@@ -81,9 +79,7 @@ public sealed record CollectionJobDefinition
         if (ConfigurationRevision is null || CoverageAsOf is null)
             throw new ArgumentException("A configuration revision and coverage date must be supplied together.");
 
-        var configuration = ConfigurationRevision.ReadConfiguration();
-        configuration.CreateRequest(SourceId, "validation-job", Path.GetFullPath("collection-artifacts"), CoverageAsOf);
-        var source = configuration.Sources.Single(candidate => candidate.Id == SourceId);
+        var source = ConfigurationRevision.Configuration.EligibleSource(SourceId, CoverageAsOf.Value);
         var expected = FromSource(source);
         if (source.ApiParser is not null && Url.StartsWith(source.Url, StringComparison.Ordinal))
             expected = expected with { Url = Url };

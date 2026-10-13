@@ -1,4 +1,6 @@
+using System.Text.Json;
 using CivicLens.Application.Collection;
+using CivicLens.Application.Configuration;
 using CivicLens.Collection.Contracts;
 
 namespace CivicLens.Tests.Application.Collection;
@@ -18,14 +20,16 @@ public sealed class ConfigurationTests
     [Fact]
     public void PreparedAttemptsHaveFreshIdentitiesSeparateFromWireJobs()
     {
-        var configuration = ValidConfiguration([new PersonConfiguration { Id = "person", Name = "Official" }], ["person"]);
-        var first = new PreparedCollectionAttempt(configuration, "shared", "captures");
-        var second = new PreparedCollectionAttempt(configuration, "shared", "captures");
+        var revision = CollectionConfigurationRevision.Create(
+            ValidConfiguration([new PersonConfiguration { Id = "person", Name = "Official" }], ["person"]));
+        var source = new ConfiguredCollectionSource(revision, "shared");
+        var first = new PreparedCollectionAttempt(source, "captures");
+        var second = new PreparedCollectionAttempt(source, "captures");
 
         Assert.Equal(4, new[] { first.AttemptId, first.Request.JobId, second.AttemptId, second.Request.JobId }.Distinct().Count());
         Assert.Equal(Path.GetFullPath("captures"), first.Request.ArtifactDirectory);
         Assert.Equal("shared", first.Request.SourceId);
-        Assert.Throws<ArgumentException>(() => new PreparedCollectionAttempt(configuration, "missing", "captures"));
+        Assert.Throws<ArgumentException>(() => new ConfiguredCollectionSource(revision, "missing"));
     }
 
     [Fact]
@@ -39,7 +43,9 @@ public sealed class ConfigurationTests
         configuration.Validate();
 
         Assert.Single(configuration.Sources);
-        var request = configuration.CreateRequest("shared", "job-1", Path.GetFullPath("artifacts"));
+        Assert.Equal(500, configuration.GetCoveredPersonIds("shared", new DateOnly(2024, 1, 1)).Length);
+        var request = new ConfiguredCollectionSource(configuration, "shared")
+            .CreateRequest("job-1", Path.GetFullPath("artifacts"), new DateOnly(2024, 1, 1));
         Assert.Equal("shared", request.SourceId);
     }
 
@@ -113,8 +119,7 @@ public sealed class ConfigurationTests
         {
             Sources = [ValidSource(["one"]) with { Enabled = false }]
         };
-        Assert.Throws<ArgumentException>(() => disabled
-            .CreateRequest("shared", "job-1", Path.GetFullPath("artifacts")));
+        Assert.Throws<ArgumentException>(() => disabled.EligibleSource("shared", new DateOnly(2024, 1, 1)));
     }
 
     [Fact]
@@ -145,7 +150,6 @@ public sealed class ConfigurationTests
                 new PersonConfiguration { Id = "a", Name = "Amy" }],
             Sources = [ValidSource([]) with
             {
-                PersonIds = null,
                 Coverage = [
                     new SourceCoverageConfiguration { PersonId = "z", StartsOn = new DateOnly(2024, 1, 1), EndsBefore = new DateOnly(2024, 2, 1) },
                     new SourceCoverageConfiguration { PersonId = "a", EndsBefore = new DateOnly(2024, 2, 1) }]
@@ -155,8 +159,8 @@ public sealed class ConfigurationTests
         Assert.Equal(["a", "z"], configuration.GetCoveredPersonIds("shared", new DateOnly(2024, 1, 31)));
         Assert.Equal(["a"], configuration.GetCoveredPersonIds("shared", new DateOnly(2023, 12, 31)));
         Assert.Empty(configuration.GetCoveredPersonIds("shared", new DateOnly(2024, 2, 1)));
-        Assert.Throws<ArgumentException>(() => configuration.CreateRequest("shared", "job", Path.GetFullPath("captures"), new DateOnly(2024, 2, 1)));
-        Assert.Equal("shared", configuration.CreateRequest("shared", "job", Path.GetFullPath("captures"), new DateOnly(2024, 1, 1)).SourceId);
+        Assert.Throws<ArgumentException>(() => configuration.EligibleSource("shared", new DateOnly(2024, 2, 1)));
+        Assert.Equal("shared", configuration.EligibleSource("shared", new DateOnly(2024, 1, 1)).Id);
     }
 
     [Fact]
@@ -178,27 +182,6 @@ public sealed class ConfigurationTests
         }]
         };
         Assert.Throws<ArgumentException>(overlapping.Validate);
-    }
-
-    [Fact]
-    public void VersionTwoSupportsHundredsOfPeopleOnOneSource()
-    {
-        var people = Enumerable.Range(1, 500)
-            .Select(index => new PersonConfiguration { Id = $"person-{index}", Name = $"Official {index}" })
-            .ToArray();
-        var configuration = new CollectionConfiguration
-        {
-            Version = 2,
-            People = people,
-            Sources = [ValidSource([]) with
-            {
-                PersonIds = null,
-                Coverage = people.Select(person => new SourceCoverageConfiguration { PersonId = person.Id }).ToArray()
-            }]
-        };
-
-        Assert.Equal(500, configuration.GetCoveredPersonIds("shared", new DateOnly(2024, 1, 1)).Length);
-        Assert.Single(configuration.Sources);
     }
 
     [Fact]
@@ -259,21 +242,35 @@ public sealed class ConfigurationTests
         Assert.Throws<ArgumentException>(shared.Validate);
     }
 
-    [Fact]
-    public void VersionOneRejectsBioguideIdBecauseOldRevisionsNeverCarriedIt()
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(3)]
+    public void OnlyConfigurationVersionTwoIsSupported(int version)
     {
-        var configuration = ValidConfiguration([new PersonConfiguration { Id = "person", Name = "Official", BioguideId = "W000817" }], ["person"]);
+        var configuration = ValidConfiguration([new PersonConfiguration { Id = "person", Name = "Official" }], ["person"]);
 
-        Assert.Throws<ArgumentException>(configuration.Validate);
+        Assert.Throws<ArgumentException>((configuration with { Version = version }).Validate);
     }
 
     [Fact]
-    public void VersionAndCoverageShapesAreStrictEvenForDisabledSources()
+    public void LegacyPersonIdsMembershipIsRejectedByTheWireContract()
+    {
+        const string json = """
+            {"version":2,"people":[{"id":"person","name":"Official"}],"sources":[{"id":"shared","personIds":["person"],
+            "url":"http://127.0.0.1:8765/page.html","allowedOrigin":"http://127.0.0.1:8765","allowedPathPrefix":"/"}]}
+            """;
+
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<CollectionConfiguration>(json, ConfigurationJson.Options));
+    }
+
+    [Fact]
+    public void CoverageShapesAreStrictEvenForDisabledSources()
     {
         var dated = DatedConfiguration([new SourceCoverageConfiguration { PersonId = "one" }]);
         Assert.Throws<ArgumentException>(() => (dated with
         {
-            Sources = [dated.Sources[0] with { Enabled = false, PersonIds = ["one"] }]
+            Sources = [dated.Sources[0] with { Enabled = false, Coverage = null }]
         }).Validate());
         Assert.Throws<ArgumentException>(() => (dated with
         {
@@ -304,19 +301,11 @@ public sealed class ConfigurationTests
         var configuration = ApiConfiguration(CollectionCredentials.CongressGov);
 
         configuration.Validate();
-        var request = configuration.CreateRequest("shared", "job", Path.GetFullPath("captures"));
+        var request = new ConfiguredCollectionSource(configuration, "shared")
+            .CreateRequest("job", Path.GetFullPath("captures"), DateOnly.FromDateTime(DateTime.UtcNow));
 
         Assert.Equal(CollectionMode.Api, request.Mode);
         Assert.Equal(CollectionCredentials.CongressGov, request.Credential);
-    }
-
-    [Fact]
-    public void VersionOneRejectsACredentialBecauseOldRevisionsNeverCarriedIt()
-    {
-        var configuration = ApiConfiguration(CollectionCredentials.CongressGov) with { Version = 1 };
-        var source = configuration.Sources[0] with { PersonIds = ["one"], Coverage = null };
-
-        Assert.Throws<ArgumentException>((configuration with { Sources = [source] }).Validate);
     }
 
     [Theory]
@@ -347,7 +336,7 @@ public sealed class ConfigurationTests
     private static WatchedSourceConfiguration ValidSource(string[] personIds) => new()
     {
         Id = "shared",
-        PersonIds = personIds,
+        Coverage = personIds?.Select(personId => new SourceCoverageConfiguration { PersonId = personId }).ToArray(),
         Url = "http://127.0.0.1:8765/page.html",
         AllowedOrigin = "http://127.0.0.1:8765",
         AllowedPathPrefix = "/"
@@ -359,6 +348,6 @@ public sealed class ConfigurationTests
             Version = 2,
             People = [person ?? new PersonConfiguration { Id = "one", Name = "One" },
             new PersonConfiguration { Id = "two", Name = "Two" }],
-            Sources = [ValidSource([]) with { PersonIds = null, Coverage = coverage }]
+            Sources = [ValidSource([]) with { Coverage = coverage }]
         };
 }

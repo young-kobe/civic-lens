@@ -1,3 +1,5 @@
+using CivicLens.Core;
+
 namespace CivicLens.Application.Collection.Processing;
 
 public static class EvidenceProcessingLifecycle
@@ -71,21 +73,19 @@ public static class EvidenceProcessingLifecycle
 
     private static bool HasValidEvidence(EvidenceProcessingRecord record, EvidenceProcessingCheckpoint update)
     {
-        if (update.ExtractionId is not null && !IsEvidenceId(update.ExtractionId)) return false;
-        if (update.ComparisonId is not null && !IsEvidenceId(update.ComparisonId)) return false;
+        if (update.ExtractionId is not null && !LowercaseHex.Is(update.ExtractionId, 64)) return false;
+        if (update.ComparisonId is not null && !LowercaseHex.Is(update.ComparisonId, 64)) return false;
         if (record.ExtractionId is not null && update.ExtractionId is not null && record.ExtractionId != update.ExtractionId)
             return false;
         var needsExtraction = update.Stage == EvidenceProcessingStage.Comparison ||
             update.Outcome is EvidenceProcessingOutcome.Baseline or EvidenceProcessingOutcome.Unchanged or EvidenceProcessingOutcome.Changed;
-        if (needsExtraction && !IsEvidenceId(update.ExtractionId ?? record.ExtractionId)) return false;
+        if (needsExtraction && !LowercaseHex.Is(update.ExtractionId ?? record.ExtractionId, 64)) return false;
         return update.Outcome switch
         {
-            EvidenceProcessingOutcome.Changed or EvidenceProcessingOutcome.Unchanged => IsEvidenceId(update.ComparisonId),
+            EvidenceProcessingOutcome.Changed or EvidenceProcessingOutcome.Unchanged => LowercaseHex.Is(update.ComparisonId, 64),
             EvidenceProcessingOutcome.Baseline or EvidenceProcessingOutcome.Prepared => update.ComparisonId is null,
             _ => update.ComparisonId is null
         };
     }
 
-    private static bool IsEvidenceId(string? value) => value is { Length: 64 } &&
-        value.All(character => character is >= '0' and <= '9' or >= 'a' and <= 'f');
 }

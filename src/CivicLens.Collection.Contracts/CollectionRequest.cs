@@ -26,6 +26,13 @@ public sealed record CollectionRequest
 
     public void Validate()
     {
+        if (Version != CollectionProtocol.Version)
+            throw new ArgumentException("New collection requests must use the current protocol version.");
+        ValidateReadable();
+    }
+
+    public void ValidateReadable()
+    {
         ValidateIdentity();
         ValidateOrigin();
         ValidatePathPrefix();
@@ -40,12 +47,9 @@ public sealed record CollectionRequest
 
     private void ValidateIdentity()
     {
-        if (!CollectionProtocol.IsSupported(Version))
+        if (!CollectionProtocol.IsReadable(Version))
             throw new ArgumentException("Unsupported collection protocol version.");
-        if (!Enum.IsDefined(Mode) || (Version == CollectionProtocol.LegacyPageVersion &&
-            (Mode != CollectionMode.Page || MaxCandidates != 100)) ||
-            (Mode == CollectionMode.Html && Version < CollectionProtocol.HtmlVersion) ||
-            (Mode == CollectionMode.Api && Version < CollectionProtocol.ApiVersion))
+        if (!Enum.IsDefined(Mode) || (Mode == CollectionMode.Api && Version < CollectionProtocol.ApiVersion))
             throw new ArgumentException("Collection mode is unsupported for this protocol version.");
         if (string.IsNullOrWhiteSpace(JobId) || string.IsNullOrWhiteSpace(SourceId))
             throw new ArgumentException("Job and source IDs are required.");
@@ -102,7 +106,7 @@ public sealed record CollectionRequest
     public Uri? ResolveCandidate(Uri url)
     {
         if (Allows(url)) return url;
-        if (Version < CollectionProtocol.SchemeUpgradeVersion || url is null || !url.IsAbsoluteUri ||
+        if (url is null || !url.IsAbsoluteUri ||
             url.Scheme != Uri.UriSchemeHttp || !url.IsDefaultPort)
             return null;
         var upgraded = new UriBuilder(url) { Scheme = Uri.UriSchemeHttps, Port = -1 }.Uri;

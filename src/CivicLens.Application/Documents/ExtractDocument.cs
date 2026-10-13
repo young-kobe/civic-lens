@@ -29,7 +29,7 @@ public sealed class ExtractDocument(ICollectionAttemptStore attempts, IDocumentT
     {
         ArgumentNullException.ThrowIfNull(configuration);
         ValidateRequest(attemptId, artifactRoot, cancellationToken);
-        configuration = CollectionConfigurationRevision.Create(configuration).ReadConfiguration();
+        configuration = CollectionConfigurationRevision.Create(configuration).Configuration;
         var captured = await GetCapturedAttemptAsync(attemptId, cancellationToken);
         var source = configuration.Sources.SingleOrDefault(candidate => candidate.Id == captured.SourceId);
         if (source is null)

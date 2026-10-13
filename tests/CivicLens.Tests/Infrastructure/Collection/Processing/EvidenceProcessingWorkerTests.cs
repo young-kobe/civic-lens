@@ -348,8 +348,8 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
         throw new InvalidOperationException($"Processing attempt '{attemptId}' did not reach a terminal state.");
     }
 
-    private EvidenceProcessingWorker Worker(IEvidenceProcessingStore processingStore, IDocumentHistoryStore? historyStore = null) => new(jobs, attempts, jobs, jobs, new CaptureBodyReader(),
-        processingStore, extract, new GetDocumentHistory(historyStore ?? PostgresDocumentHistoryStore.FromConnectionString(connectionString)),
+    private EvidenceProcessingWorker Worker(IEvidenceProcessingStore processingStore, IDocumentHistoryStore? historyStore = null) => new(jobs,
+        new JobPreparation(jobs, attempts, jobs, jobs, new CaptureBodyReader(), processingStore), processingStore, extract, new GetDocumentHistory(historyStore ?? PostgresDocumentHistoryStore.FromConnectionString(connectionString)),
         new CompareDocuments(extractions, comparisons));
 
     private CollectionJobDefinition ConfiguredDefinition(string? etag = null)

@@ -132,7 +132,7 @@ public sealed class PostgresDiscoveryAdmissionTests(PostgresCollection postgres)
             People = [new PersonConfiguration { Id = "person", Name = "Official" }],
             Sources = [new WatchedSourceConfiguration
             {
-                Id = "source", PersonIds = ["person"], Url = template.Url,
+                Id = "source", Coverage = [new SourceCoverageConfiguration { PersonId = "person" }], Url = template.Url,
                 AllowedOrigin = template.AllowedOrigin, AllowedPathPrefix = template.AllowedPathPrefix,
                 Mode = CollectionMode.Feed, MaxRequests = template.MaxRequests, MaxBytes = template.MaxBytes,
                 TimeoutSeconds = template.TimeoutSeconds, MinDelayMilliseconds = template.MinDelayMilliseconds,
@@ -254,11 +254,11 @@ public sealed class PostgresDiscoveryAdmissionTests(PostgresCollection postgres)
     }
 
     [Fact]
-    public async Task VersionFourFeedDiscoveryAndAdmissionReplayRemainSupported()
+    public async Task VersionSevenFeedDiscoveryAndAdmissionReplayRemainSupported()
     {
-        var attemptId = await SaveDiscoveryAsync(["https://example.test/articles/v4"], CollectionMode.Feed,
-            version: CollectionProtocol.PreviousVersion);
-        var request = new DiscoveryAdmissionRequest(attemptId, "version-four-replay", Template(),
+        var attemptId = await SaveDiscoveryAsync(["https://example.test/articles/v7"], CollectionMode.Feed,
+            version: CollectionProtocol.OldestReadableVersion);
+        var request = new DiscoveryAdmissionRequest(attemptId, "version-seven-replay", Template(),
             new DiscoveryAdmissionPolicy());
 
         var first = await jobs.AdmitAsync(request, default);
@@ -269,7 +269,7 @@ public sealed class PostgresDiscoveryAdmissionTests(PostgresCollection postgres)
     }
 
     [Fact]
-    public async Task GeneralizationMigrationPreservesVersionFourDiscoveryAndAdmissionRows()
+    public async Task GeneralizationMigrationPreservesVersionSevenDiscoveryAndAdmissionRows()
     {
         var upgradeSchema = "upgrade_" + Guid.NewGuid().ToString("N");
         await using (var connection = new NpgsqlConnection(postgres.ConnectionString))
@@ -298,19 +298,19 @@ public sealed class PostgresDiscoveryAdmissionTests(PostgresCollection postgres)
             Assert.Equal(1L, await CountAsync(connection, "collection_candidate_jobs"));
             Assert.Equal(1L, await CountAsync(connection, "collection_admission_batches"));
             await using var read = new NpgsqlCommand(
-                "SELECT request_json FROM collection_discoveries WHERE attempt_id = 'historical-v4'", connection);
+                "SELECT request_json FROM collection_discoveries WHERE attempt_id = 'historical-v7'", connection);
             var requestJson = (string)(await read.ExecuteScalarAsync())!;
-            Assert.Contains("\"version\":4", requestJson, StringComparison.Ordinal);
+            Assert.Contains("\"version\":7", requestJson, StringComparison.Ordinal);
             Assert.False(await TableExistsAsync(connection, "collection_feed_discoveries"));
             var upgradedAttempts = PostgresCollectionAttemptStore.FromConnectionString(upgradeConnectionString);
-            var evidence = await upgradedAttempts.GetAsync("historical-v4", default);
-            Assert.Equal(4, evidence!.Discovery!.Request.Version);
+            var evidence = await upgradedAttempts.GetAsync("historical-v7", default);
+            Assert.Equal(7, evidence!.Discovery!.Request.Version);
             Assert.Equal("https://example.test/article", Assert.Single(evidence.Discovery.Urls));
             var upgradedJobs = PostgresCollectionJobStore.FromConnectionString(upgradeConnectionString);
-            var replay = await upgradedJobs.AdmitAsync(new DiscoveryAdmissionRequest("historical-v4", "historical-batch",
+            var replay = await upgradedJobs.AdmitAsync(new DiscoveryAdmissionRequest("historical-v7", "historical-batch",
                 Template(), new DiscoveryAdmissionPolicy()), default);
             Assert.Equal("historical-job", Assert.Single(replay.Jobs).JobId);
-            var duplicate = await upgradedJobs.AdmitAsync(new DiscoveryAdmissionRequest("historical-v4", "another-batch",
+            var duplicate = await upgradedJobs.AdmitAsync(new DiscoveryAdmissionRequest("historical-v7", "another-batch",
                 Template(), new DiscoveryAdmissionPolicy()), default);
             Assert.Equal(1, duplicate.DuplicateCount);
             Assert.Empty(duplicate.Jobs);
@@ -336,11 +336,11 @@ public sealed class PostgresDiscoveryAdmissionTests(PostgresCollection postgres)
             INSERT INTO collection_captures (sha256, byte_length) VALUES (repeat('a', 64), 10);
             INSERT INTO collection_attempts (attempt_id, source_id, requested_url, final_url, observed_at_utc_ticks,
                 outcome, has_response, has_sent_validators, response_status_code, response_content_encodings, capture_sha256)
-            VALUES ('historical-v4', 'source', 'https://example.test/feed.xml', 'https://example.test/feed.xml',
+            VALUES ('historical-v7', 'source', 'https://example.test/feed.xml', 'https://example.test/feed.xml',
                 638953920000000000, 'captured', true, false, 200, ARRAY[]::text[], repeat('a', 64));
             INSERT INTO collection_feed_discoveries (attempt_id, source_id, request_json, discovery_json)
-            VALUES ('historical-v4', 'source',
-                '{"version":4,"jobId":"historical-job","sourceId":"source","url":"https://example.test/feed.xml","allowedOrigin":"https://example.test","allowedPathPrefix":"/","artifactDirectory":"/tmp/artifacts","mode":"feed","maxCandidates":100,"maxRequests":2,"maxBytes":10,"timeoutSeconds":4,"minDelayMilliseconds":0}',
+            VALUES ('historical-v7', 'source',
+                '{"version":7,"jobId":"historical-job","sourceId":"source","url":"https://example.test/feed.xml","allowedOrigin":"https://example.test","allowedPathPrefix":"/","artifactDirectory":"/tmp/artifacts","mode":"feed","maxCandidates":100,"maxRequests":2,"maxBytes":10,"timeoutSeconds":4,"minDelayMilliseconds":0}',
                 '{"status":"parsed","urls":["https://example.test/article"]}');
             INSERT INTO collection_jobs (job_id, idempotency_key, definition_json, state, created_at,
                 cancellation_requested, charged_requests, charged_bytes, charged_seconds, lease_fence)
@@ -348,7 +348,7 @@ public sealed class PostgresDiscoveryAdmissionTests(PostgresCollection postgres)
             INSERT INTO collection_feed_candidate_jobs (candidate_hash, source_id, url, job_id)
             VALUES (@hash, 'source', 'https://example.test/article', 'historical-job');
             INSERT INTO collection_feed_admission_batches (idempotency_key, attempt_id, input_json, result_json, created_at)
-            VALUES ('historical-batch', 'historical-v4',
+            VALUES ('historical-batch', 'historical-v7',
                 @input,
                 '{"jobs":[{"jobId":"historical-job","url":"https://example.test/article"}],"deferredCount":0,"duplicateCount":0,"admittedCount":1}', 1);
             """, connection);
@@ -356,7 +356,7 @@ public sealed class PostgresDiscoveryAdmissionTests(PostgresCollection postgres)
         // The v4 feed batch contract had exactly these three input fields in this order.
         seed.Parameters.AddWithValue("input", JsonSerializer.Serialize(new
         {
-            attemptId = "historical-v4",
+            attemptId = "historical-v7",
             articleTemplate = Template(),
             policy = new DiscoveryAdmissionPolicy()
         }, CollectionProtocol.JsonOptions));
@@ -434,7 +434,7 @@ public sealed class PostgresDiscoveryAdmissionTests(PostgresCollection postgres)
             People = [new PersonConfiguration { Id = "person", Name = "Original" }],
             Sources = [new WatchedSourceConfiguration
             {
-                Id = "source", PersonIds = ["person"], Url = template.Url,
+                Id = "source", Coverage = [new SourceCoverageConfiguration { PersonId = "person" }], Url = template.Url,
                 AllowedOrigin = template.AllowedOrigin, AllowedPathPrefix = template.AllowedPathPrefix,
                 Mode = mode, MaxRequests = template.MaxRequests, MaxBytes = template.MaxBytes,
                 TimeoutSeconds = template.TimeoutSeconds, MinDelayMilliseconds = template.MinDelayMilliseconds,
@@ -478,7 +478,7 @@ public sealed class PostgresDiscoveryAdmissionTests(PostgresCollection postgres)
             Version = 2,
             Sources = [configuration.Sources[0] with
             {
-                PersonIds = null, Enabled = false,
+                Enabled = false,
                 Coverage = [new SourceCoverageConfiguration { PersonId = "person", EndsBefore = new DateOnly(2021, 1, 1) }]
             }]
         };

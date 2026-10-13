@@ -99,7 +99,7 @@ public sealed class ConfigurationRevisionReferencesMigrationTests(PostgresCollec
             People = [new PersonConfiguration { Id = "person", Name = personName }],
             Sources = [new WatchedSourceConfiguration
             {
-                Id = "source", PersonIds = ["person"], Url = "https://example.test/feed.xml",
+                Id = "source", Coverage = [new SourceCoverageConfiguration { PersonId = "person" }], Url = "https://example.test/feed.xml",
                 AllowedOrigin = "https://example.test", AllowedPathPrefix = "/", Mode = CollectionMode.Feed,
                 MaxRequests = 2, MaxBytes = 10, TimeoutSeconds = 4, MinDelayMilliseconds = 0,
                 JobPolicy = new CollectionJobPolicy { MaxAttempts = 2, InitialRetryDelaySeconds = 0, MaximumRetryDelaySeconds = 0 }

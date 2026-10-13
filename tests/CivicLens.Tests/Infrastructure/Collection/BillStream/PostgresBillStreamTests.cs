@@ -1,5 +1,6 @@
 using System.Text.Json;
 using CivicLens.Application.Collection;
+using CivicLens.Application.Configuration;
 using CivicLens.Application.Collection.Bills;
 using CivicLens.Application.Collection.Discovery;
 using CivicLens.Collection.Contracts;
@@ -175,21 +176,6 @@ public sealed class PostgresBillStreamTests(PostgresCollection postgres) : IAsyn
     }
 
     [Fact]
-    public async Task APageTheBudgetCannotHoldFailsWithoutJobsOrCursorMoveBecauseDeferredBillsWouldBeLost()
-    {
-        var configuration = Configuration();
-        var tight = configuration.Sources[0] with { AdmissionPolicy = new DiscoveryAdmissionPolicy { MaxJobs = 1 } };
-        var window = new BillStreamWindow(Backfill, Backfill);
-
-        await Assert.ThrowsAsync<InvalidOperationException>(() => store.AdmitListPageAsync(
-            new ConfiguredCollectionSource(configuration with { Sources = [tight] }, SourceId, Backfill.AddDays(400)),
-            "tight", window, new CongressBillListPage([Bill(119, 1), Bill(119, 2)], null), default));
-
-        Assert.Empty(await store.ListAsync(10, default));
-        Assert.Null(await ReadCursorAsync());
-    }
-
-    [Fact]
     public async Task AFailureWhileAdmittingLeavesNoJobsAndNoCursorMove()
     {
         await ExecuteAsync(connectionString, """
@@ -211,7 +197,7 @@ public sealed class PostgresBillStreamTests(PostgresCollection postgres) : IAsyn
     public async Task PilotSourceBudgetsAdmitAFullPageAndItsNextPage()
     {
         var pilot = JsonSerializer.Deserialize<CollectionConfiguration>(
-            File.ReadAllText(Path.Combine(RepositoryRoot(), "config", "federal-pilot.json")), CollectionProtocol.JsonOptions)!;
+            File.ReadAllText(Path.Combine(RepositoryRoot(), "config", "federal-pilot.json")), ConfigurationJson.Options)!;
         pilot = pilot with { Sources = [.. pilot.Sources.Where(source => source.Id == SourceId).Select(source => source with { Enabled = true })] };
         var window = new BillStreamWindow(Backfill, Backfill);
         var page = new CongressBillListPage([.. Enumerable.Range(1, BillStreamWindow.PageLimit).Select(number => Bill(119, number))],

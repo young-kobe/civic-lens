@@ -102,7 +102,6 @@ public sealed class CollectionJobDefinitionTests
             Version = 2,
             Sources = [config.Sources[0] with
             {
-                PersonIds = null,
                 Coverage = [new SourceCoverageConfiguration { PersonId = "person", StartsOn = startsOn }]
             }]
         };
@@ -115,12 +114,12 @@ public sealed class CollectionJobDefinitionTests
         [
             new WatchedSourceConfiguration
             {
-                Id = "first", PersonIds = ["person"], Url = "https://example.test/page",
+                Id = "first", Coverage = [new SourceCoverageConfiguration { PersonId = "person" }], Url = "https://example.test/page",
                 AllowedOrigin = "https://example.test", AllowedPathPrefix = "/page"
             },
             new WatchedSourceConfiguration
             {
-                Id = "other", PersonIds = ["person"], Url = "https://other.test/page",
+                Id = "other", Coverage = [new SourceCoverageConfiguration { PersonId = "person" }], Url = "https://other.test/page",
                 AllowedOrigin = "https://other.test", AllowedPathPrefix = "/page"
             }
         ]

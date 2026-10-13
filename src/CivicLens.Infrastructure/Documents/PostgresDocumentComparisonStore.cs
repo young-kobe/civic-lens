@@ -3,6 +3,7 @@ using System.Text.Json;
 using CivicLens.Application.Documents;
 using CivicLens.Collection.Contracts;
 using CivicLens.Core.Documents;
+using CivicLens.Core;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Documents.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -105,7 +106,7 @@ public sealed class PostgresDocumentComparisonStore(IDbContextFactory<Collection
 
     private static void ValidateId(string id)
     {
-        if (id is not { Length: 64 } || id.Any(c => c is not (>= '0' and <= '9') and not (>= 'a' and <= 'f')))
+        if (!LowercaseHex.Is(id, 64))
             throw new ArgumentException("Comparison ID must be a lowercase SHA-256 value.", nameof(id));
     }
 }

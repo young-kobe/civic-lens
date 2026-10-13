@@ -62,7 +62,7 @@ public sealed record CollectionResult
     {
         if (request is null)
             throw new InvalidDataException("Collection request is required for result validation.");
-        request.Validate();
+        request.ValidateReadable();
         ValidateIdentity(request);
         ValidateObservation(request);
         ValidateRobotsAccounting(request);
@@ -84,7 +84,7 @@ public sealed record CollectionResult
 
     private void ValidateIdentity(CollectionRequest request)
     {
-        if (Version != request.Version || !CollectionProtocol.IsSupported(Version))
+        if (Version != request.Version || !CollectionProtocol.IsReadable(Version))
             throw new InvalidDataException("Unsupported collection result version.");
         if (JobId != request.JobId || SourceId != request.SourceId || RequestedUrl != request.Url)
             throw new InvalidDataException("Collector result does not identify the requested work.");
@@ -98,16 +98,10 @@ public sealed record CollectionResult
             throw new InvalidDataException("Collector result observation metadata is invalid.");
     }
 
-    private int ContentRequestCount => Version >= CollectionProtocol.RobotsVersion ? RequestCount - RobotsRequestCount!.Value : Math.Max(0, RequestCount - 1);
+    private int ContentRequestCount => RequestCount - RobotsRequestCount!.Value;
 
     private void ValidateRobotsAccounting(CollectionRequest request)
     {
-        if (Version < CollectionProtocol.RobotsVersion)
-        {
-            if (RobotsRequestCount is not null || RobotsCrawlDelayMilliseconds is not null || FailureCode == CollectionFailureCode.CrawlDelay)
-                throw new InvalidDataException("Robots accounting requires collection protocol version 6.");
-            return;
-        }
         if (request.Mode == CollectionMode.Api)
         {
             if (RobotsRequestCount != 0 || RobotsCrawlDelayMilliseconds is not null)
@@ -181,13 +175,13 @@ public sealed record CollectionResult
             throw new InvalidDataException("Deferred result has invalid failure metadata.");
         if (FailureCode == CollectionFailureCode.RateLimited && Response?.StatusCode == 429 && ContentRequestCount >= 1)
             return;
-        if (Version >= CollectionProtocol.RobotsVersion && FailureCode == CollectionFailureCode.CrawlDelay &&
+        if (FailureCode == CollectionFailureCode.CrawlDelay &&
             Math.Max(request.MinDelayMilliseconds, RobotsCrawlDelayMilliseconds ?? 0) > 0 &&
             RetryAfterSeconds >= (Math.Max(request.MinDelayMilliseconds, RobotsCrawlDelayMilliseconds ?? 0) + 999) / 1000 &&
             (RobotsRequestCount > 0 || request.Mode == CollectionMode.Api) &&
             (Response is null || Response.StatusCode is >= 300 and < 400))
             return;
-        if (Version >= CollectionProtocol.RobotsVersion && FailureCode is CollectionFailureCode.RateLimited or CollectionFailureCode.RobotsUnavailable &&
+        if (FailureCode is CollectionFailureCode.RateLimited or CollectionFailureCode.RobotsUnavailable &&
             ContentRequestCount == 0 && RobotsRequestCount > 0 && Response is null)
             return;
         throw new InvalidDataException("Deferred result requires rate limiting, robots unavailability, or crawl delay.");

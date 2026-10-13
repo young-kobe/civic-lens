@@ -46,49 +46,6 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
         await command.ExecuteNonQueryAsync();
     }
 
-    [Theory]
-    [InlineData(3)]
-    [InlineData(4)]
-    [InlineData(5)]
-    public async Task LegacySettlementReplayWithoutNewReceiptFieldsRemainsIdempotent(int version)
-    {
-        var claim = await EnqueueClaimAsync($"v{version}-settlement", Definition());
-        var start = await jobs.TryStartAttemptAsync(claim.Lease, root, default);
-        var request = start.Attempt!.Request with { Version = version };
-        var receipt = ReceiptCollector.Result(request, 404) with
-        {
-            Version = version,
-            RobotsRequestCount = null,
-            RobotsCrawlDelayMilliseconds = null
-        };
-        await using var connection = new NpgsqlConnection(connectionString);
-        await connection.OpenAsync();
-        await using (var command = new NpgsqlCommand("UPDATE collection_job_attempts SET request_json = @request WHERE attempt_id = @id", connection))
-        {
-            command.Parameters.AddWithValue("request", JsonSerializer.Serialize(request, CollectionProtocol.JsonOptions));
-            command.Parameters.AddWithValue("id", start.Attempt.AttemptId);
-            await command.ExecuteNonQueryAsync();
-        }
-        await CollectionAttemptImporter.ImportAsync(start.Attempt.AttemptId, request, receipt, evidence, default);
-        var resolution = CollectionJobLifecycle.Resolve(receipt);
-        Assert.True(await jobs.SettleAttemptAsync(claim.Lease, start.Attempt.AttemptId, resolution, default));
-        var legacyJson = JsonSerializer.SerializeToNode(resolution, CollectionProtocol.JsonOptions)!;
-        legacyJson["receipt"]!.AsObject().Remove("discovery");
-        legacyJson["receipt"]!.AsObject().Remove("robotsRequestCount");
-        legacyJson["receipt"]!.AsObject().Remove("robotsCrawlDelayMilliseconds");
-        legacyJson.AsObject().Remove("robotsCrawlDelayMilliseconds");
-        await using (var command = new NpgsqlCommand("UPDATE collection_job_attempts SET resolution_json = @resolution WHERE attempt_id = @id", connection))
-        {
-            command.Parameters.AddWithValue("resolution", legacyJson.ToJsonString());
-            command.Parameters.AddWithValue("id", start.Attempt.AttemptId);
-            await command.ExecuteNonQueryAsync();
-        }
-        Assert.True(await jobs.SettleAttemptAsync(claim.Lease, start.Attempt.AttemptId, resolution, default));
-        Assert.Equal(2, (await jobs.GetAsync(claim.Job.JobId, default))!.ReservedRequests);
-        await Assert.ThrowsAsync<InvalidOperationException>(() => jobs.SettleAttemptAsync(claim.Lease,
-            start.Attempt.AttemptId, resolution with { Receipt = receipt with { FinalUrl = receipt.FinalUrl + "/changed" } }, default));
-    }
-
     [Fact]
     public async Task SettlementWorksWithOnePooledConnection()
     {
@@ -548,7 +505,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
             People = [new PersonConfiguration { Id = "person", Name = "Original" }],
             Sources = [new WatchedSourceConfiguration
             {
-                Id = "source", PersonIds = ["person"], Url = "https://example.test/page",
+                Id = "source", Coverage = [new SourceCoverageConfiguration { PersonId = "person" }], Url = "https://example.test/page",
                 AllowedOrigin = "https://example.test", AllowedPathPrefix = "/"
             }]
         };
@@ -578,7 +535,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
             Version = 2,
             Sources = [configuration.Sources[0] with
             {
-                PersonIds = null, Enabled = false,
+                Enabled = false,
                 Coverage = [new SourceCoverageConfiguration { PersonId = "person", EndsBefore = new DateOnly(2021, 1, 1) }]
             }]
         };
@@ -599,7 +556,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
             People = [new PersonConfiguration { Id = "person", Name = "Person" }],
             Sources = [new WatchedSourceConfiguration
             {
-                Id = "source", PersonIds = ["person"], Url = "https://example.test/page",
+                Id = "source", Coverage = [new SourceCoverageConfiguration { PersonId = "person" }], Url = "https://example.test/page",
                 AllowedOrigin = "https://example.test", AllowedPathPrefix = "/"
             }]
         };
@@ -676,7 +633,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
             People = [new PersonConfiguration { Id = "person", Name = "Person" }],
             Sources = [new WatchedSourceConfiguration
             {
-                Id = "source", PersonIds = ["person"], Url = "https://example.test/page",
+                Id = "source", Coverage = [new SourceCoverageConfiguration { PersonId = "person" }], Url = "https://example.test/page",
                 AllowedOrigin = "https://example.test", AllowedPathPrefix = "/"
             }]
         };

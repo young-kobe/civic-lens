@@ -13,7 +13,7 @@ public sealed record CollectionConfigurationRevision
         ArgumentNullException.ThrowIfNull(id);
         ArgumentNullException.ThrowIfNull(json);
 
-        Rules.Verify(id, json);
+        Configuration = Rules.Verify(id, json);
 
         Id = id;
         Json = json;
@@ -23,7 +23,14 @@ public sealed record CollectionConfigurationRevision
 
     public string Json { get; }
 
+    [JsonIgnore]
+    public CollectionConfiguration Configuration { get; }
+
     public CollectionConfiguration ReadConfiguration() => Rules.Parse(Json);
+
+    public bool Equals(CollectionConfigurationRevision? other) => other is not null && Id == other.Id;
+
+    public override int GetHashCode() => Id.GetHashCode(StringComparison.Ordinal);
 
     public static CollectionConfigurationRevision Create(CollectionConfiguration configuration)
     {

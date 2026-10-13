@@ -16,7 +16,7 @@ public sealed record PendingCollectionHandoff(int Version, string AttemptId, Col
             throw new InvalidDataException("Receipt handoff attempt ID is invalid.");
         ArgumentNullException.ThrowIfNull(Request);
         ArgumentNullException.ThrowIfNull(Receipt);
-        Request.Validate();
+        Request.ValidateReadable();
         Receipt.ValidateAgainst(Request);
     }
 

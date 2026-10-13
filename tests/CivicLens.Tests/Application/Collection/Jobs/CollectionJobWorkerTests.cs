@@ -148,7 +148,7 @@ public sealed class CollectionJobWorkerTests
         var store = new RecordingJobStore();
         var schedules = new RecordingScheduleStore(1);
         var wakeup = new FakeWakeup(_ => throw new InvalidOperationException("Wakeup should not connect."));
-        var processor = new EvidenceProcessingWorker(null!, null!, null!, null!, null!, null!, null!, null!, null!);
+        var processor = new EvidenceProcessingWorker(null!, null!, null!, null!, null!, null!);
         var worker = new CollectionJobWorker(queue, new RunCollectionJob(store, null!, null!, null!, null!),
             processor, wakeup, schedules);
 

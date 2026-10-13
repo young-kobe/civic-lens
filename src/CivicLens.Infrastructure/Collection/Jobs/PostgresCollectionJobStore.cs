@@ -68,17 +68,7 @@ public sealed partial class PostgresCollectionJobStore(IDbContextFactory<Collect
                     throw new ArgumentException("The idempotency key belongs to a different job definition.");
                 return await ToRecordAsync(db, existing, savedDefinition!, cancellationToken);
             }
-            var row = new JobRow
-            {
-                JobId = Guid.NewGuid().ToString("N"),
-                IdempotencyKey = idempotencyKey,
-                DefinitionJson = StoredJobDefinition.Write(definition),
-                ConfigurationRevisionId = await new ConfigurationRevisionWriter(db, Ticks(now))
-                    .StoreAsync(definition.ConfigurationRevision, cancellationToken),
-                State = CollectionJobState.Pending,
-                CreatedAt = Ticks(now)
-            };
-            db.Add(row);
+            var row = await new JobRowWriter(db, Ticks(now)).AddJobAsync(idempotencyKey, definition, cancellationToken);
             return ToRecord(row, definition, []);
         }, cancellationToken);
     }

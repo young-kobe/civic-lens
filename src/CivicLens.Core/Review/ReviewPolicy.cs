@@ -52,7 +52,7 @@ public static class ReviewPolicy
 
     private static void ValidateDecisionFields(ReviewDecision decision)
     {
-        if (decision.DecisionId is not { Length: 32 } || decision.DecisionId.Any(c => c is not (>= '0' and <= '9') and not (>= 'a' and <= 'f')) ||
+        if (!LowercaseHex.Is(decision.DecisionId, 32) ||
             string.IsNullOrWhiteSpace(decision.ActorSubject) || decision.ActorSubject.Length > 256 || !Enum.IsDefined(decision.Kind) ||
             decision.ResolvedDecisionIds.IsDefault || decision.ResolvedDecisionIds.Length > 64 ||
             decision.ResolvedDecisionIds.Distinct(StringComparer.Ordinal).Count() != decision.ResolvedDecisionIds.Length)

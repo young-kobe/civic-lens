@@ -1,4 +1,4 @@
-namespace CivicLens.Collection.Contracts;
+namespace CivicLens.Application.Collection;
 
 public enum ApiParser
 {

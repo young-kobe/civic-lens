@@ -36,9 +36,6 @@ internal static class FeedParser
             var document = await XDocument.LoadAsync(reader, LoadOptions.None, token);
             var root = document.Root;
             if (root is null) return candidates.Failed(DiscoveryStatus.Invalid);
-            if (request.Version < CollectionProtocol.SchemeUpgradeVersion &&
-                root.DescendantsAndSelf().Attributes().Any(attribute => attribute.Name == XmlBase))
-                return candidates.Failed(DiscoveryStatus.Unsupported);
             var links = root.Name.LocalName switch
             {
                 "rss" when root.Name.NamespaceName.Length == 0 && (string?)root.Attribute("version") == "2.0" => ParseRss(root),

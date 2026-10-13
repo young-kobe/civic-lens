@@ -153,9 +153,8 @@ public sealed class CollectionWorkspaceTests
 
     private static CollectionConfiguration Configuration(WatchedSourceConfiguration source) => new()
     {
-        Version = 1,
         People = [new PersonConfiguration { Id = "person", Name = "Official" }],
-        Sources = [source with { PersonIds = ["person"] }]
+        Sources = [source with { Coverage = [new SourceCoverageConfiguration { PersonId = "person" }] }]
     };
 
     private static WatchedSourceConfiguration Source(CollectionMode mode, string url, int maxRequests) => new()

@@ -86,7 +86,7 @@ public sealed class CollectionWorkspace
         return retained;
     }
 
-    private SourceCheckTarget[] SourceTargets() => revision.ReadConfiguration().Sources
+    private SourceCheckTarget[] SourceTargets() => revision.Configuration.Sources
         .Select(source => new SourceCheckTarget(source.Id, source.Url)).ToArray();
 
     private async Task<IReadOnlyList<CollectionJobRecord>> ReadLatestJobsAsync(SourceCheckTarget[] targets,
@@ -124,9 +124,8 @@ public sealed class CollectionWorkspace
     public Task<CollectionJobRecord> EnqueueAsync(ReviewActor actor, string sourceId, string requestKey, CancellationToken cancellationToken)
     {
         RequireOwner(actor);
-        var configuration = revision.ReadConfiguration();
-        if (!configuration.Sources.Any(source => source.Id == sourceId)) throw new ArgumentException("Choose a configured source.");
-        return jobs.EnqueueAsync(new ConfiguredCollectionSource(configuration, sourceId),
+        if (!revision.Configuration.Sources.Any(source => source.Id == sourceId)) throw new ArgumentException("Choose a configured source.");
+        return jobs.EnqueueAsync(new ConfiguredCollectionSource(revision, sourceId),
             RequestKey(actor, "collect", requestKey), cancellationToken);
     }
 
@@ -142,7 +141,7 @@ public sealed class CollectionWorkspace
         var prior = await GetJobAsync(actor, jobId, cancellationToken);
         if (prior.Definition.Mode != CivicLens.Collection.Contracts.CollectionMode.Page)
             throw new ArgumentException("Use the configured source to collect a discovery listing again.");
-        var configuration = revision.ReadConfiguration();
+        var configuration = revision.Configuration;
         var source = configuration.Sources.SingleOrDefault(item => item.Id == prior.Definition.SourceId)
             ?? throw new ArgumentException("The source is no longer configured.");
         // A new observation uses current limits and coverage, but only the already retained article URL.

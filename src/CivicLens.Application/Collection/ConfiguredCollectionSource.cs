@@ -9,8 +9,13 @@ namespace CivicLens.Application.Collection;
 public sealed class ConfiguredCollectionSource
 {
     public ConfiguredCollectionSource(CollectionConfiguration configuration, string sourceId, DateOnly? asOf = null)
+        : this(CollectionConfigurationRevision.Create(configuration), sourceId, asOf)
     {
-        Revision = CollectionConfigurationRevision.Create(configuration);
+    }
+
+    public ConfiguredCollectionSource(CollectionConfigurationRevision revision, string sourceId, DateOnly? asOf = null)
+    {
+        Revision = revision;
         SourceId = sourceId;
         AsOf = asOf;
         _ = ReadSource();
@@ -22,6 +27,13 @@ public sealed class ConfiguredCollectionSource
 
     public CollectionJobDefinition CreateJobDefinition(DateOnly currentDate, CollectionJobDefinition? existing = null) =>
         PrepareDefinition(ReadSource(), currentDate, existing, article: false);
+
+    public CollectionRequest CreateRequest(string jobId, string artifactDirectory, DateOnly currentDate)
+    {
+        var request = CreateJobDefinition(currentDate).CreateRequest(jobId, artifactDirectory);
+        request.Validate();
+        return request;
+    }
 
     public DiscoveryAdmissionRequest CreateDiscoveryAdmission(string attemptId, string idempotencyKey,
         DateOnly currentDate, CollectionJobDefinition? existingTemplate = null, bool recheckKnownCandidates = false)
@@ -56,8 +68,7 @@ public sealed class ConfiguredCollectionSource
             ? details
             : details.Append(new BillStreamJob(BillStreamJobKeys.NextPage(SourceId, listJobId), template with { Url = page.Next }));
         var policy = source.AdmissionPolicy ?? new DiscoveryAdmissionPolicy();
-        policy.Validate();
-        return new BillStreamAdmission(SourceId, policy, window,
+        return new BillStreamAdmission(SourceId, policy, template, window,
             [.. jobs.DistinctBy(job => job.IdempotencyKey)], EndsWindow: page.Next is null);
     }
 
@@ -92,6 +103,6 @@ public sealed class ConfiguredCollectionSource
     }
 
     private WatchedSourceConfiguration ReadSource() =>
-        Revision.ReadConfiguration().Sources.SingleOrDefault(source => source.Id == SourceId)
+        Revision.Configuration.Sources.SingleOrDefault(source => source.Id == SourceId)
         ?? throw new ArgumentException("Unknown source ID.", nameof(SourceId));
 }

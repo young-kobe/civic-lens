@@ -15,10 +15,10 @@ public sealed partial class PostgresCollectionJobStore
     {
         ArgumentNullException.ThrowIfNull(configuration);
         var revision = CollectionConfigurationRevision.Create(configuration);
-        var snapshot = revision.ReadConfiguration();
+        var snapshot = revision.Configuration;
         return TransactionAsync(async (db, now) =>
         {
-            await new ConfigurationRevisionWriter(db, Ticks(now)).StoreAsync(revision, cancellationToken);
+            await new JobRowWriter(db, Ticks(now)).StoreAsync(revision, cancellationToken);
             var existingRows = await db.Set<CollectionScheduleRow>().ToListAsync(cancellationToken);
             var rowsBySource = existingRows.ToDictionary(row => row.SourceId, StringComparer.Ordinal);
             var configuredSourceIds = new HashSet<string>(StringComparer.Ordinal);
@@ -68,16 +68,16 @@ public sealed partial class PostgresCollectionJobStore
                 .OrderBy(row => row.NextDueUtcTicks).ThenBy(row => row.SourceId)
                 .Take(limit).ToArrayAsync(cancellationToken);
             var currentDate = DateOnly.FromDateTime(now.UtcDateTime);
-            var revisionWriter = new ConfigurationRevisionWriter(db, nowTicks);
+            var jobWriter = new JobRowWriter(db, nowTicks);
             var revisions = await StoredJobDefinition.LoadRevisionsAsync(db,
                 dueRows.Select(row => row.ConfigurationRevisionId), cancellationToken);
-            revisionWriter.MarkStored(revisions.Keys);
+            jobWriter.MarkStored(revisions.Keys);
             var configurationsByRevision = new Dictionary<string, CollectionConfiguration>(StringComparer.Ordinal);
             foreach (var schedule in dueRows)
             {
                 if (!configurationsByRevision.TryGetValue(schedule.ConfigurationRevisionId, out var configuration))
                 {
-                    configuration = StoredJobDefinition.Find(revisions, schedule.ConfigurationRevisionId).ReadConfiguration();
+                    configuration = StoredJobDefinition.Find(revisions, schedule.ConfigurationRevisionId).Configuration;
                     configurationsByRevision.Add(schedule.ConfigurationRevisionId, configuration);
                 }
                 var source = configuration.Sources.SingleOrDefault(candidate => candidate.Id == schedule.SourceId);
@@ -111,16 +111,7 @@ public sealed partial class PostgresCollectionJobStore
                     continue;
                 }
                 var idempotencyKey = $"scheduled-check/{schedule.SourceId}/{schedule.NextDueUtcTicks}";
-                var row = new JobRow
-                {
-                    JobId = Guid.NewGuid().ToString("N"),
-                    IdempotencyKey = idempotencyKey,
-                    DefinitionJson = StoredJobDefinition.Write(definition),
-                    ConfigurationRevisionId = await revisionWriter.StoreAsync(definition.ConfigurationRevision, cancellationToken),
-                    State = CollectionJobState.Pending,
-                    CreatedAt = nowTicks
-                };
-                db.Add(row);
+                _ = await jobWriter.AddJobAsync(idempotencyKey, definition, cancellationToken);
                 schedule.NextDueUtcTicks = Ticks(now.AddSeconds(schedule.IntervalSeconds));
             }
 

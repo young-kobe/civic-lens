@@ -42,10 +42,11 @@ public sealed class CongressBillSourceConfigurationTests
     {
         var configuration = Configuration();
 
-        Assert.Equal(CollectionMode.Api, configuration.CreateRequest("congress-bills", "job", Path.GetFullPath("captures"), Backfill).Mode);
-        Assert.Throws<ArgumentException>(() => configuration.CreateRequest("congress-bills", "job", Path.GetFullPath("captures"), Backfill.AddDays(-1)));
+        Assert.Equal(CollectionMode.Api, new ConfiguredCollectionSource(configuration, "congress-bills")
+            .CreateRequest("job", Path.GetFullPath("captures"), Backfill).Mode);
+        Assert.Throws<ArgumentException>(() => configuration.EligibleSource("congress-bills", Backfill.AddDays(-1)));
         Assert.Throws<ArgumentException>(() => (configuration with { People = [configuration.People[2]] })
-            .CreateRequest("congress-bills", "job", Path.GetFullPath("captures"), Backfill));
+            .EligibleSource("congress-bills", Backfill));
     }
 
     [Fact]
@@ -95,7 +96,6 @@ public sealed class CongressBillSourceConfigurationTests
         {
             Sources = [source with { Coverage = [new SourceCoverageConfiguration { PersonId = "with-id-a" }] }]
         }).Validate);
-        Assert.Throws<ArgumentException>((configuration with { Sources = [source with { PersonIds = ["with-id-a"] }] }).Validate);
     }
 
     [Fact]
@@ -126,14 +126,35 @@ public sealed class CongressBillSourceConfigurationTests
     }
 
     [Fact]
-    public void ParserNeedsACredentialApiModeAndVersionTwo()
+    public void ParserNeedsACredentialAndApiMode()
     {
         var configuration = Configuration();
         var source = configuration.Sources.Single();
 
         Assert.Throws<ArgumentException>((configuration with { Sources = [source with { Credential = null }] }).Validate);
         Assert.Throws<ArgumentException>((configuration with { Sources = [source with { Mode = CollectionMode.Page }] }).Validate);
-        Assert.Throws<ArgumentException>((configuration with { Version = 1 }).Validate);
+    }
+
+    [Theory]
+    [InlineData(250, 1506, 753_000_000, 15_060)]
+    [InlineData(251, 1505, 753_000_000, 15_060)]
+    [InlineData(251, 1506, 752_999_999, 15_060)]
+    [InlineData(251, 1506, 753_000_000, 15_059)]
+    public void AdmissionPolicyMustHoldAFullPageOfDetailJobsAndTheNextPageJob(int maxJobs, int requests, long bytes, int seconds)
+    {
+        var configuration = Configuration();
+        var source = configuration.Sources.Single();
+        var policy = source.AdmissionPolicy! with
+        {
+            MaxJobs = maxJobs,
+            MaxTotalRequests = requests,
+            MaxTotalBytes = bytes,
+            MaxTotalTimeoutSeconds = seconds
+        };
+
+        Assert.Throws<ArgumentException>((configuration with { Sources = [source with { AdmissionPolicy = policy }] }).Validate);
+        Assert.Throws<ArgumentException>((configuration with { Sources = [source with { AdmissionPolicy = null }] }).Validate);
+        configuration.Validate();
     }
 
     [Fact]

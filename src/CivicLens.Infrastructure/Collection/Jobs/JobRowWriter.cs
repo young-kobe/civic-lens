@@ -1,13 +1,31 @@
 using CivicLens.Application.Collection;
+using CivicLens.Application.Collection.Jobs;
+using CivicLens.Infrastructure.Collection.Jobs.Persistence;
 using Microsoft.EntityFrameworkCore;
 
 namespace CivicLens.Infrastructure.Collection.Jobs;
 
-internal sealed class ConfigurationRevisionWriter(CollectionAttemptDbContext db, long createdAt)
+internal sealed class JobRowWriter(CollectionAttemptDbContext db, long createdAt)
 {
     private readonly HashSet<string> storedRevisionIds = new(StringComparer.Ordinal);
 
     public void MarkStored(IEnumerable<string> revisionIds) => storedRevisionIds.UnionWith(revisionIds);
+
+    public async Task<JobRow> AddJobAsync(string idempotencyKey, CollectionJobDefinition definition,
+        CancellationToken cancellationToken)
+    {
+        var row = new JobRow
+        {
+            JobId = Guid.NewGuid().ToString("N"),
+            IdempotencyKey = idempotencyKey,
+            DefinitionJson = StoredJobDefinition.Write(definition),
+            ConfigurationRevisionId = await StoreAsync(definition.ConfigurationRevision, cancellationToken),
+            State = CollectionJobState.Pending,
+            CreatedAt = createdAt
+        };
+        db.Add(row);
+        return row;
+    }
 
     public async Task<string?> StoreAsync(CollectionConfigurationRevision? revision, CancellationToken cancellationToken)
     {

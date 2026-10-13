@@ -11,11 +11,10 @@ public sealed class CollectionConfigurationRevisionTests
     [Fact]
     public void CreatedRevisionCapturesConfigurationAndChangesIdentityWithContent()
     {
-        var personIds = new[] { "person" };
-        var configuration = Configuration(personIds);
+        var configuration = Configuration(["person"]);
 
         var revision = CollectionConfigurationRevision.Create(configuration);
-        personIds[0] = "changed";
+        configuration.Sources[0].Coverage![0] = new SourceCoverageConfiguration { PersonId = "changed" };
 
         Assert.Contains("person", revision.Json, StringComparison.Ordinal);
         Assert.DoesNotContain("changed", revision.Json, StringComparison.Ordinal);
@@ -36,13 +35,16 @@ public sealed class CollectionConfigurationRevisionTests
     }
 
     [Fact]
-    public void ReadConfigurationReturnsDetachedConfiguration()
+    public void TheRevisionParsesOnceAndReadConfigurationReturnsDetachedCopies()
     {
         var revision = CollectionConfigurationRevision.Create(Configuration(["person"]));
         var read = revision.ReadConfiguration();
-        read.Sources[0].PersonIds![0] = "changed";
+        read.Sources[0].Coverage![0] = new SourceCoverageConfiguration { PersonId = "changed" };
 
-        Assert.Equal("person", revision.ReadConfiguration().Sources[0].PersonIds![0]);
+        Assert.Same(revision.Configuration, revision.Configuration);
+        Assert.NotSame(revision.Configuration, revision.ReadConfiguration());
+        Assert.Equal("person", revision.Configuration.Sources[0].Coverage![0].PersonId);
+        Assert.Equal("person", revision.ReadConfiguration().Sources[0].Coverage![0].PersonId);
     }
 
     [Fact]
@@ -54,21 +56,8 @@ public sealed class CollectionConfigurationRevisionTests
         var malformedJson = "{";
         Assert.Throws<ArgumentException>(() => new CollectionConfigurationRevision(Hash(malformedJson), malformedJson));
 
-        const string invalidJson = "{\"version\":1,\"people\":[{\"id\":\"person\",\"name\":\"Official\"}],\"sources\":[{\"id\":\"source\",\"personIds\":[\"person\"],\"url\":\"relative\",\"allowedOrigin\":\"https://example.test\",\"allowedPathPrefix\":\"/\"}]}";
+        const string invalidJson = "{\"version\":2,\"people\":[{\"id\":\"person\",\"name\":\"Official\"}],\"sources\":[{\"id\":\"source\",\"coverage\":[{\"personId\":\"person\"}],\"url\":\"relative\",\"allowedOrigin\":\"https://example.test\",\"allowedPathPrefix\":\"/\"}]}";
         Assert.Throws<ArgumentException>(() => new CollectionConfigurationRevision(Hash(invalidJson), invalidJson));
-    }
-
-    [Fact]
-    public void LegacyCanonicalConfigurationRevisionRetainsItsOriginalJsonAndId()
-    {
-        const string json = "{\"version\":1,\"people\":[{\"id\":\"person\",\"name\":\"Official\"}],\"sources\":[{\"id\":\"source\",\"personIds\":[\"person\"],\"url\":\"https://example.test/page\",\"allowedOrigin\":\"https://example.test\",\"allowedPathPrefix\":\"/\",\"mode\":\"page\",\"maxCandidates\":100,\"enabled\":true,\"maxRequests\":5,\"maxBytes\":2000000,\"timeoutSeconds\":30,\"minDelayMilliseconds\":1000}]}";
-        const string id = "7f4521051fe8c22d4588fdf8e61e4bffdf76d6130e472472b2d4595e117ded16";
-
-        var revision = new CollectionConfigurationRevision(id, json);
-
-        Assert.Equal(json, revision.Json);
-        Assert.DoesNotContain("checkIntervalSeconds", revision.Json, StringComparison.Ordinal);
-        Assert.Equal(id, CollectionConfigurationRevision.Create(revision.ReadConfiguration()).Id);
     }
 
     [Fact]
@@ -91,7 +80,7 @@ public sealed class CollectionConfigurationRevisionTests
         {
             Version = 2,
             People = [new PersonConfiguration { Id = "person", Name = "Official", BioguideId = "W000817" }],
-            Sources = [Configuration(["person"]).Sources[0] with { PersonIds = null, Coverage = [new SourceCoverageConfiguration { PersonId = "person" }] }]
+            Sources = [Configuration(["person"]).Sources[0]]
         };
 
         var revision = CollectionConfigurationRevision.Create(configuration);
@@ -115,19 +104,6 @@ public sealed class CollectionConfigurationRevisionTests
         Assert.Equal(1800, configuredRevision.ReadConfiguration().Sources[0].ResolveCheckIntervalSeconds());
     }
 
-    [Fact]
-    public void SourcesWithoutACredentialKeepTheirExistingSnapshotAndRevisionId()
-    {
-        const string snapshot = """
-            {"version":1,"people":[{"id":"person","name":"Official"}],"sources":[{"id":"source","personIds":["person"],"url":"https://example.test/page","allowedOrigin":"https://example.test","allowedPathPrefix":"/","mode":"page","maxCandidates":100,"enabled":true,"maxRequests":5,"maxBytes":2000000,"timeoutSeconds":30,"minDelayMilliseconds":1000}]}
-            """;
-
-        var revision = CollectionConfigurationRevision.Create(Configuration(["person"]));
-
-        Assert.Equal(snapshot, revision.Json);
-        Assert.Equal(Hash(snapshot), revision.Id);
-    }
-
     private static CollectionConfiguration Configuration(string[] personIds) => new()
     {
         People = [new PersonConfiguration { Id = "person", Name = "Official" }],
@@ -136,7 +112,7 @@ public sealed class CollectionConfigurationRevisionTests
             new WatchedSourceConfiguration
             {
                 Id = "source",
-                PersonIds = personIds,
+                Coverage = [.. personIds.Select(personId => new SourceCoverageConfiguration { PersonId = personId })],
                 Url = "https://example.test/page",
                 AllowedOrigin = "https://example.test",
                 AllowedPathPrefix = "/"

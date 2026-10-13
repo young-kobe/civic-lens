@@ -76,7 +76,7 @@ public sealed partial class PostgresCollectionJobStore : IDiscoveryAdmissionStor
                 throw new ArgumentException("Discovery attempt and article template have different source IDs.", nameof(request));
 
             var discoveryRequest = Read<CollectionRequest>(discoveryRow.RequestJson);
-            discoveryRequest.Validate();
+            discoveryRequest.ValidateReadable();
             if (discoveryRequest.Mode != request.ExpectedDiscoveryMode)
                 throw new ArgumentException("Configured discovery mode does not match the retained attempt.", nameof(request));
             if (discoveryRequest.SourceId != discoveryRow.SourceId)
@@ -86,15 +86,13 @@ public sealed partial class PostgresCollectionJobStore : IDiscoveryAdmissionStor
             if (discovery.Status != DiscoveryStatus.Parsed)
                 throw new ArgumentException("Only parsed discovery attempts can admit candidates.", nameof(request));
             ValidateTemplate(request.ArticleTemplate, discoveryRequest);
-            var revisionId = await new ConfigurationRevisionWriter(db, Ticks(now))
-                .StoreAsync(request.ArticleTemplate.ConfigurationRevision, cancellationToken);
+            var jobWriter = new JobRowWriter(db, Ticks(now));
+            var revisionId = await jobWriter.StoreAsync(request.ArticleTemplate.ConfigurationRevision, cancellationToken);
 
             var jobs = new List<DiscoveryAdmissionJob>();
             var deferred = 0;
             var duplicates = 0;
-            var reservedRequests = 0;
-            long reservedBytes = 0;
-            var reservedSeconds = 0;
+            var budget = request.Policy.OpenBudget(request.ArticleTemplate);
             var candidateHashes = new string[discovery.Urls.Length];
             var urlsByCandidateHash = new Dictionary<string, string>(StringComparer.Ordinal);
             for (var index = 0; index < discovery.Urls.Length; index++)
@@ -148,38 +146,25 @@ public sealed partial class PostgresCollectionJobStore : IDiscoveryAdmissionStor
                 }
 
                 var definition = request.ArticleTemplate with { Url = url };
-                if (!request.Policy.TryReserve(definition, jobs.Count, reservedRequests, reservedBytes,
-                    reservedSeconds, out var reservation))
+                if (!budget.TryReserve())
                 {
                     deferred++;
                     continue;
                 }
 
-                var jobId = Guid.NewGuid().ToString("N");
-                var idempotencyKey = DiscoveryAdmissionKeyPrefix + Guid.NewGuid().ToString("N");
-                db.Add(new JobRow
-                {
-                    JobId = jobId,
-                    IdempotencyKey = idempotencyKey,
-                    DefinitionJson = StoredJobDefinition.Write(definition),
-                    ConfigurationRevisionId = revisionId,
-                    State = CollectionJobState.Pending,
-                    CreatedAt = Ticks(now)
-                });
+                var job = await jobWriter.AddJobAsync(DiscoveryAdmissionKeyPrefix + Guid.NewGuid().ToString("N"),
+                    definition, cancellationToken);
                 if (existingCandidates.TryGetValue(hash, out var candidateRow))
-                    candidateRow.JobId = jobId;
+                    candidateRow.JobId = job.JobId;
                 else
                     db.Add(new DiscoveryCandidateJobRow
                     {
                         SourceId = definition.SourceId,
                         CandidateHash = hash,
                         Url = url,
-                        JobId = jobId
+                        JobId = job.JobId
                     });
-                jobs.Add(new DiscoveryAdmissionJob(jobId, url));
-                reservedRequests = checked(reservedRequests + reservation.Requests);
-                reservedBytes = checked(reservedBytes + reservation.Bytes);
-                reservedSeconds = checked(reservedSeconds + reservation.TimeoutSeconds);
+                jobs.Add(new DiscoveryAdmissionJob(job.JobId, url));
             }
 
             var result = new DiscoveryAdmissionResult(jobs, deferred, duplicates);
