@@ -8,7 +8,7 @@ public sealed class CaptureArtifactVerifier : ICaptureArtifactVerifier
     public Task VerifyAsync(CollectionRequest request, CollectionResult receipt, string artifactRoot,
         CancellationToken cancellationToken)
     {
-        request.Validate();
+        request.ValidateReadable();
         receipt.ValidateAgainst(request);
         if (string.IsNullOrWhiteSpace(artifactRoot)) throw new ArgumentException("Artifact root is required.", nameof(artifactRoot));
         if (receipt.Outcome != CollectionOutcome.Captured) return Task.CompletedTask;

@@ -1,7 +1,9 @@
 using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using CivicLens.Application.Collection;
+using CivicLens.Application.Collection.Bills;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Application.Collection.Processing;
 using CivicLens.Application.Documents;
@@ -13,6 +15,7 @@ using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Collection.Jobs;
 using CivicLens.Infrastructure.Collection.Processing;
 using CivicLens.Infrastructure.Documents;
+using CivicLens.Tests.Application.Collection.Bills;
 using CivicLens.Tests.Infrastructure.Collection;
 using Npgsql;
 using Microsoft.EntityFrameworkCore;
@@ -68,8 +71,10 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
         var options = new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options;
         await using var db = new CollectionAttemptDbContext(options);
         await db.GetService<IMigrator>().MigrateAsync("20261008190000_DurableEvidenceProcessing");
-        var beforeJob = await CollectAsync("earlier", "Earlier wording.");
-        var afterJob = await CollectAsync("later", "Later wording.");
+        await db.Database.ExecuteSqlRawAsync("ALTER TABLE collection_jobs ADD COLUMN configuration_revision_id text");
+        var beforeJob = await CollectAsync("earlier", "Earlier wording.", legacySchema: true);
+        var afterJob = await CollectAsync("later", "Later wording.", legacySchema: true);
+        await db.Database.ExecuteSqlRawAsync("ALTER TABLE collection_jobs DROP COLUMN configuration_revision_id");
         var beforeAttempt = Assert.Single(beforeJob.Attempts).AttemptId;
         var afterAttempt = Assert.Single(afterJob.Attempts).AttemptId;
 
@@ -130,6 +135,73 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
         Assert.Equal(EvidenceProcessingStatus.Succeeded, record!.Status);
         Assert.Equal(EvidenceProcessingOutcome.Baseline, record.Outcome);
         Assert.NotNull(await extractions.GetAsync(record.ExtractionId!, default));
+    }
+
+    [Fact]
+    public async Task ApiCaptureWithoutAParserCompletesItsJobWithoutAProcessingStage()
+    {
+        var configuration = Configuration();
+        var apiSource = configuration.Sources[0] with
+        {
+            Mode = CollectionMode.Api,
+            Credential = CollectionCredentials.CongressGov,
+            Url = "https://example.test/pages/v3/member",
+            DocumentProfileId = null
+        };
+        var definition = new ConfiguredCollectionSource(configuration with { Sources = [apiSource] }, "source")
+            .CreateJobDefinition(DateOnly.FromDateTime(DateTime.UtcNow));
+        var job = await jobs.EnqueueAsync(definition, "api-once", default);
+        var runner = new RunCollectionJob(jobs, attempts, new FileCollectionReceiptHandoffStore(artifactRoot),
+            new CaptureArtifactVerifier(), new ApiFixtureCollector());
+        var pipeline = new CollectionJobWorker(PostgresCollectionWorkerQueue.FromConnectionString(connectionString),
+            runner, Worker(processing));
+
+        _ = await pipeline.ExecuteAsync(artifactRoot, once: true, batchSize: 20, leaseDuration: TimeSpan.FromSeconds(60));
+
+        var completedJob = await jobs.GetAsync(job.JobId, default);
+        Assert.Equal(CollectionJobState.Succeeded, completedJob!.State);
+        var record = Assert.Single(await processing.GetByJobIdsAsync([job.JobId], default));
+        Assert.Equal("prepare", record.AttemptId);
+        Assert.Equal(EvidenceProcessingStatus.Succeeded, record.Status);
+        Assert.Equal(EvidenceProcessingStage.Complete, record.Stage);
+        Assert.Null(record.ExtractionId);
+    }
+
+    [Fact]
+    public async Task BillListCaptureAdmitsItsBillJobsAndKeepsTheCursorUntilAPassAdmitsNoNewBills()
+    {
+        var job = await RunBillJobAsync(ApiResource.BillList, BillWindow.RequestUrl(BillSourceUrl), """{"bills":[{"congress":119,"type":"HR","number":"1","updateDate":"2025-01-03"},{"congress":118,"type":"HR","number":"2","updateDate":"2025-01-03"}],"pagination":{"count":2}}""");
+
+        var record = Assert.Single(await processing.GetByJobIdsAsync([job.JobId], default));
+        Assert.Equal(EvidenceProcessingStatus.Succeeded, record.Status);
+        Assert.Equal(1, record.AdmittedCount);
+        var detail = Assert.Single(await jobs.ListAsync(10, default), item => item.JobId != job.JobId);
+        Assert.Equal("https://api.congress.gov/v3/bill/119/hr/1?format=json", detail.Definition.Url);
+        Assert.Equal(ApiResource.Bill, detail.Definition.ApiResource);
+        Assert.Null(await ReadBillCursorAsync());
+    }
+
+    [Fact]
+    public async Task BillDetailCaptureCompletesWithoutAProcessingStageUntilItsParsersExist()
+    {
+        var job = await RunBillJobAsync(ApiResource.Bill, BillSourceUrl + "/119/hr/1?format=json", """{"bill":{"congress":119}}""");
+
+        var record = Assert.Single(await processing.GetByJobIdsAsync([job.JobId], default));
+        Assert.Equal(EvidenceProcessingStatus.Succeeded, record.Status);
+        Assert.Equal(EvidenceProcessingStage.Complete, record.Stage);
+        Assert.Equal(0, record.AdmittedCount);
+        Assert.Null(await ReadBillCursorAsync());
+    }
+
+    [Fact]
+    public async Task MalformedBillListCaptureBlocksPreparationAndLeavesTheCursorBehind()
+    {
+        var job = await RunBillJobAsync(ApiResource.BillList, BillWindow.RequestUrl(BillSourceUrl), """{"bills":[{"congress":119,"type":"HR","number":"1"}],"pagination":{}}""");
+
+        var record = Assert.Single(await processing.GetByJobIdsAsync([job.JobId], default));
+        Assert.Equal(EvidenceProcessingStatus.Blocked, record.Status);
+        Assert.Single(await jobs.ListAsync(10, default));
+        Assert.Null(await ReadBillCursorAsync());
     }
 
     [Fact]
@@ -235,9 +307,11 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
         Assert.NotEmpty(earlierCapture.Attempts);
     }
 
-    private async Task<CollectionJobRecord> CollectAsync(string key, string? body, string? etag = null, bool fail = false)
+    private async Task<CollectionJobRecord> CollectAsync(string key, string? body, string? etag = null, bool fail = false,
+        bool legacySchema = false)
     {
-        var definition = ConfiguredDefinition(etag);
+        var configured = ConfiguredDefinition(etag);
+        var definition = legacySchema ? configured with { ConfigurationRevision = null, CoverageAsOf = null } : configured;
         var job = await jobs.EnqueueAsync(definition, key, default);
         var collector = new FixtureCollector(body, fail, Interlocked.Increment(ref observationTick));
         var runner = new RunCollectionJob(jobs, attempts, new FileCollectionReceiptHandoffStore(artifactRoot),
@@ -245,7 +319,19 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
         var result = await runner.ExecuteAsync(job.JobId, artifactRoot, TimeSpan.FromSeconds(60), default);
         Assert.True(result.Status is CollectionJobRunStatus.Completed or CollectionJobRunStatus.AttemptFailed,
             $"Collection returned {result.Status}: {result.BlockReason}, retry {result.RetryAt:O}.");
-        return (await jobs.GetAsync(job.JobId, default))!;
+        var record = (await jobs.GetAsync(job.JobId, default))!;
+        if (legacySchema) await StoreLegacyDefinitionAsync(job.JobId, configured);
+        return record;
+    }
+
+    private async Task StoreLegacyDefinitionAsync(string jobId, CollectionJobDefinition definition)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand("UPDATE collection_jobs SET definition_json = @definition WHERE job_id = @id", connection);
+        command.Parameters.AddWithValue("definition", JsonSerializer.Serialize(definition, CollectionProtocol.JsonOptions));
+        command.Parameters.AddWithValue("id", jobId);
+        await command.ExecuteNonQueryAsync();
     }
 
     private async Task<EvidenceProcessingRecord> ProcessUntilTerminalAsync(EvidenceProcessingWorker worker,
@@ -263,8 +349,8 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
         throw new InvalidOperationException($"Processing attempt '{attemptId}' did not reach a terminal state.");
     }
 
-    private EvidenceProcessingWorker Worker(IEvidenceProcessingStore processingStore, IDocumentHistoryStore? historyStore = null) => new(jobs, attempts, jobs,
-        processingStore, extract, new GetDocumentHistory(historyStore ?? PostgresDocumentHistoryStore.FromConnectionString(connectionString)),
+    private EvidenceProcessingWorker Worker(IEvidenceProcessingStore processingStore, IDocumentHistoryStore? historyStore = null) => new(jobs,
+        new JobPreparation(jobs, attempts, jobs, jobs, new CaptureBodyReader(), processingStore), processingStore, extract, new GetDocumentHistory(historyStore ?? PostgresDocumentHistoryStore.FromConnectionString(connectionString)),
         new CompareDocuments(extractions, comparisons));
 
     private CollectionJobDefinition ConfiguredDefinition(string? etag = null)
@@ -338,6 +424,52 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
                     BytesReceived = 0
                 };
             return await new FixtureCollectorWriter().WriteAsync(request, body, observedAt, cancellationToken);
+        }
+    }
+
+    private static readonly BillStreamWindow BillWindow = new(new DateOnly(2025, 1, 3), new DateOnly(2025, 1, 4));
+
+    private const string BillSourceUrl = "https://api.congress.gov/v3/bill";
+
+    private async Task<CollectionJobRecord> RunBillJobAsync(ApiResource resource, string url, string json)
+    {
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var definition = new ConfiguredCollectionSource(CongressBillSourceConfigurationTests.Configuration(), "congress-bills", today)
+            .CreateApiJobDefinition(resource, url, today);
+        var job = await jobs.EnqueueAsync(definition, "bill-list-once", default);
+        var runner = new RunCollectionJob(jobs, attempts, new FileCollectionReceiptHandoffStore(artifactRoot),
+            new CaptureArtifactVerifier(), new ApiFixtureCollector(json));
+        var pipeline = new CollectionJobWorker(PostgresCollectionWorkerQueue.FromConnectionString(connectionString),
+            runner, Worker(processing));
+        _ = await pipeline.ExecuteAsync(artifactRoot, once: true, batchSize: 20, leaseDuration: TimeSpan.FromSeconds(60));
+        return (await jobs.GetAsync(job.JobId, default))!;
+    }
+
+    private async Task<DateOnly?> ReadBillCursorAsync()
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand("SELECT last_processed_day FROM bill_stream_cursors", connection);
+        return await command.ExecuteScalarAsync() is DateOnly day ? day : null;
+    }
+
+    private sealed class ApiFixtureCollector(string body = "{\"member\":{\"bioguideId\":\"W000817\"}}") : ICollectorProcess
+    {
+        public async Task<CollectionResult> RunAsync(CollectionRequest request, CancellationToken cancellationToken)
+        {
+            var json = Encoding.UTF8.GetBytes(body);
+            var hash = Convert.ToHexStringLower(SHA256.HashData(json));
+            await using (var file = File.Create(Path.Combine(request.ArtifactDirectory, hash + ".gz")))
+            await using (var gzip = new GZipStream(file, CompressionLevel.Fastest))
+                await gzip.WriteAsync(json, cancellationToken);
+            return Receipt(request) with
+            {
+                RobotsRequestCount = 0,
+                RequestCount = 1,
+                Response = new HttpResponseMetadata { StatusCode = 200, ContentType = "application/json", ContentEncodings = [] },
+                Capture = new CaptureArtifact { Sha256 = hash, RelativePath = hash + ".gz", ByteLength = json.Length },
+                BytesReceived = json.Length
+            };
         }
     }
 

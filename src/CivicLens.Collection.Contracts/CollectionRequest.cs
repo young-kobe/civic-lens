@@ -21,8 +21,17 @@ public sealed record CollectionRequest
     public int MinDelayMilliseconds { get; init; } = 1000;
     public string? ETag { get; init; }
     public DateTimeOffset? LastModified { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Credential { get; init; }
 
     public void Validate()
+    {
+        if (Version != CollectionProtocol.Version)
+            throw new ArgumentException("New collection requests must use the current protocol version.");
+        ValidateReadable();
+    }
+
+    public void ValidateReadable()
     {
         ValidateIdentity();
         ValidateOrigin();
@@ -31,17 +40,16 @@ public sealed record CollectionRequest
         ValidateArtifactDirectory();
         ValidateBudgets();
         ValidateETag();
+        ValidateCredential();
         if (JsonSerializer.SerializeToUtf8Bytes(this, CollectionProtocol.JsonOptions).Length > CollectionProtocol.MaximumManifestBytes)
             throw new ArgumentException("Serialized collection manifest exceeds 64 KiB.");
     }
 
     private void ValidateIdentity()
     {
-        if (!CollectionProtocol.IsSupported(Version))
+        if (!CollectionProtocol.IsReadable(Version))
             throw new ArgumentException("Unsupported collection protocol version.");
-        if (!Enum.IsDefined(Mode) || (Version == CollectionProtocol.LegacyPageVersion &&
-            (Mode != CollectionMode.Page || MaxCandidates != 100)) ||
-            (Mode == CollectionMode.Html && Version < CollectionProtocol.HtmlVersion))
+        if (!Enum.IsDefined(Mode) || (Mode == CollectionMode.Api && Version < CollectionProtocol.ApiVersion))
             throw new ArgumentException("Collection mode is unsupported for this protocol version.");
         if (string.IsNullOrWhiteSpace(JobId) || string.IsNullOrWhiteSpace(SourceId))
             throw new ArgumentException("Job and source IDs are required.");
@@ -89,10 +97,16 @@ public sealed record CollectionRequest
             throw new ArgumentException("ETag must be a single entity tag.");
     }
 
+    private void ValidateCredential()
+    {
+        if (Credential is not null && (Mode != CollectionMode.Api || !CollectionCredentials.IsKnown(Credential)))
+            throw new ArgumentException("Credential is allowed only for API requests and must be a known name.");
+    }
+
     public Uri? ResolveCandidate(Uri url)
     {
         if (Allows(url)) return url;
-        if (Version < CollectionProtocol.SchemeUpgradeVersion || url is null || !url.IsAbsoluteUri ||
+        if (url is null || !url.IsAbsoluteUri ||
             url.Scheme != Uri.UriSchemeHttp || !url.IsDefaultPort)
             return null;
         var upgraded = new UriBuilder(url) { Scheme = Uri.UriSchemeHttps, Port = -1 }.Uri;

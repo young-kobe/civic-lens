@@ -64,6 +64,17 @@ public sealed class PostgresStatementCandidateRegistrationTests(PostgresCollecti
     }
 
     [Fact]
+    public async Task ExtractionFromABillStreamJobRegistersNoCandidateBecauseBillsAreNotStatements()
+    {
+        var attempt = await seeder.ImportAsync("Bill text.", ArticleUrl, CandidateJobKind.BillStream);
+
+        await extractions.SaveAsync(new DocumentExtraction(attempt, "p", "n", "Bill text."), CancellationToken.None);
+
+        Assert.Empty(await CandidatesAsync());
+        Assert.Empty(await AnalysisRowsAsync());
+    }
+
+    [Fact]
     public async Task ExtractionWithoutAnyJobRegistersNoCandidate()
     {
         var attempt = await seeder.ImportAsync("Imported by hand.", ArticleUrl, CandidateJobKind.None);

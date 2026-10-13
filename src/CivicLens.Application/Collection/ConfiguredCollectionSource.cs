@@ -1,3 +1,4 @@
+using CivicLens.Application.Collection.Bills;
 using CivicLens.Application.Collection.Discovery;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Collection.Contracts;
@@ -8,8 +9,13 @@ namespace CivicLens.Application.Collection;
 public sealed class ConfiguredCollectionSource
 {
     public ConfiguredCollectionSource(CollectionConfiguration configuration, string sourceId, DateOnly? asOf = null)
+        : this(CollectionConfigurationRevision.Create(configuration), sourceId, asOf)
     {
-        Revision = CollectionConfigurationRevision.Create(configuration);
+    }
+
+    public ConfiguredCollectionSource(CollectionConfigurationRevision revision, string sourceId, DateOnly? asOf = null)
+    {
+        Revision = revision;
         SourceId = sourceId;
         AsOf = asOf;
         _ = ReadSource();
@@ -22,6 +28,13 @@ public sealed class ConfiguredCollectionSource
     public CollectionJobDefinition CreateJobDefinition(DateOnly currentDate, CollectionJobDefinition? existing = null) =>
         PrepareDefinition(ReadSource(), currentDate, existing, article: false);
 
+    public CollectionRequest CreateRequest(string jobId, string artifactDirectory, DateOnly currentDate)
+    {
+        var request = CreateJobDefinition(currentDate).CreateRequest(jobId, artifactDirectory);
+        request.Validate();
+        return request;
+    }
+
     public DiscoveryAdmissionRequest CreateDiscoveryAdmission(string attemptId, string idempotencyKey,
         DateOnly currentDate, CollectionJobDefinition? existingTemplate = null, bool recheckKnownCandidates = false)
     {
@@ -33,6 +46,36 @@ public sealed class ConfiguredCollectionSource
             source.AdmissionPolicy ?? new DiscoveryAdmissionPolicy(), source.Mode, recheckKnownCandidates);
         request.Validate();
         return request;
+    }
+
+    public CollectionJobDefinition CreateApiJobDefinition(ApiResource resource, string url, DateOnly currentDate)
+    {
+        var definition = PrepareDefinition(ReadSource(), currentDate, null, article: false) with
+        {
+            ApiResource = resource,
+            Url = url
+        };
+        definition.Validate();
+        return definition;
+    }
+
+    public BillStreamAdmission CreateBillStreamAdmission(string listJobId, BillStreamWindow window,
+        CongressBillListPage page, DateOnly currentDate)
+    {
+        var source = ReadSource();
+        if (source.ApiParser != ApiParser.CongressBillList)
+            throw new ArgumentException("Bill stream admission requires a configured Congress bill list source.");
+        var template = PrepareDefinition(source, currentDate, null, article: false);
+        var bills = page.Bills.Where(bill => bill.Congress >= source.MinimumCongress)
+            .Select(bill => new BillStreamJob(BillStreamJobKeys.Detail(SourceId, bill),
+                template with { ApiResource = ApiResource.Bill, Url = bill.DetailUrl(source.Url) }))
+            .DistinctBy(job => job.IdempotencyKey);
+        var nextPage = page.Next is null
+            ? null
+            : new BillStreamJob(BillStreamJobKeys.NextPage(SourceId, listJobId),
+                CreateApiJobDefinition(ApiResource.BillList, page.Next, currentDate));
+        var policy = source.AdmissionPolicy ?? new DiscoveryAdmissionPolicy();
+        return new BillStreamAdmission(SourceId, policy, template, window, page.StartsPass, [.. bills], nextPage);
     }
 
     private CollectionJobDefinition PrepareDefinition(WatchedSourceConfiguration source, DateOnly currentDate,
@@ -66,6 +109,6 @@ public sealed class ConfiguredCollectionSource
     }
 
     private WatchedSourceConfiguration ReadSource() =>
-        Revision.ReadConfiguration().Sources.SingleOrDefault(source => source.Id == SourceId)
+        Revision.Configuration.Sources.SingleOrDefault(source => source.Id == SourceId)
         ?? throw new ArgumentException("Unknown source ID.", nameof(SourceId));
 }

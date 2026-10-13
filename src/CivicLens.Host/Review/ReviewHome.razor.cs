@@ -23,7 +23,7 @@ public sealed partial class ReviewHome
     private ReviewActor? actor;
     private CollectionConfiguration? configuration;
     private ReviewOverview? overview;
-    private EligibleDocumentComparisonPage? changes;
+    private NewDocumentChangePage? changes;
     private IReadOnlyDictionary<string, DocumentChangeAnalysisRecord> analyses = new Dictionary<string, DocumentChangeAnalysisRecord>();
     private AnalysisStatus? analysisStatus;
     private DocumentChangeReviewPage? drafts;
@@ -82,7 +82,7 @@ public sealed partial class ReviewHome
             overview = await GetOverview.ExecuteAsync(actor, cancellationToken);
             changes = await ListChanges.ExecuteAsync(actor, ChangesCursor, PageSize, cancellationToken);
             analyses = await ListAnalyses.ExecuteAsync(actor,
-                [.. changes.Items.Select(item => item.Comparison.ComparisonId)], cancellationToken);
+                [.. changes.Items.Select(item => item.ComparisonId)], cancellationToken);
             analysisStatus = await GetAnalysisStatus.ExecuteAsync(actor, cancellationToken);
             drafts = await ListDrafts.ExecuteAsync(actor, DraftsCursor, PageSize, Filter, cancellationToken);
             if (collection is not null)

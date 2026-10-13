@@ -4,5 +4,6 @@ public enum CollectionMode
 {
     Page,
     Feed,
-    Html
+    Html,
+    Api
 }

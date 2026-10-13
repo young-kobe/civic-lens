@@ -21,7 +21,7 @@ public sealed record DiscoveryResult
     {
         if (request is null)
             throw new InvalidDataException("Collection request is required for discovery validation.");
-        request.Validate();
+        request.ValidateReadable();
         if (Urls is null || !Enum.IsDefined(Status))
             throw new InvalidDataException("Discovery metadata is invalid.");
         if (Status != DiscoveryStatus.Parsed && Urls.Length != 0)

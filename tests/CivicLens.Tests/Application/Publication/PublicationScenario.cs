@@ -324,7 +324,7 @@ internal sealed class FakeReviewStore : IDocumentChangeReviewStore
     public Task<DocumentChangeReviewPage> ListAsync(PageCursor? cursor, int limit, DraftStatusFilter filter,
         CancellationToken cancellationToken) => throw new NotSupportedException();
 
-    public Task<EligibleDocumentComparisonPage> ListEligibleComparisonsAsync(PageCursor? cursor, int limit,
+    public Task<NewDocumentChangePage> ListEligibleComparisonsAsync(PageCursor? cursor, int limit,
         CancellationToken cancellationToken) => throw new NotSupportedException();
 
     public Task<ReviewOverview> GetOverviewAsync(CancellationToken cancellationToken) =>

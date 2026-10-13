@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using CivicLens.Application.Collection;
+using CivicLens.Application.Configuration;
 using CivicLens.Application.Collection.Discovery;
 using CivicLens.Collection.Contracts;
 using CivicLens.Collector.Http;
@@ -40,12 +41,12 @@ public sealed class DatabaseCommandTests(PostgresCollection postgres) : IAsyncLi
             People = [new PersonConfiguration { Id = "person", Name = "Fixture Official" }],
             Sources = [new WatchedSourceConfiguration
             {
-                Id = "source", PersonIds = ["person"], Url = origin + "/page", AllowedOrigin = origin,
+                Id = "source", Coverage = [new SourceCoverageConfiguration { PersonId = "person" }], Url = origin + "/page", AllowedOrigin = origin,
                 AllowedPathPrefix = "/page", MinDelayMilliseconds = 0, TimeoutSeconds = 5
             }]
         };
         await File.WriteAllTextAsync(Path.Combine(directory, "config.json"),
-            JsonSerializer.Serialize(configuration, CollectionProtocol.JsonOptions));
+            JsonSerializer.Serialize(configuration, ConfigurationJson.Options));
         server = ServeAsync();
     }
 
@@ -105,19 +106,18 @@ public sealed class DatabaseCommandTests(PostgresCollection postgres) : IAsyncLi
     {
         var configPath = Path.Combine(directory, "config.json");
         var config = JsonSerializer.Deserialize<CollectionConfiguration>(await File.ReadAllTextAsync(configPath),
-            CollectionProtocol.JsonOptions)!;
+            ConfigurationJson.Options)!;
         config = config with
         {
             Version = 2,
             Sources = [config.Sources[0] with
             {
-                PersonIds = null,
                 Coverage = [new SourceCoverageConfiguration
                 { PersonId = "person", StartsOn = new DateOnly(2020, 1, 1), EndsBefore = new DateOnly(2021, 1, 1) }],
                 Mode = mode, AdmissionPolicy = new DiscoveryAdmissionPolicy { MaxJobs = 1 }
             }]
         };
-        await File.WriteAllTextAsync(configPath, JsonSerializer.Serialize(config, CollectionProtocol.JsonOptions));
+        await File.WriteAllTextAsync(configPath, JsonSerializer.Serialize(config, ConfigurationJson.Options));
         var entries = Enumerable.Range(0, 100).Select(index =>
             $"<item><link>/page/article-{index}?value={new string('a', 750)}</link></item>");
         feedBody = mode == CollectionMode.Feed
@@ -206,18 +206,17 @@ public sealed class DatabaseCommandTests(PostgresCollection postgres) : IAsyncLi
     public async Task DirectCollectionUsesExplicitCoverageDate(string command)
     {
         var path = Path.Combine(directory, "config.json");
-        var configuration = JsonSerializer.Deserialize<CollectionConfiguration>(await File.ReadAllTextAsync(path), CollectionProtocol.JsonOptions)!;
+        var configuration = JsonSerializer.Deserialize<CollectionConfiguration>(await File.ReadAllTextAsync(path), ConfigurationJson.Options)!;
         configuration = configuration with
         {
             Version = 2,
             Sources = [configuration.Sources[0] with
             {
-                PersonIds = null,
                 Coverage = [new SourceCoverageConfiguration
                 { PersonId = "person", StartsOn = new DateOnly(2020, 1, 1), EndsBefore = new DateOnly(2021, 1, 1) }]
             }]
         };
-        await File.WriteAllTextAsync(path, JsonSerializer.Serialize(configuration, CollectionProtocol.JsonOptions));
+        await File.WriteAllTextAsync(path, JsonSerializer.Serialize(configuration, ConfigurationJson.Options));
         if (command == "collect-import")
             Assert.Equal(0, (await HostProcess.RunAsync(connectionString, "db", "migrate")).ExitCode);
         var database = command == "collect-import" ? connectionString : null;
@@ -235,9 +234,7 @@ public sealed class DatabaseCommandTests(PostgresCollection postgres) : IAsyncLi
     {
         var configPath = Path.Combine(directory, "config.json");
         var config = JsonNode.Parse(await File.ReadAllTextAsync(configPath))!;
-        config["version"] = 2;
         var source = config["sources"]![0]!.AsObject();
-        source.Remove("personIds");
         source["coverage"] = new JsonArray(new JsonObject
         {
             ["personId"] = "person",
@@ -292,10 +289,8 @@ public sealed class DatabaseCommandTests(PostgresCollection postgres) : IAsyncLi
     }
 
     [Theory]
-    [InlineData(3)]
-    [InlineData(4)]
-    [InlineData(5)]
-    [InlineData(6)]
+    [InlineData(7)]
+    [InlineData(9)]
     public async Task FailedImportCanReplayAfterRelocationWithoutConfigurationOrCollector(int protocolVersion)
     {
         var failed = await CollectAsync("collect-import", connectionString);
@@ -306,19 +301,14 @@ public sealed class DatabaseCommandTests(PostgresCollection postgres) : IAsyncLi
         var ids = JsonSerializer.Deserialize<string[]>(listed.Output)!;
         var id = Assert.Single(ids);
         Assert.Contains(id, failed.Error);
-        if (protocolVersion < 6)
+        if (protocolVersion == 7)
         {
             var path = Path.Combine(original, ".pending", id + ".json");
             var envelope = JsonNode.Parse(await File.ReadAllTextAsync(path))!;
             var request = envelope["request"]!.AsObject();
             request["version"] = protocolVersion;
-            request.Remove("mode");
-            request.Remove("maxCandidates");
             var receipt = envelope["receipt"]!.AsObject();
             receipt["version"] = protocolVersion;
-            receipt.Remove("robotsRequestCount");
-            receipt.Remove("robotsCrawlDelayMilliseconds");
-            receipt.Remove("discovery");
             await File.WriteAllTextAsync(path, envelope.ToJsonString());
         }
 

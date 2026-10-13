@@ -57,7 +57,7 @@ internal static class SourceHealthResolver
 
         SourceHealth FromOutcome(CollectionJobRecord succeeded, EvidenceProcessingRecord record)
         {
-            if (succeeded.Definition.Mode is CollectionMode.Feed or CollectionMode.Html)
+            if (succeeded.Definition.Mode is CollectionMode.Feed or CollectionMode.Html or CollectionMode.Api)
                 return New(SourceCheckState.UpToDate);
             return record.Outcome switch
             {

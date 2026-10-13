@@ -10,7 +10,7 @@ public sealed class DiscoveryEvidence
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(discovery);
-        request.Validate();
+        request.ValidateReadable();
         if (request.Mode is not (CollectionMode.Feed or CollectionMode.Html))
             throw new ArgumentException("Discovery evidence requires a discovery request.");
         discovery.ValidateAgainst(request);

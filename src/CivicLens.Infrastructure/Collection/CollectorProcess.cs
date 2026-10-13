@@ -38,7 +38,7 @@ public sealed class CollectorProcess(string collectorAssembly, string dotnetExec
                 StandardErrorEncoding = Encoding.UTF8,
                 UseShellExecute = false
             };
-            KeepAllowedEnvironment(start.Environment);
+            KeepAllowedEnvironment(start.Environment, request.Credential);
             start.ArgumentList.Add(assembly);
             start.ArgumentList.Add("collect");
             start.ArgumentList.Add(manifest);
@@ -129,10 +129,12 @@ public sealed class CollectorProcess(string collectorAssembly, string dotnetExec
         return text.ToString();
     }
 
-    private static void KeepAllowedEnvironment(IDictionary<string, string?> environment)
+    public static void KeepAllowedEnvironment(IDictionary<string, string?> environment, string? credential)
     {
+        var credentialVariable = credential is null ? null : CollectionCredentials.VariableOf(credential);
         foreach (var name in environment.Keys.ToArray())
-            if (!AllowedVariables.Contains(name, StringComparer.Ordinal) && !name.StartsWith("LC_", StringComparison.Ordinal))
+            if (!AllowedVariables.Contains(name, StringComparer.Ordinal) && !name.StartsWith("LC_", StringComparison.Ordinal) &&
+                name != credentialVariable)
                 environment.Remove(name);
     }
 }

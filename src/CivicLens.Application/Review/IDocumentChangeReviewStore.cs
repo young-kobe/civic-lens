@@ -22,7 +22,7 @@ public interface IDocumentChangeReviewStore
         IReadOnlyCollection<string> draftIds, CancellationToken cancellationToken);
     Task<DocumentChangeReviewPage> ListAsync(PageCursor? cursor, int limit, DraftStatusFilter filter,
         CancellationToken cancellationToken);
-    Task<EligibleDocumentComparisonPage> ListEligibleComparisonsAsync(PageCursor? cursor, int limit,
+    Task<NewDocumentChangePage> ListEligibleComparisonsAsync(PageCursor? cursor, int limit,
         CancellationToken cancellationToken);
     Task<IReadOnlyList<UnpublishedApprovedDraft>> ListUnpublishedApprovedDraftsAsync(int limit,
         CancellationToken cancellationToken);

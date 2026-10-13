@@ -89,22 +89,15 @@ public sealed class CollectorTests
         Assert.Equal(payload, output.ToArray());
     }
 
-    [Fact]
-    public async Task VersionFourFeedRequestKeepsItsProtocolVersionAndDiscovery()
+    [Theory]
+    [InlineData(7)]
+    [InlineData(8)]
+    public async Task OnlyTheCurrentProtocolVersionIsCollected(int version)
     {
         using var directory = new TemporaryDirectory();
-        var payload = Encoding.UTF8.GetBytes("<rss version='2.0'><channel><item><link>/watch/story</link></item></channel></rss>");
-        using var collector = new HttpCollector(new QueueHandler(_ => Response(HttpStatusCode.NotFound), _ => Response(HttpStatusCode.OK, payload)));
-        var result = await collector.FetchAsync(Request(directory.Path) with
-        {
-            Version = CollectionProtocol.PreviousVersion,
-            Mode = CollectionMode.Feed
-        });
+        using var collector = new HttpCollector(new QueueHandler());
 
-        Assert.Equal(CollectionOutcome.Captured, result.Outcome);
-        Assert.Equal(CollectionProtocol.PreviousVersion, result.Version);
-        Assert.Equal(DiscoveryStatus.Parsed, result.Discovery!.Status);
-        Assert.Equal("https://example.test/watch/story", Assert.Single(result.Discovery.Urls));
+        await Assert.ThrowsAsync<ArgumentException>(() => collector.FetchAsync(Request(directory.Path) with { Version = version }));
     }
 
     [Fact]
@@ -158,11 +151,8 @@ public sealed class CollectorTests
         Assert.Empty(result.Discovery.Urls);
     }
 
-    [Theory]
-    [InlineData(CollectionProtocol.RobotsVersion, DiscoveryStatus.LimitExceeded)]
-    [InlineData(CollectionProtocol.TolerantHtmlRecoveryVersion, DiscoveryStatus.Parsed)]
-    public async Task TolerantHtmlRecoveryClosesOmittedParagraphsOnlyForItsProtocolVersion(int version,
-        DiscoveryStatus expectedStatus)
+    [Fact]
+    public async Task TolerantHtmlRecoveryClosesOmittedParagraphs()
     {
         using var directory = new TemporaryDirectory();
         var html = string.Concat(Enumerable.Range(0, 70).Select(index => $"<p>Paragraph {index}")) +
@@ -170,21 +160,12 @@ public sealed class CollectorTests
         using var collector = new HttpCollector(new QueueHandler(
             _ => Response(HttpStatusCode.NotFound), _ => Response(HttpStatusCode.OK, html)));
 
-        var result = await collector.FetchAsync(Request(directory.Path) with
-        {
-            Version = version,
-            Mode = CollectionMode.Html,
-            MaxBytes = 10_000
-        });
+        var result = await collector.FetchAsync(Request(directory.Path) with { Mode = CollectionMode.Html, MaxBytes = 10_000 });
 
         Assert.Equal(CollectionOutcome.Captured, result.Outcome);
-        Assert.Equal(version, result.Version);
         Assert.Equal(1, result.RobotsRequestCount);
-        Assert.Equal(expectedStatus, result.Discovery!.Status);
-        if (expectedStatus == DiscoveryStatus.Parsed)
-            Assert.Equal("https://example.test/watch/story", Assert.Single(result.Discovery.Urls));
-        else
-            Assert.Empty(result.Discovery.Urls);
+        Assert.Equal(DiscoveryStatus.Parsed, result.Discovery!.Status);
+        Assert.Equal("https://example.test/watch/story", Assert.Single(result.Discovery.Urls));
     }
 
     [Fact]
@@ -410,18 +391,15 @@ public sealed class CollectorTests
         Assert.Equal("https://example.test/watch/story", Assert.Single(result.Discovery.Urls));
     }
 
-    [Theory]
-    [InlineData(6, DiscoveryStatus.LimitExceeded)]
-    [InlineData(7, DiscoveryStatus.Parsed)]
-    public async Task SelfClosingSvgSiblingsDoNotAccumulateLexicalDepthInVersionSeven(int version, DiscoveryStatus expected)
+    [Fact]
+    public async Task SelfClosingSvgSiblingsDoNotAccumulateLexicalDepth()
     {
         using var directory = new TemporaryDirectory();
         var html = "<svg>" + string.Concat(Enumerable.Repeat("<path d='M0 0' />", 100)) + "</svg><a href='/watch/story'>story</a>";
         using var collector = new HttpCollector(new QueueHandler(_ => Response(HttpStatusCode.NotFound), _ => Response(HttpStatusCode.OK, html)));
-        var result = await collector.FetchAsync(Request(directory.Path) with { Version = version, Mode = CollectionMode.Html, MaxBytes = 10_000 });
-        Assert.Equal(expected, result.Discovery!.Status);
-        if (expected == DiscoveryStatus.Parsed) Assert.Equal("https://example.test/watch/story", Assert.Single(result.Discovery.Urls));
-        else Assert.Empty(result.Discovery.Urls);
+        var result = await collector.FetchAsync(Request(directory.Path) with { Mode = CollectionMode.Html, MaxBytes = 10_000 });
+        Assert.Equal(DiscoveryStatus.Parsed, result.Discovery!.Status);
+        Assert.Equal("https://example.test/watch/story", Assert.Single(result.Discovery.Urls));
     }
 
     [Theory]
@@ -484,7 +462,7 @@ public sealed class CollectorTests
     }
 
     [Fact]
-    public async Task FeedRelativeLinksUseRedirectedResponseUrlAndXmlBaseIsUnsupportedBeforeVersionEight()
+    public async Task FeedRelativeLinksUseRedirectedResponseUrl()
     {
         using var directory = new TemporaryDirectory();
         var redirectedFeed = Encoding.UTF8.GetBytes("<rss version='2.0'><channel><item><link>story</link></item></channel></rss>");
@@ -493,14 +471,6 @@ public sealed class CollectorTests
         using var collector = new HttpCollector(handler);
         var result = await collector.FetchAsync(Request(directory.Path) with { Mode = CollectionMode.Feed });
         Assert.Equal(new[] { "https://example.test/watch/feeds/story" }, result.Discovery!.Urls);
-
-        using var nextDirectory = new TemporaryDirectory();
-        var xmlBase = Encoding.UTF8.GetBytes("<feed xmlns='http://www.w3.org/2005/Atom' xml:base='https://example.test/watch/'><entry><link href='story'/></entry></feed>");
-        using var nextCollector = new HttpCollector(new QueueHandler(_ => Response(HttpStatusCode.NotFound), _ => Response(HttpStatusCode.OK, xmlBase)));
-        var unsupported = await nextCollector.FetchAsync(Request(nextDirectory.Path) with { Version = 7, Mode = CollectionMode.Feed });
-        Assert.Equal(DiscoveryStatus.Unsupported, unsupported.Discovery!.Status);
-        Assert.Empty(unsupported.Discovery.Urls);
-        Assert.NotNull(unsupported.Capture);
     }
 
     [Fact]
@@ -942,25 +912,6 @@ public sealed class CollectorTests
     }
 
     [Fact]
-    public async Task LegacyRobotsRedirectIsRejectedWithoutChangingContentRequestInference()
-    {
-        using var directory = new TemporaryDirectory();
-        var handler = new QueueHandler(_ => Redirect("https://example.test/robots-copy.txt"));
-        using var collector = new HttpCollector(handler);
-
-        var result = await collector.FetchAsync(Request(directory.Path) with
-        {
-            Version = CollectionProtocol.PreviousVersion,
-            ETag = "\"prior\""
-        });
-
-        Assert.Equal(CollectionOutcome.Failed, result.Outcome);
-        Assert.Equal(CollectionFailureCode.RobotsUnavailable, result.FailureCode);
-        Assert.Equal(1, result.RequestCount);
-        Assert.Null(result.SentValidators);
-    }
-
-    [Fact]
     public async Task RobotsRedirectLoopStopsAtSharedRequestBudget()
     {
         using var directory = new TemporaryDirectory();
@@ -1321,6 +1272,149 @@ public sealed class CollectorTests
         var result = await collector.FetchAsync(Request(directory), cts.Token);
         Assert.Equal(CollectionFailureCode.Cancelled, result.FailureCode);
         Assert.Empty(Directory.GetFiles(directory));
+    }
+
+    private const string ApiKey = "api-key-for-tests-0123456789";
+
+    private static CollectionRequest ApiRequest(string directory) => Request(directory) with
+    {
+        Mode = CollectionMode.Api,
+        Url = "https://example.test/watch/v3/member",
+        Credential = CollectionCredentials.CongressGov
+    };
+
+    private static string? ApiKeyVariable(string name) =>
+        name == CollectionCredentials.VariableOf(CollectionCredentials.CongressGov) ? ApiKey : null;
+
+    [Fact]
+    public async Task ApiModeSendsTheNamedKeyAndAsksForJsonSoTheServerCanAuthenticateAndNegotiate()
+    {
+        using var directory = new TemporaryDirectory();
+        string? key = null;
+        string? accept = null;
+        using var collector = new HttpCollector(new QueueHandler(message =>
+        {
+            key = message.Headers.GetValues("X-Api-Key").Single();
+            accept = message.Headers.Accept.ToString();
+            return Response(HttpStatusCode.OK, "{\"member\":{}}");
+        }), ApiKeyVariable);
+
+        var result = await collector.FetchAsync(ApiRequest(directory.Path));
+
+        Assert.Equal(CollectionOutcome.Captured, result.Outcome);
+        Assert.Equal(ApiKey, key);
+        Assert.Equal("application/json", accept);
+        Assert.Null(result.Discovery);
+    }
+
+    [Fact]
+    public async Task ApiModeMakesNoRobotsRequestBecauseTheEndpointIsAnApiNotACrawledSite()
+    {
+        using var directory = new TemporaryDirectory();
+        var paths = new List<string>();
+        using var collector = new HttpCollector(new QueueHandler(message =>
+        {
+            paths.Add(message.RequestUri!.AbsolutePath);
+            return Response(HttpStatusCode.OK, "{}");
+        }), ApiKeyVariable);
+
+        var result = await collector.FetchAsync(ApiRequest(directory.Path));
+
+        Assert.Equal(CollectionOutcome.Captured, result.Outcome);
+        Assert.Equal(["/watch/v3/member"], paths);
+        Assert.Equal(0, result.RobotsRequestCount);
+        Assert.Equal(1, result.RequestCount);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task ApiModeFailsWithoutAnyRequestWhenTheNamedVariableHasNoValue(string? value)
+    {
+        using var directory = new TemporaryDirectory();
+        var handler = new QueueHandler();
+        using var collector = new HttpCollector(handler, _ => value);
+
+        var result = await collector.FetchAsync(ApiRequest(directory.Path));
+
+        Assert.Equal(CollectionOutcome.Failed, result.Outcome);
+        Assert.Equal(CollectionFailureCode.CredentialUnavailable, result.FailureCode);
+        Assert.Equal(0, handler.Calls);
+        Assert.Equal(0, result.RequestCount);
+    }
+
+    [Fact]
+    public async Task ApiKeyNeverAppearsInTheManifestOrTheReceipt()
+    {
+        using var directory = new TemporaryDirectory();
+        var request = ApiRequest(directory.Path);
+        using var collector = new HttpCollector(new QueueHandler(_ => Response(HttpStatusCode.OK, "{}")), ApiKeyVariable);
+
+        var result = await collector.FetchAsync(request);
+
+        Assert.Equal(CollectionOutcome.Captured, result.Outcome);
+        Assert.DoesNotContain(ApiKey, System.Text.Json.JsonSerializer.Serialize(request, CollectionProtocol.JsonOptions));
+        Assert.DoesNotContain(ApiKey, System.Text.Json.JsonSerializer.Serialize(result, CollectionProtocol.JsonOptions));
+    }
+
+    [Fact]
+    public async Task ApiKeyStaysOffAnyOriginOtherThanTheAllowedOrigin()
+    {
+        using var directory = new TemporaryDirectory();
+        var hosts = new List<string>();
+        var keysSent = 0;
+        using var collector = new HttpCollector(new QueueHandler(
+            message =>
+            {
+                hosts.Add(message.RequestUri!.Host);
+                if (message.Headers.Contains("X-Api-Key")) keysSent++;
+                return Redirect("https://other.test/watch/v3/member");
+            },
+            message =>
+            {
+                hosts.Add(message.RequestUri!.Host);
+                if (message.Headers.Contains("X-Api-Key")) keysSent++;
+                return Response(HttpStatusCode.OK, "{}");
+            }), ApiKeyVariable);
+
+        var result = await collector.FetchAsync(ApiRequest(directory.Path));
+
+        Assert.Equal(CollectionFailureCode.OutOfScope, result.FailureCode);
+        Assert.Equal(["example.test"], hosts);
+        Assert.Equal(1, keysSent);
+    }
+
+    [Fact]
+    public async Task ApiModeDefersOnRateLimitWithTheServerRetryDelay()
+    {
+        using var directory = new TemporaryDirectory();
+        using var collector = new HttpCollector(new QueueHandler(_ =>
+        {
+            var response = new HttpResponseMessage((HttpStatusCode)429);
+            response.Headers.RetryAfter = new System.Net.Http.Headers.RetryConditionHeaderValue(TimeSpan.FromSeconds(42));
+            return response;
+        }), ApiKeyVariable);
+
+        var result = await collector.FetchAsync(ApiRequest(directory.Path));
+
+        Assert.Equal(CollectionOutcome.Deferred, result.Outcome);
+        Assert.Equal(CollectionFailureCode.RateLimited, result.FailureCode);
+        Assert.Equal(42, result.RetryAfterSeconds);
+    }
+
+    [Fact]
+    public async Task ApiModeStillPacesARedirectedRequestByTheConfiguredMinimumDelay()
+    {
+        using var directory = new TemporaryDirectory();
+        var handler = new QueueHandler(_ => Redirect("https://example.test/watch/v3/member/next"));
+        using var collector = new HttpCollector(handler, ApiKeyVariable);
+
+        var result = await collector.FetchAsync(ApiRequest(directory.Path) with { MinDelayMilliseconds = 60_000 });
+
+        Assert.Equal(CollectionOutcome.Deferred, result.Outcome);
+        Assert.Equal(CollectionFailureCode.CrawlDelay, result.FailureCode);
+        Assert.Equal(1, handler.Calls);
     }
 
     private static CollectionRequest Request(string directory) => new()

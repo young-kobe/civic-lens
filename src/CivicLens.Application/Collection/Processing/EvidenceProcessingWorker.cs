@@ -1,4 +1,3 @@
-using CivicLens.Application.Collection.Discovery;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Application.Documents;
 using CivicLens.Collection.Contracts;
@@ -10,8 +9,7 @@ namespace CivicLens.Application.Collection.Processing;
 /// <summary>Prepares successful collections and advances bounded captured-page evidence work.</summary>
 public sealed class EvidenceProcessingWorker(
     ICollectionJobStore jobs,
-    ICollectionAttemptStore attempts,
-    IDiscoveryAdmissionStore admissions,
+    JobPreparation preparation,
     IEvidenceProcessingStore processing,
     ExtractDocument extract,
     GetDocumentHistory history,
@@ -42,65 +40,13 @@ public sealed class EvidenceProcessingWorker(
         return new(progress, failures);
     }
 
-    private async Task PrepareAsync(EvidenceProcessingClaim claim, CancellationToken cancellationToken)
+    private async Task PrepareAsync(EvidenceProcessingClaim claim, string artifactRoot, CancellationToken cancellationToken)
     {
-        var jobId = claim.Record.JobId;
-        var job = await jobs.GetAsync(jobId, cancellationToken);
-        if (job is null || job.State != CollectionJobState.Succeeded) return;
-        var definition = job.Definition;
-        if (definition.ConfigurationRevision is null || definition.CoverageAsOf is null)
-        {
-            foreach (var jobAttempt in job.Attempts.Where(item => item.Resolution?.Outcome == CollectionJobAttemptOutcome.Succeeded))
-            {
-                var stored = await attempts.GetAsync(jobAttempt.AttemptId, cancellationToken);
-                if (stored?.AttemptResult is CapturedAttemptResult captured)
-                    _ = await processing.EnsureAsync(jobId, captured.AttemptId, captured.SourceId,
-                        captured.RequestedUrl, cancellationToken);
-            }
-            await CompleteAsync(claim, EvidenceProcessingStage.Complete, EvidenceProcessingStatus.Blocked,
-                EvidenceProcessingOutcome.Blocked, "configurationUnavailable", cancellationToken);
-            return;
-        }
-
-        var configuration = definition.ConfigurationRevision.ReadConfiguration();
-        var source = configuration.Sources.Single(candidate => candidate.Id == definition.SourceId);
-        var configured = new ConfiguredCollectionSource(configuration, source.Id, definition.CoverageAsOf);
-        var admitted = 0;
-        var deferred = 0;
-        var duplicates = 0;
-        string? preparationError = null;
-        foreach (var jobAttempt in job.Attempts.Where(item => item.Resolution?.Outcome == CollectionJobAttemptOutcome.Succeeded))
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var stored = await attempts.GetAsync(jobAttempt.AttemptId, cancellationToken);
-            if (stored?.AttemptResult is not CapturedAttemptResult captured)
-            {
-                if (stored?.AttemptResult is NotModifiedAttemptResult)
-                    preparationError = "notModified";
-                continue;
-            }
-            if (definition.Mode is CollectionMode.Feed or CollectionMode.Html)
-            {
-                if (stored.Discovery?.Status == DiscoveryStatus.Parsed)
-                {
-                    var key = $"automatic-check/{jobId}/{jobAttempt.AttemptId}";
-                    var result = await admissions.AdmitAutomaticCheckAsync(configured, jobAttempt.AttemptId, key, cancellationToken);
-                    admitted += result.AdmittedCount;
-                    deferred += result.DeferredCount;
-                    duplicates += result.DuplicateCount;
-                }
-                else preparationError = stored.Discovery is null ? "notModified" : "discoveryUnavailable";
-            }
-            if (definition.Mode == CollectionMode.Page)
-                _ = await processing.EnsureAsync(jobId, captured.AttemptId, captured.SourceId,
-                    captured.RequestedUrl, cancellationToken);
-        }
-        var isNotModified = preparationError == "notModified";
-        await CompleteAsync(claim, EvidenceProcessingStage.Complete,
-            preparationError is null || isNotModified ? EvidenceProcessingStatus.Succeeded : EvidenceProcessingStatus.Blocked,
-            preparationError is null || isNotModified ? EvidenceProcessingOutcome.Prepared : EvidenceProcessingOutcome.Blocked,
-            preparationError, cancellationToken, admittedCount: admitted, deferredCount: deferred,
-            duplicateCount: duplicates);
+        var result = await preparation.PrepareAsync(claim.Record.JobId, artifactRoot, cancellationToken);
+        if (result is null) return;
+        await CompleteAsync(claim, EvidenceProcessingStage.Complete, result.Status, result.Outcome, result.ErrorCode,
+            cancellationToken, admittedCount: result.AdmittedCount, deferredCount: result.DeferredCount,
+            duplicateCount: result.DuplicateCount);
     }
 
     private async Task<bool> ProcessAsync(EvidenceProcessingRecord record, string artifactRoot,
@@ -161,7 +107,7 @@ public sealed class EvidenceProcessingWorker(
         var record = claim.Record;
         if (record.Stage == EvidenceProcessingStage.Preparation)
         {
-            await PrepareAsync(claim, cancellationToken);
+            await PrepareAsync(claim, artifactRoot, cancellationToken);
             return;
         }
         var job = await jobs.GetAsync(record.JobId, cancellationToken)
@@ -172,7 +118,7 @@ public sealed class EvidenceProcessingWorker(
                 EvidenceProcessingOutcome.Blocked, "configurationUnavailable", cancellationToken);
             return;
         }
-        var configuration = job.Definition.ConfigurationRevision.ReadConfiguration();
+        var configuration = job.Definition.ConfigurationRevision.Configuration;
         var source = configuration.Sources.SingleOrDefault(candidate => candidate.Id == record.SourceId);
         if (source?.DocumentProfileId is null || configuration.DocumentProfiles is null)
         {

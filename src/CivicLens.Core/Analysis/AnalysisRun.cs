@@ -13,8 +13,8 @@ public sealed record AnalysisRun(string RunId, string ComparisonId, string Task,
 
     public void Validate()
     {
-        if (!IsId(RunId, 32) || !IsId(ComparisonId, 64) || !IsId(InputHash, 64) ||
-            PreviousRunId is not null && !IsId(PreviousRunId, 32))
+        if (!LowercaseHex.Is(RunId, 32) || !LowercaseHex.Is(ComparisonId, 64) || !LowercaseHex.Is(InputHash, 64) ||
+            PreviousRunId is not null && !LowercaseHex.Is(PreviousRunId, 32))
             throw new ArgumentException("Analysis run identity is invalid.");
         if (!IsLabel(Task) || !IsLabel(TaskVersion) || !IsLabel(Model) || !IsLabel(PromptVersion) || !IsLabel(SchemaVersion) ||
             StopReason is not null && !IsLabel(StopReason) || ProviderRequestId is not null && !IsLabel(ProviderRequestId))
@@ -37,8 +37,6 @@ public sealed record AnalysisRun(string RunId, string ComparisonId, string Task,
             throw new ArgumentException("Analysis run times are invalid.");
     }
 
-    private static bool IsId(string? value, int length) => value is not null && value.Length == length &&
-        value.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f');
 
     private static bool IsLabel(string? value) => !string.IsNullOrWhiteSpace(value) && value.Length <= 128 && !value.Contains('\0');
 }

@@ -129,7 +129,7 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
 
     public async Task<DocumentChangeReview?> GetAsync(string draftId, CancellationToken cancellationToken)
     {
-        ValidateDraftId(draftId);
+        DocumentChangeDraftRevision.ValidateDraftId(draftId);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
         var draft = await db.Set<DocumentChangeDraftRow>().AsNoTracking()
@@ -170,23 +170,37 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
         return new(items, slice.NewerCursor, slice.OlderCursor);
     }
 
-    public async Task<EligibleDocumentComparisonPage> ListEligibleComparisonsAsync(PageCursor? cursor, int limit,
+    public async Task<NewDocumentChangePage> ListEligibleComparisonsAsync(PageCursor? cursor, int limit,
         CancellationToken cancellationToken)
     {
         ValidatePage(limit);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
-        var keys = from comparison in ReviewQueries.EligibleComparisons(db)
+        var rows = from comparison in ReviewQueries.EligibleComparisons(db)
                    join extraction in db.Set<DocumentExtractionRow>() on comparison.AfterExtractionId equals extraction.ExtractionId
                    join attempt in db.Attempts on extraction.AttemptId equals attempt.AttemptId
-                   select new EligibleKey { ComparisonId = comparison.ComparisonId, ObservedTicks = attempt.ObservedAtUtcTicks };
-        var fetched = await ReviewKeyset.Page(keys.AsNoTracking(), cursor, key => key.ObservedTicks, key => key.ComparisonId).Take(limit + 1).ToArrayAsync(cancellationToken);
-        var slice = KeysetSlice<EligibleKey>.Create(fetched, limit, cursor, key => (key.ObservedTicks, key.ComparisonId));
-        var verified = await ReadVerifiedComparisonsAsync(db, slice.Items.Select(key => key.ComparisonId).ToArray(), cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-        var items = slice.Items.Select(key => verified.GetValueOrDefault(key.ComparisonId)?.Summary)
-            .OfType<EligibleDocumentComparison>().ToImmutableArray();
-        return new(items, slice.NewerCursor, slice.OlderCursor);
+                   select new EligibleRow
+                   {
+                       ComparisonId = comparison.ComparisonId,
+                       ObservedTicks = attempt.ObservedAtUtcTicks,
+                       SourceId = attempt.SourceId,
+                       RequestedUrl = attempt.RequestedUrl,
+                       ResultJson = comparison.ResultJson
+                   };
+        var fetched = await ReviewKeyset.Page(rows.AsNoTracking(), cursor, row => row.ObservedTicks, row => row.ComparisonId).Take(limit + 1).ToArrayAsync(cancellationToken);
+        var slice = KeysetSlice<EligibleRow>.Create(fetched, limit, cursor, row => (row.ObservedTicks, row.ComparisonId));
+        return new([.. slice.Items.Select(ToNewChange)], slice.NewerCursor, slice.OlderCursor);
+    }
+
+    private static NewDocumentChange ToNewChange(EligibleRow row)
+    {
+        using var result = JsonDocument.Parse(row.ResultJson);
+        var hunks = result.RootElement.GetProperty("hunks");
+        if (hunks.GetArrayLength() == 0)
+            throw new InvalidOperationException("A stored comparison marked as changed has no passages.");
+        var firstPassage = hunks[0].Deserialize<DocumentComparisonHunk>(CollectionProtocol.JsonOptions)
+            ?? throw new InvalidOperationException("Stored comparison passage is missing.");
+        return new(row.ComparisonId, row.SourceId, row.RequestedUrl, new DateTimeOffset(row.ObservedTicks, TimeSpan.Zero),
+            hunks.GetArrayLength(), firstPassage);
     }
 
     public async Task<IReadOnlyList<UnpublishedApprovedDraft>> ListUnpublishedApprovedDraftsAsync(int limit,
@@ -272,10 +286,13 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
             _ => throw new ArgumentOutOfRangeException(nameof(filter))
         }).AsNoTracking();
 
-    private sealed record EligibleKey
+    private sealed record EligibleRow
     {
         public string ComparisonId { get; init; } = "";
         public long ObservedTicks { get; init; }
+        public string SourceId { get; init; } = "";
+        public string RequestedUrl { get; init; } = "";
+        public string ResultJson { get; init; } = "";
     }
 
     private sealed class UnpublishedKey
@@ -401,7 +418,7 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
 
     private static void ValidateRevisionAgainstEvidence(DocumentChangeDraftRevision revision, VerifiedComparison verified)
     {
-        ValidateRevisionShape(revision);
+        revision.ValidateShape();
         if (revision.ComparisonId != verified.Summary.Comparison.ComparisonId)
             throw new InvalidOperationException("Revision comparison binding is inconsistent.");
         foreach (var citation in revision.Citations)
@@ -418,30 +435,6 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
     {
         revision.ValidateForApproval();
         await ValidateRevisionAgainstEvidenceAsync(db, revision, cancellationToken);
-    }
-
-    private static void ValidateRevisionShape(DocumentChangeDraftRevision revision)
-    {
-        if (revision.DraftId is not { Length: 32 } || revision.DraftId.Any(c => c is not (>= '0' and <= '9') and not (>= 'a' and <= 'f')) ||
-            revision.RevisionNumber < 1 || string.IsNullOrWhiteSpace(revision.AuthorSubject) || revision.AuthorSubject.Length > 256 ||
-            revision.CreatedAtUtc.Offset != TimeSpan.Zero)
-            throw new ArgumentException("Draft revision identity is invalid.", nameof(revision));
-        ValidateHash(revision.ComparisonId, nameof(revision));
-        ValidateText(revision.Headline, DocumentChangeDraftRevision.MaximumHeadlineLength, nameof(revision.Headline));
-        ValidateText(revision.Summary, DocumentChangeDraftRevision.MaximumSummaryLength, nameof(revision.Summary));
-        ValidateText(revision.Significance, DocumentChangeDraftRevision.MaximumSignificanceLength, nameof(revision.Significance));
-        ValidateText(revision.Limits, DocumentChangeDraftRevision.MaximumLimitsLength, nameof(revision.Limits));
-        ValidateText(revision.Institution, DocumentChangeDraftRevision.MaximumInstitutionLength, nameof(revision.Institution));
-        if ((revision.ChangeDate is null) != (revision.ChangeDateEvidence is null) ||
-            revision.ChangeDateEvidence is not null && !revision.Citations.Contains(revision.ChangeDateEvidence))
-            throw new ArgumentException("Change date must be bound to a citation included in the public evidence bindings.", nameof(revision));
-        ValidateIds(revision.OfficialIds, nameof(revision.OfficialIds));
-        ValidateIds(revision.IssueIds, nameof(revision.IssueIds));
-        if (revision.Citations.IsDefault || revision.Citations.Length > DocumentChangeDraftRevision.MaximumCitations)
-            throw new ArgumentException($"Revision must contain at most {DocumentChangeDraftRevision.MaximumCitations} citations.", nameof(revision));
-        if (revision.Citations.Any(citation => citation is null || citation.Start < 0 || citation.Length <= 0 || citation.Length > DocumentChangeDraftRevision.MaximumCitationLength) ||
-            revision.Citations.Distinct().Count() != revision.Citations.Length)
-            throw new ArgumentException("Citations must be distinct valid bounded spans.", nameof(revision));
     }
 
     private static async Task<DocumentChangeReview> ReadAggregateAsync(CollectionAttemptDbContext db,
@@ -511,7 +504,7 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
             throw new InvalidOperationException("Stored draft revision history is inconsistent.");
         if (revisions.Any(revision => revision.ComparisonId != draft.ComparisonId))
             throw new InvalidOperationException("A saved revision changed its bound comparison.");
-        foreach (var revision in revisions) ValidateRevisionShape(revision);
+        foreach (var revision in revisions) revision.ValidateShape();
         return revisions;
     }
 
@@ -551,40 +544,15 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
         return revision;
     }
 
-    private static void ValidateDraftId(string value)
-    {
-        if (value is not { Length: 32 } || value.Any(c => c is not (>= '0' and <= '9') and not (>= 'a' and <= 'f')))
-            throw new ArgumentException("Draft ID is invalid.", nameof(value));
-    }
-
     private static void ValidateDraftIds(IReadOnlyCollection<string> values)
     {
         ArgumentNullException.ThrowIfNull(values);
         if (values.Count is < 1 or > PublishRelease.MaximumRecords) throw new ArgumentOutOfRangeException(nameof(values));
-        foreach (var value in values) ValidateDraftId(value);
-    }
-
-    private static void ValidateHash(string value, string parameterName)
-    {
-        if (value is not { Length: 64 } || value.Any(c => c is not (>= '0' and <= '9') and not (>= 'a' and <= 'f')))
-            throw new ArgumentException("Identifier must be a lowercase SHA-256 value.", parameterName);
+        foreach (var value in values) DocumentChangeDraftRevision.ValidateDraftId(value);
     }
 
     private static void ValidatePage(int limit)
     {
         if (limit is < 1 or > MaximumPageSize) throw new ArgumentOutOfRangeException(nameof(limit));
-    }
-
-    private static void ValidateText(string? value, int max, string name)
-    {
-        if (value is not null && (value.Length > max || value.Contains('\0')))
-            throw new ArgumentException("Stored editorial text exceeds its bounds or contains NUL.", name);
-    }
-
-    private static void ValidateIds(ImmutableArray<string> values, string name)
-    {
-        if (values.IsDefault || values.Length > DocumentChangeDraftRevision.MaximumSelections || values.Any(string.IsNullOrWhiteSpace) ||
-            values.Any(value => value.Length > 128) || values.Distinct(StringComparer.Ordinal).Count() != values.Length)
-            throw new ArgumentException("Stored editorial selections are invalid.", name);
     }
 }

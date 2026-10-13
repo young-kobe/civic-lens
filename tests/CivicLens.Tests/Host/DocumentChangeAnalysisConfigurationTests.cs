@@ -18,8 +18,8 @@ public sealed class DocumentChangeAnalysisConfigurationTests
         {
             var config = Path.Combine(directory, "config.json");
             await File.WriteAllTextAsync(config, """
-                {"version":1,"people":[{"id":"person","name":"Fixture"}],"sources":[
-                  {"id":"source","personIds":["person"],"url":"https://example.test/page",
+                {"version":2,"people":[{"id":"person","name":"Fixture"}],"sources":[
+                  {"id":"source","coverage":[{"personId":"person"}],"url":"https://example.test/page",
                    "allowedOrigin":"https://example.test","allowedPathPrefix":"/page"}]}
                 """);
             var environment = new Dictionary<string, string> { ["CIVIC_LENS_COLLECTION_CONFIG"] = config, [name] = value };
@@ -49,8 +49,8 @@ public sealed class DocumentChangeAnalysisConfigurationTests
         {
             var config = Path.Combine(directory, "config.json");
             await File.WriteAllTextAsync(config, """
-                {"version":1,"people":[{"id":"person","name":"Fixture"}],"sources":[
-                  {"id":"source","personIds":["person"],"url":"https://example.test/page",
+                {"version":2,"people":[{"id":"person","name":"Fixture"}],"sources":[
+                  {"id":"source","coverage":[{"personId":"person"}],"url":"https://example.test/page",
                    "allowedOrigin":"https://example.test","allowedPathPrefix":"/page"}]}
                 """);
             var environment = new Dictionary<string, string> { ["CIVIC_LENS_COLLECTION_CONFIG"] = config, [name] = value };
@@ -80,8 +80,8 @@ public sealed class DocumentChangeAnalysisConfigurationTests
         {
             var config = Path.Combine(directory, "config.json");
             await File.WriteAllTextAsync(config, """
-                {"version":1,"people":[{"id":"person","name":"Fixture"}],"sources":[
-                  {"id":"source","personIds":["person"],"url":"https://example.test/page",
+                {"version":2,"people":[{"id":"person","name":"Fixture"}],"sources":[
+                  {"id":"source","coverage":[{"personId":"person"}],"url":"https://example.test/page",
                    "allowedOrigin":"https://example.test","allowedPathPrefix":"/page"}]}
                 """);
             var environment = new Dictionary<string, string> { ["CIVIC_LENS_COLLECTION_CONFIG"] = config, [name] = value };

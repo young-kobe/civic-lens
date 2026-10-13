@@ -355,6 +355,54 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                 });
             });
 
+            modelBuilder.Entity("CivicLens.Infrastructure.Collection.BillStream.BillStreamCursorRow", b =>
+                {
+                    b.Property<string>("SourceId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("source_id");
+
+                    b.Property<DateOnly?>("LastProcessedDay")
+                        .HasColumnType("date")
+                        .HasColumnName("last_processed_day");
+
+                    b.Property<int>("PassAdmittedBills")
+                        .HasColumnType("integer")
+                        .HasColumnName("pass_admitted_bills");
+
+                    b.Property<long>("UpdatedAtUtcTicks")
+                        .HasColumnType("bigint")
+                        .HasColumnName("updated_at_utc_ticks");
+
+                    b.HasKey("SourceId");
+
+                    b.ToTable("bill_stream_cursors", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_bill_stream_cursors_pass_admitted_bills", "pass_admitted_bills >= 0");
+
+                            t.HasCheckConstraint("ck_bill_stream_cursors_updated", "updated_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
+                        });
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Collection.BillStream.BillStreamPageRow", b =>
+                {
+                    b.Property<string>("ListJobId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("list_job_id");
+
+                    b.Property<long>("RecordedAtUtcTicks")
+                        .HasColumnType("bigint")
+                        .HasColumnName("recorded_at_utc_ticks");
+
+                    b.HasKey("ListJobId");
+
+                    b.ToTable("bill_stream_pages", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_bill_stream_pages_recorded", "recorded_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
+                        });
+                });
+
             modelBuilder.Entity("CivicLens.Infrastructure.Collection.Discovery.DiscoveryAdmissionBatchRow", b =>
                 {
                     b.Property<string>("IdempotencyKey")
@@ -367,6 +415,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)")
                         .HasColumnName("attempt_id");
+
+                    b.Property<string>("ConfigurationRevisionId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("configuration_revision_id");
 
                     b.Property<long>("CreatedAt")
                         .HasColumnType("bigint")
@@ -385,6 +438,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.HasKey("IdempotencyKey");
 
                     b.HasIndex("AttemptId");
+
+                    b.HasIndex("ConfigurationRevisionId");
 
                     b.ToTable("collection_admission_batches", (string)null);
                 });
@@ -570,11 +625,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("character varying(64)")
                         .HasColumnName("configuration_revision_id");
 
-                    b.Property<string>("ConfigurationJson")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("configuration_json");
-
                     b.Property<int>("IntervalSeconds")
                         .HasColumnType("integer")
                         .HasColumnName("interval_seconds");
@@ -589,6 +639,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.HasKey("SourceId");
 
+                    b.HasIndex("ConfigurationRevisionId");
+
                     b.HasIndex("Enabled", "NextDueUtcTicks", "SourceId");
 
                     b.ToTable("collection_source_schedules", null, t =>
@@ -596,6 +648,30 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                             t.HasCheckConstraint("ck_collection_source_schedules_revision", "configuration_revision_id ~ '^[0-9a-f]{64}$'");
                             t.HasCheckConstraint("ck_collection_source_schedules_interval", "interval_seconds BETWEEN 60 AND 604800");
                             t.HasCheckConstraint("ck_collection_source_schedules_due", "next_due_utc_ticks BETWEEN 0 AND 3155378975999999999");
+                        });
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Collection.Jobs.Persistence.ConfigurationRevisionRow", b =>
+                {
+                    b.Property<string>("RevisionId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("revision_id");
+
+                    b.Property<long>("CreatedAt")
+                        .HasColumnType("bigint")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Json")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("json");
+
+                    b.HasKey("RevisionId");
+
+                    b.ToTable("collection_configuration_revisions", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_collection_configuration_revisions_id", "revision_id ~ '^[0-9a-f]{64}$'");
                         });
                 });
 
@@ -621,6 +697,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.Property<int>("ChargedSeconds")
                         .HasColumnType("integer")
                         .HasColumnName("charged_seconds");
+
+                    b.Property<string>("ConfigurationRevisionId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("configuration_revision_id");
 
                     b.Property<long>("CreatedAt")
                         .HasColumnType("bigint")
@@ -662,6 +743,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.HasIndex("IdempotencyKey")
                         .IsUnique();
+
+                    b.HasIndex("ConfigurationRevisionId");
 
                     b.HasIndex("CreatedAt", "JobId");
 
@@ -1638,6 +1721,15 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .OnDelete(DeleteBehavior.Restrict);
                 });
 
+            modelBuilder.Entity("CivicLens.Infrastructure.Collection.BillStream.BillStreamPageRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.Collection.Jobs.Persistence.JobRow", null)
+                        .WithMany()
+                        .HasForeignKey("ListJobId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("CivicLens.Infrastructure.Collection.Discovery.DiscoveryAdmissionBatchRow", b =>
                 {
                     b.HasOne("CivicLens.Infrastructure.Collection.Discovery.DiscoveryRow", null)
@@ -1645,6 +1737,12 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasForeignKey("AttemptId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("CivicLens.Infrastructure.Collection.Jobs.Persistence.ConfigurationRevisionRow", null)
+                        .WithMany()
+                        .HasForeignKey("ConfigurationRevisionId")
+                        .HasConstraintName("fk_collection_admission_batches_configuration_revision")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("CivicLens.Infrastructure.Collection.Discovery.DiscoveryCandidateJobRow", b =>
@@ -1692,6 +1790,25 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.HasOne("CivicLens.Infrastructure.Collection.Jobs.Persistence.JobAttemptRow", null)
                         .WithMany()
                         .HasForeignKey("UnresolvedAttemptId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Collection.Jobs.Persistence.CollectionScheduleRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.Collection.Jobs.Persistence.ConfigurationRevisionRow", null)
+                        .WithMany()
+                        .HasForeignKey("ConfigurationRevisionId")
+                        .HasConstraintName("fk_collection_source_schedules_configuration_revision")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Collection.Jobs.Persistence.JobRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.Collection.Jobs.Persistence.ConfigurationRevisionRow", null)
+                        .WithMany()
+                        .HasForeignKey("ConfigurationRevisionId")
+                        .HasConstraintName("fk_collection_jobs_configuration_revision")
                         .OnDelete(DeleteBehavior.Restrict);
                 });
 

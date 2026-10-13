@@ -13,9 +13,11 @@ public sealed class HttpCollector : IDisposable
     private const int MaximumRobotsDecodedStageBytes = 10_000_000;
     private const int MaximumRobotsContentEncodings = 16;
     private readonly HttpClient client;
+    private readonly Func<string, string?> readVariable;
 
-    public HttpCollector(HttpMessageHandler? handler = null)
+    public HttpCollector(HttpMessageHandler? handler = null, Func<string, string?>? readVariable = null)
     {
+        this.readVariable = readVariable ?? Environment.GetEnvironmentVariable;
         var actual = handler ?? new SocketsHttpHandler
         {
             AllowAutoRedirect = false,
@@ -42,43 +44,17 @@ public sealed class HttpCollector : IDisposable
         var effectiveDelayMilliseconds = (long)request.MinDelayMilliseconds;
         var token = cancellationToken;
         var rules = RobotsRules.Empty;
-        var robotsPhase = true;
+        var robotsPhase = request.Mode != CollectionMode.Api;
         try
         {
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeout.CancelAfter(TimeSpan.FromSeconds(request.TimeoutSeconds));
             token = timeout.Token;
-            try
-            {
-                rules = await GetRobotsAsync(request, () =>
-                {
-                    EnsureBudget(request, requests);
-                    requests++;
-                    robotsRequests++;
-                    lastRequestAt = elapsed.Elapsed;
-                }, n => bytes += n, () => bytes, token, DelayBeforeRobotsRedirectAsync);
-                robotsCrawlDelayMilliseconds = request.Version >= CollectionProtocol.RobotsVersion
-                    ? rules.CrawlDelayMilliseconds
-                    : null;
-                robotsPhase = false;
-            }
-            catch (RobotsException exception)
-            {
-                if (request.Version < CollectionProtocol.RobotsVersion)
-                    return Result(CollectionOutcome.Failed, CollectionFailureCode.RobotsUnavailable);
-                return Result(exception.Deferred ? CollectionOutcome.Deferred : CollectionOutcome.Failed,
-                    exception.FailureCode, retry: exception.RetryAfterSeconds);
-            }
-            catch (HttpRequestException)
-            {
-                return request.Version >= CollectionProtocol.RobotsVersion
-                    ? Result(CollectionOutcome.Deferred, CollectionFailureCode.RobotsUnavailable)
-                    : Result(CollectionOutcome.Failed, CollectionFailureCode.RobotsUnavailable);
-            }
-            if (!RobotsAllows(current.PathAndQuery)) return Result(CollectionOutcome.Failed, CollectionFailureCode.RobotsDenied);
-            effectiveDelayMilliseconds = Math.Max((long)request.MinDelayMilliseconds, robotsCrawlDelayMilliseconds ?? 0);
-            if (await DeferForDelayIfNeededAsync())
-                return Result(CollectionOutcome.Deferred, CollectionFailureCode.CrawlDelay, retry: RetryDelaySeconds(effectiveDelayMilliseconds));
+            var apiKey = request.Credential is null ? null : readVariable(CollectionCredentials.VariableOf(request.Credential));
+            if (request.Credential is not null && string.IsNullOrWhiteSpace(apiKey))
+                return Result(CollectionOutcome.Failed, CollectionFailureCode.CredentialUnavailable);
+            if (request.Mode != CollectionMode.Api && await ReadRobotsAsync() is { } robotsResult)
+                return robotsResult;
             var target = current;
             while (true)
             {
@@ -86,6 +62,8 @@ public sealed class HttpCollector : IDisposable
                 if (!request.Allows(target)) return Result(CollectionOutcome.Failed, CollectionFailureCode.OutOfScope);
                 using var message = new HttpRequestMessage(HttpMethod.Get, target);
                 message.Headers.UserAgent.ParseAdd("CivicLens/0.1");
+                if (request.Mode == CollectionMode.Api) message.Headers.Accept.ParseAdd("application/json");
+                if (apiKey is not null && SameOrigin(new Uri(request.AllowedOrigin), target)) message.Headers.Add("X-Api-Key", apiKey);
                 if (target == requestedUri)
                 {
                     if (request.ETag is not null) message.Headers.IfNoneMatch.Add(EntityTagHeaderValue.Parse(request.ETag));
@@ -126,7 +104,8 @@ public sealed class HttpCollector : IDisposable
                         current.AbsoluteUri, responseMetadata!.ContentEncodings, responseMetadata.ContentType, token),
                     CollectionMode.Html => await HtmlParser.ParseCaptureAsync(Path.Combine(request.ArtifactDirectory, artifact.RelativePath), request,
                         current.AbsoluteUri, responseMetadata!.ContentEncodings, responseMetadata.ContentType, token),
-                    _ => null
+                    CollectionMode.Page or CollectionMode.Api => null,
+                    _ => throw new InvalidOperationException("Collection mode is not supported.")
                 };
                 return Result(CollectionOutcome.Captured, capture: artifact, discovery: discovery);
             }
@@ -134,7 +113,7 @@ public sealed class HttpCollector : IDisposable
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { return Result(CollectionOutcome.Failed, CollectionFailureCode.Cancelled); }
         catch (OperationCanceledException)
         {
-            return robotsPhase && request.Version >= CollectionProtocol.RobotsVersion
+            return robotsPhase
                 ? Result(CollectionOutcome.Deferred, CollectionFailureCode.RobotsUnavailable)
                 : Result(CollectionOutcome.Failed, CollectionFailureCode.Timeout);
         }
@@ -166,8 +145,8 @@ public sealed class HttpCollector : IDisposable
                 Discovery = discovery,
                 BytesReceived = bytes,
                 RequestCount = requests,
-                RobotsRequestCount = request.Version >= CollectionProtocol.RobotsVersion ? robotsRequests : null,
-                RobotsCrawlDelayMilliseconds = request.Version >= CollectionProtocol.RobotsVersion ? robotsCrawlDelayMilliseconds : null,
+                RobotsRequestCount = robotsRequests,
+                RobotsCrawlDelayMilliseconds = robotsCrawlDelayMilliseconds,
                 FailureCode = failure,
                 RetryAfterSeconds = retry
             };
@@ -175,15 +154,40 @@ public sealed class HttpCollector : IDisposable
             return result;
         }
 
+        async Task<CollectionResult?> ReadRobotsAsync()
+        {
+            try
+            {
+                rules = await GetRobotsAsync(request, () =>
+                {
+                    EnsureBudget(request, requests);
+                    requests++;
+                    robotsRequests++;
+                    lastRequestAt = elapsed.Elapsed;
+                }, n => bytes += n, () => bytes, token, DelayBeforeRobotsRedirectAsync);
+                robotsCrawlDelayMilliseconds = rules.CrawlDelayMilliseconds;
+                robotsPhase = false;
+            }
+            catch (RobotsException exception)
+            {
+                return Result(exception.Deferred ? CollectionOutcome.Deferred : CollectionOutcome.Failed,
+                    exception.FailureCode, retry: exception.RetryAfterSeconds);
+            }
+            catch (HttpRequestException)
+            {
+                return Result(CollectionOutcome.Deferred, CollectionFailureCode.RobotsUnavailable);
+            }
+            if (!RobotsAllows(current.PathAndQuery)) return Result(CollectionOutcome.Failed, CollectionFailureCode.RobotsDenied);
+            effectiveDelayMilliseconds = Math.Max((long)request.MinDelayMilliseconds, robotsCrawlDelayMilliseconds ?? 0);
+            if (await DeferForDelayIfNeededAsync())
+                return Result(CollectionOutcome.Deferred, CollectionFailureCode.CrawlDelay, retry: RetryDelaySeconds(effectiveDelayMilliseconds));
+            return null;
+        }
+
         async Task<bool> DeferForDelayIfNeededAsync()
         {
             var waitMilliseconds = effectiveDelayMilliseconds - (long)(elapsed.Elapsed - lastRequestAt).TotalMilliseconds;
             if (waitMilliseconds <= 0) return false;
-            if (request.Version < CollectionProtocol.RobotsVersion)
-            {
-                await Task.Delay(TimeSpan.FromMilliseconds(waitMilliseconds), token);
-                return false;
-            }
             var remainingMilliseconds = request.TimeoutSeconds * 1000L - (long)elapsed.Elapsed.TotalMilliseconds;
             if (waitMilliseconds >= remainingMilliseconds) return true;
             await Task.Delay(TimeSpan.FromMilliseconds(waitMilliseconds), token);
@@ -263,8 +267,6 @@ public sealed class HttpCollector : IDisposable
                     retryAfterSeconds: RetrySeconds(response.Headers.RetryAfter));
             if ((int)response.StatusCode is >= 300 and < 400)
             {
-                if (request.Version < CollectionProtocol.RobotsVersion)
-                    throw new RobotsException(CollectionFailureCode.RobotsUnavailable);
                 if (response.Headers.Location is null) throw new RobotsException(CollectionFailureCode.RobotsUnavailable);
                 Uri next;
                 try { next = response.Headers.Location.IsAbsoluteUri ? response.Headers.Location : new Uri(target, response.Headers.Location); }

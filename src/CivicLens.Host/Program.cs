@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Globalization;
 using System.Runtime.InteropServices;
 using CivicLens.Application;
+using CivicLens.Application.Configuration;
 using CivicLens.Application.Analysis;
 using CivicLens.Core.Analysis;
 using CivicLens.Infrastructure.Analysis;
@@ -167,8 +168,10 @@ try
         await statementDrafting.RecordStartAsync(cancellation.Token);
         var extractions = PostgresDocumentExtractionStore.FromConnectionString(connectionString);
         var comparisons = PostgresDocumentComparisonStore.FromConnectionString(connectionString);
-        var processing = new EvidenceProcessingWorker(jobs, attempts, jobs,
-            PostgresEvidenceProcessingStore.FromConnectionString(connectionString),
+        var processingStore = PostgresEvidenceProcessingStore.FromConnectionString(connectionString);
+        var processing = new EvidenceProcessingWorker(jobs,
+            new JobPreparation(jobs, attempts, jobs, jobs, new CaptureBodyReader(), processingStore),
+            processingStore,
             new ExtractDocument(attempts, new CaptureDocumentTextExtractor(), extractions),
             new GetDocumentHistory(PostgresDocumentHistoryStore.FromConnectionString(connectionString)),
             new CompareDocuments(extractions, comparisons));
@@ -328,10 +331,10 @@ try
     }
 
     var runner = new CollectorProcess(args[3], Environment.GetEnvironmentVariable("DOTNET_HOST_PATH") ?? "dotnet");
+    var attempt = new PreparedCollectionAttempt(new ConfiguredCollectionSource(configuration, args[2], coverageAsOf), args[4]);
     if (importing)
     {
         var database = CreateDatabase();
-        var attempt = new PreparedCollectionAttempt(configuration, args[2], args[4], coverageAsOf);
         Console.Error.WriteLine($"Attempt ID: {attempt.AttemptId}");
         executing = true;
         var completion = await new CollectAndImportCollectionAttempt(runner, database,
@@ -340,10 +343,8 @@ try
         return CollectionCommandOutput.WriteCompletion(completion);
     }
 
-    // Validate the selected source before entering operational execution.
-    configuration.CreateRequest(args[2], "validation-job", Path.GetFullPath(args[4]), coverageAsOf);
     executing = true;
-    var result = await new CollectWatchedPage(runner).ExecuteAsync(configuration, args[2], args[4], cancellation.Token, coverageAsOf);
+    var result = await new CollectWatchedPage(runner).ExecuteAsync(attempt, cancellation.Token);
     Console.WriteLine(JsonSerializer.Serialize(result, CollectionProtocol.JsonOptions));
     return result.Outcome is CollectionOutcome.Captured or CollectionOutcome.NotModified ? 0 : 1;
 }
@@ -401,7 +402,7 @@ static async Task<CollectionConfiguration> ReadConfigurationAsync(string path, C
     if (count > 1_000_000)
         throw new ArgumentException("Configuration exceeds 1 MB.");
     var configuration = JsonSerializer.Deserialize<CollectionConfiguration>(
-        buffer.AsSpan(0, count), CollectionProtocol.JsonOptions)
+        buffer.AsSpan(0, count), ConfigurationJson.Options)
         ?? throw new ArgumentException("Configuration must not be null.");
     configuration.Validate();
     return configuration;

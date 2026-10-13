@@ -1,35 +1,37 @@
+using CivicLens.Application.Collection.Bills;
+using CivicLens.Application.Collection.Discovery;
+using CivicLens.Application.Collection.Jobs;
 using CivicLens.Application.Documents;
 using CivicLens.Collection.Contracts;
 using CivicLens.Core.Registry;
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 
 namespace CivicLens.Application.Collection;
 
-public sealed record CollectionConfiguration
+public sealed partial record CollectionConfiguration
 {
     [JsonRequired]
-    public int Version { get; init; } = 1;
+    public int Version { get; init; } = 2;
     public required PersonConfiguration[] People { get; init; }
     public required WatchedSourceConfiguration[] Sources { get; init; }
     public DocumentProfileConfiguration[]? DocumentProfiles { get; init; }
 
     public void Validate()
     {
-        if (Version is not (1 or 2))
+        if (Version != 2)
             throw new ArgumentException("Unsupported collection configuration version.");
         if (People is null || Sources is null)
             throw new ArgumentException("People and sources are required.");
-        if (Version == 1 && (DocumentProfiles is not null || Sources.Any(source => source?.DocumentProfileId is not null)))
-            throw new ArgumentException("Document profiles require collection configuration version 2.");
 
         var peopleById = new Dictionary<string, PersonConfiguration>(StringComparer.Ordinal);
+        var bioguideIds = new HashSet<string>(StringComparer.Ordinal);
         foreach (var person in People)
         {
             if (person is null || string.IsNullOrWhiteSpace(person.Id) || string.IsNullOrWhiteSpace(person.Name))
                 throw new ArgumentException("Every person must have a nonblank ID and name.");
-            if (Version == 1 && person.Names is not null)
-                throw new ArgumentException("Dated names require collection configuration version 2.");
             ValidateNames(person);
+            ValidateBioguideId(person, bioguideIds);
             if (!peopleById.TryAdd(person.Id, person))
                 throw new ArgumentException($"Duplicate person ID '{person.Id}'.");
         }
@@ -53,6 +55,7 @@ public sealed record CollectionConfiguration
         {
             if (source is null || string.IsNullOrWhiteSpace(source.Id))
                 throw new ArgumentException("Every source must have an ID.");
+            ValidateApiParser(source);
             ValidateCoverageShape(source);
             if (!sourceIds.Add(source.Id))
                 throw new ArgumentException($"Duplicate source ID '{source.Id}'.");
@@ -64,15 +67,15 @@ public sealed record CollectionConfiguration
             if (!sourceUrls.Add(url))
                 throw new ArgumentException("A source URL may be configured only once; add people to its membership list.");
 
-            if (Version == 1)
-                ValidateLegacyMembership(source, peopleById);
-            else
+            if (source.ApiParser != ApiParser.CongressBillList)
                 ValidateDatedCoverage(source, peopleById);
 
-            var request = BuildRequest(source, "validation-job", Path.GetFullPath("collection-artifacts"));
+            var request = CollectionJobDefinition.FromSource(source).CreateRequest("validation-job", "collection-artifacts");
             request.Validate();
             source.JobPolicy?.Validate(request);
             source.AdmissionPolicy?.Validate();
+            if (source.ApiParser == ApiParser.CongressBillList)
+                ValidateBillListAdmissionCapacity(source);
             if (source.CheckIntervalSeconds is { } interval && interval is
                 < WatchedSourceConfiguration.MinimumCheckIntervalSeconds or
                 > WatchedSourceConfiguration.MaximumCheckIntervalSeconds)
@@ -82,27 +85,19 @@ public sealed record CollectionConfiguration
         }
     }
 
-    public CollectionRequest CreateRequest(string sourceId, string jobId, string artifactDirectory, DateOnly? asOf = null)
+    public WatchedSourceConfiguration EligibleSource(string sourceId, DateOnly asOf)
     {
-        Validate();
-        if (Sources is null)
-            throw new ArgumentException("Sources are required.");
         var source = Sources.FirstOrDefault(candidate => candidate is not null && candidate.Id == sourceId)
             ?? throw new ArgumentException($"Unknown source ID '{sourceId}'.", nameof(sourceId));
         if (!source.Enabled)
             throw new ArgumentException($"Source '{sourceId}' is disabled.", nameof(sourceId));
-        var effectiveDate = asOf ?? DateOnly.FromDateTime(DateTime.UtcNow);
-        if (Version == 2 && !source.Coverage!.Any(coverage => new DateRange(coverage.StartsOn, coverage.EndsBefore).Contains(effectiveDate)))
-            throw new ArgumentException($"Source '{sourceId}' has no active person coverage on {effectiveDate:yyyy-MM-dd}.", nameof(sourceId));
-
-        var request = BuildRequest(source, jobId, artifactDirectory);
-        request.Validate();
-        return request;
+        if (CoveredPersonIdsOf(source, asOf).Length == 0)
+            throw new ArgumentException($"Source '{sourceId}' has no active person coverage on {asOf:yyyy-MM-dd}.", nameof(sourceId));
+        return source;
     }
 
     public string[] GetCoveredPersonIds(string sourceId, DateOnly asOf)
     {
-        Validate();
         var source = Sources.FirstOrDefault(candidate => candidate is not null && candidate.Id == sourceId)
             ?? throw new ArgumentException($"Unknown source ID '{sourceId}'.", nameof(sourceId));
         return CoveredPersonIdsOf(source, asOf);
@@ -110,29 +105,65 @@ public sealed record CollectionConfiguration
 
     public string[] CoveredPersonIdsOf(WatchedSourceConfiguration source, DateOnly asOf)
     {
-        IEnumerable<string> ids = Version == 1
-            ? source.PersonIds!
-            : source.Coverage!.Where(coverage => new DateRange(coverage.StartsOn, coverage.EndsBefore).Contains(asOf))
-                .Select(coverage => coverage.PersonId);
+        IEnumerable<string> ids = source.ApiParser switch
+        {
+            ApiParser.CongressBillList => asOf < source.BackfillFrom ? [] : BioguidePersonIds(),
+            null => source.Coverage!.Where(coverage => new DateRange(coverage.StartsOn, coverage.EndsBefore).Contains(asOf))
+                .Select(coverage => coverage.PersonId),
+            _ => throw new ArgumentOutOfRangeException(nameof(source))
+        };
         return ids.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
     }
 
-    private void ValidateCoverageShape(WatchedSourceConfiguration source)
+    public string[] ListedPersonIdsOf(WatchedSourceConfiguration source) =>
+        source.ApiParser is null
+            ? [.. source.Coverage!.Select(coverage => coverage.PersonId).Distinct(StringComparer.Ordinal)]
+            : [];
+
+    private IEnumerable<string> BioguidePersonIds() =>
+        People.Where(person => person.BioguideId is not null).Select(person => person.Id);
+
+    private static void ValidateApiParser(WatchedSourceConfiguration source)
     {
-        if (Version == 1 && (source.PersonIds is null || source.Coverage is not null))
-            throw new ArgumentException("Version 1 sources require PersonIds and cannot define Coverage.");
-        if (Version == 2 && (source.PersonIds is not null || source.Coverage is null))
-            throw new ArgumentException("Version 2 sources require Coverage and cannot define PersonIds.");
+        if (source.ApiParser is null)
+        {
+            if (source.MinimumCongress is not null || source.BackfillFrom is not null)
+                throw new ArgumentException($"Source '{source.Id}' sets API parser options without an API parser.");
+            return;
+        }
+        if (source.Mode != CollectionMode.Api)
+            throw new ArgumentException($"Source '{source.Id}' can set an API parser only in API mode.");
+        if (source.Credential is null)
+            throw new ArgumentException($"Source '{source.Id}' needs a credential for its API parser.");
+        switch (source.ApiParser)
+        {
+            case ApiParser.CongressBillList:
+                ValidateCongressBillList(source);
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(source));
+        }
     }
 
-    private static void ValidateLegacyMembership(WatchedSourceConfiguration source,
-        IReadOnlyDictionary<string, PersonConfiguration> peopleById)
+    private static void ValidateCongressBillList(WatchedSourceConfiguration source)
     {
-        var ids = source.PersonIds!;
-        if (ids.Length == 0 || ids.Any(id => string.IsNullOrWhiteSpace(id) || !peopleById.ContainsKey(id)))
-            throw new ArgumentException($"Source '{source.Id}' references a missing person.");
-        if (ids.Distinct(StringComparer.Ordinal).Count() != ids.Length)
-            throw new ArgumentException($"Source '{source.Id}' has duplicate person memberships.");
+        if (source.MinimumCongress is not >= 1 || source.BackfillFrom is null)
+            throw new ArgumentException($"Source '{source.Id}' needs a minimum Congress of 1 or more and a backfill date.");
+        if (source.Coverage is not null)
+            throw new ArgumentException($"Source '{source.Id}' covers every person with a bioguide ID and cannot list people.");
+    }
+
+    private static void ValidateBillListAdmissionCapacity(WatchedSourceConfiguration source)
+    {
+        var policy = source.AdmissionPolicy ?? new DiscoveryAdmissionPolicy();
+        if (!policy.CanReserve(CollectionJobDefinition.FromSource(source), BillStreamWindow.PageLimit + 1))
+            throw new ArgumentException($"Source '{source.Id}' admission policy must hold a full bill list page and its next-page job.");
+    }
+
+    private static void ValidateCoverageShape(WatchedSourceConfiguration source)
+    {
+        if (source.ApiParser is null && source.Coverage is null)
+            throw new ArgumentException("Sources require Coverage.");
     }
 
     private static void ValidateDatedCoverage(WatchedSourceConfiguration source,
@@ -174,25 +205,16 @@ public sealed record CollectionConfiguration
         }
     }
 
-    private static CollectionRequest BuildRequest(WatchedSourceConfiguration source, string jobId, string artifactDirectory)
+    private static void ValidateBioguideId(PersonConfiguration person, HashSet<string> bioguideIds)
     {
-        var request = new CollectionRequest
-        {
-            JobId = jobId,
-            SourceId = source.Id,
-            Mode = source.Mode,
-            MaxCandidates = source.MaxCandidates,
-            Url = source.Url,
-            AllowedOrigin = source.AllowedOrigin,
-            AllowedPathPrefix = source.AllowedPathPrefix,
-            ArtifactDirectory = artifactDirectory,
-            MaxRequests = source.MaxRequests,
-            MaxBytes = source.MaxBytes,
-            TimeoutSeconds = source.TimeoutSeconds,
-            MinDelayMilliseconds = source.MinDelayMilliseconds,
-            ETag = source.ETag,
-            LastModified = source.LastModified
-        };
-        return request;
+        if (person.BioguideId is null)
+            return;
+        if (!BioguideIdPattern().IsMatch(person.BioguideId))
+            throw new ArgumentException($"Person '{person.Id}' has an invalid bioguide ID.");
+        if (!bioguideIds.Add(person.BioguideId))
+            throw new ArgumentException($"Duplicate bioguide ID '{person.BioguideId}'.");
     }
+
+    [GeneratedRegex(@"^[A-Z][0-9]{6}\z")]
+    private static partial Regex BioguideIdPattern();
 }

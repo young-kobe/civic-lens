@@ -1,3 +1,4 @@
+using CivicLens.Application.Configuration;
 using CivicLens.Application.Documents;
 using System.IO.Compression;
 using System.Security.Cryptography;
@@ -143,7 +144,7 @@ public sealed class PostgresDocumentExtractionStoreTests(PostgresCollection post
         var attempt = await ImportAsync("<nav>menu</nav><main>Policy <span class=aside>sidebar</span> text</main>", "text/html; charset=utf-8");
         var config = ProfileConfiguration();
         var configPath = Path.Combine(root, "config.json");
-        await File.WriteAllTextAsync(configPath, JsonSerializer.Serialize(config, CollectionProtocol.JsonOptions));
+        await File.WriteAllTextAsync(configPath, JsonSerializer.Serialize(config, ConfigurationJson.Options));
         var first = await HostProcess.RunAsync(connectionString, "documents", "extract", configPath, attempt.AttemptId, root);
         Assert.Equal(0, first.ExitCode);
         using var firstResult = JsonDocument.Parse(first.Output);
@@ -156,7 +157,7 @@ public sealed class PostgresDocumentExtractionStoreTests(PostgresCollection post
         Assert.Equal(0, (await HostProcess.RunAsync(connectionString, "documents", "extract", configPath, attempt.AttemptId, root)).ExitCode);
 
         config = config with { DocumentProfiles = [config.DocumentProfiles![0] with { ExcludedSelectors = [] }] };
-        await File.WriteAllTextAsync(configPath, JsonSerializer.Serialize(config, CollectionProtocol.JsonOptions));
+        await File.WriteAllTextAsync(configPath, JsonSerializer.Serialize(config, ConfigurationJson.Options));
         var changed = await HostProcess.RunAsync(connectionString, "documents", "extract", configPath, attempt.AttemptId, root);
         Assert.Equal(0, changed.ExitCode);
         using var changedResult = JsonDocument.Parse(changed.Output);
@@ -169,7 +170,7 @@ public sealed class PostgresDocumentExtractionStoreTests(PostgresCollection post
         Assert.Equal("Policy text", citation.RootElement.GetProperty("quote").GetString());
 
         config = config with { DocumentProfiles = [config.DocumentProfiles[0] with { Selector = "#missing" }] };
-        await File.WriteAllTextAsync(configPath, JsonSerializer.Serialize(config, CollectionProtocol.JsonOptions));
+        await File.WriteAllTextAsync(configPath, JsonSerializer.Serialize(config, ConfigurationJson.Options));
         Assert.Equal(1, (await HostProcess.RunAsync(connectionString, "documents", "extract", configPath, attempt.AttemptId, root)).ExitCode);
         await using var db = await factory.CreateDbContextAsync();
         Assert.Equal(2, await db.Database.SqlQuery<int>($"SELECT count(*)::integer AS \"Value\" FROM document_extractions").SingleAsync());

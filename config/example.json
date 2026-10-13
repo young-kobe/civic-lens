@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "people": [
     {
       "id": "example-official",
@@ -9,7 +9,7 @@
   "sources": [
     {
       "id": "example-local-source",
-      "personIds": ["example-official"],
+      "coverage": [{ "personId": "example-official" }],
       "url": "http://127.0.0.1:8765/page.html",
       "allowedOrigin": "http://127.0.0.1:8765",
       "allowedPathPrefix": "/",

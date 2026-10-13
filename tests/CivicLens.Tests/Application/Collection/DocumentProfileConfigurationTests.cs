@@ -48,25 +48,6 @@ public sealed class DocumentProfileConfigurationTests
         }).Validate());
     }
 
-    [Fact]
-    public void DocumentProfilesAndAssignmentsRequireConfigurationVersionTwo()
-    {
-        var v1WithProfiles = Configuration() with
-        {
-            Version = 1,
-            Sources = [Source("source", null) with { PersonIds = ["person"], Coverage = null }],
-            DocumentProfiles = [new() { Id = "profile", Selector = "main" }]
-        };
-        Assert.Throws<ArgumentException>(v1WithProfiles.Validate);
-
-        var v1WithAssignment = Configuration() with
-        {
-            Version = 1,
-            Sources = [Source("source", "profile") with { PersonIds = ["person"], Coverage = null }]
-        };
-        Assert.Throws<ArgumentException>(v1WithAssignment.Validate);
-    }
-
     private static CollectionConfiguration Configuration() => new()
     {
         Version = 2,

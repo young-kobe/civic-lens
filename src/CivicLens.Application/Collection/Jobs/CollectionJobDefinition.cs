@@ -1,3 +1,4 @@
+using CivicLens.Application.Collection.Bills;
 using CivicLens.Collection.Contracts;
 using System.Text.Json.Serialization;
 
@@ -6,6 +7,10 @@ namespace CivicLens.Application.Collection.Jobs;
 public sealed record CollectionJobDefinition
 {
     public CollectionMode Mode { get; init; } = CollectionMode.Page;
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Credential { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public ApiResource? ApiResource { get; init; }
     public int MaxCandidates { get; init; } = 100;
     public required string SourceId { get; init; }
     public required string Url { get; init; }
@@ -28,10 +33,8 @@ public sealed record CollectionJobDefinition
         DateOnly? asOf = null)
     {
         var revision = CollectionConfigurationRevision.Create(configuration);
-        var snapshot = revision.ReadConfiguration();
         var effectiveDate = asOf ?? DateOnly.FromDateTime(DateTime.UtcNow);
-        snapshot.CreateRequest(sourceId, "validation-job", Path.GetFullPath("collection-artifacts"), effectiveDate);
-        var definition = FromSource(snapshot.Sources.Single(source => source.Id == sourceId)) with
+        var definition = FromSource(revision.Configuration.EligibleSource(sourceId, effectiveDate)) with
         {
             ConfigurationRevision = revision,
             CoverageAsOf = effectiveDate
@@ -46,6 +49,7 @@ public sealed record CollectionJobDefinition
         {
             SourceId = source.Id,
             Mode = source.Mode,
+            Credential = source.Credential,
             MaxCandidates = source.MaxCandidates,
             Url = source.Url,
             AllowedOrigin = source.AllowedOrigin,
@@ -73,19 +77,32 @@ public sealed record CollectionJobDefinition
 
     private void ValidateConfigurationBinding()
     {
-        if (ConfigurationRevision is null && CoverageAsOf is null)
+        if (ConfigurationRevision is null && CoverageAsOf is null && ApiResource is null)
             return; // Legacy or explicitly supplied standalone definitions have no registry provenance.
         if (ConfigurationRevision is null || CoverageAsOf is null)
             throw new ArgumentException("A configuration revision and coverage date must be supplied together.");
 
-        var configuration = ConfigurationRevision.ReadConfiguration();
-        configuration.CreateRequest(SourceId, "validation-job", Path.GetFullPath("collection-artifacts"), CoverageAsOf);
-        var expected = FromSource(configuration.Sources.Single(source => source.Id == SourceId));
+        var source = ConfigurationRevision.Configuration.EligibleSource(SourceId, CoverageAsOf.Value);
+        var expected = FromSource(source);
+        if (ApiResource is { } resource)
+        {
+            if (!MatchesResource(resource, source, Url))
+                throw new ArgumentException("Job URL does not have the form of its API resource.");
+            expected = expected with { ApiResource = resource, Url = Url };
+        }
         if (expected.Mode is CollectionMode.Feed or CollectionMode.Html && Mode == CollectionMode.Page)
             expected = expected with { Mode = CollectionMode.Page, Url = Url, ETag = null, LastModified = null };
         if (expected != this with { ConfigurationRevision = null, CoverageAsOf = null })
             throw new ArgumentException("Job settings do not match the bound configuration revision.");
     }
+
+    private static bool MatchesResource(ApiResource resource, WatchedSourceConfiguration source, string url) =>
+        source.ApiParser == ApiParser.CongressBillList && resource switch
+        {
+            Collection.ApiResource.BillList => BillStreamWindow.IsRequestUrl(source.Url, url),
+            Collection.ApiResource.Bill => CongressBillListItem.IsDetailUrl(source.Url, url),
+            _ => false
+        };
 
     public bool MatchesReplayOf(CollectionJobDefinition existing)
     {
@@ -101,6 +118,7 @@ public sealed record CollectionJobDefinition
         JobId = jobId,
         SourceId = SourceId,
         Mode = Mode,
+        Credential = Credential,
         MaxCandidates = MaxCandidates,
         Url = Url,
         AllowedOrigin = AllowedOrigin,

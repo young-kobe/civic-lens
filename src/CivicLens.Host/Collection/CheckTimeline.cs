@@ -21,7 +21,8 @@ public static class CheckTimeline
         [CollectionFailureCode.RequestBudget] = "the request limit was reached",
         [CollectionFailureCode.Oversized] = "the page was larger than the size limit",
         [CollectionFailureCode.TransportError] = "the connection failed",
-        [CollectionFailureCode.CrawlDelay] = "the site asks for a longer wait between requests"
+        [CollectionFailureCode.CrawlDelay] = "the site asks for a longer wait between requests",
+        [CollectionFailureCode.CredentialUnavailable] = "the access key for this source is not set"
     };
 
     public static IReadOnlyList<FeedItem> Build(CollectionJobRecord job,

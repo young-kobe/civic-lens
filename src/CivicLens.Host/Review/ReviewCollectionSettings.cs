@@ -1,5 +1,6 @@
 using System.Text.Json;
 using CivicLens.Application.Collection;
+using CivicLens.Application.Configuration;
 using CivicLens.Collection.Contracts;
 
 namespace CivicLens.Host.Review;
@@ -14,7 +15,7 @@ internal sealed record ReviewCollectionSettings(CollectionConfiguration Configur
             throw new ArgumentException("Collection configuration must be an absolute path.");
         var file = new FileInfo(path);
         if (file.Length > 1_000_000) throw new ArgumentException("Collection configuration exceeds the workspace limit.");
-        var configuration = JsonSerializer.Deserialize<CollectionConfiguration>(File.ReadAllText(path), CollectionProtocol.JsonOptions)
+        var configuration = JsonSerializer.Deserialize<CollectionConfiguration>(File.ReadAllText(path), ConfigurationJson.Options)
             ?? throw new ArgumentException("Collection configuration is required.");
         configuration.Validate();
         return new(configuration);

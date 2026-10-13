@@ -192,7 +192,6 @@ public sealed class SourceHealthTests
 
     private static CollectionConfiguration Configuration => new()
     {
-        Version = 1,
         People = [new PersonConfiguration { Id = "person", Name = "Official" }],
         Sources = [.. SourceIds.Select(id => new WatchedSourceConfiguration
         {
@@ -200,7 +199,7 @@ public sealed class SourceHealthTests
             Url = Url(id),
             AllowedOrigin = "https://example.test",
             AllowedPathPrefix = "/news",
-            PersonIds = ["person"]
+            Coverage = [new SourceCoverageConfiguration { PersonId = "person" }]
         })]
     };
 }

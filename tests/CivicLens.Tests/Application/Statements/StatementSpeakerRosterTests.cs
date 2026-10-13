@@ -27,19 +27,6 @@ public sealed class StatementSpeakerRosterTests
     [Fact]
     public void NoRevisionCoversNobody() => Assert.Empty(OfficialIds(null, "source", "2026-09-01"));
 
-    [Fact]
-    public void ARevisionIsParsedOncePerIdSoLaterArticlesFromTheSameRevisionReuseTheConfiguration()
-    {
-        var roster = new StatementSpeakerRoster();
-        var revision = SpeakerRevision();
-        var configuration = roster.ConfigurationOf(revision);
-
-        roster.OfficialsOn(revision, "source", new DateOnly(2026, 9, 1));
-
-        Assert.Same(configuration, roster.ConfigurationOf(SpeakerRevision()));
-        Assert.NotSame(configuration, roster.ConfigurationOf(SpeakerRevision(warrenEndsBefore: new DateOnly(2026, 1, 1))));
-    }
-
     private static string[] OfficialIds(CollectionConfigurationRevision? revision, string sourceId, string date) =>
         [.. new StatementSpeakerRoster().OfficialsOn(revision, sourceId, DateOnly.Parse(date)).Select(official => official.Id)];
 }

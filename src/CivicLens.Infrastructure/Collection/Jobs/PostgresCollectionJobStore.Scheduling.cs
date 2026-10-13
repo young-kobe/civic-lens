@@ -1,4 +1,5 @@
 using CivicLens.Application.Collection;
+using CivicLens.Application.Collection.Bills;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Collection.Contracts;
 using CivicLens.Infrastructure.Collection.Jobs.Persistence;
@@ -14,9 +15,10 @@ public sealed partial class PostgresCollectionJobStore
     {
         ArgumentNullException.ThrowIfNull(configuration);
         var revision = CollectionConfigurationRevision.Create(configuration);
-        var snapshot = revision.ReadConfiguration();
+        var snapshot = revision.Configuration;
         return TransactionAsync(async (db, now) =>
         {
+            await new JobRowWriter(db, Ticks(now)).StoreAsync(revision, cancellationToken);
             var existingRows = await db.Set<CollectionScheduleRow>().ToListAsync(cancellationToken);
             var rowsBySource = existingRows.ToDictionary(row => row.SourceId, StringComparer.Ordinal);
             var configuredSourceIds = new HashSet<string>(StringComparer.Ordinal);
@@ -30,7 +32,6 @@ public sealed partial class PostgresCollectionJobStore
                     {
                         SourceId = source.Id,
                         ConfigurationRevisionId = revision.Id,
-                        ConfigurationJson = revision.Json,
                         IntervalSeconds = intervalSeconds,
                         NextDueUtcTicks = source.Enabled ? Ticks(now) : Ticks(now.AddSeconds(intervalSeconds)),
                         Enabled = source.Enabled
@@ -42,7 +43,6 @@ public sealed partial class PostgresCollectionJobStore
                 var wasEnabled = row.Enabled;
                 var intervalChanged = row.IntervalSeconds != intervalSeconds;
                 row.ConfigurationRevisionId = revision.Id;
-                row.ConfigurationJson = revision.Json;
                 row.IntervalSeconds = intervalSeconds;
                 row.Enabled = source.Enabled;
                 if (source.Enabled && !wasEnabled)
@@ -68,19 +68,18 @@ public sealed partial class PostgresCollectionJobStore
                 .OrderBy(row => row.NextDueUtcTicks).ThenBy(row => row.SourceId)
                 .Take(limit).ToArrayAsync(cancellationToken);
             var currentDate = DateOnly.FromDateTime(now.UtcDateTime);
-            var configurationsByRevision = new Dictionary<string, (string Json, CollectionConfiguration Configuration)>(StringComparer.Ordinal);
+            var jobWriter = new JobRowWriter(db, nowTicks);
+            var revisions = await StoredJobDefinition.LoadRevisionsAsync(db,
+                dueRows.Select(row => row.ConfigurationRevisionId), cancellationToken);
+            jobWriter.MarkStored(revisions.Keys);
+            var configurationsByRevision = new Dictionary<string, CollectionConfiguration>(StringComparer.Ordinal);
             foreach (var schedule in dueRows)
             {
-                if (!configurationsByRevision.TryGetValue(schedule.ConfigurationRevisionId, out var cached))
+                if (!configurationsByRevision.TryGetValue(schedule.ConfigurationRevisionId, out var configuration))
                 {
-                    var revision = new CollectionConfigurationRevision(schedule.ConfigurationRevisionId,
-                        schedule.ConfigurationJson);
-                    cached = (schedule.ConfigurationJson, revision.ReadConfiguration());
-                    configurationsByRevision.Add(schedule.ConfigurationRevisionId, cached);
+                    configuration = StoredJobDefinition.Find(revisions, schedule.ConfigurationRevisionId).Configuration;
+                    configurationsByRevision.Add(schedule.ConfigurationRevisionId, configuration);
                 }
-                if (cached.Json != schedule.ConfigurationJson)
-                    throw new InvalidDataException("A schedule configuration revision has conflicting retained JSON.");
-                var configuration = cached.Configuration;
                 var source = configuration.Sources.SingleOrDefault(candidate => candidate.Id == schedule.SourceId);
                 if (source is null || !source.Enabled)
                 {
@@ -105,22 +104,38 @@ public sealed partial class PostgresCollectionJobStore
                 }
 
                 var configuredSource = new ConfiguredCollectionSource(configuration, schedule.SourceId, currentDate);
-                var definition = configuredSource.CreateJobDefinition(currentDate);
-                var idempotencyKey = $"scheduled-check/{schedule.SourceId}/{schedule.NextDueUtcTicks}";
-                var row = new JobRow
+                var definition = await CreateScheduledDefinitionAsync(db, configuredSource, source, now, cancellationToken);
+                if (definition is null)
                 {
-                    JobId = Guid.NewGuid().ToString("N"),
-                    IdempotencyKey = idempotencyKey,
-                    DefinitionJson = Write(definition),
-                    State = CollectionJobState.Pending,
-                    CreatedAt = nowTicks
-                };
-                db.Add(row);
+                    schedule.NextDueUtcTicks = Ticks(now.AddSeconds(schedule.IntervalSeconds));
+                    continue;
+                }
+                var idempotencyKey = $"scheduled-check/{schedule.SourceId}/{schedule.NextDueUtcTicks}";
+                _ = await jobWriter.AddJobAsync(idempotencyKey, definition, cancellationToken);
                 schedule.NextDueUtcTicks = Ticks(now.AddSeconds(schedule.IntervalSeconds));
             }
 
             return dueRows.Length;
         }, cancellationToken);
+    }
+
+    private static async Task<CollectionJobDefinition?> CreateScheduledDefinitionAsync(CollectionAttemptDbContext db,
+        ConfiguredCollectionSource configured, WatchedSourceConfiguration source, DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var currentDate = DateOnly.FromDateTime(now.UtcDateTime);
+        switch (source.ApiParser)
+        {
+            case null:
+                return configured.CreateJobDefinition(currentDate);
+            case ApiParser.CongressBillList:
+                var cursor = await ReadCursorAsync(db, source.Id, cancellationToken);
+                var window = BillStreamWindow.Next(cursor, source.BackfillFrom!.Value, now);
+                return window is null ? null : configured.CreateApiJobDefinition(
+                    ApiResource.BillList, window.Value.RequestUrl(source.Url), currentDate);
+            default:
+                throw new ArgumentOutOfRangeException(nameof(source));
+        }
     }
 
     private static async Task<bool> HasActiveRootJobAsync(CollectionAttemptDbContext db, string sourceId,
@@ -133,7 +148,8 @@ public sealed partial class PostgresCollectionJobStore
                 SELECT 1 FROM collection_jobs
                  WHERE state IN ('Pending','Running','WaitingToRetry')
                    AND definition_json::jsonb ->> 'sourceId' = @source_id
-                   AND definition_json::jsonb ->> 'url' = @requested_url)
+                   AND (definition_json::jsonb ->> 'url' = @requested_url
+                        OR definition_json::jsonb ->> 'apiResource' = 'billList'))
             """;
         command.Parameters.Add(new NpgsqlParameter("source_id", sourceId));
         command.Parameters.Add(new NpgsqlParameter("requested_url", requestedUrl));

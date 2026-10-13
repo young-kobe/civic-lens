@@ -4,6 +4,7 @@ using CivicLens.Application.Documents;
 using CivicLens.Collection.Contracts;
 using CivicLens.Core.Collection;
 using CivicLens.Core.Documents;
+using CivicLens.Core;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Documents.Persistence;
 using CivicLens.Infrastructure.Statements;
@@ -135,7 +136,7 @@ public sealed class PostgresDocumentExtractionStore(IDbContextFactory<Collection
 
     private static void ValidateId(string extractionId)
     {
-        if (extractionId is not { Length: 64 } || extractionId.Any(c => c is not (>= '0' and <= '9') and not (>= 'a' and <= 'f')))
+        if (!LowercaseHex.Is(extractionId, 64))
             throw new ArgumentException("Extraction ID must be a lowercase SHA-256 value.", nameof(extractionId));
     }
 }

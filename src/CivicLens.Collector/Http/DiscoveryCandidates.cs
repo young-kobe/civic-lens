@@ -27,16 +27,13 @@ internal sealed class DiscoveryCandidates(CollectionRequest request)
     {
         Status = DiscoveryStatus.Parsed,
         Urls = urls.ToArray(),
-        OutOfScopeCount = CountFor(outOfScope.Count)
+        OutOfScopeCount = outOfScope.Count
     };
 
     public DiscoveryResult Failed(DiscoveryStatus status) => new()
     {
         Status = status,
         Urls = [],
-        OutOfScopeCount = CountFor(0)
+        OutOfScopeCount = 0
     };
-
-    private int? CountFor(int count) =>
-        request.Version >= CollectionProtocol.SchemeUpgradeVersion ? count : null;
 }

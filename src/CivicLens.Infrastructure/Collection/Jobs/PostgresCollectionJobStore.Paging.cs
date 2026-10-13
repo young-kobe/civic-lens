@@ -1,4 +1,5 @@
 using System.Data;
+using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Application.Paging;
 using CivicLens.Infrastructure.Collection.Jobs.Persistence;
@@ -52,21 +53,23 @@ public sealed partial class PostgresCollectionJobStore
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
         var started = await db.Set<JobRow>().AsNoTracking().OrderByDescending(row => row.CreatedAt).ThenBy(row => row.JobId)
-            .Take(limit).Select(row => new JobTime(row.JobId, row.DefinitionJson, row.CreatedAt)).ToListAsync(cancellationToken);
+            .Take(limit).Select(row => new JobTime(row.JobId, row.DefinitionJson, row.ConfigurationRevisionId, row.CreatedAt)).ToListAsync(cancellationToken);
         var failed = await (from row in db.Set<JobRow>().AsNoTracking()
                             where row.State == CollectionJobState.Failed
                             let failedAt = db.Set<JobAttemptRow>().Where(attempt => attempt.JobId == row.JobId)
                                 .Max(attempt => attempt.CompletedAt) ?? row.CreatedAt
                             orderby failedAt descending, row.JobId
-                            select new JobTime(row.JobId, row.DefinitionJson, failedAt)).Take(limit).ToListAsync(cancellationToken);
+                            select new JobTime(row.JobId, row.DefinitionJson, row.ConfigurationRevisionId, failedAt)).Take(limit).ToListAsync(cancellationToken);
+        var revisions = await StoredJobDefinition.LoadRevisionsAsync(db,
+            started.Concat(failed).Select(job => job.ConfigurationRevisionId), cancellationToken);
         await transaction.CommitAsync(cancellationToken);
-        return new(started.Select(ToEvent).ToArray(), failed.Select(ToEvent).ToArray());
+        return new(started.Select(job => ToEvent(job, revisions)).ToArray(), failed.Select(job => ToEvent(job, revisions)).ToArray());
     }
 
-    private sealed record JobTime(string JobId, string DefinitionJson, long Ticks);
+    private sealed record JobTime(string JobId, string DefinitionJson, string? ConfigurationRevisionId, long Ticks);
 
-    private static CollectionJobEvent ToEvent(JobTime job) =>
-        new(job.JobId, ReadDefinition(job.DefinitionJson).SourceId, FromTicks(job.Ticks)!.Value);
+    private static CollectionJobEvent ToEvent(JobTime job, IReadOnlyDictionary<string, CollectionConfigurationRevision> revisions) =>
+        new(job.JobId, StoredJobDefinition.Read(job.DefinitionJson, job.ConfigurationRevisionId, revisions).SourceId, FromTicks(job.Ticks)!.Value);
 
     private static IQueryable<JobRow> KeysetJobs(IQueryable<JobRow> rows, PageCursor? cursor)
     {
@@ -86,6 +89,7 @@ public sealed partial class PostgresCollectionJobStore
         var attempts = await db.Set<JobAttemptRow>().AsNoTracking().Where(attempt => jobIds.Contains(attempt.JobId))
             .OrderBy(attempt => attempt.Sequence).ToListAsync(cancellationToken);
         var attemptsByJob = attempts.ToLookup(attempt => attempt.JobId);
-        return rows.Select(row => ToRecord(row, attemptsByJob[row.JobId])).ToArray();
+        var revisions = await StoredJobDefinition.LoadRevisionsAsync(db, rows.Select(row => row.ConfigurationRevisionId), cancellationToken);
+        return rows.Select(row => ToRecord(row, StoredJobDefinition.Read(row.DefinitionJson, row.ConfigurationRevisionId, revisions), attemptsByJob[row.JobId])).ToArray();
     }
 }

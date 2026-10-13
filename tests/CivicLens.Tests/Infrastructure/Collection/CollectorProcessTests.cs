@@ -15,6 +15,28 @@ namespace CivicLens.Tests.Infrastructure.Collection;
 public sealed class CollectorProcessTests
 {
     [Fact]
+    public void ChildEnvironmentGainsOnlyTheVariableTheRequestNames()
+    {
+        var variable = CollectionCredentials.VariableOf(CollectionCredentials.CongressGov);
+        Dictionary<string, string?> Parent() => new()
+        {
+            ["PATH"] = "/usr/bin",
+            ["LC_ALL"] = "C",
+            [variable] = "key",
+            ["DATABASE_PASSWORD"] = "secret",
+            ["OPENAI_API_KEY"] = "other"
+        };
+
+        var named = Parent();
+        CollectorProcess.KeepAllowedEnvironment(named, CollectionCredentials.CongressGov);
+        var unnamed = Parent();
+        CollectorProcess.KeepAllowedEnvironment(unnamed, null);
+
+        Assert.Equal([variable, "LC_ALL", "PATH"], named.Keys.Order(StringComparer.Ordinal));
+        Assert.Equal(["LC_ALL", "PATH"], unnamed.Keys.Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
     public async Task PageReceiptCanExceedManifestLimitWithoutLosingValidEvidence()
     {
         var directory = Path.Combine(Path.GetTempPath(), "civic-large-receipt-" + Guid.NewGuid().ToString("N"));
@@ -75,12 +97,13 @@ public sealed class CollectorProcessTests
                 People = [new PersonConfiguration { Id = "person", Name = "Fixture Official" }],
                 Sources = [new WatchedSourceConfiguration
                 {
-                    Id = "source", PersonIds = ["person"], Url = origin + "/watch", AllowedOrigin = origin,
+                    Id = "source", Coverage = [new SourceCoverageConfiguration { PersonId = "person" }], Url = origin + "/watch", AllowedOrigin = origin,
                     AllowedPathPrefix = "/watch", MinDelayMilliseconds = 0, TimeoutSeconds = 5
                 }]
             };
             var useCase = new CollectWatchedPage(new CollectorProcess(typeof(HttpCollector).Assembly.Location));
-            var result = await useCase.ExecuteAsync(configuration, "source", directory, deadline.Token);
+            var result = await useCase.ExecuteAsync(new PreparedCollectionAttempt(new ConfiguredCollectionSource(configuration, "source"), directory),
+                deadline.Token);
             if (truncate)
             {
                 Assert.Equal(CollectionOutcome.Failed, result.Outcome);
@@ -96,7 +119,8 @@ public sealed class CollectorProcessTests
                 Assert.Equal(encoded ? new[] { "gzip" } : [], result.Response.ContentEncodings);
                 Assert.Equal(payload.Length, result.Capture!.ByteLength);
                 Assert.Equal(Convert.ToHexStringLower(SHA256.HashData(payload)), result.Capture!.Sha256);
-                var repeated = await useCase.ExecuteAsync(configuration, "source", directory, deadline.Token);
+                var repeated = await useCase.ExecuteAsync(new PreparedCollectionAttempt(new ConfiguredCollectionSource(configuration, "source"), directory),
+                deadline.Token);
                 Assert.Equal(CollectionOutcome.Captured, repeated.Outcome);
                 Assert.NotEqual(result.JobId, repeated.JobId);
                 Assert.Equal(result.Capture!.RelativePath, repeated.Capture!.RelativePath);
