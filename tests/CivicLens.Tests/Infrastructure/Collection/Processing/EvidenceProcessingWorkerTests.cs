@@ -212,6 +212,64 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
         Assert.Single(await jobs.ListAsync(10, default));
     }
 
+    [Fact]
+    public async Task EveryBillPageCaptureGetsOneExtractionAndNeverAStatementCandidate()
+    {
+        var detail = await RunBillJobAsync(ApiResource.Bill, BillSourceUrl + "/119/hr/1?format=json", BillDetail(sponsor: "A000001", cosponsors: 2));
+        var attempt = Assert.Single(detail.Attempts).AttemptId;
+
+        var saved = Assert.Single(await ReadBillExtractionsAsync());
+        Assert.Equal((attempt, "congress-bill-v1", "congress-bill-render-v1"), (saved.AttemptId, saved.ParserVersion, saved.NormalizationVersion));
+        Assert.StartsWith("Bill: 119 hr 1\nTitle: A bill\n", saved.Text);
+        Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM statement_candidates"));
+        Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM statement_analysis"));
+    }
+
+    [Fact]
+    public async Task PreparingABillDetailAgainKeepsTheOneExtractionEvenThoughTheGateIsADuplicate()
+    {
+        var detail = await RunBillJobAsync(ApiResource.Bill, BillSourceUrl + "/119/hr/1?format=json", BillDetail(sponsor: "A000001", cosponsors: 2));
+        var replay = new JobPreparation(jobs, attempts, jobs, jobs, new CaptureBodyReader(), processing, extractions, issues);
+
+        var result = await replay.PrepareAsync(detail.JobId, artifactRoot, default);
+
+        Assert.Equal(0, result!.AdmittedCount);
+        Assert.Single(await ReadBillExtractionsAsync());
+    }
+
+    [Fact]
+    public async Task ADetailWhoseTitleHoldsANulBlocksAndWritesNoExtractionGateOrFollowOnJob()
+    {
+        var job = await RunBillJobAsync(ApiResource.Bill, BillSourceUrl + "/119/hr/1?format=json",
+            BillDetail(sponsor: "A000001", cosponsors: 2).Replace("A bill", "A\\u0000 bill"));
+
+        var record = Assert.Single(await processing.GetByJobIdsAsync([job.JobId], default));
+        Assert.Equal(EvidenceProcessingStatus.Blocked, record.Status);
+        Assert.Empty(await ReadBillExtractionsAsync());
+        Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM bill_gates"));
+        Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM bill_follow_on_jobs"));
+    }
+
+    [Fact]
+    public async Task ANotRelevantBillIsStillExtracted()
+    {
+        _ = await RunBillJobAsync(ApiResource.Bill, BillSourceUrl + "/119/hr/1?format=json", BillDetail(sponsor: "Z000009", cosponsors: 0, policyArea: "Zoology"));
+
+        Assert.Equal(("NotRelevant", "UntrackedPolicyArea"), await ReadGateAsync());
+        Assert.Single(await ReadBillExtractionsAsync());
+    }
+
+    [Fact]
+    public async Task CosponsorAndActionsPagesAreExtractedByTheirOwnParsers()
+    {
+        _ = await RunBillJobAsync(ApiResource.BillCosponsors, BillSourceUrl + "/119/hr/1/cosponsors?format=json&limit=250",
+            """{"cosponsors":[{"bioguideId":"A000001","sponsorshipDate":"2025-01-04","isOriginalCosponsor":true}],"pagination":{}}""");
+
+        var saved = Assert.Single(await ReadBillExtractionsAsync());
+        Assert.Equal(("congress-bill-cosponsors-v1", "Bill: 119 hr 1\nCosponsor: A000001, original, 2025-01-04"),
+            (saved.ParserVersion, saved.Text));
+    }
+
     [Theory]
     [InlineData(ApiResource.Bill, "/119/hr/1?format=json")]
     [InlineData(ApiResource.BillCosponsors, "/119/hr/1/cosponsors?format=json&limit=250")]
@@ -383,7 +441,7 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
     }
 
     private EvidenceProcessingWorker Worker(IEvidenceProcessingStore processingStore, IDocumentHistoryStore? historyStore = null) => new(jobs,
-        new JobPreparation(jobs, attempts, jobs, jobs, new CaptureBodyReader(), processingStore, issues), processingStore, extract, new GetDocumentHistory(historyStore ?? PostgresDocumentHistoryStore.FromConnectionString(connectionString)),
+        new JobPreparation(jobs, attempts, jobs, jobs, new CaptureBodyReader(), processingStore, extractions, issues), processingStore, extract, new GetDocumentHistory(historyStore ?? PostgresDocumentHistoryStore.FromConnectionString(connectionString)),
         new CompareDocuments(extractions, comparisons));
 
     private CollectionJobDefinition ConfiguredDefinition(string? etag = null)
@@ -478,11 +536,23 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
         return (await jobs.GetAsync(job.JobId, default))!;
     }
 
-    private static string BillDetail(string sponsor, int cosponsors) => $$$"""
+    private static string BillDetail(string sponsor, int cosponsors, string policyArea = "Taxation") => $$$"""
         {"bill":{"congress":119,"type":"HR","number":"1","title":"A bill","introducedDate":"2025-01-03",
-         "updateDate":"2025-01-03T12:00:00Z","policyArea":{"name":"Taxation"},"sponsors":[{"bioguideId":"{{{sponsor}}}"}],
+         "updateDate":"2025-01-03T12:00:00Z","policyArea":{"name":"{{{policyArea}}}"},"sponsors":[{"bioguideId":"{{{sponsor}}}"}],
          "cosponsors":{"countIncludingWithdrawnCosponsors":{{{cosponsors}}} },"actions":{"count":1} } }
         """;
+
+    private async Task<List<(string AttemptId, string ParserVersion, string NormalizationVersion, string Text)>> ReadBillExtractionsAsync()
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            "SELECT attempt_id, parser_version, normalization_version, text FROM document_extractions ORDER BY extraction_id", connection);
+        await using var reader = await command.ExecuteReaderAsync();
+        var rows = new List<(string, string, string, string)>();
+        while (await reader.ReadAsync()) rows.Add((reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetString(3)));
+        return rows;
+    }
 
     private async Task<(string Decision, string? Reason)> ReadGateAsync()
     {

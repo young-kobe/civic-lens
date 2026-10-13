@@ -4,9 +4,11 @@ using CivicLens.Application.Collection.Bills;
 using CivicLens.Application.Collection.Discovery;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Application.Collection.Processing;
+using CivicLens.Application.Documents;
 using CivicLens.Application.Issues;
 using CivicLens.Application.Paging;
 using CivicLens.Core.Collection;
+using CivicLens.Core.Documents;
 using CivicLens.Tests.Application.Collection.Bills;
 using CivicLens.Tests.Fixtures;
 using EvidenceStatus = CivicLens.Application.Collection.Processing.EvidenceProcessingStatus;
@@ -23,6 +25,7 @@ public sealed class JobPreparationTests
     private static readonly string ListUrl = new BillStreamWindow(Backfill, Backfill).RequestUrl(SourceUrl);
     private readonly RecordingBillAdmissions admissions = new();
     private readonly ThrowingProcessingStore processing = new();
+    private readonly RecordingExtractions extractions = new();
 
     [Fact]
     public async Task DetailGateIsDecidedFromTheParsedBillAndStoredWithTheIssueRevision()
@@ -96,6 +99,100 @@ public sealed class JobPreparationTests
         Assert.Equal(next, call.Page.Next);
     }
 
+    [Fact]
+    public async Task ADetailPageIsExtractedOnceWithTheDetailParserAndTheCapturedAttempt()
+    {
+        _ = await Prepare(ApiResource.Bill, DetailUrl, Detail("A000001", BillGateFixtures.TrackedPolicyArea, 3), BillGateFixtures.Revision());
+
+        var saved = Assert.Single(extractions.Saved);
+        Assert.Equal((CongressBillParser.Version, "congress-bill-render-v1", "attempt"),
+            (saved.ParserVersion, saved.NormalizationVersion, saved.SourceAttempt.AttemptId));
+        Assert.Equal("Bill: 119 hr 1\nTitle: A bill\nIntroduced: 2025-01-03\nUpdated: 2025-01-03T12:00:00Z\n" +
+            $"Policy area: {BillGateFixtures.TrackedPolicyArea}\nSponsor: A000001\nCosponsors (including withdrawn): 3\nActions: 1", saved.Text);
+    }
+
+    [Fact]
+    public async Task ACosponsorPageIsExtractedOnceWithTheCosponsorParser()
+    {
+        _ = await Prepare(ApiResource.BillCosponsors, CosponsorUrl, Cosponsors("A000001", next: null), BillGateFixtures.Revision());
+
+        var saved = Assert.Single(extractions.Saved);
+        Assert.Equal((CongressBillCosponsorsParser.Version, "congress-bill-render-v1", "attempt"),
+            (saved.ParserVersion, saved.NormalizationVersion, saved.SourceAttempt.AttemptId));
+        Assert.Equal("Bill: 119 hr 1\nCosponsor: A000001, 2025-01-04", saved.Text);
+    }
+
+    [Fact]
+    public async Task AnActionsPageIsExtractedOnceWithTheActionsParser()
+    {
+        _ = await Prepare(ApiResource.BillActions, ActionsUrl,
+            """{"actions":[{"actionDate":"2025-01-03","actionTime":"09:30:00","text":"Introduced","type":"IntroReferral","actionCode":"H11100","sourceSystem":{"code":2,"name":"House floor actions"}}],"pagination":{}}""",
+            BillGateFixtures.Revision());
+
+        var saved = Assert.Single(extractions.Saved);
+        Assert.Equal((CongressBillActionsParser.Version, "congress-bill-render-v1", "attempt"),
+            (saved.ParserVersion, saved.NormalizationVersion, saved.SourceAttempt.AttemptId));
+        Assert.Equal("Bill: 119 hr 1\nAction 2025-01-03 09:30:00 [type IntroReferral] [code H11100] [source 2 House floor actions]: Introduced", saved.Text);
+    }
+
+    [Fact]
+    public async Task ABillThatTheGateMarksNotRelevantIsStillExtracted()
+    {
+        _ = await Prepare(ApiResource.Bill, DetailUrl, Detail("Z000009", BillGateFixtures.UntrackedPolicyArea, 0), BillGateFixtures.Revision());
+
+        Assert.Equal(BillGateDecision.NotRelevant, Assert.Single(admissions.Details).Gate.Decision);
+        Assert.Single(extractions.Saved);
+    }
+
+    [Fact]
+    public async Task TheExtractionIsWrittenEvenWhenAdmissionReportsAllJobsAsDuplicates()
+    {
+        admissions.DuplicatesOnly = true;
+
+        var result = await Prepare(ApiResource.Bill, DetailUrl, Detail("A000001", BillGateFixtures.TrackedPolicyArea, 1), BillGateFixtures.Revision());
+
+        Assert.Equal((0, 2), (result!.AdmittedCount, result.DuplicateCount));
+        Assert.Single(extractions.Saved);
+    }
+
+    [Fact]
+    public async Task PreparingTheSamePageAgainSavesTheSameExtractionIdentity()
+    {
+        var body = Cosponsors("A000001", next: null);
+
+        _ = await Prepare(ApiResource.BillCosponsors, CosponsorUrl, body, BillGateFixtures.Revision());
+        _ = await Prepare(ApiResource.BillCosponsors, CosponsorUrl, body, BillGateFixtures.Revision());
+
+        Assert.Equal(2, extractions.Saved.Count);
+        Assert.Single(extractions.Saved.Select(saved => saved.ExtractionId).Distinct());
+    }
+
+    [Fact]
+    public async Task ABillListPageAndAnUnkindedJobAreNeverExtracted()
+    {
+        _ = await Prepare(ApiResource.BillList, ListUrl, """{"bills":[],"pagination":{}}""", BillGateFixtures.Revision());
+        _ = await Prepare(null, SourceUrl, "{}", BillGateFixtures.Revision());
+
+        Assert.Empty(extractions.Saved);
+    }
+
+    [Fact]
+    public async Task APageThatFailsParsingIsNotExtracted()
+    {
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            Prepare(ApiResource.BillActions, ActionsUrl, """{"unexpected":true}""", BillGateFixtures.Revision()));
+
+        Assert.Empty(extractions.Saved);
+    }
+
+    [Fact]
+    public async Task ADetailJobWithoutAnIssuesConfigurationBlocksBeforeItWritesAnExtraction()
+    {
+        _ = await Prepare(ApiResource.Bill, DetailUrl, Detail("A000001", BillGateFixtures.TrackedPolicyArea, 0), null);
+
+        Assert.Empty(extractions.Saved);
+    }
+
     public static TheoryData<ApiResource?, string, string> EveryResource => new()
     {
         { null, SourceUrl, "{}" },
@@ -135,7 +232,7 @@ public sealed class JobPreparationTests
         var job = new CollectionJobRecord("job", definition, "key", CollectionJobState.Succeeded, DateTimeOffset.UnixEpoch, null,
             false, 0, 0, 0, [attempt]);
         var preparation = new JobPreparation(new SingleJob(job), new CapturedAttempts(), new NoDiscoveryAdmissions(), admissions,
-            new FixedBody(body), processing, issues);
+            new FixedBody(body), processing, extractions, issues);
         return await preparation.PrepareAsync("job", "artifacts", default);
     }
 
@@ -157,6 +254,7 @@ public sealed class JobPreparationTests
         public List<(string JobId, CongressBill Bill, BillGateOutcome Gate, string IssueRevisionId)> Details { get; } = [];
         public List<(string JobId, CongressBillCosponsorsPage Page)> CosponsorPages { get; } = [];
         public List<(string JobId, CongressBillActionsPage Page)> ActionPages { get; } = [];
+        public bool DuplicatesOnly { get; set; }
 
         public Task<DiscoveryAdmissionResult> AdmitListPageAsync(ConfiguredCollectionSource source, string listJobId,
             BillStreamWindow window, CongressBillListPage page, CancellationToken cancellationToken) =>
@@ -166,8 +264,10 @@ public sealed class JobPreparationTests
             CongressBill bill, BillGateOutcome gate, string issueRevisionId, CancellationToken cancellationToken)
         {
             Details.Add((detailJobId, bill, gate, issueRevisionId));
-            return Task.FromResult(new DiscoveryAdmissionResult(
-                [new DiscoveryAdmissionJob("a", "https://x"), new DiscoveryAdmissionJob("b", "https://y")], 0, 1));
+            return Task.FromResult(DuplicatesOnly
+                ? new DiscoveryAdmissionResult([], 0, 2)
+                : new DiscoveryAdmissionResult(
+                    [new DiscoveryAdmissionJob("a", "https://x"), new DiscoveryAdmissionJob("b", "https://y")], 0, 1));
         }
 
         public Task<DiscoveryAdmissionResult> AdmitCosponsorPageAsync(ConfiguredCollectionSource source, string pageJobId,
@@ -182,6 +282,19 @@ public sealed class JobPreparationTests
         {
             ActionPages.Add((pageJobId, page));
             return Task.FromResult(new DiscoveryAdmissionResult([], 0, 0));
+        }
+    }
+
+    private sealed class RecordingExtractions : IDocumentExtractionStore
+    {
+        public List<DocumentExtraction> Saved { get; } = [];
+
+        public Task<DocumentExtraction?> GetAsync(string extractionId, CancellationToken cancellationToken) => throw new NotSupportedException();
+
+        public Task<DocumentExtraction> SaveAsync(DocumentExtraction extraction, CancellationToken cancellationToken)
+        {
+            Saved.Add(extraction);
+            return Task.FromResult(extraction);
         }
     }
 

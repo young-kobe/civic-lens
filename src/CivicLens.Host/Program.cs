@@ -174,7 +174,7 @@ try
         var comparisons = PostgresDocumentComparisonStore.FromConnectionString(connectionString);
         var processingStore = PostgresEvidenceProcessingStore.FromConnectionString(connectionString);
         var processing = new EvidenceProcessingWorker(jobs,
-            new JobPreparation(jobs, attempts, jobs, jobs, new CaptureBodyReader(), processingStore, issues),
+            new JobPreparation(jobs, attempts, jobs, jobs, new CaptureBodyReader(), processingStore, extractions, issues),
             processingStore,
             new ExtractDocument(attempts, new CaptureDocumentTextExtractor(), extractions),
             new GetDocumentHistory(PostgresDocumentHistoryStore.FromConnectionString(connectionString)),

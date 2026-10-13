@@ -1,9 +1,11 @@
 using CivicLens.Application.Collection.Bills;
 using CivicLens.Application.Collection.Discovery;
 using CivicLens.Application.Collection.Jobs;
+using CivicLens.Application.Documents;
 using CivicLens.Application.Issues;
 using CivicLens.Collection.Contracts;
 using CivicLens.Core.Collection;
+using CivicLens.Core.Documents;
 
 namespace CivicLens.Application.Collection.Processing;
 
@@ -14,6 +16,7 @@ public sealed class JobPreparation(
     IBillStreamAdmissionStore billAdmissions,
     ICaptureBodyReader bodies,
     IEvidenceProcessingStore processing,
+    IDocumentExtractionStore extractions,
     IssueConfigurationRevision? issues)
 {
     private const string NotModified = "notModified";
@@ -98,8 +101,8 @@ public sealed class JobPreparation(
         var window = BillStreamWindow.TryRead(job.Definition.Url)
             ?? throw new InvalidDataException("Bill list job URL has no window.");
         var configured = ConfiguredSourceOf(job);
-        var (request, body) = await ReadApiResponseAsync(job, artifactRoot, cancellationToken);
-        var page = CongressBillListParser.Parse(body, request, window);
+        var response = await ReadApiResponseAsync(job, artifactRoot, cancellationToken);
+        var page = CongressBillListParser.Parse(response.Body, response.Request, window);
         return PreparedFrom(await billAdmissions.AdmitListPageAsync(configured, job.JobId, window, page, cancellationToken));
     }
 
@@ -110,8 +113,9 @@ public sealed class JobPreparation(
         var configured = ConfiguredSourceOf(job);
         var expected = CongressBillListItem.TryReadDetailUrl(configured.SourceUrl, job.Definition.Url)
             ?? throw new InvalidDataException("Bill detail job URL is not a bill detail URL.");
-        var (_, body) = await ReadApiResponseAsync(job, artifactRoot, cancellationToken);
-        var bill = CongressBillParser.Parse(body, expected);
+        var response = await ReadApiResponseAsync(job, artifactRoot, cancellationToken);
+        var bill = CongressBillParser.Parse(response.Body, expected);
+        await SaveExtractionAsync(response.Captured, CongressBillParser.Version, CongressBillRenderer.RenderDetail(bill), cancellationToken);
         var covered = configured.CoveredBioguideIdsOn(BillGate.DayOf(bill.UpdateDate));
         var gate = BillGate.AtDetail(bill, covered, issueConfiguration);
         return PreparedFrom(await billAdmissions.AdmitDetailAsync(configured, job.JobId, bill, gate, issues.Id,
@@ -123,8 +127,10 @@ public sealed class JobPreparation(
     {
         var configured = ConfiguredSourceOf(job);
         var bill = ReadPageBill(configured, job, ApiResource.BillCosponsors);
-        var (request, body) = await ReadApiResponseAsync(job, artifactRoot, cancellationToken);
-        var page = CongressBillCosponsorsParser.Parse(body, request, configured.SourceUrl, bill);
+        var response = await ReadApiResponseAsync(job, artifactRoot, cancellationToken);
+        var page = CongressBillCosponsorsParser.Parse(response.Body, response.Request, configured.SourceUrl, bill);
+        await SaveExtractionAsync(response.Captured, CongressBillCosponsorsParser.Version, CongressBillRenderer.RenderCosponsors(bill, page),
+            cancellationToken);
         return PreparedFrom(await billAdmissions.AdmitCosponsorPageAsync(configured, job.JobId, page, cancellationToken));
     }
 
@@ -133,8 +139,10 @@ public sealed class JobPreparation(
     {
         var configured = ConfiguredSourceOf(job);
         var bill = ReadPageBill(configured, job, ApiResource.BillActions);
-        var (request, body) = await ReadApiResponseAsync(job, artifactRoot, cancellationToken);
-        var page = CongressBillActionsParser.Parse(body, request, configured.SourceUrl, bill);
+        var response = await ReadApiResponseAsync(job, artifactRoot, cancellationToken);
+        var page = CongressBillActionsParser.Parse(response.Body, response.Request, configured.SourceUrl, bill);
+        await SaveExtractionAsync(response.Captured, CongressBillActionsParser.Version, CongressBillRenderer.RenderActions(bill, page),
+            cancellationToken);
         return PreparedFrom(await billAdmissions.AdmitActionsPageAsync(configured, job.JobId, page, cancellationToken));
     }
 
@@ -150,14 +158,19 @@ public sealed class JobPreparation(
         JobPreparationResult.Prepared(admitted: result.AdmittedCount, deferred: result.DeferredCount,
             duplicates: result.DuplicateCount);
 
-    private async Task<(CollectionRequest Request, byte[] Body)> ReadApiResponseAsync(CollectionJobRecord job,
+    private async Task SaveExtractionAsync(CapturedAttemptResult captured, string parserVersion, string text,
+        CancellationToken cancellationToken) =>
+        _ = await extractions.SaveAsync(new DocumentExtraction(captured, parserVersion, CongressBillRenderer.NormalizationVersion, text),
+            cancellationToken);
+
+    private async Task<ApiResponse> ReadApiResponseAsync(CollectionJobRecord job,
         string artifactRoot, CancellationToken cancellationToken)
     {
         var jobAttempt = job.Attempts.Single(item => item.Resolution?.Outcome == CollectionJobAttemptOutcome.Succeeded);
         var stored = await attempts.GetAsync(jobAttempt.AttemptId, cancellationToken);
         if (stored?.AttemptResult is not CapturedAttemptResult captured)
             throw new InvalidDataException("API attempt has no captured response.");
-        return (jobAttempt.Request, await bodies.ReadAsync(captured, artifactRoot, cancellationToken));
+        return new ApiResponse(jobAttempt.Request, captured, await bodies.ReadAsync(captured, artifactRoot, cancellationToken));
     }
 
     private async Task<IReadOnlyList<CapturedAttemptResult>> ReadCapturedAttemptsAsync(CollectionJobRecord job,
@@ -171,4 +184,6 @@ public sealed class JobPreparation(
         }
         return captured;
     }
+
+    private sealed record ApiResponse(CollectionRequest Request, CapturedAttemptResult Captured, byte[] Body);
 }
