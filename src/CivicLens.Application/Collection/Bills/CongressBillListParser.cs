@@ -23,7 +23,7 @@ public static class CongressBillListParser
         if (wire.Bills.Length > BillStreamWindow.PageLimit)
             throw new InvalidDataException("Bill list page holds more bills than the request limit.");
         var bills = wire.Bills.Select(ToItem).ToArray();
-        return new CongressBillListPage(bills, ReadNext(wire.Pagination.Next, scope, window));
+        return new CongressBillListPage(bills, ReadNext(wire.Pagination.Next, scope, window), BillStreamWindow.StartsPass(scope.Url));
     }
 
     private static WirePage Deserialize(ReadOnlySpan<byte> json)

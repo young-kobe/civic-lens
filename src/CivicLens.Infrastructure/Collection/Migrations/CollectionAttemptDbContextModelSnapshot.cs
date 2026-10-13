@@ -384,6 +384,25 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         });
                 });
 
+            modelBuilder.Entity("CivicLens.Infrastructure.Collection.BillStream.BillStreamPageRow", b =>
+                {
+                    b.Property<string>("ListJobId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("list_job_id");
+
+                    b.Property<long>("RecordedAtUtcTicks")
+                        .HasColumnType("bigint")
+                        .HasColumnName("recorded_at_utc_ticks");
+
+                    b.HasKey("ListJobId");
+
+                    b.ToTable("bill_stream_pages", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_bill_stream_pages_recorded", "recorded_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
+                        });
+                });
+
             modelBuilder.Entity("CivicLens.Infrastructure.Collection.Discovery.DiscoveryAdmissionBatchRow", b =>
                 {
                     b.Property<string>("IdempotencyKey")
@@ -1700,6 +1719,15 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .WithMany()
                         .HasForeignKey("DraftId", "RevisionNumber")
                         .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Collection.BillStream.BillStreamPageRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.Collection.Jobs.Persistence.JobRow", null)
+                        .WithMany()
+                        .HasForeignKey("ListJobId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("CivicLens.Infrastructure.Collection.Discovery.DiscoveryAdmissionBatchRow", b =>

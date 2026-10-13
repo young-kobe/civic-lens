@@ -243,7 +243,7 @@ public sealed class CongressBillSourceConfigurationTests
         };
 
         Assert.Throws<ArgumentException>(() => new ConfiguredCollectionSource(plain, "congress-bills", Backfill)
-            .CreateBillStreamAdmission("job", new BillStreamWindow(Backfill, Backfill), new CongressBillListPage([], null), Backfill));
+            .CreateBillStreamAdmission("job", new BillStreamWindow(Backfill, Backfill), new CongressBillListPage([], null, StartsPass: true), Backfill));
     }
 
     internal static CollectionConfiguration Configuration() => new()

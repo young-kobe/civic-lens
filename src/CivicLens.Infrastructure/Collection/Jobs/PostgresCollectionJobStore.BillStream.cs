@@ -24,7 +24,7 @@ public sealed partial class PostgresCollectionJobStore : IBillStreamAdmissionSto
             var (result, admittedBills) = await AdmitBillStreamJobsAsync(db, admission, now, cancellationToken);
             if (result.DeferredCount > 0)
                 throw new InvalidDataException($"Source '{source.SourceId}' admission policy cannot hold a full bill list page.");
-            await RecordPassAsync(db, admission, admittedBills, now, cancellationToken);
+            await RecordPassAsync(db, listJobId, admission, admittedBills, now, cancellationToken);
             return result;
         }, cancellationToken);
     }
@@ -61,9 +61,11 @@ public sealed partial class PostgresCollectionJobStore : IBillStreamAdmissionSto
         return (new DiscoveryAdmissionResult(admitted, deferred, knownKeys.Count), admittedBills);
     }
 
-    private static async Task RecordPassAsync(CollectionAttemptDbContext db, BillStreamAdmission admission,
-        int admittedBills, DateTimeOffset now, CancellationToken cancellationToken)
+    private static async Task RecordPassAsync(CollectionAttemptDbContext db, string listJobId,
+        BillStreamAdmission admission, int admittedBills, DateTimeOffset now, CancellationToken cancellationToken)
     {
+        if (await db.Set<BillStreamPageRow>().AnyAsync(row => row.ListJobId == listJobId, cancellationToken)) return;
+        db.Add(new BillStreamPageRow { ListJobId = listJobId, RecordedAtUtcTicks = Ticks(now) });
         var cursor = await db.Set<BillStreamCursorRow>().SingleOrDefaultAsync(
             row => row.SourceId == admission.SourceId, cancellationToken);
         if (cursor is null)
@@ -71,7 +73,7 @@ public sealed partial class PostgresCollectionJobStore : IBillStreamAdmissionSto
             cursor = new BillStreamCursorRow { SourceId = admission.SourceId };
             db.Add(cursor);
         }
-        cursor.PassAdmittedBills += admittedBills;
+        cursor.PassAdmittedBills = admission.StartsPass ? admittedBills : cursor.PassAdmittedBills + admittedBills;
         cursor.UpdatedAtUtcTicks = Ticks(now);
         if (!admission.EndsWindow) return;
 

@@ -80,6 +80,31 @@ public sealed class BillStreamWindowTests
         Assert.Equal(new BillStreamWindow(Backfill, new DateOnly(2025, 1, 9)), BillStreamWindow.TryRead(url));
     }
 
+    [Theory]
+    [InlineData("&offset=250&limit=100000&format=json")]
+    [InlineData("&offset=250&limit=250&format=xml")]
+    [InlineData("&offset=250&limit=250&format=json&api_key=DEMO_KEY")]
+    [InlineData("&offset=-250&limit=250&format=json")]
+    [InlineData("&offset=250&offset=500&limit=250&format=json")]
+    [InlineData("&limit=250&format=json&congress")]
+    public void AListUrlWithAnyOtherParameterHasNoWindowSoAJobCannotWidenItsPageOrCarryACredential(string parameters)
+    {
+        var url = "https://api.congress.gov/v3/bill?fromDateTime=2025-01-02T00:00:00Z&sort=updateDate asc" +
+            "&toDateTime=2025-01-10T00:00:00Z" + parameters;
+
+        Assert.Null(BillStreamWindow.TryRead(url));
+    }
+
+    [Fact]
+    public void OnlyThePageWithoutAnOffsetStartsAPassSoLaterPagesAddToItsCount()
+    {
+        var first = new BillStreamWindow(Backfill, Backfill).RequestUrl("https://api.congress.gov/v3/bill");
+
+        Assert.True(BillStreamWindow.StartsPass(first));
+        Assert.True(BillStreamWindow.StartsPass(first + "&offset=0"));
+        Assert.False(BillStreamWindow.StartsPass(first + "&offset=250"));
+    }
+
     [Fact]
     public void ThePageThatEndsOnTheLastClosedDayIsNotBehind()
     {

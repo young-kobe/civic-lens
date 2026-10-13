@@ -7,7 +7,7 @@ namespace CivicLens.Tests.Application.Collection.Bills;
 public sealed class CongressBillListParserTests
 {
     private static readonly BillStreamWindow Window = new(new DateOnly(2025, 1, 3), new DateOnly(2025, 1, 4));
-    private const string WindowQuery = "fromDateTime=2025-01-02T00:00:00Z&sort=updateDate asc&toDateTime=2025-01-05T00:00:00Z";
+    private const string WindowQuery = "fromDateTime=2025-01-02T00:00:00Z&sort=updateDate asc&toDateTime=2025-01-05T00:00:00Z&limit=250";
 
     [Fact]
     public void ValidPageYieldsItemsWithDetailUrlsBuiltFromCongressTypeAndNumber()

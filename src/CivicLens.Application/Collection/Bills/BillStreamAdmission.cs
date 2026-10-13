@@ -8,6 +8,7 @@ public sealed record BillStreamAdmission(
     DiscoveryAdmissionPolicy Policy,
     CollectionJobDefinition Template,
     BillStreamWindow Window,
+    bool StartsPass,
     IReadOnlyList<BillStreamJob> Bills,
     BillStreamJob? NextPage)
 {

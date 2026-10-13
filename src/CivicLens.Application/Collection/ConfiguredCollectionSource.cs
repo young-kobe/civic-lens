@@ -75,7 +75,7 @@ public sealed class ConfiguredCollectionSource
             : new BillStreamJob(BillStreamJobKeys.NextPage(SourceId, listJobId),
                 CreateApiJobDefinition(ApiResource.BillList, page.Next, currentDate));
         var policy = source.AdmissionPolicy ?? new DiscoveryAdmissionPolicy();
-        return new BillStreamAdmission(SourceId, policy, template, window, [.. bills], nextPage);
+        return new BillStreamAdmission(SourceId, policy, template, window, page.StartsPass, [.. bills], nextPage);
     }
 
     private CollectionJobDefinition PrepareDefinition(WatchedSourceConfiguration source, DateOnly currentDate,

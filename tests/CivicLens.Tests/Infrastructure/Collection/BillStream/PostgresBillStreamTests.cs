@@ -3,6 +3,7 @@ using CivicLens.Application.Collection;
 using CivicLens.Application.Configuration;
 using CivicLens.Application.Collection.Bills;
 using CivicLens.Application.Collection.Discovery;
+using CivicLens.Application.Collection.Jobs;
 using CivicLens.Collection.Contracts;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Collection.Jobs;
@@ -17,6 +18,7 @@ public sealed class PostgresBillStreamTests(PostgresCollection postgres) : IAsyn
 {
     private const string SourceId = "congress-bills";
     private const string SourceUrl = "https://api.congress.gov/v3/bill";
+    private const string ListJobKeyPrefix = "test-list/";
     private static readonly DateOnly Backfill = new(2025, 1, 3);
     private readonly string schema = "bill_stream_" + Guid.NewGuid().ToString("N");
     private string connectionString = null!;
@@ -89,28 +91,28 @@ public sealed class PostgresBillStreamTests(PostgresCollection postgres) : IAsyn
         var source = Source();
         var window = new BillStreamWindow(Backfill, Backfill.AddDays(1));
         var next = window.RequestUrl(SourceUrl) + "&offset=250";
-        var first = new CongressBillListPage([Bill(119, 1), Bill(118, 2), Bill(119, 1)], next);
+        var first = new CongressBillListPage([Bill(119, 1), Bill(118, 2), Bill(119, 1)], next, StartsPass: true);
 
-        var result = await store.AdmitListPageAsync(source, "list-one", window, first, default);
+        var result = await AdmitAsync(source, "list-one", window, first);
 
         Assert.Equal([$"https://api.congress.gov/v3/bill/119/hr/1?format=json", next], result.Jobs.Select(job => job.Url));
         Assert.Equal(0, result.DuplicateCount);
         Assert.Null(await ReadCursorAsync());
 
-        var replay = await store.AdmitListPageAsync(source, "list-one", window, first, default);
+        var replay = await AdmitAsync(source, "list-one", window, first);
         Assert.Empty(replay.Jobs);
         Assert.Equal(2, replay.DuplicateCount);
 
-        var last = await store.AdmitListPageAsync(source, "list-two", window,
-            new CongressBillListPage([Bill(119, 1), Bill(119, 3)], null), default);
+        var last = await AdmitAsync(source, "list-two", window,
+            new CongressBillListPage([Bill(119, 1), Bill(119, 3)], null, StartsPass: false));
         Assert.Equal(["https://api.congress.gov/v3/bill/119/hr/3?format=json"], last.Jobs.Select(job => job.Url));
         Assert.Equal(1, last.DuplicateCount);
         Assert.Null(await ReadCursorAsync());
-        Assert.Equal(3, (await store.ListAsync(10, default)).Count);
+        Assert.Equal(3, (await AdmittedJobsAsync()).Count);
 
-        await store.AdmitListPageAsync(source, "repeat-one", window, first, default);
+        await AdmitAsync(source, "repeat-one", window, first);
         Assert.Null(await ReadCursorAsync());
-        await store.AdmitListPageAsync(source, "repeat-two", window, new CongressBillListPage([Bill(119, 3)], null), default);
+        await AdmitAsync(source, "repeat-two", window, new CongressBillListPage([Bill(119, 3)], null, StartsPass: false));
         Assert.Equal(window.LastDay, await ReadCursorAsync());
     }
 
@@ -120,11 +122,37 @@ public sealed class PostgresBillStreamTests(PostgresCollection postgres) : IAsyn
         var window = new BillStreamWindow(Backfill, Backfill);
         var next = window.RequestUrl(SourceUrl) + "&offset=250";
 
-        await store.AdmitListPageAsync(Source(), "page-one", window, new CongressBillListPage([Bill(119, 1)], next), default);
-        await store.AdmitListPageAsync(Source(), "page-two", window, new CongressBillListPage([], null), default);
+        await AdmitAsync(Source(), "page-one", window, new CongressBillListPage([Bill(119, 1)], next, StartsPass: true));
+        await AdmitAsync(Source(), "page-two", window, new CongressBillListPage([], null, StartsPass: false));
 
         Assert.Null(await ReadCursorAsync());
         Assert.Equal(0, await ScalarAsync("SELECT pass_admitted_bills FROM bill_stream_cursors"));
+    }
+
+    [Fact]
+    public async Task ALastPageProcessedTwiceDoesNotSettleAWindowWhosePassAdmittedBills()
+    {
+        var window = new BillStreamWindow(Backfill, Backfill);
+        var next = window.RequestUrl(SourceUrl) + "&offset=250";
+        await AdmitAsync(Source(), "page-one", window, new CongressBillListPage([Bill(119, 1)], next, StartsPass: true));
+        var last = new CongressBillListPage([], null, StartsPass: false);
+        await AdmitAsync(Source(), "page-two", window, last);
+
+        await AdmitAsync(Source(), "page-two", window, last);
+
+        Assert.Null(await ReadCursorAsync());
+    }
+
+    [Fact]
+    public async Task AStoppedPassLeavesNoCountThatKeepsTheNextQuietPassFromSettling()
+    {
+        var window = new BillStreamWindow(Backfill, Backfill);
+        await AdmitAsync(Source(), "stopped", window,
+            new CongressBillListPage([Bill(119, 1)], window.RequestUrl(SourceUrl) + "&offset=250", StartsPass: true));
+
+        await AdmitAsync(Source(), "quiet", window, new CongressBillListPage([Bill(119, 1)], null, StartsPass: true));
+
+        Assert.Equal(window.LastDay, await ReadCursorAsync());
     }
 
     [Fact]
@@ -134,7 +162,7 @@ public sealed class PostgresBillStreamTests(PostgresCollection postgres) : IAsyn
         await ExecuteAsync(connectionString, $"UPDATE collection_source_schedules SET next_due_utc_ticks = {DateTimeOffset.UtcNow.AddDays(1).UtcTicks}");
         var caughtUp = new BillStreamWindow(Backfill, BillStreamWindow.LastClosedDay(DateTimeOffset.UtcNow));
 
-        await store.AdmitListPageAsync(Source(), "caught-up", caughtUp, new CongressBillListPage([Bill(119, 1)], null), default);
+        await AdmitAsync(Source(), "caught-up", caughtUp, new CongressBillListPage([Bill(119, 1)], null, StartsPass: true));
 
         Assert.True(await ReadNextDueAsync() <= DateTimeOffset.UtcNow.UtcTicks);
         Assert.Null(await ReadCursorAsync());
@@ -145,8 +173,8 @@ public sealed class PostgresBillStreamTests(PostgresCollection postgres) : IAsyn
     {
         await store.SynchronizeAsync(Configuration(), default);
         var window = new BillStreamWindow(Backfill, Backfill);
-        await store.AdmitListPageAsync(Source(), "first-pass", window,
-            new CongressBillListPage([Bill(119, 1)], window.RequestUrl(SourceUrl) + "&offset=250"), default);
+        await AdmitAsync(Source(), "first-pass", window,
+            new CongressBillListPage([Bill(119, 1)], window.RequestUrl(SourceUrl) + "&offset=250", StartsPass: true));
         await ExecuteAsync(connectionString, "UPDATE collection_source_schedules SET next_due_utc_ticks = 0");
 
         await store.AdvanceDueAsync(10, default);
@@ -159,12 +187,12 @@ public sealed class PostgresBillStreamTests(PostgresCollection postgres) : IAsyn
     {
         var window = new BillStreamWindow(Backfill, Backfill);
 
-        await store.AdmitListPageAsync(Source(), "one", window, new CongressBillListPage([Bill(119, 1)], null), default);
-        var again = await store.AdmitListPageAsync(Source(), "two", window,
-            new CongressBillListPage([Bill(119, 1) with { UpdateDate = Backfill.AddDays(1) }], null), default);
+        await AdmitAsync(Source(), "one", window, new CongressBillListPage([Bill(119, 1)], null, StartsPass: true));
+        var again = await AdmitAsync(Source(), "two", window,
+            new CongressBillListPage([Bill(119, 1) with { UpdateDate = Backfill.AddDays(1) }], null, StartsPass: true));
 
         Assert.Single(again.Jobs);
-        Assert.Equal(2, (await store.ListAsync(10, default)).Count);
+        Assert.Equal(2, (await AdmittedJobsAsync()).Count);
     }
 
     [Fact]
@@ -172,9 +200,9 @@ public sealed class PostgresBillStreamTests(PostgresCollection postgres) : IAsyn
     {
         var window = new BillStreamWindow(Backfill, Backfill);
 
-        await store.AdmitListPageAsync(Source(), "one", window, new CongressBillListPage([Bill(119, 1)], window.RequestUrl(SourceUrl) + "&offset=250"), default);
+        await AdmitAsync(Source(), "one", window, new CongressBillListPage([Bill(119, 1)], window.RequestUrl(SourceUrl) + "&offset=250", StartsPass: true));
 
-        var jobs = await store.ListAsync(10, default);
+        var jobs = await AdmittedJobsAsync();
         Assert.All(jobs, job =>
         {
             Assert.StartsWith(BillStreamJobKeys.Prefix, job.IdempotencyKey, StringComparison.Ordinal);
@@ -189,8 +217,8 @@ public sealed class PostgresBillStreamTests(PostgresCollection postgres) : IAsyn
         var later = new BillStreamWindow(Backfill.AddDays(10), Backfill.AddDays(12));
         var earlier = new BillStreamWindow(Backfill, Backfill.AddDays(2));
 
-        await store.AdmitListPageAsync(Source(), "later", later, new CongressBillListPage([], null), default);
-        await store.AdmitListPageAsync(Source(), "earlier", earlier, new CongressBillListPage([], null), default);
+        await AdmitAsync(Source(), "later", later, new CongressBillListPage([], null, StartsPass: true));
+        await AdmitAsync(Source(), "earlier", earlier, new CongressBillListPage([], null, StartsPass: true));
 
         Assert.Equal(later.LastDay, await ReadCursorAsync());
     }
@@ -202,7 +230,7 @@ public sealed class PostgresBillStreamTests(PostgresCollection postgres) : IAsyn
         await ExecuteAsync(connectionString, $"UPDATE collection_source_schedules SET next_due_utc_ticks = {DateTimeOffset.UtcNow.AddDays(1).UtcTicks}");
         var behind = new BillStreamWindow(Backfill, Backfill.AddDays(6));
 
-        await store.AdmitListPageAsync(Source(), "behind", behind, new CongressBillListPage([], null), default);
+        await AdmitAsync(Source(), "behind", behind, new CongressBillListPage([], null, StartsPass: true));
 
         Assert.True(await ReadNextDueAsync() <= DateTimeOffset.UtcNow.UtcTicks);
     }
@@ -215,7 +243,7 @@ public sealed class PostgresBillStreamTests(PostgresCollection postgres) : IAsyn
         await ExecuteAsync(connectionString, $"UPDATE collection_source_schedules SET next_due_utc_ticks = {due}");
         var caughtUp = new BillStreamWindow(Backfill, BillStreamWindow.LastClosedDay(DateTimeOffset.UtcNow));
 
-        await store.AdmitListPageAsync(Source(), "caught-up", caughtUp, new CongressBillListPage([], null), default);
+        await AdmitAsync(Source(), "caught-up", caughtUp, new CongressBillListPage([], null, StartsPass: true));
 
         Assert.Equal(due, await ReadNextDueAsync());
     }
@@ -231,10 +259,10 @@ public sealed class PostgresBillStreamTests(PostgresCollection postgres) : IAsyn
             """);
         var window = new BillStreamWindow(Backfill, Backfill);
 
-        await Assert.ThrowsAnyAsync<Exception>(() => store.AdmitListPageAsync(Source(), "failing", window,
-            new CongressBillListPage([Bill(119, 1), Bill(119, 2), Bill(119, 3)], null), default));
+        await Assert.ThrowsAnyAsync<Exception>(() => AdmitAsync(Source(), "failing", window,
+            new CongressBillListPage([Bill(119, 1), Bill(119, 2), Bill(119, 3)], null, StartsPass: true)));
 
-        Assert.Empty(await store.ListAsync(10, default));
+        Assert.Empty(await AdmittedJobsAsync());
         Assert.Null(await ReadCursorAsync());
     }
 
@@ -246,10 +274,10 @@ public sealed class PostgresBillStreamTests(PostgresCollection postgres) : IAsyn
         pilot = pilot with { Sources = [.. pilot.Sources.Where(source => source.Id == SourceId).Select(source => source with { Enabled = true })] };
         var window = new BillStreamWindow(Backfill, Backfill);
         var page = new CongressBillListPage([.. Enumerable.Range(1, BillStreamWindow.PageLimit).Select(number => Bill(119, number))],
-            window.RequestUrl(SourceUrl) + "&offset=250");
+            window.RequestUrl(SourceUrl) + "&offset=250", StartsPass: true);
 
-        var result = await store.AdmitListPageAsync(new ConfiguredCollectionSource(pilot, SourceId, Backfill.AddDays(400)),
-            "full", window, page, default);
+        var result = await AdmitAsync(new ConfiguredCollectionSource(pilot, SourceId, Backfill.AddDays(400)),
+            "full", window, page);
 
         Assert.Equal(BillStreamWindow.PageLimit + 1, result.AdmittedCount);
         Assert.Equal(0, result.DeferredCount);
@@ -260,16 +288,28 @@ public sealed class PostgresBillStreamTests(PostgresCollection postgres) : IAsyn
     {
         var window = new BillStreamWindow(Backfill, Backfill);
         var page = new CongressBillListPage([.. Enumerable.Range(1, BillStreamWindow.PageLimit).Select(number => Bill(119, number))],
-            window.RequestUrl(SourceUrl) + "&offset=250");
+            window.RequestUrl(SourceUrl) + "&offset=250", StartsPass: true);
 
-        var result = await store.AdmitListPageAsync(Source(), "full", window, page, default);
+        var result = await AdmitAsync(Source(), "full", window, page);
 
         Assert.Equal(BillStreamWindow.PageLimit + 1, result.AdmittedCount);
         Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM collection_configuration_revisions"));
         Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM collection_jobs WHERE definition_json::jsonb -> 'configurationRevision' IS NOT NULL"));
         var expected = CollectionConfigurationRevision.Create(Configuration());
-        Assert.All(await store.ListAsync(100, default), job => Assert.Equal(expected, job.Definition.ConfigurationRevision));
+        Assert.All(await AdmittedJobsAsync(), job => Assert.Equal(expected, job.Definition.ConfigurationRevision));
     }
+
+    private async Task<DiscoveryAdmissionResult> AdmitAsync(ConfiguredCollectionSource source, string listJob,
+        BillStreamWindow window, CongressBillListPage page)
+    {
+        var definition = source.CreateApiJobDefinition(ApiResource.BillList, window.RequestUrl(SourceUrl), Backfill);
+        var job = await store.EnqueueAsync(definition, ListJobKeyPrefix + listJob, default);
+        await ExecuteAsync(connectionString, $"UPDATE collection_jobs SET state = 'Succeeded' WHERE job_id = '{job.JobId}'");
+        return await store.AdmitListPageAsync(source, job.JobId, window, page, default);
+    }
+
+    private async Task<IReadOnlyList<CollectionJobRecord>> AdmittedJobsAsync() =>
+        [.. (await store.ListAsync(100, default)).Where(job => !job.IdempotencyKey.StartsWith(ListJobKeyPrefix, StringComparison.Ordinal))];
 
     private async Task<object?> ScalarAsync(string sql)
     {
