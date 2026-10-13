@@ -2,6 +2,7 @@ using System.Data;
 using System.Collections.Immutable;
 using System.Text.Json;
 using CivicLens.Application.Paging;
+using CivicLens.Application.Publication;
 using CivicLens.Application.Review;
 using CivicLens.Collection.Contracts;
 using CivicLens.Core.Documents;
@@ -20,7 +21,6 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
     : IDocumentChangeReviewStore
 {
     private const int MaximumPageSize = 100;
-    private const int MaximumPublicationDrafts = 64;
     private const string CreateOperation = "create";
     private const string SaveOperation = "save";
     private const string DecideOperation = "decide";
@@ -560,7 +560,7 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
     private static void ValidateDraftIds(IReadOnlyCollection<string> values)
     {
         ArgumentNullException.ThrowIfNull(values);
-        if (values.Count is < 1 or > MaximumPublicationDrafts) throw new ArgumentOutOfRangeException(nameof(values));
+        if (values.Count is < 1 or > PublishRelease.MaximumRecords) throw new ArgumentOutOfRangeException(nameof(values));
         foreach (var value in values) ValidateDraftId(value);
     }
 

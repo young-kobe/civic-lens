@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using System.Data;
 using CivicLens.Application.Paging;
+using CivicLens.Application.Publication;
 using CivicLens.Application.Review;
 using CivicLens.Application.Statements;
 using CivicLens.Core.Documents;
@@ -22,7 +23,6 @@ public sealed class PostgresStatementReviewStore(IDbContextFactory<CollectionAtt
     private const string CreateOperation = "statement-create";
     private const string SaveOperation = "statement-save";
     private const string DecideOperation = "statement-decide";
-    private const int MaximumPublicationCandidates = 64;
 
     public static PostgresStatementReviewStore FromConnectionString(string connectionString)
     {
@@ -188,7 +188,7 @@ public sealed class PostgresStatementReviewStore(IDbContextFactory<CollectionAtt
     public async Task<IReadOnlyDictionary<string, PublishableStatement>> GetForPublicationAsync(ImmutableArray<string> candidateIds,
         CancellationToken cancellationToken)
     {
-        if (candidateIds.IsDefaultOrEmpty || candidateIds.Length > MaximumPublicationCandidates)
+        if (candidateIds.IsDefaultOrEmpty || candidateIds.Length > PublishRelease.MaximumRecords)
             throw new ArgumentOutOfRangeException(nameof(candidateIds));
         var ids = candidateIds.ToArray();
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
@@ -325,7 +325,7 @@ public sealed class PostgresStatementReviewStore(IDbContextFactory<CollectionAtt
         DocumentExtraction extraction, IEnumerable<StatementRevisionRow> revisionRows, IEnumerable<StatementReviewDecisionRow> decisionRows)
     {
         var review = BuildReview(draft, revisionRows, decisionRows);
-        foreach (var revision in review.Revisions) revision.ValidateAgainst(extraction);
+        review.CurrentRevision?.ValidateAgainst(extraction);
         return new(review, candidate.Url, extraction);
     }
 
