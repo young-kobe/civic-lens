@@ -148,6 +148,39 @@ public sealed class ListPublishableTests
         Assert.True(list.HasMore);
     }
 
+    [Fact]
+    public async Task StatementStillAppearsWhenDocumentChangesAloneWouldFillThePublishLimit()
+    {
+        var scenario = new PublicationScenario();
+        for (var index = 0; index < PublishRelease.MaximumRecords; index++)
+            scenario.Reviews.Unpublished.Add(Candidate(index.ToString("x32")));
+        var statementId = scenario.AddStatement('b');
+        scenario.Statements.Unpublished.Add(StatementCandidate(statementId));
+
+        var list = await new ListPublishable(scenario.Reviews, scenario.Statements).ExecuteAsync(PublicationScenario.Owner);
+
+        Assert.Equal(PublishRelease.MaximumRecords, list.Items.Length);
+        Assert.Contains(list.Items, item => item.Kind == PublishedRecordKind.Statement && item.RecordId == statementId);
+        Assert.True(list.HasMore);
+    }
+
+    [Fact]
+    public async Task KindWithFewReadyRecordsGivesItsUnusedShareToTheOtherKind()
+    {
+        var scenario = new PublicationScenario();
+        for (var index = 0; index < 70; index++)
+            scenario.Reviews.Unpublished.Add(Candidate(index.ToString("x32")));
+        for (var index = 0; index < 10; index++)
+            scenario.Statements.Unpublished.Add(StatementCandidate(index.ToString("x64")));
+
+        var list = await new ListPublishable(scenario.Reviews, scenario.Statements).ExecuteAsync(PublicationScenario.Owner);
+
+        Assert.Equal(54, list.Items.Count(item => item.Kind == PublishedRecordKind.DocumentChange));
+        Assert.Equal(10, list.Items.Count(item => item.Kind == PublishedRecordKind.Statement));
+        Assert.Equal(PublishRelease.MaximumRecords, list.Items.Length);
+        Assert.True(list.HasMore);
+    }
+
     private static UnpublishedApprovedStatement StatementCandidate(string candidateId, int? publishedRevision = null,
         ReviewStatus status = ReviewStatus.Approved)
     {
