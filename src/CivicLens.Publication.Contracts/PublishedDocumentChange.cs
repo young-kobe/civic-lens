@@ -52,10 +52,14 @@ public sealed record PublishedDocumentChange
 
     private void ValidateLabels()
     {
-        if (Officials is null || IssueIds is null || Officials.Any(item => item is null || string.IsNullOrWhiteSpace(item.Name)) ||
-            !PublishedEvidenceRules.AreDistinctAndNotBlank(Officials.Select(item => item.Id)) ||
-            !PublishedEvidenceRules.AreDistinctAndNotBlank(IssueIds))
-            throw new InvalidDataException("Published record officials or issues are invalid.");
+        if (Officials is null || IssueIds is null)
+            throw new InvalidDataException("Published record officials or issues are missing.");
+        if (Officials.Any(item => item is null || string.IsNullOrWhiteSpace(item.Name)))
+            throw new InvalidDataException("Published record officials require a name.");
+        if (!PublishedEvidenceRules.AreDistinctAndNotBlank(Officials.Select(item => item.Id)))
+            throw new InvalidDataException("Published record official ids must be distinct and not blank.");
+        if (!PublishedEvidenceRules.AreDistinctAndNotBlank(IssueIds))
+            throw new InvalidDataException("Published record issue ids must be distinct and not blank.");
     }
 
     private void ValidateChange(PublishedChange? change)

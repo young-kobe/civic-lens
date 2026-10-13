@@ -155,7 +155,8 @@ public sealed class ReleaseRendererTests
         Assert.Contains("Evidence for the statement date", html, StringComparison.Ordinal);
         Assert.Contains("href=\"https://example.gov/story\"", html, StringComparison.Ordinal);
         Assert.Contains("Observed 2026-05-03 10:45 UTC", html, StringComparison.Ordinal);
-        Assert.Contains("They do not show when or why the source changed.", html, StringComparison.Ordinal);
+        Assert.Contains("It does not show when the statement was first made.", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("when or why the source changed", html, StringComparison.Ordinal);
         Assert.DoesNotContain("<script>", html, StringComparison.Ordinal);
     }
 

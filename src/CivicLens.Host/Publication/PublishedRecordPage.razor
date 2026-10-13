@@ -1,7 +1,8 @@
 @using CivicLens.Publication.Contracts
 
 <PublishedRecordFrame Headline="@Record.Headline" Summary="@Record.Summary" Significance="@Record.Significance"
-                      Limits="@Record.Limits" Facts="RecordFacts">
+                      Limits="@Record.Limits" Facts="RecordFacts"
+                      Caveat="Observation times show when each version was captured. They do not show when or why the source changed.">
 
     <Panel Title="What changed" Id="changes-title" Padded="true">
         <DocumentComparisonView Hunks="PublishedRecordView.Hunks(Record)" ViewId="@Record.RecordId" />

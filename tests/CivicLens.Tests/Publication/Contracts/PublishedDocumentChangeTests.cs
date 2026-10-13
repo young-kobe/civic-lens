@@ -30,6 +30,27 @@ public sealed class PublishedDocumentChangeTests
         Assert.Throws<InvalidDataException>(() => Record(citation).Validate());
     }
 
+    [Theory]
+    [MemberData(nameof(BadLabels))]
+    public void RejectsBlankOrRepeatedLabelsAndNamesTheFailingSet(PublishedDocumentChange record, string expectedMessage)
+    {
+        var error = Assert.Throws<InvalidDataException>(record.Validate);
+
+        Assert.Equal(expectedMessage, error.Message);
+    }
+
+    public static TheoryData<PublishedDocumentChange, string> BadLabels()
+    {
+        var record = Record(new() { ExtractionId = AfterId, Start = 1, Length = 2, Quote = "\U0001F600" });
+        return new()
+        {
+            { record with { IssueIds = null! }, "Published record officials or issues are missing." },
+            { record with { Officials = [new() { Id = "mayor", Name = " " }] }, "Published record officials require a name." },
+            { record with { Officials = [new() { Id = "mayor", Name = "A" }, new() { Id = "mayor", Name = "B" }] }, "Published record official ids must be distinct and not blank." },
+            { record with { IssueIds = ["housing", "housing"] }, "Published record issue ids must be distinct and not blank." }
+        };
+    }
+
     [Fact]
     public void PublishedRecordJsonMatchesPinnedSchemaVersion()
     {

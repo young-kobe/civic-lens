@@ -53,13 +53,19 @@ public sealed record PublishedStatement
 
     private void ValidateLabels()
     {
-        if (Speakers is null || Speakers.Length == 0 || OtherSpeakers is null || IssueIds is null || PolicyAreaIds is null ||
-            BillNumbers is null || Speakers.Any(item => item is null || string.IsNullOrWhiteSpace(item.Name)) ||
-            !PublishedEvidenceRules.AreDistinctAndNotBlank(Speakers.Select(item => item.Id)) ||
-            !PublishedEvidenceRules.AreDistinctAndNotBlank(OtherSpeakers) ||
-            !PublishedEvidenceRules.AreDistinctAndNotBlank(IssueIds) ||
-            !PublishedEvidenceRules.AreDistinctAndNotBlank(PolicyAreaIds) ||
-            !PublishedEvidenceRules.AreDistinctAndNotBlank(BillNumbers))
-            throw new InvalidDataException("Published statement speakers or labels are invalid.");
+        if (Speakers is null || OtherSpeakers is null || IssueIds is null || PolicyAreaIds is null || BillNumbers is null)
+            throw new InvalidDataException("Published statement speakers or labels are missing.");
+        if (Speakers.Length == 0)
+            throw new InvalidDataException("Published statement requires at least one speaker.");
+        if (Speakers.Any(item => item is null || string.IsNullOrWhiteSpace(item.Name)))
+            throw new InvalidDataException("Published statement speakers require a name.");
+        if (!PublishedEvidenceRules.AreDistinctAndNotBlank(Speakers.Select(item => item.Id)))
+            throw new InvalidDataException("Published statement speaker ids must be distinct and not blank.");
+        foreach (var (name, labels) in new[]
+        {
+            ("other speakers", OtherSpeakers), ("issue ids", IssueIds), ("policy area ids", PolicyAreaIds), ("bill numbers", BillNumbers)
+        })
+            if (!PublishedEvidenceRules.AreDistinctAndNotBlank(labels))
+                throw new InvalidDataException($"Published statement {name} must be distinct and not blank.");
     }
 }
