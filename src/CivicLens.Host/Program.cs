@@ -80,6 +80,7 @@ if (args is [] or ["--help"] or ["help"])
         jobs commands require the database. Each run reconciles prior work and performs at most one new fetch.
         worker also drafts document-change accounts when CIVIC_LENS_ANALYSIS_DAILY_TOKENS and ANTHROPIC_API_KEY are set.
         worker also gates statement candidates when CIVIC_LENS_STATEMENT_GATE_DAILY_TOKENS, ANTHROPIC_API_KEY, and CIVIC_LENS_ISSUES_CONFIG are set.
+        worker requires CIVIC_LENS_ISSUES_CONFIG when a Congress.gov bill list source is enabled.
         worker also drafts statements when CIVIC_LENS_STATEMENT_DRAFTING_DAILY_TOKENS and ANTHROPIC_API_KEY are set.
         documents commands require the database. Citations use UTF-16 offsets into immutable extracted text.
         Exit codes: 0 success, 1 failed/deferred collection or operational failure, 2 invalid input/configuration.
@@ -150,6 +151,9 @@ try
         if (string.IsNullOrWhiteSpace(configurationPath) || !Path.IsPathFullyQualified(configurationPath))
             throw new ArgumentException("Worker requires CIVIC_LENS_COLLECTION_CONFIG to name an absolute configuration path.");
         var workerConfiguration = await ReadConfigurationAsync(configurationPath, cancellation.Token);
+        var issues = StatementIssueRubric.FromEnvironment();
+        if (issues is null && workerConfiguration.Sources.Any(source => source.Enabled && source.ApiParser == ApiParser.CongressBillList))
+            throw new ArgumentException("Worker requires CIVIC_LENS_ISSUES_CONFIG when a Congress.gov bill list source is enabled.");
         var jobs = CreateJobs();
         var attempts = CreateDatabase();
         var connectionString = Environment.GetEnvironmentVariable("CIVIC_LENS_DATABASE")!;
@@ -170,7 +174,7 @@ try
         var comparisons = PostgresDocumentComparisonStore.FromConnectionString(connectionString);
         var processingStore = PostgresEvidenceProcessingStore.FromConnectionString(connectionString);
         var processing = new EvidenceProcessingWorker(jobs,
-            new JobPreparation(jobs, attempts, jobs, jobs, new CaptureBodyReader(), processingStore),
+            new JobPreparation(jobs, attempts, jobs, jobs, new CaptureBodyReader(), processingStore, issues),
             processingStore,
             new ExtractDocument(attempts, new CaptureDocumentTextExtractor(), extractions),
             new GetDocumentHistory(PostgresDocumentHistoryStore.FromConnectionString(connectionString)),

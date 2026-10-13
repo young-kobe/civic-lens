@@ -23,6 +23,15 @@ public sealed class CongressBillSourceConfigurationTests
     }
 
     [Fact]
+    public void BillListSourceCoversTheBioguideIdsOfItsCoveredPeopleOnlyFromTheBackfillDate()
+    {
+        var source = new ConfiguredCollectionSource(Configuration(), "congress-bills", Backfill);
+
+        Assert.Equal(["A000001", "B000002"], source.CoveredBioguideIdsOn(Backfill).Order());
+        Assert.Empty(source.CoveredBioguideIdsOn(Backfill.AddDays(-1)));
+    }
+
+    [Fact]
     public void BillListSourceNamesNoPeopleSoLabelsDoNotListEveryMember()
     {
         var configuration = Configuration();

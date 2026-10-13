@@ -16,13 +16,15 @@ public sealed record CongressBillListItem(int Congress, string Type, int Number,
         return IsKnownType(lowered) ? lowered : null;
     }
 
-    public static bool IsDetailUrl(string sourceUrl, string url)
+    public static bool IsDetailUrl(string sourceUrl, string url) => TryReadDetailUrl(sourceUrl, url) is not null;
+
+    public static CongressBillListItem? TryReadDetailUrl(string sourceUrl, string url)
     {
         var prefix = sourceUrl + "/";
         if (!url.StartsWith(prefix, StringComparison.Ordinal) || !url.EndsWith(DetailQuery, StringComparison.Ordinal))
-            return false;
+            return null;
         var parts = url[prefix.Length..^DetailQuery.Length].Split('/');
-        return parts.Length == 3 && TryReadIdentity(parts[0], parts[1], parts[2]) is not null;
+        return parts.Length == 3 ? TryReadIdentity(parts[0], parts[1], parts[2]) : null;
     }
 
     internal static CongressBillListItem? TryReadIdentity(string congress, string type, string number)

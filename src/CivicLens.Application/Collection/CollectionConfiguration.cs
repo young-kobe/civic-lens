@@ -114,6 +114,13 @@ public sealed record CollectionConfiguration
         return ids.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
     }
 
+    public IReadOnlySet<string> CoveredBioguideIdsOf(WatchedSourceConfiguration source, DateOnly asOf)
+    {
+        var covered = CoveredPersonIdsOf(source, asOf).ToHashSet(StringComparer.Ordinal);
+        return People.Where(person => person.BioguideId is not null && covered.Contains(person.Id))
+            .Select(person => person.BioguideId!).ToHashSet(StringComparer.Ordinal);
+    }
+
     public string[] ListedPersonIdsOf(WatchedSourceConfiguration source) =>
         source.ApiParser is null
             ? [.. source.Coverage!.Select(coverage => coverage.PersonId).Distinct(StringComparer.Ordinal)]

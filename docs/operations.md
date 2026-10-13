@@ -98,9 +98,24 @@ The source `congress-bills` in `config/federal-coverage.json` and `config/federa
 2. Set `CIVIC_LENS_CONGRESS_API_KEY` in the protected environment of the worker. Do not put the key in configuration.
 3. Set `enabled` to `true` for `congress-bills` and restart the worker. A restart reads the configuration again.
 
-The source checks once a day. It starts at `backfillFrom` (2025-01-03) and works forward in windows of at most 7 closed UTC days. A day is closed 6 hours after it ends. A window is listed again at once until a full pass over its pages admits no new bills. Then the cursor moves, and the next window starts at once until the source reaches the last closed day. So each window takes at least two passes. The second pass costs only list pages. Each window can admit up to 250 bill detail jobs and up to one next page job, one list page at a time. Bills below `minimumCongress` (119) are skipped. A bill that was admitted with the same update date is not admitted again. This backfill sends many requests to Congress.gov, paced by `minDelayMilliseconds`, so it takes some time. Bill detail jobs only save the capture today. No parser reads them yet. The source row on the Sources page shows no check state yet, because its jobs use windowed URLs.
+The source checks once a day. It starts at `backfillFrom` (2025-01-03) and works forward in windows of at most 7 closed UTC days. A day is closed 6 hours after it ends. A window is listed again at once until a full pass over its pages admits no new bills. Then the cursor moves, and the next window starts at once until the source reaches the last closed day. So each window takes at least two passes. The second pass costs only list pages. Each window can admit up to 250 bill detail jobs and up to one next page job, one list page at a time. Bills below `minimumCongress` (119) are skipped. A bill that was admitted with the same update date is not admitted again. This backfill sends many requests to Congress.gov, paced by `minDelayMilliseconds`, so it takes some time. Each bill detail job decides a relevance gate and admits cosponsor and actions page jobs. [Architecture](architecture.md#congressgov-bill-stream-implemented-through-the-gate) holds the rules. The worker needs `CIVIC_LENS_ISSUES_CONFIG` for this. With an enabled bill source and no issue file, the worker refuses to start and exits with code 2. The source row on the Sources page shows no check state yet, because its jobs use windowed URLs.
 
 If a list page is malformed, preparation of that job is blocked and the cursor does not move. The pass counter can stay above 0, which causes at most one extra pass. The next due check repeats the same window. Configuration loading rejects a bill list source whose `admissionPolicy` cannot hold 251 jobs: a full page of 250 detail jobs and the next page job. Set `maxJobs` to at least 251, and size the request, byte, and time totals for 251 jobs. A source without `admissionPolicy` uses the small defaults and fails this check.
+
+To list bills whose gate is still pending because a cosponsor page job is blocked, run this query:
+
+```sql
+SELECT g.detail_job_id, g.source_id, g.congress, g.bill_type, g.bill_number,
+       e.job_id AS blocked_job_id, e.error_code
+FROM bill_gates g
+JOIN bill_follow_on_jobs l ON l.detail_job_id = g.detail_job_id
+JOIN collection_jobs j ON j.job_id = l.job_id
+JOIN evidence_processing e ON e.job_id = l.job_id
+WHERE g.decision = 'Pending'
+  AND j.definition_json::jsonb ->> 'apiResource' = 'billCosponsors'
+  AND e.status = 'Blocked'
+ORDER BY g.congress, g.bill_type, g.bill_number;
+```
 
 ## Postgres adapter and migrations
 

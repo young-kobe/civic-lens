@@ -48,7 +48,7 @@ public readonly record struct BillPageUrl(CongressBillListItem Bill, int Offset)
         return next;
     }
 
-    private static string? SegmentOf(ApiResource resource) => resource switch
+    internal static string? SegmentOf(ApiResource resource) => resource switch
     {
         ApiResource.BillCosponsors => "cosponsors",
         ApiResource.BillActions => "actions",

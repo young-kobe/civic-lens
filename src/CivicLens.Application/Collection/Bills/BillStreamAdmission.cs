@@ -13,4 +13,6 @@ public sealed record BillStreamAdmission(
     BillStreamJob? NextPage)
 {
     public bool EndsWindow => NextPage is null;
+
+    public BillStreamBatch Batch => new(Policy, Template, NextPage is null ? Bills : [.. Bills, NextPage]);
 }
