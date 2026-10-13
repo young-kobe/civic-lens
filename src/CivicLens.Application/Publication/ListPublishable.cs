@@ -20,14 +20,14 @@ public sealed class ListPublishable(IDocumentChangeReviewStore documentChanges, 
 
     private static IEnumerable<ReadyToPublishRecord> ReadyChanges(IReadOnlyList<UnpublishedApprovedDraft> candidates) =>
         candidates
-            .Where(candidate => PublishedRecordBuilder.IsPublishable(candidate.Draft.CurrentStatus, candidate.Draft.UnresolvedConcernCount))
+            .Where(candidate => PublishedRecordRules.IsPublishable(candidate.Draft.CurrentStatus, candidate.Draft.UnresolvedConcernCount))
             .Select(candidate => new ReadyToPublishRecord(PublishedRecordKind.DocumentChange, candidate.Draft.DraftId,
                 candidate.Draft.CurrentRevision.Headline, candidate.Draft.CurrentRevision.RevisionNumber, candidate.PublishedRevisionNumber));
 
     private static IEnumerable<ReadyToPublishRecord> ReadyStatements(IReadOnlyList<UnpublishedApprovedStatement> candidates) =>
         candidates
             .Where(candidate => candidate.Statement.CurrentRevision is not null &&
-                PublishedRecordBuilder.IsPublishable(candidate.Statement.CurrentStatus, candidate.Statement.UnresolvedConcernCount))
+                PublishedRecordRules.IsPublishable(candidate.Statement.CurrentStatus, candidate.Statement.UnresolvedConcernCount))
             .Select(candidate => new ReadyToPublishRecord(PublishedRecordKind.Statement, candidate.Statement.CandidateId,
                 candidate.Statement.CurrentRevision!.Headline, candidate.Statement.CurrentRevision.RevisionNumber,
                 candidate.PublishedRevisionNumber));
