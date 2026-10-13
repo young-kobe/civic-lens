@@ -12,6 +12,8 @@ public sealed partial class PostgresCollectionJobStore : IBillStreamAdmissionSto
 {
     private const int BillStreamSaveBatchSize = 10;
 
+    private sealed record AdmittedBillStreamJob(BillStreamJob Job, string JobId);
+
     public Task<DiscoveryAdmissionResult> AdmitListPageAsync(ConfiguredCollectionSource source, string listJobId,
         BillStreamWindow window, CongressBillListPage page, CancellationToken cancellationToken)
     {
@@ -21,25 +23,26 @@ public sealed partial class PostgresCollectionJobStore : IBillStreamAdmissionSto
         return TransactionAsync(async (db, now) =>
         {
             var admission = source.CreateBillStreamAdmission(listJobId, window, page, DateOnly.FromDateTime(now.UtcDateTime));
-            var (result, admittedBills) = await AdmitBillStreamJobsAsync(db, admission, now, cancellationToken);
+            var (result, admitted) = await AdmitBillStreamJobsAsync(db, admission.Batch, BillStreamSaveBatchSize, now, cancellationToken);
             if (result.DeferredCount > 0)
                 throw new InvalidDataException($"Source '{source.SourceId}' admission policy cannot hold a full bill list page.");
+            var admittedBills = admitted.Count(item => item.Job != admission.NextPage);
             await RecordPassAsync(db, listJobId, admission, admittedBills, now, cancellationToken);
             return result;
         }, cancellationToken);
     }
 
-    private static async Task<(DiscoveryAdmissionResult Result, int AdmittedBills)> AdmitBillStreamJobsAsync(
-        CollectionAttemptDbContext db, BillStreamAdmission admission, DateTimeOffset now, CancellationToken cancellationToken)
+    private static async Task<(DiscoveryAdmissionResult Result, IReadOnlyList<AdmittedBillStreamJob> Admitted)>
+        AdmitBillStreamJobsAsync(CollectionAttemptDbContext db, BillStreamBatch batch, int saveBatchSize,
+            DateTimeOffset now, CancellationToken cancellationToken)
     {
-        BillStreamJob[] jobs = admission.NextPage is null ? [.. admission.Bills] : [.. admission.Bills, admission.NextPage];
+        var jobs = batch.Jobs;
         var keys = jobs.Select(job => job.IdempotencyKey).ToArray();
         var knownKeys = (await db.Set<JobRow>().Where(row => keys.Contains(row.IdempotencyKey))
             .Select(row => row.IdempotencyKey).ToListAsync(cancellationToken)).ToHashSet(StringComparer.Ordinal);
         var jobWriter = new JobRowWriter(db, Ticks(now));
-        var budget = admission.Policy.OpenBudget(admission.Template);
-        var admitted = new List<DiscoveryAdmissionJob>();
-        var admittedBills = 0;
+        var budget = batch.Policy.OpenBudget(batch.Template);
+        var admitted = new List<AdmittedBillStreamJob>();
         var deferred = 0;
         foreach (var job in jobs.Where(job => !knownKeys.Contains(job.IdempotencyKey)))
         {
@@ -50,15 +53,15 @@ public sealed partial class PostgresCollectionJobStore : IBillStreamAdmissionSto
                 continue;
             }
             var row = await jobWriter.AddJobAsync(job.IdempotencyKey, job.Definition, cancellationToken);
-            admitted.Add(new DiscoveryAdmissionJob(row.JobId, job.Definition.Url));
-            if (job != admission.NextPage) admittedBills++;
-            if (admitted.Count % BillStreamSaveBatchSize == 0)
+            admitted.Add(new AdmittedBillStreamJob(job, row.JobId));
+            if (admitted.Count % saveBatchSize == 0)
             {
                 await db.SaveChangesAsync(cancellationToken);
                 db.ChangeTracker.Clear();
             }
         }
-        return (new DiscoveryAdmissionResult(admitted, deferred, knownKeys.Count), admittedBills);
+        var admittedJobs = admitted.Select(item => new DiscoveryAdmissionJob(item.JobId, item.Job.Definition.Url)).ToList();
+        return (new DiscoveryAdmissionResult(admittedJobs, deferred, knownKeys.Count), admitted);
     }
 
     private static async Task RecordPassAsync(CollectionAttemptDbContext db, string listJobId,

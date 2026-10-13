@@ -1,4 +1,9 @@
+using System.Text.Json;
+using CivicLens.Application.Configuration;
+using CivicLens.Collection.Contracts;
 using CivicLens.Host.Review;
+using CivicLens.Tests.Application.Collection.Bills;
+using CivicLens.Tests.Fixtures;
 
 namespace CivicLens.Tests.Host;
 
@@ -30,6 +35,41 @@ public sealed class DocumentChangeAnalysisConfigurationTests
 
             Assert.Equal(2, result.ExitCode);
             Assert.DoesNotContain("key-sentinel", result.Output + result.Error);
+            Assert.DoesNotContain("secret-sentinel", result.Output + result.Error);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData(true, false, 2)]
+    [InlineData(false, false, 1)]
+    [InlineData(true, true, 1)]
+    public async Task TheWorkerRefusesAnEnabledBillListSourceWithoutAnIssuesConfiguration(bool enabled, bool withIssues, int exitCode)
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "civic-bill-issues-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var configuration = CongressBillSourceConfigurationTests.Configuration();
+            var config = Path.Combine(directory, "config.json");
+            await File.WriteAllTextAsync(config, JsonSerializer.Serialize(
+                configuration with { Sources = [configuration.Sources.Single() with { Enabled = enabled }] },
+                ConfigurationJson.Options));
+            var environment = new Dictionary<string, string> { ["CIVIC_LENS_COLLECTION_CONFIG"] = config };
+            if (withIssues)
+            {
+                var issues = Path.Combine(directory, "issues.json");
+                await File.WriteAllTextAsync(issues, JsonSerializer.Serialize(BillGateFixtures.Issues(), CollectionProtocol.JsonOptions));
+                environment["CIVIC_LENS_ISSUES_CONFIG"] = issues;
+            }
+
+            var result = await HostProcess.RunWithEnvironmentAsync(Database, null, environment,
+                "worker", Path.Combine(directory, "collector.dll"), Path.Combine(directory, "captures"), "--once");
+
+            Assert.Equal(exitCode, result.ExitCode);
             Assert.DoesNotContain("secret-sentinel", result.Output + result.Error);
         }
         finally

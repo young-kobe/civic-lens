@@ -46,7 +46,7 @@ review: migrate ## Run the HTTPS proxy, review workspace, and worker
 	trap 'kill $$(jobs -p) 2>/dev/null; wait' EXIT
 	$(CADDY) run --config .runtime/review/Caddyfile --adapter caddyfile > .runtime/review/proxy.log 2>&1 &
 	$(HOST) review 5081 &
-	$(HOST) worker $(COLLECTOR) .runtime/captures > .runtime/review/worker.log 2>&1 &
+	([[ ! -f .runtime/congress/api.env ]] || source .runtime/congress/api.env; exec $(HOST) worker $(COLLECTOR) .runtime/captures) > .runtime/review/worker.log 2>&1 &
 	echo "Review workspace: https://localhost:7443 (Ctrl+C stops all three)."
 	wait -n
 

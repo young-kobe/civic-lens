@@ -23,6 +23,15 @@ public sealed class CongressBillSourceConfigurationTests
     }
 
     [Fact]
+    public void BillListSourceCoversTheBioguideIdsOfItsCoveredPeopleOnlyFromTheBackfillDate()
+    {
+        var source = new ConfiguredCollectionSource(Configuration(), "congress-bills", Backfill);
+
+        Assert.Equal(["A000001", "B000002"], source.CoveredBioguideIdsOn(Backfill).Order());
+        Assert.Empty(source.CoveredBioguideIdsOn(Backfill.AddDays(-1)));
+    }
+
+    [Fact]
     public void BillListSourceNamesNoPeopleSoLabelsDoNotListEveryMember()
     {
         var configuration = Configuration();
@@ -193,11 +202,36 @@ public sealed class CongressBillSourceConfigurationTests
     [InlineData(ApiResource.Bill, "https://api.congress.gov/v3/bill/119/hr/1/actions?format=json")]
     [InlineData(ApiResource.Bill, "https://api.congress.gov/v3/bill/119/xx/1?format=json")]
     [InlineData(ApiResource.BillList, "https://api.congress.gov/v3/bill?fromDateTime=2025-01-02T00:00:00Z&toDateTime=2025-01-04T00:00:00Z&limit=250&format=json")]
+    [InlineData(ApiResource.BillCosponsors, "https://api.congress.gov/v3/bill/119/hr/1/actions?format=json&limit=250")]
+    [InlineData(ApiResource.BillActions, "https://api.congress.gov/v3/bill/119/hr/1/cosponsors?format=json&limit=250")]
+    [InlineData(ApiResource.BillActions, "https://api.congress.gov/v3/bill/119/hr/1?format=json")]
+    [InlineData(ApiResource.Bill, "https://api.congress.gov/v3/bill/119/hr/1/actions?format=json&limit=250")]
+    [InlineData(ApiResource.BillActions, "https://api.congress.gov/v3/bill/119/hr/1/actions?format=json&limit=250&api_key=secret")]
+    [InlineData(ApiResource.BillActions, "https://api.congress.gov/v3/bill/119/hr/1/actions?format=json&limit=250&offset=1&offset=2")]
+    [InlineData(ApiResource.BillActions, "https://api.congress.gov/v3/bill/119/hr/1/actions?format=json&limit=250&offset=-1")]
+    [InlineData(ApiResource.BillActions, "https://api.congress.gov/v3/bill/119/hr/1/actions?format=json&limit=20")]
+    [InlineData(ApiResource.BillActions, "https://api.congress.gov/v3/bill/119/hr/01/actions?format=json&limit=250")]
+    [InlineData(ApiResource.BillActions, "https://api.congress.gov/v3/bill/119/xx/1/actions?format=json&limit=250")]
+    [InlineData(ApiResource.BillCosponsors, "https://api.congress.gov/v3/bill/119/hr/1/cosponsors/extra?format=json&limit=250")]
     public void AJobUrlMustHaveTheExactFormOfItsResourceSoTheWorkerNeverReadsItAsAnotherKind(ApiResource resource, string url)
     {
         var configured = new ConfiguredCollectionSource(Configuration(), "congress-bills", Backfill);
 
         Assert.Throws<ArgumentException>(() => configured.CreateApiJobDefinition(resource, url, Backfill));
+    }
+
+    [Theory]
+    [InlineData(ApiResource.BillCosponsors, "https://api.congress.gov/v3/bill/119/hres/1610/cosponsors?format=json&limit=250")]
+    [InlineData(ApiResource.BillCosponsors, "https://api.congress.gov/v3/bill/119/hres/1610/cosponsors?offset=250&limit=250&format=json")]
+    [InlineData(ApiResource.BillActions, "https://api.congress.gov/v3/bill/119/hr/1/actions?format=json&limit=250")]
+    [InlineData(ApiResource.BillActions, "https://api.congress.gov/v3/bill/119/hr/1/actions?limit=250&format=json&offset=500")]
+    public void FollowOnPageJobsAcceptTheFirstPageFormAndTheApiNextFormSoPagingNeedsNoRewrite(ApiResource resource, string url)
+    {
+        var configured = new ConfiguredCollectionSource(Configuration(), "congress-bills", Backfill);
+
+        var job = configured.CreateApiJobDefinition(resource, url, Backfill);
+
+        Assert.Equal(resource, job.ApiResource);
     }
 
     [Fact]

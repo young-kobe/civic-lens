@@ -56,7 +56,7 @@ public sealed class CongressBillListParserTests
     public void MoreItemsThanTheRequestLimitAreInvalidBecauseAdmissionBudgetsAssumeTheLimit()
     {
         var item = """{"congress":119,"type":"HR","number":"1","updateDate":"2025-01-03"}""";
-        var json = "{\"bills\":[" + string.Join(",", Enumerable.Repeat(item, BillStreamWindow.PageLimit + 1)) + "],\"pagination\":{}}";
+        var json = "{\"bills\":[" + string.Join(",", Enumerable.Repeat(item, BillPageQuery.PageLimit + 1)) + "],\"pagination\":{}}";
 
         Assert.Throws<InvalidDataException>(() => Parse(json));
     }

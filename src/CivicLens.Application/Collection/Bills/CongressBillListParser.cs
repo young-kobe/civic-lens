@@ -20,7 +20,7 @@ public static class CongressBillListParser
         var wire = Deserialize(json);
         if (wire.Bills is null || wire.Pagination is null)
             throw new InvalidDataException("Bill list page must contain bills and pagination.");
-        if (wire.Bills.Length > BillStreamWindow.PageLimit)
+        if (wire.Bills.Length > BillPageQuery.PageLimit)
             throw new InvalidDataException("Bill list page holds more bills than the request limit.");
         var bills = wire.Bills.Select(ToItem).ToArray();
         return new CongressBillListPage(bills, ReadNext(wire.Pagination.Next, scope, window), BillStreamWindow.StartsPass(scope.Url));
@@ -43,9 +43,8 @@ public static class CongressBillListParser
     {
         if (bill is not { Congress: >= 1, Number: >= 1, UpdateDate: not null, Type: not null })
             throw new InvalidDataException("Bill list item is incomplete.");
-        var type = bill.Type.ToLowerInvariant();
-        if (!CongressBillListItem.IsKnownType(type))
-            throw new InvalidDataException("Bill list item has an unknown bill type.");
+        var type = CongressBillListItem.NormalizeType(bill.Type)
+            ?? throw new InvalidDataException("Bill list item has an unknown bill type.");
         return new CongressBillListItem(bill.Congress.Value, type, bill.Number.Value, bill.UpdateDate.Value);
     }
 
