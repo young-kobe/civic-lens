@@ -1323,6 +1323,149 @@ public sealed class CollectorTests
         Assert.Empty(Directory.GetFiles(directory));
     }
 
+    private const string ApiKey = "api-key-for-tests-0123456789";
+
+    private static CollectionRequest ApiRequest(string directory) => Request(directory) with
+    {
+        Mode = CollectionMode.Api,
+        Url = "https://example.test/watch/v3/member",
+        Credential = CollectionCredentials.CongressGov
+    };
+
+    private static string? ApiKeyVariable(string name) =>
+        name == CollectionCredentials.VariableOf(CollectionCredentials.CongressGov) ? ApiKey : null;
+
+    [Fact]
+    public async Task ApiModeSendsTheNamedKeyAndAsksForJsonSoTheServerCanAuthenticateAndNegotiate()
+    {
+        using var directory = new TemporaryDirectory();
+        string? key = null;
+        string? accept = null;
+        using var collector = new HttpCollector(new QueueHandler(message =>
+        {
+            key = message.Headers.GetValues("X-Api-Key").Single();
+            accept = message.Headers.Accept.ToString();
+            return Response(HttpStatusCode.OK, "{\"member\":{}}");
+        }), ApiKeyVariable);
+
+        var result = await collector.FetchAsync(ApiRequest(directory.Path));
+
+        Assert.Equal(CollectionOutcome.Captured, result.Outcome);
+        Assert.Equal(ApiKey, key);
+        Assert.Equal("application/json", accept);
+        Assert.Null(result.Discovery);
+    }
+
+    [Fact]
+    public async Task ApiModeMakesNoRobotsRequestBecauseTheEndpointIsAnApiNotACrawledSite()
+    {
+        using var directory = new TemporaryDirectory();
+        var paths = new List<string>();
+        using var collector = new HttpCollector(new QueueHandler(message =>
+        {
+            paths.Add(message.RequestUri!.AbsolutePath);
+            return Response(HttpStatusCode.OK, "{}");
+        }), ApiKeyVariable);
+
+        var result = await collector.FetchAsync(ApiRequest(directory.Path));
+
+        Assert.Equal(CollectionOutcome.Captured, result.Outcome);
+        Assert.Equal(["/watch/v3/member"], paths);
+        Assert.Equal(0, result.RobotsRequestCount);
+        Assert.Equal(1, result.RequestCount);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task ApiModeFailsWithoutAnyRequestWhenTheNamedVariableHasNoValue(string? value)
+    {
+        using var directory = new TemporaryDirectory();
+        var handler = new QueueHandler();
+        using var collector = new HttpCollector(handler, _ => value);
+
+        var result = await collector.FetchAsync(ApiRequest(directory.Path));
+
+        Assert.Equal(CollectionOutcome.Failed, result.Outcome);
+        Assert.Equal(CollectionFailureCode.CredentialUnavailable, result.FailureCode);
+        Assert.Equal(0, handler.Calls);
+        Assert.Equal(0, result.RequestCount);
+    }
+
+    [Fact]
+    public async Task ApiKeyNeverAppearsInTheManifestOrTheReceipt()
+    {
+        using var directory = new TemporaryDirectory();
+        var request = ApiRequest(directory.Path);
+        using var collector = new HttpCollector(new QueueHandler(_ => Response(HttpStatusCode.OK, "{}")), ApiKeyVariable);
+
+        var result = await collector.FetchAsync(request);
+
+        Assert.Equal(CollectionOutcome.Captured, result.Outcome);
+        Assert.DoesNotContain(ApiKey, System.Text.Json.JsonSerializer.Serialize(request, CollectionProtocol.JsonOptions));
+        Assert.DoesNotContain(ApiKey, System.Text.Json.JsonSerializer.Serialize(result, CollectionProtocol.JsonOptions));
+    }
+
+    [Fact]
+    public async Task ApiKeyStaysOffAnyOriginOtherThanTheAllowedOrigin()
+    {
+        using var directory = new TemporaryDirectory();
+        var hosts = new List<string>();
+        var keysSent = 0;
+        using var collector = new HttpCollector(new QueueHandler(
+            message =>
+            {
+                hosts.Add(message.RequestUri!.Host);
+                if (message.Headers.Contains("X-Api-Key")) keysSent++;
+                return Redirect("https://other.test/watch/v3/member");
+            },
+            message =>
+            {
+                hosts.Add(message.RequestUri!.Host);
+                if (message.Headers.Contains("X-Api-Key")) keysSent++;
+                return Response(HttpStatusCode.OK, "{}");
+            }), ApiKeyVariable);
+
+        var result = await collector.FetchAsync(ApiRequest(directory.Path));
+
+        Assert.Equal(CollectionFailureCode.OutOfScope, result.FailureCode);
+        Assert.Equal(["example.test"], hosts);
+        Assert.Equal(1, keysSent);
+    }
+
+    [Fact]
+    public async Task ApiModeDefersOnRateLimitWithTheServerRetryDelay()
+    {
+        using var directory = new TemporaryDirectory();
+        using var collector = new HttpCollector(new QueueHandler(_ =>
+        {
+            var response = new HttpResponseMessage((HttpStatusCode)429);
+            response.Headers.RetryAfter = new System.Net.Http.Headers.RetryConditionHeaderValue(TimeSpan.FromSeconds(42));
+            return response;
+        }), ApiKeyVariable);
+
+        var result = await collector.FetchAsync(ApiRequest(directory.Path));
+
+        Assert.Equal(CollectionOutcome.Deferred, result.Outcome);
+        Assert.Equal(CollectionFailureCode.RateLimited, result.FailureCode);
+        Assert.Equal(42, result.RetryAfterSeconds);
+    }
+
+    [Fact]
+    public async Task ApiModeStillPacesARedirectedRequestByTheConfiguredMinimumDelay()
+    {
+        using var directory = new TemporaryDirectory();
+        var handler = new QueueHandler(_ => Redirect("https://example.test/watch/v3/member/next"));
+        using var collector = new HttpCollector(handler, ApiKeyVariable);
+
+        var result = await collector.FetchAsync(ApiRequest(directory.Path) with { MinDelayMilliseconds = 60_000 });
+
+        Assert.Equal(CollectionOutcome.Deferred, result.Outcome);
+        Assert.Equal(CollectionFailureCode.CrawlDelay, result.FailureCode);
+        Assert.Equal(1, handler.Calls);
+    }
+
     private static CollectionRequest Request(string directory) => new()
     {
         JobId = "job",

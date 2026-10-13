@@ -48,6 +48,12 @@ public sealed class EvidenceProcessingWorker(
         var job = await jobs.GetAsync(jobId, cancellationToken);
         if (job is null || job.State != CollectionJobState.Succeeded) return;
         var definition = job.Definition;
+        if (definition.Mode == CollectionMode.Api)
+        {
+            await CompleteAsync(claim, EvidenceProcessingStage.Complete, EvidenceProcessingStatus.Succeeded,
+                EvidenceProcessingOutcome.Prepared, null, cancellationToken);
+            return;
+        }
         if (definition.ConfigurationRevision is null || definition.CoverageAsOf is null)
         {
             foreach (var jobAttempt in job.Attempts.Where(item => item.Resolution?.Outcome == CollectionJobAttemptOutcome.Succeeded))

@@ -33,6 +33,8 @@ public static class SourceLabels
     {
         CollectionMode.Html => "Newsroom",
         CollectionMode.Feed => "News feed",
-        _ => "Tracked page"
+        CollectionMode.Api => "API",
+        CollectionMode.Page => "Tracked page",
+        _ => throw new ArgumentOutOfRangeException(nameof(mode))
     };
 }

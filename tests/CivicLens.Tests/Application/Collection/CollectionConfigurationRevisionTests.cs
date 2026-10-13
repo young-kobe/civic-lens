@@ -115,6 +115,19 @@ public sealed class CollectionConfigurationRevisionTests
         Assert.Equal(1800, configuredRevision.ReadConfiguration().Sources[0].ResolveCheckIntervalSeconds());
     }
 
+    [Fact]
+    public void SourcesWithoutACredentialKeepTheirExistingSnapshotAndRevisionId()
+    {
+        const string snapshot = """
+            {"version":1,"people":[{"id":"person","name":"Official"}],"sources":[{"id":"source","personIds":["person"],"url":"https://example.test/page","allowedOrigin":"https://example.test","allowedPathPrefix":"/","mode":"page","maxCandidates":100,"enabled":true,"maxRequests":5,"maxBytes":2000000,"timeoutSeconds":30,"minDelayMilliseconds":1000}]}
+            """;
+
+        var revision = CollectionConfigurationRevision.Create(Configuration(["person"]));
+
+        Assert.Equal(snapshot, revision.Json);
+        Assert.Equal(Hash(snapshot), revision.Id);
+    }
+
     private static CollectionConfiguration Configuration(string[] personIds) => new()
     {
         People = [new PersonConfiguration { Id = "person", Name = "Official" }],

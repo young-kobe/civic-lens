@@ -1,4 +1,5 @@
 using CivicLens.Application.Collection;
+using CivicLens.Collection.Contracts;
 
 namespace CivicLens.Tests.Application.Collection;
 
@@ -295,6 +296,49 @@ public sealed class ConfigurationTests
             Coverage = [new SourceCoverageConfiguration { PersonId = "one", StartsOn = new DateOnly(2024, 2, 1), EndsBefore = new DateOnly(2024, 2, 1) }], Enabled = false
         }]
         }).Validate());
+    }
+
+    [Fact]
+    public void VersionTwoAcceptsAnApiSourceWithANamedCredentialAndPassesItToTheRequest()
+    {
+        var configuration = ApiConfiguration(CollectionCredentials.CongressGov);
+
+        configuration.Validate();
+        var request = configuration.CreateRequest("shared", "job", Path.GetFullPath("captures"));
+
+        Assert.Equal(CollectionMode.Api, request.Mode);
+        Assert.Equal(CollectionCredentials.CongressGov, request.Credential);
+    }
+
+    [Fact]
+    public void VersionOneRejectsACredentialBecauseOldRevisionsNeverCarriedIt()
+    {
+        var configuration = ApiConfiguration(CollectionCredentials.CongressGov) with { Version = 1 };
+        var source = configuration.Sources[0] with { PersonIds = ["one"], Coverage = null };
+
+        Assert.Throws<ArgumentException>((configuration with { Sources = [source] }).Validate);
+    }
+
+    [Theory]
+    [InlineData(CollectionMode.Page, CollectionCredentials.CongressGov)]
+    [InlineData(CollectionMode.Api, "unknownService")]
+    public void CredentialNeedsApiModeAndAKnownName(CollectionMode mode, string credential)
+    {
+        var configuration = ApiConfiguration(credential);
+
+        Assert.Throws<ArgumentException>((configuration with
+        {
+            Sources = [configuration.Sources[0] with { Mode = mode }]
+        }).Validate);
+    }
+
+    private static CollectionConfiguration ApiConfiguration(string credential)
+    {
+        var configuration = DatedConfiguration([new SourceCoverageConfiguration { PersonId = "one" }]);
+        return configuration with
+        {
+            Sources = [configuration.Sources[0] with { Mode = CollectionMode.Api, Credential = credential }]
+        };
     }
 
     private static CollectionConfiguration ValidConfiguration(PersonConfiguration[] people, string[] personIds) =>

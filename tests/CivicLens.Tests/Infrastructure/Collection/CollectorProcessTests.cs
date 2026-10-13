@@ -15,6 +15,28 @@ namespace CivicLens.Tests.Infrastructure.Collection;
 public sealed class CollectorProcessTests
 {
     [Fact]
+    public void ChildEnvironmentGainsOnlyTheVariableTheRequestNames()
+    {
+        var variable = CollectionCredentials.VariableOf(CollectionCredentials.CongressGov);
+        Dictionary<string, string?> Parent() => new()
+        {
+            ["PATH"] = "/usr/bin",
+            ["LC_ALL"] = "C",
+            [variable] = "key",
+            ["DATABASE_PASSWORD"] = "secret",
+            ["OPENAI_API_KEY"] = "other"
+        };
+
+        var named = Parent();
+        CollectorProcess.KeepAllowedEnvironment(named, CollectionCredentials.CongressGov);
+        var unnamed = Parent();
+        CollectorProcess.KeepAllowedEnvironment(unnamed, null);
+
+        Assert.Equal([variable, "LC_ALL", "PATH"], named.Keys.Order(StringComparer.Ordinal));
+        Assert.Equal(["LC_ALL", "PATH"], unnamed.Keys.Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
     public async Task PageReceiptCanExceedManifestLimitWithoutLosingValidEvidence()
     {
         var directory = Path.Combine(Path.GetTempPath(), "civic-large-receipt-" + Guid.NewGuid().ToString("N"));

@@ -20,6 +20,7 @@ public sealed record WatchedSourceConfiguration
     public required string AllowedOrigin { get; init; }
     public required string AllowedPathPrefix { get; init; }
     public CollectionMode Mode { get; init; } = CollectionMode.Page;
+    public string? Credential { get; init; }
     public int MaxCandidates { get; init; } = 100;
     public DiscoveryAdmissionPolicy? AdmissionPolicy { get; init; }
     public bool Enabled { get; init; } = true;

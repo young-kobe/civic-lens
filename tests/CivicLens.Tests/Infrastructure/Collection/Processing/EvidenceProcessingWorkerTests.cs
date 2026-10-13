@@ -133,6 +133,36 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
     }
 
     [Fact]
+    public async Task ApiCaptureCompletesItsJobWithoutAProcessingStageBecauseNoParserExistsYet()
+    {
+        var configuration = Configuration();
+        var apiSource = configuration.Sources[0] with
+        {
+            Mode = CollectionMode.Api,
+            Credential = CollectionCredentials.CongressGov,
+            Url = "https://example.test/pages/v3/member",
+            DocumentProfileId = null
+        };
+        var definition = new ConfiguredCollectionSource(configuration with { Sources = [apiSource] }, "source")
+            .CreateJobDefinition(DateOnly.FromDateTime(DateTime.UtcNow));
+        var job = await jobs.EnqueueAsync(definition, "api-once", default);
+        var runner = new RunCollectionJob(jobs, attempts, new FileCollectionReceiptHandoffStore(artifactRoot),
+            new CaptureArtifactVerifier(), new ApiFixtureCollector());
+        var pipeline = new CollectionJobWorker(PostgresCollectionWorkerQueue.FromConnectionString(connectionString),
+            runner, Worker(processing));
+
+        _ = await pipeline.ExecuteAsync(artifactRoot, once: true, batchSize: 20, leaseDuration: TimeSpan.FromSeconds(60));
+
+        var completedJob = await jobs.GetAsync(job.JobId, default);
+        Assert.Equal(CollectionJobState.Succeeded, completedJob!.State);
+        var record = Assert.Single(await processing.GetByJobIdsAsync([job.JobId], default));
+        Assert.Equal("prepare", record.AttemptId);
+        Assert.Equal(EvidenceProcessingStatus.Succeeded, record.Status);
+        Assert.Equal(EvidenceProcessingStage.Complete, record.Stage);
+        Assert.Null(record.ExtractionId);
+    }
+
+    [Fact]
     public async Task ComparisonReloadsHistoryAfterPredecessorReportsReady()
     {
         var beforeJob = await CollectAsync("fresh-before", "Earlier wording.");
@@ -338,6 +368,26 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
                     BytesReceived = 0
                 };
             return await new FixtureCollectorWriter().WriteAsync(request, body, observedAt, cancellationToken);
+        }
+    }
+
+    private sealed class ApiFixtureCollector : ICollectorProcess
+    {
+        public async Task<CollectionResult> RunAsync(CollectionRequest request, CancellationToken cancellationToken)
+        {
+            var json = Encoding.UTF8.GetBytes("{\"member\":{\"bioguideId\":\"W000817\"}}");
+            var hash = Convert.ToHexStringLower(SHA256.HashData(json));
+            await using (var file = File.Create(Path.Combine(request.ArtifactDirectory, hash + ".gz")))
+            await using (var gzip = new GZipStream(file, CompressionLevel.Fastest))
+                await gzip.WriteAsync(json, cancellationToken);
+            return Receipt(request) with
+            {
+                RobotsRequestCount = 0,
+                RequestCount = 1,
+                Response = new HttpResponseMetadata { StatusCode = 200, ContentType = "application/json", ContentEncodings = [] },
+                Capture = new CaptureArtifact { Sha256 = hash, RelativePath = hash + ".gz", ByteLength = json.Length },
+                BytesReceived = json.Length
+            };
         }
     }
 

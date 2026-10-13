@@ -5,12 +5,13 @@ namespace CivicLens.Collection.Contracts;
 
 public static class CollectionProtocol
 {
-    public const int Version = 8;
+    public const int Version = 9;
     public const int PreviousVersion = 4;
     public const int HtmlVersion = 5;
     public const int RobotsVersion = 6;
     public const int TolerantHtmlRecoveryVersion = 7;
     public const int SchemeUpgradeVersion = 8;
+    public const int ApiVersion = 9;
     public const long MaximumCrawlDelayMilliseconds = (long.MaxValue / TimeSpan.TicksPerSecond) * 1000;
 
     public static bool IsSupported(int version) => version is >= LegacyPageVersion and <= Version;

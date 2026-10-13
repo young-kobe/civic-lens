@@ -57,6 +57,7 @@ public sealed partial record CollectionConfiguration
             if (source is null || string.IsNullOrWhiteSpace(source.Id))
                 throw new ArgumentException("Every source must have an ID.");
             ValidateCoverageShape(source);
+            ValidateCredentialVersion(source);
             if (!sourceIds.Add(source.Id))
                 throw new ArgumentException($"Duplicate source ID '{source.Id}'.");
             if (source.DocumentProfileId is not null && !profilesById.ContainsKey(source.DocumentProfileId))
@@ -126,6 +127,12 @@ public sealed partial record CollectionConfiguration
             throw new ArgumentException("Version 1 sources require PersonIds and cannot define Coverage.");
         if (Version == 2 && (source.PersonIds is not null || source.Coverage is null))
             throw new ArgumentException("Version 2 sources require Coverage and cannot define PersonIds.");
+    }
+
+    private void ValidateCredentialVersion(WatchedSourceConfiguration source)
+    {
+        if (Version == 1 && source.Credential is not null)
+            throw new ArgumentException("Source credentials require collection configuration version 2.");
     }
 
     private static void ValidateLegacyMembership(WatchedSourceConfiguration source,
@@ -199,6 +206,7 @@ public sealed partial record CollectionConfiguration
             JobId = jobId,
             SourceId = source.Id,
             Mode = source.Mode,
+            Credential = source.Credential,
             MaxCandidates = source.MaxCandidates,
             Url = source.Url,
             AllowedOrigin = source.AllowedOrigin,

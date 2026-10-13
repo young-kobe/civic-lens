@@ -6,6 +6,8 @@ namespace CivicLens.Application.Collection.Jobs;
 public sealed record CollectionJobDefinition
 {
     public CollectionMode Mode { get; init; } = CollectionMode.Page;
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Credential { get; init; }
     public int MaxCandidates { get; init; } = 100;
     public required string SourceId { get; init; }
     public required string Url { get; init; }
@@ -46,6 +48,7 @@ public sealed record CollectionJobDefinition
         {
             SourceId = source.Id,
             Mode = source.Mode,
+            Credential = source.Credential,
             MaxCandidates = source.MaxCandidates,
             Url = source.Url,
             AllowedOrigin = source.AllowedOrigin,
@@ -101,6 +104,7 @@ public sealed record CollectionJobDefinition
         JobId = jobId,
         SourceId = SourceId,
         Mode = Mode,
+        Credential = Credential,
         MaxCandidates = MaxCandidates,
         Url = Url,
         AllowedOrigin = AllowedOrigin,
