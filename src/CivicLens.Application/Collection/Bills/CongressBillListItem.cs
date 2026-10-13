@@ -10,6 +10,12 @@ public sealed record CongressBillListItem(int Congress, string Type, int Number,
 
     public static bool IsKnownType(string type) => KnownTypes.Contains(type);
 
+    public static string? NormalizeType(string type)
+    {
+        var lowered = type.ToLowerInvariant();
+        return IsKnownType(lowered) ? lowered : null;
+    }
+
     public static bool IsDetailUrl(string sourceUrl, string url)
     {
         var prefix = sourceUrl + "/";

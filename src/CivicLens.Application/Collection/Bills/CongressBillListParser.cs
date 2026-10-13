@@ -43,9 +43,8 @@ public static class CongressBillListParser
     {
         if (bill is not { Congress: >= 1, Number: >= 1, UpdateDate: not null, Type: not null })
             throw new InvalidDataException("Bill list item is incomplete.");
-        var type = bill.Type.ToLowerInvariant();
-        if (!CongressBillListItem.IsKnownType(type))
-            throw new InvalidDataException("Bill list item has an unknown bill type.");
+        var type = CongressBillListItem.NormalizeType(bill.Type)
+            ?? throw new InvalidDataException("Bill list item has an unknown bill type.");
         return new CongressBillListItem(bill.Congress.Value, type, bill.Number.Value, bill.UpdateDate.Value);
     }
 
