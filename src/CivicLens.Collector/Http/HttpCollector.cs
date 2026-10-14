@@ -14,10 +14,13 @@ public sealed class HttpCollector : IDisposable
     private const int MaximumRobotsContentEncodings = 16;
     private readonly HttpClient client;
     private readonly Func<string, string?> readVariable;
+    private readonly TimeProvider clock;
 
-    public HttpCollector(HttpMessageHandler? handler = null, Func<string, string?>? readVariable = null)
+    public HttpCollector(HttpMessageHandler? handler = null, Func<string, string?>? readVariable = null,
+        TimeProvider? clock = null)
     {
         this.readVariable = readVariable ?? Environment.GetEnvironmentVariable;
+        this.clock = clock ?? TimeProvider.System;
         var actual = handler ?? new SocketsHttpHandler
         {
             AllowAutoRedirect = false,
@@ -34,21 +37,22 @@ public sealed class HttpCollector : IDisposable
         var requests = 0;
         var robotsRequests = 0;
         long? robotsCrawlDelayMilliseconds = null;
+        var robotsCacheHit = false;
         long bytes = 0;
         var current = new Uri(request.Url);
         var requestedUri = current;
         HttpResponseMetadata? responseMetadata = null;
         HttpRequestValidators? sentValidators = null;
         var elapsed = Stopwatch.StartNew();
-        var lastRequestAt = TimeSpan.Zero;
+        TimeSpan? lastRequestAt = null;
         var effectiveDelayMilliseconds = (long)request.MinDelayMilliseconds;
         var token = cancellationToken;
         var rules = RobotsRules.Empty;
         var robotsPhase = request.Mode != CollectionMode.Api;
         try
         {
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeout.CancelAfter(TimeSpan.FromSeconds(request.TimeoutSeconds));
+            using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(request.TimeoutSeconds), clock);
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, deadline.Token);
             token = timeout.Token;
             var apiKey = request.Credential is null ? null : readVariable(CollectionCredentials.VariableOf(request.Credential));
             if (request.Credential is not null && string.IsNullOrWhiteSpace(apiKey))
@@ -113,7 +117,7 @@ public sealed class HttpCollector : IDisposable
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { return Result(CollectionOutcome.Failed, CollectionFailureCode.Cancelled); }
         catch (OperationCanceledException)
         {
-            return robotsPhase
+            return robotsPhase && robotsRequests > 0
                 ? Result(CollectionOutcome.Deferred, CollectionFailureCode.RobotsUnavailable)
                 : Result(CollectionOutcome.Failed, CollectionFailureCode.Timeout);
         }
@@ -147,6 +151,7 @@ public sealed class HttpCollector : IDisposable
                 RequestCount = requests,
                 RobotsRequestCount = robotsRequests,
                 RobotsCrawlDelayMilliseconds = robotsCrawlDelayMilliseconds,
+                RobotsCacheHit = robotsCacheHit,
                 FailureCode = failure,
                 RetryAfterSeconds = retry
             };
@@ -158,13 +163,10 @@ public sealed class HttpCollector : IDisposable
         {
             try
             {
-                rules = await GetRobotsAsync(request, () =>
-                {
-                    EnsureBudget(request, requests);
-                    requests++;
-                    robotsRequests++;
-                    lastRequestAt = elapsed.Elapsed;
-                }, n => bytes += n, () => bytes, token, DelayBeforeRobotsRedirectAsync);
+                var cached = await RobotsCache.ReadAsync(request.ArtifactDirectory, request.AllowedOrigin, token);
+                var fresh = UsableRules(cached, RobotsCache.FreshFor);
+                robotsCacheHit = fresh is not null;
+                rules = fresh ?? await FetchOrUseStaleAsync(cached);
                 robotsCrawlDelayMilliseconds = rules.CrawlDelayMilliseconds;
                 robotsPhase = false;
             }
@@ -184,9 +186,43 @@ public sealed class HttpCollector : IDisposable
             return null;
         }
 
+        RobotsRules? UsableRules(CachedRobots? cached, TimeSpan maximumAge)
+        {
+            if (cached is null) return null;
+            var age = clock.GetUtcNow() - cached.FetchedAt;
+            if (age < TimeSpan.Zero || age > maximumAge) return null;
+            try { return RobotsRules.Parse(cached.Text, token); }
+            catch (Exception exception) when (exception is ArgumentException or NotSupportedException or TimeoutException)
+            { return null; }
+        }
+
+        async Task<RobotsRules> FetchOrUseStaleAsync(CachedRobots? cached)
+        {
+            var stale = cached is { NotFound: false } ? UsableRules(cached, RobotsCache.StaleIfErrorFor) : null;
+            try
+            {
+                var fetched = await GetRobotsAsync(request, () =>
+                {
+                    EnsureBudget(request, requests);
+                    requests++;
+                    robotsRequests++;
+                    lastRequestAt = elapsed.Elapsed;
+                }, n => bytes += n, () => bytes, token, DelayBeforeRobotsRedirectAsync);
+                await RobotsCache.TryWriteAsync(request.ArtifactDirectory, request.AllowedOrigin,
+                    new CachedRobots(fetched.Text, clock.GetUtcNow(), fetched.NotFound), CancellationToken.None);
+                return fetched.Rules;
+            }
+            catch (RobotsException exception) when (exception.IsServerError && stale is not null)
+            {
+                robotsCacheHit = true;
+                return stale;
+            }
+        }
+
         async Task<bool> DeferForDelayIfNeededAsync()
         {
-            var waitMilliseconds = effectiveDelayMilliseconds - (long)(elapsed.Elapsed - lastRequestAt).TotalMilliseconds;
+            if (lastRequestAt is not { } previousRequestAt) return false;
+            var waitMilliseconds = effectiveDelayMilliseconds - (long)(elapsed.Elapsed - previousRequestAt).TotalMilliseconds;
             if (waitMilliseconds <= 0) return false;
             var remainingMilliseconds = request.TimeoutSeconds * 1000L - (long)elapsed.Elapsed.TotalMilliseconds;
             if (waitMilliseconds >= remainingMilliseconds) return true;
@@ -246,7 +282,7 @@ public sealed class HttpCollector : IDisposable
         return fields[0];
     }
 
-    private async Task<RobotsRules> GetRobotsAsync(CollectionRequest request, Action count, Action<long> addBytes,
+    private async Task<FetchedRobots> GetRobotsAsync(CollectionRequest request, Action count, Action<long> addBytes,
         Func<long> getBytes, CancellationToken token, Func<Task<bool>> delayBeforeRedirectAsync)
     {
         var origin = new Uri(request.AllowedOrigin);
@@ -258,7 +294,7 @@ public sealed class HttpCollector : IDisposable
             robotRequest.Headers.UserAgent.ParseAdd("CivicLens/0.1");
             robotRequest.Headers.AcceptEncoding.ParseAdd("gzip, deflate, br");
             using var response = await client.SendAsync(robotRequest, HttpCompletionOption.ResponseHeadersRead, token);
-            if (response.StatusCode == HttpStatusCode.NotFound) return RobotsRules.Empty;
+            if (response.StatusCode == HttpStatusCode.NotFound) return new FetchedRobots(RobotsRules.Empty, "", NotFound: true);
             if ((int)response.StatusCode == 429)
                 throw new RobotsException(CollectionFailureCode.RateLimited, deferred: true,
                     retryAfterSeconds: RetrySeconds(response.Headers.RetryAfter));
@@ -292,7 +328,8 @@ public sealed class HttpCollector : IDisposable
                 if (encodings.Length > MaximumRobotsContentEncodings || encodings.Any(string.IsNullOrEmpty))
                     throw new InvalidDataException("Robots response has too many or malformed content encodings.");
                 var data = await DecodeRobotsBodyAsync(encoded, encodings, token);
-                return RobotsRules.Parse(new System.Text.UTF8Encoding(false, true).GetString(data).TrimStart('\uFEFF'), token);
+                var text = new System.Text.UTF8Encoding(false, true).GetString(data).TrimStart('\uFEFF');
+                return new FetchedRobots(RobotsRules.Parse(text, token), text);
             }
             catch (OperationCanceledException) { throw; }
             catch (Exception exception) when (exception is ArgumentException or FormatException or NotSupportedException or TimeoutException or IOException or InvalidDataException)
@@ -487,6 +524,9 @@ public sealed class HttpCollector : IDisposable
         public CollectionFailureCode FailureCode { get; } = failureCode;
         public bool Deferred { get; } = deferred;
         public long? RetryAfterSeconds { get; } = retryAfterSeconds;
+        public bool IsServerError => Deferred && FailureCode == CollectionFailureCode.RobotsUnavailable;
     }
+
+    private sealed record FetchedRobots(RobotsRules Rules, string Text, bool NotFound = false);
 
 }

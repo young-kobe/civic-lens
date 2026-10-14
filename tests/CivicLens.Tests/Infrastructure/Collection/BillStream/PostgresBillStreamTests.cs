@@ -53,6 +53,7 @@ public sealed class PostgresBillStreamTests(PostgresCollection postgres) : IAsyn
     public async Task FirstDueCheckRequestsTheBackfillWindowWithOneDayOfOverlap()
     {
         await store.SynchronizeAsync(Configuration(), default);
+        await ExecuteAsync(connectionString, "UPDATE collection_source_schedules SET next_due_utc_ticks = 0");
 
         Assert.Equal(1, await store.AdvanceDueAsync(10, default));
 
@@ -67,6 +68,7 @@ public sealed class PostgresBillStreamTests(PostgresCollection postgres) : IAsyn
     public async Task DueCheckWithoutAClosedDayCreatesNoJobAndWaitsOneInterval()
     {
         await store.SynchronizeAsync(Configuration(), default);
+        await ExecuteAsync(connectionString, "UPDATE collection_source_schedules SET next_due_utc_ticks = 0");
         await SetCursorAsync(BillStreamWindow.LastClosedDay(DateTimeOffset.UtcNow));
 
         Assert.Equal(1, await store.AdvanceDueAsync(10, default));
@@ -79,6 +81,7 @@ public sealed class PostgresBillStreamTests(PostgresCollection postgres) : IAsyn
     public async Task DueCheckStartsTheDayAfterTheCursorAndStopsAtTheLastClosedDay()
     {
         await store.SynchronizeAsync(Configuration(), default);
+        await ExecuteAsync(connectionString, "UPDATE collection_source_schedules SET next_due_utc_ticks = 0");
         var lastClosed = BillStreamWindow.LastClosedDay(DateTimeOffset.UtcNow);
         await SetCursorAsync(lastClosed.AddDays(-2));
 

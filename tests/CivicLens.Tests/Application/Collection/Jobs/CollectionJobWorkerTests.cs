@@ -231,6 +231,8 @@ public sealed class CollectionJobWorkerTests
             if (failingJobIds.Contains(jobId, StringComparer.Ordinal)) throw new IOException("temporary claim failure");
             return Task.FromResult<CollectionJobClaim?>(null);
         }
+        public Task<CollectionJobStartResult?> ReadPacingBlockAsync(string jobId, CancellationToken cancellationToken) =>
+            Task.FromResult<CollectionJobStartResult?>(null);
         public Task<CollectionJobRenewal> RenewAsync(CollectionJobLease jobLease, CollectionCollectorLease? collectorLease, TimeSpan leaseDuration, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<CollectionJobStartResult> TryStartAttemptAsync(CollectionJobLease jobLease, string artifactDirectory, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<bool> ReleaseCollectorAsync(CollectionJobLease jobLease, CollectionCollectorLease collectorLease, CancellationToken cancellationToken) => throw new NotSupportedException();

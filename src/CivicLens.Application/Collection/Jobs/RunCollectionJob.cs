@@ -19,7 +19,7 @@ public sealed class RunCollectionJob(
             throw new ArgumentOutOfRangeException(nameof(leaseDuration), "Lease duration must be at least 30 milliseconds.");
 
         var claim = await jobs.TryClaimAsync(jobId, leaseDuration, cancellationToken);
-        if (claim is null) return new CollectionJobRunResult(CollectionJobRunStatus.NotClaimed, null);
+        if (claim is null) return await NotClaimedAsync(jobId, cancellationToken);
 
         await using var lease = new CollectionJobLeaseGuard(jobs, claim, leaseDuration, cancellationToken);
         try
@@ -62,6 +62,13 @@ public sealed class RunCollectionJob(
             try { await lease.ReleaseClaimAsync(releaseTimeout.Token); }
             catch { }
         }
+    }
+
+    private async Task<CollectionJobRunResult> NotClaimedAsync(string jobId, CancellationToken cancellationToken)
+    {
+        var block = await jobs.ReadPacingBlockAsync(jobId, cancellationToken);
+        return block is null ? new CollectionJobRunResult(CollectionJobRunStatus.NotClaimed, null)
+            : new CollectionJobRunResult(CollectionJobRunStatus.Blocked, await ReadJobBoundedAsync(jobId), block.BlockReason, block.RetryAt);
     }
 
     private async Task<CollectionJobRunResult> CollectOneAsync(CollectionJobLeaseGuard lease,

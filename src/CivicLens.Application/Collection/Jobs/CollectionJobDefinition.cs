@@ -29,6 +29,9 @@ public sealed record CollectionJobDefinition
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public DateOnly? CoverageAsOf { get; init; }
 
+    public PacingGroupConfiguration? ResolvePacingGroup() =>
+        ConfigurationRevision?.Configuration.PacingGroupOf(AllowedOrigin);
+
     public static CollectionJobDefinition FromConfiguration(CollectionConfiguration configuration, string sourceId,
         DateOnly? asOf = null)
     {

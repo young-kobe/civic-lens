@@ -17,6 +17,8 @@ public interface ICollectionJobStore
     Task<CollectionJobActivity> ListActivityAsync(int limit, CancellationToken cancellationToken);
     Task<CollectionJobRecord?> CancelAsync(string jobId, CancellationToken cancellationToken);
     Task<CollectionJobClaim?> TryClaimAsync(string jobId, TimeSpan leaseDuration, CancellationToken cancellationToken);
+    /// <summary>Explain an unclaimed job: an origin backoff block while its stored pacing key is closed, otherwise null.</summary>
+    Task<CollectionJobStartResult?> ReadPacingBlockAsync(string jobId, CancellationToken cancellationToken);
     Task<CollectionJobRenewal> RenewAsync(CollectionJobLease jobLease, CollectionCollectorLease? collectorLease,
         TimeSpan leaseDuration, CancellationToken cancellationToken);
     Task<CollectionJobStartResult> TryStartAttemptAsync(CollectionJobLease jobLease, string artifactDirectory,

@@ -89,7 +89,7 @@ public sealed class CollectorProcessTests
             using (var gzip = new GZipStream(memory, CompressionMode.Compress, leaveOpen: true)) gzip.Write(payload);
             payload = memory.ToArray();
         }
-        var server = ServeAsync(listener, payload, truncate, encoded, truncate ? 2 : 4, deadline.Token);
+        var server = ServeAsync(listener, payload, truncate, encoded, truncate ? 2 : 3, deadline.Token);
         try
         {
             var configuration = new CollectionConfiguration

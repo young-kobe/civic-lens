@@ -1936,6 +1936,10 @@
     {"id":"harriet-hageman-issues","coverage":[{"personId":"harriet-hageman","startsOn":"2026-10-10"}],"url":"https://hageman.house.gov/issues","allowedOrigin":"https://hageman.house.gov","allowedPathPrefix":"/issues","mode":"page","checkIntervalSeconds":21600,"enabled":true,"maxRequests":5,"maxBytes":2000000,"timeoutSeconds":60,"minDelayMilliseconds":1500,"jobPolicy":{"maxAttempts":2,"initialRetryDelaySeconds":60,"maximumRetryDelaySeconds":3600},"documentProfileId":"house-main"},
     {"id":"congress-bills","url":"https://api.congress.gov/v3/bill","allowedOrigin":"https://api.congress.gov","allowedPathPrefix":"/v3/bill","mode":"api","credential":"congressGov","apiParser":"congressBillList","minimumCongress":119,"backfillFrom":"2025-01-03","checkIntervalSeconds":86400,"enabled":false,"maxRequests":2,"maxBytes":1000000,"timeoutSeconds":20,"minDelayMilliseconds":1000,"jobPolicy":{"maxAttempts":2,"initialRetryDelaySeconds":60,"maximumRetryDelaySeconds":3600},"admissionPolicy":{"maxJobs":251,"maxTotalRequests":1004,"maxTotalBytes":502000000,"maxTotalTimeoutSeconds":10040}}
   ],
+  "pacingGroups": [
+    {"hostSuffix":"house.gov","minDelayMilliseconds":3000},
+    {"hostSuffix":"senate.gov","minDelayMilliseconds":3000}
+  ],
   "documentProfiles": [
     {"id":"senate-sitelayout","selector":".SiteLayout__main","excludedSelectors":["nav","form"]},
     {"id":"wp-elementor-single","selector":".elementor-location-single","excludedSelectors":["nav",".noprint"]},
