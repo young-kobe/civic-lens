@@ -9,7 +9,7 @@ public readonly record struct BillPageUrl(CongressBillListItem Bill, int Offset)
     {
         ArgumentNullException.ThrowIfNull(bill);
         var segment = SegmentOf(resource) ?? throw new ArgumentOutOfRangeException(nameof(resource));
-        return $"{sourceUrl}/{bill.Congress}/{bill.Type}/{bill.Number}/{segment}?{BillPageQuery.FirstPage}";
+        return $"{sourceUrl}/{bill.Congress}/{bill.Type}/{bill.Number}/{segment}?{BillPageQuery.FirstPage(BillPageQuery.LimitOf(resource))}";
     }
 
     public static BillPageUrl? TryRead(string sourceUrl, ApiResource resource, string? url)
@@ -23,7 +23,7 @@ public readonly record struct BillPageUrl(CongressBillListItem Bill, int Offset)
         if (rawQuery.Contains('%') || rawQuery.Contains('+')) return null;
         var parts = url[prefix.Length..queryStart].Split('/');
         var query = HttpUtility.ParseQueryString(rawQuery);
-        if (parts.Length != 4 || parts[3] != segment || !BillPageQuery.IsValid(query)) return null;
+        if (parts.Length != 4 || parts[3] != segment || !BillPageQuery.IsValid(query, BillPageQuery.LimitOf(resource))) return null;
         var bill = CongressBillListItem.TryReadIdentity(parts[0], parts[1], parts[2]);
         return bill is null ? null : new BillPageUrl(bill, BillPageQuery.ReadOffset(query)!.Value);
     }
@@ -52,6 +52,7 @@ public readonly record struct BillPageUrl(CongressBillListItem Bill, int Offset)
     {
         ApiResource.BillCosponsors => "cosponsors",
         ApiResource.BillActions => "actions",
+        ApiResource.BillSummaries => "summaries",
         _ => null
     };
 }

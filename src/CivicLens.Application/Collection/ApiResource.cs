@@ -9,7 +9,8 @@ public enum ApiResource
     BillList,
     Bill,
     BillCosponsors,
-    BillActions
+    BillActions,
+    BillSummaries
 }
 
 public sealed class ApiResourceJsonConverter : JsonStringEnumConverter<ApiResource>

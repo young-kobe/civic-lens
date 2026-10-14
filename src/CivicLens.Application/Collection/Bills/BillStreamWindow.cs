@@ -30,7 +30,7 @@ public readonly record struct BillStreamWindow(DateOnly FirstDay, DateOnly LastD
     {
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)) return null;
         var query = HttpUtility.ParseQueryString(uri.Query);
-        if (!BillPageQuery.IsValid(query, FromParameter, ToParameter, SortParameter) ||
+        if (!BillPageQuery.IsValid(query, BillPageQuery.PageLimit, FromParameter, ToParameter, SortParameter) ||
             query[SortParameter] != OldestUpdateFirst)
             return null;
         if (!TryReadDay(query[FromParameter], out var from) || !TryReadDay(query[ToParameter], out var to)) return null;

@@ -17,6 +17,7 @@ public sealed class JobPreparation(
     ICaptureBodyReader bodies,
     IEvidenceProcessingStore processing,
     IDocumentExtractionStore extractions,
+    IDocumentTextExtractor textExtractor,
     IssueConfigurationRevision? issues)
 {
     private const string NotModified = "notModified";
@@ -92,6 +93,7 @@ public sealed class JobPreparation(
             ApiResource.Bill => AdmitBillDetailAsync(job, artifactRoot, cancellationToken),
             ApiResource.BillCosponsors => AdmitCosponsorPageAsync(job, artifactRoot, cancellationToken),
             ApiResource.BillActions => AdmitActionsPageAsync(job, artifactRoot, cancellationToken),
+            ApiResource.BillSummaries => AdmitSummariesPageAsync(job, artifactRoot, cancellationToken),
             _ => throw new ArgumentOutOfRangeException(nameof(job))
         };
 
@@ -115,11 +117,11 @@ public sealed class JobPreparation(
             ?? throw new InvalidDataException("Bill detail job URL is not a bill detail URL.");
         var response = await ReadApiResponseAsync(job, artifactRoot, cancellationToken);
         var bill = CongressBillParser.Parse(response.Body, expected);
-        await SaveExtractionAsync(response.Captured, CongressBillParser.Version, CongressBillRenderer.RenderDetail(bill), cancellationToken);
+        var extractionId = await SaveExtractionAsync(response.Captured, CongressBillParser.Version, CongressBillRenderer.RenderDetail(bill), cancellationToken);
         var covered = configured.CoveredBioguideIdsOn(BillGate.DayOf(bill.UpdateDate));
         var gate = BillGate.AtDetail(bill, covered, issueConfiguration);
         return PreparedFrom(await billAdmissions.AdmitDetailAsync(configured, job.JobId, bill, gate, issues.Id,
-            cancellationToken));
+            extractionId, cancellationToken));
     }
 
     private async Task<JobPreparationResult> AdmitCosponsorPageAsync(CollectionJobRecord job, string artifactRoot,
@@ -129,9 +131,9 @@ public sealed class JobPreparation(
         var bill = ReadPageBill(configured, job, ApiResource.BillCosponsors);
         var response = await ReadApiResponseAsync(job, artifactRoot, cancellationToken);
         var page = CongressBillCosponsorsParser.Parse(response.Body, response.Request, configured.SourceUrl, bill);
-        await SaveExtractionAsync(response.Captured, CongressBillCosponsorsParser.Version, CongressBillRenderer.RenderCosponsors(bill, page),
+        var extractionId = await SaveExtractionAsync(response.Captured, CongressBillCosponsorsParser.Version, CongressBillRenderer.RenderCosponsors(bill, page),
             cancellationToken);
-        return PreparedFrom(await billAdmissions.AdmitCosponsorPageAsync(configured, job.JobId, page, cancellationToken));
+        return PreparedFrom(await billAdmissions.AdmitCosponsorPageAsync(configured, job.JobId, page, extractionId, cancellationToken));
     }
 
     private async Task<JobPreparationResult> AdmitActionsPageAsync(CollectionJobRecord job, string artifactRoot,
@@ -141,9 +143,25 @@ public sealed class JobPreparation(
         var bill = ReadPageBill(configured, job, ApiResource.BillActions);
         var response = await ReadApiResponseAsync(job, artifactRoot, cancellationToken);
         var page = CongressBillActionsParser.Parse(response.Body, response.Request, configured.SourceUrl, bill);
-        await SaveExtractionAsync(response.Captured, CongressBillActionsParser.Version, CongressBillRenderer.RenderActions(bill, page),
+        var extractionId = await SaveExtractionAsync(response.Captured, CongressBillActionsParser.Version, CongressBillRenderer.RenderActions(bill, page),
             cancellationToken);
-        return PreparedFrom(await billAdmissions.AdmitActionsPageAsync(configured, job.JobId, page, cancellationToken));
+        return PreparedFrom(await billAdmissions.AdmitActionsPageAsync(configured, job.JobId, page, extractionId, cancellationToken));
+    }
+
+    private async Task<JobPreparationResult> AdmitSummariesPageAsync(CollectionJobRecord job, string artifactRoot,
+        CancellationToken cancellationToken)
+    {
+        var configured = ConfiguredSourceOf(job);
+        var bill = ReadPageBill(configured, job, ApiResource.BillSummaries);
+        var response = await ReadApiResponseAsync(job, artifactRoot, cancellationToken);
+        var page = CongressBillSummariesParser.Parse(response.Body, response.Request, configured.SourceUrl, bill);
+        var texts = new List<CongressBillSummaryText>();
+        foreach (var summary in page.Summaries)
+            texts.Add(new CongressBillSummaryText(summary, await textExtractor.ExtractHtmlFragmentAsync(summary.Html, cancellationToken)));
+        var parserVersion = CongressBillSummariesParser.ExtractionVersion(textExtractor);
+        var extractionId = await SaveExtractionAsync(response.Captured, parserVersion, CongressBillRenderer.RenderSummaries(bill, texts),
+            cancellationToken);
+        return PreparedFrom(await billAdmissions.AdmitSummariesPageAsync(configured, job.JobId, page, extractionId, cancellationToken));
     }
 
     private static CongressBillListItem ReadPageBill(ConfiguredCollectionSource configured, CollectionJobRecord job,
@@ -158,10 +176,10 @@ public sealed class JobPreparation(
         JobPreparationResult.Prepared(admitted: result.AdmittedCount, deferred: result.DeferredCount,
             duplicates: result.DuplicateCount);
 
-    private async Task SaveExtractionAsync(CapturedAttemptResult captured, string parserVersion, string text,
+    private async Task<string> SaveExtractionAsync(CapturedAttemptResult captured, string parserVersion, string text,
         CancellationToken cancellationToken) =>
-        _ = await extractions.SaveAsync(new DocumentExtraction(captured, parserVersion, CongressBillRenderer.NormalizationVersion, text),
-            cancellationToken);
+        (await extractions.SaveAsync(new DocumentExtraction(captured, parserVersion, CongressBillRenderer.NormalizationVersion, text),
+            cancellationToken)).ExtractionId;
 
     private async Task<ApiResponse> ReadApiResponseAsync(CollectionJobRecord job,
         string artifactRoot, CancellationToken cancellationToken)

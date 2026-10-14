@@ -41,6 +41,31 @@ public static partial class CongressBillRenderer
         return Page(bill, page.Actions.Select(ActionLine));
     }
 
+    public static string RenderSummaries(CongressBillListItem bill, IReadOnlyList<CongressBillSummaryText> summaries)
+    {
+        ArgumentNullException.ThrowIfNull(bill);
+        ArgumentNullException.ThrowIfNull(summaries);
+        var blocks = summaries.Select(SummaryBlock).Prepend(IdentityLine(bill.Congress, bill.Type, bill.Number));
+        return string.Join("\n\n", blocks);
+    }
+
+    private static string SummaryBlock(CongressBillSummaryText item)
+    {
+        var summary = item.Summary;
+        if (item.Text.Contains("\n\n", StringComparison.Ordinal) || item.Text.Contains('\r'))
+            throw new InvalidDataException("Summary text must not hold a blank line or a carriage return.");
+        var lines = new List<string>
+        {
+            Line("Summary version", summary.VersionCode),
+            Line("Action date", Date(summary.ActionDate)),
+            Line("Action", summary.ActionDescription),
+            Line("Updated", summary.UpdateDate.UtcDateTime.ToString(UpdateFormat, CultureInfo.InvariantCulture)),
+            "Text:"
+        };
+        if (item.Text.Length > 0) lines.Add(item.Text);
+        return string.Join('\n', lines);
+    }
+
     private static string CosponsorLine(CongressBillCosponsor cosponsor)
     {
         var fields = new List<string> { cosponsor.BioguideId };

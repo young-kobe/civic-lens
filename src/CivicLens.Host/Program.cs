@@ -173,10 +173,11 @@ try
         var extractions = PostgresDocumentExtractionStore.FromConnectionString(connectionString);
         var comparisons = PostgresDocumentComparisonStore.FromConnectionString(connectionString);
         var processingStore = PostgresEvidenceProcessingStore.FromConnectionString(connectionString);
+        var textExtractor = new CaptureDocumentTextExtractor();
         var processing = new EvidenceProcessingWorker(jobs,
-            new JobPreparation(jobs, attempts, jobs, jobs, new CaptureBodyReader(), processingStore, extractions, issues),
+            new JobPreparation(jobs, attempts, jobs, jobs, new CaptureBodyReader(), processingStore, extractions, textExtractor, issues),
             processingStore,
-            new ExtractDocument(attempts, new CaptureDocumentTextExtractor(), extractions),
+            new ExtractDocument(attempts, textExtractor, extractions),
             new GetDocumentHistory(PostgresDocumentHistoryStore.FromConnectionString(connectionString)),
             new CompareDocuments(extractions, comparisons));
         await using var wakeup = PostgresCollectionPipelineWakeup.FromConnectionString(connectionString);

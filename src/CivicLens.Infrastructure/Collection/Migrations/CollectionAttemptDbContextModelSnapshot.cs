@@ -355,6 +355,79 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                 });
             });
 
+            modelBuilder.Entity("CivicLens.Infrastructure.Collection.BillStream.ActionCandidateRow", b =>
+                {
+                    b.Property<string>("CandidateId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("candidate_id");
+
+                    b.Property<int>("BillNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("bill_number");
+
+                    b.Property<string>("BillType")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("bill_type");
+
+                    b.Property<string>("ConfigurationRevisionId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("configuration_revision_id");
+
+                    b.Property<int>("Congress")
+                        .HasColumnType("integer")
+                        .HasColumnName("congress");
+
+                    b.Property<long>("CreatedAtUtcTicks")
+                        .HasColumnType("bigint")
+                        .HasColumnName("created_at_utc_ticks");
+
+                    b.Property<string>("DetailJobId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("detail_job_id");
+
+                    b.Property<string>("SourceId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("source_id");
+
+                    b.Property<long?>("SummariesCompletedAtUtcTicks")
+                        .HasColumnType("bigint")
+                        .HasColumnName("summaries_completed_at_utc_ticks");
+
+                    b.Property<long>("UpdateDateUtcTicks")
+                        .HasColumnType("bigint")
+                        .HasColumnName("update_date_utc_ticks");
+
+                    b.HasKey("CandidateId");
+
+                    b.HasIndex("ConfigurationRevisionId");
+
+                    b.HasIndex("DetailJobId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_action_candidates_detail_job");
+
+                    b.ToTable("action_candidates", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_action_candidates_bill", "congress >= 1 AND bill_number >= 1");
+
+                            t.HasCheckConstraint("ck_action_candidates_created", "created_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
+
+                            t.HasCheckConstraint("ck_action_candidates_id", "candidate_id ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("ck_action_candidates_summaries", "summaries_completed_at_utc_ticks IS NULL OR summaries_completed_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
+
+                            t.HasCheckConstraint("ck_action_candidates_update", "update_date_utc_ticks BETWEEN 0 AND 3155378975999999999");
+                        });
+                });
+
             modelBuilder.Entity("CivicLens.Infrastructure.Collection.BillStream.BillFollowOnJobRow", b =>
                 {
                     b.Property<string>("JobId")
@@ -396,6 +469,10 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("congress");
 
+                    b.Property<int>("CosponsorCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("cosponsor_count");
+
                     b.Property<long>("CreatedAtUtcTicks")
                         .HasColumnType("bigint")
                         .HasColumnName("created_at_utc_ticks");
@@ -431,6 +508,10 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("character varying(128)")
                         .HasColumnName("source_id");
 
+                    b.Property<int>("SummaryCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("summary_count");
+
                     b.Property<long>("UpdateDateUtcTicks")
                         .HasColumnType("bigint")
                         .HasColumnName("update_date_utc_ticks");
@@ -445,6 +526,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         {
                             t.HasCheckConstraint("ck_bill_gates_bill", "congress >= 1 AND bill_number >= 1");
 
+                            t.HasCheckConstraint("ck_bill_gates_cosponsor_count", "cosponsor_count >= 0");
+
                             t.HasCheckConstraint("ck_bill_gates_created", "created_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
 
                             t.HasCheckConstraint("ck_bill_gates_decided", "(decision = 'Pending') = (decided_at_utc_ticks IS NULL) AND (decided_at_utc_ticks IS NULL OR decided_at_utc_ticks BETWEEN 0 AND 3155378975999999999)");
@@ -453,7 +536,60 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                             t.HasCheckConstraint("ck_bill_gates_reason", "(decision = 'Pending' AND reason IS NULL) OR (decision = 'Passed' AND reason IS NOT NULL AND reason IN ('CoveredSponsor','TrackedPolicyArea','CoveredCosponsor')) OR (decision = 'NotRelevant' AND reason IS NOT NULL AND reason IN ('NoPolicyArea','UntrackedPolicyArea'))");
 
+                            t.HasCheckConstraint("ck_bill_gates_summary_count", "summary_count >= 0");
+
                             t.HasCheckConstraint("ck_bill_gates_update", "update_date_utc_ticks BETWEEN 0 AND 3155378975999999999");
+                        });
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Collection.BillStream.BillPageRow", b =>
+                {
+                    b.Property<string>("JobId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("job_id");
+
+                    b.Property<bool>("ClosesChain")
+                        .HasColumnType("boolean")
+                        .HasColumnName("closes_chain");
+
+                    b.Property<string>("DetailJobId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("detail_job_id");
+
+                    b.Property<string>("ExtractionId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("extraction_id");
+
+                    b.Property<int>("PageOrder")
+                        .HasColumnType("integer")
+                        .HasColumnName("page_order");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("role");
+
+                    b.HasKey("JobId");
+
+                    b.HasIndex("ExtractionId");
+
+                    b.HasIndex("DetailJobId", "Role", "PageOrder")
+                        .IsUnique()
+                        .HasDatabaseName("ux_bill_pages_chain_order");
+
+                    b.ToTable("bill_pages", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_bill_pages_detail", "role <> 'Detail' OR (job_id = detail_job_id AND page_order = 0 AND closes_chain)");
+
+                            t.HasCheckConstraint("ck_bill_pages_order", "page_order >= 0");
+
+                            t.HasCheckConstraint("ck_bill_pages_role", "role IN ('Detail','Cosponsors','Actions','Summaries')");
                         });
                 });
 
@@ -497,11 +633,17 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("recorded_at_utc_ticks");
 
+                    b.Property<int>("UnknownTypeCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("unknown_type_count");
+
                     b.HasKey("ListJobId");
 
                     b.ToTable("bill_stream_pages", null, t =>
                         {
                             t.HasCheckConstraint("ck_bill_stream_pages_recorded", "recorded_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
+
+                            t.HasCheckConstraint("ck_bill_stream_pages_unknown_types", "unknown_type_count >= 0");
                         });
                 });
 
@@ -1823,6 +1965,22 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .OnDelete(DeleteBehavior.Restrict);
                 });
 
+            modelBuilder.Entity("CivicLens.Infrastructure.Collection.BillStream.ActionCandidateRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.Collection.Jobs.Persistence.ConfigurationRevisionRow", null)
+                        .WithMany()
+                        .HasForeignKey("ConfigurationRevisionId")
+                        .HasConstraintName("fk_action_candidates_configuration_revision")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("CivicLens.Infrastructure.Collection.BillStream.BillGateRow", null)
+                        .WithMany()
+                        .HasForeignKey("DetailJobId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("CivicLens.Infrastructure.Collection.BillStream.BillFollowOnJobRow", b =>
                 {
                     b.HasOne("CivicLens.Infrastructure.Collection.BillStream.BillGateRow", null)
@@ -1843,6 +2001,27 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.HasOne("CivicLens.Infrastructure.Collection.Jobs.Persistence.JobRow", null)
                         .WithMany()
                         .HasForeignKey("DetailJobId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Collection.BillStream.BillPageRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.Collection.BillStream.BillGateRow", null)
+                        .WithMany()
+                        .HasForeignKey("DetailJobId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("CivicLens.Infrastructure.Documents.Persistence.DocumentExtractionRow", null)
+                        .WithMany()
+                        .HasForeignKey("ExtractionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("CivicLens.Infrastructure.Collection.Jobs.Persistence.JobRow", null)
+                        .WithMany()
+                        .HasForeignKey("JobId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

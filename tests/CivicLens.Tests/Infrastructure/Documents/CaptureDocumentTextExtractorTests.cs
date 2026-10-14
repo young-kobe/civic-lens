@@ -1,6 +1,7 @@
 using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
+using CivicLens.Application.Collection.Bills;
 using CivicLens.Core.Collection;
 using CivicLens.Core.Documents;
 using CivicLens.Infrastructure.Documents;
@@ -311,6 +312,59 @@ public sealed class CaptureDocumentTextExtractorTests
         Assert.Equal("source text", await valid.Extractor.ExtractAsync(valid.Attempt, valid.Root, CancellationToken.None));
         await using var incomplete = await TestCapture.CreateAsync(Compress(encoded)[..^4], "text/plain", [coding, "gzip"]);
         await Assert.ThrowsAsync<InvalidDataException>(() => incomplete.Extractor.ExtractAsync(incomplete.Attempt, incomplete.Root, CancellationToken.None));
+    }
+
+    [Theory]
+    [InlineData("<p>Intro</p><p>Second&nbsp; para <b>bold</b></p><ul><li>a</li><li>b</li></ul><script>x()</script>")]
+    [InlineData("<h1>Title</h1>one<br>two  \n spaced<div>end</div>")]
+    [InlineData("")]
+    public async Task AFragmentYieldsTheSameTextAsACapturedPageWithTheSameBodyBecauseOneOwnerHoldsTheHtmlRules(string body)
+    {
+        await using var capture = await TestCapture.CreateAsync(
+            Encoding.UTF8.GetBytes($"<html><head><title>head</title></head><body>{body}</body></html>"), "text/html; charset=utf-8");
+
+        var fromCapture = await capture.Extractor.ExtractAsync(capture.Attempt, capture.Root, CancellationToken.None);
+        var fromFragment = await capture.Extractor.ExtractHtmlFragmentAsync(body, CancellationToken.None);
+
+        Assert.Equal(fromCapture, fromFragment);
+    }
+
+    [Fact]
+    public async Task AFragmentIsHeldToTheSameNestingAndOutputLimitsAsACapture()
+    {
+        var extractor = new CaptureDocumentTextExtractor();
+        var deep = string.Concat(Enumerable.Repeat("<div>", 100)) + "x";
+        var long_ = new string('a', 2_000_001);
+
+        await Assert.ThrowsAsync<InvalidDataException>(() => extractor.ExtractHtmlFragmentAsync(deep, CancellationToken.None));
+        await Assert.ThrowsAsync<InvalidDataException>(() => extractor.ExtractHtmlFragmentAsync(long_, CancellationToken.None));
+    }
+
+    [Fact]
+    public void TheSummaryExtractionVersionNamesTheRealExtractorVersionsSoAChangeToTheHtmlRulesChangesIt()
+    {
+        Assert.Equal("congress-bill-summaries-v1+capture-text-v2+body-text-v1",
+            CongressBillSummariesParser.ExtractionVersion(new CaptureDocumentTextExtractor()));
+    }
+
+    [Fact]
+    public async Task AFragmentWithEmptyBlocksAndRepeatedBreaksHasNoBlankLineBecauseTheSummaryRendererRelaysOnIt()
+    {
+        var text = await new CaptureDocumentTextExtractor().ExtractHtmlFragmentAsync(
+            "<p>a</p><br><br><p></p><div></div><p>b</p>", CancellationToken.None);
+
+        Assert.Equal("a\nb", text);
+        Assert.DoesNotContain("\n\n", text);
+    }
+
+    [Fact]
+    public async Task AFragmentHonoursCancellation()
+    {
+        using var source = new CancellationTokenSource();
+        await source.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            new CaptureDocumentTextExtractor().ExtractHtmlFragmentAsync("<p>x</p>", source.Token));
     }
 
     private static byte[] Compress(byte[] bytes)

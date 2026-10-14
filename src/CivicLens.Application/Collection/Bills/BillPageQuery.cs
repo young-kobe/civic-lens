@@ -9,12 +9,16 @@ public static class BillPageQuery
     public const string FormatParameter = "format";
     public const string OffsetParameter = "offset";
     public const int PageLimit = 250;
-    public static readonly string FirstPage = $"{FormatParameter}=json&{LimitParameter}={PageLimit}";
+    public const int SummariesPageLimit = 1;
 
-    public static bool IsValid(NameValueCollection query, params string[] additionalParameters) =>
+    public static int LimitOf(ApiResource resource) => resource == ApiResource.BillSummaries ? SummariesPageLimit : PageLimit;
+
+    public static string FirstPage(int limit) => $"{FormatParameter}=json&{LimitParameter}={limit.ToString(CultureInfo.InvariantCulture)}";
+
+    public static bool IsValid(NameValueCollection query, int limit, params string[] additionalParameters) =>
         query.AllKeys.All(key => key is LimitParameter or FormatParameter or OffsetParameter ||
             additionalParameters.Contains(key)) &&
-        query[LimitParameter] == PageLimit.ToString(CultureInfo.InvariantCulture) &&
+        query[LimitParameter] == limit.ToString(CultureInfo.InvariantCulture) &&
         query[FormatParameter] == "json" &&
         ReadOffset(query) is not null;
 

@@ -10,4 +10,5 @@ public sealed record CongressBill(
     string? PolicyArea,
     IReadOnlyList<string> SponsorBioguideIds,
     int CosponsorCount,
-    int ActionCount);
+    int ActionCount,
+    int SummaryCount);

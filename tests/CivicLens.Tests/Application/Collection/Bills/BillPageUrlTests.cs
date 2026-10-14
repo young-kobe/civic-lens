@@ -13,6 +13,7 @@ public sealed class BillPageUrlTests
     [Theory]
     [InlineData(ApiResource.BillCosponsors, "https://api.congress.gov/v3/bill/119/hres/1610/cosponsors?format=json&limit=250")]
     [InlineData(ApiResource.BillActions, "https://api.congress.gov/v3/bill/119/hres/1610/actions?format=json&limit=250")]
+    [InlineData(ApiResource.BillSummaries, "https://api.congress.gov/v3/bill/119/hres/1610/summaries?format=json&limit=1")]
     public void FirstPageUrlHasTheExactFormTheReaderAccepts(ApiResource resource, string expected)
     {
         var url = BillPageUrl.FirstPage(Source, resource, Bill);
@@ -45,6 +46,7 @@ public sealed class BillPageUrlTests
     [InlineData("https://api.congress.gov/v3/bill/119/hr/1/actions?format=json&limit=250&offset=-1")]
     [InlineData("https://api.congress.gov/v3/bill/119/hr/1/actions?format=json&limit=250&offset=")]
     [InlineData("https://api.congress.gov/v3/bill/119/hr/1/actions?format=json&limit=100")]
+    [InlineData("https://api.congress.gov/v3/bill/119/hr/1/actions?format=json&limit=1")]
     [InlineData("https://api.congress.gov/v3/bill/119/hr/1/actions?format=json&limit=250&limit=250")]
     [InlineData("https://api.congress.gov/v3/bill/119/hr/1/actions?format=json")]
     [InlineData("https://api.congress.gov/v3/bill/119/hr/1/actions?limit=250")]

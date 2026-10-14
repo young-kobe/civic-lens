@@ -117,6 +117,26 @@ WHERE g.decision = 'Pending'
 ORDER BY g.congress, g.bill_type, g.bill_number;
 ```
 
+To list passed bills that have no action candidate because a cosponsor or actions page job failed or is blocked, run this query. A failed or blocked page writes no page row, so its chain stays open and the bill gets no candidate. A failed summaries page does not block a candidate, so the query skips it.
+
+```sql
+SELECT g.detail_job_id, g.source_id, g.congress, g.bill_type, g.bill_number,
+       j.job_id AS stuck_job_id, j.definition_json::jsonb ->> 'apiResource' AS resource,
+       j.state, e.status AS processing_status, e.error_code
+FROM bill_gates g
+JOIN bill_follow_on_jobs l ON l.detail_job_id = g.detail_job_id
+JOIN collection_jobs j ON j.job_id = l.job_id
+LEFT JOIN action_candidates c ON c.detail_job_id = g.detail_job_id
+LEFT JOIN bill_pages p ON p.job_id = l.job_id
+LEFT JOIN evidence_processing e ON e.job_id = l.job_id
+WHERE g.decision = 'Passed'
+  AND c.candidate_id IS NULL
+  AND p.job_id IS NULL
+  AND j.definition_json::jsonb ->> 'apiResource' IN ('billCosponsors', 'billActions')
+  AND (j.state IN ('Failed', 'Cancelled') OR e.status IN ('Blocked', 'Failed'))
+ORDER BY g.congress, g.bill_type, g.bill_number;
+```
+
 ## Postgres adapter and migrations
 
 The Host exposes explicit schema migration and watched-page collection/import. Set `CIVIC_LENS_DATABASE` in your local environment to a Postgres connection string containing Host and Database, with authentication appropriate to your local server. Runtime commands require this variable and have no default database. Keep credentials out of committed files, command arguments, and captured output. The commands require a reachable Postgres server and sufficient database permissions; they do not install or start Postgres.

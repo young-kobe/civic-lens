@@ -21,7 +21,7 @@ public static class CongressBillParser
         if (bill is not
             {
                 Congress: >= 1, Number: >= 1, Type: not null, Title: not null, IntroducedDate: not null,
-                UpdateDate: not null, Sponsors: not null, Actions.Count: >= 0
+                UpdateDate: not null, Sponsors: not null
             })
             throw new InvalidDataException("Bill detail is incomplete.");
         var type = CongressBillListItem.NormalizeType(bill.Type)
@@ -30,7 +30,7 @@ public static class CongressBillParser
             throw new InvalidDataException("Bill detail is for another bill than requested.");
         return new CongressBill(bill.Congress.Value, type, bill.Number.Value, bill.Title, bill.IntroducedDate.Value,
             ReadUpdateDate(bill.UpdateDate), ReadPolicyArea(bill.PolicyArea), ReadSponsors(bill.Sponsors),
-            ReadCosponsorCount(bill.Cosponsors), bill.Actions.Count.Value);
+            ReadCosponsorCount(bill.Cosponsors), ReadCount(bill.Actions, "action"), ReadCount(bill.Summaries, "summary"));
     }
 
     private static WireDetail Deserialize(ReadOnlySpan<byte> json)
@@ -46,16 +46,23 @@ public static class CongressBillParser
         }
     }
 
-    private static DateTimeOffset ReadUpdateDate(string updateDate) =>
+    internal static DateTimeOffset ReadUpdateDate(string updateDate) =>
         DateTimeOffset.TryParseExact(updateDate, UpdateDateFormats, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var parsed)
             ? parsed
-            : throw new InvalidDataException("Bill detail update date must be an exact time with an offset.");
+            : throw new InvalidDataException("Update date must be an exact time with an offset.");
 
     private static int ReadCosponsorCount(WireCosponsors? cosponsors) => cosponsors switch
     {
         null => 0,
         { CountIncludingWithdrawnCosponsors: >= 0 and var count } => count,
         _ => throw new InvalidDataException("Bill detail cosponsor count is invalid.")
+    };
+
+    private static int ReadCount(WireCount? value, string name) => value switch
+    {
+        null => 0,
+        { Count: >= 0 and var count } => count,
+        _ => throw new InvalidDataException($"Bill detail {name} count is invalid.")
     };
 
     private static string? ReadPolicyArea(WirePolicyArea? policyArea) =>
@@ -69,7 +76,7 @@ public static class CongressBillParser
     private sealed record WireDetail(WireBill? Bill);
     private sealed record WireBill(int? Congress, string? Type, int? Number, string? Title, DateOnly? IntroducedDate,
         string? UpdateDate, WirePolicyArea? PolicyArea, WireSponsor?[]? Sponsors, WireCosponsors? Cosponsors,
-        WireCount? Actions);
+        WireCount? Actions, WireCount? Summaries);
     private sealed record WirePolicyArea(string? Name);
     private sealed record WireSponsor(string? BioguideId);
     private sealed record WireCount(int? Count);

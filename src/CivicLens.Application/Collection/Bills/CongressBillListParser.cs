@@ -22,8 +22,10 @@ public static class CongressBillListParser
             throw new InvalidDataException("Bill list page must contain bills and pagination.");
         if (wire.Bills.Length > BillPageQuery.PageLimit)
             throw new InvalidDataException("Bill list page holds more bills than the request limit.");
-        var bills = wire.Bills.Select(ToItem).ToArray();
-        return new CongressBillListPage(bills, ReadNext(wire.Pagination.Next, scope, window), BillStreamWindow.StartsPass(scope.Url));
+        var items = wire.Bills.Select(ToItem).ToArray();
+        var bills = items.OfType<CongressBillListItem>().ToArray();
+        return new CongressBillListPage(bills, ReadNext(wire.Pagination.Next, scope, window), BillStreamWindow.StartsPass(scope.Url),
+            items.Length - bills.Length);
     }
 
     private static WirePage Deserialize(ReadOnlySpan<byte> json)
@@ -39,13 +41,13 @@ public static class CongressBillListParser
         }
     }
 
-    private static CongressBillListItem ToItem(WireBill? bill)
+    private static CongressBillListItem? ToItem(WireBill? bill)
     {
         if (bill is not { Congress: >= 1, Number: >= 1, UpdateDate: not null, Type: not null })
             throw new InvalidDataException("Bill list item is incomplete.");
-        var type = CongressBillListItem.NormalizeType(bill.Type)
-            ?? throw new InvalidDataException("Bill list item has an unknown bill type.");
-        return new CongressBillListItem(bill.Congress.Value, type, bill.Number.Value, bill.UpdateDate.Value);
+        return CongressBillListItem.NormalizeType(bill.Type) is { } type
+            ? new CongressBillListItem(bill.Congress.Value, type, bill.Number.Value, bill.UpdateDate.Value)
+            : null;
     }
 
     private static string? ReadNext(string? next, CollectionRequest scope, BillStreamWindow window)
