@@ -29,6 +29,11 @@ public partial class ActionDrafting : Migration
             columns: new[] { "detail_job_id", "includes_summaries" },
             unique: true);
 
+        migrationBuilder.CreateIndex(
+            name: "ix_action_candidates_bill",
+            table: "action_candidates",
+            columns: new[] { "source_id", "congress", "bill_type", "bill_number", "update_date_utc_ticks" });
+
         migrationBuilder.Sql("""
             INSERT INTO action_candidates (candidate_id, source_id, congress, bill_type, bill_number, update_date_utc_ticks, detail_job_id,
                 configuration_revision_id, created_at_utc_ticks, includes_summaries)
@@ -241,6 +246,10 @@ public partial class ActionDrafting : Migration
 
     protected override void Down(MigrationBuilder migrationBuilder)
     {
+        migrationBuilder.DropIndex(
+            name: "ix_action_candidates_bill",
+            table: "action_candidates");
+
         migrationBuilder.DropTable(
             name: "action_analysis_budget");
 

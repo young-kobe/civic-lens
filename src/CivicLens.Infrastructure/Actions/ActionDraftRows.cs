@@ -1,7 +1,9 @@
+using CivicLens.Application.Actions;
 using CivicLens.Core.Actions;
 using CivicLens.Core.Review;
 using CivicLens.Infrastructure.Actions.Persistence;
 using CivicLens.Infrastructure.Collection;
+using CivicLens.Infrastructure.Collection.BillStream;
 using CivicLens.Infrastructure.Review;
 using Microsoft.EntityFrameworkCore;
 
@@ -9,18 +11,28 @@ namespace CivicLens.Infrastructure.Actions;
 
 internal static class ActionDraftRows
 {
-    public static async Task<bool> TryAppendAnalysisRevisionAsync(CollectionAttemptDbContext db, ActionDraftRevision revision, string runId,
+    public static async Task<string?> AppendAnalysisRevisionAsync(CollectionAttemptDbContext db, ActionDraftRevision revision, string runId,
         CancellationToken cancellationToken)
     {
         revision.ValidateShape();
         await ReviewWriteLock.AcquireAsync(db, ReviewWriteLock.Action, cancellationToken);
+        if (await HasNewerCandidateAsync(db, revision.CandidateId, cancellationToken)) return ActionDraftErrorCodes.SupersededByNewerCandidate;
         var draft = await db.Set<ActionDraftRow>().SingleOrDefaultAsync(row => row.RecordId == revision.RecordId, cancellationToken);
-        if ((draft?.CurrentRevisionNumber ?? 0) != revision.RevisionNumber - 1) return false;
+        if ((draft?.CurrentRevisionNumber ?? 0) != revision.RevisionNumber - 1) return ActionDraftErrorCodes.RevisionConflict;
         if (draft is null) db.Add(NewDraft(revision));
         else draft.CurrentRevisionNumber = revision.RevisionNumber;
         db.Add(NewRevision(revision, runId));
-        return true;
+        return null;
     }
+
+    public static Task<bool> HasNewerCandidateAsync(CollectionAttemptDbContext db, string candidateId, CancellationToken cancellationToken) =>
+        (from candidate in db.Set<ActionCandidateRow>().AsNoTracking()
+         where candidate.CandidateId == candidateId
+         from newer in db.Set<ActionCandidateRow>().AsNoTracking()
+         where newer.SourceId == candidate.SourceId && newer.Congress == candidate.Congress && newer.BillType == candidate.BillType &&
+             newer.BillNumber == candidate.BillNumber && (newer.UpdateDateUtcTicks > candidate.UpdateDateUtcTicks ||
+                 newer.UpdateDateUtcTicks == candidate.UpdateDateUtcTicks && newer.IncludesSummaries && !candidate.IncludesSummaries)
+         select newer).AnyAsync(cancellationToken);
 
     public static async Task<ActionDraftRevision?> ReadCurrentAsync(CollectionAttemptDbContext db, string recordId,
         CancellationToken cancellationToken)

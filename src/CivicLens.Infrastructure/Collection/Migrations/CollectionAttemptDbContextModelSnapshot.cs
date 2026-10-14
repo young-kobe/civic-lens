@@ -733,6 +733,9 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .IsUnique()
                         .HasDatabaseName("ux_action_candidates_detail_job");
 
+                    b.HasIndex("SourceId", "Congress", "BillType", "BillNumber", "UpdateDateUtcTicks")
+                        .HasDatabaseName("ix_action_candidates_bill");
+
                     b.ToTable("action_candidates", null, t =>
                         {
                             t.HasCheckConstraint("ck_action_candidates_bill", "congress >= 1 AND bill_number >= 1");

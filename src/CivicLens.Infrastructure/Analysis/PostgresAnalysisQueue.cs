@@ -39,11 +39,11 @@ internal sealed class PostgresAnalysisQueue<TRow, TBudget, TRun>(IDbContextFacto
         var key = mapping.KeyProperty;
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         var now = (await DatabaseClock.ReadAsync(db, cancellationToken)).Ticks;
-        var due = db.Set<TRow>().AsNoTracking()
+        var rows = await db.Set<TRow>().AsNoTracking()
             .Where(row => row.Task == task && (row.Status == State.Pending ||
                 (row.Status == State.RetryWaiting || row.Status == State.WaitingForBudget) && row.RetryAt <= now ||
-                row.Status == State.Running && row.LeaseExpiresAt <= now));
-        var rows = await ClaimOrder(db, due).ThenBy(row => EF.Property<string>(row, key)).Take(limit)
+                row.Status == State.Running && row.LeaseExpiresAt <= now))
+            .OrderBy(row => row.CreatedAtUtcTicks).ThenBy(row => EF.Property<string>(row, key)).Take(limit)
             .ToArrayAsync(cancellationToken);
         return [.. rows.Select(ToRecord)];
     }
@@ -194,11 +194,6 @@ internal sealed class PostgresAnalysisQueue<TRow, TBudget, TRun>(IDbContextFacto
         await transaction.CommitAsync(cancellationToken);
         return released;
     }
-
-    private IOrderedQueryable<TRow> ClaimOrder(CollectionAttemptDbContext db, IQueryable<TRow> due) =>
-        mapping.ClaimedFirst(db) is { } first
-            ? due.OrderByDescending(first).ThenBy(row => row.CreatedAtUtcTicks)
-            : due.OrderBy(row => row.CreatedAtUtcTicks);
 
     private static AnalysisRecord ToRecord(TRow row) => new(row.SubjectId, row.Task, row.Status, row.LeaseToken, row.Fence, row.Attempts,
         row.RetryAt is { } retry ? new DateTimeOffset(retry, TimeSpan.Zero) : null, row.ErrorCode, row.RetryOfRunId);

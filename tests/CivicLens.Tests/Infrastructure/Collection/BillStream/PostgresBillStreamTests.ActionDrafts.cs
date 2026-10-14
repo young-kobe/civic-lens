@@ -91,7 +91,7 @@ public sealed partial class PostgresBillStreamTests
     }
 
     [Fact]
-    public async Task ALateRunOfTheOlderCandidateCannotReplaceTheRevisionOfTheCandidateWithSummaries()
+    public async Task ANewerCandidateThatArrivesAfterTheClaimSupersedesTheAppendSoTheOlderDraftNeverBecomesARevision()
     {
         var bill = await StartPassedBillAsync(cosponsors: 0, summaries: 1);
         await AdmitActionsAsync(bill.Actions, new CongressBillActionsPage([], null));
@@ -100,24 +100,46 @@ public sealed partial class PostgresBillStreamTests
         var olderClaim = (await store.TryClaimAsync(older, Lease, default))!;
         var olderRun = await ReserveAsync(store, olderClaim);
         await AdmitSummariesAsync(bill.Summaries!, new CongressBillSummariesPage([], null));
-        var newer = (await CandidatesAsync()).Single(candidate => candidate.IncludesSummaries).CandidateId;
-        await SettleAsync(newer, Revision(newer, 1));
 
         var settled = await store.CheckpointAsync(ActionDraftCheckpoint.From(olderClaim, Revision(older, 1)),
             DraftedRun(olderRun, older), default);
 
         Assert.True(settled);
-        Assert.Equal(("RetryWaiting", ActionDraftErrorCodes.RevisionConflict),
+        Assert.Equal(("Succeeded", ActionDraftErrorCodes.SupersededByNewerCandidate),
             (await QueueAsync()).Where(row => row.CandidateId == older).Select(row => (row.Status, row.ErrorCode)).Single());
-        Assert.Equal(newer, (await ActionStore().ReadEvidenceAsync(older, default))!.Current!.CandidateId);
+        Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM action_revisions"));
+        Assert.Equal("DraftDiscarded", await ScalarAsync($"SELECT outcome FROM action_analysis_runs WHERE run_id = '{olderRun}'"));
     }
 
     [Fact]
-    public async Task ABackfilledBillDraftsItsCandidateWithSummariesFirstSoTheOlderCandidateFindsANewerRevisionAndSkipsTheModel()
+    public async Task ADelayedOlderCandidateIsSupersededSoItsStaleContentNeverBecomesTheNewestRevision()
+    {
+        var march3 = await ReadableCandidateAsync(sponsor: "A000001");
+        await RunActionWorkerAsync(new FakeActionDraftingModel().Draft(DraftableOutput));
+        var march4 = await ReadableCandidateAsync(sponsor: "B000002", UpdatedAt.AddDays(1));
+        var march5 = await ReadableCandidateAsync(sponsor: "A000001", UpdatedAt.AddDays(2));
+        await ExecuteAsync(connectionString,
+            $"UPDATE action_analysis SET status = 'RetryWaiting', retry_at = 3155378975999999999 WHERE candidate_id = '{march4}'");
+        Assert.Empty((await RunActionWorkerAsync(new FakeActionDraftingModel())).Requests);
+        await ExecuteAsync(connectionString, $"UPDATE action_analysis SET status = 'Pending', retry_at = NULL WHERE candidate_id = '{march4}'");
+
+        var model = await RunActionWorkerAsync(new FakeActionDraftingModel());
+
+        Assert.Empty(model.Requests);
+        var queue = (await QueueAsync()).ToDictionary(row => row.CandidateId, row => (row.Status, row.ErrorCode));
+        Assert.Equal(("Succeeded", (string?)null), queue[march3]);
+        Assert.Equal(("Succeeded", ActionDraftErrorCodes.SupersededByNewerCandidate), queue[march4]);
+        Assert.Equal(("Succeeded", ActionDraftErrorCodes.Unchanged), queue[march5]);
+        Assert.Equal(march3, (await ActionStore().ReadEvidenceAsync(march4, default))!.Current!.CandidateId);
+        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM action_revisions"));
+    }
+
+    [Fact]
+    public async Task ABackfilledBillClaimsItsOlderCandidateFirstButOnlyTheCandidateWithSummariesCallsTheModel()
     {
         var (older, newer) = await BothCandidatesPendingAsync();
         var store = ActionStore();
-        Assert.Equal([newer, older], (await store.GetEligibleAsync(10, default)).Select(row => row.SubjectId));
+        Assert.Equal([older, newer], (await store.GetEligibleAsync(10, default)).Select(row => row.SubjectId));
 
         var model = await RunActionWorkerAsync(new FakeActionDraftingModel().Draft(DraftableOutput));
 
@@ -177,7 +199,7 @@ public sealed partial class PostgresBillStreamTests
     }
 
     [Fact]
-    public async Task WhenTheCandidateWithSummariesBlocksTheOlderCandidateStaysDueWithNoRevisionToDeferToSoItStillDrafts()
+    public async Task WhenTheCandidateWithSummariesBlocksTheOlderCandidateIsStillSupersededAndNeverDrafts()
     {
         var (older, newer) = await BothCandidatesPendingAsync();
         var store = ActionStore();
@@ -185,7 +207,11 @@ public sealed partial class PostgresBillStreamTests
         Assert.True(await store.CheckpointAsync(AnalysisCheckpoint.From(claim, State.Blocked, ActionDraftErrorCodes.ExtractionVersionChanged),
             null, default));
 
-        Assert.Equal([older], (await store.GetEligibleAsync(10, default)).Select(row => row.SubjectId));
+        var model = await RunActionWorkerAsync(new FakeActionDraftingModel());
+
+        Assert.Empty(model.Requests);
+        Assert.Equal(("Succeeded", ActionDraftErrorCodes.SupersededByNewerCandidate),
+            (await QueueAsync()).Where(row => row.CandidateId == older).Select(row => (row.Status, row.ErrorCode)).Single());
         Assert.Null((await store.ReadEvidenceAsync(older, default))!.Current);
     }
 
@@ -353,17 +379,18 @@ public sealed partial class PostgresBillStreamTests
         return (older, candidates.Single(item => item.IncludesSummaries).CandidateId);
     }
 
-    private async Task<string> ReadableCandidateAsync(string sponsor)
+    private async Task<string> ReadableCandidateAsync(string sponsor, DateTimeOffset? updatedAt = null)
     {
-        var bill = await StartReadableBillAsync(sponsor, summaries: 0);
+        var bill = await StartReadableBillAsync(sponsor, summaries: 0, updatedAt);
         await AdmitActionsAsync(bill.Actions, new CongressBillActionsPage([], null));
-        return Assert.Single(await CandidatesAsync()).CandidateId;
+        return (await CandidatesAsync()).Single(candidate => candidate.DetailJobId == bill.Detail).CandidateId;
     }
 
-    private async Task<StartedBill> StartReadableBillAsync(string sponsor, int summaries)
+    private async Task<StartedBill> StartReadableBillAsync(string sponsor, int summaries, DateTimeOffset? updatedAt = null)
     {
-        var detail = await EnqueueDetailAsync("detail");
-        var bill = DetailBill(UpdatedAt, 0, summaries: summaries) with { SponsorBioguideIds = [sponsor] };
+        var updated = updatedAt ?? UpdatedAt;
+        var detail = await EnqueueDetailAsync("detail-" + updated.UtcTicks);
+        var bill = DetailBill(updated, 0, summaries: summaries) with { SponsorBioguideIds = [sponsor] };
         var result = await store.AdmitDetailAsync(Source(), detail, bill, BillGateOutcome.Passed(BillGateReason.CoveredSponsor),
             BillGateFixtures.Revision().Id, await ReadableExtractionAsync(detail, ApiResource.Bill, ActionBillWorld.DetailBody(bill)), default);
         string? JobOf(string resource) => result.Jobs.SingleOrDefault(job => job.Url.Contains($"/{resource}?"))?.JobId;

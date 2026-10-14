@@ -1,4 +1,3 @@
-using System.Linq.Expressions;
 using CivicLens.Application.Analysis;
 using CivicLens.Core.Analysis;
 using CivicLens.Infrastructure.Analysis.Persistence;
@@ -20,8 +19,6 @@ internal interface IAnalysisQueueMapping<TRow, TRun> where TRow : class, IAnalys
     AnalysisRun RunOf(TRun run);
     TRun WrapInterrupted(AnalysisRun run);
     void AddRun(CollectionAttemptDbContext db, TRow row, TRun run);
-
-    Expression<Func<TRow, bool>>? ClaimedFirst(CollectionAttemptDbContext db) => null;
 
     Task<AnalysisSettlement<TRun>> PrepareSettlementAsync(CollectionAttemptDbContext db, TRow row, AnalysisSettlement<TRun> settlement,
         CancellationToken cancellationToken) => Task.FromResult(settlement);

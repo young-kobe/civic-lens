@@ -27,8 +27,7 @@ public sealed class ActionDraftingStep(IActionDraftStore store, ActionBillReader
         if (evidence is null) return await attempt.CompleteAsync(State.Blocked, ActionDraftErrorCodes.EvidenceUnavailable, cancellationToken);
         if (evidence.SummaryPageCount > ActionDraftTask.MaximumSummaryPages)
             return await attempt.CompleteAsync(State.Blocked, ActionDraftErrorCodes.TooManySummaryPages, cancellationToken);
-        var candidate = evidence.Candidate;
-        if (evidence.Current is { } current && IsFromNewerCandidate(current, candidate))
+        if (evidence.HasNewerCandidate)
             return await attempt.CompleteAsync(State.Succeeded, ActionDraftErrorCodes.SupersededByNewerCandidate, cancellationToken);
 
         var read = await reader.ReadAsync(evidence, cancellationToken);
@@ -87,9 +86,6 @@ public sealed class ActionDraftingStep(IActionDraftStore store, ActionBillReader
         previous.PolicyArea == snapshot.Bill.PolicyArea && previous.BillTitle == snapshot.Bill.Title &&
         previous.TrackedIssueIds.SequenceEqual(trackedIssueIds) && previous.IssueRevisionId == issues.Id &&
         previous.Sponsorships.Select(item => item.PersonId).SequenceEqual(snapshot.Sponsorships.Select(item => item.PersonId));
-
-    private static bool IsFromNewerCandidate(ActionDraftRevision current, ActionDraftCandidate candidate) =>
-        (current.CandidateUpdateDate, current.CandidateIncludesSummaries).CompareTo((candidate.UpdateDate, candidate.IncludesSummaries)) > 0;
 
     private static Task<bool> SettleWithoutCallAsync(IAnalysisAttempt<ActionDraftRun> attempt, string inputHash, string code,
         CancellationToken cancellationToken)

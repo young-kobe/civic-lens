@@ -16,10 +16,9 @@ internal static class ActionRevisionFixtures
     public static ActionSponsorship Sponsorship(string bioguide = "W000817") => new("warren", bioguide, ActionSponsorshipRole.Sponsor, false,
         new DateOnly(2025, 1, 3), null, [new(ExtractionId, 0, 10), new(ExtractionId, 11, 10)]);
 
-    public static ActionDraftRevision Model(int number = 1, string author = "civic-lens:analysis", DateTimeOffset? candidateUpdate = null,
-        bool candidateIncludesSummaries = false) => new(
+    public static ActionDraftRevision Model(int number = 1, string author = "civic-lens:analysis", DateTimeOffset? candidateUpdate = null) => new(
         RecordId, number, author, Updated.AddMinutes(number), "Warren sponsored a bill", "Senator Warren sponsored the bill.",
-        ActionTextOrigin.Model, null, "congress-bills", 119, "hr", 1, CandidateId, candidateUpdate ?? Updated, candidateIncludesSummaries,
+        ActionTextOrigin.Model, null, "congress-bills", 119, "hr", 1, CandidateId, candidateUpdate ?? Updated, false,
         Fingerprint, null, null,
         null, null, [], IssueRevisionId, [Sponsorship()], "A housing bill");
 

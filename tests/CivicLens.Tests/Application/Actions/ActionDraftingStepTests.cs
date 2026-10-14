@@ -204,45 +204,16 @@ public sealed class ActionDraftingStepTests
     }
 
     [Fact]
-    public async Task ACandidateOlderThanTheCurrentRevisionIsSupersededWithoutReadingOrCalling()
+    public async Task ACandidateWithANewerCandidateOfTheSameBillIsSupersededWithoutReadingOrCalling()
     {
-        var world = Create();
-        var current = ActionRevisionFixtures.Model(candidateUpdate: UpdatedAt.AddDays(5));
         var model = new FakeActionDraftingModel();
 
-        var (store, _) = await RunAsync(world, model, current);
+        var (store, _) = await RunAsync(Create(), model, hasNewerCandidate: true);
 
         Assert.Equal((State.Succeeded, "supersededByNewerCandidate"), (store.Entries[0].Status, store.Entries[0].ErrorCode));
         Assert.Empty(model.Requests);
         Assert.Empty(store.Revisions);
         Assert.Empty(store.Runs);
-    }
-
-    [Fact]
-    public async Task ACandidateWithoutSummariesIsSupersededByARevisionFromTheSameVersionWithSummaries()
-    {
-        var model = new FakeActionDraftingModel();
-        var current = ActionRevisionFixtures.Model(candidateUpdate: UpdatedAt, candidateIncludesSummaries: true);
-
-        var (store, _) = await RunAsync(Create(), model, current, includesSummaries: false);
-
-        Assert.Equal((State.Succeeded, "supersededByNewerCandidate"), (store.Entries[0].Status, store.Entries[0].ErrorCode));
-        Assert.Empty(model.Requests);
-        Assert.Empty(store.Revisions);
-        Assert.Empty(store.Runs);
-    }
-
-    [Fact]
-    public async Task ACandidateWithSummariesDraftsOverARevisionFromTheSameVersionWithoutThem()
-    {
-        var model = new FakeActionDraftingModel().Draft(Output());
-        var current = ActionRevisionFixtures.Model(candidateUpdate: UpdatedAt, candidateIncludesSummaries: false);
-
-        var (store, _) = await RunAsync(Create(summaries: [Summary]), model, current, includesSummaries: true);
-
-        var revision = Assert.Single(store.Revisions);
-        Assert.True(revision.CandidateIncludesSummaries);
-        Assert.Single(model.Requests);
     }
 
     [Fact]
@@ -712,9 +683,9 @@ public sealed class ActionDraftingStepTests
 
     private static async Task<(FakeActionDraftStore Store, FakeActionDraftingModel Model)> RunAsync(ActionBillWorld world,
         FakeActionDraftingModel model, ActionDraftRevision? current = null, DateTimeOffset? updatedAt = null, ActionDraftSettings? settings = null,
-        IssueConfigurationRevision? issues = null, bool? includesSummaries = null)
+        IssueConfigurationRevision? issues = null, bool hasNewerCandidate = false)
     {
-        var store = new FakeActionDraftStore(world.Evidence(current, updatedAt, includesSummaries));
+        var store = new FakeActionDraftStore(world.Evidence(current, updatedAt, hasNewerCandidate));
         await AnalysisWorkers.ActionDrafting(store, new FakeAnalysisStatusStore(), world.Reader(), model,
             settings ?? new ActionDraftSettings(10_000_000, concurrency: 1), issues ?? BillGateFixtures.Revision(), TimeProvider.System).ExecuteAsync(once: true);
         return (store, model);

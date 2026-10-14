@@ -79,11 +79,11 @@ internal sealed class ActionBillWorld
 
     public ActionBillReader Reader() => new(Stores, new ApiResponseReader(Stores, Stores), new FragmentExtractor(), "artifacts");
 
-    public ActionDraftEvidence Evidence(ActionDraftRevision? current = null, DateTimeOffset? updatedAt = null, bool? includesSummaries = null) =>
+    public ActionDraftEvidence Evidence(ActionDraftRevision? current = null, DateTimeOffset? updatedAt = null, bool hasNewerCandidate = false) =>
         new(new ActionDraftCandidate(ActionRevisionFixtures.CandidateId, ActionRevisionFixtures.RecordId, SourceId, 119, "hr", 1,
-            updatedAt ?? UpdatedAt, includesSummaries ?? pages.Any(page => page.Resource == ApiResource.BillSummaries)),
+            updatedAt ?? UpdatedAt, pages.Any(page => page.Resource == ApiResource.BillSummaries)),
             Revision, [.. pages.Select(page => new ActionDraftPage(page.Resource, page.JobId, ExtractionIdOf(page.JobId), versionOverrides.GetValueOrDefault(page.JobId) ?? ParserVersionOf(page.Resource),
-                CongressBillRenderer.NormalizationVersion, page.Text))], current);
+                CongressBillRenderer.NormalizationVersion, page.Text))], current, hasNewerCandidate);
 
     public static string ParserVersionOf(ApiResource resource) => resource switch
     {
