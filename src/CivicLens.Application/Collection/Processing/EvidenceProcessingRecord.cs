@@ -22,5 +22,4 @@ public sealed record EvidenceProcessingRecord(
     string? ErrorCode,
     int AdmittedCount = 0,
     int DeferredCount = 0,
-    int DuplicateCount = 0,
-    string? PredecessorAttemptId = null);
+    int DuplicateCount = 0);

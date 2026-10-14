@@ -175,7 +175,7 @@ public sealed class RunCollectionJobTests
             Policy = new CollectionJobPolicy()
         };
         return new CollectionJobRecord("job-1", definition, "key", CollectionJobState.Running,
-            DateTimeOffset.UtcNow, null, false, 5, 2_000_000, 30, [attempt]);
+            DateTimeOffset.UtcNow, null, false, [attempt]);
     }
 
     private static CollectionJobRecord PendingJob(CollectionRequest request)
@@ -193,7 +193,7 @@ public sealed class RunCollectionJobTests
             Policy = new CollectionJobPolicy()
         };
         return new CollectionJobRecord("job-1", definition, "key", CollectionJobState.Pending,
-            DateTimeOffset.UtcNow, null, false, 0, 0, 0, []);
+            DateTimeOffset.UtcNow, null, false, []);
     }
 
     private sealed class ExistingAttemptStore(StoredCollectionAttempt stored) : ICollectionAttemptStore

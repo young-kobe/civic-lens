@@ -124,6 +124,9 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.HasIndex("Status", "CreatedAtUtcTicks", "CandidateId");
 
+                    b.HasIndex(new[] { "Task", "CreatedAtUtcTicks", "CandidateId" }, "ix_action_analysis_active_claim")
+                        .HasFilter("status IN ('Pending','RetryWaiting','WaitingForBudget','Running')");
+
                     b.ToTable("action_analysis", null, t =>
                         {
                             t.HasCheckConstraint("ck_action_analysis_counts", "fence >= 0 AND attempts >= 0 AND reserved_tokens >= 0");
@@ -481,6 +484,9 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.HasIndex("DraftId");
 
                     b.HasIndex("Status", "CreatedAtUtcTicks", "ComparisonId");
+
+                    b.HasIndex(new[] { "Task", "CreatedAtUtcTicks", "ComparisonId" }, "ix_document_change_analysis_active_claim")
+                        .HasFilter("status IN ('Pending','RetryWaiting','WaitingForBudget','Running')");
 
                     b.ToTable("document_change_analysis", null, t =>
                         {
@@ -1252,18 +1258,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("cancellation_requested");
 
-                    b.Property<long>("ChargedBytes")
-                        .HasColumnType("bigint")
-                        .HasColumnName("charged_bytes");
-
-                    b.Property<int>("ChargedRequests")
-                        .HasColumnType("integer")
-                        .HasColumnName("charged_requests");
-
-                    b.Property<int>("ChargedSeconds")
-                        .HasColumnType("integer")
-                        .HasColumnName("charged_seconds");
-
                     b.Property<string>("ConfigurationRevisionId")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)")
@@ -1318,10 +1312,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.HasIndex("CreatedAt", "JobId");
 
+                    b.HasIndex(new[] { "CreatedAt", "JobId" }, "ix_collection_jobs_active_created_at_job_id")
+                        .HasFilter("state IN ('Pending','Running','WaitingToRetry')");
+
                     b.ToTable("collection_jobs", null, t =>
                         {
-                            t.HasCheckConstraint("ck_job_budget", "charged_requests >= 0 AND charged_bytes >= 0 AND charged_seconds >= 0");
-
                             t.HasCheckConstraint("ck_job_lease", "(lease_token IS NULL) = (lease_expires_at IS NULL)");
 
                             t.HasCheckConstraint("ck_job_state", "state IN ('Pending','Running','WaitingToRetry','Succeeded','Failed','Cancelled')");
@@ -1583,7 +1578,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.HasKey("JobId", "AttemptId");
 
-                    b.HasIndex("PredecessorAttemptId", "Status");
+                    b.HasIndex("AttemptId");
 
                     b.HasIndex("JobId", "Stage", "Status");
 
@@ -2028,6 +2023,9 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.HasKey("CandidateId", "Task");
 
                     b.HasIndex("Status", "CreatedAtUtcTicks", "CandidateId");
+
+                    b.HasIndex(new[] { "Task", "CreatedAtUtcTicks", "CandidateId" }, "ix_statement_analysis_active_claim")
+                        .HasFilter("status IN ('Pending','RetryWaiting','WaitingForBudget','Running')");
 
                     b.ToTable("statement_analysis", null, t =>
                         {

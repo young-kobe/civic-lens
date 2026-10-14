@@ -20,10 +20,10 @@ The documents feature turns verified captures into immutable text extractions, e
 Each line gives the rule, what enforces it, and the test that protects it. Cross-feature invariants are in [architecture](../architecture.md#invariants).
 
 - An extraction ID depends on the attempt and the versions, never on the text. Enforced by `DocumentExtraction`. Test: `DocumentExtractionTests.IdentityIsFramedAndIndependentOfTextWhileTextHashTracksContent`.
-- One extraction identity keeps one text and one provenance. Enforced by `PostgresDocumentExtractionStore` under the `civic-lens-document-extractions` lock. Test: `PostgresDocumentExtractionStoreTests.RejectsChangedProvenanceAndDetectsStoredTextTampering`.
+- One extraction identity keeps one text and one provenance. Enforced by `PostgresDocumentExtractionStore` under the `PostgresAdvisoryLock.DocumentExtractions` key. Test: `PostgresDocumentExtractionStoreTests.RejectsChangedProvenanceAndDetectsStoredTextTampering`.
 - A read verifies the text hash and the identity. Enforced by `PostgresDocumentExtractionStore`. Test: `PostgresDocumentExtractionStoreTests.RejectsChangedProvenanceAndDetectsStoredTextTampering`.
 - Versions that differ give an Incompatible comparison, not a diff. Enforced by `DocumentComparison`. Test: `DocumentComparisonTests.RequiresEqualProfileRevisionAndProcessingVersions`.
-- A comparison save computes the result again, so a forged result fails. Enforced by `PostgresDocumentComparisonStore` under the `civic-lens-document-comparisons` lock. Test: `PostgresDocumentExtractionStoreTests.ForgedComparisonSaveFailsAndQueuesNothing`.
+- A comparison save computes the result again, so a forged result fails. Enforced by `PostgresDocumentComparisonStore` under the `PostgresAdvisoryLock.DocumentComparisons` key. Test: `PostgresDocumentExtractionStoreTests.ForgedComparisonSaveFailsAndQueuesNothing`.
 - A processing checkpoint accepts only a complete, verified comparison of its own extraction. Enforced by `PostgresEvidenceProcessingStore`. No test.
 
 ## Behavior

@@ -98,12 +98,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
             .AddInterceptors(counter).Options;
         var reader = new PostgresCollectionJobStore(new PooledDbContextFactory<CollectionAttemptDbContext>(options));
 
-        await using var connection = new NpgsqlConnection(connectionString);
-        await connection.OpenAsync();
-        await using var transaction = await connection.BeginTransactionAsync();
-        await using var command = new NpgsqlCommand(
-            "SELECT pg_advisory_xact_lock(hashtextextended('civic-lens-collection-jobs', 0))", connection, transaction);
-        await command.ExecuteNonQueryAsync();
+        await using var holder = await HeldAdvisoryLock.AcquireAsync(connectionString, "civic-lens-collection-jobs");
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         var listed = await reader.ListAsync(100, timeout.Token);
         var fetched = await reader.GetAsync(first.Job.JobId, timeout.Token);
@@ -226,6 +221,49 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
         var unrelated = await EnqueueClaimAsync("unrelated", Definition("https://elsewhere.test"));
         Assert.Equal(CollectionJobStartStatus.Started,
             (await jobs.TryStartAttemptAsync(unrelated.Lease, root, default)).Status);
+    }
+
+    [Fact]
+    public async Task DerivedChargesMatchTheRetiredCountersAcrossStartRefundAndRetry()
+    {
+        var claim = await EnqueueClaimAsync("derived", Definition());
+        var counters = new CollectionJobCharges(0, 0, 0);
+
+        var first = await jobs.TryStartAttemptAsync(claim.Lease, root, default);
+        counters = Reserve(counters, first.Attempt!.Request);
+        Assert.Equal(counters, await ChargesAsync(claim.Job.JobId));
+
+        var receipt = ReceiptCollector.Result(first.Attempt.Request, 429);
+        await CollectionAttemptImporter.ImportAsync(first.Attempt.AttemptId, first.Attempt.Request, receipt, evidence, default);
+        await jobs.ReleaseCollectorAsync(claim.Lease, first.CollectorLease!, default);
+        Assert.True(await jobs.SettleAttemptAsync(claim.Lease, first.Attempt.AttemptId, CollectionJobLifecycle.Resolve(receipt), default));
+        counters = counters with
+        {
+            Requests = counters.Requests - (first.Attempt.Request.MaxRequests - receipt.RequestCount),
+            Bytes = counters.Bytes - (first.Attempt.Request.MaxBytes - receipt.BytesReceived)
+        };
+        Assert.Equal(counters, await ChargesAsync(claim.Job.JobId));
+
+        await SqlAsync("UPDATE collection_jobs SET retry_at = 1; UPDATE collection_job_origins SET not_before = 0;");
+        var second = await jobs.TryStartAttemptAsync(claim.Lease, root, default);
+        Assert.Equal(CollectionJobStartStatus.Started, second.Status);
+        counters = Reserve(counters, second.Attempt!.Request);
+        Assert.Equal(counters, await ChargesAsync(claim.Job.JobId));
+
+        await jobs.ReleaseCollectorAsync(claim.Lease, second.CollectorLease!, default);
+        Assert.True(await jobs.SettleAttemptAsync(claim.Lease, second.Attempt.AttemptId,
+            new CollectionAttemptResolution(CollectionJobAttemptOutcome.Interrupted, null, "NoReceipt"), default));
+        Assert.Equal(new CollectionJobCharges(7, 100, 20), counters);
+        Assert.Equal(counters, await ChargesAsync(claim.Job.JobId));
+
+        async Task<CollectionJobCharges> ChargesAsync(string jobId)
+        {
+            var job = (await jobs.GetAsync(jobId, default))!;
+            return new(job.ReservedRequests, job.ReservedBytes, job.ReservedTimeoutSeconds);
+        }
+
+        static CollectionJobCharges Reserve(CollectionJobCharges charged, CollectionRequest request) => new(
+            charged.Requests + request.MaxRequests, charged.Bytes + request.MaxBytes, charged.TimeoutSeconds + request.TimeoutSeconds);
     }
 
     [Fact]
@@ -570,21 +608,23 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
     }
 
     [Fact]
-    public async Task EnqueueTriggersAreGoneAndWakeupTriggersRemain()
+    public async Task WorkflowTriggersAreGoneAndWakeupTriggersRemain()
     {
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
         await using var command = new NpgsqlCommand("""
             SELECT (SELECT count(*) FROM pg_proc WHERE proname IN
-                        ('civic_lens_register_document_change_analysis', 'civic_lens_create_successful_job_preparation')),
+                        ('civic_lens_register_document_change_analysis', 'civic_lens_create_successful_job_preparation',
+                         'civic_lens_release_predecessor_waiters')),
                    (SELECT count(*) FROM pg_trigger WHERE tgname IN
-                        ('trg_document_comparisons_register_analysis', 'trg_collection_jobs_create_preparation')),
+                        ('trg_document_comparisons_register_analysis', 'trg_collection_jobs_create_preparation',
+                         'trg_evidence_processing_release_waiters', 'trg_collection_jobs_release_waiters')),
                    (SELECT count(*) FROM pg_proc WHERE proname IN
-                        ('civic_lens_notify_work_change', 'civic_lens_notify_analysis_change', 'civic_lens_release_predecessor_waiters'))
+                        ('civic_lens_notify_work_change', 'civic_lens_notify_analysis_change'))
             """, connection);
         await using var reader = await command.ExecuteReaderAsync();
         Assert.True(await reader.ReadAsync());
-        Assert.Equal((0L, 0L, 3L), (reader.GetInt64(0), reader.GetInt64(1), reader.GetInt64(2)));
+        Assert.Equal((0L, 0L, 2L), (reader.GetInt64(0), reader.GetInt64(1), reader.GetInt64(2)));
     }
 
     private async Task<CollectionResult> CapturedReceiptAsync(CollectionRequest request)

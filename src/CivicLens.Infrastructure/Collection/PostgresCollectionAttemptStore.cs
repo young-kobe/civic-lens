@@ -17,8 +17,6 @@ namespace CivicLens.Infrastructure.Collection;
 public sealed class PostgresCollectionAttemptStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory)
     : ICollectionAttemptStore
 {
-    private const string ImportLockName = "civic-lens-collection-import";
-
     public async Task<StoredCollectionAttempt?> GetAsync(string attemptId, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(attemptId);
@@ -61,7 +59,7 @@ public sealed class PostgresCollectionAttemptStore(IDbContextFactory<CollectionA
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
         try
         {
-            await AcquireImportLockAsync(db, cancellationToken);
+            await PostgresAdvisoryLock.AcquireAsync(db, PostgresAdvisoryLock.CollectionImport, cancellationToken);
             var existingRow = await db.Attempts.AsNoTracking()
                 .SingleOrDefaultAsync(row => row.AttemptId == attempt.AttemptResult.AttemptId, cancellationToken);
             var existing = existingRow is null ? null : await ReadStoredAttemptAsync(db, existingRow, cancellationToken);
@@ -104,18 +102,6 @@ public sealed class PostgresCollectionAttemptStore(IDbContextFactory<CollectionA
     {
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         await db.Database.MigrateAsync(cancellationToken);
-    }
-
-    private static async Task AcquireImportLockAsync(CollectionAttemptDbContext db, CancellationToken cancellationToken)
-    {
-        var connection = (NpgsqlConnection)db.Database.GetDbConnection();
-        var command = connection.CreateCommand();
-        command.Transaction = (NpgsqlTransaction?)db.Database.CurrentTransaction!.GetDbTransaction();
-        command.CommandText = "SELECT pg_advisory_xact_lock(hashtextextended(@lock_name, 0))";
-        command.Parameters.AddWithValue("lock_name", ImportLockName);
-        command.CommandTimeout = 0;
-        await using (command)
-            await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
     private static async Task RetainCaptureAsync(CollectionAttemptDbContext db, CaptureIdentity capture,

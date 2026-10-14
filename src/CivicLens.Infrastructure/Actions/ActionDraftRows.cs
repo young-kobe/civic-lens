@@ -15,7 +15,7 @@ internal static class ActionDraftRows
         CancellationToken cancellationToken)
     {
         revision.ValidateShape();
-        await ReviewWriteLock.AcquireAsync(db, ReviewWriteLock.Action, cancellationToken);
+        await PostgresAdvisoryLock.AcquireAsync(db, PostgresAdvisoryLock.ActionReview, cancellationToken);
         var candidate = new ActionDraftCandidate(revision.CandidateId, revision.RecordId, revision.SourceId, revision.Congress, revision.BillType,
             revision.BillNumber, revision.CandidateUpdateDate, revision.CandidateIncludesSummaries);
         if (await HasNewerCandidateAsync(db, candidate, cancellationToken)) return ActionDraftErrorCodes.SupersededByNewerCandidate;

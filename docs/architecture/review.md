@@ -147,7 +147,7 @@ The Host uses `Microsoft.AspNetCore.Authentication.OpenIdConnect` 10.0.12 for th
 - The generated [review schema](schema/review.md) lists every table, column, key, check, index, and trigger.
 - Core/Review owns decision semantics. Application/Review owns authenticated commands and configured selection validation. Infrastructure/Review implements the store boundary with Postgres.
 - `ReviewPolicy` holds the status rule, the open-concern rule, and the decision checks. It works on a record ID, the current revision number, the review state version, and the decisions. It knows no record type.
-- `ReviewWriteLock` takes the review keys. The keys and their order are in [advisory locks](../architecture.md#advisory-locks).
+- Review writes take the review keys from `PostgresAdvisoryLock`. The keys and their order are in [advisory locks](../architecture.md#advisory-locks).
 - `ReviewIdempotency` reads and writes replay receipts and checks the actor, key, and payload hash. `ReviewDecisionHistory` parses and replays stored decisions. `ReviewKeyset` builds the keyset page filter. `ReviewJson` holds the stored JSON options.
 - Four tables hold record pointers, immutable revision JSON, immutable decision JSON, and actor, operation, and request-key replay receipts.
 - Draft and decision expected versions are checked inside the locked transaction.
@@ -171,7 +171,7 @@ The Host uses `Microsoft.AspNetCore.Authentication.OpenIdConnect` 10.0.12 for th
 | Reads | `src/CivicLens.Application/Review/GetDocumentChangeReview.cs`, `src/CivicLens.Application/Review/ListDocumentChangeReviews.cs`, `src/CivicLens.Application/Review/ListEligibleDocumentComparisons.cs`, `src/CivicLens.Application/Review/GetReviewOverview.cs`, `src/CivicLens.Application/Activity/GetRecentActivity.cs` |
 | Validation and authorization | `src/CivicLens.Application/Review/ReviewValidation.cs` |
 | Paging | `src/CivicLens.Application/Paging/PageCursor.cs`, `src/CivicLens.Application/Paging/KeysetSlice.cs`, `src/CivicLens.Application/Paging/PageLimit.cs` |
-| Postgres store and helpers | `src/CivicLens.Infrastructure/Review/PostgresDocumentChangeReviewStore.cs`, `src/CivicLens.Infrastructure/Review/ReviewWriteLock.cs`, `src/CivicLens.Infrastructure/Review/ReviewIdempotency.cs`, `src/CivicLens.Infrastructure/Review/ReviewDecisionHistory.cs`, `src/CivicLens.Infrastructure/Review/ReviewKeyset.cs`, `src/CivicLens.Infrastructure/Review/ReviewJson.cs`, `src/CivicLens.Infrastructure/Review/ReviewQueries.cs` |
+| Postgres store and helpers | `src/CivicLens.Infrastructure/Review/PostgresDocumentChangeReviewStore.cs`, `src/CivicLens.Infrastructure/Review/ReviewIdempotency.cs`, `src/CivicLens.Infrastructure/Review/ReviewDecisionHistory.cs`, `src/CivicLens.Infrastructure/Review/ReviewKeyset.cs`, `src/CivicLens.Infrastructure/Review/ReviewJson.cs`, `src/CivicLens.Infrastructure/Review/ReviewQueries.cs` |
 | Pages | `src/CivicLens.Host/Review/ReviewHome.razor`, `src/CivicLens.Host/Review/DraftEditor.razor`, `src/CivicLens.Host/Review/ReviewDecisionPanel.razor`, `src/CivicLens.Host/Review/ReviewHistoryPanel.razor`, `src/CivicLens.Host/Review/ReviewRecordPage.cs` |
 | Workspace settings | `src/CivicLens.Host/Review/ReviewWorkspace.cs`, `src/CivicLens.Host/Review/ReviewWorkspaceSettings.cs` |
 
@@ -182,7 +182,6 @@ The Host uses `Microsoft.AspNetCore.Authentication.OpenIdConnect` 10.0.12 for th
 - Local MCP will inspect jobs, explain processing, inspect source health, compare analysis runs, and run explicitly budgeted evaluations.
 - MCP review tools will list and read cases, propose corrections, and record explicit decisions. Mutations will use expected versions and idempotency keys. Initial local tooling is read-only.
 - AI suggestions, model predictions, and human decisions stay distinct records.
-- Agreed upgrade ([R-02](../roadmap.md#now)): one advisory lock owner. Each store writes its own `pg_advisory_xact_lock` SQL; the keys and their order are in [advisory locks](../architecture.md#advisory-locks). Generalize `ReviewWriteLock` into one owner with named keys and a documented order. Keep the trigger key `9911`, or change the triggers in the same migration.
 - Planned reviewer experience: a source-to-review path that a nontechnical reviewer understands, dynamic search across retained evidence and review records, and integrated visual comparison.
 - Global search and expanded reviewer source visibility are pending decisions. Add an evidence library page once document search exists.
 - Review volume is large, so the queue will support bulk actions and bulk approval. This is the one owner of bulk approval. It will show the automatic citation and classification checks beside each draft, and sort the riskiest drafts first.

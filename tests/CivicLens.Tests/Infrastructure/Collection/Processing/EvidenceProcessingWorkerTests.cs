@@ -78,7 +78,7 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
         Assert.All(recovered, record => Assert.Equal("prepare", record.AttemptId));
         var completed = await ProcessUntilTerminalAsync(Worker(processing), afterJob.JobId, afterAttempt);
         Assert.Equal(EvidenceProcessingOutcome.Changed, completed.Outcome);
-        var beforeRecord = await processing.GetByAttemptIdAsync(beforeAttempt, default);
+        var beforeRecord = await RecordAsync(beforeJob.JobId, beforeAttempt);
         var comparison = await comparisons.GetAsync(completed.ComparisonId!, default);
         Assert.Equal(beforeRecord!.ExtractionId, comparison!.BeforeExtractionId);
         Assert.Equal(completed.ExtractionId, comparison.AfterExtractionId);
@@ -125,8 +125,8 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
         var completedJob = await jobs.GetAsync(job.JobId, default);
         Assert.Equal(CollectionJobState.Succeeded, completedJob!.State);
         var attemptId = Assert.Single(completedJob.Attempts).AttemptId;
-        var record = await processing.GetByAttemptIdAsync(attemptId, default);
-        Assert.Equal(EvidenceProcessingStatus.Succeeded, record!.Status);
+        var record = await RecordAsync(job.JobId, attemptId);
+        Assert.Equal(EvidenceProcessingStatus.Succeeded, record.Status);
         Assert.Equal(EvidenceProcessingOutcome.Baseline, record.Outcome);
         Assert.NotNull(await extractions.GetAsync(record.ExtractionId!, default));
     }
@@ -344,8 +344,8 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
         var worker = Worker(processing);
         _ = await worker.ExecuteAsync(artifactRoot, 20, TimeSpan.FromSeconds(60), default);
         _ = await worker.ExecuteAsync(artifactRoot, 20, TimeSpan.FromSeconds(60), default);
-        var record = await processing.GetByAttemptIdAsync(attemptId, default);
-        Assert.Equal(EvidenceProcessingStage.Comparison, record!.Stage);
+        var record = await RecordAsync(job.JobId, attemptId);
+        Assert.Equal(EvidenceProcessingStage.Comparison, record.Stage);
         Assert.Equal(EvidenceProcessingStatus.Pending, record.Status);
 
         var historyGate = new GatedDocumentHistoryStore(
@@ -368,7 +368,7 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
 
         await execution.WaitAsync(TimeSpan.FromSeconds(5));
         Assert.Equal(EvidenceProcessingStatus.Succeeded,
-            (await processing.GetByAttemptIdAsync(attemptId, default))!.Status);
+            (await RecordAsync(job.JobId, attemptId)).Status);
     }
 
     [Theory]
@@ -397,7 +397,7 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
         var after304Attempt = Assert.Single(after304Job.Attempts).AttemptId;
         var after304 = await ProcessUntilTerminalAsync(Worker(processing), after304Job.JobId, after304Attempt);
         Assert.Equal(EvidenceProcessingOutcome.Changed, after304.Outcome);
-        var originalRecord = await processing.GetByAttemptIdAsync(priorAttempt, default);
+        var originalRecord = await RecordAsync(captured.JobId, priorAttempt);
         var originalExtraction = await extractions.GetAsync(originalRecord!.ExtractionId!, default);
         var after304Comparison = await comparisons.GetAsync(after304.ComparisonId!, default);
         Assert.Equal(originalExtraction!.ExtractionId, after304Comparison!.BeforeExtractionId);
@@ -455,6 +455,9 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
         }
         throw new InvalidOperationException($"Processing attempt '{attemptId}' did not reach a terminal state.");
     }
+
+    private async Task<EvidenceProcessingRecord> RecordAsync(string jobId, string attemptId) =>
+        Assert.Single(await processing.GetByJobIdsAsync([jobId], default), record => record.AttemptId == attemptId);
 
     private EvidenceProcessingWorker Worker(IEvidenceProcessingStore processingStore, IDocumentHistoryStore? historyStore = null) => new(jobs,
         new JobPreparation(jobs, attempts, jobs, jobs, new CaptureBodyReader(), processingStore, extractions, new CaptureDocumentTextExtractor(), issues), processingStore, extract, new GetDocumentHistory(historyStore ?? PostgresDocumentHistoryStore.FromConnectionString(connectionString)),
@@ -687,11 +690,8 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
             return inner.GetEligibleAsync(limit, cancellationToken);
         }
 
-        public Task<EvidenceProcessingRecord?> GetByAttemptIdAsync(string attemptId, CancellationToken cancellationToken) =>
-            inner.GetByAttemptIdAsync(attemptId, cancellationToken);
-
-        public Task<bool> IsAwaitingPreparationAsync(string attemptId, CancellationToken cancellationToken) =>
-            inner.IsAwaitingPreparationAsync(attemptId, cancellationToken);
+        public Task<bool> IsPredecessorSettledAsync(string attemptId, CancellationToken cancellationToken) =>
+            inner.IsPredecessorSettledAsync(attemptId, cancellationToken);
 
         public Task<IReadOnlyList<EvidenceProcessingRecord>> GetByJobIdsAsync(IReadOnlyList<string> jobIds,
             CancellationToken cancellationToken) => inner.GetByJobIdsAsync(jobIds, cancellationToken);

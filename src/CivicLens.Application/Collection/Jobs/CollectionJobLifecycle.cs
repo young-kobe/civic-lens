@@ -65,15 +65,16 @@ public static class CollectionJobLifecycle
     }
 
     public static bool CanReserve(CollectionJobDefinition definition, CollectionRequest request,
-        CollectionJobState state, int attemptsStarted, int reservedRequests, long reservedBytes, int reservedTimeoutSeconds)
+        CollectionJobState state, int attemptsStarted, CollectionJobCharges charged)
     {
         ArgumentNullException.ThrowIfNull(definition);
         ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(charged);
         if (state is not (CollectionJobState.Pending or CollectionJobState.WaitingToRetry)) return false;
         if (attemptsStarted >= definition.Policy.MaxAttempts) return false;
-        return (long)reservedRequests + request.MaxRequests <= definition.Policy.ResolveMaxTotalRequests(request) &&
-            reservedBytes + request.MaxBytes <= definition.Policy.ResolveMaxTotalBytes(request) &&
-            reservedTimeoutSeconds + request.TimeoutSeconds <= definition.Policy.ResolveMaxTotalTimeoutSeconds(request);
+        return (long)charged.Requests + request.MaxRequests <= definition.Policy.ResolveMaxTotalRequests(request) &&
+            charged.Bytes + request.MaxBytes <= definition.Policy.ResolveMaxTotalBytes(request) &&
+            charged.TimeoutSeconds + request.TimeoutSeconds <= definition.Policy.ResolveMaxTotalTimeoutSeconds(request);
     }
 
     public static DateTimeOffset RetryAt(DateTimeOffset now, CollectionJobPolicy policy, int completedAttemptCount,

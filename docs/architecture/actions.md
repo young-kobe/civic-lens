@@ -29,7 +29,7 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 
 - One draft exists for each bill. Enforced by `ux_action_drafts_bill`. Test: `PostgresBillStreamTests.TheDatabaseAllowsOneDraftForEachBillAndRefusesABadRecordId`.
 - Only an analysis revision has a run ID, and one revision exists for each run. Enforced by `ck_action_revisions_run` and `IX_action_revisions_run_id`. Test: `PostgresBillStreamTests.TheDatabaseRefusesAnAnalysisRevisionWithoutARunAndAPersonRevisionWithOne`.
-- An append needs the expected current revision. Enforced by `ActionDraftRows` under `ReviewWriteLock.Action`. Test: `PostgresBillStreamTests.APersonsConcurrentRevisionFailsTheExpectedVersionCheckSoTheRunRetriesWithBackoffAndAppendsNothing`.
+- An append needs the expected current revision. Enforced by `ActionDraftRows` under the `PostgresAdvisoryLock.ActionReview` key. Test: `PostgresBillStreamTests.APersonsConcurrentRevisionFailsTheExpectedVersionCheckSoTheRunRetriesWithBackoffAndAppendsNothing`.
 - A new revision needs a new fingerprint or summary version. Enforced by `ActionDraftingStep`. Test: `ActionDraftingStepTests.AMatchingFingerprintAndSummaryVersionSettleWithoutAModelCall`.
 - The text of a person stays, and model text becomes a suggestion. Enforced by `ActionDraftRevision`. Test: `ActionDraftRevisionTests.ARevisionAfterAPersonsTextMustKeepThatTextAndOfferTheModelsAsASuggestion`.
 - A person edits only the headline and the summary. Enforced by `ActionDraftRevision`. Test: `ActionDraftRevisionTests.ARecordReviewerEditsOnlyTheHeadlineAndTheSummary`.

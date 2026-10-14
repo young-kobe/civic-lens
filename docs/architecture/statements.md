@@ -31,7 +31,7 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - A pass adds exactly one Pending draft entry in the same transaction. Enforced by `StatementAnalysisQueueMapping`. Test: `PostgresStatementAnalysisStoreTests.APassSettlesTheGateAndInsertsExactlyOnePendingDraftRowInTheSameTransaction`.
 - Only an analysis revision has a run ID, and one revision exists for each run. Enforced by `ck_statement_revisions_run` and `IX_statement_revisions_run_id`. Test: `PostgresStatementDraftStoreTests.TheDatabaseRefusesAnAiRevisionThatHasNoRun`.
 - NotDrafted holds exactly when the revision number is 0. Enforced by `ck_statement_drafts_not_drafted`. Test: `StatementReviewMigrationTests.TheDatabaseRefusesANotDraftedStatusOnADraftThatHasARevision`.
-- A candidate gets one draft and one first revision. Enforced by `StatementDraftRows` under `ReviewWriteLock.Statement`. Test: `PostgresStatementReviewStoreTests.AHumanCreateAndAnAiSettlementRacingForTheSameCandidateLeaveExactlyOneFirstRevision`.
+- A candidate gets one draft and one first revision. Enforced by `StatementDraftRows` under the `PostgresAdvisoryLock.StatementReview` key. Test: `PostgresStatementReviewStoreTests.AHumanCreateAndAnAiSettlementRacingForTheSameCandidateLeaveExactlyOneFirstRevision`.
 - Each task charges its own budget. Enforced by the primary key of `statement_analysis_budget`. Test: `PostgresStatementAnalysisStoreTests.TheGateChargesItsOwnDailyBudgetAndNotTheDocumentChangeBudget`.
 
 ## Behavior

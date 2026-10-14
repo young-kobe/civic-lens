@@ -106,12 +106,6 @@ public sealed partial class PostgresCollectionJobStore : IDiscoveryAdmissionStor
                 urlsByCandidateHash[hash] = url;
                 candidateHashes[index] = hash;
             }
-            if (request.RecheckKnownCandidates && candidateHashes.Length > 0)
-                _ = await db.Database.ExecuteSqlInterpolatedAsync($"""
-                    SELECT pg_advisory_xact_lock(hashtext({request.ArticleTemplate.SourceId}), hashtext(candidate_hash))
-                    FROM unnest({candidateHashes}) AS candidates(candidate_hash)
-                    ORDER BY candidate_hash
-                    """, cancellationToken);
             var existingCandidates = candidateHashes.Length == 0
                 ? []
                 : await db.Set<DiscoveryCandidateJobRow>()

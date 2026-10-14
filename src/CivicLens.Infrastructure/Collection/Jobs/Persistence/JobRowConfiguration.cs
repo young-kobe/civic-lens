@@ -9,7 +9,6 @@ internal sealed class JobRowConfiguration : IEntityTypeConfiguration<JobRow>
     {
         builder.ToTable("collection_jobs", table =>
         {
-            table.HasCheckConstraint("ck_job_budget", "charged_requests >= 0 AND charged_bytes >= 0 AND charged_seconds >= 0");
             table.HasCheckConstraint("ck_job_lease", "(lease_token IS NULL) = (lease_expires_at IS NULL)");
             table.HasCheckConstraint("ck_job_state", "state IN ('Pending','Running','WaitingToRetry','Succeeded','Failed','Cancelled')");
         });
@@ -22,9 +21,6 @@ internal sealed class JobRowConfiguration : IEntityTypeConfiguration<JobRow>
         builder.Property(row => row.CreatedAt).HasColumnName("created_at");
         builder.Property(row => row.RetryAt).HasColumnName("retry_at");
         builder.Property(row => row.CancellationRequested).HasColumnName("cancellation_requested");
-        builder.Property(row => row.ChargedRequests).HasColumnName("charged_requests");
-        builder.Property(row => row.ChargedBytes).HasColumnName("charged_bytes");
-        builder.Property(row => row.ChargedSeconds).HasColumnName("charged_seconds");
         builder.Property(row => row.LeaseToken).HasColumnName("lease_token");
         builder.Property(row => row.LeaseFence).HasColumnName("lease_fence");
         builder.Property(row => row.LeaseExpiresAt).HasColumnName("lease_expires_at");
@@ -35,6 +31,8 @@ internal sealed class JobRowConfiguration : IEntityTypeConfiguration<JobRow>
         builder.Property(row => row.State).HasConversion<string>();
         builder.HasIndex(row => row.IdempotencyKey).IsUnique();
         builder.HasIndex(row => new { row.CreatedAt, row.JobId });
+        builder.HasIndex(row => new { row.CreatedAt, row.JobId }, "ix_collection_jobs_active_created_at_job_id")
+            .HasFilter("state IN ('Pending','Running','WaitingToRetry')");
         builder.HasOne<ConfigurationRevisionRow>().WithMany().HasForeignKey(row => row.ConfigurationRevisionId)
             .HasConstraintName("fk_collection_jobs_configuration_revision").OnDelete(DeleteBehavior.Restrict);
     }

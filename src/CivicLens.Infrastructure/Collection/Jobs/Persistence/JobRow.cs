@@ -13,9 +13,6 @@ internal sealed class JobRow
     public long CreatedAt { get; set; }
     public long? RetryAt { get; set; }
     public bool CancellationRequested { get; set; }
-    public int ChargedRequests { get; set; }
-    public long ChargedBytes { get; set; }
-    public int ChargedSeconds { get; set; }
     public string? LeaseToken { get; set; }
     public long LeaseFence { get; set; }
     public long? LeaseExpiresAt { get; set; }

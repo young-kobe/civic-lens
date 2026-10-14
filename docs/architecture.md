@@ -172,16 +172,15 @@ The analysis queues share the `civic_lens_analysis` channel. The notify trigger 
 
 ## Advisory locks
 
-Each store takes its own transaction advisory locks with `pg_advisory_xact_lock`. No shared owner holds the keys or their order yet. [R-02](roadmap.md#now) plans one owner. The current keys:
+`PostgresAdvisoryLock`, at the Infrastructure project root, owns every advisory lock that C# takes. It names each key and holds the one SQL statement that takes a key. Postgres hashes each text key with `hashtextextended(key, 0)` into one transaction lock. A transaction that needs several keys takes them one statement for each key, in the declared order. Every lock wait uses the default command timeout of the context, the import lock included.
 
-- `civic-lens-collection-import`: `PostgresCollectionAttemptStore` takes it for each import. It waits without a command timeout.
-- `civic-lens-collection-jobs`: `PostgresCollectionJobStore` takes it at the start of each admission, claim, and settlement transaction.
-- Discovery candidates: when `RecheckKnownCandidates` is true, discovery admission takes `(hashtext(source_id), hashtext(candidate_hash))` for each discovered candidate hash, in hash order. It holds the job lock first.
-- `civic-lens-document-extractions` and `civic-lens-document-comparisons`: the extraction and comparison stores each take one key for each save.
-- Evidence predecessor: `(9911, hashtext(attempt_id))`. `PostgresEvidenceProcessingStore` takes it before a comparison waits for a predecessor. The trigger function `civic_lens_release_predecessor_waiters` takes the same key, so the two exclude each other.
-- Review keys: `ReviewWriteLock` takes `civic-lens-document-change-review`, `civic-lens-statement-review`, or `civic-lens-action-review`. Publication takes all three in the order of `ReviewWriteLock.AllInOrder`. The order is document change, statement, then action.
+The keys, in their declared order:
 
-The text keys use `hashtextextended(key, 0)`. The keys other than the import key use the default command timeout. No transaction holds a review key with a collection key. The import, extraction, and comparison keys are never held with another key.
+- `civic-lens-collection-jobs`: `PostgresCollectionJobStore` takes it at the start of each admission, claim, and settlement transaction. Discovery admission needs no other key, because this key already serializes every admission.
+- Review keys: `civic-lens-document-change-review`, `civic-lens-statement-review`, and `civic-lens-action-review`. Publication takes all three in the order of `PostgresAdvisoryLock.ReviewKeysInOrder`: document change, statement, then action.
+- `civic-lens-collection-import`, `civic-lens-document-extractions`, and `civic-lens-document-comparisons`: the import, extraction, and comparison stores each take one key for each write. No transaction holds one of these with another key.
+
+No transaction holds a review key with a collection key.
 
 An analysis settlement can add a draft row or append a revision. It then takes its queue row lock (`FOR UPDATE` in `PostgresAnalysisQueue`) before the review key of its record kind. Review and publication writes take review keys only and never lock queue rows, so no lock cycle exists.
 
@@ -282,7 +281,7 @@ This is the only navigation index.
 | Tracked issues and policy areas | [Configuration](architecture/configuration.md#tracked-issues) | `src/CivicLens.Application/Issues/IssueConfiguration.cs` |
 | Version constants and when to bump them | [Behavior versions](#behavior-versions) | see table |
 | Worker wakeups, leases, database clock | [Shared worker mechanics](#shared-worker-mechanics) | `src/CivicLens.Application/WorkerLoop.cs` |
-| Advisory lock keys and lock order | [Advisory locks](#advisory-locks) | `src/CivicLens.Infrastructure/Review/ReviewWriteLock.cs` |
+| Advisory lock keys and lock order | [Advisory locks](#advisory-locks) | `src/CivicLens.Infrastructure/PostgresAdvisoryLock.cs` |
 | Cross-feature invariants | [Invariants](#invariants) | none |
 | Path from a source check to a release | [Data flow](#data-flow) | none |
 | Shared terms | [Glossary](#glossary) | none |

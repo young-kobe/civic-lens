@@ -292,7 +292,7 @@ public sealed class JobPreparationTests
         var attempt = new CollectionJobAttempt("attempt", definition.CreateRequest("job", Path.GetFullPath("captures")),
             new CollectionAttemptResolution(CollectionJobAttemptOutcome.Succeeded, null), DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch);
         var job = new CollectionJobRecord("job", definition, "key", CollectionJobState.Succeeded, DateTimeOffset.UnixEpoch, null,
-            false, 0, 0, 0, [attempt]);
+            false, [attempt]);
         var preparation = new JobPreparation(new SingleJob(job), new CapturedAttempts(), new NoDiscoveryAdmissions(), admissions,
             new FixedBody(body), processing, extractions, textExtractor, issues);
         return await preparation.PrepareAsync("job", "artifacts", default);
@@ -407,8 +407,7 @@ public sealed class JobPreparationTests
         }
 
         public Task<IReadOnlyList<EvidenceProcessingRecord>> GetEligibleAsync(int limit, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<EvidenceProcessingRecord?> GetByAttemptIdAsync(string attemptId, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<bool> IsAwaitingPreparationAsync(string attemptId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<bool> IsPredecessorSettledAsync(string attemptId, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<IReadOnlyList<EvidenceProcessingRecord>> GetByJobIdsAsync(IReadOnlyList<string> jobIds, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<IReadOnlyList<CollectionChangeEvent>> ListRecentChangesAsync(int limit, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<EvidenceProcessingClaim?> TryClaimAsync(string jobId, string attemptId, TimeSpan leaseDuration, CancellationToken cancellationToken) => throw new NotSupportedException();

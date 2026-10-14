@@ -19,7 +19,7 @@ internal static class ReviewIdempotency
     public static async Task<T> WriteOnceAsync<T>(CollectionAttemptDbContext db, string lockKey, string actorSubject, string operation,
         string idempotencyKey, string payloadHash, Func<Task<T>> write, CancellationToken cancellationToken) where T : class
     {
-        await using var transaction = await ReviewWriteLock.BeginWriteAsync(db, lockKey, cancellationToken);
+        await using var transaction = await PostgresAdvisoryLock.BeginWriteAsync(db, lockKey, cancellationToken);
         var replay = await ReadReplayAsync<T>(db, actorSubject, operation, idempotencyKey, payloadHash, cancellationToken);
         if (replay is not null)
         {

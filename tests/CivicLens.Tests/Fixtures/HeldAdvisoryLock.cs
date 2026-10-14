@@ -19,7 +19,8 @@ internal sealed class HeldAdvisoryLock : IAsyncDisposable
         var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
         var transaction = await connection.BeginTransactionAsync();
-        await using var command = new NpgsqlCommand($"SELECT pg_advisory_xact_lock(hashtextextended('{key}', 0))", connection, transaction);
+        await using var command = new NpgsqlCommand("SELECT pg_advisory_xact_lock(hashtextextended(@key, 0))", connection, transaction);
+        command.Parameters.AddWithValue("key", key);
         await command.ExecuteNonQueryAsync();
         return new(connection, transaction);
     }

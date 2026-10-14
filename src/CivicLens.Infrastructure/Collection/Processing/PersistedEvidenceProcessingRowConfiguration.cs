@@ -39,6 +39,6 @@ internal sealed class PersistedEvidenceProcessingRowConfiguration : IEntityTypeC
         builder.HasKey(row => new { row.JobId, row.AttemptId });
         builder.HasIndex(row => new { row.JobId, row.Stage, row.Status });
         builder.HasIndex(row => new { row.Status, row.ObservedAtUtcTicks, row.AttemptId, row.JobId });
-        builder.HasIndex(row => new { row.PredecessorAttemptId, row.Status });
+        builder.HasIndex(row => row.AttemptId);
     }
 }
