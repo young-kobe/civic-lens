@@ -43,6 +43,7 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - One managed collector runs at a time. Enforced by `ck_collector_singleton` and the slot lease in `PostgresCollectionJobStore`. Test: `PostgresCollectionJobStoreTests.SingletonAdmissionSurvivesDifferentRootsAndOriginBarrierOutlivesCollectorRelease`.
 - Each origin and each job has at most one unresolved attempt. Enforced by `collection_job_origins.unresolved_attempt_id` and `IX_collection_job_attempts_job_id`. Test: `PostgresCollectionJobStoreTests.SingletonAdmissionSurvivesDifferentRootsAndOriginBarrierOutlivesCollectorRelease`.
 - A stale job owner cannot renew, settle, or release. Enforced by the token, fence, and expiry checks in `PostgresCollectionJobStore` and `ck_job_lease`. Test: `PostgresCollectionJobStoreTests.ExpiredOwnerCannotRenewSettleOrReleaseNewOwnershipAndReservationsSurvive`.
+- Job budget totals equal the sum over the job's attempts. Enforced by `CollectionJobCharges`, the one owner of the totals. Test: `PostgresCollectionJobStoreTests.DerivedChargesMatchTheRetiredCountersAcrossStartRefundAndRetry`.
 - A settlement must match the imported evidence. Enforced by `PostgresCollectionJobStore.SettleAttemptAsync`. Test: `PostgresCollectionJobStoreTests.SettlementRejectsDifferentEvidenceBeforeRefundingBudget`.
 - A succeeded job gets exactly one preparation row, in the settling transaction. Enforced by `PostgresCollectionJobStore` with `ON CONFLICT DO NOTHING`. Test: `PostgresCollectionJobStoreTests.SettlingACapturedJobQueuesOnePreparationRowAndReplayDoesNotAddAnother`.
 - A scheduler admits no second active root job for one source and URL. Enforced by a check under the `PostgresAdvisoryLock.CollectionJobs` key, not by a unique index. Test: `PostgresCollectionScheduleStoreTests.ConcurrentSchedulersAdmitOnlyOneRootJob`.
@@ -280,6 +281,14 @@ A completed HTTP observation stays immutable. A retry creates a new attempt ID a
 
 **Budgets.** Admission reserves the maximum request, byte, and timeout allowance of each attempt before launch. A verified receipt refunds unused requests and bytes. Unknown use stays fully charged. Aggregate budgets and attempt caps are checked again before a retry.
 
+The job row stores no running totals. `CollectionJobCharges.Of` derives them from the attempts of the job:
+
+- Requests: the receipt `RequestCount` of a settled attempt with a receipt, else the request `MaxRequests`.
+- Bytes: the receipt `BytesReceived` of a settled attempt with a receipt, else the request `MaxBytes`.
+- Timeout seconds: the request `TimeoutSeconds` of every attempt, never refunded.
+
+An unsettled, interrupted, or receipt-less attempt therefore stays fully charged. Attempt start and settlement load the attempts of the job once and pass the totals to `CollectionJobLifecycle.CanReserve`. The job record exposes the same totals as `reservedRequests`, `reservedBytes`, and `reservedTimeoutSeconds`.
+
 The default policy allows three attempts and exponential delays from 30 seconds, capped at 3,600 seconds. Aggregate limits default to three full attempts. Policy overrides live on the source.
 
 **Recovery.** Recovery checks imported evidence before the saved handoff. Managed collection saves its receipt atomically before it waits for the spool lease, so contention cannot discard the receipt.
@@ -463,7 +472,7 @@ Provider exception details are not printed, because they can hold connection val
 | Prepared attempts | `src/CivicLens.Application/Collection/PreparedCollectionAttempt.cs`, `src/CivicLens.Application/Collection/ConfiguredCollectionSource.cs` |
 | Pacing groups | `src/CivicLens.Application/Collection/PacingGroupConfiguration.cs`, `src/CivicLens.Application/Collection/CollectionConfiguration.cs` |
 | Discovery admission | `src/CivicLens.Application/Collection/Discovery/DiscoveryAdmissionPolicy.cs`, `src/CivicLens.Application/Collection/Discovery/DiscoveryAdmissionBudget.cs`, `src/CivicLens.Application/Collection/Discovery/IDiscoveryAdmissionStore.cs` |
-| Managed jobs | `src/CivicLens.Application/Collection/Jobs/RunCollectionJob.cs`, `src/CivicLens.Application/Collection/Jobs/CollectionJobLifecycle.cs`, `src/CivicLens.Application/Collection/Jobs/CollectionJobPolicy.cs`, `src/CivicLens.Application/Collection/Jobs/ICollectionJobStore.cs` |
+| Managed jobs | `src/CivicLens.Application/Collection/Jobs/RunCollectionJob.cs`, `src/CivicLens.Application/Collection/Jobs/CollectionJobLifecycle.cs`, `src/CivicLens.Application/Collection/Jobs/CollectionJobCharges.cs`, `src/CivicLens.Application/Collection/Jobs/CollectionJobPolicy.cs`, `src/CivicLens.Application/Collection/Jobs/ICollectionJobStore.cs` |
 | Engine and preparation | `src/CivicLens.Application/Collection/Jobs/CollectionJobWorker.cs`, `src/CivicLens.Application/Collection/Processing/EvidenceProcessingWorker.cs`, `src/CivicLens.Application/Collection/Processing/EvidenceProcessingLifecycle.cs`, `src/CivicLens.Application/Collection/Processing/EvidenceProcessingPolicy.cs`, `src/CivicLens.Application/Collection/Processing/JobPreparation.cs` |
 | Schedules | `src/CivicLens.Application/Collection/WatchedSourceConfiguration.cs`, `src/CivicLens.Application/Collection/Jobs/ICollectionScheduleStore.cs` |
 | Process adapter and verification | `src/CivicLens.Infrastructure/Collection/CollectorProcess.cs`, `src/CivicLens.Infrastructure/Collection/CaptureArtifactVerifier.cs` |

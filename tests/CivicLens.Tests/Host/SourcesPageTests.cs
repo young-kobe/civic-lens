@@ -231,7 +231,7 @@ public sealed class SourcesPageTests(PostgresCollection postgres) : IAsyncLifeti
             Version = 2,
             People = [new PersonConfiguration { Id = "person", Name = "Official" }],
             Sources = [new WatchedSourceConfiguration { Id = "source", Coverage = [new SourceCoverageConfiguration { PersonId = "person" }], Url = request.Url, AllowedOrigin = request.AllowedOrigin, AllowedPathPrefix = request.AllowedPathPrefix }]
-        }, "source"), "key", CollectionJobState.Failed, Retry, null, false, 0, 0, 0,
+        }, "source"), "key", CollectionJobState.Failed, Retry, null, false,
             [new CollectionJobAttempt("attempt", request, new CollectionAttemptResolution(CollectionJobAttemptOutcome.PermanentFailure, failed), Retry, Retry)]);
 
         var item = Assert.Single(CheckTimeline.Build(job, new Dictionary<string, StoredCollectionAttempt>()));

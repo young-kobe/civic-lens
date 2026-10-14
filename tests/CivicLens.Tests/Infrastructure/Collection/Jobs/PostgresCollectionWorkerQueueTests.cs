@@ -37,10 +37,9 @@ public sealed class PostgresCollectionWorkerQueueTests(PostgresCollection postgr
             await connection.OpenAsync();
             await using var command = new NpgsqlCommand("""
                 INSERT INTO collection_jobs (job_id, idempotency_key, definition_json, state, created_at,
-                    retry_at, cancellation_requested, charged_requests, charged_bytes, charged_seconds,
-                    lease_fence)
+                    retry_at, cancellation_requested, lease_fence)
                 SELECT 'terminal-' || value::text, 'terminal-key-' || value::text, '{}', 'Succeeded',
-                    @created_at + value, NULL, FALSE, 0, 0, 0, 0
+                    @created_at + value, NULL, FALSE, 0
                 FROM generate_series(1, 125) AS value
                 """, connection);
             command.Parameters.AddWithValue("created_at", DateTimeOffset.UtcNow.UtcDateTime.Ticks);

@@ -469,8 +469,8 @@ public sealed class PostgresEvidenceProcessingStoreTests(PostgresCollection post
         await connection.OpenAsync();
         await using var command = new NpgsqlCommand("""
             INSERT INTO collection_jobs (job_id, idempotency_key, definition_json, state, created_at,
-                cancellation_requested, charged_requests, charged_bytes, charged_seconds, lease_fence)
-            VALUES (@id, @key, '{}', 'Succeeded', @created, FALSE, 0, 0, 0, 0)
+                cancellation_requested, lease_fence)
+            VALUES (@id, @key, '{}', 'Succeeded', @created, FALSE, 0)
             """, connection);
         command.Parameters.AddWithValue("id", jobId);
         command.Parameters.AddWithValue("key", "key-" + jobId);
@@ -486,8 +486,8 @@ public sealed class PostgresEvidenceProcessingStoreTests(PostgresCollection post
         await connection.OpenAsync();
         await using var command = new NpgsqlCommand("""
             INSERT INTO collection_jobs (job_id, idempotency_key, definition_json, state, created_at,
-                cancellation_requested, charged_requests, charged_bytes, charged_seconds, lease_fence)
-            VALUES (@job, @key, '{}', 'Succeeded', @created, FALSE, 0, 0, 0, 0);
+                cancellation_requested, lease_fence)
+            VALUES (@job, @key, '{}', 'Succeeded', @created, FALSE, 0);
             INSERT INTO collection_job_attempts (attempt_id, job_id, sequence, request_json, started_at)
             VALUES (@attempt, @job, 1, '{}', @created);
             INSERT INTO collection_captures (sha256, byte_length) VALUES (@hash, 1);

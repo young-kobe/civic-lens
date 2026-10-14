@@ -127,7 +127,7 @@ internal sealed class ActionBillWorld
         var attempt = new CollectionJobAttempt("attempt-" + jobId, definition.CreateRequest(jobId, Path.GetFullPath("captures")),
             new CollectionAttemptResolution(CollectionJobAttemptOutcome.Succeeded, null), DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch);
         jobs[jobId] = new CollectionJobRecord(jobId, definition, "key-" + jobId, CollectionJobState.Succeeded, DateTimeOffset.UnixEpoch, null,
-            false, 0, 0, 0, [attempt]);
+            false, [attempt]);
         bodies["attempt-" + jobId] = body;
         pages.Add((resource, jobId, RenderedText(resource, url, body)));
     }

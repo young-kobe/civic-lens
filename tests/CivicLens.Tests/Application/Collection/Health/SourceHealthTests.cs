@@ -179,7 +179,7 @@ public sealed class SourceHealthTests
 
     private static CollectionJobRecord Job(string sourceId, CollectionJobState state) => new(
         Guid.NewGuid().ToString("N"), CollectionJobDefinition.FromConfiguration(Configuration, sourceId), "key-" + sourceId,
-        state, Created, null, false, 0, 0, 0, []);
+        state, Created, null, false, []);
 
     private static CollectionJobAttempt Attempt(DateTimeOffset completedAt) => new(Guid.NewGuid().ToString("N"),
         new() { JobId = "job", SourceId = "current", Url = Url("current"), AllowedOrigin = "https://example.test", AllowedPathPrefix = "/news", ArtifactDirectory = Path.GetTempPath() },

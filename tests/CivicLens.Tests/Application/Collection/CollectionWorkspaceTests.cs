@@ -169,7 +169,7 @@ public sealed class CollectionWorkspaceTests
 
     private static CollectionJobRecord Job(CollectionJobDefinition definition) => new(
         "0123456789abcdef0123456789abcdef", definition, "old-key", CollectionJobState.Succeeded,
-        DateTimeOffset.UtcNow, null, false, 0, 0, 0, []);
+        DateTimeOffset.UtcNow, null, false, []);
 
     private static CollectionWorkspace Workspace(CountingJobStore jobs, AttemptsStore attempts) =>
         new(Configuration(Source(CollectionMode.Page, "https://example.test/news", 2)), jobs, attempts);

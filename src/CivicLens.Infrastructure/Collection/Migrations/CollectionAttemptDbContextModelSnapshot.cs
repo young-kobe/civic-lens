@@ -1258,18 +1258,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("cancellation_requested");
 
-                    b.Property<long>("ChargedBytes")
-                        .HasColumnType("bigint")
-                        .HasColumnName("charged_bytes");
-
-                    b.Property<int>("ChargedRequests")
-                        .HasColumnType("integer")
-                        .HasColumnName("charged_requests");
-
-                    b.Property<int>("ChargedSeconds")
-                        .HasColumnType("integer")
-                        .HasColumnName("charged_seconds");
-
                     b.Property<string>("ConfigurationRevisionId")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)")
@@ -1329,8 +1317,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.ToTable("collection_jobs", null, t =>
                         {
-                            t.HasCheckConstraint("ck_job_budget", "charged_requests >= 0 AND charged_bytes >= 0 AND charged_seconds >= 0");
-
                             t.HasCheckConstraint("ck_job_lease", "(lease_token IS NULL) = (lease_expires_at IS NULL)");
 
                             t.HasCheckConstraint("ck_job_state", "state IN ('Pending','Running','WaitingToRetry','Succeeded','Failed','Cancelled')");

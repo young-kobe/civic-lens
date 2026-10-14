@@ -224,6 +224,49 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task DerivedChargesMatchTheRetiredCountersAcrossStartRefundAndRetry()
+    {
+        var claim = await EnqueueClaimAsync("derived", Definition());
+        var counters = new CollectionJobCharges(0, 0, 0);
+
+        var first = await jobs.TryStartAttemptAsync(claim.Lease, root, default);
+        counters = Reserve(counters, first.Attempt!.Request);
+        Assert.Equal(counters, await ChargesAsync(claim.Job.JobId));
+
+        var receipt = ReceiptCollector.Result(first.Attempt.Request, 429);
+        await CollectionAttemptImporter.ImportAsync(first.Attempt.AttemptId, first.Attempt.Request, receipt, evidence, default);
+        await jobs.ReleaseCollectorAsync(claim.Lease, first.CollectorLease!, default);
+        Assert.True(await jobs.SettleAttemptAsync(claim.Lease, first.Attempt.AttemptId, CollectionJobLifecycle.Resolve(receipt), default));
+        counters = counters with
+        {
+            Requests = counters.Requests - (first.Attempt.Request.MaxRequests - receipt.RequestCount),
+            Bytes = counters.Bytes - (first.Attempt.Request.MaxBytes - receipt.BytesReceived)
+        };
+        Assert.Equal(counters, await ChargesAsync(claim.Job.JobId));
+
+        await SqlAsync("UPDATE collection_jobs SET retry_at = 1; UPDATE collection_job_origins SET not_before = 0;");
+        var second = await jobs.TryStartAttemptAsync(claim.Lease, root, default);
+        Assert.Equal(CollectionJobStartStatus.Started, second.Status);
+        counters = Reserve(counters, second.Attempt!.Request);
+        Assert.Equal(counters, await ChargesAsync(claim.Job.JobId));
+
+        await jobs.ReleaseCollectorAsync(claim.Lease, second.CollectorLease!, default);
+        Assert.True(await jobs.SettleAttemptAsync(claim.Lease, second.Attempt.AttemptId,
+            new CollectionAttemptResolution(CollectionJobAttemptOutcome.Interrupted, null, "NoReceipt"), default));
+        Assert.Equal(new CollectionJobCharges(7, 100, 20), counters);
+        Assert.Equal(counters, await ChargesAsync(claim.Job.JobId));
+
+        async Task<CollectionJobCharges> ChargesAsync(string jobId)
+        {
+            var job = (await jobs.GetAsync(jobId, default))!;
+            return new(job.ReservedRequests, job.ReservedBytes, job.ReservedTimeoutSeconds);
+        }
+
+        static CollectionJobCharges Reserve(CollectionJobCharges charged, CollectionRequest request) => new(
+            charged.Requests + request.MaxRequests, charged.Bytes + request.MaxBytes, charged.TimeoutSeconds + request.TimeoutSeconds);
+    }
+
+    [Fact]
     public async Task RateLimitOnOneGroupMemberDelaysAnotherMemberOfTheSameGroup()
     {
         var limited = await jobs.EnqueueAsync(GroupedDefinition("a.house.gov"), "group-limited", default);
