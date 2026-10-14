@@ -40,6 +40,8 @@ internal static class AnalysisTableConfiguration
         builder.Property<string>(nameof(IAnalysisRow.ErrorCode)).HasColumnName("error_code").HasMaxLength(128);
         builder.Property<long>(nameof(IAnalysisRow.CreatedAtUtcTicks)).HasColumnName("created_at_utc_ticks");
         builder.HasIndex(nameof(IAnalysisRow.Status), nameof(IAnalysisRow.CreatedAtUtcTicks), keyProperty);
+        builder.HasIndex([nameof(IAnalysisRow.Task), nameof(IAnalysisRow.CreatedAtUtcTicks), keyProperty], $"ix_{table}_active_claim")
+            .HasFilter("status IN ('Pending','RetryWaiting','WaitingForBudget','Running')");
     }
 
     public static void ConfigureRun<TRow>(EntityTypeBuilder<TRow> builder, string table, string keyProperty, string keyColumn,

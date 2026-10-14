@@ -124,6 +124,9 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.HasIndex("Status", "CreatedAtUtcTicks", "CandidateId");
 
+                    b.HasIndex(new[] { "Task", "CreatedAtUtcTicks", "CandidateId" }, "ix_action_analysis_active_claim")
+                        .HasFilter("status IN ('Pending','RetryWaiting','WaitingForBudget','Running')");
+
                     b.ToTable("action_analysis", null, t =>
                         {
                             t.HasCheckConstraint("ck_action_analysis_counts", "fence >= 0 AND attempts >= 0 AND reserved_tokens >= 0");
@@ -481,6 +484,9 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.HasIndex("DraftId");
 
                     b.HasIndex("Status", "CreatedAtUtcTicks", "ComparisonId");
+
+                    b.HasIndex(new[] { "Task", "CreatedAtUtcTicks", "ComparisonId" }, "ix_document_change_analysis_active_claim")
+                        .HasFilter("status IN ('Pending','RetryWaiting','WaitingForBudget','Running')");
 
                     b.ToTable("document_change_analysis", null, t =>
                         {
@@ -2031,6 +2037,9 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.HasKey("CandidateId", "Task");
 
                     b.HasIndex("Status", "CreatedAtUtcTicks", "CandidateId");
+
+                    b.HasIndex(new[] { "Task", "CreatedAtUtcTicks", "CandidateId" }, "ix_statement_analysis_active_claim")
+                        .HasFilter("status IN ('Pending','RetryWaiting','WaitingForBudget','Running')");
 
                     b.ToTable("statement_analysis", null, t =>
                         {
