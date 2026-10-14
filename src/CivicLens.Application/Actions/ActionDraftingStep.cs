@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using CivicLens.Application.Analysis;
+using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Bills;
 using CivicLens.Application.Issues;
 using CivicLens.Core.Actions;
@@ -25,10 +26,10 @@ public sealed class ActionDraftingStep(IActionDraftStore store, ActionBillReader
     {
         var evidence = await store.ReadEvidenceAsync(attempt.Claim.Record.SubjectId, cancellationToken);
         if (evidence is null) return await attempt.CompleteAsync(State.Blocked, ActionDraftErrorCodes.EvidenceUnavailable, cancellationToken);
-        if (evidence.SummaryPageCount > ActionDraftTask.MaximumSummaryPages)
-            return await attempt.CompleteAsync(State.Blocked, ActionDraftErrorCodes.TooManySummaryPages, cancellationToken);
         if (evidence.HasNewerCandidate)
             return await attempt.CompleteAsync(State.Succeeded, ActionDraftErrorCodes.SupersededByNewerCandidate, cancellationToken);
+        var summariesOmitted = evidence.SummaryPageCount > ActionDraftTask.MaximumSummaryPages;
+        if (summariesOmitted) evidence = evidence with { Pages = [.. evidence.Pages.Where(page => page.Resource != ApiResource.BillSummaries)] };
 
         var read = await reader.ReadAsync(evidence, cancellationToken);
         if (read.Snapshot is not { } snapshot)
@@ -45,11 +46,11 @@ public sealed class ActionDraftingStep(IActionDraftStore store, ActionBillReader
         if (evidence.Current is { } previous && IsUnchanged(previous, snapshot, trackedIssueIds))
             return await SettleWithoutCallAsync(attempt, snapshot.Fingerprint, ActionDraftErrorCodes.Unchanged, cancellationToken);
 
-        return await DraftAsync(attempt, evidence, snapshot, trackedIssues, trackedIssueIds, cancellationToken);
+        return await DraftAsync(attempt, evidence, snapshot, trackedIssues, trackedIssueIds, summariesOmitted, cancellationToken);
     }
 
     private async Task<bool> DraftAsync(IAnalysisAttempt<ActionDraftRun> attempt, ActionDraftEvidence evidence, ActionBillSnapshot snapshot,
-        ImmutableArray<TrackedIssueFact> trackedIssues, ImmutableArray<string> trackedIssueIds, CancellationToken cancellationToken)
+        ImmutableArray<TrackedIssueFact> trackedIssues, ImmutableArray<string> trackedIssueIds, bool summariesOmitted, CancellationToken cancellationToken)
     {
         var summaryOmittedInputHashes = new HashSet<string>(StringComparer.Ordinal);
         AnalysisModelRequest? BuildRequest(ImmutableArray<string> errors)
@@ -60,7 +61,7 @@ public sealed class ActionDraftingStep(IActionDraftStore store, ActionBillReader
             return withoutSummary;
         }
         ActionDraftRun WrapWithReason(AnalysisRun run) =>
-            new(run, summaryOmittedInputHashes.Contains(run.InputHash) ? ActionDraftErrorCodes.SummaryOmitted : null);
+            new(run, summariesOmitted || summaryOmittedInputHashes.Contains(run.InputHash) ? ActionDraftErrorCodes.SummaryOmitted : null);
 
         var loop = new AnalysisValidationLoop<ActionDraftRun, ActionDraftRevision>(WrapWithReason, attempt, AnalysisRunOutcome.Drafted,
             ActionDraftTask.MaximumValidationPasses, BuildRequest, model.DraftAsync,

@@ -109,6 +109,7 @@ public sealed partial class PostgresBillStreamTests
             (await QueueAsync()).Where(row => row.CandidateId == older).Select(row => (row.Status, row.ErrorCode)).Single());
         Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM action_revisions"));
         Assert.Equal("DraftDiscarded", await ScalarAsync($"SELECT outcome FROM action_analysis_runs WHERE run_id = '{olderRun}'"));
+        Assert.Equal(1_000L, await ScalarAsync("SELECT charged_tokens FROM action_analysis_budget WHERE task = 'action-draft'"));
     }
 
     [Fact]
@@ -132,6 +133,18 @@ public sealed partial class PostgresBillStreamTests
         Assert.Equal(("Succeeded", ActionDraftErrorCodes.Unchanged), queue[march5]);
         Assert.Equal(march3, (await ActionStore().ReadEvidenceAsync(march4, default))!.Current!.CandidateId);
         Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM action_revisions"));
+    }
+
+    [Fact]
+    public async Task ALaterUpdateDateWithoutSummariesSupersedesAnEarlierCandidateWithSummariesBecauseTheDateDecidesFirst()
+    {
+        var (_, earlierWithSummaries) = await BothCandidatesPendingAsync();
+        await ReadableCandidateAsync(sponsor: "A000001", UpdatedAt.AddDays(1));
+
+        var evidence = (await ActionStore().ReadEvidenceAsync(earlierWithSummaries, default))!;
+
+        Assert.True(evidence.Candidate.IncludesSummaries);
+        Assert.True(evidence.HasNewerCandidate);
     }
 
     [Fact]
@@ -271,6 +284,7 @@ public sealed partial class PostgresBillStreamTests
         Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM action_revisions"));
         Assert.Equal("DraftDiscarded", await ScalarAsync($"SELECT outcome FROM action_analysis_runs WHERE run_id = '{runId}'"));
         Assert.True((long)(await ScalarAsync("SELECT retry_at FROM action_analysis"))! > 0);
+        Assert.Equal(1_000L, await ScalarAsync("SELECT charged_tokens FROM action_analysis_budget WHERE task = 'action-draft'"));
     }
 
     [Fact]
@@ -300,7 +314,7 @@ public sealed partial class PostgresBillStreamTests
         await AdmitSummariesAsync(bill.Summaries!, new CongressBillSummariesPage([], null));
         await AdmitActionsAsync(bill.Actions, new CongressBillActionsPage([], null));
         var candidate = Assert.Single(await CandidatesAsync());
-        await SettleAsync(candidate.CandidateId, Revision(candidate.CandidateId, 1));
+        await SettleAsync(candidate.CandidateId, Revision(candidate.CandidateId, 1, includesSummaries: true));
 
         var evidence = (await ActionStore().ReadEvidenceAsync(candidate.CandidateId, default))!;
 

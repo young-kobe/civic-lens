@@ -16,7 +16,9 @@ internal static class ActionDraftRows
     {
         revision.ValidateShape();
         await ReviewWriteLock.AcquireAsync(db, ReviewWriteLock.Action, cancellationToken);
-        if (await HasNewerCandidateAsync(db, revision.CandidateId, cancellationToken)) return ActionDraftErrorCodes.SupersededByNewerCandidate;
+        var candidate = new ActionDraftCandidate(revision.CandidateId, revision.RecordId, revision.SourceId, revision.Congress, revision.BillType,
+            revision.BillNumber, revision.CandidateUpdateDate, revision.CandidateIncludesSummaries);
+        if (await HasNewerCandidateAsync(db, candidate, cancellationToken)) return ActionDraftErrorCodes.SupersededByNewerCandidate;
         var draft = await db.Set<ActionDraftRow>().SingleOrDefaultAsync(row => row.RecordId == revision.RecordId, cancellationToken);
         if ((draft?.CurrentRevisionNumber ?? 0) != revision.RevisionNumber - 1) return ActionDraftErrorCodes.RevisionConflict;
         if (draft is null) db.Add(NewDraft(revision));
@@ -25,14 +27,14 @@ internal static class ActionDraftRows
         return null;
     }
 
-    public static Task<bool> HasNewerCandidateAsync(CollectionAttemptDbContext db, string candidateId, CancellationToken cancellationToken) =>
-        (from candidate in db.Set<ActionCandidateRow>().AsNoTracking()
-         where candidate.CandidateId == candidateId
-         from newer in db.Set<ActionCandidateRow>().AsNoTracking()
-         where newer.SourceId == candidate.SourceId && newer.Congress == candidate.Congress && newer.BillType == candidate.BillType &&
-             newer.BillNumber == candidate.BillNumber && (newer.UpdateDateUtcTicks > candidate.UpdateDateUtcTicks ||
-                 newer.UpdateDateUtcTicks == candidate.UpdateDateUtcTicks && newer.IncludesSummaries && !candidate.IncludesSummaries)
-         select newer).AnyAsync(cancellationToken);
+    public static Task<bool> HasNewerCandidateAsync(CollectionAttemptDbContext db, ActionDraftCandidate candidate, CancellationToken cancellationToken)
+    {
+        var updateDateUtcTicks = candidate.UpdateDate.UtcTicks;
+        return db.Set<ActionCandidateRow>().AsNoTracking().AnyAsync(newer => newer.SourceId == candidate.SourceId &&
+            newer.Congress == candidate.Congress && newer.BillType == candidate.BillType && newer.BillNumber == candidate.BillNumber &&
+            (newer.UpdateDateUtcTicks > updateDateUtcTicks ||
+                newer.UpdateDateUtcTicks == updateDateUtcTicks && newer.IncludesSummaries && !candidate.IncludesSummaries), cancellationToken);
+    }
 
     public static async Task<ActionDraftRevision?> ReadCurrentAsync(CollectionAttemptDbContext db, string recordId,
         CancellationToken cancellationToken)

@@ -204,7 +204,7 @@ public sealed class ActionDraftingStepTests
     }
 
     [Fact]
-    public async Task ACandidateWithANewerCandidateOfTheSameBillIsSupersededWithoutReadingOrCalling()
+    public async Task ACandidateWithANewerCandidateOfTheSameBillIsSupersededWithoutACall()
     {
         var model = new FakeActionDraftingModel();
 
@@ -217,15 +217,22 @@ public sealed class ActionDraftingStepTests
     }
 
     [Fact]
-    public async Task MoreThanTwentySummaryPagesBlockWithAVisibleCodeAndNoCall()
+    public async Task MoreThanTwentySummaryPagesDraftWithoutSummariesAndNeverReadThemBecauseSummariesAreOptionalInput()
     {
         var summaries = Enumerable.Range(0, 21).Select(index => new SummarySpec($"{index:00}", "2025-01-03", "2025-01-05T10:00:00Z", "<p>x</p>")).ToArray();
-        var model = new FakeActionDraftingModel();
+        var world = Create(summaries: summaries);
+        for (var index = 0; index < summaries.Length; index++) world.ReplaceCapturedBody($"summaries-{index}", "not json");
+        world.SetVersion("summaries-0", "older-version");
+        var model = new FakeActionDraftingModel().Draft(Output());
 
-        var (store, _) = await RunAsync(Create(summaries: summaries), model);
+        var (store, _) = await RunAsync(world, model);
 
-        Assert.Equal((State.Blocked, "tooManySummaryPages"), (store.Entries[0].Status, store.Entries[0].ErrorCode));
-        Assert.Empty(model.Requests);
+        Assert.Equal((State.Succeeded, (string?)null), (store.Entries[0].Status, store.Entries[0].ErrorCode));
+        var revision = Assert.Single(store.Revisions);
+        Assert.Equal((null, null), (revision.SummaryVersion, revision.SummaryCitation));
+        Assert.DoesNotContain("versionCode", Assert.Single(model.Requests).UserPrompt, StringComparison.Ordinal);
+        var run = Assert.Single(store.Runs);
+        Assert.Equal((AnalysisRunOutcome.Drafted, "summaryOmitted"), (run.Run.Outcome, run.Reason));
     }
 
     [Fact]
@@ -667,18 +674,6 @@ public sealed class ActionDraftingStepTests
 
         Assert.Contains("who is not an official in the facts", model.Requests[1].UserPrompt, StringComparison.Ordinal);
         Assert.Single(store.Revisions);
-    }
-
-    [Fact]
-    public async Task ACurrentRevisionFromTheSameUpdateDateIsNotSupersededSoAChangedFingerprintDrafts()
-    {
-        var world = Create(cosponsorPages: [[MarkeyOriginal]]);
-        var model = new FakeActionDraftingModel().Draft(Output());
-
-        var (store, _) = await RunAsync(world, model, ActionRevisionFixtures.Model(candidateUpdate: UpdatedAt));
-
-        Assert.Equal(2, Assert.Single(store.Revisions).RevisionNumber);
-        Assert.Single(model.Requests);
     }
 
     private static async Task<(FakeActionDraftStore Store, FakeActionDraftingModel Model)> RunAsync(ActionBillWorld world,

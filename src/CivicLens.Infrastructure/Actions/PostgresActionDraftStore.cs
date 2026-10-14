@@ -47,7 +47,7 @@ public sealed class PostgresActionDraftStore : PostgresAnalysisStore<ActionDraft
             new DateTimeOffset(row.UpdateDateUtcTicks, TimeSpan.Zero), row.IncludesSummaries);
         return new(candidate, StoredJobDefinition.Find(revisions, row.ConfigurationRevisionId), await ReadPagesAsync(db, row.DetailJobId, row.IncludesSummaries, cancellationToken),
             await ActionDraftRows.ReadCurrentAsync(db, recordId, cancellationToken),
-            await ActionDraftRows.HasNewerCandidateAsync(db, candidateId, cancellationToken));
+            await ActionDraftRows.HasNewerCandidateAsync(db, candidate, cancellationToken));
     }
 
     public async Task<IReadOnlyList<ActionDraftListItem>> ListAsync(ActionDraftView? view, int limit, CancellationToken cancellationToken)
