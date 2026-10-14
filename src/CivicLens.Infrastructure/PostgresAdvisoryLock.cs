@@ -9,7 +9,6 @@ internal static class PostgresAdvisoryLock
 {
     // A transaction that holds several keys takes them in this declaration order.
     internal const string CollectionJobs = "civic-lens-collection-jobs";
-    internal const string DiscoveryCandidateScope = "civic-lens-discovery-candidate:";
     internal const string EvidencePredecessorScope = "civic-lens-evidence-predecessor:";
     internal const string DocumentChangeReview = "civic-lens-document-change-review";
     internal const string StatementReview = "civic-lens-statement-review";
@@ -23,17 +22,10 @@ internal static class PostgresAdvisoryLock
 
     internal static readonly IReadOnlyList<string> ReviewKeysInOrder = [DocumentChangeReview, StatementReview, ActionReview];
 
-    internal static string DiscoveryCandidate(string candidateHash) => DiscoveryCandidateScope + candidateHash;
-
     internal static string EvidencePredecessor(string attemptId) => EvidencePredecessorScope + attemptId;
 
     internal static Task AcquireAsync(DbContext db, string key, CancellationToken cancellationToken) =>
         db.Database.ExecuteSqlRawAsync(AcquireSql, [new NpgsqlParameter("key", key)], cancellationToken);
-
-    internal static async Task AcquireInOrderAsync(DbContext db, IEnumerable<string> keysInOrder, CancellationToken cancellationToken)
-    {
-        foreach (var key in keysInOrder) await AcquireAsync(db, key, cancellationToken);
-    }
 
     internal static Task<IDbContextTransaction> BeginWriteAsync(DbContext db, string key, CancellationToken cancellationToken) =>
         BeginWriteAsync(db, [key], cancellationToken);
@@ -42,7 +34,7 @@ internal static class PostgresAdvisoryLock
         CancellationToken cancellationToken)
     {
         var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
-        await AcquireInOrderAsync(db, keysInOrder, cancellationToken);
+        foreach (var key in keysInOrder) await AcquireAsync(db, key, cancellationToken);
         return transaction;
     }
 }

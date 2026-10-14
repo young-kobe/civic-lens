@@ -176,8 +176,7 @@ The analysis queues share the `civic_lens_analysis` channel. The notify trigger 
 
 The keys, in their declared order:
 
-- `civic-lens-collection-jobs`: `PostgresCollectionJobStore` takes it at the start of each admission, claim, and settlement transaction. It comes first.
-- `civic-lens-discovery-candidate:<hash>`: when `RecheckKnownCandidates` is true, discovery admission takes one key for each candidate hash, in ordinal hash order. The hash already includes the source ID. It holds the job key first.
+- `civic-lens-collection-jobs`: `PostgresCollectionJobStore` takes it at the start of each admission, claim, and settlement transaction. Discovery admission needs no other key, because this key already serializes every admission.
 - `civic-lens-evidence-predecessor:<attempt ID>`: `PostgresEvidenceProcessingStore` takes it before a comparison waits for a predecessor. The trigger function `civic_lens_release_predecessor_waiters` builds the same text, so the two exclude each other.
 - Review keys: `civic-lens-document-change-review`, `civic-lens-statement-review`, and `civic-lens-action-review`. Publication takes all three in the order of `PostgresAdvisoryLock.ReviewKeysInOrder`: document change, statement, then action.
 - `civic-lens-collection-import`, `civic-lens-document-extractions`, and `civic-lens-document-comparisons`: the import, extraction, and comparison stores each take one key for each write. No transaction holds one of these with another key.
