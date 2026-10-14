@@ -1318,6 +1318,9 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.HasIndex("CreatedAt", "JobId");
 
+                    b.HasIndex(new[] { "CreatedAt", "JobId" }, "ix_collection_jobs_active_created_at_job_id")
+                        .HasFilter("state IN ('Pending','Running','WaitingToRetry')");
+
                     b.ToTable("collection_jobs", null, t =>
                         {
                             t.HasCheckConstraint("ck_job_budget", "charged_requests >= 0 AND charged_bytes >= 0 AND charged_seconds >= 0");

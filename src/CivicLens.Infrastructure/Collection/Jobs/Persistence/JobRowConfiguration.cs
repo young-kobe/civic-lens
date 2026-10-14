@@ -35,6 +35,8 @@ internal sealed class JobRowConfiguration : IEntityTypeConfiguration<JobRow>
         builder.Property(row => row.State).HasConversion<string>();
         builder.HasIndex(row => row.IdempotencyKey).IsUnique();
         builder.HasIndex(row => new { row.CreatedAt, row.JobId });
+        builder.HasIndex(row => new { row.CreatedAt, row.JobId }, "ix_collection_jobs_active_created_at_job_id")
+            .HasFilter("state IN ('Pending','Running','WaitingToRetry')");
         builder.HasOne<ConfigurationRevisionRow>().WithMany().HasForeignKey(row => row.ConfigurationRevisionId)
             .HasConstraintName("fk_collection_jobs_configuration_revision").OnDelete(DeleteBehavior.Restrict);
     }
