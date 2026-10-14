@@ -37,7 +37,7 @@ Collection fetches configured sources through a separate, bounded collector proc
 Each line gives the rule, what enforces it, and the test that protects it. Cross-feature invariants are in [architecture](../architecture.md#invariants).
 
 - A capture hash keeps one byte length. Enforced by the primary key of `collection_captures` and `PostgresCollectionAttemptStore`. Test: `PostgresCollectionAttemptStoreTests.SerializesConcurrentSameAndDistinctAttemptsAndRejectsHashLengthConflict`.
-- An attempt import is idempotent, and a conflicting reuse of an attempt ID fails. Enforced by `CollectionImportPolicy` under the `civic-lens-collection-import` lock. Test: `PostgresCollectionAttemptStoreTests.PersistsDuplicateAndConflictingReplayAcrossAdapterInstances`.
+- An attempt import is idempotent, and a conflicting reuse of an attempt ID fails. Enforced by `CollectionImportPolicy` under the `PostgresAdvisoryLock.CollectionImport` key. Test: `PostgresCollectionAttemptStoreTests.PersistsDuplicateAndConflictingReplayAcrossAdapterInstances`.
 - Only a 304 links to a prior capture, and only to one unambiguous capture. Enforced by `CollectionImportPolicy`, `ck_collection_attempts_prior_outcome`, and `ck_collection_attempts_prior_pair`. Test: `PostgresCollectionAttemptStoreTests.LinksUnambiguous304AndPreservesUnresolvedAmbiguityOnReplay`.
 - An enqueue key returns one job, and its reuse for another definition fails. Enforced by `IX_collection_jobs_idempotency_key`. Test: `PostgresCollectionJobStoreTests.EnqueueIsIdempotentAndConflictingKeysCannotReplaceSnapshots`.
 - One managed collector runs at a time. Enforced by `ck_collector_singleton` and the slot lease in `PostgresCollectionJobStore`. Test: `PostgresCollectionJobStoreTests.SingletonAdmissionSurvivesDifferentRootsAndOriginBarrierOutlivesCollectorRelease`.
@@ -45,8 +45,8 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - A stale job owner cannot renew, settle, or release. Enforced by the token, fence, and expiry checks in `PostgresCollectionJobStore` and `ck_job_lease`. Test: `PostgresCollectionJobStoreTests.ExpiredOwnerCannotRenewSettleOrReleaseNewOwnershipAndReservationsSurvive`.
 - A settlement must match the imported evidence. Enforced by `PostgresCollectionJobStore.SettleAttemptAsync`. Test: `PostgresCollectionJobStoreTests.SettlementRejectsDifferentEvidenceBeforeRefundingBudget`.
 - A succeeded job gets exactly one preparation row, in the settling transaction. Enforced by `PostgresCollectionJobStore` with `ON CONFLICT DO NOTHING`. Test: `PostgresCollectionJobStoreTests.SettlingACapturedJobQueuesOnePreparationRowAndReplayDoesNotAddAnother`.
-- A scheduler admits no second active root job for one source and URL. Enforced by a check under the `civic-lens-collection-jobs` lock, not by a unique index. Test: `PostgresCollectionScheduleStoreTests.ConcurrentSchedulersAdmitOnlyOneRootJob`.
-- Discovery admits one job for each exact source and URL. Enforced by the primary key of `collection_candidate_jobs` and the discovery candidate lock. Test: `PostgresDiscoveryAdmissionTests.ConcurrentFeedAndHtmlAttemptsCreateOnlyOneJobForAnExactSourceUrlPair`.
+- A scheduler admits no second active root job for one source and URL. Enforced by a check under the `PostgresAdvisoryLock.CollectionJobs` key, not by a unique index. Test: `PostgresCollectionScheduleStoreTests.ConcurrentSchedulersAdmitOnlyOneRootJob`.
+- Discovery admits one job for each exact source and URL. Enforced by the primary key of `collection_candidate_jobs` and the `PostgresAdvisoryLock.DiscoveryCandidate` keys. Test: `PostgresDiscoveryAdmissionTests.ConcurrentFeedAndHtmlAttemptsCreateOnlyOneJobForAnExactSourceUrlPair`.
 - A processing checkpoint needs the current lease and fence. Enforced by `EvidenceProcessingLifecycle` and `ck_evidence_processing_lease`. Test: `PostgresEvidenceProcessingStoreTests.EnsureIsIdempotentAndCheckpointFencesReclaimedLease`.
 
 ## Behavior
@@ -270,6 +270,7 @@ A completed HTTP observation stays immutable. A retry creates a new attempt ID a
 
 **Coordination.** Short Postgres transactions serialize admission and settlement with a transaction advisory lock and database time. Job listing and inspection read jobs and attempts in two queries in a repeatable-read snapshot, without the lock.
 
+- The worker claim scan reads Pending, Running, and WaitingToRetry jobs in `(created_at, job_id)` order. The partial index `ix_collection_jobs_active_created_at_job_id` holds only those rows, so finished job history does not slow the scan. Job listing and keyset paging keep the full `(created_at, job_id)` index.
 - Each job has an expiring token and an increasing fence. Expired ownership rejects stale database updates and signals the local child to stop.
 - A renewable singleton collector slot admits one managed collector across all artifact roots. Recovery and waiting jobs do not hold that slot.
 - A per-origin unresolved-attempt barrier survives lease expiry until reconciliation. An unprocessed 429 receipt therefore cannot be bypassed.
@@ -476,7 +477,6 @@ The shared wakeup and lease mechanics are in [Shared worker mechanics](../archit
 - Future wire changes need an explicit compatibility decision.
 - Browser rendering and OCR are deferred until a selected source needs them.
 - Planned engine policies: engine-wide spending ceilings, global backlog admission limits, weighted fairness for each source, live configuration reload, and a unified engine-health view. The current scheduler does not guarantee them. Broad coverage makes them MVP requirements.
-- Agreed upgrade ([R-03](../roadmap.md#now)): a partial index on active `collection_jobs` rows for the worker claim. Finished jobs are never deleted, so the claim scan grows with job history.
 - Agreed upgrade ([R-06](../roadmap.md#now)): stored generated columns for the source ID and URL of the job definition. Add an index for the latest job of each source, and one batched active-root check for each scheduling pass.
 - Agreed upgrade ([R-08](../roadmap.md#now)): parallel evidence processing with a configured degree. It needs the lock change for comparison and extraction saves in [documents](documents.md#limits-and-planned-work) first.
 - Agreed upgrade ([R-22](../roadmap.md#later)): ordered row locks in place of the single global lock of the job store. Measure lock waits on a bills-only collection run before the design.

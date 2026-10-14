@@ -181,6 +181,7 @@ Infrastructure reads AI drafts in keyset pages of 100. Each page costs four quer
 - The generated [analysis schema](schema/analysis.md) lists every table, column, key, check, index, and trigger.
 - `document_change_analysis` has one entry for each comparison and task. The `civic_lens_analysis` notify trigger on the table wakes the worker.
 - Only analysis runs keep the task version.
+- `AnalysisTableConfiguration.ConfigureQueue` gives every queue table the partial claim index `ix_<table>_active_claim`. It covers `(task, created_at_utc_ticks, key)` for Pending, RetryWaiting, WaitingForBudget, and Running entries, in the FIFO order of the eligible scan. The `(status, created_at_utc_ticks, key)` index stays for requeue and the review lists, which filter one finished status.
 - `document_change_analysis_runs` keeps one insert-only row for each model call. It holds the versions, the input hash, the token use, the output, and the catalog copy.
 - The run does not store prompt text. The versioned prompt in code rebuilds it from the retained comparison and the catalog copy. The input hash proves the rebuild.
 - Runs from prompt version 1 have output without confidence. No code parses stored output, so those runs stay readable without a migration.
@@ -261,5 +262,4 @@ Pending decisions for the ladder are [D-05](../roadmap.md#pending-decisions).
 - Planned dataset work will curate validation sets, golden sets, and training or fine-tuning datasets from retained evidence and attributed editorial history. Clef has open weights, so fine-tuning on our labels is possible.
 - Publication approval and dataset acceptance are separate judgments.
 - Dataset exports, task labels, eligibility rules, source-use permissions, provenance manifests, correction handling, and leakage-resistant splits are not designed yet. No dataset export or training workflow exists. Agree on them before any dataset export.
-- Agreed upgrade ([R-04](../roadmap.md#now)): the analysis claim uses `FOR UPDATE SKIP LOCKED`, with an eligibility index that starts with `task`.
 - Planned: budgets and cache keys for each task, decision explanations, skipped-document sampling, and a local evaluation MCP. Ordinary CI never calls paid APIs.

@@ -20,15 +20,12 @@ Exit criteria:
 
 ## Work queue
 
-Each item gives its outcome, what it depends on, and where the design lives. R-02 to R-04 are agreed upgrades whose designs the owner chose. Present the design choices before building R-06 to R-08 and R-22 only.
+Each item gives its outcome, what it depends on, and where the design lives. Present the design choices before building R-06 to R-08 and R-22 only.
 
 ### Now
 
-- R-02: One advisory lock owner with named keys and a documented order. Depends on: none stated. [Review](architecture/review.md#limits-and-planned-work)
-- R-03: Partial index on active collection jobs for the worker claim. Depends on: R-02. [Collection](architecture/collection.md#limits-and-planned-work)
-- R-04: Analysis claim with `SKIP LOCKED` and a task-first eligibility index. Depends on: R-03. [Analysis](architecture/analysis.md#limits-and-planned-work)
 - R-05: Action review (action step 4): review pages, decisions, and the fast sponsorship-only review. Bulk approval is in R-19. Depends on: none stated. [Actions](architecture/actions.md#limits-and-planned-work)
-- R-06: Generated source columns, a latest-job index, and one batched active-root check. Built with R-05. Depends on: R-04. [Collection](architecture/collection.md#limits-and-planned-work)
+- R-06: Generated source columns, a latest-job index, and one batched active-root check. Built with R-05. Depends on: none stated. [Collection](architecture/collection.md#limits-and-planned-work)
 - R-07: Comparison and extraction saves lock one record after they verify and diff. Built with R-05. Depends on: R-06. [Documents](architecture/documents.md#limits-and-planned-work)
 - R-08: Parallel evidence processing with a configured degree. Built with R-05. Depends on: R-07. [Collection](architecture/collection.md#limits-and-planned-work)
 - R-09: Decide release growth and the search index. Depends on: none stated. It must come before R-10. [Publication](architecture/publication.md#limits-and-planned-work)
