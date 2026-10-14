@@ -38,11 +38,17 @@ public static class BillGate
     private static BillGateReason UntrackedReason(string? policyArea) =>
         policyArea is null ? BillGateReason.NoPolicyArea : BillGateReason.UntrackedPolicyArea;
 
-    private static bool IsTracked(string? policyArea, DateOnly day, IssueConfiguration issues)
+    public static IReadOnlyList<string> TrackedIssueIdsFor(string? policyArea, DateOnly day, IssueConfiguration issues)
     {
+        ArgumentNullException.ThrowIfNull(issues);
         var area = issues.PolicyAreas.SingleOrDefault(candidate => string.Equals(candidate.Name, policyArea, StringComparison.Ordinal));
-        return area is not null && issues.Issues.Any(issue => issue.PolicyAreaIds.Contains(area.Id) && IsActiveOn(issue, day));
+        if (area is null) return [];
+        return [.. issues.Issues.Where(issue => issue.PolicyAreaIds.Contains(area.Id) && IsActiveOn(issue, day))
+            .Select(issue => issue.Id).Order(StringComparer.Ordinal)];
     }
+
+    private static bool IsTracked(string? policyArea, DateOnly day, IssueConfiguration issues) =>
+        TrackedIssueIdsFor(policyArea, day, issues).Count > 0;
 
     private static bool IsActiveOn(TrackedIssueConfiguration issue, DateOnly day) =>
         new DateRange(issue.StartsOn, issue.EndsBefore).Contains(day);

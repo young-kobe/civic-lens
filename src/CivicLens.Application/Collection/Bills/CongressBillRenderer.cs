@@ -8,7 +8,7 @@ public static partial class CongressBillRenderer
     public const string NormalizationVersion = "congress-bill-render-v1";
     private const string DateFormat = "yyyy-MM-dd";
     private const string TimeFormat = "HH:mm:ss";
-    private const string UpdateFormat = "yyyy-MM-dd'T'HH:mm:ss'Z'";
+    internal const string UpdateFormat = "yyyy-MM-dd'T'HH:mm:ss'Z'";
 
     public static string RenderDetail(CongressBill bill)
     {
@@ -56,17 +56,22 @@ public static partial class CongressBillRenderer
             throw new InvalidDataException("Summary text must not hold a blank line or a carriage return.");
         var lines = new List<string>
         {
-            Line("Summary version", summary.VersionCode),
+            SummaryVersionLine(summary),
             Line("Action date", Date(summary.ActionDate)),
             Line("Action", summary.ActionDescription),
-            Line("Updated", summary.UpdateDate.UtcDateTime.ToString(UpdateFormat, CultureInfo.InvariantCulture)),
+            SummaryUpdatedLine(summary),
             "Text:"
         };
         if (item.Text.Length > 0) lines.Add(item.Text);
         return string.Join('\n', lines);
     }
 
-    private static string CosponsorLine(CongressBillCosponsor cosponsor)
+    internal static string SummaryVersionLine(CongressBillSummary summary) => Line("Summary version", summary.VersionCode);
+
+    internal static string SummaryUpdatedLine(CongressBillSummary summary) =>
+        Line("Updated", summary.UpdateDate.UtcDateTime.ToString(UpdateFormat, CultureInfo.InvariantCulture));
+
+    internal static string CosponsorLine(CongressBillCosponsor cosponsor)
     {
         var fields = new List<string> { cosponsor.BioguideId };
         if (cosponsor.IsOriginalCosponsor) fields.Add("original");

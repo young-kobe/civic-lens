@@ -11,5 +11,5 @@ internal sealed class ActionCandidateRow
     public string DetailJobId { get; set; } = "";
     public string ConfigurationRevisionId { get; set; } = "";
     public long CreatedAtUtcTicks { get; set; }
-    public long? SummariesCompletedAtUtcTicks { get; set; }
+    public bool IncludesSummaries { get; set; }
 }

@@ -4,7 +4,7 @@ using State = CivicLens.Application.Analysis.AnalysisState;
 
 namespace CivicLens.Application.Analysis;
 
-public sealed class AnalysisValidationLoop<TRun, TAccepted>(IAnalysisTaskStep<TRun> step, IAnalysisAttempt<TRun> attempt,
+public sealed class AnalysisValidationLoop<TRun, TAccepted>(Func<AnalysisRun, TRun> wrap, IAnalysisAttempt<TRun> attempt,
     AnalysisRunOutcome completedOutcome, int maximumPasses, Func<ImmutableArray<string>, AnalysisModelRequest?> buildRequest,
     Func<AnalysisModelRequest, CancellationToken, Task<AnalysisModelResponse>> send,
     Func<string, AnalysisRun, AnalysisResolution<TAccepted>> resolve,
@@ -32,7 +32,7 @@ public sealed class AnalysisValidationLoop<TRun, TAccepted>(IAnalysisTaskStep<TR
             var outcome = response.StopOutcome(completedOutcome);
             var run = attempt.ResponseRun(outcome, response);
             if (outcome != completedOutcome)
-                return AnalysisLoopResult<TAccepted>.Settled(await attempt.SettleAsync(step.Wrap(run), State.Failed,
+                return AnalysisLoopResult<TAccepted>.Settled(await attempt.SettleAsync(wrap(run), State.Failed,
                     AnalysisErrorCodes.ForOutcome(outcome), cancellationToken));
 
             var resolution = resolve(response.OutputJson!, run);
@@ -45,7 +45,7 @@ public sealed class AnalysisValidationLoop<TRun, TAccepted>(IAnalysisTaskStep<TR
             };
             var retry = number < maximumPasses ? buildRequest(resolution.Errors) : null;
             if (retry is null) return AnalysisLoopResult<TAccepted>.ExhaustedAfter(rejected);
-            if (!await attempt.SettleAsync(step.Wrap(rejected), State.Running, null, cancellationToken))
+            if (!await attempt.SettleAsync(wrap(rejected), State.Running, null, cancellationToken))
                 return AnalysisLoopResult<TAccepted>.Settled(false);
             (number, previousRunId, request) = (number + 1, runId, retry);
         }

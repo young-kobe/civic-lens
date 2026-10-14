@@ -26,7 +26,7 @@ public sealed class DocumentChangeDraftingStep(IDocumentChangeAnalysisStore stor
         if (evidence.ExistingDraftId is not null)
             return await attempt.CompleteAsync(State.Succeeded, Codes.HumanDraftExists, cancellationToken);
 
-        var loop = new AnalysisValidationLoop<AnalysisRun, DocumentChangeDraftRevision>(this, attempt, AnalysisRunOutcome.Drafted,
+        var loop = new AnalysisValidationLoop<AnalysisRun, DocumentChangeDraftRevision>(Wrap, attempt, AnalysisRunOutcome.Drafted,
             DocumentChangeDraftingTask.MaximumValidationPasses,
             errors => Bounded(DocumentChangeDraftingPrompt.Build(evidence, catalog, errors)), model.DraftAsync,
             (json, run) => Resolve(json, evidence, run), store.GetRunAsync);

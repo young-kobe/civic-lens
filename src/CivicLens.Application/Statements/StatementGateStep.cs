@@ -28,7 +28,7 @@ public sealed class StatementGateStep(IStatementAnalysisStore store, IStatementG
         attempt.ContextJson = rubric.ToContextJson();
         if (rubric.Issues.IsEmpty) return await BypassAsync(attempt, evidence, StatementGateReasons.NoTrackedIssue, null, cancellationToken);
 
-        var loop = new AnalysisValidationLoop<StatementGateRun, StatementGateResolution>(this, attempt, AnalysisRunOutcome.Classified,
+        var loop = new AnalysisValidationLoop<StatementGateRun, StatementGateResolution>(Wrap, attempt, AnalysisRunOutcome.Classified,
             StatementGateTask.MaximumValidationPasses, errors => StatementGatePrompt.Build(evidence, rubric, settings.PromptByteCap, errors),
             model.ClassifyAsync, (json, _) => Resolve(json, evidence, rubric), async (runId, token) => (await store.GetRunAsync(runId, token))?.Run);
         var result = await loop.RunAsync(cancellationToken);

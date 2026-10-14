@@ -1,4 +1,5 @@
 using CivicLens.Application;
+using CivicLens.Application.Actions;
 using CivicLens.Application.Analysis;
 using CivicLens.Application.Issues;
 using CivicLens.Application.Statements;
@@ -20,4 +21,8 @@ internal static class AnalysisWorkers
     public static AnalysisWorker<StatementDraftRun> StatementDrafting(IStatementDraftStore store, IAnalysisStatusStore status,
         IStatementDraftingModel model, StatementDraftSettings settings, TimeProvider clock) =>
         new(new StatementDraftingStep(store, model, settings), status, clock);
+
+    public static AnalysisWorker<ActionDraftRun> ActionDrafting(IActionDraftStore store, IAnalysisStatusStore status, ActionBillReader reader,
+        IActionDraftingModel model, ActionDraftSettings settings, IssueConfigurationRevision issues, TimeProvider clock) =>
+        new(new ActionDraftingStep(store, reader, model, settings, issues), status, clock);
 }

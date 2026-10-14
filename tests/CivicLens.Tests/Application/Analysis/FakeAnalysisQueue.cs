@@ -74,8 +74,11 @@ internal abstract class FakeAnalysisQueue<TRun> : IAnalysisQueue<TRun> where TRu
             ? AnalysisReservation.WaitingForBudget : AnalysisReservation.LeaseLost);
     }
 
-    public Task<bool> CheckpointAsync(AnalysisCheckpoint checkpoint, TRun? run, CancellationToken cancellationToken) =>
-        Task.FromResult(Apply(checkpoint, run));
+    public Task<bool> CheckpointAsync(AnalysisCheckpoint checkpoint, TRun? run, CancellationToken cancellationToken)
+    {
+        if (run is not null) RunOf(run).Validate();
+        return Task.FromResult(Apply(checkpoint, run));
+    }
 
     public Task<bool> ReleaseAsync(AnalysisClaim claim, CancellationToken cancellationToken) =>
         Task.FromResult(Apply(AnalysisCheckpoint.From(claim, State.Pending), null));
