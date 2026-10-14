@@ -18,7 +18,7 @@ namespace CivicLens.Tests.Infrastructure.Collection.BillStream;
 
 [Collection(PostgresCollection.Name)]
 [Trait("Category", "Postgres")]
-public sealed class PostgresBillStreamTests(PostgresCollection postgres) : IAsyncLifetime
+public sealed partial class PostgresBillStreamTests(PostgresCollection postgres) : IAsyncLifetime
 {
     private const string SourceId = "congress-bills";
     private const string SourceUrl = "https://api.congress.gov/v3/bill";
@@ -112,6 +112,17 @@ public sealed class PostgresBillStreamTests(PostgresCollection postgres) : IAsyn
             new CongressBillListPage([Bill(119, 1)], null, StartsPass: true, UnknownTypeCount: 2));
 
         Assert.Equal(2, await ScalarAsync("SELECT unknown_type_count FROM bill_stream_pages"));
+    }
+
+    [Fact]
+    public async Task AListPageWithOnlyUnknownBillTypesStillSettlesTheWindowAndMovesTheCursor()
+    {
+        var window = new BillStreamWindow(Backfill, Backfill.AddDays(1));
+
+        await AdmitAsync(Source(), "only-odd", window, new CongressBillListPage([], null, StartsPass: true, UnknownTypeCount: 3));
+
+        Assert.Equal(window.LastDay, await ReadCursorAsync());
+        Assert.Equal(3, await ScalarAsync("SELECT unknown_type_count FROM bill_stream_pages"));
     }
 
     [Fact]
@@ -838,7 +849,7 @@ public sealed class PostgresBillStreamTests(PostgresCollection postgres) : IAsyn
         Assert.Equal((SourceId, 119, "hr", 7, UpdatedAt.UtcTicks), (candidate.SourceId, candidate.Congress, candidate.BillType, candidate.BillNumber, candidate.UpdateTicks));
         Assert.Matches("^[0-9a-f]{64}$", candidate.CandidateId);
         Assert.Equal(Source().Revision.Id, candidate.RevisionId);
-        Assert.Null(candidate.SummariesCompletedTicks);
+        Assert.False(candidate.IncludesSummaries);
     }
 
     [Fact]
@@ -929,61 +940,46 @@ public sealed class PostgresBillStreamTests(PostgresCollection postgres) : IAsyn
         Assert.Equal(0, await CandidateCountAsync());
     }
 
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public async Task TheSummariesChainClosingAttachesToTheCandidateInEitherOrderAndStaysDistinctFromItsCreation(bool summariesFirst)
+    [Fact]
+    public async Task SummariesThatCloseBeforeTheEvidenceChainLeaveOnlyTheCandidateWithSummaries()
     {
         var bill = await StartPassedBillAsync(cosponsors: 0, summaries: 2);
         var summariesNext = await AdmitSummariesAsync(bill.Summaries!, new CongressBillSummariesPage([], SummariesNext(1)));
-        var closeSummaries = async () => await AdmitSummariesAsync(summariesNext.Jobs.Single().JobId, new CongressBillSummariesPage([], null));
-        var closeActions = async () => await AdmitActionsAsync(bill.Actions, new CongressBillActionsPage([], null));
+        await AdmitSummariesAsync(summariesNext.Jobs.Single().JobId, new CongressBillSummariesPage([], null));
+        Assert.Equal(0, await CandidateCountAsync());
 
-        if (summariesFirst)
-        {
-            await closeSummaries();
-            Assert.Equal(0, await CandidateCountAsync());
-            await closeActions();
-            var candidate = Assert.Single(await CandidatesAsync());
-            Assert.Equal(candidate.CreatedTicks, candidate.SummariesCompletedTicks);
-        }
-        else
-        {
-            await closeActions();
-            var created = Assert.Single(await CandidatesAsync());
-            Assert.Null(created.SummariesCompletedTicks);
-            await closeSummaries();
-            var attached = Assert.Single(await CandidatesAsync());
-            Assert.Equal(created.CandidateId, attached.CandidateId);
-            Assert.Equal(created.CreatedTicks, attached.CreatedTicks);
-            Assert.True(attached.SummariesCompletedTicks >= created.CreatedTicks);
-        }
+        await AdmitActionsAsync(bill.Actions, new CongressBillActionsPage([], null));
+
+        Assert.True(Assert.Single(await CandidatesAsync()).IncludesSummaries);
     }
 
     [Fact]
-    public async Task AFailedSummariesPageNeverBlocksTheCandidateAndReplayKeepsTheFirstCompletionTime()
+    public async Task SummariesThatCloseAfterTheEvidenceChainAddASecondCandidateAndReplayAddsNoThird()
     {
         var bill = await StartPassedBillAsync(cosponsors: 0, summaries: 2);
         await AdmitActionsAsync(bill.Actions, new CongressBillActionsPage([], null));
-        Assert.Null(Assert.Single(await CandidatesAsync()).SummariesCompletedTicks);
-
+        var older = Assert.Single(await CandidatesAsync());
+        Assert.False(older.IncludesSummaries);
         var last = new CongressBillSummariesPage([], null);
-        await AdmitSummariesAsync(bill.Summaries!, last);
-        var completed = Assert.Single(await CandidatesAsync());
-        await AdmitSummariesAsync(bill.Summaries!, last);
 
-        Assert.NotNull(completed.SummariesCompletedTicks);
-        Assert.Equal(completed, Assert.Single(await CandidatesAsync()));
+        await AdmitSummariesAsync(bill.Summaries!, last);
+        var both = await CandidatesAsync();
+        await AdmitSummariesAsync(bill.Summaries!, last);
+        await AdmitActionsAsync(bill.Actions, new CongressBillActionsPage([], null));
+
+        Assert.Equal([false, true], both.Select(candidate => candidate.IncludesSummaries).Order());
+        Assert.Contains(older, both);
+        Assert.Equal(both, await CandidatesAsync());
     }
 
     [Fact]
-    public async Task ABillWithNoSummariesNeverGetsASummariesCompletionTime()
+    public async Task ABillWithNoSummariesGetsOnlyACandidateWithoutSummaries()
     {
         var bill = await StartPassedBillAsync(cosponsors: 0, summaries: 0);
 
         await AdmitActionsAsync(bill.Actions, new CongressBillActionsPage([], null));
 
-        Assert.Null(Assert.Single(await CandidatesAsync()).SummariesCompletedTicks);
+        Assert.False(Assert.Single(await CandidatesAsync()).IncludesSummaries);
     }
 
     [Fact]
@@ -1086,6 +1082,18 @@ public sealed class PostgresBillStreamTests(PostgresCollection postgres) : IAsyn
         Assert.Equal(expected, Assert.Single(await CandidatesAsync()).CandidateId);
     }
 
+    [Fact]
+    public async Task TheCandidateWithSummariesHashesTheSameIdentityWithASummariesSuffix()
+    {
+        var bill = await StartPassedBillAsync(cosponsors: 0, summaries: 1);
+        await AdmitSummariesAsync(bill.Summaries!, new CongressBillSummariesPage([], null));
+        await AdmitActionsAsync(bill.Actions, new CongressBillActionsPage([], null));
+
+        var identity = $"{SourceId.Length}:{SourceId}119:hr:7:{UpdatedAt.UtcTicks}:summaries";
+        var expected = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(identity)));
+        Assert.Equal(expected, Assert.Single(await CandidatesAsync()).CandidateId);
+    }
+
     [Theory]
     [InlineData("UPDATE bill_pages SET closes_chain = true WHERE role = 'Actions' AND page_order = 0")]
     [InlineData("UPDATE bill_pages SET closes_chain = NOT closes_chain WHERE role = 'Actions'")]
@@ -1128,7 +1136,7 @@ public sealed class PostgresBillStreamTests(PostgresCollection postgres) : IAsyn
     }
 
     private sealed record CandidateRecord(string CandidateId, string SourceId, int Congress, string BillType, int BillNumber,
-        long UpdateTicks, string DetailJobId, string RevisionId, long CreatedTicks, long? SummariesCompletedTicks);
+        long UpdateTicks, string DetailJobId, string RevisionId, long CreatedTicks, bool IncludesSummaries);
 
     private async Task<IReadOnlyList<CandidateRecord>> CandidatesAsync()
     {
@@ -1136,7 +1144,7 @@ public sealed class PostgresBillStreamTests(PostgresCollection postgres) : IAsyn
         await connection.OpenAsync();
         await using var command = new NpgsqlCommand("""
             SELECT candidate_id, source_id, congress, bill_type, bill_number, update_date_utc_ticks, detail_job_id,
-                   configuration_revision_id, created_at_utc_ticks, summaries_completed_at_utc_ticks
+                   configuration_revision_id, created_at_utc_ticks, includes_summaries
             FROM action_candidates ORDER BY candidate_id
             """, connection);
         await using var reader = await command.ExecuteReaderAsync();
@@ -1144,7 +1152,7 @@ public sealed class PostgresBillStreamTests(PostgresCollection postgres) : IAsyn
         while (await reader.ReadAsync())
             candidates.Add(new CandidateRecord(reader.GetString(0), reader.GetString(1), reader.GetInt32(2), reader.GetString(3),
                 reader.GetInt32(4), reader.GetInt64(5), reader.GetString(6), reader.GetString(7), reader.GetInt64(8),
-                reader.IsDBNull(9) ? null : reader.GetInt64(9)));
+                reader.GetBoolean(9)));
         return candidates;
     }
 
@@ -1218,17 +1226,23 @@ public sealed class PostgresBillStreamTests(PostgresCollection postgres) : IAsyn
     private async Task<DiscoveryAdmissionResult> AdmitSummariesAsync(string pageJobId, CongressBillSummariesPage page) =>
         await store.AdmitSummariesPageAsync(Source(), pageJobId, page, await ExtractionAsync(pageJobId), default);
 
-    private async Task<string> ExtractionAsync(string jobId)
+    private Task<string> ExtractionAsync(string jobId)
     {
         var text = "Bill: 119 hr 7\n" + Guid.NewGuid().ToString("N");
-        var captured = await seeder.ImportAsync(text, "https://example.test/pages/a", CandidateJobKind.None);
-        var requestJson = JsonSerializer.Serialize(CollectionFixtures.Request() with { JobId = captured.AttemptId }, CollectionProtocol.JsonOptions);
+        return ExtractionAsync(jobId, text, text, "parser", "normalizer");
+    }
+
+    private async Task<string> ExtractionAsync(string jobId, string body, string text, string parserVersion, string normalizationVersion)
+    {
+        var captured = await seeder.ImportAsync(body, "https://example.test/pages/a", CandidateJobKind.None);
+        var request = (await store.GetAsync(jobId, default))!.Definition.CreateRequest(captured.AttemptId, captureRoot);
+        var requestJson = JsonSerializer.Serialize(request, CollectionProtocol.JsonOptions);
         await ExecuteAsync(connectionString, $$"""
             INSERT INTO collection_job_attempts (attempt_id, job_id, sequence, request_json, started_at, resolution_json, completed_at)
             VALUES ('{{captured.AttemptId}}', '{{jobId}}',
                     (SELECT COALESCE(MAX(sequence), 0) + 1 FROM collection_job_attempts WHERE job_id = '{{jobId}}'), '{{requestJson}}', 0, '{}', 0)
             """);
-        return (await extractions.SaveAsync(new DocumentExtraction(captured, "parser", "normalizer", text), default)).ExtractionId;
+        return (await extractions.SaveAsync(new DocumentExtraction(captured, parserVersion, normalizationVersion, text), default)).ExtractionId;
     }
 
     private async Task<(string Decision, string? Reason)> GateOfAsync(string detailJobId)

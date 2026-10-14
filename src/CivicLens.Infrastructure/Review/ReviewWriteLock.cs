@@ -9,8 +9,9 @@ internal static class ReviewWriteLock
 {
     public const string DocumentChange = "civic-lens-document-change-review";
     public const string Statement = "civic-lens-statement-review";
+    public const string Action = "civic-lens-action-review";
 
-    public static readonly IReadOnlyList<string> AllInOrder = [DocumentChange, Statement];
+    public static readonly IReadOnlyList<string> AllInOrder = [DocumentChange, Statement, Action];
 
     public static Task AcquireAsync(CollectionAttemptDbContext db, string key, CancellationToken cancellationToken) =>
         db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({key}, 0))", cancellationToken);

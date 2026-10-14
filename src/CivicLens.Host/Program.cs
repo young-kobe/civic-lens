@@ -16,6 +16,9 @@ using CivicLens.Infrastructure.Collection.Jobs;
 using CivicLens.Infrastructure.Collection.Processing;
 using CivicLens.Application.Documents;
 using CivicLens.Host.Analysis;
+using CivicLens.Application.Actions;
+using CivicLens.Host.Actions;
+using CivicLens.Infrastructure.Actions;
 using CivicLens.Host.Collection;
 using CivicLens.Host.Documents;
 using CivicLens.Host.Publication;
@@ -66,6 +69,9 @@ if (args is [] or ["--help"] or ["help"])
           statements draft list [drafted|over-cap|existing|pending|failed] [limit]
           statements draft run <run-id>
           statements draft requeue <candidate-id|--all>
+          actions draft status
+          actions draft list [drafted|unchanged|superseded|no-official|pending|failed] [limit]
+          actions draft requeue <candidate-id|--all>
           releases publish <idempotency-key> <draft-id>...
           releases list [limit]
           releases activate <release-number>
@@ -82,6 +88,7 @@ if (args is [] or ["--help"] or ["help"])
         worker also gates statement candidates when CIVIC_LENS_STATEMENT_GATE_DAILY_TOKENS, ANTHROPIC_API_KEY, and CIVIC_LENS_ISSUES_CONFIG are set.
         worker requires CIVIC_LENS_ISSUES_CONFIG when a Congress.gov bill list source is enabled.
         worker also drafts statements when CIVIC_LENS_STATEMENT_DRAFTING_DAILY_TOKENS and ANTHROPIC_API_KEY are set.
+        worker also drafts bill actions when CIVIC_LENS_ACTION_DRAFTING_DAILY_TOKENS, ANTHROPIC_API_KEY, and CIVIC_LENS_ISSUES_CONFIG are set.
         documents commands require the database. Citations use UTF-16 offsets into immutable extracted text.
         Exit codes: 0 success, 1 failed/deferred collection or operational failure, 2 invalid input/configuration.
         """);
@@ -129,7 +136,7 @@ if (args is not (["db", "migrate"] or ["validate", _] or ["collect", _, _, _, _]
     or ["feeds" or "discovery", "get", _] or ["feeds" or "discovery", "admit", _, _, _, _]
     or ["receipts", "list", _] or ["receipts", "replay", _, _]) && !CollectionJobCommand.Matches(args) &&
     !CollectionWorkerCommand.Matches(args) && !DocumentCommand.Matches(args) && !ReleaseCommand.Matches(args) &&
-    !AnalysisCommand.Matches(args) && !StatementCommand.Matches(args))
+    !AnalysisCommand.Matches(args) && !StatementCommand.Matches(args) && !ActionCommand.Matches(args))
 {
     Console.Error.WriteLine("Unknown command. Use --help.");
     return 2;
@@ -165,15 +172,19 @@ try
         await using var gateWakeup = gate.Wakeup;
         var statementDrafting = StatementDraftComposition.Create(analysisContexts, connectionString);
         await using var statementDraftingWakeup = statementDrafting.Wakeup;
+        var textExtractor = new CaptureDocumentTextExtractor();
+        var actionDrafting = ActionDraftComposition.Create(analysisContexts, connectionString, jobs,
+            new ApiResponseReader(attempts, new CaptureBodyReader()), textExtractor, issues, CollectionWorkerCommand.ArtifactRootOf(args));
+        await using var actionDraftingWakeup = actionDrafting.Wakeup;
         executing = true;
         await jobs.SynchronizeAsync(workerConfiguration, cancellation.Token);
         await analysis.RecordStartAsync(cancellation.Token);
         await gate.RecordStartAsync(cancellation.Token);
         await statementDrafting.RecordStartAsync(cancellation.Token);
+        await actionDrafting.RecordStartAsync(cancellation.Token);
         var extractions = PostgresDocumentExtractionStore.FromConnectionString(connectionString);
         var comparisons = PostgresDocumentComparisonStore.FromConnectionString(connectionString);
         var processingStore = PostgresEvidenceProcessingStore.FromConnectionString(connectionString);
-        var textExtractor = new CaptureDocumentTextExtractor();
         var processing = new EvidenceProcessingWorker(jobs,
             new JobPreparation(jobs, attempts, jobs, jobs, new CaptureBodyReader(), processingStore, extractions, textExtractor, issues),
             processingStore,
@@ -186,7 +197,8 @@ try
             {
                 AnalysisStage.For("drafting", analysis.Worker),
                 AnalysisStage.For("gate", gate.Worker),
-                AnalysisStage.For("statementDrafting", statementDrafting.Worker)
+                AnalysisStage.For("statementDrafting", statementDrafting.Worker),
+                AnalysisStage.For("actionDrafting", actionDrafting.Worker)
             }.OfType<AnalysisStage>()]);
     }
 
@@ -219,6 +231,19 @@ try
             new ReviewActor(ownerSubject, ReviewRole.Owner), args is ["statements", "regate", ..] ? StatementIssueRubric.FromEnvironment()?.Id : null);
         executing = true;
         return await statements.ExecuteAsync(args, cancellation.Token);
+    }
+
+    if (ActionCommand.Matches(args))
+    {
+        var connectionString = Environment.GetEnvironmentVariable("CIVIC_LENS_DATABASE");
+        var ownerSubject = Environment.GetEnvironmentVariable("CIVIC_LENS_REVIEW_OWNER");
+        if (string.IsNullOrWhiteSpace(connectionString) || string.IsNullOrWhiteSpace(ownerSubject))
+            throw new ArgumentException("Action commands require CIVIC_LENS_DATABASE and CIVIC_LENS_REVIEW_OWNER.");
+        var contexts = AnalysisDbContextFactory.Create(connectionString);
+        var draftCommands = new StatementQueueCommands<ActionDraftRun, ActionDraftView, ActionDraftListItem>(
+            new PostgresActionDraftStore(contexts), new PostgresAnalysisStatusStore(contexts, ActionDraftTask.Task));
+        executing = true;
+        return await new ActionCommand(draftCommands, new ReviewActor(ownerSubject, ReviewRole.Owner)).ExecuteAsync(args, cancellation.Token);
     }
 
     if (ReleaseCommand.Matches(args))

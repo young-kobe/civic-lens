@@ -148,6 +148,18 @@ public sealed class PostgresStatementAnalysisStoreTests(PostgresCollection postg
     }
 
     [Fact]
+    public async Task GateClaimsStayOldestFirstEvenWhenTheNewerCandidateHasTheSmallerIdSoNoCandidateWaitsBehindNewerWork()
+    {
+        var one = await seeder.SeedAsync(Article + " one", "https://example.test/pages/one");
+        var two = await seeder.SeedAsync(Article + " two", "https://example.test/pages/two");
+        var (older, newer) = string.CompareOrdinal(one, two) > 0 ? (one, two) : (two, one);
+        await ExecuteAsync(connectionString,
+            $"UPDATE statement_analysis SET created_at_utc_ticks = CASE candidate_id WHEN '{older}' THEN 1 ELSE 2 END");
+
+        Assert.Equal([older, newer], (await store.GetEligibleAsync(10, default)).Select(row => row.SubjectId));
+    }
+
+    [Fact]
     public async Task ListAndCountSeparateEachGateOutcome()
     {
         _ = await seeder.SeedAsync(Article + " one", "https://example.test/pages/one");

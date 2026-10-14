@@ -26,6 +26,8 @@ internal static class CollectionWorkerCommand
         _ = Path.GetFullPath(arguments[2]);
     }
 
+    public static string ArtifactRootOf(string[] arguments) => Path.GetFullPath(arguments[2]);
+
     public static async Task<int> ExecuteAsync(string[] arguments, ICollectionWorkerQueue queue,
         ICollectionJobStore jobs, ICollectionAttemptStore evidence, CancellationToken cancellationToken,
         EvidenceProcessingWorker? evidenceProcessor = null, IWorkerWakeup? wakeup = null,
@@ -33,7 +35,7 @@ internal static class CollectionWorkerCommand
     {
         ValidateArguments(arguments);
         var collectorPath = Path.GetFullPath(arguments[1]);
-        var artifactRoot = Path.GetFullPath(arguments[2]);
+        var artifactRoot = ArtifactRootOf(arguments);
         var runner = new RunCollectionJob(jobs, evidence, new FileCollectionReceiptHandoffStore(artifactRoot),
             new CaptureArtifactVerifier(), new CollectorProcess(collectorPath,
                 Environment.GetEnvironmentVariable("DOTNET_HOST_PATH") ?? "dotnet"));

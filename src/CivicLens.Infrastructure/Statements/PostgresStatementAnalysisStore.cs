@@ -71,8 +71,11 @@ public sealed class PostgresStatementAnalysisStore : PostgresAnalysisStore<State
             entry.LatestIssueRevisionId))];
     }
 
-    public Task<IReadOnlyDictionary<StatementGateView, int>> CountAsync(CancellationToken cancellationToken) =>
-        StatementAnalysisListing.CountAsync(contextFactory, StatementGateTask.Task, ViewOf, cancellationToken);
+    public async Task<IReadOnlyDictionary<StatementGateView, int>> CountAsync(CancellationToken cancellationToken)
+    {
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        return await AnalysisQueueCounts.CountAsync<StatementAnalysisRow, StatementGateView>(db, StatementGateTask.Task, ViewOf, cancellationToken);
+    }
 
     private static async Task<HashSet<string>> CandidatesBoundToOlderRevisionAsync(CollectionAttemptDbContext db, string[] candidateIds,
         string issueRevisionId, CancellationToken cancellationToken)

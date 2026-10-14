@@ -526,6 +526,32 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- st
 
 The opt-in live test for statement drafting sends one paid request. Run it with the command above.
 
+### Action drafting
+
+The `worker` command drafts one action record for each bill that has a candidate. [Architecture](architecture.md#action-drafting-implemented) holds the rules. Action drafting runs when all three variables below are set in the worker's protected environment. A limit without `ANTHROPIC_API_KEY` or without `CIVIC_LENS_ISSUES_CONFIG` stops the worker with exit code 2. The tracked officials come from the configuration revision of the candidate, so the stage does not read the current collection configuration. The issue file gives the tracked issues of each bill.
+
+| Variable | Meaning |
+|---|---|
+| `ANTHROPIC_API_KEY` | Claude API key, shared with the other stages |
+| `CIVIC_LENS_ISSUES_CONFIG` | Absolute path of the issue configuration, shared with the Congress.gov bill stream |
+| `CIVIC_LENS_ACTION_DRAFTING_DAILY_TOKENS` | Daily token limit for action drafting calls, per UTC day (about 2,000,000 is a good start). It is separate from the other limits. |
+| `CIVIC_LENS_ACTION_DRAFTING_RUN_TOKENS` | Optional limit for one call's reservation (default 120,000 or the daily limit, whichever is smaller). It also sets the prompt byte cap. |
+| `CIVIC_LENS_ANALYSIS_CONCURRENCY` | Optional number of calls at the same time, shared with the other stages (default 2, 1 to 4) |
+
+Drafting uses Claude Haiku 5.5. The migration queued every candidate that existed when it ran, and the first run can spend up to the daily limit on them. A bill version whose summaries had already closed has two queued candidates, one without and one with summaries. The older candidate settles as `supersededByNewerCandidate` with no call, also when the candidate with summaries blocks. When summaries arrive after the older candidate drafted, the bill version gets a second candidate and a second call. Start with a low limit. A bill whose facts did not change since the current revision gets no model call. A bill with more than 20 summary pages drafts without its summaries, and the run shows the reason `summaryOmitted`. A bill with more than 600 tracked sponsorships blocks as `tooManySponsorships`. A bill title over 4,000 characters blocks as `titleTooLong`. A bill with no tracked official settles as `noTrackedOfficial` with no call. A prompt over the byte cap drops the summary text and the run shows the reason `summaryOmitted`. A page saved by an older parser, extractor, or renderer version blocks as `extractionVersionChanged`. A page whose saved text differs from its rendering under current versions blocks as `renderedTextMismatch`, which points to changed data. A Blocked entry has no owner command yet. `requeue` moves only Failed rows.
+
+The commands below need `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`.
+
+```sh
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- actions draft status
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- actions draft list unchanged 50
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- actions draft requeue <candidate-id|--all>
+```
+
+`status` prints the daily limit, any pause, the tokens charged today, and the count of entries in each outcome. `list` takes `drafted`, `unchanged`, `superseded`, `no-official`, `pending`, or `failed`, and a limit up to 500 (default 100). `requeue` moves Failed and no other rows back to Pending. A paused or waiting stage follows the same table as document-change drafting: fix the key or the credit and restart the worker, or wait for the next UTC day.
+
+The opt-in live test for action drafting sends one paid request. Run it with the command above.
+
 ### Publish a static release
 
 The owner can also publish from the Review home page. Select records in the Publish section and choose Review selection. The list shows each record as a document change or a statement. The summary lists each headline with its kind, as new or a replacement, and shows the release number. Choose Publish to confirm. The page lists recent releases read-only. Rollback stays in the CLI.

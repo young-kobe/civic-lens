@@ -30,14 +30,14 @@ public sealed class StatementDraftingStep(IStatementDraftStore store, IStatement
             return await attempt.CompleteAsync(State.Blocked, StatementDraftErrorCodes.SpeakersUnavailable, cancellationToken);
         attempt.ContextJson = StatementDraftPrompt.SerializeContext(officials, evidence.CarryOver);
 
-        var loop = new AnalysisValidationLoop<StatementDraftRun, StatementDraftRevision>(this, attempt, AnalysisRunOutcome.Drafted,
+        var loop = new AnalysisValidationLoop<StatementDraftRun, StatementDraftRevision>(Wrap, attempt, AnalysisRunOutcome.Drafted,
             StatementDraftTask.MaximumValidationPasses, errors => StatementDraftPrompt.Build(evidence, officials, settings.PromptByteCap, errors),
             model.DraftAsync, (json, run) => Resolve(json, evidence, officials, run), async (runId, token) => (await store.GetRunAsync(runId, token))?.Run);
         var result = await loop.RunAsync(cancellationToken);
         return result.End switch
         {
             AnalysisLoopEnd.Accepted => await attempt.SettleAsync(Wrap(result.Run!),
-                StatementDraftCheckpoint.From(attempt.Claim, State.Succeeded, revision: result.Accepted), cancellationToken),
+                StatementDraftCheckpoint.From(attempt.Claim, result.Accepted!), cancellationToken),
             AnalysisLoopEnd.Exhausted => await attempt.SettleAsync(Wrap(result.Run!), State.Failed,
                 AnalysisErrorCodes.ForOutcome(result.Run!.Outcome), cancellationToken),
             AnalysisLoopEnd.NotSent when result.Run is null => await BypassAsync(attempt, evidence, cancellationToken),

@@ -110,4 +110,26 @@ public sealed class BillGateTests
 
     private static IssueConfiguration Issues(DateOnly? startsOn = null, DateOnly? endsBefore = null) =>
         BillGateFixtures.Issues(startsOn, endsBefore);
+
+    [Fact]
+    public void TrackedIssueIdsListEveryIssueThatIsActiveOnTheDayForThePolicyAreaInOrdinalOrder()
+    {
+        var issues = Issues() with
+        {
+            Issues =
+            [
+                .. Issues().Issues,
+                new TrackedIssueConfiguration { Id = "affordability", Name = "Affordability", Definition = "d", PolicyAreaIds = ["housing"] },
+                new TrackedIssueConfiguration { Id = "taxes", Name = "Taxes", Definition = "d", PolicyAreaIds = ["taxes"] },
+                new TrackedIssueConfiguration
+                {
+                    Id = "ended", Name = "Ended", Definition = "d", PolicyAreaIds = ["housing"], EndsBefore = new DateOnly(2025, 1, 1)
+                }
+            ]
+        };
+
+        Assert.Equal(["affordability", "rent"], BillGate.TrackedIssueIdsFor(BillGateFixtures.TrackedPolicyArea, new DateOnly(2025, 3, 3), issues));
+        Assert.Empty(BillGate.TrackedIssueIdsFor("Unknown", new DateOnly(2025, 3, 3), issues));
+        Assert.Empty(BillGate.TrackedIssueIdsFor(null, new DateOnly(2025, 3, 3), issues));
+    }
 }

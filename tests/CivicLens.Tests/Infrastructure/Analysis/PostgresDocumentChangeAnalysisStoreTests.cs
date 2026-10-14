@@ -413,7 +413,7 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
         Assert.Equal(5_000, await ScalarAsync<long>($"SELECT charged_tokens FROM document_change_analysis_runs WHERE run_id = '{runId}'"));
         Assert.Equal(5_000, await ChargedTodayAsync());
         var late = Run(stale.Record.SubjectId, runId, AnalysisRunOutcome.RateLimited);
-        Assert.False(await analysis.CheckpointAsync(DocumentChangeAnalysisCheckpoint.From(stale, AnalysisState.RetryWaiting,
+        Assert.False(await analysis.CheckpointAsync(AnalysisCheckpoint.From(stale, AnalysisState.RetryWaiting,
             "rateLimited", TimeSpan.FromSeconds(30)), late, default));
         Assert.Equal(AnalysisReservation.LeaseLost,
             await analysis.ReserveAsync(stale, Guid.NewGuid().ToString("N"), new string('e', 64), 5_000, 100_000, default));
@@ -485,7 +485,7 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
         await analysis.ReserveAsync(claim, runId, new string('e', 64), 5_000, 100_000, default);
         var run = Run(comparison.ComparisonId, runId, AnalysisRunOutcome.Refused);
 
-        var fail = DocumentChangeAnalysisCheckpoint.From(claim, AnalysisState.Failed, "refused");
+        var fail = AnalysisCheckpoint.From(claim, AnalysisState.Failed, "refused");
         Assert.True(await analysis.CheckpointAsync(fail, run, default));
         Assert.False(await analysis.CheckpointAsync(fail, run, default));
 

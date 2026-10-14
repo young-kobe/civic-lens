@@ -8,8 +8,7 @@ public sealed record DocumentChangeAnalysisCheckpoint(
     DocumentChangeDraftRevision? Revision = null)
     : AnalysisCheckpoint(SubjectId, Task, ExpectedStatus, LeaseToken, Fence, Status, ErrorCode, RetryDelay)
 {
-    public static DocumentChangeAnalysisCheckpoint From(AnalysisClaim claim, AnalysisState status, string? errorCode = null,
-        TimeSpan? retryDelay = null, DocumentChangeDraftRevision? revision = null) =>
-        new(claim.Record.SubjectId, claim.Record.Task, AnalysisState.Running, claim.LeaseToken, claim.Fence, status, errorCode,
-            retryDelay, revision);
+    public static DocumentChangeAnalysisCheckpoint From(AnalysisClaim claim, DocumentChangeDraftRevision revision) =>
+        new(claim.Record.SubjectId, claim.Record.Task, AnalysisState.Running, claim.LeaseToken, claim.Fence, AnalysisState.Succeeded,
+            Revision: revision);
 }

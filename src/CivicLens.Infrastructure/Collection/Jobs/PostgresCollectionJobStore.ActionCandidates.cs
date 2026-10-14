@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Bills;
+using CivicLens.Infrastructure.Actions;
 using CivicLens.Infrastructure.Collection.BillStream;
 using CivicLens.Infrastructure.Collection.Jobs.Persistence;
 using CivicLens.Infrastructure.Documents.Persistence;
@@ -14,11 +15,15 @@ public sealed partial class PostgresCollectionJobStore
     private sealed record PageState(BillPageRole Role, int Order, bool ClosesChain);
 
     internal static string HashActionCandidate(string sourceId, int congress, string billType, int billNumber,
-        long updateDateUtcTicks)
-    {
-        var identity = $"{sourceId.Length}:{sourceId}{congress}:{billType}:{billNumber}:{updateDateUtcTicks}";
-        return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(identity)));
-    }
+        long updateDateUtcTicks, bool includesSummaries) =>
+        HashActionIdentity($"{sourceId.Length}:{sourceId}{congress}:{billType}:{billNumber}:{updateDateUtcTicks}" +
+            (includesSummaries ? ":summaries" : ""));
+
+    internal static string HashActionRecord(string sourceId, int congress, string billType, int billNumber) =>
+        HashActionIdentity($"{sourceId.Length}:{sourceId}{congress}:{billType}:{billNumber}");
+
+    private static string HashActionIdentity(string identity) =>
+        Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(identity)));
 
     private static BillPageRow NewPageRow(string detailJobId, string jobId, BillPageRole role, int order, string extractionId,
         bool closesChain) => new()
@@ -57,17 +62,18 @@ public sealed partial class PostgresCollectionJobStore
         await db.SaveChangesAsync(cancellationToken);
         var pages = await db.Set<BillPageRow>().Where(row => row.DetailJobId == gate.DetailJobId)
             .Select(row => new PageState(row.Role, row.PageOrder, row.ClosesChain)).ToListAsync(cancellationToken);
-        var candidate = await db.Set<ActionCandidateRow>().SingleOrDefaultAsync(
-            row => row.DetailJobId == gate.DetailJobId, cancellationToken);
-        if (candidate is null)
-        {
-            if (!HasCompleteEvidence(gate, pages)) return;
-            candidate = NewActionCandidate(source, gate, now);
-            db.Add(candidate);
-        }
-        if (candidate.SummariesCompletedAtUtcTicks is null && IsClosed(pages, BillPageRole.Summaries))
-            candidate.SummariesCompletedAtUtcTicks = Ticks(now);
+        if (!HasCompleteEvidence(gate, pages)) return;
+        var includesSummaries = IsClosed(pages, BillPageRole.Summaries);
+        if (await HasCandidateWithAtLeastTheseInputsAsync(db, gate.DetailJobId, includesSummaries, cancellationToken)) return;
+        var candidate = NewActionCandidate(source, gate, includesSummaries, now);
+        db.Add(candidate);
+        ActionDraftQueueRows.Add(db, candidate.CandidateId, Ticks(now));
     }
+
+    private static Task<bool> HasCandidateWithAtLeastTheseInputsAsync(CollectionAttemptDbContext db, string detailJobId,
+        bool includesSummaries, CancellationToken cancellationToken) =>
+        db.Set<ActionCandidateRow>().AnyAsync(row => row.DetailJobId == detailJobId &&
+            (row.IncludesSummaries || row.IncludesSummaries == includesSummaries), cancellationToken);
 
     private static bool HasCompleteEvidence(BillGateRow gate, IReadOnlyList<PageState> pages) =>
         IsClosed(pages, BillPageRole.Detail) && IsClosed(pages, BillPageRole.Actions) &&
@@ -80,16 +86,19 @@ public sealed partial class PostgresCollectionJobStore
         return closing.Count == 1 && closing[0].Order == chain.Count - 1 && chain.Max(page => page.Order) == chain.Count - 1;
     }
 
-    private static ActionCandidateRow NewActionCandidate(ConfiguredCollectionSource source, BillGateRow gate, DateTimeOffset now) => new()
-    {
-        CandidateId = HashActionCandidate(gate.SourceId, gate.Congress, gate.BillType, gate.BillNumber, gate.UpdateDateUtcTicks),
-        SourceId = gate.SourceId,
-        Congress = gate.Congress,
-        BillType = gate.BillType,
-        BillNumber = gate.BillNumber,
-        UpdateDateUtcTicks = gate.UpdateDateUtcTicks,
-        DetailJobId = gate.DetailJobId,
-        ConfigurationRevisionId = source.Revision.Id,
-        CreatedAtUtcTicks = Ticks(now)
-    };
+    private static ActionCandidateRow NewActionCandidate(ConfiguredCollectionSource source, BillGateRow gate, bool includesSummaries,
+        DateTimeOffset now) => new()
+        {
+            CandidateId = HashActionCandidate(gate.SourceId, gate.Congress, gate.BillType, gate.BillNumber, gate.UpdateDateUtcTicks,
+                includesSummaries),
+            SourceId = gate.SourceId,
+            Congress = gate.Congress,
+            BillType = gate.BillType,
+            BillNumber = gate.BillNumber,
+            UpdateDateUtcTicks = gate.UpdateDateUtcTicks,
+            DetailJobId = gate.DetailJobId,
+            ConfigurationRevisionId = source.Revision.Id,
+            CreatedAtUtcTicks = Ticks(now),
+            IncludesSummaries = includesSummaries
+        };
 }
