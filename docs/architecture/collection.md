@@ -47,6 +47,7 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - A succeeded job gets exactly one preparation row, in the settling transaction. Enforced by `PostgresCollectionJobStore` with `ON CONFLICT DO NOTHING`. Test: `PostgresCollectionJobStoreTests.SettlingACapturedJobQueuesOnePreparationRowAndReplayDoesNotAddAnother`.
 - A scheduler admits no second active root job for one source and URL. Enforced by a check under the `PostgresAdvisoryLock.CollectionJobs` key, not by a unique index. Test: `PostgresCollectionScheduleStoreTests.ConcurrentSchedulersAdmitOnlyOneRootJob`.
 - Discovery admits one job for each exact source and URL. Enforced by the primary key of `collection_candidate_jobs` and the `PostgresAdvisoryLock.CollectionJobs` key, which every admission holds. Test: `PostgresDiscoveryAdmissionTests.ConcurrentFeedAndHtmlAttemptsCreateOnlyOneJobForAnExactSourceUrlPair`.
+- A parked comparison becomes due once its predecessor is settled, and never before. Enforced by the settled-predecessor SQL that the eligible scan, the claim, and the worker check share in `PostgresEvidenceProcessingStore`. Tests: `PostgresEvidenceProcessingStoreTests.AnUnsettledPredecessorKeepsTheWaiterParkedAndUnclaimable` and `PostgresEvidenceProcessingStoreTests.APredecessorThatSettlesBetweenTheReadAndTheParkStillWakesAndReleasesTheWaiter`.
 - A processing checkpoint needs the current lease and fence. Enforced by `EvidenceProcessingLifecycle` and `ck_evidence_processing_lease`. Test: `PostgresEvidenceProcessingStoreTests.EnsureIsIdempotentAndCheckpointFencesReclaimedLease`.
 
 ## Behavior
@@ -336,7 +337,7 @@ An active job for the same source and exact root URL suppresses the scheduled ad
 | Admission | Enabled source and current coverage, no overlapping active root check, exact-URL deduplication, job and discovery budget reservation |
 | Collection concurrency | One managed collector slot for each store, origin pacing and backoff, unresolved-attempt barrier, renewable fenced leases |
 | Stage handoff | Preparation registration in the settlement transaction; idempotent child admission and evidence saves; fenced checkpoints |
-| Recovery | Startup drain of durable work, upgrade backfill, persisted retry and lease deadlines, connection resubscription, durable predecessor release |
+| Recovery | Startup drain of durable work, upgrade backfill, persisted retry and lease deadlines, connection resubscription, predecessor waits due by rule |
 | Human boundary | Changed evidence enters review; approval and publication stay explicit |
 
 **Wakeups.** The listener subscribes before it drains. It combines schedule, retry, pacing, and ownership deadlines in database time. The release of a runnable collection claim signals work. A release behind a timed barrier carries its deadline. A commit after that deadline therefore cannot strand work or make blocked jobs wake themselves again and again.
@@ -347,7 +348,19 @@ An active job for the same source and exact root URL suppresses the scheduled ad
 
 Each successful configured discovery check admits one idempotent article batch, with its retained configuration and coverage date. New candidates and rechecks share the configured batch limits. A replay of a parent check cannot create another batch. Later passes do not drain every deferred candidate. A preparation failure shows as such, not as a collection failure.
 
-**Extraction and comparison.** Captured pages use retained content profiles for readable text; see [documents](documents.md). A comparison that waits for an earlier extraction parks as a durable dependency and leaves capacity for preparation. Dependency registration checks readiness again atomically with release, so a concurrent completion cannot lose the wakeup.
+**Extraction and comparison.** Captured pages use retained content profiles for readable text; see [documents](documents.md). A comparison that waits for an earlier extraction parks as a durable dependency and leaves capacity for preparation. The park writes `WaitingForPredecessor` and `predecessor_attempt_id`. A later claim changes the status to Running, and the column stays as a record of the last wait. No trigger or release step clears it.
+
+A predecessor is settled when one of these facts holds. Each fact is final once written:
+
+- A `document_extractions` row exists for its attempt.
+- Its `evidence_processing` row is Succeeded, Blocked, or Failed.
+- Its job is Failed or Cancelled.
+- The `prepare` row of its job is terminal, and the job has no processing row for the attempt.
+- No job owns the attempt, because it came from a direct import.
+
+`PostgresEvidenceProcessingStore` holds this rule as one SQL predicate. The eligible scan and the claim treat a waiter as due when its predecessor is settled. The worker asks the same predicate before it parks. No trigger releases waiters.
+
+A predecessor can settle after the worker reads it and before the park commits. The park still writes a status change, so `trg_evidence_processing_notify` wakes the worker after the commit. The next scan then finds the waiter due. Settling facts also notify: an extraction insert, a processing status change, and a job state change.
 
 Comparison reads the predecessor evidence again after the readiness check, because history and processing status are separate reads. It uses the preceding compatible observation and never skips across failed or unprocessed history. A first observation or a processing gap sets a baseline. Identical text completes without a review candidate.
 
@@ -367,23 +380,19 @@ Complete changed comparisons enter the private review inbox. Missing profiles, i
 
 A claim changes only the lease, never the state. Job leases last 3 to 600 seconds.
 
-`ck_evidence_processing_stage` lists the stages: Preparation, Extraction, Comparison, and Complete. `ck_evidence_processing_status` lists the statuses. `EvidenceProcessingLifecycle` decides most moves, and `PostgresEvidenceProcessingStore` applies them. `ReleaseAsync` and `ParkOrRequeueAsync` bypass the lifecycle. They write fenced raw SQL that matches the status, lease token, fence, and an unexpired lease.
+`ck_evidence_processing_stage` lists the stages: Preparation, Extraction, Comparison, and Complete. `ck_evidence_processing_status` lists the statuses. `EvidenceProcessingLifecycle` decides most moves, and `PostgresEvidenceProcessingStore` applies them. `ReleaseAsync` and `WaitForPredecessorAsync` bypass the lifecycle. They write fenced raw SQL that matches the status, lease token, fence, and an unexpired lease.
 
 | From | To | Write |
 |---|---|---|
 | (new) | Preparation, Pending | Settlement of a succeeded job |
 | (new) | Extraction, Pending | Preparation of a captured attempt |
-| Pending, due RetryWaiting, expired Running | Running | Claim, with a higher fence |
+| Pending, due RetryWaiting, expired Running, WaitingForPredecessor with a settled predecessor | Running | Claim, with a higher fence |
 | Running | Pending | Release on shutdown |
 | Preparation, Running | Complete, Succeeded or Blocked | Preparation checkpoint |
 | Extraction, Running | Comparison, Pending, or Complete, Blocked | Extraction checkpoint |
 | Comparison, Running | Complete, Succeeded or Blocked | Comparison checkpoint |
-| Comparison, Running | WaitingForPredecessor | The earlier extraction is not ready |
-| Comparison, Running | Comparison, Pending | The predecessor is already ready |
-| WaitingForPredecessor | Pending | The trigger function `civic_lens_release_predecessor_waiters` |
+| Comparison, Running | WaitingForPredecessor | The predecessor is not settled |
 | Any stage, Running | Same stage, RetryWaiting or Failed | Retry or failure checkpoint |
-
-The release of predecessor waiters is the one move in SQL. It needs the predecessor lock in the trigger; see [advisory locks](../architecture.md#advisory-locks).
 
 ### Sources page
 

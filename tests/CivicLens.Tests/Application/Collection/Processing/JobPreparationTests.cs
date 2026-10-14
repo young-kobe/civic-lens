@@ -407,8 +407,7 @@ public sealed class JobPreparationTests
         }
 
         public Task<IReadOnlyList<EvidenceProcessingRecord>> GetEligibleAsync(int limit, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<EvidenceProcessingRecord?> GetByAttemptIdAsync(string attemptId, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<bool> IsAwaitingPreparationAsync(string attemptId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<bool> IsPredecessorSettledAsync(string attemptId, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<IReadOnlyList<EvidenceProcessingRecord>> GetByJobIdsAsync(IReadOnlyList<string> jobIds, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<IReadOnlyList<CollectionChangeEvent>> ListRecentChangesAsync(int limit, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<EvidenceProcessingClaim?> TryClaimAsync(string jobId, string attemptId, TimeSpan leaseDuration, CancellationToken cancellationToken) => throw new NotSupportedException();

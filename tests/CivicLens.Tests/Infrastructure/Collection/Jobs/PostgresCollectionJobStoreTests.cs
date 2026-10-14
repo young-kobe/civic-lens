@@ -565,21 +565,23 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
     }
 
     [Fact]
-    public async Task EnqueueTriggersAreGoneAndWakeupTriggersRemain()
+    public async Task WorkflowTriggersAreGoneAndWakeupTriggersRemain()
     {
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
         await using var command = new NpgsqlCommand("""
             SELECT (SELECT count(*) FROM pg_proc WHERE proname IN
-                        ('civic_lens_register_document_change_analysis', 'civic_lens_create_successful_job_preparation')),
+                        ('civic_lens_register_document_change_analysis', 'civic_lens_create_successful_job_preparation',
+                         'civic_lens_release_predecessor_waiters')),
                    (SELECT count(*) FROM pg_trigger WHERE tgname IN
-                        ('trg_document_comparisons_register_analysis', 'trg_collection_jobs_create_preparation')),
+                        ('trg_document_comparisons_register_analysis', 'trg_collection_jobs_create_preparation',
+                         'trg_evidence_processing_release_waiters', 'trg_collection_jobs_release_waiters')),
                    (SELECT count(*) FROM pg_proc WHERE proname IN
-                        ('civic_lens_notify_work_change', 'civic_lens_notify_analysis_change', 'civic_lens_release_predecessor_waiters'))
+                        ('civic_lens_notify_work_change', 'civic_lens_notify_analysis_change'))
             """, connection);
         await using var reader = await command.ExecuteReaderAsync();
         Assert.True(await reader.ReadAsync());
-        Assert.Equal((0L, 0L, 3L), (reader.GetInt64(0), reader.GetInt64(1), reader.GetInt64(2)));
+        Assert.Equal((0L, 0L, 2L), (reader.GetInt64(0), reader.GetInt64(1), reader.GetInt64(2)));
     }
 
     private async Task<CollectionResult> CapturedReceiptAsync(CollectionRequest request)

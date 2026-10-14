@@ -3,8 +3,7 @@ namespace CivicLens.Application.Collection.Processing;
 public interface IEvidenceProcessingStore
 {
     Task<IReadOnlyList<EvidenceProcessingRecord>> GetEligibleAsync(int limit, CancellationToken cancellationToken);
-    Task<EvidenceProcessingRecord?> GetByAttemptIdAsync(string attemptId, CancellationToken cancellationToken);
-    Task<bool> IsAwaitingPreparationAsync(string attemptId, CancellationToken cancellationToken);
+    Task<bool> IsPredecessorSettledAsync(string attemptId, CancellationToken cancellationToken);
     Task<IReadOnlyList<EvidenceProcessingRecord>> GetByJobIdsAsync(IReadOnlyList<string> jobIds,
         CancellationToken cancellationToken);
     Task<IReadOnlyList<CollectionChangeEvent>> ListRecentChangesAsync(int limit, CancellationToken cancellationToken);

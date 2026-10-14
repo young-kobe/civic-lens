@@ -9,7 +9,6 @@ internal static class PostgresAdvisoryLock
 {
     // A transaction that holds several keys takes them in this declaration order.
     internal const string CollectionJobs = "civic-lens-collection-jobs";
-    internal const string EvidencePredecessorScope = "civic-lens-evidence-predecessor:";
     internal const string DocumentChangeReview = "civic-lens-document-change-review";
     internal const string StatementReview = "civic-lens-statement-review";
     internal const string ActionReview = "civic-lens-action-review";
@@ -21,8 +20,6 @@ internal static class PostgresAdvisoryLock
     private const string AcquireSql = "SELECT pg_advisory_xact_lock(hashtextextended(@key, 0))";
 
     internal static readonly IReadOnlyList<string> ReviewKeysInOrder = [DocumentChangeReview, StatementReview, ActionReview];
-
-    internal static string EvidencePredecessor(string attemptId) => EvidencePredecessorScope + attemptId;
 
     internal static Task AcquireAsync(DbContext db, string key, CancellationToken cancellationToken) =>
         db.Database.ExecuteSqlRawAsync(AcquireSql, [new NpgsqlParameter("key", key)], cancellationToken);

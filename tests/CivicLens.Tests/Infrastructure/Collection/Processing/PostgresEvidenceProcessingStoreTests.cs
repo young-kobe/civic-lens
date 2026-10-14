@@ -86,51 +86,123 @@ public sealed class PostgresEvidenceProcessingStoreTests(PostgresCollection post
     }
 
     [Fact]
-    public async Task ComparisonParksUntilPredecessorExtractionIsSavedThenBecomesEligible()
+    public async Task AParkedComparisonBecomesDueWhenThePredecessorExtractionIsSaved()
     {
-        await SeedCapturedAttemptAsync("prior-job", "prior-attempt", "senator-page", "https://example.test/page");
-        await SeedCapturedAttemptAsync("current-job", "current-attempt", "senator-page", "https://example.test/page");
-        await DeleteExtractionAsync("prior-attempt");
-        _ = await store.EnsureAsync("prior-job", "prior-attempt", "senator-page", "https://example.test/page", default);
-        _ = await store.EnsureAsync("current-job", "current-attempt", "senator-page", "https://example.test/page", default);
-        await AdvanceCurrentToComparisonAsync();
-        var comparisonClaim = await store.TryClaimAsync("current-job", "current-attempt", TimeSpan.FromSeconds(30), default);
-        Assert.NotNull(comparisonClaim);
-
-        Assert.True(await store.WaitForPredecessorAsync(comparisonClaim, "prior-attempt", default));
-        var parked = Assert.Single(await store.GetByJobIdsAsync(["current-job"], default));
+        await SeedPriorWithoutExtractionAsync();
+        var claim = await ClaimCurrentComparisonAsync();
+        Assert.True(await store.WaitForPredecessorAsync(claim, "prior-attempt", default));
+        var parked = await RecordAsync("current-job", "current-attempt");
         Assert.Equal(EvidenceProcessingStatus.WaitingForPredecessor, parked.Status);
-        Assert.Equal("prior-attempt", parked.PredecessorAttemptId);
-        Assert.DoesNotContain(await store.GetEligibleAsync(10, default), row => row.AttemptId == "current-attempt");
+        Assert.False(await IsCurrentDueAsync());
 
         await RestoreExtractionAsync("prior-attempt");
-        await AdvanceAttemptToComparisonAsync("prior-job", "prior-attempt");
-        Assert.Contains(await store.GetEligibleAsync(10, default), row => row.AttemptId == "current-attempt" &&
-            row.Status == EvidenceProcessingStatus.Pending && row.PredecessorAttemptId is null);
+
+        Assert.True(await IsCurrentDueAsync());
+        var reclaimed = await store.TryClaimAsync("current-job", "current-attempt", TimeSpan.FromSeconds(30), default);
+        Assert.NotNull(reclaimed);
+        Assert.Equal(EvidenceProcessingStatus.Running, reclaimed.Record.Status);
+    }
+
+    [Theory]
+    [InlineData("Succeeded")]
+    [InlineData("Blocked")]
+    [InlineData("Failed")]
+    public async Task ATerminalPredecessorProcessingRowWithoutAnExtractionReleasesTheWaiter(string status)
+    {
+        await SeedPriorWithoutExtractionAsync();
+        _ = await store.EnsureAsync("prior-job", "prior-attempt", "senator-page", "https://example.test/page", default);
+        await ParkCurrentOnPriorAsync();
+
+        await SqlAsync($"UPDATE evidence_processing SET stage = 'Complete', status = '{status}' WHERE attempt_id = 'prior-attempt'");
+
+        Assert.True(await IsCurrentDueAsync());
+    }
+
+    [Theory]
+    [InlineData("Failed")]
+    [InlineData("Cancelled")]
+    public async Task AFailedOrCancelledPredecessorJobReleasesTheWaiter(string state)
+    {
+        await SeedPriorWithoutExtractionAsync();
+        await ParkCurrentOnPriorAsync();
+
+        await SqlAsync($"UPDATE collection_jobs SET state = '{state}' WHERE job_id = 'prior-job'");
+
+        Assert.True(await IsCurrentDueAsync());
     }
 
     [Fact]
-    public async Task ComparisonDoesNotParkWhenPredecessorExtractionWonRace()
+    public async Task ATerminalPreparationWithoutAChildRowReleasesTheWaiter()
     {
-        await SeedCapturedAttemptAsync("prior-job", "prior-attempt", "senator-page", "https://example.test/page");
-        await SeedCapturedAttemptAsync("current-job", "current-attempt", "senator-page", "https://example.test/page");
-        _ = await store.EnsureAsync("prior-job", "prior-attempt", "senator-page", "https://example.test/page", default);
-        _ = await store.EnsureAsync("current-job", "current-attempt", "senator-page", "https://example.test/page", default);
-        await AdvanceAttemptToComparisonAsync("prior-job", "prior-attempt");
-        await AdvanceCurrentToComparisonAsync();
-        var comparisonClaim = await store.TryClaimAsync("current-job", "current-attempt", TimeSpan.FromSeconds(30), default);
-        Assert.NotNull(comparisonClaim);
+        await SeedPriorWithoutExtractionAsync();
+        await InsertPreparationAsync("prior-job", "senator-page", "https://example.test/page");
+        await ParkCurrentOnPriorAsync();
 
-        Assert.True(await store.WaitForPredecessorAsync(comparisonClaim, "prior-attempt", default));
-        var requeued = Assert.Single(await store.GetByJobIdsAsync(["current-job"], default));
-        Assert.Equal(EvidenceProcessingStatus.Pending, requeued.Status);
-        Assert.Null(requeued.PredecessorAttemptId);
+        await CompletePrepAsync("prior-job", EvidenceProcessingOutcome.Prepared, 0, 0, 0);
+
+        Assert.True(await IsCurrentDueAsync());
+    }
+
+    [Fact]
+    public async Task APredecessorThatNoJobOwnsCameFromADirectImportAndNeverHoldsTheWaiter()
+    {
+        await SeedPriorWithoutExtractionAsync();
+        await ParkCurrentOnPriorAsync();
+
+        await SqlAsync("DELETE FROM collection_job_attempts WHERE attempt_id = 'prior-attempt'");
+
+        Assert.True(await IsCurrentDueAsync());
+    }
+
+    [Theory]
+    [InlineData("no preparation row")]
+    [InlineData("pending preparation")]
+    [InlineData("pending child after preparation")]
+    [InlineData("retrying child")]
+    public async Task AnUnsettledPredecessorKeepsTheWaiterParkedAndUnclaimable(string predecessor)
+    {
+        await SeedPriorWithoutExtractionAsync();
+        if (predecessor != "no preparation row")
+            await InsertPreparationAsync("prior-job", "senator-page", "https://example.test/page");
+        if (predecessor is "pending child after preparation" or "retrying child")
+        {
+            await CompletePrepAsync("prior-job", EvidenceProcessingOutcome.Prepared, 1, 0, 0);
+            _ = await store.EnsureAsync("prior-job", "prior-attempt", "senator-page", "https://example.test/page", default);
+        }
+        if (predecessor == "retrying child")
+            await SqlAsync("UPDATE evidence_processing SET status = 'RetryWaiting', retry_at = 0 WHERE attempt_id = 'prior-attempt'");
+        await ParkCurrentOnPriorAsync();
+
+        Assert.False(await store.IsPredecessorSettledAsync("prior-attempt", default));
+        Assert.False(await IsCurrentDueAsync());
+        Assert.Null(await store.TryClaimAsync("current-job", "current-attempt", TimeSpan.FromSeconds(30), default));
+    }
+
+    [Fact]
+    public async Task APredecessorThatSettlesBetweenTheReadAndTheParkStillWakesAndReleasesTheWaiter()
+    {
+        await SeedPriorWithoutExtractionAsync();
+        var claim = await ClaimCurrentComparisonAsync();
+        Assert.False(await store.IsPredecessorSettledAsync("prior-attempt", default));
+        await RestoreExtractionAsync("prior-attempt");
+        await using var listener = new NpgsqlConnection(connectionString);
+        await listener.OpenAsync();
+        await using (var listen = new NpgsqlCommand("LISTEN civic_lens_work", listener))
+            await listen.ExecuteNonQueryAsync();
+
+        Assert.True(await store.WaitForPredecessorAsync(claim, "prior-attempt", default));
+
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        await listener.WaitAsync(timeout.Token);
+        Assert.True(await IsCurrentDueAsync());
+        Assert.NotNull(await store.TryClaimAsync("current-job", "current-attempt", TimeSpan.FromSeconds(30), default));
     }
 
     [Fact]
     public async Task FullBatchOfParkedComparisonsLeavesCapacityForPreparation()
     {
         await SeedCapturedAttemptAsync("prior-job", "prior-attempt", "senator-page", "https://example.test/page");
+        await DeleteExtractionAsync("prior-attempt");
         await InsertPreparationAsync("prior-job", "senator-page", "https://example.test/page");
         var claims = new List<EvidenceProcessingClaim>();
         for (var index = 0; index < 3; index++)
@@ -150,7 +222,7 @@ public sealed class PostgresEvidenceProcessingStoreTests(PostgresCollection post
             Assert.NotNull(claim);
             claims.Add(claim);
             Assert.True(await store.WaitForPredecessorAsync(claim, "prior-attempt", default));
-            Assert.Equal(0, (await store.GetByAttemptIdAsync(record.AttemptId, default))!.Attempts);
+            Assert.Equal(0, (await RecordAsync(record.JobId, record.AttemptId)).Attempts);
         }
 
         var preparation = Assert.Single(await store.GetEligibleAsync(3, default));
@@ -163,60 +235,53 @@ public sealed class PostgresEvidenceProcessingStoreTests(PostgresCollection post
     [Fact]
     public async Task ConcurrentPreparationCompletionCannotLoseDependencyRelease()
     {
-        await SeedCapturedAttemptAsync("prior-job", "prior-attempt", "senator-page", "https://example.test/page");
+        await SeedPriorWithoutExtractionAsync();
         await InsertPreparationAsync("prior-job", "senator-page", "https://example.test/page");
-        await SeedCapturedAttemptAsync("current-job", "current-attempt", "senator-page", "https://example.test/page");
-        _ = await store.EnsureAsync("current-job", "current-attempt", "senator-page", "https://example.test/page", default);
-        await AdvanceCurrentToComparisonAsync();
-        var claim = await store.TryClaimAsync("current-job", "current-attempt", TimeSpan.FromSeconds(30), default);
-        Assert.NotNull(claim);
+        var claim = await ClaimCurrentComparisonAsync();
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         var parking = store.WaitForPredecessorAsync(claim, "prior-attempt", timeout.Token);
         await Task.WhenAll(parking, CompletePrepAsync("prior-job", EvidenceProcessingOutcome.Prepared, 0, 0, 0))
             .WaitAsync(timeout.Token);
         Assert.True(await parking);
-        var record = await store.GetByAttemptIdAsync("current-attempt", default);
-        Assert.Equal(EvidenceProcessingStatus.Pending, record!.Status);
-        Assert.Null(record.PredecessorAttemptId);
+        Assert.True(await IsCurrentDueAsync());
     }
 
-    [Fact]
-    public async Task ParkingWaitsForTheReleaseTriggerOnTheSamePredecessorKeySoNoReleaseIsLost()
+    private async Task<EvidenceProcessingClaim> ClaimCurrentComparisonAsync()
     {
-        await SeedCapturedAttemptAsync("prior-job", "prior-attempt", "senator-page", "https://example.test/page");
-        await InsertPreparationAsync("prior-job", "senator-page", "https://example.test/page");
         await SeedCapturedAttemptAsync("current-job", "current-attempt", "senator-page", "https://example.test/page");
         _ = await store.EnsureAsync("current-job", "current-attempt", "senator-page", "https://example.test/page", default);
         await AdvanceCurrentToComparisonAsync();
         var claim = await store.TryClaimAsync("current-job", "current-attempt", TimeSpan.FromSeconds(30), default);
         Assert.NotNull(claim);
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-        await using var releasing = new NpgsqlConnection(connectionString);
-        await releasing.OpenAsync(timeout.Token);
-        await using var release = await releasing.BeginTransactionAsync(timeout.Token);
-        await using (var complete = new NpgsqlCommand("""
-            UPDATE evidence_processing SET stage = 'Complete', status = 'Succeeded', outcome = 'Prepared'
-             WHERE job_id = 'prior-job' AND attempt_id = 'prepare'
-            """, releasing, release))
-            Assert.Equal(1, await complete.ExecuteNonQueryAsync(timeout.Token));
-
-        var parking = store.WaitForPredecessorAsync(claim, "prior-attempt", timeout.Token);
-        await using (var observer = new NpgsqlConnection(connectionString))
-        {
-            await observer.OpenAsync(timeout.Token);
-            await using var blocked = new NpgsqlCommand(
-                "SELECT EXISTS (SELECT 1 FROM pg_locks WHERE locktype = 'advisory' AND NOT granted)", observer);
-            while (!(bool)(await blocked.ExecuteScalarAsync(timeout.Token))!)
-                await Task.Delay(10, timeout.Token);
-        }
-        Assert.False(parking.IsCompleted);
-        await release.CommitAsync(timeout.Token);
-
-        Assert.True(await parking.WaitAsync(timeout.Token));
-        var record = await store.GetByAttemptIdAsync("current-attempt", default);
-        Assert.Equal(EvidenceProcessingStatus.Pending, record!.Status);
-        Assert.Null(record.PredecessorAttemptId);
+        return claim;
     }
+
+    private async Task SeedPriorWithoutExtractionAsync()
+    {
+        await SeedCapturedAttemptAsync("prior-job", "prior-attempt", "senator-page", "https://example.test/page");
+        await DeleteExtractionAsync("prior-attempt");
+    }
+
+    private async Task SqlAsync(string sql)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(sql, connection);
+        await command.ExecuteNonQueryAsync();
+    }
+
+    private async Task ParkCurrentOnPriorAsync()
+    {
+        var claim = await ClaimCurrentComparisonAsync();
+        Assert.True(await store.WaitForPredecessorAsync(claim, "prior-attempt", default));
+        Assert.False(await IsCurrentDueAsync());
+    }
+
+    private async Task<bool> IsCurrentDueAsync() =>
+        (await store.GetEligibleAsync(10, default)).Any(record => record.AttemptId == "current-attempt");
+
+    private async Task<EvidenceProcessingRecord> RecordAsync(string jobId, string attemptId) =>
+        Assert.Single(await store.GetByJobIdsAsync([jobId], default), record => record.AttemptId == attemptId);
 
     private async Task AdvanceCurrentToComparisonAsync()
         => await AdvanceAttemptToComparisonAsync("current-job", "current-attempt");

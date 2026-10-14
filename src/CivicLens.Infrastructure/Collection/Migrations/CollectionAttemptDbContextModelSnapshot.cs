@@ -1592,7 +1592,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.HasKey("JobId", "AttemptId");
 
-                    b.HasIndex("PredecessorAttemptId", "Status");
+                    b.HasIndex("AttemptId");
 
                     b.HasIndex("JobId", "Stage", "Status");
 

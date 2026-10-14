@@ -306,8 +306,6 @@ public sealed partial class PostgresCollectionJobStore(IDbContextFactory<Collect
     private static async Task EnqueuePreparationAsync(CollectionAttemptDbContext db, JobRow job,
         CollectionJobDefinition definition, CancellationToken cancellationToken)
     {
-        // Flush the state change first. The waiter-release triggers then see the same order as before.
-        await db.SaveChangesAsync(cancellationToken);
         _ = await db.Database.ExecuteSqlInterpolatedAsync($"""
             INSERT INTO evidence_processing (job_id, attempt_id, source_id, requested_url, stage, status,
                 fence, attempts, admitted_count, deferred_count, duplicate_count)

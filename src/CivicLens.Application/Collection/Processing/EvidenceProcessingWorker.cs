@@ -150,7 +150,7 @@ public sealed class EvidenceProcessingWorker(
         var snapshot = await ReadComparisonHistoryAsync(record, cancellationToken);
         var predecessorAttemptId = snapshot.PreviousCapture?.AttemptId;
         if (predecessorAttemptId is not null &&
-            await IsPredecessorPendingAsync(predecessorAttemptId, cancellationToken))
+            !await processing.IsPredecessorSettledAsync(predecessorAttemptId, cancellationToken))
         {
             if (!await processing.WaitForPredecessorAsync(claim, predecessorAttemptId, cancellationToken))
                 throw new OperationCanceledException("Processing lease was lost.");
@@ -219,17 +219,6 @@ public sealed class EvidenceProcessingWorker(
 
     private sealed record ComparisonHistorySnapshot(Core.Documents.DocumentExtraction Current,
         DocumentHistoryObservation? Previous, CapturedAttemptResult? PreviousCapture);
-
-    private async Task<bool> IsPredecessorPendingAsync(string predecessorAttemptId,
-        CancellationToken cancellationToken)
-    {
-        var predecessor = await processing.GetByAttemptIdAsync(predecessorAttemptId, cancellationToken);
-        if (predecessor?.ExtractionId is not null) return false;
-        if (predecessor?.Status is EvidenceProcessingStatus.Pending or EvidenceProcessingStatus.Running or
-            EvidenceProcessingStatus.RetryWaiting or EvidenceProcessingStatus.WaitingForPredecessor)
-            return true;
-        return predecessor is null && await processing.IsAwaitingPreparationAsync(predecessorAttemptId, cancellationToken);
-    }
 
     private async Task CompleteAsync(EvidenceProcessingClaim claim, EvidenceProcessingStage stage,
         EvidenceProcessingStatus status, EvidenceProcessingOutcome outcome, string? errorCode,
