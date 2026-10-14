@@ -27,7 +27,7 @@ public sealed partial class PostgresCollectionJobStore : IBillStreamAdmissionSto
             if (result.DeferredCount > 0)
                 throw new InvalidDataException($"Source '{source.SourceId}' admission policy cannot hold a full bill list page.");
             var admittedBills = admitted.Count(item => item.Job != admission.NextPage);
-            await RecordPassAsync(db, listJobId, admission, admittedBills, now, cancellationToken);
+            await RecordPassAsync(db, listJobId, admission, admittedBills, page.UnknownTypeCount, now, cancellationToken);
             return result;
         }, cancellationToken);
     }
@@ -65,10 +65,11 @@ public sealed partial class PostgresCollectionJobStore : IBillStreamAdmissionSto
     }
 
     private static async Task RecordPassAsync(CollectionAttemptDbContext db, string listJobId,
-        BillStreamAdmission admission, int admittedBills, DateTimeOffset now, CancellationToken cancellationToken)
+        BillStreamAdmission admission, int admittedBills, int unknownTypeCount, DateTimeOffset now,
+        CancellationToken cancellationToken)
     {
         if (await db.Set<BillStreamPageRow>().AnyAsync(row => row.ListJobId == listJobId, cancellationToken)) return;
-        db.Add(new BillStreamPageRow { ListJobId = listJobId, RecordedAtUtcTicks = Ticks(now) });
+        db.Add(new BillStreamPageRow { ListJobId = listJobId, RecordedAtUtcTicks = Ticks(now), UnknownTypeCount = unknownTypeCount });
         var cursor = await db.Set<BillStreamCursorRow>().SingleOrDefaultAsync(
             row => row.SourceId == admission.SourceId, cancellationToken);
         if (cursor is null)

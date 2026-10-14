@@ -46,10 +46,17 @@ public sealed class CongressBillListParserTests
     }
 
     [Fact]
-    public void UnknownBillTypeIsInvalidBecauseItWouldBuildAnUnknownDetailUrl()
+    public void UnknownBillTypesAreSkippedAndCountedSoOneOddRecordCannotBlockTheWindowOrBuildADetailUrl()
     {
-        Assert.Throws<InvalidDataException>(() => Parse(
-            """{"bills":[{"congress":119,"type":"../x","number":"1","updateDate":"2025-01-03"}],"pagination":{}}"""));
+        var page = Parse("""
+            {"bills":[{"congress":119,"type":"../x","number":"1","updateDate":"2025-01-03"},
+                      {"congress":17,"type":"CEN_DOC_H","number":"2","updateDate":"2025-01-03"},
+                      {"congress":119,"type":"HR","number":"5","updateDate":"2025-01-03"}],
+             "pagination":{}}
+            """);
+
+        Assert.Equal([new CongressBillListItem(119, "hr", 5, new DateOnly(2025, 1, 3))], page.Bills);
+        Assert.Equal(2, page.UnknownTypeCount);
     }
 
     [Fact]

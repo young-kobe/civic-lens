@@ -633,11 +633,17 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("recorded_at_utc_ticks");
 
+                    b.Property<int>("UnknownTypeCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("unknown_type_count");
+
                     b.HasKey("ListJobId");
 
                     b.ToTable("bill_stream_pages", null, t =>
                         {
                             t.HasCheckConstraint("ck_bill_stream_pages_recorded", "recorded_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
+
+                            t.HasCheckConstraint("ck_bill_stream_pages_unknown_types", "unknown_type_count >= 0");
                         });
                 });
 

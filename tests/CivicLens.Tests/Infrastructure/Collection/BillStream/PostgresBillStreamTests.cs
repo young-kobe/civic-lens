@@ -101,6 +101,17 @@ public sealed class PostgresBillStreamTests(PostgresCollection postgres) : IAsyn
     }
 
     [Fact]
+    public async Task ListPageRecordsHowManyUnknownBillTypesItSkippedSoTheExclusionStaysVisible()
+    {
+        var window = new BillStreamWindow(Backfill, Backfill.AddDays(1));
+
+        await AdmitAsync(Source(), "odd-types", window,
+            new CongressBillListPage([Bill(119, 1)], null, StartsPass: true, UnknownTypeCount: 2));
+
+        Assert.Equal(2, await ScalarAsync("SELECT unknown_type_count FROM bill_stream_pages"));
+    }
+
+    [Fact]
     public async Task ListPageAdmitsRecentBillsOnlyOnceAndLeavesTheCursorUntilAPassAdmitsNothingNew()
     {
         var source = Source();
