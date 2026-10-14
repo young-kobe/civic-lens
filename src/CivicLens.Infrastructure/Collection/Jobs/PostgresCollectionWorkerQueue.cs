@@ -27,7 +27,8 @@ public sealed class PostgresCollectionWorkerQueue(IDbContextFactory<CollectionAt
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         var nowTicks = (await DatabaseClock.ReadAsync(db, cancellationToken)).Ticks;
 
-        var query = db.Set<JobRow>().AsNoTracking().Where(row =>
+        var jobs = PostgresCollectionJobStore.WherePacingOpen(db.Set<JobRow>(), db.Set<JobOriginRow>(), nowTicks);
+        var query = jobs.AsNoTracking().Where(row =>
             (row.LeaseExpiresAt == null || row.LeaseExpiresAt <= nowTicks) &&
             (row.State == CollectionJobState.Pending || row.State == CollectionJobState.Running ||
              row.State == CollectionJobState.WaitingToRetry && (row.RetryAt == null || row.RetryAt <= nowTicks)));

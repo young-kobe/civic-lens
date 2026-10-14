@@ -5,13 +5,14 @@ namespace CivicLens.Collection.Contracts;
 
 public static class CollectionProtocol
 {
-    public const int Version = 9;
+    public const int Version = 10;
     public const int OldestReadableVersion = 7;
     public const int SchemeUpgradeVersion = 8;
     public const int ApiVersion = 9;
+    public const int RobotsCacheVersion = 10;
     public const long MaximumCrawlDelayMilliseconds = (long.MaxValue / TimeSpan.TicksPerSecond) * 1000;
 
-    public static bool IsReadable(int version) => version is OldestReadableVersion or Version;
+    public static bool IsReadable(int version) => version is OldestReadableVersion or ApiVersion or Version;
     public const int MaximumManifestBytes = 64 * 1024;
     // A page receipt repeats request identity and URLs and adds escaped response metadata.
     public const int MaximumPageReceiptSize = 1024 * 1024;

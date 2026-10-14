@@ -183,6 +183,16 @@
       }
     }
   ],
+  "pacingGroups": [
+    {
+      "hostSuffix": "house.gov",
+      "minDelayMilliseconds": 3000
+    },
+    {
+      "hostSuffix": "senate.gov",
+      "minDelayMilliseconds": 3000
+    }
+  ],
   "documentProfiles": [
     {
       "id": "senate-main",

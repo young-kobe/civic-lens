@@ -974,6 +974,10 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("text")
                         .HasColumnName("lease_token");
 
+                    b.Property<string>("PacingKey")
+                        .HasColumnType("text")
+                        .HasColumnName("pacing_key");
+
                     b.Property<long?>("RetryAt")
                         .HasColumnType("bigint")
                         .HasColumnName("retry_at");

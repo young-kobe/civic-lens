@@ -14,7 +14,15 @@ public sealed record CollectionConfiguration
     public int Version { get; init; } = 2;
     public required PersonConfiguration[] People { get; init; }
     public required WatchedSourceConfiguration[] Sources { get; init; }
+    public PacingGroupConfiguration[]? PacingGroups { get; init; }
     public DocumentProfileConfiguration[]? DocumentProfiles { get; init; }
+
+    public PacingGroupConfiguration? PacingGroupOf(string allowedOrigin)
+    {
+        if (PacingGroups is null) return null;
+        var host = new Uri(allowedOrigin).IdnHost.ToLowerInvariant();
+        return PacingGroups.Where(group => group.Matches(host)).MaxBy(group => group.HostSuffix.Length);
+    }
 
     public void Validate()
     {
@@ -48,6 +56,8 @@ public sealed record CollectionConfiguration
                     throw new ArgumentException($"Duplicate document profile ID '{profile.Id}'.");
             }
         }
+
+        ValidatePacingGroups();
 
         var sourceUrls = new HashSet<Uri>();
         foreach (var source in Sources)
@@ -189,6 +199,20 @@ public sealed record CollectionConfiguration
             if (ranges.Any(existing => existing.Overlaps(range)))
                 throw new ArgumentException($"Source '{source.Id}' has overlapping coverage intervals for person '{item.PersonId}'.");
             ranges.Add(range);
+        }
+    }
+
+    private void ValidatePacingGroups()
+    {
+        if (PacingGroups is null) return;
+        var suffixes = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var group in PacingGroups)
+        {
+            if (group is null)
+                throw new ArgumentException("Pacing groups cannot contain null entries.");
+            group.Validate();
+            if (!suffixes.Add(group.HostSuffix))
+                throw new ArgumentException($"Duplicate pacing group '{group.HostSuffix}'.");
         }
     }
 

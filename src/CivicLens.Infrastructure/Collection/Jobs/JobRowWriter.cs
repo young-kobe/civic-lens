@@ -20,6 +20,7 @@ internal sealed class JobRowWriter(CollectionAttemptDbContext db, long createdAt
             IdempotencyKey = idempotencyKey,
             DefinitionJson = StoredJobDefinition.Write(definition),
             ConfigurationRevisionId = await StoreAsync(definition.ConfigurationRevision, cancellationToken),
+            PacingKey = PostgresCollectionJobStore.PacingKeyOf(definition),
             State = CollectionJobState.Pending,
             CreatedAt = createdAt
         };

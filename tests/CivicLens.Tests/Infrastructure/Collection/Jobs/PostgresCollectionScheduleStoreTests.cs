@@ -66,6 +66,33 @@ public sealed class PostgresCollectionScheduleStoreTests(PostgresCollection post
         Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM collection_configuration_revisions"));
     }
 
+    [Fact]
+    public async Task FreshStartSpreadsFirstDueTimesInsteadOfBurstingAndRestartKeepsThem()
+    {
+        var template = Configuration(intervalSeconds: 21600).Sources[0];
+        var sources = Enumerable.Range(0, 30).Select(index => template with
+        {
+            Id = $"member-{index}",
+            Url = $"https://member{index}.example.test/about",
+            AllowedOrigin = $"https://member{index}.example.test"
+        }).ToArray();
+        var configuration = Configuration() with { Sources = sources };
+        var before = DateTimeOffset.UtcNow;
+
+        await store.SynchronizeAsync(configuration, default);
+
+        var dues = new Dictionary<string, long>();
+        foreach (var source in sources) dues[source.Id] = await ReadNextDueAsync(source.Id);
+        foreach (var source in sources)
+            Assert.InRange(dues[source.Id], before.Add(source.InitialDueOffset()).UtcTicks - TimeSpan.TicksPerSecond * 5,
+                DateTimeOffset.UtcNow.Add(source.InitialDueOffset()).UtcTicks + TimeSpan.TicksPerSecond * 5);
+        Assert.True(dues.Values.Distinct().Count() > 20);
+        Assert.True(dues.Values.Max() <= DateTimeOffset.UtcNow.AddHours(1).UtcTicks);
+
+        await store.SynchronizeAsync(configuration, default);
+        foreach (var source in sources) Assert.Equal(dues[source.Id], await ReadNextDueAsync(source.Id));
+    }
+
     private async Task<object?> ScalarAsync(string sql)
     {
         await using var connection = new NpgsqlConnection(connectionString);
@@ -92,7 +119,7 @@ public sealed class PostgresCollectionScheduleStoreTests(PostgresCollection post
     [Fact]
     public async Task ConcurrentSchedulersAdmitOnlyOneRootJob()
     {
-        await store.SynchronizeAsync(Configuration(intervalSeconds: 60), default);
+        await SynchronizeDueAsync(Configuration(intervalSeconds: 60));
         var admitted = await Task.WhenAll(store.AdvanceDueAsync(10, default), store.AdvanceDueAsync(10, default));
 
         Assert.Equal(1, admitted.Sum());
@@ -103,7 +130,7 @@ public sealed class PostgresCollectionScheduleStoreTests(PostgresCollection post
     public async Task ActiveManualRootJobConsumesDueSlotWithoutScheduledDuplicate()
     {
         var configuration = Configuration(intervalSeconds: 60);
-        await store.SynchronizeAsync(configuration, default);
+        await SynchronizeDueAsync(configuration);
         var configured = new ConfiguredCollectionSource(configuration, "senate");
         await store.EnqueueAsync(configured, "manual-request", default);
 
@@ -128,7 +155,7 @@ public sealed class PostgresCollectionScheduleStoreTests(PostgresCollection post
     [Fact]
     public async Task NoCoverageOnDatabaseAdmissionDateConsumesSlotWithoutCreatingJob()
     {
-        await store.SynchronizeAsync(Configuration(coverageStartsOn: DateOnly.MaxValue), default);
+        await SynchronizeDueAsync(Configuration(coverageStartsOn: DateOnly.MaxValue));
 
         Assert.Equal(1, await store.AdvanceDueAsync(10, default));
         Assert.Empty(await store.ListAsync(10, default));
@@ -166,7 +193,7 @@ public sealed class PostgresCollectionScheduleStoreTests(PostgresCollection post
                 Coverage = [new SourceCoverageConfiguration { PersonId = "person" }]
             }]
         };
-        await store.SynchronizeAsync(configuration, default);
+        await SynchronizeDueAsync(configuration);
         var pipeline = new CollectionJobWorker(new EmptyQueue(),
             new RunCollectionJob(null!, null!, null!, null!, null!), schedules: store);
 
@@ -207,6 +234,13 @@ public sealed class PostgresCollectionScheduleStoreTests(PostgresCollection post
             People = [new PersonConfiguration { Id = "person", Name = "Person" }],
             Sources = withSource ? [source] : []
         };
+    }
+
+    private async Task SynchronizeDueAsync(CollectionConfiguration configuration)
+    {
+        await store.SynchronizeAsync(configuration, default);
+        await ExecuteAsync("UPDATE collection_source_schedules SET next_due_utc_ticks = @due",
+            ("due", DateTimeOffset.UtcNow.AddMinutes(-1).UtcTicks));
     }
 
     private async Task<long> ReadNextDueAsync(string sourceId) =>

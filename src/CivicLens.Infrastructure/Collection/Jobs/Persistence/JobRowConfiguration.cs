@@ -17,6 +17,7 @@ internal sealed class JobRowConfiguration : IEntityTypeConfiguration<JobRow>
         builder.Property(row => row.IdempotencyKey).HasColumnName("idempotency_key");
         builder.Property(row => row.DefinitionJson).HasColumnName("definition_json");
         builder.Property(row => row.ConfigurationRevisionId).HasColumnName("configuration_revision_id").HasMaxLength(64);
+        builder.Property(row => row.PacingKey).HasColumnName("pacing_key");
         builder.Property(row => row.State).HasColumnName("state");
         builder.Property(row => row.CreatedAt).HasColumnName("created_at");
         builder.Property(row => row.RetryAt).HasColumnName("retry_at");

@@ -74,10 +74,10 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
         var options = new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options;
         await using var db = new CollectionAttemptDbContext(options);
         await db.GetService<IMigrator>().MigrateAsync("20261008190000_DurableEvidenceProcessing");
-        await db.Database.ExecuteSqlRawAsync("ALTER TABLE collection_jobs ADD COLUMN configuration_revision_id text");
+        await db.Database.ExecuteSqlRawAsync("ALTER TABLE collection_jobs ADD COLUMN configuration_revision_id text, ADD COLUMN pacing_key text");
         var beforeJob = await CollectAsync("earlier", "Earlier wording.", legacySchema: true);
         var afterJob = await CollectAsync("later", "Later wording.", legacySchema: true);
-        await db.Database.ExecuteSqlRawAsync("ALTER TABLE collection_jobs DROP COLUMN configuration_revision_id");
+        await db.Database.ExecuteSqlRawAsync("ALTER TABLE collection_jobs DROP COLUMN configuration_revision_id, DROP COLUMN pacing_key");
         var beforeAttempt = Assert.Single(beforeJob.Attempts).AttemptId;
         var afterAttempt = Assert.Single(afterJob.Attempts).AttemptId;
 

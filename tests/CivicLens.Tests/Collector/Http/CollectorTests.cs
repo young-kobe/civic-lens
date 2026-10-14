@@ -624,7 +624,6 @@ public sealed class CollectorTests
                 response.Content.Headers.TryAddWithoutValidation("Content-Type", "text/plain; charset=iso-8859-1");
                 return response;
             },
-            _ => Response(HttpStatusCode.NotFound),
             _ =>
             {
                 var response = Response(HttpStatusCode.OK, payload);
@@ -668,7 +667,7 @@ public sealed class CollectorTests
         Assert.Equal(CollectionFailureCode.InvalidResponse, result.FailureCode);
         Assert.Null(result.Capture);
         Assert.Null(result.Response);
-        Assert.Empty(Directory.GetFiles(directory.Path));
+        Assert.Empty(CaptureFiles(directory.Path));
     }
 
     [Fact]
@@ -686,7 +685,7 @@ public sealed class CollectorTests
         var result = await collector.FetchAsync(Request(directory.Path));
         Assert.Equal(CollectionFailureCode.InvalidResponse, result.FailureCode);
         Assert.Null(result.Capture);
-        Assert.Empty(Directory.GetFiles(directory.Path));
+        Assert.Empty(CaptureFiles(directory.Path));
     }
 
     [Fact]
@@ -1247,7 +1246,7 @@ public sealed class CollectorTests
         using var collector = new HttpCollector(handler);
         var result = await collector.FetchAsync(Request(directory) with { MaxBytes = 10 });
         Assert.Equal(CollectionFailureCode.Oversized, result.FailureCode);
-        Assert.Empty(Directory.GetFiles(directory));
+        Assert.Empty(CaptureFiles(directory));
     }
 
     [Fact]
@@ -1259,7 +1258,7 @@ public sealed class CollectorTests
         using var collector = new HttpCollector(handler);
         var result = await collector.FetchAsync(Request(directory));
         Assert.Equal(CollectionFailureCode.IncompleteResponse, result.FailureCode);
-        Assert.Empty(Directory.GetFiles(directory));
+        Assert.Empty(CaptureFiles(directory));
     }
 
     [Fact]
@@ -1271,7 +1270,7 @@ public sealed class CollectorTests
         using var collector = new HttpCollector(handler);
         var result = await collector.FetchAsync(Request(directory), cts.Token);
         Assert.Equal(CollectionFailureCode.Cancelled, result.FailureCode);
-        Assert.Empty(Directory.GetFiles(directory));
+        Assert.Empty(CaptureFiles(directory));
     }
 
     private const string ApiKey = "api-key-for-tests-0123456789";
@@ -1429,6 +1428,8 @@ public sealed class CollectorTests
         MaxBytes = 1000,
         MinDelayMilliseconds = 0
     };
+    private static string[] CaptureFiles(string directory) =>
+        Directory.GetFiles(directory).Where(path => !Path.GetFileName(path).StartsWith("robots-", StringComparison.Ordinal)).ToArray();
     private sealed class TemporaryDirectory : IDisposable
     {
         public string Path { get; } = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "collector-" + Guid.NewGuid().ToString("N"));

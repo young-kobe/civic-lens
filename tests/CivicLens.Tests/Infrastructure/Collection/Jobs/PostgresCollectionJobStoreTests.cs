@@ -231,13 +231,159 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
         Assert.Equal(2, completed.Job.ReservedRequests);
         Assert.Equal(0, completed.Job.ReservedBytes);
         Assert.Equal(10, completed.Job.ReservedTimeoutSeconds);
-        var other = await EnqueueClaimAsync("same-origin", Definition());
-        var blocked = await jobs.TryStartAttemptAsync(other.Lease, root, default);
-        Assert.Equal(CollectionJobBlockReason.OriginBackoff, blocked.BlockReason);
-        Assert.True(blocked.RetryAt > DateTimeOffset.UtcNow.AddSeconds(50));
+        Assert.True(await UnclaimableUntilAsync("same-origin", Definition()) > DateTimeOffset.UtcNow.AddSeconds(50));
         var unrelated = await EnqueueClaimAsync("unrelated", Definition("https://elsewhere.test"));
         Assert.Equal(CollectionJobStartStatus.Started,
             (await jobs.TryStartAttemptAsync(unrelated.Lease, root, default)).Status);
+    }
+
+    [Fact]
+    public async Task RateLimitOnOneGroupMemberDelaysAnotherMemberOfTheSameGroup()
+    {
+        var limited = await jobs.EnqueueAsync(GroupedDefinition("a.house.gov"), "group-limited", default);
+        await Runner(new RobotsDeferredCollector(CollectionFailureCode.RateLimited)).ExecuteAsync(limited.JobId, root, LeaseDuration);
+
+        Assert.True(await UnclaimableUntilAsync("group-sibling", GroupedDefinition("b.house.gov")) >
+            DateTimeOffset.UtcNow.AddSeconds(50));
+        var otherGroup = await EnqueueClaimAsync("group-other", GroupedDefinition("a.senate.gov"));
+        Assert.Equal(CollectionJobStartStatus.Started, (await jobs.TryStartAttemptAsync(otherGroup.Lease, root, default)).Status);
+    }
+
+    [Fact]
+    public async Task ServerErrorOnOneGroupMemberOnlyAppliesTheNormalGroupDelay()
+    {
+        var failed = await jobs.EnqueueAsync(GroupedDefinition("a.house.gov"), "group-server-error", default);
+        await Runner(new RobotsDeferredCollector(CollectionFailureCode.RobotsUnavailable)).ExecuteAsync(failed.JobId, root, LeaseDuration);
+
+        var unclaimableUntil = await UnclaimableUntilAsync("group-after-error", GroupedDefinition("b.house.gov"));
+
+        Assert.InRange(unclaimableUntil, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddSeconds(10));
+    }
+
+    [Fact]
+    public async Task EverySettlementSpacesGroupMembersByTheGroupDelay()
+    {
+        var first = await jobs.EnqueueAsync(GroupedDefinition("a.house.gov"), "group-spacing", default);
+        await Runner(new ReceiptCollector(404)).ExecuteAsync(first.JobId, root, LeaseDuration);
+
+        var unclaimableUntil = await UnclaimableUntilAsync("group-spacing-sibling", GroupedDefinition("b.house.gov"));
+
+        Assert.InRange(unclaimableUntil, DateTimeOffset.UtcNow.AddSeconds(1), DateTimeOffset.UtcNow.AddSeconds(4));
+        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM collection_job_origins WHERE origin = 'group:house.gov'"));
+    }
+
+    [Fact]
+    public async Task LookalikeHostOutsideTheGroupIsNotDelayed()
+    {
+        var limited = await jobs.EnqueueAsync(GroupedDefinition("a.house.gov"), "lookalike-limited", default);
+        await Runner(new RobotsDeferredCollector(CollectionFailureCode.RateLimited)).ExecuteAsync(limited.JobId, root, LeaseDuration);
+
+        var lookalike = await EnqueueClaimAsync("lookalike", GroupedDefinition("evilhouse.gov"));
+
+        Assert.Equal(CollectionJobStartStatus.Started, (await jobs.TryStartAttemptAsync(lookalike.Lease, root, default)).Status);
+    }
+
+    [Fact]
+    public async Task AClosedGroupLeavesItsJobsUnclaimedWhileAnotherGroupInTheSameQueueIsClaimed()
+    {
+        var paced = await jobs.EnqueueAsync(GroupedDefinition("b.house.gov"), "closed-group", default);
+        var open = await jobs.EnqueueAsync(GroupedDefinition("a.senate.gov"), "open-group", default);
+        await ClosePacingKeyAsync("group:house.gov", TimeSpan.FromHours(1));
+
+        var page = await PostgresCollectionWorkerQueue.FromConnectionString(connectionString)
+            .GetEligibleJobIdsAsync(null, 10, default);
+
+        Assert.Equal(open.JobId, Assert.Single(page.JobIds));
+        Assert.Null(await jobs.TryClaimAsync(paced.JobId, LeaseDuration, default));
+        Assert.NotNull(await jobs.TryClaimAsync(open.JobId, LeaseDuration, default));
+    }
+
+    [Fact]
+    public async Task AJobBecomesClaimableOnceItsPacingBlockExpires()
+    {
+        var paced = await jobs.EnqueueAsync(GroupedDefinition("b.house.gov"), "expiring-group", default);
+        await ClosePacingKeyAsync("group:house.gov", TimeSpan.FromHours(1));
+        Assert.Null(await jobs.TryClaimAsync(paced.JobId, LeaseDuration, default));
+
+        await ClosePacingKeyAsync("group:house.gov", TimeSpan.FromHours(-1));
+
+        var page = await PostgresCollectionWorkerQueue.FromConnectionString(connectionString)
+            .GetEligibleJobIdsAsync(null, 10, default);
+        Assert.Equal(paced.JobId, Assert.Single(page.JobIds));
+        Assert.NotNull(await jobs.TryClaimAsync(paced.JobId, LeaseDuration, default));
+    }
+
+    [Fact]
+    public async Task RunningAJobWhoseGroupIsClosedReportsTheGroupBackoffInsteadOfNotClaimed()
+    {
+        var paced = await jobs.EnqueueAsync(GroupedDefinition("b.house.gov"), "run-closed-group", default);
+        await ClosePacingKeyAsync("group:house.gov", TimeSpan.FromHours(1));
+        var notBefore = (long)(await ScalarAsync("SELECT not_before FROM collection_job_origins WHERE origin = 'group:house.gov'"))!;
+
+        var result = await Runner(new RejectCollector()).ExecuteAsync(paced.JobId, root, LeaseDuration);
+
+        Assert.Equal(CollectionJobRunStatus.Blocked, result.Status);
+        Assert.Equal(CollectionJobBlockReason.OriginBackoff, result.BlockReason);
+        Assert.Equal(new DateTimeOffset(notBefore, TimeSpan.Zero), result.RetryAt);
+        Assert.Equal(paced.JobId, result.Job!.JobId);
+    }
+
+    [Fact]
+    public async Task RunningAJobThatAnotherWorkerHoldsIsStillNotClaimed()
+    {
+        var held = await EnqueueClaimAsync("run-held", Definition());
+
+        var result = await Runner(new RejectCollector()).ExecuteAsync(held.Job.JobId, root, LeaseDuration);
+
+        Assert.Equal(CollectionJobRunStatus.NotClaimed, result.Status);
+        Assert.Null(result.BlockReason);
+    }
+
+    [Fact]
+    public async Task ARunningJobIsClaimedForRecoveryEvenWhileItsPacingKeyIsClosed()
+    {
+        var claim = await EnqueueClaimAsync("recover-paced", GroupedDefinition("a.house.gov"));
+        Assert.Equal(CollectionJobStartStatus.Started, (await jobs.TryStartAttemptAsync(claim.Lease, root, default)).Status);
+        await SqlAsync("UPDATE collection_jobs SET lease_expires_at = 1; UPDATE collection_collector_slot SET expires_at = 1;");
+        await ClosePacingKeyAsync("group:house.gov", TimeSpan.FromHours(1));
+
+        Assert.NotNull(await jobs.TryClaimAsync(claim.Job.JobId, LeaseDuration, default));
+    }
+
+    [Fact]
+    public async Task EachNewJobStoresTheKeyThatPacesItsAdmission()
+    {
+        var grouped = await jobs.EnqueueAsync(GroupedDefinition("a.house.gov"), "grouped-key", default);
+        var ungrouped = await jobs.EnqueueAsync(Definition(), "origin-key", default);
+
+        Assert.Equal("group:house.gov", await ScalarAsync($"SELECT pacing_key FROM collection_jobs WHERE job_id = '{grouped.JobId}'"));
+        Assert.Equal("https://example.test:443",
+            await ScalarAsync($"SELECT pacing_key FROM collection_jobs WHERE job_id = '{ungrouped.JobId}'"));
+    }
+
+    private Task ClosePacingKeyAsync(string key, TimeSpan remaining) => SqlAsync($"""
+        INSERT INTO collection_job_origins (origin, not_before)
+        VALUES ('{key}', {(DateTimeOffset.UtcNow + remaining).UtcTicks})
+        ON CONFLICT (origin) DO UPDATE SET not_before = EXCLUDED.not_before
+        """);
+
+    private static CollectionJobDefinition GroupedDefinition(string host)
+    {
+        var configuration = new CollectionConfiguration
+        {
+            People = [new PersonConfiguration { Id = "person", Name = "Person" }],
+            Sources = [new WatchedSourceConfiguration
+            {
+                Id = host, Coverage = [new SourceCoverageConfiguration { PersonId = "person" }],
+                Url = $"https://{host}/page", AllowedOrigin = $"https://{host}", AllowedPathPrefix = "/page"
+            }],
+            PacingGroups =
+            [
+                new PacingGroupConfiguration { HostSuffix = "house.gov", MinDelayMilliseconds = 3000 },
+                new PacingGroupConfiguration { HostSuffix = "senate.gov", MinDelayMilliseconds = 3000 }
+            ]
+        };
+        return CollectionJobDefinition.FromConfiguration(configuration, host, new DateOnly(2026, 7, 1));
     }
 
     [Fact]
@@ -275,9 +421,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
         Assert.Equal(CollectionJobState.WaitingToRetry, result.Job!.State);
         Assert.Equal(5, result.Job.ReservedRequests);
         Assert.Equal(100, result.Job.ReservedBytes);
-        var other = await EnqueueClaimAsync("after-recovery", Definition());
-        Assert.Equal(CollectionJobBlockReason.OriginBackoff,
-            (await jobs.TryStartAttemptAsync(other.Lease, root, default)).BlockReason);
+        Assert.True(await UnclaimableUntilAsync("after-recovery", Definition()) > DateTimeOffset.UtcNow);
     }
 
     [Fact]
@@ -302,10 +446,8 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
         var recovered = await Runner(new RejectCollector()).ExecuteAsync(claim.Job.JobId, root, LeaseDuration);
 
         Assert.Equal(CollectionJobState.Succeeded, recovered.Job!.State);
-        var other = await EnqueueClaimAsync("robots-delay-capture-same-origin", Definition());
-        var blocked = await jobs.TryStartAttemptAsync(other.Lease, root, default);
-        Assert.Equal(CollectionJobBlockReason.OriginBackoff, blocked.BlockReason);
-        Assert.True(blocked.RetryAt > DateTimeOffset.UtcNow.AddSeconds(40));
+        Assert.True(await UnclaimableUntilAsync("robots-delay-capture-same-origin", Definition()) >
+            DateTimeOffset.UtcNow.AddSeconds(40));
     }
 
     [Fact]
@@ -315,10 +457,8 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
         var completed = await Runner(new RobotsRateLimitedCollector()).ExecuteAsync(job.JobId, root, LeaseDuration);
         Assert.Equal(CollectionJobState.WaitingToRetry, completed.Job!.State);
 
-        var other = await EnqueueClaimAsync("robots-rate-limit-same-origin", Definition());
-        var blocked = await jobs.TryStartAttemptAsync(other.Lease, root, default);
-        Assert.Equal(CollectionJobBlockReason.OriginBackoff, blocked.BlockReason);
-        Assert.True(blocked.RetryAt > DateTimeOffset.UtcNow.AddSeconds(50));
+        Assert.True(await UnclaimableUntilAsync("robots-rate-limit-same-origin", Definition()) >
+            DateTimeOffset.UtcNow.AddSeconds(50));
     }
 
     [Fact]
@@ -731,6 +871,18 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
         return (await jobs.TryClaimAsync(job.JobId, LeaseDuration, default))!;
     }
 
+    private async Task<DateTimeOffset> UnclaimableUntilAsync(string key, CollectionJobDefinition definition)
+    {
+        var job = await jobs.EnqueueAsync(definition, key, default);
+        Assert.Null(await jobs.TryClaimAsync(job.JobId, LeaseDuration, default));
+        var notBefore = (long)(await ScalarAsync($"""
+            SELECT pace.not_before FROM collection_jobs job
+              JOIN collection_job_origins pace ON pace.origin = job.pacing_key
+             WHERE job.job_id = '{job.JobId}'
+            """))!;
+        return new DateTimeOffset(notBefore, TimeSpan.Zero);
+    }
+
     private async Task SqlAsync(string sql)
     {
         await using var connection = new NpgsqlConnection(connectionString);
@@ -773,6 +925,25 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
                 RobotsRequestCount = 1,
                 BytesReceived = 0,
                 FailureCode = CollectionFailureCode.RateLimited,
+                RetryAfterSeconds = 60
+            });
+    }
+
+    private sealed class RobotsDeferredCollector(CollectionFailureCode failureCode) : ICollectorProcess
+    {
+        public Task<CollectionResult> RunAsync(CollectionRequest request, CancellationToken cancellationToken) =>
+            Task.FromResult(new CollectionResult
+            {
+                JobId = request.JobId,
+                SourceId = request.SourceId,
+                RequestedUrl = request.Url,
+                FinalUrl = request.Url,
+                Outcome = CollectionOutcome.Deferred,
+                ObservedAt = DateTimeOffset.UtcNow,
+                RequestCount = 1,
+                RobotsRequestCount = 1,
+                BytesReceived = 0,
+                FailureCode = failureCode,
                 RetryAfterSeconds = 60
             });
     }

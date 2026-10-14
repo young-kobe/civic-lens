@@ -35,15 +35,70 @@ public sealed class CollectionProtocolTests
     [Theory]
     [InlineData(null)]
     [InlineData(-1)]
-    [InlineData(0)]
     [InlineData(3)]
-    public void VersionSevenRejectsMissingOrImpossibleRobotsAccounting(int? robotsRequests)
+    public void MissingNegativeOrExcessRobotsRequestCountsAreRejected(int? robotsRequests)
     {
         var request = Request();
         Assert.Throws<InvalidDataException>(() => (Receipt(request) with
         {
             RobotsRequestCount = robotsRequests
         }).ValidateAgainst(request));
+    }
+
+    [Fact]
+    public void VersionSevenResultWithRequestsButNoRobotsRequestIsRejected()
+    {
+        var request = Request() with { Version = 7 };
+        var receipt = Receipt(request);
+
+        receipt.ValidateAgainst(request);
+        Assert.True(receipt.RequestCount > 0);
+        Assert.Throws<InvalidDataException>(() => (receipt with { RobotsRequestCount = 0 }).ValidateAgainst(request));
+    }
+
+    [Fact]
+    public void VersionTenResultWithRequestsNeedsARobotsRequestOrACacheHit()
+    {
+        var request = Request();
+        var receipt = Receipt(request);
+
+        receipt.ValidateAgainst(request);
+        Assert.Throws<InvalidDataException>(() => (receipt with { RobotsRequestCount = 0 }).ValidateAgainst(request));
+        (receipt with { RobotsRequestCount = 0, RobotsCacheHit = true, RobotsCrawlDelayMilliseconds = 1500 }).ValidateAgainst(request);
+        (receipt with { RobotsCacheHit = true }).ValidateAgainst(request);
+    }
+
+    [Fact]
+    public void CrawlDelayWithoutAnyRobotsEvidenceIsRejected()
+    {
+        var request = Request();
+        Assert.Throws<InvalidDataException>(() => (Receipt(request) with { RobotsRequestCount = 0, RobotsCrawlDelayMilliseconds = 1500 })
+            .ValidateAgainst(request));
+        Assert.Throws<InvalidDataException>(() => (Receipt(request) with { RobotsRequestCount = 0, RobotsCacheHit = true, RobotsCrawlDelayMilliseconds = -1 })
+            .ValidateAgainst(request));
+    }
+
+    [Fact]
+    public void VersionNineReceiptsKeepTheirOldRulesAndCannotClaimACacheHit()
+    {
+        var request = Request() with { Version = 9 };
+        var receipt = Receipt(request);
+
+        receipt.ValidateAgainst(request);
+        Assert.Throws<InvalidDataException>(() => (receipt with { RobotsRequestCount = 0 }).ValidateAgainst(request));
+        Assert.Throws<InvalidDataException>(() => (receipt with { RobotsRequestCount = 0, RobotsCacheHit = true }).ValidateAgainst(request));
+        var json = JsonSerializer.Serialize(receipt, CollectionProtocol.JsonOptions);
+        Assert.DoesNotContain("robotsCacheHit", json, StringComparison.Ordinal);
+        JsonSerializer.Deserialize<CollectionResult>(json, CollectionProtocol.JsonOptions)!.ValidateAgainst(request);
+    }
+
+    [Fact]
+    public void ApiResultsCannotReportACacheHit()
+    {
+        var request = Request() with { Mode = CollectionMode.Api };
+        var receipt = Receipt(request) with { RobotsRequestCount = 0, RobotsCrawlDelayMilliseconds = null };
+        receipt.ValidateAgainst(request);
+        Assert.Throws<InvalidDataException>(() => (receipt with { RobotsCacheHit = true }).ValidateAgainst(request));
     }
 
     [Fact]
@@ -97,21 +152,22 @@ public sealed class CollectionProtocolTests
     public void ScopeAllowsExactPathOrDescendants(string url) => (Request() with { Url = url }).Validate();
 
     [Fact]
-    public void VersionNineIsTheOnlyVersionForNewRequestsAndOlderVersionsAreRejected()
+    public void VersionTenIsTheOnlyVersionForNewRequestsAndOlderVersionsAreRejected()
     {
         var requestJson = JsonSerializer.Serialize(Request(), CollectionProtocol.JsonOptions);
-        Assert.Contains("\"version\":9", requestJson, StringComparison.Ordinal);
+        Assert.Contains("\"version\":10", requestJson, StringComparison.Ordinal);
         var resultJson = JsonSerializer.Serialize(Receipt(Request()), CollectionProtocol.JsonOptions);
         Assert.Contains("\"failureCode\":null", resultJson, StringComparison.Ordinal);
         var roundTrip = JsonSerializer.Serialize(JsonSerializer.Deserialize<CollectionResult>(resultJson, CollectionProtocol.JsonOptions), CollectionProtocol.JsonOptions);
         Assert.Equal(resultJson, roundTrip);
         foreach (var version in new[] { 1, 2, 3, 4, 5, 6, 8 })
         {
-            var oldRequest = requestJson.Replace("\"version\":9", $"\"version\":{version}", StringComparison.Ordinal);
+            var oldRequest = requestJson.Replace("\"version\":10", $"\"version\":{version}", StringComparison.Ordinal);
             Assert.Throws<ArgumentException>(() => JsonSerializer.Deserialize<CollectionRequest>(oldRequest, CollectionProtocol.JsonOptions)!.ValidateReadable());
             Assert.Throws<InvalidDataException>(() => (Receipt(Request()) with { Version = version }).ValidateAgainst(Request()));
         }
         Assert.Throws<ArgumentException>(() => (Request() with { Version = 7 }).Validate());
+        Assert.Throws<ArgumentException>(() => (Request() with { Version = 9 }).Validate());
     }
 
     [Fact]
@@ -131,9 +187,9 @@ public sealed class CollectionProtocolTests
     }
 
     [Theory]
-    [InlineData("\"version\":9", "\"version\":99")]
-    [InlineData("\"version\":9", "\"version\":9,\"version\":9")]
-    [InlineData("\"version\":9", "\"version\":9,\"extra\":true")]
+    [InlineData("\"version\":10", "\"version\":99")]
+    [InlineData("\"version\":10", "\"version\":10,\"version\":10")]
+    [InlineData("\"version\":10", "\"version\":10,\"extra\":true")]
     [InlineData("\"sourceId\":\"source\"", "\"sourceId\":null")]
     public void MalformedOrUnsupportedWireContractsAreRejected(string original, string replacement)
     {

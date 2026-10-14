@@ -53,6 +53,8 @@ public sealed record CollectionResult
     public int? RobotsRequestCount { get; init; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public long? RobotsCrawlDelayMilliseconds { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool RobotsCacheHit { get; init; }
     public CaptureArtifact? Capture { get; init; }
     public DiscoveryResult? Discovery { get; init; }
     public CollectionFailureCode? FailureCode { get; init; }
@@ -100,18 +102,22 @@ public sealed record CollectionResult
 
     private int ContentRequestCount => RequestCount - RobotsRequestCount!.Value;
 
+    private bool RobotsEvidenced => RobotsRequestCount > 0 || RobotsCacheHit;
+
     private void ValidateRobotsAccounting(CollectionRequest request)
     {
         if (request.Mode == CollectionMode.Api)
         {
-            if (RobotsRequestCount != 0 || RobotsCrawlDelayMilliseconds is not null)
+            if (RobotsRequestCount != 0 || RobotsCrawlDelayMilliseconds is not null || RobotsCacheHit)
                 throw new InvalidDataException("API requests do not read robots rules.");
             return;
         }
+        if (RobotsCacheHit && Version < CollectionProtocol.RobotsCacheVersion)
+            throw new InvalidDataException("Robots cache hits require a newer protocol version.");
         if (RobotsRequestCount is null or < 0 || RobotsRequestCount > RequestCount ||
-            (RequestCount > 0 && RobotsRequestCount == 0) ||
+            (RequestCount > 0 && !RobotsEvidenced) ||
             RobotsCrawlDelayMilliseconds is < 0 or > CollectionProtocol.MaximumCrawlDelayMilliseconds ||
-            (RobotsCrawlDelayMilliseconds is not null && RobotsRequestCount == 0))
+            (RobotsCrawlDelayMilliseconds is not null && !RobotsEvidenced))
             throw new InvalidDataException("Robots accounting or crawl delay is invalid.");
     }
 
@@ -178,7 +184,7 @@ public sealed record CollectionResult
         if (FailureCode == CollectionFailureCode.CrawlDelay &&
             Math.Max(request.MinDelayMilliseconds, RobotsCrawlDelayMilliseconds ?? 0) > 0 &&
             RetryAfterSeconds >= (Math.Max(request.MinDelayMilliseconds, RobotsCrawlDelayMilliseconds ?? 0) + 999) / 1000 &&
-            (RobotsRequestCount > 0 || request.Mode == CollectionMode.Api) &&
+            (RobotsEvidenced || request.Mode == CollectionMode.Api) &&
             (Response is null || Response.StatusCode is >= 300 and < 400))
             return;
         if (FailureCode is CollectionFailureCode.RateLimited or CollectionFailureCode.RobotsUnavailable &&

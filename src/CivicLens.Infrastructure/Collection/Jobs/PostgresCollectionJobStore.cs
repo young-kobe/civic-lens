@@ -123,13 +123,26 @@ public sealed partial class PostgresCollectionJobStore(IDbContextFactory<Collect
         ValidateLeaseDuration(leaseDuration);
         return TransactionAsync<CollectionJobClaim?>(async (db, now) =>
         {
-            var row = await db.Set<JobRow>().SingleOrDefaultAsync(row => row.JobId == jobId, cancellationToken);
+            var row = await WherePacingOpen(db.Set<JobRow>(), db.Set<JobOriginRow>(), Ticks(now))
+                .SingleOrDefaultAsync(row => row.JobId == jobId, cancellationToken);
             if (row is null || row.LeaseExpiresAt > Ticks(now)) return null;
             row.LeaseToken = Guid.NewGuid().ToString("N");
             row.LeaseFence = checked(row.LeaseFence + 1);
             row.LeaseExpiresAt = Ticks(now + leaseDuration);
             return new CollectionJobClaim(Lease(row), await ToRecordAsync(db, row, cancellationToken));
         }, cancellationToken);
+    }
+
+    public async Task<CollectionJobStartResult?> ReadPacingBlockAsync(string jobId, CancellationToken cancellationToken)
+    {
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        var nowTicks = (await DatabaseClock.ReadAsync(db, cancellationToken)).Ticks;
+        var open = WherePacingOpen(db.Set<JobRow>(), db.Set<JobOriginRow>(), nowTicks);
+        var notBefore = await db.Set<JobRow>().AsNoTracking()
+            .Where(row => row.JobId == jobId && !open.Any(candidate => candidate.JobId == jobId))
+            .Join(db.Set<JobOriginRow>(), row => row.PacingKey, pace => pace.Origin, (_, pace) => (long?)pace.NotBefore)
+            .SingleOrDefaultAsync(cancellationToken);
+        return notBefore is null ? null : Blocked(CollectionJobBlockReason.OriginBackoff, FromTicks(notBefore));
     }
 
     public Task<CollectionJobRenewal> RenewAsync(CollectionJobLease jobLease, CollectionCollectorLease? collectorLease,
@@ -173,7 +186,8 @@ public sealed partial class PostgresCollectionJobStore(IDbContextFactory<Collect
             return new CollectionJobStartResult(CollectionJobStartStatus.Exhausted);
         }
         var originKey = NormalizeOrigin(definition.AllowedOrigin);
-        var (origin, slot, admissionBlock) = await ReadAdmissionAvailabilityAsync(db, originKey, now, cancellationToken);
+        var (origin, slot, admissionBlock) = await ReadAdmissionAvailabilityAsync(db, originKey,
+            definition.ResolvePacingGroup()?.Key, now, cancellationToken);
         if (admissionBlock is not null) return admissionBlock;
 
         var attempt = new JobAttemptRow
@@ -263,16 +277,33 @@ public sealed partial class PostgresCollectionJobStore(IDbContextFactory<Collect
         if (origin.UnresolvedAttemptId != attemptId) throw new InvalidOperationException("Origin ownership does not match the unresolved attempt.");
         var effectiveOriginDelay = Math.Max(request.MinDelayMilliseconds, resolution.RobotsCrawlDelayMilliseconds ?? 0);
         var nextOrigin = AddDelay(now, TimeSpan.FromTicks(effectiveOriginDelay * TimeSpan.TicksPerMillisecond));
+        DateTimeOffset? deferralBackoff = null;
         if (evidence?.AttemptResult is DeferredAttemptResult)
         {
-            var backoff = CollectionJobLifecycle.RetryAt(now, definition.Policy, attempt.Sequence, resolution.RetryDelay);
-            if (backoff > nextOrigin) nextOrigin = backoff;
+            deferralBackoff = CollectionJobLifecycle.RetryAt(now, definition.Policy, attempt.Sequence, resolution.RetryDelay);
+            if (deferralBackoff > nextOrigin) nextOrigin = deferralBackoff.Value;
         }
         origin.NotBefore = Math.Max(origin.NotBefore, Ticks(nextOrigin));
         origin.UnresolvedAttemptId = null;
+        if (definition.ResolvePacingGroup() is { } group)
+        {
+            var rateLimitBackoff = evidence?.AttemptResult is DeferredAttemptResult { FailureCode: nameof(CollectionFailureCode.RateLimited) }
+                ? deferralBackoff : null;
+            await ExtendPacingGroupAsync(db, group, now, rateLimitBackoff, cancellationToken);
+        }
         if (job.State == CollectionJobState.Succeeded) await EnqueuePreparationAsync(db, job, definition, cancellationToken);
         return true;
     }, cancellationToken);
+
+    private static async Task ExtendPacingGroupAsync(CollectionAttemptDbContext db, PacingGroupConfiguration group,
+        DateTimeOffset now, DateTimeOffset? rateLimitBackoff, CancellationToken cancellationToken)
+    {
+        var row = await db.Set<JobOriginRow>().SingleOrDefaultAsync(item => item.Origin == group.Key, cancellationToken);
+        if (row is null) { row = new JobOriginRow { Origin = group.Key }; db.Add(row); }
+        var next = AddDelay(now, TimeSpan.FromMilliseconds(group.MinDelayMilliseconds));
+        if (rateLimitBackoff > next) next = rateLimitBackoff.Value;
+        row.NotBefore = Math.Max(row.NotBefore, Ticks(next));
+    }
 
     private static async Task EnqueuePreparationAsync(CollectionAttemptDbContext db, JobRow job,
         CollectionJobDefinition definition, CancellationToken cancellationToken)
@@ -313,26 +344,36 @@ public sealed partial class PostgresCollectionJobStore(IDbContextFactory<Collect
             return "changed";
         if (job.RetryAt > Ticks(now)) return job.RetryAt.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
         string origin;
-        try { origin = NormalizeOrigin((await ReadDefinitionAsync(db, job, cancellationToken)).AllowedOrigin); }
+        string? groupKey;
+        try
+        {
+            var definition = await ReadDefinitionAsync(db, job, cancellationToken);
+            origin = NormalizeOrigin(definition.AllowedOrigin);
+            groupKey = definition.ResolvePacingGroup()?.Key;
+        }
         catch (Exception exception) when (exception is InvalidDataException or JsonException or ArgumentException)
         {
             // Invalid retained settings must not prevent releasing ownership for recovery.
             return "changed";
         }
-        var availability = await ReadAdmissionAvailabilityAsync(db, origin, now, cancellationToken);
+        var availability = await ReadAdmissionAvailabilityAsync(db, origin, groupKey, now, cancellationToken);
         return availability.Block is null ? "changed" :
             availability.Block.RetryAt?.UtcTicks.ToString(System.Globalization.CultureInfo.InvariantCulture);
     }
 
     private static async Task<(JobOriginRow? Origin, CollectorSlotRow? Slot, CollectionJobStartResult? Block)>
-        ReadAdmissionAvailabilityAsync(CollectionAttemptDbContext db, string originKey, DateTimeOffset now,
-            CancellationToken cancellationToken)
+        ReadAdmissionAvailabilityAsync(CollectionAttemptDbContext db, string originKey, string? groupKey,
+            DateTimeOffset now, CancellationToken cancellationToken)
     {
         var origin = await db.Set<JobOriginRow>().SingleOrDefaultAsync(item => item.Origin == originKey, cancellationToken);
         if (origin?.UnresolvedAttemptId is not null)
             return (origin, null, Blocked(CollectionJobBlockReason.AttemptUnresolved));
         if (origin?.NotBefore > Ticks(now))
             return (origin, null, Blocked(CollectionJobBlockReason.OriginBackoff, FromTicks(origin.NotBefore)));
+        var group = groupKey is null ? null
+            : await db.Set<JobOriginRow>().SingleOrDefaultAsync(item => item.Origin == groupKey, cancellationToken);
+        if (group?.NotBefore > Ticks(now))
+            return (origin, null, Blocked(CollectionJobBlockReason.OriginBackoff, FromTicks(group.NotBefore)));
         var slot = await db.Set<CollectorSlotRow>().SingleOrDefaultAsync(cancellationToken);
         return (origin, slot, slot?.ExpiresAt > Ticks(now)
             ? Blocked(CollectionJobBlockReason.CollectorBusy, FromTicks(slot.ExpiresAt)) : null);
@@ -388,6 +429,15 @@ public sealed partial class PostgresCollectionJobStore(IDbContextFactory<Collect
         new(CollectionJobStartStatus.Blocked, BlockReason: reason, RetryAt: retryAt);
     private static long Ticks(DateTimeOffset value) => value.UtcDateTime.Ticks;
     private static DateTimeOffset? FromTicks(long? value) => value is { } ticks ? new DateTimeOffset(ticks, TimeSpan.Zero) : null;
+    internal static string PacingKeyOf(CollectionJobDefinition definition) =>
+        definition.ResolvePacingGroup()?.Key ?? NormalizeOrigin(definition.AllowedOrigin);
+
+    internal static IQueryable<JobRow> WherePacingOpen(IQueryable<JobRow> jobs, IQueryable<JobOriginRow> paces,
+        long nowTicks) =>
+        // A running job holds an unresolved attempt, and its recovery must not wait for pacing.
+        jobs.Where(row => row.PacingKey == null || row.State == CollectionJobState.Running ||
+            !paces.Any(pace => pace.Origin == row.PacingKey && pace.NotBefore > nowTicks));
+
     private static string NormalizeOrigin(string value)
     {
         var uri = new Uri(value);

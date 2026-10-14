@@ -8,6 +8,7 @@ internal sealed class JobRow
     public string IdempotencyKey { get; set; } = "";
     public string DefinitionJson { get; set; } = "";
     public string? ConfigurationRevisionId { get; set; }
+    public string? PacingKey { get; set; }
     public CollectionJobState State { get; set; }
     public long CreatedAt { get; set; }
     public long? RetryAt { get; set; }

@@ -33,7 +33,7 @@ public sealed partial class PostgresCollectionJobStore
                         SourceId = source.Id,
                         ConfigurationRevisionId = revision.Id,
                         IntervalSeconds = intervalSeconds,
-                        NextDueUtcTicks = source.Enabled ? Ticks(now) : Ticks(now.AddSeconds(intervalSeconds)),
+                        NextDueUtcTicks = Ticks(source.Enabled ? now + source.InitialDueOffset() : now.AddSeconds(intervalSeconds)),
                         Enabled = source.Enabled
                     };
                     db.Add(row);
