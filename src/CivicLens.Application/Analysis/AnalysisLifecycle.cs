@@ -1,7 +1,7 @@
 namespace CivicLens.Application.Analysis;
 
 public sealed class AnalysisLifecycle(Func<AnalysisCheckpoint, bool> acceptsSuccess,
-    Func<AnalysisRecord, bool>? allowsRequeueOfSucceeded = null)
+    Func<AnalysisRecord, bool>? allowsRequeueOfSucceeded = null, Func<AnalysisRecord, bool>? allowsRequeueOfBlocked = null)
 {
     public bool CanTransition(AnalysisRecord record, AnalysisCheckpoint update)
     {
@@ -13,6 +13,7 @@ public sealed class AnalysisLifecycle(Func<AnalysisCheckpoint, bool> acceptsSucc
             (AnalysisState.Pending or AnalysisState.RetryWaiting or AnalysisState.WaitingForBudget, AnalysisState.Running) => true,
             (AnalysisState.WaitingForBudget or AnalysisState.Failed, AnalysisState.Pending) => true,
             (AnalysisState.Succeeded, AnalysisState.Pending) => allowsRequeueOfSucceeded?.Invoke(record) == true,
+            (AnalysisState.Blocked, AnalysisState.Pending) => allowsRequeueOfBlocked?.Invoke(record) == true,
             (AnalysisState.Running, _) => IsClaimed(record, update),
             _ => false
         };

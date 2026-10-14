@@ -1,3 +1,4 @@
+using CivicLens.Application.Actions;
 using CivicLens.Tests.Infrastructure.Collection;
 
 namespace CivicLens.Tests.Host;
@@ -44,6 +45,8 @@ public sealed class ActionCommandTests(PostgresCollection postgres) : IAsyncLife
     [InlineData("actions", "draft")]
     [InlineData("actions", "draft", "list", "passed")]
     [InlineData("actions", "draft", "requeue")]
+    [InlineData("actions", "draft", "requeue", "--blocked")]
+    [InlineData("actions", "draft", "requeue", "--blocked", "--code")]
     [InlineData("actions", "draft", "run", "x")]
     public async Task BadArgumentsShowTheUsage(params string[] arguments)
     {
@@ -64,11 +67,25 @@ public sealed class ActionCommandTests(PostgresCollection postgres) : IAsyncLife
     }
 
     [Fact]
-    public async Task TheAiDrafterCannotActAsTheOwner()
+    public async Task RequeueBlockedReportsTheCountAndRefusesAnEmptyCodeSoItNeverMatchesEveryBlockedRow()
     {
-        var result = await RunAsync("civic-lens:analysis", "actions", "draft", "requeue", "--all");
+        var known = await RunAsync("auth0|owner", "actions", "draft", "requeue", "--blocked", "--code", ActionDraftErrorCodes.TitleTooLong);
+        var empty = await RunAsync("auth0|owner", "actions", "draft", "requeue", "--blocked", "--code", " ");
+
+        Assert.Equal((0, """{"requeued":0}"""), (known.ExitCode, known.Output.Trim()));
+        Assert.Equal(2, empty.ExitCode);
+        Assert.Contains("errorCode", empty.Error, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("requeue", "--all")]
+    [InlineData("requeue", "--blocked", "--code", ActionDraftErrorCodes.TitleTooLong)]
+    public async Task TheAiDrafterCannotActAsTheOwner(params string[] command)
+    {
+        var result = await RunAsync("civic-lens:analysis", ["actions", "draft", .. command]);
 
         Assert.Equal(2, result.ExitCode);
+        Assert.Contains("The configured actor is not the owner.", result.Error, StringComparison.Ordinal);
     }
 
     private Task<(int ExitCode, string Output, string Error)> RunAsync(string owner, params string[] arguments) =>

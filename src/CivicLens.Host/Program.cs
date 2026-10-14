@@ -240,10 +240,12 @@ try
         if (string.IsNullOrWhiteSpace(connectionString) || string.IsNullOrWhiteSpace(ownerSubject))
             throw new ArgumentException("Action commands require CIVIC_LENS_DATABASE and CIVIC_LENS_REVIEW_OWNER.");
         var contexts = AnalysisDbContextFactory.Create(connectionString);
+        var draftStore = new PostgresActionDraftStore(contexts);
         var draftCommands = new StatementQueueCommands<ActionDraftRun, ActionDraftView, ActionDraftListItem>(
-            new PostgresActionDraftStore(contexts), new PostgresAnalysisStatusStore(contexts, ActionDraftTask.Task));
+            draftStore, new PostgresAnalysisStatusStore(contexts, ActionDraftTask.Task));
+        var actions = new ActionCommand(draftCommands, new RequeueBlockedActionDrafts(draftStore), new ReviewActor(ownerSubject, ReviewRole.Owner));
         executing = true;
-        return await new ActionCommand(draftCommands, new ReviewActor(ownerSubject, ReviewRole.Owner)).ExecuteAsync(args, cancellation.Token);
+        return await actions.ExecuteAsync(args, cancellation.Token);
     }
 
     if (ReleaseCommand.Matches(args))
