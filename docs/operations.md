@@ -1,8 +1,10 @@
 # Operations
 
+This page holds commands and procedures. Design rules are in the [architecture](architecture.md) lookup table.
+
 ## Verification
 
-Prerequisites: .NET SDK selected by global.json and a working Docker daemon for the full test suite. Python 3 is needed only to regenerate the architecture visual. Testcontainers creates disposable Postgres instances; no pre-existing database, model account, Node installation, or deployment credentials are needed.
+Prerequisites: the .NET SDK selected by global.json and a working Docker daemon for the full test suite. Python 3 runs the development tools in `tools/`. Testcontainers creates disposable Postgres instances. No existing database, model account, Node installation, or deployment credentials are needed.
 
 ```sh
 dotnet restore --locked-mode
@@ -11,13 +13,20 @@ docker version
 dotnet test CivicLens.slnx --configuration Release --no-build
 dotnet format CivicLens.slnx --verify-no-changes --no-restore
 python3 tools/render-architecture.py --check
+python3 tools/check-docs.py --check
 ```
 
-Tests never call the paid Claude API. They use a fake model at the drafting port. The one live test, in category `LiveAi`, is skipped unless you set `CIVIC_LENS_LIVE_AI=1` and `ANTHROPIC_API_KEY`; see [AI drafting](#ai-drafting-of-document-change-accounts). CI does not set them. For a database-free test run, use `dotnet test CivicLens.slnx --configuration Release --no-build --filter 'Category!=Postgres'`. This excludes the Postgres adapter and CLI database integration tests and is not a substitute for the full required check. Testcontainers requires Docker socket access; an agent sandbox may need an execution override for Docker and local test sockets. Missing Docker fails the full suite rather than silently skipping database checks. The Postgres image is pinned by tag and digest in the test fixture; its first run and the Testcontainers cleanup container may require image downloads.
+Tests never call the paid Claude API. They use a fake model at each drafting port. The live tests, in category `LiveAi`, are skipped unless you set `CIVIC_LENS_LIVE_AI=1` and `ANTHROPIC_API_KEY`. CI does not set them. Each live test sends paid requests, so run them on request only:
+
+```sh
+CIVIC_LENS_LIVE_AI=1 ANTHROPIC_API_KEY=... dotnet test CivicLens.slnx --configuration Release --no-build --filter 'Category=LiveAi'
+```
+
+For a database-free test run, use `dotnet test CivicLens.slnx --configuration Release --no-build --filter 'Category!=Postgres'`. This leaves out the Postgres adapter and CLI database integration tests. It does not replace the full required check. Testcontainers needs Docker socket access, so an agent sandbox may need an execution override for Docker and local test sockets. Missing Docker fails the full suite; it never skips database checks silently. The test fixture pins the Postgres image by tag and digest. Its first run and the Testcontainers cleanup container may download images.
 
 `dotnet run --project src/CivicLens.Host -- status` describes implemented capabilities. `dotnet run --project src/CivicLens.Collector -- --help` describes the manifest-driven collector. Unsupported commands return nonzero exit codes.
 
-Generate the self-contained architecture explorer with `python3 tools/render-architecture.py`; open artifacts/architecture.html in a browser. The HTML requires no remote assets or network access. The same script updates the Mermaid blocks in architecture.md. `--check` detects diagram drift without changing files.
+Generate the self-contained architecture explorer with `python3 tools/render-architecture.py`, then open artifacts/architecture.html in a browser. The HTML needs no remote assets or network access. The same script updates the Mermaid blocks in architecture.md. `--check` detects diagram drift without changing files. `python3 tools/check-docs.py --check` checks repository paths, local links, and sentence length in the core docs.
 
 ## Local development
 
@@ -25,36 +34,19 @@ The Makefile wraps the local commands. Run `make help` to list them. It reads `.
 
 ## Dependency changes
 
-Update explicit package versions, run `dotnet restore --force-evaluate`, review and commit packages.lock.json changes, then run the checks above. CI restores in locked mode. global.json pins the exact SDK with no roll forward, so CI and local builds use the same SDK. Update global.json deliberately when adopting an SDK patch or feature band. An SDK update can change implicit package versions, so run `dotnet restore --force-evaluate` after it and commit the lock file changes.
+Update explicit package versions, run `dotnet restore --force-evaluate`, review and commit packages.lock.json changes, then run the checks above. CI restores in locked mode. global.json pins the exact SDK with no roll forward, so CI and local builds use the same SDK. Update global.json deliberately when you adopt an SDK patch or feature band. An SDK update can change implicit package versions, so run `dotnet restore --force-evaluate` after it and commit the lock file changes.
 
-## Watched-page tracer
+## Configuration
 
-Use the installed SDK on `PATH`. Build Release first. Validate the example registry without making requests:
+Validate a registry without making requests:
 
 ```sh
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- validate config/example.json
 ```
 
-The example contains a fictitious official and one localhost watched page. Start a local source in one terminal:
+Edit configuration to add people or shared sources. A source URL occurs once, with several `coverage` entries when needed. `enabled: false` prevents collection without removing the configuration. `allowedOrigin` includes the scheme and port. `allowedPathPrefix` permits that exact path and its descendants. The local example permits loopback explicitly. This tool is for trusted local configuration, not arbitrary public fetch requests. Keep credentials out of source URLs and manifests.
 
-```sh
-mkdir -p .runtime/example-source
-printf 'User-agent: *\nDisallow:\n' > .runtime/example-source/robots.txt
-printf '<html><body>A local evidence example.</body></html>\n' > .runtime/example-source/page.html
-python3 -m http.server 8765 --bind 127.0.0.1 --directory .runtime/example-source
-```
-
-In another terminal, collect through the real process boundary:
-
-```sh
-dotnet run --no-build --configuration Release --project src/CivicLens.Host -- collect config/example.json example-local-source src/CivicLens.Collector/bin/Release/net10.0/CivicLens.Collector.dll .runtime/captures
-```
-
-The host prints a verified JSON receipt. A captured result points to `capture.relativePath` (`<sha256>.gz`) relative to `.runtime/captures`; `gzip -dc .runtime/captures/<sha256>.gz` inspects the original response bytes. Repeating the command produces a new observation receipt but reuses an identical artifact. Receipts separate `capture` (hash, relative path and byte length) from `response` (status, validators, content type and ordered content encodings). The storage gzip envelope is separate from HTTP content encoding; decoding a gzip-encoded HTTP response requires both layers. The `collect` command does not import or persist receipts. Save stdout if needed for inspection; do not treat it as a durable job store. No database is needed for this command.
-
-Edit configuration to add people or shared sources. A source URL occurs once, with multiple `coverage` entries when appropriate. `enabled: false` prevents collection without removing the configuration. `allowedOrigin` includes scheme and port; `allowedPathPrefix` permits that exact path and descendants. The local example explicitly permits loopback; this tool is for trusted local configuration, not arbitrary public fetch requests. Keep credentials out of source URLs and manifests.
-
-Configuration version 2 is the only supported version. Each source lists `coverage` entries, and people can have dated names. For example:
+Configuration version 2 is the only supported version. For example:
 
 ```json
 {
@@ -70,25 +62,54 @@ Configuration version 2 is the only supported version. Each source lists `covera
 }
 ```
 
-`startsOn` is inclusive and `endsBefore` exclusive; either may be omitted to leave that limit unspecified. A person's optional `names` array contains entries with `name` and the same optional date fields. A version 2 person may also have a `bioguideId`, the Congress.gov member ID, for example `W000817`. It is one uppercase letter and six digits. Each ID belongs to one person. Different names may overlap. Duplicate overlapping intervals for the same exact name or person/source are invalid; adjacent intervals are allowed. Coverage is our monitoring policy, not a claim about authorship, officeholding, or source ownership.
+`startsOn` is inclusive and `endsBefore` is exclusive. Either can be left out. A person's optional `names` array holds entries with `name` and the same optional date fields. A person may also have a `bioguideId`, the Congress.gov member ID, for example `W000817`. The field rules are in [configuration](architecture/configuration.md#people-and-sources).
 
-`collect`, `collect-import`, `jobs enqueue`, and `discovery admit` accept a trailing `--as-of yyyy-MM-dd`. Direct collection defaults to today's UTC date. New managed admissions default to the UTC database date inside their transaction. An enabled source must have coverage on the resolved date for new work. Repeating an existing key without `--as-of` returns its saved decision and date, even after coverage expires. Selecting a past date still fetches the current source; it does not request an archived page. For a reproducible managed admission:
+`collect`, `collect-import`, `jobs enqueue`, and `discovery admit` accept a trailing `--as-of yyyy-MM-dd`. Selecting a past date still fetches the current source; it does not request an archived page. For a reproducible managed admission:
 
 ```sh
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- jobs enqueue config/example.json example-local-source dated-check-1 --as-of 2026-07-01
 ```
 
-New managed jobs retain `definition.configurationRevision` (hash ID and complete validated JSON snapshot) and `definition.coverageAsOf`, visible through `jobs get`. Discovery children retain the admission configuration revision. The database stores each revision once, in `collection_configuration_revisions`. Job rows, admission batches, and source schedules reference it by ID through a foreign key, so Postgres refuses to delete a revision that is still in use. `db migrate` converts older rows in place. Repeating a job/batch key requires the same configuration revision. Omit `--as-of` to reuse its saved date, or supply the original date explicitly; a different explicit date conflicts. Replay checks the saved decision before current eligibility, while a new key still requires eligible coverage. Corrections or even array reorderings produce another revision. Pre-upgrade keys can replay matching execution settings even after current coverage expires or the source is disabled. They retain unknown provenance and do not acquire a later revision. Because legacy keys have no saved date, an explicit date is ignored on their replay and does not establish historical coverage.
+`jobs get` shows `definition.configurationRevision` (the hash ID and the validated JSON snapshot) and `definition.coverageAsOf`. To repeat a job or batch key, use the same configuration revision. Leave out `--as-of` to reuse the saved date, or give the original date; another date conflicts. The replay rules are in [configuration](architecture/configuration.md#admission-replay).
 
-Changing coverage prevents new admissions but does not cancel jobs already admitted under an earlier snapshot. Use `jobs cancel` for that. Keep stable people in configuration when ending coverage. Direct collection/import checks eligibility but retains no registry revision with its receipt; use managed jobs to retain that decision. Configuration snapshots include the full registry and source settings, so keep secrets out of configuration and treat job inspection output as local operational data.
+Changing coverage stops new admissions but does not cancel admitted jobs. Use `jobs cancel` for that. Keep stable people in configuration when coverage ends. Use managed jobs when the retained coverage decision matters, because direct collection keeps no revision. Snapshots hold the full registry and source settings. Keep secrets out of configuration, and treat job inspection output as local operational data.
 
-Standalone collection accepts `CivicLens.Collector collect <manifest.json>` (or `dotnet <collector.dll> collect <manifest.json>`). Version 10 request fields are defined by `CollectionRequest` in Collection.Contracts: `version`, `jobId`, `sourceId`, `url`, `allowedOrigin`, `allowedPathPrefix`, and absolute `artifactDirectory`, plus optional bounded `maxRequests`, `maxBytes`, `timeoutSeconds`, `minDelayMilliseconds`, `eTag`, `lastModified`, and, for `api` mode only, `credential`. JSON names are case-sensitive. Use version 10 in new standalone manifests and rebuild host and collector together. The collector rejects every other version. Registry configuration supports version 2 only. Receipts report applied conditional headers in `sentValidators`, using serialized ETags and whole-second UTC dates; the field is null when no conditional headers were applied to the last attempted content request. Validators are explicit in standalone manifests; the host does not yet automatically replay stored validators. A 304 emits `notModified` without a capture. A 429 emits `deferred`, with optional `retryAfterSeconds`; wait before rerunning. HTTP failures, robots denial/unavailability, budget exhaustion, incomplete bodies, and cancellation are explicit failures rather than source deletion.
+## Watched-page tracer
 
-Do not run concurrent collectors for the same origin. Host invocations sharing a capture directory are mutually exclusive, but separate directories and standalone invocations are not coordinated. Robots support and protocol limits are documented in [architecture](architecture.md#robots-policy-and-pacing). Version 10 supports Allow exceptions, bounded same-origin robots redirects, compressed robots files, crawl-delay, and tolerant HTML recovery. It fetches same-host `http` discovery links over `https`, supports feed `xml:base`, and reports `outOfScopeCount` in discovery results; `discovery get` prints it. It also adds `api` mode: one JSON GET with no robots request. Cross-origin redirects are unsupported. The collector caches robots rules for 24 hours in `robots-*.json` files in the artifact directory; see [architecture](architecture.md#robots-policy-and-pacing). To force a refetch, delete the file for that origin. Do not delete other files. Stored version 7 receipts and requests stay readable for recovery and replay. The collector does not run them. A killed child can leave `.capture-*.tmp` or `.robots-*.tmp`; these files are never valid captures or cache entries and can be removed when no collector is running. Do not remove hash-named captures as temporary files. Use `collect-import` below for atomic evidence persistence. Use the receipt recovery commands below after an interrupted import. Use managed jobs below for cross-run admission, retry budgets, and origin pacing.
+Use the installed SDK on `PATH`. Build Release first. The example holds a fictitious official and one localhost watched page. Start a local source in one terminal:
+
+```sh
+mkdir -p .runtime/example-source
+printf 'User-agent: *\nDisallow:\n' > .runtime/example-source/robots.txt
+printf '<html><body>A local evidence example.</body></html>\n' > .runtime/example-source/page.html
+python3 -m http.server 8765 --bind 127.0.0.1 --directory .runtime/example-source
+```
+
+In another terminal, collect through the real process boundary:
+
+```sh
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- collect config/example.json example-local-source src/CivicLens.Collector/bin/Release/net10.0/CivicLens.Collector.dll .runtime/captures
+```
+
+The host prints a verified JSON receipt. A captured result points to `capture.relativePath` (`<sha256>.gz`) relative to `.runtime/captures`. `gzip -dc .runtime/captures/<sha256>.gz` shows the original response bytes. To decode a gzip-encoded HTTP response, remove both layers. A repeated command gives a new receipt and reuses an identical artifact. `collect` needs no database and persists nothing. Save stdout if you need it, but do not treat it as a durable job store.
+
+## Standalone collector
+
+Run `CivicLens.Collector collect <manifest.json>` or `dotnet <collector.dll> collect <manifest.json>`. `CollectionRequest` in Collection.Contracts defines the version 10 fields:
+
+- required: `version`, `jobId`, `sourceId`, `url`, `allowedOrigin`, `allowedPathPrefix`, and an absolute `artifactDirectory`
+- optional, bounded: `maxRequests`, `maxBytes`, `timeoutSeconds`, `minDelayMilliseconds`, `eTag`, `lastModified`
+- for `api` mode only: `credential`
+
+JSON names are case-sensitive. Use version 10 in new manifests, and rebuild the host and collector together. The collector rejects every other version. Validators are explicit in standalone manifests. A 429 gives `deferred` with an optional `retryAfterSeconds`; wait before you run again. The protocol rules are in [collection](architecture/collection.md#collector-protocol).
+
+Do not run concurrent collectors for the same origin. Host runs that share a capture directory exclude each other, but separate directories and standalone runs are not coordinated. Use managed jobs for cross-run admission, retry budgets, and origin pacing.
+
+The collector caches robots rules for 24 hours in `robots-*.json` files in the artifact directory. To force a refetch, delete the file for that origin. Do not delete other files. A killed child can leave `.capture-*.tmp` or `.robots-*.tmp` files. They are never valid captures or cache entries. Remove them only when no collector runs. Never remove hash-named captures as temporary files.
 
 ### API credential
 
-A source with mode `api` may name a `credential`. Today the only name is `congressGov`. The collector reads its key from the environment variable `CIVIC_LENS_CONGRESS_API_KEY`. Only the collector child process receives this variable. The host passes it on only when the request names the credential. Get a free key at api.congress.gov/sign-up. Set the variable in the protected environment of the process that starts the collector, such as the worker. Never put the key in configuration, manifests, command arguments, or committed files. If the variable is missing or blank, the check fails with `credentialUnavailable` and sends no request.
+A source with mode `api` may name a `credential`. The only name is `congressGov`, and its key is in `CIVIC_LENS_CONGRESS_API_KEY`. Get a free key at api.congress.gov/sign-up. Set the variable in the protected environment of the process that starts the collector, such as the worker. Never put the key in configuration, manifests, command arguments, or committed files. A missing or blank variable fails the check with `credentialUnavailable`.
 
 ### Congress.gov bill stream
 
@@ -96,11 +117,12 @@ The source `congress-bills` in `config/federal-coverage.json` and `config/federa
 
 1. Get a key at api.congress.gov/sign-up.
 2. Set `CIVIC_LENS_CONGRESS_API_KEY` in the protected environment of the worker. Do not put the key in configuration.
-3. Set `enabled` to `true` for `congress-bills` and restart the worker. A restart reads the configuration again.
+3. Set `CIVIC_LENS_ISSUES_CONFIG` for the worker. With an enabled bill source and no issue file, the worker refuses to start and exits with code 2.
+4. Set `enabled` to `true` for `congress-bills` and restart the worker. A restart reads the configuration again.
 
-The source checks once a day. It starts at `backfillFrom` (2025-01-03) and works forward in windows of at most 7 closed UTC days. A day is closed 6 hours after it ends. A window is listed again at once until a full pass over its pages admits no new bills. Then the cursor moves, and the next window starts at once until the source reaches the last closed day. So each window takes at least two passes. The second pass costs only list pages. Each window can admit up to 250 bill detail jobs and up to one next page job, one list page at a time. Bills below `minimumCongress` (119) are skipped. A bill that was admitted with the same update date is not admitted again. This backfill sends many requests to Congress.gov, paced by `minDelayMilliseconds`, so it takes some time. Each bill detail job decides a relevance gate and admits cosponsor and actions page jobs. [Architecture](architecture.md#congressgov-bill-stream-implemented-through-the-gate) holds the rules. The worker needs `CIVIC_LENS_ISSUES_CONFIG` for this. With an enabled bill source and no issue file, the worker refuses to start and exits with code 2. The source row on the Sources page shows no check state yet, because its jobs use windowed URLs.
+The backfill sends many requests to Congress.gov, paced by `minDelayMilliseconds`, so it takes some time. [Bills](architecture/bills.md) holds the window, cursor, and gate rules.
 
-If a list page is malformed, preparation of that job is blocked and the cursor does not move. The pass counter can stay above 0, which causes at most one extra pass. The next due check repeats the same window. Configuration loading rejects a bill list source whose `admissionPolicy` cannot hold 251 jobs: a full page of 250 detail jobs and the next page job. Set `maxJobs` to at least 251, and size the request, byte, and time totals for 251 jobs. A source without `admissionPolicy` uses the small defaults and fails this check.
+Configuration loading rejects a bill list source whose `admissionPolicy` cannot hold the [251-job rule](architecture/bills.md#admission). Set `maxJobs` and the request, byte, and time totals to fit it.
 
 To list bills whose gate is still pending because a cosponsor page job is blocked, run this query:
 
@@ -117,7 +139,7 @@ WHERE g.decision = 'Pending'
 ORDER BY g.congress, g.bill_type, g.bill_number;
 ```
 
-To list passed bills that have no action candidate because a cosponsor or actions page job failed or is blocked, run this query. A failed or blocked page writes no page row, so its chain stays open and the bill gets no candidate. A failed summaries page does not block a candidate, so the query skips it.
+To list passed bills that have no action candidate because a cosponsor or actions page job failed or is blocked, run this query. A failed summaries page does not block a candidate, so the query skips it.
 
 ```sql
 SELECT g.detail_job_id, g.source_id, g.congress, g.bill_type, g.bill_number,
@@ -139,36 +161,40 @@ ORDER BY g.congress, g.bill_type, g.bill_number;
 
 ## Postgres adapter and migrations
 
-The Host exposes explicit schema migration and watched-page collection/import. Set `CIVIC_LENS_DATABASE` in your local environment to a Postgres connection string containing Host and Database, with authentication appropriate to your local server. Runtime commands require this variable and have no default database. Keep credentials out of committed files, command arguments, and captured output. The commands require a reachable Postgres server and sufficient database permissions; they do not install or start Postgres.
+Set `CIVIC_LENS_DATABASE` in your local environment to a Postgres connection string with Host and Database, and with authentication for your local server. Runtime commands need this variable and have no default database. Keep credentials out of committed files, command arguments, and captured output. The commands need a reachable Postgres server and enough database permissions. They do not install or start Postgres.
 
-After setting the environment variable, run:
+After you set the variable, run:
 
 ```sh
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- db migrate
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- collect-import config/example.json example-local-source src/CivicLens.Collector/bin/Release/net10.0/CivicLens.Collector.dll .runtime/captures
 ```
 
-Use the local HTTP source from the tracer example above. `db migrate` applies pending checked-in EF migrations and can be repeated. Imports never apply migrations. Capture files remain in the artifact directory; Postgres stores capture identities and immutable attempt evidence, not file bodies.
+Use the local HTTP source from the tracer example. `db migrate` applies all pending checked-in EF migrations and can be repeated. Imports never apply migrations. Capture files stay in the artifact directory.
 
-Before collection, stderr identifies the application-generated attempt ID. After successful import, stdout contains one JSON summary, for example:
+Before collection, stderr shows the application-generated attempt ID. After a successful import, stdout holds one JSON summary, for example:
 
 ```json
 {"attemptId":"<generated-id>","outcome":"captured","importDisposition":"newAttempt","priorCaptureLinkStatus":"notApplicable","handoffRemoved":true}
 ```
 
-Every invocation creates a fresh attempt ID independent of its collector wire job ID. There is no attempt-ID override. Repeated identical content retains separate attempts and reuses the capture. Failed and deferred outcomes are imported too. The command does not automatically load prior validators or schedule retries. Feed and HTML discovery sources also retain their discovery result atomically with the captured attempt.
+Exit codes are 0 for imported captured or not-modified outcomes. They are 1 for failed or deferred collection, an operational failure, a cancellation, or a confirmed import whose handoff cleanup failed. They are 2 for invalid input or configuration. Only a returned import prints the JSON summary. A confirmed import with failed cleanup prints `handoffRemoved: false`; replay stays safe.
 
-Exit codes are 0 for imported captured/not-modified outcomes, 1 for failed/deferred collection or operational failure/cancellation, and 2 for invalid input/configuration. Only a returned import produces the JSON summary. On import failure or interruption, stderr reports that persistence was not confirmed: a lost commit acknowledgment can mean evidence was stored even though no success was printed. Retain the attempt ID for investigation. Re-running `collect-import` collects again with a new ID. Use `receipts replay` to retain the original attempt identity and import its saved receipt without another fetch. A confirmed import with failed handoff cleanup prints its summary with `handoffRemoved: false` and returns 1; replay remains safe. Provider error details and connection strings are not printed.
+On an import failure or interruption, stderr reports that persistence was not confirmed. Evidence may still be stored. Keep the attempt ID for investigation. Running `collect-import` again collects again with a new ID. Use `receipts replay` to keep the original attempt identity and import its saved receipt without another fetch.
 
-For other application composition, construct `PostgresCollectionAttemptStore` with `FromConnectionString`, or supply an `IDbContextFactory<CollectionAttemptDbContext>` directly. Call `MigrateAsync` explicitly before importing.
+For other application composition, build `PostgresCollectionAttemptStore` with `FromConnectionString`, or supply an `IDbContextFactory<CollectionAttemptDbContext>`. Call `MigrateAsync` explicitly before you import.
 
-The design-time context factory reads `CIVIC_LENS_DATABASE` when supplied and otherwise uses a local design database name for offline migration generation. Keep credentials out of committed files and command output. Use EF tooling version 10.0.12 when generating future migrations for `src/CivicLens.Infrastructure`, with output under `Collection/Migrations`. Review generated migration operations and the snapshot together. The initial migration includes an explicit composite prior-capture foreign key that EF cannot represent without incorrectly making the principal capture field required for all outcomes; preserve and test that constraint in later schema changes.
+The design-time context factory reads `CIVIC_LENS_DATABASE` when it is set. Otherwise it uses a local design database name for offline migration generation. Use EF tooling version 10.0.12 to generate migrations for `src/CivicLens.Infrastructure`, with output under `Collection/Migrations`. Review the generated operations and the snapshot together. Keep and test the explicit composite prior-capture foreign key in later schema changes.
 
-Integration tests apply migrations against disposable Postgres instances and check for model drift. They verify exact evidence round trips, duplicate/conflicting and concurrent imports, capture-length conflicts, 304 ambiguity, and transaction cancellation/rollback. Receipt tests additionally exercise failed-import recovery, relocation, revalidation, uncertain commit replay, and cleanup failures. They do not establish machine power-loss durability or a production backup/restore procedure.
+After a schema change, regenerate the schema reference in `docs/architecture/schema/` and commit it. Place each new table in the feature map of `SchemaReferenceTests` first.
+
+```sh
+CIVIC_LENS_WRITE_SCHEMA_DOCS=1 dotnet test CivicLens.slnx --configuration Release --no-build --filter FullyQualifiedName~SchemaReferenceTests
+```
 
 ## Managed collection jobs
 
-Apply `db migrate` first, including the additive `RobotsCrawlDelay` migration when upgrading. Rebuild host and collector together to use version 10. Stored version 7 and 9 attempts stay readable, but only version 10 runs. Jobs queued before an upgrade run at version 10. Job commands require `CIVIC_LENS_DATABASE`. Enqueue snapshots the selected source and policy; later runs need neither the original configuration nor an enabled entry in a changed configuration.
+Apply `db migrate` first, also when you upgrade. Rebuild the host and collector together. Job commands need `CIVIC_LENS_DATABASE`.
 
 ```sh
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- jobs enqueue config/example.json example-local-source check-2026-10-06
@@ -180,19 +206,27 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- jo
 CIVIC_LENS_COLLECTION_CONFIG="$PWD/config/example.json" dotnet run --no-build --configuration Release --project src/CivicLens.Host -- worker src/CivicLens.Collector/bin/Release/net10.0/CivicLens.Collector.dll .runtime/captures
 ```
 
-Reuse an enqueue key only for the same configuration revision, source settings, policy, and any explicitly supplied coverage date; use a new key for a new logical check. `jobs run` reconciles old execution before making at most one new attempt. It returns immediately when a lease, global collector slot, origin barrier, origin deadline, or retry deadline blocks admission. Inspect `status`, `blockReason`, `retryAt`, and `job` in the JSON result; rerun when eligible. Run exits 0 only for a succeeded job, otherwise 1. Other job commands return 0 on success, 2 for invalid input or missing inspected jobs, and 1 for operational failures. Listing defaults to 20 jobs, maximum 100.
+Reuse an enqueue key only for the same configuration revision, source settings, policy, and any explicit coverage date. Use a new key for a new logical check.
 
-Optional source `jobPolicy` fields are `maxAttempts` (default 3), `initialRetryDelaySeconds` (30), `maximumRetryDelaySeconds` (3600), `maxTotalRequests`, `maxTotalBytes`, and `maxTotalTimeoutSeconds`. Omitted aggregate limits equal the corresponding per-attempt limit times `maxAttempts`. Limits must reserve at least one complete attempt. Source `eTag` and `lastModified` are optional explicit validators; automatic stored-validator lookup is not implemented. A server Retry-After can exceed the exponential delay cap. Version 6 robots 429/server/transport failures are deferred without attaching robots headers as content evidence. Declared crawl-delay extends shared origin pacing even after successful collection or recovery without a saved receipt. If the required wait cannot fit the attempt timeout, the collector defers with `crawlDelay`; it does not shorten the delay. Attempts remain budgeted, so a delay longer than every attempt timeout can exhaust retries. Inspect the delay and adjust the explicit work budget or source policy before admitting new work. Inspection includes immutable attempts and charged totals; the `reserved*` totals retain timeout reservations and unknown usage conservatively.
+`jobs run` returns at once when a lease, the global collector slot, an origin barrier, an origin deadline, or a retry deadline blocks admission. Inspect `status`, `blockReason`, `retryAt`, and `job` in the JSON result, and run again when eligible. `jobs run` exits 0 only for a succeeded job, otherwise 1. Other job commands return 0 on success, 2 for invalid input or a missing job, and 1 for operational failures. `jobs list` defaults to 20 jobs, with a maximum of 100.
 
-The CLI uses a 60-second renewable database-time lease. Persisted cancellation is observed on renewal (normally within 20 seconds) and stops future collection. Complete receipts remain recoverable. Ctrl+C does not permanently cancel the job. After interruption, rerun the same job with the complete artifact root, including `.pending`, or its relocated copy. A same-origin unresolved attempt blocks other managed jobs until reconciled. `jobs run` and the worker reconcile imported evidence even when its receipt handoff is missing; otherwise receipt replay remains available without fetching. No receipt and no imported evidence means unknown execution, charged at the full reserved budget.
+Optional source `jobPolicy` fields are `maxAttempts` (default 3), `initialRetryDelaySeconds` (30), `maximumRetryDelaySeconds` (3600), `maxTotalRequests`, `maxTotalBytes`, and `maxTotalTimeoutSeconds`. Omitted aggregate limits equal the per-attempt limit times `maxAttempts`. Limits must reserve at least one complete attempt. Source `eTag` and `lastModified` are optional explicit validators.
 
-`worker <collector.dll> <artifact-directory>` requires `CIVIC_LENS_COLLECTION_CONFIG` to name an absolute configuration path and runs the durable collection-to-review engine. It drains bounded batches, default 20 and maximum 100, then waits for committed work notifications or persisted source-check, retry, pacing, and lease deadlines. `--once` admits due configured checks and drains currently runnable work through downstream preparation, extraction, and comparison; it exits without waiting for future deadlines. Ctrl+C stops the worker. Successful configured source checks automatically queue one bounded article batch, extract readable text using retained profiles, and compare compatible consecutive observations. Repeated source checks can recheck known articles within that same batch budget. The worker resumes durable pending stages after restart. A new source gets its first check after a deterministic offset of less than one hour, so a fresh start does not burst. Optional top-level `pacingGroups` limit total load on shared hosts: `{"hostSuffix": "house.gov", "minDelayMilliseconds": 3000}` spaces all managed jobs for any `*.house.gov` origin by at least 3 seconds, in addition to each origin's own pacing. A 429 on one member site also delays the whole group by its Retry-After. A 5xx does not. The checked-in federal configurations set 3000 ms for `house.gov` and `senate.gov`. House and Senate are separate groups. At about 538 House checks an hour, a 3 second delay uses about 45 percent of group capacity. If the queue keeps growing, lower the delay. Jobs created under an older configuration revision have no pacing group until they finish. The `JobPacingKeys` migration does not backfill the new `pacing_key` column, because the key needs .NET origin normalization and group matching that SQL cannot repeat exactly. Jobs created before it keep a null key: the worker still claims them while their origin waits, and attempt start blocks them as before, so a large old backlog still costs one claim, start, and release per pass. Enabled sources are checked every hour unless `checkIntervalSeconds` specifies another interval from 60 through 604800 seconds. On restart, unchanged schedules preserve their next due time, and missed intervals coalesce into one catch-up check. Active checks for the same source and exact root URL suppress another scheduled check. Disabled/removed sources pause future scheduling; coverage is checked at each due admission. Change configuration and restart the worker to apply it. Cancelling one job does not disable its source schedule. Keep one worker for an operational store; leases and fenced checkpoints protect ownership if another worker runs.
+A crawl delay longer than every attempt timeout can exhaust the retries. Inspect the delay, then adjust the work budget or the source policy before you admit new work. Inspection shows immutable attempts and charged totals. The `reserved*` totals keep timeout reservations and unknown use conservatively.
 
-Managed jobs share one collector slot per operational store across artifact roots. Direct `collect`, `collect-import`, and standalone collector commands are outside this guarantee. A lost lease cannot guarantee that an old process has physically ceased HTTP; do not treat collection as exactly once. A stale runner can save a late receipt after its attempt was already settled as interrupted. Such a handoff remains available to `receipts replay`; later managed runs do not revisit already settled attempts. Back up the database and complete artifact roots together.
+**Interruption.** Ctrl+C does not cancel the job permanently. After an interruption, run the same job again with the complete artifact root, including `.pending`, or its relocated copy. A same-origin unresolved attempt blocks other managed jobs until it is reconciled. `jobs run` and the worker reconcile imported evidence even when its handoff is missing. Otherwise `receipts replay` imports without a fetch.
 
-## Feed/HTML discovery and bounded article admission
+**Worker.** `worker <collector.dll> <artifact-directory>` needs `CIVIC_LENS_COLLECTION_CONFIG` with an absolute configuration path. It runs the durable collection-to-review engine. `--once` admits due checks, drains the runnable work, and exits without waiting for future deadlines. Ctrl+C stops the worker. Change the configuration and restart the worker to apply it. Cancelling one job does not disable its source schedule. Keep one worker for each operational store. Leases and fenced checkpoints protect ownership if another worker runs.
 
-Set a source's `mode` to `feed` to collect RSS 2.0 or Atom, or `html` to extract scoped anchor links from a listing page; omitted mode remains `page`. `maxCandidates` defaults to 100 and accepts 1 through 1,000. The allowed origin and path prefix must cover both the feed and intended article URLs. Add this synthetic source to `config/example.json` for the local HTTP server described above:
+Enabled sources are checked every hour unless `checkIntervalSeconds` sets another interval from 60 to 604800 seconds. The engine rules are in [collection](architecture/collection.md#autonomous-collection-engine).
+
+**Pacing groups.** Optional top-level `pacingGroups` limit the total load on shared hosts. For example, `{"hostSuffix": "house.gov", "minDelayMilliseconds": 3000}` spaces all managed jobs for any `*.house.gov` origin by at least 3 seconds. This adds to the pacing of each origin. If the queue keeps growing, lower the delay. The group rules are in [collection](architecture/collection.md#robots-and-pacing).
+
+Managed jobs share one collector slot for each operational store. Direct `collect`, `collect-import`, and standalone collector commands are outside this guarantee. Do not treat collection as exactly once. Back up the database and the complete artifact roots together.
+
+## Feed and HTML discovery
+
+Set a source's `mode` to `feed` to collect RSS 2.0 or Atom, or to `html` to extract scoped anchor links from a listing page. An omitted mode stays `page`. `maxCandidates` defaults to 100 and accepts 1 to 1,000. The allowed origin and path prefix must cover the feed and the article URLs. Add this synthetic source to `config/example.json` for the local HTTP server above:
 
 ```json
 {
@@ -212,13 +246,13 @@ Set a source's `mode` to `feed` to collect RSS 2.0 or Atom, or `html` to extract
 }
 ```
 
-Create the feed in the same local server directory. This fixture is synthetic and contains no claims about an actual official:
+Create the feed in the same local server directory. This fixture is synthetic and holds no claims about a real official:
 
 ```sh
 printf '<rss version="2.0"><channel><title>Local fixture</title><item><link>/page.html</link></item></channel></rss>' > .runtime/example-source/feed.xml
 ```
 
-Apply migrations, collect/import the feed, inspect the returned attempt ID, and explicitly admit its candidates:
+Apply migrations, collect and import the feed, inspect the returned attempt ID, and admit its candidates:
 
 ```sh
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- db migrate
@@ -229,29 +263,29 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- di
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- jobs run <job-id> src/CivicLens.Collector/bin/Release/net10.0/CivicLens.Collector.dll .runtime/captures
 ```
 
-`feeds get/admit` remain aliases for `discovery get/admit`. For HTML, use the same commands with a source configured as `mode: "html"` and a listing-page URL. Admission creates ordinary page jobs; fetching those pages does not generate more candidates.
+`feeds get` and `feeds admit` are aliases of `discovery get` and `discovery admit`. For HTML, use the same commands with a source in `mode: "html"` and a listing-page URL.
 
-Discovery collection also works through `jobs enqueue` and `jobs run`; inspect the job's attempts to obtain the evidence attempt ID. Successful HTTP capture does not guarantee valid discovery. `discovery get` reports `parsed`, `invalid`, `unsupported`, or `limitExceeded`, with URLs only after complete parsing. The raw capture remains inspectable in every captured case. Failed/deferred HTTP outcomes and 304s do not create candidate lists. For a 304, inspect the earlier captured discovery attempt.
+Discovery collection also works through `jobs enqueue` and `jobs run`. Inspect the job's attempts to find the evidence attempt ID. `discovery get` reports `parsed`, `invalid`, `unsupported`, or `limitExceeded`, with URLs only after complete parsing. It also prints `outOfScopeCount`. A successful capture does not prove a valid discovery. For a 304, inspect the earlier captured discovery attempt.
 
-`discovery admit` snapshots the current enabled source's page-job settings, clears its conditional validators, and checks that source, discovery mode, and scope match the retained discovery. Its limits reserve the full retry budget of every article job. Admission enqueues jobs and does not fetch them. The response reports jobs created, duplicate count, and deferred count. Repeating the same key and inputs returns the original result without creating jobs; changing inputs with the same key fails. A new key authorizes another bounded batch for remaining candidates. A source/URL already admitted stays deduplicated even if its job failed or was cancelled; inspect or recover that job instead. Existing admitted jobs run from their snapshot after configuration changes.
+`discovery admit` enqueues jobs and does not fetch them. The response reports the jobs created, the duplicate count, and the deferred count. The same key and inputs return the original result; changed inputs with the same key fail. Use a new key for another bounded batch of the remaining candidates. A source and URL already admitted stays deduplicated, even when its job failed or was cancelled; inspect or recover that job instead.
 
-Candidates, capture identity, and attempt evidence commit atomically. If import fails, use the existing `receipts replay` commands; no new fetch is required. If admission acknowledgment is lost, repeat its exact key and configuration; omit the date to reuse the saved one, or supply that same date explicitly. Older v3 page, v4 page/feed, and v5 page/feed/HTML handoffs remain recoverable after upgrading; HTML discovery requires v5 or later. The migration renames existing discovery/admission tables while preserving their evidence, URL bindings, and batch replay records. Schema changes still require explicit `db migrate`.
+If an import fails, use `receipts replay`; no new fetch is needed. If an admission acknowledgment is lost, repeat its exact key and configuration. Leave out the date to reuse the saved one, or give that same date. Schema changes still need an explicit `db migrate`.
 
 ## Federal source pilot
 
-`config/federal-pilot.json` contains a deliberately small live-source configuration for Elizabeth Warren and Ted Cruz. It is a collection pilot, not representative national coverage. The coverage start date records when this project began monitoring these sources, not when either senator took office. Office press releases establish what an office published; claims about enacted legislation or completed government actions require corroborating authoritative records before publication.
+`config/federal-pilot.json` holds a small live-source configuration for Elizabeth Warren and Ted Cruz. It is a collection pilot, not representative national coverage. The coverage start date records when this project began to monitor these sources, not when either senator took office. Office press releases show what an office published. Claims about enacted legislation or completed government actions need corroborating authoritative records before publication. The pilot verified captures of both newsroom pages, and a worker pass parsed 16 candidate links from the Warren listing.
 
 | Source ID | Purpose |
 |---|---|
 | `elizabeth-warren-press` | Official newsroom listing; HTML discovery applies tolerant recovery to its retained markup; refresh the capture and inspect candidates before admission |
 | `ted-cruz-press` | Official newsroom listing; parsed candidates include navigation and pagination, so prefer the RSS source for article admission |
-| `ted-cruz-press-feed` | RSS endpoint advertised by the official newsroom; bounded admission of linked article jobs |
+| `ted-cruz-press-feed` | RSS endpoint that the official newsroom advertises; bounded admission of linked article jobs |
 | `elizabeth-warren-pilot-article-1` | Explicit education-oversight release; `capture-text-v2` with the `warren-article` profile extracts its retained capture |
 | `elizabeth-warren-pilot-article-2` | Explicit heating-assistance release; `capture-text-v2` with the `warren-article` profile extracts its retained capture |
 
-Each job permits at most two attempts, five requests and 2 MB per attempt, with a 60-second attempt timeout and at least 1.5 seconds between content requests. A discovery admission permits at most two article jobs and reserves their complete retry allowances: 20 requests, 8 MB, and 240 seconds. Another explicit admission authorizes another batch; these are not lifetime coverage caps. The worker is a separate explicit command and does not start with the Host.
+Each job allows at most two attempts, five requests and 2 MB for each attempt, a 60-second attempt timeout, and at least 1.5 seconds between content requests. A discovery admission allows at most two article jobs and reserves their full retry allowances: 20 requests, 8 MB, and 240 seconds. Another explicit admission authorizes another batch. The worker is a separate command and does not start with the Host.
 
-Build both executables and configure `CIVIC_LENS_DATABASE` as above. For the already configured local development database, source the ignored `.runtime/database/connection.env` file. Start with the RSS source:
+Build both executables and set `CIVIC_LENS_DATABASE` as above. For the configured local development database, source the ignored `.runtime/database/connection.env` file. Start with the RSS source:
 
 ```sh
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- validate config/federal-pilot.json
@@ -261,7 +295,7 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- di
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- discovery admit config/federal-pilot.json ted-cruz-press-feed <captured-attempt-id> <new-admission-key>
 ```
 
-Inspect discovery before admission. Run each admitted job explicitly, then extract its captured article with the configured content profile:
+Inspect discovery before admission. Run each admitted job, then extract its captured article with the configured content profile:
 
 ```sh
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- jobs run <article-job-id> src/CivicLens.Collector/bin/Release/net10.0/CivicLens.Collector.dll .runtime/captures
@@ -269,17 +303,15 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- do
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- documents get <extraction-id>
 ```
 
-The `senate-main` profile retains the main article region and excludes navigation, modal, sharing, and previous/next controls. Inspect selected text before relying on a profile. Its exact revision is retained with each extraction; changing the profile does not rewrite old text. The `warren-article` profile selects the article template. Version 7 collection and `capture-text-v2` extraction use tolerant HTML recovery while retaining token, decoded-input, and DOM-depth limits.
+The `senate-main` profile keeps the main article region and excludes navigation, modal, sharing, and previous and next controls. The `warren-article` profile selects the article template. Inspect the selected text before you rely on a profile.
 
-The bounded pilot verified captures of both newsroom pages, the RSS feed, and two articles per office, with readable text retained for both offices. A version 7 worker pass captured the Warren listing and parsed 16 candidate links. Both retained Warren articles also extract successfully under `capture-text-v2`. These checks establish compatibility with those responses, not future source availability. Failed processing must not be interpreted as no activity.
-
-First captures are baselines. Do not compare different articles to fabricate a change, or mistake a changed extraction profile for a source edit. A document-change candidate requires two compatible extractions of the same source and exact requested URL and a complete comparison containing changed text. The review queue can therefore remain empty while real evidence is already stored. Use the evidence pages in the review workspace, or `documents history`, to inspect extraction IDs. No evidence is approved or published by collection.
+First captures are baselines. Do not compare different articles to make a change, and do not mistake a changed profile for a source edit. A document-change candidate needs two compatible extractions of the same source and exact requested URL, and a complete comparison with changed text. The review queue can therefore stay empty while real evidence is stored. Use the evidence pages or `documents history` to find extraction IDs. Failed processing does not mean no activity.
 
 ## Recover saved receipts
 
-`collect-import` saves a versioned handoff in `<artifact-directory>/.pending/` after the collector receipt and capture have been verified and before importing into Postgres. The directory also contains the hash-named gzip captures. Database outages and missing migrations leave the saved handoff available for replay. Missing or invalid database configuration is still rejected before collection.
+`collect-import` saves a versioned handoff in `<artifact-directory>/.pending/` after it verifies the receipt and capture, and before it imports. The directory also holds the hash-named gzip captures. A database outage or a missing migration leaves the handoff for replay. Missing or invalid database configuration is still rejected before collection.
 
-List pending handoffs without a database, then replay one attempt or all pending attempts after setting `CIVIC_LENS_DATABASE` and applying migrations:
+List pending handoffs without a database. Then set `CIVIC_LENS_DATABASE`, apply migrations, and replay one attempt or all of them:
 
 ```sh
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- receipts list .runtime/captures
@@ -287,23 +319,19 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- re
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- receipts replay .runtime/captures --all
 ```
 
-Listing returns a JSON array of pending identifiers, including entries whose contents may be invalid. Single replay prints the same import summary as `collect-import`. Batch replay writes one JSON result per entry, with `handoffId`, `status`, an optional `import` summary, and a sanitized `error`. It continues past individual failures and returns 1 if any recovery fails, cleanup fails, or a saved outcome is failed/deferred. Empty batches return 0. Cancellation stops the batch and returns reports for completed imports plus the interrupted entry when applicable; use listing to see remaining work.
+Listing returns a JSON array of pending identifiers, also for entries whose contents may be invalid. A single replay prints the same import summary as `collect-import`. A batch replay writes one JSON result for each entry, with `handoffId`, `status`, an optional `import` summary, and a sanitized `error`. It continues past single failures. It returns 1 if any recovery fails, any cleanup fails, or a saved outcome is failed or deferred. An empty batch returns 0. Cancellation stops the batch and reports the completed imports and the interrupted entry. Use listing to see the remaining work.
 
-Batch replay imports captured observations before 304s. If a captured import is unconfirmed or an envelope is unreadable, 304s stay pending with `prerequisiteUnconfirmed` until the missing evidence can be recovered. Other valid entries still proceed. A confirmed capture whose cleanup failed does not block 304s. This deliberately conservative rule can delay unrelated 304s in the same spool. Prefer `--all` when recovering related captures and 304s; single replay processes only the selected receipt and cannot account for other pending evidence. Existing stored 304 links are never rewritten.
+In a batch, a 304 waits with `prerequisiteUnconfirmed` when a captured import is unconfirmed or an envelope is unreadable. Prefer `--all` when you recover related captures and 304s, because a single replay cannot account for other pending evidence. Invalid receipts and missing or corrupt captures stay pending for inspection. Fresh collection and recovery in one spool wait up to 30 seconds for access, then report a failure.
 
-Replay reads the saved request and receipt, validates their identity and supported versions, and rechecks referenced capture bytes. It never fetches a source or reads current coverage configuration. The saved attempt ID is reused, so a commit that succeeded before acknowledgment was lost becomes a duplicate import. Invalid receipts and missing or corrupted captures stay pending for inspection; no evidence is imported from them. Provider exception details are not printed.
+To relocate runtime storage, move the complete capture directory, including `.pending`, and pass its new path to listing and replay. Back up pending handoffs together with their captures. Do not edit envelope contents to relocate them, and never copy credentials into them.
 
-After a confirmed import, the handoff is removed. If removal fails, the confirmed import remains valid and the handoff can be replayed safely. Capture files are never deleted by receipt cleanup. Fresh collection/import and recovery serialize within one spool, waiting up to 30 seconds for access before reporting failure; this does not implement cross-root host pacing.
+A crash or a cancellation before the handoff save may leave captures without a replayable receipt. Temporary `.tmp-*` handoff files are not replayable. Remove them only when no collection or recovery runs.
 
-To relocate runtime storage, move the complete capture directory including `.pending`, then pass its new path to listing/replay. The historical request retains its original artifact directory, while verification resolves hash-named captures beneath the selected new root. Back up pending handoffs together with their captures; do not edit envelope contents to relocate them or copy credentials into them.
-
-Recovery begins only once a complete handoff has been saved. A crash or cancellation before that point may leave captures without a replayable receipt. Temporary `.tmp-*` handoff files are not replayable; remove them only when no collection or recovery operation is running. Process restart recovery does not establish machine power-loss durability. Unsupported handoff versions require an explicit future migration; they are not silently converted.
-
-## Runtime and future operations
+## Documents
 
 ### Extract and cite document text
 
-Apply `db migrate` for the additive `document_extractions` table, then use an imported captured attempt and its artifact directory:
+Apply `db migrate`, then use an imported captured attempt and its artifact directory:
 
 ```sh
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- documents extract <captured-attempt-id> .runtime/captures
@@ -311,13 +339,13 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- do
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- documents cite <extraction-id> <start> <length>
 ```
 
-Extraction returns the extraction ID, source attempt ID, processing versions, text hash, and text length. `get` returns the exact stored text and provenance. Citation offsets count UTF-16 units, matching .NET strings; an emoji represented by a surrogate pair counts as two units. The command rejects ranges that split that pair. Citation output is local evidence, not publication or approval.
+Extraction returns the extraction ID, the source attempt ID, the processing versions, the text hash, and the text length. `get` returns the exact stored text and provenance. Citation offsets count UTF-16 units, so an emoji stored as a surrogate pair counts as two. The command rejects a range that splits that pair.
 
-Only captured HTML/plain-text attempts are supported. For a linked 304, explicitly select the original captured attempt. Repeating extraction verifies the artifact again and returns the same record for identical output; different output under the same processing versions and profile revision is rejected. A relocated artifact directory is supported. Missing/corrupt files, unsupported content, and parser limits fail without replacing earlier text. Inspection and citation can still use retained text if the capture is temporarily unavailable, but this does not replace backing up raw captures. Static HTML extraction may retain navigation or hidden text; it does not establish a substantive source change. See architecture for exact bounds and encoding rules.
+Only captured HTML and plain-text attempts are supported. For a linked 304, select the original captured attempt. Repeating an extraction verifies the artifact again and returns the same record for identical output. A relocated artifact directory works. Inspection and citation can use retained text while a capture is unavailable, but back up the raw captures anyway. The rules are in [documents](architecture/documents.md#extraction).
 
 ### Configure versioned HTML content selection
 
-Apply `db migrate` to add the nullable profile snapshot column. In configuration v2, declare reusable profiles and reference them from sources. This example targets synthetic local HTML containing `<main>` and a `.related-news` subtree:
+In configuration v2, declare reusable profiles and name them from sources. This example targets synthetic local HTML with `<main>` and a `.related-news` subtree:
 
 ```json
 {
@@ -339,13 +367,11 @@ Apply `db migrate` to add the nullable profile snapshot column. In configuration
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- documents extract <config.json> <captured-attempt-id> .runtime/captures
 ```
 
-This command uses the profile assigned to the imported attempt's source ID. It reports the profile ID and revision alongside the extraction ID. Missing assignments, missing/ambiguous content regions, a profile that excludes its own root, and non-HTML content fail without falling back to whole-body extraction. Selectors support one tag name, `#id`, or `.class`; they do not support combinations, attributes, or pseudo-classes. Inspect output with `documents get` to verify the selected content before relying on a profile.
-
-Changing selectors or exclusions produces a new immutable extraction identity even for the same capture. Earlier text, profiles, and citations remain readable; profiles are never retroactively attached to older records. Processing an already captured source is allowed after its coverage ends or it is disabled. Selection does not prove substantive change or grant publication approval. Version comparisons require matching processing settings on both sides.
+This command uses the profile of the attempt's source ID. It reports the profile ID and revision with the extraction ID. Check the output with `documents get` before you rely on a profile. The selector rules are in [documents](architecture/documents.md#content-profiles).
 
 ### Inspect history and compare text
 
-Run `db migrate` to apply `DocumentComparisons` and `DocumentHistoryLookupIndex`, then use:
+Run `db migrate`, then use:
 
 ```sh
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- documents history <source-id> <exact-requested-url>
@@ -353,27 +379,25 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- do
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- documents comparison <comparison-id>
 ```
 
-History retains checks and extraction revisions, groups consecutive equal text within each processing stream, and preserves reversions. Failed/missing evidence breaks grouping. Resolved 304 checks reuse the earlier captured extraction. Histories exceeding the documented observation, extraction, or text budgets fail explicitly; pagination is not yet implemented.
+`compare` returns exit 0 for a complete comparison. It returns exit 1 with a retained `incompatible` or `limitExceeded` result otherwise. `comparison` shows that retained result and returns exit 0 when found. No hunks means unchanged only when the status is `complete`. To inspect an exact quotation, use `documents cite` with the extraction ID and a positive range length.
 
-`compare` stores a deterministic result bound to both extractions and the algorithm/settings versions. It returns exit 0 for a complete comparison and exit 1 with a retained `incompatible` or `limitExceeded` result otherwise. `comparison` inspects that retained result and returns exit 0 when found. No hunks means unchanged only when status is `complete`. Text ranges use UTF-16 offsets; use `documents cite` with the corresponding extraction ID and positive range length to inspect exact quotations. A zero-length range denotes an insertion/deletion point, not a quotation.
-
-When processing versions or profiles differ, explicitly rerun `documents extract` on both original captured attempt IDs using the same current settings/configuration, then compare those new extraction IDs. Earlier extractions, citations, and comparisons remain retained. These commands do not judge substantive significance, approve evidence, or publish anything.
+When processing versions or profiles differ, run `documents extract` again on both original captured attempt IDs with the same current settings. Then compare the new extraction IDs. These commands do not judge significance, approve evidence, or publish anything.
 
 ### Inspect evidence in the review workspace
 
-The review workspace shows retained evidence on pages under `/Documents`: saved comparison, saved text, cited passage, and saved versions. Open them from links in Review and Sources. These pages read existing evidence only. Use the CLI or the worker for migrations, collection, extraction, and comparisons. The pages show failed checks, missing evidence, and history or comparison limits explicitly. Empty comparisons mean unchanged only when the saved status is complete. Empty histories do not establish source inactivity. Storage failures produce a sanitized unavailable response.
+The pages under `/Documents` show a saved comparison, saved text, a cited passage, and saved versions. Open them from links in Review and Sources. They read existing evidence only. Use the CLI or the worker for migrations, collection, extraction, and comparisons. Empty histories do not show source inactivity.
 
-### Authenticated document-change review
+## Review workspace
 
-`review [port]` starts the separate editorial workspace on IPv4 loopback (default 5081). It supports draft and decision mutations and requires Auth0 configuration. It does not collect, migrate, or manage access accounts through the UI. The owner can publish selected drafts from the Review home page. Apply `db migrate` explicitly before starting it; the additive `DocumentChangeReview` migration retains draft pointers, immutable revisions, decisions, and replay receipts.
+`review [port]` starts the editorial workspace on IPv4 loopback (default 5081). It needs Auth0 configuration. It does not collect, migrate, or manage access accounts. Apply `db migrate` before you start it.
 
-Configure these environment variables through the deployment's protected environment/secret mechanism, not command-line arguments or committed files:
+Set these variables through the protected environment or secret mechanism of the deployment, never through command-line arguments or committed files:
 
 | Variable | Meaning |
 |---|---|
 | `CIVIC_LENS_DATABASE` | Existing operational PostgreSQL connection string |
 | `CIVIC_LENS_REVIEW_ORIGIN` | Exact external HTTPS origin, without a path, query, or credentials |
-| `CIVIC_LENS_AUTH0_AUTHORITY` | Auth0 tenant/custom-domain HTTPS origin |
+| `CIVIC_LENS_AUTH0_AUTHORITY` | Auth0 tenant or custom-domain HTTPS origin |
 | `CIVIC_LENS_AUTH0_CLIENT_ID` | Regular Web Application client ID |
 | `CIVIC_LENS_AUTH0_CLIENT_SECRET` | Auth0 client secret |
 | `CIVIC_LENS_REVIEW_OWNER` | Exact Auth0 `sub` of the owner |
@@ -382,31 +406,29 @@ Configure these environment variables through the deployment's protected environ
 | `CIVIC_LENS_ISSUES_CONFIG` | Optional absolute path to the tracked-issue file, at most 1 MB. Its issue IDs are the configured issues. Unset means no configured issues |
 | `CIVIC_LENS_REVIEW_OFFICIALS` | Optional comma-separated configured official IDs |
 | `CIVIC_LENS_COLLECTION_CONFIG` | Optional absolute path to the collection configuration for the owner Sources page |
-| `CIVIC_LENS_RELEASE_DIRECTORY` | Optional absolute path to the release root. With the collection configuration, it enables the owner publish section |
+| `CIVIC_LENS_RELEASE_DIRECTORY` | Optional absolute path to the release root. With the collection configuration, it turns on the owner publish section |
 
-Without the collection configuration, the Sources page reports that source checks are not set up. The worker, not the workspace, reads and writes captures. The publish section needs both the collection configuration, for officials' display names, and the release directory. Without them, the owner sees a notice that publishing is off.
+Without the collection configuration, the Sources page reports that source checks are not set up. The publish section needs the collection configuration, for the officials' display names, and the release directory. Without them, the owner sees a notice that publishing is off. Set `CIVIC_LENS_ISSUES_CONFIG` to offer issues and policy areas as choices on the statement pages.
 
-Set the Auth0 allowed callback URL to `<CIVIC_LENS_REVIEW_ORIGIN>/signin-oidc`. Configure an HTTPS reverse proxy on the same host to forward to loopback and preserve the configured external Host header, including its port if nonstandard. The workspace rejects other Host values, pins its effective scheme to HTTPS, ignores ambient listener configuration, and does not trust forwarded headers. The initial listener expects a same-host proxy; isolated container networking requires an explicitly reviewed deployment configuration. Public access must terminate HTTPS at the proxy. Local workstation testing also requires a local HTTPS proxy and an allowed Auth0 callback; there is no unauthenticated review mode.
+**Auth0 and proxy.** Set the Auth0 allowed callback URL to `<CIVIC_LENS_REVIEW_ORIGIN>/signin-oidc`. Configure an HTTPS reverse proxy on the same host. It forwards to loopback and keeps the configured external Host header, with its port if it is not standard. Public access must end HTTPS at the proxy. Local workstation testing also needs a local HTTPS proxy and an allowed Auth0 callback; there is no unauthenticated review mode.
 
-The application accepts only configured subjects, even if other users can authenticate at Auth0. Both owner and reviewer may draft, self-approve, request changes, and withdraw an effective approval. Publishing and access-management UI are not implemented. Change the server subject configuration and restart to change access; previously issued cookies are rechecked against that configuration. Signing out clears the application session; it does not end the Auth0 identity-provider session. Cookies are secure, HttpOnly, non-sliding, and expire after eight hours. Keys persist across restarts; on Unix the application restricts the key directory to its owner. Keys are not encrypted by the application at rest, so protect the persistent volume and its backups as credentials.
+**Access.** To change access, change the server subject configuration and restart. The data-protection keys are not encrypted at rest by the application. Protect the persistent key volume and its backups as credentials.
 
 ```sh
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- review 5081
 ```
 
-Open `/Review` through the configured HTTPS origin. The dashboard lists new changes, drafts, source health, and recent activity. With collection settings configured, `/Review/Sources` is an interactive owner-only page. It lists configured sources with the health of their latest check, offers Check now, and lists recent checks with Stop for active checks and Start draft for found changes. Check details open in a side panel with each attempt, retry timing, Check again for a tracked page URL, and a link to all saved versions. Keep the separate `worker` running: it collects articles, extracts readable text, and prepares comparisons automatically. The page refreshes every 5 seconds while a check is active and every 30 seconds otherwise; connection failures show a reconnect notice. A baseline or unchanged observation does not enter review. Article admission, extraction, and comparison run only in the worker or the CLI. The page accepts configured sources and retained article URLs only, contains no demonstration records, and does not claim worker liveness. Evidence pages under `/Documents` (saved comparison, saved text, cited passage, and saved versions) open from links in Review and Sources. `/Review/Statements` lists statement drafts and the statements that are not in review. `/Review/Statements/{candidate-id}` shows one statement with its article text, the edit form, the decision form, and its history. The statement pages need the same variables as the review workspace. Set `CIVIC_LENS_ISSUES_CONFIG` to offer issues and policy areas as choices. Without it, the pages offer none.
+Open `/Review` through the configured HTTPS origin. Keep the separate `worker` running, because it collects, extracts, and compares automatically. `/Review/Sources` is the owner Sources page. `/Review/Statements` lists statements, and `/Review/Statements/{candidate-id}` shows one statement for editing and decisions.
 
-Creating a draft explicitly selects a complete changed comparison. Saves retain immutable authored revisions. Actual change dates require a selected exact citation; dates of observation are displayed separately. Approval requires headline, summary, institution, at least one valid citation, and explicit resolution of all outstanding concerns. Concurrent saves/decisions return conflicts; stale unsaved edits remain visible, and decisions are disabled until the saved revision is reloaded or edits are saved. Review decisions do not publish anything.
+History allows at most 64 revisions and 128 decisions for each record. When a limit rejects a write, do not discard history to continue; it needs future history-pagination work. Browsing comparisons may return an empty batch with a continuation when the batch holds only unchanged, incompatible, or limited results. Use the continuation; the empty batch does not prove that no changes exist.
 
-The editor shows the saved document-change account and its exact selected passages as the approval target, separately from editable or recovered unsaved wording. Reviewers judge substantive change, wording, attribution, dates, interpretation, and evidence limits; automatic citation and revision checks establish integrity, not semantic correctness. Approved accounts remain private until the owner publishes them. Approval does not designate a golden label or a model training example.
+An AI draft is revision 1 by the AI drafter. Check every sentence and citation against the evidence. If the editor flags an unverified change date, check it, tick Date checked, and save a revision before you approve. Approved accounts stay private until the owner publishes them.
 
-History currently supports at most 64 revisions and 128 decisions per record, with 64 outstanding concerns and 64 citations per revision. Limit exhaustion rejects writes and requires future history-pagination work; do not discard history to continue. Browsing comparisons may return an empty batch with a continuation if the batch contains only unchanged/incompatible/limited results. Use the continuation rather than treating that batch as an exhaustive absence of changes.
+Auth0 tenant login and logout and the production reverse proxy still need live verification.
 
-Auth0 tenant login/logout and the production reverse proxy still require live verification. Offline tests validate subject authorization and HTTP workflows with isolated test signing keys; they do not exercise a live Auth0 tenant. Hetzner/Terraform provisioning, worker service management, and production backup restoration remain pending.
+## AI drafting of document-change accounts
 
-### AI drafting of document-change accounts
-
-The `worker` command drafts AI accounts of changed comparisons. [Architecture](architecture.md#ai-drafting-of-document-change-accounts-implemented) holds the rules. Set both variables below in the worker's protected environment to turn drafting on. If you set only one, the worker stops with exit code 2.
+The `worker` command drafts AI accounts of changed comparisons. [Analysis](architecture/analysis.md) holds the rules. Set both required variables below in the worker's protected environment to turn drafting on. If you set only one, the worker stops with exit code 2.
 
 | Variable | Meaning |
 |---|---|
@@ -416,13 +438,13 @@ The `worker` command drafts AI accounts of changed comparisons. [Architecture](a
 | `CIVIC_LENS_ANALYSIS_CONCURRENCY` | Optional number of calls at the same time (default 2, 1 to 4) |
 | `CIVIC_LENS_ISSUES_CONFIG`, `CIVIC_LENS_REVIEW_OFFICIALS` | The same issue file and official IDs that the review host reads |
 
-Tracked issues live in `config/issues.json`. The file has a `version` (only 1 is supported), a list of `policyAreas` (`id`, `name`), and a list of `issues`. Each issue has an `id`, `name`, `definition`, and at least one `policyAreaIds` entry. It may also have `includes`, `excludes`, `startsOn` (inclusive), and `endsBefore` (exclusive). IDs use lowercase words joined by hyphens, at most 128 characters. Policy area IDs and names are unique, and issue IDs are unique. Each policy area ID in an issue must exist and may appear once. List entries must be nonblank and unique within their list. The date range must be valid. The file holds at most 256 issues. The host reads and validates the file once at process start, and an invalid file stops startup.
+Tracked issues live in `config/issues.json`. The file format is in [configuration](architecture/configuration.md#tracked-issues). An invalid file stops startup.
 
 `db migrate` queues every earlier changed comparison that has no draft. The first worker run can spend up to the daily limit on those changes. Start with a low daily limit. Check the first drafts, and then raise the limit.
 
 With `--once`, the worker drains collection first and then drafting. A second JSON line reports the drafting result. Drafting failures give exit code 1.
 
-The New changes panel shows whether drafting is on, off, or paused. It also shows the state of each new change.
+The New changes panel shows whether drafting is on, off, or paused, and the state of each new change.
 
 | Shown state | Action |
 |---|---|
@@ -458,19 +480,11 @@ The document lists one entry for each prompt version. Drafts that a person start
 
 Each draft is counted once, by its current status. A draft with a newer revision is judged on that revision.
 
-An AI draft is revision 1 by the AI drafter. Check every sentence and citation against the evidence. If the editor flags an unverified change date, check it, tick Date checked, and save a revision before you approve.
+The [live test](#verification) for this adapter sends one paid call. It refuses to call if the reservation is over 25,000 tokens.
 
-To check the adapter against the real API, run one paid call on request only:
+## Statement issue gate
 
-```sh
-CIVIC_LENS_LIVE_AI=1 ANTHROPIC_API_KEY=... dotnet test CivicLens.slnx --configuration Release --no-build --filter 'Category=LiveAi'
-```
-
-The test refuses to call if the reservation is over 25,000 tokens.
-
-### Statement issue gate
-
-The `worker` command gates statement candidates. [Architecture](architecture.md#issue-gate-implemented) holds the rules. The gate runs when all of these variables are set in the worker's protected environment. A limit without `ANTHROPIC_API_KEY` stops the worker with exit code 2. Without `CIVIC_LENS_ISSUES_CONFIG`, the gate stage does not run, and `statements status` shows the pause reason `issuesConfigurationUnset`.
+The `worker` command gates statement candidates. [Statements](architecture/statements.md#issue-gate) holds the rules. The gate runs when all of these variables are set in the worker's protected environment. A limit without `ANTHROPIC_API_KEY` stops the worker with exit code 2. Without `CIVIC_LENS_ISSUES_CONFIG`, the gate stage does not run, and `statements status` shows the pause reason `issuesConfigurationUnset`.
 
 | Variable | Meaning |
 |---|---|
@@ -480,7 +494,7 @@ The `worker` command gates statement candidates. [Architecture](architecture.md#
 | `CIVIC_LENS_ANALYSIS_CONCURRENCY` | Optional number of calls at the same time, shared with drafting (default 2, 1 to 4) |
 | `CIVIC_LENS_ISSUES_CONFIG` | The issue file. Its revision ID binds each gate run. |
 
-The migration queued a gate row for every earlier candidate. The first run can spend up to the daily limit on them. Start with a low limit. With `--once`, the worker drains collection, then document-change drafting, then the gate, then statement drafting. It prints one more JSON line for each stage that runs.
+The migration queued a gate row for every earlier candidate. The first run can spend up to the daily limit on them. Start with a low limit. With `--once`, the worker drains the stages in the [order in statements](architecture/statements.md#issue-gate) and prints one more JSON line for each stage that runs.
 
 The commands below need `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`.
 
@@ -492,17 +506,13 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- st
 CIVIC_LENS_ISSUES_CONFIG=/abs/config/issues.json dotnet run --no-build --configuration Release --project src/CivicLens.Host -- statements regate --since 2026-01-01
 ```
 
-`status` prints the daily limit, any pause, the tokens charged today, and the count of candidates in each outcome. `list` takes `passed`, `skipped`, `failed-open`, `over-cap`, `pending`, or `failed`, and a limit up to 500 (default 100). `run` prints one run with its output, rubric revision, reason, and verified quote spans. `requeue` moves Failed gate rows back to Pending. `regate` moves skipped candidates back to Pending when their latest run used an older issue revision. Edit the issue file, then run `regate`, then let the worker run. No rubric change requeues anything by itself.
+`status` prints the daily limit, any pause, the tokens charged today, and the count of candidates in each outcome. `list` takes `passed`, `skipped`, `failed-open`, `over-cap`, `pending`, or `failed`, and a limit up to 500 (default 100). `run` prints one run with its output, rubric revision, reason, and verified quote spans. `requeue` moves Failed gate rows back to Pending. `regate` moves skipped candidates back to Pending when their latest run used an older issue revision. To apply a rubric change, edit the issue file, run `regate`, and let the worker run.
 
-To check the adapter and the prompt cache against the real API, run one paid test on request only. The gate test sends two requests and fails unless the second reads the cache.
+The [live test](#verification) for the gate sends two paid requests. It fails unless the second request reads the prompt cache.
 
-```sh
-CIVIC_LENS_LIVE_AI=1 ANTHROPIC_API_KEY=... dotnet test CivicLens.slnx --configuration Release --no-build --filter 'Category=LiveAi'
-```
+## Statement drafting
 
-### Statement drafting
-
-The `worker` command drafts a statement record for each candidate that the gate passed. [Architecture](architecture.md#statement-drafting-implemented) holds the rules. Statement drafting runs when both variables below are set in the worker's protected environment. A limit without `ANTHROPIC_API_KEY` stops the worker with exit code 2. The speakers come from the configuration revision of the job that admitted the article, so the stage does not read the current collection configuration. It does not need the issue file.
+The `worker` command drafts a statement record for each candidate that the gate passed. [Statements](architecture/statements.md#statement-drafting) holds the rules. Statement drafting runs when both variables below are set in the worker's protected environment. A limit without `ANTHROPIC_API_KEY` stops the worker with exit code 2. The stage does not need the issue file or the current collection configuration.
 
 | Variable | Meaning |
 |---|---|
@@ -511,7 +521,7 @@ The `worker` command drafts a statement record for each candidate that the gate 
 | `CIVIC_LENS_STATEMENT_DRAFTING_RUN_TOKENS` | Optional limit for one call's reservation (default 120,000 or the daily limit, whichever is smaller). It also sets the article byte cap. |
 | `CIVIC_LENS_ANALYSIS_CONCURRENCY` | Optional number of calls at the same time, shared with the other stages (default 2, 1 to 4) |
 
-Drafting uses Claude Sonnet 5.5, which costs more than the gate model. Gate rows that passed before you set the limit become draft rows, and the first run can spend up to the daily limit on them. Start with a low limit. A candidate whose article is over the byte cap gets no model call. It gets a draft with no revision, and a person writes the record. An entry blocks as `speakersUnavailable` when the admitting job has no configuration revision, or when its revision has no covered official for the source on the capture date. A later change to the coverage does not change this result. The change applies only to articles that jobs admit after it.
+Drafting uses Claude Sonnet 5.5, which costs more than the gate model. Gate rows that passed before you set the limit become draft rows, and the first run can spend up to the daily limit on them. Start with a low limit. A candidate whose article is over the byte cap gets no model call. It gets a draft with no revision, and a person writes the record. An entry blocked as `speakersUnavailable` stays blocked after a coverage change; the change applies only to articles admitted after it.
 
 The commands below need `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`.
 
@@ -522,13 +532,13 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- st
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- statements draft requeue <candidate-id|--all>
 ```
 
-`status` prints the daily limit, any pause, the tokens charged today, and the count of drafts in each outcome. `list` takes `drafted`, `over-cap`, `existing`, `pending`, or `failed`, and a limit up to 500 (default 100). `run` prints one run with its output, reason, and validation errors. `requeue` moves Failed and no other draft rows back to Pending. A requeue never changes a gate row. A paused or waiting stage follows the same table as document-change drafting: fix the key or the credit and restart the worker, or wait for the next UTC day.
+`status` prints the daily limit, any pause, the tokens charged today, and the count of drafts in each outcome. `list` takes `drafted`, `over-cap`, `existing`, `pending`, or `failed`, and a limit up to 500 (default 100). `run` prints one run with its output, reason, and validation errors. `requeue` moves Failed and no other draft rows back to Pending. It never changes a gate row. A paused or waiting stage follows the same table as document-change drafting: fix the key or the credit and restart the worker, or wait for the next UTC day.
 
-The opt-in live test for statement drafting sends one paid request. Run it with the command above.
+The [live test](#verification) for statement drafting sends one paid request.
 
-### Action drafting
+## Action drafting
 
-The `worker` command drafts one action record for each bill that has a candidate. [Architecture](architecture.md#action-drafting-implemented) holds the rules. Action drafting runs when all three variables below are set in the worker's protected environment. A limit without `ANTHROPIC_API_KEY` or without `CIVIC_LENS_ISSUES_CONFIG` stops the worker with exit code 2. The tracked officials come from the configuration revision of the candidate, so the stage does not read the current collection configuration. The issue file gives the tracked issues of each bill.
+The `worker` command drafts one action record for each bill that has a candidate. [Actions](architecture/actions.md) holds the rules. Action drafting runs when all three required variables below are set in the worker's protected environment. A limit without `ANTHROPIC_API_KEY` or without `CIVIC_LENS_ISSUES_CONFIG` stops the worker with exit code 2. The tracked officials come from the configuration revision of the candidate, so the stage does not read the current collection configuration. The issue file gives the tracked issues of each bill.
 
 | Variable | Meaning |
 |---|---|
@@ -538,7 +548,7 @@ The `worker` command drafts one action record for each bill that has a candidate
 | `CIVIC_LENS_ACTION_DRAFTING_RUN_TOKENS` | Optional limit for one call's reservation (default 120,000 or the daily limit, whichever is smaller). It also sets the prompt byte cap. |
 | `CIVIC_LENS_ANALYSIS_CONCURRENCY` | Optional number of calls at the same time, shared with the other stages (default 2, 1 to 4) |
 
-Drafting uses Claude Haiku 5.5. The migration queued every candidate that existed when it ran, and the first run can spend up to the daily limit on them. A bill version whose summaries had already closed has two queued candidates, one without and one with summaries. The older candidate settles as `supersededByNewerCandidate` with no call, also when the candidate with summaries blocks. When summaries arrive after the older candidate drafted, the bill version gets a second candidate and a second call. Start with a low limit. A bill whose facts did not change since the current revision gets no model call. A bill with more than 20 summary pages drafts without its summaries, and the run shows the reason `summaryOmitted`. A bill with more than 600 tracked sponsorships blocks as `tooManySponsorships`. A bill title over 4,000 characters blocks as `titleTooLong`. A bill with no tracked official settles as `noTrackedOfficial` with no call. A prompt over the byte cap drops the summary text and the run shows the reason `summaryOmitted`. A page saved by an older parser, extractor, or renderer version blocks as `extractionVersionChanged`. A page whose saved text differs from its rendering under current versions blocks as `renderedTextMismatch`, which points to changed data. A Blocked entry has no owner command yet. `requeue` moves only Failed rows.
+Drafting uses Claude Haiku 5.5. The migration queued every candidate that existed when it ran, and the first run can spend up to the daily limit on them. Start with a low limit. A bill version whose summaries had already closed has two queued candidates. The older one settles as `supersededByNewerCandidate` with no call, also when the candidate with summaries blocks. The [outcomes](architecture/actions.md#outcomes) table lists every other code.
 
 The commands below need `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`.
 
@@ -548,15 +558,15 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- ac
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- actions draft requeue <candidate-id|--all>
 ```
 
-`status` prints the daily limit, any pause, the tokens charged today, and the count of entries in each outcome. `list` takes `drafted`, `unchanged`, `superseded`, `no-official`, `pending`, or `failed`, and a limit up to 500 (default 100). `requeue` moves Failed and no other rows back to Pending. A paused or waiting stage follows the same table as document-change drafting: fix the key or the credit and restart the worker, or wait for the next UTC day.
+`status` prints the daily limit, any pause, the tokens charged today, and the count of entries in each outcome. `list` takes `drafted`, `unchanged`, `superseded`, `no-official`, `pending`, or `failed`, and a limit up to 500 (default 100). `requeue` moves Failed and no other rows back to Pending. A Blocked entry has no owner command yet. A paused or waiting stage follows the same table as document-change drafting: fix the key or the credit and restart the worker, or wait for the next UTC day.
 
-The opt-in live test for action drafting sends one paid request. Run it with the command above.
+The [live test](#verification) for action drafting sends one paid request.
 
-### Publish a static release
+## Publish a static release
 
-The owner can also publish from the Review home page. Select records in the Publish section and choose Review selection. The list shows each record as a document change or a statement. The summary lists each headline with its kind, as new or a replacement, and shows the release number. Choose Publish to confirm. The page lists recent releases read-only. Rollback stays in the CLI.
+The owner can publish from the Review home page. Select records in the Publish section and choose Review selection. The list shows each record as a document change or a statement. The summary lists each headline with its kind, as new or a replacement, and shows the release number. Choose Publish to confirm. The page lists recent releases read-only. Rollback stays in the CLI.
 
-The CLI is a local owner command. Set `CIVIC_LENS_DATABASE`, `CIVIC_LENS_REVIEW_OWNER` (the owner subject recorded on the release), and `CIVIC_LENS_RELEASE_DIRECTORY` (an absolute path, for example `$PWD/.runtime/releases`). Publishing also needs `CIVIC_LENS_COLLECTION_CONFIG`, an absolute configuration path that supplies officials' display names. The command trusts the local operator, who already holds database credentials.
+The CLI is a local owner command. Set `CIVIC_LENS_DATABASE`, `CIVIC_LENS_REVIEW_OWNER` (the owner subject recorded on the release), and `CIVIC_LENS_RELEASE_DIRECTORY` (an absolute path, for example `$PWD/.runtime/releases`). Publishing also needs `CIVIC_LENS_COLLECTION_CONFIG`, an absolute configuration path that supplies the officials' display names. The command trusts the local operator, who already holds database credentials.
 
 ```sh
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases publish <idempotency-key> <kind>:<id> [<kind>:<id>...]
@@ -564,22 +574,20 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- re
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases activate <release-number>
 ```
 
-Each record is written as `<kind>:<id>`. The kind is `documentChange` or `statement`. For example, use `documentChange:` and a 32-character draft ID, or `statement:` and a 64-character candidate ID. The command never guesses the kind from the ID. An unknown kind or a bad shape exits with code 2. `publish` adds or replaces each selected record's current revision. The revision must be approved with no unresolved concerns. The new release also keeps every record from the active release as hard links to that release's files. Disk grows with published records, not with the number of releases. The command builds the release in `staging/` and moves it to a unique directory under `releases/`. It then records the release as active in Postgres and points the relative `current` link at the release that Postgres records as active. The link swap holds the same Postgres lock as release commits, so overlapping commands cannot leave the link on an older release. A concurrent review decision, draft save, other release, or rollback makes the commit fail with exit code 1. The built directory is deleted and nothing is activated. Invalid input or a non-owner actor exits with code 2 and prints the rule that failed.
+Write each record as `<kind>:<id>`. The kind is `documentChange` or `statement`. For example, use `documentChange:` and a 32-character draft ID, or `statement:` and a 64-character candidate ID. The command never guesses the kind from the ID. An unknown kind or a bad shape exits with code 2. The revision must be approved with no unresolved concerns.
 
-Repeat the same key and records to receive the original result. The repeat also points the link at the recorded active release, so it repairs a link swap that failed after the commit. To roll back, activate an earlier release number. The next `publish` builds on the active release, so records added after it are not carried forward. `list` shows `activeReleaseNumber`, which is the release Postgres records as active, and `servedDirectoryName`, which is the release that the link serves. If they differ, run `releases activate` with the active release number. Releases are never deleted automatically.
+A concurrent review decision, draft save, other release, or rollback makes the commit fail with exit code 1. The built directory is deleted and nothing is activated. Invalid input or a non-owner actor exits with code 2 and prints the rule that failed. The publish rules are in [publication](architecture/publication.md#publish).
 
-To check that the public pages work without the operational application, stop the review workspace, worker, and Postgres, then serve the active release with a plain static server:
+Repeat the same key and records to receive the original result. The repeat also repairs a link swap that failed after the commit. To roll back, activate an earlier release number. The next `publish` builds on the active release, so records added after it are not carried forward. `list` shows `activeReleaseNumber`, the release that Postgres records as active, and `servedDirectoryName`, the release that the link serves. If they differ, run `releases activate` with the active release number. Releases are never deleted automatically.
+
+To check that the public pages work without the operational application, stop the review workspace, the worker, and Postgres. Then serve the active release with a plain static server:
 
 ```sh
 python3 -m http.server 8090 --bind 127.0.0.1 --directory "$CIVIC_LENS_RELEASE_DIRECTORY/current"
 ```
 
-Open `http://127.0.0.1:8090/`. The site holds at most 2,000 published records. The index shows 50 records per page, with links to the previous and next pages. A document change page shows the account, the changes, the citations, and both full document versions. A statement page shows the speakers, the statement date with its evidence, each quotation with its kind, and the full source text with the quotations marked. The index shows a kind label next to each headline. The production static server remains a deployment decision.
+Open `http://127.0.0.1:8090/`. The index shows 50 records for each page, with links to the previous and next pages, and a kind label next to each headline. A document change page shows the account, the changes, the citations, and both full document versions. A statement page shows the speakers, the statement date with its evidence, each quotation with its kind, and the full source text with the quotations marked. The production static server is still a deployment decision.
 
-### Remaining operations
+## Runtime data
 
-Runtime data belongs in ignored .runtime/; generated publication and evaluation artifacts in ignored artifacts/. Never commit credentials or copy operational directories from the legacy repository. There is currently no deploy command and no public endpoint. Published releases live under the configured release directory, not in the repository.
-
-Core collection-import decisions and the Application fresh/replay handlers share evidence mapping and atomic Postgres imports. The host exposes receipt-only `collect`, database-backed `collect-import`, and explicit receipt recovery. Managed jobs add explicit lifecycle execution; background scheduling remains planned.
-
-Production backup/restore and MCP runbooks will be added here when implemented. Do not treat target architecture descriptions as executable procedures.
+Runtime data belongs in ignored .runtime/. Generated publication and evaluation artifacts belong in ignored artifacts/. Never commit credentials or copy operational directories from the legacy repository. There is no deploy command and no public endpoint yet. Published releases live under the configured release directory, not in the repository. Production backup and restore and MCP runbooks will come here when they exist.

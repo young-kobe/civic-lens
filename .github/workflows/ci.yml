@@ -21,3 +21,4 @@ jobs:
       - run: dotnet test --no-build --configuration Release
       - run: dotnet format CivicLens.slnx --verify-no-changes --no-restore
       - run: python3 tools/render-architecture.py --check
+      - run: python3 tools/check-docs.py --check

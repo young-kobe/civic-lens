@@ -1,140 +1,92 @@
-# Remaining implementation
+# Roadmap
 
-## MVP goal
+This page holds pending work only. Current behavior and agreed designs are in the feature docs; start at the [architecture lookup table](architecture.md#lookup-table).
 
-The MVP delivers the full product proposition: officials' statements, authoritative actions, substantive document changes, and evidence-backed weekly briefs. A document-change-only release is an intermediate milestone, not the MVP.
+## MVP definition
 
-The initial audience is regular citizens seeking transparency in U.S. national politics. Follow the [approved editorial experience](architecture.md#approved-editorial-experience-target): readable reviewed accounts lead to inspectable evidence, and private review presents the proposed public record beside its sources. State and local coverage are possible future extensions. The editorial flow and restrained monochrome identity are agreed; detailed public layouts remain to be built.
+The MVP delivers the full product: officials' statements, authoritative actions, substantive document changes, and evidence-backed weekly briefs. A release with document changes only is a milestone, not the MVP. Coverage may start small, but all four record kinds must work end to end. Each one collects evidence, keeps exact inspectable provenance, gets human review, and publishes in a static release. AI drafts every record kind, and people edit, approve, and publish. Only human approval stays manual, so review must handle a large volume. Reach MVP features, correctness, and a sufficient citizen and reviewer UI locally before production work starts.
 
-Initial coverage may be small, but all four capabilities must work end to end: collect evidence, retain exact inspectable provenance, review proposed output, and publish a static release that remains usable during an operational application outage. Human approval must bind to the exact evidence version; model output never constitutes approval. Statements and actions must support reviewed relationships and timelines, document changes must distinguish substantive edits from navigation churn and parser upgrades, and weekly briefs must use verified citations and explicit coverage cutoffs.
+Exit criteria:
 
-Public search is an MVP requirement. Readers must be able to search all published records from the public pages. An easy interface must let them filter by record kind, official, issue, policy area, date range, and source. Search reads the published release only, so it must keep working while the operational application is down. The search design is not decided. Keep it in mind when designing record contracts, so each record carries the fields that filters need.
+- [ ] Statements, actions, document changes, and weekly briefs each run from collection to a published static release.
+- [ ] The public release stays usable during an outage of the operational application.
+- [ ] Human approval binds to the exact evidence version. Model output never counts as approval.
+- [ ] Statements and actions support reviewed relationships and timelines.
+- [ ] Document changes separate substantive edits from navigation churn and parser upgrades, through the classification gate.
+- [ ] A weekly brief publishes with verified citation links, an explicit sample and cutoff, and versioned editorial decisions.
+- [ ] Readers search and filter all published records from the public pages.
+- [ ] The review queue handles the drafted volume with bulk tools.
+- [ ] The acceptance checklists in the linked feature docs pass.
 
-AI drafting and classification are MVP requirements. AI drafts document-change accounts, statement and action records, and weekly briefs. Reviewers edit, approve, and publish these drafts. A classification gate keeps navigation churn and other nonsubstantive changes out of review.
+## Work queue
 
-Design for scale. The product needs rich detail in each record and broad coverage of officials, sources, and issues. Automate every step that does not need human judgment. The worker drafts each change that passes the gate; no operator starts it. Human approval remains the only manual step before publication, so review must handle a large volume (see [Reviewer and public experience](#reviewer-and-public-experience)).
+Each item gives its outcome, what it depends on, and where the design lives. R-02 to R-04 are agreed upgrades whose designs the owner chose. Present the design choices before building R-06 to R-08 and R-22 only.
 
-The phases below sequence delivery toward this goal. Completing collection or document changes alone does not satisfy it.
+### Now
 
-Phase 0, the watched-page tracer, version 10 collection contracts that read stored version 7, 9, and 10 receipts, Core collection-import rules, the Application collection/import handler, the Postgres adapter with its initial migration, CLI database setup and collection/import, durable receipt handoff/replay, managed jobs with fenced ownership, aggregate budgets, retries, cancellation, and origin pacing/backoff, and a separately launched sequential queue worker are implemented. RSS/Atom and scoped HTML discovery with explicit bounded article admission are implemented. HTML discovery uses tolerant recovery; `capture-text-v2` extracts the retained Warren article captures with the configured profile. The authenticated review workspace includes owner-only source collection, cancellation, admission, extraction, comparison, and article recollection actions. Bounded robots handling and durable crawl-delay pacing are implemented. Configuration v2 dated coverage/names and immutable configuration revisions bound to managed jobs are also implemented. Current live Auth0 login remains unverified. The following is remaining planned work, not available functionality. Remove completed work and update the current architecture/operations references; Git preserves previous plans.
+- R-02: One advisory lock owner with named keys and a documented order. Depends on: none stated. [Review](architecture/review.md#limits-and-planned-work)
+- R-03: Partial index on active collection jobs for the worker claim. Depends on: R-02. [Collection](architecture/collection.md#limits-and-planned-work)
+- R-04: Analysis claim with `SKIP LOCKED` and a task-first eligibility index. Depends on: R-03. [Analysis](architecture/analysis.md#limits-and-planned-work)
+- R-05: Action review (action step 4): review pages, decisions, and the fast sponsorship-only review. Bulk approval is in R-19. Depends on: none stated. [Actions](architecture/actions.md#limits-and-planned-work)
+- R-06: Generated source columns, a latest-job index, and one batched active-root check. Built with R-05. Depends on: R-04. [Collection](architecture/collection.md#limits-and-planned-work)
+- R-07: Comparison and extraction saves lock one record after they verify and diff. Built with R-05. Depends on: R-06. [Documents](architecture/documents.md#limits-and-planned-work)
+- R-08: Parallel evidence processing with a configured degree. Built with R-05. Depends on: R-07. [Collection](architecture/collection.md#limits-and-planned-work)
+- R-09: Decide release growth and the search index. Depends on: none stated. It must come before R-10. [Publication](architecture/publication.md#limits-and-planned-work)
+- R-10: Action publication (action step 5). Depends on: R-05, R-09. [Actions](architecture/actions.md#limits-and-planned-work)
 
-## Next delivery milestone
+### Next
 
-The first document-change review workflow is implemented: browse saved comparisons, create drafts, inspect preview/evidence, save immutable revisions, and record attributed approval, requested changes, or withdrawal. The owner can publish approved revisions as an immutable static release from the workspace or the CLI, with atomic activation and CLI rollback. The worker now writes an AI draft of each document-change account ([architecture](architecture.md#ai-drafting-of-document-change-accounts-implemented)). It also gates statement candidates and writes an AI draft of each statement that passes ([architecture](architecture.md#statement-drafting-implemented)). The statement review backend and pages are implemented, and approved statements publish in releases. Next add actions, then AI-drafted weekly briefs. Actions arrive as stacked steps. Bill summaries and action candidates are implemented. Next come AI drafting of action records, then action review, then action publication. Most observed source change is new press releases, not in-place edits, so statements carry most of the volume. Build the document-change gate (phase 4) as our own check history produces in-place edits to label. Reach MVP functionality, correctness, and a sufficient citizen/reviewer UI locally before production Auth0 verification or production infrastructure. Keep the approved editorial UI direction and [review rules](architecture.md#approved-document-change-review-rules).
+- R-11: One shared citation span type, unified analysis naming, and generic queue handlers in Application/Analysis. Depends on: R-10. [Actions](architecture/actions.md#limits-and-planned-work)
+- R-12: AI-drafted weekly briefs from reviewed records: evidence selection, cited drafting, corrections, review, and release assembly. Depends on: R-10, because briefs follow actions. [Analysis](architecture/analysis.md#limits-and-planned-work)
+- R-13: Document-change classification gate: rubric, labels, features, bake-off, and ladder. Depends on: none stated. [Analysis](architecture/analysis.md#limits-and-planned-work)
+- R-14: Offices and dated terms. Depends on: R-10, the first action slice. [Configuration](architecture/configuration.md#limits-and-planned-work)
+- R-15: House roll-call votes as actions. Depends on: R-14. [Actions](architecture/actions.md#limits-and-planned-work)
+- R-16: Reviewed relationships between statements and actions, and timelines. Depends on: R-15. [Statements](architecture/statements.md#limits-and-planned-work)
+- R-17: Congressional Record articles as a statement connector. Depends on: R-16. [Actions](architecture/actions.md#limits-and-planned-work)
+- R-18: Engine policies for broad coverage: spending ceilings, backlog limits, source fairness, live reload, and a health view. Depends on: none stated. [Collection](architecture/collection.md#limits-and-planned-work)
+- R-19: Review volume tools, bulk approval included, and a clearer source-to-review path. Depends on: none stated. [Review](architecture/review.md#limits-and-planned-work)
+- R-20: Public search and filter pages. Depends on: none stated. [Publication](architecture/publication.md#limits-and-planned-work)
+- R-21: Process view of collection and AI stages from retained state. Depends on: none stated. [Host](architecture/host.md#limits-and-planned-work)
+- R-29: Verify the policy area names against the Congress.gov API; nothing shows this is done. Depends on: none stated. [Configuration](architecture/configuration.md#limits-and-planned-work)
+- R-30: Fix the remaining format and parser limits that the federal coverage found. Depends on: none stated. [Collection](architecture/collection.md#limits-and-planned-work)
 
-After MVP functionality and UI are satisfactory, prepare the application for the agreed Hetzner production deployment using containers, persistent PostgreSQL/capture storage, Terraform, and CI. Serve versioned static public releases on the same CPX21 through a separate static file server. Before exposing the shared workspace, verify access controls, controlled migrations, worker restart/recovery, Hetzner off-server backups and restoration, and operation with the developer workstation off. Select the Hetzner backup destination based on cost and recovery requirements. Infrastructure is not implemented yet. Single-host downtime is accepted initially; public serving must remain independent of the operational application, worker, and database.
+### Later
 
-Baseline versions before first production deploy. Before the first production deploy, reset the dev database. Collapse the protocol, configuration, schema, parser, and behavior versions to a single baseline version 1. Squash the EF migrations into one initial migration. Delete all older readers. Merge each extraction's parser and normalization versions into one version, and name each rule set by its behavior, for example `html-text-v1` instead of `capture-text-v2`. After the first deploy, versions only grow.
+- R-22: Ordered row locks in the job store, after the MVP. Depends on: lock waits measured on a bills-only collection run. [Collection](architecture/collection.md#limits-and-planned-work)
+- R-23: Baseline versions before the first production deploy. Depends on: none stated. It must come before the first production deploy. [Behavior versions](architecture.md#behavior-versions)
+- R-24: Production on the Hetzner CPX21 with containers, Terraform, CI, off-server backups, and live Auth0 verification. Depends on: the MVP. [Host](architecture/host.md#limits-and-planned-work)
+- R-25: Public MCP over published releases, with source health, backup and restore, and worker service management. Depends on: the MVP. [Publication](architecture/publication.md#limits-and-planned-work)
+- R-26: Read-only local MCP inspection. Depends on: none stated. [Review](architecture/review.md#limits-and-planned-work)
+- R-27: Automatic discovery of official sources, and check cadence from measured change rates. Depends on: none stated. [Collection](architecture/collection.md#limits-and-planned-work)
+- R-28: Datasets and fine-tuning from labels and review history. Depends on: none stated. [Analysis](architecture/analysis.md#limits-and-planned-work)
+- R-31: Remove the redundant hunk and context copy in saved comparisons. Depends on: none stated. [Documents](architecture/documents.md#limits-and-planned-work)
 
-After action publication, unify naming across the analysis features. Use one shared citation span type for document changes, statements, and actions. Move the generic queue handlers, such as `IStatementQueueStore` and `StatementQueueCommands`, into Application/Analysis.
+## Pending decisions
 
-## Reviewer and public experience
+- D-01: Public search index: where it is built and served, how large it can grow, and how it stays bounded. Decide before R-10. [Publication](architecture/publication.md#limits-and-planned-work)
+- D-02: Release growth: a release is rebuilt in full and has a record limit that action volume passes within weeks. Decide before R-10. [Publication](architecture/publication.md#limits-and-planned-work)
+- D-03: Global search and expanded reviewer source visibility. [Review](architecture/review.md#limits-and-planned-work)
+- D-04: Bounded storage: store each distinct extraction text once, keyed by its hash. Keep raw capture bytes forever only when a gated change, draft, or release uses them or they are the latest version. Delete other bytes after a set period and keep the observation record. [Collection](architecture/collection.md#limits-and-planned-work)
+- D-05: Classification ladder: the uncertainty signal for each tier, where the escalation policy and thresholds live, and the stronger model for the reasoning tier. [Analysis](architecture/analysis.md#limits-and-planned-work)
+- D-06: The Hetzner backup destination, chosen by cost and recovery needs. [Host](architecture/host.md#limits-and-planned-work)
+- D-07: How the static file server runs locally and in production, and the release retention policy. [Publication](architecture/publication.md#limits-and-planned-work)
 
-Make the source-to-review path understandable to a nontechnical reviewer, with automatic evidence preparation within explicit collection limits, dynamic search across retained evidence and review records, and integrated visual comparison. Global search and expanded reviewer source visibility remain pending decisions. Add an evidence library page to the workspace once document search exists.
+## Product direction
 
-Every published record keeps its own human approval of the exact revision. To handle volume, the review queue supports bulk actions, shows the automatic citation and classification checks beside each draft, and sorts the riskiest drafts first. A reviewer can approve a weekly brief together with the records it links, and each record still gets an attributed decision bound to its exact revision. Model output never approves or publishes. Action records can produce about 110 revisions a day, about half of them sponsorship changes on approved records. Review must therefore be as streamlined as possible: bulk approval, and a faster review for a revision where only the code-built sponsorship part changed. That review shows only the change and its citations. The queue holds one item for each record: a newer worker revision replaces an unreviewed one, and review shows the change since the last approved revision. Sponsorship changes draft at once. Measure how often an approved record gets a new revision within a few days; add a waiting window only if that rate is high.
+The audience is regular citizens who want transparency in U.S. national politics. State and local coverage are possible future extensions. Readers start with reviewed accounts and can inspect the evidence behind them. The editorial flow and the restrained monochrome identity are agreed; detailed public layouts are still to build.
 
-For MVP, add a dynamic SVG visualization of collection and AI processing driven by actual retained process state, with clear waiting, failure, recovery, and budget-limit states and reduced-motion support. Keep AI stages explicitly unavailable until implemented. Public reader pages must preserve the same editorial identity and shared presentation components while exposing published accounts and evidence only.
+Design for scale. Each record carries rich detail, and coverage of officials, sources, and issues is broad. Automate every step that does not need human judgment.
 
-Public search and filters are part of the reader experience for MVP. Results must show each record's kind, headline, officials, issues, and dates, and link to the record page. Filters must be easy to combine and easy to clear, and the page must work at phone width. Pending decisions: where the index is built and served, how large it can grow, and how it stays bounded as coverage grows. Decide these before action publication, together with release growth: a release holds at most 2,000 records and is rebuilt in full, which action volume will exceed within weeks.
-
-## Shared machinery upgrades
-
-The owner agreed seven upgrades to shared persistence and concurrency code. Build them as stacked PRs in this order. Present the design choices for each item before building it.
-
-1. One advisory lock owner. Six stores write their own `pg_advisory_xact_lock` SQL with four key schemes, and no lock order is written down. Generalize `ReviewWriteLock` into one owner with named keys and a documented order. Keep the trigger key `9911`, or change the triggers in the same migration.
-2. A partial index on active `collection_jobs` rows for the worker claim. Finished jobs are never deleted, so the claim scan grows with job history.
-3. `FOR UPDATE SKIP LOCKED` in the analysis claim, and an eligibility index that starts with `task`.
-4. Comparison and extraction saves verify and diff before they take a lock, and they lock one record instead of the whole store.
-5. Stored generated columns for the job definition's source ID and URL, an index for the latest job of each source, and one batched active-root check for each scheduling pass.
-6. Parallel evidence processing with a configured degree. This needs item 4 first.
-7. Ordered row locks instead of the job store's single global lock. Measure lock waits on the bills-only collection run before the design.
-
-Build items 1 to 3 right after action drafting. Build item 5, then items 4 and 6, together with action review. Build item 7 after the MVP.
-
-## 1. Collection and evidence
-
-Automatic stored-validator selection remains future work. List bills for each Congress from `/v3/bill/{congress}`, for each Congress at or above the configured minimum. The date-window bill list pages through thousands of older bills. The durable engine schedules hourly source checks with per-source cadence and coalesced catch-up, then advances evidence to review. `config/federal-coverage.json` lists all 539 current members of Congress, including delegates, each with a bioguide ID, and 1,392 sources: persistent pages are checked every 6 hours, and feeds and listings every hour. McConnell has no web sources, because his site's robots.txt disallows all paths. Britt and Kim have no press source, because their press listings refuse our requests. Fix the remaining format and parser limits that this coverage found. Version 8 discovery fetches same-host `http` links over `https`, supports feed `xml:base`, and counts excluded links. The House Drupal `rss.xml` feeds stay unused: a sample showed site-wide content, at most 10 items, and no overlap with the press-release listings. Engine-wide spending ceilings, global backlog limits, weighted source fairness, live configuration reload, and a unified operational health view still need explicit policies and implementation. Broad coverage makes these MVP requirements. Automatic discovery of official sources for a configured official is also planned, so that adding an official does not need each source entered by hand. Learn churn for each page region with a two-state Markov chain (stable or churning) over check history, so that recurring churn such as timestamps or rotating widgets is recognized without a hand-written profile for each source. Estimate each page's change rate from check history (a Poisson model, after Cho and Garcia-Molina) and set check cadence from it within the collection budget; read the original work before choosing the refresh policy. Storage must stay bounded at scale. Pending decisions: store each distinct extraction text once, keyed by its hash, and keep raw capture bytes forever only when a gated change, draft, or release uses them or they are the latest version, deleting other bytes after a set period while keeping the observation record. Persistent robots caching and cross-origin robots redirects are outside the current collection policy. Add only packages needed for these capabilities.
-
-Acceptance: add an official through configuration; collect one feed and watched page; demonstrate cancellation/restart without duplicate imports, conditional 304 handling, 429 backoff, bounded discovery, and explicit incomplete-download errors. Validate registry behavior with hundreds of fixture identities without issuing hundreds of live requests.
-
-## 2. Document changes and review foundation
-
-Immutable text extraction, persisted parser/normalization versions, reusable versioned source profiles, and exact local citation spans are implemented. Profiles select one HTML content region and exclude configured subregions without rewriting earlier extractions or citations. Derived document history and immutable bounded contextual comparisons are implemented, including explicit CLI creation and inspection. Version-bound human review is implemented. Implement read-only local MCP inspection. Future cleanup: saved comparisons retain hunk and context text that their exact offsets can rebuild from the two extractions; remove this redundant copy. Comparisons must use compatible parser, normalization, and profile revisions; reprocess both captures when settings change. Profile selection can remove known navigation regions but does not itself identify substantive changes.
-
-The authenticated review workspace provides proposed public records and version-bound review. The first public document-change record must explain the change and its limits in plain language, with both versions and citations accessible from the account. Keep document history available for investigation. Preserve the implemented decision and persistence semantics in shared Application handlers; the throwaway prototype remains the UI reference, not a substitute for these contracts.
-
-The first drafting workflow starts from an operator-selected saved comparison and retains an immutable revision on each explicit save. The Auth0 integration and subject authorization are implemented; live tenant login and production proxy verification remain deferred to deployment. Only the owner can publish or manage access initially. Either authorized operator may approve their own draft; decisions remain individually attributed. Host the shared workspace on Hetzner and verify the existing authentication and authorization before opening shared access.
-
-Acceptance: inspect and publish a real substantive edit with both versions and valid citations. Navigation churn and parser upgrades cannot masquerade as source changes. A reader can distinguish observation time from an established event/edit time and see relevant evidence gaps. A reviewer can assess the proposed public wording beside its sources; changes to approved content or evidence require review of the new version. Approval alone does not publish. Public output remains usable during an operational application outage.
-
-## 3. Statements and actions
-
-Implement offices, dated terms, institutional source ownership (agencies and committees get an institution owner in the schema, not a synthetic person), authoritative action connectors, structured statement extraction, temporal identity resolution, candidate matching, reviewed relationships, and timelines.
-
-Agreed decisions:
-
-- Build statements first: an admitted article's first extraction becomes an AI statement draft that goes through review and publication. Actions, with a Congress.gov connector and offices and terms, come next.
-- One statement record covers one source document, such as a press release. It holds the speaker, the date, a short account, and one or more cited quotations. Each quotation stays addressable for later matching.
-- An issue gate runs before drafting. A cheap classification tags each article. Only an article that touches a tracked issue gets a full draft and enters review. Other articles stay retained and visible with the reason, and a reviewer can move one into review.
-- Issues use two layers. The 32 Congress.gov policy areas are the backbone; they link statements to bills, which carry one policy area each. A small configured list of tracked issues drives the gate and the issue pages. Each tracked issue has an id, a name, a written definition, its parent policy areas, and a dated active range. The definitions are the classification rubric. Verify the policy area names against the Congress.gov API before use.
-- Statements mirror the document-change feature: their own queue, runs, drafts, revisions, and review pages, in the same shape. They share only parts that already have one owner: the Core review actor and decision policy, the Anthropic adapter, the citation span checks, and the budget mechanics.
-- A statement candidate is the first extraction of an article admitted from a feed or HTML listing. Watched pages stay document-change sources only.
-- The first tracked-issue list in `config/issues.json` is a proposal for the owner to edit before use.
-- A statement's identity is its admitted article: the source and the URL. A parser upgrade does not create a second statement, and a later edit to the article is a document change.
-- This slice includes publication: Publication.Contracts and the static pages gain statement records, so an approved statement publishes end to end.
-- Each analysis feature keeps its own queue table. The queue rules have one owner each in Application/Analysis: state transitions, budget reservation and charging, retry backoff, and the worker loop. A feature supplies only its task step and its table mapping.
-- The first action slice is bill sponsorship and cosponsorship. One action record covers one bill and lists every tracked official's sponsorship. The bill's bioguide IDs match configured people; the record shows the configured name. Member records are not captured in this slice, because Congress.gov member terms give years only.
-- A withdrawn cosponsorship stays in the record with both dates cited.
-- The worker writes a new AI revision only when tracked officials' sponsorship, including withdrawals, differs from the current revision. An update to actions alone adds no revision. The record states the date of its evidence.
-- Actions get their own review lock key, last in the publication lock order.
-- CRS bill summaries are optional cited evidence for the action record. A record must also work without one, because CRS often publishes weeks after introduction. The record cites the newest summary by action date. A new summary version triggers a new AI revision. Drafting does not wait for a summary.
-- Pull the shared line-format rules out of the bill renderer when a second renderer needs them.
-- Offices and dated terms are a separate step before House votes. Senate votes need senate.gov data and a `lis_member_id` crosswalk, because Congress.gov has neither.
-- After the first action slice, build in this order: House votes, then reviewed relationships between statements and actions, then Congressional Record articles as a statement connector. Cosponsorship is cheap position-taking, so votes carry most of the signal about whether words match deeds. Floor speeches cover every member, including officials with no usable web source.
-- Use Congress.gov bill subjects when the search filters are designed. Use the member list's `fromDateTime` change check when automatic official discovery is built.
-
-Derived insights are product goals. They make Civic Lens more than a connector to source APIs. Code computes each metric and publishes a method note. A person reviews any judgment before it is published, and each insight shows its coverage limits.
+Derived insights are product goals. They make Civic Lens more than a connector to source APIs. Code computes each metric and publishes a method note. A person reviews any judgment before publication, and each insight shows its coverage limits.
 
 1. Changed record: detect deleted press releases, rewritten quotations, and positions removed from issue pages. Show both versions and their timing next to votes and events. This needs deletion detection and the document-change gate.
 2. Shared language: find the same or nearly the same sentences in releases from different offices. Show coordinated messaging, how it spreads, and who uses it first.
 3. Talk and action profile: for each official, show the share of statements on each issue next to the share of sponsorships and votes on it.
 
-Acceptance: every statement/action has exact inspectable provenance. Quotation validity and interpretation are separate checks. Human review is bound to the reviewed version. Adding/removing tracked officials requires no code changes and retains history.
+## Deferred
 
-## 4. AI drafting, classification, and evaluation
-
-AI drafting of document-change accounts is implemented with Claude Haiku 5.5, a durable analysis queue, immutable runs, and a daily token limit ([architecture](architecture.md#ai-drafting-of-document-change-accounts-implemented)). Classification is a separate stage with its own task versions, budgets, and escalation policy, in the same queue. Weekly briefs and statement/action extraction reuse the same adapter and citation rules.
-
-Classification gates document changes in the MVP. A change classified as nonsubstantive skips review, but it stays visible and inspectable with its reason. Audit a random sample of skipped changes, and let a reviewer move a skipped change back into review. When the engine is unsure, the change goes to review; the engine never drops a change silently. The planned classification ladder is deterministic rules (including learned churn regions), then a cheap probability tier, then a stronger model, then a person. A bake-off selects the models and thresholds for each tier.
-
-The source of truth for classification is human labels made under a written, versioned rubric. The rubric asks narrow typed questions, for example: navigation or boilerplate, date or timestamp only, a changed number, obligation, named person, or policy claim, removed content, and touched configured issues. A label binds to the exact comparison, the rubric version, and the labeler, and it is separate from editorial approval. Model output, including agreement between models, is a prediction and never a label. Labels from the review queue are biased by the gate, so false-negative estimates use the random sample of skipped changes, weighted by its selection rate. Measure agreement between the two reviewers on an overlapping sample.
-
-First steps:
-
-1. Write the labeling rubric and label 150 to 200 changes from our own check history across the federal coverage.
-2. Implement deterministic change features: share of text changed, longest change, configured issue terms added or removed, link changes including a removed self-link, and HTTP status or redirect changes.
-3. Run a budgeted bake-off on the labeled set: deterministic features alone, logistic regression over those features, Cloudflare Clef-flash and Clef, and Haiku 5.5. Self-hosted encoders are out of scope for now because of the CPX21 memory limit.
-4. Set the ladder tiers and thresholds from the measured results.
-
-Verification and confidence (agreed): every model run records a stated confidence from 0 to 1 for each decision it makes. The value is raw and uncalibrated. It drives no routing and is not shown as a score until a calibration map for that task, fitted on human outcomes and versioned, exists. Code-checked results are verified or failed, not scored. The labeled eval set follows with the rubric. A prompt or model change runs against it on demand, within a budget, and ships only without a regression.
-
-Pending decisions: the uncertainty signal for each tier; where the escalation policy and its thresholds live; and the stronger model for the reasoning tier.
-
-Later, use retained evidence and attributed review history to build task-specific validation/golden sets and training or fine-tuning datasets for our own models. Clef has open weights, so fine-tuning on our labels is possible. Editorial approval establishes suitability of a particular account for publication; it does not automatically establish a golden label or eligibility for model training. Before dataset export, agree task labels, example eligibility, source-use permissions, versioned provenance, correction handling, and separate training/validation/test splits that prevent related document versions from leaking across splits. Add task-specific budgets/cache keys, decision explanations, skipped-document sampling, and local evaluation MCP. Ordinary CI must not call paid APIs.
-
-Acceptance: an AI draft of a real substantive edit passes citation checks, and a human approves and publishes it. The gate's false negatives are measured on held-out labeled examples and visible in the skipped-change sample. Budget exhaustion leaves a visible resumable backlog; changing one task version reruns only affected work.
-
-## 5. Weekly briefs
-
-Implement evidence selection, citation-backed drafting, corrections, review mutations, and complete release assembly.
-
-The MVP brief uses only reviewed records. News coverage comes after the first brief. First measure how much of the real record a set of news feeds covers. Add coverage links and a gap signal only if that recall is high. Store feed entries only, never full articles.
-
-Acceptance: publish an issue brief with verified citation links, explicit sample/cutoff, and versioned editorial decisions. AI proposals never become human approvals automatically.
-
-## 6. Public MCP and operational readiness
-
-Implement the separate public MCP deployment over publication artifacts/search index; add source health, backup/restore, worker service management, and deployment automation. Verify live Auth0 login and configure the Hetzner/Terraform infrastructure at this stage, after local MVP functionality, correctness, and UI quality are satisfactory.
-
-Acceptance: public tools never access operational data, mutate records, crawl, or invoke models. Website/MCP use the same release. Demonstrate restore, rollback, release-pinned reads, pagination, bounded traffic behavior, and visible coverage gaps.
+- News coverage in briefs: deferred until we measure how much of the real record a set of news feeds covers. Add coverage links and a gap signal only if that recall is high. Store feed entries only, never full articles.
+- Senate votes, Congress.gov member records, and a waiting window before sponsorship revisions: see [actions](architecture/actions.md#limits-and-planned-work) and [action decisions](architecture/actions.md#decisions).
+- Self-hosted encoder models: see [analysis](architecture/analysis.md#limits-and-planned-work).
+- Browser rendering, OCR, and cross-origin robots redirects: see [collection](architecture/collection.md#limits-and-planned-work) and [robots](architecture/collection.md#robots-and-pacing).
+- Shared line-format rules for renderers: see [bills](architecture/bills.md#limits-and-planned-work).
