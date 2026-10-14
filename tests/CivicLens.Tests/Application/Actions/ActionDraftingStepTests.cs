@@ -230,6 +230,7 @@ public sealed class ActionDraftingStepTests
         Assert.Equal((State.Succeeded, (string?)null), (store.Entries[0].Status, store.Entries[0].ErrorCode));
         var revision = Assert.Single(store.Revisions);
         Assert.Equal((null, null), (revision.SummaryVersion, revision.SummaryCitation));
+        Assert.True(revision.CandidateIncludesSummaries);
         Assert.DoesNotContain("versionCode", Assert.Single(model.Requests).UserPrompt, StringComparison.Ordinal);
         var run = Assert.Single(store.Runs);
         Assert.Equal((AnalysisRunOutcome.Drafted, "summaryOmitted"), (run.Run.Outcome, run.Reason));
