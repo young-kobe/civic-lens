@@ -19,11 +19,7 @@ internal static class PostgresAdvisoryLock
     internal const string DocumentExtractions = "civic-lens-document-extractions";
     internal const string DocumentComparisons = "civic-lens-document-comparisons";
 
-    internal const string AcquireInOrderSql = """
-        SELECT pg_advisory_xact_lock(hashtextextended(keys.key, 0))
-          FROM unnest(@keys) WITH ORDINALITY AS keys(key, position)
-         ORDER BY keys.position
-        """;
+    private const string AcquireSql = "SELECT pg_advisory_xact_lock(hashtextextended(@key, 0))";
 
     internal static readonly IReadOnlyList<string> ReviewKeysInOrder = [DocumentChangeReview, StatementReview, ActionReview];
 
@@ -32,23 +28,11 @@ internal static class PostgresAdvisoryLock
     internal static string EvidencePredecessor(string attemptId) => EvidencePredecessorScope + attemptId;
 
     internal static Task AcquireAsync(DbContext db, string key, CancellationToken cancellationToken) =>
-        AcquireAsync(db, [key], cancellationToken);
+        db.Database.ExecuteSqlRawAsync(AcquireSql, [new NpgsqlParameter("key", key)], cancellationToken);
 
-    internal static Task AcquireAsync(DbContext db, IReadOnlyList<string> keysInOrder, CancellationToken cancellationToken) =>
-        db.Database.ExecuteSqlRawAsync(AcquireInOrderSql, [new NpgsqlParameter("keys", keysInOrder.ToArray())], cancellationToken);
-
-    internal static async Task AcquireWithoutCommandTimeoutAsync(DbContext db, string key, CancellationToken cancellationToken)
+    internal static async Task AcquireInOrderAsync(DbContext db, IEnumerable<string> keysInOrder, CancellationToken cancellationToken)
     {
-        var commandTimeout = db.Database.GetCommandTimeout();
-        db.Database.SetCommandTimeout(0);
-        try
-        {
-            await AcquireAsync(db, key, cancellationToken);
-        }
-        finally
-        {
-            db.Database.SetCommandTimeout(commandTimeout);
-        }
+        foreach (var key in keysInOrder) await AcquireAsync(db, key, cancellationToken);
     }
 
     internal static Task<IDbContextTransaction> BeginWriteAsync(DbContext db, string key, CancellationToken cancellationToken) =>
@@ -58,7 +42,7 @@ internal static class PostgresAdvisoryLock
         CancellationToken cancellationToken)
     {
         var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
-        await AcquireAsync(db, keysInOrder, cancellationToken);
+        await AcquireInOrderAsync(db, keysInOrder, cancellationToken);
         return transaction;
     }
 }

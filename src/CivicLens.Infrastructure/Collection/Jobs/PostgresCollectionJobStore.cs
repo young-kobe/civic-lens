@@ -16,7 +16,6 @@ namespace CivicLens.Infrastructure.Collection.Jobs;
 public sealed partial class PostgresCollectionJobStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory) :
     ICollectionJobStore, ICollectionScheduleStore
 {
-
     public static PostgresCollectionJobStore FromConnectionString(string connectionString)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);

@@ -1,4 +1,3 @@
-using System.Data;
 using System.Text.Json;
 using CivicLens.Application.Documents;
 using CivicLens.Collection.Contracts;

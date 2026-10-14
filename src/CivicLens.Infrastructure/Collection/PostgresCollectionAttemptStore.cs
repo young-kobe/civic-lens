@@ -17,7 +17,6 @@ namespace CivicLens.Infrastructure.Collection;
 public sealed class PostgresCollectionAttemptStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory)
     : ICollectionAttemptStore
 {
-
     public async Task<StoredCollectionAttempt?> GetAsync(string attemptId, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(attemptId);
@@ -60,7 +59,7 @@ public sealed class PostgresCollectionAttemptStore(IDbContextFactory<CollectionA
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
         try
         {
-            await PostgresAdvisoryLock.AcquireWithoutCommandTimeoutAsync(db, PostgresAdvisoryLock.CollectionImport, cancellationToken);
+            await PostgresAdvisoryLock.AcquireAsync(db, PostgresAdvisoryLock.CollectionImport, cancellationToken);
             var existingRow = await db.Attempts.AsNoTracking()
                 .SingleOrDefaultAsync(row => row.AttemptId == attempt.AttemptResult.AttemptId, cancellationToken);
             var existing = existingRow is null ? null : await ReadStoredAttemptAsync(db, existingRow, cancellationToken);
