@@ -155,7 +155,7 @@ Statement review mirrors document-change review and uses the shared decision rul
 
 **Ownership.** Core/Statements holds `StatementReview`, the aggregate of one candidate, and the rules on `StatementDraftRevision`. Application/Statements holds the commands `CreateStatementDraft`, `SaveStatementDraft`, and `DecideStatementReview`. It also holds the reads `GetStatementReview`, `ListStatementReviews`, and `ListStatementsNotInReview`, and the store boundary `IStatementReviewStore`.
 
-Infrastructure/Statements holds `PostgresStatementReviewStore` and `StatementReviewQueries`. The handlers use `ReviewAuthorization`, `ReviewValidation`, `PageCursor`, `KeysetSlice`, and `PageLimit`. Every command needs a reviewer. The AI author can never decide or author a person revision.
+Infrastructure/Statements holds `PostgresStatementReviewStore` and `StatementReviewQueries`. The store runs on the shared `ReviewRecords` core; see [review](review.md#storage-and-contracts). The handlers use `ReviewAuthorization`, `ReviewValidation`, `PageCursor`, `KeysetSlice`, and `PageLimit`. Every command needs a reviewer. The AI author can never decide or author a person revision.
 
 **Write lock.** Statement writes take the statement review key; see [advisory locks](../architecture.md#advisory-locks). The AI settlement and the over-cap draft row take the same lock. A human create and an AI settlement for one candidate therefore run one after the other, and only one first revision exists.
 
@@ -178,7 +178,7 @@ Infrastructure/Statements holds `PostgresStatementReviewStore` and `StatementRev
 
 `ListStatementReviews` takes the filter `All`, `NeedsAction`, or `Approved`. It orders by creation time and then candidate ID. `NotDrafted` counts as needs action.
 
-`ListStatementsNotInReview` lists candidates that have no draft revision, each with its stage and reason code. These are over-cap draft rows. They are also candidates with no draft row whose gate or draft entry is skipped, failed, or blocked. `StatementReviewQueries` holds the status and not-in-review SQL.
+`ListStatementsNotInReview` lists candidates that have no draft revision, each with its stage and reason code. These are over-cap draft rows. They are also candidates with no draft row whose gate or draft entry is skipped, failed, or blocked. `StatementReviewQueries` holds the unpublished approved and not-in-review SQL.
 
 **Pages.** `/Review/Statements` lists the drafts and the statements that are not in review.
 

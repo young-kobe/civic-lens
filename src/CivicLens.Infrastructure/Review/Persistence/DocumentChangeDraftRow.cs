@@ -2,7 +2,7 @@ using CivicLens.Core.Review;
 
 namespace CivicLens.Infrastructure.Review.Persistence;
 
-internal sealed class DocumentChangeDraftRow
+internal sealed class DocumentChangeDraftRow : IReviewDraftRow
 {
     public string DraftId { get; set; } = string.Empty;
     public string ComparisonId { get; set; } = string.Empty;
@@ -10,4 +10,6 @@ internal sealed class DocumentChangeDraftRow
     public int ReviewStateVersion { get; set; }
     public ReviewStatus ReviewStatus { get; set; }
     public long CreatedAtUtcTicks { get; set; }
+
+    string IReviewDraftRow.RecordId => DraftId;
 }

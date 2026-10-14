@@ -35,17 +35,17 @@ public sealed class PostgresDocumentChangeReviewOutcomeStore(IDbContextFactory<C
         var promptVersions = await db.Set<DocumentChangeAnalysisRunRow>().AsNoTracking()
             .Where(run => ids.Contains(run.DraftId!)).ToDictionaryAsync(run => run.DraftId!, run => run.PromptVersion,
                 StringComparer.Ordinal, cancellationToken);
-        var revisions = await PostgresDocumentChangeReviewStore.ReadRevisionRowsAsync(db, ids, cancellationToken);
-        var decisions = await PostgresDocumentChangeReviewStore.ReadDecisionRowsAsync(db, ids, cancellationToken);
+        var histories = await PostgresDocumentChangeReviewStore.Records.ReadHistoriesAsync(db, slice.Items, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
-        var items = slice.Items.Select(row => ToOutcome(row, promptVersions[row.DraftId], revisions[row.DraftId], decisions[row.DraftId]));
+        var items = slice.Items.Select(row => ToOutcome(row, promptVersions[row.DraftId], histories[row.DraftId]));
         return new([.. items], slice.NewerCursor, slice.OlderCursor);
     }
 
     private static AiDraftOutcome ToOutcome(DocumentChangeDraftRow draft, string promptVersion,
-        IEnumerable<DocumentChangeRevisionRow> revisions, IEnumerable<ReviewDecisionRow> decisions)
+        ReviewHistory<DocumentChangeDraftRevision> history)
     {
-        var (first, current) = PostgresDocumentChangeReviewStore.ToValidatedListItem(draft, revisions, decisions);
+        var current = PostgresDocumentChangeReviewStore.ToListItem(draft, history);
+        var first = history.Revisions[0];
         if (!ReviewAuthor.IsAnalysis(first.AuthorSubject))
             throw new InvalidOperationException("An analysis run is linked to a draft that the model did not write.");
         return new(promptVersion, first, current);
