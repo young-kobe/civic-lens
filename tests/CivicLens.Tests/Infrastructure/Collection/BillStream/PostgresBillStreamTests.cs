@@ -6,9 +6,12 @@ using CivicLens.Application.Collection.Discovery;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Collection.Contracts;
 using CivicLens.Infrastructure.Collection;
+using CivicLens.Core.Documents;
 using CivicLens.Infrastructure.Collection.Jobs;
+using CivicLens.Infrastructure.Documents;
 using CivicLens.Tests.Application.Collection.Bills;
 using CivicLens.Tests.Fixtures;
+using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
 namespace CivicLens.Tests.Infrastructure.Collection.BillStream;
@@ -24,16 +27,27 @@ public sealed class PostgresBillStreamTests(PostgresCollection postgres) : IAsyn
     private readonly string schema = "bill_stream_" + Guid.NewGuid().ToString("N");
     private string connectionString = null!;
     private PostgresCollectionJobStore store = null!;
+    private PostgresDocumentExtractionStore extractions = null!;
+    private StatementCandidateSeeder seeder = null!;
+    private readonly string captureRoot = Path.Combine(Path.GetTempPath(), "bill-stream-" + Guid.NewGuid().ToString("N"));
 
     public async Task InitializeAsync()
     {
         await ExecuteAsync(postgres.ConnectionString, $"CREATE SCHEMA {schema}");
         connectionString = new NpgsqlConnectionStringBuilder(postgres.ConnectionString) { SearchPath = schema }.ConnectionString;
         store = PostgresCollectionJobStore.FromConnectionString(connectionString);
-        await PostgresCollectionAttemptStore.FromConnectionString(connectionString).MigrateAsync();
+        var attempts = PostgresCollectionAttemptStore.FromConnectionString(connectionString);
+        await attempts.MigrateAsync();
+        extractions = PostgresDocumentExtractionStore.FromConnectionString(connectionString);
+        Directory.CreateDirectory(captureRoot);
+        seeder = new StatementCandidateSeeder(attempts, extractions, connectionString, captureRoot);
     }
 
-    public async Task DisposeAsync() => await ExecuteAsync(postgres.ConnectionString, $"DROP SCHEMA IF EXISTS {schema} CASCADE");
+    public async Task DisposeAsync()
+    {
+        await ExecuteAsync(postgres.ConnectionString, $"DROP SCHEMA IF EXISTS {schema} CASCADE");
+        Directory.Delete(captureRoot, recursive: true);
+    }
 
     [Fact]
     public async Task FirstDueCheckRequestsTheBackfillWindowWithOneDayOfOverlap()
@@ -473,7 +487,7 @@ public sealed class PostgresBillStreamTests(PostgresCollection postgres) : IAsyn
         var withdrawn = new CongressBillCosponsorsPage(
             [new CongressBillCosponsor("A000001", Backfill, false, Backfill.AddDays(1))], null);
 
-        await store.AdmitCosponsorPageAsync(Source(), first.Jobs.Single().JobId, withdrawn, default);
+        await AdmitCosponsorPageAsync(first.Jobs.Single().JobId, withdrawn);
 
         Assert.Equal(("NotRelevant", "UntrackedPolicyArea"), await GateOfAsync(detail));
     }
@@ -498,15 +512,15 @@ public sealed class PostgresBillStreamTests(PostgresCollection postgres) : IAsyn
         var actionsJob = first.Jobs.Single().JobId;
         var page = new CongressBillActionsPage([], ActionsNext(250));
 
-        var next = await store.AdmitActionsPageAsync(Source(), actionsJob, page, default);
+        var next = await AdmitActionsAsync(actionsJob, page);
 
         Assert.Equal(ActionsNext(250), next.Jobs.Single().Url);
         Assert.Contains((BillStreamJobKeys.NextBillPage(SourceId, ApiResource.BillActions, actionsJob), detail),
             (await LinksAsync()).Select(link => (link.Key, link.DetailJobId)));
-        var replay = await store.AdmitActionsPageAsync(Source(), actionsJob, page, default);
+        var replay = await AdmitActionsAsync(actionsJob, page);
         Assert.Empty(replay.Jobs);
         Assert.Equal(1, replay.DuplicateCount);
-        var last = await store.AdmitActionsPageAsync(Source(), next.Jobs.Single().JobId, new CongressBillActionsPage([], null), default);
+        var last = await AdmitActionsAsync(next.Jobs.Single().JobId, new CongressBillActionsPage([], null));
         Assert.Empty(last.Jobs);
     }
 
@@ -515,8 +529,8 @@ public sealed class PostgresBillStreamTests(PostgresCollection postgres) : IAsyn
     {
         var orphan = await EnqueueDetailAsync("orphan");
 
-        await Assert.ThrowsAsync<InvalidDataException>(() => store.AdmitCosponsorPageAsync(Source(), orphan, Cosponsors([], null), default));
-        await Assert.ThrowsAsync<InvalidDataException>(() => store.AdmitActionsPageAsync(Source(), orphan, new CongressBillActionsPage([], null), default));
+        await Assert.ThrowsAsync<InvalidDataException>(async () => await AdmitCosponsorPageAsync(orphan, Cosponsors([], null)));
+        await Assert.ThrowsAsync<InvalidDataException>(async () => await AdmitActionsAsync(orphan, new CongressBillActionsPage([], null)));
     }
 
     [Fact]
@@ -609,10 +623,10 @@ public sealed class PostgresBillStreamTests(PostgresCollection postgres) : IAsyn
         var first = await AdmitDetailAsync(detail, DetailBill(UpdatedAt, cosponsors: 0), BillGateOutcome.Passed(BillGateReason.CoveredSponsor));
         var actionsJob = first.Jobs.Single().JobId;
         var page = new CongressBillActionsPage([], ActionsNext(250));
-        await store.AdmitActionsPageAsync(Source(), actionsJob, page, default);
+        await AdmitActionsAsync(actionsJob, page);
         var before = await CountsAsync();
 
-        var replay = await store.AdmitActionsPageAsync(Source(), actionsJob, page, default);
+        var replay = await AdmitActionsAsync(actionsJob, page);
 
         Assert.Empty(replay.Jobs);
         Assert.Equal(before, await CountsAsync());
@@ -719,17 +733,17 @@ public sealed class PostgresBillStreamTests(PostgresCollection postgres) : IAsyn
         var summariesJob = first.Jobs.Single(job => job.Url.Contains("/summaries?")).JobId;
         var page = new CongressBillSummariesPage([], SummariesNext(250));
 
-        var next = await store.AdmitSummariesPageAsync(Source(), summariesJob, page, default);
+        var next = await AdmitSummariesAsync(summariesJob, page);
 
         Assert.Equal(SummariesNext(250), next.Jobs.Single().Url);
         Assert.Contains((BillStreamJobKeys.NextBillPage(SourceId, ApiResource.BillSummaries, summariesJob), detail),
             (await LinksAsync()).Select(link => (link.Key, link.DetailJobId)));
         var before = await CountsAsync();
-        var replay = await store.AdmitSummariesPageAsync(Source(), summariesJob, page, default);
+        var replay = await AdmitSummariesAsync(summariesJob, page);
         Assert.Empty(replay.Jobs);
         Assert.Equal(1, replay.DuplicateCount);
         Assert.Equal(before, await CountsAsync());
-        var last = await store.AdmitSummariesPageAsync(Source(), next.Jobs.Single().JobId, new CongressBillSummariesPage([], null), default);
+        var last = await AdmitSummariesAsync(next.Jobs.Single().JobId, new CongressBillSummariesPage([], null));
         Assert.Empty(last.Jobs);
     }
 
@@ -738,7 +752,7 @@ public sealed class PostgresBillStreamTests(PostgresCollection postgres) : IAsyn
     {
         var orphan = await EnqueueDetailAsync("orphan");
 
-        await Assert.ThrowsAsync<InvalidDataException>(() => store.AdmitSummariesPageAsync(Source(), orphan, new CongressBillSummariesPage([], null), default));
+        await Assert.ThrowsAsync<InvalidDataException>(async () => await AdmitSummariesAsync(orphan, new CongressBillSummariesPage([], null)));
     }
 
     [Fact]
@@ -748,6 +762,407 @@ public sealed class PostgresBillStreamTests(PostgresCollection postgres) : IAsyn
         await AdmitDetailAsync(detail, DetailBill(UpdatedAt, cosponsors: 1), BillGateOutcome.Pending);
 
         await Assert.ThrowsAsync<PostgresException>(() => ExecuteAsync(connectionString, "UPDATE bill_gates SET summary_count = -1"));
+    }
+
+    [Fact]
+    public async Task EveryAdmittedPageRecordsItsExtractionItsOrderAndWhetherItClosesItsChain()
+    {
+        var bill = await StartPassedBillAsync(cosponsors: 2, summaries: 0);
+        var secondCosponsorPage = await AdmitCosponsorPageAsync(bill.Cosponsors!, Cosponsors(["Z000009"], CosponsorsNext(250)));
+        await AdmitCosponsorPageAsync(secondCosponsorPage.Jobs.Single().JobId, Cosponsors(["Z000009"], next: null));
+
+        var pages = await PagesAsync();
+
+        Assert.Equal([("Cosponsors", 0), ("Cosponsors", 1), ("Detail", 0)],
+            pages.Select(page => (page.Role, page.Order)).Order());
+        Assert.Equal([("Cosponsors", 0, false), ("Cosponsors", 1, true), ("Detail", 0, true)],
+            pages.Select(page => (page.Role, page.Order, page.Closes)).Order());
+        Assert.Equal(pages.Count, pages.Select(page => page.ExtractionId).Distinct().Count());
+        Assert.All(pages, page => Assert.Equal(64, page.ExtractionId.Length));
+    }
+
+    [Fact]
+    public async Task ReplayingAPageAdmissionKeepsItsFirstExtractionAndAddsNoRow()
+    {
+        var bill = await StartPassedBillAsync(cosponsors: 1, summaries: 0);
+        var page = Cosponsors(["A000001"], next: null);
+        await AdmitCosponsorPageAsync(bill.Cosponsors!, page);
+        var before = await PagesAsync();
+
+        await AdmitCosponsorPageAsync(bill.Cosponsors!, page);
+
+        Assert.Equal(before, await PagesAsync());
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ACandidateIsWrittenOnceWhenTheLastOfTheCosponsorAndActionsChainsCloses(bool cosponsorsCloseLast)
+    {
+        var bill = await StartPassedBillAsync(cosponsors: 2, summaries: 0);
+        var cosponsorsNext = await AdmitCosponsorPageAsync(bill.Cosponsors!, Cosponsors(["Z000009"], CosponsorsNext(250)));
+        var actionsNext = await AdmitActionsAsync(bill.Actions, new CongressBillActionsPage([], ActionsNext(250)));
+        Assert.Equal(0, await CandidateCountAsync());
+
+        var closeCosponsors = () => AdmitCosponsorPageAsync(cosponsorsNext.Jobs.Single().JobId, Cosponsors(["Z000009"], next: null));
+        var closeActions = async () => await AdmitActionsAsync(actionsNext.Jobs.Single().JobId, new CongressBillActionsPage([], null));
+        if (cosponsorsCloseLast)
+        {
+            await closeActions();
+            Assert.Equal(0, await CandidateCountAsync());
+            await closeCosponsors();
+        }
+        else
+        {
+            await closeCosponsors();
+            Assert.Equal(0, await CandidateCountAsync());
+            await closeActions();
+        }
+
+        var candidate = Assert.Single(await CandidatesAsync());
+        Assert.Equal(bill.Detail, candidate.DetailJobId);
+        Assert.Equal((SourceId, 119, "hr", 7, UpdatedAt.UtcTicks), (candidate.SourceId, candidate.Congress, candidate.BillType, candidate.BillNumber, candidate.UpdateTicks));
+        Assert.Matches("^[0-9a-f]{64}$", candidate.CandidateId);
+        Assert.Equal(Source().Revision.Id, candidate.RevisionId);
+        Assert.Null(candidate.SummariesCompletedTicks);
+    }
+
+    [Fact]
+    public async Task ABillWithoutCosponsorsGetsItsCandidateWhenTheActionsChainCloses()
+    {
+        var bill = await StartPassedBillAsync(cosponsors: 0, summaries: 0);
+        Assert.Null(bill.Cosponsors);
+
+        await AdmitActionsAsync(bill.Actions, new CongressBillActionsPage([], null));
+
+        Assert.Equal(1, await CandidateCountAsync());
+    }
+
+    [Fact]
+    public async Task ABillThatPassesAtALaterCosponsorPageGetsItsCandidateAfterBothChainsClose()
+    {
+        var detail = await EnqueueDetailAsync("detail");
+        var first = await AdmitDetailAsync(detail, DetailBill(UpdatedAt, cosponsors: 2), BillGateOutcome.Pending);
+        var second = await AdmitCosponsorPageAsync(first.Jobs.Single().JobId, Cosponsors(["Z000009"], CosponsorsNext(250)));
+        var passed = await AdmitCosponsorPageAsync(second.Jobs.Single().JobId, Cosponsors(["A000001"], next: null));
+        Assert.Equal(0, await CandidateCountAsync());
+
+        await AdmitActionsAsync(passed.Jobs.Single().JobId, new CongressBillActionsPage([], null));
+
+        Assert.Equal(1, await CandidateCountAsync());
+    }
+
+    [Fact]
+    public async Task ReplayingAnyAdmissionOfACompleteBillWritesNothingNew()
+    {
+        var bill = await StartPassedBillAsync(cosponsors: 1, summaries: 0);
+        var cosponsors = Cosponsors(["A000001"], next: null);
+        var actions = new CongressBillActionsPage([], null);
+        await AdmitCosponsorPageAsync(bill.Cosponsors!, cosponsors);
+        await AdmitActionsAsync(bill.Actions, actions);
+        var candidates = await CandidatesAsync();
+        var pages = await PagesAsync();
+
+        await AdmitCosponsorPageAsync(bill.Cosponsors!, cosponsors);
+        await AdmitActionsAsync(bill.Actions, actions);
+        await AdmitDetailAsync(bill.Detail, DetailBill(UpdatedAt, cosponsors: 1), BillGateOutcome.Passed(BillGateReason.CoveredSponsor));
+
+        Assert.Equal(candidates, await CandidatesAsync());
+        Assert.Equal(pages, await PagesAsync());
+    }
+
+    [Fact]
+    public async Task NoCandidateIsWrittenForABillTheGateMarksNotRelevant()
+    {
+        var detail = await EnqueueDetailAsync("detail");
+        var first = await AdmitDetailAsync(detail, DetailBill(UpdatedAt, cosponsors: 1, policyArea: null), BillGateOutcome.Pending);
+
+        await AdmitCosponsorPageAsync(first.Jobs.Single().JobId, Cosponsors(["Z000009"], next: null));
+
+        Assert.Equal(("NotRelevant", "NoPolicyArea"), await GateOfAsync(detail));
+        Assert.Equal(0, await CandidateCountAsync());
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task AFailedOrBlockedPageLeavesTheChainOpenSoNoCandidateIsWritten(bool cosponsorsFail)
+    {
+        var bill = await StartPassedBillAsync(cosponsors: 1, summaries: 0);
+
+        if (cosponsorsFail) await AdmitActionsAsync(bill.Actions, new CongressBillActionsPage([], null));
+        else await AdmitCosponsorPageAsync(bill.Cosponsors!, Cosponsors(["A000001"], next: null));
+
+        Assert.Equal(0, await CandidateCountAsync());
+        await ExecuteAsync(connectionString, """
+            UPDATE collection_jobs SET state = 'Failed' WHERE job_id IN (
+                SELECT l.job_id FROM bill_follow_on_jobs l LEFT JOIN bill_pages p ON p.job_id = l.job_id WHERE p.job_id IS NULL)
+            """);
+        var stuck = Assert.Single(await StuckBillsAsync());
+        Assert.Equal(cosponsorsFail ? "billCosponsors" : "billActions", stuck.Resource);
+    }
+
+    [Fact]
+    public async Task AChainWhoseClosingPageHasAGapBeforeItNeverCompletes()
+    {
+        var bill = await StartPassedBillAsync(cosponsors: 1, summaries: 0);
+        var next = await AdmitActionsAsync(bill.Actions, new CongressBillActionsPage([], ActionsNext(250)));
+        await AdmitActionsAsync(next.Jobs.Single().JobId, new CongressBillActionsPage([], null));
+        await ExecuteAsync(connectionString, "UPDATE bill_pages SET page_order = 5 WHERE role = 'Actions' AND closes_chain");
+
+        await AdmitCosponsorPageAsync(bill.Cosponsors!, Cosponsors(["A000001"], next: null));
+
+        Assert.Equal(0, await CandidateCountAsync());
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task TheSummariesChainClosingAttachesToTheCandidateInEitherOrderAndStaysDistinctFromItsCreation(bool summariesFirst)
+    {
+        var bill = await StartPassedBillAsync(cosponsors: 0, summaries: 2);
+        var summariesNext = await AdmitSummariesAsync(bill.Summaries!, new CongressBillSummariesPage([], SummariesNext(1)));
+        var closeSummaries = async () => await AdmitSummariesAsync(summariesNext.Jobs.Single().JobId, new CongressBillSummariesPage([], null));
+        var closeActions = async () => await AdmitActionsAsync(bill.Actions, new CongressBillActionsPage([], null));
+
+        if (summariesFirst)
+        {
+            await closeSummaries();
+            Assert.Equal(0, await CandidateCountAsync());
+            await closeActions();
+            var candidate = Assert.Single(await CandidatesAsync());
+            Assert.Equal(candidate.CreatedTicks, candidate.SummariesCompletedTicks);
+        }
+        else
+        {
+            await closeActions();
+            var created = Assert.Single(await CandidatesAsync());
+            Assert.Null(created.SummariesCompletedTicks);
+            await closeSummaries();
+            var attached = Assert.Single(await CandidatesAsync());
+            Assert.Equal(created.CandidateId, attached.CandidateId);
+            Assert.Equal(created.CreatedTicks, attached.CreatedTicks);
+            Assert.True(attached.SummariesCompletedTicks >= created.CreatedTicks);
+        }
+    }
+
+    [Fact]
+    public async Task AFailedSummariesPageNeverBlocksTheCandidateAndReplayKeepsTheFirstCompletionTime()
+    {
+        var bill = await StartPassedBillAsync(cosponsors: 0, summaries: 2);
+        await AdmitActionsAsync(bill.Actions, new CongressBillActionsPage([], null));
+        Assert.Null(Assert.Single(await CandidatesAsync()).SummariesCompletedTicks);
+
+        var last = new CongressBillSummariesPage([], null);
+        await AdmitSummariesAsync(bill.Summaries!, last);
+        var completed = Assert.Single(await CandidatesAsync());
+        await AdmitSummariesAsync(bill.Summaries!, last);
+
+        Assert.NotNull(completed.SummariesCompletedTicks);
+        Assert.Equal(completed, Assert.Single(await CandidatesAsync()));
+    }
+
+    [Fact]
+    public async Task ABillWithNoSummariesNeverGetsASummariesCompletionTime()
+    {
+        var bill = await StartPassedBillAsync(cosponsors: 0, summaries: 0);
+
+        await AdmitActionsAsync(bill.Actions, new CongressBillActionsPage([], null));
+
+        Assert.Null(Assert.Single(await CandidatesAsync()).SummariesCompletedTicks);
+    }
+
+    [Fact]
+    public async Task ABillVersionWithANewUpdateDateGetsItsOwnCandidate()
+    {
+        var first = await StartPassedBillAsync(cosponsors: 0, summaries: 0);
+        await AdmitActionsAsync(first.Actions, new CongressBillActionsPage([], null));
+        var detail = await EnqueueDetailAsync("detail-two");
+        var second = await AdmitDetailAsync(detail, DetailBill(UpdatedAt.AddDays(1), cosponsors: 0),
+            BillGateOutcome.Passed(BillGateReason.CoveredSponsor));
+
+        await AdmitActionsAsync(second.Jobs.Single().JobId, new CongressBillActionsPage([], null));
+
+        Assert.Equal(2, (await CandidatesAsync()).Select(candidate => candidate.CandidateId).Distinct().Count());
+    }
+
+    [Fact]
+    public async Task AnExtractionOfAnotherJobsAttemptIsInvalidDataAndWritesNoPageRowOrCandidate()
+    {
+        var bill = await StartPassedBillAsync(cosponsors: 0, summaries: 0);
+        var otherJob = await EnqueueDetailAsync("other");
+        var foreign = await ExtractionAsync(otherJob);
+
+        await Assert.ThrowsAsync<InvalidDataException>(() => store.AdmitActionsPageAsync(Source(), bill.Actions,
+            new CongressBillActionsPage([], null), foreign, default));
+
+        Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM bill_pages WHERE role = 'Actions'"));
+        Assert.Equal(0, await CandidateCountAsync());
+    }
+
+    [Fact]
+    public async Task ADetailWithAnExtractionOfAnotherJobIsInvalidDataAndSavesNoGate()
+    {
+        var detail = await EnqueueDetailAsync("detail");
+        var foreign = await ExtractionAsync(await EnqueueDetailAsync("other"));
+
+        await Assert.ThrowsAsync<InvalidDataException>(() => store.AdmitDetailAsync(Source(), detail,
+            DetailBill(UpdatedAt, cosponsors: 0), BillGateOutcome.Passed(BillGateReason.CoveredSponsor),
+            BillGateFixtures.Revision().Id, foreign, default));
+
+        Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM bill_gates"));
+        Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM bill_pages"));
+    }
+
+    [Fact]
+    public async Task AnUnknownExtractionIdIsInvalidData()
+    {
+        var detail = await EnqueueDetailAsync("detail");
+
+        await Assert.ThrowsAsync<InvalidDataException>(() => store.AdmitDetailAsync(Source(), detail,
+            DetailBill(UpdatedAt, cosponsors: 0), BillGateOutcome.Passed(BillGateReason.CoveredSponsor),
+            BillGateFixtures.Revision().Id, new string('a', 64), default));
+    }
+
+    [Theory]
+    [InlineData("UPDATE bill_pages SET page_order = 1 WHERE role = 'Detail'")]
+    [InlineData("UPDATE bill_pages SET closes_chain = false WHERE role = 'Detail'")]
+    [InlineData("UPDATE bill_pages SET role = 'Unknown' WHERE role = 'Detail'")]
+    [InlineData("UPDATE bill_pages SET page_order = -1 WHERE role = 'Detail'")]
+    public async Task TheDatabaseRefusesAnImpossibleBillPageRow(string corruption)
+    {
+        await StartPassedBillAsync(cosponsors: 0, summaries: 0);
+
+        var refused = await Assert.ThrowsAsync<PostgresException>(() => ExecuteAsync(connectionString, corruption));
+
+        Assert.Equal(PostgresErrorCodes.CheckViolation, refused.SqlState);
+    }
+
+    [Fact]
+    public async Task TheDatabaseRefusesADetailRowWhoseJobIsNotTheRoot()
+    {
+        var bill = await StartPassedBillAsync(cosponsors: 0, summaries: 0);
+        await AdmitActionsAsync(bill.Actions, new CongressBillActionsPage([], null));
+
+        var refused = await Assert.ThrowsAsync<PostgresException>(() => ExecuteAsync(connectionString,
+            $"UPDATE bill_pages SET role = 'Detail', page_order = 0, closes_chain = true WHERE job_id = '{bill.Actions}'"));
+
+        Assert.Equal(PostgresErrorCodes.CheckViolation, refused.SqlState);
+    }
+
+    [Fact]
+    public async Task AGateWrittenBeforeThePageRowsExistedNeverGetsACandidate()
+    {
+        var bill = await StartPassedBillAsync(cosponsors: 0, summaries: 0);
+        await ExecuteAsync(connectionString, "DELETE FROM bill_pages WHERE role = 'Detail'");
+
+        await AdmitActionsAsync(bill.Actions, new CongressBillActionsPage([], null));
+
+        Assert.Equal(0, await CandidateCountAsync());
+    }
+
+    [Fact]
+    public async Task TheCandidateIdIsTheSha256OfTheLengthFramedSourceAndTheBillVersion()
+    {
+        var bill = await StartPassedBillAsync(cosponsors: 0, summaries: 0);
+        await AdmitActionsAsync(bill.Actions, new CongressBillActionsPage([], null));
+
+        var identity = $"{SourceId.Length}:{SourceId}119:hr:7:{UpdatedAt.UtcTicks}";
+        var expected = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(identity)));
+        Assert.Equal(expected, Assert.Single(await CandidatesAsync()).CandidateId);
+    }
+
+    [Theory]
+    [InlineData("UPDATE bill_pages SET closes_chain = true WHERE role = 'Actions' AND page_order = 0")]
+    [InlineData("UPDATE bill_pages SET closes_chain = NOT closes_chain WHERE role = 'Actions'")]
+    public async Task AChainWithTwoClosingRowsOrAClosingRowBelowTheHighestOrderNeverCompletes(string corruption)
+    {
+        var bill = await StartPassedBillAsync(cosponsors: 1, summaries: 0);
+        var next = await AdmitActionsAsync(bill.Actions, new CongressBillActionsPage([], ActionsNext(250)));
+        await AdmitActionsAsync(next.Jobs.Single().JobId, new CongressBillActionsPage([], null));
+        await ExecuteAsync(connectionString, corruption);
+
+        await AdmitCosponsorPageAsync(bill.Cosponsors!, Cosponsors(["A000001"], next: null));
+
+        Assert.Equal(0, await CandidateCountAsync());
+    }
+
+    private sealed record StartedBill(string Detail, string? Cosponsors, string Actions, string? Summaries);
+
+    private async Task<StartedBill> StartPassedBillAsync(int cosponsors, int summaries)
+    {
+        var detail = await EnqueueDetailAsync("detail");
+        var result = await AdmitDetailAsync(detail, DetailBill(UpdatedAt, cosponsors, summaries: summaries),
+            BillGateOutcome.Passed(BillGateReason.CoveredSponsor));
+        string? JobOf(string resource) => result.Jobs.SingleOrDefault(job => job.Url.Contains($"/{resource}?"))?.JobId;
+        return new StartedBill(detail, JobOf("cosponsors"), JobOf("actions")!, JobOf("summaries"));
+    }
+
+    private sealed record PageRecord(string Role, int Order, bool Closes, string ExtractionId);
+
+    private async Task<IReadOnlyList<PageRecord>> PagesAsync()
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            "SELECT role, page_order, closes_chain, extraction_id FROM bill_pages ORDER BY role, page_order", connection);
+        await using var reader = await command.ExecuteReaderAsync();
+        var pages = new List<PageRecord>();
+        while (await reader.ReadAsync())
+            pages.Add(new PageRecord(reader.GetString(0), reader.GetInt32(1), reader.GetBoolean(2), reader.GetString(3)));
+        return pages;
+    }
+
+    private sealed record CandidateRecord(string CandidateId, string SourceId, int Congress, string BillType, int BillNumber,
+        long UpdateTicks, string DetailJobId, string RevisionId, long CreatedTicks, long? SummariesCompletedTicks);
+
+    private async Task<IReadOnlyList<CandidateRecord>> CandidatesAsync()
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand("""
+            SELECT candidate_id, source_id, congress, bill_type, bill_number, update_date_utc_ticks, detail_job_id,
+                   configuration_revision_id, created_at_utc_ticks, summaries_completed_at_utc_ticks
+            FROM action_candidates ORDER BY candidate_id
+            """, connection);
+        await using var reader = await command.ExecuteReaderAsync();
+        var candidates = new List<CandidateRecord>();
+        while (await reader.ReadAsync())
+            candidates.Add(new CandidateRecord(reader.GetString(0), reader.GetString(1), reader.GetInt32(2), reader.GetString(3),
+                reader.GetInt32(4), reader.GetInt64(5), reader.GetString(6), reader.GetString(7), reader.GetInt64(8),
+                reader.IsDBNull(9) ? null : reader.GetInt64(9)));
+        return candidates;
+    }
+
+    private async Task<long> CandidateCountAsync() => (long)(await ScalarAsync("SELECT count(*) FROM action_candidates"))!;
+
+    private sealed record StuckBill(string DetailJobId, string Resource);
+
+    private async Task<IReadOnlyList<StuckBill>> StuckBillsAsync()
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand("""
+            SELECT g.detail_job_id, g.source_id, g.congress, g.bill_type, g.bill_number,
+                   j.job_id AS stuck_job_id, j.definition_json::jsonb ->> 'apiResource' AS resource,
+                   j.state, e.status AS processing_status, e.error_code
+            FROM bill_gates g
+            JOIN bill_follow_on_jobs l ON l.detail_job_id = g.detail_job_id
+            JOIN collection_jobs j ON j.job_id = l.job_id
+            LEFT JOIN action_candidates c ON c.detail_job_id = g.detail_job_id
+            LEFT JOIN bill_pages p ON p.job_id = l.job_id
+            LEFT JOIN evidence_processing e ON e.job_id = l.job_id
+            WHERE g.decision = 'Passed'
+              AND c.candidate_id IS NULL
+              AND p.job_id IS NULL
+              AND j.definition_json::jsonb ->> 'apiResource' IN ('billCosponsors', 'billActions')
+              AND (j.state IN ('Failed', 'Cancelled') OR e.status IN ('Blocked', 'Failed'))
+            ORDER BY g.congress, g.bill_type, g.bill_number;
+            """, connection);
+        await using var reader = await command.ExecuteReaderAsync();
+        var stuck = new List<StuckBill>();
+        while (await reader.ReadAsync()) stuck.Add(new StuckBill(reader.GetString(0), reader.GetString(6)));
+        return stuck;
     }
 
     private static readonly DateTimeOffset UpdatedAt = new(2025, 3, 3, 12, 0, 0, TimeSpan.Zero);
@@ -776,11 +1191,31 @@ public sealed class PostgresBillStreamTests(PostgresCollection postgres) : IAsyn
         return job.JobId;
     }
 
-    private Task<DiscoveryAdmissionResult> AdmitDetailAsync(string detailJobId, CongressBill bill, BillGateOutcome gate) =>
-        store.AdmitDetailAsync(Source(), detailJobId, bill, gate, BillGateFixtures.Revision().Id, default);
+    private async Task<DiscoveryAdmissionResult> AdmitDetailAsync(string detailJobId, CongressBill bill, BillGateOutcome gate) =>
+        await store.AdmitDetailAsync(Source(), detailJobId, bill, gate, BillGateFixtures.Revision().Id,
+            await ExtractionAsync(detailJobId), default);
 
-    private Task<DiscoveryAdmissionResult> AdmitCosponsorPageAsync(string pageJobId, CongressBillCosponsorsPage page) =>
-        store.AdmitCosponsorPageAsync(Source(), pageJobId, page, default);
+    private async Task<DiscoveryAdmissionResult> AdmitCosponsorPageAsync(string pageJobId, CongressBillCosponsorsPage page) =>
+        await store.AdmitCosponsorPageAsync(Source(), pageJobId, page, await ExtractionAsync(pageJobId), default);
+
+    private async Task<DiscoveryAdmissionResult> AdmitActionsAsync(string pageJobId, CongressBillActionsPage page) =>
+        await store.AdmitActionsPageAsync(Source(), pageJobId, page, await ExtractionAsync(pageJobId), default);
+
+    private async Task<DiscoveryAdmissionResult> AdmitSummariesAsync(string pageJobId, CongressBillSummariesPage page) =>
+        await store.AdmitSummariesPageAsync(Source(), pageJobId, page, await ExtractionAsync(pageJobId), default);
+
+    private async Task<string> ExtractionAsync(string jobId)
+    {
+        var text = "Bill: 119 hr 7\n" + Guid.NewGuid().ToString("N");
+        var captured = await seeder.ImportAsync(text, "https://example.test/pages/a", CandidateJobKind.None);
+        var requestJson = JsonSerializer.Serialize(CollectionFixtures.Request() with { JobId = captured.AttemptId }, CollectionProtocol.JsonOptions);
+        await ExecuteAsync(connectionString, $$"""
+            INSERT INTO collection_job_attempts (attempt_id, job_id, sequence, request_json, started_at, resolution_json, completed_at)
+            VALUES ('{{captured.AttemptId}}', '{{jobId}}',
+                    (SELECT COALESCE(MAX(sequence), 0) + 1 FROM collection_job_attempts WHERE job_id = '{{jobId}}'), '{{requestJson}}', 0, '{}', 0)
+            """);
+        return (await extractions.SaveAsync(new DocumentExtraction(captured, "parser", "normalizer", text), default)).ExtractionId;
+    }
 
     private async Task<(string Decision, string? Reason)> GateOfAsync(string detailJobId)
     {

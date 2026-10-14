@@ -126,6 +126,26 @@ public sealed class JobPreparationTests
             $"Policy area: {BillGateFixtures.TrackedPolicyArea}\nSponsor: A000001\nCosponsors (including withdrawn): 3\nActions: 1", saved.Text);
     }
 
+    [Theory]
+    [InlineData(ApiResource.Bill)]
+    [InlineData(ApiResource.BillCosponsors)]
+    [InlineData(ApiResource.BillActions)]
+    [InlineData(ApiResource.BillSummaries)]
+    public async Task EveryBillPageHandsItsSavedExtractionIdToAdmissionSoTheStoreCanCiteTheEvidence(ApiResource resource)
+    {
+        var (url, body) = resource switch
+        {
+            ApiResource.Bill => (DetailUrl, Detail("A000001", BillGateFixtures.TrackedPolicyArea, 3)),
+            ApiResource.BillCosponsors => (CosponsorUrl, Cosponsors("A000001", next: null)),
+            ApiResource.BillActions => (ActionsUrl, "{\"actions\":[],\"pagination\":{}}"),
+            _ => (SummariesUrl, Summaries(null))
+        };
+
+        _ = await Prepare(resource, url, body, BillGateFixtures.Revision());
+
+        Assert.Equal(Assert.Single(extractions.Saved).ExtractionId, Assert.Single(admissions.ExtractionIds));
+    }
+
     [Fact]
     public async Task ACosponsorPageIsExtractedOnceWithTheCosponsorParser()
     {
@@ -307,6 +327,7 @@ public sealed class JobPreparationTests
         public List<(string JobId, CongressBillCosponsorsPage Page)> CosponsorPages { get; } = [];
         public List<(string JobId, CongressBillActionsPage Page)> ActionPages { get; } = [];
         public List<(string JobId, CongressBillSummariesPage Page)> SummaryPages { get; } = [];
+        public List<string> ExtractionIds { get; } = [];
         public bool DuplicatesOnly { get; set; }
 
         public Task<DiscoveryAdmissionResult> AdmitListPageAsync(ConfiguredCollectionSource source, string listJobId,
@@ -314,9 +335,10 @@ public sealed class JobPreparationTests
             Task.FromResult(new DiscoveryAdmissionResult([], 0, 0));
 
         public Task<DiscoveryAdmissionResult> AdmitDetailAsync(ConfiguredCollectionSource source, string detailJobId,
-            CongressBill bill, BillGateOutcome gate, string issueRevisionId, CancellationToken cancellationToken)
+            CongressBill bill, BillGateOutcome gate, string issueRevisionId, string extractionId, CancellationToken cancellationToken)
         {
             Details.Add((detailJobId, bill, gate, issueRevisionId));
+            ExtractionIds.Add(extractionId);
             return Task.FromResult(DuplicatesOnly
                 ? new DiscoveryAdmissionResult([], 0, 2)
                 : new DiscoveryAdmissionResult(
@@ -324,23 +346,26 @@ public sealed class JobPreparationTests
         }
 
         public Task<DiscoveryAdmissionResult> AdmitCosponsorPageAsync(ConfiguredCollectionSource source, string pageJobId,
-            CongressBillCosponsorsPage page, CancellationToken cancellationToken)
+            CongressBillCosponsorsPage page, string extractionId, CancellationToken cancellationToken)
         {
             CosponsorPages.Add((pageJobId, page));
+            ExtractionIds.Add(extractionId);
             return Task.FromResult(new DiscoveryAdmissionResult([], 0, 0));
         }
 
         public Task<DiscoveryAdmissionResult> AdmitActionsPageAsync(ConfiguredCollectionSource source, string pageJobId,
-            CongressBillActionsPage page, CancellationToken cancellationToken)
+            CongressBillActionsPage page, string extractionId, CancellationToken cancellationToken)
         {
             ActionPages.Add((pageJobId, page));
+            ExtractionIds.Add(extractionId);
             return Task.FromResult(new DiscoveryAdmissionResult([], 0, 0));
         }
 
         public Task<DiscoveryAdmissionResult> AdmitSummariesPageAsync(ConfiguredCollectionSource source, string pageJobId,
-            CongressBillSummariesPage page, CancellationToken cancellationToken)
+            CongressBillSummariesPage page, string extractionId, CancellationToken cancellationToken)
         {
             SummaryPages.Add((pageJobId, page));
+            ExtractionIds.Add(extractionId);
             return Task.FromResult(new DiscoveryAdmissionResult([], 0, 0));
         }
     }

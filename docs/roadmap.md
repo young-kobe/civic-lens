@@ -78,6 +78,12 @@ Agreed decisions:
 - After the first action slice, build in this order: House votes, then reviewed relationships between statements and actions, then Congressional Record articles as a statement connector. Cosponsorship is cheap position-taking, so votes carry most of the signal about whether words match deeds. Floor speeches cover every member, including officials with no usable web source.
 - Use Congress.gov bill subjects when the search filters are designed. Use the member list's `fromDateTime` change check when automatic official discovery is built.
 
+Derived insights are product goals. They make Civic Lens more than a connector to source APIs. Code computes each metric and publishes a method note. A person reviews any judgment before it is published, and each insight shows its coverage limits.
+
+1. Changed record: detect deleted press releases, rewritten quotations, and positions removed from issue pages. Show both versions and their timing next to votes and events. This needs deletion detection and the document-change gate.
+2. Shared language: find the same or nearly the same sentences in releases from different offices. Show coordinated messaging, how it spreads, and who uses it first.
+3. Talk and action profile: for each official, show the share of statements on each issue next to the share of sponsorships and votes on it.
+
 Acceptance: every statement/action has exact inspectable provenance. Quotation validity and interpretation are separate checks. Human review is bound to the reviewed version. Adding/removing tracked officials requires no code changes and retains history.
 
 ## 4. AI drafting, classification, and evaluation
