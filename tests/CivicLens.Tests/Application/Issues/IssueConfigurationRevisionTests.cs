@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using CivicLens.Application.Issues;
 using CivicLens.Collection.Contracts;
+using CivicLens.Tests.Fixtures;
 
 namespace CivicLens.Tests.Application.Issues;
 
@@ -11,7 +12,7 @@ public sealed class IssueConfigurationRevisionTests
     [Fact]
     public void OwnerEditedIssueFileLoadsAndValidates()
     {
-        var json = File.ReadAllText(Path.Combine(RepositoryRoot(), "config", "issues.json"));
+        var json = File.ReadAllText(Path.Combine(RepositoryRoot.FullName, "config", "issues.json"));
 
         var configuration = JsonSerializer.Deserialize<IssueConfiguration>(json, CollectionProtocol.JsonOptions)!;
         configuration.Validate();
@@ -138,12 +139,4 @@ public sealed class IssueConfigurationRevisionTests
         new() { PolicyAreas = [Area()], Issues = issues.Length == 0 ? [Issue()] : issues };
 
     private static string Hash(string json) => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(json)));
-
-    private static string RepositoryRoot()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "CivicLens.slnx")))
-            directory = directory.Parent;
-        return directory?.FullName ?? throw new InvalidOperationException("Cannot locate CivicLens.slnx.");
-    }
 }

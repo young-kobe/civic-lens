@@ -31,7 +31,6 @@ namespace CivicLens.Tests.Infrastructure.Collection.Processing;
 [Trait("Category", "Postgres")]
 public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) : IAsyncLifetime
 {
-    private readonly string schema = "processing_worker_" + Guid.NewGuid().ToString("N");
     private readonly string artifactRoot = Path.Combine(Path.GetTempPath(), "civic-processing-" + Guid.NewGuid().ToString("N"));
     private string connectionString = null!;
     private PostgresCollectionJobStore jobs = null!;
@@ -44,11 +43,7 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
 
     public async Task InitializeAsync()
     {
-        await using var connection = new NpgsqlConnection(postgres.ConnectionString);
-        await connection.OpenAsync();
-        await using var command = new NpgsqlCommand($"CREATE SCHEMA {schema}", connection);
-        await command.ExecuteNonQueryAsync();
-        connectionString = new NpgsqlConnectionStringBuilder(postgres.ConnectionString) { SearchPath = schema }.ConnectionString;
+        connectionString = await postgres.CreateMigratedDatabaseAsync();
         jobs = PostgresCollectionJobStore.FromConnectionString(connectionString);
         attempts = PostgresCollectionAttemptStore.FromConnectionString(connectionString);
         processing = PostgresEvidenceProcessingStore.FromConnectionString(connectionString);
@@ -56,16 +51,12 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
         comparisons = PostgresDocumentComparisonStore.FromConnectionString(connectionString);
         extract = new ExtractDocument(attempts, new CaptureDocumentTextExtractor(), extractions);
         Directory.CreateDirectory(artifactRoot);
-        await attempts.MigrateAsync();
     }
 
     public async Task DisposeAsync()
     {
         if (Directory.Exists(artifactRoot)) Directory.Delete(artifactRoot, recursive: true);
-        await using var connection = new NpgsqlConnection(postgres.ConnectionString);
-        await connection.OpenAsync();
-        await using var command = new NpgsqlCommand($"DROP SCHEMA IF EXISTS {schema} CASCADE", connection);
-        await command.ExecuteNonQueryAsync();
+        await postgres.DropDatabaseAsync(connectionString);
     }
 
     [Fact]

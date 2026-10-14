@@ -24,16 +24,15 @@ using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Collection.Jobs;
 using CivicLens.Infrastructure.Collection.Processing;
 using CivicLens.Infrastructure.Documents;
+using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
-using Npgsql;
 using static CivicLens.Tests.Fixtures.CollectionFixtures;
 
 namespace CivicLens.Tests.Host;
 
-/// <summary>Runs the review workspace as a real process against an isolated Postgres schema, with offline sign-in cookies.</summary>
+/// <summary>Runs the review workspace as a real process against an isolated Postgres database, with offline sign-in cookies.</summary>
 public sealed class ReviewWorkspaceHost(PostgresCollection postgres)
 {
-    private readonly string schema = "review_web_" + Guid.NewGuid().ToString("N");
     public HttpClient Client { get; } = new(new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false }) { Timeout = TimeSpan.FromSeconds(15) };
     public string KeyDirectory { get; } = Path.Combine(Path.GetTempPath(), "civic-review-keys-" + Guid.NewGuid().ToString("N"));
     public string ReleaseDirectory => Path.Combine(KeyDirectory, "releases");
@@ -51,23 +50,16 @@ public sealed class ReviewWorkspaceHost(PostgresCollection postgres)
 
     public async Task StartAsync()
     {
-        await using var connection = new NpgsqlConnection(postgres.ConnectionString);
-        await connection.OpenAsync();
-        await using var command = new NpgsqlCommand($"CREATE SCHEMA {schema}", connection);
-        await command.ExecuteNonQueryAsync();
-        ConnectionString = new NpgsqlConnectionStringBuilder(postgres.ConnectionString) { SearchPath = schema, Pooling = false }.ConnectionString;
+        ConnectionString = await postgres.CreateMigratedDatabaseAsync();
         Attempts = PostgresCollectionAttemptStore.FromConnectionString(ConnectionString);
         Extractions = PostgresDocumentExtractionStore.FromConnectionString(ConnectionString);
         Comparisons = PostgresDocumentComparisonStore.FromConnectionString(ConnectionString);
-        await Attempts.MigrateAsync();
         using var listener = new TcpListener(IPAddress.Loopback, 0);
         listener.Start();
         var port = ((IPEndPoint)listener.LocalEndpoint).Port;
         listener.Stop();
-        var root = new DirectoryInfo(AppContext.BaseDirectory);
-        while (root is not null && !File.Exists(Path.Combine(root.FullName, "CivicLens.slnx"))) root = root.Parent;
         var configuration = new DirectoryInfo(AppContext.BaseDirectory).Parent!.Name;
-        var assembly = Path.Combine(root!.FullName, "src", "CivicLens.Host", "bin", configuration, "net10.0", "CivicLens.Host.dll");
+        var assembly = Path.Combine(RepositoryRoot.FullName, "src", "CivicLens.Host", "bin", configuration, "net10.0", "CivicLens.Host.dll");
         var start = new ProcessStartInfo(Environment.GetEnvironmentVariable("DOTNET_HOST_PATH") ?? "dotnet")
         {
             RedirectStandardOutput = true,
@@ -137,10 +129,7 @@ public sealed class ReviewWorkspaceHost(PostgresCollection postgres)
             process.Dispose();
         }
         if (Directory.Exists(KeyDirectory)) Directory.Delete(KeyDirectory, recursive: true);
-        await using var connection = new NpgsqlConnection(postgres.ConnectionString);
-        await connection.OpenAsync();
-        await using var command = new NpgsqlCommand($"DROP SCHEMA IF EXISTS {schema} CASCADE", connection);
-        await command.ExecuteNonQueryAsync();
+        await postgres.DropDatabaseAsync(ConnectionString);
     }
 
     public async Task<IDocument> GetDocumentAsync(string url)

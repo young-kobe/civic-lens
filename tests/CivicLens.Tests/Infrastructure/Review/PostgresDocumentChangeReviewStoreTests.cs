@@ -27,7 +27,6 @@ namespace CivicLens.Tests.Infrastructure.Review;
 [Trait("Category", "Postgres")]
 public sealed class PostgresDocumentChangeReviewStoreTests(PostgresCollection postgres) : IAsyncLifetime
 {
-    private readonly string schema = "review_" + Guid.NewGuid().ToString("N");
     private readonly string captureRoot = Path.Combine(Path.GetTempPath(), "civic-review-" + Guid.NewGuid().ToString("N"));
     private string connectionString = null!;
     private PooledDbContextFactory<CollectionAttemptDbContext> factory = null!;
@@ -38,29 +37,19 @@ public sealed class PostgresDocumentChangeReviewStoreTests(PostgresCollection po
 
     public async Task InitializeAsync()
     {
-        await using var connection = new NpgsqlConnection(postgres.ConnectionString);
-        await connection.OpenAsync();
-        await using var command = connection.CreateCommand();
-        command.CommandText = $"CREATE SCHEMA {schema}";
-        await command.ExecuteNonQueryAsync();
-        connectionString = new NpgsqlConnectionStringBuilder(postgres.ConnectionString) { SearchPath = schema, Pooling = false }.ConnectionString;
+        connectionString = await postgres.CreateMigratedDatabaseAsync();
         factory = new PooledDbContextFactory<CollectionAttemptDbContext>(
             new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options);
         attempts = new PostgresCollectionAttemptStore(factory);
         extractions = new PostgresDocumentExtractionStore(factory);
         comparisons = new PostgresDocumentComparisonStore(factory);
         reviews = new PostgresDocumentChangeReviewStore(factory);
-        await attempts.MigrateAsync();
         Directory.CreateDirectory(captureRoot);
     }
 
     public async Task DisposeAsync()
     {
-        await using var connection = new NpgsqlConnection(postgres.ConnectionString);
-        await connection.OpenAsync();
-        await using var command = connection.CreateCommand();
-        command.CommandText = $"DROP SCHEMA IF EXISTS {schema} CASCADE";
-        await command.ExecuteNonQueryAsync();
+        await postgres.DropDatabaseAsync(connectionString);
         Directory.Delete(captureRoot, recursive: true);
     }
 

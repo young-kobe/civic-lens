@@ -13,16 +13,14 @@ namespace CivicLens.Tests.Infrastructure.Collection;
 public sealed class ActionDraftingMigrationTests(PostgresCollection postgres) : IAsyncLifetime
 {
     private const string PreviousMigration = "20261020120000_JobPacingKeys";
-    private readonly string schema = "action_queue_" + Guid.NewGuid().ToString("N");
     private string connectionString = null!;
 
     public async Task InitializeAsync()
     {
-        await ExecuteAsync($"CREATE SCHEMA {schema}", postgres.ConnectionString);
-        connectionString = new NpgsqlConnectionStringBuilder(postgres.ConnectionString) { SearchPath = schema }.ConnectionString;
+        connectionString = await postgres.CreateEmptyDatabaseAsync();
     }
 
-    public Task DisposeAsync() => ExecuteAsync($"DROP SCHEMA IF EXISTS {schema} CASCADE", postgres.ConnectionString);
+    public Task DisposeAsync() => postgres.DropDatabaseAsync(connectionString);
 
     [Fact]
     public async Task BackfillQueuesOnePendingDraftRowForEveryCandidateThatExistedBeforeTheMigration()

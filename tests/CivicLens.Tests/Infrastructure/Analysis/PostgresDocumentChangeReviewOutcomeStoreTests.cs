@@ -22,7 +22,6 @@ public sealed class PostgresDocumentChangeReviewOutcomeStoreTests(PostgresCollec
 {
     private static readonly ReviewActor Owner = new("auth0|owner", ReviewRole.Owner);
     private static readonly ReviewCatalog Catalog = new([], []);
-    private readonly string schema = "outcomes_" + Guid.NewGuid().ToString("N");
     private readonly string captureRoot = Path.Combine(Path.GetTempPath(), "civic-outcomes-" + Guid.NewGuid().ToString("N"));
     private string connectionString = null!;
     private PooledDbContextFactory<CollectionAttemptDbContext> factory = null!;
@@ -33,8 +32,7 @@ public sealed class PostgresDocumentChangeReviewOutcomeStoreTests(PostgresCollec
 
     public async Task InitializeAsync()
     {
-        await ExecuteAsync(postgres.ConnectionString, $"CREATE SCHEMA {schema}");
-        connectionString = new NpgsqlConnectionStringBuilder(postgres.ConnectionString) { SearchPath = schema, Pooling = false }.ConnectionString;
+        connectionString = await postgres.CreateMigratedDatabaseAsync();
         factory = new PooledDbContextFactory<CollectionAttemptDbContext>(
             new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options);
         attempts = new PostgresCollectionAttemptStore(factory);
@@ -42,12 +40,11 @@ public sealed class PostgresDocumentChangeReviewOutcomeStoreTests(PostgresCollec
         seeder = new ComparisonSeeder(attempts, new PostgresDocumentExtractionStore(factory),
             new PostgresDocumentComparisonStore(factory), captureRoot);
         Directory.CreateDirectory(captureRoot);
-        await attempts.MigrateAsync();
     }
 
     public async Task DisposeAsync()
     {
-        await ExecuteAsync(postgres.ConnectionString, $"DROP SCHEMA IF EXISTS {schema} CASCADE");
+        await postgres.DropDatabaseAsync(connectionString);
         Directory.Delete(captureRoot, recursive: true);
     }
 

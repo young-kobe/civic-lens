@@ -10,25 +10,16 @@ namespace CivicLens.Tests.Infrastructure.Collection.Jobs;
 [Trait("Category", "Postgres")]
 public sealed class PostgresCollectionPipelineWakeupTests(PostgresCollection postgres) : IAsyncLifetime
 {
-    private readonly string schema = "pipeline_wakeup_" + Guid.NewGuid().ToString("N");
     private string connectionString = null!;
 
     public async Task InitializeAsync()
     {
-        await using var connection = new NpgsqlConnection(postgres.ConnectionString);
-        await connection.OpenAsync();
-        await using var command = new NpgsqlCommand($"CREATE SCHEMA {schema}", connection);
-        await command.ExecuteNonQueryAsync();
-        connectionString = new NpgsqlConnectionStringBuilder(postgres.ConnectionString) { SearchPath = schema }.ConnectionString;
-        await PostgresCollectionAttemptStore.FromConnectionString(connectionString).MigrateAsync();
+        connectionString = await postgres.CreateMigratedDatabaseAsync();
     }
 
     public async Task DisposeAsync()
     {
-        await using var connection = new NpgsqlConnection(postgres.ConnectionString);
-        await connection.OpenAsync();
-        await using var command = new NpgsqlCommand($"DROP SCHEMA IF EXISTS {schema} CASCADE", connection);
-        await command.ExecuteNonQueryAsync();
+        await postgres.DropDatabaseAsync(connectionString);
     }
 
     [Fact]

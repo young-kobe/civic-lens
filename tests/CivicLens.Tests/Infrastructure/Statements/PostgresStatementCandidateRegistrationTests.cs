@@ -14,7 +14,6 @@ namespace CivicLens.Tests.Infrastructure.Statements;
 public sealed class PostgresStatementCandidateRegistrationTests(PostgresCollection postgres) : IAsyncLifetime
 {
     private const string ArticleUrl = "https://example.test/pages/article";
-    private readonly string schema = "statements_" + Guid.NewGuid().ToString("N");
     private readonly string root = Path.Combine(Path.GetTempPath(), "civic-statements-" + Guid.NewGuid().ToString("N"));
     private string connectionString = null!;
     private PostgresCollectionAttemptStore attempts = null!;
@@ -23,20 +22,18 @@ public sealed class PostgresStatementCandidateRegistrationTests(PostgresCollecti
 
     public async Task InitializeAsync()
     {
-        await ExecuteAsync(postgres.ConnectionString, $"CREATE SCHEMA {schema}");
-        connectionString = new NpgsqlConnectionStringBuilder(postgres.ConnectionString) { SearchPath = schema }.ConnectionString;
+        connectionString = await postgres.CreateMigratedDatabaseAsync();
         var factory = new PooledDbContextFactory<CollectionAttemptDbContext>(
             new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options);
         attempts = new PostgresCollectionAttemptStore(factory);
         extractions = new PostgresDocumentExtractionStore(factory);
-        await attempts.MigrateAsync();
         seeder = new StatementCandidateSeeder(attempts, extractions, connectionString, root);
         Directory.CreateDirectory(root);
     }
 
     public async Task DisposeAsync()
     {
-        await ExecuteAsync(postgres.ConnectionString, $"DROP SCHEMA IF EXISTS {schema} CASCADE");
+        await postgres.DropDatabaseAsync(connectionString);
         Directory.Delete(root, recursive: true);
     }
 

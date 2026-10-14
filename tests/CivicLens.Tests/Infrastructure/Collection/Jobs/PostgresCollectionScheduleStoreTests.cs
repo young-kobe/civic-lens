@@ -12,27 +12,18 @@ namespace CivicLens.Tests.Infrastructure.Collection.Jobs;
 [Trait("Category", "Postgres")]
 public sealed class PostgresCollectionScheduleStoreTests(PostgresCollection postgres) : IAsyncLifetime
 {
-    private readonly string schema = "source_schedules_" + Guid.NewGuid().ToString("N");
     private string connectionString = null!;
     private PostgresCollectionJobStore store = null!;
 
     public async Task InitializeAsync()
     {
-        await using var connection = new NpgsqlConnection(postgres.ConnectionString);
-        await connection.OpenAsync();
-        await using var command = new NpgsqlCommand($"CREATE SCHEMA {schema}", connection);
-        await command.ExecuteNonQueryAsync();
-        connectionString = new NpgsqlConnectionStringBuilder(postgres.ConnectionString) { SearchPath = schema }.ConnectionString;
+        connectionString = await postgres.CreateMigratedDatabaseAsync();
         store = PostgresCollectionJobStore.FromConnectionString(connectionString);
-        await PostgresCollectionAttemptStore.FromConnectionString(connectionString).MigrateAsync();
     }
 
     public async Task DisposeAsync()
     {
-        await using var connection = new NpgsqlConnection(postgres.ConnectionString);
-        await connection.OpenAsync();
-        await using var command = new NpgsqlCommand($"DROP SCHEMA IF EXISTS {schema} CASCADE", connection);
-        await command.ExecuteNonQueryAsync();
+        await postgres.DropDatabaseAsync(connectionString);
     }
 
     [Fact]

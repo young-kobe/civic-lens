@@ -11,16 +11,14 @@ namespace CivicLens.Tests.Infrastructure.Collection;
 public sealed class KeysetReadsMigrationTests(PostgresCollection postgres) : IAsyncLifetime
 {
     private const string PreviousMigration = "20261009120000_PublicationReleases";
-    private readonly string schema = "keyset_" + Guid.NewGuid().ToString("N");
     private string connectionString = null!;
 
     public async Task InitializeAsync()
     {
-        await ExecuteAsync(postgres.ConnectionString, $"CREATE SCHEMA {schema}");
-        connectionString = new NpgsqlConnectionStringBuilder(postgres.ConnectionString) { SearchPath = schema }.ConnectionString;
+        connectionString = await postgres.CreateEmptyDatabaseAsync();
     }
 
-    public Task DisposeAsync() => ExecuteAsync(postgres.ConnectionString, $"DROP SCHEMA IF EXISTS {schema} CASCADE");
+    public Task DisposeAsync() => postgres.DropDatabaseAsync(connectionString);
 
     // Rows written before the migration have the time and kind only inside their JSON. The new columns must carry the same values.
     [Fact]

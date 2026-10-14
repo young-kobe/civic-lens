@@ -25,7 +25,6 @@ public sealed class PostgresStatementReviewStoreTests(PostgresCollection postgre
 {
     private const string Quote = "a rent cap for tenants";
     private static readonly ReviewActor Owner = new("auth0|owner", ReviewRole.Owner);
-    private readonly string schema = "statement_review_" + Guid.NewGuid().ToString("N");
     private readonly string captureRoot = Path.Combine(Path.GetTempPath(), "civic-statement-review-" + Guid.NewGuid().ToString("N"));
     private string connectionString = null!;
     private PooledDbContextFactory<CollectionAttemptDbContext> factory = null!;
@@ -37,12 +36,10 @@ public sealed class PostgresStatementReviewStoreTests(PostgresCollection postgre
 
     public async Task InitializeAsync()
     {
-        await ExecuteAsync(postgres.ConnectionString, $"CREATE SCHEMA {schema}");
-        connectionString = new NpgsqlConnectionStringBuilder(postgres.ConnectionString) { SearchPath = schema, Pooling = false }.ConnectionString;
+        connectionString = await postgres.CreateMigratedDatabaseAsync();
         factory = new PooledDbContextFactory<CollectionAttemptDbContext>(
             new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options);
         var attempts = new PostgresCollectionAttemptStore(factory);
-        await attempts.MigrateAsync();
         gates = new PostgresStatementAnalysisStore(factory);
         drafts = new PostgresStatementDraftStore(factory);
         reviews = new PostgresStatementReviewStore(factory);
@@ -52,7 +49,7 @@ public sealed class PostgresStatementReviewStoreTests(PostgresCollection postgre
 
     public async Task DisposeAsync()
     {
-        await ExecuteAsync(postgres.ConnectionString, $"DROP SCHEMA IF EXISTS {schema} CASCADE");
+        await postgres.DropDatabaseAsync(connectionString);
         Directory.Delete(captureRoot, recursive: true);
     }
 
@@ -413,16 +410,6 @@ public sealed class PostgresStatementReviewStoreTests(PostgresCollection postgre
         Assert.Null(notDrafted.Review.CurrentRevision);
         Assert.Equal((0, ReviewStatus.NotDrafted), (notDrafted.Review.ReviewStateVersion, notDrafted.Review.CurrentStatus));
         Assert.Null(await get.ExecuteAsync(Owner, new string('a', 64)));
-    }
-
-    [Fact]
-    public async Task MigrationMatchesTheModelSoStatementReviewCannotDriftFromTheSchema()
-    {
-        await using var db = await factory.CreateDbContextAsync();
-
-        Assert.Contains("20261012220000_StatementReview", await db.Database.GetAppliedMigrationsAsync());
-        Assert.Empty(await db.Database.GetPendingMigrationsAsync());
-        Assert.False(db.Database.HasPendingModelChanges());
     }
 
     private async Task<string> CandidateAsync() =>

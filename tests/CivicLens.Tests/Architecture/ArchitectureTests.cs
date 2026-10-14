@@ -1,12 +1,13 @@
 using System.Reflection.Metadata;
 using System.Reflection.PortableExecutable;
 using System.Xml.Linq;
+using CivicLens.Tests.Fixtures;
 
 namespace CivicLens.Tests.Architecture;
 
 public sealed class ArchitectureTests
 {
-    private static readonly string Root = FindRoot();
+    private static readonly string Root = RepositoryRoot.FullName;
 
     private static readonly Dictionary<string, string[]> Allowed = new()
     {
@@ -76,16 +77,5 @@ public sealed class ArchitectureTests
             Assert.Empty(xml.Descendants("PackageReference"));
             Assert.Empty(xml.Descendants("Reference"));
         }
-    }
-
-    private static string FindRoot()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "CivicLens.slnx")))
-        {
-            directory = directory.Parent;
-        }
-
-        return directory?.FullName ?? throw new InvalidOperationException("Cannot locate CivicLens.slnx.");
     }
 }

@@ -26,7 +26,6 @@ namespace CivicLens.Tests.Infrastructure.Documents;
 [Trait("Category", "Postgres")]
 public sealed class PostgresDocumentExtractionStoreTests(PostgresCollection postgres) : IAsyncLifetime
 {
-    private readonly string schema = "documents_" + Guid.NewGuid().ToString("N");
     private readonly string root = Path.Combine(Path.GetTempPath(), "civic-documents-" + Guid.NewGuid().ToString("N"));
     private string connectionString = null!;
     private PooledDbContextFactory<CollectionAttemptDbContext> factory = null!;
@@ -35,27 +34,17 @@ public sealed class PostgresDocumentExtractionStoreTests(PostgresCollection post
 
     public async Task InitializeAsync()
     {
-        await using var connection = new NpgsqlConnection(postgres.ConnectionString);
-        await connection.OpenAsync();
-        await using var command = connection.CreateCommand();
-        command.CommandText = $"CREATE SCHEMA {schema}";
-        await command.ExecuteNonQueryAsync();
-        connectionString = new NpgsqlConnectionStringBuilder(postgres.ConnectionString) { SearchPath = schema }.ConnectionString;
+        connectionString = await postgres.CreateMigratedDatabaseAsync();
         factory = new PooledDbContextFactory<CollectionAttemptDbContext>(
             new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options);
         attempts = new PostgresCollectionAttemptStore(factory);
         extractions = new PostgresDocumentExtractionStore(factory);
-        await attempts.MigrateAsync();
         Directory.CreateDirectory(root);
     }
 
     public async Task DisposeAsync()
     {
-        await using var connection = new NpgsqlConnection(postgres.ConnectionString);
-        await connection.OpenAsync();
-        await using var command = connection.CreateCommand();
-        command.CommandText = $"DROP SCHEMA IF EXISTS {schema} CASCADE";
-        await command.ExecuteNonQueryAsync();
+        await postgres.DropDatabaseAsync(connectionString);
         Directory.Delete(root, recursive: true);
     }
 
@@ -454,7 +443,7 @@ public sealed class PostgresDocumentExtractionStoreTests(PostgresCollection post
         await using var db = await factory.CreateDbContextAsync();
         var indexDefinition = await db.Database.SqlQuery<string>($"""
             SELECT indexdef AS "Value" FROM pg_indexes
-            WHERE schemaname = {schema} AND indexname = 'ix_collection_attempts_history_url'
+            WHERE schemaname = current_schema() AND indexname = 'ix_collection_attempts_history_url'
             """).SingleAsync();
         Assert.Contains("USING hash (requested_url)", indexDefinition, StringComparison.Ordinal);
     }

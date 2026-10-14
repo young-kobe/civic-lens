@@ -1,6 +1,4 @@
-using CivicLens.Infrastructure.Collection;
 using CivicLens.Tests.Infrastructure.Collection;
-using Npgsql;
 
 namespace CivicLens.Tests.Host;
 
@@ -8,17 +6,14 @@ namespace CivicLens.Tests.Host;
 [Trait("Category", "Postgres")]
 public sealed class StatementCommandTests(PostgresCollection postgres) : IAsyncLifetime
 {
-    private readonly string schema = "statements_cli_" + Guid.NewGuid().ToString("N");
     private string connectionString = null!;
 
     public async Task InitializeAsync()
     {
-        await ExecuteAsync(postgres.ConnectionString, $"CREATE SCHEMA {schema}");
-        connectionString = new NpgsqlConnectionStringBuilder(postgres.ConnectionString) { SearchPath = schema }.ConnectionString;
-        await PostgresCollectionAttemptStore.FromConnectionString(connectionString).MigrateAsync();
+        connectionString = await postgres.CreateMigratedDatabaseAsync();
     }
 
-    public Task DisposeAsync() => ExecuteAsync(postgres.ConnectionString, $"DROP SCHEMA IF EXISTS {schema} CASCADE");
+    public Task DisposeAsync() => postgres.DropDatabaseAsync(connectionString);
 
     [Fact]
     public async Task StatusReportsZeroCountsForEveryOutcomeBeforeAnyCandidateExists()
@@ -156,12 +151,4 @@ public sealed class StatementCommandTests(PostgresCollection postgres) : IAsyncL
     private Task<(int ExitCode, string Output, string Error)> RunAsync(string owner, params string[] arguments) =>
         HostProcess.RunWithEnvironmentAsync(connectionString, null,
             new Dictionary<string, string> { ["CIVIC_LENS_REVIEW_OWNER"] = owner }, arguments);
-
-    private static async Task ExecuteAsync(string connection, string sql)
-    {
-        await using var open = new NpgsqlConnection(connection);
-        await open.OpenAsync();
-        await using var command = new NpgsqlCommand(sql, open);
-        await command.ExecuteNonQueryAsync();
-    }
 }

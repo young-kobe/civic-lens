@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using CivicLens.Tests.Fixtures;
 
 namespace CivicLens.Tests.Host;
 
@@ -17,11 +18,8 @@ internal static class HostProcess
     public static async Task<(int ExitCode, string Output, string Error)> RunWithEnvironmentAsync(
         string? database, string? collectorHost, IReadOnlyDictionary<string, string> environment, params string[] arguments)
     {
-        var root = new DirectoryInfo(AppContext.BaseDirectory);
-        while (root is not null && !File.Exists(Path.Combine(root.FullName, "CivicLens.slnx")))
-            root = root.Parent;
         var configuration = new DirectoryInfo(AppContext.BaseDirectory).Parent!.Name;
-        var assembly = Path.Combine(root!.FullName, "src", "CivicLens.Host", "bin", configuration,
+        var assembly = Path.Combine(RepositoryRoot.FullName, "src", "CivicLens.Host", "bin", configuration,
             "net10.0", "CivicLens.Host.dll");
         var start = new ProcessStartInfo(Environment.GetEnvironmentVariable("DOTNET_HOST_PATH") ?? "dotnet")
         {
