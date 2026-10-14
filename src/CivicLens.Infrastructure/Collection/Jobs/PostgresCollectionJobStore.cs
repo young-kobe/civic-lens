@@ -16,7 +16,6 @@ namespace CivicLens.Infrastructure.Collection.Jobs;
 public sealed partial class PostgresCollectionJobStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory) :
     ICollectionJobStore, ICollectionScheduleStore
 {
-    private const string LockName = "civic-lens-collection-jobs";
 
     public static PostgresCollectionJobStore FromConnectionString(string connectionString)
     {
@@ -402,12 +401,7 @@ public sealed partial class PostgresCollectionJobStore(IDbContextFactory<Collect
         CancellationToken cancellationToken)
     {
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
-        await using var command = db.Database.GetDbConnection().CreateCommand();
-        command.Transaction = transaction.GetDbTransaction();
-        command.CommandText = "SELECT pg_advisory_xact_lock(hashtextextended(@name, 0))";
-        command.Parameters.Add(new NpgsqlParameter("name", LockName));
-        await command.ExecuteNonQueryAsync(cancellationToken);
+        await using var transaction = await PostgresAdvisoryLock.BeginWriteAsync(db, PostgresAdvisoryLock.CollectionJobs, cancellationToken);
         var now = (await DatabaseClock.ReadAsync(db, cancellationToken)).Offset;
         var result = await operation(db, now);
         await db.SaveChangesAsync(cancellationToken);

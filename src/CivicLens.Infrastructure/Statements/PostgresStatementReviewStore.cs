@@ -37,7 +37,7 @@ public sealed class PostgresStatementReviewStore(IDbContextFactory<CollectionAtt
         ReviewIdempotency.ValidateRequest(actorSubject, idempotencyKey, payloadHash);
         ArgumentNullException.ThrowIfNull(revision);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        return await ReviewIdempotency.WriteOnceAsync(db, ReviewWriteLock.Statement, actorSubject, CreateOperation, idempotencyKey,
+        return await ReviewIdempotency.WriteOnceAsync(db, PostgresAdvisoryLock.StatementReview, actorSubject, CreateOperation, idempotencyKey,
             payloadHash, async () =>
             {
                 if (revision.RevisionNumber != 1) throw new InvalidOperationException("A draft must begin at revision one.");
@@ -60,7 +60,7 @@ public sealed class PostgresStatementReviewStore(IDbContextFactory<CollectionAtt
         ReviewIdempotency.ValidateRequest(actorSubject, idempotencyKey, payloadHash);
         ArgumentNullException.ThrowIfNull(revision);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        return await ReviewIdempotency.WriteOnceAsync(db, ReviewWriteLock.Statement, actorSubject, SaveOperation, idempotencyKey,
+        return await ReviewIdempotency.WriteOnceAsync(db, PostgresAdvisoryLock.StatementReview, actorSubject, SaveOperation, idempotencyKey,
             payloadHash, async () =>
             {
                 var draft = await ReadDraftAsync(db, revision.CandidateId, cancellationToken);
@@ -84,7 +84,7 @@ public sealed class PostgresStatementReviewStore(IDbContextFactory<CollectionAtt
         ReviewIdempotency.ValidateRequest(actorSubject, idempotencyKey, payloadHash);
         ReviewWriteRules.RequireDecisionActor(decision, actorSubject);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        return await ReviewIdempotency.WriteOnceAsync(db, ReviewWriteLock.Statement, actorSubject, DecideOperation, idempotencyKey,
+        return await ReviewIdempotency.WriteOnceAsync(db, PostgresAdvisoryLock.StatementReview, actorSubject, DecideOperation, idempotencyKey,
             payloadHash, async () =>
             {
                 var draft = await ReadDraftAsync(db, decision.DraftId, cancellationToken);

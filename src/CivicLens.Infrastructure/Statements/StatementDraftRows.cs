@@ -13,7 +13,7 @@ internal static class StatementDraftRows
         CancellationToken cancellationToken)
     {
         revision.ValidateAsFirstAnalysisRevision();
-        await ReviewWriteLock.AcquireAsync(db, ReviewWriteLock.Statement, cancellationToken);
+        await PostgresAdvisoryLock.AcquireAsync(db, PostgresAdvisoryLock.StatementReview, cancellationToken);
         if (await ExistsAsync(db, revision.CandidateId, cancellationToken)) return false;
         await RequireCandidateExtractionAsync(db, revision, cancellationToken);
         db.Add(NewDraft(revision.CandidateId, 1, revision.CreatedAtUtc.UtcTicks));
@@ -24,7 +24,7 @@ internal static class StatementDraftRows
     public static async Task AddDraftWithoutRevisionAsync(CollectionAttemptDbContext db, string candidateId, long createdAtUtcTicks,
         CancellationToken cancellationToken)
     {
-        await ReviewWriteLock.AcquireAsync(db, ReviewWriteLock.Statement, cancellationToken);
+        await PostgresAdvisoryLock.AcquireAsync(db, PostgresAdvisoryLock.StatementReview, cancellationToken);
         if (!await ExistsAsync(db, candidateId, cancellationToken)) db.Add(NewDraft(candidateId, 0, createdAtUtcTicks));
     }
 

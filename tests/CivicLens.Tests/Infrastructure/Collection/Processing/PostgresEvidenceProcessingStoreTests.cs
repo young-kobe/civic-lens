@@ -180,6 +180,44 @@ public sealed class PostgresEvidenceProcessingStoreTests(PostgresCollection post
         Assert.Null(record.PredecessorAttemptId);
     }
 
+    [Fact]
+    public async Task ParkingWaitsForTheReleaseTriggerOnTheSamePredecessorKeySoNoReleaseIsLost()
+    {
+        await SeedCapturedAttemptAsync("prior-job", "prior-attempt", "senator-page", "https://example.test/page");
+        await InsertPreparationAsync("prior-job", "senator-page", "https://example.test/page");
+        await SeedCapturedAttemptAsync("current-job", "current-attempt", "senator-page", "https://example.test/page");
+        _ = await store.EnsureAsync("current-job", "current-attempt", "senator-page", "https://example.test/page", default);
+        await AdvanceCurrentToComparisonAsync();
+        var claim = await store.TryClaimAsync("current-job", "current-attempt", TimeSpan.FromSeconds(30), default);
+        Assert.NotNull(claim);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        await using var releasing = new NpgsqlConnection(connectionString);
+        await releasing.OpenAsync(timeout.Token);
+        await using var release = await releasing.BeginTransactionAsync(timeout.Token);
+        await using (var complete = new NpgsqlCommand("""
+            UPDATE evidence_processing SET stage = 'Complete', status = 'Succeeded', outcome = 'Prepared'
+             WHERE job_id = 'prior-job' AND attempt_id = 'prepare'
+            """, releasing, release))
+            Assert.Equal(1, await complete.ExecuteNonQueryAsync(timeout.Token));
+
+        var parking = store.WaitForPredecessorAsync(claim, "prior-attempt", timeout.Token);
+        await using (var observer = new NpgsqlConnection(connectionString))
+        {
+            await observer.OpenAsync(timeout.Token);
+            await using var blocked = new NpgsqlCommand(
+                "SELECT EXISTS (SELECT 1 FROM pg_locks WHERE locktype = 'advisory' AND NOT granted)", observer);
+            while (!(bool)(await blocked.ExecuteScalarAsync(timeout.Token))!)
+                await Task.Delay(10, timeout.Token);
+        }
+        Assert.False(parking.IsCompleted);
+        await release.CommitAsync(timeout.Token);
+
+        Assert.True(await parking.WaitAsync(timeout.Token));
+        var record = await store.GetByAttemptIdAsync("current-attempt", default);
+        Assert.Equal(EvidenceProcessingStatus.Pending, record!.Status);
+        Assert.Null(record.PredecessorAttemptId);
+    }
+
     private async Task AdvanceCurrentToComparisonAsync()
         => await AdvanceAttemptToComparisonAsync("current-job", "current-attempt");
 

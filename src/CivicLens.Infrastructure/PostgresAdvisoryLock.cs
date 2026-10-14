@@ -1,0 +1,64 @@
+using System.Data;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
+using Npgsql;
+
+namespace CivicLens.Infrastructure;
+
+internal static class PostgresAdvisoryLock
+{
+    // A transaction that holds several keys takes them in this declaration order.
+    internal const string CollectionJobs = "civic-lens-collection-jobs";
+    internal const string DiscoveryCandidateScope = "civic-lens-discovery-candidate:";
+    internal const string EvidencePredecessorScope = "civic-lens-evidence-predecessor:";
+    internal const string DocumentChangeReview = "civic-lens-document-change-review";
+    internal const string StatementReview = "civic-lens-statement-review";
+    internal const string ActionReview = "civic-lens-action-review";
+    // No transaction holds these with another key.
+    internal const string CollectionImport = "civic-lens-collection-import";
+    internal const string DocumentExtractions = "civic-lens-document-extractions";
+    internal const string DocumentComparisons = "civic-lens-document-comparisons";
+
+    internal const string AcquireInOrderSql = """
+        SELECT pg_advisory_xact_lock(hashtextextended(keys.key, 0))
+          FROM unnest(@keys) WITH ORDINALITY AS keys(key, position)
+         ORDER BY keys.position
+        """;
+
+    internal static readonly IReadOnlyList<string> ReviewKeysInOrder = [DocumentChangeReview, StatementReview, ActionReview];
+
+    internal static string DiscoveryCandidate(string candidateHash) => DiscoveryCandidateScope + candidateHash;
+
+    internal static string EvidencePredecessor(string attemptId) => EvidencePredecessorScope + attemptId;
+
+    internal static Task AcquireAsync(DbContext db, string key, CancellationToken cancellationToken) =>
+        AcquireAsync(db, [key], cancellationToken);
+
+    internal static Task AcquireAsync(DbContext db, IReadOnlyList<string> keysInOrder, CancellationToken cancellationToken) =>
+        db.Database.ExecuteSqlRawAsync(AcquireInOrderSql, [new NpgsqlParameter("keys", keysInOrder.ToArray())], cancellationToken);
+
+    internal static async Task AcquireWithoutCommandTimeoutAsync(DbContext db, string key, CancellationToken cancellationToken)
+    {
+        var commandTimeout = db.Database.GetCommandTimeout();
+        db.Database.SetCommandTimeout(0);
+        try
+        {
+            await AcquireAsync(db, key, cancellationToken);
+        }
+        finally
+        {
+            db.Database.SetCommandTimeout(commandTimeout);
+        }
+    }
+
+    internal static Task<IDbContextTransaction> BeginWriteAsync(DbContext db, string key, CancellationToken cancellationToken) =>
+        BeginWriteAsync(db, [key], cancellationToken);
+
+    internal static async Task<IDbContextTransaction> BeginWriteAsync(DbContext db, IReadOnlyList<string> keysInOrder,
+        CancellationToken cancellationToken)
+    {
+        var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
+        await AcquireAsync(db, keysInOrder, cancellationToken);
+        return transaction;
+    }
+}

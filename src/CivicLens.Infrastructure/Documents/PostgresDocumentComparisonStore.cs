@@ -39,9 +39,7 @@ public sealed class PostgresDocumentComparisonStore(IDbContextFactory<Collection
     {
         ArgumentNullException.ThrowIfNull(comparison);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
-        await db.Database.ExecuteSqlRawAsync(
-            "SELECT pg_advisory_xact_lock(hashtextextended('civic-lens-document-comparisons', 0))", cancellationToken);
+        await using var transaction = await PostgresAdvisoryLock.BeginWriteAsync(db, PostgresAdvisoryLock.DocumentComparisons, cancellationToken);
         var verified = await ReconstructAsync(db, comparison.BeforeExtractionId, comparison.AfterExtractionId, cancellationToken);
         if (Serialize(verified) != Serialize(comparison))
             throw new InvalidOperationException("Comparison does not match retained extraction evidence.");

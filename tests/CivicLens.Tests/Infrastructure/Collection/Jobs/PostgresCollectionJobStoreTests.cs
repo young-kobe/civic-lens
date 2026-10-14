@@ -98,12 +98,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
             .AddInterceptors(counter).Options;
         var reader = new PostgresCollectionJobStore(new PooledDbContextFactory<CollectionAttemptDbContext>(options));
 
-        await using var connection = new NpgsqlConnection(connectionString);
-        await connection.OpenAsync();
-        await using var transaction = await connection.BeginTransactionAsync();
-        await using var command = new NpgsqlCommand(
-            "SELECT pg_advisory_xact_lock(hashtextextended('civic-lens-collection-jobs', 0))", connection, transaction);
-        await command.ExecuteNonQueryAsync();
+        await using var holder = await HeldAdvisoryLock.AcquireAsync(connectionString, "civic-lens-collection-jobs");
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         var listed = await reader.ListAsync(100, timeout.Token);
         var fetched = await reader.GetAsync(first.Job.JobId, timeout.Token);

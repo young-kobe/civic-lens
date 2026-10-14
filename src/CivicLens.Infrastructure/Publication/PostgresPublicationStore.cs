@@ -51,7 +51,7 @@ public sealed class PostgresPublicationStore(IDbContextFactory<CollectionAttempt
     public async Task<PublicationReleaseSummary> ActivateAsync(int releaseNumber, CancellationToken cancellationToken)
     {
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        await using var transaction = await ReviewWriteLock.BeginWriteAsync(db, ReviewWriteLock.AllInOrder, cancellationToken);
+        await using var transaction = await PostgresAdvisoryLock.BeginWriteAsync(db, PostgresAdvisoryLock.ReviewKeysInOrder, cancellationToken);
         var row = await db.Set<PublicationReleaseRow>().AsNoTracking()
             .SingleOrDefaultAsync(candidate => candidate.ReleaseNumber == releaseNumber, cancellationToken)
             ?? throw new ArgumentException($"Release {releaseNumber} has not been committed.", nameof(releaseNumber));
@@ -67,7 +67,7 @@ public sealed class PostgresPublicationStore(IDbContextFactory<CollectionAttempt
     {
         ArgumentNullException.ThrowIfNull(serve);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        await using var transaction = await ReviewWriteLock.BeginWriteAsync(db, ReviewWriteLock.AllInOrder, cancellationToken);
+        await using var transaction = await PostgresAdvisoryLock.BeginWriteAsync(db, PostgresAdvisoryLock.ReviewKeysInOrder, cancellationToken);
         var active = await db.Set<PublicationReleaseRow>().AsNoTracking()
             .SingleOrDefaultAsync(row => row.IsActive, cancellationToken);
         if (active is not null) await serve(active.DirectoryName, cancellationToken);
@@ -92,7 +92,7 @@ public sealed class PostgresPublicationStore(IDbContextFactory<CollectionAttempt
             throw new UnauthorizedAccessException("A model author cannot publish.");
         ValidateCommit(commit);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        await using var transaction = await ReviewWriteLock.BeginWriteAsync(db, ReviewWriteLock.AllInOrder, cancellationToken);
+        await using var transaction = await PostgresAdvisoryLock.BeginWriteAsync(db, PostgresAdvisoryLock.ReviewKeysInOrder, cancellationToken);
         var replay = await ReviewIdempotency.ReadReplayAsync<PublicationReleaseSummary>(db, actorSubject, PublishOperation, idempotencyKey,
             payloadHash, cancellationToken);
         if (replay is not null)

@@ -2,6 +2,7 @@ using CivicLens.Application.Collection;
 using CivicLens.Collection.Contracts;
 using CivicLens.Core.Collection;
 using CivicLens.Infrastructure.Collection;
+using CivicLens.Tests.Fixtures;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Npgsql;
@@ -279,9 +280,7 @@ public sealed class PostgresCollectionAttemptStoreTests(PostgresCollection postg
     [Fact]
     public async Task CancellationWhileWaitingForLockAndFailedTransactionLeaveNoPartialRows()
     {
-        await using var blocker = await factory.CreateDbContextAsync();
-        await using var blockerTransaction = await blocker.Database.BeginTransactionAsync();
-        await blocker.Database.ExecuteSqlRawAsync("SELECT pg_advisory_xact_lock(hashtextextended('civic-lens-collection-import', 0))");
+        var blocker = await HeldAdvisoryLock.AcquireAsync(connectionString, "civic-lens-collection-import");
         using var cancellation = new CancellationTokenSource();
         using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         var waiting = Handler(Result("cancelled", CollectionOutcome.Failed, FailureCode: CollectionFailureCode.TransportError), store)
@@ -295,7 +294,7 @@ public sealed class PostgresCollectionAttemptStoreTests(PostgresCollection postg
         }
         cancellation.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => waiting.WaitAsync(TimeSpan.FromSeconds(10)));
-        await blockerTransaction.RollbackAsync();
+        await blocker.DisposeAsync();
         var afterCancellation = await Handler(Result("cancelled", CollectionOutcome.Failed,
             FailureCode: CollectionFailureCode.TransportError), store).ExecuteAsync("cancelled", Request("cancelled"));
         Assert.Equal(ImportDisposition.NewAttempt, afterCancellation.Disposition);

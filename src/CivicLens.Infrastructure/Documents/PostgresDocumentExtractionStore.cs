@@ -36,10 +36,8 @@ public sealed class PostgresDocumentExtractionStore(IDbContextFactory<Collection
     {
         ArgumentNullException.ThrowIfNull(extraction);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
         // As with collection imports, serialize the read/compare/write decision in one short transaction.
-        await db.Database.ExecuteSqlRawAsync(
-            "SELECT pg_advisory_xact_lock(hashtextextended('civic-lens-document-extractions', 0))", cancellationToken);
+        await using var transaction = await PostgresAdvisoryLock.BeginWriteAsync(db, PostgresAdvisoryLock.DocumentExtractions, cancellationToken);
         var imported = await PostgresCollectionAttemptStore.GetAsync(db, extraction.SourceAttempt.AttemptId, cancellationToken,
             includeDiscovery: false);
         if (imported?.AttemptResult is not CapturedAttemptResult captured || !captured.Equals(extraction.SourceAttempt))

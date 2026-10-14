@@ -236,8 +236,8 @@ public sealed class PostgresEvidenceProcessingStore(
             throw new ArgumentException("Only comparison work can wait for a predecessor.", nameof(claim));
 
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
-        await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(9911, hashtext({predecessorAttemptId}))", cancellationToken);
+        await using var transaction = await PostgresAdvisoryLock.BeginWriteAsync(db,
+            PostgresAdvisoryLock.EvidencePredecessor(predecessorAttemptId), cancellationToken);
 
         var predecessor = await db.Set<PersistedEvidenceProcessingRow>().AsNoTracking()
             .SingleOrDefaultAsync(row => row.AttemptId == predecessorAttemptId, cancellationToken);

@@ -39,7 +39,7 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
         ReviewIdempotency.ValidateRequest(actorSubject, idempotencyKey, payloadHash);
         ArgumentNullException.ThrowIfNull(revision);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        return await ReviewIdempotency.WriteOnceAsync(db, ReviewWriteLock.DocumentChange, actorSubject, CreateOperation,
+        return await ReviewIdempotency.WriteOnceAsync(db, PostgresAdvisoryLock.DocumentChangeReview, actorSubject, CreateOperation,
             idempotencyKey, payloadHash, async () =>
             {
                 if (revision.RevisionNumber != 1) throw new InvalidOperationException("A draft must begin at revision one.");
@@ -62,7 +62,7 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
         ReviewIdempotency.ValidateRequest(actorSubject, idempotencyKey, payloadHash);
         ArgumentNullException.ThrowIfNull(revision);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        return await ReviewIdempotency.WriteOnceAsync(db, ReviewWriteLock.DocumentChange, actorSubject, SaveOperation,
+        return await ReviewIdempotency.WriteOnceAsync(db, PostgresAdvisoryLock.DocumentChangeReview, actorSubject, SaveOperation,
             idempotencyKey, payloadHash, async () =>
             {
                 var draft = await db.Set<DocumentChangeDraftRow>().SingleOrDefaultAsync(row => row.DraftId == revision.DraftId, cancellationToken)
@@ -93,7 +93,7 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
         ReviewIdempotency.ValidateRequest(actorSubject, idempotencyKey, payloadHash);
         ReviewWriteRules.RequireDecisionActor(decision, actorSubject);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        return await ReviewIdempotency.WriteOnceAsync(db, ReviewWriteLock.DocumentChange, actorSubject, DecideOperation,
+        return await ReviewIdempotency.WriteOnceAsync(db, PostgresAdvisoryLock.DocumentChangeReview, actorSubject, DecideOperation,
             idempotencyKey, payloadHash, async () =>
             {
                 var draft = await db.Set<DocumentChangeDraftRow>().SingleOrDefaultAsync(row => row.DraftId == decision.DraftId, cancellationToken)
@@ -361,7 +361,7 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
     {
         if (revision.RevisionNumber != 1 || !ReviewAuthor.IsAnalysis(revision.AuthorSubject))
             throw new InvalidOperationException("An analysis draft must be revision 1 by the analysis author.");
-        await ReviewWriteLock.AcquireAsync(db, ReviewWriteLock.DocumentChange, cancellationToken);
+        await PostgresAdvisoryLock.AcquireAsync(db, PostgresAdvisoryLock.DocumentChangeReview, cancellationToken);
         if (await ReadDraftIdForComparisonAsync(db, revision.ComparisonId, cancellationToken) is not null) return false;
         await ValidateRevisionAgainstEvidenceAsync(db, revision, cancellationToken);
         AddDraft(db, revision);
