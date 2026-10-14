@@ -71,7 +71,7 @@ public sealed class ActionDraftingStep(IActionDraftStore store, ActionBillReader
         return result.End switch
         {
             AnalysisLoopEnd.Accepted => await attempt.SettleAsync(WrapWithReason(result.Run!),
-                ActionDraftCheckpoint.From(attempt.Claim, State.Succeeded, revision: result.Accepted), cancellationToken),
+                ActionDraftCheckpoint.From(attempt.Claim, result.Accepted!), cancellationToken),
             AnalysisLoopEnd.Exhausted => await attempt.SettleAsync(WrapWithReason(result.Run!), State.Failed,
                 AnalysisErrorCodes.ForOutcome(result.Run!.Outcome), cancellationToken),
             AnalysisLoopEnd.NotSent when result.Run is null =>

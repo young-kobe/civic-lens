@@ -34,7 +34,7 @@ public sealed class DocumentChangeDraftingStep(IDocumentChangeAnalysisStore stor
         return result.End switch
         {
             AnalysisLoopEnd.Accepted => await attempt.SettleAsync(result.Run!,
-                DocumentChangeAnalysisCheckpoint.From(attempt.Claim, State.Succeeded, revision: result.Accepted), cancellationToken),
+                DocumentChangeAnalysisCheckpoint.From(attempt.Claim, result.Accepted!), cancellationToken),
             AnalysisLoopEnd.Exhausted => await attempt.SettleAsync(result.Run!, State.Failed,
                 AnalysisErrorCodes.ForOutcome(result.Run!.Outcome), cancellationToken),
             AnalysisLoopEnd.NotSent when result.Run is null => await attempt.CompleteAsync(State.Blocked, Codes.InputLimitExceeded,

@@ -103,7 +103,7 @@ public sealed partial class PostgresBillStreamTests
         var newer = (await CandidatesAsync()).Single(candidate => candidate.IncludesSummaries).CandidateId;
         await SettleAsync(newer, Revision(newer, 1));
 
-        var settled = await store.CheckpointAsync(ActionDraftCheckpoint.From(olderClaim, State.Succeeded, revision: Revision(older, 1)),
+        var settled = await store.CheckpointAsync(ActionDraftCheckpoint.From(olderClaim, Revision(older, 1)),
             DraftedRun(olderRun, older), default);
 
         Assert.True(settled);
@@ -182,7 +182,7 @@ public sealed partial class PostgresBillStreamTests
         var (older, newer) = await BothCandidatesPendingAsync();
         var store = ActionStore();
         var claim = (await store.TryClaimAsync(newer, Lease, default))!;
-        Assert.True(await store.CheckpointAsync(ActionDraftCheckpoint.From(claim, State.Blocked, ActionDraftErrorCodes.ExtractionVersionChanged),
+        Assert.True(await store.CheckpointAsync(AnalysisCheckpoint.From(claim, State.Blocked, ActionDraftErrorCodes.ExtractionVersionChanged),
             null, default));
 
         Assert.Equal([older], (await store.GetEligibleAsync(10, default)).Select(row => row.SubjectId));
@@ -197,7 +197,7 @@ public sealed partial class PostgresBillStreamTests
         var claim = (await store.TryClaimAsync(candidate, Lease, default))!;
         var runId = await ReserveAsync(store, claim);
 
-        var settled = await store.CheckpointAsync(ActionDraftCheckpoint.From(claim, State.Succeeded, revision: Revision(candidate, 1)),
+        var settled = await store.CheckpointAsync(ActionDraftCheckpoint.From(claim, Revision(candidate, 1)),
             DraftedRun(runId, candidate), default);
 
         Assert.True(settled);
@@ -236,7 +236,7 @@ public sealed partial class PostgresBillStreamTests
             VALUES ('{RecordId}', 1, 'auth0|editor', 'Person', NULL, 'x', 0)
             """);
 
-        var settled = await store.CheckpointAsync(ActionDraftCheckpoint.From(claim, State.Succeeded, revision: Revision(candidate, 1)),
+        var settled = await store.CheckpointAsync(ActionDraftCheckpoint.From(claim, Revision(candidate, 1)),
             DraftedRun(runId, candidate), default);
 
         Assert.True(settled);
@@ -257,7 +257,7 @@ public sealed partial class PostgresBillStreamTests
         Task<bool> settling;
         await using (var holder = await HeldAdvisoryLock.AcquireAsync(connectionString, "civic-lens-action-review"))
         {
-            settling = store.CheckpointAsync(ActionDraftCheckpoint.From(claim, State.Succeeded, revision: Revision(candidate, 1)),
+            settling = store.CheckpointAsync(ActionDraftCheckpoint.From(claim, Revision(candidate, 1)),
                 DraftedRun(runId, candidate), default);
             await Task.Delay(300);
             Assert.False(settling.IsCompleted);
@@ -391,7 +391,7 @@ public sealed partial class PostgresBillStreamTests
         var store = ActionStore();
         var claim = (await store.TryClaimAsync(candidate, Lease, default))!;
         var runId = await ReserveAsync(store, claim);
-        Assert.True(await store.CheckpointAsync(ActionDraftCheckpoint.From(claim, State.Succeeded, revision: revision),
+        Assert.True(await store.CheckpointAsync(ActionDraftCheckpoint.From(claim, revision),
             DraftedRun(runId, candidate), default));
     }
 

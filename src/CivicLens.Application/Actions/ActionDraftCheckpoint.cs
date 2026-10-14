@@ -9,8 +9,7 @@ public sealed record ActionDraftCheckpoint(
     ActionDraftRevision? Revision = null)
     : AnalysisCheckpoint(SubjectId, Task, ExpectedStatus, LeaseToken, Fence, Status, ErrorCode, RetryDelay)
 {
-    public static ActionDraftCheckpoint From(AnalysisClaim claim, AnalysisState status, string? errorCode = null,
-        TimeSpan? retryDelay = null, ActionDraftRevision? revision = null) =>
-        new(claim.Record.SubjectId, claim.Record.Task, AnalysisState.Running, claim.LeaseToken, claim.Fence, status, errorCode,
-            retryDelay, revision);
+    public static ActionDraftCheckpoint From(AnalysisClaim claim, ActionDraftRevision revision) =>
+        new(claim.Record.SubjectId, claim.Record.Task, AnalysisState.Running, claim.LeaseToken, claim.Fence, AnalysisState.Succeeded,
+            Revision: revision);
 }

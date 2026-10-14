@@ -37,7 +37,7 @@ public sealed class StatementDraftingStep(IStatementDraftStore store, IStatement
         return result.End switch
         {
             AnalysisLoopEnd.Accepted => await attempt.SettleAsync(Wrap(result.Run!),
-                StatementDraftCheckpoint.From(attempt.Claim, State.Succeeded, revision: result.Accepted), cancellationToken),
+                StatementDraftCheckpoint.From(attempt.Claim, result.Accepted!), cancellationToken),
             AnalysisLoopEnd.Exhausted => await attempt.SettleAsync(Wrap(result.Run!), State.Failed,
                 AnalysisErrorCodes.ForOutcome(result.Run!.Outcome), cancellationToken),
             AnalysisLoopEnd.NotSent when result.Run is null => await BypassAsync(attempt, evidence, cancellationToken),
