@@ -17,16 +17,14 @@ namespace CivicLens.Tests.Infrastructure.Collection;
 public sealed class ConfigurationRevisionReferencesMigrationTests(PostgresCollection postgres) : IAsyncLifetime
 {
     private const string PreviousMigration = "20261013120000_BillStreamCursor";
-    private readonly string schema = "revision_refs_" + Guid.NewGuid().ToString("N");
     private string connectionString = null!;
 
     public async Task InitializeAsync()
     {
-        await ExecuteAsync(postgres.ConnectionString, $"CREATE SCHEMA {schema}");
-        connectionString = new NpgsqlConnectionStringBuilder(postgres.ConnectionString) { SearchPath = schema }.ConnectionString;
+        connectionString = await postgres.CreateEmptyDatabaseAsync();
     }
 
-    public Task DisposeAsync() => ExecuteAsync(postgres.ConnectionString, $"DROP SCHEMA IF EXISTS {schema} CASCADE");
+    public Task DisposeAsync() => postgres.DropDatabaseAsync(connectionString);
 
     [Fact]
     public async Task LegacyRowsThatEmbedTheirRevisionReadBackIdenticallyFromOneSharedRevision()
@@ -115,13 +113,5 @@ public sealed class ConfigurationRevisionReferencesMigrationTests(PostgresCollec
         await connection.OpenAsync();
         await using var command = new NpgsqlCommand(sql, connection);
         return await command.ExecuteScalarAsync();
-    }
-
-    private static async Task ExecuteAsync(string connectionString, string sql)
-    {
-        await using var connection = new NpgsqlConnection(connectionString);
-        await connection.OpenAsync();
-        await using var command = new NpgsqlCommand(sql, connection);
-        await command.ExecuteNonQueryAsync();
     }
 }

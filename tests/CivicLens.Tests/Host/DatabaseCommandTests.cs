@@ -17,22 +17,20 @@ namespace CivicLens.Tests.Host;
 [Trait("Category", "Postgres")]
 public sealed class DatabaseCommandTests(PostgresCollection postgres) : IAsyncLifetime
 {
-    private readonly string schema = "cli_" + Guid.NewGuid().ToString("N");
     private readonly string directory = Path.Combine(Path.GetTempPath(), "civic-cli-" + Guid.NewGuid().ToString("N"));
     private readonly TcpListener listener = new(IPAddress.Loopback, 0);
     private readonly CancellationTokenSource shutdown = new();
     private string connectionString = null!;
+    private string absentDatabase = null!;
     private Task server = Task.CompletedTask;
     private int statusCode = 200;
     private string? feedBody;
 
     public async Task InitializeAsync()
     {
-        await using var connection = new NpgsqlConnection(postgres.ConnectionString);
-        await connection.OpenAsync();
-        await using var command = new NpgsqlCommand($"CREATE SCHEMA {schema}", connection);
-        await command.ExecuteNonQueryAsync();
-        connectionString = new NpgsqlConnectionStringBuilder(postgres.ConnectionString) { SearchPath = schema }.ConnectionString;
+        connectionString = await postgres.CreateMigratedDatabaseAsync();
+        // An import into a database that does not exist fails after collection, so its receipt stays for replay.
+        absentDatabase = new NpgsqlConnectionStringBuilder(connectionString) { Database = "civic_lens_absent" }.ConnectionString;
         Directory.CreateDirectory(directory);
         listener.Start();
         var origin = $"http://127.0.0.1:{((IPEndPoint)listener.LocalEndpoint).Port}";
@@ -58,21 +56,16 @@ public sealed class DatabaseCommandTests(PostgresCollection postgres) : IAsyncLi
         catch (Exception exception) when (exception is OperationCanceledException or SocketException) { }
         shutdown.Dispose();
         Directory.Delete(directory, recursive: true);
-        await using var connection = new NpgsqlConnection(postgres.ConnectionString);
-        await connection.OpenAsync();
-        await using var command = new NpgsqlCommand($"DROP SCHEMA {schema} CASCADE", connection);
-        await command.ExecuteNonQueryAsync();
+        await postgres.DropDatabaseAsync(connectionString);
     }
 
     [Theory]
     [InlineData(200, "captured", 0)]
     [InlineData(404, "failed", 1)]
     [InlineData(429, "deferred", 1)]
-    public async Task ExplicitMigrationsAndCollectionPersistOutcomes(int status, string outcome, int exitCode)
+    public async Task CollectImportPersistsEachOutcome(int status, string outcome, int exitCode)
     {
         statusCode = status;
-        Assert.Equal(0, (await HostProcess.RunAsync(connectionString, "db", "migrate")).ExitCode);
-        Assert.Equal(0, (await HostProcess.RunAsync(connectionString, "db", "migrate")).ExitCode);
         var first = await CollectAsync("collect-import", connectionString);
         Assert.Equal(exitCode, first.ExitCode);
         using var output = JsonDocument.Parse(first.Output);
@@ -125,13 +118,12 @@ public sealed class DatabaseCommandTests(PostgresCollection postgres) : IAsyncLi
             : "<html><body>" + string.Concat(Enumerable.Range(0, 100).Select(index =>
                 $"<a href=\"/page/article-{index}?value={new string('a', 750)}\">Article</a>")) + "</body></html>";
         Assert.True(feedBody.Length > 65_536);
-        // An import interrupted by missing schema must retain the feed and its discovery for replay.
-        var interrupted = await CollectAsync("collect-import", connectionString, "2020-01-01");
+        // An interrupted import must retain the feed and its discovery for replay.
+        var interrupted = await CollectAsync("collect-import", absentDatabase, "2020-01-01");
         Assert.Equal(1, interrupted.ExitCode);
         var root = Path.Combine(directory, "captures");
         var listed = await HostProcess.RunAsync(null, "receipts", "list", root);
         var attemptId = Assert.Single(JsonSerializer.Deserialize<string[]>(listed.Output)!);
-        Assert.Equal(0, (await HostProcess.RunAsync(connectionString, "db", "migrate")).ExitCode);
         var replay = await HostProcess.RunWithCollectorHostAsync(connectionString, "/no-collector-host",
             "receipts", "replay", root, attemptId);
         Assert.True(replay.ExitCode == 0, replay.Error);
@@ -171,7 +163,6 @@ public sealed class DatabaseCommandTests(PostgresCollection postgres) : IAsyncLi
     [Fact]
     public async Task ManagedJobUsesSnapshotAndRepeatedRunDoesNotCollectAgain()
     {
-        Assert.Equal(0, (await HostProcess.RunAsync(connectionString, "db", "migrate")).ExitCode);
         var arguments = new[] { "jobs", "enqueue", Path.Combine(directory, "config.json"), "source", "check-1" };
         var enqueued = await HostProcess.RunAsync(connectionString, arguments);
         Assert.Equal(0, enqueued.ExitCode);
@@ -217,8 +208,6 @@ public sealed class DatabaseCommandTests(PostgresCollection postgres) : IAsyncLi
             }]
         };
         await File.WriteAllTextAsync(path, JsonSerializer.Serialize(configuration, ConfigurationJson.Options));
-        if (command == "collect-import")
-            Assert.Equal(0, (await HostProcess.RunAsync(connectionString, "db", "migrate")).ExitCode);
         var database = command == "collect-import" ? connectionString : null;
         var inactive = await CollectAsync(command, database, "2021-01-01");
         Assert.Equal(2, inactive.ExitCode);
@@ -243,7 +232,6 @@ public sealed class DatabaseCommandTests(PostgresCollection postgres) : IAsyncLi
         });
         await File.WriteAllTextAsync(configPath, config.ToJsonString());
         Assert.Equal(0, (await HostProcess.RunAsync(null, "validate", configPath)).ExitCode);
-        Assert.Equal(0, (await HostProcess.RunAsync(connectionString, "db", "migrate")).ExitCode);
         var inactive = await HostProcess.RunAsync(connectionString, "jobs", "enqueue", configPath, "source", "dated",
             "--as-of", "2020-08-01");
         Assert.Equal(2, inactive.ExitCode);
@@ -274,18 +262,34 @@ public sealed class DatabaseCommandTests(PostgresCollection postgres) : IAsyncLi
     }
 
     [Fact]
-    public async Task MissingMigrationsFailImportWithoutImplicitSchemaChangesOrSuccessOutput()
+    public async Task ImportNeverMigratesAndExplicitRepeatableMigrationLetsTheReceiptReplay()
     {
-        var result = await CollectAsync("collect-import", connectionString);
-        Assert.Equal(1, result.ExitCode);
-        Assert.Empty(result.Output);
-        Assert.Contains("Attempt ID:", result.Error);
-        Assert.Contains("Persistence was not confirmed", result.Error);
-        Assert.Single(Directory.GetFiles(Path.Combine(directory, "captures"), "*.gz"));
-        await using var connection = new NpgsqlConnection(connectionString);
-        await connection.OpenAsync();
-        await using var command = new NpgsqlCommand("SELECT to_regclass('collection_attempts') IS NULL", connection);
-        Assert.Equal(true, await command.ExecuteScalarAsync());
+        var empty = await postgres.CreateEmptyDatabaseAsync();
+        try
+        {
+            var result = await CollectAsync("collect-import", empty);
+            Assert.Equal(1, result.ExitCode);
+            Assert.Empty(result.Output);
+            Assert.Contains("Attempt ID:", result.Error);
+            Assert.Contains("Persistence was not confirmed", result.Error);
+            Assert.Single(Directory.GetFiles(Path.Combine(directory, "captures"), "*.gz"));
+            await using (var connection = new NpgsqlConnection(empty))
+            {
+                await connection.OpenAsync();
+                await using var command = new NpgsqlCommand("SELECT to_regclass('collection_attempts') IS NULL", connection);
+                Assert.Equal(true, await command.ExecuteScalarAsync());
+            }
+
+            Assert.Equal(0, (await HostProcess.RunAsync(empty, "db", "migrate")).ExitCode);
+            Assert.Equal(0, (await HostProcess.RunAsync(empty, "db", "migrate")).ExitCode);
+            var replayed = await HostProcess.RunAsync(empty, "receipts", "replay", Path.Combine(directory, "captures"), "--all");
+            Assert.True(replayed.ExitCode == 0, replayed.Error);
+            Assert.Contains("\"status\":\"importedAndRemoved\"", replayed.Output, StringComparison.Ordinal);
+        }
+        finally
+        {
+            await postgres.DropDatabaseAsync(empty);
+        }
     }
 
     [Theory]
@@ -293,7 +297,7 @@ public sealed class DatabaseCommandTests(PostgresCollection postgres) : IAsyncLi
     [InlineData(9)]
     public async Task FailedImportCanReplayAfterRelocationWithoutConfigurationOrCollector(int protocolVersion)
     {
-        var failed = await CollectAsync("collect-import", connectionString);
+        var failed = await CollectAsync("collect-import", absentDatabase);
         Assert.Equal(1, failed.ExitCode);
         var original = Path.Combine(directory, "captures");
         var listed = await HostProcess.RunAsync(null, "receipts", "list", original);
@@ -317,7 +321,6 @@ public sealed class DatabaseCommandTests(PostgresCollection postgres) : IAsyncLi
         File.Delete(Path.Combine(directory, "config.json"));
         shutdown.Cancel();
         listener.Stop();
-        Assert.Equal(0, (await HostProcess.RunAsync(connectionString, "db", "migrate")).ExitCode);
 
         var replayed = await HostProcess.RunWithCollectorHostAsync(connectionString, "/no-collector-host",
             "receipts", "replay", relocated, id);
@@ -339,12 +342,11 @@ public sealed class DatabaseCommandTests(PostgresCollection postgres) : IAsyncLi
     [Fact]
     public async Task BatchRecoveryRetainsInvalidEntryAndImportsOtherPendingReceipt()
     {
-        var failed = await CollectAsync("collect-import", connectionString);
+        var failed = await CollectAsync("collect-import", absentDatabase);
         Assert.Equal(1, failed.ExitCode);
         var root = Path.Combine(directory, "captures");
         var invalid = Path.Combine(root, ".pending", "000-invalid.json");
         await File.WriteAllTextAsync(invalid, "{broken");
-        Assert.Equal(0, (await HostProcess.RunAsync(connectionString, "db", "migrate")).ExitCode);
 
         var batch = await HostProcess.RunAsync(connectionString, "receipts", "replay", root, "--all");
         Assert.Equal(1, batch.ExitCode);

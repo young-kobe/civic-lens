@@ -1,10 +1,11 @@
 using System.Text.RegularExpressions;
+using CivicLens.Tests.Fixtures;
 
 namespace CivicLens.Tests.Architecture;
 
 public sealed class PresentationArchitectureTests
 {
-    private static readonly string HostRoot = Path.Combine(FindRoot(), "src", "CivicLens.Host");
+    private static readonly string HostRoot = Path.Combine(RepositoryRoot.FullName, "src", "CivicLens.Host");
     private static readonly string ComponentsRoot = Path.Combine(HostRoot, "Components");
 
     // Documents that own <html>: the workspace document and the published-page document.
@@ -86,11 +87,4 @@ public sealed class PresentationArchitectureTests
 
     private static HashSet<string> Tokens(string css) =>
         [.. Regex.Matches(css, @"(--[a-z0-9-]+)\s*:").Select(match => match.Groups[1].Value)];
-
-    private static string FindRoot()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "CivicLens.slnx"))) directory = directory.Parent;
-        return directory?.FullName ?? throw new InvalidOperationException("Cannot locate CivicLens.slnx.");
-    }
 }

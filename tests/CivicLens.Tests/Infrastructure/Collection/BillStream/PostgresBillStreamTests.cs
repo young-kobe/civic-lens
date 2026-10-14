@@ -24,7 +24,6 @@ public sealed partial class PostgresBillStreamTests(PostgresCollection postgres)
     private const string SourceUrl = "https://api.congress.gov/v3/bill";
     private const string ListJobKeyPrefix = "test-list/";
     private static readonly DateOnly Backfill = new(2025, 1, 3);
-    private readonly string schema = "bill_stream_" + Guid.NewGuid().ToString("N");
     private string connectionString = null!;
     private PostgresCollectionJobStore store = null!;
     private PostgresDocumentExtractionStore extractions = null!;
@@ -33,11 +32,9 @@ public sealed partial class PostgresBillStreamTests(PostgresCollection postgres)
 
     public async Task InitializeAsync()
     {
-        await ExecuteAsync(postgres.ConnectionString, $"CREATE SCHEMA {schema}");
-        connectionString = new NpgsqlConnectionStringBuilder(postgres.ConnectionString) { SearchPath = schema }.ConnectionString;
+        connectionString = await postgres.CreateMigratedDatabaseAsync();
         store = PostgresCollectionJobStore.FromConnectionString(connectionString);
         var attempts = PostgresCollectionAttemptStore.FromConnectionString(connectionString);
-        await attempts.MigrateAsync();
         extractions = PostgresDocumentExtractionStore.FromConnectionString(connectionString);
         Directory.CreateDirectory(captureRoot);
         seeder = new StatementCandidateSeeder(attempts, extractions, connectionString, captureRoot);
@@ -45,7 +42,7 @@ public sealed partial class PostgresBillStreamTests(PostgresCollection postgres)
 
     public async Task DisposeAsync()
     {
-        await ExecuteAsync(postgres.ConnectionString, $"DROP SCHEMA IF EXISTS {schema} CASCADE");
+        await postgres.DropDatabaseAsync(connectionString);
         Directory.Delete(captureRoot, recursive: true);
     }
 
@@ -310,7 +307,7 @@ public sealed partial class PostgresBillStreamTests(PostgresCollection postgres)
     public async Task PilotSourceBudgetsAdmitAFullPageAndItsNextPage()
     {
         var pilot = JsonSerializer.Deserialize<CollectionConfiguration>(
-            File.ReadAllText(Path.Combine(RepositoryRoot(), "config", "federal-pilot.json")), ConfigurationJson.Options)!;
+            File.ReadAllText(Path.Combine(RepositoryRoot.FullName, "config", "federal-pilot.json")), ConfigurationJson.Options)!;
         pilot = pilot with { Sources = [.. pilot.Sources.Where(source => source.Id == SourceId).Select(source => source with { Enabled = true })] };
         var window = new BillStreamWindow(Backfill, Backfill);
         var page = new CongressBillListPage([.. Enumerable.Range(1, BillPageQuery.PageLimit).Select(number => Bill(119, number))],
@@ -1326,13 +1323,5 @@ public sealed partial class PostgresBillStreamTests(PostgresCollection postgres)
         await connection.OpenAsync();
         await using var command = new NpgsqlCommand(sql, connection);
         await command.ExecuteNonQueryAsync();
-    }
-
-    private static string RepositoryRoot()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "CivicLens.slnx")))
-            directory = directory.Parent;
-        return directory?.FullName ?? throw new InvalidOperationException("Cannot locate CivicLens.slnx.");
     }
 }

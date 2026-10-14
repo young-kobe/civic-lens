@@ -20,7 +20,6 @@ namespace CivicLens.Tests.Infrastructure.Collection.Discovery;
 [Trait("Category", "Postgres")]
 public sealed class PostgresDiscoveryAdmissionTests(PostgresCollection postgres) : IAsyncLifetime
 {
-    private readonly string schema = "admission_" + Guid.NewGuid().ToString("N");
     private readonly string artifacts = Path.Combine(Path.GetTempPath(), "civic-admission-" + Guid.NewGuid().ToString("N"));
     private PostgresCollectionJobStore jobs = null!;
     private PostgresCollectionAttemptStore attempts = null!;
@@ -29,24 +28,16 @@ public sealed class PostgresDiscoveryAdmissionTests(PostgresCollection postgres)
 
     public async Task InitializeAsync()
     {
-        await using var connection = new NpgsqlConnection(postgres.ConnectionString);
-        await connection.OpenAsync();
-        await using var command = new NpgsqlCommand($"CREATE SCHEMA {schema}", connection);
-        await command.ExecuteNonQueryAsync();
-        connectionString = new NpgsqlConnectionStringBuilder(postgres.ConnectionString) { SearchPath = schema }.ConnectionString;
+        connectionString = await postgres.CreateMigratedDatabaseAsync();
         jobs = PostgresCollectionJobStore.FromConnectionString(connectionString);
         attempts = PostgresCollectionAttemptStore.FromConnectionString(connectionString);
-        await attempts.MigrateAsync();
         Directory.CreateDirectory(artifacts);
     }
 
     public async Task DisposeAsync()
     {
         Directory.Delete(artifacts, true);
-        await using var connection = new NpgsqlConnection(postgres.ConnectionString);
-        await connection.OpenAsync();
-        await using var command = new NpgsqlCommand($"DROP SCHEMA {schema} CASCADE", connection);
-        await command.ExecuteNonQueryAsync();
+        await postgres.DropDatabaseAsync(connectionString);
     }
 
     [Theory]
@@ -271,20 +262,9 @@ public sealed class PostgresDiscoveryAdmissionTests(PostgresCollection postgres)
     [Fact]
     public async Task GeneralizationMigrationPreservesVersionSevenDiscoveryAndAdmissionRows()
     {
-        var upgradeSchema = "upgrade_" + Guid.NewGuid().ToString("N");
-        await using (var connection = new NpgsqlConnection(postgres.ConnectionString))
-        {
-            await connection.OpenAsync();
-            await using var create = new NpgsqlCommand($"CREATE SCHEMA {upgradeSchema}", connection);
-            await create.ExecuteNonQueryAsync();
-        }
-
+        var upgradeConnectionString = await postgres.CreateEmptyDatabaseAsync();
         try
         {
-            var upgradeConnectionString = new NpgsqlConnectionStringBuilder(postgres.ConnectionString)
-            {
-                SearchPath = upgradeSchema
-            }.ConnectionString;
             var options = new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(upgradeConnectionString).Options;
             await using var db = new CollectionAttemptDbContext(options);
             await db.GetService<IMigrator>().MigrateAsync("20261007002616_FeedDiscoveryAdmission");
@@ -321,10 +301,7 @@ public sealed class PostgresDiscoveryAdmissionTests(PostgresCollection postgres)
         }
         finally
         {
-            await using var connection = new NpgsqlConnection(postgres.ConnectionString);
-            await connection.OpenAsync();
-            await using var drop = new NpgsqlCommand($"DROP SCHEMA {upgradeSchema} CASCADE", connection);
-            await drop.ExecuteNonQueryAsync();
+            await postgres.DropDatabaseAsync(upgradeConnectionString);
         }
     }
 

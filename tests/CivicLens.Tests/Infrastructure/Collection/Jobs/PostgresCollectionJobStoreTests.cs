@@ -17,7 +17,6 @@ namespace CivicLens.Tests.Infrastructure.Collection.Jobs;
 [Trait("Category", "Postgres")]
 public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres) : IAsyncLifetime
 {
-    private readonly string schema = "jobs_" + Guid.NewGuid().ToString("N");
     private readonly string root = Path.Combine(Path.GetTempPath(), "civic-jobs-" + Guid.NewGuid().ToString("N"));
     private string connectionString = null!;
     private PostgresCollectionJobStore jobs = null!;
@@ -26,24 +25,16 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
 
     public async Task InitializeAsync()
     {
-        await using var connection = new NpgsqlConnection(postgres.ConnectionString);
-        await connection.OpenAsync();
-        await using var command = new NpgsqlCommand($"CREATE SCHEMA {schema}", connection);
-        await command.ExecuteNonQueryAsync();
-        connectionString = new NpgsqlConnectionStringBuilder(postgres.ConnectionString) { SearchPath = schema }.ConnectionString;
+        connectionString = await postgres.CreateMigratedDatabaseAsync();
         jobs = PostgresCollectionJobStore.FromConnectionString(connectionString);
         evidence = PostgresCollectionAttemptStore.FromConnectionString(connectionString);
-        await evidence.MigrateAsync();
         Directory.CreateDirectory(root);
     }
 
     public async Task DisposeAsync()
     {
         Directory.Delete(root, true);
-        await using var connection = new NpgsqlConnection(postgres.ConnectionString);
-        await connection.OpenAsync();
-        await using var command = new NpgsqlCommand($"DROP SCHEMA {schema} CASCADE", connection);
-        await command.ExecuteNonQueryAsync();
+        await postgres.DropDatabaseAsync(connectionString);
     }
 
     [Fact]

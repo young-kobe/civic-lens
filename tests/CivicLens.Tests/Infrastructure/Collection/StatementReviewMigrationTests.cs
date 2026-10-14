@@ -11,16 +11,14 @@ namespace CivicLens.Tests.Infrastructure.Collection;
 public sealed class StatementReviewMigrationTests(PostgresCollection postgres) : IAsyncLifetime
 {
     private const string PreviousMigration = "20261012210000_AnalysisWakeupPayload";
-    private readonly string schema = "statement_review_" + Guid.NewGuid().ToString("N");
     private string connectionString = null!;
 
     public async Task InitializeAsync()
     {
-        await ExecuteAsync(postgres.ConnectionString, $"CREATE SCHEMA {schema}");
-        connectionString = new NpgsqlConnectionStringBuilder(postgres.ConnectionString) { SearchPath = schema }.ConnectionString;
+        connectionString = await postgres.CreateEmptyDatabaseAsync();
     }
 
-    public Task DisposeAsync() => ExecuteAsync(postgres.ConnectionString, $"DROP SCHEMA IF EXISTS {schema} CASCADE");
+    public Task DisposeAsync() => postgres.DropDatabaseAsync(connectionString);
 
     [Fact]
     public async Task BackfillMarksRevisionLessDraftsNotDraftedAndEveryOtherDraftAwaitingReview()

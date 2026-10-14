@@ -11,31 +11,22 @@ namespace CivicLens.Tests.Infrastructure.Collection.Jobs;
 [Trait("Category", "Postgres")]
 public sealed class PostgresCollectionWorkerQueueTests(PostgresCollection postgres) : IAsyncLifetime
 {
-    private readonly string schema = "worker_queue_" + Guid.NewGuid().ToString("N");
     private string connectionString = null!;
     private PostgresCollectionJobStore jobs = null!;
     private PostgresCollectionWorkerQueue queue = null!;
 
     public async Task InitializeAsync()
     {
-        await using var connection = new NpgsqlConnection(postgres.ConnectionString);
-        await connection.OpenAsync();
-        await using var command = new NpgsqlCommand($"CREATE SCHEMA {schema}", connection);
-        await command.ExecuteNonQueryAsync();
-        connectionString = new NpgsqlConnectionStringBuilder(postgres.ConnectionString) { SearchPath = schema }.ConnectionString;
+        connectionString = await postgres.CreateMigratedDatabaseAsync();
         var options = new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options;
         var factory = new PooledDbContextFactory<CollectionAttemptDbContext>(options);
         jobs = PostgresCollectionJobStore.FromConnectionString(connectionString);
         queue = new PostgresCollectionWorkerQueue(factory);
-        await PostgresCollectionAttemptStore.FromConnectionString(connectionString).MigrateAsync();
     }
 
     public async Task DisposeAsync()
     {
-        await using var connection = new NpgsqlConnection(postgres.ConnectionString);
-        await connection.OpenAsync();
-        await using var command = new NpgsqlCommand($"DROP SCHEMA IF EXISTS {schema} CASCADE", connection);
-        await command.ExecuteNonQueryAsync();
+        await postgres.DropDatabaseAsync(connectionString);
     }
 
     [Fact]

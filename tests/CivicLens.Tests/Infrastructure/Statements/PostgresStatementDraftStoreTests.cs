@@ -22,7 +22,6 @@ namespace CivicLens.Tests.Infrastructure.Statements;
 public sealed class PostgresStatementDraftStoreTests(PostgresCollection postgres) : IAsyncLifetime
 {
     private static readonly ReviewActor Owner = new("auth0|owner", ReviewRole.Owner);
-    private readonly string schema = "draft_" + Guid.NewGuid().ToString("N");
     private readonly string captureRoot = Path.Combine(Path.GetTempPath(), "civic-draft-" + Guid.NewGuid().ToString("N"));
     private string connectionString = null!;
     private PostgresStatementAnalysisStore gates = null!;
@@ -31,12 +30,10 @@ public sealed class PostgresStatementDraftStoreTests(PostgresCollection postgres
 
     public async Task InitializeAsync()
     {
-        await ExecuteAsync(postgres.ConnectionString, $"CREATE SCHEMA {schema}");
-        connectionString = new NpgsqlConnectionStringBuilder(postgres.ConnectionString) { SearchPath = schema, Pooling = false }.ConnectionString;
+        connectionString = await postgres.CreateMigratedDatabaseAsync();
         var factory = new PooledDbContextFactory<CollectionAttemptDbContext>(
             new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options);
         var attempts = new PostgresCollectionAttemptStore(factory);
-        await attempts.MigrateAsync();
         gates = new PostgresStatementAnalysisStore(factory);
         drafts = new PostgresStatementDraftStore(factory);
         seeder = new StatementCandidateSeeder(attempts, new PostgresDocumentExtractionStore(factory), connectionString, captureRoot);
@@ -45,7 +42,7 @@ public sealed class PostgresStatementDraftStoreTests(PostgresCollection postgres
 
     public async Task DisposeAsync()
     {
-        await ExecuteAsync(postgres.ConnectionString, $"DROP SCHEMA IF EXISTS {schema} CASCADE");
+        await postgres.DropDatabaseAsync(connectionString);
         Directory.Delete(captureRoot, recursive: true);
     }
 

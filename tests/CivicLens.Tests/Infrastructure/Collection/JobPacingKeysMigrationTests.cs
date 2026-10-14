@@ -15,17 +15,15 @@ namespace CivicLens.Tests.Infrastructure.Collection;
 public sealed class JobPacingKeysMigrationTests(PostgresCollection postgres) : IAsyncLifetime
 {
     private const string PreviousMigration = "20261018130000_BillListUnknownTypes";
-    private readonly string schema = "pacing_keys_" + Guid.NewGuid().ToString("N");
     private readonly string root = Path.Combine(Path.GetTempPath(), "civic-pacing-keys-" + Guid.NewGuid().ToString("N"));
     private string connectionString = null!;
 
     public async Task InitializeAsync()
     {
-        await ExecuteAsync(postgres.ConnectionString, $"CREATE SCHEMA {schema}");
-        connectionString = new NpgsqlConnectionStringBuilder(postgres.ConnectionString) { SearchPath = schema }.ConnectionString;
+        connectionString = await postgres.CreateEmptyDatabaseAsync();
     }
 
-    public Task DisposeAsync() => ExecuteAsync(postgres.ConnectionString, $"DROP SCHEMA IF EXISTS {schema} CASCADE");
+    public Task DisposeAsync() => postgres.DropDatabaseAsync(connectionString);
 
     [Fact]
     public async Task AnOlderJobKeepsNoKeyAndStillWaitsForItsOriginAtAttemptStart()

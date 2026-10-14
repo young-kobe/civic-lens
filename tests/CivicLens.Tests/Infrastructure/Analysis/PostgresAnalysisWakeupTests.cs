@@ -17,7 +17,6 @@ namespace CivicLens.Tests.Infrastructure.Analysis;
 [Trait("Category", "Postgres")]
 public sealed class PostgresAnalysisWakeupTests(PostgresCollection postgres) : IAsyncLifetime
 {
-    private readonly string schema = "analysis_wakeup_" + Guid.NewGuid().ToString("N");
     private readonly string captureRoot = Path.Combine(Path.GetTempPath(), "civic-analysis-wakeup-" + Guid.NewGuid().ToString("N"));
     private string connectionString = null!;
     private ComparisonSeeder seeder = null!;
@@ -25,12 +24,10 @@ public sealed class PostgresAnalysisWakeupTests(PostgresCollection postgres) : I
 
     public async Task InitializeAsync()
     {
-        await ExecuteAsync(postgres.ConnectionString, $"CREATE SCHEMA {schema}");
-        connectionString = new NpgsqlConnectionStringBuilder(postgres.ConnectionString) { SearchPath = schema }.ConnectionString;
+        connectionString = await postgres.CreateMigratedDatabaseAsync();
         var factory = new PooledDbContextFactory<CollectionAttemptDbContext>(
             new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options);
         var attempts = new PostgresCollectionAttemptStore(factory);
-        await attempts.MigrateAsync();
         var extractions = new PostgresDocumentExtractionStore(factory);
         seeder = new ComparisonSeeder(attempts, extractions, new PostgresDocumentComparisonStore(factory), captureRoot);
         statements = new StatementCandidateSeeder(attempts, extractions, connectionString, captureRoot);
@@ -39,7 +36,7 @@ public sealed class PostgresAnalysisWakeupTests(PostgresCollection postgres) : I
 
     public async Task DisposeAsync()
     {
-        await ExecuteAsync(postgres.ConnectionString, $"DROP SCHEMA IF EXISTS {schema} CASCADE");
+        await postgres.DropDatabaseAsync(connectionString);
         Directory.Delete(captureRoot, recursive: true);
     }
 

@@ -14,41 +14,37 @@ namespace CivicLens.Tests.Infrastructure.Collection;
 public sealed class PostgresCollectionAttemptStoreTests(PostgresCollection postgres) : IAsyncLifetime
 {
     private static readonly DateTimeOffset ObservedAt = new DateTimeOffset(2026, 10, 1, 12, 0, 0, TimeSpan.Zero).AddTicks(7);
-    private string schema = null!;
+    private string connectionString = null!;
     private ContextFactory factory = null!;
     private PostgresCollectionAttemptStore store = null!;
 
     public async Task InitializeAsync()
     {
-        schema = $"test_{Guid.NewGuid():N}";
-        var admin = new NpgsqlConnectionStringBuilder(postgres.ConnectionString);
-        await using (var connection = new NpgsqlConnection(admin.ConnectionString))
-        {
-            await connection.OpenAsync();
-            await using var command = connection.CreateCommand();
-            command.CommandText = $"CREATE SCHEMA {schema}";
-            await command.ExecuteNonQueryAsync();
-        }
-
-        admin.SearchPath = schema;
-        var options = new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(admin.ConnectionString).Options;
-        factory = new ContextFactory(options);
+        connectionString = await postgres.CreateMigratedDatabaseAsync();
+        factory = Factory(connectionString);
         store = new PostgresCollectionAttemptStore(factory);
-        await store.MigrateAsync();
-        await using var db = await factory.CreateDbContextAsync();
-        Assert.Empty(await db.Database.GetPendingMigrationsAsync());
-        Assert.Equal(db.Database.GetMigrations().Order(), (await db.Database.GetAppliedMigrationsAsync()).Order());
-        Assert.False(db.Database.HasPendingModelChanges());
     }
 
-    public async Task DisposeAsync()
+    public Task DisposeAsync() => postgres.DropDatabaseAsync(connectionString);
+
+    [Fact]
+    public async Task MigrationsCreateTheWholeModelInAnEmptyDatabase()
     {
-        var connectionString = postgres.ConnectionString;
-        await using var connection = new NpgsqlConnection(connectionString);
-        await connection.OpenAsync();
-        await using var command = connection.CreateCommand();
-        command.CommandText = $"DROP SCHEMA IF EXISTS {schema} CASCADE";
-        await command.ExecuteNonQueryAsync();
+        var empty = await postgres.CreateEmptyDatabaseAsync();
+        try
+        {
+            var migrated = Factory(empty);
+            await new PostgresCollectionAttemptStore(migrated).MigrateAsync();
+
+            await using var db = await migrated.CreateDbContextAsync();
+            Assert.Empty(await db.Database.GetPendingMigrationsAsync());
+            Assert.Equal(db.Database.GetMigrations().Order(), (await db.Database.GetAppliedMigrationsAsync()).Order());
+            Assert.False(db.Database.HasPendingModelChanges());
+        }
+        finally
+        {
+            await postgres.DropDatabaseAsync(empty);
+        }
     }
 
     [Fact]
@@ -416,6 +412,9 @@ public sealed class PostgresCollectionAttemptStoreTests(PostgresCollection postg
         public Task<CollectionResult> RunAsync(CollectionRequest request, CancellationToken cancellationToken) => Task.FromResult(result);
     }
 
+    private static ContextFactory Factory(string connectionString) =>
+        new(new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options);
+
     private sealed class ContextFactory(DbContextOptions<CollectionAttemptDbContext> options) : IDbContextFactory<CollectionAttemptDbContext>
     {
         public CollectionAttemptDbContext CreateDbContext() => new(options);
@@ -432,6 +431,7 @@ public sealed class PostgresCollectionDefinition : ICollectionFixture<PostgresCo
 public sealed class PostgresCollection : IAsyncLifetime
 {
     public const string Name = "Postgres collection persistence";
+    private const string TemplateDatabase = "civic_lens_template";
     private readonly PostgreSqlContainer container = new PostgreSqlBuilder(
         "postgres:18.3-alpine@sha256:54451ecb8ab38c24c3ec123f2fd501303a3a1856a5c66e98cecf2460d5e1e9d7")
         .WithDatabase("civic_lens")
@@ -439,11 +439,42 @@ public sealed class PostgresCollection : IAsyncLifetime
         .WithPassword("civic_lens")
         .Build();
 
-    // Each test schema has its own connection string, so idle pools would accumulate across the suite.
-    public string ConnectionString => new NpgsqlConnectionStringBuilder(container.GetConnectionString())
+    public async Task InitializeAsync()
     {
-        Pooling = false
-    }.ConnectionString;
-    public Task InitializeAsync() => container.StartAsync();
+        await container.StartAsync();
+        await ExecuteAsync($"CREATE DATABASE {TemplateDatabase}");
+        await PostgresCollectionAttemptStore.FromConnectionString(ConnectionString(TemplateDatabase)).MigrateAsync();
+    }
+
     public Task DisposeAsync() => container.DisposeAsync().AsTask();
+
+    public Task<string> CreateMigratedDatabaseAsync() => CreateDatabaseAsync($"TEMPLATE {TemplateDatabase}");
+
+    public Task<string> CreateEmptyDatabaseAsync() => CreateDatabaseAsync("");
+
+    // A test that failed before it created its database passes no name, so there is nothing to drop.
+    public Task DropDatabaseAsync(string? connectionString)
+    {
+        var database = new NpgsqlConnectionStringBuilder(connectionString).Database;
+        return string.IsNullOrEmpty(database) ? Task.CompletedTask : ExecuteAsync($"DROP DATABASE IF EXISTS {database} WITH (FORCE)");
+    }
+
+    private async Task<string> CreateDatabaseAsync(string template)
+    {
+        var database = "test_" + Guid.NewGuid().ToString("N");
+        await ExecuteAsync($"CREATE DATABASE {database} {template}");
+        return ConnectionString(database);
+    }
+
+    // Pooling is off so that no idle session blocks a template copy or a database drop.
+    private string ConnectionString(string database) =>
+        new NpgsqlConnectionStringBuilder(container.GetConnectionString()) { Database = database, Pooling = false }.ConnectionString;
+
+    private async Task ExecuteAsync(string sql)
+    {
+        await using var connection = new NpgsqlConnection(container.GetConnectionString());
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(sql, connection);
+        await command.ExecuteNonQueryAsync();
+    }
 }

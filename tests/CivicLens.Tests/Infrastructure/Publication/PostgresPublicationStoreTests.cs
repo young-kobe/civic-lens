@@ -26,7 +26,6 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
 {
     private static readonly DateTimeOffset PublishedAt = new(2026, 10, 9, 12, 0, 0, TimeSpan.Zero);
     private static readonly ReviewActor Owner = new("auth0|owner", ReviewRole.Owner);
-    private readonly string schema = "publication_" + Guid.NewGuid().ToString("N");
     private readonly string captureRoot = Path.Combine(Path.GetTempPath(), "civic-publication-" + Guid.NewGuid().ToString("N"));
     private PooledDbContextFactory<CollectionAttemptDbContext> factory = null!;
     private PostgresCollectionAttemptStore attempts = null!;
@@ -43,15 +42,7 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
 
     public async Task InitializeAsync()
     {
-        await using (var connection = new NpgsqlConnection(postgres.ConnectionString))
-        {
-            await connection.OpenAsync();
-            await using var command = connection.CreateCommand();
-            command.CommandText = $"CREATE SCHEMA {schema}";
-            await command.ExecuteNonQueryAsync();
-        }
-
-        connectionString = new NpgsqlConnectionStringBuilder(postgres.ConnectionString) { SearchPath = schema, Pooling = false }.ConnectionString;
+        connectionString = await postgres.CreateMigratedDatabaseAsync();
         factory = new PooledDbContextFactory<CollectionAttemptDbContext>(
             new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options);
         attempts = new PostgresCollectionAttemptStore(factory);
@@ -63,28 +54,13 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
         statementDrafts = new PostgresStatementDraftStore(factory);
         seeder = new ComparisonSeeder(attempts, extractions, comparisons, captureRoot);
         statementSeeder = new StatementCandidateSeeder(attempts, extractions, connectionString, captureRoot);
-        await attempts.MigrateAsync();
         Directory.CreateDirectory(captureRoot);
     }
 
     public async Task DisposeAsync()
     {
-        await using var connection = new NpgsqlConnection(postgres.ConnectionString);
-        await connection.OpenAsync();
-        await using var command = connection.CreateCommand();
-        command.CommandText = $"DROP SCHEMA IF EXISTS {schema} CASCADE";
-        await command.ExecuteNonQueryAsync();
+        await postgres.DropDatabaseAsync(connectionString);
         Directory.Delete(captureRoot, recursive: true);
-    }
-
-    [Fact]
-    public async Task MigrationMatchesTheModelSoReleasesCannotDriftFromTheSchema()
-    {
-        await using var db = await factory.CreateDbContextAsync();
-
-        Assert.Contains("20261009120000_PublicationReleases", await db.Database.GetAppliedMigrationsAsync());
-        Assert.Empty(await db.Database.GetPendingMigrationsAsync());
-        Assert.False(db.Database.HasPendingModelChanges());
     }
 
     [Fact]

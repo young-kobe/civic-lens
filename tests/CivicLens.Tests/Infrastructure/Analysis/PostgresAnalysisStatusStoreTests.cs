@@ -1,7 +1,5 @@
 using CivicLens.Infrastructure.Analysis;
-using CivicLens.Infrastructure.Collection;
 using CivicLens.Tests.Infrastructure.Collection;
-using Npgsql;
 
 namespace CivicLens.Tests.Infrastructure.Analysis;
 
@@ -9,20 +7,18 @@ namespace CivicLens.Tests.Infrastructure.Analysis;
 [Trait("Category", "Postgres")]
 public sealed class PostgresAnalysisStatusStoreTests(PostgresCollection postgres) : IAsyncLifetime
 {
-    private readonly string schema = "analysis_status_" + Guid.NewGuid().ToString("N");
+    private string connectionString = null!;
     private PostgresAnalysisStatusStore status = null!;
     private PostgresAnalysisStatusStore gateStatus = null!;
 
     public async Task InitializeAsync()
     {
-        await ExecuteAsync(postgres.ConnectionString, $"CREATE SCHEMA {schema}");
-        var connectionString = new NpgsqlConnectionStringBuilder(postgres.ConnectionString) { SearchPath = schema, Pooling = false }.ConnectionString;
-        await PostgresCollectionAttemptStore.FromConnectionString(connectionString).MigrateAsync();
+        connectionString = await postgres.CreateMigratedDatabaseAsync();
         status = PostgresAnalysisStatusStore.FromConnectionString(connectionString);
         gateStatus = PostgresAnalysisStatusStore.FromConnectionString(connectionString, "gate");
     }
 
-    public Task DisposeAsync() => ExecuteAsync(postgres.ConnectionString, $"DROP SCHEMA IF EXISTS {schema} CASCADE");
+    public Task DisposeAsync() => postgres.DropDatabaseAsync(connectionString);
 
     [Fact]
     public async Task TheWorkerReportsWhetherDraftingIsOnAndItsDailyLimit()
@@ -80,13 +76,5 @@ public sealed class PostgresAnalysisStatusStoreTests(PostgresCollection postgres
         var paused = (await status.GetAsync(default))!;
         Assert.Equal(("billingFailed", (DateTimeOffset?)null), (paused.PausedReason, paused.PausedUntilUtc));
         Assert.True(paused.IsPaused(DateTimeOffset.UtcNow.AddYears(1)));
-    }
-
-    private static async Task ExecuteAsync(string connection, string sql)
-    {
-        await using var open = new NpgsqlConnection(connection);
-        await open.OpenAsync();
-        await using var command = new NpgsqlCommand(sql, open);
-        await command.ExecuteNonQueryAsync();
     }
 }

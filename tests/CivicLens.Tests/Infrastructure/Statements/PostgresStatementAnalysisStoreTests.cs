@@ -20,7 +20,6 @@ public sealed class PostgresStatementAnalysisStoreTests(PostgresCollection postg
 {
     private const string Article = "The senator announced a rent cap for tenants.";
     private static readonly ReviewActor Owner = new("auth0|owner", ReviewRole.Owner);
-    private readonly string schema = "gate_" + Guid.NewGuid().ToString("N");
     private readonly string captureRoot = Path.Combine(Path.GetTempPath(), "civic-gate-" + Guid.NewGuid().ToString("N"));
     private string connectionString = null!;
     private PostgresStatementAnalysisStore store = null!;
@@ -28,12 +27,10 @@ public sealed class PostgresStatementAnalysisStoreTests(PostgresCollection postg
 
     public async Task InitializeAsync()
     {
-        await ExecuteAsync(postgres.ConnectionString, $"CREATE SCHEMA {schema}");
-        connectionString = new NpgsqlConnectionStringBuilder(postgres.ConnectionString) { SearchPath = schema, Pooling = false }.ConnectionString;
+        connectionString = await postgres.CreateMigratedDatabaseAsync();
         var factory = new PooledDbContextFactory<CollectionAttemptDbContext>(
             new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options);
         var attempts = new PostgresCollectionAttemptStore(factory);
-        await attempts.MigrateAsync();
         store = new PostgresStatementAnalysisStore(factory);
         seeder = new StatementCandidateSeeder(attempts, new PostgresDocumentExtractionStore(factory), connectionString, captureRoot);
         Directory.CreateDirectory(captureRoot);
@@ -41,7 +38,7 @@ public sealed class PostgresStatementAnalysisStoreTests(PostgresCollection postg
 
     public async Task DisposeAsync()
     {
-        await ExecuteAsync(postgres.ConnectionString, $"DROP SCHEMA IF EXISTS {schema} CASCADE");
+        await postgres.DropDatabaseAsync(connectionString);
         Directory.Delete(captureRoot, recursive: true);
     }
 

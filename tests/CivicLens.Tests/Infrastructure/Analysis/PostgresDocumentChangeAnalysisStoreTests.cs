@@ -24,7 +24,6 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
     private const string PreviousMigration = "20261009130000_KeysetReads";
     private static readonly ReviewActor Owner = new("auth0|owner", ReviewRole.Owner);
     private static readonly DocumentChangeAnalysisCatalog Catalog = new([], []);
-    private readonly string schema = "analysis_" + Guid.NewGuid().ToString("N");
     private readonly string captureRoot = Path.Combine(Path.GetTempPath(), "civic-analysis-" + Guid.NewGuid().ToString("N"));
     private string connectionString = null!;
     private PooledDbContextFactory<CollectionAttemptDbContext> factory = null!;
@@ -35,8 +34,7 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
 
     public async Task InitializeAsync()
     {
-        await ExecuteAsync(postgres.ConnectionString, $"CREATE SCHEMA {schema}");
-        connectionString = new NpgsqlConnectionStringBuilder(postgres.ConnectionString) { SearchPath = schema, Pooling = false }.ConnectionString;
+        connectionString = await postgres.CreateMigratedDatabaseAsync();
         factory = new PooledDbContextFactory<CollectionAttemptDbContext>(
             new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options);
         attempts = new PostgresCollectionAttemptStore(factory);
@@ -49,14 +47,13 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
 
     public async Task DisposeAsync()
     {
-        await ExecuteAsync(postgres.ConnectionString, $"DROP SCHEMA IF EXISTS {schema} CASCADE");
+        await postgres.DropDatabaseAsync(connectionString);
         Directory.Delete(captureRoot, recursive: true);
     }
 
     [Fact]
     public async Task AnAiDraftBecomesRevisionOneLinkedToItsRunAndOnlyPeopleRevisePublishOrDecide()
     {
-        await attempts.MigrateAsync();
         var comparison = await seeder.SaveAsync("Deadline: October 15.\n", "Deadline: October 30.\n");
         var queued = Assert.Single(await analysis.GetByComparisonIdsAsync([comparison.ComparisonId], default));
         Assert.Equal(AnalysisState.Pending, queued.Status);
@@ -108,7 +105,6 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
     [InlineData(true)]
     public async Task AnAiChangeDateSurvivesAHumanSaveOnlyWhenThePersonChecksIt(bool changeDateChecked)
     {
-        await attempts.MigrateAsync();
         var comparison = await seeder.SaveAsync("Deadline: October 15.\n", "Updated October 3, 2026. Deadline: October 30.\n");
         var model = new FakeDocumentChangeDraftingModel().Draft(FakeDocumentChangeDraftingModel.Output("Headline",
             [("h1", "after", "Updated October 3, 2026.")], changeDate: new { date = "2026-10-03", citationIndex = 0, confidence = 0.9 }));
@@ -128,7 +124,6 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
     [Fact]
     public async Task OnlyComparisonsWithATextChangeAreQueued()
     {
-        await attempts.MigrateAsync();
         var unchanged = await seeder.SaveAsync("Same text.\n", "Same text.\n");
         Assert.Empty(await analysis.GetByComparisonIdsAsync([unchanged.ComparisonId], default));
     }
@@ -137,8 +132,7 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
     public async Task TheUpgradeBackfillsChangedComparisonsThatHaveNoDraft()
     {
         // The store now queues analysis itself, so comparisons written before the upgrade are made by
-        // migrating up, seeding, and migrating back down to the schema that had no analysis queue.
-        await attempts.MigrateAsync();
+        // seeding the migrated database and migrating back down to the schema that had no analysis queue.
         var open = await seeder.SaveAsync("Fee: 10.\n", "Fee: 12.\n");
         var drafted = await seeder.SaveAsync("Rule A.\n", "Rule B.\n");
         _ = await new CreateDocumentChangeDraft(reviews).ExecuteAsync(Owner, new CreateDocumentChangeDraftRequest(drafted.ComparisonId, "k"));
@@ -154,7 +148,6 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
     [Fact]
     public async Task ARefusalIsAVisibleFailedRunWithoutRetryOrDraft()
     {
-        await attempts.MigrateAsync();
         var comparison = await seeder.SaveAsync("Text A.\n", "Text B.\n");
         var model = new FakeDocumentChangeDraftingModel().Reply(new AnalysisModelResponse("refusal", null, FakeDocumentChangeDraftingModel.Usage(400, 20), null));
 
@@ -170,7 +163,6 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
     [Fact]
     public async Task ACitationFailureRetriesOnceWithItsReasonsAndThenFailsVisibly()
     {
-        await attempts.MigrateAsync();
         var comparison = await seeder.SaveAsync("Deadline: October 15.\n", "Deadline: October 30.\n");
         var bad = FakeDocumentChangeDraftingModel.Output(("h1", "after", "October 31"));
         var model = new FakeDocumentChangeDraftingModel().Draft(bad).Draft(bad);
@@ -192,7 +184,6 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
     [Fact]
     public async Task ACorrectedRetryBecomesTheDraft()
     {
-        await attempts.MigrateAsync();
         var comparison = await seeder.SaveAsync("Deadline: October 15.\n", "Deadline: October 30.\n");
         var model = new FakeDocumentChangeDraftingModel().Draft(FakeDocumentChangeDraftingModel.Output(("h1", "after", "e")))
             .Draft(FakeDocumentChangeDraftingModel.Output(("h1", "after", "October 30")));
@@ -208,7 +199,6 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
     [Fact]
     public async Task AValidationRetryResumesAfterABudgetWaitWithThePreviousErrors()
     {
-        await attempts.MigrateAsync();
         var comparison = await seeder.SaveAsync("Deadline: October 15.\n", "Deadline: October 30.\n");
         var first = DocumentChangeDraftingPrompt.Build((await analysis.ReadEvidenceAsync(comparison.ComparisonId, default))!, Catalog)!;
         var tight = new FakeDocumentChangeDraftingModel().Draft(FakeDocumentChangeDraftingModel.Output(("h1", "after", "October 31")));
@@ -231,7 +221,6 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
     [Fact]
     public async Task AShutdownDuringACallKeepsTheChargeAndCountsAnAttempt()
     {
-        await attempts.MigrateAsync();
         var comparison = await seeder.SaveAsync("Text A.\n", "Text B.\n");
         using var shutdown = new CancellationTokenSource();
         var model = new FakeDocumentChangeDraftingModel().Reply(async (_, token) =>
@@ -252,7 +241,6 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
     [Fact]
     public async Task TheClaimFailsAnEntryThatUsedAllItsAttemptsWithoutACall()
     {
-        await attempts.MigrateAsync();
         var comparison = await seeder.SaveAsync("Text A.\n", "Text B.\n");
         await ScalarAsync<int>($"""
             UPDATE document_change_analysis SET status = 'RetryWaiting', attempts = {AnalysisPolicy.MaximumAttempts},
@@ -270,7 +258,6 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
     [Fact]
     public async Task OnlyTheOwnerRequeuesFailedEntriesAndTheyStartAgain()
     {
-        await attempts.MigrateAsync();
         var failed = await seeder.SaveAsync("Text A.\n", "Text B.\n");
         var pending = await seeder.SaveAsync("Text C.\n", "Text D.\n");
         await ScalarAsync<int>($"""
@@ -292,7 +279,6 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
     [Fact]
     public async Task SeveralCallsRunAtOnceUpToTheConcurrencyLimit()
     {
-        await attempts.MigrateAsync();
         for (var index = 0; index < 4; index++) await seeder.SaveAsync($"Item {index} old.\n", $"Item {index} new.\n");
         var running = 0;
         var peak = 0;
@@ -327,7 +313,6 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
     [Fact]
     public async Task ARateLimitWaitsDurablyAndRefundsItsReservation()
     {
-        await attempts.MigrateAsync();
         var comparison = await seeder.SaveAsync("Text A.\n", "Text B.\n");
         var model = new FakeDocumentChangeDraftingModel().Fail(AnalysisModelFailure.RateLimited);
 
@@ -344,7 +329,6 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
     [Fact]
     public async Task AConnectionFailureKeepsItsFullReservationCharged()
     {
-        await attempts.MigrateAsync();
         var comparison = await seeder.SaveAsync("Text A.\n", "Text B.\n");
         var model = new FakeDocumentChangeDraftingModel().Fail(AnalysisModelFailure.ConnectionFailed);
 
@@ -357,7 +341,6 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
     [Fact]
     public async Task WorkOverTheDailyLimitWaitsUntilTheNextUtcDayWithoutACall()
     {
-        await attempts.MigrateAsync();
         var first = await seeder.SaveAsync("Alpha one.\n", "Alpha two.\n");
         var second = await seeder.SaveAsync("Beta one.\n", "Beta two.\n");
         var reservation = DocumentChangeDraftingPrompt.Build((await analysis.ReadEvidenceAsync(first.ComparisonId, default))!, Catalog)!
@@ -378,7 +361,6 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
     [Fact]
     public async Task ConcurrentReservationsNeverPassTheDailyLimit()
     {
-        await attempts.MigrateAsync();
         var claims = new List<AnalysisClaim>();
         for (var index = 0; index < 6; index++)
         {
@@ -397,7 +379,6 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
     [Fact]
     public async Task AnExpiredLeaseIsRecoveredAsAnInterruptedRunAndTheStaleOwnerIsFenced()
     {
-        await attempts.MigrateAsync();
         var comparison = await seeder.SaveAsync("Text A.\n", "Text B.\n");
         var stale = (await analysis.TryClaimAsync(comparison.ComparisonId, TimeSpan.FromSeconds(1), default))!;
         var runId = Guid.NewGuid().ToString("N");
@@ -423,7 +404,6 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
     [Fact]
     public async Task AHumanDraftBeforeTheCallCostsNothing()
     {
-        await attempts.MigrateAsync();
         var comparison = await seeder.SaveAsync("Text A.\n", "Text B.\n");
         _ = await new CreateDocumentChangeDraft(reviews).ExecuteAsync(Owner, new CreateDocumentChangeDraftRequest(comparison.ComparisonId, "k"));
         var model = new FakeDocumentChangeDraftingModel();
@@ -438,7 +418,6 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
     [Fact]
     public async Task AHumanDraftStartedDuringTheCallWinsAndTheAiDraftIsDiscarded()
     {
-        await attempts.MigrateAsync();
         var comparison = await seeder.SaveAsync("Deadline: October 15.\n", "Deadline: October 30.\n");
         string? humanDraft = null;
         var model = new FakeDocumentChangeDraftingModel().Reply(async (_, _) =>
@@ -462,7 +441,6 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
     [Fact]
     public async Task AComparisonOverTheInputBoundIsBlockedWithoutACall()
     {
-        await attempts.MigrateAsync();
         var before = string.Concat(Enumerable.Range(0, 65).Select(index => $"line {index}\nsame {index}\n"));
         var after = string.Concat(Enumerable.Range(0, 65).Select(index => $"edit {index}\nsame {index}\n"));
         var comparison = await seeder.SaveAsync(before, after);
@@ -478,7 +456,6 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
     [Fact]
     public async Task ReplayingASettlementAfterItCommittedChangesNothing()
     {
-        await attempts.MigrateAsync();
         var comparison = await seeder.SaveAsync("Text A.\n", "Text B.\n");
         var claim = (await analysis.TryClaimAsync(comparison.ComparisonId, TimeSpan.FromMinutes(1), default))!;
         var runId = Guid.NewGuid().ToString("N");
