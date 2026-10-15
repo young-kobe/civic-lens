@@ -152,10 +152,12 @@ public sealed class PublicationReleaseTests
     }
 
     [Fact]
-    public void SameIdUnderTwoKindsIsTwoRecordsButTheSamePairTwiceIsNot()
+    public void ARecordIdIsUniqueAcrossKindsBecauseAllKindsShareOneRecordFilePath()
     {
-        Release(2, Entry(PublishedRecordKind.DocumentChange, ChangeId), Entry(PublishedRecordKind.Statement, StatementId)).Validate();
-        Assert.Throws<InvalidDataException>(Release(2, Entry(PublishedRecordKind.DocumentChange, ChangeId),
+        Release(3, Entry(PublishedRecordKind.Statement, StatementId), Entry(PublishedRecordKind.Action, new string('7', 64))).Validate();
+        Assert.Throws<InvalidDataException>(Release(3, Entry(PublishedRecordKind.Statement, StatementId),
+            Entry(PublishedRecordKind.Action, StatementId)).Validate);
+        Assert.Throws<InvalidDataException>(Release(3, Entry(PublishedRecordKind.DocumentChange, ChangeId),
             Entry(PublishedRecordKind.DocumentChange, ChangeId)).Validate);
     }
 

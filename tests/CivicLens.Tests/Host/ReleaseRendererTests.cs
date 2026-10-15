@@ -111,7 +111,7 @@ public sealed class ReleaseRendererTests
         Assert.Equal(PublicationProtocol.ManifestPath, form.GetAttribute("data-release-search"));
         Assert.Equal(PublicationProtocol.RecordPagePath("{id}"), form.GetAttribute("data-record-page"));
         Assert.True(form.Closest("section")!.HasAttribute("hidden"));
-        Assert.Equal(["", "documentChange", "statement"],
+        Assert.Equal(["", "documentChange", "statement", "action"],
             document.QuerySelectorAll("#search-kind option").Select(option => option.GetAttribute("value")));
         Assert.Equal(["text", "kind", "official", "issue", "policyArea", "from", "to"],
             form.QuerySelectorAll("input, select").Select(control => control.GetAttribute("name")));
@@ -201,7 +201,8 @@ public sealed class ReleaseRendererTests
         var release = ReleaseOf(2);
         release = release with
         {
-            Records = [release.Records[0], release.Records[1] with { Kind = PublishedRecordKind.Statement, RecordId = new string('d', 64) }]
+            Records = [release.Records[0], release.Records[1] with { Kind = PublishedRecordKind.Statement, RecordId = new string('d', 64) },
+                release.Records[1] with { Kind = PublishedRecordKind.Action, RecordId = new string('f', 64) }]
         };
 
         var html = await new ReleaseRenderer().RenderIndexAsync(release, 1, CancellationToken.None);
@@ -209,7 +210,7 @@ public sealed class ReleaseRendererTests
         var rows = new HtmlParser().ParseDocument(html).QuerySelectorAll("tbody tr")
             .Select(row => (row.QuerySelector("a")!.GetAttribute("href"), row.QuerySelector(".badge")!.TextContent));
         Assert.Equal([($"records/{release.Records[0].RecordId}.html", "Document change"),
-            ($"records/{new string('d', 64)}.html", "Statement")], rows);
+            ($"records/{new string('d', 64)}.html", "Statement"), ($"records/{new string('f', 64)}.html", "Action")], rows);
     }
 
     [Theory]
