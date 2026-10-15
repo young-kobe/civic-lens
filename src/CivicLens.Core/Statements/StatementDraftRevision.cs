@@ -7,7 +7,7 @@ namespace CivicLens.Core.Statements;
 public sealed record StatementDraftRevision(string CandidateId, int RevisionNumber, string AuthorSubject, DateTimeOffset CreatedAtUtc,
     string Headline, string Summary, DateOnly? StatementDate, StatementSpan? StatementDateEvidence,
     ImmutableArray<string> SpeakerOfficialIds, ImmutableArray<string> OtherSpeakers, ImmutableArray<string> IssueIds,
-    ImmutableArray<string> PolicyAreaIds, ImmutableArray<StatementQuotation> Quotations, ImmutableArray<string> BillNumbers)
+    ImmutableArray<string> PolicyAreaIds, ImmutableArray<StatementQuotation> Quotations, ImmutableArray<string> BillNumbers) : IReviewRevision
 {
     public const int MaximumHeadlineLength = 256;
     public const int MaximumSummaryLength = 8_000;
@@ -21,6 +21,8 @@ public sealed record StatementDraftRevision(string CandidateId, int RevisionNumb
         !string.IsNullOrEmpty(name) && name.Length <= MaximumOtherSpeakerLength && !name.Contains('\0') && name == name.Trim();
 
     public ReviewAuthorKind AuthorKind => ReviewAuthor.KindOf(AuthorSubject);
+
+    string IReviewRevision.RecordId => CandidateId;
 
     public void ValidateAsFirstAnalysisRevision()
     {

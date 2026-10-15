@@ -7,7 +7,7 @@ public sealed record DocumentChangeDraftRevision(string DraftId, int RevisionNum
     string? Significance, string? Limits, string Institution,
     DateOnly? ChangeDate, DocumentChangeCitation? ChangeDateEvidence,
     ImmutableArray<string> OfficialIds, ImmutableArray<string> IssueIds,
-    ImmutableArray<DocumentChangeCitation> Citations)
+    ImmutableArray<DocumentChangeCitation> Citations) : IReviewRevision
 {
     public const int MaximumHeadlineLength = 256;
     public const int MaximumSummaryLength = 8_000;
@@ -17,6 +17,8 @@ public sealed record DocumentChangeDraftRevision(string DraftId, int RevisionNum
     public const int MaximumCitations = 64;
     public const int MaximumCitationLength = 8_192;
     public const int MaximumSelections = 64;
+
+    string IReviewRevision.RecordId => DraftId;
 
     public DocumentChangeDraftRevision KeepingAiChangeDateOnlyIfChecked(DocumentChangeDraftRevision previous, bool changeDateChecked) =>
         AiProposedDate.IsUnconfirmedCarryOver(previous.AuthorSubject, previous.ChangeDate, ChangeDate, changeDateChecked)

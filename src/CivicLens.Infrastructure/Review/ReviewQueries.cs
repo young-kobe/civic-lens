@@ -1,4 +1,3 @@
-using CivicLens.Core.Review;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Documents.Persistence;
 using CivicLens.Infrastructure.Review.Persistence;
@@ -12,12 +11,6 @@ internal static class ReviewQueries
         db.Set<DocumentComparisonRow>().AsNoTracking().Where(comparison => comparison.HasChanges &&
             !db.Set<DocumentChangeDraftRow>().Any(draft => draft.ComparisonId == comparison.ComparisonId));
 
-    public static IQueryable<DocumentChangeDraftRow> ApprovedDrafts(CollectionAttemptDbContext db) =>
-        db.Set<DocumentChangeDraftRow>().AsNoTracking().Where(draft => draft.ReviewStatus == ReviewStatus.Approved);
-
-    public static IQueryable<DocumentChangeDraftRow> NeedsActionDrafts(CollectionAttemptDbContext db) =>
-        db.Set<DocumentChangeDraftRow>().AsNoTracking().Where(draft => draft.ReviewStatus != ReviewStatus.Approved);
-
     public const string ActivePublishedRecords = """
         active AS (
             SELECT COALESCE(e ->> 'kind', 'documentChange') AS kind, COALESCE(e ->> 'recordId', e ->> 'draftId') AS record_id,
@@ -29,7 +22,7 @@ internal static class ReviewQueries
     // Published state comes from the active release, not the draft, so this stays a read query.
     public const string UnpublishedApprovedDrafts = $"""
         WITH {ActivePublishedRecords}
-        SELECT d.draft_id AS "DraftId", d.current_revision_number AS "CurrentRevisionNumber",
+        SELECT d.draft_id AS "RecordId", d.current_revision_number AS "CurrentRevisionNumber",
                d.created_at_utc_ticks AS "CreatedAtUtcTicks", a.revision_number AS "PublishedRevisionNumber"
         FROM document_change_drafts d
         LEFT JOIN active a ON a.kind = 'documentChange' AND a.record_id = d.draft_id

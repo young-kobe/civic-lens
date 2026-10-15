@@ -25,16 +25,16 @@ internal static class ReviewDecisionHistory
         return decisions;
     }
 
-    public static void Validate(string recordId, int revisionCount, ImmutableArray<ReviewDecision> decisions,
-        Action<int> validateApprovedRevision)
+    public static void Validate<TRevision>(string recordId, ImmutableArray<TRevision> revisions, ImmutableArray<ReviewDecision> decisions)
+        where TRevision : IReviewRevision
     {
         var prior = ImmutableArray<ReviewDecision>.Empty;
         foreach (var decision in decisions)
         {
-            if (decision.RevisionNumber < 1 || decision.RevisionNumber > revisionCount)
+            if (decision.RevisionNumber < 1 || decision.RevisionNumber > revisions.Length)
                 throw new InvalidOperationException("Stored decision references a missing revision.");
             ReviewPolicy.ValidateDecision(recordId, decision.RevisionNumber, prior.Length, prior, decision);
-            if (decision.Kind == ReviewDecisionKind.Approve) validateApprovedRevision(decision.RevisionNumber);
+            if (decision.Kind == ReviewDecisionKind.Approve) revisions[decision.RevisionNumber - 1].ValidateForApproval();
             prior = prior.Add(decision);
         }
     }

@@ -1,23 +1,13 @@
 using CivicLens.Application.Statements;
-using CivicLens.Core.Review;
-using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Review;
-using CivicLens.Infrastructure.Statements.Persistence;
-using Microsoft.EntityFrameworkCore;
 
 namespace CivicLens.Infrastructure.Statements;
 
 internal static class StatementReviewQueries
 {
-    public static IQueryable<StatementDraftRow> ApprovedDrafts(CollectionAttemptDbContext db) =>
-        db.Set<StatementDraftRow>().AsNoTracking().Where(draft => draft.ReviewStatus == ReviewStatus.Approved);
-
-    public static IQueryable<StatementDraftRow> NeedsActionDrafts(CollectionAttemptDbContext db) =>
-        db.Set<StatementDraftRow>().AsNoTracking().Where(draft => draft.ReviewStatus != ReviewStatus.Approved);
-
     public const string UnpublishedApproved = $"""
         WITH {ReviewQueries.ActivePublishedRecords}
-        SELECT d.candidate_id AS "CandidateId", d.current_revision_number AS "CurrentRevisionNumber",
+        SELECT d.candidate_id AS "RecordId", d.current_revision_number AS "CurrentRevisionNumber",
                d.created_at_utc_ticks AS "CreatedAtUtcTicks", a.revision_number AS "PublishedRevisionNumber"
         FROM statement_drafts d
         LEFT JOIN active a ON a.kind = 'statement' AND a.record_id = d.candidate_id

@@ -263,6 +263,26 @@ public sealed class PostgresDocumentChangeReviewStoreTests(PostgresCollection po
     }
 
     [Fact]
+    public async Task EveryDecisionKindChecksTheRetainedEvidenceSoATamperedComparisonCannotCollectARequestForChanges()
+    {
+        var draft = Assert.Single(await CreateDraftsAsync(1));
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            "UPDATE document_comparisons SET settings_version = 'tampered' WHERE comparison_id = @id", connection);
+        command.Parameters.AddWithValue("id", draft.ComparisonId);
+        Assert.Equal(1, await command.ExecuteNonQueryAsync());
+        var actor = new ReviewActor("auth0|reviewer", ReviewRole.Reviewer);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => new DecideDocumentChangeReview(reviews, new ReviewCatalog([], []))
+            .ExecuteAsync(actor, new(draft.DraftId, 1, 0, ReviewDecisionKind.RequestChanges, "Check context.", [], "tampered")));
+        await using var count = new NpgsqlCommand(
+            "SELECT count(*) FROM document_change_review_decisions WHERE draft_id = @id", connection);
+        count.Parameters.AddWithValue("id", draft.DraftId);
+        Assert.Equal(0L, await count.ExecuteScalarAsync());
+    }
+
+    [Fact]
     public async Task DraftPagesWalkOlderThenNewerOverTheSameRowsEvenWhenTimestampsTie()
     {
         var drafts = await CreateDraftsAsync(7);
