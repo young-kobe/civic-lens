@@ -12,11 +12,10 @@ public static class AnalysisCommand
 
     public static bool Matches(string[] args) => args is ["analyses", ..];
 
-    public static async Task<int> ExecuteAsync(string[] args, RequeueAnalyses<AnalysisRun> requeue,
+    public static Task<int> ExecuteAsync(string[] args, RequeueAnalyses<AnalysisRun> requeue,
         GetDocumentChangeReviewOutcomes outcomes, ReviewActor owner,
-        CancellationToken cancellationToken)
-    {
-        try
+        CancellationToken cancellationToken) =>
+        OwnerCommand.RunAsync(async () =>
         {
             switch (args)
             {
@@ -33,18 +32,7 @@ public static class AnalysisCommand
                     Console.Error.WriteLine(Usage);
                     return 2;
             }
-        }
-        catch (ArgumentException exception)
-        {
-            Console.Error.WriteLine(exception.Message);
-            return 2;
-        }
-        catch (UnauthorizedAccessException)
-        {
-            Console.Error.WriteLine("The configured actor is not the owner.");
-            return 2;
-        }
-    }
+        });
 
     private static void Write(int requeued) => Console.WriteLine(JsonSerializer.Serialize(new { requeued }));
 

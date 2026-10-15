@@ -17,6 +17,7 @@ using CivicLens.Infrastructure.Collection.Processing;
 using CivicLens.Application.Documents;
 using CivicLens.Host.Analysis;
 using CivicLens.Application.Actions;
+using CivicLens.Host;
 using CivicLens.Host.Actions;
 using CivicLens.Infrastructure.Actions;
 using CivicLens.Host.Collection;
@@ -206,22 +207,16 @@ try
 
     if (AnalysisCommand.Matches(args))
     {
-        var connectionString = Environment.GetEnvironmentVariable("CIVIC_LENS_DATABASE");
-        var ownerSubject = Environment.GetEnvironmentVariable("CIVIC_LENS_REVIEW_OWNER");
-        if (string.IsNullOrWhiteSpace(connectionString) || string.IsNullOrWhiteSpace(ownerSubject))
-            throw new ArgumentException("Analysis commands require CIVIC_LENS_DATABASE and CIVIC_LENS_REVIEW_OWNER.");
+        var (connectionString, owner) = OwnerCommand.ReadEnvironment("Analysis");
         var requeue = new RequeueAnalyses<AnalysisRun>(PostgresDocumentChangeAnalysisStore.FromConnectionString(connectionString));
         var outcomes = new GetDocumentChangeReviewOutcomes(PostgresDocumentChangeReviewOutcomeStore.FromConnectionString(connectionString));
         executing = true;
-        return await AnalysisCommand.ExecuteAsync(args, requeue, outcomes, new ReviewActor(ownerSubject, ReviewRole.Owner), cancellation.Token);
+        return await AnalysisCommand.ExecuteAsync(args, requeue, outcomes, owner, cancellation.Token);
     }
 
     if (StatementCommand.Matches(args))
     {
-        var connectionString = Environment.GetEnvironmentVariable("CIVIC_LENS_DATABASE");
-        var ownerSubject = Environment.GetEnvironmentVariable("CIVIC_LENS_REVIEW_OWNER");
-        if (string.IsNullOrWhiteSpace(connectionString) || string.IsNullOrWhiteSpace(ownerSubject))
-            throw new ArgumentException("Statement commands require CIVIC_LENS_DATABASE and CIVIC_LENS_REVIEW_OWNER.");
+        var (connectionString, owner) = OwnerCommand.ReadEnvironment("Statement");
         var contexts = AnalysisDbContextFactory.Create(connectionString);
         var gates = new PostgresStatementAnalysisStore(contexts);
         var gateCommands = new StatementQueueCommands<StatementGateRun, StatementGateView, StatementGateListItem>(gates,
@@ -230,34 +225,29 @@ try
             new PostgresStatementDraftStore(contexts),
             new PostgresAnalysisStatusStore(contexts, StatementDraftTask.Task));
         var statements = new StatementCommand(gateCommands, draftCommands, new RegateStatementCandidates(gates),
-            new ReviewActor(ownerSubject, ReviewRole.Owner), args is ["statements", "regate", ..] ? StatementIssueRubric.FromEnvironment()?.Id : null);
+            owner, args is ["statements", "regate", ..] ? StatementIssueRubric.FromEnvironment()?.Id : null);
         executing = true;
         return await statements.ExecuteAsync(args, cancellation.Token);
     }
 
     if (ActionCommand.Matches(args))
     {
-        var connectionString = Environment.GetEnvironmentVariable("CIVIC_LENS_DATABASE");
-        var ownerSubject = Environment.GetEnvironmentVariable("CIVIC_LENS_REVIEW_OWNER");
-        if (string.IsNullOrWhiteSpace(connectionString) || string.IsNullOrWhiteSpace(ownerSubject))
-            throw new ArgumentException("Action commands require CIVIC_LENS_DATABASE and CIVIC_LENS_REVIEW_OWNER.");
+        var (connectionString, owner) = OwnerCommand.ReadEnvironment("Action");
         var contexts = AnalysisDbContextFactory.Create(connectionString);
         var draftStore = new PostgresActionDraftStore(contexts);
         var draftCommands = new StatementQueueCommands<ActionDraftRun, ActionDraftView, ActionDraftListItem>(
             draftStore, new PostgresAnalysisStatusStore(contexts, ActionDraftTask.Task));
-        var actions = new ActionCommand(draftCommands, new RequeueBlockedActionDrafts(draftStore), new ReviewActor(ownerSubject, ReviewRole.Owner));
+        var actions = new ActionCommand(draftCommands, new RequeueBlockedActionDrafts(draftStore), owner);
         executing = true;
         return await actions.ExecuteAsync(args, cancellation.Token);
     }
 
     if (ReleaseCommand.Matches(args))
     {
-        var connectionString = Environment.GetEnvironmentVariable("CIVIC_LENS_DATABASE");
+        var (connectionString, owner) = OwnerCommand.ReadEnvironment("Release");
         var releaseRoot = Environment.GetEnvironmentVariable("CIVIC_LENS_RELEASE_DIRECTORY");
-        var ownerSubject = Environment.GetEnvironmentVariable("CIVIC_LENS_REVIEW_OWNER");
-        if (string.IsNullOrWhiteSpace(connectionString) || string.IsNullOrWhiteSpace(releaseRoot) ||
-            string.IsNullOrWhiteSpace(ownerSubject))
-            throw new ArgumentException("Release commands require CIVIC_LENS_DATABASE, CIVIC_LENS_RELEASE_DIRECTORY, and CIVIC_LENS_REVIEW_OWNER.");
+        if (string.IsNullOrWhiteSpace(releaseRoot))
+            throw new ArgumentException("Release commands require CIVIC_LENS_RELEASE_DIRECTORY.");
         var officialNames = new Dictionary<string, string>(StringComparer.Ordinal);
         if (args is ["releases", "publish", ..])
         {
@@ -275,7 +265,7 @@ try
             new PublicationCatalog(officialNames), TimeProvider.System);
         executing = true;
         return await ReleaseCommand.ExecuteAsync(args, publish, new ListPublicationReleases(publications, releases),
-            new ActivatePublicationRelease(publications, releases), new ReviewActor(ownerSubject, ReviewRole.Owner),
+            new ActivatePublicationRelease(publications, releases), owner,
             cancellation.Token);
     }
 

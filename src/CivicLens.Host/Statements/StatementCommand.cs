@@ -1,6 +1,4 @@
 using System.Globalization;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using CivicLens.Application.Statements;
 using CivicLens.Core.Review;
 
@@ -15,82 +13,69 @@ internal sealed class StatementCommand(StatementQueueCommands<StatementGateRun, 
         "statements draft status, statements draft list [drafted|over-cap|existing|pending|failed] [limit], " +
         "statements draft run <run-id>, or statements draft requeue <candidate-id|--all>.";
     private const int DefaultListLimit = 100;
-    private static readonly JsonSerializerOptions JsonOptions = CreateJsonOptions();
 
     public static bool Matches(string[] args) => args is ["statements", ..];
 
-    public async Task<int> ExecuteAsync(string[] args, CancellationToken cancellationToken)
-    {
-        try
+    public Task<int> ExecuteAsync(string[] args, CancellationToken cancellationToken) =>
+        OwnerCommand.RunAsync(async () =>
         {
             switch (args)
             {
                 case ["statements", "status"]:
-                    Write(await gates.Status.ExecuteAsync(owner, cancellationToken));
+                    CommandOutput.Write(await gates.Status.ExecuteAsync(owner, cancellationToken));
                     return 0;
                 case ["statements", "list"]:
-                    Write(await gates.List.ExecuteAsync(owner, null, DefaultListLimit, cancellationToken));
+                    CommandOutput.Write(await gates.List.ExecuteAsync(owner, null, DefaultListLimit, cancellationToken));
                     return 0;
                 case ["statements", "list", var view]:
-                    Write(await gates.List.ExecuteAsync(owner, ParseView(view), DefaultListLimit, cancellationToken));
+                    CommandOutput.Write(await gates.List.ExecuteAsync(owner, ParseView(view), DefaultListLimit, cancellationToken));
                     return 0;
                 case ["statements", "list", var view, var limit]:
-                    Write(await gates.List.ExecuteAsync(owner, ParseView(view), ParseLimit(limit), cancellationToken));
+                    CommandOutput.Write(await gates.List.ExecuteAsync(owner, ParseView(view), ParseLimit(limit), cancellationToken));
                     return 0;
                 case ["statements", "run", var runId]:
-                    Write(await gates.Run.ExecuteAsync(owner, runId, cancellationToken)
+                    CommandOutput.Write(await gates.Run.ExecuteAsync(owner, runId, cancellationToken)
                         ?? throw new ArgumentException("No gate run has that ID."));
                     return 0;
                 case ["statements", "requeue", "--all"]:
-                    Write(new { requeued = await gates.Requeue.ExecuteAsync(owner, null, cancellationToken) });
+                    CommandOutput.Write(new { requeued = await gates.Requeue.ExecuteAsync(owner, null, cancellationToken) });
                     return 0;
                 case ["statements", "requeue", var candidateId]:
-                    Write(new { requeued = await gates.Requeue.ExecuteAsync(owner, candidateId, cancellationToken) });
+                    CommandOutput.Write(new { requeued = await gates.Requeue.ExecuteAsync(owner, candidateId, cancellationToken) });
                     return 0;
                 case ["statements", "regate"]:
-                    Write(new { requeued = await RegateAsync(null, cancellationToken) });
+                    CommandOutput.Write(new { requeued = await RegateAsync(null, cancellationToken) });
                     return 0;
                 case ["statements", "regate", "--since", var since]:
-                    Write(new { requeued = await RegateAsync(ParseDate(since), cancellationToken) });
+                    CommandOutput.Write(new { requeued = await RegateAsync(ParseDate(since), cancellationToken) });
                     return 0;
                 case ["statements", "draft", "status"]:
-                    Write(await drafts.Status.ExecuteAsync(owner, cancellationToken));
+                    CommandOutput.Write(await drafts.Status.ExecuteAsync(owner, cancellationToken));
                     return 0;
                 case ["statements", "draft", "list"]:
-                    Write(await drafts.List.ExecuteAsync(owner, null, DefaultListLimit, cancellationToken));
+                    CommandOutput.Write(await drafts.List.ExecuteAsync(owner, null, DefaultListLimit, cancellationToken));
                     return 0;
                 case ["statements", "draft", "list", var view]:
-                    Write(await drafts.List.ExecuteAsync(owner, ParseDraftView(view), DefaultListLimit, cancellationToken));
+                    CommandOutput.Write(await drafts.List.ExecuteAsync(owner, ParseDraftView(view), DefaultListLimit, cancellationToken));
                     return 0;
                 case ["statements", "draft", "list", var view, var limit]:
-                    Write(await drafts.List.ExecuteAsync(owner, ParseDraftView(view), ParseLimit(limit), cancellationToken));
+                    CommandOutput.Write(await drafts.List.ExecuteAsync(owner, ParseDraftView(view), ParseLimit(limit), cancellationToken));
                     return 0;
                 case ["statements", "draft", "run", var runId]:
-                    Write(await drafts.Run.ExecuteAsync(owner, runId, cancellationToken)
+                    CommandOutput.Write(await drafts.Run.ExecuteAsync(owner, runId, cancellationToken)
                         ?? throw new ArgumentException("No draft run has that ID."));
                     return 0;
                 case ["statements", "draft", "requeue", "--all"]:
-                    Write(new { requeued = await drafts.Requeue.ExecuteAsync(owner, null, cancellationToken) });
+                    CommandOutput.Write(new { requeued = await drafts.Requeue.ExecuteAsync(owner, null, cancellationToken) });
                     return 0;
                 case ["statements", "draft", "requeue", var candidateId]:
-                    Write(new { requeued = await drafts.Requeue.ExecuteAsync(owner, candidateId, cancellationToken) });
+                    CommandOutput.Write(new { requeued = await drafts.Requeue.ExecuteAsync(owner, candidateId, cancellationToken) });
                     return 0;
                 default:
                     Console.Error.WriteLine(Usage);
                     return 2;
             }
-        }
-        catch (ArgumentException exception)
-        {
-            Console.Error.WriteLine(exception.Message);
-            return 2;
-        }
-        catch (UnauthorizedAccessException)
-        {
-            Console.Error.WriteLine("The configured actor is not the owner.");
-            return 2;
-        }
-    }
+        });
 
     private Task<int> RegateAsync(DateOnly? since, CancellationToken cancellationToken) =>
         regate.ExecuteAsync(owner, currentIssueRevisionId
@@ -124,13 +109,4 @@ internal sealed class StatementCommand(StatementQueueCommands<StatementGateRun, 
     private static DateOnly ParseDate(string text) =>
         DateOnly.TryParseExact(text, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date)
             ? date : throw new ArgumentException("The --since date must use yyyy-MM-dd.");
-
-    private static void Write(object value) => Console.WriteLine(JsonSerializer.Serialize(value, JsonOptions));
-
-    private static JsonSerializerOptions CreateJsonOptions()
-    {
-        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
-        options.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase));
-        return options;
-    }
 }
