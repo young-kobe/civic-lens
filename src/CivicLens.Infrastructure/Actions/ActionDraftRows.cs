@@ -21,9 +21,9 @@ internal static class ActionDraftRows
         if (await HasNewerCandidateAsync(db, candidate, cancellationToken)) return ActionDraftErrorCodes.SupersededByNewerCandidate;
         var draft = await db.Set<ActionDraftRow>().SingleOrDefaultAsync(row => row.RecordId == revision.RecordId, cancellationToken);
         if ((draft?.CurrentRevisionNumber ?? 0) != revision.RevisionNumber - 1) return ActionDraftErrorCodes.RevisionConflict;
-        if (draft is null) db.Add(NewDraft(revision));
-        else draft.CurrentRevisionNumber = revision.RevisionNumber;
-        db.Add(NewRevision(revision, runId));
+        if (draft is null) db.Add(draft = NewDraft(revision));
+        var records = PostgresActionReviewStore.Records;
+        records.AppendRevision(db, draft, revision, NewRevision(revision, runId), await records.ReadCycleAsync(db, draft, cancellationToken));
         return null;
     }
 
@@ -54,11 +54,10 @@ internal static class ActionDraftRows
         Congress = revision.Congress,
         BillType = revision.BillType,
         BillNumber = revision.BillNumber,
-        CurrentRevisionNumber = revision.RevisionNumber,
         CreatedAtUtcTicks = revision.CreatedAtUtc.UtcTicks
     };
 
-    private static ActionRevisionRow NewRevision(ActionDraftRevision revision, string runId) => new()
+    public static ActionRevisionRow NewRevision(ActionDraftRevision revision, string? runId) => new()
     {
         RecordId = revision.RecordId,
         RevisionNumber = revision.RevisionNumber,

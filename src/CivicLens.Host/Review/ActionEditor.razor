@@ -1,0 +1,196 @@
+@page "/Review/Actions/{RecordId}"
+@inherits ReviewRecordPage
+@using CivicLens.Core.Actions
+@using CivicLens.Core.Review
+
+@if (detail is null)
+{
+    <TopBarTitle Crumbs="Crumbs" />
+    <div class="content">
+        @if (error is not null)
+        {
+            <Notice Tone="Tone.Bad">@error</Notice>
+        }
+        @if (notFound)
+        {
+            <Panel Label="Action not found">
+                <EmptyState Title="Action not found" Text="This action record does not exist, or its link is not valid.">
+                    <Action><Button Href="@ActionRoutes.List">Go to Actions</Button></Action>
+                </EmptyState>
+            </Panel>
+            <form @formname="save" @onsubmit="SaveAsync" hidden></form>
+            <form @formname="decide" @onsubmit="DecideAsync" hidden></form>
+        }
+    </div>
+}
+else
+{
+    var review = detail.Review;
+    var revision = review.CurrentRevision;
+    var concerns = review.UnresolvedConcerns;
+    <TopBarTitle Crumbs="Crumbs" />
+    <div class="content">
+        <PageHeader Title="@revision.Headline" Meta="HeaderMeta(review.CurrentStatus, concerns.Length)" />
+
+        @if (error is not null)
+        {
+            <Notice Tone="Tone.Bad">@error</Notice>
+        }
+        @if (statusMessage is not null)
+        {
+            <Notice Tone="@(isConflict ? Tone.Warn : Tone.Ok)" Dismissible="@(!isConflict)">@statusMessage</Notice>
+        }
+        @if (revision.AuthorKind == ReviewAuthorKind.Analysis)
+        {
+            <Notice Tone="Tone.Warn">The AI drafter wrote this revision. It is not a human decision. Code built the sponsorships and their citations. Check the headline and the summary against them before you approve.</Notice>
+        }
+        @if (concerns.Length > 0)
+        {
+            <Notice Tone="Tone.Warn">Approval is blocked. @(concerns.Length == 1 ? "Resolve the open concern below first." : $"Resolve the {concerns.Length} open concerns below first.")</Notice>
+        }
+
+        @if (isDraftConflict && Input is not null)
+        {
+            <Panel Title="Compare the latest saved revision with your wording" Id="conflict-compare" Padded="true">
+                <div class="split">
+                    <RecordView Headline="@($"Saved revision {revision.RevisionNumber}: {revision.Headline}")" Summary="@revision.Summary" />
+                    <RecordView Headline="@($"Your wording: {Input.Headline}")" Summary="@Input.Summary" />
+                </div>
+                <p class="muted small">The form still holds your wording. Saving again makes a new revision on top of the latest saved one.</p>
+            </Panel>
+        }
+
+        <Panel Title="Change since the last approval" Id="change" Padded="true">
+            @if (review.LastApprovedRevision is not { } approved)
+            {
+                <p class="muted small">No revision is approved yet. Review the whole record.</p>
+            }
+            else if (approved.RevisionNumber == revision.RevisionNumber)
+            {
+                <p class="muted small">This revision is the approved revision.</p>
+            }
+            else if (review.IsSponsorshipOnly)
+            {
+                var changes = revision.SponsorshipChangesSince(approved);
+                <p class="small">Only the sponsorships changed since approved revision @approved.RevisionNumber. The headline, the summary, and the other bill facts are the same.</p>
+                @ChangeList("Added", changes.Added)
+                @ChangeList("Changed", changes.Changed)
+                @ChangeList("No longer listed", changes.Removed)
+            }
+            else
+            {
+                <div class="split">
+                    <RecordView Headline="@($"Approved revision {approved.RevisionNumber}: {approved.Headline}")" Summary="@approved.Summary" Facts="FactsOf(approved)" />
+                    <RecordView Headline="@($"Revision {revision.RevisionNumber}: {revision.Headline}")" Summary="@revision.Summary" Facts="FactsOf(revision)" />
+                </div>
+            }
+        </Panel>
+
+        <div class="split">
+            <Panel Label="Action record" Padded="true">
+                <TabSet Label="Action record views" Selected="@SelectedTab" Tabs="RecordTabs">
+                    <TabPane Key="saved" Label="@($"Saved revision {revision.RevisionNumber}")">
+                        <RecordView Id="saved-approval-target" Headline="@revision.Headline" Summary="@revision.Summary" Facts="FactsOf(revision)" />
+                    </TabPane>
+                    <TabPane Key="edit" Label="Edit wording">
+                        @if (Input is not null)
+                        {
+                            <form id="draft-form" class="form" method="post" @formname="save" @onsubmit="SaveAsync"
+                                  data-unsaved-form data-recovered-unsaved="@(hasUnsavedInput ? "true" : "false")">
+                                <AntiforgeryToken />
+                                <input type="hidden" name="expectedRevisionNumber" value="@revision.RevisionNumber" />
+                                <input type="hidden" name="idempotencyKey" value="@saveKey" />
+                                <Field Label="Headline" For="Input_Headline" Hint="@($"Up to {ActionDraftRevision.MaximumHeadlineLength} characters.")">
+                                    <input id="Input_Headline" class="headline" name="Input.Headline" value="@Input.Headline" maxlength="@ActionDraftRevision.MaximumHeadlineLength" aria-describedby="Input_Headline-hint" />
+                                </Field>
+                                <Field Label="Plain-language summary" For="Input_Summary" Hint="Say what each official did with the bill. A sponsorship is a proposal, not a law.">
+                                    <textarea id="Input_Summary" name="Input.Summary" maxlength="@ActionDraftRevision.MaximumSummaryLength" aria-describedby="Input_Summary-hint" value="@Input.Summary"></textarea>
+                                </Field>
+                                @if (revision.Suggestion is { } suggestion)
+                                {
+                                    <section class="stack" id="suggestion">
+                                        <h3>AI suggestion</h3>
+                                        <p class="muted small">The AI drafter wrote this text for the newest facts. Your text stays until you choose.</p>
+                                        <RecordView Headline="@suggestion.Headline" Summary="@suggestion.Summary" HeadingLevel="3" />
+                                        <div class="actions">
+                                            <Button Type="submit" name="Input.SuggestionAction" value="@SuggestionActions.Use">Use suggestion</Button>
+                                            <Button Type="submit" name="Input.SuggestionAction" value="@SuggestionActions.Dismiss">Dismiss</Button>
+                                        </div>
+                                    </section>
+                                }
+                                <div class="actions">
+                                    <Button Variant="ButtonVariant.Primary" Type="submit">Save revision @(revision.RevisionNumber + 1)</Button>
+                                    <span class="actions-hint">Approval applies only to saved wording. A person cannot edit the sponsorships.</span>
+                                </div>
+                            </form>
+                        }
+                    </TabPane>
+                </TabSet>
+            </Panel>
+
+            <Panel Title="Evidence" Id="evidence" Padded="true" Raised="true" Class="split-sticky">
+                <p class="small muted">Code built each citation from the saved Congress.gov text of @Moment.Day(revision.CandidateUpdateDate).</p>
+                <ul class="choices">
+                    @foreach (var sponsorship in revision.Sponsorships)
+                    {
+                        <li>@Cited(sponsorship)</li>
+                    }
+                    @if (revision.PolicyAreaCitation is { } area)
+                    {
+                        <li><CitationQuote Label="Policy area" Quote="@Quote(area)" /></li>
+                    }
+                    @if (revision.SummaryCitation is { } summary)
+                    {
+                        <li><CitationQuote Label="CRS summary" Quote="@Quote(summary)" /></li>
+                    }
+                </ul>
+                <TechnicalDetails Items="TechnicalItems" />
+            </Panel>
+        </div>
+
+        <ReviewDecisionPanel RevisionNumber="revision.RevisionNumber" ReviewStateVersion="review.ReviewStateVersion" Status="review.CurrentStatus"
+                             Concerns="concerns" CanDecide="CanDecide" IdempotencyKey="@decisionKey" Note="@Decision?.Note" OnDecide="DecideAsync">
+            <Checklist>
+                <ul class="checklist">
+                    <li>Does the headline name only officials in the sponsorships?</li>
+                    <li>Does the summary match the cited sponsorship dates?</li>
+                    <li>Does the summary present a sponsorship as a proposal, not as a law?</li>
+                </ul>
+            </Checklist>
+        </ReviewDecisionPanel>
+
+        <ReviewHistoryPanel Entries="History" ViewerSubject="@actor.Subject" />
+    </div>
+}
+
+@code {
+    private RenderFragment ChangeList(string title, System.Collections.Immutable.ImmutableArray<ActionSponsorship> items) =>
+        @<text>
+            @if (!items.IsEmpty)
+            {
+                <section class="stack">
+                    <h3>@title</h3>
+                    <ul class="choices">
+                        @foreach (var sponsorship in items)
+                        {
+                            <li>@Cited(sponsorship)</li>
+                        }
+                    </ul>
+                </section>
+            }
+        </text>;
+
+    private RenderFragment Cited(ActionSponsorship sponsorship) =>
+        @<text>
+            @for (var index = 0; index < sponsorship.Citations.Length; index++)
+            {
+                <CitationQuote Label="@(index == 0 ? Describe(sponsorship) : "Also cited")" Quote="@Quote(sponsorship.Citations[index])" />
+            }
+        </text>;
+
+    private RenderFragment HeaderMeta(ReviewStatus status, int concerns) =>
+        @<text>
+            <StatusBadge Tone="DraftStatusDisplay.Tone(status)" Text="@DraftStatusDisplay.Label(status, concerns)" />
+            <span class="muted small">@ActionLabels.Bill(Revision), revision @Revision.RevisionNumber, saved @Moment.Full(Revision.CreatedAtUtc)</span>
+        </text>;
+}

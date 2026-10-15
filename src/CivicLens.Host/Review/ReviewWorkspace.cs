@@ -1,4 +1,5 @@
 using System.Net;
+using CivicLens.Application.Actions;
 using CivicLens.Application.Activity;
 using CivicLens.Application.Analysis;
 using CivicLens.Application.Collection;
@@ -7,6 +8,7 @@ using CivicLens.Application.Publication;
 using CivicLens.Application.Issues;
 using CivicLens.Application.Review;
 using CivicLens.Application.Statements;
+using CivicLens.Infrastructure.Actions;
 using CivicLens.Infrastructure.Analysis;
 using CivicLens.Infrastructure.Documents;
 using CivicLens.Infrastructure.Collection;
@@ -22,6 +24,7 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 
 namespace CivicLens.Host.Review;
@@ -215,7 +218,9 @@ internal static class ReviewWorkspace
         services.AddScoped<ListDocumentChangeReviews>();
         services.AddScoped<ListEligibleDocumentComparisons>();
         services.AddScoped<GetReviewOverview>();
-        ConfigureStatementReview(services, connectionString);
+        var contexts = AnalysisDbContextFactory.Create(connectionString);
+        ConfigureStatementReview(services, contexts);
+        ConfigureActionReview(services, contexts);
         var collection = ReviewCollectionSettings.FromEnvironment();
         if (collection is null)
         {
@@ -234,9 +239,8 @@ internal static class ReviewWorkspace
         }
     }
 
-    private static void ConfigureStatementReview(IServiceCollection services, string connectionString)
+    private static void ConfigureStatementReview(IServiceCollection services, IDbContextFactory<CollectionAttemptDbContext> contexts)
     {
-        var contexts = AnalysisDbContextFactory.Create(connectionString);
         services.AddSingleton<IStatementReviewStore>(new PostgresStatementReviewStore(contexts));
         services.AddSingleton<IStatementDraftStore>(new PostgresStatementDraftStore(contexts));
         services.AddSingleton(Issues.Value);
@@ -248,6 +252,17 @@ internal static class ReviewWorkspace
         services.AddScoped<GetStatementReview>();
         services.AddScoped<ListStatementReviews>();
         services.AddScoped<ListStatementsNotInReview>();
+    }
+
+    private static void ConfigureActionReview(IServiceCollection services, IDbContextFactory<CollectionAttemptDbContext> contexts)
+    {
+        services.AddSingleton<IActionReviewStore>(new PostgresActionReviewStore(contexts));
+        services.AddScoped<SaveActionDraft>();
+        services.AddScoped<DecideActionReview>();
+        services.AddScoped<ApproveSponsorshipChanges>();
+        services.AddScoped<GetActionReview>();
+        services.AddScoped<ListActionReviews>();
+        services.AddScoped<GetActionReviewCounts>();
     }
 
     // The owner publish section needs a release directory and the configured official names.

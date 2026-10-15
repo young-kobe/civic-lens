@@ -22,8 +22,6 @@ internal static class ReviewWriteRules
     {
         if (currentRevisionNumber != expectedRevisionNumber || newRevisionNumber != expectedRevisionNumber + 1)
             throw new ReviewConflictException("The draft has a newer revision. Refresh before saving.");
-        if (currentRevisionNumber >= ReviewPolicy.MaximumRevisionsPerRecord)
-            throw new ArgumentException("Draft revision history has reached its configured limit.");
     }
 
     public static void RequireDecidable(int currentRevisionNumber, int reviewStateVersion, int expectedRevisionNumber,
@@ -33,7 +31,5 @@ internal static class ReviewWriteRules
             throw new ReviewConflictException("The draft has a newer revision. Refresh before deciding.");
         if (reviewStateVersion != expectedReviewStateVersion || decision.ReviewStateVersion != expectedReviewStateVersion + 1)
             throw new ReviewConflictException("Review state changed. Refresh before deciding.");
-        if (reviewStateVersion >= ReviewPolicy.MaximumDecisionsPerRecord)
-            throw new ArgumentException("Review decision history has reached its configured limit.");
     }
 }

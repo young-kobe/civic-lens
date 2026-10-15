@@ -15,8 +15,8 @@ namespace CivicLens.Tests.Application.Actions;
 
 public sealed class ActionDraftingStepTests
 {
+    private static readonly string UnnamedOutput = Output(headline: "A housing bill", summary: "A housing bill was introduced.");
     private static readonly CosponsorSpec MarkeyOriginal = new(Markey, "2025-01-04", Original: true);
-    private static readonly string MarkeyOutput = Output(headline: "Ed Markey cosponsored a housing bill", summary: "Ed Markey cosponsored a housing bill.");
     private static readonly SummarySpec Summary = new("00", "2025-01-03", "2025-01-05T10:00:00Z", "<p>It funds rent aid.</p>");
 
     [Fact]
@@ -67,12 +67,26 @@ public sealed class ActionDraftingStepTests
     public async Task AWithdrawnCosponsorshipIsListedAndCitedWithBothDates()
     {
         var world = Create(sponsors: [Stranger], cosponsorPages: [[new(Markey, "2025-01-04", Original: false, Withdrawn: "2025-02-10")]]);
-        var (store, model) = await RunAsync(world, new FakeActionDraftingModel().Draft(MarkeyOutput));
+        var (store, model) = await RunAsync(world, new FakeActionDraftingModel().Draft(UnnamedOutput));
 
         var markey = Assert.Single(Assert.Single(store.Revisions).Sponsorships);
         Assert.Equal((new DateOnly(2025, 1, 4), new DateOnly(2025, 2, 10)), (markey.SponsoredOn, markey.WithdrawnOn));
         Assert.Equal("Cosponsor: M000133, 2025-01-04, withdrawn 2025-02-10", world.Quote(Assert.Single(markey.Citations)));
-        Assert.Contains("\"withdrawnOn\": \"2025-02-10\"", model.Requests[0].UserPrompt, StringComparison.Ordinal);
+        Assert.Single(model.Requests);
+    }
+
+    [Fact]
+    public async Task ThePromptNamesOnlyTheSponsorsBecauseCodeOwnsTheCosponsorListThatSponsorshipChangesUpdate()
+    {
+        var world = Create(cosponsorPages: [[MarkeyOriginal with { Withdrawn = "2025-02-10" }]]);
+
+        var (_, model) = await RunAsync(world, new FakeActionDraftingModel().Draft(Output()));
+
+        var prompt = Assert.Single(model.Requests).UserPrompt;
+        Assert.Contains("Elizabeth Warren", prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("Markey", prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("2025-02-10", prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("cosponsor", prompt, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -122,31 +136,82 @@ public sealed class ActionDraftingStepTests
     }
 
     [Fact]
-    public async Task ANewSponsorshipDraftsAtOnceBecauseTheFingerprintChanged()
+    public async Task ANewSponsorshipAppendsAtOnceWithoutAModelCallAndKeepsTheTextBecauseCodeOwnsTheSponsorshipList()
     {
-        var before = Create();
-        var (first, _) = await RunAsync(before, new FakeActionDraftingModel().Draft(Output()));
-        var after = Create(cosponsorPages: [[MarkeyOriginal]]);
-        var model = new FakeActionDraftingModel().Draft(Output(headline: "Warren and Markey back a housing bill"));
+        var (first, _) = await RunAsync(Create(), new FakeActionDraftingModel().Draft(Output()));
+        var current = Assert.Single(first.Revisions);
+        var model = new FakeActionDraftingModel();
 
-        var (second, _) = await RunAsync(after, model, Assert.Single(first.Revisions), updatedAt: UpdatedAt.AddDays(1));
+        var (second, _) = await RunAsync(Create(cosponsorPages: [[MarkeyOriginal]]), model, current, updatedAt: UpdatedAt.AddDays(1));
 
+        Assert.Empty(model.Requests);
         var revision = Assert.Single(second.Revisions);
-        Assert.Equal((2, "Warren and Markey back a housing bill"), (revision.RevisionNumber, revision.Headline));
-        Assert.Single(model.Requests);
+        Assert.Equal((2, current.Headline, current.Summary, ActionTextOrigin.Model, null),
+            (revision.RevisionNumber, revision.Headline, revision.Summary, revision.TextOrigin, revision.Suggestion));
+        Assert.Equal([Markey, Warren], revision.Sponsorships.Select(item => item.BioguideId).Order());
+        Assert.NotEqual(current.Fingerprint, revision.Fingerprint);
+        Assert.Equal((State.Succeeded, null), (second.Entries[0].Status, second.Entries[0].ErrorCode));
+        var run = Assert.Single(second.Runs);
+        Assert.Equal((AnalysisRunOutcome.Bypassed, "sponsorshipsChanged", 0L), (run.Run.Outcome, run.Reason, run.Run.ChargedTokens));
     }
 
     [Fact]
-    public async Task ADifferentWithdrawalDateChangesTheFingerprint()
+    public async Task ASponsorshipChangeKeepsAPersonsTextAndTheSuggestionUnchangedWithItsRunId()
+    {
+        var (first, _) = await RunAsync(Create(), new FakeActionDraftingModel().Draft(Output()));
+        var suggestion = new ActionTextSuggestion("Model headline", "Model summary.", Assert.Single(first.Runs).Run.RunId,
+            Assert.Single(first.Revisions).Fingerprint);
+        var edited = ActionRevisionFixtures.PersonEditOf(Assert.Single(first.Revisions), "Edited headline", "Edited summary.") with
+        {
+            Suggestion = suggestion
+        };
+        var model = new FakeActionDraftingModel();
+
+        var (second, _) = await RunAsync(Create(cosponsorPages: [[MarkeyOriginal]]), model, edited, updatedAt: UpdatedAt.AddDays(1));
+
+        Assert.Empty(model.Requests);
+        var revision = Assert.Single(second.Revisions);
+        Assert.Equal(("Edited headline", "Edited summary.", ActionTextOrigin.Person, suggestion),
+            (revision.Headline, revision.Summary, revision.TextOrigin, revision.Suggestion));
+        Assert.Equal("civic-lens:analysis", revision.AuthorSubject);
+    }
+
+    [Fact]
+    public async Task ADifferentWithdrawalDateChangesTheFingerprintAndAppendsWithoutAModelCall()
     {
         var active = Create(sponsors: [Stranger], cosponsorPages: [[MarkeyOriginal]]);
         var withdrawn = Create(sponsors: [Stranger], cosponsorPages: [[MarkeyOriginal with { Withdrawn = "2025-02-10" }]]);
 
-        var (first, _) = await RunAsync(active, new FakeActionDraftingModel().Draft(MarkeyOutput));
-        var (second, model) = await RunAsync(withdrawn, new FakeActionDraftingModel().Draft(MarkeyOutput), Assert.Single(first.Revisions), updatedAt: UpdatedAt.AddDays(1));
+        var (first, _) = await RunAsync(active, new FakeActionDraftingModel().Draft(UnnamedOutput));
+        var (second, model) = await RunAsync(withdrawn, new FakeActionDraftingModel(), Assert.Single(first.Revisions), updatedAt: UpdatedAt.AddDays(1));
 
-        Assert.Single(second.Revisions);
+        Assert.Equal(new DateOnly(2025, 2, 10), Assert.Single(Assert.Single(second.Revisions).Sponsorships).WithdrawnOn);
+        Assert.Empty(model.Requests);
+    }
+
+    [Fact]
+    public async Task ANewSponsorCallsTheModelBecauseTheTextNamesTheSponsors()
+    {
+        var (first, _) = await RunAsync(Create(), new FakeActionDraftingModel().Draft(Output()));
+        var model = new FakeActionDraftingModel().Draft(Output(headline: "Warren and Markey sponsor a bill"));
+
+        var (second, _) = await RunAsync(Create(sponsors: [Warren, Markey]), model, Assert.Single(first.Revisions), updatedAt: UpdatedAt.AddDays(1));
+
         Assert.Single(model.Requests);
+        Assert.Equal("Warren and Markey sponsor a bill", Assert.Single(second.Revisions).Headline);
+    }
+
+    [Fact]
+    public async Task ASponsorshipChangeTogetherWithAnotherFactStillCallsTheModel()
+    {
+        var (first, _) = await RunAsync(Create(), new FakeActionDraftingModel().Draft(Output()));
+        var model = new FakeActionDraftingModel().Draft(Output(headline: "Warren and Markey back a renamed bill"));
+
+        var (second, _) = await RunAsync(Create(cosponsorPages: [[MarkeyOriginal]], title: "A renamed housing bill"), model,
+            Assert.Single(first.Revisions), updatedAt: UpdatedAt.AddDays(1));
+
+        Assert.Single(model.Requests);
+        Assert.Equal("Warren and Markey back a renamed bill", Assert.Single(second.Revisions).Headline);
     }
 
     [Fact]
@@ -186,7 +251,7 @@ public sealed class ActionDraftingStepTests
         var (_, model) = await RunAsync(Create(summaries: [Summary]), new FakeActionDraftingModel().Draft(Output()));
 
         using var document = JsonDocument.Parse(model.Requests[0].UserPrompt["Facts:\n".Length..]);
-        Assert.Equal(["bill", "trackedIssues", "officials", "summary"], document.RootElement.EnumerateObject().Select(item => item.Name));
+        Assert.Equal(["bill", "trackedIssues", "sponsors", "summary"], document.RootElement.EnumerateObject().Select(item => item.Name));
     }
 
     [Fact]
@@ -249,7 +314,7 @@ public sealed class ActionDraftingStepTests
     [Fact]
     public async Task APersonsTextIsKeptAndTheModelsNewTextBecomesASuggestion()
     {
-        var world = Create(cosponsorPages: [[MarkeyOriginal]]);
+        var world = Create(cosponsorPages: [[MarkeyOriginal]], title: "A renamed housing bill");
         var (first, _) = await RunAsync(Create(), new FakeActionDraftingModel().Draft(Output()));
         var edited = ActionRevisionFixtures.PersonEditOf(Assert.Single(first.Revisions), "Edited headline", "Edited summary.");
 
@@ -268,11 +333,11 @@ public sealed class ActionDraftingStepTests
     {
         var (first, _) = await RunAsync(Create(), new FakeActionDraftingModel().Draft(Output()));
         var edited = ActionRevisionFixtures.PersonEditOf(Assert.Single(first.Revisions), "Edited headline", "Edited summary.");
-        var (second, _) = await RunAsync(Create(cosponsorPages: [[MarkeyOriginal]]), new FakeActionDraftingModel().Draft(Output(headline: "One")), edited);
+        var (second, _) = await RunAsync(Create(title: "One title"), new FakeActionDraftingModel().Draft(Output(headline: "One")), edited);
         var keptByAnalysis = Assert.Single(second.Revisions);
         Assert.Equal("civic-lens:analysis", keptByAnalysis.AuthorSubject);
 
-        var third = Create(cosponsorPages: [[MarkeyOriginal, new(Warren, "2025-01-08")]]);
+        var third = Create(title: "Two title");
         var (last, _) = await RunAsync(third, new FakeActionDraftingModel().Draft(Output(headline: "Two", summary: "Two.")), keptByAnalysis);
 
         var revision = Assert.Single(last.Revisions);
@@ -308,12 +373,45 @@ public sealed class ActionDraftingStepTests
     }
 
     [Fact]
-    public async Task ListedOfficialsMayBeNamedAndAPartOfTheirNameIsNotAnotherPerson()
+    public async Task ASponsorMayBeNamedAndAPartOfTheirNameIsNotAnotherPerson()
     {
         var (store, _) = await RunAsync(Create(sponsors: [Warren], cosponsorPages: [[MarkeyOriginal]]),
-            new FakeActionDraftingModel().Draft(Output(summary: "Elizabeth Warren sponsored it. Ed Markey cosponsored it. Markey is a senator.")));
+            new FakeActionDraftingModel().Draft(Output(summary: "Elizabeth Warren sponsored it. Warren is a senator.")));
 
         Assert.Single(store.Revisions);
+    }
+
+    [Fact]
+    public async Task APersonWhoSponsorsAndCosponsorsMayBeNamedBecauseOnlyAPureCosponsorBelongsToCode()
+    {
+        var world = Create(sponsors: [Warren, Markey], cosponsorPages: [[MarkeyOriginal]]);
+
+        var (store, _) = await RunAsync(world, new FakeActionDraftingModel().Draft(Output(summary: "Ed Markey sponsored it.")));
+
+        Assert.Single(store.Revisions);
+    }
+
+    [Fact]
+    public async Task ASponsorWhoseNameContainsACosponsorsFullNameMayBeNamed()
+    {
+        var world = Create(sponsors: [ExtraBioguide(10)], cosponsorPages: [[new(ExtraBioguide(1), "2025-01-04", Original: true)]], extraPeople: 10);
+
+        var (store, _) = await RunAsync(world, new FakeActionDraftingModel().Draft(Output(summary: "Extra Person 10 sponsored it.")));
+
+        Assert.Single(store.Revisions);
+    }
+
+    [Theory]
+    [InlineData("Ed Markey cosponsored a bill")]
+    [InlineData("Backed by ED MARKEY")]
+    public async Task TextThatNamesATrackedCosponsorIsRejectedBecauseCodeOwnsTheCosponsorList(string headline)
+    {
+        var model = new FakeActionDraftingModel().Draft(Output(headline: headline)).Draft(Output());
+
+        var (store, _) = await RunAsync(Create(sponsors: [Warren], cosponsorPages: [[MarkeyOriginal]]), model);
+
+        Assert.Contains("The headline names \"Ed Markey\", a cosponsor", model.Requests[1].UserPrompt, StringComparison.Ordinal);
+        Assert.Equal([AnalysisRunOutcome.OutputRejected, AnalysisRunOutcome.Drafted], store.Runs.Select(run => run.Run.Outcome));
     }
 
     [Theory]
@@ -548,7 +646,7 @@ public sealed class ActionDraftingStepTests
     public async Task TheRevisionFollowsTheCurrentRevisionNumberAndNeverTheModelsChoice()
     {
         var (first, _) = await RunAsync(Create(), new FakeActionDraftingModel().Draft(Output()));
-        var (second, _) = await RunAsync(Create(cosponsorPages: [[MarkeyOriginal]]), new FakeActionDraftingModel().Draft(Output()), Assert.Single(first.Revisions));
+        var (second, _) = await RunAsync(Create(title: "A renamed housing bill"), new FakeActionDraftingModel().Draft(Output()), Assert.Single(first.Revisions));
 
         Assert.Equal(2, Assert.Single(second.Revisions).RevisionNumber);
     }
@@ -636,7 +734,7 @@ public sealed class ActionDraftingStepTests
     {
         var world = Create(sponsors: [Stranger], cosponsorPages: [[new(Markey, "2025-01-04", Original: true, Withdrawn: "2025-02-10"), new(Markey, "2025-02-20")]]);
 
-        var (store, _) = await RunAsync(world, new FakeActionDraftingModel().Draft(MarkeyOutput));
+        var (store, _) = await RunAsync(world, new FakeActionDraftingModel().Draft(UnnamedOutput));
 
         var entries = Assert.Single(store.Revisions).Sponsorships;
         Assert.Equal(2, entries.Length);
@@ -651,8 +749,8 @@ public sealed class ActionDraftingStepTests
         var once = Create(sponsors: [Stranger], cosponsorPages: [[MarkeyOriginal]]);
         var twice = Create(sponsors: [Stranger], cosponsorPages: [[MarkeyOriginal], [MarkeyOriginal]]);
 
-        var (single, _) = await RunAsync(once, new FakeActionDraftingModel().Draft(MarkeyOutput));
-        var (doubled, _) = await RunAsync(twice, new FakeActionDraftingModel().Draft(MarkeyOutput));
+        var (single, _) = await RunAsync(once, new FakeActionDraftingModel().Draft(UnnamedOutput));
+        var (doubled, _) = await RunAsync(twice, new FakeActionDraftingModel().Draft(UnnamedOutput));
 
         Assert.Single(Assert.Single(doubled.Revisions).Sponsorships);
         Assert.Equal(Assert.Single(single.Revisions).Fingerprint, Assert.Single(doubled.Revisions).Fingerprint);

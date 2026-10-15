@@ -194,8 +194,8 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
         Assert.Null(editor.QuerySelector("#decision-form button[value='Approve']"));
         Assert.NotNull(editor.QuerySelector("#decision-form button[value='WithdrawApproval']"));
         var history = editor.QuerySelector("[aria-labelledby='history'] tbody")!.TextContent;
-        Assert.Contains("Changes requested", history, StringComparison.Ordinal);
-        Assert.Contains("Cite the notice.", history, StringComparison.Ordinal);
+        Assert.Contains("The notice is cited. Resolved 1 concern.", history, StringComparison.Ordinal);
+        Assert.DoesNotContain("Cite the notice.", history, StringComparison.Ordinal);
     }
 
     [Fact]

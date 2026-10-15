@@ -24,11 +24,10 @@ Each item gives its outcome, what it depends on, and where the design lives. Pre
 
 ### Now
 
-- R-05: Action review (action step 4): review pages, decisions, and the fast sponsorship-only review. Bulk approval is in R-19. Depends on: none stated. [Actions](architecture/actions.md#limits-and-planned-work)
-- R-07: Comparison and extraction saves lock one record after they verify and diff. Built with R-05. Depends on: none stated. [Documents](architecture/documents.md#limits-and-planned-work)
-- R-08: Parallel evidence processing with a configured degree. Built with R-05. Depends on: R-07. [Collection](architecture/collection.md#limits-and-planned-work)
+- R-07: Comparison and extraction saves lock one record after they verify and diff. Depends on: none stated. [Documents](architecture/documents.md#limits-and-planned-work)
+- R-08: Parallel evidence processing with a configured degree. Depends on: R-07. [Collection](architecture/collection.md#limits-and-planned-work)
 - R-09: Decide release growth and the search index. Depends on: none stated. It must come before R-10. [Publication](architecture/publication.md#limits-and-planned-work)
-- R-10: Action publication (action step 5). Depends on: R-05, R-09. [Actions](architecture/actions.md#limits-and-planned-work)
+- R-10: Action publication (action step 5). Depends on: R-09. [Actions](architecture/actions.md#limits-and-planned-work)
 
 ### Next
 
@@ -40,7 +39,7 @@ Each item gives its outcome, what it depends on, and where the design lives. Pre
 - R-16: Reviewed relationships between statements and actions, and timelines. Depends on: R-15. [Statements](architecture/statements.md#limits-and-planned-work)
 - R-17: Congressional Record articles as a statement connector. Depends on: R-16. [Actions](architecture/actions.md#limits-and-planned-work)
 - R-18: Engine policies for broad coverage: spending ceilings, backlog limits, source fairness, live reload, and a health view. Depends on: none stated. [Collection](architecture/collection.md#limits-and-planned-work)
-- R-19: Review volume tools, bulk approval included, and a clearer source-to-review path. Depends on: none stated. [Review](architecture/review.md#limits-and-planned-work)
+- R-19: Review volume tools beyond the sponsorship-only bulk approval of actions, and a clearer source-to-review path. Depends on: none stated. [Review](architecture/review.md#limits-and-planned-work)
 - R-20: Public search and filter pages. Depends on: none stated. [Publication](architecture/publication.md#limits-and-planned-work)
 - R-21: Process view of collection and AI stages from retained state. Depends on: none stated. [Host](architecture/host.md#limits-and-planned-work)
 - R-29: Verify the policy area names against the Congress.gov API; nothing shows this is done. Depends on: none stated. [Configuration](architecture/configuration.md#limits-and-planned-work)

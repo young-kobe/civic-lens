@@ -119,7 +119,7 @@ public sealed class PostgresStatementReviewStoreTests(PostgresCollection postgre
     }
 
     [Fact]
-    public async Task GetReadsTheAdmittingRevisionWithTheSameQueryCountForADraftedAndAnUndraftedCandidate()
+    public async Task GetReadsTheAdmittingRevisionWithNoExtraQueryForAnUndraftedCandidate()
     {
         var drafted = await ApprovableAsync();
         var undrafted = await CandidateAsync();
@@ -135,8 +135,8 @@ public sealed class PostgresStatementReviewStoreTests(PostgresCollection postgre
         await counted.GetAsync(undrafted, default);
 
         Assert.NotNull(read!.ConfigurationRevision);
-        Assert.Equal(draftedReads, counter.ReadCount);
-        Assert.InRange(counter.ReadCount, 1, 9);
+        Assert.InRange(counter.ReadCount, 1, draftedReads);
+        Assert.InRange(draftedReads, 1, 9);
     }
 
     [Fact]
@@ -401,7 +401,7 @@ public sealed class PostgresStatementReviewStoreTests(PostgresCollection postgre
         var detail = (await get.ExecuteAsync(Owner, candidate))!;
         var notDrafted = (await get.ExecuteAsync(Owner, undrafted))!;
 
-        Assert.Equal((2, 2, 0, ReviewStatus.AwaitingReview), (detail.Review.CurrentRevision!.RevisionNumber, detail.Review.Revisions.Length,
+        Assert.Equal((2, 1, 0, ReviewStatus.AwaitingReview), (detail.Review.CurrentRevision!.RevisionNumber, detail.Review.Revisions.Length,
             detail.Review.ReviewStateVersion, detail.Review.CurrentStatus));
         Assert.Contains(Quote, detail.Extraction.Text);
         Assert.Equal("source", detail.SourceId);

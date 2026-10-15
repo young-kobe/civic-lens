@@ -41,10 +41,12 @@ internal sealed class ActionDraftQueueMapping : IAnalysisQueueMapping<ActionAnal
             throw new ArgumentException("A bypassed settlement needs its run.", nameof(settlement));
         if (settlement.Checkpoint is not ActionDraftCheckpoint { Revision: { } revision } checkpoint || settlement.Run is not { } run)
             return settlement;
-        if (run.Run.Outcome != AnalysisRunOutcome.Drafted) throw new ArgumentException("A revision needs its drafted run.", nameof(settlement));
+        if (run.Run.Outcome is not (AnalysisRunOutcome.Drafted or AnalysisRunOutcome.Bypassed))
+            throw new ArgumentException("A revision needs its drafted or bypassed run.", nameof(settlement));
         var refusal = await ActionDraftRows.AppendAnalysisRevisionAsync(db, revision, run.Run.RunId, cancellationToken);
         if (refusal is null) return settlement;
-        var discarded = run with { Run = run.Run with { Outcome = AnalysisRunOutcome.DraftDiscarded } };
+        var discarded = run.Run.Outcome == AnalysisRunOutcome.Drafted
+            ? run with { Run = run.Run with { Outcome = AnalysisRunOutcome.DraftDiscarded } } : run;
         if (refusal == ActionDraftErrorCodes.SupersededByNewerCandidate)
             return new(checkpoint with { ErrorCode = refusal, Revision = null }, discarded);
         row.RetryOfRunId = null;
