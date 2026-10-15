@@ -346,7 +346,7 @@ public sealed partial class PostgresBillStreamTests
         {
             settling = store.CheckpointAsync(ActionDraftCheckpoint.From(claim, Revision(candidate, 1)),
                 DraftedRun(runId, candidate), default);
-            await Task.Delay(300);
+            await HeldAdvisoryLock.WaitForWaiterAsync(connectionString, "civic-lens-action-review");
             Assert.False(settling.IsCompleted);
         }
 

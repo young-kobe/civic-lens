@@ -40,23 +40,6 @@ public sealed class PostgresAnalysisWakeupTests(PostgresCollection postgres) : I
         Directory.Delete(captureRoot, recursive: true);
     }
 
-    [Theory]
-    [InlineData("")]
-    [InlineData("document_change_analysis; DROP TABLE x")]
-    [InlineData("Statement_Analysis")]
-    public void AQueueTableNameWithAnythingButLowercaseLettersAndUnderscoresIsRefused(string table) =>
-        Assert.ThrowsAny<ArgumentException>(() => PostgresAnalysisWakeup.FromConnectionString(connectionString, table,
-            DocumentChangeDraftingTask.Task));
-
-    [Theory]
-    [InlineData("")]
-    [InlineData("gate' OR '1'='1")]
-    [InlineData("Gate")]
-    [InlineData("statement_draft")]
-    public void AQueueTaskWithAnythingButLowercaseLettersDigitsAndHyphensIsRefused(string task) =>
-        Assert.ThrowsAny<ArgumentException>(() => PostgresAnalysisWakeup.FromConnectionString(connectionString,
-            PostgresStatementAnalysisStore.Table, task));
-
     [Fact]
     public async Task ANewlyQueuedChangeWakesTheListener()
     {

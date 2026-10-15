@@ -22,6 +22,7 @@ namespace CivicLens.Tests.Infrastructure.Analysis;
 public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection postgres) : IAsyncLifetime
 {
     private const string PreviousMigration = "20261009130000_KeysetReads";
+    private static readonly TimeSpan HangGuard = TimeSpan.FromSeconds(10);
     private static readonly ReviewActor Owner = new("auth0|owner", ReviewRole.Owner);
     private static readonly DocumentChangeAnalysisCatalog Catalog = new([], []);
     private readonly string captureRoot = Path.Combine(Path.GetTempPath(), "civic-analysis-" + Guid.NewGuid().ToString("N"));
@@ -283,13 +284,15 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
         for (var index = 0; index < 4; index++) await seeder.SaveAsync($"Item {index} old.\n", $"Item {index} new.\n");
         var running = 0;
         var peak = 0;
+        var limitReached = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var model = new FakeDocumentChangeDraftingModel();
         for (var index = 0; index < 4; index++)
             model.Reply(async (request, token) =>
             {
                 var now = Interlocked.Increment(ref running);
                 InterlockedMax(ref peak, now);
-                await Task.Delay(300, token);
+                if (now == 3) limitReached.TrySetResult();
+                await limitReached.Task.WaitAsync(HangGuard, token);
                 Interlocked.Decrement(ref running);
                 var quote = request.UserPrompt.Contains("Item 0 new", StringComparison.Ordinal) ? "Item 0 new"
                     : request.UserPrompt.Contains("Item 1 new", StringComparison.Ordinal) ? "Item 1 new"
@@ -300,7 +303,7 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
 
         await Worker(model, new DocumentChangeAnalysisSettings(10_000_000, concurrency: 3)).ExecuteAsync(once: true);
 
-        Assert.InRange(peak, 2, 3);
+        Assert.Equal(3, peak);
         Assert.Equal(4, await ScalarAsync<long>("SELECT count(*) FROM document_change_drafts"));
         Assert.Equal(4, await ScalarAsync<long>("SELECT count(*) FROM document_change_drafts WHERE review_status = 'AwaitingReview'"));
     }
@@ -381,11 +384,11 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
     public async Task AnExpiredLeaseIsRecoveredAsAnInterruptedRunAndTheStaleOwnerIsFenced()
     {
         var comparison = await seeder.SaveAsync("Text A.\n", "Text B.\n");
-        var stale = (await analysis.TryClaimAsync(comparison.ComparisonId, TimeSpan.FromSeconds(1), default))!;
+        var stale = (await analysis.TryClaimAsync(comparison.ComparisonId, TimeSpan.FromMinutes(1), default))!;
         var runId = Guid.NewGuid().ToString("N");
         Assert.Equal(AnalysisReservation.Reserved,
             await analysis.ReserveAsync(stale, runId, new string('e', 64), 5_000, 100_000, default));
-        await Task.Delay(TimeSpan.FromSeconds(1.5));
+        await ExecuteAsync(connectionString, $"UPDATE document_change_analysis SET lease_expires_at = 0 WHERE comparison_id = '{comparison.ComparisonId}'");
 
         var current = await analysis.TryClaimAsync(comparison.ComparisonId, TimeSpan.FromMinutes(1), default);
 

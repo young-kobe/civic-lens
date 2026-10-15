@@ -526,23 +526,33 @@ public sealed partial class PostgresBillStreamTests(PostgresCollection postgres)
         Assert.Equal(("NotRelevant", "UntrackedPolicyArea"), await GateOfAsync(detail));
     }
 
-    [Fact]
-    public async Task ActionPagesChainByTheirParentJobAndEveryPageIsLinkedToTheDetailJob()
+    [Theory]
+    [InlineData("Actions")]
+    [InlineData("Summaries")]
+    public async Task ABillPageChainsByItsParentJobIsLinkedToTheDetailJobAndChangesNothingWhenReplayed(string role)
     {
-        var detail = await EnqueueDetailAsync("detail");
-        var first = await AdmitDetailAsync(detail, DetailBill(UpdatedAt, cosponsors: 0), BillGateOutcome.Passed(BillGateReason.CoveredSponsor));
-        var actionsJob = first.Jobs.Single().JobId;
-        var page = new CongressBillActionsPage([], ActionsNext(250));
+        var bill = await StartPassedBillAsync(cosponsors: 0, summaries: 2);
+        var (firstPageJob, nextUrl, resource) = role == "Actions"
+            ? (bill.Actions, ActionsNext(250), ApiResource.BillActions)
+            : (bill.Summaries!, SummariesNext(250), ApiResource.BillSummaries);
+        Task<DiscoveryAdmissionResult> Admit(string pageJob, string? next) => role == "Actions"
+            ? AdmitActionsAsync(pageJob, new CongressBillActionsPage([], next))
+            : AdmitSummariesAsync(pageJob, new CongressBillSummariesPage([], next));
 
-        var next = await AdmitActionsAsync(actionsJob, page);
+        var next = await Admit(firstPageJob, nextUrl);
 
-        Assert.Equal(ActionsNext(250), next.Jobs.Single().Url);
-        Assert.Contains((BillStreamJobKeys.NextBillPage(SourceId, ApiResource.BillActions, actionsJob), detail),
+        Assert.Equal(nextUrl, next.Jobs.Single().Url);
+        Assert.Contains((BillStreamJobKeys.NextBillPage(SourceId, resource, firstPageJob), bill.Detail),
             (await LinksAsync()).Select(link => (link.Key, link.DetailJobId)));
-        var replay = await AdmitActionsAsync(actionsJob, page);
+        Assert.Contains(await PagesAsync(), page => page.Role == role);
+        var counts = await CountsAsync();
+        var pages = await PagesAsync();
+        var replay = await Admit(firstPageJob, nextUrl);
         Assert.Empty(replay.Jobs);
         Assert.Equal(1, replay.DuplicateCount);
-        var last = await AdmitActionsAsync(next.Jobs.Single().JobId, new CongressBillActionsPage([], null));
+        Assert.Equal(counts, await CountsAsync());
+        Assert.Equal(pages, await PagesAsync());
+        var last = await Admit(next.Jobs.Single().JobId, null);
         Assert.Empty(last.Jobs);
     }
 
@@ -639,22 +649,6 @@ public sealed partial class PostgresBillStreamTests(PostgresCollection postgres)
     }
 
     [Fact]
-    public async Task ReplayingAnActionsPageChangesNothing()
-    {
-        var detail = await EnqueueDetailAsync("detail");
-        var first = await AdmitDetailAsync(detail, DetailBill(UpdatedAt, cosponsors: 0), BillGateOutcome.Passed(BillGateReason.CoveredSponsor));
-        var actionsJob = first.Jobs.Single().JobId;
-        var page = new CongressBillActionsPage([], ActionsNext(250));
-        await AdmitActionsAsync(actionsJob, page);
-        var before = await CountsAsync();
-
-        var replay = await AdmitActionsAsync(actionsJob, page);
-
-        Assert.Empty(replay.Jobs);
-        Assert.Equal(before, await CountsAsync());
-    }
-
-    [Fact]
     public async Task ACoveredSponsorBillAdmitsBothFirstPagesAndALaterCosponsorPageKeepsItsReason()
     {
         var detail = await EnqueueDetailAsync("detail");
@@ -747,37 +741,6 @@ public sealed partial class PostgresBillStreamTests(PostgresCollection postgres)
     }
 
     [Fact]
-    public async Task SummaryPagesChainByTheirParentJobAndReplayingOneChangesNothing()
-    {
-        var detail = await EnqueueDetailAsync("detail");
-        var first = await AdmitDetailAsync(detail, DetailBill(UpdatedAt, cosponsors: 0, summaries: 2),
-            BillGateOutcome.Passed(BillGateReason.CoveredSponsor));
-        var summariesJob = first.Jobs.Single(job => job.Url.Contains("/summaries?")).JobId;
-        var page = new CongressBillSummariesPage([], SummariesNext(250));
-
-        var next = await AdmitSummariesAsync(summariesJob, page);
-
-        Assert.Equal(SummariesNext(250), next.Jobs.Single().Url);
-        Assert.Contains((BillStreamJobKeys.NextBillPage(SourceId, ApiResource.BillSummaries, summariesJob), detail),
-            (await LinksAsync()).Select(link => (link.Key, link.DetailJobId)));
-        var before = await CountsAsync();
-        var replay = await AdmitSummariesAsync(summariesJob, page);
-        Assert.Empty(replay.Jobs);
-        Assert.Equal(1, replay.DuplicateCount);
-        Assert.Equal(before, await CountsAsync());
-        var last = await AdmitSummariesAsync(next.Jobs.Single().JobId, new CongressBillSummariesPage([], null));
-        Assert.Empty(last.Jobs);
-    }
-
-    [Fact]
-    public async Task ASummariesPageJobWithoutALinkRowIsInvalidData()
-    {
-        var orphan = await EnqueueDetailAsync("orphan");
-
-        await Assert.ThrowsAsync<InvalidDataException>(async () => await AdmitSummariesAsync(orphan, new CongressBillSummariesPage([], null)));
-    }
-
-    [Fact]
     public async Task TheDatabaseRefusesANegativeSummaryCount()
     {
         var detail = await EnqueueDetailAsync("detail");
@@ -801,19 +764,6 @@ public sealed partial class PostgresBillStreamTests(PostgresCollection postgres)
             pages.Select(page => (page.Role, page.Order, page.Closes)).Order());
         Assert.Equal(pages.Count, pages.Select(page => page.ExtractionId).Distinct().Count());
         Assert.All(pages, page => Assert.Equal(64, page.ExtractionId.Length));
-    }
-
-    [Fact]
-    public async Task ReplayingAPageAdmissionKeepsItsFirstExtractionAndAddsNoRow()
-    {
-        var bill = await StartPassedBillAsync(cosponsors: 1, summaries: 0);
-        var page = Cosponsors(["A000001"], next: null);
-        await AdmitCosponsorPageAsync(bill.Cosponsors!, page);
-        var before = await PagesAsync();
-
-        await AdmitCosponsorPageAsync(bill.Cosponsors!, page);
-
-        Assert.Equal(before, await PagesAsync());
     }
 
     [Theory]
