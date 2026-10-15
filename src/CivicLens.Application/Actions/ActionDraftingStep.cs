@@ -86,7 +86,7 @@ public sealed class ActionDraftingStep(IActionDraftStore store, ActionBillReader
                 ActionDraftCheckpoint.From(attempt.Claim, result.Accepted!), cancellationToken),
             AnalysisLoopEnd.NotSent when result.Run is null =>
                 await attempt.CompleteAsync(State.Blocked, ActionDraftErrorCodes.OverByteCap, cancellationToken),
-            AnalysisLoopEnd.Exhausted or AnalysisLoopEnd.NotSent => await result.FailAsync(attempt, WrapWithReason, cancellationToken),
+            AnalysisLoopEnd.Exhausted or AnalysisLoopEnd.NotSent => await loop.FailAsync(result, cancellationToken),
             _ => result.Progress
         };
     }

@@ -50,4 +50,14 @@ public sealed class AnalysisValidationLoop<TRun, TAccepted>(Func<AnalysisRun, TR
             (number, previousRunId, request) = (number + 1, runId, retry);
         }
     }
+
+    public Task<bool> FailAsync(AnalysisLoopResult<TAccepted> result, CancellationToken cancellationToken)
+    {
+        if (result.End is not (AnalysisLoopEnd.Exhausted or AnalysisLoopEnd.NotSent) || result.Run is not { } run)
+            throw new InvalidOperationException("Only an exhausted loop or an unsent retry with its run can fail the entry.");
+        var errorCode = AnalysisErrorCodes.ForOutcome(run.Outcome);
+        return result.End == AnalysisLoopEnd.Exhausted
+            ? attempt.SettleAsync(wrap(run), State.Failed, errorCode, cancellationToken)
+            : attempt.CompleteAsync(State.Failed, errorCode, cancellationToken);
+    }
 }

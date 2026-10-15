@@ -81,7 +81,7 @@ The loop returns one of four ends:
 - Exhausted: a second rejection, or a retry prompt over the cap.
 - Not sent: the first prompt is over the cap, or the resumed retry prompt is.
 
-The step decides what each end means. Document-change drafting fails the entry with the rejection code. Statement drafting does the same. The statement gate fails open.
+The step decides what each end means. The drafting steps for document changes, statements, and actions call `AnalysisValidationLoop.FailAsync`, which fails the entry with the rejection code. The statement gate fails open.
 
 ### Prompt and output
 
