@@ -196,7 +196,7 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
         await publications.ServeActiveAsync(async (directory, _) =>
         {
             rollback = publications.ActivateAsync(1, default);
-            await Task.Delay(TimeSpan.FromMilliseconds(300));
+            await HeldAdvisoryLock.WaitForWaiterAsync(connectionString, "civic-lens-document-change-review");
             Assert.False(rollback.IsCompleted);
             served.Add(directory);
         }, default);
@@ -255,7 +255,7 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
         await using var holder = await HeldAdvisoryLock.AcquireAsync(connectionString, "civic-lens-statement-review");
 
         var committing = publications.CommitAsync(Owner.Subject, StatementCommit(1, statement, reviewStateVersion: 1), "key", Hash(1), default);
-        await Task.Delay(400);
+        await HeldAdvisoryLock.WaitForWaiterAsync(connectionString, "civic-lens-statement-review");
         Assert.False(committing.IsCompleted);
         await holder.DisposeAsync();
 
@@ -268,7 +268,7 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
         await using var holder = await HeldAdvisoryLock.AcquireAsync(connectionString, "civic-lens-document-change-review");
 
         var serving = publications.ServeActiveAsync((_, _) => Task.CompletedTask, default);
-        await Task.Delay(400);
+        await HeldAdvisoryLock.WaitForWaiterAsync(connectionString, "civic-lens-document-change-review");
         Assert.False(serving.IsCompleted);
         await holder.DisposeAsync();
 
