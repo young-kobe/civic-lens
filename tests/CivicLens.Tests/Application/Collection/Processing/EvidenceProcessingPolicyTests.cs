@@ -20,4 +20,21 @@ public sealed class EvidenceProcessingPolicyTests
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             EvidenceProcessingPolicy.ValidateLeaseDuration(TimeSpan.FromSeconds(seconds)));
     }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(4)]
+    public void ConcurrencyAcceptsInclusiveBounds(int concurrency)
+    {
+        Assert.Equal(concurrency, EvidenceProcessingPolicy.ValidateConcurrency(concurrency));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(5)]
+    [InlineData(-1)]
+    public void ConcurrencyRejectsValuesOutsideBounds(int concurrency)
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => EvidenceProcessingPolicy.ValidateConcurrency(concurrency));
+    }
 }

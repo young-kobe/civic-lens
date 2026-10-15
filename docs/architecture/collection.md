@@ -54,8 +54,10 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - A job without a configuration revision is never a root. Enforced by `CollectionJobDefinition.IsRoot`. Tests: `CollectionJobDefinitionTests.OnlyTheConfiguredUrlOfItsOwnRevisionMakesAPageJobARoot` and `JobSourceColumnsMigrationTests.OlderJobsGetTheSourceAndRootStatusThatTheWriterGivesNewJobs`.
 - Jobs written before the root columns existed get the root status that the writer gives a new job. Enforced by the `JobSourceColumns` migration. Test: `JobSourceColumnsMigrationTests.OlderJobsGetTheSourceAndRootStatusThatTheWriterGivesNewJobs`.
 - Discovery admits one job for each exact source and URL. Enforced by the primary key of `collection_candidate_jobs` and the `PostgresAdvisoryLock.CollectionJobs` key, which every admission holds. Test: `PostgresDiscoveryAdmissionTests.ConcurrentFeedAndHtmlAttemptsCreateOnlyOneJobForAnExactSourceUrlPair`.
-- A parked comparison becomes due once its predecessor is settled, and never before. Enforced by the settled-predecessor SQL that the eligible scan, the claim, and the worker check share in `PostgresEvidenceProcessingStore`. Tests: `PostgresEvidenceProcessingStoreTests.AnUnsettledPredecessorKeepsTheWaiterParkedAndUnclaimable` and `PostgresEvidenceProcessingStoreTests.APredecessorThatSettlesBetweenTheReadAndTheParkStillWakesAndReleasesTheWaiter`.
+- A parked comparison becomes due once its predecessor is settled, and never before. This holds when items run in parallel. Enforced by the settled-predecessor SQL that the eligible scan, the claim, and the worker check share in `PostgresEvidenceProcessingStore`. Tests: `PostgresEvidenceProcessingStoreTests.AnUnsettledPredecessorKeepsTheWaiterParkedAndUnclaimable` and `PostgresEvidenceProcessingStoreTests.APredecessorThatSettlesBetweenTheReadAndTheParkStillWakesAndReleasesTheWaiter`.
 - A processing checkpoint needs the current lease and fence. Enforced by `EvidenceProcessingLifecycle` and `ck_evidence_processing_lease`. Test: `PostgresEvidenceProcessingStoreTests.EnsureIsIdempotentAndCheckpointFencesReclaimedLease`.
+- The evidence degree stays between 1 and 4, and items run at once up to it. Enforced by `EvidenceProcessingPolicy.ValidateConcurrency` and `Parallel.ForEachAsync` in `EvidenceProcessingWorker`. Tests: `EvidenceProcessingWorkerConcurrencyTests.ItemsRunAtOnceUpToTheConfiguredDegreeAndNoFurther` and `EvidenceProcessingPolicyTests.ConcurrencyRejectsValuesOutsideBounds`.
+- Two workers never own one processing item. Enforced by the single-statement fenced claim. Test: `PostgresEvidenceProcessingStoreTests.CompetingClaimsHaveOneOwnerAndWorkOrdersByCaptureObservation`.
 
 ## Behavior
 
@@ -317,6 +319,8 @@ Collection state keeps its meaning: success means that verified collection evide
 
 **Worker.** `CollectionJobWorker` runs the pipeline in a separately launched process. It interleaves bounded collection pages with evidence processing through the same fenced handlers. The default page size is 20, with a maximum of 100. It drains runnable work before it waits for notifications or persisted retry, pacing, and ownership deadlines.
 
+**Parallel processing.** `EvidenceProcessingWorker` runs the eligible items of one pass in parallel, up to `CIVIC_LENS_EVIDENCE_CONCURRENCY`. The default is 2 and the maximum is 4. `EvidenceProcessingPolicy` owns these bounds. Each task claims its own item with the fenced claim. Several items for one URL stay correct, because a comparison parks until its predecessor settles. On shutdown each task releases its claim.
+
 `worker --once` admits due checks and drains the runnable stages, also downstream work released during the run. The worker requires `CIVIC_LENS_COLLECTION_CONFIG` and validates that configuration before it starts.
 
 **Leases.** Evidence processing shares Application-owned lease bounds of one second to ten minutes, for pipeline startup, processing startup, claims, and renewals. Renewal runs every third of the lease duration. Retry checkpoints carry a nonnegative delay of at most five minutes.
@@ -502,7 +506,6 @@ The shared wakeup and lease mechanics are in [Shared worker mechanics](../archit
 - Future wire changes need an explicit compatibility decision.
 - Browser rendering and OCR are deferred until a selected source needs them.
 - Planned engine policies: engine-wide spending ceilings, global backlog admission limits, weighted fairness for each source, live configuration reload, and a unified engine-health view. The current scheduler does not guarantee them. Broad coverage makes them MVP requirements.
-- Agreed upgrade ([R-08](../roadmap.md#now)): parallel evidence processing with a configured degree.
 - Agreed upgrade ([R-22](../roadmap.md#later)): ordered row locks in place of the single global lock of the job store. Measure lock waits on a bills-only collection run before the design.
 - Fix the remaining format and parser limits that the federal coverage found ([R-30](../roadmap.md#next)).
 - Planned: automatic discovery of official sources for a configured official, so that a new official needs no source entered by hand. Use the `fromDateTime` change check of the Congress.gov member list for it.

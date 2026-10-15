@@ -20,11 +20,10 @@ Exit criteria:
 
 ## Work queue
 
-Each item gives its outcome, what it depends on, and where the design lives. Present the design choices before building R-08 and R-22 only.
+Each item gives its outcome, what it depends on, and where the design lives. Present the design choices before building R-22 only.
 
 ### Now
 
-- R-08: Parallel evidence processing with a configured degree. Depends on: none stated. [Collection](architecture/collection.md#limits-and-planned-work)
 - R-10: Action publication (action step 5). Depends on: none stated. [Actions](architecture/actions.md#limits-and-planned-work)
 
 ### Next
@@ -61,6 +60,7 @@ Each item gives its outcome, what it depends on, and where the design lives. Pre
 - D-05: Classification ladder: the uncertainty signal for each tier, where the escalation policy and thresholds live, and the stronger model for the reasoning tier. [Analysis](architecture/analysis.md#limits-and-planned-work)
 - D-06: The Hetzner backup destination, chosen by cost and recovery needs. [Host](architecture/host.md#limits-and-planned-work)
 - D-07: How the static file server runs locally and in production, and the release retention policy. [Publication](architecture/publication.md#limits-and-planned-work)
+- D-08: Deployment topology: one cloud deployment, separate services, or services split across cloud providers, chosen by cost and operational needs. [Host](architecture/host.md#limits-and-planned-work)
 
 ## Product direction
 
