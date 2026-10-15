@@ -38,11 +38,8 @@ public sealed class StatementDraftingStep(IStatementDraftStore store, IStatement
         {
             AnalysisLoopEnd.Accepted => await attempt.SettleAsync(Wrap(result.Run!),
                 StatementDraftCheckpoint.From(attempt.Claim, result.Accepted!), cancellationToken),
-            AnalysisLoopEnd.Exhausted => await attempt.SettleAsync(Wrap(result.Run!), State.Failed,
-                AnalysisErrorCodes.ForOutcome(result.Run!.Outcome), cancellationToken),
             AnalysisLoopEnd.NotSent when result.Run is null => await BypassAsync(attempt, evidence, cancellationToken),
-            AnalysisLoopEnd.NotSent => await attempt.CompleteAsync(State.Failed, AnalysisErrorCodes.ForOutcome(result.Run!.Outcome),
-                cancellationToken),
+            AnalysisLoopEnd.Exhausted or AnalysisLoopEnd.NotSent => await loop.FailAsync(result, cancellationToken),
             _ => result.Progress
         };
     }

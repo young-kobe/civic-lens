@@ -102,13 +102,12 @@ public sealed class PostgresActionDraftStore : PostgresAnalysisStore<ActionDraft
 
     private static Expression<Func<ActionAnalysisRow, bool>> InView(ActionDraftView view) => view switch
     {
-        ActionDraftView.Pending => row => row.Status == State.Pending || row.Status == State.Running ||
-            row.Status == State.RetryWaiting || row.Status == State.WaitingForBudget,
+        ActionDraftView.Pending => AnalysisQueueStates.IsPending<ActionAnalysisRow>(),
         ActionDraftView.Drafted => row => row.Status == State.Succeeded && row.ErrorCode == null,
         ActionDraftView.Unchanged => row => row.Status == State.Succeeded && row.ErrorCode == ActionDraftErrorCodes.Unchanged,
         ActionDraftView.Superseded => row => row.Status == State.Succeeded && row.ErrorCode == ActionDraftErrorCodes.SupersededByNewerCandidate,
         ActionDraftView.NoTrackedOfficial => row => row.Status == State.Succeeded && row.ErrorCode == ActionDraftErrorCodes.NoTrackedOfficial,
-        _ => row => row.Status == State.Failed || row.Status == State.Blocked
+        _ => AnalysisQueueStates.IsFailed<ActionAnalysisRow>()
     };
 
     private static ActionDraftView ViewOf(State status, string? errorCode) => status switch
@@ -120,7 +119,7 @@ public sealed class PostgresActionDraftStore : PostgresAnalysisStore<ActionDraft
             ActionDraftErrorCodes.NoTrackedOfficial => ActionDraftView.NoTrackedOfficial,
             _ => ActionDraftView.Superseded
         },
-        State.Failed or State.Blocked => ActionDraftView.Failed,
+        var failed when AnalysisQueueStates.IsFailed(failed) => ActionDraftView.Failed,
         _ => ActionDraftView.Pending
     };
 }

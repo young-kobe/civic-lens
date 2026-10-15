@@ -12,16 +12,17 @@ public static class CollectionJobLifecycle
         var outcome = receipt.Outcome switch
         {
             CollectionOutcome.Captured or CollectionOutcome.NotModified => CollectionJobAttemptOutcome.Succeeded,
-            CollectionOutcome.Deferred or CollectionOutcome.Failed when IsRetryable(receipt) => CollectionJobAttemptOutcome.RetryableFailure,
+            CollectionOutcome.Deferred or CollectionOutcome.Failed when IsRetryable(
+                receipt.Outcome == CollectionOutcome.Deferred, receipt.FailureCode?.ToString(), receipt.Response?.StatusCode) => CollectionJobAttemptOutcome.RetryableFailure,
             _ => CollectionJobAttemptOutcome.PermanentFailure
         };
         return new CollectionAttemptResolution(outcome, receipt, receipt.FailureCode?.ToString(),
             ToRetryDelay(receipt.RetryAfterSeconds), receipt.RobotsCrawlDelayMilliseconds);
     }
 
-    public static bool IsRetryable(CollectionResult receipt) => receipt.Outcome == CollectionOutcome.Deferred ||
-        receipt.FailureCode is CollectionFailureCode.TransportError or CollectionFailureCode.Timeout or
-            CollectionFailureCode.IncompleteResponse || receipt.Response?.StatusCode is >= 500 and <= 599;
+    private static bool IsRetryable(bool deferred, string? failureCode, int? statusCode) => deferred ||
+        failureCode is nameof(CollectionFailureCode.TransportError) or nameof(CollectionFailureCode.Timeout) or
+            nameof(CollectionFailureCode.IncompleteResponse) || statusCode is >= 500 and <= 599;
 
     public static CollectionAttemptResolution Resolve(StoredCollectionAttempt retained)
     {
@@ -36,9 +37,7 @@ public static class CollectionJobLifecycle
             DeferredAttemptResult deferred => deferred.FailureCode,
             _ => "UnknownImportedOutcome"
         };
-        var retryable = attempt is DeferredAttemptResult ||
-            failureCode is nameof(CollectionFailureCode.TransportError) or nameof(CollectionFailureCode.Timeout) or
-                nameof(CollectionFailureCode.IncompleteResponse) || attempt.Response?.StatusCode is >= 500 and <= 599;
+        var retryable = IsRetryable(attempt is DeferredAttemptResult, failureCode, attempt.Response?.StatusCode);
         TimeSpan? delay = attempt is DeferredAttemptResult deferredAttempt ? deferredAttempt.RetryDelay : null;
         return new CollectionAttemptResolution(retryable ? CollectionJobAttemptOutcome.RetryableFailure :
             CollectionJobAttemptOutcome.PermanentFailure, null, failureCode, delay,

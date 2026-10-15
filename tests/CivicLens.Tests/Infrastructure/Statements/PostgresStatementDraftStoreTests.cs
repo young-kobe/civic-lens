@@ -161,6 +161,23 @@ public sealed class PostgresStatementDraftStoreTests(PostgresCollection postgres
     }
 
     [Fact]
+    public async Task ThePendingAndFailedViewsFilterInTheDatabaseByTheSharedStateSets()
+    {
+        var rejected = await PassedCandidateAsync(Article + " one", "https://example.test/pages/one");
+        var waiting = await PassedCandidateAsync(Article + " two", "https://example.test/pages/two");
+        var model = new FakeStatementDraftingModel().Draft("not json").Draft(Output(quotes: ["a rent freeze"]))
+            .Fail(AnalysisModelFailure.RateLimited);
+        await DraftingWorker(model).ExecuteAsync(once: true);
+        var list = new ListStatementAnalyses<StatementDraftRun, StatementDraftView, StatementDraftListItem>(drafts);
+
+        var failed = await list.ExecuteAsync(Owner, StatementDraftView.Failed, 10);
+        var pending = await list.ExecuteAsync(Owner, StatementDraftView.Pending, 10);
+
+        Assert.Equal(rejected, Assert.Single(failed).CandidateId);
+        Assert.Equal(waiting, Assert.Single(pending).CandidateId);
+    }
+
+    [Fact]
     public async Task TheDatabaseRefusesAnAiRevisionThatHasNoRun()
     {
         var candidate = await PassedCandidateAsync();
