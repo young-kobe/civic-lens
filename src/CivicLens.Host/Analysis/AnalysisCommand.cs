@@ -12,19 +12,18 @@ public static class AnalysisCommand
 
     public static bool Matches(string[] args) => args is ["analyses", ..];
 
-    public static async Task<int> ExecuteAsync(string[] args, RequeueAnalyses<AnalysisRun> requeue,
+    public static Task<int> ExecuteAsync(string[] args, RequeueAnalyses<AnalysisRun> requeue,
         GetDocumentChangeReviewOutcomes outcomes, ReviewActor owner,
-        CancellationToken cancellationToken)
-    {
-        try
+        CancellationToken cancellationToken) =>
+        OwnerCommand.RunAsync(async () =>
         {
             switch (args)
             {
                 case ["analyses", "requeue", "--all"]:
-                    Write(await requeue.ExecuteAsync(owner, null, cancellationToken));
+                    CommandOutput.Write(new { requeued = await requeue.ExecuteAsync(owner, null, cancellationToken) });
                     return 0;
                 case ["analyses", "requeue", var comparisonId]:
-                    Write(await requeue.ExecuteAsync(owner, comparisonId, cancellationToken));
+                    CommandOutput.Write(new { requeued = await requeue.ExecuteAsync(owner, comparisonId, cancellationToken) });
                     return 0;
                 case ["analyses", "metrics"]:
                     WriteMetrics(await outcomes.ExecuteAsync(owner, cancellationToken));
@@ -33,23 +32,10 @@ public static class AnalysisCommand
                     Console.Error.WriteLine(Usage);
                     return 2;
             }
-        }
-        catch (ArgumentException exception)
-        {
-            Console.Error.WriteLine(exception.Message);
-            return 2;
-        }
-        catch (UnauthorizedAccessException)
-        {
-            Console.Error.WriteLine("The configured actor is not the owner.");
-            return 2;
-        }
-    }
-
-    private static void Write(int requeued) => Console.WriteLine(JsonSerializer.Serialize(new { requeued }));
+        });
 
     private static void WriteMetrics(ImmutableArray<DocumentChangeReviewOutcomes> outcomes) =>
-        Console.WriteLine(JsonSerializer.Serialize(new
+        CommandOutput.Write(new
         {
             promptVersions = outcomes.Select(item => new
             {
@@ -62,5 +48,5 @@ public static class AnalysisCommand
                 item.AwaitingReview,
                 fieldEdits = item.FieldEdits.ToDictionary(pair => JsonNamingPolicy.CamelCase.ConvertName(pair.Key.ToString()), pair => pair.Value)
             })
-        }, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+        });
 }
