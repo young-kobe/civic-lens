@@ -1,9 +1,9 @@
 using CivicLens.Application.Review;
 using CivicLens.Core.Review;
 
-namespace CivicLens.Application.Statements;
+namespace CivicLens.Application.Analysis;
 
-public sealed class ListStatementAnalyses<TRun, TView, TItem>(IStatementQueueStore<TRun, TView, TItem> store)
+public sealed class ListAnalyses<TRun, TView, TItem>(IAnalysisQueueStore<TRun, TView, TItem> store)
     where TRun : class
     where TView : struct, Enum
 {

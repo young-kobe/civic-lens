@@ -1,8 +1,6 @@
-using CivicLens.Application.Analysis;
+namespace CivicLens.Application.Analysis;
 
-namespace CivicLens.Application.Statements;
-
-public interface IStatementQueueStore<TRun, TView, TItem> : IAnalysisQueue<TRun>
+public interface IAnalysisQueueStore<TRun, TView, TItem> : IAnalysisQueue<TRun>
     where TRun : class
     where TView : struct, Enum
 {

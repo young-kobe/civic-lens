@@ -1,11 +1,11 @@
 using System.Globalization;
 using CivicLens.Application.Actions;
 using CivicLens.Core.Review;
-using CivicLens.Host.Statements;
+using CivicLens.Host.Analysis;
 
 namespace CivicLens.Host.Actions;
 
-internal sealed class ActionCommand(StatementQueueCommands<ActionDraftRun, ActionDraftView, ActionDraftListItem> drafts,
+internal sealed class ActionCommand(AnalysisQueueCommands<ActionDraftRun, ActionDraftView, ActionDraftListItem> drafts,
     RequeueBlockedActionDrafts requeueBlocked, ReviewActor owner)
 {
     private const string Usage = "Use actions draft status, actions draft list [drafted|unchanged|superseded|no-official|pending|failed] [limit], " +

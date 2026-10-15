@@ -65,7 +65,7 @@ The step runs on the shared analysis owners: `AnalysisWorker<TRun>`, `AnalysisVa
 
 `BillGate.TrackedIssueIdsFor` maps a policy area to the issues that are active on a day. The bill gate and drafting both call it. `CollectionConfiguration.CoveredBioguidePeopleOf` lists the covered people who have a bioguide ID. `ApiResponseReader` reads the saved capture of a job, and `JobPreparation` shares it.
 
-The store port `IActionDraftStore` extends `IStatementQueueStore`. The owner commands therefore use the same generic handlers as statements.
+The store port `IActionDraftStore` extends `IAnalysisQueueStore`. The owner commands therefore use the shared queue handlers in [analysis](analysis.md#queue-and-lifecycle).
 
 ### Record identity
 
@@ -264,7 +264,5 @@ All are owner commands. Variables and examples are in [operations](../operations
 - The editor page has no Host test with a drafted record yet. The Host tests cover the list, the rail, and missing records.
 - The prompt does not include the candidate update date, and no page renders it yet.
 - Sponsorship changes draft at once. Measure how often an approved record gets a new revision within a few days. Add a waiting window only if that rate is high.
-- Move the generic queue handlers, such as `IStatementQueueStore` and `StatementQueueCommands`, into Application/Analysis.
-- Use one shared citation span type for document changes, statements, and actions, and unify naming across the analysis features.
 - After the first action slice, build in this order: House votes, reviewed relationships between statements and actions, then Congressional Record articles as a statement connector. Cosponsorship is cheap position-taking, so votes carry most of the signal about whether words match deeds. Floor speeches cover every member, including officials with no usable web source.
 - Offices and dated terms are a separate step before House votes. Senate votes need senate.gov data and a `lis_member_id` crosswalk, because Congress.gov has neither.

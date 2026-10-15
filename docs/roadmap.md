@@ -24,8 +24,6 @@ Each item gives its outcome, what it depends on, and where the design lives. Pre
 
 ### Now
 
-- R-11: One shared citation span type, unified analysis naming, and generic queue handlers in Application/Analysis. Depends on: none stated. [Actions](architecture/actions.md#limits-and-planned-work)
-
 ### Next
 
 - R-12: AI-drafted weekly briefs from reviewed records: evidence selection, cited drafting, corrections, review, and release assembly. Depends on: none stated. [Analysis](architecture/analysis.md#limits-and-planned-work)

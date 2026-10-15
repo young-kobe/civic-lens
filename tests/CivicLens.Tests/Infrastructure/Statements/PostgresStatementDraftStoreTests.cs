@@ -154,7 +154,7 @@ public sealed class PostgresStatementDraftStoreTests(PostgresCollection postgres
         await DraftingWorker(model).ExecuteAsync(once: true);
 
         var counts = await drafts.CountAsync(default);
-        var drafted = await new ListStatementAnalyses<StatementDraftRun, StatementDraftView, StatementDraftListItem>(drafts).ExecuteAsync(Owner, StatementDraftView.Drafted, 10);
+        var drafted = await new ListAnalyses<StatementDraftRun, StatementDraftView, StatementDraftListItem>(drafts).ExecuteAsync(Owner, StatementDraftView.Drafted, 10);
 
         Assert.Equal((1, 1, 0), (counts[StatementDraftView.Drafted], counts[StatementDraftView.Pending], counts[StatementDraftView.Failed]));
         Assert.Equal((null, "source"), (Assert.Single(drafted).Code, drafted[0].SourceId));
@@ -168,7 +168,7 @@ public sealed class PostgresStatementDraftStoreTests(PostgresCollection postgres
         var model = new FakeStatementDraftModel().Draft("not json").Draft(Output(quotes: ["a rent freeze"]))
             .Fail(AnalysisModelFailure.RateLimited);
         await DraftingWorker(model).ExecuteAsync(once: true);
-        var list = new ListStatementAnalyses<StatementDraftRun, StatementDraftView, StatementDraftListItem>(drafts);
+        var list = new ListAnalyses<StatementDraftRun, StatementDraftView, StatementDraftListItem>(drafts);
 
         var failed = await list.ExecuteAsync(Owner, StatementDraftView.Failed, 10);
         var pending = await list.ExecuteAsync(Owner, StatementDraftView.Pending, 10);

@@ -167,7 +167,7 @@ public sealed class PostgresStatementAnalysisStoreTests(PostgresCollection postg
         await Worker(model, Revision()).ExecuteAsync(once: true);
 
         var counts = await store.CountAsync(default);
-        var skipped = await new ListStatementAnalyses<StatementGateRun, StatementGateView, StatementGateListItem>(store).ExecuteAsync(Owner, StatementGateView.Skipped, 10);
+        var skipped = await new ListAnalyses<StatementGateRun, StatementGateView, StatementGateListItem>(store).ExecuteAsync(Owner, StatementGateView.Skipped, 10);
 
         Assert.Equal(1, counts[StatementGateView.Skipped]);
         Assert.Equal(1, counts[StatementGateView.Passed]);

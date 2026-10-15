@@ -1,9 +1,11 @@
+using CivicLens.Application.Analysis;
 using CivicLens.Application.Statements;
 using CivicLens.Core.Review;
+using CivicLens.Tests.Application.Statements;
 
-namespace CivicLens.Tests.Application.Statements;
+namespace CivicLens.Tests.Application.Analysis;
 
-public sealed class StatementAnalysisUseCaseTests
+public sealed class AnalysisQueueUseCaseTests
 {
     private static readonly ReviewActor Owner = new("auth0|owner", ReviewRole.Owner);
     private static readonly ReviewActor Reviewer = new("auth0|friend", ReviewRole.Reviewer);
@@ -58,10 +60,10 @@ public sealed class StatementAnalysisUseCaseTests
         Assert.Empty(report.Counts);
     }
 
-    private ListStatementAnalyses<StatementGateRun, StatementGateView, StatementGateListItem> List() => new(store);
+    private ListAnalyses<StatementGateRun, StatementGateView, StatementGateListItem> List() => new(store);
 
-    private GetStatementAnalysisRun<StatementGateRun, StatementGateView, StatementGateListItem> Run() => new(store);
+    private GetAnalysisRun<StatementGateRun, StatementGateView, StatementGateListItem> Run() => new(store);
 
-    private GetStatementAnalysisStatus<StatementGateRun, StatementGateView, StatementGateListItem> Status() =>
-        new(store, new Analysis.FakeAnalysisStatusStore());
+    private GetAnalysisStatus<StatementGateRun, StatementGateView, StatementGateListItem> Status() =>
+        new(store, new FakeAnalysisStatusStore());
 }

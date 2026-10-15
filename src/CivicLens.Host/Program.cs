@@ -219,9 +219,9 @@ try
         var (connectionString, owner) = OwnerCommand.ReadEnvironment();
         var contexts = AnalysisDbContextFactory.Create(connectionString);
         var gates = new PostgresStatementAnalysisStore(contexts);
-        var gateCommands = new StatementQueueCommands<StatementGateRun, StatementGateView, StatementGateListItem>(gates,
+        var gateCommands = new AnalysisQueueCommands<StatementGateRun, StatementGateView, StatementGateListItem>(gates,
             new PostgresAnalysisStatusStore(contexts, StatementGateTask.Task));
-        var draftCommands = new StatementQueueCommands<StatementDraftRun, StatementDraftView, StatementDraftListItem>(
+        var draftCommands = new AnalysisQueueCommands<StatementDraftRun, StatementDraftView, StatementDraftListItem>(
             new PostgresStatementDraftStore(contexts),
             new PostgresAnalysisStatusStore(contexts, StatementDraftTask.Task));
         var statements = new StatementCommand(gateCommands, draftCommands, new RegateStatementCandidates(gates),
@@ -235,7 +235,7 @@ try
         var (connectionString, owner) = OwnerCommand.ReadEnvironment();
         var contexts = AnalysisDbContextFactory.Create(connectionString);
         var draftStore = new PostgresActionDraftStore(contexts);
-        var draftCommands = new StatementQueueCommands<ActionDraftRun, ActionDraftView, ActionDraftListItem>(
+        var draftCommands = new AnalysisQueueCommands<ActionDraftRun, ActionDraftView, ActionDraftListItem>(
             draftStore, new PostgresAnalysisStatusStore(contexts, ActionDraftTask.Task));
         var actions = new ActionCommand(draftCommands, new RequeueBlockedActionDrafts(draftStore), owner);
         executing = true;
