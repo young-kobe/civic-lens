@@ -204,6 +204,12 @@ Action review uses the shared decision rules and review cycles in [review](revie
 
 "Use suggestion" saves the suggestion text and clears the suggestion. "Dismiss" saves the form text and clears the suggestion. The plain save keeps the suggestion. The forms use the static post-back pattern of the statement pages, and `ReviewRecordPage` maps the failures. The rail has an Actions link.
 
+### Publication
+
+An approved action record with no open concern publishes in a static release, like the other kinds. `ActionRecordLoader` owns the action kind for publish and the ready list. `PostgresActionReviewStore.GetForPublicationAsync` reads the selected drafts, their review cycles, and every extraction that their current revisions cite in one repeatable-read transaction. It checks each citation against its extraction before it returns.
+
+`PublishedActionBuilder` maps the current revision to `PublishedAction`. Each sponsorship shows the configured name of its official from the publication catalog. Each distinct cited extraction becomes one embedded source with its URL and observation time. The record and its search filters are in [publication](publication.md#release-content).
+
 ### Commands
 
 | Command | Effect |
@@ -244,6 +250,7 @@ All are owner commands. Variables and examples are in [operations](../operations
 | Review commands and reads | `src/CivicLens.Application/Actions/SaveActionDraft.cs`, `src/CivicLens.Application/Actions/DecideActionReview.cs`, `src/CivicLens.Application/Actions/ApproveSponsorshipChanges.cs`, `src/CivicLens.Application/Actions/GetActionReview.cs`, `src/CivicLens.Application/Actions/ListActionReviews.cs`, `src/CivicLens.Application/Actions/GetActionReviewCounts.cs`, `src/CivicLens.Application/Actions/IActionReviewStore.cs` |
 | Review store | `src/CivicLens.Infrastructure/Actions/PostgresActionReviewStore.cs`, `src/CivicLens.Infrastructure/Actions/Persistence/ActionReviewDecisionRow.cs` |
 | Review pages | `src/CivicLens.Host/Review/ActionList.razor`, `src/CivicLens.Host/Review/ActionEditor.razor`, `src/CivicLens.Host/Review/ActionLabels.cs`, `src/CivicLens.Host/Review/ActionRoutes.cs` |
+| Publication | `src/CivicLens.Application/Publication/ActionRecordLoader.cs`, `src/CivicLens.Application/Publication/PublishedActionBuilder.cs`, `src/CivicLens.Publication.Contracts/PublishedAction.cs`, `src/CivicLens.Host/Publication/PublishedActionPage.razor` |
 | Record ID hash | `src/CivicLens.Infrastructure/Collection/Jobs/PostgresCollectionJobStore.ActionCandidates.cs` |
 | Owner requeue of Blocked entries | `src/CivicLens.Application/Actions/RequeueBlockedActionDrafts.cs` |
 | CLI and composition | `src/CivicLens.Host/Actions/ActionCommand.cs`, `src/CivicLens.Host/Actions/ActionDraftComposition.cs`, `src/CivicLens.Host/Actions/ActionDraftConfiguration.cs` |
@@ -253,12 +260,11 @@ All are owner commands. Variables and examples are in [operations](../operations
 - Text drafted under the older prompt `action-draft-prompt-v1` names cosponsors and counts them. A cosponsor-only change copies that text unchanged. Only the dev database holds v1 text, and it resets before R-23.
 - The Changed list shows only the new value of an entry. It shows no before value for a person ID change or an original-flag change.
 - A cosponsor who is added and then removed between two approvals leaves no change list. The record then needs one normal approval, not bulk approval.
-- Action publication is not built. Decide release growth and the search index before it; see the [release limit](publication.md#limits-and-planned-work).
 - Action records can produce about 110 revisions a day, about half of them sponsorship changes on approved records. Those revisions copy the text and need no model call, so they stay sponsorship-only and go to bulk approval.
 - The editor page has no Host test with a drafted record yet. The Host tests cover the list, the rail, and missing records.
 - The prompt does not include the candidate update date, and no page renders it yet.
 - Sponsorship changes draft at once. Measure how often an approved record gets a new revision within a few days. Add a waiting window only if that rate is high.
-- After action publication, move the generic queue handlers, such as `IStatementQueueStore` and `StatementQueueCommands`, into Application/Analysis.
-- After action publication, use one shared citation span type for document changes, statements, and actions, and unify naming across the analysis features.
+- Move the generic queue handlers, such as `IStatementQueueStore` and `StatementQueueCommands`, into Application/Analysis.
+- Use one shared citation span type for document changes, statements, and actions, and unify naming across the analysis features.
 - After the first action slice, build in this order: House votes, reviewed relationships between statements and actions, then Congressional Record articles as a statement connector. Cosponsorship is cheap position-taking, so votes carry most of the signal about whether words match deeds. Floor speeches cover every member, including officials with no usable web source.
 - Offices and dated terms are a separate step before House votes. Senate votes need senate.gov data and a `lis_member_id` crosswalk, because Congress.gov has neither.

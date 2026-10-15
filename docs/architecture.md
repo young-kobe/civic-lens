@@ -39,9 +39,9 @@ Implemented:
 - AI drafting of bill action records
 - action review, with bulk approval of sponsorship-only revisions
 - the authenticated review workspace
-- static release publication
+- static release publication of document changes, statements, and actions
 
-Pending: live Auth0 tenant verification, production deployment, AI classification, correction and withdrawal releases, action publication, weekly briefs, and MCP. The [roadmap](roadmap.md) holds the order.
+Pending: live Auth0 tenant verification, production deployment, AI classification, correction and withdrawal releases, weekly briefs, and MCP. The [roadmap](roadmap.md) holds the order.
 
 ## Layers and dependency rules
 
@@ -61,7 +61,7 @@ Core holds domain invariants. Application holds use cases and the interfaces of 
 <!-- diagrams:start -->
 ### Collection to publication (target)
 
-Target workflow. Implemented: configured collection with durable jobs, discovery, and admission; the Congress.gov bill stream with its gate and action candidates; text extraction, history, and comparison; AI drafting of document-change accounts; the statement gate and statement drafting; AI drafting of bill action records; version-bound review of all three record kinds; and static release publication. Planned: action publication, classification, weekly briefs, and private and public MCP.
+Target workflow. Implemented: configured collection with durable jobs, discovery, and admission; the Congress.gov bill stream with its gate and action candidates; text extraction, history, and comparison; AI drafting of document-change accounts; the statement gate and statement drafting; AI drafting of bill action records; version-bound review of all three record kinds; and static release publication of all three. Planned: classification, weekly briefs, and private and public MCP.
 
 ```mermaid
 flowchart LR
