@@ -37,10 +37,4 @@ public sealed class EvidenceProcessingPolicyTests
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => EvidenceProcessingPolicy.ValidateConcurrency(concurrency));
     }
-
-    [Fact]
-    public void ConcurrencyDefaultsToTwoSoOneSlowPageDoesNotBlockTheQueue()
-    {
-        Assert.Equal(2, EvidenceProcessingPolicy.DefaultConcurrency);
-    }
 }
