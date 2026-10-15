@@ -25,8 +25,8 @@ public sealed class AnthropicActionDraftLiveTests
         var first = await model.DraftAsync(request, CancellationToken.None);
 
         Assert.Equal("end_turn", first.StopReason);
-        var resolution = ActionDraftResolver.Resolve(first.OutputJson!, evidence, snapshot, ["rent"], "housing", BillGateFixtures.Revision().Id,
-            new string('1', 32), DateTimeOffset.UnixEpoch);
+        var resolution = ActionDraftResolver.Resolve(first.OutputJson!,
+            new ActionDraftContext(evidence, snapshot, ["rent"], "housing", BillGateFixtures.Revision().Id), new string('1', 32), DateTimeOffset.UnixEpoch);
         Assert.True(resolution.IsAccepted, string.Join("; ", resolution.Errors));
     }
 }
