@@ -20,6 +20,19 @@ public sealed record PublishedDocumentChange
     public required DateTimeOffset ApprovedAtUtc { get; init; }
     public required DateTimeOffset FirstPublishedAtUtc { get; init; }
 
+    public PublishedRecordEntry ToEntry() => new()
+    {
+        Kind = PublishedRecordKind.DocumentChange,
+        RecordId = RecordId,
+        RevisionNumber = RevisionNumber,
+        Headline = Headline,
+        FirstPublishedAtUtc = FirstPublishedAtUtc,
+        Officials = Officials,
+        IssueIds = IssueIds,
+        SourceHost = After.Host,
+        EventDate = ChangeDate
+    };
+
     public void Validate()
     {
         if (!PublicationProtocol.IsRecordId(PublishedRecordKind.DocumentChange, RecordId) || RevisionNumber < 1 || string.IsNullOrWhiteSpace(Headline) ||

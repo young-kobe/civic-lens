@@ -6,4 +6,6 @@ public sealed record PublishedDocumentVersion
     public required string Url { get; init; }
     public required DateTimeOffset ObservedAtUtc { get; init; }
     public required string Text { get; init; }
+
+    internal string Host => new Uri(Url).Host;
 }

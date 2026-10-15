@@ -11,12 +11,15 @@ The publication feature turns approved revisions into immutable, cumulative stat
 - A newer draft never replaces published content automatically.
 - A release is cumulative. It holds the base release records plus explicit additions or replacements.
 - Carried records are hard links to the immutable files of the base release. Disk therefore grows with published records, not with the number of releases.
+- Each publish rebuilds only `release.json`, the index pages, and the assets. It reads the previous manifest once, under the 32 MB manifest cap, `PublicationProtocol.MaximumManifestBytes`. `PublicationProtocol.MaximumRecordsPerRelease` is the one owner of the record limit, which is 20,000. The database has no count check, because C# owns the rule.
 - Postgres records which release is active. The `current` link is only a copy for the static server, so a failed link swap never drops committed records.
 - Every publication write takes all three review locks in one fixed order, which prevents a deadlock. The order is in [advisory locks](../architecture.md#advisory-locks).
 - A release has no status column. `is_active` marks the one active release: a commit sets it on the new row and clears the old one, and rollback moves it.
 - Rollback is a CLI command only. The workspace has no rollback or activate control.
 - All releases are kept until a retention policy is agreed.
 - Host renders the shared Razor components to static HTML, so publication needs no new project.
+- Each manifest entry carries search filters, so search needs no record file reads. Each published record type owns the mapping in its `ToEntry` method. A filter that the kind has no fact for stays empty; publish never guesses it.
+- Release JSON uses relaxed escaping (`JavaScriptEncoder.UnsafeRelaxedJsonEscaping`), so non-ASCII letters and punctuation take UTF-8 bytes, not 6-byte `\uXXXX` escapes. This is safe because release JSON is fetched as JSON and never inlined in HTML or a script tag. Readers do not change.
 - Unreviewed proposals, internal reviewer notes, operational job details, and mutation controls stay private.
 - Public serving reads release contracts only. It never reads operational storage or private notes.
 
@@ -25,6 +28,10 @@ The publication feature turns approved revisions into immutable, cumulative stat
 Each line gives the rule, what enforces it, and the test that protects it. Cross-feature invariants are in [architecture](../architecture.md#invariants).
 
 - Only an approved record with no open concern publishes. Enforced by `PublishedRecordRules`. Test: `PublishReleaseTests.RejectsDraftsThatAreNotCleanlyApproved`.
+- A release holds at most `PublicationProtocol.MaximumRecordsPerRelease` records, and the manifest stays under the manifest cap at that count. Enforced by the `PublishRelease` record count check and manifest size check. Test: `PublishReleaseTests.RejectsMoreRecordsThanTheCapBeforeAnythingIsBuilt`, `PublishReleaseTests.AReleaseAtTheRecordLimitOfFilledStatementEntriesKeepsTheManifestUnderThreeQuartersOfTheManifestCap`, and `PublishReleaseTests.RefusesAManifestOverTheManifestCapAndStagesNothing`.
+- Manifest filters hold at most `PublishedRecordEntry.MaximumFilterValues` distinct, nonblank values, each at most `PublishedRecordEntry.MaximumFilterValueLength` characters. Enforced by `PublishedRecordEntry.Validate`, which `PublicationRelease.Validate` calls. Test: `PublicationReleaseTests.FiltersAreBoundedAndDistinctSoOneEntryCannotSwellTheManifest`.
+- An entry's filters come from the revision that the release publishes. Enforced by `PublishedDocumentChange.ToEntry` and `PublishedStatement.ToEntry`. Test: `PublishStatementTests.EachKindFillsItsSearchFiltersFromTheRevisionItPublishes` and `PublishStatementTests.ARepublishedStatementReplacesItsCarriedEntryInsteadOfDuplicatingIt`.
+- The precompressed manifests hold exactly the manifest bytes. Enforced by `PublishRelease`. Test: `PublishReleaseTests.PrecompressedManifestsHoldExactlyTheManifestBytesSoTheServerNeverSendsADifferentRelease`.
 - A commit holds the exact revision and review state version that the build read. Enforced by `PostgresPublicationStore`. Test: `PostgresPublicationStoreTests.ADecisionAfterTheBuildBlocksTheCommitBecauseApprovalMayHaveChanged`.
 - One release is active. Enforced by `IX_publication_releases_is_active`. Test: `PostgresPublicationStoreTests.EachCommitBecomesTheActiveReleaseSoAFailedLinkSwapCannotHideIt`.
 - Release numbers have no gaps. Enforced by `PostgresPublicationStore`. Test: `PostgresPublicationStoreTests.ReleaseNumbersMustFollowTheLatestCommittedOneWithoutGaps`.
@@ -44,7 +51,7 @@ A document-change record shows both versions, and observation history where need
 - Each document-change record carries the full extracted text of both versions, their source URLs, and their observation times. Changed regions are offsets into those texts.
 - A citation holds an extraction ID, UTF-16 offsets, and the quoted text. The contract rejects a quote that does not match its offsets.
 - Records show the approval date and the first-publication date. The release index shows the release date.
-- A release holds at most 2,000 records.
+- A release holds at most 20,000 records.
 - The index lists 50 records on each page, newest first. The pages are `index.html`, then `page-2.html` and so on, with relative previous and next links.
 - Officials appear by their configured name. Issues appear by their configured identifier.
 - Only the release manifest shows the schema version.
@@ -103,13 +110,28 @@ Withdrawing approval does not change published artifacts. The UI flags affected 
 
 The release builder renders public components to static HTML through `PublicPage`, `PublishedIndexPage`, and `PublishedRecordPage`. A release copies `assets/css/theme.css`, `assets/css/app.css`, `assets/js/theme.js`, `assets/js/app.js`, and the fonts. Pages also work without JavaScript. Shared components are described in [host](host.md#presentation).
 
+### Search
+
+Each index page has a search panel. It stays hidden until `app.js` runs, because search needs JavaScript. On the first input, the script fetches `release.json` once and fills the official, issue, and policy area lists from the entries. It matches headline text and filters by kind, official, issue, policy area, and a date range. A date filter matches the event date only, so a record without an event date never matches it. The panel shows the first 50 matches, each linked to its record page. Search reads only the release files, so it works without the operational application.
+
 ## Storage and contracts
 
 - The generated [publication schema](schema/publication.md) lists every table, column, key, check, index, and trigger.
 - Each release row lists its records as kind, record ID, and revision. A row written before kinds existed has no kind and counts as a document change.
 - The ready lists read the active row and match by kind, so a statement ID cannot hide a document change.
-- Schema version 2 adds the entry kind. Readers accept versions 1 and 2. A version 1 entry has no kind and means a document change. A version 1 release on disk can therefore still be the base of the next release.
-- New manifests use version 2. `src/CivicLens.Publication.Contracts/PublicationProtocol.cs` owns the version; see [Behavior versions](../architecture.md#behavior-versions).
+- Schema version 2 adds the entry kind. Readers accept versions 1 to 3. A version 1 entry has no kind and means a document change. A version 1 release on disk can therefore still be the base of the next release.
+- Schema version 3 adds the entry filters. An entry from version 1 or 2 has empty filters, and publish does not backfill them.
+
+| Filter | Document change | Statement | Planned action |
+|---|---|---|---|
+| `officials` (ID and configured name) | Officials | Speakers | Sponsor officials |
+| `issueIds` | Issue IDs | Issue IDs | Issue IDs |
+| `policyAreaIds` | Empty | Policy area IDs | Policy area |
+| `sourceHost` | Host of the after version URL | Host of the source URL | Host of the bill source URL |
+| `eventDate` | Evidenced change date, or empty | Evidenced statement date, or empty | Latest action date |
+
+- New manifests use version 3. `src/CivicLens.Publication.Contracts/PublicationProtocol.cs` owns the version; see [Behavior versions](../architecture.md#behavior-versions).
+- Each release also holds `release.json.gz` and `release.json.br`, at `PublicationProtocol.ManifestGzipPath` and `ManifestBrotliPath`. They compress the exact manifest bytes, so a static server can send them without compressing on each request.
 - A separate static file server serves the release root read-only. It has no access to operational storage.
 
 ## Code map
@@ -128,19 +150,25 @@ Release and rollback commands are in [operations](../operations.md#publish-a-sta
 ## Limits and planned work
 
 - Correction and withdrawal releases come later.
-- How the static file server runs locally is not decided.
+- How the static file server runs locally is not decided. It must send the precompressed manifest, for example Caddy `file_server { precompressed br gzip }` or nginx `gzip_static on`. Compression by the server is the fallback.
 - Issue, official, and briefing pages are planned. Readers will start with a weekly briefing and recent reviewed developments. Issue pages will connect related records across officials and institutions. Official pages will show dated statements, actions, and reviewed relationships.
-- Public search and filtering, timelines, expandable evidence, and shareable records are planned against published releases.
+- Search filter pages, timelines, expandable evidence, and shareable records are planned against published releases.
 - Public search is an MVP requirement. Readers search all published records from the public pages. Search reads the published release only, so it works while the operational application is down.
 - Search filters: record kind, official, issue, policy area, date range, and source. Filters are easy to combine and easy to clear. The page works at phone width.
 - Results show the kind, headline, officials, issues, and dates of each record, and link to the record page.
-- Record contracts must carry the fields that the filters need. The index design is pending decision [D-01](../roadmap.md#pending-decisions).
-- A release is rebuilt in full, and its 2,000-record limit is the one owner of that number. Action volume will pass that limit within weeks; see [D-02](../roadmap.md#pending-decisions).
+- Planned, not built: a source filter and filters that are easy to clear, on the R-20 filter pages.
+- Later, after the first MVP deploy: a public search service with its own Postgres database, fed from releases. It gives full-text search over the whole processed corpus.
+- Split the manifest by kind when it grows over 4 MB.
+- Measured entry sizes have two officials, two issues, two policy areas, a host, and a date. An 80-character headline gives 528 bytes. A 256-character punctuated headline with non-ASCII letters gives 731 bytes. Default escaping would make the second one 824 bytes. At 20,000 entries the worst realistic manifest takes about 14.6 MB, under three quarters of the 32 MB cap. An entry at the filter limits can take far more, about 2.3 KB with eight long issue IDs. `PublishRelease` refuses a manifest over the cap, so such a release fails before it stages anything.
+- Issue and policy area filters show raw IDs, because the manifest has no names for them. R-20 owns the fix.
+- After the first deploy, the public search service replaces the client search and the schema 3 filter fields. Delete them then.
+- Each release row stores `records_json`, about 2 MB at 20,000 records. Review queries expand the active one.
+- Rolling back the `DropReleaseCountCheck` migration fails while any release holds more than 2000 records.
 - A future live public Blazor deployment must read published releases only and stay separate from the operational application.
 - A future mobile client would read public release contracts through an API, not operational storage.
 - Public MCP will expose `search_records`, `get_record`, `get_official_timeline`, and `compare_document_versions`. It returns published data with IDs, citations, dates, review status, coverage caveats, and the release ID.
 - Public MCP cannot start collection, inference, or edits. It bounds and pages responses, limits requests, and accepts record IDs, not arbitrary fetch URLs. It treats source passages as untrusted attributed content.
-- Releases will also carry a bounded search index, built from the same explicit approved selection. The website and public MCP will share one release, and clients can pin it across calls.
+- Public MCP will search the same manifest entries as the website. The website and public MCP will share one release, and clients can pin it across calls.
 - Public MCP needs request compute, but never the local database or AI inference.
 - Local Postgres and capture files need coordinated backups and a tested restore. Production backup rules are in [host](host.md#limits-and-planned-work).
 - Retention must keep the evidence that published releases reference. Disposable captures follow an explicit policy, which is not agreed yet.

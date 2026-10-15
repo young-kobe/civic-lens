@@ -20,7 +20,7 @@ internal sealed class PreviousRelease
     {
         if (active is null) return new(null, []);
         var bytes = await releases.ReadFileAsync(active.DirectoryName, PublicationProtocol.ManifestPath,
-            PublicationProtocol.MaximumRecordFileBytes, cancellationToken);
+            PublicationProtocol.MaximumManifestBytes, cancellationToken);
         var manifest = JsonSerializer.Deserialize<PublicationRelease>(bytes, PublicationProtocol.JsonOptions)
             ?? throw new InvalidDataException("Release manifest is empty.");
         manifest.Validate();

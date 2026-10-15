@@ -15,6 +15,7 @@ internal sealed class FixedJobStore : ICollectionJobStore
     public int PageReads { get; private set; }
     public List<IReadOnlyCollection<string>> LatestReads { get; } = [];
     public int ActivityReads { get; private set; }
+    public Func<string, CancellationToken, Task<CollectionJobRecord?>>? Get { get; init; }
 
     public Task<CollectionJobPage> ListPageAsync(PageCursor? cursor, int limit, CancellationToken cancellationToken)
     {
@@ -37,7 +38,8 @@ internal sealed class FixedJobStore : ICollectionJobStore
 
     public Task<CollectionJobRecord> EnqueueAsync(ConfiguredCollectionSource source, string idempotencyKey, CancellationToken cancellationToken) => throw new NotSupportedException();
     public Task<CollectionJobRecord> EnqueueAsync(CollectionJobDefinition definition, string idempotencyKey, CancellationToken cancellationToken) => throw new NotSupportedException();
-    public Task<CollectionJobRecord?> GetAsync(string jobId, CancellationToken cancellationToken) => throw new NotSupportedException();
+    public Task<CollectionJobRecord?> GetAsync(string jobId, CancellationToken cancellationToken) =>
+        Get?.Invoke(jobId, cancellationToken) ?? throw new NotSupportedException();
     public Task<IReadOnlyList<CollectionJobRecord>> ListAsync(int limit, CancellationToken cancellationToken) => throw new NotSupportedException();
     public Task<CollectionJobRecord?> CancelAsync(string jobId, CancellationToken cancellationToken) => throw new NotSupportedException();
     public Task<CollectionJobClaim?> TryClaimAsync(string jobId, TimeSpan leaseDuration, CancellationToken cancellationToken) => throw new NotSupportedException();
