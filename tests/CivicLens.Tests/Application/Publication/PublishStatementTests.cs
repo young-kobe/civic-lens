@@ -37,6 +37,65 @@ public sealed class PublishStatementTests
     }
 
     [Fact]
+    public async Task EachKindFillsItsSearchFiltersFromTheRevisionItPublishes()
+    {
+        var scenario = new PublicationScenario();
+        var change = scenario.AddDraft('a', officialIds: ["mayor"]);
+        var changeItem = scenario.Reviews.Items[change];
+        var changeRevision = changeItem.Review.CurrentRevision with
+        {
+            ChangeDate = new DateOnly(2026, 1, 5),
+            ChangeDateEvidence = new(changeItem.After.ExtractionId, 6, 5)
+        };
+        scenario.Reviews.Items[change] = changeItem with
+        {
+            Review = changeItem.Review with { CurrentRevision = changeRevision, Revisions = [changeRevision] }
+        };
+        var statement = scenario.AddStatement('b');
+        var statementItem = scenario.Statements.Publishable[statement];
+        var statementRevision = statementItem.Review.CurrentRevision! with
+        {
+            StatementDate = new DateOnly(2026, 1, 7),
+            StatementDateEvidence = new(statementItem.Extraction.ExtractionId, 0, 5)
+        };
+        scenario.Statements.Publishable[statement] = statementItem with
+        {
+            Review = statementItem.Review with { CurrentRevision = statementRevision, Revisions = [statementRevision] }
+        };
+
+        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k",
+            new PublishedRecordReference(PublishedRecordKind.Statement, statement),
+            new PublishedRecordReference(PublishedRecordKind.DocumentChange, change)));
+
+        var records = ReadManifest(scenario, summary.DirectoryName).Records;
+        var changeEntry = records.Single(entry => entry.Kind == PublishedRecordKind.DocumentChange);
+        Assert.Equal(("mayor", "Mayor Example"), (Assert.Single(changeEntry.Officials).Id, changeEntry.Officials[0].Name));
+        Assert.Equal(["housing"], changeEntry.IssueIds);
+        Assert.Empty(changeEntry.PolicyAreaIds);
+        Assert.Equal("example.test", changeEntry.SourceHost);
+        Assert.Equal(new DateOnly(2026, 1, 5), changeEntry.EventDate);
+        var statementEntry = records.Single(entry => entry.Kind == PublishedRecordKind.Statement);
+        Assert.Equal(("mayor", "Mayor Example"), (Assert.Single(statementEntry.Officials).Id, statementEntry.Officials[0].Name));
+        Assert.Equal(["housing"], statementEntry.IssueIds);
+        Assert.Equal(["land-use"], statementEntry.PolicyAreaIds);
+        Assert.Equal("example.test", statementEntry.SourceHost);
+        Assert.Equal(new DateOnly(2026, 1, 7), statementEntry.EventDate);
+    }
+
+    [Fact]
+    public async Task ARecordWithoutAnEvidencedDateHasNoEventDateRatherThanAGuessedOne()
+    {
+        var scenario = new PublicationScenario();
+        var change = scenario.AddDraft('a');
+
+        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k", change));
+
+        var entry = Assert.Single(ReadManifest(scenario, summary.DirectoryName).Records);
+        Assert.Null(entry.EventDate);
+        Assert.Empty(entry.Officials);
+    }
+
+    [Fact]
     public async Task ARequestWithOnlyDocumentChangesNeverAsksTheStatementStoreBecauseItHasNothingToLoad()
     {
         var scenario = new PublicationScenario();
@@ -126,7 +185,7 @@ public sealed class PublishStatementTests
         var reference = new PublishedRecordReference(PublishedRecordKind.Statement, statement);
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1", reference));
         var review = scenario.Statements.Publishable[statement].Review;
-        var revised = review.CurrentRevision! with { RevisionNumber = 2 };
+        var revised = review.CurrentRevision! with { RevisionNumber = 2, IssueIds = ["transit"], PolicyAreaIds = ["transportation"] };
         var decisions = review.Decisions.Add(PublicationScenario.Decision(statement, 2, ReviewDecisionKind.Approve) with { RevisionNumber = 2 });
         scenario.Statements.Publishable[statement] = scenario.Statements.Publishable[statement] with
         {
@@ -143,6 +202,8 @@ public sealed class PublishStatementTests
 
         var entry = Assert.Single(ReadManifest(scenario, second.DirectoryName).Records);
         Assert.Equal(2, entry.RevisionNumber);
+        Assert.Equal(["transit"], entry.IssueIds);
+        Assert.Equal(["transportation"], entry.PolicyAreaIds);
         Assert.Empty(scenario.Releases.Links);
     }
 
@@ -205,9 +266,11 @@ public sealed class PublishStatementTests
             PublicationScenario.Request("k", scenario.AddDraft('a')));
 
         var manifest = ReadManifest(scenario, summary.DirectoryName);
-        Assert.Equal(2, manifest.SchemaVersion);
+        Assert.Equal(3, manifest.SchemaVersion);
         var carried = Assert.Single(manifest.Records, entry => entry.RecordId == old);
         Assert.Equal(PublishedRecordKind.DocumentChange, carried.Kind);
+        Assert.Empty(carried.IssueIds);
+        Assert.Null(carried.SourceHost);
         Assert.Contains(("seeded", PublicationProtocol.RecordDataPath(old)), scenario.Releases.Links);
     }
 

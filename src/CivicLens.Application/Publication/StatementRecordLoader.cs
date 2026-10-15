@@ -24,8 +24,7 @@ internal sealed class StatementRecordLoader(IStatementReviewStore statements, IR
                 review.Decisions, review.UnresolvedConcerns);
             PublishedRecordRules.RequireNotPublishedAt(PublishedRecordKind.Statement, candidateId, revision.RevisionNumber, previous);
             var record = builder.Build(addition, previous.Find(PublishedRecordKind.Statement, candidateId), now);
-            pending.Add(PendingRecord.Create(PublishedRecordKind.Statement, review.ReviewStateVersion, record, record.RecordId,
-                record.RevisionNumber, record.Headline, record.FirstPublishedAtUtc,
+            pending.Add(PendingRecord.Create(record.ToEntry(), review.ReviewStateVersion, record,
                 await renderer.RenderStatementAsync(record, cancellationToken)));
         }
         return pending;

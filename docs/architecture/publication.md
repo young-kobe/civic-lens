@@ -18,6 +18,7 @@ The publication feature turns approved revisions into immutable, cumulative stat
 - Rollback is a CLI command only. The workspace has no rollback or activate control.
 - All releases are kept until a retention policy is agreed.
 - Host renders the shared Razor components to static HTML, so publication needs no new project.
+- Each manifest entry carries search filters, so search needs no record file reads. Each published record type owns the mapping in its `ToEntry` method. A filter that the kind has no fact for stays empty; publish never guesses it.
 - Unreviewed proposals, internal reviewer notes, operational job details, and mutation controls stay private.
 - Public serving reads release contracts only. It never reads operational storage or private notes.
 
@@ -27,6 +28,8 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 
 - Only an approved record with no open concern publishes. Enforced by `PublishedRecordRules`. Test: `PublishReleaseTests.RejectsDraftsThatAreNotCleanlyApproved`.
 - A release holds at most `PublicationProtocol.MaximumRecordsPerRelease` records, and the manifest stays under the read cap at that count. Enforced by `PublishRelease` and `PublicationRelease.Validate`. Test: `PublishReleaseTests.RejectsMoreRecordsThanTheCapBeforeAnythingIsBuilt` and `PublishReleaseTests.AReleaseAtTheRecordLimitWithLongestHeadlinesStaysWellUnderTheManifestReadCap`.
+- Manifest filters hold at most `PublishedRecordEntry.MaximumFilterValues` distinct, nonblank values, each at most `PublishedRecordEntry.MaximumFilterValueLength` characters. Enforced by `PublishedRecordEntry.Validate`, which `PublicationRelease.Validate` calls. Test: `PublicationReleaseTests.FiltersAreBoundedAndDistinctSoOneEntryCannotSwellTheManifest`.
+- An entry's filters come from the revision that the release publishes. Enforced by `PublishedDocumentChange.ToEntry` and `PublishedStatement.ToEntry`. Test: `PublishStatementTests.EachKindFillsItsSearchFiltersFromTheRevisionItPublishes` and `PublishStatementTests.ARepublishedStatementReplacesItsCarriedEntryInsteadOfDuplicatingIt`.
 - A commit holds the exact revision and review state version that the build read. Enforced by `PostgresPublicationStore`. Test: `PostgresPublicationStoreTests.ADecisionAfterTheBuildBlocksTheCommitBecauseApprovalMayHaveChanged`.
 - One release is active. Enforced by `IX_publication_releases_is_active`. Test: `PostgresPublicationStoreTests.EachCommitBecomesTheActiveReleaseSoAFailedLinkSwapCannotHideIt`.
 - Release numbers have no gaps. Enforced by `PostgresPublicationStore`. Test: `PostgresPublicationStoreTests.ReleaseNumbersMustFollowTheLatestCommittedOneWithoutGaps`.
@@ -110,8 +113,18 @@ The release builder renders public components to static HTML through `PublicPage
 - The generated [publication schema](schema/publication.md) lists every table, column, key, check, index, and trigger.
 - Each release row lists its records as kind, record ID, and revision. A row written before kinds existed has no kind and counts as a document change.
 - The ready lists read the active row and match by kind, so a statement ID cannot hide a document change.
-- Schema version 2 adds the entry kind. Readers accept versions 1 and 2. A version 1 entry has no kind and means a document change. A version 1 release on disk can therefore still be the base of the next release.
-- New manifests use version 2. `src/CivicLens.Publication.Contracts/PublicationProtocol.cs` owns the version; see [Behavior versions](../architecture.md#behavior-versions).
+- Schema version 2 adds the entry kind. Readers accept versions 1 to 3. A version 1 entry has no kind and means a document change. A version 1 release on disk can therefore still be the base of the next release.
+- Schema version 3 adds the entry filters. An entry from version 1 or 2 has empty filters, and publish does not backfill them.
+
+| Filter | Document change | Statement | Planned action |
+|---|---|---|---|
+| `officials` (ID and configured name) | Officials | Speakers | Sponsor officials |
+| `issueIds` | Issue IDs | Issue IDs | Issue IDs |
+| `policyAreaIds` | Empty | Policy area IDs | Policy area |
+| `sourceHost` | Host of the after version URL | Host of the source URL | Host of the bill source URL |
+| `eventDate` | Evidenced change date, or empty | Evidenced statement date, or empty | Latest action date |
+
+- New manifests use version 3. `src/CivicLens.Publication.Contracts/PublicationProtocol.cs` owns the version; see [Behavior versions](../architecture.md#behavior-versions).
 - A separate static file server serves the release root read-only. It has no access to operational storage.
 
 ## Code map
@@ -136,7 +149,7 @@ Release and rollback commands are in [operations](../operations.md#publish-a-sta
 - Public search is an MVP requirement. Readers search all published records from the public pages. Search reads the published release only, so it works while the operational application is down.
 - Search filters: record kind, official, issue, policy area, date range, and source. Filters are easy to combine and easy to clear. The page works at phone width.
 - Results show the kind, headline, officials, issues, and dates of each record, and link to the record page.
-- Planned, not built: `PublishedRecordEntry` carries the filter fields (officials, issues, policy area, source, event date) as manifest schema 3. Publish builds a bounded `search.json` from the manifest entries, and the public pages search it client side.
+- Planned, not built: the public pages search the manifest entry filters client side. Whether they read `release.json` or a separate compact search file is not decided.
 - Later, after the first MVP deploy: a public search service with its own Postgres database, fed from releases. It gives full-text search over the whole processed corpus.
 - Revisit the record limit at about 20,000 records or a manifest over 4 MB. Then split the manifest by kind.
 - The manifest read cap holds at 20,000 records for headlines that are plain ASCII text. A 256-character headline of non-ASCII characters takes about 1.7 KB in the escaped manifest, and a manifest full of those would pass the cap.
