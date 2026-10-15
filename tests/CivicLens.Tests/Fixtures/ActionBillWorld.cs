@@ -166,7 +166,7 @@ internal sealed class ActionBillWorld
             }
         });
 
-    private static string CosponsorBody(CosponsorSpec[] page, string? next) => JsonSerializer.Serialize(new
+    public static string CosponsorBody(CosponsorSpec[] page, string? next) => JsonSerializer.Serialize(new
     {
         cosponsors = page.Select(item => new
         {

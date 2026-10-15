@@ -1,8 +1,9 @@
 using CivicLens.Core.Review;
+using CivicLens.Infrastructure.Review.Persistence;
 
 namespace CivicLens.Infrastructure.Actions.Persistence;
 
-internal sealed class ActionRevisionRow
+internal sealed class ActionRevisionRow : IReviewRevisionRow
 {
     public string RecordId { get; set; } = string.Empty;
     public int RevisionNumber { get; set; }

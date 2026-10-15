@@ -11,6 +11,7 @@ public static class ActionDraftErrorCodes
     public const string NoTrackedOfficial = "noTrackedOfficial";
     public const string SummaryOmitted = "summaryOmitted";
     public const string Unchanged = "unchanged";
+    public const string SponsorshipsChanged = "sponsorshipsChanged";
     public const string SupersededByNewerCandidate = "supersededByNewerCandidate";
     public const string RevisionConflict = "revisionConflict";
 }

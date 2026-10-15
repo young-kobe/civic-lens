@@ -5,8 +5,13 @@ namespace CivicLens.Core.Review;
 /// <summary>Pure review decision rules shared by every record type that people approve.</summary>
 public static class ReviewPolicy
 {
-    public const int MaximumRevisionsPerRecord = 64;
-    public const int MaximumDecisionsPerRecord = 128;
+    public const int MaximumOpenConcerns = 64;
+
+    /// <summary>A cycle holds its opening approval and at most <see cref="MaximumOpenConcerns"/> concerns. Only an approval resolves
+    /// a concern, and the next approval opens a new cycle.</summary>
+    public const int MaximumDecisionsPerCycle = MaximumOpenConcerns + 1;
+
+    public static ReviewStatus GetInitialStatus(int currentRevisionNumber) => GetCurrentStatus(currentRevisionNumber, []);
 
     public static ReviewStatus GetCurrentStatus(int currentRevisionNumber, ImmutableArray<ReviewDecision> decisions) =>
         GetCurrentStatus(currentRevisionNumber, decisions, GetUnresolvedConcerns(decisions));
@@ -54,7 +59,7 @@ public static class ReviewPolicy
     {
         if (!LowercaseHex.Is(decision.DecisionId, 32) ||
             string.IsNullOrWhiteSpace(decision.ActorSubject) || decision.ActorSubject.Length > 256 || !Enum.IsDefined(decision.Kind) ||
-            decision.ResolvedDecisionIds.IsDefault || decision.ResolvedDecisionIds.Length > 64 ||
+            decision.ResolvedDecisionIds.IsDefault || decision.ResolvedDecisionIds.Length > MaximumOpenConcerns ||
             decision.ResolvedDecisionIds.Distinct(StringComparer.Ordinal).Count() != decision.ResolvedDecisionIds.Length)
             throw new ArgumentException("Review decision is invalid.", nameof(decision));
         if (ReviewAuthor.IsAnalysis(decision.ActorSubject))
@@ -71,7 +76,7 @@ public static class ReviewPolicy
         ReviewDecision decision)
     {
         var currentConcerns = GetUnresolvedConcerns(decisions);
-        if ((decision.Kind is ReviewDecisionKind.RequestChanges or ReviewDecisionKind.WithdrawApproval) && currentConcerns.Length >= 64)
+        if ((decision.Kind is ReviewDecisionKind.RequestChanges or ReviewDecisionKind.WithdrawApproval) && currentConcerns.Length >= MaximumOpenConcerns)
             throw new ArgumentException("Resolve outstanding concerns before adding another blocker.", nameof(decision));
         var outstanding = currentConcerns.Select(item => item.DecisionId).Order(StringComparer.Ordinal).ToArray();
         var resolved = decision.ResolvedDecisionIds.Order(StringComparer.Ordinal).ToArray();

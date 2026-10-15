@@ -269,8 +269,9 @@ public sealed partial class PostgresBillStreamTests
         var claim = (await store.TryClaimAsync(candidate, Lease, default))!;
         var runId = await ReserveAsync(store, claim);
         await ExecuteAsync(connectionString, $"""
-            INSERT INTO action_drafts (record_id, source_id, congress, bill_type, bill_number, current_revision_number, created_at_utc_ticks)
-            VALUES ('{RecordId}', '{SourceId}', 119, 'hr', 7, 1, 0);
+            INSERT INTO action_drafts (record_id, source_id, congress, bill_type, bill_number, current_revision_number, review_state_version,
+                review_status, created_at_utc_ticks, last_revised_at_utc_ticks)
+            VALUES ('{RecordId}', '{SourceId}', 119, 'hr', 7, 1, 0, 'AwaitingReview', 0, 0);
             INSERT INTO action_revisions (record_id, revision_number, author_subject, author_kind, run_id, revision_json, created_at_utc_ticks)
             VALUES ('{RecordId}', 1, 'auth0|editor', 'Person', NULL, 'x', 0)
             """);
@@ -285,6 +286,31 @@ public sealed partial class PostgresBillStreamTests
         Assert.Equal("DraftDiscarded", await ScalarAsync($"SELECT outcome FROM action_analysis_runs WHERE run_id = '{runId}'"));
         Assert.True((long)(await ScalarAsync("SELECT retry_at FROM action_analysis"))! > 0);
         Assert.Equal(1_000L, await ScalarAsync("SELECT charged_tokens FROM action_analysis_budget WHERE task = 'action-draft'"));
+    }
+
+    [Fact]
+    public async Task ABypassedRunStaysBypassedWhenItsRevisionConflictsSoTheEntryRetries()
+    {
+        var candidate = await CandidateWithoutSummariesAsync();
+        var store = ActionStore();
+        var claim = (await store.TryClaimAsync(candidate, Lease, default))!;
+        await ExecuteAsync(connectionString, $"""
+            INSERT INTO action_drafts (record_id, source_id, congress, bill_type, bill_number, current_revision_number, review_state_version,
+                review_status, created_at_utc_ticks, last_revised_at_utc_ticks)
+            VALUES ('{RecordId}', '{SourceId}', 119, 'hr', 7, 1, 0, 'AwaitingReview', 0, 0);
+            INSERT INTO action_revisions (record_id, revision_number, author_subject, author_kind, run_id, revision_json, created_at_utc_ticks)
+            VALUES ('{RecordId}', 1, 'auth0|editor', 'Person', NULL, 'x', 0)
+            """);
+        var run = DraftedRun(Guid.NewGuid().ToString("N"), candidate);
+        var bypassed = new ActionDraftRun(run.Run with { Outcome = AnalysisRunOutcome.Bypassed, Usage = AnalysisTokenUsage.None, ChargedTokens = 0 },
+            ActionDraftErrorCodes.SponsorshipsChanged);
+
+        Assert.True(await store.CheckpointAsync(ActionDraftCheckpoint.From(claim, Revision(candidate, 1)), bypassed, default));
+
+        var row = Assert.Single(await QueueAsync());
+        Assert.Equal(("RetryWaiting", ActionDraftErrorCodes.RevisionConflict), (row.Status, row.ErrorCode));
+        Assert.Equal("Bypassed", await ScalarAsync($"SELECT outcome FROM action_analysis_runs WHERE run_id = '{run.Run.RunId}'"));
+        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM action_revisions"));
     }
 
     [Fact]
@@ -344,8 +370,9 @@ public sealed partial class PostgresBillStreamTests
     {
         await CandidateWithoutSummariesAsync();
         await ExecuteAsync(connectionString, $"""
-            INSERT INTO action_drafts (record_id, source_id, congress, bill_type, bill_number, current_revision_number, created_at_utc_ticks)
-            VALUES ('{RecordId}', '{SourceId}', 119, 'hr', 7, 1, 0)
+            INSERT INTO action_drafts (record_id, source_id, congress, bill_type, bill_number, current_revision_number, review_state_version,
+                review_status, created_at_utc_ticks, last_revised_at_utc_ticks)
+            VALUES ('{RecordId}', '{SourceId}', 119, 'hr', 7, 1, 0, 'AwaitingReview', 0, 0)
             """);
 
         await Assert.ThrowsAsync<PostgresException>(() => ExecuteAsync(connectionString, $"""
@@ -358,11 +385,12 @@ public sealed partial class PostgresBillStreamTests
     public async Task TheDatabaseAllowsOneDraftForEachBillAndRefusesABadRecordId()
     {
         await CandidateWithoutSummariesAsync();
-        const string insert = "INSERT INTO action_drafts (record_id, source_id, congress, bill_type, bill_number, current_revision_number, created_at_utc_ticks)";
-        await ExecuteAsync(connectionString, $"{insert} VALUES ('{RecordId}', '{SourceId}', 119, 'hr', 7, 1, 0)");
+        const string insert = "INSERT INTO action_drafts (record_id, source_id, congress, bill_type, bill_number, current_revision_number, " +
+            "review_state_version, review_status, created_at_utc_ticks, last_revised_at_utc_ticks)";
+        await ExecuteAsync(connectionString, $"{insert} VALUES ('{RecordId}', '{SourceId}', 119, 'hr', 7, 1, 0, 'AwaitingReview', 0, 0)");
 
-        await Assert.ThrowsAsync<PostgresException>(() => ExecuteAsync(connectionString, $"{insert} VALUES ('{new string('a', 64)}', '{SourceId}', 119, 'hr', 7, 1, 0)"));
-        await Assert.ThrowsAsync<PostgresException>(() => ExecuteAsync(connectionString, $"{insert} VALUES ('NOT-A-HASH', '{SourceId}', 119, 'hr', 8, 1, 0)"));
+        await Assert.ThrowsAsync<PostgresException>(() => ExecuteAsync(connectionString, $"{insert} VALUES ('{new string('a', 64)}', '{SourceId}', 119, 'hr', 7, 1, 0, 'AwaitingReview', 0, 0)"));
+        await Assert.ThrowsAsync<PostgresException>(() => ExecuteAsync(connectionString, $"{insert} VALUES ('NOT-A-HASH', '{SourceId}', 119, 'hr', 8, 1, 0, 'AwaitingReview', 0, 0)"));
     }
 
     private static readonly string DraftableOutput = ActionDraftOutputs.Output(headline: "A sponsored a housing measure", summary: "A filed this measure.");
@@ -381,7 +409,7 @@ public sealed partial class PostgresBillStreamTests
 
     private async Task<(string Older, string Newer)> BothCandidatesPendingAsync()
     {
-        var bill = await StartReadableBillAsync("A000001", summaries: 1);
+        var bill = await StartReadableBillAsync(["A000001"], summaries: 1);
         await AdmitActionsAsync(bill.Actions, new CongressBillActionsPage([], null));
         var summaries = ActionBillWorld.SummaryBody(new SummarySpec("00", "2025-01-03", "2025-01-05T10:00:00Z", "<p>It funds rent aid.</p>"), null);
         await store.AdmitSummariesPageAsync(Source(), bill.Summaries!, new CongressBillSummariesPage([], null),
@@ -393,18 +421,27 @@ public sealed partial class PostgresBillStreamTests
         return (older, candidates.Single(item => item.IncludesSummaries).CandidateId);
     }
 
-    private async Task<string> ReadableCandidateAsync(string sponsor, DateTimeOffset? updatedAt = null)
+    private async Task<string> ReadableCandidateAsync(string sponsor, DateTimeOffset? updatedAt = null, string? cosponsor = null,
+        string? title = null)
     {
-        var bill = await StartReadableBillAsync(sponsor, summaries: 0, updatedAt);
+        var bill = await StartReadableBillAsync([sponsor], summaries: 0, updatedAt, title, cosponsors: cosponsor is null ? 0 : 1);
+        if (cosponsor is not null)
+        {
+            var body = ActionBillWorld.CosponsorBody([new(cosponsor, Backfill.ToString("yyyy-MM-dd"))], null);
+            _ = await store.AdmitCosponsorPageAsync(Source(), bill.Cosponsors!, Cosponsors([cosponsor], next: null),
+                await ReadableExtractionAsync(bill.Cosponsors!, ApiResource.BillCosponsors, body), default);
+        }
         await AdmitActionsAsync(bill.Actions, new CongressBillActionsPage([], null));
         return (await CandidatesAsync()).Single(candidate => candidate.DetailJobId == bill.Detail).CandidateId;
     }
 
-    private async Task<StartedBill> StartReadableBillAsync(string sponsor, int summaries, DateTimeOffset? updatedAt = null)
+    private async Task<StartedBill> StartReadableBillAsync(string[] sponsors, int summaries, DateTimeOffset? updatedAt = null,
+        string? title = null, int cosponsors = 0)
     {
         var updated = updatedAt ?? UpdatedAt;
         var detail = await EnqueueDetailAsync("detail-" + updated.UtcTicks);
-        var bill = DetailBill(updated, 0, summaries: summaries) with { SponsorBioguideIds = [sponsor] };
+        var bill = DetailBill(updated, cosponsors, summaries: summaries) with { SponsorBioguideIds = sponsors };
+        if (title is not null) bill = bill with { Title = title };
         var result = await store.AdmitDetailAsync(Source(), detail, bill, BillGateOutcome.Passed(BillGateReason.CoveredSponsor),
             BillGateFixtures.Revision().Id, await ReadableExtractionAsync(detail, ApiResource.Bill, ActionBillWorld.DetailBody(bill)), default);
         string? JobOf(string resource) => result.Jobs.SingleOrDefault(job => job.Url.Contains($"/{resource}?"))?.JobId;

@@ -27,16 +27,33 @@ public static class ActionDraftResolver
             Assemble(output, evidence, snapshot, trackedIssueIds, issueRevisionId, runId, createdAtUtc));
     }
 
+    public static ActionDraftRevision CopyText(ActionDraftEvidence evidence, ActionBillSnapshot snapshot,
+        ImmutableArray<string> trackedIssueIds, string issueRevisionId, DateTimeOffset createdAtUtc)
+    {
+        var current = evidence.Current ?? throw new ArgumentException("Copied text needs a current revision.", nameof(evidence));
+        return Assemble(evidence, snapshot, trackedIssueIds, issueRevisionId, createdAtUtc,
+            (current.Headline, current.Summary, current.TextOrigin, current.Suggestion));
+    }
+
     private static ActionDraftRevision Assemble(ActionDraftOutput output, ActionDraftEvidence evidence, ActionBillSnapshot snapshot,
         ImmutableArray<string> trackedIssueIds, string issueRevisionId, string runId, DateTimeOffset createdAtUtc)
     {
         var current = evidence.Current;
+        var text = current?.TextOrigin == ActionTextOrigin.Person
+            ? (current.Headline, current.Summary, ActionTextOrigin.Person,
+                new ActionTextSuggestion(output.Headline.Text, output.Summary.Text, runId, snapshot.Fingerprint))
+            : (output.Headline.Text, output.Summary.Text, ActionTextOrigin.Model, (ActionTextSuggestion?)null);
+        return Assemble(evidence, snapshot, trackedIssueIds, issueRevisionId, createdAtUtc, text);
+    }
+
+    private static ActionDraftRevision Assemble(ActionDraftEvidence evidence, ActionBillSnapshot snapshot,
+        ImmutableArray<string> trackedIssueIds, string issueRevisionId, DateTimeOffset createdAtUtc,
+        (string Headline, string Summary, ActionTextOrigin Origin, ActionTextSuggestion? Suggestion) text)
+    {
+        var current = evidence.Current;
         var candidate = evidence.Candidate;
-        var keepsPersonText = current?.TextOrigin == ActionTextOrigin.Person;
         var revision = new ActionDraftRevision(candidate.RecordId, (current?.RevisionNumber ?? 0) + 1, ReviewAuthor.AnalysisSubject,
-            createdAtUtc, keepsPersonText ? current!.Headline : output.Headline.Text, keepsPersonText ? current!.Summary : output.Summary.Text,
-            keepsPersonText ? ActionTextOrigin.Person : ActionTextOrigin.Model,
-            keepsPersonText ? new ActionTextSuggestion(output.Headline.Text, output.Summary.Text, runId, snapshot.Fingerprint) : null,
+            createdAtUtc, text.Headline, text.Summary, text.Origin, text.Suggestion,
             candidate.SourceId, candidate.Congress, candidate.BillType, candidate.BillNumber, candidate.CandidateId, candidate.UpdateDate,
             candidate.IncludesSummaries,
             snapshot.Fingerprint, snapshot.SummaryVersion, snapshot.SummaryCitation, snapshot.Bill.PolicyArea, snapshot.PolicyAreaCitation,
@@ -47,13 +64,29 @@ public static class ActionDraftResolver
 
     private static void CheckNames(string text, string field, ActionBillSnapshot snapshot, List<string> errors)
     {
-        foreach (var name in snapshot.ExcludedNames.Where(name => !IsPartOfListedName(name, snapshot)))
+        foreach (var name in snapshot.ExcludedNames.Where(name => !IsPartOfListedName(name, snapshot.OfficialNames.Values)))
             if (text.Contains(name, StringComparison.OrdinalIgnoreCase))
                 errors.Add($"The {field} names \"{Shorten(name)}\", who is not an official in the facts. Name only the listed officials.");
+        foreach (var name in CosponsorNamesOf(snapshot).Where(name => !IsPartOfListedName(name, SponsorNamesOf(snapshot))))
+            if (text.Contains(name, StringComparison.OrdinalIgnoreCase))
+                errors.Add($"The {field} names \"{Shorten(name)}\", a cosponsor. Code lists the cosponsors, so name only the sponsors.");
     }
 
-    private static bool IsPartOfListedName(string name, ActionBillSnapshot snapshot) =>
-        snapshot.OfficialNames.Values.Any(listed => listed.Contains(name, StringComparison.OrdinalIgnoreCase));
+    private static IEnumerable<string> CosponsorNamesOf(ActionBillSnapshot snapshot)
+    {
+        var sponsors = SponsorIdsOf(snapshot);
+        return snapshot.Sponsorships.Where(item => item.Role == ActionSponsorshipRole.Cosponsor && !sponsors.Contains(item.PersonId))
+            .Select(item => snapshot.OfficialNames[item.PersonId]).Distinct(StringComparer.Ordinal);
+    }
+
+    private static IEnumerable<string> SponsorNamesOf(ActionBillSnapshot snapshot) =>
+        SponsorIdsOf(snapshot).Select(id => snapshot.OfficialNames[id]);
+
+    private static HashSet<string> SponsorIdsOf(ActionBillSnapshot snapshot) =>
+        snapshot.Sponsorships.Where(item => item.Role == ActionSponsorshipRole.Sponsor).Select(item => item.PersonId).ToHashSet(StringComparer.Ordinal);
+
+    private static bool IsPartOfListedName(string name, IEnumerable<string> listedNames) =>
+        listedNames.Any(listed => listed.Contains(name, StringComparison.OrdinalIgnoreCase));
 
     private static ActionDraftOutput? Parse(string outputJson)
     {

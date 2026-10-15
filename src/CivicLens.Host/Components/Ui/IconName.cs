@@ -5,6 +5,7 @@ public enum IconName
     Review,
     Sources,
     Statements,
+    Actions,
     Light,
     Dark,
     System,

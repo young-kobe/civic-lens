@@ -12,4 +12,7 @@ public sealed record ActionSponsorship(string PersonId, string BioguideId, Actio
         Citations.SequenceEqual(other.Citations);
 
     public override int GetHashCode() => HashCode.Combine(PersonId, BioguideId, Role, SponsoredOn, WithdrawnOn);
+
+    public static (string BioguideId, ActionSponsorshipRole Role, DateOnly SponsoredOn) KeyOf(ActionSponsorship sponsorship) =>
+        (sponsorship.BioguideId, sponsorship.Role, sponsorship.SponsoredOn);
 }

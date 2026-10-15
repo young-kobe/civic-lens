@@ -3,8 +3,9 @@ using CivicLens.Core.Review;
 
 namespace CivicLens.Infrastructure.Review;
 
-internal sealed record ReviewHistory<TRevision>(ImmutableArray<TRevision> Revisions, ImmutableArray<ReviewDecision> Decisions,
-    ImmutableArray<ReviewDecision> UnresolvedConcerns, ReviewStatus CurrentStatus) where TRevision : class
+internal sealed record ReviewHistory<TRevision>(TRevision? CurrentRevision, TRevision? LastApprovedRevision,
+    ImmutableArray<ReviewDecision> Decisions, ImmutableArray<ReviewDecision> UnresolvedConcerns, ReviewStatus CurrentStatus)
+    where TRevision : class
 {
-    public TRevision? CurrentRevision => Revisions.IsEmpty ? null : Revisions[^1];
+    public ImmutableArray<TRevision> LoadedRevisions => [.. new[] { LastApprovedRevision, CurrentRevision }.OfType<TRevision>().Distinct()];
 }

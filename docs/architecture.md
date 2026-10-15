@@ -37,10 +37,11 @@ Implemented:
 - AI drafting of document-change accounts
 - the statement gate and statement drafting
 - AI drafting of bill action records
+- action review, with bulk approval of sponsorship-only revisions
 - the authenticated review workspace
 - static release publication
 
-Pending: live Auth0 tenant verification, production deployment, AI classification, correction and withdrawal releases, action review and publication, weekly briefs, and MCP. The [roadmap](roadmap.md) holds the order.
+Pending: live Auth0 tenant verification, production deployment, AI classification, correction and withdrawal releases, action publication, weekly briefs, and MCP. The [roadmap](roadmap.md) holds the order.
 
 ## Layers and dependency rules
 
@@ -60,7 +61,7 @@ Core holds domain invariants. Application holds use cases and the interfaces of 
 <!-- diagrams:start -->
 ### Collection to publication (target)
 
-Target workflow. Implemented: configured collection with durable jobs, discovery, and admission; the Congress.gov bill stream with its gate and action candidates; text extraction, history, and comparison; AI drafting of document-change accounts; the statement gate and statement drafting; AI drafting of bill action records; version-bound review; and static release publication. Planned: action review and publication, classification, weekly briefs, and private and public MCP.
+Target workflow. Implemented: configured collection with durable jobs, discovery, and admission; the Congress.gov bill stream with its gate and action candidates; text extraction, history, and comparison; AI drafting of document-change accounts; the statement gate and statement drafting; AI drafting of bill action records; version-bound review of all three record kinds; and static release publication. Planned: action publication, classification, weekly briefs, and private and public MCP.
 
 ```mermaid
 flowchart LR
@@ -234,8 +235,8 @@ Before the first production deploy ([R-23](roadmap.md#later)), reset the develop
 | Statement draft task | `statement-draft-v1` | `src/CivicLens.Application/Statements/StatementDraftTask.cs` | Statement analysis runs and queue entries | Task flow or output handling changes |
 | Statement draft prompt | `statement-draft-prompt-v1` | same file | Statement analysis runs | Prompt text or input framing changes, for either speaker shape |
 | Statement draft schema | `statement-draft-schema-v1` | same file | Statement analysis runs | The model output schema changes, for either speaker shape |
-| Action draft task | `action-draft-v1` | `src/CivicLens.Application/Actions/ActionDraftTask.cs` | Action analysis runs and queue entries | Task flow or output handling changes |
-| Action draft prompt | `action-draft-prompt-v1` | same file | Action analysis runs | Prompt text or input framing changes |
+| Action draft task | `action-draft-v2` | `src/CivicLens.Application/Actions/ActionDraftTask.cs` | Action analysis runs and queue entries | Task flow or output handling changes |
+| Action draft prompt | `action-draft-prompt-v2` | same file | Action analysis runs | Prompt text or input framing changes |
 | Action draft schema | `action-draft-schema-v1` | same file | Action analysis runs | The model output schema changes |
 | Sponsorship fingerprint | `action-fingerprint-v1` | `src/CivicLens.Application/Collection/Bills/ActionFingerprint.cs` | The fingerprint in each action revision | The canonical text of an entry changes |
 | Gate task | `statement-gate-v1` | `src/CivicLens.Application/Statements/StatementGateTask.cs` | Statement analysis runs and queue entries | Task flow or output handling changes |
@@ -304,10 +305,11 @@ This is the only navigation index.
 | Action candidates | [Bills](architecture/bills.md#action-candidate) | `src/CivicLens.Infrastructure/Collection/Jobs/PostgresCollectionJobStore.ActionCandidates.cs` |
 | Action drafting | [Actions](architecture/actions.md#step) | `src/CivicLens.Application/Actions/ActionDraftingStep.cs` |
 | Action revisions and the person edit rule | [Actions](architecture/actions.md#revision-and-append) | `src/CivicLens.Core/Actions/ActionDraftRevision.cs` |
+| Action review pages, bulk approval, sponsorship-only view | [Actions](architecture/actions.md#action-review) | `src/CivicLens.Host/Review/ActionEditor.razor` |
 | Action commands | [Actions](architecture/actions.md#commands) | `src/CivicLens.Host/Actions/ActionCommand.cs` |
 | Action queue outcomes and codes | [Actions](architecture/actions.md#outcomes) | `src/CivicLens.Application/Actions/ActionDraftErrorCodes.cs` |
 | Bill stream tables: cursors, gates, pages, candidates | [Bills](architecture/bills.md#storage-and-contracts) | `src/CivicLens.Infrastructure/Collection/BillStream/` |
-| Action tables: queue, runs, budget, drafts, revisions | [Actions](architecture/actions.md#storage-and-contracts) | `src/CivicLens.Infrastructure/Actions/` |
+| Action tables: queue, runs, budget, drafts, revisions, decisions | [Actions](architecture/actions.md#storage-and-contracts) | `src/CivicLens.Infrastructure/Actions/` |
 | Text extraction, profiles, citations | [Documents](architecture/documents.md#extraction) | `src/CivicLens.Application/Documents/ExtractDocument.cs` |
 | Document history and comparisons | [Documents](architecture/documents.md#history) | `src/CivicLens.Core/Documents/DocumentComparison.cs` |
 | Evidence pages under `/Documents` | [Documents](architecture/documents.md#evidence-pages) | `src/CivicLens.Host/Documents/ComparisonPage.razor` |
@@ -318,6 +320,7 @@ This is the only navigation index.
 | Statement drafting | [Statements](architecture/statements.md#statement-drafting) | `src/CivicLens.Application/Statements/StatementDraftingStep.cs` |
 | Statement review pages and commands | [Statements](architecture/statements.md#statement-review) | `src/CivicLens.Host/Review/StatementEditor.razor` |
 | Review decisions, roles, concurrency | [Review](architecture/review.md#review-decisions) | `src/CivicLens.Core/Review/ReviewPolicy.cs` |
+| Review cycles, history caps, the shared append step | [Review](architecture/review.md#review-cycles) | `src/CivicLens.Infrastructure/Review/ReviewRecords.cs` |
 | Review lists, paging, overview counts | [Review](architecture/review.md#lists-and-paging) | `src/CivicLens.Application/Review/ListDocumentChangeReviews.cs` |
 | Releases, activation, rollback | [Publication](architecture/publication.md#publish) | `src/CivicLens.Application/Publication/PublishRelease.cs` |
 | Release record content and schema | [Publication](architecture/publication.md#release-content) | `src/CivicLens.Publication.Contracts/PublicationRelease.cs` |

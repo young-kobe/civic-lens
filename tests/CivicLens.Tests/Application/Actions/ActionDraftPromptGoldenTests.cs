@@ -9,9 +9,9 @@ namespace CivicLens.Tests.Application.Actions;
 
 public sealed class ActionDraftPromptGoldenTests
 {
-    private const string SystemSha256 = "a676e0a31917a6fe4cfdeb0499d8dee8976e880517e96d05b742f458ee759949";
+    private const string SystemSha256 = "71814fe66fb5dfd9b42380a66f64e6ae6892f81a327f823e6e8397627c2485e9";
     private const string SchemaSha256 = "7e063b55e0c1bfc654088f5e9372850813294a033939acc1826b01b822aa7016";
-    private const string InputHash = "697acaa8254f919ff7482686704eb2a3283915f75576ffaa733c3c30c86e96a3";
+    private const string InputHash = "cafe29953361b38d4f577da1b626bed6c3be1857d6d98a61638462f9e8a88741";
 
     [Fact]
     public async Task ThePromptAndSchemaMatchTheirPinnedVersions()
@@ -24,7 +24,7 @@ public sealed class ActionDraftPromptGoldenTests
 
         var bump = $"The prompt or schema changed. Bump {nameof(ActionDraftTask.PromptVersion)} ({ActionDraftTask.PromptVersion}) or " +
             $"{nameof(ActionDraftTask.SchemaVersion)} ({ActionDraftTask.SchemaVersion}), and then update the pinned hashes in this test.";
-        Assert.Equal(("action-draft", "action-draft-v1", "action-draft-prompt-v1", "action-draft-schema-v1", "claude-haiku-5-5"),
+        Assert.Equal(("action-draft", "action-draft-v2", "action-draft-prompt-v2", "action-draft-schema-v1", "claude-haiku-5-5"),
             (ActionDraftTask.Task, ActionDraftTask.TaskVersion, ActionDraftTask.PromptVersion, ActionDraftTask.SchemaVersion, ActionDraftTask.Model));
         Assert.NotEqual(StatementDraftTaskName, ActionDraftTask.Task);
         Assert.True(Sha256(request.SystemPrompt) == SystemSha256, $"{bump} System prompt: {Sha256(request.SystemPrompt)}");

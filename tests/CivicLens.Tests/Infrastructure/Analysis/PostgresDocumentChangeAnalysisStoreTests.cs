@@ -65,7 +65,8 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
         var entry = await EntryAsync(comparison);
         Assert.Equal(AnalysisState.Succeeded, entry.Status);
         var review = (await reviews.GetAsync(entry.DraftId!, default))!;
-        var revision = Assert.Single(review.Revisions);
+        var revision = review.CurrentRevision;
+        Assert.Equal(1, revision.RevisionNumber);
         Assert.Equal(ReviewAuthor.AnalysisSubject, revision.AuthorSubject);
         var citation = Assert.Single(revision.Citations);
         Assert.Equal(comparison.AfterExtractionId, citation.ExtractionId);

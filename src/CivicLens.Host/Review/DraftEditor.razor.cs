@@ -56,8 +56,7 @@ public sealed partial class DraftEditor
             ShowNotFound();
             return;
         }
-        if (ReviewAuthor.IsAnalysis(review.Revisions[0].AuthorSubject))
-            draftRun = await GetRun.ExecuteAsync(actor, DraftId, RequestAborted);
+        draftRun = await GetRun.ExecuteAsync(actor, DraftId, RequestAborted);
         comparison = await GetComparison.ExecuteAsync(Revision.ComparisonId, RequestAborted);
         if (comparison is null)
         {
