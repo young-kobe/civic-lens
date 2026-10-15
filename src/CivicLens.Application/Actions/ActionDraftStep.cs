@@ -45,7 +45,7 @@ public sealed class ActionDraftStep(IActionDraftStore store, ActionBillReader re
         var trackedIssueIds = trackedIssues.Select(issue => issue.Id).ToImmutableArray();
         var policyAreaId = issueConfiguration.PolicyAreaIdFor(snapshot.Bill.PolicyArea);
         var context = new ActionDraftContext(evidence, snapshot, trackedIssueIds, policyAreaId, issues.Id);
-        return context.ChangeSince(evidence.Current) switch
+        return context.ChangeSinceCurrent() switch
         {
             ActionChange.None =>
                 await SettleWithoutCallAsync(attempt, snapshot.Fingerprint, ActionDraftErrorCodes.Unchanged, cancellationToken),
