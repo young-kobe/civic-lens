@@ -30,13 +30,13 @@ internal sealed class PublicationScenario
     public PublishRelease Publisher() => new(Publications, Releases, new FakeRenderer(), Reviews, Statements,
         new PublicationCatalog(OfficialNames), Clock);
 
-    public void SeedRelease(int recordCount, bool withFiles)
+    public void SeedRelease(int recordCount, bool withFiles, int headlineLength = 0)
     {
         var entries = Enumerable.Range(0, recordCount).Select(index => new PublishedRecordEntry
         {
             RecordId = index.ToString("x32"),
             RevisionNumber = 1,
-            Headline = $"Seeded {index}",
+            Headline = $"Seeded {index}".PadRight(headlineLength, 'x'),
             FirstPublishedAtUtc = ApprovedAt.AddMinutes(-index)
         }).ToArray();
         var manifest = new PublicationRelease

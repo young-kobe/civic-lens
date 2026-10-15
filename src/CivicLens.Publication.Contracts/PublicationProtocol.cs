@@ -8,7 +8,7 @@ public static class PublicationProtocol
     public const int SchemaVersion = 2;
     public const int OldestReadableSchemaVersion = 1;
     public const string ManifestPath = "release.json";
-    public const int MaximumRecordsPerRelease = 2000;
+    public const int MaximumRecordsPerRelease = 20000;
     public const int IndexPageSize = 50;
     public const int MaximumRecordFileBytes = 16 * 1024 * 1024;
 

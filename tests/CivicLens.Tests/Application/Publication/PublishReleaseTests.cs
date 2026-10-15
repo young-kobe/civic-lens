@@ -118,6 +118,22 @@ public sealed class PublishReleaseTests
         Assert.Empty(scenario.Releases.Activated);
     }
 
+    [Fact]
+    public async Task AReleaseAtTheRecordLimitWithLongestHeadlinesStaysWellUnderTheManifestReadCap()
+    {
+        var scenario = new PublicationScenario();
+        scenario.SeedRelease(PublicationProtocol.MaximumRecordsPerRelease - 1, withFiles: true,
+            DocumentChangeDraftRevision.MaximumHeadlineLength);
+        var draft = scenario.AddDraft('a');
+
+        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k", draft));
+
+        Assert.Equal(PublicationProtocol.MaximumRecordsPerRelease, summary.RecordCount);
+        var manifestBytes = scenario.Releases.Directories[summary.DirectoryName][PublicationProtocol.ManifestPath].Length;
+        Assert.True(manifestBytes < PublicationProtocol.MaximumRecordFileBytes * 3 / 4,
+            $"The manifest has {manifestBytes} bytes, and the next publish must read it under {PublicationProtocol.MaximumRecordFileBytes}.");
+    }
+
     [Theory]
     [InlineData("awaiting")]
     [InlineData("changes-requested")]

@@ -11,6 +11,7 @@ The publication feature turns approved revisions into immutable, cumulative stat
 - A newer draft never replaces published content automatically.
 - A release is cumulative. It holds the base release records plus explicit additions or replacements.
 - Carried records are hard links to the immutable files of the base release. Disk therefore grows with published records, not with the number of releases.
+- Each publish rebuilds only `release.json`, the index pages, and the assets. It reads the previous manifest once, under the 16 MB read cap. `PublicationProtocol.MaximumRecordsPerRelease` is the one owner of the record limit, which is 20,000. The database has no count check, because C# owns the rule. At the longest allowed headline, one entry takes about 440 bytes, so 20,000 entries take about 8.8 MB.
 - Postgres records which release is active. The `current` link is only a copy for the static server, so a failed link swap never drops committed records.
 - Every publication write takes all three review locks in one fixed order, which prevents a deadlock. The order is in [advisory locks](../architecture.md#advisory-locks).
 - A release has no status column. `is_active` marks the one active release: a commit sets it on the new row and clears the old one, and rollback moves it.
@@ -25,6 +26,7 @@ The publication feature turns approved revisions into immutable, cumulative stat
 Each line gives the rule, what enforces it, and the test that protects it. Cross-feature invariants are in [architecture](../architecture.md#invariants).
 
 - Only an approved record with no open concern publishes. Enforced by `PublishedRecordRules`. Test: `PublishReleaseTests.RejectsDraftsThatAreNotCleanlyApproved`.
+- A release holds at most `PublicationProtocol.MaximumRecordsPerRelease` records, and the manifest stays under the read cap at that count. Enforced by `PublishRelease` and `PublicationRelease.Validate`. Test: `PublishReleaseTests.RejectsMoreRecordsThanTheCapBeforeAnythingIsBuilt` and `PublishReleaseTests.AReleaseAtTheRecordLimitWithLongestHeadlinesStaysWellUnderTheManifestReadCap`.
 - A commit holds the exact revision and review state version that the build read. Enforced by `PostgresPublicationStore`. Test: `PostgresPublicationStoreTests.ADecisionAfterTheBuildBlocksTheCommitBecauseApprovalMayHaveChanged`.
 - One release is active. Enforced by `IX_publication_releases_is_active`. Test: `PostgresPublicationStoreTests.EachCommitBecomesTheActiveReleaseSoAFailedLinkSwapCannotHideIt`.
 - Release numbers have no gaps. Enforced by `PostgresPublicationStore`. Test: `PostgresPublicationStoreTests.ReleaseNumbersMustFollowTheLatestCommittedOneWithoutGaps`.
@@ -44,7 +46,7 @@ A document-change record shows both versions, and observation history where need
 - Each document-change record carries the full extracted text of both versions, their source URLs, and their observation times. Changed regions are offsets into those texts.
 - A citation holds an extraction ID, UTF-16 offsets, and the quoted text. The contract rejects a quote that does not match its offsets.
 - Records show the approval date and the first-publication date. The release index shows the release date.
-- A release holds at most 2,000 records.
+- A release holds at most 20,000 records.
 - The index lists 50 records on each page, newest first. The pages are `index.html`, then `page-2.html` and so on, with relative previous and next links.
 - Officials appear by their configured name. Issues appear by their configured identifier.
 - Only the release manifest shows the schema version.
@@ -134,8 +136,10 @@ Release and rollback commands are in [operations](../operations.md#publish-a-sta
 - Public search is an MVP requirement. Readers search all published records from the public pages. Search reads the published release only, so it works while the operational application is down.
 - Search filters: record kind, official, issue, policy area, date range, and source. Filters are easy to combine and easy to clear. The page works at phone width.
 - Results show the kind, headline, officials, issues, and dates of each record, and link to the record page.
-- Record contracts must carry the fields that the filters need. The index design is pending decision [D-01](../roadmap.md#pending-decisions).
-- A release is rebuilt in full, and its 2,000-record limit is the one owner of that number. Action volume will pass that limit within weeks; see [D-02](../roadmap.md#pending-decisions).
+- Planned, not built: `PublishedRecordEntry` carries the filter fields (officials, issues, policy area, source, event date) as manifest schema 3. Publish builds a bounded `search.json` from the manifest entries, and the public pages search it client side.
+- Later, after the first MVP deploy: a public search service with its own Postgres database, fed from releases. It gives full-text search over the whole processed corpus.
+- Revisit the record limit at about 20,000 records or a manifest over 4 MB. Then split the manifest by kind.
+- The manifest read cap holds at 20,000 records for headlines that are plain ASCII text. A 256-character headline of non-ASCII characters takes about 1.7 KB in the escaped manifest, and a manifest full of those would pass the cap.
 - A future live public Blazor deployment must read published releases only and stay separate from the operational application.
 - A future mobile client would read public release contracts through an API, not operational storage.
 - Public MCP will expose `search_records`, `get_record`, `get_official_timeline`, and `compare_document_versions`. It returns published data with IDs, citations, dates, review status, coverage caveats, and the release ID.
