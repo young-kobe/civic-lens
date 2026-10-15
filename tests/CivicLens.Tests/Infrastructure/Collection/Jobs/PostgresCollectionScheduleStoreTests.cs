@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Jobs;
+using CivicLens.Collection.Contracts;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Collection.Jobs;
 using Npgsql;
@@ -130,6 +131,31 @@ public sealed class PostgresCollectionScheduleStoreTests(PostgresCollection post
         Assert.True(await ReadNextDueAsync("senate") > DateTimeOffset.UtcNow.UtcTicks);
     }
 
+    // An article found by discovery is not a check of its source, so it must not use the due slot of the source.
+    [Fact]
+    public async Task ActiveArticleJobNeverCountsAsAnActiveRootJob()
+    {
+        var configuration = Configuration(intervalSeconds: 60, mode: CollectionMode.Html);
+        await SynchronizeDueAsync(configuration);
+        var source = CollectionJobDefinition.FromConfiguration(configuration, "senate");
+        await store.EnqueueAsync(source with { Mode = CollectionMode.Page, Url = "https://example.test/senate/article" },
+            "article", default);
+
+        Assert.Equal(1, await store.AdvanceDueAsync(10, default));
+        Assert.Equal(2, (await store.ListAsync(10, default)).Count);
+    }
+
+    // Root status is fixed when the job is written. A root job at an earlier configured URL therefore still holds the slot.
+    [Fact]
+    public async Task ActiveRootJobAtAnEarlierConfiguredUrlStillConsumesTheDueSlot()
+    {
+        await store.EnqueueAsync(new ConfiguredCollectionSource(Configuration(), "senate"), "manual-request", default);
+        await SynchronizeDueAsync(Configuration(intervalSeconds: 60, url: "https://example.test/senate-moved"));
+
+        Assert.Equal(1, await store.AdvanceDueAsync(10, default));
+        Assert.Single(await store.ListAsync(10, default));
+    }
+
     [Fact]
     public async Task DisabledAndRemovedSourcesPauseTheirScheduleWithoutDeletingIt()
     {
@@ -203,7 +229,8 @@ public sealed class PostgresCollectionScheduleStoreTests(PostgresCollection post
     }
 
     private static CollectionConfiguration Configuration(int intervalSeconds = WatchedSourceConfiguration.DefaultCheckIntervalSeconds,
-        bool enabled = true, bool withSource = true, DateOnly? coverageStartsOn = null)
+        bool enabled = true, bool withSource = true, DateOnly? coverageStartsOn = null,
+        CollectionMode mode = CollectionMode.Page, string url = "https://example.test/senate")
     {
         var source = new WatchedSourceConfiguration
         {
@@ -213,7 +240,8 @@ public sealed class PostgresCollectionScheduleStoreTests(PostgresCollection post
                 PersonId = "person",
                 StartsOn = coverageStartsOn ?? DateOnly.MinValue
             }],
-            Url = "https://example.test/senate",
+            Url = url,
+            Mode = mode,
             AllowedOrigin = "https://example.test",
             AllowedPathPrefix = "/",
             Enabled = enabled,

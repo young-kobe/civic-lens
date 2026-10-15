@@ -32,6 +32,10 @@ public sealed record CollectionJobDefinition
     public PacingGroupConfiguration? ResolvePacingGroup() =>
         ConfigurationRevision?.Configuration.PacingGroupOf(AllowedOrigin);
 
+    public bool IsRoot() =>
+        ApiResource == Collection.ApiResource.BillList ||
+        ConfigurationRevision?.Configuration.Sources.FirstOrDefault(source => source.Id == SourceId)?.Url == Url;
+
     public static CollectionJobDefinition FromConfiguration(CollectionConfiguration configuration, string sourceId,
         DateOnly? asOf = null)
     {

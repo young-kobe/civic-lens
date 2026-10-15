@@ -207,7 +207,7 @@ public sealed class CollectionWorkspaceTests
         public Task<CollectionJobRecord?> GetAsync(string jobId, CancellationToken cancellationToken) => Task.FromResult<CollectionJobRecord?>(jobId == job.JobId ? job : null);
         public Task<IReadOnlyList<CollectionJobRecord>> ListAsync(int limit, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<CollectionJobPage> ListPageAsync(PageCursor? cursor, int limit, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<IReadOnlyList<CollectionJobRecord>> ListLatestBySourceAsync(IReadOnlyCollection<SourceCheckTarget> targets, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<IReadOnlyList<CollectionJobRecord>> ListLatestBySourceAsync(IReadOnlyCollection<string> sourceIds, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<CollectionJobActivity> ListActivityAsync(int limit, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<CollectionJobRecord?> CancelAsync(string jobId, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<CollectionJobClaim?> TryClaimAsync(string jobId, TimeSpan leaseDuration, CancellationToken cancellationToken) => throw new NotSupportedException();
@@ -231,7 +231,7 @@ public sealed class CollectionWorkspaceTests
             Assert.Equal(CollectionWorkspace.RecentJobLimit, limit);
             return Task.FromResult(new CollectionJobPage(recent, null, null));
         }
-        public Task<IReadOnlyList<CollectionJobRecord>> ListLatestBySourceAsync(IReadOnlyCollection<SourceCheckTarget> targets, CancellationToken cancellationToken)
+        public Task<IReadOnlyList<CollectionJobRecord>> ListLatestBySourceAsync(IReadOnlyCollection<string> sourceIds, CancellationToken cancellationToken)
         {
             LatestCalls++;
             return Task.FromResult<IReadOnlyList<CollectionJobRecord>>([]);
