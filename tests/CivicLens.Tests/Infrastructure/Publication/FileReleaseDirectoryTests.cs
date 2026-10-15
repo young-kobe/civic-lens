@@ -52,13 +52,14 @@ public sealed class FileReleaseDirectoryTests : IDisposable
         await releases.ActivateAsync(first, default);
         using var stop = new CancellationTokenSource();
         var failures = new ConcurrentQueue<string>();
+        var reads = 0;
         var reader = Task.Run(() =>
         {
             while (!stop.IsCancellationRequested)
             {
                 try { _ = File.ReadAllText(Path.Combine(root, "current", "release.json")); }
                 catch (IOException exception) { failures.Enqueue($"{exception.GetType().Name}: {exception.Message}"); }
-                Thread.Yield();
+                reads++;
             }
         });
 
@@ -67,6 +68,7 @@ public sealed class FileReleaseDirectoryTests : IDisposable
         await reader;
 
         Assert.Empty(failures);
+        Assert.True(reads > 0);
     }
 
     [Fact]

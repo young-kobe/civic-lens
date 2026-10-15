@@ -44,7 +44,7 @@ internal sealed class HeldAdvisoryLock : IAsyncDisposable
     {
         await using var command = new NpgsqlCommand("""
             SELECT EXISTS (SELECT 1 FROM pg_locks
-                WHERE locktype = 'advisory' AND NOT granted
+                WHERE locktype = 'advisory' AND objsubid = 1 AND NOT granted
                   AND database = (SELECT oid FROM pg_database WHERE datname = current_database())
                   AND ((classid::bigint << 32) | objid::bigint) = hashtextextended(@key, 0))
             """, connection);

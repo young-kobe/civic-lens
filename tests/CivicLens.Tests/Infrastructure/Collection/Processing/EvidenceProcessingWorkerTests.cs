@@ -145,7 +145,7 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
             DocumentProfileId = null
         };
         var definition = new ConfiguredCollectionSource(configuration with { Sources = [apiSource] }, "source")
-            .CreateJobDefinition(DateOnly.FromDateTime(DateTime.UtcNow));
+            .CreateJobDefinition(DateOnly.FromDateTime(ObservationEpoch.UtcDateTime));
         var job = await jobs.EnqueueAsync(definition, "api-once", default);
         var runner = new RunCollectionJob(jobs, attempts, new FileCollectionReceiptHandoffStore(artifactRoot),
             new CaptureArtifactVerifier(), new ApiFixtureCollector());
@@ -547,7 +547,7 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
 
     private async Task<CollectionJobRecord> RunBillJobAsync(ApiResource resource, string url, string json)
     {
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var today = DateOnly.FromDateTime(ObservationEpoch.UtcDateTime);
         var definition = new ConfiguredCollectionSource(CongressBillSourceConfigurationTests.Configuration(), "congress-bills", today)
             .CreateApiJobDefinition(resource, url, today);
         var job = await jobs.EnqueueAsync(definition, "bill-list-once", default);

@@ -22,6 +22,7 @@ namespace CivicLens.Tests.Infrastructure.Analysis;
 public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection postgres) : IAsyncLifetime
 {
     private const string PreviousMigration = "20261009130000_KeysetReads";
+    private static readonly TimeSpan HangGuard = TimeSpan.FromSeconds(10);
     private static readonly ReviewActor Owner = new("auth0|owner", ReviewRole.Owner);
     private static readonly DocumentChangeAnalysisCatalog Catalog = new([], []);
     private readonly string captureRoot = Path.Combine(Path.GetTempPath(), "civic-analysis-" + Guid.NewGuid().ToString("N"));
@@ -291,7 +292,7 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
                 var now = Interlocked.Increment(ref running);
                 InterlockedMax(ref peak, now);
                 if (now == 3) limitReached.TrySetResult();
-                await limitReached.Task.WaitAsync(TimeSpan.FromSeconds(10), token);
+                await limitReached.Task.WaitAsync(HangGuard, token);
                 Interlocked.Decrement(ref running);
                 var quote = request.UserPrompt.Contains("Item 0 new", StringComparison.Ordinal) ? "Item 0 new"
                     : request.UserPrompt.Contains("Item 1 new", StringComparison.Ordinal) ? "Item 1 new"
@@ -387,7 +388,7 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
         var runId = Guid.NewGuid().ToString("N");
         Assert.Equal(AnalysisReservation.Reserved,
             await analysis.ReserveAsync(stale, runId, new string('e', 64), 5_000, 100_000, default));
-        await ScalarAsync<int>($"UPDATE document_change_analysis SET lease_expires_at = 0 WHERE comparison_id = '{comparison.ComparisonId}' RETURNING 0");
+        await ExecuteAsync(connectionString, $"UPDATE document_change_analysis SET lease_expires_at = 0 WHERE comparison_id = '{comparison.ComparisonId}'");
 
         var current = await analysis.TryClaimAsync(comparison.ComparisonId, TimeSpan.FromMinutes(1), default);
 

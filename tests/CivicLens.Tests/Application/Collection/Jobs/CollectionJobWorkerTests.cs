@@ -13,7 +13,7 @@ public sealed class CollectionJobWorkerTests
     {
         var queue = new SequenceQueue((_, _) => Task.FromResult(new CollectionWorkerQueuePage([], null)));
         var runner = new RunCollectionJob(new RecordingJobStore(), null!, null!, null!, null!);
-        using var cancellation = new CancellationTokenSource();
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         var wakeup = new FakeWakeup(async token =>
         {
             await cancellation.CancelAsync();
@@ -34,7 +34,7 @@ public sealed class CollectionJobWorkerTests
     [Fact]
     public async Task ConnectsBeforeInitialScanSoAnArrivingNotificationCannotBeMissed()
     {
-        using var cancellation = new CancellationTokenSource();
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         var wakeup = new FakeWakeup(_ => { cancellation.Cancel(); return Task.CompletedTask; });
         var queue = new SequenceQueue((_, _) =>
         {

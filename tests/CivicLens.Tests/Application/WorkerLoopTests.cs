@@ -44,12 +44,13 @@ public sealed class WorkerLoopTests
         {
             calls++;
             if (calls == 1) throw new InvalidOperationException("Brief outage.");
-            recovered.TrySetResult();
+            if (calls == 3) recovered.TrySetResult();
             return Task.FromResult(true);
         }, Lease, ownership);
 
-        await recovered.Task.WaitAsync(HangGuard);
+        await Task.WhenAny(recovered.Task, renewal).WaitAsync(HangGuard);
 
+        Assert.True(recovered.Task.IsCompleted);
         Assert.False(ownership.IsCancellationRequested);
         await ownership.CancelAsync();
         await renewal;
@@ -68,12 +69,13 @@ public sealed class WorkerLoopTests
         }, Lease, ownership).WaitAsync(HangGuard);
 
         Assert.True(ownership.IsCancellationRequested);
-        Assert.True(started.Elapsed >= Lease * 0.9);
+        Assert.InRange(started.Elapsed, Lease * 0.9, Lease * 2);
     }
 
     [Fact]
     public async Task ASlowSuccessfulRenewalExtendsTheLeaseFromWhenItWasSent()
     {
+        var lease = TimeSpan.FromMilliseconds(1500);
         using var ownership = new CancellationTokenSource();
         var started = Stopwatch.StartNew();
         var first = true;
@@ -82,11 +84,11 @@ public sealed class WorkerLoopTests
         {
             if (!first) await Task.Delay(Timeout.Infinite, token);
             first = false;
-            await Task.Delay(Lease / 2, token);
+            await Task.Delay(lease / 2, token);
             return true;
-        }, Lease, ownership).WaitAsync(HangGuard);
+        }, lease, ownership).WaitAsync(HangGuard);
 
-        var sentAt = Lease / 3;
-        Assert.True(started.Elapsed >= sentAt + Lease * 0.9);
+        var sentAt = lease / 3;
+        Assert.InRange(started.Elapsed, sentAt + lease * 0.9, sentAt + lease + lease / 2);
     }
 }
