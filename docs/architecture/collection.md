@@ -490,7 +490,7 @@ Provider exception details are not printed, because they can hold connection val
 | Postgres evidence | `src/CivicLens.Infrastructure/Collection/PostgresCollectionAttemptStore.cs`, `src/CivicLens.Infrastructure/Collection/CollectionAttemptDbContext.cs` |
 | Postgres jobs | `src/CivicLens.Infrastructure/Collection/Jobs/PostgresCollectionJobStore.cs`, `src/CivicLens.Infrastructure/Collection/Jobs/JobRowWriter.cs`, `src/CivicLens.Infrastructure/Collection/Jobs/StoredJobDefinition.cs`, `src/CivicLens.Infrastructure/Collection/Jobs/PostgresCollectionWorkerQueue.cs`, `src/CivicLens.Infrastructure/Collection/Jobs/PostgresCollectionPipelineWakeup.cs` |
 | Postgres processing | `src/CivicLens.Infrastructure/Collection/Processing/PostgresEvidenceProcessingStore.cs` |
-| CLI and pages | `src/CivicLens.Host/Collection/CollectionWorkerCommand.cs`, `src/CivicLens.Host/Collection/CollectionJobCommand.cs`, `src/CivicLens.Host/Collection/CollectionRecoveryCommand.cs`, `src/CivicLens.Host/Collection/DiscoveryCommand.cs`, `src/CivicLens.Host/Collection/SourcesPage.razor` |
+| CLI and pages | `src/CivicLens.Host/Collection/CollectionWorkerCommand.cs`, `src/CivicLens.Host/Collection/CollectionJobCommand.cs`, `src/CivicLens.Host/Collection/CollectionRecoveryCommand.cs`, `src/CivicLens.Host/Collection/DiscoveryCommand.cs`, `src/CivicLens.Host/Collection/CollectionCommandOutput.cs`, `src/CivicLens.Host/Collection/SourcesPage.razor` |
 | Parser parity test | `tests/CivicLens.Tests/Infrastructure/Documents/HtmlParseParityTests.cs` |
 
 The shared wakeup and lease mechanics are in [Shared worker mechanics](../architecture.md#shared-worker-mechanics). Commands are in [operations](../operations.md#managed-collection-jobs).

@@ -1,19 +1,14 @@
 using CivicLens.Application;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using CivicLens.Application.Analysis;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Application.Collection.Processing;
-using CivicLens.Collection.Contracts;
 using CivicLens.Infrastructure.Collection;
 
 namespace CivicLens.Host.Collection;
 
 internal static class CollectionWorkerCommand
 {
-    private static readonly JsonSerializerOptions JsonOptions = CreateJsonOptions();
-
     public static bool Matches(string[] arguments) => arguments is
         ["worker", _, _] or ["worker", _, _, "--once"];
 
@@ -42,9 +37,9 @@ internal static class CollectionWorkerCommand
         var once = arguments.Length == 4;
         var collection = new CollectionJobWorker(queue, runner, evidenceProcessor, wakeup, schedules);
         var (result, analysisResults) = await RunAsync(collection, analysis ?? [], artifactRoot, once, cancellationToken);
-        Console.WriteLine(JsonSerializer.Serialize(result, JsonOptions));
+        CollectionCommandOutput.Write(result);
         foreach (var (name, analysisResult) in analysisResults)
-            Console.WriteLine(JsonSerializer.Serialize(new Dictionary<string, AnalysisWorkerResult> { [name] = analysisResult }, JsonOptions));
+            CollectionCommandOutput.Write(new Dictionary<string, AnalysisWorkerResult> { [name] = analysisResult });
         var analysisFailed = analysisResults.Any(item => item.Result.Failures > 0);
         return result.JobFailures == 0 && result.QueueFailures == 0 && !analysisFailed ? 0 : 1;
     }
@@ -75,12 +70,5 @@ internal static class CollectionWorkerCommand
             await stop.CancelAsync();
             throw;
         }
-    }
-
-    private static JsonSerializerOptions CreateJsonOptions()
-    {
-        var options = new JsonSerializerOptions(CollectionProtocol.JsonOptions);
-        options.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase, allowIntegerValues: false));
-        return options;
     }
 }

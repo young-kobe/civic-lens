@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using CivicLens.Application.Collection;
 using CivicLens.Collection.Contracts;
 using CivicLens.Core.Collection;
@@ -7,6 +8,10 @@ namespace CivicLens.Host.Collection;
 
 internal static class CollectionCommandOutput
 {
+    private static readonly JsonSerializerOptions JsonOptions = CreateJsonOptions();
+
+    public static void Write<T>(T value) => Console.WriteLine(JsonSerializer.Serialize(value, JsonOptions));
+
     public static int WriteCompletion(CollectionAttemptCompletion completion)
     {
         var output = Create(completion.Decision, completion.HandoffRemoved);
@@ -30,5 +35,12 @@ internal static class CollectionCommandOutput
         return new CollectionImportOutput(decision.AttemptResult.AttemptId, outcome,
             JsonNamingPolicy.CamelCase.ConvertName(decision.Disposition.ToString()),
             JsonNamingPolicy.CamelCase.ConvertName(decision.PriorCaptureLinkStatus.ToString()), handoffRemoved);
+    }
+
+    private static JsonSerializerOptions CreateJsonOptions()
+    {
+        var options = new JsonSerializerOptions(CollectionProtocol.JsonOptions);
+        options.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase, allowIntegerValues: false));
+        return options;
     }
 }
