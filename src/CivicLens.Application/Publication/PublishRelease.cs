@@ -114,22 +114,7 @@ public sealed class PublishRelease
         PreviousRelease previous, List<PublishedRecordEntry> carried, List<PendingRecord> additions,
         CancellationToken cancellationToken)
     {
-        await using var staging = await releases.BeginAsync(cancellationToken);
-        var entries = new List<PublishedRecordEntry>();
-        foreach (var entry in carried)
-        {
-            await staging.LinkFileAsync(previous.DirectoryName!, PublicationProtocol.RecordDataPath(entry.RecordId), cancellationToken);
-            await staging.LinkFileAsync(previous.DirectoryName!, PublicationProtocol.RecordPagePath(entry.RecordId), cancellationToken);
-            entries.Add(entry);
-        }
-        foreach (var addition in additions)
-        {
-            await staging.WriteFileAsync(PublicationProtocol.RecordDataPath(addition.RecordId), addition.Json, cancellationToken);
-            await staging.WriteFileAsync(PublicationProtocol.RecordPagePath(addition.RecordId),
-                Encoding.UTF8.GetBytes(addition.Page), cancellationToken);
-            entries.Add(addition.Entry);
-        }
-
+        List<PublishedRecordEntry> entries = [.. carried, .. additions.Select(addition => addition.Entry)];
         var manifest = new PublicationRelease
         {
             SchemaVersion = PublicationProtocol.SchemaVersion,
@@ -139,6 +124,23 @@ public sealed class PublishRelease
                 .ThenBy(entry => entry.RecordId, StringComparer.Ordinal)]
         };
         manifest.Validate();
+        var manifestJson = JsonSerializer.SerializeToUtf8Bytes(manifest, PublicationProtocol.JsonOptions);
+        if (manifestJson.Length > PublicationProtocol.MaximumRecordFileBytes)
+            throw new ArgumentException("The release manifest would exceed the manifest size limit.", nameof(additions));
+
+        await using var staging = await releases.BeginAsync(cancellationToken);
+        foreach (var entry in carried)
+        {
+            await staging.LinkFileAsync(previous.DirectoryName!, PublicationProtocol.RecordDataPath(entry.RecordId), cancellationToken);
+            await staging.LinkFileAsync(previous.DirectoryName!, PublicationProtocol.RecordPagePath(entry.RecordId), cancellationToken);
+        }
+        foreach (var addition in additions)
+        {
+            await staging.WriteFileAsync(PublicationProtocol.RecordDataPath(addition.RecordId), addition.Json, cancellationToken);
+            await staging.WriteFileAsync(PublicationProtocol.RecordPagePath(addition.RecordId),
+                Encoding.UTF8.GetBytes(addition.Page), cancellationToken);
+        }
+
         foreach (var asset in renderer.Assets)
             await staging.WriteFileAsync(asset.RelativePath, asset.Content, cancellationToken);
         for (var page = 1; page <= PublicationProtocol.IndexPageCount(entries.Count); page++)
@@ -146,8 +148,7 @@ public sealed class PublishRelease
             var index = await renderer.RenderIndexAsync(manifest, page, cancellationToken);
             await staging.WriteFileAsync(PublicationProtocol.IndexPagePath(page), Encoding.UTF8.GetBytes(index), cancellationToken);
         }
-        await staging.WriteFileAsync(PublicationProtocol.ManifestPath,
-            JsonSerializer.SerializeToUtf8Bytes(manifest, PublicationProtocol.JsonOptions), cancellationToken);
+        await staging.WriteFileAsync(PublicationProtocol.ManifestPath, manifestJson, cancellationToken);
         return (await staging.CompleteAsync(number, cancellationToken), entries);
     }
 

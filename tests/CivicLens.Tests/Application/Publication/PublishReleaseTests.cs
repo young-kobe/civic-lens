@@ -8,6 +8,8 @@ namespace CivicLens.Tests.Application.Publication;
 
 public sealed class PublishReleaseTests
 {
+    private const int SeededNonAsciiRecords = 10252;
+
     [Fact]
     public async Task ReviewerCannotPublishBecauseOnlyTheOwnerSpeaksForTheSite()
     {
@@ -119,7 +121,7 @@ public sealed class PublishReleaseTests
     }
 
     [Fact]
-    public async Task AReleaseAtTheRecordLimitWithLongestHeadlinesStaysWellUnderTheManifestReadCap()
+    public async Task AReleaseAtTheRecordLimitOfLongestAsciiDocumentChangeHeadlinesKeepsTheManifestUnderThreeQuartersOfTheReadCap()
     {
         var scenario = new PublicationScenario();
         scenario.SeedRelease(PublicationProtocol.MaximumRecordsPerRelease - 1, withFiles: true,
@@ -132,6 +134,23 @@ public sealed class PublishReleaseTests
         var manifestBytes = scenario.Releases.Directories[summary.DirectoryName][PublicationProtocol.ManifestPath].Length;
         Assert.True(manifestBytes < PublicationProtocol.MaximumRecordFileBytes * 3 / 4,
             $"The manifest has {manifestBytes} bytes, and the next publish must read it under {PublicationProtocol.MaximumRecordFileBytes}.");
+    }
+
+    [Fact]
+    public async Task RefusesAManifestOverTheReadCapAndStagesNothing()
+    {
+        var scenario = new PublicationScenario();
+        scenario.SeedRelease(SeededNonAsciiRecords, withFiles: true, DocumentChangeDraftRevision.MaximumHeadlineLength, 'é');
+        var seededBytes = scenario.Releases.Directories["seeded"][PublicationProtocol.ManifestPath].Length;
+        Assert.InRange(seededBytes, PublicationProtocol.MaximumRecordFileBytes - 600, PublicationProtocol.MaximumRecordFileBytes);
+        var drafts = new[] { 'a', 'b', 'c', 'd', 'e', 'f' }.Select(id => scenario.AddDraft(id)).ToArray();
+
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k", drafts)));
+
+        Assert.Equal(0, scenario.Releases.BeginCount);
+        Assert.Single(scenario.Publications.Committed);
+        Assert.Empty(scenario.Releases.Activated);
     }
 
     [Theory]

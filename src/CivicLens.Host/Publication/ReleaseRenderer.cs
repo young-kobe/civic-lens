@@ -36,7 +36,6 @@ public sealed class ReleaseRenderer : IReleaseRenderer
     public Task<string> RenderIndexAsync(PublicationRelease release, int page, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(release);
-        release.Validate();
         ArgumentOutOfRangeException.ThrowIfLessThan(page, 1);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(page, PublicationProtocol.IndexPageCount(release.Records.Length));
         return RenderAsync<PublishedIndexPage>(new Dictionary<string, object?>
