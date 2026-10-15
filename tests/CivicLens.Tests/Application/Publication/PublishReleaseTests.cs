@@ -145,9 +145,10 @@ public sealed class PublishReleaseTests
         Assert.InRange(seededBytes, PublicationProtocol.MaximumRecordFileBytes - 600, PublicationProtocol.MaximumRecordFileBytes);
         var drafts = new[] { 'a', 'b', 'c', 'd', 'e', 'f' }.Select(id => scenario.AddDraft(id)).ToArray();
 
-        await Assert.ThrowsAsync<ArgumentException>(() =>
+        var refusal = await Assert.ThrowsAsync<ArgumentException>(() =>
             scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k", drafts)));
 
+        Assert.Contains("manifest size limit", refusal.Message);
         Assert.Equal(0, scenario.Releases.BeginCount);
         Assert.Single(scenario.Publications.Committed);
         Assert.Empty(scenario.Releases.Activated);
