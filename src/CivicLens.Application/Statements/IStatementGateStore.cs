@@ -4,6 +4,6 @@ namespace CivicLens.Application.Statements;
 
 public interface IStatementGateStore : IAnalysisQueueStore<StatementGateRun, StatementGateView, StatementGateListItem>
 {
-    Task<StatementGateEvidence?> ReadEvidenceAsync(string candidateId, CancellationToken cancellationToken);
+    Task<StatementArticle?> ReadEvidenceAsync(string candidateId, CancellationToken cancellationToken);
     Task<int> RegateAsync(string issueRevisionId, DateOnly? since, CancellationToken cancellationToken);
 }

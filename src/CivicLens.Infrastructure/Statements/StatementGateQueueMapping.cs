@@ -11,7 +11,7 @@ namespace CivicLens.Infrastructure.Statements;
 
 internal sealed class StatementGateQueueMapping : IAnalysisQueueMapping<StatementAnalysisRow, StatementGateRun>
 {
-    public string Table => PostgresStatementGateStore.Table;
+    public string Table => StatementAnalysisListing.Table;
 
     public string KeyColumn => "candidate_id";
 

@@ -37,7 +37,7 @@ public sealed class PostgresStatementDraftStore : PostgresAnalysisStore<Statemen
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(candidateId);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        var article = await PostgresStatementGateStore.ReadArticleAsync(db, candidateId, cancellationToken);
+        var article = await StatementAnalysisListing.ReadArticleAsync(db, candidateId, cancellationToken);
         if (article is null) return null;
         var gateRun = await db.Set<StatementAnalysisRunRow>().AsNoTracking()
             .Where(run => run.CandidateId == candidateId && run.Task == StatementGateTask.Task && run.Reason != null)

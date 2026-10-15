@@ -9,7 +9,7 @@ namespace CivicLens.Infrastructure.Statements;
 
 internal sealed class StatementDraftQueueMapping : IAnalysisQueueMapping<StatementAnalysisRow, StatementDraftRun>
 {
-    public string Table => PostgresStatementGateStore.Table;
+    public string Table => StatementAnalysisListing.Table;
 
     public string KeyColumn => "candidate_id";
 

@@ -26,7 +26,7 @@ public static class StatementGatePrompt
 
     public static long MinimumReservation => Encoding.UTF8.GetByteCount(Instructions) + (long)StatementGateTask.MaximumOutputTokens;
 
-    public static AnalysisModelRequest? Build(StatementGateEvidence evidence, StatementGateRubric rubric, int maximumBytes,
+    public static AnalysisModelRequest? Build(StatementArticle evidence, StatementGateRubric rubric, int maximumBytes,
         ImmutableArray<string> previousErrors = default)
     {
         ArgumentNullException.ThrowIfNull(evidence);
@@ -45,7 +45,7 @@ public static class StatementGatePrompt
     private static string BuildSystemPrompt(StatementGateRubric rubric) =>
         Instructions + "\n\nRubric:\n" + JsonSerializer.Serialize(rubric.ToDocument(), AnalysisPromptText.EvidenceJson);
 
-    private static string BuildUserPrompt(StatementGateEvidence evidence, ImmutableArray<string> previousErrors)
+    private static string BuildUserPrompt(StatementArticle evidence, ImmutableArray<string> previousErrors)
     {
         var attempt = evidence.Extraction.SourceAttempt;
         var document = new

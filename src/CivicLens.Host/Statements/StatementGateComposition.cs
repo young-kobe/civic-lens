@@ -19,7 +19,7 @@ internal static class StatementGateComposition
         if (configuration is null) return AnalysisComposition<StatementGateRun>.Disabled(status);
         var rubric = StatementIssueRubric.FromEnvironment();
         if (rubric is null) return new(status, configuration.Settings.DailyTokenLimit, null, null, IssuesUnsetReason);
-        var wakeup = PostgresAnalysisWakeup.FromConnectionString(connectionString, PostgresStatementGateStore.Table,
+        var wakeup = PostgresAnalysisWakeup.FromConnectionString(connectionString, StatementAnalysisListing.Table,
             StatementGateTask.Task);
         var step = new StatementGateStep(new PostgresStatementGateStore(contexts),
             new AnthropicStatementGateModel(configuration.ApiKey), configuration.Settings, rubric);

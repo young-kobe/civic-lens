@@ -2,7 +2,7 @@ using CivicLens.Core.Documents;
 
 namespace CivicLens.Application.Statements;
 
-public sealed record StatementGateEvidence(string CandidateId, DocumentExtraction Extraction)
+public sealed record StatementArticle(string CandidateId, DocumentExtraction Extraction)
 {
     public DateOnly FirstCapturedOn => CapturedOn(Extraction);
 

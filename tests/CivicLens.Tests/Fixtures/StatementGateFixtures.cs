@@ -33,7 +33,7 @@ internal static class StatementGateFixtures
     public static IssueConfigurationRevision Revision(string rentDefinition = "Limits on rent increases for tenants.") =>
         IssueConfigurationRevision.Create(Configuration(rentDefinition));
 
-    public static StatementGateEvidence Evidence(string text, DateTimeOffset? observed = null, string url = "https://example.test/news/release")
+    public static StatementArticle Evidence(string text, DateTimeOffset? observed = null, string url = "https://example.test/news/release")
     {
         var attempt = new CapturedAttemptResult(Guid.NewGuid().ToString("N"), "source", url, url, observed ?? Observed,
             new CollectionResponse(200, null, null, "text/plain", []), new CaptureIdentity(new string('a', 64), 0));

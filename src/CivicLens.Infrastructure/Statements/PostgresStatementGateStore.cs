@@ -2,7 +2,6 @@ using System.Linq.Expressions;
 using CivicLens.Application.Statements;
 using CivicLens.Infrastructure.Analysis;
 using CivicLens.Infrastructure.Collection;
-using CivicLens.Infrastructure.Documents;
 using CivicLens.Infrastructure.Statements.Persistence;
 using Microsoft.EntityFrameworkCore;
 using State = CivicLens.Application.Analysis.AnalysisState;
@@ -11,8 +10,6 @@ namespace CivicLens.Infrastructure.Statements;
 
 public sealed class PostgresStatementGateStore : PostgresAnalysisStore<StatementGateRun>, IStatementGateStore
 {
-    public const string Table = "statement_analysis";
-
     private readonly IDbContextFactory<CollectionAttemptDbContext> contextFactory;
     private readonly PostgresAnalysisQueue<StatementAnalysisRow, StatementAnalysisBudgetRow, StatementGateRun> queue;
 
@@ -35,21 +32,11 @@ public sealed class PostgresStatementGateStore : PostgresAnalysisStore<Statement
         return row is null ? null : StatementGateQueueMapping.ToRun(row);
     }
 
-    public async Task<StatementGateEvidence?> ReadEvidenceAsync(string candidateId, CancellationToken cancellationToken)
+    public async Task<StatementArticle?> ReadEvidenceAsync(string candidateId, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(candidateId);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        return await ReadArticleAsync(db, candidateId, cancellationToken);
-    }
-
-    internal static async Task<StatementGateEvidence?> ReadArticleAsync(CollectionAttemptDbContext db, string candidateId,
-        CancellationToken cancellationToken)
-    {
-        var extractionId = await db.Set<StatementCandidateRow>().AsNoTracking().Where(row => row.CandidateId == candidateId)
-            .Select(row => row.ExtractionId).SingleOrDefaultAsync(cancellationToken);
-        if (extractionId is null) return null;
-        var extraction = await PostgresDocumentExtractionStore.ReadAsync(db, extractionId, cancellationToken);
-        return extraction is null ? null : new(candidateId, extraction);
+        return await StatementAnalysisListing.ReadArticleAsync(db, candidateId, cancellationToken);
     }
 
     public Task<int> RegateAsync(string issueRevisionId, DateOnly? since, CancellationToken cancellationToken) =>

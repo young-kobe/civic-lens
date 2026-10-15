@@ -21,11 +21,11 @@ internal sealed class FakeStatementGateStore : FakeAnalysisQueue<StatementGateRu
         }
     }
 
-    public Dictionary<string, StatementGateEvidence> Evidence { get; } = [];
+    public Dictionary<string, StatementArticle> Evidence { get; } = [];
     public HashSet<string> QueuedDrafts { get; } = [];
 
-    public Task<StatementGateEvidence?> ReadEvidenceAsync(string candidateId, CancellationToken cancellationToken) =>
-        Task.FromResult<StatementGateEvidence?>(Evidence[candidateId]);
+    public Task<StatementArticle?> ReadEvidenceAsync(string candidateId, CancellationToken cancellationToken) =>
+        Task.FromResult<StatementArticle?>(Evidence[candidateId]);
 
     public Task<int> RegateAsync(string issueRevisionId, DateOnly? since, CancellationToken cancellationToken) => Task.FromResult(0);
 

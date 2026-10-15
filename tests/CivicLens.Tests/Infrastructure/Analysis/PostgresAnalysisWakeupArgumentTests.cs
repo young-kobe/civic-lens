@@ -23,5 +23,5 @@ public sealed class PostgresAnalysisWakeupArgumentTests
     [InlineData("statement_draft")]
     public void AQueueTaskWithAnythingButLowercaseLettersDigitsAndHyphensIsRefused(string task) =>
         Assert.ThrowsAny<ArgumentException>(() => PostgresAnalysisWakeup.FromConnectionString(Database,
-            PostgresStatementGateStore.Table, task));
+            StatementAnalysisListing.Table, task));
 }
