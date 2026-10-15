@@ -208,6 +208,7 @@ Infrastructure reads AI drafts in keyset pages of 100. Each page costs four quer
 | Document-change parts | `DocumentChangeAnalysisRecord` adds the draft ID, and `DocumentChangeAnalysisCheckpoint` adds the revision. `DocumentChangeAnalysisErrorCodes`, `DocumentChangeAnalysisSettings`, `DocumentChangeAnalysisCatalog`, and `DocumentChangeAnalysisEvidence` complete the feature. |
 | Reserved author | `src/CivicLens.Core/Review/ReviewAuthor.cs` |
 | CLI and composition | `src/CivicLens.Host/Analysis/AnalysisCommand.cs`, `src/CivicLens.Host/Analysis/DocumentChangeAnalysisComposition.cs` |
+| Shared Host setup | `AnalysisEnvironment` reads the token limits, the concurrency, and the API key for every drafting feature. `AnalysisComposition<TRun>` holds the worker, the wakeup, and the start record of each feature. |
 
 The shared wakeup and lease mechanics are in [Shared worker mechanics](../architecture.md#shared-worker-mechanics).
 

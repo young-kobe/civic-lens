@@ -9,29 +9,14 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CivicLens.Host.Analysis;
 
-internal sealed class DocumentChangeAnalysisComposition
+internal static class DocumentChangeAnalysisComposition
 {
-    private readonly IAnalysisStatusStore status;
-    private readonly long? dailyTokenLimit;
-
-    private DocumentChangeAnalysisComposition(IAnalysisStatusStore status, DocumentChangeAnalysisConfiguration? configuration,
-        AnalysisWorker<AnalysisRun>? worker, IWorkerWakeup? wakeup)
-    {
-        this.status = status;
-        dailyTokenLimit = configuration?.Settings.DailyTokenLimit;
-        Worker = worker;
-        Wakeup = wakeup;
-    }
-
-    public AnalysisWorker<AnalysisRun>? Worker { get; }
-    public IWorkerWakeup? Wakeup { get; }
-
-    public static DocumentChangeAnalysisComposition Create(IDbContextFactory<CollectionAttemptDbContext> contexts,
+    public static AnalysisComposition<AnalysisRun> Create(IDbContextFactory<CollectionAttemptDbContext> contexts,
         string connectionString, CollectionConfiguration collection)
     {
         var status = new PostgresAnalysisStatusStore(contexts);
         var configuration = DocumentChangeAnalysisConfiguration.FromEnvironment();
-        if (configuration is null) return new(status, null, null, null);
+        if (configuration is null) return AnalysisComposition<AnalysisRun>.Disabled(status);
         var names = collection.People.ToDictionary(person => person.Id, person => person.Name, StringComparer.Ordinal);
         var catalog = DocumentChangeAnalysisCatalog.Create(ReviewWorkspace.ReadCatalog(), names);
         var wakeup = PostgresAnalysisWakeup.FromConnectionString(connectionString, PostgresDocumentChangeAnalysisStore.Table,
@@ -39,8 +24,6 @@ internal sealed class DocumentChangeAnalysisComposition
         var step = new DocumentChangeDraftingStep(new PostgresDocumentChangeAnalysisStore(contexts),
             new AnthropicDocumentChangeDraftingModel(configuration.ApiKey), configuration.Settings, catalog);
         var worker = new AnalysisWorker<AnalysisRun>(step, status, TimeProvider.System, wakeup);
-        return new(status, configuration, worker, wakeup);
+        return new(status, configuration.Settings.DailyTokenLimit, worker, wakeup);
     }
-
-    public Task RecordStartAsync(CancellationToken cancellationToken) => status.RecordStartAsync(dailyTokenLimit, cancellationToken);
 }
