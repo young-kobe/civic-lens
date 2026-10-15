@@ -1,7 +1,8 @@
 @using CivicLens.Publication.Contracts
 
-<p class="muted small">Observed @Moment.Full(Version.ObservedAtUtc). Source: <a href="@Version.Url" rel="noopener noreferrer nofollow">@Version.Url</a></p>
+<p class="muted small">Observed @Moment.Full(Version.ObservedAtUtc). Source: @if (Linked) {<a href="@Version.Url" rel="noopener noreferrer nofollow">@Version.Url</a>} else {@Version.Url}</p>
 
 @code {
     [Parameter, EditorRequired] public PublishedDocumentVersion Version { get; set; } = default!;
+    [Parameter] public bool Linked { get; set; } = true;
 }

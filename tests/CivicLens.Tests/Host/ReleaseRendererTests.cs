@@ -212,7 +212,11 @@ public sealed class ReleaseRendererTests
         Assert.Equal(["Jane <Doe>|Sponsor|No|2026-01-03|None|Sponsor: D000001", "Ann Roe|Cosponsor|Yes|2026-01-05|2026-01-20|Cosponsor: R000002, original"], rows);
         Assert.Contains("Summary version: 00 <i>funds</i> rent aid.", document.QuerySelector("[aria-labelledby='bill-evidence-title']")!.TextContent,
             StringComparison.Ordinal);
-        Assert.Contains("href=\"https://api.congress.gov/v3/bill/119/hr/7/cosponsors\"", html, StringComparison.Ordinal);
+        var sources = document.QuerySelector("[aria-labelledby='sources-title']")!;
+        Assert.Contains("https://api.congress.gov/v3/bill/119/hr/7/cosponsors", sources.TextContent, StringComparison.Ordinal);
+        Assert.Empty(sources.QuerySelectorAll("a"));
+        Assert.Equal(["Sponsor: D000001", "Policy area: Housing and Community Development", "Summary version: 00 <i>funds</i> rent aid.",
+            "Cosponsor: R000002, original"], sources.QuerySelectorAll("mark").Select(mark => mark.TextContent));
         Assert.Contains("A sponsorship is a proposal, not a law.", html, StringComparison.Ordinal);
         Assert.DoesNotContain("<i>", html, StringComparison.Ordinal);
     }

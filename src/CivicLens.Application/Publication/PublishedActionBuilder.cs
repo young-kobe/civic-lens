@@ -11,7 +11,7 @@ internal sealed class PublishedActionBuilder(PublishedRecordRules rules)
     {
         var (review, extractions) = action;
         var revision = review.CurrentRevision;
-        PublishedCitation Cite(StatementSpan span) => PublishedStatementBuilder.Cite(span, extractions[span.ExtractionId]);
+        PublishedCitation Cite(StatementSpan span) => PublishedRecordRules.Cite(span, extractions[span.ExtractionId]);
 
         var record = new PublishedAction
         {
@@ -24,6 +24,7 @@ internal sealed class PublishedActionBuilder(PublishedRecordRules rules)
             BillNumber = revision.BillNumber,
             BillTitle = revision.BillTitle,
             PolicyArea = revision.PolicyArea,
+            PolicyAreaId = rules.PolicyAreaIdOf(revision.PolicyArea),
             PolicyAreaCitation = revision.PolicyAreaCitation is { } area ? Cite(area) : null,
             TrackedIssueIds = [.. revision.TrackedIssueIds],
             SummaryCitation = revision.SummaryCitation is { } summary ? Cite(summary) : null,

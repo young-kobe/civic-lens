@@ -19,7 +19,9 @@ The publication feature turns approved revisions into immutable, cumulative stat
 - All releases are kept until a retention policy is agreed.
 - Host renders the shared Razor components to static HTML, so publication needs no new project.
 - Each manifest entry carries search filters, so search needs no record file reads. Each published record type owns the mapping in its `ToEntry` method. A filter that the kind has no fact for stays empty; publish never guesses it.
-- One loader owns each record kind: its ID shape, its ready list, and how publish loads and builds it. `PublishedRecordLoaders` lists them, and the publish and ready-list handlers go through that list. A new kind adds one loader and no switch.
+- One loader owns each record kind: its ID shape, its ready list, and how publish loads and builds it. `PublishedRecordLoaders` lists them, and the publish and ready-list handlers go through that list. One loader owns the Application side of a kind. The other per-kind places are the `PublicationProtocol.IsRecordId` arm, the store state check, `PublishedRecordLabels.Kind`, the review link, and the `IReleaseRenderer` method.
+- The loader base class gives each kind one owner for its Application rules. The three kinds are real variation, with different IDs, stores, and records. The precedents are `PostgresAnalysisStore<TRun>` and `ReviewRecordPage`.
+- Official names in every record kind come from the current `PublicationCatalog`, not from stored revisions. The action `policyAreaIds` filter comes from the current issue configuration in the same catalog, through `IssueConfiguration.PolicyAreaIdFor`. A name that the configuration no longer holds gives an empty filter.
 - A record ID is unique across all kinds, because all kinds share the flat `records/{id}` paths.
 - An action record embeds the full text of each cited extraction once. Each citation names its extraction, and the contract checks the quote against that source.
 - Actions kept manifest schema version 3, because every reader ships with or after the release it reads. The publisher reads releases that it or an older publisher wrote. `app.js` ships inside each release. An older publisher fails loudly on the unknown kind.
@@ -39,6 +41,9 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - A record ID has the shape of its kind. Enforced by each loader's `ValidateId` for requests and by `PublicationProtocol.IsRecordId` for files. Test: `PublishStatementTests.RecordIdMustMatchTheIdShapeOfItsKindSoAKindCannotBeMislabelled`.
 - Each action citation quotes the embedded source that it names, and each embedded source is cited. Enforced by `PublishedAction.Validate`. Tests: `PublishedActionTests.RejectsACitationWhoseQuoteMatchesAnotherSourceButNotTheOneItNames`, `PublishedActionTests.RejectsACitationThatNamesNoEmbeddedSource`, and `PublishedActionTests.RejectsASourceThatNoCitationNamesBecauseTheFileEmbedsOnlyCitedEvidence`.
 - An action file holds 1 to `PublishedAction.MaximumSources` sources and 1 to `PublishedAction.MaximumSponsorships` sponsorships. Enforced by `PublishedAction.Validate`. Tests: `PublishedActionTests.RequiresOneToEightSourcesSoTheRecordFileStaysBounded` and `PublishedActionTests.RequiresOneToSixHundredSponsorships`.
+- An action sponsorship is never withdrawn before it began, and the contract limits equal the Core limits. Enforced by `PublishedAction.Validate` and the shared constants. Tests: `PublishedActionTests.ASponsorshipCannotBeWithdrawnBeforeItBegan` and `PublishedActionTests.ContractLimitsEqualTheCoreLimitsSoADraftThatPassesReviewAlwaysPublishes`.
+- The action `policyAreaIds` filter holds the configured policy area ID. Enforced by `PublishedAction.ToEntry` and `PublishedRecordRules.PolicyAreaIdOf`. Tests: `PublishedActionTests.TheEntryNamesOnlyTheSponsorAndDatesTheLatestSponsorshipEvent` and `PublishActionTests.AnActionFillsItsSearchFiltersFromTheRevisionItPublishesAndNamesOnlyItsSponsor`.
+- A commit waits for the action review lock. Enforced by `PostgresAdvisoryLock.ReviewKeysInOrder`. Test: `PostgresPublicationStoreTests.CommitWaitsForTheActionLockBecauseAnActionDecisionMustNotSlipInDuringThePublish`.
 - The precompressed manifests hold exactly the manifest bytes. Enforced by `PublishRelease`. Test: `PublishReleaseTests.PrecompressedManifestsHoldExactlyTheManifestBytesSoTheServerNeverSendsADifferentRelease`.
 - A commit holds the exact revision and review state version that the build read, in the draft table of the record's kind. Enforced by `PostgresPublicationStore`. Tests: `PostgresPublicationStoreTests.ADecisionAfterTheBuildBlocksTheCommitBecauseApprovalMayHaveChanged`, `PostgresBillStreamTests.AnActionDecisionAfterTheBuildBlocksTheCommitBecauseApprovalMayHaveChanged`, and `PostgresPublicationStoreTests.AStatementIsNeverCheckedAgainstTheActionTableBecauseTheKindPicksTheDraftTable`.
 - The kinds share the ready list limit equally, and unused share goes to the other kinds. Enforced by `ListPublishable`. Tests: `ListPublishableTests.ThreeKindsShareTheLimitEquallyWhenEachHasMoreThanItsShare` and `ListPublishableTests.AKindWithFewReadyRecordsGivesItsUnusedShareToBothOtherKinds`.
@@ -85,7 +90,7 @@ Every quotation must equal the source text at its offsets.
 An action record carries:
 
 - the bill identity (congress, type, and number) and the bill title
-- the policy area with its citation, and the tracked issue IDs
+- the policy area with its citation, the configured policy area ID, and the tracked issue IDs
 - the CRS summary citation, when the revision has one
 - 1 to 600 sponsorships. Each has the official by configured name, the role (`sponsor` or `cosponsor`), and the original flag. It also has the sponsored date, the optional withdrawn date, and one or two citations.
 - 1 to 8 sources, each with the full extracted text of one cited Congress.gov API page, its URL, and its observation time
@@ -130,7 +135,7 @@ Withdrawing approval does not change published artifacts. The UI flags affected 
 
 The release builder renders public components to static HTML through `PublicPage`, `PublishedIndexPage`, and one record page for each kind: `PublishedRecordPage`, `PublishedStatementPage`, and `PublishedActionPage`.
 
-An action page shows the headline, the summary, the bill, the title, the policy area, and the tracked issues. It has a sponsorship table with each official's configured name, role, original flag, dates, and cited quotes. It shows the policy area and CRS summary citations and links each source. Its caveat says that a sponsorship is a proposal, not a law, and that the record lists tracked officials only. A release copies `assets/css/theme.css`, `assets/css/app.css`, `assets/js/theme.js`, `assets/js/app.js`, and the fonts. Pages also work without JavaScript. Shared components are described in [host](host.md#presentation).
+An action page shows the headline, the summary, the bill, the title, the policy area, and the tracked issues. It has a sponsorship table with each official's configured name, role, original flag, dates, and cited quotes. It shows the policy area and CRS summary citations. Each source shows its URL and observation time as plain text, with no link, and its full text with the quotes marked. Its caveat says that a sponsorship is a proposal, not a law, and that the record lists tracked officials only. A release copies `assets/css/theme.css`, `assets/css/app.css`, `assets/js/theme.js`, `assets/js/app.js`, and the fonts. Pages also work without JavaScript. Shared components are described in [host](host.md#presentation).
 
 ### Search
 
@@ -148,7 +153,7 @@ Each index page has a search panel. It stays hidden until `app.js` runs, because
 |---|---|---|---|
 | `officials` (ID and configured name) | Officials | Speakers | The sponsor, when tracked |
 | `issueIds` | Issue IDs | Issue IDs | Tracked issue IDs |
-| `policyAreaIds` | Empty | Policy area IDs | The Congress.gov policy area, or empty |
+| `policyAreaIds` | Empty | Policy area IDs | The configured policy area ID, or empty |
 | `sourceHost` | Host of the after version URL | Host of the source URL | Host of the first source URL |
 | `eventDate` | Evidenced change date, or empty | Evidenced statement date, or empty | Latest sponsored or withdrawn date |
 
@@ -172,6 +177,7 @@ Release and rollback commands are in [operations](../operations.md#publish-a-sta
 
 ## Limits and planned work
 
+- An action record embeds at most `PublishedAction.MaximumSources` sources. The worst case is the detail page, 3 cosponsor pages (250 rows), and the summaries page, which is 5 sources. A record over the cap fails publish loudly.
 - Correction and withdrawal releases come later.
 - How the static file server runs locally is not decided. It must send the precompressed manifest, for example Caddy `file_server { precompressed br gzip }` or nginx `gzip_static on`. Compression by the server is the fallback.
 - Issue, official, and briefing pages are planned. Readers will start with a weekly briefing and recent reviewed developments. Issue pages will connect related records across officials and institutions. Official pages will show dated statements, actions, and reviewed relationships.

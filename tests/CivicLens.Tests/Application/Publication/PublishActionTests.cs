@@ -19,7 +19,7 @@ public sealed class PublishActionTests
         Assert.Equal(PublishedRecordKind.Action, entry.Kind);
         Assert.Equal(("mayor", "Mayor Example"), (Assert.Single(entry.Officials).Id, entry.Officials[0].Name));
         Assert.Equal(["housing"], entry.IssueIds);
-        Assert.Equal(["Housing and Community Development"], entry.PolicyAreaIds);
+        Assert.Equal(["housing-development"], entry.PolicyAreaIds);
         Assert.Equal("api.congress.gov", entry.SourceHost);
         Assert.Equal(new DateOnly(2026, 1, 20), entry.EventDate);
     }

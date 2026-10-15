@@ -24,13 +24,12 @@ Each item gives its outcome, what it depends on, and where the design lives. Pre
 
 ### Now
 
-- R-11: One shared citation span type, unified analysis naming, and generic queue handlers in Application/Analysis. Depends on: none stated. [Actions](architecture/actions.md#limits-and-planned-work)
-
 ### Next
 
-- R-12: AI-drafted weekly briefs from reviewed records: evidence selection, cited drafting, corrections, review, and release assembly. Depends on: none stated. [Analysis](architecture/analysis.md#limits-and-planned-work)
+- R-11: One shared citation span type, unified analysis naming, and generic queue handlers in Application/Analysis. Depends on: none stated. [Actions](architecture/actions.md#limits-and-planned-work)
+- R-12: AI-drafted weekly briefs from reviewed records: evidence selection, cited drafting, corrections, review, and release assembly. Depends on: none stated. Briefs follow actions, and action publication is built. [Analysis](architecture/analysis.md#limits-and-planned-work)
 - R-13: Document-change classification gate: rubric, labels, features, bake-off, and ladder. Depends on: none stated. [Analysis](architecture/analysis.md#limits-and-planned-work)
-- R-14: Offices and dated terms. Depends on: none stated. [Configuration](architecture/configuration.md#limits-and-planned-work)
+- R-14: Offices and dated terms. Depends on: none stated. The first action slice is built. [Configuration](architecture/configuration.md#limits-and-planned-work)
 - R-15: House roll-call votes as actions. Depends on: R-14. [Actions](architecture/actions.md#limits-and-planned-work)
 - R-16: Reviewed relationships between statements and actions, and timelines. Depends on: R-15. [Statements](architecture/statements.md#limits-and-planned-work)
 - R-17: Congressional Record articles as a statement connector. Depends on: R-16. [Actions](architecture/actions.md#limits-and-planned-work)

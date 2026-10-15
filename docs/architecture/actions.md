@@ -208,7 +208,7 @@ Action review uses the shared decision rules and review cycles in [review](revie
 
 An approved action record with no open concern publishes in a static release, like the other kinds. `ActionRecordLoader` owns the action kind for publish and the ready list. `PostgresActionReviewStore.GetForPublicationAsync` reads the selected drafts, their review cycles, and every extraction that their current revisions cite in one repeatable-read transaction. It checks each citation against its extraction before it returns.
 
-`PublishedActionBuilder` maps the current revision to `PublishedAction`. Each sponsorship shows the configured name of its official from the publication catalog. Each distinct cited extraction becomes one embedded source with its URL and observation time. The record and its search filters are in [publication](publication.md#release-content).
+`PublishedActionBuilder` maps the current revision to `PublishedAction`. Each sponsorship shows the configured name of its official from the current publication catalog. The policy area ID comes from the current issue configuration in the same catalog. Each distinct cited extraction becomes one embedded source with its URL and observation time. The record and its search filters are in [publication](publication.md#release-content).
 
 ### Commands
 

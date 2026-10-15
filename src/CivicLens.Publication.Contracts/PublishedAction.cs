@@ -15,6 +15,7 @@ public sealed record PublishedAction
     public required int BillNumber { get; init; }
     public required string BillTitle { get; init; }
     public string? PolicyArea { get; init; }
+    public string? PolicyAreaId { get; init; }
     public PublishedCitation? PolicyAreaCitation { get; init; }
     public required string[] TrackedIssueIds { get; init; }
     public PublishedCitation? SummaryCitation { get; init; }
@@ -32,7 +33,7 @@ public sealed record PublishedAction
         FirstPublishedAtUtc = FirstPublishedAtUtc,
         Officials = [.. Sponsorships.Where(item => item.Role == PublishedSponsorshipRole.Sponsor).Select(item => item.Official)],
         IssueIds = TrackedIssueIds,
-        PolicyAreaIds = PolicyArea is null ? [] : [PolicyArea],
+        PolicyAreaIds = PolicyAreaId is null ? [] : [PolicyAreaId],
         SourceHost = Sources[0].Host,
         EventDate = Sponsorships.Max(item => item.LatestDate)
     };
@@ -50,6 +51,8 @@ public sealed record PublishedAction
         foreach (var sponsorship in Sponsorships) ValidateSponsorship(sponsorship);
         if ((PolicyArea is null) != (PolicyAreaCitation is null) || PolicyArea is not null && string.IsNullOrWhiteSpace(PolicyArea))
             throw new InvalidDataException("A policy area requires exact evidence.");
+        if (PolicyAreaId is not null && (PolicyArea is null || string.IsNullOrWhiteSpace(PolicyAreaId)))
+            throw new InvalidDataException("A policy area id requires a policy area.");
         if (PolicyAreaCitation is not null) ValidateCitation(PolicyAreaCitation);
         if (SummaryCitation is not null) ValidateCitation(SummaryCitation);
         if (TrackedIssueIds is null || !PublishedEvidenceRules.AreDistinctAndNotBlank(TrackedIssueIds))
@@ -77,6 +80,8 @@ public sealed record PublishedAction
             throw new InvalidDataException("Published sponsorship requires a named official and a known role.");
         if (sponsorship.Citations is null || sponsorship.Citations.Length is 0 or > MaximumCitationsPerSponsorship)
             throw new InvalidDataException($"Published sponsorship requires 1 to {MaximumCitationsPerSponsorship} citations.");
+        if (sponsorship.WithdrawnOn < sponsorship.SponsoredOn)
+            throw new InvalidDataException("A sponsorship cannot be withdrawn before it began.");
         foreach (var citation in sponsorship.Citations) ValidateCitation(citation);
     }
 

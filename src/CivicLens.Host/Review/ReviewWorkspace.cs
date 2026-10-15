@@ -278,7 +278,7 @@ internal static class ReviewWorkspace
         services.AddSingleton(provider => new PublishedRecordLoaders(provider.GetRequiredService<IDocumentChangeReviewStore>(),
             provider.GetRequiredService<IStatementReviewStore>(), provider.GetRequiredService<IActionReviewStore>()));
         services.AddScoped(provider => new PublishRelease(publications, releases, new ReleaseRenderer(),
-            provider.GetRequiredService<PublishedRecordLoaders>(), new PublicationCatalog(officialNames), TimeProvider.System));
+            provider.GetRequiredService<PublishedRecordLoaders>(), new PublicationCatalog(officialNames, Issues.Value), TimeProvider.System));
         services.AddScoped<ListPublishable>();
     }
 

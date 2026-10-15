@@ -1,3 +1,4 @@
+using CivicLens.Core.Actions;
 using System.Text.Json;
 using CivicLens.Publication.Contracts;
 
@@ -16,7 +17,7 @@ public sealed class PublishedActionTests
         var json = JsonSerializer.Serialize(Action(), PublicationProtocol.JsonOptions);
 
         Assert.Equal(3, PublicationProtocol.SchemaVersion);
-        Assert.True(json == """{"recordId":"5555555555555555555555555555555555555555555555555555555555555555","revisionNumber":1,"headline":"Headline","summary":"Summary","congress":119,"billType":"hr","billNumber":7,"billTitle":"A housing bill","policyArea":"Housing","policyAreaCitation":{"extractionId":"1111111111111111111111111111111111111111111111111111111111111111","start":17,"length":20,"quote":"Policy area: Housing"},"trackedIssueIds":["housing"],"summaryCitation":null,"sponsorships":[{"official":{"id":"mayor","name":"Mayor Example"},"role":"sponsor","isOriginal":false,"sponsoredOn":"2026-01-03","withdrawnOn":null,"citations":[{"extractionId":"1111111111111111111111111111111111111111111111111111111111111111","start":0,"length":16,"quote":"Sponsor: M000001"}]},{"official":{"id":"chair","name":"Chair Example"},"role":"cosponsor","isOriginal":true,"sponsoredOn":"2026-01-05","withdrawnOn":"2026-01-20","citations":[{"extractionId":"2222222222222222222222222222222222222222222222222222222222222222","start":0,"length":30,"quote":"Cosponsor: C000001, 2026-01-05"}]}],"sources":[{"extractionId":"1111111111111111111111111111111111111111111111111111111111111111","url":"https://api.congress.gov/v3/bill/119/hr/7","observedAtUtc":"1970-01-01T00:00:00+00:00","text":"Sponsor: M000001\nPolicy area: Housing\n"},{"extractionId":"2222222222222222222222222222222222222222222222222222222222222222","url":"https://api.congress.gov/v3/bill/119/hr/7/cosponsors","observedAtUtc":"1970-01-01T00:00:00+00:00","text":"Cosponsor: C000001, 2026-01-05\n"}],"approvedAtUtc":"1970-01-01T00:00:00+00:00","firstPublishedAtUtc":"1970-01-01T00:00:00+00:00"}""",
+        Assert.True(json == """{"recordId":"5555555555555555555555555555555555555555555555555555555555555555","revisionNumber":1,"headline":"Headline","summary":"Summary","congress":119,"billType":"hr","billNumber":7,"billTitle":"A housing bill","policyArea":"Housing","policyAreaId":"housing-area","policyAreaCitation":{"extractionId":"1111111111111111111111111111111111111111111111111111111111111111","start":17,"length":20,"quote":"Policy area: Housing"},"trackedIssueIds":["housing"],"summaryCitation":null,"sponsorships":[{"official":{"id":"mayor","name":"Mayor Example"},"role":"sponsor","isOriginal":false,"sponsoredOn":"2026-01-03","withdrawnOn":null,"citations":[{"extractionId":"1111111111111111111111111111111111111111111111111111111111111111","start":0,"length":16,"quote":"Sponsor: M000001"}]},{"official":{"id":"chair","name":"Chair Example"},"role":"cosponsor","isOriginal":true,"sponsoredOn":"2026-01-05","withdrawnOn":"2026-01-20","citations":[{"extractionId":"2222222222222222222222222222222222222222222222222222222222222222","start":0,"length":30,"quote":"Cosponsor: C000001, 2026-01-05"}]}],"sources":[{"extractionId":"1111111111111111111111111111111111111111111111111111111111111111","url":"https://api.congress.gov/v3/bill/119/hr/7","observedAtUtc":"1970-01-01T00:00:00+00:00","text":"Sponsor: M000001\nPolicy area: Housing\n"},{"extractionId":"2222222222222222222222222222222222222222222222222222222222222222","url":"https://api.congress.gov/v3/bill/119/hr/7/cosponsors","observedAtUtc":"1970-01-01T00:00:00+00:00","text":"Cosponsor: C000001, 2026-01-05\n"}],"approvedAtUtc":"1970-01-01T00:00:00+00:00","firstPublishedAtUtc":"1970-01-01T00:00:00+00:00"}""",
             "The published action JSON changed. Bump PublicationProtocol.SchemaVersion, update the version table " +
             "in docs/architecture.md, then update this test. Actual: " + json);
     }
@@ -34,7 +35,7 @@ public sealed class PublishedActionTests
 
         Assert.Equal(["mayor"], entry.Officials.Select(official => official.Id));
         Assert.Equal(new DateOnly(2026, 1, 20), entry.EventDate);
-        Assert.Equal(["Housing"], entry.PolicyAreaIds);
+        Assert.Equal(["housing-area"], entry.PolicyAreaIds);
         Assert.Equal("api.congress.gov", entry.SourceHost);
     }
 
@@ -117,6 +118,31 @@ public sealed class PublishedActionTests
     }
 
     [Fact]
+    public void ASponsorshipCannotBeWithdrawnBeforeItBegan()
+    {
+        var action = Action();
+        var sponsor = action.Sponsorships[0];
+        var withdrawn = sponsor with { WithdrawnOn = sponsor.SponsoredOn.AddDays(-1) };
+
+        Assert.Throws<InvalidDataException>((action with { Sponsorships = [withdrawn, action.Sponsorships[1]] }).Validate);
+    }
+
+    [Fact]
+    public void APolicyAreaIdNeedsAPolicyAreaSoTheFilterNeverNamesAnAreaTheRecordLacks()
+    {
+        var action = Action() with { PolicyArea = null, PolicyAreaCitation = null, PolicyAreaId = "housing-area" };
+
+        Assert.Throws<InvalidDataException>(action.Validate);
+    }
+
+    [Fact]
+    public void ContractLimitsEqualTheCoreLimitsSoADraftThatPassesReviewAlwaysPublishes()
+    {
+        Assert.Equal(ActionDraftRevision.MaximumSponsorships, PublishedAction.MaximumSponsorships);
+        Assert.Equal(ActionDraftRevision.MaximumCitationsPerSponsorship, PublishedAction.MaximumCitationsPerSponsorship);
+    }
+
+    [Fact]
     public void RequiresAnActionIdSoAnActionCannotUseADocumentChangeId()
     {
         Assert.Throws<InvalidDataException>((Action() with { RecordId = "0123456789abcdef0123456789abcdef" }).Validate);
@@ -133,6 +159,7 @@ public sealed class PublishedActionTests
         BillNumber = 7,
         BillTitle = "A housing bill",
         PolicyArea = "Housing",
+        PolicyAreaId = "housing-area",
         PolicyAreaCitation = Cite(DetailId, DetailText, "Policy area: Housing"),
         TrackedIssueIds = ["housing"],
         Sponsorships =

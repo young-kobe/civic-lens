@@ -1,3 +1,4 @@
+using CivicLens.Application.Issues;
 using CivicLens.Application.Paging;
 using System.Collections.Immutable;
 using CivicLens.Application.Actions;
@@ -31,10 +32,16 @@ internal sealed class PublicationScenario
     public FakeActionReviewStore Actions { get; } = new();
     public Dictionary<string, string> OfficialNames { get; } = new() { ["mayor"] = "Mayor Example", ["chair"] = "Council Chair Example" };
 
+    public IssueConfiguration Issues { get; } = new()
+    {
+        PolicyAreas = [new() { Id = "housing-development", Name = "Housing and Community Development" }],
+        Issues = []
+    };
+
     public PublishedRecordLoaders Loaders() => new(Reviews, Statements, Actions);
 
     public PublishRelease Publisher() => new(Publications, Releases, new FakeRenderer(), Loaders(),
-        new PublicationCatalog(OfficialNames), Clock);
+        new PublicationCatalog(OfficialNames, Issues), Clock);
 
     private const string PunctuatedHeadline = "Mayor\u2019s \u201Chousing\u201D plan: caf\u00E9 owners, r\u00E9sum\u00E9 rules; it\u2019s 100% ready? ";
 

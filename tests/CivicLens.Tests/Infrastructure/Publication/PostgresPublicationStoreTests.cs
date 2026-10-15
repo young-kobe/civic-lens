@@ -275,6 +275,20 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
     }
 
     [Fact]
+    public async Task CommitWaitsForTheActionLockBecauseAnActionDecisionMustNotSlipInDuringThePublish()
+    {
+        await using var holder = await HeldAdvisoryLock.AcquireAsync(connectionString, "civic-lens-action-review");
+
+        var committing = publications.CommitAsync(Owner.Subject,
+            new(1, null, $"000001-{Guid.NewGuid():N}", PublishedAt, [], []), "key", Hash(1), default);
+        await Task.Delay(400);
+        Assert.False(committing.IsCompleted);
+        await holder.DisposeAsync();
+
+        Assert.Equal(1, (await committing).ReleaseNumber);
+    }
+
+    [Fact]
     public async Task ServingWaitsForTheDocumentChangeLockToo()
     {
         await using var holder = await HeldAdvisoryLock.AcquireAsync(connectionString, "civic-lens-document-change-review");
