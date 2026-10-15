@@ -455,6 +455,9 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
                 .SingleOrDefault(candidate => candidate.AttemptId == attemptId);
             if (record?.Status is EvidenceProcessingStatus.Succeeded or EvidenceProcessingStatus.Blocked or EvidenceProcessingStatus.Failed)
                 return record;
+            if (record?.Status is EvidenceProcessingStatus.RetryWaiting)
+                throw new InvalidOperationException(
+                    $"Processing attempt '{attemptId}' hit a transient error at {record.Stage} after {record.Attempts} attempts: {record.ErrorCode}.");
         }
         throw new InvalidOperationException($"Processing attempt '{attemptId}' did not reach a terminal state.");
     }

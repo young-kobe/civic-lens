@@ -5,7 +5,7 @@ namespace CivicLens.Tests.Application;
 
 public sealed class WorkerLoopTests
 {
-    private static readonly TimeSpan Lease = TimeSpan.FromMilliseconds(600);
+    private static readonly TimeSpan Lease = TimeSpan.FromMilliseconds(1500);
     private static readonly TimeSpan HangGuard = TimeSpan.FromSeconds(10);
 
     [Fact]
@@ -69,13 +69,12 @@ public sealed class WorkerLoopTests
         }, Lease, ownership).WaitAsync(HangGuard);
 
         Assert.True(ownership.IsCancellationRequested);
-        Assert.InRange(started.Elapsed, Lease * 0.9, Lease * 2);
+        Assert.InRange(started.Elapsed, Lease * 0.9, Lease + Lease / 3);
     }
 
     [Fact]
     public async Task ASlowSuccessfulRenewalExtendsTheLeaseFromWhenItWasSent()
     {
-        var lease = TimeSpan.FromMilliseconds(1500);
         using var ownership = new CancellationTokenSource();
         var started = Stopwatch.StartNew();
         var first = true;
@@ -84,11 +83,11 @@ public sealed class WorkerLoopTests
         {
             if (!first) await Task.Delay(Timeout.Infinite, token);
             first = false;
-            await Task.Delay(lease / 2, token);
+            await Task.Delay(Lease / 2, token);
             return true;
-        }, lease, ownership).WaitAsync(HangGuard);
+        }, Lease, ownership).WaitAsync(HangGuard);
 
-        var sentAt = lease / 3;
-        Assert.InRange(started.Elapsed, sentAt + lease * 0.9, sentAt + lease + lease / 2);
+        var sentAt = Lease / 3;
+        Assert.InRange(started.Elapsed, sentAt + Lease * 0.9, sentAt + Lease + Lease / 4);
     }
 }
