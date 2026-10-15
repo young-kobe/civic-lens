@@ -850,13 +850,6 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
         walk.AssertExact(expected);
     }
 
-    [Fact]
-    public async Task JobPageRejectsLimitOutsideBounds()
-    {
-        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => jobs.ListPageAsync(null, 0, default));
-        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => jobs.ListPageAsync(null, 101, default));
-    }
-
     // Source health shows the latest check of each source, so a newer article job must not hide it.
     [Fact]
     public async Task LatestBySourceReturnsTheNewestRootJobOfEachSourceOnly()

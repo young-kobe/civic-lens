@@ -39,19 +39,18 @@ public sealed class PostgresCollectionPipelineWakeupTests(PostgresCollection pos
         await InsertJobAsync("deadline", DateTimeOffset.UtcNow.UtcTicks, null);
         await using var wakeup = PostgresCollectionPipelineWakeup.FromConnectionString(connectionString);
         await wakeup.ConnectAsync(default);
-        // Lease updates are silent. Set the deadline after subscription so slow connection setup
-        // cannot turn this into a deadline that already expired before the first drain.
+        // Lease updates are silent. Set the deadline to the database now after subscription,
+        // so it is already past when the wait starts and no notification can announce it.
         await using (var connection = new NpgsqlConnection(connectionString))
         {
             await connection.OpenAsync();
             await using var command = new NpgsqlCommand("""
                 UPDATE collection_jobs SET lease_token = 'deadline-lease', lease_expires_at =
-                    (EXTRACT(EPOCH FROM clock_timestamp())::numeric * 10000000 + 621355968001000000)::bigint
+                    (EXTRACT(EPOCH FROM clock_timestamp())::numeric * 10000000 + 621355968000000000)::bigint
                 WHERE job_id = 'deadline'
                 """, connection);
             await command.ExecuteNonQueryAsync();
         }
-        await Task.Delay(TimeSpan.FromMilliseconds(150));
 
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(3));
         var elapsed = Stopwatch.StartNew();

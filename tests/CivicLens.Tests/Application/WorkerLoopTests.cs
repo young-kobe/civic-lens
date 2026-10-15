@@ -6,7 +6,7 @@ namespace CivicLens.Tests.Application;
 public sealed class WorkerLoopTests
 {
     private static readonly TimeSpan Lease = TimeSpan.FromMilliseconds(1500);
-    private static readonly TimeSpan Slack = TimeSpan.FromMilliseconds(500);
+    private static readonly TimeSpan HangGuard = TimeSpan.FromSeconds(10);
 
     [Fact]
     public async Task RenewalToleratesFailuresUntilTheLeaseDeadline()
@@ -39,14 +39,18 @@ public sealed class WorkerLoopTests
     {
         using var ownership = new CancellationTokenSource();
         var calls = 0;
+        var recovered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var renewal = WorkerLoop.RenewLeaseAsync(_ =>
         {
             calls++;
-            return calls == 1 ? throw new InvalidOperationException("Brief outage.") : Task.FromResult(true);
+            if (calls == 1) throw new InvalidOperationException("Brief outage.");
+            if (calls == 3) recovered.TrySetResult();
+            return Task.FromResult(true);
         }, Lease, ownership);
 
-        await Task.Delay(Lease * 2);
+        await Task.WhenAny(recovered.Task, renewal).WaitAsync(HangGuard);
 
+        Assert.True(recovered.Task.IsCompleted);
         Assert.False(ownership.IsCancellationRequested);
         await ownership.CancelAsync();
         await renewal;
@@ -62,10 +66,10 @@ public sealed class WorkerLoopTests
         {
             await Task.Delay(Timeout.Infinite, token);
             return true;
-        }, Lease, ownership);
+        }, Lease, ownership).WaitAsync(HangGuard);
 
         Assert.True(ownership.IsCancellationRequested);
-        Assert.InRange(started.Elapsed, Lease * 0.9, Lease + Slack);
+        Assert.InRange(started.Elapsed, Lease * 0.9, Lease + Lease / 3);
     }
 
     [Fact]
@@ -81,9 +85,9 @@ public sealed class WorkerLoopTests
             first = false;
             await Task.Delay(Lease / 2, token);
             return true;
-        }, Lease, ownership);
+        }, Lease, ownership).WaitAsync(HangGuard);
 
         var sentAt = Lease / 3;
-        Assert.InRange(started.Elapsed, sentAt + Lease * 0.9, sentAt + Lease + Slack);
+        Assert.InRange(started.Elapsed, sentAt + Lease * 0.9, sentAt + Lease + Lease / 4);
     }
 }

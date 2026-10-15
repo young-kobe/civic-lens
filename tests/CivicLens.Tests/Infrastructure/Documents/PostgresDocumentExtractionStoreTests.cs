@@ -299,21 +299,30 @@ public sealed class PostgresDocumentExtractionStoreTests(PostgresCollection post
     }
 
     [Fact]
-    public async Task ComparisonReplayBindsRetainedEvidenceAndDetectsTampering()
+    public async Task ConcurrentSavesOfOneComparisonStoreItOnceAndQueueOneAnalysis()
     {
-        var before = new DocumentExtraction(await ImportAsync("Old policy."), "p", "n", "Old policy.");
-        var after = new DocumentExtraction(await ImportAsync("New policy."), "p", "n", "New policy.");
-        await extractions.SaveAsync(before, CancellationToken.None);
-        await extractions.SaveAsync(after, CancellationToken.None);
+        var (before, after) = await SaveExtractionPairAsync();
         var comparisons = new PostgresDocumentComparisonStore(factory);
         var comparison = DocumentComparison.Create(before, after);
+
         var saved = await Task.WhenAll(Enumerable.Range(0, 4)
             .Select(_ => comparisons.CompareAndSaveAsync(before.ExtractionId, after.ExtractionId, CancellationToken.None)));
+
         Assert.All(saved, item => Assert.Equal(comparison.ComparisonId, item.ComparisonId));
         Assert.Equal(DocumentComparisonStatus.Complete,
             (await comparisons.GetAsync(comparison.ComparisonId, CancellationToken.None))!.Status);
         await using var db = await factory.CreateDbContextAsync();
         Assert.Equal(1, await db.Database.SqlQuery<int>($"SELECT count(*)::integer AS \"Value\" FROM document_comparisons").SingleAsync());
+        Assert.Equal(1, await db.Database.SqlQuery<int>($"SELECT count(*)::integer AS \"Value\" FROM document_change_analysis").SingleAsync());
+    }
+
+    [Fact]
+    public async Task ComparisonReplayBindsRetainedEvidenceAndDetectsTampering()
+    {
+        var (before, after) = await SaveExtractionPairAsync();
+        var comparisons = new PostgresDocumentComparisonStore(factory);
+        var comparison = await comparisons.CompareAndSaveAsync(before.ExtractionId, after.ExtractionId, CancellationToken.None);
+        await using var db = await factory.CreateDbContextAsync();
         await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE document_comparisons SET before_extraction_id = {after.ExtractionId} WHERE comparison_id = {comparison.ComparisonId}");
         await Assert.ThrowsAsync<InvalidOperationException>(() => comparisons.CompareAndSaveAsync(before.ExtractionId, after.ExtractionId, CancellationToken.None));
         await Assert.ThrowsAsync<InvalidOperationException>(() => comparisons.GetAsync(comparison.ComparisonId, CancellationToken.None));
@@ -321,6 +330,15 @@ public sealed class PostgresDocumentExtractionStoreTests(PostgresCollection post
         await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE document_comparisons SET result_json = '{{}}' WHERE comparison_id = {comparison.ComparisonId}");
         await Assert.ThrowsAsync<InvalidOperationException>(() => comparisons.GetAsync(comparison.ComparisonId, CancellationToken.None));
         await Assert.ThrowsAsync<InvalidOperationException>(() => comparisons.CompareAndSaveAsync(before.ExtractionId, after.ExtractionId, CancellationToken.None));
+    }
+
+    private async Task<(DocumentExtraction Before, DocumentExtraction After)> SaveExtractionPairAsync()
+    {
+        var before = new DocumentExtraction(await ImportAsync("Old policy."), "p", "n", "Old policy.");
+        var after = new DocumentExtraction(await ImportAsync("New policy."), "p", "n", "New policy.");
+        await extractions.SaveAsync(before, CancellationToken.None);
+        await extractions.SaveAsync(after, CancellationToken.None);
+        return (before, after);
     }
 
     [Fact]

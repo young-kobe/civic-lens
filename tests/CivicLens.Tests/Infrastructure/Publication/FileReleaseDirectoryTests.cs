@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text;
 using CivicLens.Application.Publication;
 using CivicLens.Infrastructure.Publication;
@@ -50,21 +51,24 @@ public sealed class FileReleaseDirectoryTests : IDisposable
         var second = await BuildReleaseAsync(2, "two");
         await releases.ActivateAsync(first, default);
         using var stop = new CancellationTokenSource();
-        var failures = 0;
+        var failures = new ConcurrentQueue<string>();
+        var reading = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var reader = Task.Run(() =>
         {
             while (!stop.IsCancellationRequested)
             {
                 try { _ = File.ReadAllText(Path.Combine(root, "current", "release.json")); }
-                catch (IOException) { Interlocked.Increment(ref failures); }
+                catch (IOException exception) { failures.Enqueue($"{exception.GetType().Name}: {exception.Message}"); }
+                reading.TrySetResult();
             }
         });
 
+        await reading.Task.WaitAsync(TimeSpan.FromSeconds(10));
         for (var swap = 0; swap < 300; swap++) await releases.ActivateAsync(swap % 2 == 0 ? second : first, default);
         await stop.CancelAsync();
         await reader;
 
-        Assert.Equal(0, failures);
+        Assert.Empty(failures);
     }
 
     [Fact]

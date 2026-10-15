@@ -298,7 +298,7 @@ public sealed class PostgresStatementReviewStoreTests(PostgresCollection postgre
         var other = await CandidateAsync();
         await using var statementHolder = await HeldAdvisoryLock.AcquireAsync(connectionString, "civic-lens-statement-review");
         var blocked = Create.ExecuteAsync(Owner, new(other, "blocked"));
-        await Task.Delay(400);
+        await HeldAdvisoryLock.WaitForWaiterAsync(connectionString, "civic-lens-statement-review");
         Assert.False(blocked.IsCompleted);
         await statementHolder.DisposeAsync();
         await blocked;
@@ -311,7 +311,7 @@ public sealed class PostgresStatementReviewStoreTests(PostgresCollection postgre
         await using var holder = await HeldAdvisoryLock.AcquireAsync(connectionString, "civic-lens-statement-review");
 
         var settling = DraftingWorker(new FakeStatementDraftingModel().Draft(Output())).ExecuteAsync(once: true);
-        await Task.Delay(1_000);
+        await HeldAdvisoryLock.WaitForWaiterAsync(connectionString, "civic-lens-statement-review");
         Assert.False(settling.IsCompleted);
         await holder.DisposeAsync();
         await settling;
