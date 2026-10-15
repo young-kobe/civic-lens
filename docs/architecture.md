@@ -178,7 +178,9 @@ The keys, in their declared order:
 
 - `civic-lens-collection-jobs`: `PostgresCollectionJobStore` takes it at the start of each admission, claim, and settlement transaction. Discovery admission needs no other key, because this key already serializes every admission.
 - Review keys: `civic-lens-document-change-review`, `civic-lens-statement-review`, and `civic-lens-action-review`. Publication takes all three in the order of `PostgresAdvisoryLock.ReviewKeysInOrder`: document change, statement, then action.
-- `civic-lens-collection-import`, `civic-lens-document-extractions`, and `civic-lens-document-comparisons`: the import, extraction, and comparison stores each take one key for each write. No transaction holds one of these with another key.
+- `civic-lens-collection-import`: the import store takes it for each write. No transaction holds it with another key.
+
+Extraction and comparison saves take no advisory lock. Each uses `INSERT ... ON CONFLICT DO NOTHING` in one ReadCommitted transaction. See [documents](architecture/documents.md#invariants).
 
 No transaction holds a review key with a collection key.
 

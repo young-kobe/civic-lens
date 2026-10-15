@@ -26,8 +26,7 @@ Each item gives its outcome, what it depends on, and where the design lives. Pre
 
 - R-05: Action review (action step 4): review pages, decisions, and the fast sponsorship-only review. Bulk approval is in R-19. Depends on: none stated. [Actions](architecture/actions.md#limits-and-planned-work)
 - R-06: Generated source columns, a latest-job index, and one batched active-root check. Built with R-05. Depends on: none stated. [Collection](architecture/collection.md#limits-and-planned-work)
-- R-07: Comparison and extraction saves lock one record after they verify and diff. Built with R-05. Depends on: R-06. [Documents](architecture/documents.md#limits-and-planned-work)
-- R-08: Parallel evidence processing with a configured degree. Built with R-05. Depends on: R-07. [Collection](architecture/collection.md#limits-and-planned-work)
+- R-08: Parallel evidence processing with a configured degree. Built with R-05. Depends on: none stated. [Collection](architecture/collection.md#limits-and-planned-work)
 - R-09: Decide release growth and the search index. Depends on: none stated. It must come before R-10. [Publication](architecture/publication.md#limits-and-planned-work)
 - R-10: Action publication (action step 5). Depends on: R-05, R-09. [Actions](architecture/actions.md#limits-and-planned-work)
 

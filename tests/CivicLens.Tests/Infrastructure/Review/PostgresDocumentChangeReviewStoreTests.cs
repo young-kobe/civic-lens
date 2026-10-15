@@ -117,7 +117,7 @@ public sealed class PostgresDocumentChangeReviewStoreTests(PostgresCollection po
             var after = new CivicLens.Core.Documents.DocumentExtraction(await ImportAsync(text), "parser", "normalizer", text);
             await extractions.SaveAsync(before, default);
             await extractions.SaveAsync(after, default);
-            var comparison = await comparisons.SaveAsync(CivicLens.Core.Documents.DocumentComparison.Create(before, after), default);
+            var comparison = await comparisons.CompareAndSaveAsync(before.ExtractionId, after.ExtractionId, default);
             if (changed) expected.Add(comparison.ComparisonId);
         }
         var actual = new List<string>();
@@ -586,7 +586,7 @@ public sealed class PostgresDocumentChangeReviewStoreTests(PostgresCollection po
         var after = new CivicLens.Core.Documents.DocumentExtraction(await ImportAsync("Policy after."), "parser", "normalizer", "Policy after.");
         await extractions.SaveAsync(before, CancellationToken.None);
         await extractions.SaveAsync(after, CancellationToken.None);
-        return await comparisons.SaveAsync(CivicLens.Core.Documents.DocumentComparison.Create(before, after), CancellationToken.None);
+        return await comparisons.CompareAndSaveAsync(before.ExtractionId, after.ExtractionId, CancellationToken.None);
     }
 
     private async Task<CivicLens.Core.Collection.CapturedAttemptResult> ImportAsync(string text)

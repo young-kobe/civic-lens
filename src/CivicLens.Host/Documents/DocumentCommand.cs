@@ -37,7 +37,7 @@ internal static class DocumentCommand
             }
             if (args is ["documents", "compare", var beforeId, var afterId])
             {
-                var comparison = await new CompareDocuments(extractions,
+                var comparison = await new CompareDocuments(
                     comparisons ?? throw new InvalidOperationException("Comparison store is required."))
                     .ExecuteAsync(beforeId, afterId, cancellationToken);
                 Write(comparison);

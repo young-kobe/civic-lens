@@ -496,7 +496,7 @@ The shared wakeup and lease mechanics are in [Shared worker mechanics](../archit
 - Browser rendering and OCR are deferred until a selected source needs them.
 - Planned engine policies: engine-wide spending ceilings, global backlog admission limits, weighted fairness for each source, live configuration reload, and a unified engine-health view. The current scheduler does not guarantee them. Broad coverage makes them MVP requirements.
 - Agreed upgrade ([R-06](../roadmap.md#now)): stored generated columns for the source ID and URL of the job definition. Add an index for the latest job of each source, and one batched active-root check for each scheduling pass.
-- Agreed upgrade ([R-08](../roadmap.md#now)): parallel evidence processing with a configured degree. It needs the lock change for comparison and extraction saves in [documents](documents.md#limits-and-planned-work) first.
+- Agreed upgrade ([R-08](../roadmap.md#now)): parallel evidence processing with a configured degree.
 - Agreed upgrade ([R-22](../roadmap.md#later)): ordered row locks in place of the single global lock of the job store. Measure lock waits on a bills-only collection run before the design.
 - Fix the remaining format and parser limits that the federal coverage found ([R-30](../roadmap.md#next)).
 - Planned: automatic discovery of official sources for a configured official, so that a new official needs no source entered by hand. Use the `fromDateTime` change check of the Congress.gov member list for it.

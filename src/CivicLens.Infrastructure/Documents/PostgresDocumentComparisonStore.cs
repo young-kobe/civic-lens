@@ -35,38 +35,35 @@ public sealed class PostgresDocumentComparisonStore(IDbContextFactory<Collection
         return result;
     }
 
-    public async Task<DocumentComparison> SaveAsync(DocumentComparison comparison, CancellationToken cancellationToken)
+    public async Task<DocumentComparison> CompareAndSaveAsync(string beforeExtractionId, string afterExtractionId,
+        CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(comparison);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        await using var transaction = await PostgresAdvisoryLock.BeginWriteAsync(db, PostgresAdvisoryLock.DocumentComparisons, cancellationToken);
-        var verified = await ReconstructAsync(db, comparison.BeforeExtractionId, comparison.AfterExtractionId, cancellationToken);
-        if (Serialize(verified) != Serialize(comparison))
-            throw new InvalidOperationException("Comparison does not match retained extraction evidence.");
-        var existing = await db.Set<DocumentComparisonRow>().AsNoTracking()
-            .SingleOrDefaultAsync(row => row.ComparisonId == comparison.ComparisonId, cancellationToken);
-        if (existing is not null)
-        {
-            ValidateRetained(existing, verified);
-            await transaction.CommitAsync(cancellationToken);
-            return verified;
-        }
+        var before = await ReadRequestedAsync(db, beforeExtractionId, cancellationToken);
+        var after = await ReadRequestedAsync(db, afterExtractionId, cancellationToken);
+        var comparison = DocumentComparison.Create(before, after, cancellationToken);
+        if (comparison.Status != DocumentComparisonStatus.Complete) return comparison;
 
-        db.Add(new DocumentComparisonRow
+        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
+        var resultJson = Serialize(comparison);
+        var inserted = await db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO document_comparisons (comparison_id, before_extraction_id, after_extraction_id,
+                algorithm_version, settings_version, result_json, has_changes)
+            VALUES ({comparison.ComparisonId}, {comparison.BeforeExtractionId}, {comparison.AfterExtractionId},
+                {comparison.AlgorithmVersion}, {comparison.SettingsVersion}, {resultJson}, {comparison.HasChanges()})
+            ON CONFLICT (comparison_id) DO NOTHING
+            """, cancellationToken);
+        if (inserted == 0)
         {
-            ComparisonId = comparison.ComparisonId,
-            BeforeExtractionId = comparison.BeforeExtractionId,
-            AfterExtractionId = comparison.AfterExtractionId,
-            AlgorithmVersion = comparison.AlgorithmVersion,
-            SettingsVersion = comparison.SettingsVersion,
-            ResultJson = Serialize(comparison),
-            HasChanges = comparison.HasChanges()
-        });
-        await db.SaveChangesAsync(cancellationToken);
+            var winner = await db.Set<DocumentComparisonRow>().AsNoTracking()
+                .SingleAsync(row => row.ComparisonId == comparison.ComparisonId, cancellationToken);
+            ValidateRetained(winner, comparison);
+            return comparison;
+        }
         if (comparison.HasChanges())
             await EnqueueDraftAnalysisAsync(db, comparison.ComparisonId, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
-        return verified;
+        return comparison;
     }
 
     private static async Task EnqueueDraftAnalysisAsync(CollectionAttemptDbContext db, string comparisonId,
@@ -79,6 +76,14 @@ public sealed class PostgresDocumentComparisonStore(IDbContextFactory<Collection
             VALUES ({comparisonId}, 'draft', 'Pending', 0, 0, 0, {now})
             ON CONFLICT (comparison_id, task) DO NOTHING
             """, cancellationToken);
+    }
+
+    private static async Task<DocumentExtraction> ReadRequestedAsync(CollectionAttemptDbContext db, string extractionId,
+        CancellationToken cancellationToken)
+    {
+        PostgresDocumentExtractionStore.ValidateId(extractionId);
+        return await PostgresDocumentExtractionStore.ReadAsync(db, extractionId, cancellationToken)
+            ?? throw new ArgumentException("Extraction was not found.", nameof(extractionId));
     }
 
     private static async Task<DocumentComparison> ReconstructAsync(CollectionAttemptDbContext db, string beforeId,

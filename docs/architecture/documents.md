@@ -20,11 +20,12 @@ The documents feature turns verified captures into immutable text extractions, e
 Each line gives the rule, what enforces it, and the test that protects it. Cross-feature invariants are in [architecture](../architecture.md#invariants).
 
 - An extraction ID depends on the attempt and the versions, never on the text. Enforced by `DocumentExtraction`. Test: `DocumentExtractionTests.IdentityIsFramedAndIndependentOfTextWhileTextHashTracksContent`.
-- One extraction identity keeps one text and one provenance. Enforced by `PostgresDocumentExtractionStore` under the `PostgresAdvisoryLock.DocumentExtractions` key. Test: `PostgresDocumentExtractionStoreTests.RejectsChangedProvenanceAndDetectsStoredTextTampering`.
+- One extraction identity keeps one text and one provenance. Enforced by `PostgresDocumentExtractionStore`: an insert that finds the row compares the committed winner and throws on a mismatch. Test: `PostgresDocumentExtractionStoreTests.RejectsChangedProvenanceAndDetectsStoredTextTampering`.
 - A read verifies the text hash and the identity. Enforced by `PostgresDocumentExtractionStore`. Test: `PostgresDocumentExtractionStoreTests.RejectsChangedProvenanceAndDetectsStoredTextTampering`.
 - Versions that differ give an Incompatible comparison, not a diff. Enforced by `DocumentComparison`. Test: `DocumentComparisonTests.RequiresEqualProfileRevisionAndProcessingVersions`.
-- A comparison save computes the result again, so a forged result fails. Enforced by `PostgresDocumentComparisonStore` under the `PostgresAdvisoryLock.DocumentComparisons` key. Test: `PostgresDocumentExtractionStoreTests.ForgedComparisonSaveFailsAndQueuesNothing`.
-- A processing checkpoint accepts only a complete, verified comparison of its own extraction. Enforced by `PostgresEvidenceProcessingStore`. No test.
+- The comparison store saves only a result that it computed from retained extractions, and only when the status is Complete. Enforced by `PostgresDocumentComparisonStore.CompareAndSaveAsync`, the only save path. Test: `PostgresDocumentExtractionStoreTests.AnIncompleteComparisonSavesAndQueuesNothing`.
+- Concurrent saves of one identity keep one row, and only the inserting transaction runs the follow-on writes (candidate registration, draft analysis queue row). Enforced by `INSERT ... ON CONFLICT DO NOTHING` in both stores. Test for one row: `PostgresDocumentExtractionStoreTests.ComparisonReplayBindsRetainedEvidenceAndDetectsTampering`. No test for the follow-on writes: the loser returns before commit, and the follow-on inserts are idempotent.
+- A processing checkpoint accepts only a complete, verified comparison of its own extraction. Enforced by `PostgresEvidenceProcessingStore`. Test: `PostgresDocumentExtractionStoreTests.AProcessingCheckpointRejectsAStoredComparisonThatIsNotComplete`.
 
 ## Behavior
 
@@ -98,13 +99,13 @@ Comparison limits:
 
 A result over any limit is explicit and has no partial hunks. Context and changed text are never truncated. Cancellation stops the work and saves no comparison.
 
-`CompareDocuments` loads exact extraction IDs and saves through `IDocumentComparisonStore`. The CLI creates comparisons and shows history and results. The worker also prepares compatible comparisons automatically.
+`CompareDocuments` passes two extraction IDs to `IDocumentComparisonStore.CompareAndSaveAsync`. The store reads both extractions, computes the comparison once, and saves it only when it is Complete. An incompatible or limit exceeded result is returned and not saved. The CLI creates comparisons and shows history and results. The worker also prepares compatible comparisons automatically.
 
 ### Evidence pages
 
 The pages under `/Documents` show a saved comparison, saved text, a cited passage, and saved versions. Links in Review and Sources open them. There is no document catalog until document search exists. These pages support review, but they are not the editorial entry point. The pages call the Application document handlers and the extraction store boundary.
 
-A saved comparison shows its status: complete, incompatible, or limit exceeded. Positive changed ranges link to exact citations. Zero-length ranges stay insertion or deletion points. Encoded text keeps carriage returns, leading newlines, and C1 code points through HTML parsing. The comparison page can start an eligible private review draft through the shared Application handler.
+A saved comparison is always complete. Positive changed ranges link to exact citations. Zero-length ranges stay insertion or deletion points. Encoded text keeps carriage returns, leading newlines, and C1 code points through HTML parsing. The comparison page can start an eligible private review draft through the shared Application handler.
 
 A malformed link returns 400, and missing evidence returns 404. A storage or reconstruction failure returns a sanitized 503 with no provider diagnostics. History overflow shows a limit notice and no partial timeline. Source IDs and URLs show as retained identifiers, not as official attribution. No page calls a text difference substantive or human-approved.
 
@@ -115,13 +116,13 @@ A malformed link returns 400, and missing evidence returns 404. A storage or rec
 - Whole-body extraction identity is the SHA-256 of three framed UTF-8 strings: attempt ID, parser version, normalization version. Each frame has a four-byte big-endian byte length.
 - A profile extraction adds the profile revision ID as a fourth framed string. Three-field identities do not change.
 - Profile revision identity hashes the framed ID and selector, a four-byte big-endian exclusion count, and each framed exclusion in order. IDs and exclusion order are significant.
-- `PostgresDocumentExtractionStore` uses the operational DbContext and additive migrations. A short transaction with an advisory lock serializes provenance checks and replay decisions.
+- `PostgresDocumentExtractionStore` uses the operational DbContext and additive migrations. The save verifies provenance first. It then inserts with `ON CONFLICT DO NOTHING` in one ReadCommitted transaction and takes no advisory lock. If the row exists, the save compares the committed winner and throws on a mismatch. Only the inserting transaction registers statement candidates.
 - A foreign key keeps the source attempt. Reads verify extraction identity and the text hash.
 - The nullable `profile_json` column holds the profile snapshot. Old rows are whole-body extractions with unchanged IDs. A changed or removed stored profile fails identity verification.
 - Absent profile fields are null and are left out of configuration snapshots. Older canonical snapshots therefore stay readable.
 - Captures stay as files. Extracted text lives in Postgres. No public serving path reads this store.
 - `document_comparisons` has foreign keys to both extractions. It stores the algorithm and settings versions and the serialized result.
-- A short transaction serializes equal and conflicting comparison replays. A save computes the result again from the retained extractions, so fabricated text cannot reuse an extraction identity.
+- A save takes no advisory lock. It inserts with `ON CONFLICT DO NOTHING` in one ReadCommitted transaction. A replay that finds the row checks the retained row against the computed result and throws on a mismatch. The store computes the result from retained extractions, so fabricated text cannot reuse an extraction identity.
 - Reads that act on evidence revalidate the extractions and compute the result again to find conflicts. The New changes list reads only the stored result; see [review](review.md#storage-and-contracts).
 - The comparison save also queues AI drafting in the same transaction; see [analysis](analysis.md#behavior).
 - `db migrate` installs the comparison table. Version owners are in [Behavior versions](../architecture.md#behavior-versions).
@@ -141,7 +142,6 @@ A malformed link returns 400, and missing evidence returns 404. A storage or rec
 ## Limits and planned work
 
 - Automatic navigation filtering is planned.
-- Agreed upgrade ([R-07](../roadmap.md#now)): comparison and extraction saves verify and diff before they take a lock, and they lock one record, not the whole store.
 - Future cleanup ([R-31](../roadmap.md#later)): a saved comparison keeps hunk and context text that its exact offsets can rebuild from the two extractions. Remove this redundant copy.
 - Keep document history available for investigation.
 

@@ -350,7 +350,7 @@ public sealed class StatementReviewWorkspaceTests(PostgresCollection postgres) :
     {
         var before = await host.SaveExtractionAsync("Fee: 10 dollars.\n");
         var after = await host.SaveExtractionAsync("Fee: 12 dollars.\n");
-        var comparison = await host.Comparisons.SaveAsync(DocumentComparison.Create(before, after), default);
+        var comparison = await host.Comparisons.CompareAndSaveAsync(before.ExtractionId, after.ExtractionId, default);
         var store = PostgresDocumentChangeReviewStore.FromConnectionString(host.ConnectionString);
         var catalog = new ReviewCatalog([StatementGateFixtures.RentIssue], [StatementDraftFixtures.Warren]);
         var actor = new ReviewActor(Owner, ReviewRole.Owner);

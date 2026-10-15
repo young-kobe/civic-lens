@@ -69,7 +69,7 @@
     [SupplyParameterFromQuery] private string? ComparisonId { get; set; }
     [SupplyParameterFromForm(FormName = "start-draft")] private string? IdempotencyKey { get; set; }
 
-    private bool CanStartDraft => comparison is { Status: DocumentComparisonStatus.Complete, Hunks.IsEmpty: false };
+    private bool CanStartDraft => comparison is { Hunks.IsEmpty: false };
 
     private CancellationToken Aborted => HttpContext.RequestAborted;
 

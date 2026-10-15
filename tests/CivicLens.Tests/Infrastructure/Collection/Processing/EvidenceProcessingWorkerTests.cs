@@ -461,7 +461,7 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
 
     private EvidenceProcessingWorker Worker(IEvidenceProcessingStore processingStore, IDocumentHistoryStore? historyStore = null) => new(jobs,
         new JobPreparation(jobs, attempts, jobs, jobs, new CaptureBodyReader(), processingStore, extractions, new CaptureDocumentTextExtractor(), issues), processingStore, extract, new GetDocumentHistory(historyStore ?? PostgresDocumentHistoryStore.FromConnectionString(connectionString)),
-        new CompareDocuments(extractions, comparisons));
+        new CompareDocuments(comparisons));
 
     private CollectionJobDefinition ConfiguredDefinition(string? etag = null)
     {

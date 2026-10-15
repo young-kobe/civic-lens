@@ -190,7 +190,7 @@ try
             processingStore,
             new ExtractDocument(attempts, textExtractor, extractions),
             new GetDocumentHistory(PostgresDocumentHistoryStore.FromConnectionString(connectionString)),
-            new CompareDocuments(extractions, comparisons));
+            new CompareDocuments(comparisons));
         await using var wakeup = PostgresCollectionPipelineWakeup.FromConnectionString(connectionString);
         return await CollectionWorkerCommand.ExecuteAsync(args, queue, jobs, attempts, cancellation.Token, processing, wakeup, jobs,
             [.. new[]

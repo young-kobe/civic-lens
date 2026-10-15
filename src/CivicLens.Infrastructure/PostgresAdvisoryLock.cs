@@ -12,10 +12,8 @@ internal static class PostgresAdvisoryLock
     internal const string DocumentChangeReview = "civic-lens-document-change-review";
     internal const string StatementReview = "civic-lens-statement-review";
     internal const string ActionReview = "civic-lens-action-review";
-    // No transaction holds these with another key.
+    // No transaction holds this with another key.
     internal const string CollectionImport = "civic-lens-collection-import";
-    internal const string DocumentExtractions = "civic-lens-document-extractions";
-    internal const string DocumentComparisons = "civic-lens-document-comparisons";
 
     private const string AcquireSql = "SELECT pg_advisory_xact_lock(hashtextextended(@key, 0))";
 
