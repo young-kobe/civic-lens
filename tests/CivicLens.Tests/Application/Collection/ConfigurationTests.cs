@@ -221,10 +221,12 @@ public sealed class ConfigurationTests
         Assert.Throws<ArgumentException>(() => DatedConfiguration([new SourceCoverageConfiguration { PersonId = "one" }], person).Validate());
     }
 
-    [Fact]
-    public void BioguideIdIsOptionalAndAcceptedInVersionTwo()
+    [Theory]
+    [InlineData(null)]
+    [InlineData("W000817")]
+    public void BioguideIdIsOptionalAndAcceptedInVersionTwo(string? bioguideId)
     {
-        var person = new PersonConfiguration { Id = "one", Name = "One", BioguideId = "W000817" };
+        var person = new PersonConfiguration { Id = "one", Name = "One", BioguideId = bioguideId };
 
         DatedConfiguration([new SourceCoverageConfiguration { PersonId = "one" }], person).Validate();
     }
