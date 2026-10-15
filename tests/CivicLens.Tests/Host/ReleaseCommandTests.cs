@@ -80,6 +80,29 @@ public sealed class ReleaseCommandTests
     }
 
     [Fact]
+    public async Task APublishConflictExitsWithOneSoTheOwnerRebuildsInsteadOfFixingInput()
+    {
+        var scenario = new PublicationScenario();
+        var statement = scenario.AddStatement('b');
+        scenario.Publications.ConflictOnCommit = true;
+        var error = new StringWriter();
+        var original = Console.Error;
+        Console.SetError(error);
+        try
+        {
+            var exit = await ReleaseCommand.ExecuteAsync(["releases", "publish", "key", $"statement:{statement}"],
+                scenario.Publisher(), null!, null!, PublicationScenario.Owner, CancellationToken.None);
+
+            Assert.Equal(1, exit);
+            Assert.Contains("Review state changed.", error.ToString(), StringComparison.Ordinal);
+        }
+        finally
+        {
+            Console.SetError(original);
+        }
+    }
+
+    [Fact]
     public async Task AnUnknownKindIsAUsageErrorThatNamesTheValidKinds()
     {
         var error = new StringWriter();

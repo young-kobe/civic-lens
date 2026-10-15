@@ -4,12 +4,12 @@ namespace CivicLens.Host;
 
 internal static class OwnerCommand
 {
-    public static (string ConnectionString, ReviewActor Owner) ReadEnvironment(string commandKind)
+    public static (string ConnectionString, ReviewActor Owner) ReadEnvironment()
     {
         var connectionString = Environment.GetEnvironmentVariable("CIVIC_LENS_DATABASE");
         var ownerSubject = Environment.GetEnvironmentVariable("CIVIC_LENS_REVIEW_OWNER");
         if (string.IsNullOrWhiteSpace(connectionString) || string.IsNullOrWhiteSpace(ownerSubject))
-            throw new ArgumentException($"{commandKind} commands require CIVIC_LENS_DATABASE and CIVIC_LENS_REVIEW_OWNER.");
+            throw new ArgumentException("Owner commands require CIVIC_LENS_DATABASE and CIVIC_LENS_REVIEW_OWNER.");
         return (connectionString, new ReviewActor(ownerSubject, ReviewRole.Owner));
     }
 

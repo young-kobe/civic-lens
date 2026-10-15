@@ -207,7 +207,7 @@ try
 
     if (AnalysisCommand.Matches(args))
     {
-        var (connectionString, owner) = OwnerCommand.ReadEnvironment("Analysis");
+        var (connectionString, owner) = OwnerCommand.ReadEnvironment();
         var requeue = new RequeueAnalyses<AnalysisRun>(PostgresDocumentChangeAnalysisStore.FromConnectionString(connectionString));
         var outcomes = new GetDocumentChangeReviewOutcomes(PostgresDocumentChangeReviewOutcomeStore.FromConnectionString(connectionString));
         executing = true;
@@ -216,7 +216,7 @@ try
 
     if (StatementCommand.Matches(args))
     {
-        var (connectionString, owner) = OwnerCommand.ReadEnvironment("Statement");
+        var (connectionString, owner) = OwnerCommand.ReadEnvironment();
         var contexts = AnalysisDbContextFactory.Create(connectionString);
         var gates = new PostgresStatementAnalysisStore(contexts);
         var gateCommands = new StatementQueueCommands<StatementGateRun, StatementGateView, StatementGateListItem>(gates,
@@ -232,7 +232,7 @@ try
 
     if (ActionCommand.Matches(args))
     {
-        var (connectionString, owner) = OwnerCommand.ReadEnvironment("Action");
+        var (connectionString, owner) = OwnerCommand.ReadEnvironment();
         var contexts = AnalysisDbContextFactory.Create(connectionString);
         var draftStore = new PostgresActionDraftStore(contexts);
         var draftCommands = new StatementQueueCommands<ActionDraftRun, ActionDraftView, ActionDraftListItem>(
@@ -244,7 +244,7 @@ try
 
     if (ReleaseCommand.Matches(args))
     {
-        var (connectionString, owner) = OwnerCommand.ReadEnvironment("Release");
+        var (connectionString, owner) = OwnerCommand.ReadEnvironment();
         var releaseRoot = Environment.GetEnvironmentVariable("CIVIC_LENS_RELEASE_DIRECTORY");
         if (string.IsNullOrWhiteSpace(releaseRoot))
             throw new ArgumentException("Release commands require CIVIC_LENS_RELEASE_DIRECTORY.");

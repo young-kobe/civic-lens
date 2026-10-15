@@ -20,10 +20,10 @@ public static class AnalysisCommand
             switch (args)
             {
                 case ["analyses", "requeue", "--all"]:
-                    Write(await requeue.ExecuteAsync(owner, null, cancellationToken));
+                    CommandOutput.Write(new { requeued = await requeue.ExecuteAsync(owner, null, cancellationToken) });
                     return 0;
                 case ["analyses", "requeue", var comparisonId]:
-                    Write(await requeue.ExecuteAsync(owner, comparisonId, cancellationToken));
+                    CommandOutput.Write(new { requeued = await requeue.ExecuteAsync(owner, comparisonId, cancellationToken) });
                     return 0;
                 case ["analyses", "metrics"]:
                     WriteMetrics(await outcomes.ExecuteAsync(owner, cancellationToken));
@@ -34,10 +34,8 @@ public static class AnalysisCommand
             }
         });
 
-    private static void Write(int requeued) => Console.WriteLine(JsonSerializer.Serialize(new { requeued }));
-
     private static void WriteMetrics(ImmutableArray<DocumentChangeReviewOutcomes> outcomes) =>
-        Console.WriteLine(JsonSerializer.Serialize(new
+        CommandOutput.Write(new
         {
             promptVersions = outcomes.Select(item => new
             {
@@ -50,5 +48,5 @@ public static class AnalysisCommand
                 item.AwaitingReview,
                 fieldEdits = item.FieldEdits.ToDictionary(pair => JsonNamingPolicy.CamelCase.ConvertName(pair.Key.ToString()), pair => pair.Value)
             })
-        }, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+        });
 }
