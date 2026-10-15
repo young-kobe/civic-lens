@@ -271,7 +271,7 @@ public sealed class PostgresStatementReviewStoreTests(PostgresCollection postgre
     public async Task AHumanCreateAndAnAiSettlementRacingForTheSameCandidateLeaveExactlyOneFirstRevision()
     {
         var candidate = await PassedCandidateAsync();
-        var model = new FakeStatementDraftingModel().Draft(Output());
+        var model = new FakeStatementDraftModel().Draft(Output());
 
         var outcomes = await Task.WhenAll(Observe(Create.ExecuteAsync(Owner, new(candidate, "create"))),
             Task.Run(async () =>
@@ -311,7 +311,7 @@ public sealed class PostgresStatementReviewStoreTests(PostgresCollection postgre
         var candidate = await PassedCandidateAsync();
         await using var holder = await HeldAdvisoryLock.AcquireAsync(connectionString, "civic-lens-statement-review");
 
-        var settling = DraftingWorker(new FakeStatementDraftingModel().Draft(Output())).ExecuteAsync(once: true);
+        var settling = DraftingWorker(new FakeStatementDraftModel().Draft(Output())).ExecuteAsync(once: true);
         await HeldAdvisoryLock.WaitForWaiterAsync(connectionString, "civic-lens-statement-review");
         Assert.False(settling.IsCompleted);
         await holder.DisposeAsync();
@@ -460,7 +460,7 @@ public sealed class PostgresStatementReviewStoreTests(PostgresCollection postgre
         return candidate;
     }
 
-    private AnalysisWorker<StatementDraftRun> DraftingWorker(FakeStatementDraftingModel model) =>
+    private AnalysisWorker<StatementDraftRun> DraftingWorker(FakeStatementDraftModel model) =>
         AnalysisWorkers.StatementDrafting(drafts, new FakeAnalysisStatusStore(), model, new StatementDraftSettings(10_000_000, concurrency: 1),
             TimeProvider.System);
 

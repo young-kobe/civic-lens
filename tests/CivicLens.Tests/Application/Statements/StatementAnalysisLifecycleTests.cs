@@ -37,9 +37,9 @@ public sealed class StatementAnalysisLifecycleTests
     [Fact]
     public void ADocumentChangeEntryNeverReturnsFromSucceededToPending()
     {
-        var record = new AnalysisRecord(CandidateId, DocumentChangeDraftingTask.Task, State.Succeeded, null, 1, 0, null, StatementGateReasons.NoTrackedIssue);
-        var requeue = new AnalysisCheckpoint(CandidateId, DocumentChangeDraftingTask.Task, State.Succeeded, null, 1, State.Pending);
+        var record = new AnalysisRecord(CandidateId, DocumentChangeDraftTask.Task, State.Succeeded, null, 1, 0, null, StatementGateReasons.NoTrackedIssue);
+        var requeue = new AnalysisCheckpoint(CandidateId, DocumentChangeDraftTask.Task, State.Succeeded, null, 1, State.Pending);
 
-        Assert.False(DocumentChangeAnalysisLifecycle.CanTransition(record, requeue));
+        Assert.False(DocumentChangeDraftLifecycle.CanTransition(record, requeue));
     }
 }

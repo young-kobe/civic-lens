@@ -11,7 +11,7 @@ internal static class StatementAiDrafting
     public static Task SkipGateAsync(IStatementAnalysisStore gates) => GateAsync(gates, StatementGateFixtures.Output());
 
     public static Task DraftAsync(IStatementDraftStore drafts, string output) =>
-        AnalysisWorkers.StatementDrafting(drafts, new FakeAnalysisStatusStore(), new FakeStatementDraftingModel().Draft(output),
+        AnalysisWorkers.StatementDrafting(drafts, new FakeAnalysisStatusStore(), new FakeStatementDraftModel().Draft(output),
             new StatementDraftSettings(10_000_000, concurrency: 1), TimeProvider.System).ExecuteAsync(once: true);
 
     private static Task GateAsync(IStatementAnalysisStore gates, string output) =>

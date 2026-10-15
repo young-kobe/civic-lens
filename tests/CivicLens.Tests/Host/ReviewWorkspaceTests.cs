@@ -101,8 +101,8 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
         await status.RecordStartAsync(50_000, default);
         Assert.Contains("AI drafting is on. Daily limit: 50,000 tokens.", (await host.GetDocumentAsync("/Review")).Body!.TextContent,
             StringComparison.Ordinal);
-        var model = new FakeDocumentChangeDraftingModel().Draft(FakeDocumentChangeDraftingModel.Output(("h1", "after", "October 30")));
-        await AnalysisWorkers.Drafting(analysis, status, model, new DocumentChangeAnalysisSettings(1_000_000, concurrency: 1),
+        var model = new FakeDocumentChangeDraftModel().Draft(FakeDocumentChangeDraftModel.Output(("h1", "after", "October 30")));
+        await AnalysisWorkers.Drafting(analysis, status, model, new DocumentChangeDraftSettings(1_000_000, concurrency: 1),
             new DocumentChangeAnalysisCatalog([], []), TimeProvider.System).ExecuteAsync(once: true);
         var draftId = Assert.Single(await analysis.GetByComparisonIdsAsync([comparison.ComparisonId], default)).DraftId!;
         var reviews = PostgresDocumentChangeReviewStore.FromConnectionString(host.ConnectionString);
@@ -112,7 +112,7 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
         var text = editor.Body!.TextContent;
         Assert.Contains("The AI drafter wrote this revision", text, StringComparison.Ordinal);
         Assert.Contains("AI draft written", text, StringComparison.Ordinal);
-        Assert.Contains(DocumentChangeDraftingTask.Model, text, StringComparison.Ordinal);
+        Assert.Contains(DocumentChangeDraftTask.Model, text, StringComparison.Ordinal);
 
         var fields = Fields(editor.QuerySelector("#draft-form")!);
         Set(fields, "Input.Headline", "Reviewer headline");

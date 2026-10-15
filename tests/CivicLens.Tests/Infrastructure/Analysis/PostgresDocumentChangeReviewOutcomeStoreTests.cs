@@ -70,7 +70,7 @@ public sealed class PostgresDocumentChangeReviewOutcomeStoreTests(PostgresCollec
 
         var outcomes = await new GetDocumentChangeReviewOutcomes(new PostgresDocumentChangeReviewOutcomeStore(factory)).ExecuteAsync(Owner);
 
-        Assert.Equal(["aaa-old-prompt", DocumentChangeDraftingTask.PromptVersion], outcomes.Select(item => item.PromptVersion));
+        Assert.Equal(["aaa-old-prompt", DocumentChangeDraftTask.PromptVersion], outcomes.Select(item => item.PromptVersion));
         var old = outcomes[0];
         Assert.Equal((2, 0, 0, 1, 0, 1), (old.Drafts, old.ApprovedUnchanged, old.ApprovedEdited, old.ChangesRequested,
             old.ApprovalWithdrawn, old.AwaitingReview));
@@ -141,11 +141,11 @@ public sealed class PostgresDocumentChangeReviewOutcomeStoreTests(PostgresCollec
         var after = withChangeDate ? $"Updated October 3, 2026. Deadline: October {10 + number}.\n" : $"Deadline: October {10 + number}.\n";
         var comparison = await seeder.SaveAsync("Deadline: October 1.\n", after);
         var changeDate = withChangeDate ? new { date = "2026-10-03", citationIndex = 0, confidence = 0.9 } : null;
-        var output = FakeDocumentChangeDraftingModel.Output("Headline",
+        var output = FakeDocumentChangeDraftModel.Output("Headline",
             [("h1", "after", withChangeDate ? "Updated October 3, 2026." : $"October {10 + number}")], changeDate: changeDate);
-        var model = new FakeDocumentChangeDraftingModel().Draft(output);
+        var model = new FakeDocumentChangeDraftModel().Draft(output);
         var worker = AnalysisWorkers.Drafting(new PostgresDocumentChangeAnalysisStore(factory),
-            new PostgresAnalysisStatusStore(factory), model, new DocumentChangeAnalysisSettings(10_000_000, concurrency: 1),
+            new PostgresAnalysisStatusStore(factory), model, new DocumentChangeDraftSettings(10_000_000, concurrency: 1),
             new DocumentChangeAnalysisCatalog([], []), TimeProvider.System);
         await worker.ExecuteAsync(once: true);
         var entry = Assert.Single(await new PostgresDocumentChangeAnalysisStore(factory).GetByComparisonIdsAsync([comparison.ComparisonId], default));

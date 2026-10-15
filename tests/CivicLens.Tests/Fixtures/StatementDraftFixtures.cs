@@ -83,7 +83,7 @@ internal static class StatementDraftFixtures
     }
 }
 
-internal sealed class FakeStatementDraftingModel : IStatementDraftingModel
+internal sealed class FakeStatementDraftModel : IStatementDraftModel
 {
     private readonly Queue<Func<AnalysisModelRequest, Task<AnalysisModelResponse>>> replies = new();
     private readonly List<AnalysisModelRequest> requests = [];
@@ -94,12 +94,12 @@ internal sealed class FakeStatementDraftingModel : IStatementDraftingModel
         get { lock (gate) return [.. requests]; }
     }
 
-    public FakeStatementDraftingModel Draft(string outputJson) =>
+    public FakeStatementDraftModel Draft(string outputJson) =>
         Reply(_ => Task.FromResult(new AnalysisModelResponse("end_turn", outputJson, new(900, 100, 0, 0), "req_fixture")));
 
-    public FakeStatementDraftingModel Fail(AnalysisModelFailure kind) => Reply(_ => throw new AnalysisModelException(kind));
+    public FakeStatementDraftModel Fail(AnalysisModelFailure kind) => Reply(_ => throw new AnalysisModelException(kind));
 
-    public FakeStatementDraftingModel Reply(Func<AnalysisModelRequest, Task<AnalysisModelResponse>> reply)
+    public FakeStatementDraftModel Reply(Func<AnalysisModelRequest, Task<AnalysisModelResponse>> reply)
     {
         lock (gate) replies.Enqueue(reply);
         return this;

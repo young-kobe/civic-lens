@@ -22,11 +22,11 @@ public sealed class ActionDraftLifecycleTests
     {
         var gate = BlockedRequeue(StatementGateTask.Task);
         var statementDraft = BlockedRequeue(StatementDraftTask.Task);
-        var documentChange = BlockedRequeue(DocumentChangeDraftingTask.Task);
+        var documentChange = BlockedRequeue(DocumentChangeDraftTask.Task);
 
         Assert.False(StatementAnalysisLifecycle.CanTransition(gate.Record, gate.Requeue));
         Assert.False(StatementDraftLifecycle.CanTransition(statementDraft.Record, statementDraft.Requeue));
-        Assert.False(DocumentChangeAnalysisLifecycle.CanTransition(documentChange.Record, documentChange.Requeue));
+        Assert.False(DocumentChangeDraftLifecycle.CanTransition(documentChange.Record, documentChange.Requeue));
     }
 
     private static (AnalysisRecord Record, AnalysisCheckpoint Requeue) BlockedRequeue(string task) =>

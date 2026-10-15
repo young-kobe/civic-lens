@@ -6,10 +6,10 @@ using Microsoft.EntityFrameworkCore;
 namespace CivicLens.Infrastructure.Analysis;
 
 public sealed class PostgresAnalysisStatusStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory,
-    string task = DocumentChangeDraftingTask.Task) : IAnalysisStatusStore
+    string task = DocumentChangeDraftTask.Task) : IAnalysisStatusStore
 {
     public static PostgresAnalysisStatusStore FromConnectionString(string connectionString,
-        string task = DocumentChangeDraftingTask.Task) => new(AnalysisDbContextFactory.Create(connectionString), task);
+        string task = DocumentChangeDraftTask.Task) => new(AnalysisDbContextFactory.Create(connectionString), task);
 
     public async Task<AnalysisStatus?> GetAsync(CancellationToken cancellationToken)
     {

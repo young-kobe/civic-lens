@@ -14,7 +14,7 @@ public sealed class PostgresAnalysisWakeupArgumentTests
     [InlineData("Statement_Analysis")]
     public void AQueueTableNameWithAnythingButLowercaseLettersAndUnderscoresIsRefused(string table) =>
         Assert.ThrowsAny<ArgumentException>(() => PostgresAnalysisWakeup.FromConnectionString(Database, table,
-            DocumentChangeDraftingTask.Task));
+            DocumentChangeDraftTask.Task));
 
     [Theory]
     [InlineData("")]

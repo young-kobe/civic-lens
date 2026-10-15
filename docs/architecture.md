@@ -231,7 +231,7 @@ Before the first production deploy ([R-23](roadmap.md#later)), reset the develop
 | Normalization | `body-text-v1` | same file | Extraction IDs, text, and citations | Whitespace or block-separator rules change |
 | Comparison algorithm | `line-lcs-context-v1` | `src/CivicLens.Core/Documents/DocumentComparison.cs` | Stored comparison IDs and hunks | Hunk or word-edit output changes |
 | Comparison settings | `bounded-lines-2000-...-v1` | same file | Limits recorded with each comparison | Any limit constant changes |
-| Draft task | `document-change-draft-v1` | `src/CivicLens.Application/Analysis/DocumentChangeDraftingTask.cs` | Analysis runs and queue entries | Task flow or output handling changes |
+| Draft task | `document-change-draft-v1` | `src/CivicLens.Application/Analysis/DocumentChangeDraftTask.cs` | Analysis runs and queue entries | Task flow or output handling changes |
 | Draft prompt | `document-change-draft-prompt-v2` | same file | Analysis runs and review metrics | Prompt text or input framing changes |
 | Draft schema | `document-change-draft-schema-v2` | same file | Analysis runs | The model output schema changes |
 | Statement draft task | `statement-draft-v1` | `src/CivicLens.Application/Statements/StatementDraftTask.cs` | Statement analysis runs and queue entries | Task flow or output handling changes |
@@ -305,7 +305,7 @@ This is the only navigation index.
 | Bill gate and follow-on pages | [Bills](architecture/bills.md#bill-gate) | `src/CivicLens.Application/Collection/Bills/BillGate.cs` |
 | Bill page extraction text | [Bills](architecture/bills.md#extraction) | `src/CivicLens.Application/Collection/Bills/CongressBillRenderer.cs` |
 | Action candidates | [Bills](architecture/bills.md#action-candidate) | `src/CivicLens.Infrastructure/Collection/Jobs/PostgresCollectionJobStore.ActionCandidates.cs` |
-| Action drafting | [Actions](architecture/actions.md#step) | `src/CivicLens.Application/Actions/ActionDraftingStep.cs` |
+| Action drafting | [Actions](architecture/actions.md#step) | `src/CivicLens.Application/Actions/ActionDraftStep.cs` |
 | Action revisions and the person edit rule | [Actions](architecture/actions.md#revision-and-append) | `src/CivicLens.Core/Actions/ActionDraftRevision.cs` |
 | Action review pages, bulk approval, sponsorship-only view | [Actions](architecture/actions.md#action-review) | `src/CivicLens.Host/Review/ActionEditor.razor` |
 | Action commands | [Actions](architecture/actions.md#commands) | `src/CivicLens.Host/Actions/ActionCommand.cs` |
@@ -316,10 +316,10 @@ This is the only navigation index.
 | Document history and comparisons | [Documents](architecture/documents.md#history) | `src/CivicLens.Core/Documents/DocumentComparison.cs` |
 | Evidence pages under `/Documents` | [Documents](architecture/documents.md#evidence-pages) | `src/CivicLens.Host/Documents/ComparisonPage.razor` |
 | AI queue, budgets, retries, pauses | [Analysis](architecture/analysis.md#behavior) | `src/CivicLens.Application/Analysis/AnalysisWorker.cs` |
-| AI drafting of document-change accounts | [Analysis](architecture/analysis.md#prompt-and-output) | `src/CivicLens.Application/Analysis/DocumentChangeDraftingStep.cs` |
+| AI drafting of document-change accounts | [Analysis](architecture/analysis.md#prompt-and-output) | `src/CivicLens.Application/Analysis/DocumentChangeDraftStep.cs` |
 | Planned classification and datasets | [Analysis](architecture/analysis.md#limits-and-planned-work) | none |
 | Statement candidates and the issue gate | [Statements](architecture/statements.md#issue-gate) | `src/CivicLens.Application/Statements/StatementGateStep.cs` |
-| Statement drafting | [Statements](architecture/statements.md#statement-drafting) | `src/CivicLens.Application/Statements/StatementDraftingStep.cs` |
+| Statement drafting | [Statements](architecture/statements.md#statement-drafting) | `src/CivicLens.Application/Statements/StatementDraftStep.cs` |
 | Statement review pages and commands | [Statements](architecture/statements.md#statement-review) | `src/CivicLens.Host/Review/StatementEditor.razor` |
 | Review decisions, roles, concurrency | [Review](architecture/review.md#review-decisions) | `src/CivicLens.Core/Review/ReviewPolicy.cs` |
 | Review cycles, history caps, the shared append step | [Review](architecture/review.md#review-cycles) | `src/CivicLens.Infrastructure/Review/ReviewRecords.cs` |

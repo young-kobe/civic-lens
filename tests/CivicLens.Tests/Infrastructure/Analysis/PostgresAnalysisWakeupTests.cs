@@ -44,7 +44,7 @@ public sealed class PostgresAnalysisWakeupTests(PostgresCollection postgres) : I
     public async Task ANewlyQueuedChangeWakesTheListener()
     {
         await using var wakeup = PostgresAnalysisWakeup.FromConnectionString(connectionString, PostgresDocumentChangeAnalysisStore.Table,
-            DocumentChangeDraftingTask.Task);
+            DocumentChangeDraftTask.Task);
         await wakeup.ConnectAsync(default);
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         var waiting = wakeup.WaitAsync(timeout.Token);
@@ -63,7 +63,7 @@ public sealed class PostgresAnalysisWakeupTests(PostgresCollection postgres) : I
             WHERE comparison_id = '{comparison.ComparisonId}'
             """);
         await using var wakeup = PostgresAnalysisWakeup.FromConnectionString(connectionString, PostgresDocumentChangeAnalysisStore.Table,
-            DocumentChangeDraftingTask.Task);
+            DocumentChangeDraftTask.Task);
         await wakeup.ConnectAsync(default);
         await ExecuteAsync(connectionString, $"""
             UPDATE document_change_analysis SET lease_expires_at =

@@ -17,8 +17,8 @@ internal static class StatementDraftComposition
         if (configuration is null) return AnalysisComposition<StatementDraftRun>.Disabled(status);
         var wakeup = PostgresAnalysisWakeup.FromConnectionString(connectionString, PostgresStatementAnalysisStore.Table,
             StatementDraftTask.Task);
-        var step = new StatementDraftingStep(new PostgresStatementDraftStore(contexts),
-            new AnthropicStatementDraftingModel(configuration.ApiKey), configuration.Settings);
+        var step = new StatementDraftStep(new PostgresStatementDraftStore(contexts),
+            new AnthropicStatementDraftModel(configuration.ApiKey), configuration.Settings);
         return new(status, configuration.Settings.DailyTokenLimit, new AnalysisWorker<StatementDraftRun>(step, status, TimeProvider.System, wakeup), wakeup);
     }
 }

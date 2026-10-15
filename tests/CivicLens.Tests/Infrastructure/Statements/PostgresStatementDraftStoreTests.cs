@@ -50,7 +50,7 @@ public sealed class PostgresStatementDraftStoreTests(PostgresCollection postgres
     public async Task AValidDraftWritesTheDraftTheAiRevisionAndTheRunInOneTransactionWithTheGateIssuesAndItsOwnBudget()
     {
         var candidate = await PassedCandidateAsync();
-        var model = new FakeStatementDraftingModel().Draft(Output(quotes: ["a rent cap for tenants"]));
+        var model = new FakeStatementDraftModel().Draft(Output(quotes: ["a rent cap for tenants"]));
 
         await DraftingWorker(model).ExecuteAsync(once: true);
 
@@ -72,7 +72,7 @@ public sealed class PostgresStatementDraftStoreTests(PostgresCollection postgres
     public async Task AnArticleOverTheByteCapGetsADraftWithoutARevisionAndABypassedRun()
     {
         var candidate = await PassedCandidateAsync(new string('x', 6_000), "https://example.test/pages/big", gateSettings: BigGate);
-        var model = new FakeStatementDraftingModel();
+        var model = new FakeStatementDraftModel();
 
         await DraftingWorker(model, new StatementDraftSettings(10_000_000, StatementDraftPrompt.MinimumReservation, 1)).ExecuteAsync(once: true);
 
@@ -87,8 +87,8 @@ public sealed class PostgresStatementDraftStoreTests(PostgresCollection postgres
     public async Task ARepeatRunAndARequeueOfASucceededEntryChangeNothing()
     {
         _ = await PassedCandidateAsync();
-        await DraftingWorker(new FakeStatementDraftingModel().Draft(Output())).ExecuteAsync(once: true);
-        var again = new FakeStatementDraftingModel();
+        await DraftingWorker(new FakeStatementDraftModel().Draft(Output())).ExecuteAsync(once: true);
+        var again = new FakeStatementDraftModel();
 
         await DraftingWorker(again).ExecuteAsync(once: true);
 
@@ -103,7 +103,7 @@ public sealed class PostgresStatementDraftStoreTests(PostgresCollection postgres
     {
         var candidate = await PassedCandidateAsync();
         await InsertDraftAsync(candidate);
-        var model = new FakeStatementDraftingModel();
+        var model = new FakeStatementDraftModel();
 
         await DraftingWorker(model).ExecuteAsync(once: true);
 
@@ -115,7 +115,7 @@ public sealed class PostgresStatementDraftStoreTests(PostgresCollection postgres
     public async Task ADraftThatAppearsDuringTheCallKeepsTheRunAsDiscardedAndAddsNoSecondDraft()
     {
         var candidate = await PassedCandidateAsync();
-        var model = new FakeStatementDraftingModel().Reply(async _ =>
+        var model = new FakeStatementDraftModel().Reply(async _ =>
         {
             await InsertDraftAsync(candidate);
             return new AnalysisModelResponse("end_turn", Output(), new(900, 100, 0, 0), "req_fixture");
@@ -132,13 +132,13 @@ public sealed class PostgresStatementDraftStoreTests(PostgresCollection postgres
     public async Task TwoRejectedAnswersFailTheEntryAndAnOwnerRequeueRunsItAgainWithoutTouchingTheGate()
     {
         var candidate = await PassedCandidateAsync();
-        var model = new FakeStatementDraftingModel().Draft("not json").Draft(Output(quotes: ["a rent freeze"]));
+        var model = new FakeStatementDraftModel().Draft("not json").Draft(Output(quotes: ["a rent freeze"]));
         await DraftingWorker(model).ExecuteAsync(once: true);
         Assert.Equal([("gate", "Succeeded", "passed"), (StatementDraftTask.Task, "Failed", "citationRejected")], await QueueAsync(candidate));
         Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM statement_drafts"));
 
         var requeued = await new RequeueAnalyses<StatementDraftRun>(drafts).ExecuteAsync(Owner, candidate);
-        await DraftingWorker(new FakeStatementDraftingModel().Draft(Output())).ExecuteAsync(once: true);
+        await DraftingWorker(new FakeStatementDraftModel().Draft(Output())).ExecuteAsync(once: true);
 
         Assert.Equal(1, requeued);
         Assert.Equal([("gate", "Succeeded", "passed"), (StatementDraftTask.Task, "Succeeded", null)], await QueueAsync(candidate));
@@ -150,7 +150,7 @@ public sealed class PostgresStatementDraftStoreTests(PostgresCollection postgres
     {
         _ = await PassedCandidateAsync(Article + " one", "https://example.test/pages/one");
         _ = await PassedCandidateAsync(Article + " two", "https://example.test/pages/two");
-        var model = new FakeStatementDraftingModel().Draft(Output(quotes: ["a rent cap for tenants"])).Fail(AnalysisModelFailure.RateLimited);
+        var model = new FakeStatementDraftModel().Draft(Output(quotes: ["a rent cap for tenants"])).Fail(AnalysisModelFailure.RateLimited);
         await DraftingWorker(model).ExecuteAsync(once: true);
 
         var counts = await drafts.CountAsync(default);
@@ -165,7 +165,7 @@ public sealed class PostgresStatementDraftStoreTests(PostgresCollection postgres
     {
         var rejected = await PassedCandidateAsync(Article + " one", "https://example.test/pages/one");
         var waiting = await PassedCandidateAsync(Article + " two", "https://example.test/pages/two");
-        var model = new FakeStatementDraftingModel().Draft("not json").Draft(Output(quotes: ["a rent freeze"]))
+        var model = new FakeStatementDraftModel().Draft("not json").Draft(Output(quotes: ["a rent freeze"]))
             .Fail(AnalysisModelFailure.RateLimited);
         await DraftingWorker(model).ExecuteAsync(once: true);
         var list = new ListStatementAnalyses<StatementDraftRun, StatementDraftView, StatementDraftListItem>(drafts);
@@ -198,7 +198,7 @@ public sealed class PostgresStatementDraftStoreTests(PostgresCollection postgres
         var admittedForWarren = AdmittedDefinition(SoleCoverage(Warren));
         var markey = await PassedCandidateAsync(Article + " one", "https://example.test/pages/one", admittedBy: admittedForMarkey);
         var warren = await PassedCandidateAsync(Article + " two", "https://example.test/pages/two", admittedBy: admittedForWarren);
-        var model = new FakeStatementDraftingModel().Draft(Output()).Draft(Output());
+        var model = new FakeStatementDraftModel().Draft(Output()).Draft(Output());
 
         await DraftingWorker(model).ExecuteAsync(once: true);
 
@@ -225,7 +225,7 @@ public sealed class PostgresStatementDraftStoreTests(PostgresCollection postgres
     public async Task AJobThatHasNoConfigurationRevisionBlocksTheDraftWithoutACall()
     {
         var candidate = await PassedCandidateAsync(admittedBy: LegacyDefinition());
-        var model = new FakeStatementDraftingModel();
+        var model = new FakeStatementDraftModel();
 
         await DraftingWorker(model).ExecuteAsync(once: true);
 
@@ -246,7 +246,7 @@ public sealed class PostgresStatementDraftStoreTests(PostgresCollection postgres
         return candidate;
     }
 
-    private AnalysisWorker<StatementDraftRun> DraftingWorker(FakeStatementDraftingModel model, StatementDraftSettings? settings = null) =>
+    private AnalysisWorker<StatementDraftRun> DraftingWorker(FakeStatementDraftModel model, StatementDraftSettings? settings = null) =>
         AnalysisWorkers.StatementDrafting(drafts, new FakeAnalysisStatusStore(), model, settings ?? new StatementDraftSettings(10_000_000, concurrency: 1),
             TimeProvider.System);
 

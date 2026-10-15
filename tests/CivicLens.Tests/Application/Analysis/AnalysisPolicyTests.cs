@@ -16,24 +16,24 @@ public sealed class AnalysisPolicyTests
     [Fact]
     public void ARunCannotReserveMoreThanTheDailyLimit()
     {
-        Assert.Throws<ArgumentOutOfRangeException>(() => new DocumentChangeAnalysisSettings(dailyTokenLimit: 1_000, runTokenLimit: 2_000));
-        Assert.Throws<ArgumentOutOfRangeException>(() => new DocumentChangeAnalysisSettings(dailyTokenLimit: 1_000_000, concurrency: 5));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new DocumentChangeDraftSettings(dailyTokenLimit: 1_000, runTokenLimit: 2_000));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new DocumentChangeDraftSettings(dailyTokenLimit: 1_000_000, concurrency: 5));
     }
 
     [Fact]
     public void ADailyLimitBelowTheDefaultRunLimitCapsTheRunLimitInsteadOfFailing()
     {
-        Assert.Equal(50_000, new DocumentChangeAnalysisSettings(dailyTokenLimit: 50_000).RunTokenLimit);
-        Assert.Equal(DocumentChangeAnalysisSettings.DefaultRunTokenLimit, new DocumentChangeAnalysisSettings(1_000_000).RunTokenLimit);
+        Assert.Equal(50_000, new DocumentChangeDraftSettings(dailyTokenLimit: 50_000).RunTokenLimit);
+        Assert.Equal(DocumentChangeDraftSettings.DefaultRunTokenLimit, new DocumentChangeDraftSettings(1_000_000).RunTokenLimit);
     }
 
     [Fact]
     public void ALimitBelowTheSmallestReservationFailsAtStartup()
     {
-        var minimum = DocumentChangeDraftingPrompt.MinimumReservation;
-        Assert.Throws<ArgumentOutOfRangeException>(() => new DocumentChangeAnalysisSettings(minimum - 1, minimum - 1));
-        Assert.Throws<ArgumentOutOfRangeException>(() => new DocumentChangeAnalysisSettings(minimum * 10, minimum - 1));
-        Assert.Equal(minimum, new DocumentChangeAnalysisSettings(minimum, minimum).RunTokenLimit);
+        var minimum = DocumentChangeDraftPrompt.MinimumReservation;
+        Assert.Throws<ArgumentOutOfRangeException>(() => new DocumentChangeDraftSettings(minimum - 1, minimum - 1));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new DocumentChangeDraftSettings(minimum * 10, minimum - 1));
+        Assert.Equal(minimum, new DocumentChangeDraftSettings(minimum, minimum).RunTokenLimit);
     }
 
     [Fact]

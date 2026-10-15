@@ -26,7 +26,7 @@ public sealed class PostgresDocumentChangeAnalysisStore(IDbContextFactory<Collec
         var ids = comparisonIds.ToArray();
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         var rows = await db.Set<DocumentChangeAnalysisRow>().AsNoTracking()
-            .Where(row => row.Task == DocumentChangeDraftingTask.Task && ids.Contains(row.ComparisonId)).ToArrayAsync(cancellationToken);
+            .Where(row => row.Task == DocumentChangeDraftTask.Task && ids.Contains(row.ComparisonId)).ToArrayAsync(cancellationToken);
         return [.. rows.Select(ToRecord)];
     }
 
@@ -48,7 +48,7 @@ public sealed class PostgresDocumentChangeAnalysisStore(IDbContextFactory<Collec
         return row is null ? null : AnalysisRunRows.ToRun(row);
     }
 
-    public async Task<DocumentChangeAnalysisEvidence?> ReadEvidenceAsync(string comparisonId, CancellationToken cancellationToken)
+    public async Task<DocumentChangeDraftEvidence?> ReadEvidenceAsync(string comparisonId, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(comparisonId);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);

@@ -168,7 +168,7 @@ try
         var connectionString = Environment.GetEnvironmentVariable("CIVIC_LENS_DATABASE")!;
         var queue = PostgresCollectionWorkerQueue.FromConnectionString(connectionString);
         var analysisContexts = AnalysisDbContextFactory.Create(connectionString);
-        var analysis = DocumentChangeAnalysisComposition.Create(analysisContexts, connectionString, workerConfiguration);
+        var analysis = DocumentChangeDraftComposition.Create(analysisContexts, connectionString, workerConfiguration);
         await using var analysisWakeup = analysis.Wakeup;
         var gate = StatementGateComposition.Create(analysisContexts, connectionString);
         await using var gateWakeup = gate.Wakeup;
