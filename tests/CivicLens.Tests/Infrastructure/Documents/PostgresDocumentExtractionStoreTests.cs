@@ -531,8 +531,9 @@ public sealed class PostgresDocumentExtractionStoreTests(PostgresCollection post
         {
             await connection.OpenAsync();
             await using var command = new NpgsqlCommand("""
-                INSERT INTO collection_jobs (job_id, idempotency_key, definition_json, state, created_at, cancellation_requested, lease_fence)
-                VALUES ('job', 'key', '{}', 'Succeeded', 1, FALSE, 0);
+                INSERT INTO collection_jobs (job_id, idempotency_key, definition_json, source_id, is_root, state, created_at,
+                    cancellation_requested, lease_fence)
+                VALUES ('job', 'key', '{}', 'source', FALSE, 'Succeeded', 1, FALSE, 0);
                 INSERT INTO collection_job_attempts (attempt_id, job_id, sequence, request_json, started_at)
                 VALUES (@attempt, 'job', 1, '{}', 1);
                 INSERT INTO document_comparisons (comparison_id, before_extraction_id, after_extraction_id,
