@@ -18,10 +18,10 @@ internal sealed class DocumentChangeAnalysisQueueMapping : IAnalysisQueueMapping
 
     public string? BudgetTask => null;
 
-    public AnalysisTaskIdentity Identity => DocumentChangeDraftingTask.Identity;
+    public AnalysisTaskIdentity Identity => DocumentChangeDraftTask.Identity;
 
     public bool CanTransition(AnalysisRecord record, AnalysisCheckpoint checkpoint) =>
-        DocumentChangeAnalysisLifecycle.CanTransition(record, checkpoint);
+        DocumentChangeDraftLifecycle.CanTransition(record, checkpoint);
 
     public AnalysisRun RunOf(AnalysisRun run) => run;
 
@@ -32,7 +32,7 @@ internal sealed class DocumentChangeAnalysisQueueMapping : IAnalysisQueueMapping
     public async Task<AnalysisSettlement<AnalysisRun>> PrepareSettlementAsync(CollectionAttemptDbContext db,
         DocumentChangeAnalysisRow row, AnalysisSettlement<AnalysisRun> settlement, CancellationToken cancellationToken)
     {
-        if (settlement.Checkpoint is not DocumentChangeAnalysisCheckpoint { Revision: { } revision } checkpoint) return settlement;
+        if (settlement.Checkpoint is not DocumentChangeDraftCheckpoint { Revision: { } revision } checkpoint) return settlement;
         if (settlement.Run?.Outcome != AnalysisRunOutcome.Drafted)
             throw new ArgumentException("A draft needs its drafted run.", nameof(settlement));
         if (await PostgresDocumentChangeReviewStore.TryAddAnalysisDraftAsync(db, revision, cancellationToken))
@@ -40,7 +40,7 @@ internal sealed class DocumentChangeAnalysisQueueMapping : IAnalysisQueueMapping
             row.DraftId = revision.DraftId;
             return settlement;
         }
-        return new(checkpoint with { Revision = null, ErrorCode = DocumentChangeAnalysisErrorCodes.DraftDiscarded },
+        return new(checkpoint with { Revision = null, ErrorCode = DocumentChangeDraftErrorCodes.DraftDiscarded },
             settlement.Run with { Outcome = AnalysisRunOutcome.DraftDiscarded });
     }
 

@@ -24,8 +24,8 @@ internal static class ActionDraftComposition
         if (issues is null) throw new ArgumentException("Action drafting needs CIVIC_LENS_ISSUES_CONFIG.");
         var wakeup = PostgresAnalysisWakeup.FromConnectionString(connectionString, PostgresActionDraftStore.Table, ActionDraftTask.Task);
         var reader = new ActionBillReader(jobs, responses, textExtractor, artifactRoot);
-        var step = new ActionDraftingStep(new PostgresActionDraftStore(contexts), reader,
-            new AnthropicActionDraftingModel(configuration.ApiKey), configuration.Settings, issues);
+        var step = new ActionDraftStep(new PostgresActionDraftStore(contexts), reader,
+            new AnthropicActionDraftModel(configuration.ApiKey), configuration.Settings, issues);
         return new(status, configuration.Settings.DailyTokenLimit, new AnalysisWorker<ActionDraftRun>(step, status, TimeProvider.System, wakeup), wakeup);
     }
 }

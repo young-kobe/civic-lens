@@ -8,7 +8,7 @@ namespace CivicLens.Application.Statements;
 
 public static class StatementGateResolver
 {
-    public static StatementGateResolution Resolve(string outputJson, StatementGateEvidence evidence, StatementGateRubric rubric)
+    public static StatementGateResolution Resolve(string outputJson, StatementArticle evidence, StatementGateRubric rubric)
     {
         ArgumentNullException.ThrowIfNull(evidence);
         ArgumentNullException.ThrowIfNull(rubric);
@@ -47,7 +47,7 @@ public static class StatementGateResolver
     }
 
     private static ImmutableArray<StatementGateQuote> ResolveIssues(ImmutableArray<StatementGateOutputIssue> issues,
-        StatementGateEvidence evidence, StatementGateRubric rubric, List<string> errors,
+        StatementArticle evidence, StatementGateRubric rubric, List<string> errors,
         List<string> citationErrors)
     {
         var listed = rubric.Issues.Select(issue => issue.Id).ToHashSet(StringComparer.Ordinal);

@@ -3,7 +3,7 @@ using CivicLens.Core.Review;
 
 namespace CivicLens.Application.Statements;
 
-public sealed class RegateStatementCandidates(IStatementAnalysisStore store)
+public sealed class RegateStatementCandidates(IStatementGateStore store)
 {
     public Task<int> ExecuteAsync(ReviewActor actor, string issueRevisionId, DateOnly? since, CancellationToken cancellationToken = default)
     {

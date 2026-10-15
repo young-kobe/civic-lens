@@ -34,7 +34,7 @@ public sealed class StatementDraftPromptGoldenTests
         Assert.Equal("statement-draft-schema-v1", StatementDraftTask.SchemaVersion);
         Assert.Equal("statement-draft-v1", StatementDraftTask.TaskVersion);
         Assert.Equal("statement-draft", StatementDraftTask.Task);
-        Assert.NotEqual(CivicLens.Application.Analysis.DocumentChangeDraftingTask.Task, StatementDraftTask.Task);
+        Assert.NotEqual(CivicLens.Application.Analysis.DocumentChangeDraftTask.Task, StatementDraftTask.Task);
         Assert.True(Sha256(request.SystemPrompt) == system, $"{bump} System prompt: {Sha256(request.SystemPrompt)}");
         Assert.True(Sha256(request.SchemaJson) == schema, $"{bump} Schema: {Sha256(request.SchemaJson)}");
         Assert.True(request.InputHash == input, $"{bump} Input hash: {request.InputHash}");

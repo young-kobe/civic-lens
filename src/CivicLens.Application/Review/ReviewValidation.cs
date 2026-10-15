@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using CivicLens.Application.Paging;
+using CivicLens.Core.Documents;
 using CivicLens.Core.Review;
 using CivicLens.Core;
 
@@ -71,7 +72,7 @@ internal static class ReviewValidation
         return result.ToImmutable();
     }
 
-    public static ImmutableArray<DocumentChangeCitation> ValidateCitations(ImmutableArray<DocumentChangeCitation> citations)
+    public static ImmutableArray<SourceSpan> ValidateCitations(ImmutableArray<SourceSpan> citations)
     {
         if (citations.IsDefault || citations.Length > DocumentChangeDraftRevision.MaximumCitations)
             throw new ArgumentException($"At most {DocumentChangeDraftRevision.MaximumCitations} citations may be supplied.", nameof(citations));
@@ -85,8 +86,8 @@ internal static class ReviewValidation
         return citations;
     }
 
-    public static DocumentChangeCitation? ValidateChangeDateEvidence(DateOnly? changeDate,
-        DocumentChangeCitation? evidence, ImmutableArray<DocumentChangeCitation> citations)
+    public static SourceSpan? ValidateChangeDateEvidence(DateOnly? changeDate,
+        SourceSpan? evidence, ImmutableArray<SourceSpan> citations)
     {
         if ((changeDate is null) != (evidence is null))
             throw new ArgumentException("An actual change date requires an exact evidence citation.");

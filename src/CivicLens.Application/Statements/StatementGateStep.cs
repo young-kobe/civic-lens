@@ -6,7 +6,7 @@ using State = CivicLens.Application.Analysis.AnalysisState;
 
 namespace CivicLens.Application.Statements;
 
-public sealed class StatementGateStep(IStatementAnalysisStore store, IStatementGateModel model, StatementGateSettings settings,
+public sealed class StatementGateStep(IStatementGateStore store, IStatementGateModel model, StatementGateSettings settings,
     IssueConfigurationRevision issueRevision) : IAnalysisTaskStep<StatementGateRun>
 {
     private readonly IssueConfiguration issues = issueRevision.ReadConfiguration();
@@ -47,7 +47,7 @@ public sealed class StatementGateStep(IStatementAnalysisStore store, IStatementG
         };
     }
 
-    private static AnalysisResolution<StatementGateResolution> Resolve(string outputJson, StatementGateEvidence evidence,
+    private static AnalysisResolution<StatementGateResolution> Resolve(string outputJson, StatementArticle evidence,
         StatementGateRubric rubric)
     {
         var resolution = StatementGateResolver.Resolve(outputJson, evidence, rubric);
@@ -55,7 +55,7 @@ public sealed class StatementGateStep(IStatementAnalysisStore store, IStatementG
             : AnalysisResolution<StatementGateResolution>.Reject(resolution.Errors, resolution.HasCitationErrors);
     }
 
-    private Task<bool> BypassAsync(IAnalysisAttempt<StatementGateRun> attempt, StatementGateEvidence evidence, string reason,
+    private Task<bool> BypassAsync(IAnalysisAttempt<StatementGateRun> attempt, StatementArticle evidence, string reason,
         string? previousRunId, CancellationToken cancellationToken)
     {
         var run = attempt.BypassRun(StatementGateTask.Model, evidence.Extraction.TextSha256, previousRunId);

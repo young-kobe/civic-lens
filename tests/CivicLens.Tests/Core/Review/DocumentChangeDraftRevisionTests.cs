@@ -1,3 +1,4 @@
+using CivicLens.Core.Documents;
 using CivicLens.Core.Review;
 
 namespace CivicLens.Tests.Core.Review;
@@ -7,7 +8,7 @@ public sealed class DocumentChangeDraftRevisionTests
     [Fact]
     public void AnAiProposedChangeDateNeedsAHumanRevisionBeforeApproval()
     {
-        var citation = new DocumentChangeCitation(new string('e', 64), 0, 4);
+        var citation = new SourceSpan(new string('e', 64), 0, 4);
         var dated = Revision(new string('d', 32), 1) with
         {
             AuthorSubject = ReviewAuthor.AnalysisSubject,
@@ -24,7 +25,7 @@ public sealed class DocumentChangeDraftRevisionTests
     [Fact]
     public void AStoredRevisionMustKeepItsIdentityTextBoundsAndEvidenceBindings()
     {
-        var citation = new DocumentChangeCitation(new string('e', 64), 0, 4);
+        var citation = new SourceSpan(new string('e', 64), 0, 4);
         var valid = Revision(new string('d', 32), 1) with { Citations = [citation] };
         valid.ValidateShape();
 
@@ -37,7 +38,7 @@ public sealed class DocumentChangeDraftRevisionTests
         Assert.Throws<ArgumentException>((valid with { OfficialIds = ["a", "a"] }).ValidateShape);
         Assert.Throws<ArgumentException>((valid with { ChangeDate = new DateOnly(2026, 10, 3) }).ValidateShape);
         Assert.Throws<ArgumentException>((valid with { Citations = [citation, citation] }).ValidateShape);
-        Assert.Throws<ArgumentException>((valid with { Citations = [new DocumentChangeCitation(new string('e', 64), 0, 0)] }).ValidateShape);
+        Assert.Throws<ArgumentException>((valid with { Citations = [new SourceSpan(new string('e', 64), 0, 0)] }).ValidateShape);
     }
 
     private static DocumentChangeDraftRevision Revision(string draftId, int number) =>

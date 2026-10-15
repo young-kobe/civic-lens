@@ -38,10 +38,10 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - One draft exists for each bill. Enforced by `ux_action_drafts_bill`. Test: `PostgresBillStreamTests.TheDatabaseAllowsOneDraftForEachBillAndRefusesABadRecordId`.
 - Only an analysis revision has a run ID, and one revision exists for each run. Enforced by `ck_action_revisions_run` and `IX_action_revisions_run_id`. Test: `PostgresBillStreamTests.TheDatabaseRefusesAnAnalysisRevisionWithoutARunAndAPersonRevisionWithOne`.
 - An append needs the expected current revision. Enforced by `ActionDraftRows` under the `PostgresAdvisoryLock.ActionReview` key. Test: `PostgresBillStreamTests.APersonsConcurrentRevisionFailsTheExpectedVersionCheckSoTheRunRetriesWithBackoffAndAppendsNothing`.
-- A new revision needs a new fingerprint or summary version. Enforced by `ActionDraftingStep`. Test: `ActionDraftingStepTests.AMatchingFingerprintAndSummaryVersionSettleWithoutAModelCall`.
-- A cosponsor-only change appends without a model call and keeps the text and the suggestion. Any other change, including a change in a sponsor, calls the model. Enforced by `ActionDraftingStep` and `ActionDraftRevision.HasSameSponsorsAs`. Tests: `ActionDraftingStepTests.ANewSponsorCallsTheModelBecauseTheTextNamesTheSponsors`, `ActionDraftingStepTests.ANewSponsorshipAppendsAtOnceWithoutAModelCallAndKeepsTheTextBecauseCodeOwnsTheSponsorshipList`, `ActionDraftingStepTests.ASponsorshipChangeKeepsAPersonsTextAndTheSuggestionUnchangedWithItsRunId`, and `ActionDraftingStepTests.ASponsorshipChangeTogetherWithAnotherFactStillCallsTheModel`.
-- The model text names no tracked cosponsor who is not also a sponsor. A sponsor may be named, even when the sponsor's name contains the full name of a cosponsor. Enforced by `ActionDraftResolver.CheckNames`. Tests: `ActionDraftingStepTests.TextThatNamesATrackedCosponsorIsRejectedBecauseCodeOwnsTheCosponsorList`, `ActionDraftingStepTests.ASponsorMayBeNamedAndAPartOfTheirNameIsNotAnotherPerson`, `ActionDraftingStepTests.APersonWhoSponsorsAndCosponsorsMayBeNamedBecauseOnlyAPureCosponsorBelongsToCode`, and `ActionDraftingStepTests.ASponsorWhoseNameContainsACosponsorsFullNameMayBeNamed`.
-- The prompt names no cosponsor. Enforced by `ActionDraftPrompt`. Test: `ActionDraftingStepTests.ThePromptNamesOnlyTheSponsorsBecauseCodeOwnsTheCosponsorListThatSponsorshipChangesUpdate`.
+- A new revision needs a new fingerprint or summary version. Enforced by `ActionDraftStep`. Test: `ActionDraftStepTests.AMatchingFingerprintAndSummaryVersionSettleWithoutAModelCall`.
+- A cosponsor-only change appends without a model call and keeps the text and the suggestion. Any other change, including a change in a sponsor, calls the model. Enforced by `ActionDraftStep` and `ActionDraftRevision.HasSameSponsorsAs`. Tests: `ActionDraftStepTests.ANewSponsorCallsTheModelBecauseTheTextNamesTheSponsors`, `ActionDraftStepTests.ANewSponsorshipAppendsAtOnceWithoutAModelCallAndKeepsTheTextBecauseCodeOwnsTheSponsorshipList`, `ActionDraftStepTests.ASponsorshipChangeKeepsAPersonsTextAndTheSuggestionUnchangedWithItsRunId`, and `ActionDraftStepTests.ASponsorshipChangeTogetherWithAnotherFactStillCallsTheModel`.
+- The model text names no tracked cosponsor who is not also a sponsor. A sponsor may be named, even when the sponsor's name contains the full name of a cosponsor. Enforced by `ActionDraftResolver.CheckNames`. Tests: `ActionDraftStepTests.TextThatNamesATrackedCosponsorIsRejectedBecauseCodeOwnsTheCosponsorList`, `ActionDraftStepTests.ASponsorMayBeNamedAndAPartOfTheirNameIsNotAnotherPerson`, `ActionDraftStepTests.APersonWhoSponsorsAndCosponsorsMayBeNamedBecauseOnlyAPureCosponsorBelongsToCode`, and `ActionDraftStepTests.ASponsorWhoseNameContainsACosponsorsFullNameMayBeNamed`.
+- The prompt names no cosponsor. Enforced by `ActionDraftPrompt`. Test: `ActionDraftStepTests.ThePromptNamesOnlyTheSponsorsBecauseCodeOwnsTheCosponsorListThatSponsorshipChangesUpdate`.
 - The text of a person stays, and model text becomes a suggestion. Enforced by `ActionDraftRevision`. Test: `ActionDraftRevisionTests.ARevisionAfterAPersonsTextMustKeepThatTextAndOfferTheModelsAsASuggestion`.
 - A person edits only the headline and the summary. Enforced by `ActionDraftRevision`. Test: `ActionDraftRevisionTests.ARecordReviewerEditsOnlyTheHeadlineAndTheSummary`.
 - A person may keep or clear the suggestion, but never change it. Enforced by `ActionDraftRevision.ValidatePersonEditOf`, checked again under the action review lock. Tests: `ActionDraftRevisionTests.APersonMayKeepOrClearTheSuggestionButNeverChangeItBecauseOnlyTheModelWritesSuggestions` and `PostgresBillStreamTests.APersonSaveMayKeepOrClearTheSuggestionButTheStoreRefusesAChangedOne`.
@@ -53,9 +53,9 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - The sponsorship-only check compares text, suggestion, bill facts, and Sponsor-role entries. Enforced by `ActionDraftRevision.IsSponsorshipOnlyChangeOf`. Test: `ActionDraftRevisionTests.ARevisionIsSponsorshipOnlyWhenOnlyItsSponsorshipsDifferFromTheApprovedRevision`.
 - The change view lists added, changed, and no longer listed sponsorships. Enforced by `ActionDraftRevision.SponsorshipChangesSince`. Test: `ActionDraftRevisionTests.AnAddedCosponsorAndAReversedWithdrawalAreBothListedBecauseClearingAWithdrawalIsAChangeToo`.
 - An older candidate never becomes the newest revision. Enforced by `ActionDraftRows.HasNewerCandidateAsync`, checked when the step reads its evidence and again at the append. Tests: `PostgresBillStreamTests.ADelayedOlderCandidateIsSupersededSoItsStaleContentNeverBecomesTheNewestRevision`, `PostgresBillStreamTests.ANewerCandidateThatArrivesAfterTheClaimSupersedesTheAppendSoTheOlderDraftNeverBecomesARevision`, and `PostgresBillStreamTests.ALaterUpdateDateWithoutSummariesSupersedesAnEarlierCandidateWithSummariesBecauseTheDateDecidesFirst`.
-- More than 20 summary pages never block a bill; it drafts without them. Enforced by `ActionDraftingStep`. Test: `ActionDraftingStepTests.MoreThanTwentySummaryPagesDraftWithoutSummariesAndNeverReadThemBecauseSummariesAreOptionalInput`.
+- More than 20 summary pages never block a bill; it drafts without them. Enforced by `ActionDraftStep`. Test: `ActionDraftStepTests.MoreThanTwentySummaryPagesDraftWithoutSummariesAndNeverReadThemBecauseSummariesAreOptionalInput`.
 - An owner requeue of Blocked drafts moves only Blocked drafts with exactly the given code, and only for actions. Enforced by `PostgresAnalysisQueue.RequeueAsync` and `ActionDraftLifecycle`. Tests: `PostgresBillStreamTests.RequeueBlockedMovesOnlyBlockedEntriesWithTheGivenCodeAndResetsTheirAttempts` and `ActionDraftLifecycleTests.OtherTasksKeepBlockedFinalBecauseOnlyActionsTurnTheOptionOn`.
-- Model confidence never reaches a revision. Enforced by `ActionDraftingStep`. Test: `ActionDraftingStepTests.ConfidenceStaysInTheRunOutputAndNeverReachesTheRevision`.
+- Model confidence never reaches a revision. Enforced by `ActionDraftStep`. Test: `ActionDraftStepTests.ConfidenceStaysInTheRunOutputAndNeverReachesTheRevision`.
 
 ## Behavior
 
@@ -65,7 +65,7 @@ The step runs on the shared analysis owners: `AnalysisWorker<TRun>`, `AnalysisVa
 
 `BillGate.TrackedIssueIdsFor` maps a policy area to the issues that are active on a day. The bill gate and drafting both call it. `CollectionConfiguration.CoveredBioguidePeopleOf` lists the covered people who have a bioguide ID. `ApiResponseReader` reads the saved capture of a job, and `JobPreparation` shares it.
 
-The store port `IActionDraftStore` extends `IStatementQueueStore`. The owner commands therefore use the same generic handlers as statements.
+The store port `IActionDraftStore` extends `IAnalysisQueueStore`. The owner commands therefore use the shared queue handlers in [analysis](analysis.md#queue-and-lifecycle).
 
 ### Record identity
 
@@ -92,7 +92,7 @@ The step does these checks in order. None of them calls the model.
 7. The step computes eight values. They are the sponsorship fingerprint, the newest summary version, the policy area, the policy area ID, and the bill title. They also include the tracked issue IDs, the issue revision ID, and the person ID of each tracked official. The step resolves the policy area ID with `IssueConfiguration.PolicyAreaIdFor`, next to the tracked issue IDs. A label that the configuration lacks gives no ID. If the current revision has the same eight values: Succeeded as `unchanged`.
 8. Only the fingerprint differs, and the Sponsor-role entries are equal (bioguide ID, person ID, and sponsorship date): the step makes no model call. It appends a revision that copies the text, the origin, and the suggestion of the current revision, with a Bypassed run whose reason is `sponsorshipsChanged`. The entry settles Succeeded with no code.
 
-Actions pages are not read. A change in a Sponsor-role entry calls the model. Any other difference in step 7 calls the model too, so a renamed issue or a bioguide ID mapped to another person drafts again. A bill with no current revision is always drafted. `ActionDraftingStep.ChangeSince` owns this comparison, and `ActionDraftRevision.HasSameSponsorsAs` owns the sponsor test.
+Actions pages are not read. A change in a Sponsor-role entry calls the model. Any other difference in step 7 calls the model too, so a renamed issue or a bioguide ID mapped to another person drafts again. A bill with no current revision is always drafted. `ActionDraftStep.ChangeSince` owns this comparison, and `ActionDraftRevision.HasSameSponsorsAs` owns the sponsor test.
 
 The `noTrackedOfficial` and `unchanged` outcomes write a Bypassed run with the reason as its code and the same context as a drafted run. The sponsorship-only append writes a Bypassed run with the reason `sponsorshipsChanged`, and the revision names that run. The queue refuses either code without its run. The `supersededByNewerCandidate` outcome of step 2 writes no run.
 
@@ -175,7 +175,7 @@ A person edits only the headline and the summary. `ActionDraftRevision.ValidateP
 
 ### Executor
 
-The executor is `AnalysisWorker<ActionDraftRun>` with `ActionDraftingStep`. It runs beside the other analysis loops in the `worker` process, with its own wakeup, status row, daily limit, and run limit. It uses `CIVIC_LENS_ANALYSIS_CONCURRENCY`.
+The executor is `AnalysisWorker<ActionDraftRun>` with `ActionDraftStep`. It runs beside the other analysis loops in the `worker` process, with its own wakeup, status row, daily limit, and run limit. It uses `CIVIC_LENS_ANALYSIS_CONCURRENCY`.
 
 Its required variables are in [operations](../operations.md#action-drafting). A daily limit without the key or the issue file is a configuration error. The status row is in `document_change_analysis_status` under the task `action-draft`.
 
@@ -241,11 +241,11 @@ All are owner commands. Variables and examples are in [operations](../operations
 | Concern | Files |
 |---|---|
 | Revision and sponsorships | `src/CivicLens.Core/Actions/ActionDraftRevision.cs`, `src/CivicLens.Core/Actions/ActionSponsorship.cs`, `src/CivicLens.Core/Actions/ActionSponsorshipRole.cs`, `src/CivicLens.Core/Actions/ActionTextOrigin.cs`, `src/CivicLens.Core/Actions/ActionTextSuggestion.cs` |
-| Step and evidence read | `src/CivicLens.Application/Actions/ActionDraftingStep.cs`, `src/CivicLens.Application/Actions/ActionBillReader.cs`, `src/CivicLens.Application/Actions/ActionBillSnapshot.cs`, `src/CivicLens.Application/Actions/ActionCitations.cs` |
+| Step and evidence read | `src/CivicLens.Application/Actions/ActionDraftStep.cs`, `src/CivicLens.Application/Actions/ActionBillReader.cs`, `src/CivicLens.Application/Actions/ActionBillSnapshot.cs`, `src/CivicLens.Application/Actions/ActionCitations.cs` |
 | Prompt, resolver, lifecycle, settings | `src/CivicLens.Application/Actions/ActionDraftPrompt.cs`, `src/CivicLens.Application/Actions/ActionDraftResolver.cs`, `src/CivicLens.Application/Actions/ActionDraftLifecycle.cs`, `src/CivicLens.Application/Actions/ActionDraftSettings.cs`, `src/CivicLens.Application/Actions/ActionDraftTask.cs` |
-| Store and model ports | `src/CivicLens.Application/Actions/IActionDraftStore.cs`, `src/CivicLens.Application/Actions/IActionDraftingModel.cs` |
+| Store and model ports | `src/CivicLens.Application/Actions/IActionDraftStore.cs`, `src/CivicLens.Application/Actions/IActionDraftModel.cs` |
 | Fingerprint and summary choice | `src/CivicLens.Application/Collection/Bills/ActionFingerprint.cs`, `src/CivicLens.Application/Collection/Bills/BillSummarySelection.cs` |
-| Store, queue mapping, model | `src/CivicLens.Infrastructure/Actions/PostgresActionDraftStore.cs`, `src/CivicLens.Infrastructure/Actions/ActionDraftQueueMapping.cs`, `src/CivicLens.Infrastructure/Actions/ActionDraftRows.cs`, `src/CivicLens.Infrastructure/Actions/AnthropicActionDraftingModel.cs` |
+| Store, queue mapping, model | `src/CivicLens.Infrastructure/Actions/PostgresActionDraftStore.cs`, `src/CivicLens.Infrastructure/Actions/ActionDraftQueueMapping.cs`, `src/CivicLens.Infrastructure/Actions/ActionDraftRows.cs`, `src/CivicLens.Infrastructure/Actions/AnthropicActionDraftModel.cs` |
 | Review aggregate and change view | `src/CivicLens.Core/Actions/ActionReview.cs`, `src/CivicLens.Core/Actions/ActionSponsorshipChanges.cs` |
 | Review commands and reads | `src/CivicLens.Application/Actions/SaveActionDraft.cs`, `src/CivicLens.Application/Actions/DecideActionReview.cs`, `src/CivicLens.Application/Actions/ApproveSponsorshipChanges.cs`, `src/CivicLens.Application/Actions/GetActionReview.cs`, `src/CivicLens.Application/Actions/ListActionReviews.cs`, `src/CivicLens.Application/Actions/GetActionReviewCounts.cs`, `src/CivicLens.Application/Actions/IActionReviewStore.cs` |
 | Review store | `src/CivicLens.Infrastructure/Actions/PostgresActionReviewStore.cs`, `src/CivicLens.Infrastructure/Actions/Persistence/ActionReviewDecisionRow.cs` |
@@ -264,7 +264,5 @@ All are owner commands. Variables and examples are in [operations](../operations
 - The editor page has no Host test with a drafted record yet. The Host tests cover the list, the rail, and missing records.
 - The prompt does not include the candidate update date, and no page renders it yet.
 - Sponsorship changes draft at once. Measure how often an approved record gets a new revision within a few days. Add a waiting window only if that rate is high.
-- Move the generic queue handlers, such as `IStatementQueueStore` and `StatementQueueCommands`, into Application/Analysis.
-- Use one shared citation span type for document changes, statements, and actions, and unify naming across the analysis features.
 - After the first action slice, build in this order: House votes, reviewed relationships between statements and actions, then Congressional Record articles as a statement connector. Cosponsorship is cheap position-taking, so votes carry most of the signal about whether words match deeds. Floor speeches cover every member, including officials with no usable web source.
 - Offices and dated terms are a separate step before House votes. Senate votes need senate.gov data and a `lis_member_id` crosswalk, because Congress.gov has neither.

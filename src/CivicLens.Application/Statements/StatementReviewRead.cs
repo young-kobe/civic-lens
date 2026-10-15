@@ -7,5 +7,5 @@ namespace CivicLens.Application.Statements;
 public sealed record StatementReviewRead(StatementReview Review, string SourceId, string Url, DocumentExtraction Extraction,
     string? AnalysisRunId, CollectionConfigurationRevision? ConfigurationRevision)
 {
-    public DateOnly FirstCapturedOn => StatementGateEvidence.CapturedOn(Extraction);
+    public DateOnly FirstCapturedOn => StatementArticle.CapturedOn(Extraction);
 }

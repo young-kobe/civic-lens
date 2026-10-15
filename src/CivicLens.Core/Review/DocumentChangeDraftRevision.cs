@@ -1,13 +1,14 @@
 using System.Collections.Immutable;
+using CivicLens.Core.Documents;
 
 namespace CivicLens.Core.Review;
 
 public sealed record DocumentChangeDraftRevision(string DraftId, int RevisionNumber, string ComparisonId,
     string AuthorSubject, DateTimeOffset CreatedAtUtc, string Headline, string Summary,
     string? Significance, string? Limits, string Institution,
-    DateOnly? ChangeDate, DocumentChangeCitation? ChangeDateEvidence,
+    DateOnly? ChangeDate, SourceSpan? ChangeDateEvidence,
     ImmutableArray<string> OfficialIds, ImmutableArray<string> IssueIds,
-    ImmutableArray<DocumentChangeCitation> Citations) : IReviewRevision
+    ImmutableArray<SourceSpan> Citations) : IReviewRevision
 {
     public const int MaximumHeadlineLength = 256;
     public const int MaximumSummaryLength = 8_000;

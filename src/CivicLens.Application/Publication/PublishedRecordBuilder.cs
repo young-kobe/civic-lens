@@ -1,6 +1,5 @@
 using CivicLens.Application.Review;
 using CivicLens.Core.Documents;
-using CivicLens.Core.Review;
 using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Application.Publication;
@@ -12,6 +11,7 @@ internal sealed class PublishedRecordBuilder(PublishedRecordRules rules)
     {
         var (review, comparison, before, after) = change;
         var revision = review.CurrentRevision;
+        PublishedCitation Cite(SourceSpan citation) => PublishedRecordRules.Cite(citation, ExtractionOf(citation, before, after));
 
         var record = new PublishedDocumentChange
         {
@@ -23,7 +23,7 @@ internal sealed class PublishedRecordBuilder(PublishedRecordRules rules)
             Limits = revision.Limits,
             Institution = revision.Institution,
             ChangeDate = revision.ChangeDate,
-            ChangeDateEvidence = revision.ChangeDateEvidence is null ? null : Cite(revision.ChangeDateEvidence, before, after),
+            ChangeDateEvidence = revision.ChangeDateEvidence is null ? null : Cite(revision.ChangeDateEvidence),
             Officials = rules.MapOfficials(review.DraftId, revision.OfficialIds),
             IssueIds = [.. revision.IssueIds],
             Before = new()
@@ -41,7 +41,7 @@ internal sealed class PublishedRecordBuilder(PublishedRecordRules rules)
                 Text = after.Text
             },
             Changes = [.. comparison.Comparison.Hunks.Select(MapChange)],
-            Citations = [.. revision.Citations.Select(citation => Cite(citation, before, after))],
+            Citations = [.. revision.Citations.Select(Cite)],
             ApprovedAtUtc = PublishedRecordRules.GetApprovalTime(revision.RevisionNumber, review.Decisions),
             FirstPublishedAtUtc = previous?.FirstPublishedAtUtc ?? now
         };
@@ -49,14 +49,10 @@ internal sealed class PublishedRecordBuilder(PublishedRecordRules rules)
         return record;
     }
 
-    private static PublishedCitation Cite(DocumentChangeCitation citation, DocumentExtraction before, DocumentExtraction after)
-    {
-        var extraction = citation.ExtractionId == before.ExtractionId ? before
+    private static DocumentExtraction ExtractionOf(SourceSpan citation, DocumentExtraction before, DocumentExtraction after) =>
+        citation.ExtractionId == before.ExtractionId ? before
             : citation.ExtractionId == after.ExtractionId ? after
             : throw new InvalidDataException("A citation names an extraction outside its comparison.");
-        var span = new DocumentTextSpan(extraction, citation.Start, citation.Length);
-        return new() { ExtractionId = span.ExtractionId, Start = span.Start, Length = span.Length, Quote = span.Quote };
-    }
 
     private static PublishedChange MapChange(DocumentComparisonHunk hunk) => new()
     {

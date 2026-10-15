@@ -8,7 +8,7 @@ using CivicLens.Application.Collection.Bills;
 using CivicLens.Application.Collection.Processing;
 using CivicLens.Core.Actions;
 using CivicLens.Core.Analysis;
-using CivicLens.Core.Statements;
+using CivicLens.Core.Documents;
 using CivicLens.Infrastructure.Actions;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Tests.Application.Actions;
@@ -116,15 +116,15 @@ public sealed partial class PostgresBillStreamTests
     public async Task ADelayedOlderCandidateIsSupersededSoItsStaleContentNeverBecomesTheNewestRevision()
     {
         var march3 = await ReadableCandidateAsync(sponsor: "A000001");
-        await RunActionWorkerAsync(new FakeActionDraftingModel().Draft(DraftableOutput));
+        await RunActionWorkerAsync(new FakeActionDraftModel().Draft(DraftableOutput));
         var march4 = await ReadableCandidateAsync(sponsor: "B000002", UpdatedAt.AddDays(1));
         var march5 = await ReadableCandidateAsync(sponsor: "A000001", UpdatedAt.AddDays(2));
         await ExecuteAsync(connectionString,
             $"UPDATE action_analysis SET status = 'RetryWaiting', retry_at = 3155378975999999999 WHERE candidate_id = '{march4}'");
-        Assert.Empty((await RunActionWorkerAsync(new FakeActionDraftingModel())).Requests);
+        Assert.Empty((await RunActionWorkerAsync(new FakeActionDraftModel())).Requests);
         await ExecuteAsync(connectionString, $"UPDATE action_analysis SET status = 'Pending', retry_at = NULL WHERE candidate_id = '{march4}'");
 
-        var model = await RunActionWorkerAsync(new FakeActionDraftingModel());
+        var model = await RunActionWorkerAsync(new FakeActionDraftModel());
 
         Assert.Empty(model.Requests);
         var queue = (await QueueAsync()).ToDictionary(row => row.CandidateId, row => (row.Status, row.ErrorCode));
@@ -154,7 +154,7 @@ public sealed partial class PostgresBillStreamTests
         var store = ActionStore();
         Assert.Equal([older, newer], (await store.GetEligibleAsync(10, default)).Select(row => row.SubjectId));
 
-        var model = await RunActionWorkerAsync(new FakeActionDraftingModel().Draft(DraftableOutput));
+        var model = await RunActionWorkerAsync(new FakeActionDraftModel().Draft(DraftableOutput));
 
         Assert.Single(model.Requests);
         var current = (await store.ReadEvidenceAsync(older, default))!.Current!;
@@ -169,7 +169,7 @@ public sealed partial class PostgresBillStreamTests
     {
         var candidate = await ReadableCandidateAsync(sponsor: "Z000009");
 
-        var model = await RunActionWorkerAsync(new FakeActionDraftingModel());
+        var model = await RunActionWorkerAsync(new FakeActionDraftModel());
 
         Assert.Empty(model.Requests);
         Assert.Equal([(candidate, "action-draft", "Succeeded", ActionDraftErrorCodes.NoTrackedOfficial, 0)], await QueueAsync());
@@ -185,10 +185,10 @@ public sealed partial class PostgresBillStreamTests
     public async Task AnUnchangedBillSettlesWithABypassedRunThatKeepsTheSameContextAsTheDraftedRun()
     {
         var candidate = await ReadableCandidateAsync(sponsor: "A000001");
-        await RunActionWorkerAsync(new FakeActionDraftingModel().Draft(DraftableOutput));
+        await RunActionWorkerAsync(new FakeActionDraftModel().Draft(DraftableOutput));
         await ExecuteAsync(connectionString, $"UPDATE action_analysis SET status = 'Pending' WHERE candidate_id = '{candidate}'");
 
-        var model = await RunActionWorkerAsync(new FakeActionDraftingModel());
+        var model = await RunActionWorkerAsync(new FakeActionDraftModel());
 
         Assert.Empty(model.Requests);
         Assert.Equal([(candidate, "action-draft", "Succeeded", ActionDraftErrorCodes.Unchanged, 0)], await QueueAsync());
@@ -220,7 +220,7 @@ public sealed partial class PostgresBillStreamTests
         Assert.True(await store.CheckpointAsync(AnalysisCheckpoint.From(claim, State.Blocked, ActionDraftErrorCodes.ExtractionVersionChanged),
             null, default));
 
-        var model = await RunActionWorkerAsync(new FakeActionDraftingModel());
+        var model = await RunActionWorkerAsync(new FakeActionDraftModel());
 
         Assert.Empty(model.Requests);
         Assert.Equal(("Succeeded", ActionDraftErrorCodes.SupersededByNewerCandidate),
@@ -476,7 +476,7 @@ public sealed partial class PostgresBillStreamTests
             CongressBillRenderer.NormalizationVersion);
     }
 
-    private async Task<FakeActionDraftingModel> RunActionWorkerAsync(FakeActionDraftingModel model)
+    private async Task<FakeActionDraftModel> RunActionWorkerAsync(FakeActionDraftModel model)
     {
         var reader = new ActionBillReader(store, new ApiResponseReader(PostgresCollectionAttemptStore.FromConnectionString(connectionString),
             new CaptureBodyReader()), new ActionBillWorld.FragmentExtractor(), captureRoot);
@@ -512,7 +512,7 @@ public sealed partial class PostgresBillStreamTests
         return new(RecordId, number, "civic-lens:analysis", UpdatedAt.AddMinutes(number), "Headline", "Summary.", ActionTextOrigin.Model, null,
             SourceId, 119, "hr", 7, candidate, UpdatedAt, includesSummaries, new string('d', 64), null, null, null, null, null, [], BillGateFixtures.Revision().Id,
             [new("warren", "W000817", ActionSponsorshipRole.Sponsor, false, new DateOnly(2025, 1, 3), null,
-                [new StatementSpan(extraction, 0, 5)])], "A bill");
+                [new SourceSpan(extraction, 0, 5)])], "A bill");
     }
 
     private async Task<IReadOnlyList<(string CandidateId, string Task, string Status, string? ErrorCode, int Attempts)>> QueueAsync()

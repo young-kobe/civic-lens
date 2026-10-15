@@ -3,7 +3,7 @@ using CivicLens.Application.Analysis;
 using CivicLens.Core.Analysis;
 using CivicLens.Host.Components.Ui;
 using Codes = CivicLens.Application.Analysis.AnalysisErrorCodes;
-using DocumentCodes = CivicLens.Application.Analysis.DocumentChangeAnalysisErrorCodes;
+using DocumentCodes = CivicLens.Application.Analysis.DocumentChangeDraftErrorCodes;
 using State = CivicLens.Application.Analysis.AnalysisState;
 
 namespace CivicLens.Host.Analysis;

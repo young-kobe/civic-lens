@@ -44,7 +44,7 @@ public sealed class PostgresAnalysisWakeupTests(PostgresCollection postgres) : I
     public async Task ANewlyQueuedChangeWakesTheListener()
     {
         await using var wakeup = PostgresAnalysisWakeup.FromConnectionString(connectionString, PostgresDocumentChangeAnalysisStore.Table,
-            DocumentChangeDraftingTask.Task);
+            DocumentChangeDraftTask.Task);
         await wakeup.ConnectAsync(default);
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         var waiting = wakeup.WaitAsync(timeout.Token);
@@ -63,7 +63,7 @@ public sealed class PostgresAnalysisWakeupTests(PostgresCollection postgres) : I
             WHERE comparison_id = '{comparison.ComparisonId}'
             """);
         await using var wakeup = PostgresAnalysisWakeup.FromConnectionString(connectionString, PostgresDocumentChangeAnalysisStore.Table,
-            DocumentChangeDraftingTask.Task);
+            DocumentChangeDraftTask.Task);
         await wakeup.ConnectAsync(default);
         await ExecuteAsync(connectionString, $"""
             UPDATE document_change_analysis SET lease_expires_at =
@@ -87,9 +87,9 @@ public sealed class PostgresAnalysisWakeupTests(PostgresCollection postgres) : I
                 (EXTRACT(EPOCH FROM clock_timestamp())::numeric * 10000000 + 621355968010000000)::bigint
             WHERE candidate_id = '{candidateId}' AND task = '{StatementGateTask.Task}'
             """);
-        await using var gate = PostgresAnalysisWakeup.FromConnectionString(connectionString, PostgresStatementAnalysisStore.Table,
+        await using var gate = PostgresAnalysisWakeup.FromConnectionString(connectionString, StatementAnalysisListing.Table,
             StatementGateTask.Task);
-        await using var drafting = PostgresAnalysisWakeup.FromConnectionString(connectionString, PostgresStatementAnalysisStore.Table,
+        await using var drafting = PostgresAnalysisWakeup.FromConnectionString(connectionString, StatementAnalysisListing.Table,
             StatementDraftTask.Task);
         await gate.ConnectAsync(default);
         await drafting.ConnectAsync(default);
@@ -103,9 +103,9 @@ public sealed class PostgresAnalysisWakeupTests(PostgresCollection postgres) : I
     [Fact]
     public async Task ANotificationWakesOnlyTheListenerForItsOwnQueue()
     {
-        await using var gate = PostgresAnalysisWakeup.FromConnectionString(connectionString, PostgresStatementAnalysisStore.Table,
+        await using var gate = PostgresAnalysisWakeup.FromConnectionString(connectionString, StatementAnalysisListing.Table,
             StatementGateTask.Task);
-        await using var drafting = PostgresAnalysisWakeup.FromConnectionString(connectionString, PostgresStatementAnalysisStore.Table,
+        await using var drafting = PostgresAnalysisWakeup.FromConnectionString(connectionString, StatementAnalysisListing.Table,
             StatementDraftTask.Task);
         await gate.ConnectAsync(default);
         await drafting.ConnectAsync(default);
@@ -114,7 +114,7 @@ public sealed class PostgresAnalysisWakeupTests(PostgresCollection postgres) : I
         var draftingWaiting = drafting.WaitAsync(timeout.Token);
 
         await ExecuteAsync(connectionString,
-            $"SELECT pg_notify('civic_lens_analysis', '{PostgresStatementAnalysisStore.Table}:{StatementGateTask.Task}')");
+            $"SELECT pg_notify('civic_lens_analysis', '{StatementAnalysisListing.Table}:{StatementGateTask.Task}')");
 
         await gateWaiting;
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => draftingWaiting);

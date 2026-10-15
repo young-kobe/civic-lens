@@ -1,11 +1,12 @@
 using System.Globalization;
 using CivicLens.Application.Statements;
 using CivicLens.Core.Review;
+using CivicLens.Host.Analysis;
 
 namespace CivicLens.Host.Statements;
 
-internal sealed class StatementCommand(StatementQueueCommands<StatementGateRun, StatementGateView, StatementGateListItem> gates,
-    StatementQueueCommands<StatementDraftRun, StatementDraftView, StatementDraftListItem> drafts, RegateStatementCandidates regate,
+internal sealed class StatementCommand(AnalysisQueueCommands<StatementGateRun, StatementGateView, StatementGateListItem> gates,
+    AnalysisQueueCommands<StatementDraftRun, StatementDraftView, StatementDraftListItem> drafts, RegateStatementCandidates regate,
     ReviewActor owner, string? currentIssueRevisionId)
 {
     private const string Usage = "Use statements status, statements list [passed|skipped|failed-open|over-cap|pending|failed] [limit], " +

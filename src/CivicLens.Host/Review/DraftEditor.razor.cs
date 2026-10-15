@@ -88,7 +88,7 @@ public sealed partial class DraftEditor
         return verified;
     }
 
-    private async Task<string?> ReadQuoteAsync(DocumentChangeCitation binding)
+    private async Task<string?> ReadQuoteAsync(SourceSpan binding)
     {
         try
         {
@@ -101,14 +101,14 @@ public sealed partial class DraftEditor
         catch (ArgumentException) { return null; }
     }
 
-    private string CitationLabel(DocumentChangeCitation binding)
+    private string CitationLabel(SourceSpan binding)
     {
         var version = binding.ExtractionId == comparison!.BeforeExtractionId ? "Earlier version"
             : binding.ExtractionId == comparison.AfterExtractionId ? "Later version" : "Retained source text";
         return Revision.ChangeDateEvidence == binding ? $"Change date evidence, {version.ToLowerInvariant()}" : version;
     }
 
-    private string? PassageKey(DocumentChangeCitation binding)
+    private string? PassageKey(SourceSpan binding)
     {
         for (var index = 0; index < comparison!.Hunks.Length; index++)
         {
@@ -120,7 +120,7 @@ public sealed partial class DraftEditor
         return null;
     }
 
-    private static bool Covers(int start, int length, DocumentChangeCitation binding) =>
+    private static bool Covers(int start, int length, SourceSpan binding) =>
         binding.Start >= start && binding.Start + binding.Length <= start + length;
 
     private async Task SaveAsync() => NavigateWhenSet(await TrySaveAsync());
@@ -150,7 +150,7 @@ public sealed partial class DraftEditor
     {
         var citations = ResolveCitations(input.EvidenceSelection);
         DateOnly? changeDate = null;
-        DocumentChangeCitation? changeDateEvidence = null;
+        SourceSpan? changeDateEvidence = null;
         if (!string.IsNullOrWhiteSpace(input.ChangeDate))
         {
             if (!DateOnly.TryParseExact(input.ChangeDate, "yyyy-MM-dd", CultureInfo.InvariantCulture,
@@ -171,7 +171,7 @@ public sealed partial class DraftEditor
             [.. input.OfficialIds ?? []], [.. input.IssueIds ?? []], citations, SaveKey ?? "", input.ChangeDateChecked == true);
     }
 
-    private ImmutableArray<DocumentChangeCitation> ResolveCitations(string[]? keys)
+    private ImmutableArray<SourceSpan> ResolveCitations(string[]? keys)
     {
         var selections = keys ?? [];
         if (selections.Length > DocumentChangeDraftRevision.MaximumCitations || selections.Distinct(StringComparer.Ordinal).Count() != selections.Length)
@@ -299,11 +299,11 @@ public sealed partial class DraftEditor
             IssueIds = [.. revision.IssueIds]
         };
 
-        private static string KeyOf(DocumentChangeCitation? citation, ImmutableArray<EvidenceOption> options) =>
+        private static string KeyOf(SourceSpan? citation, ImmutableArray<EvidenceOption> options) =>
             options.FirstOrDefault(option => option.Citation == citation)?.Key ?? "";
     }
 
-    internal sealed record EvidenceOption(string Key, string Label, string Quote, DocumentChangeCitation Citation, string Link)
+    internal sealed record EvidenceOption(string Key, string Label, string Quote, SourceSpan Citation, string Link)
     {
         public static ImmutableArray<EvidenceOption> Build(DocumentComparison comparison)
         {
@@ -314,16 +314,16 @@ public sealed partial class DraftEditor
                 var link = DocumentComparisonView.LinkKey(comparison.ComparisonId, index);
                 if (hunk.BeforeLength > 0)
                     options.Add(new($"b:{index}", $"Earlier text, passage {index + 1}", hunk.BeforeText,
-                        new DocumentChangeCitation(comparison.BeforeExtractionId, hunk.BeforeStart, hunk.BeforeLength), link));
+                        new SourceSpan(comparison.BeforeExtractionId, hunk.BeforeStart, hunk.BeforeLength), link));
                 if (hunk.AfterLength > 0)
                     options.Add(new($"a:{index}", $"Later text, passage {index + 1}", hunk.AfterText,
-                        new DocumentChangeCitation(comparison.AfterExtractionId, hunk.AfterStart, hunk.AfterLength), link));
+                        new SourceSpan(comparison.AfterExtractionId, hunk.AfterStart, hunk.AfterLength), link));
             }
             return options.ToImmutable();
         }
 
         public static ImmutableArray<EvidenceOption> Build(DocumentComparison comparison,
-            ImmutableArray<DocumentChangeCitation> saved, DocumentExtraction? before, DocumentExtraction? after)
+            ImmutableArray<SourceSpan> saved, DocumentExtraction? before, DocumentExtraction? after)
         {
             var options = Build(comparison).ToBuilder();
             foreach (var citation in saved.Where(citation => options.All(option => option.Citation != citation)))
@@ -340,7 +340,7 @@ public sealed partial class DraftEditor
             return options.ToImmutable();
         }
 
-        private static int? ContainingHunk(DocumentComparison comparison, DocumentChangeCitation citation, bool earlier)
+        private static int? ContainingHunk(DocumentComparison comparison, SourceSpan citation, bool earlier)
         {
             for (var index = 0; index < comparison.Hunks.Length; index++)
             {
@@ -352,5 +352,5 @@ public sealed partial class DraftEditor
         }
     }
 
-    private sealed record SavedCitation(DocumentChangeCitation Binding, string Quote, string Label, string? Link);
+    private sealed record SavedCitation(SourceSpan Binding, string Quote, string Label, string? Link);
 }

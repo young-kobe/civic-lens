@@ -40,7 +40,7 @@ internal sealed class FakeActionDraftStore : FakeAnalysisQueue<ActionDraftRun>, 
     }
 }
 
-internal sealed class FakeActionDraftingModel : IActionDraftingModel
+internal sealed class FakeActionDraftModel : IActionDraftModel
 {
     private readonly Queue<Func<AnalysisModelRequest, Task<AnalysisModelResponse>>> replies = new();
     private readonly List<AnalysisModelRequest> requests = [];
@@ -51,10 +51,10 @@ internal sealed class FakeActionDraftingModel : IActionDraftingModel
         get { lock (gate) return [.. requests]; }
     }
 
-    public FakeActionDraftingModel Draft(string outputJson) =>
+    public FakeActionDraftModel Draft(string outputJson) =>
         Reply(_ => Task.FromResult(new AnalysisModelResponse("end_turn", outputJson, new(900, 100, 0, 0), "req_fixture")));
 
-    public FakeActionDraftingModel Reply(Func<AnalysisModelRequest, Task<AnalysisModelResponse>> reply)
+    public FakeActionDraftModel Reply(Func<AnalysisModelRequest, Task<AnalysisModelResponse>> reply)
     {
         lock (gate) replies.Enqueue(reply);
         return this;

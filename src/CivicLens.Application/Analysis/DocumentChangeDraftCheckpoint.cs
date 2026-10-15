@@ -1,0 +1,14 @@
+using CivicLens.Core.Review;
+
+namespace CivicLens.Application.Analysis;
+
+public sealed record DocumentChangeDraftCheckpoint(
+    string SubjectId, string Task, AnalysisState ExpectedStatus, string? LeaseToken, long Fence,
+    AnalysisState Status, string? ErrorCode = null, TimeSpan? RetryDelay = null,
+    DocumentChangeDraftRevision? Revision = null)
+    : AnalysisCheckpoint(SubjectId, Task, ExpectedStatus, LeaseToken, Fence, Status, ErrorCode, RetryDelay)
+{
+    public static DocumentChangeDraftCheckpoint From(AnalysisClaim claim, DocumentChangeDraftRevision revision) =>
+        new(claim.Record.SubjectId, claim.Record.Task, AnalysisState.Running, claim.LeaseToken, claim.Fence, AnalysisState.Succeeded,
+            Revision: revision);
+}

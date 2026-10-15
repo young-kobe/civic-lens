@@ -8,5 +8,5 @@ public interface IDocumentChangeAnalysisStore : IAnalysisQueue<AnalysisRun>
         CancellationToken cancellationToken);
     Task<AnalysisRun?> GetRunAsync(string runId, CancellationToken cancellationToken);
     Task<AnalysisRun?> GetDraftRunAsync(string draftId, CancellationToken cancellationToken);
-    Task<DocumentChangeAnalysisEvidence?> ReadEvidenceAsync(string comparisonId, CancellationToken cancellationToken);
+    Task<DocumentChangeDraftEvidence?> ReadEvidenceAsync(string comparisonId, CancellationToken cancellationToken);
 }

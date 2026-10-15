@@ -1,3 +1,5 @@
+using CivicLens.Core.Documents;
+
 namespace CivicLens.Core.Statements;
 
 /// <summary>
@@ -26,8 +28,8 @@ public sealed class QuotedText
         Close(openedAt, text.Length);
     }
 
-    public IReadOnlyList<StatementSpan> Passages(string extractionId) =>
-        [.. regions.Select(region => new StatementSpan(extractionId, region.Start, region.End - region.Start))];
+    public IReadOnlyList<SourceSpan> Passages(string extractionId) =>
+        [.. regions.Select(region => new SourceSpan(extractionId, region.Start, region.End - region.Start))];
 
     public StatementQuotationKind KindOf(int start, int length)
     {

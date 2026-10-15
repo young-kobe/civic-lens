@@ -1,11 +1,11 @@
 using System.Collections.Immutable;
-using CivicLens.Core.Review;
+using CivicLens.Core.Documents;
 
 namespace CivicLens.Application.Review;
 
 public sealed record SaveDocumentChangeDraftRequest(string DraftId, int ExpectedRevisionNumber,
     string Headline, string Summary, string? Significance, string? Limits, string Institution,
-    DateOnly? ChangeDate, DocumentChangeCitation? ChangeDateEvidence,
+    DateOnly? ChangeDate, SourceSpan? ChangeDateEvidence,
     ImmutableArray<string> OfficialIds, ImmutableArray<string> IssueIds,
-    ImmutableArray<DocumentChangeCitation> Citations, string IdempotencyKey,
+    ImmutableArray<SourceSpan> Citations, string IdempotencyKey,
     bool ChangeDateChecked = false);

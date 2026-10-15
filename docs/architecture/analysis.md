@@ -24,8 +24,8 @@ The analysis feature runs model tasks over retained evidence through durable, bu
 Each line gives the rule, what enforces it, and the test that protects it. Cross-feature invariants are in [architecture](../architecture.md#invariants).
 
 - A queue entry has a lease token if and only if it is Running. Enforced in both directions by `ck_<table>_running` on every queue table: `(status = 'Running') = (lease_token IS NOT NULL)`. No test.
-- A move matches the subject, task, status, lease token, and fence. Enforced by `AnalysisLifecycle`. Test: `DocumentChangeAnalysisLifecycleTests.AStaleLeaseFenceOrStatusCannotMoveTheEntry`.
-- Each target status carries only its own outcome. Enforced by `AnalysisLifecycle`. Test: `DocumentChangeAnalysisLifecycleTests.EachTargetCarriesOnlyItsOwnOutcome`.
+- A move matches the subject, task, status, lease token, and fence. Enforced by `AnalysisLifecycle`. Test: `DocumentChangeDraftLifecycleTests.AStaleLeaseFenceOrStatusCannotMoveTheEntry`.
+- Each target status carries only its own outcome. Enforced by `AnalysisLifecycle`. Test: `DocumentChangeDraftLifecycleTests.EachTargetCarriesOnlyItsOwnOutcome`.
 - An entry gets at most eight attempts. Enforced by `PostgresAnalysisQueue` with `AnalysisPolicy`. Test: `PostgresDocumentChangeAnalysisStoreTests.TheClaimFailsAnEntryThatUsedAllItsAttemptsWithoutACall`.
 - Charged tokens never pass the daily limit. Enforced by `PostgresAnalysisQueue`, which locks the budget row. Test: `PostgresDocumentChangeAnalysisStoreTests.ConcurrentReservationsNeverPassTheDailyLimit`.
 - A reservation is set or cleared as a whole. Enforced by `ck_<table>_reservation` on every queue table. No test.
@@ -41,7 +41,7 @@ The shared owners are generic over `TRun`, the run type that a feature stores: `
 
 `PostgresDocumentComparisonStore` adds a `draft` entry to `document_change_analysis` for each complete comparison with at least one hunk. It does this in the transaction that saves the comparison, from the worker or the CLI. A repeat save keeps one entry. There is no classification gate yet.
 
-`AnalysisLifecycle` owns the valid moves for every analysis feature. A feature gives it three rules. The first says which `Succeeded` outcomes are valid. The others say whether a `Succeeded` or a `Blocked` entry may return to Pending. `DocumentChangeAnalysisLifecycle` adds the revision rule. `PostgresAnalysisQueue` applies every status write through the lifecycle of its feature, under a row lock on the entry.
+`AnalysisLifecycle` owns the valid moves for every analysis feature. A feature gives it three rules. The first says which `Succeeded` outcomes are valid. The others say whether a `Succeeded` or a `Blocked` entry may return to Pending. `DocumentChangeDraftLifecycle` adds the revision rule. `PostgresAnalysisQueue` applies every status write through the lifecycle of its feature, under a row lock on the entry.
 
 The states are the values of `ck_<table>_status`, the same for every queue table. A move must match the status, lease token, and fence of the entry. A move out of Running needs a current claim: status Running and a lease. Each target carries only its own outcome. `Succeeded` needs a revision for the same comparison, or the code `draftDiscarded` or `humanDraftExists`.
 
@@ -60,9 +60,11 @@ The states are the values of `ck_<table>_status`, the same for every queue table
 
 These events count as attempts: a durable retry, a reclaim of an expired lease, a release with tokens reserved, and a rejected draft. The claim owns the limit. A claim of an entry with eight attempts fails it as `attemptsExhausted` with no call.
 
+`IAnalysisQueueStore<TRun, TView, TItem>` adds a run read, a list for each view, and the counts to `IAnalysisQueue<TRun>`. The owner handlers `GetAnalysisStatus`, `ListAnalyses`, and `GetAnalysisRun` work on any such store. The statement gate, statement drafting, and action drafting use them. The Host puts them with `RequeueAnalyses` in one `AnalysisQueueCommands` for each queue. Document-change drafting keeps its own read handlers. They serve the review UI, need the reviewer role, and find entries by comparison or draft ID.
+
 ### Executor
 
-The drafting executor is `AnalysisWorker<AnalysisRun>` with `DocumentChangeDraftingStep`. The worker owns the drain loop, the claim, and lease renewal. It also owns the daily budget check, token reservation and settlement, the retry delay, the pauses, and release on shutdown. The step owns only its evidence read, its prompt, its model call, and the resolution of the answer. The worker gives the step an `IAnalysisAttempt<TRun>` for the reserve-and-call and settle operations.
+The drafting executor is `AnalysisWorker<AnalysisRun>` with `DocumentChangeDraftStep`. The worker owns the drain loop, the claim, and lease renewal. It also owns the daily budget check, token reservation and settlement, the retry delay, the pauses, and release on shutdown. The step owns only its evidence read, its prompt, its model call, and the resolution of the answer. The worker gives the step an `IAnalysisAttempt<TRun>` for the reserve-and-call and settle operations.
 
 The executor runs beside the collection loop in the `worker` process. Its wakeup uses the `civic_lens_analysis` channel with the payload `document_change_analysis:draft`. Collection therefore never waits for a model call. With `--once`, collection drains first and drafting drains next. If one loop fails, both stop.
 
@@ -199,15 +201,16 @@ Infrastructure reads AI drafts in keyset pages of 100. Each page costs four quer
 | Run and outcomes | `src/CivicLens.Core/Analysis/AnalysisRun.cs`, `src/CivicLens.Core/Analysis/AnalysisRunOutcome.cs` |
 | Shared queue rules | `src/CivicLens.Application/Analysis/AnalysisWorker.cs`, `src/CivicLens.Application/Analysis/AnalysisLifecycle.cs`, `src/CivicLens.Application/Analysis/AnalysisValidationLoop.cs`, `src/CivicLens.Application/Analysis/AnalysisStatus.cs`, `src/CivicLens.Application/Analysis/AnalysisPolicy.cs` |
 | Shared answer and schema rules | `src/CivicLens.Application/Analysis/AnalysisAnswerRules.cs`, `src/CivicLens.Application/Analysis/AnalysisSchema.cs` |
-| Ports | `src/CivicLens.Application/Analysis/IAnalysisQueue.cs`, `src/CivicLens.Application/Analysis/IAnalysisTaskStep.cs`, `src/CivicLens.Application/Analysis/IAnalysisAttempt.cs`, `src/CivicLens.Application/Analysis/IAnalysisStatusStore.cs` |
-| Document-change drafting | `src/CivicLens.Application/Analysis/DocumentChangeDraftingStep.cs`, `src/CivicLens.Application/Analysis/DocumentChangeDraftingTask.cs`, `src/CivicLens.Application/Analysis/DocumentChangeDraftingPrompt.cs`, `src/CivicLens.Application/Analysis/DocumentChangeDraftingResolver.cs`, `src/CivicLens.Application/Analysis/DocumentChangeAnalysisLifecycle.cs` |
+| Ports | `src/CivicLens.Application/Analysis/IAnalysisQueue.cs`, `src/CivicLens.Application/Analysis/IAnalysisQueueStore.cs`, `src/CivicLens.Application/Analysis/IAnalysisTaskStep.cs`, `src/CivicLens.Application/Analysis/IAnalysisAttempt.cs`, `src/CivicLens.Application/Analysis/IAnalysisStatusStore.cs` |
+| Document-change drafting | `src/CivicLens.Application/Analysis/DocumentChangeDraftStep.cs`, `src/CivicLens.Application/Analysis/DocumentChangeDraftTask.cs`, `src/CivicLens.Application/Analysis/DocumentChangeDraftPrompt.cs`, `src/CivicLens.Application/Analysis/DocumentChangeDraftResolver.cs`, `src/CivicLens.Application/Analysis/DocumentChangeDraftLifecycle.cs` |
+| Owner queue handlers | `src/CivicLens.Application/Analysis/GetAnalysisStatus.cs`, `src/CivicLens.Application/Analysis/ListAnalyses.cs`, `src/CivicLens.Application/Analysis/GetAnalysisRun.cs`, `src/CivicLens.Application/Analysis/RequeueAnalyses.cs`, `src/CivicLens.Host/Analysis/AnalysisQueueCommands.cs` |
 | Review metrics | `src/CivicLens.Application/Analysis/GetDocumentChangeReviewOutcomes.cs`, `src/CivicLens.Core/Review/DocumentChangeRevisionComparison.cs` |
 | Postgres queue | `src/CivicLens.Infrastructure/Analysis/PostgresAnalysisQueue.cs`, `src/CivicLens.Infrastructure/Analysis/PostgresAnalysisStore.cs`, `src/CivicLens.Infrastructure/Analysis/PostgresAnalysisStatusStore.cs`, `src/CivicLens.Infrastructure/Analysis/PostgresAnalysisWakeup.cs`, `src/CivicLens.Infrastructure/Analysis/Persistence/AnalysisTableConfiguration.cs`, `src/CivicLens.Infrastructure/Analysis/AnalysisRunRows.cs` |
-| Document-change store and model | `src/CivicLens.Infrastructure/Analysis/PostgresDocumentChangeAnalysisStore.cs`, `src/CivicLens.Infrastructure/Analysis/DocumentChangeAnalysisQueueMapping.cs`, `src/CivicLens.Infrastructure/Analysis/AnthropicDocumentChangeDraftingModel.cs`, `src/CivicLens.Infrastructure/Analysis/AnthropicStructuredCall.cs` |
+| Document-change store and model | `src/CivicLens.Infrastructure/Analysis/PostgresDocumentChangeAnalysisStore.cs`, `src/CivicLens.Infrastructure/Analysis/DocumentChangeAnalysisQueueMapping.cs`, `src/CivicLens.Infrastructure/Analysis/AnthropicDocumentChangeDraftModel.cs`, `src/CivicLens.Infrastructure/Analysis/AnthropicStructuredCall.cs` |
 | Other shared types | `AnalysisState`, `AnalysisRecord`, `AnalysisClaim`, `AnalysisCheckpoint`, `AnalysisSettings`, `AnalysisErrorCodes`, `AnalysisTaskIdentity`, `AnalysisPromptHash`, `AnalysisModelRequest`, `AnalysisModelResponse`, and `AnalysisModelException`, each in its own file in `src/CivicLens.Application/Analysis/` |
-| Document-change parts | `DocumentChangeAnalysisRecord` adds the draft ID, and `DocumentChangeAnalysisCheckpoint` adds the revision. `DocumentChangeAnalysisErrorCodes`, `DocumentChangeAnalysisSettings`, `DocumentChangeAnalysisCatalog`, and `DocumentChangeAnalysisEvidence` complete the feature. |
+| Document-change parts | `DocumentChangeAnalysisRecord` adds the draft ID, and `DocumentChangeDraftCheckpoint` adds the revision. `DocumentChangeDraftErrorCodes`, `DocumentChangeDraftSettings`, `DocumentChangeDraftCatalog`, and `DocumentChangeDraftEvidence` complete the feature. |
 | Reserved author | `src/CivicLens.Core/Review/ReviewAuthor.cs` |
-| CLI and composition | `src/CivicLens.Host/Analysis/AnalysisCommand.cs`, `src/CivicLens.Host/Analysis/DocumentChangeAnalysisComposition.cs` |
+| CLI and composition | `src/CivicLens.Host/Analysis/AnalysisCommand.cs`, `src/CivicLens.Host/Analysis/DocumentChangeDraftComposition.cs` |
 | Shared Host setup | `src/CivicLens.Host/Analysis/AnalysisEnvironment.cs`, `src/CivicLens.Host/Analysis/AnalysisComposition.cs` |
 
 The shared wakeup and lease mechanics are in [Shared worker mechanics](../architecture.md#shared-worker-mechanics).

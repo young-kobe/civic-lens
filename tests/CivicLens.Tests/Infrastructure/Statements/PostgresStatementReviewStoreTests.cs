@@ -2,6 +2,7 @@ using System.Data.Common;
 using CivicLens.Application.Analysis;
 using CivicLens.Application.Review;
 using CivicLens.Application.Statements;
+using CivicLens.Core.Documents;
 using CivicLens.Core.Review;
 using CivicLens.Core.Statements;
 using CivicLens.Infrastructure.Collection;
@@ -28,7 +29,7 @@ public sealed class PostgresStatementReviewStoreTests(PostgresCollection postgre
     private readonly string captureRoot = Path.Combine(Path.GetTempPath(), "civic-statement-review-" + Guid.NewGuid().ToString("N"));
     private string connectionString = null!;
     private PooledDbContextFactory<CollectionAttemptDbContext> factory = null!;
-    private PostgresStatementAnalysisStore gates = null!;
+    private PostgresStatementGateStore gates = null!;
     private PostgresStatementDraftStore drafts = null!;
     private PostgresStatementReviewStore reviews = null!;
     private StatementCandidateSeeder seeder = null!;
@@ -40,7 +41,7 @@ public sealed class PostgresStatementReviewStoreTests(PostgresCollection postgre
         factory = new PooledDbContextFactory<CollectionAttemptDbContext>(
             new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options);
         var attempts = new PostgresCollectionAttemptStore(factory);
-        gates = new PostgresStatementAnalysisStore(factory);
+        gates = new PostgresStatementGateStore(factory);
         drafts = new PostgresStatementDraftStore(factory);
         reviews = new PostgresStatementReviewStore(factory);
         seeder = new StatementCandidateSeeder(attempts, new PostgresDocumentExtractionStore(factory), connectionString, captureRoot);
@@ -270,7 +271,7 @@ public sealed class PostgresStatementReviewStoreTests(PostgresCollection postgre
     public async Task AHumanCreateAndAnAiSettlementRacingForTheSameCandidateLeaveExactlyOneFirstRevision()
     {
         var candidate = await PassedCandidateAsync();
-        var model = new FakeStatementDraftingModel().Draft(Output());
+        var model = new FakeStatementDraftModel().Draft(Output());
 
         var outcomes = await Task.WhenAll(Observe(Create.ExecuteAsync(Owner, new(candidate, "create"))),
             Task.Run(async () =>
@@ -310,7 +311,7 @@ public sealed class PostgresStatementReviewStoreTests(PostgresCollection postgre
         var candidate = await PassedCandidateAsync();
         await using var holder = await HeldAdvisoryLock.AcquireAsync(connectionString, "civic-lens-statement-review");
 
-        var settling = DraftingWorker(new FakeStatementDraftingModel().Draft(Output())).ExecuteAsync(once: true);
+        var settling = DraftingWorker(new FakeStatementDraftModel().Draft(Output())).ExecuteAsync(once: true);
         await HeldAdvisoryLock.WaitForWaiterAsync(connectionString, "civic-lens-statement-review");
         Assert.False(settling.IsCompleted);
         await holder.DisposeAsync();
@@ -432,7 +433,7 @@ public sealed class PostgresStatementReviewStoreTests(PostgresCollection postgre
     private async Task<SaveStatementDraftRequest> SaveRequestAsync(string candidate, int expectedRevision, string key)
     {
         var extraction = (await drafts.ReadEvidenceAsync(candidate, default))!.Article.Extraction;
-        var span = new StatementSpan(extraction.ExtractionId, extraction.Text.IndexOf(Quote, StringComparison.Ordinal), Quote.Length);
+        var span = new SourceSpan(extraction.ExtractionId, extraction.Text.IndexOf(Quote, StringComparison.Ordinal), Quote.Length);
         return new(candidate, expectedRevision, "Warren announces a rent cap", "The senator announced a rent cap for tenants.", null, null,
             [Warren], [], [RentIssue], [HousingArea], [span], key);
     }
@@ -459,7 +460,7 @@ public sealed class PostgresStatementReviewStoreTests(PostgresCollection postgre
         return candidate;
     }
 
-    private AnalysisWorker<StatementDraftRun> DraftingWorker(FakeStatementDraftingModel model) =>
+    private AnalysisWorker<StatementDraftRun> DraftingWorker(FakeStatementDraftModel model) =>
         AnalysisWorkers.StatementDrafting(drafts, new FakeAnalysisStatusStore(), model, new StatementDraftSettings(10_000_000, concurrency: 1),
             TimeProvider.System);
 

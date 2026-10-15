@@ -102,7 +102,7 @@ public static class StatementDraftResolver
         return [.. speakers.Select(speaker => speaker.Name)];
     }
 
-    private static (DateOnly Date, StatementSpan Evidence)? ResolveDate(StatementDraftOutputDate? statementDate, DocumentExtraction extraction,
+    private static (DateOnly Date, SourceSpan Evidence)? ResolveDate(StatementDraftOutputDate? statementDate, DocumentExtraction extraction,
         List<string> errors, List<string> citationErrors)
     {
         if (statementDate is null) return null;

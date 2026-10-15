@@ -1,8 +1,8 @@
-using CivicLens.Application.Statements;
+using CivicLens.Application.Analysis;
 
 namespace CivicLens.Application.Actions;
 
-public interface IActionDraftStore : IStatementQueueStore<ActionDraftRun, ActionDraftView, ActionDraftListItem>
+public interface IActionDraftStore : IAnalysisQueueStore<ActionDraftRun, ActionDraftView, ActionDraftListItem>
 {
     Task<ActionDraftEvidence?> ReadEvidenceAsync(string candidateId, CancellationToken cancellationToken);
 

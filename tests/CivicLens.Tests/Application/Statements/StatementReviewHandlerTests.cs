@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using CivicLens.Application.Review;
 using CivicLens.Application.Statements;
+using CivicLens.Core.Documents;
 using CivicLens.Core.Review;
 using CivicLens.Core.Statements;
 using CivicLens.Tests.Fixtures;
@@ -22,11 +23,11 @@ public sealed class StatementReviewHandlerTests
 
     private static StatementSelectionResolver Resolver => new(StatementGateFixtures.Configuration());
 
-    private static StatementSpan Span(string quoted) => new(Evidence.Article.Extraction.ExtractionId,
+    private static SourceSpan Span(string quoted) => new(Evidence.Article.Extraction.ExtractionId,
         Evidence.Article.Extraction.Text.IndexOf(quoted, StringComparison.Ordinal), quoted.Length);
 
     private static SaveStatementDraftRequest Request(
-        ImmutableArray<StatementSpan>? quotations = null, ImmutableArray<string>? speakers = null,
+        ImmutableArray<SourceSpan>? quotations = null, ImmutableArray<string>? speakers = null,
         ImmutableArray<string>? issues = null, ImmutableArray<string>? policyAreas = null) =>
         new(CandidateId, 1, "Warren announces a rent cap", "The senator announced a rent cap.", null, null,
             speakers ?? [StatementDraftFixtures.Warren], ["Jo Rivera"], issues ?? [StatementGateFixtures.RentIssue],

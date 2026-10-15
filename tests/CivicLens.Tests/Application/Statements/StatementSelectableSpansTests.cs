@@ -1,4 +1,5 @@
 using CivicLens.Application.Statements;
+using CivicLens.Core.Documents;
 using CivicLens.Core.Statements;
 using CivicLens.Tests.Fixtures;
 
@@ -8,7 +9,7 @@ public sealed class StatementSelectableSpansTests
 {
     private const string Quote = "a rent cap for tenants";
 
-    private static StatementDraftRevision Saved(StatementSpan quotation, StatementSpan? dateEvidence = null) =>
+    private static StatementDraftRevision Saved(SourceSpan quotation, SourceSpan? dateEvidence = null) =>
         new(new string('a', 64), 2, "auth0|reviewer", DateTimeOffset.UtcNow, "h", "s", dateEvidence is null ? null : new DateOnly(2026, 10, 3),
             dateEvidence, [], [], [], [], [new(quotation, StatementQuotationKind.ReleaseText)], []);
 
@@ -17,8 +18,8 @@ public sealed class StatementSelectableSpansTests
     {
         var extraction = StatementGateFixtures.Evidence(StatementDraftFixtures.Article).Extraction;
         var text = extraction.Text;
-        var quote = new StatementSpan(extraction.ExtractionId, text.IndexOf(Quote, StringComparison.Ordinal), Quote.Length);
-        var firstParagraph = new StatementSpan(extraction.ExtractionId, 0, text.IndexOf('\n'));
+        var quote = new SourceSpan(extraction.ExtractionId, text.IndexOf(Quote, StringComparison.Ordinal), Quote.Length);
+        var firstParagraph = new SourceSpan(extraction.ExtractionId, 0, text.IndexOf('\n'));
 
         var options = StatementSelectableSpans.Build(extraction, Saved(quote, firstParagraph));
 

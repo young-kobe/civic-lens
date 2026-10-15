@@ -4,6 +4,7 @@ using CivicLens.Application.Analysis;
 using CivicLens.Application.Issues;
 using CivicLens.Application.Review;
 using CivicLens.Application.Statements;
+using CivicLens.Core.Documents;
 using CivicLens.Core.Review;
 using CivicLens.Core.Statements;
 using CivicLens.Host.Components.Evidence;
@@ -133,7 +134,7 @@ public sealed partial class StatementEditor
     private static ImmutableArray<string> OtherSpeakersOf(StatementInput input) =>
         [.. (input.OtherSpeakersText ?? "").Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)];
 
-    private ImmutableArray<StatementSpan> ResolveQuotations(string[]? keys)
+    private ImmutableArray<SourceSpan> ResolveQuotations(string[]? keys)
     {
         var selections = keys ?? [];
         if (selections.Length > StatementDraftRevision.MaximumQuotations || selections.Distinct(StringComparer.Ordinal).Count() != selections.Length)
@@ -142,7 +143,7 @@ public sealed partial class StatementEditor
             ?? throw new ArgumentException("A passage is no longer available. Refresh and choose it again."))];
     }
 
-    private StatementSpan? FindSpan(string? key) =>
+    private SourceSpan? FindSpan(string? key) =>
         spans.FirstOrDefault(option => string.Equals(option.Key, key, StringComparison.Ordinal))?.Span;
 
     private async Task DecideAsync() => NavigateWhenSet(await TryDecideAsync());
@@ -167,7 +168,7 @@ public sealed partial class StatementEditor
         return LoadAsync();
     }
 
-    private string TextOf(StatementSpan span) => ArticleText.Substring(span.Start, span.Length);
+    private string TextOf(SourceSpan span) => ArticleText.Substring(span.Start, span.Length);
 
     private static string SpanLabel(StatementSelectableSpan option) => option.Origin switch
     {

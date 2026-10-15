@@ -43,7 +43,7 @@ public sealed class AnthropicStatementGateModelTests
         var request = new AnalysisModelRequest("claude-haiku-5-5", 100, "System.", "User.", """{"type":"object"}""",
             new string('a', 64), 1_000);
 
-        await new AnthropicDocumentChangeDraftingModel("test-key", client).DraftAsync(request, CancellationToken.None);
+        await new AnthropicDocumentChangeDraftModel("test-key", client).DraftAsync(request, CancellationToken.None);
 
         Assert.Equal(JsonValueKind.String, JsonDocument.Parse(handler.Body).RootElement.GetProperty("system").ValueKind);
     }
@@ -56,7 +56,7 @@ public sealed class AnthropicStatementGateModelTests
         var request = StatementDraftPrompt.Build(StatementDraftFixtures.DraftEvidence(), StatementDraftFixtures.Officials(StatementDraftFixtures.Warren),
             StatementDraftTask.MaximumPromptBytes)!;
 
-        await new AnthropicStatementDraftingModel("test-key", client).DraftAsync(request, CancellationToken.None);
+        await new AnthropicStatementDraftModel("test-key", client).DraftAsync(request, CancellationToken.None);
 
         var body = JsonDocument.Parse(handler.Body).RootElement;
         Assert.Equal("claude-sonnet-5-5", body.GetProperty("model").GetString());

@@ -315,9 +315,9 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
         CreatedAtUtcTicks = revision.CreatedAtUtc.UtcTicks
     };
 
-    private static ImmutableArray<DocumentChangeCitation> CreateInitialCitations(DocumentComparison comparison)
+    private static ImmutableArray<SourceSpan> CreateInitialCitations(DocumentComparison comparison)
     {
-        var citations = ImmutableArray.CreateBuilder<DocumentChangeCitation>();
+        var citations = ImmutableArray.CreateBuilder<SourceSpan>();
         foreach (var hunk in comparison.Hunks.Take(32))
         {
             if (hunk.BeforeLength > 0)

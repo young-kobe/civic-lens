@@ -15,7 +15,7 @@ public sealed class StatementGateStepTests
     [Fact]
     public async Task AVerifiedTrackedIssueQueuesTheDraftAndRecordsTheQuoteSpan()
     {
-        var store = new FakeStatementAnalysisStore(Article);
+        var store = new FakeStatementGateStore(Article);
         var model = new FakeStatementGateModel().Classify(Output([HousingArea], 0.8, (RentIssue, "a rent cap")));
 
         await Worker(store, model).ExecuteAsync(once: true);
@@ -32,7 +32,7 @@ public sealed class StatementGateStepTests
     [Fact]
     public async Task NoTrackedIssueSucceedsTheGateWithoutADraftAndKeepsPolicyAreasAndRubricRevision()
     {
-        var store = new FakeStatementAnalysisStore(Article);
+        var store = new FakeStatementGateStore(Article);
         var model = new FakeStatementGateModel().Classify(Output([HealthArea]));
 
         await Worker(store, model).ExecuteAsync(once: true);
@@ -49,7 +49,7 @@ public sealed class StatementGateStepTests
     [Fact]
     public async Task AnArticleOverTheByteCapMakesNoModelCallAndStillQueuesTheDraft()
     {
-        var store = new FakeStatementAnalysisStore(new string('x', 5_000));
+        var store = new FakeStatementGateStore(new string('x', 5_000));
         var model = new FakeStatementGateModel();
         var smallest = StatementGatePrompt.MinimumReservation;
 
@@ -65,7 +65,7 @@ public sealed class StatementGateStepTests
     [Fact]
     public async Task AnArticleWhenNoTrackedIssueIsActiveMakesNoModelCallAndSkips()
     {
-        var store = new FakeStatementAnalysisStore(new DateTimeOffset(2025, 1, 1, 0, 0, 0, TimeSpan.Zero), Article);
+        var store = new FakeStatementGateStore(new DateTimeOffset(2025, 1, 1, 0, 0, 0, TimeSpan.Zero), Article);
         var model = new FakeStatementGateModel();
 
         await Worker(store, model).ExecuteAsync(once: true);
@@ -78,7 +78,7 @@ public sealed class StatementGateStepTests
     [Fact]
     public async Task InvalidOutputRetriesOnceWithTheRejectionReasonsThenSucceeds()
     {
-        var store = new FakeStatementAnalysisStore(Article);
+        var store = new FakeStatementGateStore(Article);
         var model = new FakeStatementGateModel()
             .Classify(Output([], 0.8, (RentIssue, "a rent freeze")))
             .Classify(Output([], 0.8, (RentIssue, "a rent cap")));
@@ -95,7 +95,7 @@ public sealed class StatementGateStepTests
     [Fact]
     public async Task TwoInvalidOutputsFailOpenByQueueingTheDraftAndKeepingBothRuns()
     {
-        var store = new FakeStatementAnalysisStore(Article);
+        var store = new FakeStatementGateStore(Article);
         var model = new FakeStatementGateModel().Classify("not json").Classify(Output([], 2.5));
 
         await Worker(store, model).ExecuteAsync(once: true);
@@ -113,7 +113,7 @@ public sealed class StatementGateStepTests
     [InlineData(AnalysisModelFailure.BillingFailed, "billingFailed")]
     public async Task AnAccountErrorPausesTheGateAndTheArticleWaitsWithoutADraft(AnalysisModelFailure failure, string reason)
     {
-        var store = new FakeStatementAnalysisStore(Article, Article + " More.");
+        var store = new FakeStatementGateStore(Article, Article + " More.");
         var status = new FakeAnalysisStatusStore();
         var model = new FakeStatementGateModel().Fail(failure);
 
@@ -128,7 +128,7 @@ public sealed class StatementGateStepTests
     [Fact]
     public async Task ARateLimitRetriesDurablyAndIsNeverFailOpen()
     {
-        var store = new FakeStatementAnalysisStore(Article);
+        var store = new FakeStatementGateStore(Article);
         var model = new FakeStatementGateModel().Fail(AnalysisModelFailure.RateLimited);
 
         await Worker(store, model).ExecuteAsync(once: true);
@@ -140,7 +140,7 @@ public sealed class StatementGateStepTests
     [Fact]
     public async Task AnExhaustedDailyBudgetWaitsBeforeAnyCallAndResumesWhenTheBudgetReturns()
     {
-        var store = new FakeStatementAnalysisStore(Article) { Charged = 99_000 };
+        var store = new FakeStatementGateStore(Article) { Charged = 99_000 };
         var model = new FakeStatementGateModel().Classify(Output([], 0.8, (RentIssue, "a rent cap")));
         var worker = Worker(store, model, new StatementGateSettings(100_000, 50_000, 1));
 
@@ -158,7 +158,7 @@ public sealed class StatementGateStepTests
     [Fact]
     public async Task AResumedRetryUsesThePreviousRejectionAndOnlyOneMoreCall()
     {
-        var store = new FakeStatementAnalysisStore(Article);
+        var store = new FakeStatementGateStore(Article);
         store.ResumeAfterRejection("{}", "The quote \"x\" does not occur in the article text.");
         var model = new FakeStatementGateModel().Classify("not json");
 
@@ -169,7 +169,7 @@ public sealed class StatementGateStepTests
         Assert.Equal(StatementGateReasons.FailedOpen, store.Entries.Single().ErrorCode);
     }
 
-    private static AnalysisWorker<StatementGateRun> Worker(FakeStatementAnalysisStore store, FakeStatementGateModel model,
+    private static AnalysisWorker<StatementGateRun> Worker(FakeStatementGateStore store, FakeStatementGateModel model,
         StatementGateSettings? settings = null, FakeAnalysisStatusStore? status = null) =>
         AnalysisWorkers.Gate(store, status ?? new FakeAnalysisStatusStore(), model, settings ?? new StatementGateSettings(10_000_000, concurrency: 1),
             Revision(), new FakeClock(DateTimeOffset.UnixEpoch));

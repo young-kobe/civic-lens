@@ -9,7 +9,7 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
     string Headline, string Summary, ActionTextOrigin TextOrigin, ActionTextSuggestion? Suggestion,
     string SourceId, int Congress, string BillType, int BillNumber, string CandidateId, DateTimeOffset CandidateUpdateDate,
     bool CandidateIncludesSummaries,
-    string Fingerprint, string? SummaryVersion, StatementSpan? SummaryCitation, string? PolicyArea, StatementSpan? PolicyAreaCitation,
+    string Fingerprint, string? SummaryVersion, SourceSpan? SummaryCitation, string? PolicyArea, SourceSpan? PolicyAreaCitation,
     string? PolicyAreaId, ImmutableArray<string> TrackedIssueIds, string IssueRevisionId, ImmutableArray<ActionSponsorship> Sponsorships, string BillTitle)
     : IReviewRevision
 {
@@ -21,7 +21,7 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
 
     public ReviewAuthorKind AuthorKind => ReviewAuthor.KindOf(AuthorSubject);
 
-    public IEnumerable<StatementSpan> Citations => Sponsorships.SelectMany(item => item.Citations)
+    public IEnumerable<SourceSpan> Citations => Sponsorships.SelectMany(item => item.Citations)
         .Concat(SummaryCitation is { } summary ? [summary] : []).Concat(PolicyAreaCitation is { } area ? [area] : []);
 
     public void ValidateShape()
@@ -129,7 +129,7 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
         SummaryVersion == other.SummaryVersion && PolicyArea == other.PolicyArea && PolicyAreaId == other.PolicyAreaId && IssueRevisionId == other.IssueRevisionId &&
         BillTitle == other.BillTitle && TrackedIssueIds.SequenceEqual(other.TrackedIssueIds);
 
-    private static bool IsBounded(StatementSpan span) => span is { Start: >= 0, Length: > 0 } && LowercaseHex.Is(span.ExtractionId, 64);
+    private static bool IsBounded(SourceSpan span) => span is { Start: >= 0, Length: > 0 } && LowercaseHex.Is(span.ExtractionId, 64);
 
     private static void ValidateText(string text, int maximumLength, string name)
     {
