@@ -6,12 +6,12 @@ namespace CivicLens.Application.Collection.Health;
 
 internal static class SourceHealthResolver
 {
-    public static SourceHealthReport Report(IReadOnlyList<SourceCheckTarget> targets,
+    public static SourceHealthReport Report(IReadOnlyList<string> sourceIds,
         IReadOnlyList<CollectionJobRecord> latestJobs, IReadOnlyList<EvidenceProcessingRecord> processing)
     {
         var records = processing.ToLookup(record => record.JobId, StringComparer.Ordinal);
-        var health = targets.Select(target => Resolve(target.SourceId,
-            latestJobs.FirstOrDefault(job => Matches(job, target)), records)).ToArray();
+        var health = sourceIds.Select(sourceId => Resolve(sourceId,
+            latestJobs.FirstOrDefault(job => IsRootCheckOf(job, sourceId)), records)).ToArray();
         return new(health, health.Count(item => item.NeedsAttention));
     }
 
@@ -23,8 +23,8 @@ internal static class SourceHealthResolver
             job => Resolve(job.Definition.SourceId, job, records), StringComparer.Ordinal);
     }
 
-    public static bool Matches(CollectionJobRecord job, SourceCheckTarget target) =>
-        job.Definition.SourceId == target.SourceId && job.Definition.Url == target.Url;
+    public static bool IsRootCheckOf(CollectionJobRecord job, string sourceId) =>
+        job.Definition.SourceId == sourceId && job.Definition.IsRoot();
 
     private static SourceHealth Resolve(string sourceId, CollectionJobRecord? job, ILookup<string, EvidenceProcessingRecord> records)
     {

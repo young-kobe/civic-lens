@@ -12,7 +12,7 @@ public interface ICollectionJobStore
     Task<CollectionJobRecord?> GetAsync(string jobId, CancellationToken cancellationToken);
     Task<IReadOnlyList<CollectionJobRecord>> ListAsync(int limit, CancellationToken cancellationToken);
     Task<CollectionJobPage> ListPageAsync(PageCursor? cursor, int limit, CancellationToken cancellationToken);
-    Task<IReadOnlyList<CollectionJobRecord>> ListLatestBySourceAsync(IReadOnlyCollection<SourceCheckTarget> targets,
+    Task<IReadOnlyList<CollectionJobRecord>> ListLatestBySourceAsync(IReadOnlyCollection<string> sourceIds,
         CancellationToken cancellationToken);
     Task<CollectionJobActivity> ListActivityAsync(int limit, CancellationToken cancellationToken);
     Task<CollectionJobRecord?> CancelAsync(string jobId, CancellationToken cancellationToken);

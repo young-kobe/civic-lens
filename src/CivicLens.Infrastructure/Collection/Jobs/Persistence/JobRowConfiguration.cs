@@ -15,6 +15,8 @@ internal sealed class JobRowConfiguration : IEntityTypeConfiguration<JobRow>
         builder.Property(row => row.JobId).HasColumnName("job_id");
         builder.Property(row => row.IdempotencyKey).HasColumnName("idempotency_key");
         builder.Property(row => row.DefinitionJson).HasColumnName("definition_json");
+        builder.Property(row => row.SourceId).HasColumnName("source_id");
+        builder.Property(row => row.IsRoot).HasColumnName("is_root");
         builder.Property(row => row.ConfigurationRevisionId).HasColumnName("configuration_revision_id").HasMaxLength(64);
         builder.Property(row => row.PacingKey).HasColumnName("pacing_key");
         builder.Property(row => row.State).HasColumnName("state");
@@ -33,6 +35,10 @@ internal sealed class JobRowConfiguration : IEntityTypeConfiguration<JobRow>
         builder.HasIndex(row => new { row.CreatedAt, row.JobId });
         builder.HasIndex(row => new { row.CreatedAt, row.JobId }, "ix_collection_jobs_active_created_at_job_id")
             .HasFilter("state IN ('Pending','Running','WaitingToRetry')");
+        builder.HasIndex(row => new { row.SourceId, row.CreatedAt, row.JobId }, "ix_collection_jobs_root_source_created")
+            .IsDescending(false, true, false).HasFilter("is_root");
+        builder.HasIndex(row => row.SourceId, "ix_collection_jobs_active_root_source_id")
+            .HasFilter("is_root AND state IN ('Pending','Running','WaitingToRetry')");
         builder.HasOne<ConfigurationRevisionRow>().WithMany().HasForeignKey(row => row.ConfigurationRevisionId)
             .HasConstraintName("fk_collection_jobs_configuration_revision").OnDelete(DeleteBehavior.Restrict);
     }
