@@ -6,7 +6,7 @@ using State = CivicLens.Application.Analysis.AnalysisState;
 namespace CivicLens.Application.Analysis;
 
 public sealed class DocumentChangeDraftStep(IDocumentChangeAnalysisStore store, IDocumentChangeDraftModel model,
-    DocumentChangeDraftSettings settings, DocumentChangeAnalysisCatalog catalog) : IAnalysisTaskStep<AnalysisRun>
+    DocumentChangeDraftSettings settings, DocumentChangeDraftCatalog catalog) : IAnalysisTaskStep<AnalysisRun>
 {
     private readonly string catalogJson = DocumentChangeDraftPrompt.SerializeCatalog(catalog);
 

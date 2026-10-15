@@ -10,11 +10,11 @@ namespace CivicLens.Tests.Fixtures;
 internal static class AnalysisWorkers
 {
     public static AnalysisWorker<AnalysisRun> Drafting(IDocumentChangeAnalysisStore store, IAnalysisStatusStore status,
-        IDocumentChangeDraftModel model, DocumentChangeDraftSettings settings, DocumentChangeAnalysisCatalog catalog,
+        IDocumentChangeDraftModel model, DocumentChangeDraftSettings settings, DocumentChangeDraftCatalog catalog,
         TimeProvider clock, IWorkerWakeup? wakeup = null) =>
         new(new DocumentChangeDraftStep(store, model, settings, catalog), status, clock, wakeup);
 
-    public static AnalysisWorker<StatementGateRun> Gate(IStatementAnalysisStore store, IAnalysisStatusStore status,
+    public static AnalysisWorker<StatementGateRun> Gate(IStatementGateStore store, IAnalysisStatusStore status,
         IStatementGateModel model, StatementGateSettings settings, IssueConfigurationRevision revision, TimeProvider clock) =>
         new(new StatementGateStep(store, model, settings, revision), status, clock);
 

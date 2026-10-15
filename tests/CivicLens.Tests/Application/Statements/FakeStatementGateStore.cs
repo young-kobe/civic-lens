@@ -7,11 +7,11 @@ using State = CivicLens.Application.Analysis.AnalysisState;
 
 namespace CivicLens.Tests.Application.Statements;
 
-internal sealed class FakeStatementAnalysisStore : FakeAnalysisQueue<StatementGateRun>, IStatementAnalysisStore
+internal sealed class FakeStatementGateStore : FakeAnalysisQueue<StatementGateRun>, IStatementGateStore
 {
-    public FakeStatementAnalysisStore(params string[] articleTexts) : this(StatementGateFixtures.Observed, articleTexts) { }
+    public FakeStatementGateStore(params string[] articleTexts) : this(StatementGateFixtures.Observed, articleTexts) { }
 
-    public FakeStatementAnalysisStore(DateTimeOffset observed, params string[] articleTexts)
+    public FakeStatementGateStore(DateTimeOffset observed, params string[] articleTexts)
     {
         foreach (var text in articleTexts)
         {
@@ -48,7 +48,7 @@ internal sealed class FakeStatementAnalysisStore : FakeAnalysisQueue<StatementGa
     }
 
     protected override bool CanTransition(AnalysisRecord record, AnalysisCheckpoint checkpoint) =>
-        StatementAnalysisLifecycle.CanTransition(record, checkpoint);
+        StatementGateLifecycle.CanTransition(record, checkpoint);
 
     protected override AnalysisRun RunOf(StatementGateRun run) => run.Run;
 

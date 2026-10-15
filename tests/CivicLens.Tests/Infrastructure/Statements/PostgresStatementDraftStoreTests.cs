@@ -24,7 +24,7 @@ public sealed class PostgresStatementDraftStoreTests(PostgresCollection postgres
     private static readonly ReviewActor Owner = new("auth0|owner", ReviewRole.Owner);
     private readonly string captureRoot = Path.Combine(Path.GetTempPath(), "civic-draft-" + Guid.NewGuid().ToString("N"));
     private string connectionString = null!;
-    private PostgresStatementAnalysisStore gates = null!;
+    private PostgresStatementGateStore gates = null!;
     private PostgresStatementDraftStore drafts = null!;
     private StatementCandidateSeeder seeder = null!;
 
@@ -34,7 +34,7 @@ public sealed class PostgresStatementDraftStoreTests(PostgresCollection postgres
         var factory = new PooledDbContextFactory<CollectionAttemptDbContext>(
             new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options);
         var attempts = new PostgresCollectionAttemptStore(factory);
-        gates = new PostgresStatementAnalysisStore(factory);
+        gates = new PostgresStatementGateStore(factory);
         drafts = new PostgresStatementDraftStore(factory);
         seeder = new StatementCandidateSeeder(attempts, new PostgresDocumentExtractionStore(factory), connectionString, captureRoot);
         Directory.CreateDirectory(captureRoot);

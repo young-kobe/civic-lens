@@ -218,7 +218,7 @@ try
     {
         var (connectionString, owner) = OwnerCommand.ReadEnvironment();
         var contexts = AnalysisDbContextFactory.Create(connectionString);
-        var gates = new PostgresStatementAnalysisStore(contexts);
+        var gates = new PostgresStatementGateStore(contexts);
         var gateCommands = new AnalysisQueueCommands<StatementGateRun, StatementGateView, StatementGateListItem>(gates,
             new PostgresAnalysisStatusStore(contexts, StatementGateTask.Task));
         var draftCommands = new AnalysisQueueCommands<StatementDraftRun, StatementDraftView, StatementDraftListItem>(

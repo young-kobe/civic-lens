@@ -15,7 +15,7 @@ internal static class StatementDraftComposition
         var status = new PostgresAnalysisStatusStore(contexts, StatementDraftTask.Task);
         var configuration = StatementDraftConfiguration.FromEnvironment();
         if (configuration is null) return AnalysisComposition<StatementDraftRun>.Disabled(status);
-        var wakeup = PostgresAnalysisWakeup.FromConnectionString(connectionString, PostgresStatementAnalysisStore.Table,
+        var wakeup = PostgresAnalysisWakeup.FromConnectionString(connectionString, PostgresStatementGateStore.Table,
             StatementDraftTask.Task);
         var step = new StatementDraftStep(new PostgresStatementDraftStore(contexts),
             new AnthropicStatementDraftModel(configuration.ApiKey), configuration.Settings);

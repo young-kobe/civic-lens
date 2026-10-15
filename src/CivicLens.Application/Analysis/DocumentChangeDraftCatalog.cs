@@ -3,9 +3,9 @@ using CivicLens.Application.Review;
 
 namespace CivicLens.Application.Analysis;
 
-public sealed record DocumentChangeAnalysisCatalog(ImmutableArray<AnalysisOfficial> Officials, ImmutableArray<string> IssueIds)
+public sealed record DocumentChangeDraftCatalog(ImmutableArray<AnalysisOfficial> Officials, ImmutableArray<string> IssueIds)
 {
-    public static DocumentChangeAnalysisCatalog Create(ReviewCatalog catalog, IReadOnlyDictionary<string, string> officialNames)
+    public static DocumentChangeDraftCatalog Create(ReviewCatalog catalog, IReadOnlyDictionary<string, string> officialNames)
     {
         ArgumentNullException.ThrowIfNull(catalog);
         ArgumentNullException.ThrowIfNull(officialNames);

@@ -10,7 +10,7 @@ namespace CivicLens.Application.Analysis;
 
 public static class DocumentChangeDraftResolver
 {
-    public static DocumentChangeDraftResolution Resolve(string outputJson, DocumentChangeDraftEvidence evidence, DocumentChangeAnalysisCatalog catalog,
+    public static DocumentChangeDraftResolution Resolve(string outputJson, DocumentChangeDraftEvidence evidence, DocumentChangeDraftCatalog catalog,
         string draftId, DateTimeOffset createdAtUtc)
     {
         ArgumentNullException.ThrowIfNull(evidence);

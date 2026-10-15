@@ -24,7 +24,7 @@ public sealed class ActionDraftLifecycleTests
         var statementDraft = BlockedRequeue(StatementDraftTask.Task);
         var documentChange = BlockedRequeue(DocumentChangeDraftTask.Task);
 
-        Assert.False(StatementAnalysisLifecycle.CanTransition(gate.Record, gate.Requeue));
+        Assert.False(StatementGateLifecycle.CanTransition(gate.Record, gate.Requeue));
         Assert.False(StatementDraftLifecycle.CanTransition(statementDraft.Record, statementDraft.Requeue));
         Assert.False(DocumentChangeDraftLifecycle.CanTransition(documentChange.Record, documentChange.Requeue));
     }

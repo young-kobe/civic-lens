@@ -37,7 +37,7 @@ public sealed class PostgresStatementDraftStore : PostgresAnalysisStore<Statemen
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(candidateId);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        var article = await PostgresStatementAnalysisStore.ReadArticleAsync(db, candidateId, cancellationToken);
+        var article = await PostgresStatementGateStore.ReadArticleAsync(db, candidateId, cancellationToken);
         if (article is null) return null;
         var gateRun = await db.Set<StatementAnalysisRunRow>().AsNoTracking()
             .Where(run => run.CandidateId == candidateId && run.Task == StatementGateTask.Task && run.Reason != null)
@@ -45,7 +45,7 @@ public sealed class PostgresStatementDraftStore : PostgresAnalysisStore<Statemen
         var existing = await db.Set<StatementDraftRow>().AsNoTracking().Where(row => row.CandidateId == candidateId)
             .Select(row => row.CandidateId).FirstOrDefaultAsync(cancellationToken);
         var revision = await admittingRevisions.ReadAsync(db, candidateId, cancellationToken);
-        return new(article, StatementGateCarryOver.From(gateRun is null ? null : StatementAnalysisQueueMapping.ToRun(gateRun)), existing, revision);
+        return new(article, StatementGateCarryOver.From(gateRun is null ? null : StatementGateQueueMapping.ToRun(gateRun)), existing, revision);
     }
 
     public async Task<IReadOnlyList<StatementDraftListItem>> ListAsync(StatementDraftView? view, int limit, CancellationToken cancellationToken)

@@ -15,7 +15,7 @@ public sealed class AnthropicDocumentChangeDraftLiveTests
         var evidence = FakeDocumentChangeDraftModel.Evidence(
             "Applications open on October 1.\nThe deadline is October 15, 2026.\n",
             "Applications open on October 1.\nThe deadline is October 30, 2026.\n");
-        var catalog = new DocumentChangeAnalysisCatalog([], []);
+        var catalog = new DocumentChangeDraftCatalog([], []);
         var request = DocumentChangeDraftPrompt.Build(evidence, catalog)!;
         Assert.InRange(request.ReservedTokens, 1, TokenCap);
         var model = new AnthropicDocumentChangeDraftModel(Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY")!);

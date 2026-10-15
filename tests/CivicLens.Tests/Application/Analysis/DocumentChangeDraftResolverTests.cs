@@ -9,7 +9,7 @@ namespace CivicLens.Tests.Application.Analysis;
 
 public sealed class DocumentChangeDraftResolverTests
 {
-    private static readonly DocumentChangeAnalysisCatalog Catalog = new([new("warren", "Elizabeth Warren")], ["housing"]);
+    private static readonly DocumentChangeDraftCatalog Catalog = new([new("warren", "Elizabeth Warren")], ["housing"]);
     private static readonly string DraftId = new('d', 32);
 
     [Fact]

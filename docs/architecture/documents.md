@@ -67,7 +67,7 @@ Exclusions apply only inside the selected region. They keep separators between t
 
 ### Citations
 
-A citation holds an extraction ID, a UTF-16 start, a positive length, and the exact quoted text. A boundary cannot split a surrogate pair. A citation locates text in one immutable extraction. It is not a raw HTML byte offset or a PDF page. The CLI has commands for whole-body and configured extraction, inspection, and citations.
+A citation holds an extraction ID, a UTF-16 start, a positive length, and the exact quoted text. A boundary cannot split a surrogate pair. A citation locates text in one immutable extraction. It is not a raw HTML byte offset or a PDF page. The CLI has commands for whole-body and configured extraction, inspection, and citations. `SourceSpan` is the stored span (extraction ID, start, length, no quote) shared by document changes, statements and actions. `DocumentTextSpan` is the checked span with the quote.
 
 ### History
 
@@ -131,7 +131,7 @@ A malformed link returns 400, and missing evidence returns 404. A storage or rec
 
 | Concern | Files |
 |---|---|
-| Domain values and comparison | `src/CivicLens.Core/Documents/DocumentExtraction.cs`, `src/CivicLens.Core/Documents/DocumentContentProfile.cs`, `src/CivicLens.Core/Documents/DocumentTextSpan.cs`, `src/CivicLens.Core/Documents/DocumentComparison.cs`, `src/CivicLens.Core/Documents/DocumentLines.cs` |
+| Domain values and comparison | `src/CivicLens.Core/Documents/DocumentExtraction.cs`, `src/CivicLens.Core/Documents/DocumentContentProfile.cs`, `src/CivicLens.Core/Documents/DocumentTextSpan.cs`, `src/CivicLens.Core/Documents/SourceSpan.cs`, `src/CivicLens.Core/Documents/DocumentComparison.cs`, `src/CivicLens.Core/Documents/DocumentLines.cs` |
 | Use cases and ports | `src/CivicLens.Application/Documents/ExtractDocument.cs`, `src/CivicLens.Application/Documents/GetDocumentHistory.cs`, `src/CivicLens.Application/Documents/CompareDocuments.cs`, `src/CivicLens.Application/Documents/GetDocumentCitation.cs`, `src/CivicLens.Application/Documents/IDocumentTextExtractor.cs` |
 | Profile mapping | `src/CivicLens.Application/Documents/DocumentProfileConfiguration.cs` |
 | Text extraction | `src/CivicLens.Infrastructure/Documents/CaptureDocumentTextExtractor.cs` |

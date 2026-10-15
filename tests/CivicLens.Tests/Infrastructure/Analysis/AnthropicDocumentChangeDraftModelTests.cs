@@ -56,7 +56,7 @@ public sealed class AnthropicDocumentChangeDraftModelTests
         using var client = new HttpClient(new FixtureHandler(respond));
         var model = new AnthropicDocumentChangeDraftModel("test-key", client);
         var request = DocumentChangeDraftPrompt.Build(
-            FakeDocumentChangeDraftModel.Evidence("Fee: 10.\n", "Fee: 12.\n"), new DocumentChangeAnalysisCatalog([], []))!;
+            FakeDocumentChangeDraftModel.Evidence("Fee: 10.\n", "Fee: 12.\n"), new DocumentChangeDraftCatalog([], []))!;
         return await Assert.ThrowsAsync<AnalysisModelException>(() => model.DraftAsync(request, CancellationToken.None));
     }
 

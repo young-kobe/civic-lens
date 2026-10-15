@@ -9,9 +9,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CivicLens.Infrastructure.Statements;
 
-internal sealed class StatementAnalysisQueueMapping : IAnalysisQueueMapping<StatementAnalysisRow, StatementGateRun>
+internal sealed class StatementGateQueueMapping : IAnalysisQueueMapping<StatementAnalysisRow, StatementGateRun>
 {
-    public string Table => PostgresStatementAnalysisStore.Table;
+    public string Table => PostgresStatementGateStore.Table;
 
     public string KeyColumn => "candidate_id";
 
@@ -24,7 +24,7 @@ internal sealed class StatementAnalysisQueueMapping : IAnalysisQueueMapping<Stat
     public AnalysisTaskIdentity Identity => StatementGateTask.Identity;
 
     public bool CanTransition(AnalysisRecord record, AnalysisCheckpoint checkpoint) =>
-        StatementAnalysisLifecycle.CanTransition(record, checkpoint);
+        StatementGateLifecycle.CanTransition(record, checkpoint);
 
     public AnalysisRun RunOf(StatementGateRun run) => run.Run;
 

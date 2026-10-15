@@ -24,7 +24,7 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
     private const string PreviousMigration = "20261009130000_KeysetReads";
     private static readonly TimeSpan HangGuard = TimeSpan.FromSeconds(10);
     private static readonly ReviewActor Owner = new("auth0|owner", ReviewRole.Owner);
-    private static readonly DocumentChangeAnalysisCatalog Catalog = new([], []);
+    private static readonly DocumentChangeDraftCatalog Catalog = new([], []);
     private readonly string captureRoot = Path.Combine(Path.GetTempPath(), "civic-analysis-" + Guid.NewGuid().ToString("N"));
     private string connectionString = null!;
     private PooledDbContextFactory<CollectionAttemptDbContext> factory = null!;

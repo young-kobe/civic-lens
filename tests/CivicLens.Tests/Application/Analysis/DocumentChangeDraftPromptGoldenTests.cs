@@ -15,7 +15,7 @@ public sealed class DocumentChangeDraftPromptGoldenTests
     public void ThePromptAndSchemaMatchTheirPinnedVersions()
     {
         var request = DocumentChangeDraftPrompt.Build(FakeDocumentChangeDraftModel.Evidence("Deadline: October 15.\n",
-            "Deadline: October 30.\n"), new DocumentChangeAnalysisCatalog([new("warren", "Elizabeth Warren")], ["housing"]))!;
+            "Deadline: October 30.\n"), new DocumentChangeDraftCatalog([new("warren", "Elizabeth Warren")], ["housing"]))!;
         var bump = $"The prompt or schema changed. Bump {nameof(DocumentChangeDraftTask.PromptVersion)} " +
             $"({DocumentChangeDraftTask.PromptVersion}) or {nameof(DocumentChangeDraftTask.SchemaVersion)} " +
             $"({DocumentChangeDraftTask.SchemaVersion}), and then update the pinned hashes in this test.";

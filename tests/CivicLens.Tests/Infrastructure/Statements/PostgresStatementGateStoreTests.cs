@@ -16,13 +16,13 @@ namespace CivicLens.Tests.Infrastructure.Statements;
 
 [Collection(PostgresCollection.Name)]
 [Trait("Category", "Postgres")]
-public sealed class PostgresStatementAnalysisStoreTests(PostgresCollection postgres) : IAsyncLifetime
+public sealed class PostgresStatementGateStoreTests(PostgresCollection postgres) : IAsyncLifetime
 {
     private const string Article = "The senator announced a rent cap for tenants.";
     private static readonly ReviewActor Owner = new("auth0|owner", ReviewRole.Owner);
     private readonly string captureRoot = Path.Combine(Path.GetTempPath(), "civic-gate-" + Guid.NewGuid().ToString("N"));
     private string connectionString = null!;
-    private PostgresStatementAnalysisStore store = null!;
+    private PostgresStatementGateStore store = null!;
     private StatementCandidateSeeder seeder = null!;
 
     public async Task InitializeAsync()
@@ -31,7 +31,7 @@ public sealed class PostgresStatementAnalysisStoreTests(PostgresCollection postg
         var factory = new PooledDbContextFactory<CollectionAttemptDbContext>(
             new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options);
         var attempts = new PostgresCollectionAttemptStore(factory);
-        store = new PostgresStatementAnalysisStore(factory);
+        store = new PostgresStatementGateStore(factory);
         seeder = new StatementCandidateSeeder(attempts, new PostgresDocumentExtractionStore(factory), connectionString, captureRoot);
         Directory.CreateDirectory(captureRoot);
     }

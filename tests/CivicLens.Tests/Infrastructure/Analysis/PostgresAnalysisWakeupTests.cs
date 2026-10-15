@@ -87,9 +87,9 @@ public sealed class PostgresAnalysisWakeupTests(PostgresCollection postgres) : I
                 (EXTRACT(EPOCH FROM clock_timestamp())::numeric * 10000000 + 621355968010000000)::bigint
             WHERE candidate_id = '{candidateId}' AND task = '{StatementGateTask.Task}'
             """);
-        await using var gate = PostgresAnalysisWakeup.FromConnectionString(connectionString, PostgresStatementAnalysisStore.Table,
+        await using var gate = PostgresAnalysisWakeup.FromConnectionString(connectionString, PostgresStatementGateStore.Table,
             StatementGateTask.Task);
-        await using var drafting = PostgresAnalysisWakeup.FromConnectionString(connectionString, PostgresStatementAnalysisStore.Table,
+        await using var drafting = PostgresAnalysisWakeup.FromConnectionString(connectionString, PostgresStatementGateStore.Table,
             StatementDraftTask.Task);
         await gate.ConnectAsync(default);
         await drafting.ConnectAsync(default);
@@ -103,9 +103,9 @@ public sealed class PostgresAnalysisWakeupTests(PostgresCollection postgres) : I
     [Fact]
     public async Task ANotificationWakesOnlyTheListenerForItsOwnQueue()
     {
-        await using var gate = PostgresAnalysisWakeup.FromConnectionString(connectionString, PostgresStatementAnalysisStore.Table,
+        await using var gate = PostgresAnalysisWakeup.FromConnectionString(connectionString, PostgresStatementGateStore.Table,
             StatementGateTask.Task);
-        await using var drafting = PostgresAnalysisWakeup.FromConnectionString(connectionString, PostgresStatementAnalysisStore.Table,
+        await using var drafting = PostgresAnalysisWakeup.FromConnectionString(connectionString, PostgresStatementGateStore.Table,
             StatementDraftTask.Task);
         await gate.ConnectAsync(default);
         await drafting.ConnectAsync(default);
@@ -114,7 +114,7 @@ public sealed class PostgresAnalysisWakeupTests(PostgresCollection postgres) : I
         var draftingWaiting = drafting.WaitAsync(timeout.Token);
 
         await ExecuteAsync(connectionString,
-            $"SELECT pg_notify('civic_lens_analysis', '{PostgresStatementAnalysisStore.Table}:{StatementGateTask.Task}')");
+            $"SELECT pg_notify('civic_lens_analysis', '{PostgresStatementGateStore.Table}:{StatementGateTask.Task}')");
 
         await gateWaiting;
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => draftingWaiting);

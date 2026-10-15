@@ -10,7 +10,7 @@ public sealed class AnalysisQueueUseCaseTests
     private static readonly ReviewActor Owner = new("auth0|owner", ReviewRole.Owner);
     private static readonly ReviewActor Reviewer = new("auth0|friend", ReviewRole.Reviewer);
     private static readonly string KnownRunId = new('a', 32);
-    private readonly FakeStatementAnalysisStore store = new("The senator announced a rent cap for tenants.");
+    private readonly FakeStatementGateStore store = new("The senator announced a rent cap for tenants.");
 
     [Fact]
     public async Task OnlyTheOwnerReadsTheQueue()

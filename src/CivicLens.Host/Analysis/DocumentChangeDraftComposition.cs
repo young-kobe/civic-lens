@@ -17,7 +17,7 @@ internal static class DocumentChangeDraftComposition
         var configuration = DocumentChangeDraftConfiguration.FromEnvironment();
         if (configuration is null) return AnalysisComposition<AnalysisRun>.Disabled(status);
         var names = collection.People.ToDictionary(person => person.Id, person => person.Name, StringComparer.Ordinal);
-        var catalog = DocumentChangeAnalysisCatalog.Create(ReviewWorkspace.ReadCatalog(), names);
+        var catalog = DocumentChangeDraftCatalog.Create(ReviewWorkspace.ReadCatalog(), names);
         var wakeup = PostgresAnalysisWakeup.FromConnectionString(connectionString, PostgresDocumentChangeAnalysisStore.Table,
             DocumentChangeDraftTask.Task);
         var step = new DocumentChangeDraftStep(new PostgresDocumentChangeAnalysisStore(contexts),

@@ -4,7 +4,7 @@ using State = CivicLens.Application.Analysis.AnalysisState;
 
 namespace CivicLens.Tests.Application.Statements;
 
-public sealed class StatementAnalysisLifecycleTests
+public sealed class StatementGateLifecycleTests
 {
     private const string CandidateId = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
 
@@ -18,7 +18,7 @@ public sealed class StatementAnalysisLifecycleTests
         var record = new AnalysisRecord(CandidateId, StatementGateTask.Task, State.Succeeded, null, 1, 0, null, reason);
         var requeue = new AnalysisCheckpoint(CandidateId, StatementGateTask.Task, State.Succeeded, null, 1, State.Pending);
 
-        Assert.Equal(allowed, StatementAnalysisLifecycle.CanTransition(record, requeue));
+        Assert.Equal(allowed, StatementGateLifecycle.CanTransition(record, requeue));
     }
 
     [Theory]
@@ -31,7 +31,7 @@ public sealed class StatementAnalysisLifecycleTests
         var record = new AnalysisRecord(CandidateId, StatementGateTask.Task, State.Running, "lease", 1, 0, null, null);
         var settle = new AnalysisCheckpoint(CandidateId, StatementGateTask.Task, State.Running, "lease", 1, State.Succeeded, reason);
 
-        Assert.Equal(allowed, StatementAnalysisLifecycle.CanTransition(record, settle));
+        Assert.Equal(allowed, StatementGateLifecycle.CanTransition(record, settle));
     }
 
     [Fact]

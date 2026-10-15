@@ -40,7 +40,7 @@ public static class DocumentChangeDraftPrompt
         Every confidence is a number from 0 to 1. Civic Lens records the values to calibrate them against human review. A person never sees them as a score and no rule acts on them. Use the full range honestly. Do not round toward 1.
         """;
 
-    public static AnalysisModelRequest? Build(DocumentChangeDraftEvidence evidence, DocumentChangeAnalysisCatalog catalog,
+    public static AnalysisModelRequest? Build(DocumentChangeDraftEvidence evidence, DocumentChangeDraftCatalog catalog,
         ImmutableArray<string> previousErrors = default)
     {
         ArgumentNullException.ThrowIfNull(evidence);
@@ -59,10 +59,10 @@ public static class DocumentChangeDraftPrompt
 
     public static long MinimumReservation => Encoding.UTF8.GetByteCount(SystemPrompt) + (long)DocumentChangeDraftTask.MaximumOutputTokens;
 
-    public static string SerializeCatalog(DocumentChangeAnalysisCatalog catalog) =>
+    public static string SerializeCatalog(DocumentChangeDraftCatalog catalog) =>
         JsonSerializer.Serialize(new { officials = Officials(catalog), issues = catalog.IssueIds }, CompactJson);
 
-    private static string BuildUserPrompt(DocumentChangeDraftEvidence evidence, DocumentChangeAnalysisCatalog catalog, ImmutableArray<string> previousErrors)
+    private static string BuildUserPrompt(DocumentChangeDraftEvidence evidence, DocumentChangeDraftCatalog catalog, ImmutableArray<string> previousErrors)
     {
         var summary = evidence.Comparison;
         var document = new
@@ -92,7 +92,7 @@ public static class DocumentChangeDraftPrompt
         return builder.ToString();
     }
 
-    private static string BuildSchema(int hunkCount, DocumentChangeAnalysisCatalog catalog)
+    private static string BuildSchema(int hunkCount, DocumentChangeDraftCatalog catalog)
     {
         var hunkIds = new JsonArray([.. Enumerable.Range(0, hunkCount).Select(index => (JsonNode)HunkId(index))]);
         var schema = new JsonObject
@@ -147,7 +147,7 @@ public static class DocumentChangeDraftPrompt
         return schema.ToJsonString(CompactJson);
     }
 
-    private static IEnumerable<object> Officials(DocumentChangeAnalysisCatalog catalog) =>
+    private static IEnumerable<object> Officials(DocumentChangeDraftCatalog catalog) =>
         catalog.Officials.Select(official => new { id = official.Id, name = official.Name });
 
     private static string HunkId(int index) => "h" + (index + 1).ToString(CultureInfo.InvariantCulture);

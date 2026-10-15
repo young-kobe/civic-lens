@@ -8,7 +8,7 @@ namespace CivicLens.Tests.Application.Analysis;
 
 public sealed class DocumentChangeDraftStepTests
 {
-    private static readonly DocumentChangeAnalysisCatalog Catalog = new([], []);
+    private static readonly DocumentChangeDraftCatalog Catalog = new([], []);
 
     [Fact]
     public async Task AnUnexpectedModelErrorAfterTheReservationFailsTheEntryAndKeepsTheCharge()

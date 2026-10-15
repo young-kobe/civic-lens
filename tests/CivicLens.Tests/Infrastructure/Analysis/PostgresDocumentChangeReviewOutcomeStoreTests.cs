@@ -146,7 +146,7 @@ public sealed class PostgresDocumentChangeReviewOutcomeStoreTests(PostgresCollec
         var model = new FakeDocumentChangeDraftModel().Draft(output);
         var worker = AnalysisWorkers.Drafting(new PostgresDocumentChangeAnalysisStore(factory),
             new PostgresAnalysisStatusStore(factory), model, new DocumentChangeDraftSettings(10_000_000, concurrency: 1),
-            new DocumentChangeAnalysisCatalog([], []), TimeProvider.System);
+            new DocumentChangeDraftCatalog([], []), TimeProvider.System);
         await worker.ExecuteAsync(once: true);
         var entry = Assert.Single(await new PostgresDocumentChangeAnalysisStore(factory).GetByComparisonIdsAsync([comparison.ComparisonId], default));
         return entry.DraftId!;

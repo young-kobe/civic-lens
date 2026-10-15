@@ -75,7 +75,7 @@ public sealed class PostgresStatementReviewStore(IDbContextFactory<CollectionAtt
         var candidate = await db.Set<StatementCandidateRow>().AsNoTracking()
             .SingleOrDefaultAsync(row => row.CandidateId == candidateId, cancellationToken);
         if (candidate is null) return null;
-        var article = await PostgresStatementAnalysisStore.ReadArticleAsync(db, candidateId, cancellationToken)
+        var article = await PostgresStatementGateStore.ReadArticleAsync(db, candidateId, cancellationToken)
             ?? throw new InvalidOperationException("The extraction of a statement candidate is missing.");
         var draft = await db.Set<StatementDraftRow>().AsNoTracking()
             .SingleOrDefaultAsync(row => row.CandidateId == candidateId, cancellationToken)
@@ -170,7 +170,7 @@ public sealed class PostgresStatementReviewStore(IDbContextFactory<CollectionAtt
         if (allowed is null) throw new ArgumentException("Approval needs the allowed selections.", nameof(allowed));
         revision.ValidateForApproval();
         allowed.RequireAllowed(revision);
-        var article = await PostgresStatementAnalysisStore.ReadArticleAsync(db, revision.CandidateId, cancellationToken)
+        var article = await PostgresStatementGateStore.ReadArticleAsync(db, revision.CandidateId, cancellationToken)
             ?? throw new InvalidOperationException("The extraction of a statement candidate is missing.");
         revision.ValidateAgainst(article.Extraction);
     }

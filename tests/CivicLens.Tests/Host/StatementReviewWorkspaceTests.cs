@@ -33,7 +33,7 @@ public sealed class StatementReviewWorkspaceTests(PostgresCollection postgres) :
         OfficialName = "Elizabeth Warren"
     };
     private readonly string captureRoot = Path.Combine(Path.GetTempPath(), "civic-statement-pages-" + Guid.NewGuid().ToString("N"));
-    private PostgresStatementAnalysisStore gates = null!;
+    private PostgresStatementGateStore gates = null!;
     private PostgresStatementDraftStore drafts = null!;
     private PostgresStatementReviewStore reviews = null!;
     private StatementCandidateSeeder seeder = null!;
@@ -43,7 +43,7 @@ public sealed class StatementReviewWorkspaceTests(PostgresCollection postgres) :
     {
         await host.StartAsync();
         var factory = AnalysisDbContextFactory.Create(host.ConnectionString);
-        gates = new PostgresStatementAnalysisStore(factory);
+        gates = new PostgresStatementGateStore(factory);
         drafts = new PostgresStatementDraftStore(factory);
         reviews = new PostgresStatementReviewStore(factory);
         Directory.CreateDirectory(captureRoot);

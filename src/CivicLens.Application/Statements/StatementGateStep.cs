@@ -6,7 +6,7 @@ using State = CivicLens.Application.Analysis.AnalysisState;
 
 namespace CivicLens.Application.Statements;
 
-public sealed class StatementGateStep(IStatementAnalysisStore store, IStatementGateModel model, StatementGateSettings settings,
+public sealed class StatementGateStep(IStatementGateStore store, IStatementGateModel model, StatementGateSettings settings,
     IssueConfigurationRevision issueRevision) : IAnalysisTaskStep<StatementGateRun>
 {
     private readonly IssueConfiguration issues = issueRevision.ReadConfiguration();

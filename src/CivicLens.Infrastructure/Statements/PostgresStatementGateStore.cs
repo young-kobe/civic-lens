@@ -9,17 +9,17 @@ using State = CivicLens.Application.Analysis.AnalysisState;
 
 namespace CivicLens.Infrastructure.Statements;
 
-public sealed class PostgresStatementAnalysisStore : PostgresAnalysisStore<StatementGateRun>, IStatementAnalysisStore
+public sealed class PostgresStatementGateStore : PostgresAnalysisStore<StatementGateRun>, IStatementGateStore
 {
     public const string Table = "statement_analysis";
 
     private readonly IDbContextFactory<CollectionAttemptDbContext> contextFactory;
     private readonly PostgresAnalysisQueue<StatementAnalysisRow, StatementAnalysisBudgetRow, StatementGateRun> queue;
 
-    public PostgresStatementAnalysisStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory)
-        : this(contextFactory, new(contextFactory, new StatementAnalysisQueueMapping())) { }
+    public PostgresStatementGateStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory)
+        : this(contextFactory, new(contextFactory, new StatementGateQueueMapping())) { }
 
-    private PostgresStatementAnalysisStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory,
+    private PostgresStatementGateStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory,
         PostgresAnalysisQueue<StatementAnalysisRow, StatementAnalysisBudgetRow, StatementGateRun> queue) : base(queue)
     {
         this.contextFactory = contextFactory;
@@ -32,7 +32,7 @@ public sealed class PostgresStatementAnalysisStore : PostgresAnalysisStore<State
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         var row = await db.Set<StatementAnalysisRunRow>().AsNoTracking()
             .SingleOrDefaultAsync(candidate => candidate.RunId == runId && candidate.Task == StatementGateTask.Task, cancellationToken);
-        return row is null ? null : StatementAnalysisQueueMapping.ToRun(row);
+        return row is null ? null : StatementGateQueueMapping.ToRun(row);
     }
 
     public async Task<StatementGateEvidence?> ReadEvidenceAsync(string candidateId, CancellationToken cancellationToken)

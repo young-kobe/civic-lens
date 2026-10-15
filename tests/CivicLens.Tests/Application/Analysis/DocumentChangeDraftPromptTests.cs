@@ -7,7 +7,7 @@ namespace CivicLens.Tests.Application.Analysis;
 
 public sealed class DocumentChangeDraftPromptTests
 {
-    private static readonly DocumentChangeAnalysisCatalog Catalog = new([new("warren", "Elizabeth Warren")], ["housing"]);
+    private static readonly DocumentChangeDraftCatalog Catalog = new([new("warren", "Elizabeth Warren")], ["housing"]);
 
     [Fact]
     public void TheSameEvidenceRebuildsTheSameRequestAndHash()
