@@ -101,13 +101,12 @@ public sealed class PostgresStatementAnalysisStore : PostgresAnalysisStore<State
 
     private static Expression<Func<StatementAnalysisRow, bool>> InView(StatementGateView view) => view switch
     {
-        StatementGateView.Pending => row => row.Status == State.Pending || row.Status == State.Running ||
-            row.Status == State.RetryWaiting || row.Status == State.WaitingForBudget,
+        StatementGateView.Pending => AnalysisQueueStates.IsPending<StatementAnalysisRow>(),
         StatementGateView.Passed => row => row.Status == State.Succeeded && row.ErrorCode == StatementGateReasons.Passed,
         StatementGateView.Skipped => row => row.Status == State.Succeeded && row.ErrorCode == StatementGateReasons.NoTrackedIssue,
         StatementGateView.FailedOpen => row => row.Status == State.Succeeded && row.ErrorCode == StatementGateReasons.FailedOpen,
         StatementGateView.OverCap => row => row.Status == State.Succeeded && row.ErrorCode == StatementGateReasons.OverByteCap,
-        _ => row => row.Status == State.Failed || row.Status == State.Blocked
+        _ => AnalysisQueueStates.IsFailed<StatementAnalysisRow>()
     };
 
     private static StatementGateView ViewOf(State status, string? errorCode) => status switch
@@ -119,7 +118,7 @@ public sealed class PostgresStatementAnalysisStore : PostgresAnalysisStore<State
             StatementGateReasons.FailedOpen => StatementGateView.FailedOpen,
             _ => StatementGateView.OverCap
         },
-        State.Failed or State.Blocked => StatementGateView.Failed,
+        var failed when AnalysisQueueStates.IsFailed(failed) => StatementGateView.Failed,
         _ => StatementGateView.Pending
     };
 }

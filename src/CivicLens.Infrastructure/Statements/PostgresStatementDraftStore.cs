@@ -64,13 +64,12 @@ public sealed class PostgresStatementDraftStore : PostgresAnalysisStore<Statemen
 
     private static Expression<Func<StatementAnalysisRow, bool>> InView(StatementDraftView view) => view switch
     {
-        StatementDraftView.Pending => row => row.Status == State.Pending || row.Status == State.Running ||
-            row.Status == State.RetryWaiting || row.Status == State.WaitingForBudget,
+        StatementDraftView.Pending => AnalysisQueueStates.IsPending<StatementAnalysisRow>(),
         StatementDraftView.Drafted => row => row.Status == State.Succeeded && row.ErrorCode == null,
         StatementDraftView.OverCap => row => row.Status == State.Succeeded && row.ErrorCode == StatementDraftErrorCodes.OverByteCap,
         StatementDraftView.Existing => row => row.Status == State.Succeeded && (row.ErrorCode == StatementDraftErrorCodes.HumanDraftExists ||
             row.ErrorCode == StatementDraftErrorCodes.DraftDiscarded),
-        _ => row => row.Status == State.Failed || row.Status == State.Blocked
+        _ => AnalysisQueueStates.IsFailed<StatementAnalysisRow>()
     };
 
     private static StatementDraftView ViewOf(State status, string? errorCode) => status switch
@@ -81,7 +80,7 @@ public sealed class PostgresStatementDraftStore : PostgresAnalysisStore<Statemen
             StatementDraftErrorCodes.OverByteCap => StatementDraftView.OverCap,
             _ => StatementDraftView.Existing
         },
-        State.Failed or State.Blocked => StatementDraftView.Failed,
+        var failed when AnalysisQueueStates.IsFailed(failed) => StatementDraftView.Failed,
         _ => StatementDraftView.Pending
     };
 }
