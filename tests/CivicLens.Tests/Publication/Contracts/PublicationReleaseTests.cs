@@ -9,17 +9,6 @@ public sealed class PublicationReleaseTests
     private static readonly string StatementId = new('b', 64);
 
     [Fact]
-    public void VersionOneManifestWithoutKindsStillLoadsAndMeansDocumentChanges()
-    {
-        var json = $$"""{"schemaVersion":1,"releaseNumber":3,"publishedAtUtc":"2026-01-01T00:00:00+00:00","records":[{"recordId":"{{ChangeId}}","revisionNumber":1,"headline":"Old","firstPublishedAtUtc":"2026-01-01T00:00:00+00:00"}]}""";
-
-        var release = JsonSerializer.Deserialize<PublicationRelease>(json, PublicationProtocol.JsonOptions)!;
-        release.Validate();
-
-        Assert.Equal(PublishedRecordKind.DocumentChange, Assert.Single(release.Records).Kind);
-    }
-
-    [Fact]
     public void KindIsWrittenAsALowercaseCamelStringSoReadersNeverSeeANumber()
     {
         var json = JsonSerializer.Serialize(Entry(PublishedRecordKind.DocumentChange, ChangeId), PublicationProtocol.JsonOptions);
@@ -84,9 +73,9 @@ public sealed class PublicationReleaseTests
     }
 
     [Theory]
-    [InlineData(1, "")]
-    [InlineData(2, "\"kind\":\"statement\",")]
-    public void OlderManifestsReadWithEmptyFiltersBecauseNothingIsBackfilled(int version, string kind)
+    [InlineData(1, "", PublishedRecordKind.DocumentChange)]
+    [InlineData(2, "\"kind\":\"statement\",", PublishedRecordKind.Statement)]
+    public void OlderManifestsReadWithEmptyFiltersBecauseNothingIsBackfilled(int version, string kind, PublishedRecordKind expectedKind)
     {
         var id = version == 1 ? ChangeId : StatementId;
         var json = $$"""{"schemaVersion":{{version}},"releaseNumber":3,"publishedAtUtc":"2026-01-01T00:00:00+00:00","records":[{{{kind}}"recordId":"{{id}}","revisionNumber":1,"headline":"Old","firstPublishedAtUtc":"2026-01-01T00:00:00+00:00"}]}""";
@@ -95,6 +84,7 @@ public sealed class PublicationReleaseTests
         release.Validate();
 
         var entry = Assert.Single(release.Records);
+        Assert.Equal(expectedKind, entry.Kind);
         Assert.Empty(entry.Officials);
         Assert.Empty(entry.IssueIds);
         Assert.Empty(entry.PolicyAreaIds);

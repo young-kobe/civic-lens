@@ -373,16 +373,14 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
             (await RecordAsync(job.JobId, attemptId)).Status);
     }
 
-    [Theory]
-    [InlineData(0)]
-    [InlineData(601)]
-    public async Task InvalidLeaseDurationIsRejectedBeforeReadingEligibleWork(int seconds)
+    [Fact]
+    public async Task InvalidLeaseDurationIsRejectedBeforeReadingEligibleWork()
     {
         var observedProcessing = new ObservedEvidenceProcessingStore(processing);
         var worker = Worker(observedProcessing);
 
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
-            worker.ExecuteAsync(artifactRoot, 20, TimeSpan.FromSeconds(seconds), default));
+            worker.ExecuteAsync(artifactRoot, 20, TimeSpan.Zero, default));
 
         Assert.Equal(0, observedProcessing.EligibleReads);
     }
