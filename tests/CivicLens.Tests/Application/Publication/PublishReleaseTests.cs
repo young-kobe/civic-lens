@@ -2,6 +2,7 @@ using System.IO.Compression;
 using System.Text.Json;
 using CivicLens.Application.Publication;
 using CivicLens.Application.Review;
+using CivicLens.Core.Actions;
 using CivicLens.Core.Review;
 using CivicLens.Core.Statements;
 using CivicLens.Publication.Contracts;
@@ -143,6 +144,22 @@ public sealed class PublishReleaseTests
         var scenario = new PublicationScenario();
         scenario.SeedRelease(withFiles: true, [.. Enumerable.Range(0, PublicationProtocol.MaximumRecordsPerRelease - 1)
             .Select(index => PublicationScenario.FilledStatementEntry(index, StatementDraftRevision.MaximumHeadlineLength))]);
+        var draft = scenario.AddDraft('a');
+
+        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k", draft));
+
+        Assert.Equal(PublicationProtocol.MaximumRecordsPerRelease, summary.RecordCount);
+        var manifestBytes = scenario.Releases.Directories[summary.DirectoryName][PublicationProtocol.ManifestPath].Length;
+        Assert.True(manifestBytes < PublicationProtocol.MaximumManifestBytes * 3 / 4,
+            $"The manifest has {manifestBytes} bytes, and the next publish must read it under {PublicationProtocol.MaximumManifestBytes}.");
+    }
+
+    [Fact]
+    public async Task AReleaseAtTheRecordLimitOfFilledActionEntriesKeepsTheManifestUnderThreeQuartersOfTheManifestCap()
+    {
+        var scenario = new PublicationScenario();
+        scenario.SeedRelease(withFiles: true, [.. Enumerable.Range(0, PublicationProtocol.MaximumRecordsPerRelease - 1)
+            .Select(index => PublicationScenario.FilledActionEntry(index, ActionDraftRevision.MaximumHeadlineLength))]);
         var draft = scenario.AddDraft('a');
 
         var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k", draft));

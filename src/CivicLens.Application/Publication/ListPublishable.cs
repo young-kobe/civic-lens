@@ -1,50 +1,33 @@
 using System.Collections.Immutable;
 using CivicLens.Application.Review;
-using CivicLens.Application.Statements;
 using CivicLens.Core.Review;
-using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Application.Publication;
 
-public sealed class ListPublishable(IDocumentChangeReviewStore documentChanges, IStatementReviewStore statements)
+public sealed class ListPublishable(PublishedRecordLoaders loaders)
 {
     public async Task<ReadyToPublishList> ExecuteAsync(ReviewActor actor, CancellationToken cancellationToken = default)
     {
         ReviewAuthorization.RequireOwner(actor);
         var limit = PublishRelease.MaximumRecords;
-        var changeRead = documentChanges.ListUnpublishedApprovedDraftsAsync(limit + 1, cancellationToken);
-        var statementRead = statements.ListUnpublishedApprovedAsync(limit + 1, cancellationToken);
-        await Task.WhenAll(changeRead, statementRead);
-        var changeCandidates = await changeRead;
-        var statementCandidates = await statementRead;
-        var readyChanges = ReadyChanges(changeCandidates);
-        var readyStatements = ReadyStatements(statementCandidates);
-        var hasMore = changeCandidates.Count > limit || statementCandidates.Count > limit
-            || readyChanges.Count + readyStatements.Count > limit;
-        return new(ShareLimitBetweenKinds(readyChanges, readyStatements, limit), hasMore);
+        var reads = await Task.WhenAll(loaders.All.Select(loader => loader.ListReadyAsync(limit, cancellationToken)));
+        var ready = reads.Select(read => read.Ready).ToArray();
+        var hasMore = reads.Any(read => read.HasMore) || ready.Sum(kind => kind.Count) > limit;
+        return new(ShareLimitBetweenKinds(ready, limit), hasMore);
     }
 
-    private static ImmutableArray<ReadyToPublishRecord> ShareLimitBetweenKinds(IReadOnlyList<ReadyToPublishRecord> changes,
-        IReadOnlyList<ReadyToPublishRecord> statements, int limit)
+    // Each kind gets an equal share of the limit. A kind with fewer ready records gives its unused share to the others.
+    private static ImmutableArray<ReadyToPublishRecord> ShareLimitBetweenKinds(IReadOnlyList<ReadyToPublishRecord>[] kinds, int limit)
     {
-        var changeCount = Math.Min(changes.Count, Math.Max(limit / 2, limit - statements.Count));
-        var statementCount = Math.Min(statements.Count, limit - changeCount);
-        return [.. changes.Take(changeCount), .. statements.Take(statementCount)];
+        var counts = new int[kinds.Length];
+        var remaining = limit;
+        var smallestFirst = Enumerable.Range(0, kinds.Length).OrderBy(kind => kinds[kind].Count).ToArray();
+        for (var position = 0; position < smallestFirst.Length; position++)
+        {
+            var kind = smallestFirst[position];
+            counts[kind] = Math.Min(kinds[kind].Count, remaining / (smallestFirst.Length - position));
+            remaining -= counts[kind];
+        }
+        return [.. kinds.SelectMany((ready, kind) => ready.Take(counts[kind]))];
     }
-
-    private static IReadOnlyList<ReadyToPublishRecord> ReadyChanges(IReadOnlyList<UnpublishedApprovedDraft> candidates) =>
-        candidates
-            .Where(candidate => PublishedRecordRules.IsPublishable(candidate.Draft.CurrentStatus, candidate.Draft.UnresolvedConcernCount))
-            .Select(candidate => new ReadyToPublishRecord(PublishedRecordKind.DocumentChange, candidate.Draft.DraftId,
-                candidate.Draft.CurrentRevision.Headline, candidate.Draft.CurrentRevision.RevisionNumber, candidate.PublishedRevisionNumber))
-            .ToList();
-
-    private static IReadOnlyList<ReadyToPublishRecord> ReadyStatements(IReadOnlyList<UnpublishedApprovedStatement> candidates) =>
-        candidates
-            .Where(candidate => candidate.Statement.CurrentRevision is not null &&
-                PublishedRecordRules.IsPublishable(candidate.Statement.CurrentStatus, candidate.Statement.UnresolvedConcernCount))
-            .Select(candidate => new ReadyToPublishRecord(PublishedRecordKind.Statement, candidate.Statement.CandidateId,
-                candidate.Statement.CurrentRevision!.Headline, candidate.Statement.CurrentRevision.RevisionNumber,
-                candidate.PublishedRevisionNumber))
-            .ToList();
 }

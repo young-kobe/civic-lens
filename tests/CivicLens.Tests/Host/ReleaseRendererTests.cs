@@ -111,7 +111,7 @@ public sealed class ReleaseRendererTests
         Assert.Equal(PublicationProtocol.ManifestPath, form.GetAttribute("data-release-search"));
         Assert.Equal(PublicationProtocol.RecordPagePath("{id}"), form.GetAttribute("data-record-page"));
         Assert.True(form.Closest("section")!.HasAttribute("hidden"));
-        Assert.Equal(["", "documentChange", "statement"],
+        Assert.Equal(["", "documentChange", "statement", "action"],
             document.QuerySelectorAll("#search-kind option").Select(option => option.GetAttribute("value")));
         Assert.Equal(["text", "kind", "official", "issue", "policyArea", "from", "to"],
             form.QuerySelectorAll("input, select").Select(control => control.GetAttribute("name")));
@@ -196,12 +196,64 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
+    public async Task ActionPageShowsTheBillTheSponsorshipTableTheCrsSummaryAndTheSources()
+    {
+        var html = await new ReleaseRenderer().RenderActionAsync(Action(), CancellationToken.None);
+
+        var document = new HtmlParser().ParseDocument(html);
+        var facts = document.QuerySelectorAll(".facts dt").Zip(document.QuerySelectorAll(".facts dd"))
+            .ToDictionary(pair => pair.First.TextContent, pair => pair.Second.TextContent);
+        Assert.Equal("HR 7, Congress 119", facts["Bill"]);
+        Assert.Equal("A <housing> bill", facts["Title"]);
+        Assert.Equal("Housing and Community Development", facts["Policy area"]);
+        Assert.Equal("housing", facts["Tracked issues"]);
+        var rows = document.QuerySelectorAll("[aria-labelledby='sponsorships-title'] tbody tr")
+            .Select(row => string.Join("|", row.QuerySelectorAll("td").Select(cell => cell.QuerySelector("blockquote")?.TextContent ?? cell.TextContent.Trim())));
+        Assert.Equal(["Jane <Doe>|Sponsor|No|2026-01-03|None|Sponsor: D000001", "Ann Roe|Cosponsor|Yes|2026-01-05|2026-01-20|Cosponsor: R000002, original"], rows);
+        Assert.Contains("Summary version: 00 <i>funds</i> rent aid.", document.QuerySelector("[aria-labelledby='bill-evidence-title']")!.TextContent,
+            StringComparison.Ordinal);
+        var sources = document.QuerySelector("[aria-labelledby='sources-title']")!;
+        Assert.Contains("https://api.congress.gov/v3/bill/119/hr/7/cosponsors", sources.TextContent, StringComparison.Ordinal);
+        Assert.Empty(sources.QuerySelectorAll("a"));
+        Assert.Equal(["Sponsor: D000001", "Policy area: Housing and Community Development", "Summary version: 00 <i>funds</i> rent aid.",
+            "Cosponsor: R000002, original"], sources.QuerySelectorAll("mark").Select(mark => mark.TextContent));
+        Assert.Contains("A sponsorship is a proposal, not a law.", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("<i>", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task EveryActionQuoteLinksToTheMarkOfTheSameTextInTheSourceAndEachSourceIsLabelledByPosition()
+    {
+        var html = await new ReleaseRenderer().RenderActionAsync(Action(), CancellationToken.None);
+
+        var document = new HtmlParser().ParseDocument(html);
+        var links = document.QuerySelectorAll("a[href^='#cite-']").ToArray();
+        Assert.Equal(4, links.Length);
+        foreach (var link in links)
+        {
+            var quote = link.Closest("td, .choice")!.QuerySelector("blockquote")!.TextContent;
+            Assert.Equal(quote, document.QuerySelector(link.GetAttribute("href")!)!.TextContent);
+        }
+        Assert.Equal(["Source text 1 of 2", "Source text 2 of 2"],
+            document.QuerySelectorAll("[aria-labelledby='sources-title'] [aria-label]").Select(item => item.GetAttribute("aria-label")));
+    }
+
+    [Fact]
+    public async Task ActionPageRejectsACitationThatNamesNoEmbeddedSource()
+    {
+        var action = Action() with { SummaryCitation = Action().SummaryCitation! with { ExtractionId = new string('9', 64) } };
+
+        await Assert.ThrowsAsync<InvalidDataException>(() => new ReleaseRenderer().RenderActionAsync(action, CancellationToken.None));
+    }
+
+    [Fact]
     public async Task IndexPageLabelsEachEntryWithItsKindSoReadersKnowWhatTheyOpen()
     {
         var release = ReleaseOf(2);
         release = release with
         {
-            Records = [release.Records[0], release.Records[1] with { Kind = PublishedRecordKind.Statement, RecordId = new string('d', 64) }]
+            Records = [release.Records[0], release.Records[1] with { Kind = PublishedRecordKind.Statement, RecordId = new string('d', 64) },
+                release.Records[1] with { Kind = PublishedRecordKind.Action, RecordId = new string('f', 64) }]
         };
 
         var html = await new ReleaseRenderer().RenderIndexAsync(release, 1, CancellationToken.None);
@@ -209,7 +261,7 @@ public sealed class ReleaseRendererTests
         var rows = new HtmlParser().ParseDocument(html).QuerySelectorAll("tbody tr")
             .Select(row => (row.QuerySelector("a")!.GetAttribute("href"), row.QuerySelector(".badge")!.TextContent));
         Assert.Equal([($"records/{release.Records[0].RecordId}.html", "Document change"),
-            ($"records/{new string('d', 64)}.html", "Statement")], rows);
+            ($"records/{new string('d', 64)}.html", "Statement"), ($"records/{new string('f', 64)}.html", "Action")], rows);
     }
 
     [Theory]
@@ -272,6 +324,60 @@ public sealed class ReleaseRendererTests
         var match = Regex.Match(html, $"<mark id=\"{id}\">(.*?)</mark>", RegexOptions.Singleline);
         Assert.True(match.Success, $"No mark with id {id}.");
         return match.Groups[1].Value;
+    }
+
+    private static PublishedAction Action()
+    {
+        const string detail = "Sponsor: D000001\nPolicy area: Housing and Community Development\nSummary version: 00 <i>funds</i> rent aid.\n";
+        const string cosponsors = "Cosponsor: R000002, original\n";
+        var detailId = new string('1', 64);
+        var cosponsorsId = new string('2', 64);
+        PublishedCitation Cite(string id, string text, string quote) =>
+            new() { ExtractionId = id, Start = text.IndexOf(quote, StringComparison.Ordinal), Length = quote.Length, Quote = quote };
+        PublishedDocumentVersion Source(string id, string url, string text) =>
+            new() { ExtractionId = id, Url = url, ObservedAtUtc = new DateTimeOffset(2026, 1, 21, 9, 0, 0, TimeSpan.Zero), Text = text };
+        return new PublishedAction
+        {
+            RecordId = new string('f', 64),
+            RevisionNumber = 1,
+            Headline = "Doe sponsors a housing bill",
+            Summary = "Doe sponsored the bill.",
+            Congress = 119,
+            BillType = "hr",
+            BillNumber = 7,
+            BillTitle = "A <housing> bill",
+            PolicyArea = "Housing and Community Development",
+            PolicyAreaCitation = Cite(detailId, detail, "Policy area: Housing and Community Development"),
+            TrackedIssueIds = ["housing"],
+            SummaryCitation = Cite(detailId, detail, "Summary version: 00 <i>funds</i> rent aid."),
+            Sponsorships =
+            [
+                new PublishedSponsorship
+                {
+                    Official = new PublishedOfficial { Id = "o1", Name = "Jane <Doe>" },
+                    Role = PublishedSponsorshipRole.Sponsor,
+                    IsOriginal = false,
+                    SponsoredOn = new DateOnly(2026, 1, 3),
+                    Citations = [Cite(detailId, detail, "Sponsor: D000001")]
+                },
+                new PublishedSponsorship
+                {
+                    Official = new PublishedOfficial { Id = "o2", Name = "Ann Roe" },
+                    Role = PublishedSponsorshipRole.Cosponsor,
+                    IsOriginal = true,
+                    SponsoredOn = new DateOnly(2026, 1, 5),
+                    WithdrawnOn = new DateOnly(2026, 1, 20),
+                    Citations = [Cite(cosponsorsId, cosponsors, "Cosponsor: R000002, original")]
+                }
+            ],
+            Sources =
+            [
+                Source(detailId, "https://api.congress.gov/v3/bill/119/hr/7", detail),
+                Source(cosponsorsId, "https://api.congress.gov/v3/bill/119/hr/7/cosponsors", cosponsors)
+            ],
+            ApprovedAtUtc = new DateTimeOffset(2026, 1, 22, 12, 0, 0, TimeSpan.Zero),
+            FirstPublishedAtUtc = new DateTimeOffset(2026, 1, 23, 8, 0, 0, TimeSpan.Zero)
+        };
     }
 
     private static PublishedStatement Statement()

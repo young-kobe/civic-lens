@@ -174,6 +174,36 @@ public sealed class ActionDraftRevisionTests
     }
 
     [Fact]
+    public void APersonCannotChangeTheStoredPolicyAreaID()
+    {
+        var previous = Model() with { PolicyArea = "Housing", PolicyAreaCitation = new(ExtractionId, 0, 5), PolicyAreaId = "housing" };
+        var edit = PersonEditOf(previous, "A better headline", "A better summary.");
+
+        edit.ValidatePersonEditOf(previous);
+
+        Assert.Throws<ArgumentException>(() => (edit with { PolicyAreaId = "other" }).ValidatePersonEditOf(previous));
+    }
+
+    [Fact]
+    public void ASponsorshipCannotBeWithdrawnBeforeItBegan()
+    {
+        var sponsorship = Sponsorship();
+        Assert.Throws<ArgumentException>(() =>
+            (Model() with { Sponsorships = [sponsorship with { WithdrawnOn = sponsorship.SponsoredOn.AddDays(-1) }] }).ValidateShape());
+        (Model() with { Sponsorships = [sponsorship with { WithdrawnOn = sponsorship.SponsoredOn }] }).ValidateShape();
+    }
+
+    [Fact]
+    public void APolicyAreaIDNeedsAPolicyAreaAndTextButIsOptionalBecauseTheConfigurationMayLackTheLabel()
+    {
+        var area = Model() with { PolicyArea = "Housing", PolicyAreaCitation = new(ExtractionId, 0, 5) };
+        area.ValidateShape();
+        (area with { PolicyAreaId = "housing" }).ValidateShape();
+        Assert.Throws<ArgumentException>(() => (area with { PolicyAreaId = " " }).ValidateShape());
+        Assert.Throws<ArgumentException>(() => (Model() with { PolicyAreaId = "housing" }).ValidateShape());
+    }
+
+    [Fact]
     public void ASummaryVersionAndAPolicyAreaEachNeedTheirCitation()
     {
         Assert.Throws<ArgumentException>(() => (Model() with { SummaryVersion = "00@2025-01-05T10:00:00Z" }).ValidateShape());

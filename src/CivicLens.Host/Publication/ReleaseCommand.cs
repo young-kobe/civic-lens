@@ -36,7 +36,7 @@ public static class ReleaseCommand
                     Write(await activate.ExecuteAsync(owner, number, cancellationToken));
                     return 0;
                 default:
-                    Console.Error.WriteLine("Use releases publish <idempotency-key> <kind>:<id>... (kind is documentChange or statement), releases list [limit], or releases activate <release-number>.");
+                    Console.Error.WriteLine($"Use releases publish <idempotency-key> <kind>:<id>... (kind is one of: {PublishedRecordReference.KindNames}), releases list [limit], or releases activate <release-number>.");
                     return 2;
             }
         }

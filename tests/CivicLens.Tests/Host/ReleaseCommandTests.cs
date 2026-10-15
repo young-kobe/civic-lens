@@ -91,7 +91,7 @@ public sealed class ReleaseCommandTests
                 null!, null!, null!, new ReviewActor("auth0|owner", ReviewRole.Owner), CancellationToken.None);
 
             Assert.Equal(2, exit);
-            Assert.Contains("documentChange or statement", error.ToString(), StringComparison.Ordinal);
+            Assert.Contains("documentChange, statement, action", error.ToString(), StringComparison.Ordinal);
         }
         finally
         {

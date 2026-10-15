@@ -7,6 +7,8 @@ public sealed record PublishedRecordReference(PublishedRecordKind Kind, string R
 {
     private const char Separator = ':';
 
+    public static string KindNames { get; } = string.Join(", ", Enum.GetValues<PublishedRecordKind>().Select(NameOf));
+
     public static PublishedRecordReference Parse(string? text)
     {
         var separator = text?.IndexOf(Separator) ?? -1;
@@ -14,7 +16,7 @@ public sealed record PublishedRecordReference(PublishedRecordKind Kind, string R
             throw new ArgumentException("Name each record as <kind>:<id>.", nameof(text));
         var kindName = text[..separator];
         if (!TryParseKind(kindName, out var kind))
-            throw new ArgumentException($"Unknown record kind '{kindName}'. Use documentChange or statement.", nameof(text));
+            throw new ArgumentException($"Unknown record kind '{kindName}'. Use one of: {KindNames}.", nameof(text));
         return new PublishedRecordReference(kind, text[(separator + 1)..]);
     }
 

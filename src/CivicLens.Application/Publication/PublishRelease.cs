@@ -3,7 +3,6 @@ using System.IO.Compression;
 using System.Text;
 using System.Text.Json;
 using CivicLens.Application.Review;
-using CivicLens.Application.Statements;
 using CivicLens.Core.Review;
 using CivicLens.Publication.Contracts;
 
@@ -16,21 +15,19 @@ public sealed class PublishRelease
     private readonly IPublicationStore publications;
     private readonly IReleaseDirectory releases;
     private readonly IReleaseRenderer renderer;
-    private readonly DocumentChangeRecordLoader documentChanges;
-    private readonly StatementRecordLoader statements;
+    private readonly PublishedRecordLoaders loaders;
+    private readonly PublishedRecordRules rules;
     private readonly TimeProvider clock;
 
     public PublishRelease(IPublicationStore publications, IReleaseDirectory releases, IReleaseRenderer renderer,
-        IDocumentChangeReviewStore documentChangeReviews, IStatementReviewStore statementReviews, PublicationCatalog catalog,
-        TimeProvider clock)
+        PublishedRecordLoaders loaders, PublicationCatalog catalog, TimeProvider clock)
     {
         this.publications = publications;
         this.releases = releases;
         this.renderer = renderer;
+        this.loaders = loaders;
         this.clock = clock;
-        var rules = new PublishedRecordRules(catalog);
-        documentChanges = new(documentChangeReviews, renderer, new(rules));
-        statements = new(statementReviews, renderer, new(rules));
+        rules = new PublishedRecordRules(catalog);
     }
 
     public async Task<PublicationReleaseSummary> ExecuteAsync(ReviewActor actor, PublishReleaseRequest request,
@@ -49,7 +46,7 @@ public sealed class PublishRelease
         var now = clock.GetUtcNow();
         var state = await publications.GetStateAsync(cancellationToken);
         var previous = await PreviousRelease.LoadAsync(releases, state.Active, cancellationToken);
-        var additions = await LoadAdditionsAsync(references, previous, now, cancellationToken);
+        var additions = await LoadAdditionsAsync(references, new(previous, now, rules, renderer), cancellationToken);
         var requested = references.ToHashSet();
         var carried = previous.Entries.Where(entry => !requested.Contains(new(entry.Kind, entry.RecordId))).ToList();
         if (carried.Count + additions.Count > PublicationProtocol.MaximumRecordsPerRelease)
@@ -72,39 +69,25 @@ public sealed class PublishRelease
             ?? throw new InvalidDataException("A release was committed but none is active.");
     }
 
-    private static ImmutableArray<PublishedRecordReference> ValidateRequest(PublishReleaseRequest request)
+    private ImmutableArray<PublishedRecordReference> ValidateRequest(PublishReleaseRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
         ReviewValidation.ValidateIdempotencyKey(request.IdempotencyKey);
         var records = request.Records;
         if (records.IsDefaultOrEmpty || records.Length > MaximumRecords)
             throw new ArgumentException($"Select 1 to {MaximumRecords} records to publish.", nameof(request));
-        foreach (var record in records) ValidateId(record);
+        foreach (var record in records) loaders.For(record.Kind).ValidateId(record.RecordId);
         if (records.ToHashSet().Count != records.Length)
             throw new ArgumentException("Selected records must be distinct.", nameof(request));
         return records;
     }
 
-    private static void ValidateId(PublishedRecordReference record)
-    {
-        switch (record.Kind)
-        {
-            case PublishedRecordKind.DocumentChange:
-                ReviewValidation.ValidateDraftId(record.RecordId);
-                break;
-            case PublishedRecordKind.Statement:
-                ReviewValidation.ValidateCandidateId(record.RecordId);
-                break;
-            default:
-                throw new ArgumentException("Record kind is unknown.", nameof(record));
-        }
-    }
-
     private async Task<List<PendingRecord>> LoadAdditionsAsync(ImmutableArray<PublishedRecordReference> references,
-        PreviousRelease previous, DateTimeOffset now, CancellationToken cancellationToken)
+        PublicationBuild build, CancellationToken cancellationToken)
     {
-        var additions = await documentChanges.LoadAsync(IdsOf(references, PublishedRecordKind.DocumentChange), previous, now, cancellationToken);
-        additions.AddRange(await statements.LoadAsync(IdsOf(references, PublishedRecordKind.Statement), previous, now, cancellationToken));
+        var additions = new List<PendingRecord>(references.Length);
+        foreach (var loader in loaders.All)
+            additions.AddRange(await loader.LoadAsync(IdsOf(references, loader.Kind), build, cancellationToken));
         return additions;
     }
 

@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using System.Data;
 using CivicLens.Application.Actions;
 using CivicLens.Application.Paging;
+using CivicLens.Application.Publication;
 using CivicLens.Application.Review;
 using CivicLens.Core.Actions;
 using CivicLens.Core.Documents;
@@ -13,6 +14,7 @@ using CivicLens.Infrastructure.Collection.Jobs;
 using CivicLens.Infrastructure.Documents;
 using CivicLens.Infrastructure.Review;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 
 namespace CivicLens.Infrastructure.Actions;
 
@@ -24,6 +26,13 @@ public sealed class PostgresActionReviewStore(IDbContextFactory<CollectionAttemp
 
     private const string SaveOperation = "action-save";
     private const string DecideOperation = "action-decide";
+
+    public static PostgresActionReviewStore FromConnectionString(string connectionString)
+    {
+        _ = PostgresCollectionAttemptStore.FromConnectionString(connectionString);
+        var options = new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options;
+        return new(new PooledDbContextFactory<CollectionAttemptDbContext>(options));
+    }
 
     public async Task<ActionDraftRevision?> GetRevisionAsync(string recordId, int revisionNumber, CancellationToken cancellationToken)
     {
@@ -87,6 +96,34 @@ public sealed class PostgresActionReviewStore(IDbContextFactory<CollectionAttemp
         var needsAction = await Records.Drafts(db, DraftStatusFilter.NeedsAction).CountAsync(cancellationToken);
         var approved = await Records.Drafts(db, DraftStatusFilter.Approved).CountAsync(cancellationToken);
         return new(needsAction, approved);
+    }
+
+    public async Task<IReadOnlyList<UnpublishedApprovedAction>> ListUnpublishedApprovedAsync(int limit,
+        CancellationToken cancellationToken)
+    {
+        PageLimit.Validate(limit);
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
+        var records = await Records.ReadUnpublishedApprovedAsync(db, ActionReviewQueries.UnpublishedApproved, limit, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return [.. records.Select(record => new UnpublishedApprovedAction(ToReview(record.Draft, record.History), record.PublishedRevisionNumber))];
+    }
+
+    public async Task<IReadOnlyDictionary<string, PublishableAction>> GetForPublicationAsync(ImmutableArray<string> recordIds,
+        CancellationToken cancellationToken)
+    {
+        if (recordIds.IsDefaultOrEmpty || recordIds.Length > PublishRelease.MaximumRecords)
+            throw new ArgumentOutOfRangeException(nameof(recordIds));
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
+        var drafts = await Records.ReadDraftsAsync(db, [.. recordIds], cancellationToken);
+        var histories = await Records.ReadHistoriesAsync(db, drafts, cancellationToken);
+        var currents = histories.Values.Select(history => history.CurrentRevision!).ToArray();
+        var extractions = (await ReadExtractionsAsync(db, currents, cancellationToken)).ToImmutableDictionary(StringComparer.Ordinal);
+        await transaction.CommitAsync(cancellationToken);
+        foreach (var current in currents) current.ValidateAgainst(extractions);
+        return drafts.ToDictionary(draft => draft.RecordId,
+            draft => new PublishableAction(ToReview(draft, histories[draft.RecordId]), extractions), StringComparer.Ordinal);
     }
 
     private static ActionReview ToReview(ActionDraftRow draft, ReviewHistory<ActionDraftRevision> history) =>

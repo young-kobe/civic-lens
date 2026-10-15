@@ -18,8 +18,8 @@ internal sealed class PublishedStatementBuilder(PublishedRecordRules rules)
             Headline = revision.Headline,
             Summary = revision.Summary,
             StatementDate = revision.StatementDate,
-            StatementDateEvidence = revision.StatementDateEvidence is null ? null : Cite(revision.StatementDateEvidence, extraction),
-            Speakers = rules.MapOfficials(PublishedRecordKind.Statement, review.CandidateId, revision.SpeakerOfficialIds),
+            StatementDateEvidence = revision.StatementDateEvidence is null ? null : PublishedRecordRules.Cite(revision.StatementDateEvidence, extraction),
+            Speakers = rules.MapOfficials(review.CandidateId, revision.SpeakerOfficialIds),
             OtherSpeakers = [.. revision.OtherSpeakers],
             IssueIds = [.. revision.IssueIds],
             PolicyAreaIds = [.. revision.PolicyAreaIds],
@@ -39,15 +39,9 @@ internal sealed class PublishedStatementBuilder(PublishedRecordRules rules)
         return record;
     }
 
-    private static PublishedCitation Cite(StatementSpan statementSpan, DocumentExtraction extraction)
-    {
-        var span = new DocumentTextSpan(extraction, statementSpan.Start, statementSpan.Length);
-        return new() { ExtractionId = span.ExtractionId, Start = span.Start, Length = span.Length, Quote = span.Quote };
-    }
-
     private static PublishedQuotation Quote(StatementQuotation quotation, DocumentExtraction extraction)
     {
-        var citation = Cite(quotation.Span, extraction);
+        var citation = PublishedRecordRules.Cite(quotation.Span, extraction);
         return new()
         {
             ExtractionId = citation.ExtractionId,

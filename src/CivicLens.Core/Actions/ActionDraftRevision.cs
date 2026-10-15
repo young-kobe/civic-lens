@@ -10,7 +10,7 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
     string SourceId, int Congress, string BillType, int BillNumber, string CandidateId, DateTimeOffset CandidateUpdateDate,
     bool CandidateIncludesSummaries,
     string Fingerprint, string? SummaryVersion, StatementSpan? SummaryCitation, string? PolicyArea, StatementSpan? PolicyAreaCitation,
-    ImmutableArray<string> TrackedIssueIds, string IssueRevisionId, ImmutableArray<ActionSponsorship> Sponsorships, string BillTitle)
+    string? PolicyAreaId, ImmutableArray<string> TrackedIssueIds, string IssueRevisionId, ImmutableArray<ActionSponsorship> Sponsorships, string BillTitle)
     : IReviewRevision
 {
     public const int MaximumHeadlineLength = 256;
@@ -47,10 +47,14 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
         if (Sponsorships.Any(item => item.Citations.IsDefaultOrEmpty || item.Citations.Length > MaximumCitationsPerSponsorship ||
                 !item.Citations.All(IsBounded)))
             throw new ArgumentException("Each sponsorship needs bounded citations.");
+        if (Sponsorships.Any(item => item.WithdrawnOn < item.SponsoredOn))
+            throw new ArgumentException("A sponsorship cannot be withdrawn before it began.");
         if (SummaryCitation is { } summary && !IsBounded(summary) || PolicyAreaCitation is { } area && !IsBounded(area))
             throw new ArgumentException("Citations must be bounded spans.");
         if ((SummaryVersion is null) != (SummaryCitation is null) || (PolicyArea is null) != (PolicyAreaCitation is null))
             throw new ArgumentException("A summary version and a policy area each need their citation.");
+        if (PolicyAreaId is not null && (PolicyArea is null || string.IsNullOrWhiteSpace(PolicyAreaId)))
+            throw new ArgumentException("A policy area ID needs a policy area and text.");
         if (AuthorKind == ReviewAuthorKind.Person && TextOrigin != ActionTextOrigin.Person)
             throw new ArgumentException("A person revision holds person text.");
     }
@@ -122,7 +126,7 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
         HasSameBillFactsAs(other) && Sponsorships.SequenceEqual(other.Sponsorships);
 
     private bool HasSameBillFactsAs(ActionDraftRevision other) =>
-        SummaryVersion == other.SummaryVersion && PolicyArea == other.PolicyArea && IssueRevisionId == other.IssueRevisionId &&
+        SummaryVersion == other.SummaryVersion && PolicyArea == other.PolicyArea && PolicyAreaId == other.PolicyAreaId && IssueRevisionId == other.IssueRevisionId &&
         BillTitle == other.BillTitle && TrackedIssueIds.SequenceEqual(other.TrackedIssueIds);
 
     private static bool IsBounded(StatementSpan span) => span is { Start: >= 0, Length: > 0 } && LowercaseHex.Is(span.ExtractionId, 64);

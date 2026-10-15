@@ -34,6 +34,9 @@ public sealed partial record IssueConfiguration
         }
     }
 
+    public string? PolicyAreaIdFor(string? policyAreaName) =>
+        PolicyAreas.SingleOrDefault(area => string.Equals(area.Name, policyAreaName, StringComparison.Ordinal))?.Id;
+
     internal static void ValidateId(string? id, string kind)
     {
         if (string.IsNullOrWhiteSpace(id) || id.Length > MaximumIdLength || !IdPattern().IsMatch(id))

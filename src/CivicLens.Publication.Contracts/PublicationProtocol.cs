@@ -31,8 +31,12 @@ public static class PublicationProtocol
         UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow
     };
 
-    internal static bool IsRecordId(PublishedRecordKind kind, string? value) =>
-        IsLowerHex(value, kind == PublishedRecordKind.Statement ? 64 : 32);
+    internal static bool IsRecordId(PublishedRecordKind kind, string? value) => kind switch
+    {
+        PublishedRecordKind.DocumentChange => IsLowerHex(value, 32),
+        PublishedRecordKind.Statement or PublishedRecordKind.Action => IsSha256(value),
+        _ => false
+    };
 
     internal static bool IsSha256(string? value) => IsLowerHex(value, 64);
 

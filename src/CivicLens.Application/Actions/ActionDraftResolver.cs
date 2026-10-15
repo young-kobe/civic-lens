@@ -10,7 +10,7 @@ namespace CivicLens.Application.Actions;
 public static class ActionDraftResolver
 {
     public static AnalysisResolution<ActionDraftRevision> Resolve(string outputJson, ActionDraftEvidence evidence, ActionBillSnapshot snapshot,
-        ImmutableArray<string> trackedIssueIds, string issueRevisionId, string runId, DateTimeOffset createdAtUtc)
+        ImmutableArray<string> trackedIssueIds, string? policyAreaId, string issueRevisionId, string runId, DateTimeOffset createdAtUtc)
     {
         var output = Parse(outputJson);
         if (output is null)
@@ -24,30 +24,30 @@ public static class ActionDraftResolver
         CheckNames(output.Summary.Text, "summary", snapshot, errors);
         if (errors.Count > 0) return AnalysisResolution<ActionDraftRevision>.Reject(Bound(errors), false);
         return AnalysisResolution<ActionDraftRevision>.Accept(
-            Assemble(output, evidence, snapshot, trackedIssueIds, issueRevisionId, runId, createdAtUtc));
+            Assemble(output, evidence, snapshot, trackedIssueIds, policyAreaId, issueRevisionId, runId, createdAtUtc));
     }
 
     public static ActionDraftRevision CopyText(ActionDraftEvidence evidence, ActionBillSnapshot snapshot,
-        ImmutableArray<string> trackedIssueIds, string issueRevisionId, DateTimeOffset createdAtUtc)
+        ImmutableArray<string> trackedIssueIds, string? policyAreaId, string issueRevisionId, DateTimeOffset createdAtUtc)
     {
         var current = evidence.Current ?? throw new ArgumentException("Copied text needs a current revision.", nameof(evidence));
-        return Assemble(evidence, snapshot, trackedIssueIds, issueRevisionId, createdAtUtc,
+        return Assemble(evidence, snapshot, trackedIssueIds, policyAreaId, issueRevisionId, createdAtUtc,
             (current.Headline, current.Summary, current.TextOrigin, current.Suggestion));
     }
 
     private static ActionDraftRevision Assemble(ActionDraftOutput output, ActionDraftEvidence evidence, ActionBillSnapshot snapshot,
-        ImmutableArray<string> trackedIssueIds, string issueRevisionId, string runId, DateTimeOffset createdAtUtc)
+        ImmutableArray<string> trackedIssueIds, string? policyAreaId, string issueRevisionId, string runId, DateTimeOffset createdAtUtc)
     {
         var current = evidence.Current;
         var text = current?.TextOrigin == ActionTextOrigin.Person
             ? (current.Headline, current.Summary, ActionTextOrigin.Person,
                 new ActionTextSuggestion(output.Headline.Text, output.Summary.Text, runId, snapshot.Fingerprint))
             : (output.Headline.Text, output.Summary.Text, ActionTextOrigin.Model, (ActionTextSuggestion?)null);
-        return Assemble(evidence, snapshot, trackedIssueIds, issueRevisionId, createdAtUtc, text);
+        return Assemble(evidence, snapshot, trackedIssueIds, policyAreaId, issueRevisionId, createdAtUtc, text);
     }
 
     private static ActionDraftRevision Assemble(ActionDraftEvidence evidence, ActionBillSnapshot snapshot,
-        ImmutableArray<string> trackedIssueIds, string issueRevisionId, DateTimeOffset createdAtUtc,
+        ImmutableArray<string> trackedIssueIds, string? policyAreaId, string issueRevisionId, DateTimeOffset createdAtUtc,
         (string Headline, string Summary, ActionTextOrigin Origin, ActionTextSuggestion? Suggestion) text)
     {
         var current = evidence.Current;
@@ -57,7 +57,7 @@ public static class ActionDraftResolver
             candidate.SourceId, candidate.Congress, candidate.BillType, candidate.BillNumber, candidate.CandidateId, candidate.UpdateDate,
             candidate.IncludesSummaries,
             snapshot.Fingerprint, snapshot.SummaryVersion, snapshot.SummaryCitation, snapshot.Bill.PolicyArea, snapshot.PolicyAreaCitation,
-            trackedIssueIds, issueRevisionId, snapshot.Sponsorships, snapshot.Bill.Title);
+            policyAreaId, trackedIssueIds, issueRevisionId, snapshot.Sponsorships, snapshot.Bill.Title);
         revision.ValidateAsAnalysisRevision(current);
         return revision;
     }
