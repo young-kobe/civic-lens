@@ -161,6 +161,7 @@ try
         var issues = StatementIssueRubric.FromEnvironment();
         if (issues is null && workerConfiguration.Sources.Any(source => source.Enabled && source.ApiParser == ApiParser.CongressBillList))
             throw new ArgumentException("Worker requires CIVIC_LENS_ISSUES_CONFIG when a Congress.gov bill list source is enabled.");
+        var evidenceConcurrency = EvidenceProcessingConfiguration.ReadConcurrency();
         var jobs = CreateJobs();
         var attempts = CreateDatabase();
         var connectionString = Environment.GetEnvironmentVariable("CIVIC_LENS_DATABASE")!;
@@ -190,7 +191,8 @@ try
             processingStore,
             new ExtractDocument(attempts, textExtractor, extractions),
             new GetDocumentHistory(PostgresDocumentHistoryStore.FromConnectionString(connectionString)),
-            new CompareDocuments(comparisons));
+            new CompareDocuments(comparisons),
+            evidenceConcurrency);
         await using var wakeup = PostgresCollectionPipelineWakeup.FromConnectionString(connectionString);
         return await CollectionWorkerCommand.ExecuteAsync(args, queue, jobs, attempts, cancellation.Token, processing, wakeup, jobs,
             [.. new[]

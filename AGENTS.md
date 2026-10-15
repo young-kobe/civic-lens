@@ -8,7 +8,7 @@ Entry points: src/CivicLens.Host/Program.cs and src/CivicLens.Collector/Program.
 
 ## Product and ownership
 
-Civic Lens collects evidence for statements/actions, document changes, and weekly briefs. Officials, issues, and supported sources are configuration, never per-person branches. Collection and review run locally; public serving reads published releases.
+Civic Lens collects evidence for statements/actions, document changes, and weekly briefs. Officials, issues, and supported sources are configuration, never per-person branches. Collection, review, and public serving all run in the cloud; the dev machine runs them only during development. Public serving reads published releases only.
 
 Keep these dependencies acyclic and exact (enforced by tests):
 

@@ -13,10 +13,13 @@ public sealed class EvidenceProcessingWorker(
     IEvidenceProcessingStore processing,
     ExtractDocument extract,
     GetDocumentHistory history,
-    CompareDocuments compare)
+    CompareDocuments compare,
+    int concurrency)
 {
     public const int MaximumBatchSize = 100;
     private const int MaximumAttempts = 5;
+
+    private readonly int degree = EvidenceProcessingPolicy.ValidateConcurrency(concurrency);
 
     public async Task<EvidenceProcessingWorkerResult> ExecuteAsync(string artifactRoot, int batchSize, TimeSpan leaseDuration,
         CancellationToken cancellationToken)
@@ -27,16 +30,19 @@ public sealed class EvidenceProcessingWorker(
         var failures = 0;
         var progress = 0;
         var eligible = await processing.GetEligibleAsync(batchSize, cancellationToken);
-        foreach (var record in eligible)
+        await Parallel.ForEachAsync(eligible, new ParallelOptions
         {
-            cancellationToken.ThrowIfCancellationRequested();
+            MaxDegreeOfParallelism = degree,
+            CancellationToken = cancellationToken
+        }, async (record, token) =>
+        {
             try
             {
-                if (await ProcessAsync(record, artifactRoot, leaseDuration, cancellationToken)) progress++;
+                if (await ProcessAsync(record, artifactRoot, leaseDuration, token)) Interlocked.Increment(ref progress);
             }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
-            catch (Exception exception) when (WorkerLoop.IsRecoverable(exception)) { failures++; }
-        }
+            catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
+            catch (Exception exception) when (WorkerLoop.IsRecoverable(exception)) { Interlocked.Increment(ref failures); }
+        });
         return new(progress, failures);
     }
 

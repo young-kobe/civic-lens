@@ -102,6 +102,7 @@ Production hosting is agreed but not implemented. The [roadmap](../roadmap.md) h
 - Containers host the application, the collection and background jobs, and PostgreSQL with persistent storage.
 - Terraform manages the infrastructure, and CI automates deployment.
 - Production collection, review, publication, and recovery run without the developer workstation. Local development stays supported.
+- One CPX21 is the starting point. Separate services, or services split across cloud providers, are open in [D-08](../roadmap.md#pending-decisions).
 - Both reviewers reach the shared workspace through their browsers. Live Auth0 tenant login and proxy verification happen in the infrastructure stage.
 - Retained evidence and database backups need off-server storage and a tested restoration.
 - A static file server on the same CPX21 serves approved releases. It is separate from the operational application and storage, and reads only published files.
