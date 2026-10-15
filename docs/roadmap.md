@@ -24,8 +24,7 @@ Each item gives its outcome, what it depends on, and where the design lives. Pre
 
 ### Now
 
-- R-09: Decide release growth and the search index. Depends on: none stated. It must come before R-10. [Publication](architecture/publication.md#limits-and-planned-work)
-- R-10: Action publication (action step 5). Depends on: R-09. [Actions](architecture/actions.md#limits-and-planned-work)
+- R-10: Action publication (action step 5). Depends on: none stated. [Actions](architecture/actions.md#limits-and-planned-work)
 
 ### Next
 
@@ -56,8 +55,6 @@ Each item gives its outcome, what it depends on, and where the design lives. Pre
 
 ## Pending decisions
 
-- D-01: Public search index: where it is built and served, how large it can grow, and how it stays bounded. Decide before R-10. [Publication](architecture/publication.md#limits-and-planned-work)
-- D-02: Release growth: a release is rebuilt in full and has a record limit that action volume passes within weeks. Decide before R-10. [Publication](architecture/publication.md#limits-and-planned-work)
 - D-03: Global search and expanded reviewer source visibility. [Review](architecture/review.md#limits-and-planned-work)
 - D-04: Bounded storage: store each distinct extraction text once, keyed by its hash. Keep raw capture bytes forever only when a gated change, draft, or release uses them or they are the latest version. Delete other bytes after a set period and keep the observation record. [Collection](architecture/collection.md#limits-and-planned-work)
 - D-05: Classification ladder: the uncertainty signal for each tier, where the escalation policy and thresholds live, and the stronger model for the reasoning tier. [Analysis](architecture/analysis.md#limits-and-planned-work)

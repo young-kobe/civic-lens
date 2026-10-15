@@ -128,6 +128,10 @@ tr.is-new td { animation: row-in 1.6s var(--ease); }
 .search { width: min(100%, 280px); min-height: 30px; padding: 0 10px; border: 0; border-radius: var(--r-control); background: var(--surface); box-shadow: inset 0 0 0 1px var(--line-strong); font-size: var(--t-sm); transition: box-shadow var(--fast); }
 .search:hover { box-shadow: inset 0 0 0 1px var(--muted); }
 .search:focus-visible { outline: none; box-shadow: inset 0 0 0 1px var(--focus), 0 0 0 3px var(--focus-halo); }
+.release-search { display: grid; gap: var(--s3); }
+.search-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: var(--s3); }
+.search-results { display: grid; gap: var(--s2); margin: 0; padding: 0; list-style: none; }
+.search-results li { display: grid; gap: 2px; }
 
 .segmented { position: relative; display: inline-flex; gap: 2px; padding: 2px; border-radius: 8px; background: var(--raised); box-shadow: inset 0 0 0 1px var(--line); }
 .segmented-item { position: relative; z-index: 1; display: inline-flex; align-items: center; gap: 6px; border: 0; border-radius: var(--r-control); background: transparent; padding: 4px 10px; color: var(--muted); font-size: var(--t-xs); font-weight: 600; text-decoration: none; cursor: pointer; transition: color var(--fast); }

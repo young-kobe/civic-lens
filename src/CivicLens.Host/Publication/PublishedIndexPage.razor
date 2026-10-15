@@ -1,7 +1,33 @@
+@using System.Text.Json
 @using CivicLens.Publication.Contracts
 
 <PublicPage Title="Published records">
     <PageHeader Title="Published records" Lede="@($"Release {Release.ReleaseNumber}, published {Moment.Full(Release.PublishedAtUtc)}.")" />
+    <Panel Title="Search records" Padded="true" hidden>
+        <form class="release-search" data-release-search="@PublicationProtocol.ManifestPath"
+              data-record-page="@PublicationProtocol.RecordPagePath("{id}")">
+            <input class="search" type="search" name="text" aria-label="Search headlines" placeholder="Search headlines" />
+            <div class="search-filters">
+                <Field Label="Kind" For="search-kind">
+                    <select id="search-kind" name="kind">
+                        <option value="">Any</option>
+                        @foreach (var kind in Enum.GetValues<PublishedRecordKind>())
+                        {
+                            <option value="@KindValue(kind)">@PublishedRecordLabels.Kind(kind)</option>
+                        }
+                    </select>
+                </Field>
+                <Field Label="Official" For="search-official"><select id="search-official" name="official"><option value="">Any</option></select></Field>
+                <Field Label="Issue" For="search-issue"><select id="search-issue" name="issue"><option value="">Any</option></select></Field>
+                <Field Label="Policy area" For="search-policy-area"><select id="search-policy-area" name="policyArea"><option value="">Any</option></select></Field>
+                <Field Label="From" For="search-from"><input id="search-from" name="from" type="date" /></Field>
+                <Field Label="To" For="search-to"><input id="search-to" name="to" type="date" /></Field>
+            </div>
+            <p class="field-hint">A date filter matches the date of the event. Records without one do not match.</p>
+            <p class="field-hint" role="status" data-search-status></p>
+            <ol class="search-results" data-search-results></ol>
+        </form>
+    </Panel>
     <Panel Label="Records">
         <DataTable Items="PageRecords" Caption="Published records">
             <Head><th>Record</th><th class="fit num hide-narrow">First published</th></Head>
@@ -20,6 +46,9 @@
 @code {
     [Parameter, EditorRequired] public PublicationRelease Release { get; set; } = default!;
     [Parameter, EditorRequired] public int Page { get; set; }
+
+    private static string KindValue(PublishedRecordKind kind) =>
+        JsonSerializer.Serialize(kind, PublicationProtocol.JsonOptions).Trim('"');
 
     private int PageCount => PublicationProtocol.IndexPageCount(Release.Records.Length);
 

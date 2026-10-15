@@ -23,8 +23,7 @@ internal sealed class DocumentChangeRecordLoader(IDocumentChangeReviewStore revi
                 review.Decisions, review.UnresolvedConcerns);
             PublishedRecordRules.RequireNotPublishedAt(PublishedRecordKind.DocumentChange, draftId, revisionNumber, previous);
             var record = builder.Build(addition, previous.Find(PublishedRecordKind.DocumentChange, draftId), now);
-            pending.Add(PendingRecord.Create(PublishedRecordKind.DocumentChange, review.ReviewStateVersion, record, record.RecordId,
-                record.RevisionNumber, record.Headline, record.FirstPublishedAtUtc,
+            pending.Add(PendingRecord.Create(record.ToEntry(), review.ReviewStateVersion, record,
                 await renderer.RenderRecordAsync(record, cancellationToken)));
         }
         return pending;

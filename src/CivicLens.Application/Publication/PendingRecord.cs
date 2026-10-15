@@ -3,23 +3,13 @@ using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Application.Publication;
 
-internal sealed record PendingRecord(PublishedRecordKind Kind, string RecordId, int RevisionNumber, int ReviewStateVersion,
-    string Headline, DateTimeOffset FirstPublishedAtUtc, byte[] Json, string Page)
+internal sealed record PendingRecord(PublishedRecordEntry Entry, int ReviewStateVersion, byte[] Json, string Page)
 {
-    public static PendingRecord Create<TRecord>(PublishedRecordKind kind, int reviewStateVersion, TRecord record,
-        string recordId, int revisionNumber, string headline, DateTimeOffset firstPublishedAtUtc, string page)
+    public static PendingRecord Create<TRecord>(PublishedRecordEntry entry, int reviewStateVersion, TRecord record, string page)
         where TRecord : class =>
-        new(kind, recordId, revisionNumber, reviewStateVersion, headline, firstPublishedAtUtc,
-            JsonSerializer.SerializeToUtf8Bytes(record, PublicationProtocol.JsonOptions), page);
+        new(entry, reviewStateVersion, JsonSerializer.SerializeToUtf8Bytes(record, PublicationProtocol.JsonOptions), page);
 
-    public PublishedRecordEntry Entry => new()
-    {
-        Kind = Kind,
-        RecordId = RecordId,
-        RevisionNumber = RevisionNumber,
-        Headline = Headline,
-        FirstPublishedAtUtc = FirstPublishedAtUtc
-    };
+    public string RecordId => Entry.RecordId;
 
-    public ReviewStateExpectation Expectation => new(Kind, RecordId, RevisionNumber, ReviewStateVersion);
+    public ReviewStateExpectation Expectation => new(Entry.Kind, Entry.RecordId, Entry.RevisionNumber, ReviewStateVersion);
 }

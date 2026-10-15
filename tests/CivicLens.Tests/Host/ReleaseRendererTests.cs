@@ -102,6 +102,22 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
+    public async Task IndexPageSearchReadsTheReleaseManifestAndStaysHiddenUntilScriptRuns()
+    {
+        var html = await new ReleaseRenderer().RenderIndexAsync(ReleaseOf(1), 1, CancellationToken.None);
+        var document = new HtmlParser().ParseDocument(html);
+
+        var form = document.QuerySelector("form[data-release-search]")!;
+        Assert.Equal(PublicationProtocol.ManifestPath, form.GetAttribute("data-release-search"));
+        Assert.Equal(PublicationProtocol.RecordPagePath("{id}"), form.GetAttribute("data-record-page"));
+        Assert.True(form.Closest("section")!.HasAttribute("hidden"));
+        Assert.Equal(["", "documentChange", "statement"],
+            document.QuerySelectorAll("#search-kind option").Select(option => option.GetAttribute("value")));
+        Assert.Equal(["text", "kind", "official", "issue", "policyArea", "from", "to"],
+            form.QuerySelectorAll("input, select").Select(control => control.GetAttribute("name")));
+    }
+
+    [Fact]
     public async Task IndexPageListsRecordsWithRelativeLinks()
     {
         var release = new PublicationRelease
