@@ -1,3 +1,5 @@
+using CivicLens.Core.Documents;
+
 namespace CivicLens.Core.Statements;
 
-public sealed record StatementQuotation(StatementSpan Span, StatementQuotationKind Kind);
+public sealed record StatementQuotation(SourceSpan Span, StatementQuotationKind Kind);

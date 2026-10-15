@@ -1,10 +1,10 @@
 using System.Collections.Immutable;
 using CivicLens.Application.Collection.Bills;
 using CivicLens.Core.Actions;
-using CivicLens.Core.Statements;
+using CivicLens.Core.Documents;
 
 namespace CivicLens.Application.Actions;
 
 public sealed record ActionBillSnapshot(CongressBill Bill, ImmutableArray<ActionSponsorship> Sponsorships, string Fingerprint,
-    CongressBillSummaryText? NewestSummary, string? SummaryVersion, StatementSpan? SummaryCitation, StatementSpan? PolicyAreaCitation,
+    CongressBillSummaryText? NewestSummary, string? SummaryVersion, SourceSpan? SummaryCitation, SourceSpan? PolicyAreaCitation,
     ImmutableDictionary<string, string> OfficialNames, ImmutableArray<string> ExcludedNames);

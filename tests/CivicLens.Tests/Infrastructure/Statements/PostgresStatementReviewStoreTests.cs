@@ -2,6 +2,7 @@ using System.Data.Common;
 using CivicLens.Application.Analysis;
 using CivicLens.Application.Review;
 using CivicLens.Application.Statements;
+using CivicLens.Core.Documents;
 using CivicLens.Core.Review;
 using CivicLens.Core.Statements;
 using CivicLens.Infrastructure.Collection;
@@ -432,7 +433,7 @@ public sealed class PostgresStatementReviewStoreTests(PostgresCollection postgre
     private async Task<SaveStatementDraftRequest> SaveRequestAsync(string candidate, int expectedRevision, string key)
     {
         var extraction = (await drafts.ReadEvidenceAsync(candidate, default))!.Article.Extraction;
-        var span = new StatementSpan(extraction.ExtractionId, extraction.Text.IndexOf(Quote, StringComparison.Ordinal), Quote.Length);
+        var span = new SourceSpan(extraction.ExtractionId, extraction.Text.IndexOf(Quote, StringComparison.Ordinal), Quote.Length);
         return new(candidate, expectedRevision, "Warren announces a rent cap", "The senator announced a rent cap for tenants.", null, null,
             [Warren], [], [RentIssue], [HousingArea], [span], key);
     }

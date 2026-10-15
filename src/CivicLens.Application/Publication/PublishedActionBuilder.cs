@@ -1,6 +1,6 @@
 using CivicLens.Application.Actions;
 using CivicLens.Core.Actions;
-using CivicLens.Core.Statements;
+using CivicLens.Core.Documents;
 using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Application.Publication;
@@ -11,7 +11,7 @@ internal sealed class PublishedActionBuilder(PublishedRecordRules rules)
     {
         var (review, extractions) = action;
         var revision = review.CurrentRevision;
-        PublishedCitation Cite(StatementSpan span) => PublishedRecordRules.Cite(span, extractions[span.ExtractionId]);
+        PublishedCitation Cite(SourceSpan span) => PublishedRecordRules.Cite(span, extractions[span.ExtractionId]);
 
         var record = new PublishedAction
         {

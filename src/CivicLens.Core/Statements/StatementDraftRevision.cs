@@ -5,7 +5,7 @@ using CivicLens.Core.Review;
 namespace CivicLens.Core.Statements;
 
 public sealed record StatementDraftRevision(string CandidateId, int RevisionNumber, string AuthorSubject, DateTimeOffset CreatedAtUtc,
-    string Headline, string Summary, DateOnly? StatementDate, StatementSpan? StatementDateEvidence,
+    string Headline, string Summary, DateOnly? StatementDate, SourceSpan? StatementDateEvidence,
     ImmutableArray<string> SpeakerOfficialIds, ImmutableArray<string> OtherSpeakers, ImmutableArray<string> IssueIds,
     ImmutableArray<string> PolicyAreaIds, ImmutableArray<StatementQuotation> Quotations, ImmutableArray<string> BillNumbers) : IReviewRevision
 {
@@ -78,7 +78,7 @@ public sealed record StatementDraftRevision(string CandidateId, int RevisionNumb
         }
     }
 
-    private static bool IsBoundedSpan(StatementSpan span) =>
+    private static bool IsBoundedSpan(SourceSpan span) =>
         span is { Start: >= 0, Length: > 0 and <= MaximumQuotationLength };
 
     private static void ValidateText(string text, int maximumLength, string name)

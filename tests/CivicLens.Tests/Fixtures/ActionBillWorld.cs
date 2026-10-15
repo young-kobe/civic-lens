@@ -99,7 +99,7 @@ internal sealed class ActionBillWorld
 
     public static string ExtractionIdOf(string jobId) => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(jobId)));
 
-    public string Quote(CivicLens.Core.Statements.StatementSpan span)
+    public string Quote(CivicLens.Core.Documents.SourceSpan span)
     {
         var page = pages.Single(item => ExtractionIdOf(item.JobId) == span.ExtractionId);
         return page.Text.Substring(span.Start, span.Length);

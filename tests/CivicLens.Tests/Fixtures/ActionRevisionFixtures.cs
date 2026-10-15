@@ -1,6 +1,6 @@
 using System.Collections.Immutable;
 using CivicLens.Core.Actions;
-using CivicLens.Core.Statements;
+using CivicLens.Core.Documents;
 
 namespace CivicLens.Tests.Fixtures;
 
@@ -31,6 +31,6 @@ internal static class ActionRevisionFixtures
         TextOrigin = ActionTextOrigin.Person
     };
 
-    public static ImmutableArray<StatementSpan> Spans(params (int Start, int Length)[] spans) =>
-        [.. spans.Select(span => new StatementSpan(ExtractionId, span.Start, span.Length))];
+    public static ImmutableArray<SourceSpan> Spans(params (int Start, int Length)[] spans) =>
+        [.. spans.Select(span => new SourceSpan(ExtractionId, span.Start, span.Length))];
 }

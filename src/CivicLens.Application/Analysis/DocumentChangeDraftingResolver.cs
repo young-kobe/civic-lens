@@ -49,7 +49,7 @@ public static class DocumentChangeDraftingResolver
         catch (JsonException) { return null; }
     }
 
-    private static ImmutableArray<DocumentChangeCitation> ResolveCitations(ImmutableArray<DocumentChangeDraftingOutputCitation> citations,
+    private static ImmutableArray<SourceSpan> ResolveCitations(ImmutableArray<DocumentChangeDraftingOutputCitation> citations,
         DocumentChangeAnalysisEvidence evidence, List<string> errors, List<string> citationErrors)
     {
         if (citations.IsEmpty || citations.Length > DocumentChangeDraftRevision.MaximumCitations)
@@ -57,7 +57,7 @@ public static class DocumentChangeDraftingResolver
             errors.Add($"Give 1 to {DocumentChangeDraftRevision.MaximumCitations} citations.");
             return default;
         }
-        var resolved = ImmutableArray.CreateBuilder<DocumentChangeCitation>(citations.Length);
+        var resolved = ImmutableArray.CreateBuilder<SourceSpan>(citations.Length);
         for (var index = 0; index < citations.Length; index++)
         {
             var citation = ResolveCitation(citations[index], index, evidence, errors, citationErrors);
@@ -68,7 +68,7 @@ public static class DocumentChangeDraftingResolver
         return resolved.Count == citations.Length ? resolved.MoveToImmutable() : default;
     }
 
-    private static DocumentChangeCitation? ResolveCitation(DocumentChangeDraftingOutputCitation citation, int index, DocumentChangeAnalysisEvidence evidence,
+    private static SourceSpan? ResolveCitation(DocumentChangeDraftingOutputCitation citation, int index, DocumentChangeAnalysisEvidence evidence,
         List<string> errors, List<string> citationErrors)
     {
         var hunks = evidence.Comparison.Comparison.Hunks;
@@ -98,7 +98,7 @@ public static class DocumentChangeDraftingResolver
         return Locate(citation, index, window, windowStart, extraction, errors, citationErrors);
     }
 
-    private static DocumentChangeCitation? Locate(DocumentChangeDraftingOutputCitation citation, int index, string window, int windowStart,
+    private static SourceSpan? Locate(DocumentChangeDraftingOutputCitation citation, int index, string window, int windowStart,
         DocumentExtraction extraction, List<string> errors, List<string> citationErrors)
     {
         var found = UniqueQuote.Find(window, citation.Quote, out var first);
@@ -122,8 +122,8 @@ public static class DocumentChangeDraftingResolver
         return new(span.ExtractionId, span.Start, span.Length);
     }
 
-    private static (DateOnly Date, DocumentChangeCitation Evidence)? ResolveChangeDate(DocumentChangeDraftingOutputChangeDate? changeDate,
-        ImmutableArray<DocumentChangeDraftingOutputCitation> quotes, ImmutableArray<DocumentChangeCitation> citations, List<string> errors,
+    private static (DateOnly Date, SourceSpan Evidence)? ResolveChangeDate(DocumentChangeDraftingOutputChangeDate? changeDate,
+        ImmutableArray<DocumentChangeDraftingOutputCitation> quotes, ImmutableArray<SourceSpan> citations, List<string> errors,
         List<string> citationErrors)
     {
         if (changeDate is null) return null;

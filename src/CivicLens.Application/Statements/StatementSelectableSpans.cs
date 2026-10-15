@@ -13,7 +13,7 @@ public static class StatementSelectableSpans
         ArgumentNullException.ThrowIfNull(extraction);
         var options = new List<StatementSelectableSpan>();
         var seen = new HashSet<(int Start, int Length)>();
-        void Add(StatementSpan span, StatementSpanOrigin origin)
+        void Add(SourceSpan span, StatementSpanOrigin origin)
         {
             if (options.Count < Maximum && span.Length <= StatementDraftRevision.MaximumQuotationLength && seen.Add((span.Start, span.Length)))
                 options.Add(new(span, extraction.Text.Substring(span.Start, span.Length), origin));
@@ -25,12 +25,12 @@ public static class StatementSelectableSpans
         return [.. options];
     }
 
-    private static IEnumerable<StatementSpan> SavedSpans(StatementDraftRevision? saved) =>
+    private static IEnumerable<SourceSpan> SavedSpans(StatementDraftRevision? saved) =>
         saved is null ? [] : saved.Quotations.Select(quotation => quotation.Span)
             .Concat(saved.StatementDateEvidence is { } evidence ? [evidence] : []);
 
-    private static IEnumerable<StatementSpan> Paragraphs(DocumentExtraction extraction) =>
+    private static IEnumerable<SourceSpan> Paragraphs(DocumentExtraction extraction) =>
         DocumentLines.Split(extraction.Text, Maximum).Select(line => (line.Start, Text: line.Text.TrimEnd('\n')))
             .Where(line => line.Text.Trim().Length > 0)
-            .Select(line => new StatementSpan(extraction.ExtractionId, line.Start, line.Text.Length));
+            .Select(line => new SourceSpan(extraction.ExtractionId, line.Start, line.Text.Length));
 }

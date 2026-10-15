@@ -1,6 +1,5 @@
 using CivicLens.Application.Review;
 using CivicLens.Core.Documents;
-using CivicLens.Core.Review;
 using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Application.Publication;
@@ -49,7 +48,7 @@ internal sealed class PublishedRecordBuilder(PublishedRecordRules rules)
         return record;
     }
 
-    private static PublishedCitation Cite(DocumentChangeCitation citation, DocumentExtraction before, DocumentExtraction after)
+    private static PublishedCitation Cite(SourceSpan citation, DocumentExtraction before, DocumentExtraction after)
     {
         var extraction = citation.ExtractionId == before.ExtractionId ? before
             : citation.ExtractionId == after.ExtractionId ? after

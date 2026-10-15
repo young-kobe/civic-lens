@@ -1,7 +1,6 @@
 using System.Collections.Immutable;
 using CivicLens.Core.Documents;
 using CivicLens.Core.Review;
-using CivicLens.Core.Statements;
 using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Application.Publication;
@@ -16,7 +15,7 @@ internal sealed class PublishedRecordRules(PublicationCatalog catalog)
             .Where(item => item.RevisionNumber == revisionNumber && item.Kind == ReviewDecisionKind.Approve)
             .MaxBy(item => item.ReviewStateVersion)!.CreatedAtUtc;
 
-    public static PublishedCitation Cite(StatementSpan statementSpan, DocumentExtraction extraction)
+    public static PublishedCitation Cite(SourceSpan statementSpan, DocumentExtraction extraction)
     {
         var span = new DocumentTextSpan(extraction, statementSpan.Start, statementSpan.Length);
         return new() { ExtractionId = span.ExtractionId, Start = span.Start, Length = span.Length, Quote = span.Quote };

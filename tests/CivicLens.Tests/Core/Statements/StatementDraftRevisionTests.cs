@@ -9,7 +9,7 @@ public sealed class StatementDraftRevisionTests
 {
     private const string Text = "Senator Warren announced a rent cap. \"We act now,\" she said.";
     private static readonly string ExtractionId = new('e', 64);
-    private static readonly StatementSpan Span = new(ExtractionId, 0, 14);
+    private static readonly SourceSpan Span = new(ExtractionId, 0, 14);
     private static readonly DateOnly Date = new(2026, 10, 3);
 
     private static StatementDraftRevision Revision(string author = "reviewer") =>

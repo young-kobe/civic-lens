@@ -1,10 +1,10 @@
 using System.Collections.Immutable;
-using CivicLens.Core.Statements;
+using CivicLens.Core.Documents;
 
 namespace CivicLens.Core.Actions;
 
 public sealed record ActionSponsorship(string PersonId, string BioguideId, ActionSponsorshipRole Role, bool IsOriginal,
-    DateOnly SponsoredOn, DateOnly? WithdrawnOn, ImmutableArray<StatementSpan> Citations)
+    DateOnly SponsoredOn, DateOnly? WithdrawnOn, ImmutableArray<SourceSpan> Citations)
 {
     public bool Equals(ActionSponsorship? other) =>
         other is not null && PersonId == other.PersonId && BioguideId == other.BioguideId && Role == other.Role &&

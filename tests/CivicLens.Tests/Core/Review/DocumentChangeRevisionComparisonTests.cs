@@ -1,12 +1,13 @@
 using System.Collections.Immutable;
+using CivicLens.Core.Documents;
 using CivicLens.Core.Review;
 
 namespace CivicLens.Tests.Core.Review;
 
 public sealed class DocumentChangeRevisionComparisonTests
 {
-    private static readonly DocumentChangeCitation First = new(new string('a', 64), 0, 5);
-    private static readonly DocumentChangeCitation Second = new(new string('a', 64), 10, 5);
+    private static readonly SourceSpan First = new(new string('a', 64), 0, 5);
+    private static readonly SourceSpan Second = new(new string('a', 64), 10, 5);
 
     private static DocumentChangeDraftRevision Original() => new(new string('d', 32), 1, new string('c', 64),
         ReviewAuthor.AnalysisSubject, DateTimeOffset.UnixEpoch, "Headline", "Summary", "Significance", "Limits", "Institution",

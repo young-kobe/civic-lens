@@ -1,3 +1,4 @@
+using CivicLens.Core.Documents;
 using CivicLens.Core.Review;
 
 namespace CivicLens.Application.Review;
@@ -16,7 +17,7 @@ public sealed class CreateDocumentChangeDraft(IDocumentChangeReviewStore store)
             DateTimeOffset.UtcNow, "", "", null, null, "", null, null,
             System.Collections.Immutable.ImmutableArray<string>.Empty,
             System.Collections.Immutable.ImmutableArray<string>.Empty,
-            System.Collections.Immutable.ImmutableArray<DocumentChangeCitation>.Empty);
+            System.Collections.Immutable.ImmutableArray<SourceSpan>.Empty);
         return await store.CreateAsync(actor.Subject, revision, request.IdempotencyKey,
             ReviewValidation.HashPayload(request), cancellationToken);
     }

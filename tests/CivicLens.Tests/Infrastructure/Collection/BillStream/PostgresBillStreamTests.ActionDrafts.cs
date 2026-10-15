@@ -8,7 +8,7 @@ using CivicLens.Application.Collection.Bills;
 using CivicLens.Application.Collection.Processing;
 using CivicLens.Core.Actions;
 using CivicLens.Core.Analysis;
-using CivicLens.Core.Statements;
+using CivicLens.Core.Documents;
 using CivicLens.Infrastructure.Actions;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Tests.Application.Actions;
@@ -512,7 +512,7 @@ public sealed partial class PostgresBillStreamTests
         return new(RecordId, number, "civic-lens:analysis", UpdatedAt.AddMinutes(number), "Headline", "Summary.", ActionTextOrigin.Model, null,
             SourceId, 119, "hr", 7, candidate, UpdatedAt, includesSummaries, new string('d', 64), null, null, null, null, null, [], BillGateFixtures.Revision().Id,
             [new("warren", "W000817", ActionSponsorshipRole.Sponsor, false, new DateOnly(2025, 1, 3), null,
-                [new StatementSpan(extraction, 0, 5)])], "A bill");
+                [new SourceSpan(extraction, 0, 5)])], "A bill");
     }
 
     private async Task<IReadOnlyList<(string CandidateId, string Task, string Status, string? ErrorCode, int Attempts)>> QueueAsync()

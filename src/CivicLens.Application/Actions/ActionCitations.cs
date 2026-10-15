@@ -1,22 +1,21 @@
 using System.Collections.Immutable;
 using CivicLens.Application.Collection.Bills;
 using CivicLens.Core.Documents;
-using CivicLens.Core.Statements;
 
 namespace CivicLens.Application.Actions;
 
 internal static class ActionCitations
 {
-    public static StatementSpan? Line(ActionDraftPage page, ImmutableArray<DocumentLine> lines, string prefix)
+    public static SourceSpan? Line(ActionDraftPage page, ImmutableArray<DocumentLine> lines, string prefix)
     {
         var line = lines.FirstOrDefault(item => item.Text.StartsWith(prefix, StringComparison.Ordinal));
         return line is null ? null : Span(page, line);
     }
 
-    public static IReadOnlyDictionary<string, StatementSpan> ExactLines(ActionDraftPage page) =>
+    public static IReadOnlyDictionary<string, SourceSpan> ExactLines(ActionDraftPage page) =>
         DocumentLines.Split(page.Text).DistinctBy(Content).ToDictionary(Content, line => Span(page, line), StringComparer.Ordinal);
 
-    public static StatementSpan? SummaryBlock(ActionDraftPage page, CongressBillSummary summary)
+    public static SourceSpan? SummaryBlock(ActionDraftPage page, CongressBillSummary summary)
     {
         var version = CongressBillRenderer.SummaryVersionLine(summary);
         var updated = CongressBillRenderer.SummaryUpdatedLine(summary);
@@ -32,7 +31,7 @@ internal static class ActionCitations
         return null;
     }
 
-    private static StatementSpan Span(ActionDraftPage page, DocumentLine line) => new(page.ExtractionId, line.Start, Content(line).Length);
+    private static SourceSpan Span(ActionDraftPage page, DocumentLine line) => new(page.ExtractionId, line.Start, Content(line).Length);
 
     private static string Content(DocumentLine line) => line.Text.TrimEnd('\n');
 }

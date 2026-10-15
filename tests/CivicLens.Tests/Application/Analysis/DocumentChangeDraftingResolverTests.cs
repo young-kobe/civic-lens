@@ -170,6 +170,6 @@ public sealed class DocumentChangeDraftingResolverTests
     private static DocumentChangeDraftingResolution Resolve(string output, DocumentChangeAnalysisEvidence evidence) =>
         DocumentChangeDraftingResolver.Resolve(output, evidence, Catalog, DraftId, DateTimeOffset.UnixEpoch);
 
-    private static string Quote(DocumentExtraction extraction, DocumentChangeCitation citation) =>
+    private static string Quote(DocumentExtraction extraction, SourceSpan citation) =>
         new DocumentTextSpan(extraction, citation.Start, citation.Length).Quote;
 }

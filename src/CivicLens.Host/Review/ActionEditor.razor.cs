@@ -109,7 +109,7 @@ public sealed partial class ActionEditor
         return LoadAsync();
     }
 
-    private string Quote(StatementSpan span) =>
+    private string Quote(SourceSpan span) =>
         new DocumentTextSpan(detail!.Extractions[span.ExtractionId], span.Start, span.Length).Quote;
 
     private string Describe(ActionSponsorship sponsorship)

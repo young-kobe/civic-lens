@@ -3,8 +3,8 @@ using System.Security.Cryptography;
 using CivicLens.Application.Publication;
 using CivicLens.Application.Review;
 using CivicLens.Application.Statements;
+using CivicLens.Core.Documents;
 using CivicLens.Core.Review;
-using CivicLens.Core.Statements;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Documents;
 using CivicLens.Infrastructure.Publication;
@@ -407,7 +407,7 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
         var reader = new StatementReviewContextReader(statementDrafts, new StatementSelectionResolver(StatementGateFixtures.Configuration()));
         await new CreateStatementDraft(statementReviews).ExecuteAsync(Owner, new(candidate, "create-" + candidate[..8]));
         var extraction = (await statementDrafts.ReadEvidenceAsync(candidate, default))!.Article.Extraction;
-        var span = new StatementSpan(extraction.ExtractionId, extraction.Text.IndexOf(quote, StringComparison.Ordinal), quote.Length);
+        var span = new SourceSpan(extraction.ExtractionId, extraction.Text.IndexOf(quote, StringComparison.Ordinal), quote.Length);
         await new SaveStatementDraft(statementReviews, reader).ExecuteAsync(Owner, new(candidate, 1, "Warren announces a rent cap",
             "The senator announced a rent cap for tenants.", null, null, [StatementDraftFixtures.Warren], [],
             [StatementGateFixtures.RentIssue], [StatementGateFixtures.HousingArea], [span], "save-" + candidate[..8]));
