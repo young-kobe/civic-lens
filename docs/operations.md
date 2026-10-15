@@ -569,7 +569,7 @@ The [live test](#verification) for action drafting sends one paid request.
 
 ## Publish a static release
 
-The owner can publish from the Review home page. Select records in the Publish section and choose Review selection. The list shows each record as a document change or a statement. The summary lists each headline with its kind, as new or a replacement, and shows the release number. Choose Publish to confirm. The page lists recent releases read-only. Rollback stays in the CLI.
+The owner can publish from the Review home page. Select records in the Publish section and choose Review selection. The list shows each record as a document change, a statement, or an action. The summary lists each headline with its kind, as new or a replacement, and shows the release number. Choose Publish to confirm. The page lists recent releases read-only. Rollback stays in the CLI.
 
 The CLI is a local owner command. Set `CIVIC_LENS_DATABASE`, `CIVIC_LENS_REVIEW_OWNER` (the owner subject recorded on the release), and `CIVIC_LENS_RELEASE_DIRECTORY` (an absolute path, for example `$PWD/.runtime/releases`). Publishing also needs `CIVIC_LENS_COLLECTION_CONFIG`, an absolute configuration path that supplies the officials' display names. The command trusts the local operator, who already holds database credentials.
 
@@ -579,7 +579,7 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- re
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases activate <release-number>
 ```
 
-Write each record as `<kind>:<id>`. The kind is `documentChange` or `statement`. For example, use `documentChange:` and a 32-character draft ID, or `statement:` and a 64-character candidate ID. The command never guesses the kind from the ID. An unknown kind or a bad shape exits with code 2. The revision must be approved with no unresolved concerns.
+Write each record as `<kind>:<id>`. The kind is `documentChange`, `statement`, or `action`. For example, use `documentChange:` and a 32-character draft ID, `statement:` and a 64-character candidate ID, or `action:` and a 64-character action record ID. The command never guesses the kind from the ID. An unknown kind or a bad shape exits with code 2. The revision must be approved with no unresolved concerns.
 
 A concurrent review decision, draft save, other release, or rollback makes the commit fail with exit code 1. The built directory is deleted and nothing is activated. Invalid input or a non-owner actor exits with code 2 and prints the rule that failed. The publish rules are in [publication](architecture/publication.md#publish).
 
@@ -591,7 +591,7 @@ To check that the public pages work without the operational application, stop th
 python3 -m http.server 8090 --bind 127.0.0.1 --directory "$CIVIC_LENS_RELEASE_DIRECTORY/current"
 ```
 
-Open `http://127.0.0.1:8090/`. The index shows 50 records for each page, with links to the previous and next pages, and a kind label next to each headline. A document change page shows the account, the changes, the citations, and both full document versions. A statement page shows the speakers, the statement date with its evidence, each quotation with its kind, and the full source text with the quotations marked. The production static server is still a deployment decision.
+Open `http://127.0.0.1:8090/`. The index shows 50 records for each page, with links to the previous and next pages, and a kind label next to each headline. A document change page shows the account, the changes, the citations, and both full document versions. A statement page shows the speakers, the statement date with its evidence, each quotation with its kind, and the full source text with the quotations marked. An action page shows the bill, a sponsorship table with cited quotes, the policy area and CRS summary citations, and its Congress.gov sources. The production static server is still a deployment decision.
 
 ## Runtime data
 

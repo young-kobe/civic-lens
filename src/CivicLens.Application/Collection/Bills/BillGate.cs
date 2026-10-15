@@ -41,9 +41,8 @@ public static class BillGate
     public static IReadOnlyList<string> TrackedIssueIdsFor(string? policyArea, DateOnly day, IssueConfiguration issues)
     {
         ArgumentNullException.ThrowIfNull(issues);
-        var area = issues.PolicyAreas.SingleOrDefault(candidate => string.Equals(candidate.Name, policyArea, StringComparison.Ordinal));
-        if (area is null) return [];
-        return [.. issues.Issues.Where(issue => issue.PolicyAreaIds.Contains(area.Id) && IsActiveOn(issue, day))
+        if (issues.PolicyAreaIdFor(policyArea) is not { } areaId) return [];
+        return [.. issues.Issues.Where(issue => issue.PolicyAreaIds.Contains(areaId) && IsActiveOn(issue, day))
             .Select(issue => issue.Id).Order(StringComparer.Ordinal)];
     }
 

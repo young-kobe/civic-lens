@@ -26,7 +26,7 @@ The actions feature drafts one record for each bill that has an [action candidat
 - Actions have their own review lock key, `civic-lens-action-review`, last in the publication lock order.
 - Each record is one queue item. A newer analysis revision replaces an unreviewed one, and review shows the change since the last approved revision.
 - The analysis append computes `review_status` again under the action review lock. `last_revised_at_utc_ticks` holds the time of the current revision, and the Needs action list sorts by it.
-- A revision is sponsorship-only when its headline, summary, `textOrigin`, and suggestion equal those of the last approved revision. The bill title, policy area, summary version, tracked issues, issue revision, and Sponsor-role entries must also be equal. At least one sponsorship must be added, changed, or no longer listed. It gets a compact view of those sponsorships with their citations. Any other revision shows the old and the new text side by side.
+- A revision is sponsorship-only when its headline, summary, `textOrigin`, and suggestion equal those of the last approved revision. The bill title, policy area, policy area ID, summary version, tracked issues, issue revision, and Sponsor-role entries must also be equal. At least one sponsorship must be added, changed, or no longer listed. It gets a compact view of those sponsorships with their citations. Any other revision shows the old and the new text side by side.
 - The compact view keys each sponsorship by bioguide ID, role, and sponsorship date. A keyed entry is Changed when its withdrawal date is set, changed, or cleared, when its person ID changes, or when its original-cosponsor flag changes. A change in citations alone is not shown. Code builds each citation by exact match to the saved extraction, so the cited text states the same fact.
 - Bulk approval accepts sponsorship-only revisions only. It takes up to 64 records and records one decision for each record, with a result for each record.
 - A suggestion shows beside the text of a person, with "Use suggestion" and "Dismiss". A person's save may keep or clear the suggestion, but never change it.
@@ -89,7 +89,7 @@ The step does these checks in order. None of them calls the model.
 4. A saved extraction has other parser or normalization versions than the current parser, extractor, and renderer would write: Blocked as `extractionVersionChanged`. This check runs before any capture is read or parsed.
 5. The step reads the detail page, each cosponsor page, and each summary page. It parses each capture with the preparation parser and renders it with `CongressBillRenderer`. Any difference from the saved extraction text: Blocked as `renderedTextMismatch`, which means the saved text changed.
 6. No tracked official on the bill: Succeeded as `noTrackedOfficial`, with no revision. More than 600 sponsorships: Blocked as `tooManySponsorships`. A bill title over 4,000 characters: Blocked as `titleTooLong`.
-7. The step computes seven values. They are the sponsorship fingerprint, the newest summary version, the policy area, and the bill title. They also include the tracked issue IDs, the issue revision ID, and the person ID of each tracked official. If the current revision has the same seven values: Succeeded as `unchanged`.
+7. The step computes eight values. They are the sponsorship fingerprint, the newest summary version, the policy area, the policy area ID, and the bill title. They also include the tracked issue IDs, the issue revision ID, and the person ID of each tracked official. The step resolves the policy area ID with `IssueConfiguration.PolicyAreaIdFor`, next to the tracked issue IDs. A label that the configuration lacks gives no ID. If the current revision has the same eight values: Succeeded as `unchanged`.
 8. Only the fingerprint differs, and the Sponsor-role entries are equal (bioguide ID, person ID, and sponsorship date): the step makes no model call. It appends a revision that copies the text, the origin, and the suggestion of the current revision, with a Bypassed run whose reason is `sponsorshipsChanged`. The entry settles Succeeded with no code.
 
 Actions pages are not read. A change in a Sponsor-role entry calls the model. Any other difference in step 7 calls the model too, so a renamed issue or a bioguide ID mapped to another person drafts again. A bill with no current revision is always drafted. `ActionDraftingStep.ChangeSince` owns this comparison, and `ActionDraftRevision.HasSameSponsorsAs` owns the sponsor test.
@@ -204,6 +204,12 @@ Action review uses the shared decision rules and review cycles in [review](revie
 
 "Use suggestion" saves the suggestion text and clears the suggestion. "Dismiss" saves the form text and clears the suggestion. The plain save keeps the suggestion. The forms use the static post-back pattern of the statement pages, and `ReviewRecordPage` maps the failures. The rail has an Actions link.
 
+### Publication
+
+An approved action record with no open concern publishes in a static release, like the other kinds. `ActionRecordLoader` owns the action kind for publish and the ready list. `PostgresActionReviewStore.GetForPublicationAsync` reads the selected drafts, their review cycles, and every extraction that their current revisions cite in one repeatable-read transaction. It checks each citation against its extraction before it returns.
+
+`PublishedActionBuilder` maps the current revision to `PublishedAction`. Each sponsorship shows the configured name of its official from the current publication catalog. The policy area ID is the one that the approved revision stored at draft time. Publish never reads the issue configuration. Each distinct cited extraction becomes one embedded source with its URL and observation time. The record and its search filters are in [publication](publication.md#release-content).
+
 ### Commands
 
 | Command | Effect |
@@ -225,7 +231,7 @@ All are owner commands. Variables and examples are in [operations](../operations
 - The migration `ActionReview` adds `review_state_version`, `review_status`, and `last_revised_at_utc_ticks` to `action_drafts`. Existing drafts get `AwaitingReview`, version 0, and the creation time of their current revision. It adds `action_review_decisions`, which mirrors the statement decision table, and partial indexes for the Approved and Needs action lists.
 - The commands use the replay receipt table with the operations `action-save` and `action-decide`.
 - `ActionDraftRevision` holds the headline, the summary, `textOrigin` (`Model` or `Person`), and an optional `suggestion`. The suggestion holds a headline, a summary, a run ID, and the fingerprint it was made under.
-- It also holds the bill identity and title, `candidateId`, `candidateUpdateDate`, `candidateIncludesSummaries`, `fingerprint`, `summaryVersion`, the policy area, the tracked issue IDs, and `issueRevisionId`.
+- It also holds the bill identity and title, `candidateId`, `candidateUpdateDate`, `candidateIncludesSummaries`, `fingerprint`, `summaryVersion`, the policy area, the optional `policyAreaId`, the tracked issue IDs, and `issueRevisionId`.
 - It holds 1 to 600 sponsorships, each with one or two citations, and the summary and policy area citations. It holds at most 64 tracked issue IDs.
 - Action drafting has its own budget, separate from the other budgets.
 - Version constants are listed in [Behavior versions](../architecture.md#behavior-versions).
@@ -244,6 +250,7 @@ All are owner commands. Variables and examples are in [operations](../operations
 | Review commands and reads | `src/CivicLens.Application/Actions/SaveActionDraft.cs`, `src/CivicLens.Application/Actions/DecideActionReview.cs`, `src/CivicLens.Application/Actions/ApproveSponsorshipChanges.cs`, `src/CivicLens.Application/Actions/GetActionReview.cs`, `src/CivicLens.Application/Actions/ListActionReviews.cs`, `src/CivicLens.Application/Actions/GetActionReviewCounts.cs`, `src/CivicLens.Application/Actions/IActionReviewStore.cs` |
 | Review store | `src/CivicLens.Infrastructure/Actions/PostgresActionReviewStore.cs`, `src/CivicLens.Infrastructure/Actions/Persistence/ActionReviewDecisionRow.cs` |
 | Review pages | `src/CivicLens.Host/Review/ActionList.razor`, `src/CivicLens.Host/Review/ActionEditor.razor`, `src/CivicLens.Host/Review/ActionLabels.cs`, `src/CivicLens.Host/Review/ActionRoutes.cs` |
+| Publication | `src/CivicLens.Application/Publication/ActionRecordLoader.cs`, `src/CivicLens.Application/Publication/PublishedActionBuilder.cs`, `src/CivicLens.Publication.Contracts/PublishedAction.cs`, `src/CivicLens.Host/Publication/PublishedActionPage.razor` |
 | Record ID hash | `src/CivicLens.Infrastructure/Collection/Jobs/PostgresCollectionJobStore.ActionCandidates.cs` |
 | Owner requeue of Blocked entries | `src/CivicLens.Application/Actions/RequeueBlockedActionDrafts.cs` |
 | CLI and composition | `src/CivicLens.Host/Actions/ActionCommand.cs`, `src/CivicLens.Host/Actions/ActionDraftComposition.cs`, `src/CivicLens.Host/Actions/ActionDraftConfiguration.cs` |
@@ -253,12 +260,11 @@ All are owner commands. Variables and examples are in [operations](../operations
 - Text drafted under the older prompt `action-draft-prompt-v1` names cosponsors and counts them. A cosponsor-only change copies that text unchanged. Only the dev database holds v1 text, and it resets before R-23.
 - The Changed list shows only the new value of an entry. It shows no before value for a person ID change or an original-flag change.
 - A cosponsor who is added and then removed between two approvals leaves no change list. The record then needs one normal approval, not bulk approval.
-- Action publication is not built. Decide release growth and the search index before it; see the [release limit](publication.md#limits-and-planned-work).
 - Action records can produce about 110 revisions a day, about half of them sponsorship changes on approved records. Those revisions copy the text and need no model call, so they stay sponsorship-only and go to bulk approval.
 - The editor page has no Host test with a drafted record yet. The Host tests cover the list, the rail, and missing records.
 - The prompt does not include the candidate update date, and no page renders it yet.
 - Sponsorship changes draft at once. Measure how often an approved record gets a new revision within a few days. Add a waiting window only if that rate is high.
-- After action publication, move the generic queue handlers, such as `IStatementQueueStore` and `StatementQueueCommands`, into Application/Analysis.
-- After action publication, use one shared citation span type for document changes, statements, and actions, and unify naming across the analysis features.
+- Move the generic queue handlers, such as `IStatementQueueStore` and `StatementQueueCommands`, into Application/Analysis.
+- Use one shared citation span type for document changes, statements, and actions, and unify naming across the analysis features.
 - After the first action slice, build in this order: House votes, reviewed relationships between statements and actions, then Congressional Record articles as a statement connector. Cosponsorship is cheap position-taking, so votes carry most of the signal about whether words match deeds. Floor speeches cover every member, including officials with no usable web source.
 - Offices and dated terms are a separate step before House votes. Senate votes need senate.gov data and a `lis_member_id` crosswalk, because Congress.gov has neither.

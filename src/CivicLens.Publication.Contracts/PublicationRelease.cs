@@ -14,7 +14,7 @@ public sealed record PublicationRelease
             throw new InvalidDataException("Release manifest is invalid.");
         foreach (var entry in Records) entry?.Validate();
         if (Records.Any(entry => entry is null) ||
-            Records.Select(entry => (entry.Kind, entry.RecordId)).Distinct().Count() != Records.Length)
-            throw new InvalidDataException("Release manifest records must be present and unique.");
+            Records.Select(entry => entry.RecordId).Distinct(StringComparer.Ordinal).Count() != Records.Length)
+            throw new InvalidDataException("Release manifest records must be present, and each record ID must be unique across all kinds.");
     }
 }

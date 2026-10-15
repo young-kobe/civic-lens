@@ -32,10 +32,33 @@ public sealed class ActionDraftingStepTests
         Assert.Matches("^[0-9a-f]{64}$", revision.Fingerprint);
         Assert.Equal("00@2025-01-05T10:00:00Z", revision.SummaryVersion);
         Assert.Equal(["rent"], revision.TrackedIssueIds.ToArray());
+        Assert.Equal("housing", revision.PolicyAreaId);
         Assert.Equal(BillGateFixtures.Revision().Id, revision.IssueRevisionId);
         Assert.Single(model.Requests);
         var entry = Assert.Single(store.Entries);
         Assert.Equal((State.Succeeded, null), (entry.Status, entry.ErrorCode));
+    }
+
+    [Fact]
+    public async Task APolicyAreaLabelThatTheConfigurationLacksStoresNoAreaIDSoThePublishedFilterNeverGuesses()
+    {
+        var (store, _) = await RunAsync(Create(policyArea: "Public Lands"), new FakeActionDraftingModel().Draft(Output()));
+
+        var revision = Assert.Single(store.Revisions);
+        Assert.Equal(("Public Lands", null), (revision.PolicyArea, revision.PolicyAreaId));
+    }
+
+    [Fact]
+    public async Task ADifferentConfiguredAreaIDDraftsAgainBecauseTheStoredIDIsPartOfWhatTheReviewerApproved()
+    {
+        var world = Create(cosponsorPages: [[MarkeyOriginal]]);
+        var (first, _) = await RunAsync(world, new FakeActionDraftingModel().Draft(Output()));
+        var staleAreaId = Assert.Single(first.Revisions) with { PolicyAreaId = "old-housing" };
+
+        var (second, model) = await RunAsync(world, new FakeActionDraftingModel().Draft(Output()), staleAreaId);
+
+        Assert.Single(model.Requests);
+        Assert.Equal("housing", Assert.Single(second.Revisions).PolicyAreaId);
     }
 
     [Fact]

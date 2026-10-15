@@ -6,6 +6,7 @@ public interface IReleaseRenderer
 {
     Task<string> RenderRecordAsync(PublishedDocumentChange record, CancellationToken cancellationToken);
     Task<string> RenderStatementAsync(PublishedStatement record, CancellationToken cancellationToken);
+    Task<string> RenderActionAsync(PublishedAction record, CancellationToken cancellationToken);
     Task<string> RenderIndexAsync(PublicationRelease release, int page, CancellationToken cancellationToken);
 
     IReadOnlyList<ReleaseAsset> Assets { get; }

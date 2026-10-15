@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using System.Text.Json;
 using CivicLens.Application.Publication;
+using CivicLens.Infrastructure.Actions.Persistence;
 using CivicLens.Core.Review;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Publication.Persistence;
@@ -161,6 +162,7 @@ public sealed class PostgresPublicationStore(IDbContextFactory<CollectionAttempt
         var current = new Dictionary<(PublishedRecordKind, string), (int, int)>();
         await AddDocumentChangeStatesAsync(db, IdsOf(expectations, PublishedRecordKind.DocumentChange), current, cancellationToken);
         await AddStatementStatesAsync(db, IdsOf(expectations, PublishedRecordKind.Statement), current, cancellationToken);
+        await AddActionStatesAsync(db, IdsOf(expectations, PublishedRecordKind.Action), current, cancellationToken);
         return current;
     }
 
@@ -182,6 +184,16 @@ public sealed class PostgresPublicationStore(IDbContextFactory<CollectionAttempt
             .Where(row => candidateIds.Contains(row.CandidateId)).ToArrayAsync(cancellationToken);
         foreach (var row in statements)
             current[(PublishedRecordKind.Statement, row.CandidateId)] = (row.CurrentRevisionNumber, row.ReviewStateVersion);
+    }
+
+    private static async Task AddActionStatesAsync(CollectionAttemptDbContext db, string[] recordIds,
+        Dictionary<(PublishedRecordKind, string), (int, int)> current, CancellationToken cancellationToken)
+    {
+        if (recordIds.Length == 0) return;
+        var actions = await db.Set<ActionDraftRow>().AsNoTracking()
+            .Where(row => recordIds.Contains(row.RecordId)).ToArrayAsync(cancellationToken);
+        foreach (var row in actions)
+            current[(PublishedRecordKind.Action, row.RecordId)] = (row.CurrentRevisionNumber, row.ReviewStateVersion);
     }
 
     private static string[] IdsOf(ImmutableArray<ReviewStateExpectation> expectations, PublishedRecordKind kind) =>

@@ -8,6 +8,7 @@ public sealed class PublishedRecordReferenceTests
     [Theory]
     [InlineData(PublishedRecordKind.DocumentChange, "documentChange:abc")]
     [InlineData(PublishedRecordKind.Statement, "statement:abc")]
+    [InlineData(PublishedRecordKind.Action, "action:abc")]
     public void FormattingAndParsingRoundTripSoTheFormAndTheCommandAgreeOnOneShape(PublishedRecordKind kind, string text)
     {
         var reference = new PublishedRecordReference(kind, "abc");
