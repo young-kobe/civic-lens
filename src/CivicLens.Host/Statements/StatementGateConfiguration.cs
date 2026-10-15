@@ -1,5 +1,5 @@
-using CivicLens.Application.Statements;
 using CivicLens.Application.Analysis;
+using CivicLens.Application.Statements;
 using CivicLens.Host.Analysis;
 
 namespace CivicLens.Host.Statements;

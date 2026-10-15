@@ -163,7 +163,7 @@ The editor labels an AI revision and flags an unverified AI change date. Its tec
 
 ### Credentials
 
-The worker drafts only when `CIVIC_LENS_ANALYSIS_DAILY_TOKENS` and `ANTHROPIC_API_KEY` are both set. One without the other is a configuration error. The adapter takes the key from the Host and never reads the environment for it. It sets the production API address and no auth token. A test checks that a request goes to that address without an Authorization header.
+The worker drafts only when `CIVIC_LENS_ANALYSIS_DAILY_TOKENS` and `ANTHROPIC_API_KEY` are both set. A limit without the key is a configuration error. The key alone does not turn drafting on, because the other AI stages share it. The adapter takes the key from the Host and never reads the environment for it. It sets the production API address and no auth token. A test checks that a request goes to that address without an Authorization header.
 
 The collector child process receives only an allowlist of environment variables: `PATH`, `HOME`, `TMPDIR`, `LANG`, `LC_*`, `DOTNET_ROOT`, `DOTNET_SYSTEM_GLOBALIZATION_INVARIANT`, `SSL_CERT_FILE`, `SSL_CERT_DIR`, and the proxy variables.
 
@@ -208,7 +208,7 @@ Infrastructure reads AI drafts in keyset pages of 100. Each page costs four quer
 | Document-change parts | `DocumentChangeAnalysisRecord` adds the draft ID, and `DocumentChangeAnalysisCheckpoint` adds the revision. `DocumentChangeAnalysisErrorCodes`, `DocumentChangeAnalysisSettings`, `DocumentChangeAnalysisCatalog`, and `DocumentChangeAnalysisEvidence` complete the feature. |
 | Reserved author | `src/CivicLens.Core/Review/ReviewAuthor.cs` |
 | CLI and composition | `src/CivicLens.Host/Analysis/AnalysisCommand.cs`, `src/CivicLens.Host/Analysis/DocumentChangeAnalysisComposition.cs` |
-| Shared Host setup | `AnalysisEnvironment` reads the token limits, the concurrency, and the API key for every drafting feature. `AnalysisComposition<TRun>` holds the worker, the wakeup, and the start record of each feature. |
+| Shared Host setup | `src/CivicLens.Host/Analysis/AnalysisEnvironment.cs`, `src/CivicLens.Host/Analysis/AnalysisComposition.cs` |
 
 The shared wakeup and lease mechanics are in [Shared worker mechanics](../architecture.md#shared-worker-mechanics).
 

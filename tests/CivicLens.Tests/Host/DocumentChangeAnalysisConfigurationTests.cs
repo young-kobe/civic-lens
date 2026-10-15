@@ -13,7 +13,6 @@ public sealed class DocumentChangeAnalysisConfigurationTests
 
     [Theory]
     [InlineData("CIVIC_LENS_ANALYSIS_DAILY_TOKENS", "100000")]
-    [InlineData("ANTHROPIC_API_KEY", "key-sentinel")]
     [InlineData("CIVIC_LENS_ANALYSIS_DAILY_TOKENS", "not-a-number")]
     public async Task TheWorkerRefusesAPartialOrInvalidDraftingConfiguration(string name, string value)
     {
@@ -36,6 +35,37 @@ public sealed class DocumentChangeAnalysisConfigurationTests
             Assert.Equal(2, result.ExitCode);
             Assert.DoesNotContain("key-sentinel", result.Output + result.Error);
             Assert.DoesNotContain("secret-sentinel", result.Output + result.Error);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task AKeyAloneLeavesEveryAiStageOffBecauseTheStagesShareIt()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "civic-key-alone-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var config = Path.Combine(directory, "config.json");
+            await File.WriteAllTextAsync(config, """
+                {"version":2,"people":[{"id":"person","name":"Fixture"}],"sources":[
+                  {"id":"source","coverage":[{"personId":"person"}],"url":"https://example.test/page",
+                   "allowedOrigin":"https://example.test","allowedPathPrefix":"/page"}]}
+                """);
+            var environment = new Dictionary<string, string>
+            {
+                ["CIVIC_LENS_COLLECTION_CONFIG"] = config,
+                ["ANTHROPIC_API_KEY"] = "key-sentinel"
+            };
+
+            var result = await HostProcess.RunWithEnvironmentAsync(Database, null, environment,
+                "worker", Path.Combine(directory, "collector.dll"), Path.Combine(directory, "captures"), "--once");
+
+            Assert.Equal(1, result.ExitCode);
+            Assert.DoesNotContain("key-sentinel", result.Output + result.Error);
         }
         finally
         {
@@ -127,7 +157,6 @@ public sealed class DocumentChangeAnalysisConfigurationTests
             var environment = new Dictionary<string, string> { ["CIVIC_LENS_COLLECTION_CONFIG"] = config, [name] = value };
             if (name.EndsWith("RUN_TOKENS", StringComparison.Ordinal)) environment["CIVIC_LENS_STATEMENT_DRAFTING_DAILY_TOKENS"] = "100000";
             if (key is not null) environment["ANTHROPIC_API_KEY"] = key;
-            if (key is not null) environment["CIVIC_LENS_ANALYSIS_DAILY_TOKENS"] = "100000";
 
             var result = await HostProcess.RunWithEnvironmentAsync(Database, null, environment,
                 "worker", Path.Combine(directory, "collector.dll"), Path.Combine(directory, "captures"), "--once");

@@ -1,13 +1,11 @@
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Jobs;
-using CivicLens.Collection.Contracts;
 using CivicLens.Infrastructure.Collection;
 
 namespace CivicLens.Host.Collection;
 
 internal static class CollectionJobCommand
 {
-
     public static bool Matches(string[] arguments) => arguments is
         ["jobs", "enqueue", _, _, _] or ["jobs", "run", _, _, _] or ["jobs", "get", _] or
         ["jobs", "cancel", _] or ["jobs", "list"] or ["jobs", "list", _];

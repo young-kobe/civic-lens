@@ -8,14 +8,13 @@ internal sealed record AnalysisEnvironment(long DailyTokens, long? RunTokens, in
     private const string ApiKeyVariable = "ANTHROPIC_API_KEY";
     private const long MaximumTokenLimit = 1_000_000_000_000;
 
-    public static AnalysisEnvironment? Read(string variablePrefix, string subject, bool apiKeyAloneIsPartial = false)
+    public static AnalysisEnvironment? Read(string variablePrefix, string subject)
     {
         var dailyVariable = variablePrefix + "DAILY_TOKENS";
         var daily = Environment.GetEnvironmentVariable(dailyVariable);
         var apiKey = Environment.GetEnvironmentVariable(ApiKeyVariable);
-        var dailyMissing = string.IsNullOrWhiteSpace(daily);
-        if (dailyMissing && (!apiKeyAloneIsPartial || string.IsNullOrWhiteSpace(apiKey))) return null;
-        if (dailyMissing || string.IsNullOrWhiteSpace(apiKey))
+        if (string.IsNullOrWhiteSpace(daily)) return null;
+        if (string.IsNullOrWhiteSpace(apiKey))
             throw new ArgumentException($"{subject} needs both {dailyVariable} and {ApiKeyVariable}.");
         return new(ReadTokens(dailyVariable)!.Value, ReadTokens(variablePrefix + "RUN_TOKENS"), ReadConcurrency(), apiKey);
     }

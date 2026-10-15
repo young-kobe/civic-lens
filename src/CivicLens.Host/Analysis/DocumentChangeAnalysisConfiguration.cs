@@ -6,7 +6,7 @@ internal sealed record DocumentChangeAnalysisConfiguration(DocumentChangeAnalysi
 {
     public static DocumentChangeAnalysisConfiguration? FromEnvironment()
     {
-        var environment = AnalysisEnvironment.Read("CIVIC_LENS_ANALYSIS_", "AI drafting", apiKeyAloneIsPartial: true);
+        var environment = AnalysisEnvironment.Read("CIVIC_LENS_ANALYSIS_", "AI drafting");
         if (environment is null) return null;
         var settings = new DocumentChangeAnalysisSettings(environment.DailyTokens, environment.RunTokens,
             environment.Concurrency ?? DocumentChangeAnalysisSettings.DefaultConcurrency);

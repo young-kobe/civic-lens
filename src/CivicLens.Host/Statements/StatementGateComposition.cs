@@ -1,4 +1,3 @@
-using CivicLens.Application;
 using CivicLens.Application.Analysis;
 using CivicLens.Application.Statements;
 using CivicLens.Host.Analysis;

@@ -1,12 +1,11 @@
-using CivicLens.Application;
 using CivicLens.Application.Actions;
 using CivicLens.Application.Analysis;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Application.Collection.Processing;
 using CivicLens.Application.Documents;
 using CivicLens.Application.Issues;
-using CivicLens.Infrastructure.Actions;
 using CivicLens.Host.Analysis;
+using CivicLens.Infrastructure.Actions;
 using CivicLens.Infrastructure.Analysis;
 using CivicLens.Infrastructure.Collection;
 using Microsoft.EntityFrameworkCore;

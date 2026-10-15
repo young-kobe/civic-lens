@@ -36,6 +36,7 @@ internal static class CollectionCommandOutput
             JsonNamingPolicy.CamelCase.ConvertName(decision.Disposition.ToString()),
             JsonNamingPolicy.CamelCase.ConvertName(decision.PriorCaptureLinkStatus.ToString()), handoffRemoved);
     }
+
     private static JsonSerializerOptions CreateJsonOptions()
     {
         var options = new JsonSerializerOptions(CollectionProtocol.JsonOptions);

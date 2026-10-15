@@ -3,14 +3,12 @@ using CivicLens.Application.Analysis;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Application.Collection.Processing;
-using CivicLens.Collection.Contracts;
 using CivicLens.Infrastructure.Collection;
 
 namespace CivicLens.Host.Collection;
 
 internal static class CollectionWorkerCommand
 {
-
     public static bool Matches(string[] arguments) => arguments is
         ["worker", _, _] or ["worker", _, _, "--once"];
 
