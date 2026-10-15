@@ -24,7 +24,7 @@ internal sealed class PublishedRecordBuilder(PublishedRecordRules rules)
             Institution = revision.Institution,
             ChangeDate = revision.ChangeDate,
             ChangeDateEvidence = revision.ChangeDateEvidence is null ? null : Cite(revision.ChangeDateEvidence, before, after),
-            Officials = rules.MapOfficials(PublishedRecordKind.DocumentChange, review.DraftId, revision.OfficialIds),
+            Officials = rules.MapOfficials(review.DraftId, revision.OfficialIds),
             IssueIds = [.. revision.IssueIds],
             Before = new()
             {

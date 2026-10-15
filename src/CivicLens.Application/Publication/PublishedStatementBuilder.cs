@@ -19,7 +19,7 @@ internal sealed class PublishedStatementBuilder(PublishedRecordRules rules)
             Summary = revision.Summary,
             StatementDate = revision.StatementDate,
             StatementDateEvidence = revision.StatementDateEvidence is null ? null : Cite(revision.StatementDateEvidence, extraction),
-            Speakers = rules.MapOfficials(PublishedRecordKind.Statement, review.CandidateId, revision.SpeakerOfficialIds),
+            Speakers = rules.MapOfficials(review.CandidateId, revision.SpeakerOfficialIds),
             OtherSpeakers = [.. revision.OtherSpeakers],
             IssueIds = [.. revision.IssueIds],
             PolicyAreaIds = [.. revision.PolicyAreaIds],
@@ -39,7 +39,7 @@ internal sealed class PublishedStatementBuilder(PublishedRecordRules rules)
         return record;
     }
 
-    private static PublishedCitation Cite(StatementSpan statementSpan, DocumentExtraction extraction)
+    internal static PublishedCitation Cite(StatementSpan statementSpan, DocumentExtraction extraction)
     {
         var span = new DocumentTextSpan(extraction, statementSpan.Start, statementSpan.Length);
         return new() { ExtractionId = span.ExtractionId, Start = span.Start, Length = span.Length, Quote = span.Quote };

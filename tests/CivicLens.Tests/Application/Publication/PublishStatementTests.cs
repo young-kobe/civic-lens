@@ -237,6 +237,7 @@ public sealed class PublishStatementTests
     [Theory]
     [InlineData(PublishedRecordKind.Statement, 32)]
     [InlineData(PublishedRecordKind.DocumentChange, 64)]
+    [InlineData(PublishedRecordKind.Action, 32)]
     public async Task RecordIdMustMatchTheIdShapeOfItsKindSoAKindCannotBeMislabelled(PublishedRecordKind kind, int length)
     {
         var scenario = new PublicationScenario();
@@ -244,7 +245,7 @@ public sealed class PublishStatementTests
         await Assert.ThrowsAsync<ArgumentException>(() => scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
             PublicationScenario.Request("k", new PublishedRecordReference(kind, new string('a', length)))));
 
-        Assert.Equal(0, scenario.Statements.PublicationReadCount);
+        Assert.Equal((0, 0), (scenario.Statements.PublicationReadCount, scenario.Actions.PublicationReadCount));
     }
 
     [Fact]

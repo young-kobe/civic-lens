@@ -249,6 +249,18 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
     }
 
     [Fact]
+    public async Task AStatementIsNeverCheckedAgainstTheActionTableBecauseTheKindPicksTheDraftTable()
+    {
+        var statement = await CreateApprovedStatementAsync();
+
+        await Assert.ThrowsAsync<PublicationConflictException>(() => publications.CommitAsync(Owner.Subject,
+            new(1, null, $"000001-{Guid.NewGuid():N}", PublishedAt, [new(PublishedRecordKind.Action, statement, 2)],
+                [new(PublishedRecordKind.Action, statement, 2, 1)]), "wrong-kind", Hash(1), default));
+        Assert.Equal(1, (await publications.CommitAsync(Owner.Subject, StatementCommit(1, statement, reviewStateVersion: 1), "right-kind",
+            Hash(2), default)).ReleaseNumber);
+    }
+
+    [Fact]
     public async Task CommitWaitsForTheStatementLockBecauseAStatementDecisionMustNotSlipInDuringThePublish()
     {
         var statement = await CreateApprovedStatementAsync();

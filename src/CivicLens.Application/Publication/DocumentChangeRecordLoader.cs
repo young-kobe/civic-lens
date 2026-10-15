@@ -4,27 +4,38 @@ using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Application.Publication;
 
-internal sealed class DocumentChangeRecordLoader(IDocumentChangeReviewStore reviews, IReleaseRenderer renderer,
-    PublishedRecordBuilder builder)
+internal sealed class DocumentChangeRecordLoader(IDocumentChangeReviewStore reviews)
+    : PublishedRecordLoader(PublishedRecordKind.DocumentChange, "Draft")
 {
-    public async Task<List<PendingRecord>> LoadAsync(ImmutableArray<string> draftIds, PreviousRelease previous, DateTimeOffset now,
+    public override void ValidateId(string recordId) => ReviewValidation.ValidateDraftId(recordId);
+
+    public override async Task<(IReadOnlyList<ReadyToPublishRecord> Ready, bool HasMore)> ListReadyAsync(int limit,
         CancellationToken cancellationToken)
     {
-        if (draftIds.IsEmpty) return [];
-        var found = await reviews.GetForPublicationAsync(draftIds, cancellationToken);
-        var pending = new List<PendingRecord>(draftIds.Length);
-        foreach (var draftId in draftIds)
+        var candidates = await reviews.ListUnpublishedApprovedDraftsAsync(limit + 1, cancellationToken);
+        var ready = candidates
+            .Where(candidate => PublishedRecordRules.IsPublishable(candidate.Draft.CurrentStatus, candidate.Draft.UnresolvedConcernCount))
+            .Select(candidate => Ready(candidate.Draft.DraftId, candidate.Draft.CurrentRevision.Headline,
+                candidate.Draft.CurrentRevision.RevisionNumber, candidate.PublishedRevisionNumber))
+            .ToList();
+        return (ready, candidates.Count > limit);
+    }
+
+    public override async Task<List<PendingRecord>> LoadAsync(ImmutableArray<string> recordIds, PublicationBuild build,
+        CancellationToken cancellationToken)
+    {
+        if (recordIds.IsEmpty) return [];
+        var found = await reviews.GetForPublicationAsync(recordIds, cancellationToken);
+        var builder = new PublishedRecordBuilder(build.Rules);
+        var pending = new List<PendingRecord>(recordIds.Length);
+        foreach (var draftId in recordIds)
         {
-            var addition = found.GetValueOrDefault(draftId)
-                ?? throw new ArgumentException($"Draft {draftId} does not exist.", nameof(draftIds));
+            var addition = found.GetValueOrDefault(draftId) ?? throw NotFound(draftId);
             var review = addition.Review;
-            var revisionNumber = review.CurrentRevision.RevisionNumber;
-            PublishedRecordRules.RequirePublishable(PublishedRecordKind.DocumentChange, draftId, revisionNumber,
-                review.Decisions, review.UnresolvedConcerns);
-            PublishedRecordRules.RequireNotPublishedAt(PublishedRecordKind.DocumentChange, draftId, revisionNumber, previous);
-            var record = builder.Build(addition, previous.Find(PublishedRecordKind.DocumentChange, draftId), now);
+            RequirePublishable(draftId, review.CurrentRevision.RevisionNumber, review.Decisions, review.UnresolvedConcerns, build.Previous);
+            var record = builder.Build(addition, build.Previous.Find(Kind, draftId), build.Now);
             pending.Add(PendingRecord.Create(record.ToEntry(), review.ReviewStateVersion, record,
-                await renderer.RenderRecordAsync(record, cancellationToken)));
+                await build.Renderer.RenderRecordAsync(record, cancellationToken)));
         }
         return pending;
     }

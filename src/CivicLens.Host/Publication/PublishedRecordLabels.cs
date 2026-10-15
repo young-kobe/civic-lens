@@ -14,4 +14,7 @@ public static class PublishedRecordLabels
 
     public static string Quotation(PublishedQuotationKind kind) =>
         kind == PublishedQuotationKind.DirectQuotation ? "Direct quotation" : "Release text";
+
+    public static string Role(PublishedSponsorshipRole role) =>
+        role == PublishedSponsorshipRole.Sponsor ? "Sponsor" : "Cosponsor";
 }

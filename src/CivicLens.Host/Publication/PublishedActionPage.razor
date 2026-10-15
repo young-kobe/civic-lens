@@ -1,0 +1,51 @@
+@using CivicLens.Publication.Contracts
+
+<PublishedRecordFrame Headline="@Record.Headline" Summary="@Record.Summary" Facts="PublishedActionView.Facts(Record)"
+                      Caveat="A sponsorship is a proposal, not a law. This record lists only the officials that Civic Lens tracks. Each date comes from the Congress.gov record at the observation time of its source.">
+    <Panel Title="Sponsorships" Id="sponsorships-title" Padded="true">
+        <p class="muted small">Each quote is the exact text of the Congress.gov record.</p>
+        <DataTable Items="Record.Sponsorships" Caption="Sponsorships of tracked officials">
+            <Head><th>Official</th><th>Role</th><th>Original</th><th class="fit num">Sponsored</th><th class="fit num">Withdrawn</th><th>Evidence</th></Head>
+            <Row Context="sponsorship">
+                <td>@sponsorship.Official.Name</td>
+                <td>@PublishedRecordLabels.Role(sponsorship.Role)</td>
+                <td>@(sponsorship.IsOriginal ? "Yes" : "No")</td>
+                <td class="fit num">@Moment.Iso(sponsorship.SponsoredOn)</td>
+                <td class="fit num">@(sponsorship.WithdrawnOn is { } withdrawn ? Moment.Iso(withdrawn) : "None")</td>
+                <td>
+                    @foreach (var citation in sponsorship.Citations)
+                    {
+                        <blockquote class="quote">@EncodedEvidence.Markup(citation.Quote)</blockquote>
+                    }
+                </td>
+            </Row>
+        </DataTable>
+    </Panel>
+
+    @if (Record.SummaryCitation is not null || Record.PolicyAreaCitation is not null)
+    {
+        <Panel Title="Bill evidence" Id="bill-evidence-title" Padded="true">
+            <ul class="choices">
+                @if (Record.PolicyAreaCitation is { } area)
+                {
+                    <li><CitationQuote Label="Policy area" Quote="@area.Quote" /></li>
+                }
+                @if (Record.SummaryCitation is { } summary)
+                {
+                    <li><CitationQuote Label="CRS summary" Quote="@summary.Quote" /></li>
+                }
+            </ul>
+        </Panel>
+    }
+
+    <Panel Title="Sources" Id="sources-title" Padded="true">
+        @foreach (var source in Record.Sources)
+        {
+            <VersionSource Version="source" />
+        }
+    </Panel>
+</PublishedRecordFrame>
+
+@code {
+    [Parameter, EditorRequired] public PublishedAction Record { get; set; } = default!;
+}

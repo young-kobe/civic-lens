@@ -1,13 +1,16 @@
 using CivicLens.Application.Paging;
 using System.Collections.Immutable;
+using CivicLens.Application.Actions;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using CivicLens.Application.Publication;
 using CivicLens.Application.Review;
+using CivicLens.Core.Actions;
 using CivicLens.Core.Collection;
 using CivicLens.Core.Documents;
 using CivicLens.Core.Review;
 using CivicLens.Core.Statements;
+using CivicLens.Tests.Application.Actions;
 using CivicLens.Tests.Application.Statements;
 using CivicLens.Publication.Contracts;
 using CivicLens.Tests.Fixtures;
@@ -25,9 +28,12 @@ internal sealed class PublicationScenario
     public FakeReleaseDirectory Releases { get; } = new();
     public FakeReviewStore Reviews { get; } = new();
     public FakeStatementReviewStore Statements { get; } = new();
-    public Dictionary<string, string> OfficialNames { get; } = new() { ["mayor"] = "Mayor Example" };
+    public FakeActionReviewStore Actions { get; } = new();
+    public Dictionary<string, string> OfficialNames { get; } = new() { ["mayor"] = "Mayor Example", ["chair"] = "Council Chair Example" };
 
-    public PublishRelease Publisher() => new(Publications, Releases, new FakeRenderer(), Reviews, Statements,
+    public PublishedRecordLoaders Loaders() => new(Reviews, Statements, Actions);
+
+    public PublishRelease Publisher() => new(Publications, Releases, new FakeRenderer(), Loaders(),
         new PublicationCatalog(OfficialNames), Clock);
 
     private const string PunctuatedHeadline = "Mayor\u2019s \u201Chousing\u201D plan: caf\u00E9 owners, r\u00E9sum\u00E9 rules; it\u2019s 100% ready? ";
@@ -44,6 +50,15 @@ internal sealed class PublicationScenario
         PolicyAreaIds = ["land-use", "transportation"],
         SourceHost = "council.example.gov",
         EventDate = new DateOnly(2026, 1, 15)
+    };
+
+    // An action entry names its sponsor only, and its policy area is the longest Congress.gov policy area name.
+    public static PublishedRecordEntry FilledActionEntry(int index, int headlineLength) => FilledStatementEntry(index, headlineLength) with
+    {
+        Kind = PublishedRecordKind.Action,
+        Officials = [new() { Id = "mayor", Name = "Mayor Example" }],
+        PolicyAreaIds = ["Civil Rights and Liberties, Minority Issues"],
+        SourceHost = "api.congress.gov"
     };
 
     public void SeedRelease(int recordCount, bool withFiles) =>
@@ -147,12 +162,40 @@ internal sealed class PublicationScenario
         return candidateId;
     }
 
+    public const string ActionDetail = "Bill: 119 hr 7\nIntroduced: 2026-01-03\nPolicy area: Housing and Community Development\nSponsor: M000001\n";
+    public const string ActionCosponsors = "Bill: 119 hr 7\nCosponsor: C000001, original, 2026-01-05, withdrawn 2026-01-20\n";
+
+    // The sponsor cites the detail page and the cosponsor cites a second API page, so the record has two sources.
+    public string AddAction(char id, ImmutableArray<ReviewDecision>? decisions = null, string sponsorId = "mayor")
+    {
+        var recordId = new string(id, 64);
+        var detail = Extraction(ActionDetail, $"action-detail-{id}", "https://api.congress.gov/v3/bill/119/hr/7");
+        var cosponsors = Extraction(ActionCosponsors, $"action-cosponsors-{id}", "https://api.congress.gov/v3/bill/119/hr/7/cosponsors");
+        StatementSpan DetailLine(string line) => new(detail.ExtractionId, ActionDetail.IndexOf(line, StringComparison.Ordinal), line.Length);
+        var revision = new ActionDraftRevision(recordId, 1, "civic-lens:analysis", ApprovedAt, $"Action {id}", "The mayor sponsored a housing bill.",
+            ActionTextOrigin.Model, null, "congress-bills", 119, "hr", 7, new string('b', 64), ApprovedAt, false, new string('d', 64), null, null,
+            "Housing and Community Development", DetailLine("Policy area: Housing and Community Development"), ["housing"], new string('e', 64),
+            [
+                new(sponsorId, "M000001", ActionSponsorshipRole.Sponsor, false, new DateOnly(2026, 1, 3), null,
+                    [DetailLine("Sponsor: M000001"), DetailLine("Introduced: 2026-01-03")]),
+                new("chair", "C000001", ActionSponsorshipRole.Cosponsor, true, new DateOnly(2026, 1, 5), new DateOnly(2026, 1, 20),
+                    [new(cosponsors.ExtractionId, ActionCosponsors.IndexOf("Cosponsor", StringComparison.Ordinal),
+                        ActionCosponsors.Length - ActionCosponsors.IndexOf("Cosponsor", StringComparison.Ordinal) - 1)])
+            ], "A housing bill");
+        var all = decisions ?? [Decision(recordId, 1, ReviewDecisionKind.Approve)];
+        var concerns = ReviewPolicy.GetUnresolvedConcerns(all);
+        var review = new ActionReview(recordId, revision, null, [revision], all.Length, ReviewPolicy.GetCurrentStatus(1, all, concerns), all, concerns);
+        Actions.Publishable[recordId] = new(review, ImmutableDictionary.CreateRange(StringComparer.Ordinal,
+            [KeyValuePair.Create(detail.ExtractionId, detail), KeyValuePair.Create(cosponsors.ExtractionId, cosponsors)]));
+        return recordId;
+    }
+
     public static ReviewDecision Decision(string draftId, int stateVersion, ReviewDecisionKind kind) =>
         new(new string((char)('a' + stateVersion), 32), draftId, 1, stateVersion, kind, "reviewer",
             kind == ReviewDecisionKind.Approve ? null : "Needs work.", [], ApprovedAt);
 
-    internal static DocumentExtraction Extraction(string text, string attemptId) => new(
-        new(attemptId, "source", "https://example.test/", "https://example.test/", DateTimeOffset.UnixEpoch,
+    internal static DocumentExtraction Extraction(string text, string attemptId, string url = "https://example.test/") => new(
+        new(attemptId, "source", url, url, DateTimeOffset.UnixEpoch,
             new CollectionResponse(200, null, null, "text/html", []), new CaptureIdentity(new string('a', 64), 0)),
         "parser", "normalizer", text);
 }
@@ -164,6 +207,8 @@ internal sealed class FakeRenderer : IReleaseRenderer
         Task.FromResult($"<html>{record.RecordId}</html>");
     public Task<string> RenderStatementAsync(PublishedStatement record, CancellationToken cancellationToken) =>
         Task.FromResult($"<html>statement {record.RecordId}</html>");
+    public Task<string> RenderActionAsync(PublishedAction record, CancellationToken cancellationToken) =>
+        Task.FromResult($"<html>action {record.RecordId}</html>");
     public Task<string> RenderIndexAsync(PublicationRelease release, int page, CancellationToken cancellationToken) =>
         Task.FromResult($"<html>index {page} {release.Records.Length}</html>");
 }
