@@ -44,27 +44,29 @@ public sealed class ActionDraftStep(IActionDraftStore store, ActionBillReader re
             return await attempt.CompleteAsync(State.Blocked, ActionDraftErrorCodes.TitleTooLong, cancellationToken);
         var trackedIssueIds = trackedIssues.Select(issue => issue.Id).ToImmutableArray();
         var policyAreaId = issueConfiguration.PolicyAreaIdFor(snapshot.Bill.PolicyArea);
-        return ChangeSince(evidence.Current, snapshot, trackedIssueIds, policyAreaId) switch
+        var context = new ActionDraftContext(evidence, snapshot, trackedIssueIds, policyAreaId, issues.Id);
+        return context.ChangeSince(evidence.Current) switch
         {
             ActionChange.None =>
                 await SettleWithoutCallAsync(attempt, snapshot.Fingerprint, ActionDraftErrorCodes.Unchanged, cancellationToken),
-            ActionChange.SponsorshipsOnly => await CopyTextAsync(attempt, evidence, snapshot, trackedIssueIds, policyAreaId, cancellationToken),
-            _ => await DraftAsync(attempt, evidence, snapshot, trackedIssues, trackedIssueIds, policyAreaId, summariesOmitted, cancellationToken)
+            ActionChange.SponsorshipsOnly => await CopyTextAsync(attempt, context, cancellationToken),
+            _ => await DraftAsync(attempt, context, trackedIssues, summariesOmitted, cancellationToken)
         };
     }
 
-    private Task<bool> CopyTextAsync(IAnalysisAttempt<ActionDraftRun> attempt, ActionDraftEvidence evidence, ActionBillSnapshot snapshot,
-        ImmutableArray<string> trackedIssueIds, string? policyAreaId, CancellationToken cancellationToken)
+    private Task<bool> CopyTextAsync(IAnalysisAttempt<ActionDraftRun> attempt, ActionDraftContext context,
+        CancellationToken cancellationToken)
     {
-        var run = attempt.BypassRun(ActionDraftTask.Model, snapshot.Fingerprint, null);
-        var revision = ActionDraftResolver.CopyText(evidence, snapshot, trackedIssueIds, policyAreaId, issues.Id, run.FinishedAtUtc);
+        var run = attempt.BypassRun(ActionDraftTask.Model, context.Snapshot.Fingerprint, null);
+        var revision = ActionDraftResolver.CopyText(context, run.FinishedAtUtc);
         return attempt.SettleAsync(new ActionDraftRun(run, ActionDraftErrorCodes.SponsorshipsChanged),
             ActionDraftCheckpoint.From(attempt.Claim, revision), cancellationToken);
     }
 
-    private async Task<bool> DraftAsync(IAnalysisAttempt<ActionDraftRun> attempt, ActionDraftEvidence evidence, ActionBillSnapshot snapshot,
-        ImmutableArray<TrackedIssueFact> trackedIssues, ImmutableArray<string> trackedIssueIds, string? policyAreaId, bool summariesOmitted, CancellationToken cancellationToken)
+    private async Task<bool> DraftAsync(IAnalysisAttempt<ActionDraftRun> attempt, ActionDraftContext context,
+        ImmutableArray<TrackedIssueFact> trackedIssues, bool summariesOmitted, CancellationToken cancellationToken)
     {
+        var snapshot = context.Snapshot;
         var summaryOmittedInputHashes = new HashSet<string>(StringComparer.Ordinal);
         AnalysisModelRequest? BuildRequest(ImmutableArray<string> errors)
         {
@@ -78,7 +80,7 @@ public sealed class ActionDraftStep(IActionDraftStore store, ActionBillReader re
 
         var loop = new AnalysisValidationLoop<ActionDraftRun, ActionDraftRevision>(WrapWithReason, attempt, AnalysisRunOutcome.Drafted,
             ActionDraftTask.MaximumValidationPasses, BuildRequest, model.DraftAsync,
-            (json, run) => ActionDraftResolver.Resolve(json, evidence, snapshot, trackedIssueIds, policyAreaId, issues.Id, run.RunId, run.FinishedAtUtc),
+            (json, run) => ActionDraftResolver.Resolve(json, context, run.RunId, run.FinishedAtUtc),
             async (runId, token) => (await store.GetRunAsync(runId, token))?.Run);
         var result = await loop.RunAsync(cancellationToken);
         return result.End switch
@@ -90,19 +92,6 @@ public sealed class ActionDraftStep(IActionDraftStore store, ActionBillReader re
             AnalysisLoopEnd.Exhausted or AnalysisLoopEnd.NotSent => await loop.FailAsync(result, cancellationToken),
             _ => result.Progress
         };
-    }
-
-    private ActionChange ChangeSince(ActionDraftRevision? previous, ActionBillSnapshot snapshot, ImmutableArray<string> trackedIssueIds,
-        string? policyAreaId)
-    {
-        if (previous is null || previous.SummaryVersion != snapshot.SummaryVersion || previous.PolicyArea != snapshot.Bill.PolicyArea || previous.PolicyAreaId != policyAreaId ||
-            previous.BillTitle != snapshot.Bill.Title || !previous.TrackedIssueIds.SequenceEqual(trackedIssueIds) ||
-            previous.IssueRevisionId != issues.Id)
-            return ActionChange.Other;
-        if (previous.Fingerprint != snapshot.Fingerprint)
-            return previous.HasSameSponsorsAs(snapshot.Sponsorships) ? ActionChange.SponsorshipsOnly : ActionChange.Other;
-        return previous.Sponsorships.Select(item => item.PersonId).SequenceEqual(snapshot.Sponsorships.Select(item => item.PersonId))
-            ? ActionChange.None : ActionChange.Other;
     }
 
     private static Task<bool> SettleWithoutCallAsync(IAnalysisAttempt<ActionDraftRun> attempt, string inputHash, string code,
@@ -117,6 +106,4 @@ public sealed class ActionDraftStep(IActionDraftStore store, ActionBillReader re
         var ids = BillGate.TrackedIssueIdsFor(snapshot.Bill.PolicyArea, BillGate.DayOf(snapshot.Bill.UpdateDate), issueConfiguration);
         return [.. ids.Select(id => new TrackedIssueFact(id, issueConfiguration.Issues.Single(issue => issue.Id == id).Name))];
     }
-
-    private enum ActionChange { None, SponsorshipsOnly, Other }
 }

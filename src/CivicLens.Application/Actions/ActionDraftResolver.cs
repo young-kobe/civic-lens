@@ -1,4 +1,3 @@
-using System.Collections.Immutable;
 using System.Text.Json;
 using CivicLens.Application.Analysis;
 using CivicLens.Core.Actions;
@@ -9,9 +8,10 @@ namespace CivicLens.Application.Actions;
 
 public static class ActionDraftResolver
 {
-    public static AnalysisResolution<ActionDraftRevision> Resolve(string outputJson, ActionDraftEvidence evidence, ActionBillSnapshot snapshot,
-        ImmutableArray<string> trackedIssueIds, string? policyAreaId, string issueRevisionId, string runId, DateTimeOffset createdAtUtc)
+    public static AnalysisResolution<ActionDraftRevision> Resolve(string outputJson, ActionDraftContext context, string runId,
+        DateTimeOffset createdAtUtc)
     {
+        var snapshot = context.Snapshot;
         var output = Parse(outputJson);
         if (output is null)
             return AnalysisResolution<ActionDraftRevision>.Reject(["The output is not valid JSON for the action schema."], false);
@@ -23,33 +23,31 @@ public static class ActionDraftResolver
         CheckNames(output.Headline.Text, "headline", snapshot, errors);
         CheckNames(output.Summary.Text, "summary", snapshot, errors);
         if (errors.Count > 0) return AnalysisResolution<ActionDraftRevision>.Reject(Bound(errors), false);
-        return AnalysisResolution<ActionDraftRevision>.Accept(
-            Assemble(output, evidence, snapshot, trackedIssueIds, policyAreaId, issueRevisionId, runId, createdAtUtc));
+        return AnalysisResolution<ActionDraftRevision>.Accept(Assemble(output, context, runId, createdAtUtc));
     }
 
-    public static ActionDraftRevision CopyText(ActionDraftEvidence evidence, ActionBillSnapshot snapshot,
-        ImmutableArray<string> trackedIssueIds, string? policyAreaId, string issueRevisionId, DateTimeOffset createdAtUtc)
+    public static ActionDraftRevision CopyText(ActionDraftContext context, DateTimeOffset createdAtUtc)
     {
-        var current = evidence.Current ?? throw new ArgumentException("Copied text needs a current revision.", nameof(evidence));
-        return Assemble(evidence, snapshot, trackedIssueIds, policyAreaId, issueRevisionId, createdAtUtc,
+        var current = context.Evidence.Current ?? throw new ArgumentException("Copied text needs a current revision.", nameof(context));
+        return Assemble(context, createdAtUtc,
             (current.Headline, current.Summary, current.TextOrigin, current.Suggestion));
     }
 
-    private static ActionDraftRevision Assemble(ActionDraftOutput output, ActionDraftEvidence evidence, ActionBillSnapshot snapshot,
-        ImmutableArray<string> trackedIssueIds, string? policyAreaId, string issueRevisionId, string runId, DateTimeOffset createdAtUtc)
+    private static ActionDraftRevision Assemble(ActionDraftOutput output, ActionDraftContext context, string runId,
+        DateTimeOffset createdAtUtc)
     {
-        var current = evidence.Current;
+        var current = context.Evidence.Current;
         var text = current?.TextOrigin == ActionTextOrigin.Person
             ? (current.Headline, current.Summary, ActionTextOrigin.Person,
-                new ActionTextSuggestion(output.Headline.Text, output.Summary.Text, runId, snapshot.Fingerprint))
+                new ActionTextSuggestion(output.Headline.Text, output.Summary.Text, runId, context.Snapshot.Fingerprint))
             : (output.Headline.Text, output.Summary.Text, ActionTextOrigin.Model, (ActionTextSuggestion?)null);
-        return Assemble(evidence, snapshot, trackedIssueIds, policyAreaId, issueRevisionId, createdAtUtc, text);
+        return Assemble(context, createdAtUtc, text);
     }
 
-    private static ActionDraftRevision Assemble(ActionDraftEvidence evidence, ActionBillSnapshot snapshot,
-        ImmutableArray<string> trackedIssueIds, string? policyAreaId, string issueRevisionId, DateTimeOffset createdAtUtc,
+    private static ActionDraftRevision Assemble(ActionDraftContext context, DateTimeOffset createdAtUtc,
         (string Headline, string Summary, ActionTextOrigin Origin, ActionTextSuggestion? Suggestion) text)
     {
+        var (evidence, snapshot, trackedIssueIds, policyAreaId, issueRevisionId) = context;
         var current = evidence.Current;
         var candidate = evidence.Candidate;
         var revision = new ActionDraftRevision(candidate.RecordId, (current?.RevisionNumber ?? 0) + 1, ReviewAuthor.AnalysisSubject,
