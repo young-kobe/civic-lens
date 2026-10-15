@@ -126,7 +126,7 @@ public sealed class PublishRelease
         };
         manifest.Validate();
         var manifestJson = JsonSerializer.SerializeToUtf8Bytes(manifest, PublicationProtocol.JsonOptions);
-        if (manifestJson.Length > PublicationProtocol.MaximumRecordFileBytes)
+        if (manifestJson.Length > PublicationProtocol.MaximumManifestBytes)
             throw new ArgumentException("The release manifest would exceed the manifest size limit.", nameof(additions));
 
         await using var staging = await releases.BeginAsync(cancellationToken);
@@ -144,9 +144,9 @@ public sealed class PublishRelease
 
         foreach (var asset in renderer.Assets)
             await staging.WriteFileAsync(asset.RelativePath, asset.Content, cancellationToken);
-        await staging.WriteFileAsync(PublicationProtocol.ManifestPath + ".gz",
+        await staging.WriteFileAsync(PublicationProtocol.ManifestGzipPath,
             Compress(manifestJson, stream => new GZipStream(stream, CompressionLevel.Optimal)), cancellationToken);
-        await staging.WriteFileAsync(PublicationProtocol.ManifestPath + ".br",
+        await staging.WriteFileAsync(PublicationProtocol.ManifestBrotliPath,
             Compress(manifestJson, stream => new BrotliStream(stream, CompressionLevel.Optimal)), cancellationToken);
         for (var page = 1; page <= PublicationProtocol.IndexPageCount(entries.Count); page++)
         {

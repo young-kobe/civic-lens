@@ -30,15 +30,34 @@ internal sealed class PublicationScenario
     public PublishRelease Publisher() => new(Publications, Releases, new FakeRenderer(), Reviews, Statements,
         new PublicationCatalog(OfficialNames), Clock);
 
-    public void SeedRelease(int recordCount, bool withFiles, int headlineLength = 0, char headlinePad = 'x')
+    private const string PunctuatedHeadline = "Mayor\u2019s \u201Chousing\u201D plan: caf\u00E9 owners, r\u00E9sum\u00E9 rules; it\u2019s 100% ready? ";
+
+    public static PublishedRecordEntry FilledStatementEntry(int index, int headlineLength, int extraIssueIds = 0) => new()
     {
-        var entries = Enumerable.Range(0, recordCount).Select(index => new PublishedRecordEntry
+        Kind = PublishedRecordKind.Statement,
+        RecordId = index.ToString("x64"),
+        RevisionNumber = 1,
+        Headline = string.Concat(Enumerable.Repeat(PunctuatedHeadline, headlineLength / PunctuatedHeadline.Length + 1))[..headlineLength],
+        FirstPublishedAtUtc = ApprovedAt.AddMinutes(-index),
+        Officials = [new() { Id = "mayor", Name = "Mayor Example" }, new() { Id = "council-chair", Name = "Council Chair Example" }],
+        IssueIds = ["housing", "public-transit", .. Enumerable.Range(0, extraIssueIds).Select(issue => $"{issue:x2}".PadRight(256, 'i'))],
+        PolicyAreaIds = ["land-use", "transportation"],
+        SourceHost = "council.example.gov",
+        EventDate = new DateOnly(2026, 1, 15)
+    };
+
+    public void SeedRelease(int recordCount, bool withFiles) =>
+        SeedRelease(withFiles, [.. Enumerable.Range(0, recordCount).Select(index => new PublishedRecordEntry
         {
             RecordId = index.ToString("x32"),
             RevisionNumber = 1,
-            Headline = $"Seeded {index}".PadRight(headlineLength, headlinePad),
+            Headline = $"Seeded {index}",
             FirstPublishedAtUtc = ApprovedAt.AddMinutes(-index)
-        }).ToArray();
+        })]);
+
+    public void SeedRelease(bool withFiles, PublishedRecordEntry[] entries)
+    {
+        var recordCount = entries.Length;
         var manifest = new PublicationRelease
         {
             SchemaVersion = PublicationProtocol.SchemaVersion,

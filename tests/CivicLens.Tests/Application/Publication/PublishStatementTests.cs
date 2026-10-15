@@ -174,7 +174,9 @@ public sealed class PublishStatementTests
 
         Assert.Equal([(first.DirectoryName, PublicationProtocol.RecordDataPath(statement)),
             (first.DirectoryName, PublicationProtocol.RecordPagePath(statement))], scenario.Releases.Links);
-        Assert.Contains(ReadManifest(scenario, second.DirectoryName).Records, entry => entry.Kind == PublishedRecordKind.Statement);
+        var carried = Assert.Single(ReadManifest(scenario, second.DirectoryName).Records, entry => entry.Kind == PublishedRecordKind.Statement);
+        Assert.Equal(("mayor", "Mayor Example"), (Assert.Single(carried.Officials).Id, carried.Officials[0].Name));
+        Assert.Equal(["housing"], carried.IssueIds);
     }
 
     [Fact]

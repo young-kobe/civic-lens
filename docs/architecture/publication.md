@@ -11,7 +11,7 @@ The publication feature turns approved revisions into immutable, cumulative stat
 - A newer draft never replaces published content automatically.
 - A release is cumulative. It holds the base release records plus explicit additions or replacements.
 - Carried records are hard links to the immutable files of the base release. Disk therefore grows with published records, not with the number of releases.
-- Each publish rebuilds only `release.json`, the index pages, and the assets. It reads the previous manifest once, under the 16 MB read cap. `PublicationProtocol.MaximumRecordsPerRelease` is the one owner of the record limit, which is 20,000. The database has no count check, because C# owns the rule.
+- Each publish rebuilds only `release.json`, the index pages, and the assets. It reads the previous manifest once, under the 32 MB manifest cap, `PublicationProtocol.MaximumManifestBytes`. `PublicationProtocol.MaximumRecordsPerRelease` is the one owner of the record limit, which is 20,000. The database has no count check, because C# owns the rule.
 - Postgres records which release is active. The `current` link is only a copy for the static server, so a failed link swap never drops committed records.
 - Every publication write takes all three review locks in one fixed order, which prevents a deadlock. The order is in [advisory locks](../architecture.md#advisory-locks).
 - A release has no status column. `is_active` marks the one active release: a commit sets it on the new row and clears the old one, and rollback moves it.
@@ -19,6 +19,7 @@ The publication feature turns approved revisions into immutable, cumulative stat
 - All releases are kept until a retention policy is agreed.
 - Host renders the shared Razor components to static HTML, so publication needs no new project.
 - Each manifest entry carries search filters, so search needs no record file reads. Each published record type owns the mapping in its `ToEntry` method. A filter that the kind has no fact for stays empty; publish never guesses it.
+- Release JSON uses relaxed escaping (`JavaScriptEncoder.UnsafeRelaxedJsonEscaping`), so non-ASCII letters and punctuation take UTF-8 bytes, not 6-byte `\uXXXX` escapes. This is safe because release JSON is fetched as JSON and never inlined in HTML or a script tag. Readers do not change.
 - Unreviewed proposals, internal reviewer notes, operational job details, and mutation controls stay private.
 - Public serving reads release contracts only. It never reads operational storage or private notes.
 
@@ -27,7 +28,7 @@ The publication feature turns approved revisions into immutable, cumulative stat
 Each line gives the rule, what enforces it, and the test that protects it. Cross-feature invariants are in [architecture](../architecture.md#invariants).
 
 - Only an approved record with no open concern publishes. Enforced by `PublishedRecordRules`. Test: `PublishReleaseTests.RejectsDraftsThatAreNotCleanlyApproved`.
-- A release holds at most `PublicationProtocol.MaximumRecordsPerRelease` records, and the manifest stays under the read cap at that count. Enforced by the `PublishRelease` record count check and manifest size check. Test: `PublishReleaseTests.RejectsMoreRecordsThanTheCapBeforeAnythingIsBuilt` and `PublishReleaseTests.RefusesAManifestOverTheReadCapAndStagesNothing`.
+- A release holds at most `PublicationProtocol.MaximumRecordsPerRelease` records, and the manifest stays under the manifest cap at that count. Enforced by the `PublishRelease` record count check and manifest size check. Test: `PublishReleaseTests.RejectsMoreRecordsThanTheCapBeforeAnythingIsBuilt`, `PublishReleaseTests.AReleaseAtTheRecordLimitOfFilledStatementEntriesKeepsTheManifestUnderThreeQuartersOfTheManifestCap`, and `PublishReleaseTests.RefusesAManifestOverTheManifestCapAndStagesNothing`.
 - Manifest filters hold at most `PublishedRecordEntry.MaximumFilterValues` distinct, nonblank values, each at most `PublishedRecordEntry.MaximumFilterValueLength` characters. Enforced by `PublishedRecordEntry.Validate`, which `PublicationRelease.Validate` calls. Test: `PublicationReleaseTests.FiltersAreBoundedAndDistinctSoOneEntryCannotSwellTheManifest`.
 - An entry's filters come from the revision that the release publishes. Enforced by `PublishedDocumentChange.ToEntry` and `PublishedStatement.ToEntry`. Test: `PublishStatementTests.EachKindFillsItsSearchFiltersFromTheRevisionItPublishes` and `PublishStatementTests.ARepublishedStatementReplacesItsCarriedEntryInsteadOfDuplicatingIt`.
 - The precompressed manifests hold exactly the manifest bytes. Enforced by `PublishRelease`. Test: `PublishReleaseTests.PrecompressedManifestsHoldExactlyTheManifestBytesSoTheServerNeverSendsADifferentRelease`.
@@ -129,8 +130,8 @@ Each index page has a search panel. It stays hidden until `app.js` runs, because
 | `sourceHost` | Host of the after version URL | Host of the source URL | Host of the bill source URL |
 | `eventDate` | Evidenced change date, or empty | Evidenced statement date, or empty | Latest action date |
 
-- New manifests use version 3.
-- Each release also holds `release.json.gz` and `release.json.br`. They compress the exact manifest bytes, so a static server can send them without compressing on each request. `src/CivicLens.Publication.Contracts/PublicationProtocol.cs` owns the version; see [Behavior versions](../architecture.md#behavior-versions).
+- New manifests use version 3. `src/CivicLens.Publication.Contracts/PublicationProtocol.cs` owns the version; see [Behavior versions](../architecture.md#behavior-versions).
+- Each release also holds `release.json.gz` and `release.json.br`, at `PublicationProtocol.ManifestGzipPath` and `ManifestBrotliPath`. They compress the exact manifest bytes, so a static server can send them without compressing on each request.
 - A separate static file server serves the release root read-only. It has no access to operational storage.
 
 ## Code map
@@ -158,7 +159,9 @@ Release and rollback commands are in [operations](../operations.md#publish-a-sta
 - Planned, not built: a source filter and filters that are easy to clear, on the R-20 filter pages.
 - Later, after the first MVP deploy: a public search service with its own Postgres database, fed from releases. It gives full-text search over the whole processed corpus.
 - Split the manifest by kind when it grows over 4 MB.
-- An entry with an 80-character headline and one official, issue, and policy area takes about 460 bytes. At the longest ASCII headline, it takes about 640 bytes, so 20,000 entries take about 12.8 MB. Such a manifest compresses to about 1.4 MB with gzip. A 256-character non-ASCII headline takes about 1.7 KB in the escaped manifest. `PublishRelease` refuses a manifest over the 16 MB read cap, so such a release fails before it stages anything.
+- Measured entry sizes have two officials, two issues, two policy areas, a host, and a date. An 80-character headline gives 528 bytes. A 256-character punctuated headline with non-ASCII letters gives 731 bytes. Default escaping would make the second one 824 bytes. At 20,000 entries the worst realistic manifest takes about 14.6 MB, under three quarters of the 32 MB cap. An entry at the filter limits can take far more, about 2.3 KB with eight long issue IDs. `PublishRelease` refuses a manifest over the cap, so such a release fails before it stages anything.
+- Issue and policy area filters show raw IDs, because the manifest has no names for them. R-20 owns the fix.
+- After the first deploy, the public search service replaces the client search and the schema 3 filter fields. Delete them then.
 - Each release row stores `records_json`, about 2 MB at 20,000 records. Review queries expand the active one.
 - Rolling back the `DropReleaseCountCheck` migration fails while any release holds more than 2000 records.
 - A future live public Blazor deployment must read published releases only and stay separate from the operational application.

@@ -3,13 +3,14 @@ using System.Text.Json;
 using CivicLens.Application.Publication;
 using CivicLens.Application.Review;
 using CivicLens.Core.Review;
+using CivicLens.Core.Statements;
 using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Tests.Application.Publication;
 
 public sealed class PublishReleaseTests
 {
-    private const int SeededNonAsciiRecords = 9756;
+    private const int SeededRoom = 800;
 
     [Fact]
     public async Task ReviewerCannotPublishBecauseOnlyTheOwnerSpeaksForTheSite()
@@ -96,8 +97,8 @@ public sealed class PublishReleaseTests
 
         var files = scenario.Releases.Directories[summary.DirectoryName];
         var manifest = files[PublicationProtocol.ManifestPath];
-        Assert.Equal(manifest, Decompress(files[PublicationProtocol.ManifestPath + ".gz"], stream => new GZipStream(stream, CompressionMode.Decompress)));
-        Assert.Equal(manifest, Decompress(files[PublicationProtocol.ManifestPath + ".br"], stream => new BrotliStream(stream, CompressionMode.Decompress)));
+        Assert.Equal(manifest, Decompress(files[PublicationProtocol.ManifestGzipPath], stream => new GZipStream(stream, CompressionMode.Decompress)));
+        Assert.Equal(manifest, Decompress(files[PublicationProtocol.ManifestBrotliPath], stream => new BrotliStream(stream, CompressionMode.Decompress)));
     }
 
     [Fact]
@@ -137,29 +138,35 @@ public sealed class PublishReleaseTests
     }
 
     [Fact]
-    public async Task AReleaseAtTheRecordLimitOfLongestAsciiDocumentChangeHeadlinesKeepsTheManifestUnderThreeQuartersOfTheReadCap()
+    public async Task AReleaseAtTheRecordLimitOfFilledStatementEntriesKeepsTheManifestUnderThreeQuartersOfTheManifestCap()
     {
         var scenario = new PublicationScenario();
-        scenario.SeedRelease(PublicationProtocol.MaximumRecordsPerRelease - 1, withFiles: true,
-            DocumentChangeDraftRevision.MaximumHeadlineLength);
+        scenario.SeedRelease(withFiles: true, [.. Enumerable.Range(0, PublicationProtocol.MaximumRecordsPerRelease - 1)
+            .Select(index => PublicationScenario.FilledStatementEntry(index, StatementDraftRevision.MaximumHeadlineLength))]);
         var draft = scenario.AddDraft('a');
 
         var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k", draft));
 
         Assert.Equal(PublicationProtocol.MaximumRecordsPerRelease, summary.RecordCount);
         var manifestBytes = scenario.Releases.Directories[summary.DirectoryName][PublicationProtocol.ManifestPath].Length;
-        Assert.True(manifestBytes < PublicationProtocol.MaximumRecordFileBytes * 3 / 4,
-            $"The manifest has {manifestBytes} bytes, and the next publish must read it under {PublicationProtocol.MaximumRecordFileBytes}.");
+        Assert.True(manifestBytes < PublicationProtocol.MaximumManifestBytes * 3 / 4,
+            $"The manifest has {manifestBytes} bytes, and the next publish must read it under {PublicationProtocol.MaximumManifestBytes}.");
     }
 
     [Fact]
-    public async Task RefusesAManifestOverTheReadCapAndStagesNothing()
+    public async Task RefusesAManifestOverTheManifestCapAndStagesNothing()
     {
         var scenario = new PublicationScenario();
-        scenario.SeedRelease(SeededNonAsciiRecords, withFiles: true, DocumentChangeDraftRevision.MaximumHeadlineLength, 'é');
-        var seededBytes = scenario.Releases.Directories["seeded"][PublicationProtocol.ManifestPath].Length;
-        Assert.InRange(seededBytes, PublicationProtocol.MaximumRecordFileBytes - 2_000, PublicationProtocol.MaximumRecordFileBytes);
         var drafts = new[] { 'a', 'b', 'c', 'd', 'e', 'f' }.Select(id => scenario.AddDraft(id)).ToArray();
+        var entrySize = JsonSerializer.SerializeToUtf8Bytes(FatEntry(0), PublicationProtocol.JsonOptions).Length;
+        var fatCount = (PublicationProtocol.MaximumManifestBytes - SeededRoom) / (entrySize + 1) - 1;
+        Assert.True(fatCount + 1 + drafts.Length <= PublicationProtocol.MaximumRecordsPerRelease,
+            "The fat entry must reach the cap before the record limit does.");
+        var fillerLength = PublicationProtocol.MaximumManifestBytes - SeededRoom - fatCount * (entrySize + 1);
+        var filler = PublicationScenario.FilledStatementEntry(fatCount, 1) with { Headline = new string('x', fillerLength) };
+        scenario.SeedRelease(withFiles: true, [.. Enumerable.Range(0, fatCount).Select(FatEntry), filler]);
+        var seededBytes = scenario.Releases.Directories["seeded"][PublicationProtocol.ManifestPath].Length;
+        Assert.InRange(seededBytes, PublicationProtocol.MaximumManifestBytes - SeededRoom - 400, PublicationProtocol.MaximumManifestBytes);
 
         var refusal = await Assert.ThrowsAsync<ArgumentException>(() =>
             scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k", drafts)));
@@ -169,6 +176,9 @@ public sealed class PublishReleaseTests
         Assert.Single(scenario.Publications.Committed);
         Assert.Empty(scenario.Releases.Activated);
     }
+
+    private static PublishedRecordEntry FatEntry(int index) => PublicationScenario.FilledStatementEntry(
+        index, StatementDraftRevision.MaximumHeadlineLength, extraIssueIds: 6);
 
     [Theory]
     [InlineData("awaiting")]
