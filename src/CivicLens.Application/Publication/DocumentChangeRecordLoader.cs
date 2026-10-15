@@ -5,38 +5,28 @@ using CivicLens.Publication.Contracts;
 namespace CivicLens.Application.Publication;
 
 internal sealed class DocumentChangeRecordLoader(IDocumentChangeReviewStore reviews)
-    : PublishedRecordLoader(PublishedRecordKind.DocumentChange, "Draft")
+    : PublishedRecordLoader<UnpublishedApprovedDraft, PublishableDocumentChange>(PublishedRecordKind.DocumentChange, "Draft")
 {
     public override void ValidateId(string recordId) => ReviewValidation.ValidateDraftId(recordId);
 
-    public override async Task<(IReadOnlyList<ReadyToPublishRecord> Ready, bool HasMore)> ListReadyAsync(int limit,
-        CancellationToken cancellationToken)
-    {
-        var candidates = await reviews.ListUnpublishedApprovedDraftsAsync(limit + 1, cancellationToken);
-        var ready = candidates
-            .Where(candidate => PublishedRecordRules.IsPublishable(candidate.Draft.CurrentStatus, candidate.Draft.UnresolvedConcernCount))
-            .Select(candidate => Ready(candidate.Draft.DraftId, candidate.Draft.CurrentRevision.Headline,
-                candidate.Draft.CurrentRevision.RevisionNumber, candidate.PublishedRevisionNumber))
-            .ToList();
-        return (ready, candidates.Count > limit);
-    }
+    protected override Task<IReadOnlyList<UnpublishedApprovedDraft>> ListCandidatesAsync(int limit,
+        CancellationToken cancellationToken) => reviews.ListUnpublishedApprovedDraftsAsync(limit, cancellationToken);
 
-    public override async Task<List<PendingRecord>> LoadAsync(ImmutableArray<string> recordIds, PublicationBuild build,
-        CancellationToken cancellationToken)
+    protected override ReadyToPublishRecord? ToReady(UnpublishedApprovedDraft candidate) =>
+        Ready(candidate.Draft.CurrentStatus, candidate.Draft.UnresolvedConcernCount, candidate.Draft.DraftId,
+            candidate.Draft.CurrentRevision.Headline, candidate.Draft.CurrentRevision.RevisionNumber, candidate.PublishedRevisionNumber);
+
+    protected override Task<IReadOnlyDictionary<string, PublishableDocumentChange>> GetForPublicationAsync(
+        ImmutableArray<string> recordIds, CancellationToken cancellationToken) =>
+        reviews.GetForPublicationAsync(recordIds, cancellationToken);
+
+    protected override async Task<PendingRecord> BuildAsync(string recordId, PublishableDocumentChange addition,
+        PublicationBuild build, CancellationToken cancellationToken)
     {
-        if (recordIds.IsEmpty) return [];
-        var found = await reviews.GetForPublicationAsync(recordIds, cancellationToken);
-        var builder = new PublishedRecordBuilder(build.Rules);
-        var pending = new List<PendingRecord>(recordIds.Length);
-        foreach (var draftId in recordIds)
-        {
-            var addition = found.GetValueOrDefault(draftId) ?? throw NotFound(draftId);
-            var review = addition.Review;
-            RequirePublishable(draftId, review.CurrentRevision.RevisionNumber, review.Decisions, review.UnresolvedConcerns, build.Previous);
-            var record = builder.Build(addition, build.Previous.Find(Kind, draftId), build.Now);
-            pending.Add(PendingRecord.Create(record.ToEntry(), review.ReviewStateVersion, record,
-                await build.Renderer.RenderRecordAsync(record, cancellationToken)));
-        }
-        return pending;
+        var review = addition.Review;
+        RequirePublishable(recordId, review.CurrentRevision.RevisionNumber, review.Decisions, review.UnresolvedConcerns, build.Previous);
+        var record = new PublishedRecordBuilder(build.Rules).Build(addition, build.Previous.Find(Kind, recordId), build.Now);
+        return PendingRecord.Create(record.ToEntry(), review.ReviewStateVersion, record,
+            await build.Renderer.RenderRecordAsync(record, cancellationToken));
     }
 }

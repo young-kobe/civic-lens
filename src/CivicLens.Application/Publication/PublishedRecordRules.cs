@@ -15,9 +15,9 @@ internal sealed class PublishedRecordRules(PublicationCatalog catalog)
             .Where(item => item.RevisionNumber == revisionNumber && item.Kind == ReviewDecisionKind.Approve)
             .MaxBy(item => item.ReviewStateVersion)!.CreatedAtUtc;
 
-    public static PublishedCitation Cite(SourceSpan statementSpan, DocumentExtraction extraction)
+    public static PublishedCitation Cite(SourceSpan source, DocumentExtraction extraction)
     {
-        var span = new DocumentTextSpan(extraction, statementSpan.Start, statementSpan.Length);
+        var span = new DocumentTextSpan(extraction, source.Start, source.Length);
         return new() { ExtractionId = span.ExtractionId, Start = span.Start, Length = span.Length, Quote = span.Quote };
     }
 
