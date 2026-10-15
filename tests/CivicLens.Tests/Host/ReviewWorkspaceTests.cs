@@ -204,7 +204,7 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
         const string untrustedSource = "<img src=x onerror=alert(1)>";
         var before = await host.SaveExtractionAsync("Earlier wording.\n");
         var after = await host.SaveExtractionAsync(untrustedSource + "\n");
-        await host.Comparisons.SaveAsync(DocumentComparison.Create(before, after), default);
+        await host.Comparisons.CompareAndSaveAsync(before.ExtractionId, after.ExtractionId, default);
         SignIn(Owner);
 
         // Captured pages are attacker-controlled; rendering them as HTML would run script in the reviewer's session.
@@ -440,7 +440,7 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
     {
         var before = await host.SaveExtractionAsync(beforeText);
         var after = await host.SaveExtractionAsync(afterText);
-        return await host.Comparisons.SaveAsync(DocumentComparison.Create(before, after), default);
+        return await host.Comparisons.CompareAndSaveAsync(before.ExtractionId, after.ExtractionId, default);
     }
 
     private static List<KeyValuePair<string, string>> StartFields(IDocument home, string comparisonId)

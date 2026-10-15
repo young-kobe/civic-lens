@@ -10,7 +10,9 @@ using CivicLens.Application.Collection;
 using CivicLens.Collection.Contracts;
 using CivicLens.Core.Collection;
 using CivicLens.Core.Documents;
+using CivicLens.Application.Collection.Processing;
 using CivicLens.Infrastructure.Collection;
+using CivicLens.Infrastructure.Collection.Processing;
 using CivicLens.Infrastructure.Documents;
 using CivicLens.Tests.Host;
 using CivicLens.Tests.Infrastructure.Collection;
@@ -94,7 +96,7 @@ public sealed class PostgresDocumentExtractionStoreTests(PostgresCollection post
             CREATE TRIGGER fail_extraction BEFORE INSERT ON document_extractions
             FOR EACH ROW EXECUTE FUNCTION fail_extraction();
             """);
-        await Assert.ThrowsAsync<DbUpdateException>(() => extractions.SaveAsync(extraction, CancellationToken.None));
+        await Assert.ThrowsAsync<PostgresException>(() => extractions.SaveAsync(extraction, CancellationToken.None));
         Assert.Null(await extractions.GetAsync(extraction.ExtractionId, CancellationToken.None));
         await db.Database.ExecuteSqlRawAsync("DROP TRIGGER fail_extraction ON document_extractions");
         using var cancellation = new CancellationTokenSource();
@@ -182,7 +184,8 @@ public sealed class PostgresDocumentExtractionStoreTests(PostgresCollection post
     {
         var comparison = await SaveComparisonAsync("Old policy.", "New policy.");
         var comparisons = new PostgresDocumentComparisonStore(factory);
-        await Task.WhenAll(Enumerable.Range(0, 4).Select(_ => comparisons.SaveAsync(comparison, CancellationToken.None)));
+        await Task.WhenAll(Enumerable.Range(0, 4).Select(_ => comparisons.CompareAndSaveAsync(
+            comparison.BeforeExtractionId, comparison.AfterExtractionId, CancellationToken.None)));
 
         var row = await AnalysisRowsAsync(comparison.ComparisonId);
         Assert.Equal([("draft", "Pending", 0L, 0, 0L)], row);
@@ -190,7 +193,7 @@ public sealed class PostgresDocumentExtractionStoreTests(PostgresCollection post
     }
 
     [Fact]
-    public async Task ComparisonWithoutHunksOrWithoutACompleteResultQueuesNoAnalysis()
+    public async Task AnIncompleteComparisonSavesAndQueuesNothing()
     {
         await SaveComparisonAsync("Same policy.", "Same policy.");
         var comparisons = new PostgresDocumentComparisonStore(factory);
@@ -198,25 +201,23 @@ public sealed class PostgresDocumentExtractionStoreTests(PostgresCollection post
         var after = new DocumentExtraction(await ImportAsync("New."), "p2", "n", "New.");
         await extractions.SaveAsync(before, CancellationToken.None);
         await extractions.SaveAsync(after, CancellationToken.None);
-        var incompatible = await comparisons.SaveAsync(DocumentComparison.Create(before, after), CancellationToken.None);
+        var incompatible = await comparisons.CompareAndSaveAsync(before.ExtractionId, after.ExtractionId, CancellationToken.None);
 
         Assert.Equal(DocumentComparisonStatus.Incompatible, incompatible.Status);
+        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM document_comparisons"));
+        Assert.Null(await comparisons.GetAsync(incompatible.ComparisonId, CancellationToken.None));
         Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM document_change_analysis"));
     }
 
     [Fact]
-    public async Task ForgedComparisonSaveFailsAndQueuesNothing()
+    public async Task ComparingAnExtractionThatWasNeverSavedFailsAndWritesNothing()
     {
-        var comparison = await SaveComparisonAsync("Old policy.", "New policy.");
         var comparisons = new PostgresDocumentComparisonStore(factory);
-        var forged = DocumentComparison.Create(new DocumentExtraction(
-            (await extractions.GetAsync(comparison.BeforeExtractionId, CancellationToken.None))!.SourceAttempt, "p", "n", "Forged."),
-            (await extractions.GetAsync(comparison.AfterExtractionId, CancellationToken.None))!);
+        var unknown = new string('c', 64);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => comparisons.SaveAsync(forged, CancellationToken.None));
+        await Assert.ThrowsAsync<ArgumentException>(() => comparisons.CompareAndSaveAsync(unknown, unknown, CancellationToken.None));
 
-        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM document_comparisons"));
-        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM document_change_analysis"));
+        Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM document_comparisons"));
     }
 
     [Fact]
@@ -233,7 +234,7 @@ public sealed class PostgresDocumentExtractionStoreTests(PostgresCollection post
         await extractions.SaveAsync(after, CancellationToken.None);
         var comparisons = new PostgresDocumentComparisonStore(factory);
 
-        await Assert.ThrowsAnyAsync<Exception>(() => comparisons.SaveAsync(DocumentComparison.Create(before, after), CancellationToken.None));
+        await Assert.ThrowsAnyAsync<Exception>(() => comparisons.CompareAndSaveAsync(before.ExtractionId, after.ExtractionId, CancellationToken.None));
 
         Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM document_comparisons"));
         Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM document_change_analysis"));
@@ -246,7 +247,7 @@ public sealed class PostgresDocumentExtractionStoreTests(PostgresCollection post
         await extractions.SaveAsync(before, CancellationToken.None);
         await extractions.SaveAsync(after, CancellationToken.None);
         return await new PostgresDocumentComparisonStore(factory)
-            .SaveAsync(DocumentComparison.Create(before, after), CancellationToken.None);
+            .CompareAndSaveAsync(before.ExtractionId, after.ExtractionId, CancellationToken.None);
     }
 
     private async Task<List<(string Task, string Status, long Fence, int Attempts, long Reserved)>> AnalysisRowsAsync(string comparisonId)
@@ -307,21 +308,19 @@ public sealed class PostgresDocumentExtractionStoreTests(PostgresCollection post
         var comparisons = new PostgresDocumentComparisonStore(factory);
         var comparison = DocumentComparison.Create(before, after);
         var saved = await Task.WhenAll(Enumerable.Range(0, 4)
-            .Select(_ => comparisons.SaveAsync(comparison, CancellationToken.None)));
+            .Select(_ => comparisons.CompareAndSaveAsync(before.ExtractionId, after.ExtractionId, CancellationToken.None)));
         Assert.All(saved, item => Assert.Equal(comparison.ComparisonId, item.ComparisonId));
         Assert.Equal(DocumentComparisonStatus.Complete,
             (await comparisons.GetAsync(comparison.ComparisonId, CancellationToken.None))!.Status);
-        var forged = DocumentComparison.Create(new DocumentExtraction(before.SourceAttempt, "p", "n", "Forged policy."), after);
-        await Assert.ThrowsAsync<InvalidOperationException>(() => comparisons.SaveAsync(forged, CancellationToken.None));
         await using var db = await factory.CreateDbContextAsync();
         Assert.Equal(1, await db.Database.SqlQuery<int>($"SELECT count(*)::integer AS \"Value\" FROM document_comparisons").SingleAsync());
         await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE document_comparisons SET before_extraction_id = {after.ExtractionId} WHERE comparison_id = {comparison.ComparisonId}");
-        await Assert.ThrowsAsync<InvalidOperationException>(() => comparisons.SaveAsync(comparison, CancellationToken.None));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => comparisons.CompareAndSaveAsync(before.ExtractionId, after.ExtractionId, CancellationToken.None));
         await Assert.ThrowsAsync<InvalidOperationException>(() => comparisons.GetAsync(comparison.ComparisonId, CancellationToken.None));
         await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE document_comparisons SET before_extraction_id = {before.ExtractionId} WHERE comparison_id = {comparison.ComparisonId}");
         await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE document_comparisons SET result_json = '{{}}' WHERE comparison_id = {comparison.ComparisonId}");
         await Assert.ThrowsAsync<InvalidOperationException>(() => comparisons.GetAsync(comparison.ComparisonId, CancellationToken.None));
-        await Assert.ThrowsAsync<InvalidOperationException>(() => comparisons.SaveAsync(comparison, CancellationToken.None));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => comparisons.CompareAndSaveAsync(before.ExtractionId, after.ExtractionId, CancellationToken.None));
     }
 
     [Fact]
@@ -509,6 +508,67 @@ public sealed class PostgresDocumentExtractionStoreTests(PostgresCollection post
         using var failure = JsonDocument.Parse(incompatible.Output);
         Assert.Equal("incompatible", failure.RootElement.GetProperty("status").GetString());
         Assert.Empty(failure.RootElement.GetProperty("hunks").EnumerateArray());
+    }
+
+    [Fact]
+    public async Task CliRejectsAnUnknownOrMalformedExtractionIdWithInvalidInputExit()
+    {
+        var unknown = new string('c', 64);
+
+        Assert.Equal(2, (await HostProcess.RunAsync(connectionString, "documents", "compare", unknown, unknown)).ExitCode);
+        Assert.Equal(2, (await HostProcess.RunAsync(connectionString, "documents", "compare", "bad", "bad")).ExitCode);
+    }
+
+    [Fact]
+    public async Task AProcessingCheckpointRejectsAStoredComparisonThatIsNotComplete()
+    {
+        var before = new DocumentExtraction(await ImportAsync("Old."), "p", "n", "Old.");
+        var after = new DocumentExtraction(await ImportAsync("New."), "p2", "n", "New.");
+        await extractions.SaveAsync(before, CancellationToken.None);
+        await extractions.SaveAsync(after, CancellationToken.None);
+        var incompatible = DocumentComparison.Create(before, after);
+        await using (var connection = new NpgsqlConnection(connectionString))
+        {
+            await connection.OpenAsync();
+            await using var command = new NpgsqlCommand("""
+                INSERT INTO collection_jobs (job_id, idempotency_key, definition_json, source_id, is_root, state, created_at,
+                    cancellation_requested, lease_fence)
+                VALUES ('job', 'key', '{}', 'source', FALSE, 'Succeeded', 1, FALSE, 0);
+                INSERT INTO collection_job_attempts (attempt_id, job_id, sequence, request_json, started_at)
+                VALUES (@attempt, 'job', 1, '{}', 1);
+                INSERT INTO document_comparisons (comparison_id, before_extraction_id, after_extraction_id,
+                    algorithm_version, settings_version, result_json, has_changes)
+                VALUES (@comparison, @before, @after, @algorithm, @settings, @result, FALSE)
+                """, connection);
+            command.Parameters.AddWithValue("attempt", after.SourceAttempt.AttemptId);
+            command.Parameters.AddWithValue("comparison", incompatible.ComparisonId);
+            command.Parameters.AddWithValue("before", before.ExtractionId);
+            command.Parameters.AddWithValue("after", after.ExtractionId);
+            command.Parameters.AddWithValue("algorithm", incompatible.AlgorithmVersion);
+            command.Parameters.AddWithValue("settings", incompatible.SettingsVersion);
+            command.Parameters.AddWithValue("result", JsonSerializer.Serialize(incompatible, CollectionProtocol.JsonOptions));
+            await command.ExecuteNonQueryAsync();
+        }
+        var processing = PostgresEvidenceProcessingStore.FromConnectionString(connectionString);
+        _ = await processing.EnsureAsync("job", after.SourceAttempt.AttemptId, "source", "https://example.test/pages/a", CancellationToken.None);
+        var claim = await processing.TryClaimAsync("job", after.SourceAttempt.AttemptId, TimeSpan.FromSeconds(30), CancellationToken.None);
+        Assert.NotNull(claim);
+
+        Assert.True(await processing.CheckpointAsync(new EvidenceProcessingCheckpoint("job", after.SourceAttempt.AttemptId,
+            EvidenceProcessingStage.Extraction, EvidenceProcessingStatus.Running, claim.LeaseToken, claim.Fence,
+            EvidenceProcessingStage.Comparison, EvidenceProcessingStatus.Pending, ExtractionId: after.ExtractionId),
+            CancellationToken.None));
+
+        claim = await processing.TryClaimAsync("job", after.SourceAttempt.AttemptId, TimeSpan.FromSeconds(30), CancellationToken.None);
+        Assert.NotNull(claim);
+
+        var accepted = await processing.CheckpointAsync(new EvidenceProcessingCheckpoint("job", after.SourceAttempt.AttemptId,
+            EvidenceProcessingStage.Comparison, EvidenceProcessingStatus.Running, claim.LeaseToken, claim.Fence,
+            EvidenceProcessingStage.Complete, EvidenceProcessingStatus.Succeeded,
+            ComparisonId: incompatible.ComparisonId, Outcome: EvidenceProcessingOutcome.Unchanged), CancellationToken.None);
+
+        Assert.Equal(DocumentComparisonStatus.Incompatible, incompatible.Status);
+        Assert.False(accepted);
     }
 
     private static CollectionConfiguration ProfileConfiguration() => new()

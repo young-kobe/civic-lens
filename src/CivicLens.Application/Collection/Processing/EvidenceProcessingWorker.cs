@@ -184,7 +184,8 @@ public sealed class EvidenceProcessingWorker(
                 snapshot.PreviousCapture is null ? "historyGap" : "incompatibleHistory", cancellationToken);
             return;
         }
-        var comparison = await compare.CompareAsync(previousExtraction, snapshot.Current, cancellationToken);
+        var comparison = await compare.ExecuteAsync(previousExtraction.ExtractionId, snapshot.Current.ExtractionId,
+            cancellationToken);
         if (comparison.Status != DocumentComparisonStatus.Complete)
         {
             await CompleteAsync(claim, EvidenceProcessingStage.Complete, EvidenceProcessingStatus.Blocked,
@@ -192,10 +193,9 @@ public sealed class EvidenceProcessingWorker(
                     ? "comparisonLimitExceeded" : "incompatibleHistory", cancellationToken);
             return;
         }
-        var saved = await compare.SaveAsync(comparison, cancellationToken);
         await CompleteAsync(claim, EvidenceProcessingStage.Complete, EvidenceProcessingStatus.Succeeded,
             comparison.Hunks.IsEmpty ? EvidenceProcessingOutcome.Unchanged : EvidenceProcessingOutcome.Changed,
-            null, cancellationToken, saved.ComparisonId);
+            null, cancellationToken, comparison.ComparisonId);
     }
 
     private async Task<ComparisonHistorySnapshot> ReadComparisonHistoryAsync(EvidenceProcessingRecord record,

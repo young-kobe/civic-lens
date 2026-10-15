@@ -379,7 +379,7 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- do
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- documents comparison <comparison-id>
 ```
 
-`compare` returns exit 0 for a complete comparison. It returns exit 1 with a retained `incompatible` or `limitExceeded` result otherwise. `comparison` shows that retained result and returns exit 0 when found. No hunks means unchanged only when the status is `complete`. To inspect an exact quotation, use `documents cite` with the extraction ID and a positive range length.
+`compare` returns exit 0 for a complete comparison. It prints an `incompatible` or `limitExceeded` result with exit 1 and does not save it, so `comparison` cannot find it. `comparison` shows a saved result and returns exit 0 when found. An unknown or malformed extraction ID returns exit 2. No hunks means unchanged only when the status is `complete`. To inspect an exact quotation, use `documents cite` with the extraction ID and a positive range length.
 
 When processing versions or profiles differ, run `documents extract` again on both original captured attempt IDs with the same current settings. Then compare the new extraction IDs. These commands do not judge significance, approve evidence, or publish anything.
 

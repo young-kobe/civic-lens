@@ -1,3 +1,4 @@
+using System.Data;
 using System.Text.Json;
 using CivicLens.Application.Documents;
 using CivicLens.Collection.Contracts;
@@ -35,33 +36,28 @@ public sealed class PostgresDocumentExtractionStore(IDbContextFactory<Collection
     {
         ArgumentNullException.ThrowIfNull(extraction);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        // As with collection imports, serialize the read/compare/write decision in one short transaction.
-        await using var transaction = await PostgresAdvisoryLock.BeginWriteAsync(db, PostgresAdvisoryLock.DocumentExtractions, cancellationToken);
         var imported = await PostgresCollectionAttemptStore.GetAsync(db, extraction.SourceAttempt.AttemptId, cancellationToken,
             includeDiscovery: false);
         if (imported?.AttemptResult is not CapturedAttemptResult captured || !captured.Equals(extraction.SourceAttempt))
             throw new InvalidOperationException("Extraction provenance does not match an imported captured attempt.");
 
-        var existing = await ReadAsync(db, extraction.ExtractionId, cancellationToken);
-        if (existing is not null)
+        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
+        var profileJson = SerializeProfile(extraction.Profile);
+        var inserted = await db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO document_extractions (extraction_id, attempt_id, parser_version, normalization_version, text,
+                text_sha256, profile_json)
+            VALUES ({extraction.ExtractionId}, {captured.AttemptId}, {extraction.ParserVersion},
+                {extraction.NormalizationVersion}, {extraction.Text}, {extraction.TextSha256}, {profileJson})
+            ON CONFLICT (extraction_id) DO NOTHING
+            """, cancellationToken);
+        if (inserted == 0)
         {
-            if (!SameEvidence(existing, extraction))
+            var winner = await ReadAsync(db, extraction.ExtractionId, cancellationToken)
+                ?? throw new InvalidOperationException("A conflicting extraction row vanished.");
+            if (!SameEvidence(winner, extraction))
                 throw new InvalidOperationException("An extraction identity was reused with different evidence or text.");
-            await transaction.CommitAsync(cancellationToken);
-            return existing;
+            return winner;
         }
-
-        db.Add(new DocumentExtractionRow
-        {
-            ExtractionId = extraction.ExtractionId,
-            AttemptId = extraction.SourceAttempt.AttemptId,
-            ParserVersion = extraction.ParserVersion,
-            NormalizationVersion = extraction.NormalizationVersion,
-            Text = extraction.Text,
-            TextSha256 = extraction.TextSha256,
-            ProfileJson = SerializeProfile(extraction.Profile)
-        });
-        await db.SaveChangesAsync(cancellationToken);
         await PostgresStatementCandidateRegistration.RegisterAsync(db, captured, extraction.ExtractionId, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return extraction;
@@ -131,7 +127,7 @@ public sealed class PostgresDocumentExtractionStore(IDbContextFactory<Collection
             ExcludedSelectors = profile.ExcludedSelectors.ToArray()
         }, CollectionProtocol.JsonOptions);
 
-    private static void ValidateId(string extractionId)
+    internal static void ValidateId(string extractionId)
     {
         if (!LowercaseHex.Is(extractionId, 64))
             throw new ArgumentException("Extraction ID must be a lowercase SHA-256 value.", nameof(extractionId));

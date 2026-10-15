@@ -119,13 +119,13 @@ public sealed class EvidencePagesTests(PostgresCollection postgres) : IAsyncLife
         Assert.Contains("parser-v1", page.QuerySelector(".tech")!.TextContent, StringComparison.Ordinal);
     }
 
-    // Only a complete comparison with changed text may start a draft; other states must explain why there is nothing to review.
+    // A saved comparison with changed text shows both versions and may start a draft.
     [Fact]
-    public async Task ComparisonShowsBothVersionsAndExplainsStatesThatCannotStartADraft()
+    public async Task ComparisonShowsBothVersionsAndOffersADraft()
     {
         var before = await host.SaveExtractionAsync("Deadline October 15.\nEligibility unchanged.");
         var after = await host.SaveExtractionAsync("Deadline October 30.\nEligibility unchanged.");
-        var changed = await host.Comparisons.SaveAsync(DocumentComparison.Create(before, after), default);
+        var changed = await host.Comparisons.CompareAndSaveAsync(before.ExtractionId, after.ExtractionId, default);
 
         var page = await host.GetDocumentAsync("/Documents/Comparison?comparisonId=" + changed.ComparisonId);
 
@@ -135,18 +135,6 @@ public sealed class EvidencePagesTests(PostgresCollection postgres) : IAsyncLife
         Assert.Contains(page.QuerySelectorAll("a"), link => link.GetAttribute("href")!.StartsWith("/Documents/Citation?", StringComparison.Ordinal));
         Assert.Equal(2, page.QuerySelectorAll(".page-header-meta time").Length);
         Assert.NotNull(StartDraftForm(page));
-
-        var upgraded = await host.Extractions.SaveAsync(new DocumentExtraction(after.SourceAttempt, "parser-v2", "normalization-v1", after.Text), default);
-        var incompatible = await host.Comparisons.SaveAsync(DocumentComparison.Create(before, upgraded), default);
-        var incompatiblePage = await host.GetDocumentAsync("/Documents/Comparison?comparisonId=" + incompatible.ComparisonId);
-        Assert.Contains("incompatible", incompatiblePage.QuerySelector(".notice")!.TextContent, StringComparison.Ordinal);
-        Assert.Null(StartDraftForm(incompatiblePage));
-
-        var longText = await host.SaveExtractionAsync(string.Join('\n', Enumerable.Repeat("line", 2002)));
-        var limited = await host.Comparisons.SaveAsync(DocumentComparison.Create(before, longText), default);
-        var limitedPage = await host.GetDocumentAsync("/Documents/Comparison?comparisonId=" + limited.ComparisonId);
-        Assert.Contains("limit", limitedPage.QuerySelector(".notice")!.TextContent, StringComparison.Ordinal);
-        Assert.Null(StartDraftForm(limitedPage));
     }
 
     // Drafting changes review state, so the form needs a valid antiforgery token and a replay must open the same draft.
@@ -155,7 +143,7 @@ public sealed class EvidencePagesTests(PostgresCollection postgres) : IAsyncLife
     {
         var before = await host.SaveExtractionAsync("Earlier wording.\n");
         var after = await host.SaveExtractionAsync("<img src=x onerror=alert(1)>\n");
-        var comparison = await host.Comparisons.SaveAsync(DocumentComparison.Create(before, after), default);
+        var comparison = await host.Comparisons.CompareAndSaveAsync(before.ExtractionId, after.ExtractionId, default);
         host.Client.DefaultRequestHeaders.Remove("Cookie");
         host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie("auth0|friend"));
         var url = "/Documents/Comparison?comparisonId=" + comparison.ComparisonId;

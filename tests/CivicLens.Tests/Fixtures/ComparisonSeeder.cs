@@ -20,7 +20,7 @@ internal sealed class ComparisonSeeder(PostgresCollectionAttemptStore attempts, 
         var after = new DocumentExtraction(await ImportAsync(afterText), "parser", "normalizer", afterText);
         await extractions.SaveAsync(before, CancellationToken.None);
         await extractions.SaveAsync(after, CancellationToken.None);
-        return await comparisons.SaveAsync(DocumentComparison.Create(before, after), CancellationToken.None);
+        return await comparisons.CompareAndSaveAsync(before.ExtractionId, after.ExtractionId, CancellationToken.None);
     }
 
     private async Task<CapturedAttemptResult> ImportAsync(string text)
