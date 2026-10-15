@@ -92,7 +92,7 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
     {
         var manualAttemptId = "manual-" + Guid.NewGuid().ToString("N");
         var manualRequest = ConfiguredDefinition().CreateRequest("manual-job", artifactRoot);
-        var manualReceipt = await CapturedReceiptAsync(manualRequest, "Earlier manual wording.", DateTimeOffset.UtcNow.AddMinutes(-2));
+        var manualReceipt = await CapturedReceiptAsync(manualRequest, "Earlier manual wording.", ObservationEpoch.AddMinutes(-2));
         var imported = await attempts.ImportAtomicallyAsync(CollectionAttemptImporter.CreateImport(
             manualAttemptId, manualRequest, manualReceipt), default);
         Assert.IsType<CapturedAttemptResult>(imported.AttemptResult);
@@ -392,8 +392,10 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
     {
         var captured = await CollectAsync("before-304", "Before conditional check.");
         var priorAttempt = Assert.Single(captured.Attempts).AttemptId;
+        await ProcessUntilTerminalAsync(Worker(processing), captured.JobId, priorAttempt);
         var conditionalJob = await CollectAsync("not-modified", body: null, etag: "\"v1\"");
-        var notModified = await attempts.GetAsync(Assert.Single(conditionalJob.Attempts).AttemptId, default);
+        var conditionalAttempt = Assert.Single(conditionalJob.Attempts).AttemptId;
+        var notModified = await attempts.GetAsync(conditionalAttempt, default);
         Assert.Equal(priorAttempt, notModified!.PriorCapturedAttempt!.AttemptId);
         var after304Job = await CollectAsync("after-304", "After conditional check.");
         var after304Attempt = Assert.Single(after304Job.Attempts).AttemptId;
@@ -406,6 +408,7 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
         Assert.NotEmpty(after304Comparison.Hunks);
 
         var earlierCapture = await CollectAsync("before-failure", "Text before failed observation.");
+        await ProcessUntilTerminalAsync(Worker(processing), earlierCapture.JobId, Assert.Single(earlierCapture.Attempts).AttemptId);
         var failedJob = await CollectAsync("failed-observation", body: null, fail: true);
         Assert.NotEqual(CollectionJobState.Succeeded, failedJob.State);
         var resumedJob = await CollectAsync("after-failure", "Text after failed observation.");
@@ -413,7 +416,6 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
         var resumed = await ProcessUntilTerminalAsync(Worker(processing), resumedJob.JobId, resumedAttempt);
         Assert.Equal(EvidenceProcessingOutcome.Baseline, resumed.Outcome);
         Assert.Equal("historyGap", resumed.ErrorCode);
-        Assert.NotEmpty(earlierCapture.Attempts);
     }
 
     private async Task<CollectionJobRecord> CollectAsync(string key, string? body, string? etag = null, bool fail = false,
@@ -453,7 +455,6 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
                 .SingleOrDefault(candidate => candidate.AttemptId == attemptId);
             if (record?.Status is EvidenceProcessingStatus.Succeeded or EvidenceProcessingStatus.Blocked or EvidenceProcessingStatus.Failed)
                 return record;
-            await Task.Delay(100);
         }
         throw new InvalidOperationException($"Processing attempt '{attemptId}' did not reach a terminal state.");
     }
@@ -468,7 +469,7 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
     private CollectionJobDefinition ConfiguredDefinition(string? etag = null)
     {
         var source = new ConfiguredCollectionSource(Configuration(etag), "source");
-        return source.CreateJobDefinition(DateOnly.FromDateTime(DateTime.UtcNow));
+        return source.CreateJobDefinition(DateOnly.FromDateTime(ObservationEpoch.UtcDateTime));
     }
 
     private static CollectionConfiguration Configuration(string? etag = null) => new()
@@ -508,13 +509,14 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
     }
 
     private const string Url = "https://example.test/pages/a";
+    private static readonly DateTimeOffset ObservationEpoch = new(2026, 6, 1, 12, 0, 0, TimeSpan.Zero);
     private static long observationTick;
 
     private sealed class FixtureCollector(string? body, bool fail, long sequence) : ICollectorProcess
     {
         public async Task<CollectionResult> RunAsync(CollectionRequest request, CancellationToken cancellationToken)
         {
-            var observedAt = DateTimeOffset.UtcNow.AddTicks(sequence);
+            var observedAt = ObservationEpoch.AddTicks(sequence);
             if (fail)
                 return Receipt(request) with
                 {

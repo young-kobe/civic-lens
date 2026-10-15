@@ -13,18 +13,16 @@ public sealed class CollectionJobWorkerTests
     {
         var queue = new SequenceQueue((_, _) => Task.FromResult(new CollectionWorkerQueuePage([], null)));
         var runner = new RunCollectionJob(new RecordingJobStore(), null!, null!, null!, null!);
-        var wakeup = new FakeWakeup(async token => await Task.Delay(Timeout.Infinite, token));
-        var worker = new CollectionJobWorker(queue, runner, wakeup: wakeup);
         using var cancellation = new CancellationTokenSource();
-        var cancelTask = Task.Run(async () =>
+        var wakeup = new FakeWakeup(async token =>
         {
-            await Task.Delay(100);
-            cancellation.Cancel();
+            await cancellation.CancelAsync();
+            await Task.Delay(Timeout.Infinite, token);
         });
+        var worker = new CollectionJobWorker(queue, runner, wakeup: wakeup);
 
         var result = await worker.ExecuteAsync(Path.GetTempPath(), once: false,
             cancellationToken: cancellation.Token);
-        await cancelTask;
 
         Assert.Equal(1, result.Passes);
         Assert.Single(queue.CursorHistory);
