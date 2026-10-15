@@ -24,23 +24,22 @@ public sealed partial class PostgresCollectionJobStore
     }
 
     public async Task<IReadOnlyList<CollectionJobRecord>> ListLatestBySourceAsync(
-        IReadOnlyCollection<SourceCheckTarget> targets, CancellationToken cancellationToken)
+        IReadOnlyCollection<string> sourceIds, CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(targets);
-        if (targets.Count == 0) return [];
+        ArgumentNullException.ThrowIfNull(sourceIds);
+        if (sourceIds.Count == 0) return [];
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
         var rows = await db.Set<JobRow>().FromSqlRaw("""
-            SELECT DISTINCT ON (j.definition_json::jsonb ->> 'sourceId') j.*
-              FROM collection_jobs j
-              JOIN unnest(@sourceIds, @urls) AS t(source_id, url)
-                ON j.definition_json::jsonb ->> 'sourceId' = t.source_id AND j.definition_json::jsonb ->> 'url' = t.url
-             ORDER BY j.definition_json::jsonb ->> 'sourceId', j.created_at DESC, j.job_id
+            SELECT latest.*
+              FROM unnest(@sourceIds) AS source(source_id)
+             CROSS JOIN LATERAL (
+                   SELECT * FROM collection_jobs j
+                    WHERE j.source_id = source.source_id AND j.is_root
+                    ORDER BY j.created_at DESC, j.job_id
+                    LIMIT 1) AS latest
             """,
-            new NpgsqlParameter("sourceIds", NpgsqlDbType.Array | NpgsqlDbType.Text)
-            { Value = targets.Select(target => target.SourceId).ToArray() },
-            new NpgsqlParameter("urls", NpgsqlDbType.Array | NpgsqlDbType.Text)
-            { Value = targets.Select(target => target.Url).ToArray() })
+            new NpgsqlParameter("sourceIds", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = sourceIds.ToArray() })
             .AsNoTracking().ToListAsync(cancellationToken);
         var records = await ToRecordsAsync(db, rows, cancellationToken);
         await transaction.CommitAsync(cancellationToken);

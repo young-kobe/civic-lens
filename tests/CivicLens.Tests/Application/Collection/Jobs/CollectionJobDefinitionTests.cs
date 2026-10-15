@@ -75,6 +75,17 @@ public sealed class CollectionJobDefinitionTests
         Assert.Throws<ArgumentException>(() => (child with { ETag = "\"etag\"" }).Validate());
     }
 
+    // Only a check of the configured URL is a root, so an article job never suppresses or stands for a source check.
+    [Fact]
+    public void OnlyTheConfiguredUrlOfItsOwnRevisionMakesAPageJobARoot()
+    {
+        var definition = CollectionJobDefinition.FromConfiguration(Config(), "first", new DateOnly(2026, 7, 1));
+
+        Assert.True(definition.IsRoot());
+        Assert.False((definition with { Url = "https://example.test/page/article" }).IsRoot());
+        Assert.False((definition with { ConfigurationRevision = null, CoverageAsOf = null }).IsRoot());
+    }
+
     [Fact]
     public void LegacyReplayMatchesExecutionSettingsWithoutInventingProvenance()
     {

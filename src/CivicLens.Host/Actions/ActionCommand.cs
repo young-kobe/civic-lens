@@ -7,10 +7,11 @@ using CivicLens.Host.Statements;
 
 namespace CivicLens.Host.Actions;
 
-internal sealed class ActionCommand(StatementQueueCommands<ActionDraftRun, ActionDraftView, ActionDraftListItem> drafts, ReviewActor owner)
+internal sealed class ActionCommand(StatementQueueCommands<ActionDraftRun, ActionDraftView, ActionDraftListItem> drafts,
+    RequeueBlockedActionDrafts requeueBlocked, ReviewActor owner)
 {
     private const string Usage = "Use actions draft status, actions draft list [drafted|unchanged|superseded|no-official|pending|failed] [limit], " +
-        "or actions draft requeue <candidate-id|--all>.";
+        "actions draft requeue <candidate-id|--all>, or actions draft requeue --blocked --code <block-code>.";
     private const int DefaultListLimit = 100;
     private static readonly JsonSerializerOptions JsonOptions = CreateJsonOptions();
 
@@ -37,6 +38,12 @@ internal sealed class ActionCommand(StatementQueueCommands<ActionDraftRun, Actio
                 case ["actions", "draft", "requeue", "--all"]:
                     Write(new { requeued = await drafts.Requeue.ExecuteAsync(owner, null, cancellationToken) });
                     return 0;
+                case ["actions", "draft", "requeue", "--blocked", "--code", var code]:
+                    Write(new { requeued = await requeueBlocked.ExecuteAsync(owner, code, cancellationToken) });
+                    return 0;
+                case ["actions", "draft", "requeue", "--blocked", ..]:
+                    Console.Error.WriteLine(Usage);
+                    return 2;
                 case ["actions", "draft", "requeue", var candidateId]:
                     Write(new { requeued = await drafts.Requeue.ExecuteAsync(owner, candidateId, cancellationToken) });
                     return 0;

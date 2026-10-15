@@ -97,10 +97,24 @@ public sealed class SourceHealthTests
         var result = await workspace.GetSourcesAsync(Owner, null, null, 10, default);
 
         var read = Assert.Single(store.LatestReads);
-        Assert.DoesNotContain(read, target => target.SourceId == "checking");
+        Assert.DoesNotContain("checking", read);
         Assert.Equal(SourceIds.Length - 1, read.Count);
         Assert.Equal(SourceCheckState.Checking, result.Health!.Sources.Single(item => item.SourceId == "checking").State);
         Assert.Equal(SourceCheckState.Failed, result.Health.Sources.Single(item => item.SourceId == "failed").State);
+    }
+
+    // An article job on the page is not a check of its source, so the source health still comes from its latest root job.
+    [Fact]
+    public async Task ANonRootJobOnThePageNeverStandsForTheSourceCheck()
+    {
+        var job = Job("checking", CollectionJobState.Failed);
+        var article = job with { JobId = Guid.NewGuid().ToString("N"), Definition = job.Definition with { Url = Url("checking") + "/article" } };
+        var store = new FixedJobStore { Page = [article], Latest = [Job("checking", CollectionJobState.Running)] };
+
+        var result = await Workspace(store, new FixedProcessingStore()).GetSourcesAsync(Owner, null, null, 10, default);
+
+        Assert.Contains("checking", Assert.Single(store.LatestReads));
+        Assert.Equal(SourceCheckState.Checking, result.Health!.Sources.Single(item => item.SourceId == "checking").State);
     }
 
     // An older page says nothing about which check is the latest, so it must never feed the health report.

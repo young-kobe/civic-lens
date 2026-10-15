@@ -228,6 +228,27 @@ public sealed partial class PostgresBillStreamTests
         Assert.Null((await store.ReadEvidenceAsync(older, default))!.Current);
     }
 
+    [Theory]
+    [InlineData(ActionDraftErrorCodes.TitleTooLong)]
+    [InlineData(nameof(InvalidDataException))]
+    public async Task RequeueBlockedMovesOnlyBlockedEntriesWithTheGivenCodeAndResetsTheirAttempts(string code)
+    {
+        var requeued = await ReadableCandidateAsync(sponsor: "A000001");
+        var overByteCap = await ReadableCandidateAsync(sponsor: "A000001", UpdatedAt.AddDays(1));
+        var failed = await ReadableCandidateAsync(sponsor: "A000001", UpdatedAt.AddDays(2));
+        await ExecuteAsync(connectionString, $"""
+            UPDATE action_analysis SET attempts = 2, status = CASE candidate_id WHEN '{failed}' THEN 'Failed' ELSE 'Blocked' END,
+                error_code = CASE candidate_id WHEN '{overByteCap}' THEN '{ActionDraftErrorCodes.OverByteCap}' ELSE '{code}' END
+            """);
+
+        Assert.Equal(1, await ActionStore().RequeueBlockedAsync(code, default));
+
+        var queue = (await QueueAsync()).ToDictionary(row => row.CandidateId, row => (row.Status, row.ErrorCode, row.Attempts));
+        Assert.Equal(("Pending", (string?)null, 0), queue[requeued]);
+        Assert.Equal(("Blocked", ActionDraftErrorCodes.OverByteCap, 2), queue[overByteCap]);
+        Assert.Equal(("Failed", code, 2), queue[failed]);
+    }
+
     [Fact]
     public async Task ADraftedSettlementWritesTheDraftTheRevisionTheRunAndTheBudgetInOneTransaction()
     {

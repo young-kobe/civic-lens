@@ -31,7 +31,7 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - A reservation is set or cleared as a whole. Enforced by `ck_<table>_reservation` on every queue table. No test.
 - A run charges at least the tokens it used. Enforced by `ck_document_change_analysis_runs_tokens` and `AnalysisRun`. Test: `AnalysisRunTests.ARunCannotChargeLessThanTheTokensItUsed`.
 - At most one run exists for each draft revision. Enforced by the unique index `IX_document_change_analysis_runs_draft_id_revision_number` on `(draft_id, revision_number)`. A run without a draft has a null `draft_id`. No test.
-- Only a human owner requeues. Enforced by `RequeueAnalyses`. Test: `RequeueAnalysesTests.OnlyAHumanOwnerRequeues`.
+- Only a human owner requeues. Enforced by `RequeueAnalyses` and `RequeueBlockedActionDrafts`. Tests: `RequeueAnalysesTests.OnlyAHumanOwnerRequeues` and `ActionCommandTests.TheAiDrafterCannotActAsTheOwner`.
 
 ## Behavior
 
@@ -41,7 +41,7 @@ The shared owners are generic over `TRun`, the run type that a feature stores: `
 
 `PostgresDocumentComparisonStore` adds a `draft` entry to `document_change_analysis` for each complete comparison with at least one hunk. It does this in the transaction that saves the comparison, from the worker or the CLI. A repeat save keeps one entry. There is no classification gate yet.
 
-`AnalysisLifecycle` owns the valid moves for every analysis feature. A feature gives it two rules: which `Succeeded` outcomes are valid, and whether a `Succeeded` entry may return to Pending. `DocumentChangeAnalysisLifecycle` adds the revision rule. `PostgresAnalysisQueue` applies every status write through the lifecycle of its feature, under a row lock on the entry.
+`AnalysisLifecycle` owns the valid moves for every analysis feature. A feature gives it three rules. The first says which `Succeeded` outcomes are valid. The others say whether a `Succeeded` or a `Blocked` entry may return to Pending. `DocumentChangeAnalysisLifecycle` adds the revision rule. `PostgresAnalysisQueue` applies every status write through the lifecycle of its feature, under a row lock on the entry.
 
 The states are the values of `ck_<table>_status`, the same for every queue table. A move must match the status, lease token, and fence of the entry. A move out of Running needs a current claim: status Running and a lease. Each target carries only its own outcome. `Succeeded` needs a revision for the same comparison, or the code `draftDiscarded` or `humanDraftExists`.
 
@@ -56,6 +56,7 @@ The states are the values of `ck_<table>_status`, the same for every queue table
 | WaitingForBudget | Pending | Budget wait release at worker startup |
 | Failed | Pending | Owner requeue (`analyses requeue`) |
 | Succeeded | Pending | Only where the feature lifecycle allows it: a skipped statement gate (`statements regate`) and any action draft |
+| Blocked | Pending | Only where the feature lifecycle allows it: an action draft (`actions draft requeue --blocked`) |
 
 These events count as attempts: a durable retry, a reclaim of an expired lease, a release with tokens reserved, and a rejected draft. The claim owns the limit. A claim of an entry with eight attempts fails it as `attemptsExhausted` with no call.
 

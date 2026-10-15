@@ -13,7 +13,7 @@ internal sealed class FixedJobStore : ICollectionJobStore
     public IReadOnlyList<CollectionJobRecord> Latest { get; init; } = [];
     public CollectionJobActivity Activity { get; init; } = new([], []);
     public int PageReads { get; private set; }
-    public List<IReadOnlyCollection<SourceCheckTarget>> LatestReads { get; } = [];
+    public List<IReadOnlyCollection<string>> LatestReads { get; } = [];
     public int ActivityReads { get; private set; }
 
     public Task<CollectionJobPage> ListPageAsync(PageCursor? cursor, int limit, CancellationToken cancellationToken)
@@ -23,9 +23,9 @@ internal sealed class FixedJobStore : ICollectionJobStore
     }
 
     public Task<IReadOnlyList<CollectionJobRecord>> ListLatestBySourceAsync(
-        IReadOnlyCollection<SourceCheckTarget> targets, CancellationToken cancellationToken)
+        IReadOnlyCollection<string> sourceIds, CancellationToken cancellationToken)
     {
-        LatestReads.Add(targets);
+        LatestReads.Add(sourceIds);
         return Task.FromResult(Latest);
     }
 

@@ -1,10 +1,12 @@
 using System.Data.Common;
 using System.Text.Json;
 using CivicLens.Application.Collection;
+using CivicLens.Application.Collection.Bills;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Collection.Contracts;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Collection.Jobs;
+using CivicLens.Tests.Application.Collection.Bills;
 using CivicLens.Tests.Fixtures;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -855,23 +857,52 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => jobs.ListPageAsync(null, 101, default));
     }
 
+    // Source health shows the latest check of each source, so a newer article job must not hide it.
     [Fact]
-    public async Task LatestBySourceReturnsTheNewestJobForTheExactSourceAndUrlOnly()
+    public async Task LatestBySourceReturnsTheNewestRootJobOfEachSourceOnly()
     {
-        var older = await jobs.EnqueueAsync(Definition() with { SourceId = "a" }, "a-old", default);
-        var newer = await jobs.EnqueueAsync(Definition() with { SourceId = "a" }, "a-new", default);
-        var article = await jobs.EnqueueAsync(Definition() with { SourceId = "a", Url = "https://example.test/page/article" }, "a-article", default);
-        var other = await jobs.EnqueueAsync(Definition() with { SourceId = "b" }, "b-only", default);
+        var configuration = new CollectionConfiguration
+        {
+            People = [new PersonConfiguration { Id = "person", Name = "Person" }],
+            Sources = [.. new[] { "a", "b" }.Select(id => new WatchedSourceConfiguration
+            {
+                Id = id, Mode = CollectionMode.Html, Coverage = [new SourceCoverageConfiguration { PersonId = "person" }],
+                Url = $"https://example.test/{id}", AllowedOrigin = "https://example.test", AllowedPathPrefix = "/"
+            })]
+        };
+        var a = CollectionJobDefinition.FromConfiguration(configuration, "a");
+        var older = await jobs.EnqueueAsync(a, "a-old", default);
+        var newer = await jobs.EnqueueAsync(a, "a-new", default);
+        var article = await jobs.EnqueueAsync(a with { Mode = CollectionMode.Page, Url = "https://example.test/a/article" },
+            "a-article", default);
+        var other = await jobs.EnqueueAsync(CollectionJobDefinition.FromConfiguration(configuration, "b"), "b-only", default);
         await SqlAsync($"UPDATE collection_jobs SET created_at = 100 WHERE job_id = '{older.JobId}'");
         await SqlAsync($"UPDATE collection_jobs SET created_at = 200 WHERE job_id = '{newer.JobId}'");
         await SqlAsync($"UPDATE collection_jobs SET created_at = 300 WHERE job_id = '{article.JobId}'");
         await SqlAsync($"UPDATE collection_jobs SET created_at = 50 WHERE job_id = '{other.JobId}'");
 
-        var latest = await jobs.ListLatestBySourceAsync([
-            new("a", "https://example.test/page"), new("b", "https://example.test/page"), new("c", "https://example.test/page")], default);
+        var latest = await jobs.ListLatestBySourceAsync(["a", "b", "c"], default);
 
         Assert.Equal(new[] { newer.JobId, other.JobId }.Order(), latest.Select(job => job.JobId).Order());
         Assert.Empty(await jobs.ListLatestBySourceAsync([], default));
+    }
+
+    // A bill list URL carries its window, so it never equals the configured URL. Bill source health still needs its latest list job.
+    [Fact]
+    public async Task LatestBySourceFindsTheNewestBillListJobAndSkipsNewerDetailJobs()
+    {
+        var backfill = new DateOnly(2025, 1, 3);
+        var configured = new ConfiguredCollectionSource(CongressBillSourceConfigurationTests.Configuration(), "congress-bills", backfill);
+        var listUrl = new BillStreamWindow(backfill, backfill).RequestUrl(configured.SourceUrl);
+        var list = await jobs.EnqueueAsync(configured.CreateApiJobDefinition(ApiResource.BillList, listUrl, backfill), "list", default);
+        var detail = await jobs.EnqueueAsync(configured.CreateApiJobDefinition(ApiResource.Bill,
+            "https://api.congress.gov/v3/bill/119/hr/1?format=json", backfill), "detail", default);
+        await SqlAsync($"UPDATE collection_jobs SET created_at = 100 WHERE job_id = '{list.JobId}'");
+        await SqlAsync($"UPDATE collection_jobs SET created_at = 200 WHERE job_id = '{detail.JobId}'");
+
+        var latest = await jobs.ListLatestBySourceAsync(["congress-bills"], default);
+
+        Assert.Equal(list.JobId, Assert.Single(latest).JobId);
     }
 
     [Fact]

@@ -1278,6 +1278,10 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("character varying(256)")
                         .HasColumnName("idempotency_key");
 
+                    b.Property<bool>("IsRoot")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_root");
+
                     b.Property<long?>("LeaseExpiresAt")
                         .HasColumnType("bigint")
                         .HasColumnName("lease_expires_at");
@@ -1298,6 +1302,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("retry_at");
 
+                    b.Property<string>("SourceId")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("source_id");
+
                     b.Property<string>("State")
                         .IsRequired()
                         .HasColumnType("text")
@@ -1314,6 +1323,13 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.HasIndex(new[] { "CreatedAt", "JobId" }, "ix_collection_jobs_active_created_at_job_id")
                         .HasFilter("state IN ('Pending','Running','WaitingToRetry')");
+
+                    b.HasIndex(new[] { "SourceId" }, "ix_collection_jobs_active_root_source_id")
+                        .HasFilter("is_root AND state IN ('Pending','Running','WaitingToRetry')");
+
+                    b.HasIndex(new[] { "SourceId", "CreatedAt", "JobId" }, "ix_collection_jobs_root_source_created")
+                        .IsDescending(false, true, false)
+                        .HasFilter("is_root");
 
                     b.ToTable("collection_jobs", null, t =>
                         {

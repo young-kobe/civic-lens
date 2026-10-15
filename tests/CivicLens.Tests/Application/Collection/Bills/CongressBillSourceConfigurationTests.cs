@@ -195,6 +195,18 @@ public sealed class CongressBillSourceConfigurationTests
         Assert.Throws<ArgumentException>(() => configured.CreateApiJobDefinition(ApiResource.Bill, "https://api.congress.gov/v3/member", Backfill));
     }
 
+    // A bill list window URL is never the configured URL, yet each window is the check of the bill source.
+    [Fact]
+    public void EveryBillListWindowIsARootCheckAndADetailJobIsNot()
+    {
+        var configured = new ConfiguredCollectionSource(Configuration(), "congress-bills", Backfill);
+        var listUrl = new BillStreamWindow(Backfill, Backfill).RequestUrl("https://api.congress.gov/v3/bill");
+
+        Assert.True(configured.CreateApiJobDefinition(ApiResource.BillList, listUrl, Backfill).IsRoot());
+        Assert.False(configured.CreateApiJobDefinition(ApiResource.Bill,
+            "https://api.congress.gov/v3/bill/119/hr/1?format=json", Backfill).IsRoot());
+    }
+
     [Theory]
     [InlineData(ApiResource.Bill, "https://api.congress.gov/v3/bill?fromDateTime=2025-01-02T00:00:00Z&toDateTime=2025-01-04T00:00:00Z&sort=updateDate+asc&limit=250&format=json")]
     [InlineData(ApiResource.BillList, "https://api.congress.gov/v3/bill/119/hr/1?format=json")]
