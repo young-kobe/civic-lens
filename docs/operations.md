@@ -218,6 +218,10 @@ A crawl delay longer than every attempt timeout can exhaust the retries. Inspect
 
 **Worker.** `worker <collector.dll> <artifact-directory>` needs `CIVIC_LENS_COLLECTION_CONFIG` with an absolute configuration path. It runs the durable collection-to-review engine. `--once` admits due checks, drains the runnable work, and exits without waiting for future deadlines. Ctrl+C stops the worker. Change the configuration and restart the worker to apply it. Cancelling one job does not disable its source schedule. Keep one worker for each operational store. Leases and fenced checkpoints protect ownership if another worker runs.
 
+| Variable | Meaning |
+|---|---|
+| `CIVIC_LENS_EVIDENCE_CONCURRENCY` | Optional number of captured pages processed at the same time (default 2, 1 to 4). Any other value stops the worker with exit code 2 |
+
 Enabled sources are checked every hour unless `checkIntervalSeconds` sets another interval from 60 to 604800 seconds. The engine rules are in [collection](architecture/collection.md#autonomous-collection-engine).
 
 **Pacing groups.** Optional top-level `pacingGroups` limit the total load on shared hosts. For example, `{"hostSuffix": "house.gov", "minDelayMilliseconds": 3000}` spaces all managed jobs for any `*.house.gov` origin by at least 3 seconds. This adds to the pacing of each origin. If the queue keeps growing, lower the delay. The group rules are in [collection](architecture/collection.md#robots-and-pacing).

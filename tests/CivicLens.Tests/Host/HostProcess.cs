@@ -11,6 +11,8 @@ internal static class HostProcess
     public static readonly string[] DraftingVariables =
         ["ANTHROPIC_API_KEY", "CIVIC_LENS_ANALYSIS_DAILY_TOKENS", "CIVIC_LENS_ANALYSIS_RUN_TOKENS", "CIVIC_LENS_ANALYSIS_CONCURRENCY"];
 
+    private const string EvidenceConcurrencyVariable = "CIVIC_LENS_EVIDENCE_CONCURRENCY";
+
     public static Task<(int ExitCode, string Output, string Error)> RunWithCollectorHostAsync(
         string? database, string? collectorHost, params string[] arguments) =>
         RunWithEnvironmentAsync(database, collectorHost, new Dictionary<string, string>(), arguments);
@@ -31,6 +33,7 @@ internal static class HostProcess
         foreach (var argument in arguments) start.ArgumentList.Add(argument);
         start.Environment.Remove("CIVIC_LENS_DATABASE");
         foreach (var name in DraftingVariables) start.Environment.Remove(name);
+        start.Environment.Remove(EvidenceConcurrencyVariable);
         foreach (var (name, value) in environment) start.Environment[name] = value;
         if (database is not null) start.Environment["CIVIC_LENS_DATABASE"] = database;
         if (collectorHost is not null) start.Environment["DOTNET_HOST_PATH"] = collectorHost;
