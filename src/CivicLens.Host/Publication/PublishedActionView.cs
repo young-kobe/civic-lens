@@ -23,6 +23,17 @@ internal static class PublishedActionView
         .Where(item => item.citation.ExtractionId == source.ExtractionId)
         .Select(item => new CitedRange(item.anchor, item.citation.Start, item.citation.Length))];
 
+    public static string SponsorshipAnchor(PublishedAction action, PublishedSponsorship sponsorship, int citationIndex) =>
+        PublishedRecordView.CitationAnchor(action.Sponsorships.TakeWhile(item => !ReferenceEquals(item, sponsorship))
+            .Sum(item => item.Citations.Length) + citationIndex);
+
+    public static string PolicyAreaAnchor(PublishedAction action) => PublishedRecordView.CitationAnchor(SponsorshipCitationCount(action));
+
+    public static string SummaryAnchor(PublishedAction action) =>
+        PublishedRecordView.CitationAnchor(SponsorshipCitationCount(action) + (action.PolicyAreaCitation is null ? 0 : 1));
+
+    private static int SponsorshipCitationCount(PublishedAction action) => action.Sponsorships.Sum(item => item.Citations.Length);
+
     private static IEnumerable<PublishedCitation> CitationsOf(PublishedAction action) =>
         action.Sponsorships.SelectMany(sponsorship => sponsorship.Citations)
             .Concat(action.PolicyAreaCitation is { } area ? [area] : []).Concat(action.SummaryCitation is { } summary ? [summary] : []);

@@ -1,4 +1,3 @@
-using CivicLens.Application.Issues;
 using System.Security.Cryptography;
 using System.Text.Json;
 using CivicLens.Application.Publication;
@@ -73,7 +72,7 @@ public sealed partial class PostgresBillStreamTests
         var publisher = new PublishRelease(PostgresPublicationStore.FromConnectionString(connectionString), releases, new ReleaseRenderer(),
             new PublishedRecordLoaders(PostgresDocumentChangeReviewStore.FromConnectionString(connectionString),
                 PostgresStatementReviewStore.FromConnectionString(connectionString), ActionReviews()),
-            new PublicationCatalog(names, new IssueConfiguration { PolicyAreas = [], Issues = [] }), TimeProvider.System);
+            new PublicationCatalog(names), TimeProvider.System);
 
         var summary = await publisher.ExecuteAsync(PublicationScenario.Owner,
             PublicationScenario.Request("publish", new PublishedRecordReference(PublishedRecordKind.Action, RecordId)));

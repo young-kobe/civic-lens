@@ -208,7 +208,7 @@ public sealed class ReleaseRendererTests
         Assert.Equal("Housing and Community Development", facts["Policy area"]);
         Assert.Equal("housing", facts["Tracked issues"]);
         var rows = document.QuerySelectorAll("[aria-labelledby='sponsorships-title'] tbody tr")
-            .Select(row => string.Join("|", row.QuerySelectorAll("td").Select(cell => cell.TextContent.Trim())));
+            .Select(row => string.Join("|", row.QuerySelectorAll("td").Select(cell => cell.QuerySelector("blockquote")?.TextContent ?? cell.TextContent.Trim())));
         Assert.Equal(["Jane <Doe>|Sponsor|No|2026-01-03|None|Sponsor: D000001", "Ann Roe|Cosponsor|Yes|2026-01-05|2026-01-20|Cosponsor: R000002, original"], rows);
         Assert.Contains("Summary version: 00 <i>funds</i> rent aid.", document.QuerySelector("[aria-labelledby='bill-evidence-title']")!.TextContent,
             StringComparison.Ordinal);
@@ -219,6 +219,23 @@ public sealed class ReleaseRendererTests
             "Cosponsor: R000002, original"], sources.QuerySelectorAll("mark").Select(mark => mark.TextContent));
         Assert.Contains("A sponsorship is a proposal, not a law.", html, StringComparison.Ordinal);
         Assert.DoesNotContain("<i>", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task EveryActionQuoteLinksToTheMarkOfTheSameTextInTheSourceAndEachSourceIsLabelledByPosition()
+    {
+        var html = await new ReleaseRenderer().RenderActionAsync(Action(), CancellationToken.None);
+
+        var document = new HtmlParser().ParseDocument(html);
+        var links = document.QuerySelectorAll("a[href^='#cite-']").ToArray();
+        Assert.Equal(4, links.Length);
+        foreach (var link in links)
+        {
+            var quote = link.Closest("td, .choice")!.QuerySelector("blockquote")!.TextContent;
+            Assert.Equal(quote, document.QuerySelector(link.GetAttribute("href")!)!.TextContent);
+        }
+        Assert.Equal(["Source text 1 of 2", "Source text 2 of 2"],
+            document.QuerySelectorAll("[aria-labelledby='sources-title'] [aria-label]").Select(item => item.GetAttribute("aria-label")));
     }
 
     [Fact]

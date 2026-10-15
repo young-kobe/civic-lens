@@ -22,8 +22,6 @@ internal sealed class PublishedRecordRules(PublicationCatalog catalog)
         return new() { ExtractionId = span.ExtractionId, Start = span.Start, Length = span.Length, Quote = span.Quote };
     }
 
-    public string? PolicyAreaIdOf(string? policyArea) => catalog.Issues.PolicyAreaIdFor(policyArea);
-
     public PublishedOfficial MapOfficial(string recordId, string officialId) => new()
     {
         Id = officialId,

@@ -136,7 +136,7 @@ public sealed class PublishedActionTests
     }
 
     [Fact]
-    public void ContractLimitsEqualTheCoreLimitsSoADraftThatPassesReviewAlwaysPublishes()
+    public void ContractLimitsEqualTheCoreLimits()
     {
         Assert.Equal(ActionDraftRevision.MaximumSponsorships, PublishedAction.MaximumSponsorships);
         Assert.Equal(ActionDraftRevision.MaximumCitationsPerSponsorship, PublishedAction.MaximumCitationsPerSponsorship);

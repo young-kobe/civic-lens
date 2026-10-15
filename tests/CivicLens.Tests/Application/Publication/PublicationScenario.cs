@@ -1,4 +1,3 @@
-using CivicLens.Application.Issues;
 using CivicLens.Application.Paging;
 using System.Collections.Immutable;
 using CivicLens.Application.Actions;
@@ -32,16 +31,10 @@ internal sealed class PublicationScenario
     public FakeActionReviewStore Actions { get; } = new();
     public Dictionary<string, string> OfficialNames { get; } = new() { ["mayor"] = "Mayor Example", ["chair"] = "Council Chair Example" };
 
-    public IssueConfiguration Issues { get; } = new()
-    {
-        PolicyAreas = [new() { Id = "housing-development", Name = "Housing and Community Development" }],
-        Issues = []
-    };
-
     public PublishedRecordLoaders Loaders() => new(Reviews, Statements, Actions);
 
     public PublishRelease Publisher() => new(Publications, Releases, new FakeRenderer(), Loaders(),
-        new PublicationCatalog(OfficialNames, Issues), Clock);
+        new PublicationCatalog(OfficialNames), Clock);
 
     private const string PunctuatedHeadline = "Mayor\u2019s \u201Chousing\u201D plan: caf\u00E9 owners, r\u00E9sum\u00E9 rules; it\u2019s 100% ready? ";
 
@@ -173,7 +166,8 @@ internal sealed class PublicationScenario
     public const string ActionCosponsors = "Bill: 119 hr 7\nCosponsor: C000001, original, 2026-01-05, withdrawn 2026-01-20\n";
 
     // The sponsor cites the detail page and the cosponsor cites a second API page, so the record has two sources.
-    public string AddAction(char id, ImmutableArray<ReviewDecision>? decisions = null, string sponsorId = "mayor")
+    public string AddAction(char id, ImmutableArray<ReviewDecision>? decisions = null, string sponsorId = "mayor",
+        string? policyAreaId = "housing-development")
     {
         var recordId = new string(id, 64);
         var detail = Extraction(ActionDetail, $"action-detail-{id}", "https://api.congress.gov/v3/bill/119/hr/7");
@@ -181,7 +175,7 @@ internal sealed class PublicationScenario
         StatementSpan DetailLine(string line) => new(detail.ExtractionId, ActionDetail.IndexOf(line, StringComparison.Ordinal), line.Length);
         var revision = new ActionDraftRevision(recordId, 1, "civic-lens:analysis", ApprovedAt, $"Action {id}", "The mayor sponsored a housing bill.",
             ActionTextOrigin.Model, null, "congress-bills", 119, "hr", 7, new string('b', 64), ApprovedAt, false, new string('d', 64), null, null,
-            "Housing and Community Development", DetailLine("Policy area: Housing and Community Development"), ["housing"], new string('e', 64),
+            "Housing and Community Development", DetailLine("Policy area: Housing and Community Development"), policyAreaId, ["housing"], new string('e', 64),
             [
                 new(sponsorId, "M000001", ActionSponsorshipRole.Sponsor, false, new DateOnly(2026, 1, 3), null,
                     [DetailLine("Sponsor: M000001"), DetailLine("Introduced: 2026-01-03")]),

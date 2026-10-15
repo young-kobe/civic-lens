@@ -25,6 +25,17 @@ public sealed class PublishActionTests
     }
 
     [Fact]
+    public async Task AnActionWithoutAStoredAreaIDPublishesNoAreaFilterBecauseTheReviewerApprovedNone()
+    {
+        var scenario = new PublicationScenario();
+        var action = scenario.AddAction('c', policyAreaId: null);
+
+        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k", action));
+
+        Assert.Empty(Assert.Single(ReadManifest(scenario, summary.DirectoryName).Records).PolicyAreaIds);
+    }
+
+    [Fact]
     public async Task TheRecordEmbedsEachCitedApiPageOnceAndNamesEveryOfficialByConfiguredName()
     {
         var scenario = new PublicationScenario();

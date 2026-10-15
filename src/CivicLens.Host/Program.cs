@@ -28,7 +28,6 @@ using CivicLens.Application.Statements;
 using CivicLens.Infrastructure.Statements;
 using CivicLens.Infrastructure.Documents;
 using CivicLens.Application.Publication;
-using CivicLens.Application.Issues;
 using CivicLens.Core.Review;
 using CivicLens.Infrastructure.Publication;
 using CivicLens.Infrastructure.Review;
@@ -260,7 +259,6 @@ try
             string.IsNullOrWhiteSpace(ownerSubject))
             throw new ArgumentException("Release commands require CIVIC_LENS_DATABASE, CIVIC_LENS_RELEASE_DIRECTORY, and CIVIC_LENS_REVIEW_OWNER.");
         var officialNames = new Dictionary<string, string>(StringComparer.Ordinal);
-        var issues = new IssueConfiguration { PolicyAreas = [], Issues = [] };
         if (args is ["releases", "publish", ..])
         {
             var configurationPath = Environment.GetEnvironmentVariable("CIVIC_LENS_COLLECTION_CONFIG");
@@ -268,7 +266,6 @@ try
                 throw new ArgumentException("Publishing requires CIVIC_LENS_COLLECTION_CONFIG to name an absolute configuration path.");
             var releaseConfiguration = await ReadConfigurationAsync(configurationPath, cancellation.Token);
             foreach (var person in releaseConfiguration.People) officialNames.Add(person.Id, person.Name);
-            issues = ReviewIssueSettings.FromEnvironment().Configuration;
         }
         var publications = PostgresPublicationStore.FromConnectionString(connectionString);
         var releases = new FileReleaseDirectory(releaseRoot);
@@ -276,7 +273,7 @@ try
                 PostgresDocumentChangeReviewStore.FromConnectionString(connectionString),
                 PostgresStatementReviewStore.FromConnectionString(connectionString),
                 PostgresActionReviewStore.FromConnectionString(connectionString)),
-            new PublicationCatalog(officialNames, issues), TimeProvider.System);
+            new PublicationCatalog(officialNames), TimeProvider.System);
         executing = true;
         return await ReleaseCommand.ExecuteAsync(args, publish, new ListPublicationReleases(publications, releases),
             new ActivatePublicationRelease(publications, releases), new ReviewActor(ownerSubject, ReviewRole.Owner),

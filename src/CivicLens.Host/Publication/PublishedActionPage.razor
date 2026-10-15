@@ -14,9 +14,10 @@
                 <td class="fit num">@Moment.Iso(sponsorship.SponsoredOn)</td>
                 <td class="fit num">@(sponsorship.WithdrawnOn is { } withdrawn ? Moment.Iso(withdrawn) : "None")</td>
                 <td>
-                    @foreach (var citation in sponsorship.Citations)
+                    @for (var index = 0; index < sponsorship.Citations.Length; index++)
                     {
-                        <blockquote class="quote">@EncodedEvidence.Markup(citation.Quote)</blockquote>
+                        <blockquote class="quote">@EncodedEvidence.Markup(sponsorship.Citations[index].Quote)</blockquote>
+                        <a class="small" href="@("#" + PublishedActionView.SponsorshipAnchor(Record, sponsorship, index))">Show in the full source text</a>
                     }
                 </td>
             </Row>
@@ -29,21 +30,30 @@
             <ul class="choices">
                 @if (Record.PolicyAreaCitation is { } area)
                 {
-                    <li><CitationQuote Label="Policy area" Quote="@area.Quote" /></li>
+                    <li>
+                        <CitationQuote Label="Policy area" Quote="@area.Quote">
+                            <a href="@("#" + PublishedActionView.PolicyAreaAnchor(Record))">Show in the full source text</a>
+                        </CitationQuote>
+                    </li>
                 }
                 @if (Record.SummaryCitation is { } summary)
                 {
-                    <li><CitationQuote Label="CRS summary" Quote="@summary.Quote" /></li>
+                    <li>
+                        <CitationQuote Label="CRS summary" Quote="@summary.Quote">
+                            <a href="@("#" + PublishedActionView.SummaryAnchor(Record))">Show in the full source text</a>
+                        </CitationQuote>
+                    </li>
                 }
             </ul>
         </Panel>
     }
 
     <Panel Title="Sources" Id="sources-title" Padded="true">
-        @foreach (var source in Record.Sources)
+        @for (var index = 0; index < Record.Sources.Length; index++)
         {
+            var source = Record.Sources[index];
             <VersionSource Version="source" Linked="false" />
-            <DocumentText Label="@($"Source text {source.ExtractionId}")" Runs="CitedText.Split(source.Text, PublishedActionView.RangesIn(Record, source))" />
+            <DocumentText Label="@($"Source text {index + 1} of {Record.Sources.Length}")" Runs="CitedText.Split(source.Text, PublishedActionView.RangesIn(Record, source))" />
         }
     </Panel>
 </PublishedRecordFrame>
