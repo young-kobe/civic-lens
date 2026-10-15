@@ -25,6 +25,9 @@ Collection fetches configured sources through a separate, bounded collector proc
 - A robots rule that exceeds a limit blocks collection. The collector never accepts partial rules.
 - Pacing groups bound the total load on shared infrastructure, such as all `*.house.gov` origins.
 - A new source gets a deterministic first-check offset, so a fresh database does not send every check at once.
+- Each job row keeps its source ID and root status in plain columns. `JobRowWriter` writes them from the definition, so scheduling and source health read indexed columns and never parse the job JSON.
+- A root job is a check of its source. `CollectionJobDefinition.IsRoot` owns the rule. A job is a root when its URL is the configured URL of its source in its own revision. A [bill list](bills.md#admission) job is also a root. Discovery articles, bill details, and bill follow-on pages are not roots.
+- `JobRowWriter` fixes the root status when it writes the job. After the configured URL of a source changes, an active root job at the earlier URL still holds the due slot until it ends.
 - Each configuration revision is stored once and referenced by ID. Otherwise each job and schedule would copy the whole snapshot. A [bill list page](bills.md#admission) of 251 jobs would then write hundreds of megabytes inside the job lock.
 - `PostgresCollectionJobStore.SettleAttemptAsync` is the only path that sets a job to Succeeded. It adds the preparation row in the same transaction, so no recurring or startup registration scan is needed.
 - Article jobs clear the validators of the discovery source and use page mode. This prevents recursive discovery.
@@ -46,7 +49,10 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - Job budget totals equal the sum over the job's attempts. Enforced by `CollectionJobCharges`, the one owner of the totals. Test: `PostgresCollectionJobStoreTests.DerivedChargesMatchTheRetiredCountersAcrossStartRefundAndRetry`.
 - A settlement must match the imported evidence. Enforced by `PostgresCollectionJobStore.SettleAttemptAsync`. Test: `PostgresCollectionJobStoreTests.SettlementRejectsDifferentEvidenceBeforeRefundingBudget`.
 - A succeeded job gets exactly one preparation row, in the settling transaction. Enforced by `PostgresCollectionJobStore` with `ON CONFLICT DO NOTHING`. Test: `PostgresCollectionJobStoreTests.SettlingACapturedJobQueuesOnePreparationRowAndReplayDoesNotAddAnother`.
-- A scheduler admits no second active root job for one source and URL. Enforced by a check under the `PostgresAdvisoryLock.CollectionJobs` key, not by a unique index. Test: `PostgresCollectionScheduleStoreTests.ConcurrentSchedulersAdmitOnlyOneRootJob`.
+- A scheduler admits no second active root job for one source. Enforced by one read of the sources with an active root job for each scheduling pass, under the `PostgresAdvisoryLock.CollectionJobs` key, not by a unique index. Tests: `PostgresCollectionScheduleStoreTests.ConcurrentSchedulersAdmitOnlyOneRootJob` and `PostgresCollectionScheduleStoreTests.ActiveManualRootJobConsumesDueSlotWithoutScheduledDuplicate`.
+- A job that is not a root never counts as an active root job or as the latest check of its source. Enforced by `is_root`, which `JobRowWriter` writes from `CollectionJobDefinition.IsRoot` and which no code changes later. Tests: `PostgresCollectionScheduleStoreTests.ActiveArticleJobNeverCountsAsAnActiveRootJob` and `PostgresCollectionJobStoreTests.LatestBySourceReturnsTheNewestRootJobOfEachSourceOnly`.
+- A job without a configuration revision is never a root. Enforced by `CollectionJobDefinition.IsRoot`. Tests: `CollectionJobDefinitionTests.OnlyTheConfiguredUrlOfItsOwnRevisionMakesAPageJobARoot` and `JobSourceColumnsMigrationTests.OlderJobsGetTheSourceAndRootStatusThatTheWriterGivesNewJobs`.
+- Jobs written before the root columns existed get the root status that the writer gives a new job. Enforced by the `JobSourceColumns` migration. Test: `JobSourceColumnsMigrationTests.OlderJobsGetTheSourceAndRootStatusThatTheWriterGivesNewJobs`.
 - Discovery admits one job for each exact source and URL. Enforced by the primary key of `collection_candidate_jobs` and the `PostgresAdvisoryLock.CollectionJobs` key, which every admission holds. Test: `PostgresDiscoveryAdmissionTests.ConcurrentFeedAndHtmlAttemptsCreateOnlyOneJobForAnExactSourceUrlPair`.
 - A parked comparison becomes due once its predecessor is settled, and never before. Enforced by the settled-predecessor SQL that the eligible scan, the claim, and the worker check share in `PostgresEvidenceProcessingStore`. Tests: `PostgresEvidenceProcessingStoreTests.AnUnsettledPredecessorKeepsTheWaiterParkedAndUnclaimable` and `PostgresEvidenceProcessingStoreTests.APredecessorThatSettlesBetweenTheReadAndTheParkStillWakesAndReleasesTheWaiter`.
 - A processing checkpoint needs the current lease and fence. Enforced by `EvidenceProcessingLifecycle` and `ck_evidence_processing_lease`. Test: `PostgresEvidenceProcessingStoreTests.EnsureIsIdempotentAndCheckpointFencesReclaimedLease`.
@@ -328,7 +334,7 @@ A checkpoint reads the database clock once in its transaction. `EvidenceProcessi
 
 **Due admission.** Admission of a due check and the move of the next due time commit in one transaction. Each due source admits at most one root job, then its next due time becomes database time plus its interval. Missed intervals coalesce into one check.
 
-An active job for the same source and exact root URL suppresses the scheduled admission and uses that due slot. A manually admitted job counts too. Coverage eligibility uses the current database UTC date, and an ineligible slot advances without collecting. Cancellation stops one job; pausing a source in configuration stops its future checks.
+An active root job of the same source suppresses the scheduled admission and uses that due slot. A manually admitted job counts too. Each scheduling pass reads the sources with an active root job once, before it admits any due source. Coverage eligibility uses the current database UTC date, and an ineligible slot advances without collecting. Cancellation stops one job; pausing a source in configuration stops its future checks.
 
 **Configuration revisions.** Each revision is stored once in `collection_configuration_revisions`, keyed by its hash ID. Job, admission batch, and source schedule rows reference it through `configuration_revision_id` with a restricting foreign key. Postgres therefore refuses to delete a revision that a row needs. Their stored JSON never embeds the revision.
 
@@ -407,7 +413,7 @@ A claim changes only the lease, never the state. Job leases last 3 to 600 second
 
 The review workspace has an owner-only Sources page when `CIVIC_LENS_COLLECTION_CONFIG` names an absolute configuration path. The owner can enqueue a source check (Check now), cancel a job (Stop), and start a draft from a found change.
 
-- The page lists configured sources with the health of their latest check, and the recent checks.
+- The page lists configured sources with the health of their latest root job, and the recent checks. The latest bill list job is the latest check of a bill source.
 - Check details open in a side panel. It shows each attempt, the retry timing, Check again for a tracked page URL, and a link to all saved versions.
 - The page refreshes every 5 seconds while a check is active and every 30 seconds otherwise. A connection failure shows a reconnect notice.
 - It accepts configured sources and retained article URLs only. It holds no demonstration records and does not claim worker liveness.
@@ -415,7 +421,7 @@ The review workspace has an owner-only Sources page when `CIVIC_LENS_COLLECTION_
 
 The owner can also collect a retained article URL again. That uses the current coverage, limits, and profile, and keeps the retained URL. It never reruns a listing or creates work from an arbitrary URL. The page has no manual admission, extraction, or comparison controls; only the worker and the CLI run them.
 
-Browser actions call Application handlers. Only the worker runs queued HTTP collection, and only the worker reads and writes captures. The page reuses the newest page of recent jobs to find the latest check of each source, and reads only the missing sources. It reuses a selected job from the listed page, or loads an older job once. It reads processing progress in bounded batches by job ID.
+Browser actions call Application handlers. Only the worker runs queued HTTP collection, and only the worker reads and writes captures. The page reuses the newest page of recent jobs to find the latest root job of each source. It reads only the missing sources, with one indexed lookup for each source. It reuses a selected job from the listed page, or loads an older job once. It reads processing progress in bounded batches by job ID.
 
 ### CLI composition
 
@@ -451,6 +457,7 @@ Provider exception details are not printed, because they can hold connection val
 - A migration renamed the old feed tables without rewriting evidence. Legacy feed batch input serialization stays, so old batches replay idempotently.
 - `collection_jobs`, `collection_job_attempts`, `collection_job_origins`, `collection_collector_slot`, and `collection_source_schedules` hold managed job state.
 - `collection_configuration_revisions` holds each configuration revision once.
+- `collection_jobs.source_id` is a NOT NULL copy of the definition source ID. `collection_jobs.is_root` comes from `CollectionJobDefinition.IsRoot`. `ix_collection_jobs_root_source_created` serves the latest root job of a source. `ix_collection_jobs_active_root_source_id` serves the active-root read of the scheduler.
 - `evidence_processing` is keyed by job and attempt ID. Each succeeded job gets exactly one Preparation row with the attempt ID `prepare`. Each captured attempt that preparation registers gets one Extraction row.
 - Schema changes go only through checked-in EF migrations and `MigrateAsync`. `db migrate` applies them. Generated designers and snapshots keep the EF layout.
 - Integration tests start one Testcontainers Postgres for each test run and migrate one template database in it. Each test copies the template. The migration tests migrate an empty database and check for model drift. Full CI needs Docker. A category filter runs the database-free tests.
@@ -495,7 +502,6 @@ The shared wakeup and lease mechanics are in [Shared worker mechanics](../archit
 - Future wire changes need an explicit compatibility decision.
 - Browser rendering and OCR are deferred until a selected source needs them.
 - Planned engine policies: engine-wide spending ceilings, global backlog admission limits, weighted fairness for each source, live configuration reload, and a unified engine-health view. The current scheduler does not guarantee them. Broad coverage makes them MVP requirements.
-- Agreed upgrade ([R-06](../roadmap.md#now)): stored generated columns for the source ID and URL of the job definition. Add an index for the latest job of each source, and one batched active-root check for each scheduling pass.
 - Agreed upgrade ([R-08](../roadmap.md#now)): parallel evidence processing with a configured degree. It needs the lock change for comparison and extraction saves in [documents](documents.md#limits-and-planned-work) first.
 - Agreed upgrade ([R-22](../roadmap.md#later)): ordered row locks in place of the single global lock of the job store. Measure lock waits on a bills-only collection run before the design.
 - Fix the remaining format and parser limits that the federal coverage found ([R-30](../roadmap.md#next)).

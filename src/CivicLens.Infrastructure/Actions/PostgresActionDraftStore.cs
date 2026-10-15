@@ -18,13 +18,17 @@ public sealed class PostgresActionDraftStore : PostgresAnalysisStore<ActionDraft
     public const string Table = "action_analysis";
 
     private readonly IDbContextFactory<CollectionAttemptDbContext> contextFactory;
+    private readonly PostgresAnalysisQueue<ActionAnalysisRow, ActionAnalysisBudgetRow, ActionDraftRun> queue;
 
     public PostgresActionDraftStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory)
         : this(contextFactory, new(contextFactory, new ActionDraftQueueMapping())) { }
 
     private PostgresActionDraftStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory,
-        PostgresAnalysisQueue<ActionAnalysisRow, ActionAnalysisBudgetRow, ActionDraftRun> queue) : base(queue) =>
+        PostgresAnalysisQueue<ActionAnalysisRow, ActionAnalysisBudgetRow, ActionDraftRun> queue) : base(queue)
+    {
         this.contextFactory = contextFactory;
+        this.queue = queue;
+    }
 
     public async Task<ActionDraftRun?> GetRunAsync(string runId, CancellationToken cancellationToken)
     {
@@ -49,6 +53,9 @@ public sealed class PostgresActionDraftStore : PostgresAnalysisStore<ActionDraft
             await ActionDraftRows.ReadCurrentAsync(db, recordId, cancellationToken),
             await ActionDraftRows.HasNewerCandidateAsync(db, candidate, cancellationToken));
     }
+
+    public Task<int> RequeueBlockedAsync(string errorCode, CancellationToken cancellationToken) =>
+        queue.RequeueAsync(State.Blocked, errorCode, null, null, cancellationToken);
 
     public async Task<IReadOnlyList<ActionDraftListItem>> ListAsync(ActionDraftView? view, int limit, CancellationToken cancellationToken)
     {

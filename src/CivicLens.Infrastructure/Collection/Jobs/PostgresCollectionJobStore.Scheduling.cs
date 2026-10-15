@@ -4,8 +4,6 @@ using CivicLens.Application.Collection.Jobs;
 using CivicLens.Collection.Contracts;
 using CivicLens.Infrastructure.Collection.Jobs.Persistence;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Storage;
-using Npgsql;
 
 namespace CivicLens.Infrastructure.Collection.Jobs;
 
@@ -72,6 +70,8 @@ public sealed partial class PostgresCollectionJobStore
             var revisions = await StoredJobDefinition.LoadRevisionsAsync(db,
                 dueRows.Select(row => row.ConfigurationRevisionId), cancellationToken);
             jobWriter.MarkStored(revisions.Keys);
+            var sourcesWithActiveRoot = await ReadSourcesWithActiveRootAsync(db,
+                dueRows.Select(row => row.SourceId).ToArray(), cancellationToken);
             var configurationsByRevision = new Dictionary<string, CollectionConfiguration>(StringComparer.Ordinal);
             foreach (var schedule in dueRows)
             {
@@ -97,7 +97,7 @@ public sealed partial class PostgresCollectionJobStore
                     continue;
                 }
 
-                if (await HasActiveRootJobAsync(db, schedule.SourceId, source.Url, cancellationToken))
+                if (sourcesWithActiveRoot.Contains(schedule.SourceId))
                 {
                     schedule.NextDueUtcTicks = Ticks(now.AddSeconds(schedule.IntervalSeconds));
                     continue;
@@ -138,22 +138,14 @@ public sealed partial class PostgresCollectionJobStore
         }
     }
 
-    private static async Task<bool> HasActiveRootJobAsync(CollectionAttemptDbContext db, string sourceId,
-        string requestedUrl, CancellationToken cancellationToken)
+    private static async Task<HashSet<string>> ReadSourcesWithActiveRootAsync(CollectionAttemptDbContext db,
+        string[] sourceIds, CancellationToken cancellationToken)
     {
-        await using var command = db.Database.GetDbConnection().CreateCommand();
-        command.Transaction = db.Database.CurrentTransaction?.GetDbTransaction();
-        command.CommandText = """
-            SELECT EXISTS (
-                SELECT 1 FROM collection_jobs
-                 WHERE state IN ('Pending','Running','WaitingToRetry')
-                   AND definition_json::jsonb ->> 'sourceId' = @source_id
-                   AND (definition_json::jsonb ->> 'url' = @requested_url
-                        OR definition_json::jsonb ->> 'apiResource' = 'billList'))
-            """;
-        command.Parameters.Add(new NpgsqlParameter("source_id", sourceId));
-        command.Parameters.Add(new NpgsqlParameter("requested_url", requestedUrl));
-        return (bool)(await command.ExecuteScalarAsync(cancellationToken)
-            ?? throw new InvalidOperationException("Postgres did not return active-job state."));
+        var active = await db.Set<JobRow>().AsNoTracking()
+            .Where(row => row.IsRoot && sourceIds.Contains(row.SourceId) &&
+                (row.State == CollectionJobState.Pending || row.State == CollectionJobState.Running ||
+                 row.State == CollectionJobState.WaitingToRetry))
+            .Select(row => row.SourceId).Distinct().ToListAsync(cancellationToken);
+        return new HashSet<string>(active, StringComparer.Ordinal);
     }
 }

@@ -64,7 +64,7 @@ public sealed class StatementCandidateQueueMigrationTests(PostgresCollection pos
     private static string Job(string jobId, string key) => $$"""
         INSERT INTO collection_jobs (job_id, idempotency_key, definition_json, state, created_at, cancellation_requested,
             charged_requests, charged_bytes, charged_seconds, lease_fence)
-        VALUES ('{{jobId}}', '{{key}}', '{}', 'Succeeded', 0, false, 0, 0, 0, 0);
+        VALUES ('{{jobId}}', '{{key}}', '{"sourceId":"source"}', 'Succeeded', 0, false, 0, 0, 0, 0);
         """;
 
     private static string Attempt(string jobId, string attemptId, long observed, string path) => $$"""

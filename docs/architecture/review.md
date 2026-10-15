@@ -137,7 +137,7 @@ The draft list, the new-change list, and the recent collection checks use keyset
 
 A new change is a complete comparison with at least one text hunk and no draft. The draft list can filter on status in SQL. Approved means that the newest decision on the current revision approves it. Needs action means every other status. The overview counts reuse the same status filter in `ReviewRecords.Drafts`, so each count equals the total of its list.
 
-The Review home page lists new changes, drafts, source health, and recent activity. The owner also sees the latest check of each configured source. The recent activity feed reads the newest events of each kind from the review tables. For the owner only, it also reads the job and processing tables. Application merges the events by time.
+The Review home page lists new changes, drafts, source health, and recent activity. The owner also sees the latest root job of each configured source; see [collection](collection.md#sources-page). The recent activity feed reads the newest events of each kind from the review tables. For the owner only, it also reads the job and processing tables. Application merges the events by time.
 
 ### Workspace forms
 

@@ -4,7 +4,7 @@ namespace CivicLens.Application.Actions;
 
 public static class ActionDraftLifecycle
 {
-    private static readonly AnalysisLifecycle Rules = new(AcceptsSuccess, _ => true);
+    private static readonly AnalysisLifecycle Rules = new(AcceptsSuccess, _ => true, _ => true);
 
     public static bool CanTransition(AnalysisRecord record, AnalysisCheckpoint update) =>
         Rules.CanTransition(record, update) && HasConsistentRevision(record, update);

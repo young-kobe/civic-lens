@@ -1,0 +1,35 @@
+using CivicLens.Application.Actions;
+using CivicLens.Application.Analysis;
+using CivicLens.Application.Statements;
+using State = CivicLens.Application.Analysis.AnalysisState;
+
+namespace CivicLens.Tests.Application.Actions;
+
+public sealed class ActionDraftLifecycleTests
+{
+    private const string CandidateId = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
+
+    [Fact]
+    public void ABlockedActionDraftMayReturnToPendingSoTheOwnerCanRerunItAfterAFix()
+    {
+        var (record, requeue) = BlockedRequeue(ActionDraftTask.Task);
+
+        Assert.True(ActionDraftLifecycle.CanTransition(record, requeue));
+    }
+
+    [Fact]
+    public void OtherTasksKeepBlockedFinalBecauseOnlyActionsTurnTheOptionOn()
+    {
+        var gate = BlockedRequeue(StatementGateTask.Task);
+        var statementDraft = BlockedRequeue(StatementDraftTask.Task);
+        var documentChange = BlockedRequeue(DocumentChangeDraftingTask.Task);
+
+        Assert.False(StatementAnalysisLifecycle.CanTransition(gate.Record, gate.Requeue));
+        Assert.False(StatementDraftLifecycle.CanTransition(statementDraft.Record, statementDraft.Requeue));
+        Assert.False(DocumentChangeAnalysisLifecycle.CanTransition(documentChange.Record, documentChange.Requeue));
+    }
+
+    private static (AnalysisRecord Record, AnalysisCheckpoint Requeue) BlockedRequeue(string task) =>
+        (new AnalysisRecord(CandidateId, task, State.Blocked, null, 1, 1, null, ActionDraftErrorCodes.TitleTooLong),
+            new AnalysisCheckpoint(CandidateId, task, State.Blocked, null, 1, State.Pending));
+}

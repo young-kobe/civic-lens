@@ -54,6 +54,7 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - The change view lists added, changed, and no longer listed sponsorships. Enforced by `ActionDraftRevision.SponsorshipChangesSince`. Test: `ActionDraftRevisionTests.AnAddedCosponsorAndAReversedWithdrawalAreBothListedBecauseClearingAWithdrawalIsAChangeToo`.
 - An older candidate never becomes the newest revision. Enforced by `ActionDraftRows.HasNewerCandidateAsync`, checked when the step reads its evidence and again at the append. Tests: `PostgresBillStreamTests.ADelayedOlderCandidateIsSupersededSoItsStaleContentNeverBecomesTheNewestRevision`, `PostgresBillStreamTests.ANewerCandidateThatArrivesAfterTheClaimSupersedesTheAppendSoTheOlderDraftNeverBecomesARevision`, and `PostgresBillStreamTests.ALaterUpdateDateWithoutSummariesSupersedesAnEarlierCandidateWithSummariesBecauseTheDateDecidesFirst`.
 - More than 20 summary pages never block a bill; it drafts without them. Enforced by `ActionDraftingStep`. Test: `ActionDraftingStepTests.MoreThanTwentySummaryPagesDraftWithoutSummariesAndNeverReadThemBecauseSummariesAreOptionalInput`.
+- An owner requeue of Blocked drafts moves only Blocked drafts with exactly the given code, and only for actions. Enforced by `PostgresAnalysisQueue.RequeueAsync` and `ActionDraftLifecycle`. Tests: `PostgresBillStreamTests.RequeueBlockedMovesOnlyBlockedEntriesWithTheGivenCodeAndResetsTheirAttempts` and `ActionDraftLifecycleTests.OtherTasksKeepBlockedFinalBecauseOnlyActionsTurnTheOptionOn`.
 - Model confidence never reaches a revision. Enforced by `ActionDraftingStep`. Test: `ActionDraftingStepTests.ConfidenceStaysInTheRunOutputAndNeverReachesTheRevision`.
 
 ## Behavior
@@ -94,6 +95,8 @@ The step does these checks in order. None of them calls the model.
 Actions pages are not read. A change in a Sponsor-role entry calls the model. Any other difference in step 7 calls the model too, so a renamed issue or a bioguide ID mapped to another person drafts again. A bill with no current revision is always drafted. `ActionDraftingStep.ChangeSince` owns this comparison, and `ActionDraftRevision.HasSameSponsorsAs` owns the sponsor test.
 
 The `noTrackedOfficial` and `unchanged` outcomes write a Bypassed run with the reason as its code and the same context as a drafted run. The sponsorship-only append writes a Bypassed run with the reason `sponsorshipsChanged`, and the revision names that run. The queue refuses either code without its run. The `supersededByNewerCandidate` outcome of step 2 writes no run.
+
+A Blocked entry stays Blocked until the owner fixes the cause and requeues it by its code. The command accepts any block code, including an exception type name such as `InvalidDataException` from an unexpected error. The requeue moves only Blocked entries with exactly that code back to Pending, so an unknown code moves none. It clears the attempts, the retry fields, and the lease, like a Failed requeue. A Blocked entry holds no reservation, because the step blocks before it reserves tokens.
 
 ### Tracked officials
 
@@ -208,6 +211,7 @@ Action review uses the shared decision rules and review cycles in [review](revie
 | `actions draft status` | Daily limit, pause, tokens charged today, and the count of entries in each outcome |
 | `actions draft list [view] [limit]` | Entries. Views: `drafted`, `unchanged`, `superseded`, `no-official`, `pending`, `failed` |
 | `actions draft requeue <candidate-id\|--all>` | Failed rows, and no others, back to Pending |
+| `actions draft requeue --blocked --code <block-code>` | Blocked rows with exactly that code, and no others, back to Pending. The code is required and must not be empty |
 
 All are owner commands. Variables and examples are in [operations](../operations.md#action-drafting).
 
@@ -241,6 +245,7 @@ All are owner commands. Variables and examples are in [operations](../operations
 | Review store | `src/CivicLens.Infrastructure/Actions/PostgresActionReviewStore.cs`, `src/CivicLens.Infrastructure/Actions/Persistence/ActionReviewDecisionRow.cs` |
 | Review pages | `src/CivicLens.Host/Review/ActionList.razor`, `src/CivicLens.Host/Review/ActionEditor.razor`, `src/CivicLens.Host/Review/ActionLabels.cs`, `src/CivicLens.Host/Review/ActionRoutes.cs` |
 | Record ID hash | `src/CivicLens.Infrastructure/Collection/Jobs/PostgresCollectionJobStore.ActionCandidates.cs` |
+| Owner requeue of Blocked entries | `src/CivicLens.Application/Actions/RequeueBlockedActionDrafts.cs` |
 | CLI and composition | `src/CivicLens.Host/Actions/ActionCommand.cs`, `src/CivicLens.Host/Actions/ActionDraftComposition.cs`, `src/CivicLens.Host/Actions/ActionDraftConfiguration.cs` |
 
 ## Limits and planned work
@@ -252,7 +257,6 @@ All are owner commands. Variables and examples are in [operations](../operations
 - Action records can produce about 110 revisions a day, about half of them sponsorship changes on approved records. Those revisions copy the text and need no model call, so they stay sponsorship-only and go to bulk approval.
 - The editor page has no Host test with a drafted record yet. The Host tests cover the list, the rail, and missing records.
 - The prompt does not include the candidate update date, and no page renders it yet.
-- A Blocked entry has no owner command yet. `requeue` moves only Failed rows.
 - Sponsorship changes draft at once. Measure how often an approved record gets a new revision within a few days. Add a waiting window only if that rate is high.
 - After action publication, move the generic queue handlers, such as `IStatementQueueStore` and `StatementQueueCommands`, into Application/Analysis.
 - After action publication, use one shared citation span type for document changes, statements, and actions, and unify naming across the analysis features.

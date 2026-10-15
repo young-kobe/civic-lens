@@ -7,6 +7,8 @@ internal sealed class JobRow
     public string JobId { get; set; } = "";
     public string IdempotencyKey { get; set; } = "";
     public string DefinitionJson { get; set; } = "";
+    public string SourceId { get; set; } = "";
+    public bool IsRoot { get; set; }
     public string? ConfigurationRevisionId { get; set; }
     public string? PacingKey { get; set; }
     public CollectionJobState State { get; set; }

@@ -35,10 +35,10 @@ public sealed class CollectionWorkspace
     public async Task<SourceHealthReport> GetSourceHealthAsync(ReviewActor actor, CancellationToken cancellationToken)
     {
         RequireOwner(actor);
-        var targets = SourceTargets();
-        var latest = await ReadLatestJobsAsync(targets, [], cancellationToken);
+        var sourceIds = SourceIds();
+        var latest = await ReadLatestJobsAsync(sourceIds, [], cancellationToken);
         var progress = await ReadProgressAsync(latest, cancellationToken);
-        return SourceHealthResolver.Report(targets, latest, progress);
+        return SourceHealthResolver.Report(sourceIds, latest, progress);
     }
 
     public async Task<CollectionWorkspaceSources> GetSourcesAsync(ReviewActor actor, string? jobId, string? cursor,
@@ -50,8 +50,8 @@ public sealed class CollectionWorkspace
         var pageCursor = PageCursor.Parse(cursor);
         var page = await jobs.ListPageAsync(pageCursor, limit, cancellationToken);
         var recentJobs = page.Items;
-        var targets = SourceTargets();
-        var latest = await ReadLatestJobsAsync(targets, pageCursor is null ? recentJobs : [], cancellationToken);
+        var sourceIds = SourceIds();
+        var latest = await ReadLatestJobsAsync(sourceIds, pageCursor is null ? recentJobs : [], cancellationToken);
         var selected = jobId is null ? null : await ReadSelectedJobAsync(recentJobs, jobId, cancellationToken);
         IReadOnlyList<CollectionJobRecord> listed = selected is null ? recentJobs : [.. recentJobs, selected];
         var progress = await ReadProgressAsync(listed.Concat(latest), cancellationToken);
@@ -59,7 +59,7 @@ public sealed class CollectionWorkspace
             ? new Dictionary<string, StoredCollectionAttempt>(StringComparer.Ordinal)
             : await ReadReceiptlessAttemptsAsync(selected, cancellationToken);
         return new CollectionWorkspaceSources(recentJobs, selected, retained, SourceHealthResolver.ByJob(listed, progress),
-            SourceHealthResolver.Report(targets, latest, progress), page.NewerCursor, page.OlderCursor);
+            SourceHealthResolver.Report(sourceIds, latest, progress), page.NewerCursor, page.OlderCursor);
     }
 
     private async Task<CollectionJobRecord> ReadSelectedJobAsync(IReadOnlyList<CollectionJobRecord> recentJobs, string jobId,
@@ -86,18 +86,17 @@ public sealed class CollectionWorkspace
         return retained;
     }
 
-    private SourceCheckTarget[] SourceTargets() => revision.Configuration.Sources
-        .Select(source => new SourceCheckTarget(source.Id, source.Url)).ToArray();
+    private string[] SourceIds() => revision.Configuration.Sources.Select(source => source.Id).ToArray();
 
-    private async Task<IReadOnlyList<CollectionJobRecord>> ReadLatestJobsAsync(SourceCheckTarget[] targets,
+    private async Task<IReadOnlyList<CollectionJobRecord>> ReadLatestJobsAsync(string[] sourceIds,
         IReadOnlyList<CollectionJobRecord> loaded, CancellationToken cancellationToken)
     {
         var latest = new List<CollectionJobRecord>();
-        var missing = new List<SourceCheckTarget>();
-        foreach (var target in targets)
+        var missing = new List<string>();
+        foreach (var sourceId in sourceIds)
         {
-            var job = loaded.FirstOrDefault(candidate => SourceHealthResolver.Matches(candidate, target));
-            if (job is null) missing.Add(target);
+            var job = loaded.FirstOrDefault(candidate => SourceHealthResolver.IsRootCheckOf(candidate, sourceId));
+            if (job is null) missing.Add(sourceId);
             else latest.Add(job);
         }
         if (missing.Count > 0) latest.AddRange(await jobs.ListLatestBySourceAsync(missing, cancellationToken));

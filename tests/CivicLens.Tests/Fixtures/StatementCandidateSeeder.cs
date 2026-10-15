@@ -66,11 +66,12 @@ internal sealed class StatementCandidateSeeder(PostgresCollectionAttemptStore at
         };
         var imported = await attempts.ImportAtomicallyAsync(CollectionAttemptImporter.CreateImport(attemptId, request, receipt),
             CancellationToken.None);
-        if (kind != CandidateJobKind.None) await SeedJobAttemptAsync(attemptId, kind, definitionJson, revisionId);
+        if (kind != CandidateJobKind.None) await SeedJobAttemptAsync(attemptId, kind, sourceId, definitionJson, revisionId);
         return (CapturedAttemptResult)imported.AttemptResult;
     }
 
-    private async Task SeedJobAttemptAsync(string attemptId, CandidateJobKind kind, string definitionJson, string? revisionId)
+    private async Task SeedJobAttemptAsync(string attemptId, CandidateJobKind kind, string sourceId,
+        string definitionJson, string? revisionId)
     {
         var prefix = kind switch
         {
@@ -82,15 +83,16 @@ internal sealed class StatementCandidateSeeder(PostgresCollectionAttemptStore at
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
         await using var command = new NpgsqlCommand("""
-            INSERT INTO collection_jobs (job_id, idempotency_key, definition_json, configuration_revision_id, state, created_at,
-                cancellation_requested, lease_fence)
-            VALUES (@id, @key, @definition, @revision, 'Succeeded', 0, false, 0);
+            INSERT INTO collection_jobs (job_id, idempotency_key, definition_json, source_id, is_root,
+                configuration_revision_id, state, created_at, cancellation_requested, lease_fence)
+            VALUES (@id, @key, @definition, @source, false, @revision, 'Succeeded', 0, false, 0);
             INSERT INTO collection_job_attempts (attempt_id, job_id, sequence, request_json, started_at)
             VALUES (@id, @id, 1, '{}', 0);
             """, connection);
         command.Parameters.AddWithValue("id", attemptId);
         command.Parameters.AddWithValue("key", key);
         command.Parameters.AddWithValue("definition", definitionJson);
+        command.Parameters.AddWithValue("source", sourceId);
         command.Parameters.AddWithValue("revision", (object?)revisionId ?? DBNull.Value);
         await command.ExecuteNonQueryAsync();
     }
