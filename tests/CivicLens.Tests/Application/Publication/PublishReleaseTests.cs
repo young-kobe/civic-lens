@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using System.Text.Json;
 using CivicLens.Application.Publication;
 using CivicLens.Application.Review;
@@ -8,7 +9,7 @@ namespace CivicLens.Tests.Application.Publication;
 
 public sealed class PublishReleaseTests
 {
-    private const int SeededNonAsciiRecords = 10252;
+    private const int SeededNonAsciiRecords = 9756;
 
     [Fact]
     public async Task ReviewerCannotPublishBecauseOnlyTheOwnerSpeaksForTheSite()
@@ -85,6 +86,21 @@ public sealed class PublishReleaseTests
     }
 
     [Fact]
+    public async Task PrecompressedManifestsHoldExactlyTheManifestBytesSoTheServerNeverSendsADifferentRelease()
+    {
+        var scenario = new PublicationScenario();
+        scenario.SeedRelease(3, withFiles: true);
+        var draft = scenario.AddDraft('a');
+
+        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k", draft));
+
+        var files = scenario.Releases.Directories[summary.DirectoryName];
+        var manifest = files[PublicationProtocol.ManifestPath];
+        Assert.Equal(manifest, Decompress(files[PublicationProtocol.ManifestPath + ".gz"], stream => new GZipStream(stream, CompressionMode.Decompress)));
+        Assert.Equal(manifest, Decompress(files[PublicationProtocol.ManifestPath + ".br"], stream => new BrotliStream(stream, CompressionMode.Decompress)));
+    }
+
+    [Fact]
     public async Task EveryIndexPageIsWrittenBeforeTheManifestSoALongReleaseIsNeverTruncated()
     {
         var scenario = new PublicationScenario();
@@ -142,7 +158,7 @@ public sealed class PublishReleaseTests
         var scenario = new PublicationScenario();
         scenario.SeedRelease(SeededNonAsciiRecords, withFiles: true, DocumentChangeDraftRevision.MaximumHeadlineLength, 'é');
         var seededBytes = scenario.Releases.Directories["seeded"][PublicationProtocol.ManifestPath].Length;
-        Assert.InRange(seededBytes, PublicationProtocol.MaximumRecordFileBytes - 600, PublicationProtocol.MaximumRecordFileBytes);
+        Assert.InRange(seededBytes, PublicationProtocol.MaximumRecordFileBytes - 2_000, PublicationProtocol.MaximumRecordFileBytes);
         var drafts = new[] { 'a', 'b', 'c', 'd', 'e', 'f' }.Select(id => scenario.AddDraft(id)).ToArray();
 
         var refusal = await Assert.ThrowsAsync<ArgumentException>(() =>
@@ -450,4 +466,11 @@ public sealed class PublishReleaseTests
     private static PublicationRelease ReadManifest(PublicationScenario scenario, string directory) =>
         JsonSerializer.Deserialize<PublicationRelease>(
             scenario.Releases.Directories[directory][PublicationProtocol.ManifestPath], PublicationProtocol.JsonOptions)!;
+
+    private static byte[] Decompress(byte[] compressed, Func<Stream, Stream> decompressor)
+    {
+        using var output = new MemoryStream();
+        using (var stream = decompressor(new MemoryStream(compressed))) stream.CopyTo(output);
+        return output.ToArray();
+    }
 }

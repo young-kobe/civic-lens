@@ -78,11 +78,83 @@
         if (warning) warning.hidden = false;
     };
 
+    const searchLimit = 50;
+    const byText = ([, a], [, b]) => a.localeCompare(b);
+    const addOptions = (select, values) =>
+        [...values].sort(byText).forEach(([value, text]) => select.append(new Option(text, value)));
+    const matchesSearch = (record, query) =>
+        (!query.text || record.headline.toLowerCase().includes(query.text)) &&
+        (!query.kind || record.kind === query.kind) &&
+        (!query.official || record.officials.some(official => official.id === query.official)) &&
+        (!query.issue || record.issueIds.includes(query.issue)) &&
+        (!query.policyArea || record.policyAreaIds.includes(query.policyArea)) &&
+        (!query.from || (record.eventDate !== null && record.eventDate >= query.from)) &&
+        (!query.to || (record.eventDate !== null && record.eventDate <= query.to));
+    const initReleaseSearch = form => {
+        const field = name => form.elements.namedItem(name);
+        const status = form.querySelector("[data-search-status]");
+        const results = form.querySelector("[data-search-results]");
+        const kindLabels = new Map(Array.from(field("kind").options, option => [option.value, option.text]));
+        let records = [];
+        let loading = null;
+        const load = async () => {
+            const response = await fetch(form.dataset.releaseSearch);
+            if (!response.ok) throw new Error(`Release request failed with ${response.status}.`);
+            records = (await response.json()).records;
+            const officials = new Map(), issues = new Map(), policyAreas = new Map();
+            for (const record of records) {
+                record.officials.forEach(official => officials.set(official.id, official.name));
+                record.issueIds.forEach(id => issues.set(id, id));
+                record.policyAreaIds.forEach(id => policyAreas.set(id, id));
+            }
+            addOptions(field("official"), officials);
+            addOptions(field("issue"), issues);
+            addOptions(field("policyArea"), policyAreas);
+        };
+        const resultItem = record => {
+            const item = document.createElement("li");
+            const link = document.createElement("a");
+            link.className = "cell-title";
+            link.href = form.dataset.recordPage.replace("{id}", record.recordId);
+            link.textContent = record.headline;
+            const facts = document.createElement("span");
+            facts.className = "cell-sub";
+            facts.textContent = [kindLabels.get(record.kind), ...record.officials.map(official => official.name),
+                ...record.issueIds, record.eventDate].filter(Boolean).join(" · ");
+            item.append(link, facts);
+            return item;
+        };
+        const show = () => {
+            const query = Object.fromEntries(new FormData(form));
+            query.text = query.text.trim().toLowerCase();
+            if (!Object.values(query).some(Boolean)) {
+                status.textContent = "";
+                results.replaceChildren();
+                return;
+            }
+            const found = records.filter(record => matchesSearch(record, query));
+            status.textContent = found.length > searchLimit
+                ? `${found.length} records match. The first ${searchLimit} show.`
+                : `${found.length} records match.`;
+            results.replaceChildren(...found.slice(0, searchLimit).map(resultItem));
+        };
+        form.closest("section").hidden = false;
+        form.addEventListener("submit", event => event.preventDefault());
+        form.addEventListener("input", () => {
+            loading ??= load();
+            loading.then(show, () => {
+                loading = null;
+                status.textContent = "Search could not load this release.";
+            });
+        });
+    };
+
     const init = () => {
         all(".theme-toggle").forEach(toggle => { toggle.hidden = false; });
         all("[data-layout-switch]").forEach(control => { control.hidden = false; });
         showTheme(root.dataset.theme || "");
         initTabs();
+        all("[data-release-search]").forEach(initReleaseSearch);
         const unsaved = document.querySelector("[data-unsaved-form]");
         if (unsaved?.dataset.recoveredUnsaved === "true") markDirty();
         measureAll();

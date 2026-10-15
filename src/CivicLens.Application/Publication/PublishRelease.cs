@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.IO.Compression;
 using System.Text;
 using System.Text.Json;
 using CivicLens.Application.Review;
@@ -143,6 +144,10 @@ public sealed class PublishRelease
 
         foreach (var asset in renderer.Assets)
             await staging.WriteFileAsync(asset.RelativePath, asset.Content, cancellationToken);
+        await staging.WriteFileAsync(PublicationProtocol.ManifestPath + ".gz",
+            Compress(manifestJson, stream => new GZipStream(stream, CompressionLevel.Optimal)), cancellationToken);
+        await staging.WriteFileAsync(PublicationProtocol.ManifestPath + ".br",
+            Compress(manifestJson, stream => new BrotliStream(stream, CompressionLevel.Optimal)), cancellationToken);
         for (var page = 1; page <= PublicationProtocol.IndexPageCount(entries.Count); page++)
         {
             var index = await renderer.RenderIndexAsync(manifest, page, cancellationToken);
@@ -150,6 +155,13 @@ public sealed class PublishRelease
         }
         await staging.WriteFileAsync(PublicationProtocol.ManifestPath, manifestJson, cancellationToken);
         return (await staging.CompleteAsync(number, cancellationToken), entries);
+    }
+
+    private static byte[] Compress(byte[] content, Func<Stream, Stream> compressor)
+    {
+        using var output = new MemoryStream();
+        using (var compressed = compressor(output)) compressed.Write(content);
+        return output.ToArray();
     }
 
     private async Task<PublicationReleaseSummary> CommitAsync(ReviewActor actor, PublicationCommit commit,

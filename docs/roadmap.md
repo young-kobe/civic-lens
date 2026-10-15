@@ -25,8 +25,7 @@ Each item gives its outcome, what it depends on, and where the design lives. Pre
 ### Now
 
 - R-08: Parallel evidence processing with a configured degree. Depends on: none stated. [Collection](architecture/collection.md#limits-and-planned-work)
-- R-09: Static search in each release: client-side search over the manifest entry filters, from `release.json` or a bounded search file built at publish. Depends on: none stated. It must come before R-10. [Publication](architecture/publication.md#limits-and-planned-work)
-- R-10: Action publication (action step 5). Depends on: R-09. [Actions](architecture/actions.md#limits-and-planned-work)
+- R-10: Action publication (action step 5). Depends on: none stated. [Actions](architecture/actions.md#limits-and-planned-work)
 
 ### Next
 

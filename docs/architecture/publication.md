@@ -30,6 +30,7 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - A release holds at most `PublicationProtocol.MaximumRecordsPerRelease` records, and the manifest stays under the read cap at that count. Enforced by the `PublishRelease` record count check and manifest size check. Test: `PublishReleaseTests.RejectsMoreRecordsThanTheCapBeforeAnythingIsBuilt` and `PublishReleaseTests.RefusesAManifestOverTheReadCapAndStagesNothing`.
 - Manifest filters hold at most `PublishedRecordEntry.MaximumFilterValues` distinct, nonblank values, each at most `PublishedRecordEntry.MaximumFilterValueLength` characters. Enforced by `PublishedRecordEntry.Validate`, which `PublicationRelease.Validate` calls. Test: `PublicationReleaseTests.FiltersAreBoundedAndDistinctSoOneEntryCannotSwellTheManifest`.
 - An entry's filters come from the revision that the release publishes. Enforced by `PublishedDocumentChange.ToEntry` and `PublishedStatement.ToEntry`. Test: `PublishStatementTests.EachKindFillsItsSearchFiltersFromTheRevisionItPublishes` and `PublishStatementTests.ARepublishedStatementReplacesItsCarriedEntryInsteadOfDuplicatingIt`.
+- The precompressed manifests hold exactly the manifest bytes. Enforced by `PublishRelease`. Test: `PublishReleaseTests.PrecompressedManifestsHoldExactlyTheManifestBytesSoTheServerNeverSendsADifferentRelease`.
 - A commit holds the exact revision and review state version that the build read. Enforced by `PostgresPublicationStore`. Test: `PostgresPublicationStoreTests.ADecisionAfterTheBuildBlocksTheCommitBecauseApprovalMayHaveChanged`.
 - One release is active. Enforced by `IX_publication_releases_is_active`. Test: `PostgresPublicationStoreTests.EachCommitBecomesTheActiveReleaseSoAFailedLinkSwapCannotHideIt`.
 - Release numbers have no gaps. Enforced by `PostgresPublicationStore`. Test: `PostgresPublicationStoreTests.ReleaseNumbersMustFollowTheLatestCommittedOneWithoutGaps`.
@@ -108,6 +109,10 @@ Withdrawing approval does not change published artifacts. The UI flags affected 
 
 The release builder renders public components to static HTML through `PublicPage`, `PublishedIndexPage`, and `PublishedRecordPage`. A release copies `assets/css/theme.css`, `assets/css/app.css`, `assets/js/theme.js`, `assets/js/app.js`, and the fonts. Pages also work without JavaScript. Shared components are described in [host](host.md#presentation).
 
+### Search
+
+Each index page has a search panel. It stays hidden until `app.js` runs, because search needs JavaScript. On the first input, the script fetches `release.json` once and fills the official, issue, and policy area lists from the entries. It matches headline text and filters by kind, official, issue, policy area, and a date range. A date filter matches the event date only, so a record without an event date never matches it. The panel shows the first 50 matches, each linked to its record page. Search reads only the release files, so it works without the operational application.
+
 ## Storage and contracts
 
 - The generated [publication schema](schema/publication.md) lists every table, column, key, check, index, and trigger.
@@ -124,7 +129,8 @@ The release builder renders public components to static HTML through `PublicPage
 | `sourceHost` | Host of the after version URL | Host of the source URL | Host of the bill source URL |
 | `eventDate` | Evidenced change date, or empty | Evidenced statement date, or empty | Latest action date |
 
-- New manifests use version 3. `src/CivicLens.Publication.Contracts/PublicationProtocol.cs` owns the version; see [Behavior versions](../architecture.md#behavior-versions).
+- New manifests use version 3.
+- Each release also holds `release.json.gz` and `release.json.br`. They compress the exact manifest bytes, so a static server can send them without compressing on each request. `src/CivicLens.Publication.Contracts/PublicationProtocol.cs` owns the version; see [Behavior versions](../architecture.md#behavior-versions).
 - A separate static file server serves the release root read-only. It has no access to operational storage.
 
 ## Code map
@@ -143,23 +149,23 @@ Release and rollback commands are in [operations](../operations.md#publish-a-sta
 ## Limits and planned work
 
 - Correction and withdrawal releases come later.
-- How the static file server runs locally is not decided.
+- How the static file server runs locally is not decided. It must send the precompressed manifest, for example Caddy `file_server { precompressed br gzip }` or nginx `gzip_static on`. Compression by the server is the fallback.
 - Issue, official, and briefing pages are planned. Readers will start with a weekly briefing and recent reviewed developments. Issue pages will connect related records across officials and institutions. Official pages will show dated statements, actions, and reviewed relationships.
-- Public search and filtering, timelines, expandable evidence, and shareable records are planned against published releases.
+- Search filter pages, timelines, expandable evidence, and shareable records are planned against published releases.
 - Public search is an MVP requirement. Readers search all published records from the public pages. Search reads the published release only, so it works while the operational application is down.
 - Search filters: record kind, official, issue, policy area, date range, and source. Filters are easy to combine and easy to clear. The page works at phone width.
 - Results show the kind, headline, officials, issues, and dates of each record, and link to the record page.
-- Planned, not built: the public pages search the manifest entry filters client side. Whether they read `release.json` or a separate compact search file is not decided.
+- Planned, not built: a source filter and filters that are easy to clear, on the R-20 filter pages.
 - Later, after the first MVP deploy: a public search service with its own Postgres database, fed from releases. It gives full-text search over the whole processed corpus.
 - Split the manifest by kind when it grows over 4 MB.
-- At the longest ASCII headline, one entry takes about 440 bytes, so 20,000 entries take about 8.8 MB. A 256-character non-ASCII headline takes about 1.7 KB in the escaped manifest. `PublishRelease` refuses a manifest over the 16 MB read cap, so such a release fails before it stages anything.
+- An entry with an 80-character headline and one official, issue, and policy area takes about 460 bytes. At the longest ASCII headline, it takes about 640 bytes, so 20,000 entries take about 12.8 MB. Such a manifest compresses to about 1.4 MB with gzip. A 256-character non-ASCII headline takes about 1.7 KB in the escaped manifest. `PublishRelease` refuses a manifest over the 16 MB read cap, so such a release fails before it stages anything.
 - Each release row stores `records_json`, about 2 MB at 20,000 records. Review queries expand the active one.
 - Rolling back the `DropReleaseCountCheck` migration fails while any release holds more than 2000 records.
 - A future live public Blazor deployment must read published releases only and stay separate from the operational application.
 - A future mobile client would read public release contracts through an API, not operational storage.
 - Public MCP will expose `search_records`, `get_record`, `get_official_timeline`, and `compare_document_versions`. It returns published data with IDs, citations, dates, review status, coverage caveats, and the release ID.
 - Public MCP cannot start collection, inference, or edits. It bounds and pages responses, limits requests, and accepts record IDs, not arbitrary fetch URLs. It treats source passages as untrusted attributed content.
-- Releases will also carry a bounded search index, built from the same explicit approved selection. The website and public MCP will share one release, and clients can pin it across calls.
+- Public MCP will search the same manifest entries as the website. The website and public MCP will share one release, and clients can pin it across calls.
 - Public MCP needs request compute, but never the local database or AI inference.
 - Local Postgres and capture files need coordinated backups and a tested restore. Production backup rules are in [host](host.md#limits-and-planned-work).
 - Retention must keep the evidence that published releases reference. Disposable captures follow an explicit policy, which is not agreed yet.
