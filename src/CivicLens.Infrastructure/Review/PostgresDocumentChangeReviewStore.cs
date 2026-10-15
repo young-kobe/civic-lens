@@ -70,7 +70,7 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
                 var comparisons = await ReadVerifiedComparisonsAsync(db, [draft.ComparisonId], cancellationToken);
                 ValidateAgainstEvidence(draft, history, comparisons);
                 if (decision.Kind != ReviewDecisionKind.Approve) return;
-                var current = history.Revisions[^1];
+                var current = history.CurrentRevision!;
                 if (current.OfficialIds.Any(id => !allowedOfficialIds.Contains(id)) || current.IssueIds.Any(id => !allowedIssueIds.Contains(id)))
                     throw new ArgumentException("The saved revision includes selections that are no longer configured.");
                 current.ValidateForApproval();
@@ -290,7 +290,7 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
             ComparisonId = revision.ComparisonId,
             CurrentRevisionNumber = 1,
             ReviewStateVersion = 0,
-            ReviewStatus = ReviewPolicy.GetCurrentStatus(revision.RevisionNumber, []),
+            ReviewStatus = ReviewPolicy.GetInitialStatus(1),
             CreatedAtUtcTicks = revision.CreatedAtUtc.UtcTicks
         });
         db.Add(NewRevisionRow(revision));
@@ -365,7 +365,7 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
         ReviewHistory<DocumentChangeDraftRevision> history, Dictionary<string, VerifiedComparison> comparisons)
     {
         var verified = ValidateAgainstEvidence(draft, history, comparisons);
-        var review = new DocumentChangeReview(draft.DraftId, history.Revisions[^1], draft.ReviewStateVersion, history.Revisions,
+        var review = new DocumentChangeReview(draft.DraftId, history.CurrentRevision!, draft.ReviewStateVersion, history.LoadedRevisions,
             history.Decisions, history.UnresolvedConcerns);
         return new(review, verified.Summary, verified.Before, verified.After);
     }
@@ -373,24 +373,24 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
     private static VerifiedComparison ValidateAgainstEvidence(DocumentChangeDraftRow draft,
         ReviewHistory<DocumentChangeDraftRevision> history, Dictionary<string, VerifiedComparison> comparisons)
     {
-        RequireBoundComparison(draft, history.Revisions);
+        RequireBoundComparison(draft, history);
         var verified = comparisons.GetValueOrDefault(draft.ComparisonId)
             ?? throw new InvalidOperationException("Retained draft comparison is no longer valid.");
-        foreach (var revision in history.Revisions) ValidateRevisionAgainstEvidence(revision, verified);
+        foreach (var revision in history.LoadedRevisions) ValidateRevisionAgainstEvidence(revision, verified);
         return verified;
     }
 
     internal static DocumentChangeReviewListItem ToListItem(DocumentChangeDraftRow draft,
         ReviewHistory<DocumentChangeDraftRevision> history)
     {
-        RequireBoundComparison(draft, history.Revisions);
-        return new(draft.DraftId, history.Revisions[^1], draft.ReviewStateVersion, history.CurrentStatus,
+        RequireBoundComparison(draft, history);
+        return new(draft.DraftId, history.CurrentRevision!, draft.ReviewStateVersion, history.CurrentStatus,
             history.UnresolvedConcerns.Length);
     }
 
-    private static void RequireBoundComparison(DocumentChangeDraftRow draft, ImmutableArray<DocumentChangeDraftRevision> revisions)
+    private static void RequireBoundComparison(DocumentChangeDraftRow draft, ReviewHistory<DocumentChangeDraftRevision> history)
     {
-        if (revisions.Any(revision => revision.ComparisonId != draft.ComparisonId))
+        if (history.LoadedRevisions.Any(revision => revision.ComparisonId != draft.ComparisonId))
             throw new InvalidOperationException("A saved revision changed its bound comparison.");
     }
 

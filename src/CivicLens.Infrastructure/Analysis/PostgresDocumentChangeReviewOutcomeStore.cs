@@ -36,16 +36,17 @@ public sealed class PostgresDocumentChangeReviewOutcomeStore(IDbContextFactory<C
             .Where(run => ids.Contains(run.DraftId!)).ToDictionaryAsync(run => run.DraftId!, run => run.PromptVersion,
                 StringComparer.Ordinal, cancellationToken);
         var histories = await PostgresDocumentChangeReviewStore.Records.ReadHistoriesAsync(db, slice.Items, cancellationToken);
+        var firstRevisions = await PostgresDocumentChangeReviewStore.Records.ReadFirstRevisionsAsync(db, ids, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
-        var items = slice.Items.Select(row => ToOutcome(row, promptVersions[row.DraftId], histories[row.DraftId]));
+        var items = slice.Items.Select(row =>
+            ToOutcome(row, promptVersions[row.DraftId], firstRevisions[row.DraftId].Revision, histories[row.DraftId]));
         return new([.. items], slice.NewerCursor, slice.OlderCursor);
     }
 
-    private static AiDraftOutcome ToOutcome(DocumentChangeDraftRow draft, string promptVersion,
+    private static AiDraftOutcome ToOutcome(DocumentChangeDraftRow draft, string promptVersion, DocumentChangeDraftRevision first,
         ReviewHistory<DocumentChangeDraftRevision> history)
     {
         var current = PostgresDocumentChangeReviewStore.ToListItem(draft, history);
-        var first = history.Revisions[0];
         if (!ReviewAuthor.IsAnalysis(first.AuthorSubject))
             throw new InvalidOperationException("An analysis run is linked to a draft that the model did not write.");
         return new(promptVersion, first, current);

@@ -270,7 +270,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                             t.HasCheckConstraint("ck_action_analysis_runs_outcome", "outcome IN ('Drafted','DraftDiscarded','CitationRejected','OutputRejected','Refused','OutputLimitReached','UnexpectedStop','RateLimited','ProviderUnavailable','AuthenticationFailed','ProviderRejected','ConnectionFailed','BillingFailed','ModelNotFound','ProcessingFailed','InvalidResponse','Interrupted','Bypassed')");
 
-                            t.HasCheckConstraint("ck_action_analysis_runs_reason", "reason IS NULL OR reason IN ('unchanged','noTrackedOfficial','summaryOmitted')");
+                            t.HasCheckConstraint("ck_action_analysis_runs_reason", "reason IS NULL OR reason IN ('unchanged','noTrackedOfficial','summaryOmitted','sponsorshipsChanged')");
 
                             t.HasCheckConstraint("ck_action_analysis_runs_times", "finished_at_utc_ticks >= started_at_utc_ticks");
 
@@ -307,6 +307,20 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("current_revision_number");
 
+                    b.Property<long>("LastRevisedAtUtcTicks")
+                        .HasColumnType("bigint")
+                        .HasColumnName("last_revised_at_utc_ticks");
+
+                    b.Property<int>("ReviewStateVersion")
+                        .HasColumnType("integer")
+                        .HasColumnName("review_state_version");
+
+                    b.Property<string>("ReviewStatus")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("review_status");
+
                     b.Property<string>("SourceId")
                         .IsRequired()
                         .HasMaxLength(128)
@@ -325,7 +339,61 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                             t.HasCheckConstraint("ck_action_drafts_id", "record_id ~ '^[0-9a-f]{64}$'");
 
+                            t.HasCheckConstraint("ck_action_drafts_review_state_version", "review_state_version >= 0");
+
+                            t.HasCheckConstraint("ck_action_drafts_review_status", "review_status IN ('AwaitingReview','AwaitingReviewWithConcerns','Approved','ChangesRequested','ApprovalWithdrawn')");
+
                             t.HasCheckConstraint("ck_action_drafts_revision", "current_revision_number >= 1");
+                        });
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Actions.Persistence.ActionReviewDecisionRow", b =>
+                {
+                    b.Property<string>("DecisionId")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("decision_id");
+
+                    b.Property<long>("CreatedAtUtcTicks")
+                        .HasColumnType("bigint")
+                        .HasColumnName("created_at_utc_ticks");
+
+                    b.Property<string>("DecisionJson")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("decision_json");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("RecordId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("record_id");
+
+                    b.Property<int>("ReviewStateVersion")
+                        .HasColumnType("integer")
+                        .HasColumnName("review_state_version");
+
+                    b.Property<int>("RevisionNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("revision_number");
+
+                    b.HasKey("DecisionId");
+
+                    b.HasIndex("RecordId", "ReviewStateVersion")
+                        .IsUnique();
+
+                    b.HasIndex("RecordId", "RevisionNumber");
+
+                    b.ToTable("action_review_decisions", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_action_review_decisions_id", "decision_id ~ '^[0-9a-f]{32}$'");
+
+                            t.HasCheckConstraint("ck_action_review_decisions_versions", "revision_number >= 1 AND review_state_version >= 1");
                         });
                 });
 
@@ -2410,6 +2478,15 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.HasOne("CivicLens.Infrastructure.Actions.Persistence.ActionAnalysisRow", null)
                         .WithMany()
                         .HasForeignKey("CandidateId", "Task")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Actions.Persistence.ActionReviewDecisionRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.Actions.Persistence.ActionRevisionRow", null)
+                        .WithMany()
+                        .HasForeignKey("RecordId", "RevisionNumber")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The review feature is the private editorial workspace. People draft, revise, and decide on proposed public records beside their evidence. Every decision binds to an exact immutable revision. This page covers document changes and the decision rules that statements share. Statement-specific review is in [statements](statements.md#statement-review).
+The review feature is the private editorial workspace. People draft, revise, and decide on proposed public records beside their evidence. Every decision binds to an exact immutable revision. This page covers document changes and the decision rules that statements and actions share. Statement-specific review is in [statements](statements.md#statement-review). Action-specific review is in [actions](actions.md#action-review).
 
 ## Decisions
 
@@ -18,7 +18,9 @@ The review feature is the private editorial workspace. People draft, revise, and
 - Decisions are immutable. They cannot be edited or deleted.
 - A saved revision never resolves a concern by itself. Only an explicit approval with a resolution note does.
 - Shared Application handlers own these rules for the UI, the CLI, and future MCP callers.
-- Document changes and statements share one decision policy, `ReviewPolicy`.
+- Document changes, statements, and actions share one decision policy, `ReviewPolicy`.
+- A review cycle starts at the latest approval. Reads load the current revision, the last approved revision, and the decisions since that approval. A cycle has no revision cap. The open-concern cap bounds its decisions.
+- One step appends a revision and computes `review_status` again. Person saves and analysis appends both use it.
 - `review_status` and `has_changes` are stored columns that C# computes. SQL filters read them, so SQL keeps no copy of the policy.
 - Autosave and live preview are not part of the first workflow.
 
@@ -30,9 +32,11 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - A decision binds to its exact revision. Enforced by composite foreign keys from the decision tables to the revision tables. No test.
 - One decision exists for each record and review state version. Enforced by unique indexes on both decision tables. Test: `PostgresStatementReviewStoreTests.DecisionReplayReturnsTheOriginalDecisionAndAStaleStateConflicts`.
 - Expected versions are checked under the review lock. Enforced by `ReviewWriteRules`. Test: `PostgresDocumentChangeReviewStoreTests.CreateReplayIsStableAndConcurrentSavesAppendOnlyOneCurrentRevision`.
-- A record has at most 64 revisions and 128 decisions. Enforced by `ReviewWriteRules` and `ReviewDecisionHistory`. No test.
+- A record has at most 64 open concerns, so a review cycle holds at most 65 decisions: its opening approval and the concerns after it. Only an approval resolves a concern, and the next approval opens a new cycle. The cycle read takes `ReviewPolicy.MaximumDecisionsPerCycle` rows for each record. Enforced by `ReviewPolicy`. Tests: `ReviewPolicyTests.ACycleHoldsItsApprovalAndAtMostTheOpenConcernCapBecauseOnlyTheNextApprovalResolvesAConcern` and `PostgresDocumentChangeReviewStoreTests.ReadsLoadOneReviewCycleSoARecordWithMoreDecisionsInTotalThanACycleHoldsStillReadsAndAcceptsDecisions`.
+- A batched read finds the cycle start of each record on its own. Enforced by `ReviewRecords`. Test: `PostgresDocumentChangeReviewStoreTests.AListReadsEachRecordFromItsOwnCycleStartSoStatusesAndConcernsStayApartInOneBatch`.
+- A read replays every decision of the current cycle against the policy. Enforced by `ReviewDecisionHistory`. Test: `PostgresDocumentChangeReviewStoreTests.ReadsReplayEveryDecisionSinceTheLatestApprovalSoATamperedDecisionInTheCycleFailsTheRead`.
 - A reused idempotency key with another payload fails. Enforced by `ReviewIdempotency`. Test: `PostgresDocumentChangeReviewStoreTests.DecisionReplayReturnsOriginalDecisionAndRejectsPayloadReuse`.
-- The stored status equals the policy status. Enforced by `ReviewPolicy` and `ck_document_change_drafts_review_status`. Test: `PostgresDocumentChangeReviewStoreTests.StoredStatusEqualsThePolicyStatusAfterEveryKindOfWrite`.
+- The stored status equals the policy status. Enforced by `ReviewPolicy`, `ReviewRecords.AppendRevision`, and the status check constraints. Tests: `PostgresDocumentChangeReviewStoreTests.StoredStatusEqualsThePolicyStatusAfterEveryKindOfWrite` and `PostgresBillStreamTests.AWorkerRevisionAfterAnApprovalRecomputesTheStoredStatusSoTheRecordNeedsReviewAgain`.
 - An approval resolves every open concern. Enforced by `ReviewPolicy`. Test: `ReviewPolicyTests.RequestChangesCarriesAcrossRevisionAndApprovalMustResolveExactConcern`.
 - A withdrawal needs a current approval. Enforced by `ReviewPolicy`. Test: `ReviewPolicyTests.WithdrawalRequiresCurrentApprovalAndCreatesAConcernForReapproval`.
 
@@ -93,15 +97,24 @@ Either reviewer can raise a blocking concern. A later approval must acknowledge 
 
 ### Status states
 
-`ck_document_change_drafts_review_status` and `ck_statement_drafts_review_status` list the stored statuses. Statements add NotDrafted. `ReviewPolicy.GetCurrentStatus` computes it after each write: the latest decision on the current revision sets it, and without one it is awaiting review.
+The check constraints on `document_change_drafts`, `statement_drafts`, and `action_drafts` list the stored statuses. Statements add NotDrafted. `ReviewPolicy.GetCurrentStatus` computes it after each write: the latest decision on the current revision sets it, and without one it is awaiting review. `ReviewPolicy.GetInitialStatus` gives the status of a new draft row, which has no decisions.
 
 | From | To | Write |
 |---|---|---|
 | NotDrafted | AwaitingReview | The first revision, by a person or by analysis |
-| Any status | AwaitingReview or AwaitingReviewWithConcerns | A saved revision, with or without open concerns |
+| Any status | AwaitingReview or AwaitingReviewWithConcerns | A saved or appended revision, with or without open concerns |
 | Any drafted status | Approved | Approve, which must resolve every open concern |
 | Any drafted status | ChangesRequested | Request changes |
 | Approved | ApprovalWithdrawn | Withdraw approval |
+
+### Review cycles
+
+A review cycle starts at the latest approval of a record. A record with no approval has one cycle that starts at its first decision. An approval resolves every open concern, so the decisions before it never change the status or the open concerns.
+
+- Reads load the current revision, the last approved revision, and the decisions of the cycle. The AI draft outcome list loads revision 1 through `ReviewRecords.ReadFirstRevisionsAsync` for the model draft. The statement read loads it too, but uses only the run of revision 1. No read loads other revisions or older decisions.
+- A read checks the approval at the start of the cycle against its revision, and replays every later decision against the policy.
+- The history panel shows the current and the last approved revisions, and the decisions of the cycle. `ReviewHistory.LoadedRevisions` builds that revision list, and each review aggregate carries it as `Revisions`.
+- A cycle has no revision cap. The decisions of a cycle are bounded by the open-concern cap; see [Invariants](#invariants).
 
 ### Concurrency and replay
 
@@ -148,18 +161,19 @@ The Host uses `Microsoft.AspNetCore.Authentication.OpenIdConnect` 10.0.12 for th
 - Core/Review owns decision semantics. Application/Review owns authenticated commands and configured selection validation. Infrastructure/Review implements the store boundary with Postgres.
 - `ReviewPolicy` holds the status rule, the open-concern rule, and the decision checks. It works on a record ID, the current revision number, the review state version, and the decisions. It knows no record type.
 - Review writes take the review keys from `PostgresAdvisoryLock`. The keys and their order are in [advisory locks](../architecture.md#advisory-locks).
-- `ReviewRecords` is the shared store core for each record type. Each store holds one instance over its draft, revision, and decision rows, its lock key, and its record ID property. It owns the create, save, and decide flow, the status filters, the draft page, and the unpublished approved list. Its bounded batch reads parse and validate each `ReviewHistory`. A store gives only its feature rules as delegates. They are the create body, the save preparation, the revision row builder, the decision checks, and the decision row builder. The rows implement `IReviewDraftRow`, `IReviewRevisionRow`, and `IReviewDecisionRow`, and the revisions implement `IReviewRevision`. `IReviewRevision` is a deliberate departure from the concrete-types rule and the first interface in Core. Core cannot see Infrastructure, and the shared core needs it as its generic constraint.
-- `ReviewIdempotency` reads and writes replay receipts and checks the actor, key, and payload hash. `ReviewDecisionHistory` parses and replays stored decisions. `ReviewKeyset` builds the keyset page filter. `ReviewJson` holds the stored JSON options.
+- `ReviewRecords` is the shared store core for each record type. Each store holds one instance over its draft, revision, and decision rows, its lock key, and its record ID property. It owns the create, save, and decide flow, the append step, the status filters, the draft page, and the unpublished approved list. Its bounded batch reads parse and validate one review cycle for each record into a `ReviewHistory`. Its batched revision 1 read parses and validates the shape of each revision 1. A store gives only its feature rules as delegates. They are the create body, the save preparation, the revision row builder, the decision checks, and the decision row builder. Actions also give a delegate that records the revision time on the draft row. The rows implement `IReviewDraftRow`, `IReviewRevisionRow`, and `IReviewDecisionRow`, and the revisions implement `IReviewRevision`. `IReviewRevision` is a deliberate departure from the concrete-types rule and the first interface in Core. Core cannot see Infrastructure, and the shared core needs it as its generic constraint.
+- `ReviewRecords.AppendRevision` is the one step that appends a revision and computes `review_status` again. The person save and the action analysis append both call it. Document-change and statement analysis drafts only create revision 1, so they use `ReviewPolicy.GetInitialStatus`.
+- `ReviewIdempotency` reads and writes replay receipts and checks the actor, key, and payload hash. `ReviewDecisionHistory` parses and replays the stored decisions of one review cycle. `IReviewDecisionRow` exposes the decision kind, so the cycle read finds the latest approval in SQL. `ReviewKeyset` builds the keyset page filter. `ReviewJson` holds the stored JSON options.
 - Four tables hold record pointers, immutable revision JSON, immutable decision JSON, and actor, operation, and request-key replay receipts.
 - Draft and decision expected versions are checked inside the locked transaction.
-- Each draft row stores `review_status`, which `ReviewPolicy` computes in C#. Create, save, and every decision write it under the lock. A check constraint lists the five status names. `ReviewStatus` adds `NotDrafted` for a record with no revision, which a document change never has.
+- Each draft row stores `review_status`, which `ReviewPolicy` computes in C#. Create, save, the action analysis append, and every decision write it under the lock. A check constraint lists the five status names. `ReviewStatus` adds `NotDrafted` for a record with no revision, which a document change never has.
 - The migration `StoreReviewStatusAndHasChanges` filled `review_status` of existing document-change drafts from their stored decision JSON, and `has_changes` from the stored comparison result.
 - Each comparison row stores `has_changes`, which is `DocumentComparison.HasChanges()`: a complete comparison with at least one hunk.
 - Partial indexes on `has_changes` and on the Approved and not-Approved statuses serve the filters, the New changes list, and the overview counts.
 - The list of unpublished approved drafts reads the active release records. It stays a read query on top of `review_status`.
 - Revisions keep the author and the UTC save time. Decisions reference the exact revision with a composite foreign key.
 - Reads validate stored identities, historical transitions, and exact retained evidence.
-- Bounds: the revision and decision caps in [Invariants](#invariants), 64 outstanding concerns, 64 citations for each revision, and bounded field sizes. Writes fail before they exceed a history bound.
+- Bounds: 64 open concerns, which also bound the decisions of a cycle (see [Invariants](#invariants)), 64 citations for each revision, and bounded field sizes. Writes fail before they exceed a bound.
 - The public release contract includes review and publication dates and correction context. It excludes author identity, reviewer email, Auth0 identifiers, and private notes; see [publication](publication.md).
 
 ## Code map
@@ -180,13 +194,13 @@ The Host uses `Microsoft.AspNetCore.Authentication.OpenIdConnect` 10.0.12 for th
 ## Limits and planned work
 
 - Live Auth0 tenant verification is pending. Both reviewers will reach the shared production workspace on Hetzner through their browsers; see [host](host.md#limits-and-planned-work).
-- Paged history beyond the revision and decision bounds is future work.
+- Reads show the current review cycle only. A page of older cycles is future work.
+- A read trusts the approval at the start of a cycle and does not check it against older concerns again. The decide step checked it under the lock when it was written.
 - Local MCP will inspect jobs, explain processing, inspect source health, compare analysis runs, and run explicitly budgeted evaluations.
 - MCP review tools will list and read cases, propose corrections, and record explicit decisions. Mutations will use expected versions and idempotency keys. Initial local tooling is read-only.
 - AI suggestions, model predictions, and human decisions stay distinct records.
 - Planned reviewer experience: a source-to-review path that a nontechnical reviewer understands, dynamic search across retained evidence and review records, and integrated visual comparison.
 - Global search and expanded reviewer source visibility are pending decisions. Add an evidence library page once document search exists.
-- Review volume is large, so the queue will support bulk actions and bulk approval. This is the one owner of bulk approval. It will show the automatic citation and classification checks beside each draft, and sort the riskiest drafts first.
+- Review volume is large. Bulk approval exists for action revisions that change only sponsorships; see [actions](actions.md#action-review). Wider bulk tools are planned here. They will show the automatic citation and classification checks beside each draft, and sort the riskiest drafts first.
 - A reviewer will approve a weekly brief together with the records it links. Each record still gets an attributed decision bound to its exact revision. Model output never approves or publishes.
-- Action-specific review rules are in [actions](actions.md#limits-and-planned-work).
 - See [roadmap](../roadmap.md) for order.

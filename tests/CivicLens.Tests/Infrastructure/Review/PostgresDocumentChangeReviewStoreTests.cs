@@ -78,7 +78,6 @@ public sealed class PostgresDocumentChangeReviewStoreTests(PostgresCollection po
 
         var review = await reviews.GetAsync(first.DraftId, CancellationToken.None);
         Assert.NotNull(review);
-        Assert.Equal(2, review.Revisions.Length);
         Assert.Equal(2, review.CurrentRevision.RevisionNumber);
     }
 
@@ -160,7 +159,7 @@ public sealed class PostgresDocumentChangeReviewStoreTests(PostgresCollection po
     }
 
     [Fact]
-    public async Task QueueRejectsApprovalThatDoesNotResolveRetainedConcern()
+    public async Task ReadsReplayEveryDecisionSinceTheLatestApprovalSoATamperedDecisionInTheCycleFailsTheRead()
     {
         var comparison = await SaveComparisonAsync();
         var actor = new ReviewActor("auth0|owner", ReviewRole.Owner);
@@ -171,24 +170,85 @@ public sealed class PostgresDocumentChangeReviewStoreTests(PostgresCollection po
             new(revision.DraftId, 1, "Headline", "Summary", null, null, "Institution",
                 null, null, [], [], revision.Citations, "save"));
         var decide = new DecideDocumentChangeReview(reviews, catalog);
-        var concern = await decide.ExecuteAsync(actor,
-            new(revision.DraftId, 2, 0, ReviewDecisionKind.RequestChanges, "Check context.", [], "concern"));
-        var approval = await decide.ExecuteAsync(actor,
-            new(revision.DraftId, 2, 1, ReviewDecisionKind.Approve, "Context checked.", [concern.DecisionId], "approve"));
+        _ = await decide.ExecuteAsync(actor, new(revision.DraftId, 2, 0, ReviewDecisionKind.Approve, null, [], "approve"));
+        var withdrawal = await decide.ExecuteAsync(actor,
+            new(revision.DraftId, 2, 1, ReviewDecisionKind.WithdrawApproval, "The date is wrong.", [], "withdraw"));
 
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
         await using var command = new NpgsqlCommand("""
             UPDATE document_change_review_decisions
-            SET decision_json = jsonb_set(decision_json::jsonb, '{resolvedDecisionIds}', '[]'::jsonb)::text
+            SET decision_json = jsonb_set(decision_json::jsonb, '{note}', 'null'::jsonb)::text
             WHERE decision_id = @id
             """, connection);
-        command.Parameters.AddWithValue("id", approval.DecisionId);
+        command.Parameters.AddWithValue("id", withdrawal.DecisionId);
         Assert.Equal(1, await command.ExecuteNonQueryAsync());
 
         await Assert.ThrowsAsync<ArgumentException>(() => reviews.GetAsync(revision.DraftId, default));
         await Assert.ThrowsAsync<ArgumentException>(() => reviews.ListAsync(null, 10, DraftStatusFilter.All, default));
     }
+
+    [Fact]
+    public async Task ReadsLoadOneReviewCycleSoARecordWithMoreDecisionsInTotalThanACycleHoldsStillReadsAndAcceptsDecisions()
+    {
+        var (actor, catalog, revision) = await SavedDraftAsync();
+        var decide = new DecideDocumentChangeReview(reviews, catalog);
+        var version = 0;
+        while (version <= ReviewPolicy.MaximumDecisionsPerCycle)
+        {
+            await decide.ExecuteAsync(actor, new(revision.DraftId, 2, version++, ReviewDecisionKind.Approve, null, [], $"approve-{version}"));
+            var withdrawal = await decide.ExecuteAsync(actor,
+                new(revision.DraftId, 2, version++, ReviewDecisionKind.WithdrawApproval, "Check again.", [], $"withdraw-{version}"));
+            await decide.ExecuteAsync(actor, new(revision.DraftId, 2, version++, ReviewDecisionKind.Approve, "Checked.",
+                [withdrawal.DecisionId], $"reapprove-{version}"));
+        }
+
+        var review = (await reviews.GetAsync(revision.DraftId, default))!;
+        Assert.True(review.ReviewStateVersion > ReviewPolicy.MaximumDecisionsPerCycle);
+        Assert.Equal(ReviewDecisionKind.Approve, Assert.Single(review.Decisions).Kind);
+        Assert.Empty(review.UnresolvedConcerns);
+    }
+
+    [Fact]
+    public async Task AListReadsEachRecordFromItsOwnCycleStartSoStatusesAndConcernsStayApartInOneBatch()
+    {
+        var actor = new ReviewActor("auth0|owner", ReviewRole.Owner);
+        var catalog = new ReviewCatalog([], []);
+        var save = new SaveDocumentChangeDraft(reviews, catalog);
+        var decide = new DecideDocumentChangeReview(reviews, catalog);
+        var drafts = await CreateDraftsAsync(4);
+        foreach (var draft in drafts) _ = await save.ExecuteAsync(actor, SaveRequest(draft, "save-" + draft.DraftId));
+        var requested = drafts[1].DraftId;
+        await decide.ExecuteAsync(actor, new(requested, 2, 0, ReviewDecisionKind.RequestChanges, "Cite it.", [], "request-1"));
+        var withdrawn = drafts[2].DraftId;
+        var concern = await decide.ExecuteAsync(actor, new(withdrawn, 2, 0, ReviewDecisionKind.RequestChanges, "Cite it.", [], "request-2"));
+        await decide.ExecuteAsync(actor, new(withdrawn, 2, 1, ReviewDecisionKind.Approve, "Cited.", [concern.DecisionId], "approve-2"));
+        await decide.ExecuteAsync(actor, new(withdrawn, 2, 2, ReviewDecisionKind.WithdrawApproval, "Wrong date.", [], "withdraw-2"));
+        var reapproved = drafts[3].DraftId;
+        await decide.ExecuteAsync(actor, new(reapproved, 2, 0, ReviewDecisionKind.Approve, null, [], "approve-3"));
+        var withdrawal = await decide.ExecuteAsync(actor, new(reapproved, 2, 1, ReviewDecisionKind.WithdrawApproval, "Check.", [], "withdraw-3"));
+        await decide.ExecuteAsync(actor, new(reapproved, 2, 2, ReviewDecisionKind.Approve, "Checked.", [withdrawal.DecisionId], "reapprove-3"));
+
+        var items = (await reviews.ListAsync(null, 10, DraftStatusFilter.All, default)).Items.ToDictionary(item => item.DraftId);
+
+        Assert.Equal((ReviewStatus.AwaitingReview, 0), (items[drafts[0].DraftId].CurrentStatus, items[drafts[0].DraftId].UnresolvedConcernCount));
+        Assert.Equal((ReviewStatus.ChangesRequested, 1), (items[requested].CurrentStatus, items[requested].UnresolvedConcernCount));
+        Assert.Equal((ReviewStatus.ApprovalWithdrawn, 1), (items[withdrawn].CurrentStatus, items[withdrawn].UnresolvedConcernCount));
+        Assert.Equal((ReviewStatus.Approved, 0), (items[reapproved].CurrentStatus, items[reapproved].UnresolvedConcernCount));
+    }
+
+    private async Task<(ReviewActor Actor, ReviewCatalog Catalog, DocumentChangeDraftRevision Revision)> SavedDraftAsync()
+    {
+        var comparison = await SaveComparisonAsync();
+        var actor = new ReviewActor("auth0|owner", ReviewRole.Owner);
+        var catalog = new ReviewCatalog([], []);
+        var created = await new CreateDocumentChangeDraft(reviews).ExecuteAsync(actor, new(comparison.ComparisonId, "create"));
+        var saved = await new SaveDocumentChangeDraft(reviews, catalog).ExecuteAsync(actor, SaveRequest(created, "save-2"));
+        return (actor, catalog, saved);
+    }
+
+    private static SaveDocumentChangeDraftRequest SaveRequest(DocumentChangeDraftRevision current, string key) =>
+        new(current.DraftId, current.RevisionNumber, "Headline", "Summary", null, null, "Institution", null, null, [], [], current.Citations, key);
 
     [Fact]
     public async Task PublicationReadReturnsTheSameVerifiedReviewAsTheSingleDraftRead()

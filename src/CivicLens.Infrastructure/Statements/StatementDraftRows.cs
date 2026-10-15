@@ -32,7 +32,7 @@ internal static class StatementDraftRows
     {
         CandidateId = candidateId,
         CurrentRevisionNumber = currentRevisionNumber,
-        ReviewStatus = ReviewPolicy.GetCurrentStatus(currentRevisionNumber, []),
+        ReviewStatus = ReviewPolicy.GetInitialStatus(currentRevisionNumber),
         CreatedAtUtcTicks = createdAtUtcTicks
     };
 

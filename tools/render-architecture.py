@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 VIEWS = [
     {
         "title": "Collection to publication (target)",
-        "description": "Target workflow. Implemented: configured collection with durable jobs, discovery, and admission; the Congress.gov bill stream with its gate and action candidates; text extraction, history, and comparison; AI drafting of document-change accounts; the statement gate and statement drafting; AI drafting of bill action records; version-bound review; and static release publication. Planned: action review and publication, classification, weekly briefs, and private and public MCP.",
+        "description": "Target workflow. Implemented: configured collection with durable jobs, discovery, and admission; the Congress.gov bill stream with its gate and action candidates; text extraction, history, and comparison; AI drafting of document-change accounts; the statement gate and statement drafting; AI drafting of bill action records; version-bound review of all three record kinds; and static release publication. Planned: action publication, classification, weekly briefs, and private and public MCP.",
         "nodes": [
             ("config", "Coverage configuration", "People, dated roles, sources, issues and policies; one authoritative configuration path."),
             ("app", "C# application", "Owns durable collection jobs, aggregate budgets, retries, and a persisted evidence preparation state machine."),

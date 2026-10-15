@@ -43,10 +43,22 @@ public sealed class ActionDraftingStep(IActionDraftStore store, ActionBillReader
         if (snapshot.Bill.Title.Length > ActionDraftRevision.MaximumTitleLength)
             return await attempt.CompleteAsync(State.Blocked, ActionDraftErrorCodes.TitleTooLong, cancellationToken);
         var trackedIssueIds = trackedIssues.Select(issue => issue.Id).ToImmutableArray();
-        if (evidence.Current is { } previous && IsUnchanged(previous, snapshot, trackedIssueIds))
-            return await SettleWithoutCallAsync(attempt, snapshot.Fingerprint, ActionDraftErrorCodes.Unchanged, cancellationToken);
+        return ChangeSince(evidence.Current, snapshot, trackedIssueIds) switch
+        {
+            ActionChange.None =>
+                await SettleWithoutCallAsync(attempt, snapshot.Fingerprint, ActionDraftErrorCodes.Unchanged, cancellationToken),
+            ActionChange.SponsorshipsOnly => await CopyTextAsync(attempt, evidence, snapshot, trackedIssueIds, cancellationToken),
+            _ => await DraftAsync(attempt, evidence, snapshot, trackedIssues, trackedIssueIds, summariesOmitted, cancellationToken)
+        };
+    }
 
-        return await DraftAsync(attempt, evidence, snapshot, trackedIssues, trackedIssueIds, summariesOmitted, cancellationToken);
+    private Task<bool> CopyTextAsync(IAnalysisAttempt<ActionDraftRun> attempt, ActionDraftEvidence evidence, ActionBillSnapshot snapshot,
+        ImmutableArray<string> trackedIssueIds, CancellationToken cancellationToken)
+    {
+        var run = attempt.BypassRun(ActionDraftTask.Model, snapshot.Fingerprint, null);
+        var revision = ActionDraftResolver.CopyText(evidence, snapshot, trackedIssueIds, issues.Id, run.FinishedAtUtc);
+        return attempt.SettleAsync(new ActionDraftRun(run, ActionDraftErrorCodes.SponsorshipsChanged),
+            ActionDraftCheckpoint.From(attempt.Claim, revision), cancellationToken);
     }
 
     private async Task<bool> DraftAsync(IAnalysisAttempt<ActionDraftRun> attempt, ActionDraftEvidence evidence, ActionBillSnapshot snapshot,
@@ -82,11 +94,17 @@ public sealed class ActionDraftingStep(IActionDraftStore store, ActionBillReader
         };
     }
 
-    private bool IsUnchanged(ActionDraftRevision previous, ActionBillSnapshot snapshot, ImmutableArray<string> trackedIssueIds) =>
-        previous.Fingerprint == snapshot.Fingerprint && previous.SummaryVersion == snapshot.SummaryVersion &&
-        previous.PolicyArea == snapshot.Bill.PolicyArea && previous.BillTitle == snapshot.Bill.Title &&
-        previous.TrackedIssueIds.SequenceEqual(trackedIssueIds) && previous.IssueRevisionId == issues.Id &&
-        previous.Sponsorships.Select(item => item.PersonId).SequenceEqual(snapshot.Sponsorships.Select(item => item.PersonId));
+    private ActionChange ChangeSince(ActionDraftRevision? previous, ActionBillSnapshot snapshot, ImmutableArray<string> trackedIssueIds)
+    {
+        if (previous is null || previous.SummaryVersion != snapshot.SummaryVersion || previous.PolicyArea != snapshot.Bill.PolicyArea ||
+            previous.BillTitle != snapshot.Bill.Title || !previous.TrackedIssueIds.SequenceEqual(trackedIssueIds) ||
+            previous.IssueRevisionId != issues.Id)
+            return ActionChange.Other;
+        if (previous.Fingerprint != snapshot.Fingerprint)
+            return previous.HasSameSponsorsAs(snapshot.Sponsorships) ? ActionChange.SponsorshipsOnly : ActionChange.Other;
+        return previous.Sponsorships.Select(item => item.PersonId).SequenceEqual(snapshot.Sponsorships.Select(item => item.PersonId))
+            ? ActionChange.None : ActionChange.Other;
+    }
 
     private static Task<bool> SettleWithoutCallAsync(IAnalysisAttempt<ActionDraftRun> attempt, string inputHash, string code,
         CancellationToken cancellationToken)
@@ -100,4 +118,6 @@ public sealed class ActionDraftingStep(IActionDraftStore store, ActionBillReader
         var ids = BillGate.TrackedIssueIdsFor(snapshot.Bill.PolicyArea, BillGate.DayOf(snapshot.Bill.UpdateDate), issueConfiguration);
         return [.. ids.Select(id => new TrackedIssueFact(id, issueConfiguration.Issues.Single(issue => issue.Id == id).Name))];
     }
+
+    private enum ActionChange { None, SponsorshipsOnly, Other }
 }

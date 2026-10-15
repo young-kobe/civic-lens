@@ -80,13 +80,13 @@ public sealed class PostgresStatementReviewStore(IDbContextFactory<CollectionAtt
         var draft = await db.Set<StatementDraftRow>().AsNoTracking()
             .SingleOrDefaultAsync(row => row.CandidateId == candidateId, cancellationToken)
             ?? StatementDraftRows.NewDraft(candidateId, 0, candidate.CreatedAtUtcTicks);
-        var revisions = await Records.ReadRevisionRowsAsync(db, [candidateId], cancellationToken);
-        var decisions = await Records.ReadDecisionRowsAsync(db, [candidateId], cancellationToken);
+        var history = (await Records.ReadHistoriesAsync(db, [draft], cancellationToken))[candidateId];
+        var firstRevisions = await Records.ReadFirstRevisionsAsync(db, [candidateId], cancellationToken);
         var configurationRevision = await admittingRevisions.ReadAsync(db, candidateId, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
-        var review = ToReview(draft, Records.BuildHistory(draft, revisions[candidateId], decisions[candidateId]));
-        foreach (var revision in review.Revisions) revision.ValidateAgainst(article.Extraction);
-        return new(review, candidate.SourceId, candidate.Url, article.Extraction, revisions[candidateId].FirstOrDefault()?.RunId, configurationRevision);
+        foreach (var revision in history.LoadedRevisions) revision.ValidateAgainst(article.Extraction);
+        var analysisRunId = firstRevisions.TryGetValue(candidateId, out var first) ? first.Row.RunId : null;
+        return new(ToReview(draft, history), candidate.SourceId, candidate.Url, article.Extraction, analysisRunId, configurationRevision);
     }
 
     public async Task<StatementReviewPage> ListAsync(PageCursor? cursor, int limit, DraftStatusFilter filter,
@@ -161,7 +161,7 @@ public sealed class PostgresStatementReviewStore(IDbContextFactory<CollectionAtt
     {
         if (draft.CurrentRevisionNumber != 0) throw new StatementDraftExistsException(draft.CandidateId);
         draft.CurrentRevisionNumber = 1;
-        draft.ReviewStatus = ReviewPolicy.GetCurrentStatus(1, []);
+        draft.ReviewStatus = ReviewPolicy.GetInitialStatus(1);
     }
 
     private static async Task ValidateApprovalAsync(CollectionAttemptDbContext db, StatementDraftRevision revision,
@@ -192,7 +192,7 @@ public sealed class PostgresStatementReviewStore(IDbContextFactory<CollectionAtt
             .ToDictionaryAsync(row => row.CandidateId, StringComparer.Ordinal, cancellationToken);
 
     private static StatementReview ToReview(StatementDraftRow draft, ReviewHistory<StatementDraftRevision> history) =>
-        new(draft.CandidateId, history.CurrentRevision, draft.ReviewStateVersion, history.CurrentStatus, history.Revisions,
+        new(draft.CandidateId, history.CurrentRevision, draft.ReviewStateVersion, history.CurrentStatus, history.LoadedRevisions,
             history.Decisions, history.UnresolvedConcerns);
 
     private static PublishableStatement ToPublishable(StatementDraftRow draft, StatementCandidateRow candidate,

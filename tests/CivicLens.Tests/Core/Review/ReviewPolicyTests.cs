@@ -39,6 +39,25 @@ public sealed class ReviewPolicyTests
             Decision(draftId, 1, 3, ReviewDecisionKind.WithdrawApproval, "Withdraw again.")));
     }
 
+    [Fact]
+    public void ACycleHoldsItsApprovalAndAtMostTheOpenConcernCapBecauseOnlyTheNextApprovalResolvesAConcern()
+    {
+        var draftId = new string('e', 32);
+        var cycle = ImmutableArray.Create(Decision(draftId, 1, 1, ReviewDecisionKind.Approve, null));
+        while (cycle.Length < ReviewPolicy.MaximumDecisionsPerCycle)
+        {
+            var concern = Decision(draftId, 1, cycle.Length + 1, ReviewDecisionKind.RequestChanges, "Check again.");
+            Validate(Review(draftId, 1, cycle.Length, cycle), concern);
+            cycle = cycle.Add(concern);
+        }
+
+        var full = Review(draftId, 1, cycle.Length, cycle);
+        Assert.Throws<ArgumentException>(() => Validate(full,
+            Decision(draftId, 1, cycle.Length + 1, ReviewDecisionKind.RequestChanges, "One more.")));
+        Validate(full, Decision(draftId, 1, cycle.Length + 1, ReviewDecisionKind.Approve, "Resolved.",
+            [.. cycle.Skip(1).Select(item => item.DecisionId)]));
+    }
+
     [Theory]
     [InlineData(ReviewDecisionKind.Approve, null)]
     [InlineData(ReviewDecisionKind.RequestChanges, "Needs context.")]
