@@ -38,7 +38,7 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 
 ### Candidate queue
 
-`PostgresDocumentExtractionStore.SaveAsync` calls `PostgresStatementCandidateRegistration` after it inserts a new extraction, in the same transaction. An attempt came from admission when its job has an idempotency key that starts with `discovery-admission/`. The job is found through `collection_job_attempts`.
+`PostgresDocumentExtractionStore.SaveAsync` calls `PostgresStatementCandidateRegistration` after it inserts a new extraction, in the same transaction. An attempt came from admission when its job has an idempotency key that starts with `discovery-admission/`. The job is found through `collection_job_attempts`. Admission never admits the configured page of a source, so a listing page never becomes a candidate. See [collection](collection.md#discovery-and-admission).
 
 The registration inserts the candidate with `ON CONFLICT (candidate_id) DO NOTHING`. When that insert adds a row, it also inserts the Pending `gate` row in `statement_analysis`. A failure rolls back the extraction, the candidate, and the gate row together.
 

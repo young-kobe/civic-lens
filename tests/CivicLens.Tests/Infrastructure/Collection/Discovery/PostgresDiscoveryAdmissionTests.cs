@@ -245,6 +245,38 @@ public sealed class PostgresDiscoveryAdmissionTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task ASourceListingThatLinksToItselfAdmitsOnlyItsArticlesBecauseAnArticleJobMustNeverBeARootCheck()
+    {
+        var template = Template();
+        var configuration = new CollectionConfiguration
+        {
+            People = [new PersonConfiguration { Id = "person", Name = "Official" }],
+            Sources = [new WatchedSourceConfiguration
+            {
+                Id = "source", Coverage = [new SourceCoverageConfiguration { PersonId = "person" }], Url = template.Url,
+                AllowedOrigin = template.AllowedOrigin, AllowedPathPrefix = template.AllowedPathPrefix,
+                Mode = CollectionMode.Html, MaxRequests = template.MaxRequests, MaxBytes = template.MaxBytes,
+                TimeoutSeconds = template.TimeoutSeconds, MinDelayMilliseconds = template.MinDelayMilliseconds,
+                JobPolicy = template.Policy
+            }]
+        };
+        var configured = new ConfiguredCollectionSource(configuration, "source", new DateOnly(2026, 10, 8));
+        string[] listing = [template.Url, "https://example.test/articles/story"];
+
+        var manual = await jobs.AdmitAsync(configured, await SaveDiscoveryAsync(listing, CollectionMode.Html),
+            "listing-manual", default);
+        var automatic = await jobs.AdmitAutomaticCheckAsync(configured,
+            await SaveDiscoveryAsync(listing, CollectionMode.Html), "listing-automatic", default);
+
+        var article = Assert.Single(manual.Jobs);
+        Assert.Equal("https://example.test/articles/story", article.Url);
+        Assert.False((await jobs.GetAsync(article.JobId, default))!.Definition.IsRoot());
+        Assert.Equal(1, manual.DuplicateCount);
+        Assert.Empty(automatic.Jobs);
+        Assert.Equal(2, automatic.DuplicateCount);
+    }
+
+    [Fact]
     public async Task VersionSevenFeedDiscoveryAndAdmissionReplayRemainSupported()
     {
         var attemptId = await SaveDiscoveryAsync(["https://example.test/articles/v7"], CollectionMode.Feed,
