@@ -85,11 +85,8 @@ public sealed partial class StatementList
     private static string HeadlineOf(StatementReviewListItem draft) => draft.CurrentRevision is null
         ? DraftStatusDisplay.Label(draft.CurrentStatus, 0) : DraftStatusDisplay.DraftName(draft.CurrentRevision.Headline);
 
-    private IReadOnlyList<FilterTab> DraftTabs => [
-        new("All", Href(null, null, NotInReviewCursor, "drafts"), Filter == DraftStatusFilter.All),
-        new("Needs action", Href(DraftFilterNames.NeedsAction, null, NotInReviewCursor, "drafts"), Filter == DraftStatusFilter.NeedsAction),
-        new("Approved", Href(DraftFilterNames.Approved, null, NotInReviewCursor, "drafts"), Filter == DraftStatusFilter.Approved)
-    ];
+    private IReadOnlyList<FilterTab> DraftTabs =>
+        DraftFilterTabs.For(Filter, name => Href(name, null, NotInReviewCursor, "drafts"));
 
     private string? DraftsHref(string? cursor) =>
         cursor is null ? null : Href(DraftFilterNames.NameOf(Filter), cursor, NotInReviewCursor, "drafts");

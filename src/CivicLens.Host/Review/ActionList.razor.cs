@@ -105,11 +105,8 @@ public sealed partial class ActionList
         _ => "Not approved. It has open concerns or changes more than sponsorships."
     };
 
-    private IReadOnlyList<FilterTab> DraftTabs => [
-        new("All", Href(null, null), Filter == DraftStatusFilter.All, counts!.NeedsAction + counts.Approved),
-        new("Needs action", Href(DraftFilterNames.NeedsAction, null), Filter == DraftStatusFilter.NeedsAction, counts.NeedsAction),
-        new("Approved", Href(DraftFilterNames.Approved, null), Filter == DraftStatusFilter.Approved, counts.Approved)
-    ];
+    private IReadOnlyList<FilterTab> DraftTabs =>
+        DraftFilterTabs.For(Filter, name => Href(name, null), counts!.NeedsAction, counts.Approved);
 
     private string? DraftsHref(string? cursor) => cursor is null ? null : Href(DraftFilterNames.NameOf(Filter), cursor);
 

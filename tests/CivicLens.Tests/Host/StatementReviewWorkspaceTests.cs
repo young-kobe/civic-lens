@@ -86,6 +86,8 @@ public sealed class StatementReviewWorkspaceTests(PostgresCollection postgres) :
         var needsAction = await host.GetDocumentAsync("/Review/Statements?drafts=needs-action");
         var approved = await host.GetDocumentAsync("/Review/Statements?drafts=approved");
 
+        Assert.Equal(["/Review/Statements#drafts", "/Review/Statements?drafts=needs-action#drafts", "/Review/Statements?drafts=approved#drafts"],
+            needsAction.QuerySelectorAll("[aria-labelledby='drafts'] a.segmented-item").Select(tab => tab.GetAttribute("href")));
         Assert.Single(needsAction.QuerySelectorAll("[aria-labelledby='drafts'] a.cell-title"));
         Assert.Equal("No approved statements", approved.QuerySelector("[aria-labelledby='drafts'] .empty h3")!.TextContent);
     }

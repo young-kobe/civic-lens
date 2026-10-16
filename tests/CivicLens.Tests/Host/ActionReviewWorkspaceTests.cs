@@ -25,6 +25,8 @@ public sealed class ActionReviewWorkspaceTests(PostgresCollection postgres) : IA
         Assert.Equal("page", page.QuerySelector(".nav a[href='/Review/Actions']")!.GetAttribute("aria-current"));
         Assert.Null(page.QuerySelector(".nav a[href='/Review']")!.GetAttribute("aria-current"));
         Assert.Equal(["0", "0", "0"], page.QuerySelectorAll("[aria-labelledby='drafts'] .segmented-count").Select(count => count.TextContent));
+        Assert.Equal(["/Review/Actions#drafts", "/Review/Actions?drafts=needs-action#drafts", "/Review/Actions?drafts=approved#drafts"],
+            page.QuerySelectorAll("[aria-labelledby='drafts'] a.segmented-item").Select(tab => tab.GetAttribute("href")));
         Assert.Equal("No action records yet", page.QuerySelector("[aria-labelledby='drafts'] .empty h3")!.TextContent);
         using var empty = await host.Client.PostAsync("/Review/Actions", Form(page.QuerySelector("#approve-sponsorships")!));
         Assert.Equal(HttpStatusCode.BadRequest, empty.StatusCode);

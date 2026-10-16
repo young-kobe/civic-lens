@@ -158,14 +158,8 @@ public sealed partial class ReviewHome
         return new(text, item.OccurredAt, DraftStatusDisplay.Tone(kind));
     }
 
-    private IReadOnlyList<FilterTab> DraftTabs => [
-        new("All", Href(ChangesCursor, null, null, "drafts"), Filter == DraftStatusFilter.All,
-            overview!.DraftsNeedingAction + overview.ApprovedDrafts),
-        new("Needs action", Href(ChangesCursor, DraftFilterNames.NeedsAction, null, "drafts"), Filter == DraftStatusFilter.NeedsAction,
-            overview.DraftsNeedingAction),
-        new("Approved", Href(ChangesCursor, DraftFilterNames.Approved, null, "drafts"), Filter == DraftStatusFilter.Approved,
-            overview.ApprovedDrafts)
-    ];
+    private IReadOnlyList<FilterTab> DraftTabs => DraftFilterTabs.For(
+        Filter, name => Href(ChangesCursor, name, null, "drafts"), overview!.DraftsNeedingAction, overview.ApprovedDrafts);
 
     private string? FilterName => DraftFilterNames.NameOf(Filter);
 
