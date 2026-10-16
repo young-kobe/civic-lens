@@ -174,7 +174,7 @@ internal sealed class PublicationScenario
         var cosponsors = Extraction(ActionCosponsors, $"action-cosponsors-{id}", "https://api.congress.gov/v3/bill/119/hr/7/cosponsors");
         SourceSpan DetailLine(string line) => new(detail.ExtractionId, ActionDetail.IndexOf(line, StringComparison.Ordinal), line.Length);
         var revision = new ActionDraftRevision(recordId, 1, "civic-lens:analysis", ApprovedAt, $"Action {id}", "The mayor sponsored a housing bill.",
-            ActionTextOrigin.Model, null, "congress-bills", 119, "hr", 7, new string('b', 64), ApprovedAt, false, new string('d', 64), null, null,
+            ReviewTextOrigin.Model, null, "congress-bills", 119, "hr", 7, new string('b', 64), ApprovedAt, false, new string('d', 64), null, null,
             "Housing and Community Development", DetailLine("Policy area: Housing and Community Development"), policyAreaId, ["housing"], new string('e', 64),
             [
                 new(sponsorId, "M000001", ActionSponsorshipRole.Sponsor, false, new DateOnly(2026, 1, 3), null,
@@ -266,7 +266,7 @@ internal sealed class FakePublicationStore : IPublicationStore
         if (FailOnCommit is not null) throw FailOnCommit;
         if (ConcurrentWinner is not null) return Task.FromResult(ConcurrentWinner);
         LastCommit = commit;
-        var summary = new PublicationReleaseSummary(commit.ReleaseNumber, commit.DirectoryName, commit.PublishedAtUtc, commit.Records.Length);
+        var summary = new PublicationReleaseSummary(commit.ReleaseNumber, commit.DirectoryName, DateTimeOffset.UnixEpoch, commit.Records.Length);
         Committed.Add(summary);
         ActiveReleaseNumber = summary.ReleaseNumber;
         receipts[(actorSubject, idempotencyKey)] = (payloadHash, summary);

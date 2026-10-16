@@ -13,7 +13,7 @@ The publication feature turns approved revisions into immutable, cumulative stat
 - Carried records are hard links to the immutable files of the base release. Disk therefore grows with published records, not with the number of releases.
 - Each publish rebuilds only `release.json`, the index pages, and the assets. It reads the previous manifest once, under the 32 MB manifest cap, `PublicationProtocol.MaximumManifestBytes`. `PublicationProtocol.MaximumRecordsPerRelease` is the one owner of the record limit, which is 20,000. The database has no count check, because C# owns the rule.
 - Postgres records which release is active. The `current` link is only a copy for the static server, so a failed link swap never drops committed records.
-- Every publication write takes all three review locks in one fixed order, which prevents a deadlock. The order is in [advisory locks](../architecture.md#advisory-locks).
+- Every publication write takes all four review locks in one fixed order, which prevents a deadlock. The order is in [advisory locks](../architecture.md#advisory-locks).
 - A release has no status column. `is_active` marks the one active release: a commit sets it on the new row and clears the old one, and rollback moves it.
 - Rollback is a CLI command only. The workspace has no rollback or activate control.
 - All releases are kept until a retention policy is agreed.
@@ -45,7 +45,10 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - The contract limits for actions equal the Core limits. No enforcer; the constants are separate copies. Test: `PublishedActionTests.ContractLimitsEqualTheCoreLimits`.
 - An action sponsorship is never withdrawn before it began. Enforced by `ActionDraftRevision.ValidateShape` and, at the trust boundary, `PublishedAction.Validate`. Tests: `ActionDraftRevisionTests.ASponsorshipCannotBeWithdrawnBeforeItBegan` and `PublishedActionTests.ASponsorshipCannotBeWithdrawnBeforeItBegan`.
 - The action `policyAreaIds` filter holds the policy area ID that the approved revision stored. Enforced by `PublishedActionBuilder` and `PublishedAction.ToEntry`. Tests: `PublishActionTests.AnActionFillsItsSearchFiltersFromTheRevisionItPublishesAndNamesOnlyItsSponsor` and `PublishActionTests.AnActionWithoutAStoredAreaIDPublishesNoAreaFilterBecauseTheReviewerApprovedNone`.
-- A commit waits for the action review lock. Enforced by `PostgresAdvisoryLock.ReviewKeysInOrder`. Test: `PostgresPublicationStoreTests.CommitWaitsForTheActionLockBecauseAnActionDecisionMustNotSlipInDuringThePublish`.
+- A commit waits for the action review lock. Enforced by `PostgresAdvisoryLock.ReviewKeysBeforeBriefs`. Test: `PostgresPublicationStoreTests.CommitWaitsForTheActionLockBecauseAnActionDecisionMustNotSlipInDuringThePublish`.
+- The manifest `publishedAtUtc` and each `firstPublishedAtUtc` come from the application clock at build time. They can be earlier than the stored release time by the time that the commit waits. Only the stored release time places a release in a brief week. No enforcer. No test.
+- A commit also waits for the brief review lock. Enforced by `BriefStaleness.TakeLocksAsync`. Test: `BriefStalenessTests.ThePublishWaitsForTheBriefLockLastInTheOrderBecauseAnAppendOfABriefMustNotSlipInDuringIt`.
+- The stored release time is the database time of the commit, read after the commit holds the brief lock. Enforced by `PostgresPublicationStore.CommitAsync`. Tests: `PostgresPublicationStoreTests.TheReleaseTimeIsTheDatabaseTimeOfTheCommitSoABriefWeekNeverMissesARelease` and `BriefStalenessTests.TheReleaseTimeIsStampedAfterTheBriefLockSoABriefReadThatWaitedForTheCommitFindsTheRelease`.
 - The precompressed manifests hold exactly the manifest bytes. Enforced by `PublishRelease`. Test: `PublishReleaseTests.PrecompressedManifestsHoldExactlyTheManifestBytesSoTheServerNeverSendsADifferentRelease`.
 - A commit holds the exact revision and review state version that the build read, in the draft table of the record's kind. Enforced by `PostgresPublicationStore`. Tests: `PostgresPublicationStoreTests.ADecisionAfterTheBuildBlocksTheCommitBecauseApprovalMayHaveChanged`, `PostgresBillStreamTests.AnActionDecisionAfterTheBuildBlocksTheCommitBecauseApprovalMayHaveChanged`, and `PostgresPublicationStoreTests.AStatementIsNeverCheckedAgainstTheActionTableBecauseTheKindPicksTheDraftTable`.
 - The kinds share the ready list limit equally, and unused share goes to the other kinds. Enforced by `ListPublishable`. Tests: `ListPublishableTests.ThreeKindsShareTheLimitEquallyWhenEachHasMoreThanItsShare` and `ListPublishableTests.AKindWithFewReadyRecordsGivesItsUnusedShareToBothOtherKinds`.
@@ -107,9 +110,9 @@ One publish request names 1 to 64 records, each as a kind and an ID. For each ki
 
 1. Application builds the release contract, and Host renders the static HTML.
 2. The owner action builds the release in a staging directory, verifies it, and moves it to a uniquely named directory under `releases/`.
-3. Under all three review locks, the commit checks each added record's revision and review-state version again, in the draft table of its kind. It also checks the next release number and the active release it built on.
-4. In the same transaction, it records a sequentially numbered release and marks it as active.
-5. After the commit, it takes all three review locks again, reads the active release, and atomically replaces the relative `current` symbolic link.
+3. Under all four review locks, the commit checks each added record's revision and review-state version again, in the draft table of its kind. It also checks the next release number and the active release it built on. It then requeues the brief of the week of each record that the release changes, drops, or adds again; see [briefs](briefs.md#staleness).
+4. In the same transaction, it records a sequentially numbered release and marks it as active. It stamps the release time from the database clock after it holds all review locks. The commit does not take a time from the caller.
+5. After the commit, it takes all four review locks again, reads the active release, and atomically replaces the relative `current` symbolic link.
 
 Publish, replay, and activate all end with step 5. An older command therefore cannot move the link back after a newer one.
 
@@ -119,7 +122,7 @@ Each publication builds on the recorded active release, not on the link. A repla
 
 ### Rollback
 
-Rollback records an earlier release as active and then points the link at it. The next publication builds on the rolled-back release, so it does not restore the records that were rolled back. A publication built before a rollback fails on commit.
+Rollback records an earlier release as active and then points the link at it. It also requeues the brief of the week of each record that differs between the two releases. The next publication builds on the rolled-back release, so it does not restore the records that were rolled back. A publication built before a rollback fails on commit.
 
 ### Owner publish section
 

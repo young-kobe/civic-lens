@@ -37,15 +37,15 @@ public static class ActionDraftResolver
         DateTimeOffset createdAtUtc)
     {
         var current = context.Evidence.Current;
-        var text = current?.TextOrigin == ActionTextOrigin.Person
-            ? (current.Headline, current.Summary, ActionTextOrigin.Person,
+        var text = current?.TextOrigin == ReviewTextOrigin.Person
+            ? (current.Headline, current.Summary, ReviewTextOrigin.Person,
                 new ActionTextSuggestion(output.Headline.Text, output.Summary.Text, runId, context.Snapshot.Fingerprint))
-            : (output.Headline.Text, output.Summary.Text, ActionTextOrigin.Model, (ActionTextSuggestion?)null);
+            : (output.Headline.Text, output.Summary.Text, ReviewTextOrigin.Model, (ActionTextSuggestion?)null);
         return Assemble(context, createdAtUtc, text);
     }
 
     private static ActionDraftRevision Assemble(ActionDraftContext context, DateTimeOffset createdAtUtc,
-        (string Headline, string Summary, ActionTextOrigin Origin, ActionTextSuggestion? Suggestion) text)
+        (string Headline, string Summary, ReviewTextOrigin Origin, ActionTextSuggestion? Suggestion) text)
     {
         var (evidence, snapshot, trackedIssueIds, policyAreaId, issueRevisionId) = context;
         var current = evidence.Current;
@@ -62,9 +62,7 @@ public static class ActionDraftResolver
 
     private static void CheckNames(string text, string field, ActionBillSnapshot snapshot, List<string> errors)
     {
-        foreach (var name in snapshot.ExcludedNames.Where(name => !IsPartOfListedName(name, snapshot.OfficialNames.Values)))
-            if (text.Contains(name, StringComparison.OrdinalIgnoreCase))
-                errors.Add($"The {field} names \"{Shorten(name)}\", who is not an official in the facts. Name only the listed officials.");
+        CheckNamesOutsideFacts(text, field, snapshot.ExcludedNames, snapshot.OfficialNames.Values, errors);
         foreach (var name in CosponsorNamesOf(snapshot).Where(name => !IsPartOfListedName(name, SponsorNamesOf(snapshot))))
             if (text.Contains(name, StringComparison.OrdinalIgnoreCase))
                 errors.Add($"The {field} names \"{Shorten(name)}\", a cosponsor. Code lists the cosponsors, so name only the sponsors.");
@@ -82,9 +80,6 @@ public static class ActionDraftResolver
 
     private static HashSet<string> SponsorIdsOf(ActionBillSnapshot snapshot) =>
         snapshot.Sponsorships.Where(item => item.Role == ActionSponsorshipRole.Sponsor).Select(item => item.PersonId).ToHashSet(StringComparer.Ordinal);
-
-    private static bool IsPartOfListedName(string name, IEnumerable<string> listedNames) =>
-        listedNames.Any(listed => listed.Contains(name, StringComparison.OrdinalIgnoreCase));
 
     private static ActionDraftOutput? Parse(string outputJson)
     {

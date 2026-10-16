@@ -19,6 +19,9 @@ using CivicLens.Host.Analysis;
 using CivicLens.Application.Actions;
 using CivicLens.Host;
 using CivicLens.Host.Actions;
+using CivicLens.Host.Briefs;
+using CivicLens.Application.Briefs;
+using CivicLens.Infrastructure.Briefs;
 using CivicLens.Infrastructure.Actions;
 using CivicLens.Host.Collection;
 using CivicLens.Host.Documents;
@@ -73,6 +76,7 @@ if (args is [] or ["--help"] or ["help"])
           actions draft status
           actions draft list [drafted|unchanged|superseded|no-official|pending|failed] [limit]
           actions draft requeue <candidate-id|--all>
+          brief redraft --week <yyyy-MM-dd>
           releases publish <idempotency-key> <draft-id>...
           releases list [limit]
           releases activate <release-number>
@@ -90,6 +94,7 @@ if (args is [] or ["--help"] or ["help"])
         worker requires CIVIC_LENS_ISSUES_CONFIG when a Congress.gov bill list source is enabled.
         worker also drafts statements when CIVIC_LENS_STATEMENT_DRAFTING_DAILY_TOKENS and ANTHROPIC_API_KEY are set.
         worker also drafts bill actions when CIVIC_LENS_ACTION_DRAFTING_DAILY_TOKENS, ANTHROPIC_API_KEY, and CIVIC_LENS_ISSUES_CONFIG are set.
+        worker also drafts weekly briefs when CIVIC_LENS_BRIEF_DRAFTING_DAILY_TOKENS and ANTHROPIC_API_KEY are set.
         documents commands require the database. Citations use UTF-16 offsets into immutable extracted text.
         Exit codes: 0 success, 1 failed/deferred collection or operational failure, 2 invalid input/configuration.
         """);
@@ -137,7 +142,7 @@ if (args is not (["db", "migrate"] or ["validate", _] or ["collect", _, _, _, _]
     or ["feeds" or "discovery", "get", _] or ["feeds" or "discovery", "admit", _, _, _, _]
     or ["receipts", "list", _] or ["receipts", "replay", _, _]) && !CollectionJobCommand.Matches(args) &&
     !CollectionWorkerCommand.Matches(args) && !DocumentCommand.Matches(args) && !ReleaseCommand.Matches(args) &&
-    !AnalysisCommand.Matches(args) && !StatementCommand.Matches(args) && !ActionCommand.Matches(args))
+    !AnalysisCommand.Matches(args) && !StatementCommand.Matches(args) && !ActionCommand.Matches(args) && !BriefCommand.Matches(args))
 {
     Console.Error.WriteLine("Unknown command. Use --help.");
     return 2;
@@ -178,12 +183,15 @@ try
         var actionDrafting = ActionDraftComposition.Create(analysisContexts, connectionString, jobs,
             new ApiResponseReader(attempts, new CaptureBodyReader()), textExtractor, issues, CollectionWorkerCommand.ArtifactRootOf(args));
         await using var actionDraftingWakeup = actionDrafting.Wakeup;
+        var briefDrafting = BriefDraftComposition.Create(analysisContexts, connectionString, workerConfiguration);
+        await using var briefDraftingWakeup = briefDrafting.Wakeup;
         executing = true;
         await jobs.SynchronizeAsync(workerConfiguration, cancellation.Token);
         await analysis.RecordStartAsync(cancellation.Token);
         await gate.RecordStartAsync(cancellation.Token);
         await statementDrafting.RecordStartAsync(cancellation.Token);
         await actionDrafting.RecordStartAsync(cancellation.Token);
+        await briefDrafting.RecordStartAsync(cancellation.Token);
         var extractions = PostgresDocumentExtractionStore.FromConnectionString(connectionString);
         var comparisons = PostgresDocumentComparisonStore.FromConnectionString(connectionString);
         var processingStore = PostgresEvidenceProcessingStore.FromConnectionString(connectionString);
@@ -201,7 +209,8 @@ try
                 AnalysisStage.For("drafting", analysis.Worker),
                 AnalysisStage.For("gate", gate.Worker),
                 AnalysisStage.For("statementDrafting", statementDrafting.Worker),
-                AnalysisStage.For("actionDrafting", actionDrafting.Worker)
+                AnalysisStage.For("actionDrafting", actionDrafting.Worker),
+                AnalysisStage.For("briefDrafting", briefDrafting.Worker)
             }.OfType<AnalysisStage>()]);
     }
 
@@ -240,6 +249,14 @@ try
         var actions = new ActionCommand(draftCommands, new RequeueBlockedActionDrafts(draftStore), owner);
         executing = true;
         return await actions.ExecuteAsync(args, cancellation.Token);
+    }
+
+    if (BriefCommand.Matches(args))
+    {
+        var (connectionString, owner) = OwnerCommand.ReadEnvironment();
+        var brief = new BriefCommand(new RedraftBrief(new PostgresBriefDraftStore(AnalysisDbContextFactory.Create(connectionString))), owner);
+        executing = true;
+        return await brief.ExecuteAsync(args, cancellation.Token);
     }
 
     if (ReleaseCommand.Matches(args))

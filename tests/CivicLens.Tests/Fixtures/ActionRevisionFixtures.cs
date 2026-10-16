@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using CivicLens.Core.Review;
 using CivicLens.Core.Actions;
 using CivicLens.Core.Documents;
 
@@ -18,7 +19,7 @@ internal static class ActionRevisionFixtures
 
     public static ActionDraftRevision Model(int number = 1, string author = "civic-lens:analysis") => new(
         RecordId, number, author, Updated.AddMinutes(number), "Warren sponsored a bill", "Senator Warren sponsored the bill.",
-        ActionTextOrigin.Model, null, "congress-bills", 119, "hr", 1, CandidateId, Updated, false,
+        ReviewTextOrigin.Model, null, "congress-bills", 119, "hr", 1, CandidateId, Updated, false,
         Fingerprint, null, null,
         null, null, null, [], IssueRevisionId, [Sponsorship()], "A housing bill");
 
@@ -28,7 +29,7 @@ internal static class ActionRevisionFixtures
         AuthorSubject = "auth0|editor",
         Headline = headline,
         Summary = summary,
-        TextOrigin = ActionTextOrigin.Person
+        TextOrigin = ReviewTextOrigin.Person
     };
 
     public static ImmutableArray<SourceSpan> Spans(params (int Start, int Length)[] spans) =>

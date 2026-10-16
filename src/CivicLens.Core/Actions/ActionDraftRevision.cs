@@ -6,7 +6,7 @@ using CivicLens.Core.Statements;
 namespace CivicLens.Core.Actions;
 
 public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, string AuthorSubject, DateTimeOffset CreatedAtUtc,
-    string Headline, string Summary, ActionTextOrigin TextOrigin, ActionTextSuggestion? Suggestion,
+    string Headline, string Summary, ReviewTextOrigin TextOrigin, ActionTextSuggestion? Suggestion,
     string SourceId, int Congress, string BillType, int BillNumber, string CandidateId, DateTimeOffset CandidateUpdateDate,
     bool CandidateIncludesSummaries,
     string Fingerprint, string? SummaryVersion, SourceSpan? SummaryCitation, string? PolicyArea, SourceSpan? PolicyAreaCitation,
@@ -55,7 +55,7 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
             throw new ArgumentException("A summary version and a policy area each need their citation.");
         if (PolicyAreaId is not null && (PolicyArea is null || string.IsNullOrWhiteSpace(PolicyAreaId)))
             throw new ArgumentException("A policy area ID needs a policy area and text.");
-        if (AuthorKind == ReviewAuthorKind.Person && TextOrigin != ActionTextOrigin.Person)
+        if (AuthorKind == ReviewAuthorKind.Person && TextOrigin != ReviewTextOrigin.Person)
             throw new ArgumentException("A person revision holds person text.");
     }
 
@@ -65,12 +65,12 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
         if (AuthorKind != ReviewAuthorKind.Analysis || RevisionNumber != (previous?.RevisionNumber ?? 0) + 1)
             throw new ArgumentException("An analysis revision follows the current revision and has the analysis author.");
         if (previous is not null && HasSameTextAs(previous)) return;
-        if (previous?.TextOrigin == ActionTextOrigin.Person)
+        if (previous?.TextOrigin == ReviewTextOrigin.Person)
         {
-            if (TextOrigin != ActionTextOrigin.Person || Headline != previous.Headline || Summary != previous.Summary || Suggestion is null)
+            if (TextOrigin != ReviewTextOrigin.Person || Headline != previous.Headline || Summary != previous.Summary || Suggestion is null)
                 throw new ArgumentException("An analysis revision keeps the text that a person wrote and offers its own as a suggestion.");
         }
-        else if (TextOrigin != ActionTextOrigin.Model || Suggestion is not null)
+        else if (TextOrigin != ReviewTextOrigin.Model || Suggestion is not null)
             throw new ArgumentException("Model text has no suggestion.");
     }
 

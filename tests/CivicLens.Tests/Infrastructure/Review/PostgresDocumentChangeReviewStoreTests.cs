@@ -18,6 +18,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Npgsql;
+using CivicLens.Publication.Contracts;
 using CivicLens.Tests.Fixtures;
 using static CivicLens.Tests.Fixtures.CollectionFixtures;
 
@@ -156,6 +157,25 @@ public sealed class PostgresDocumentChangeReviewStoreTests(PostgresCollection po
         var detail = await reviews.GetAsync(saved.DraftId, default);
         Assert.Empty(detail!.UnresolvedConcerns);
         Assert.Equal(actor.Subject, detail.CurrentRevision.AuthorSubject);
+    }
+
+    [Fact]
+    public async Task ADecisionOnTheRevisionThatTheActiveReleaseServesRequeuesTheBriefOfItsWeek()
+    {
+        var comparison = await SaveComparisonAsync();
+        var actor = new ReviewActor("auth0|owner", ReviewRole.Owner);
+        var catalog = new ReviewCatalog([], []);
+        var revision = await new CreateDocumentChangeDraft(reviews).ExecuteAsync(actor, new(comparison.ComparisonId, "create"));
+        revision = await new SaveDocumentChangeDraft(reviews, catalog).ExecuteAsync(actor,
+            new(revision.DraftId, 1, "Headline", "Summary", null, null, "Institution", null, null, [], [], revision.Citations, "save"));
+        var briefs = new BriefWorldSeeder(connectionString);
+        await briefs.ReleaseWithoutApprovalsAsync(1, BriefFixtures.InWeek, active: true, BriefWorldSeeder.Binding(PublishedRecordKind.DocumentChange, revision.DraftId, 2));
+        await briefs.BriefAsync(BriefFixtures.Week);
+        var decide = new DecideDocumentChangeReview(reviews, catalog);
+
+        _ = await decide.ExecuteAsync(actor, new(revision.DraftId, 2, 0, ReviewDecisionKind.Approve, null, [], "approve"));
+
+        Assert.Equal("Pending:0", await briefs.BriefQueueStatusAsync(BriefFixtures.Week));
     }
 
     [Fact]

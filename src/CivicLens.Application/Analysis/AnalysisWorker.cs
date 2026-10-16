@@ -6,7 +6,7 @@ using State = CivicLens.Application.Analysis.AnalysisState;
 namespace CivicLens.Application.Analysis;
 
 public sealed class AnalysisWorker<TRun>(IAnalysisTaskStep<TRun> step, IAnalysisStatusStore status, TimeProvider clock,
-    IWorkerWakeup? wakeup = null) where TRun : class
+    IWorkerWakeup? wakeup = null, Func<CancellationToken, Task>? beforeEachPass = null) where TRun : class
 {
     private static readonly TimeSpan ReleaseTimeout = TimeSpan.FromSeconds(5);
     private readonly IAnalysisTaskStep<TRun> step = step;
@@ -58,7 +58,11 @@ public sealed class AnalysisWorker<TRun>(IAnalysisTaskStep<TRun> step, IAnalysis
             passes++;
             Interlocked.Exchange(ref budgetExhausted, 0);
             IReadOnlyList<AnalysisRecord> eligible;
-            try { eligible = await queue.GetEligibleAsync(settings.Concurrency * 4, cancellationToken); }
+            try
+            {
+                if (beforeEachPass is not null) await beforeEachPass(cancellationToken);
+                eligible = await queue.GetEligibleAsync(settings.Concurrency * 4, cancellationToken);
+            }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { break; }
             catch (Exception exception) when (WorkerLoop.IsRecoverable(exception)) { return new(passes, total, failures + 1); }
             if (eligible.Count == 0) break;

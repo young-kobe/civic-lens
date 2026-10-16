@@ -2,12 +2,16 @@ using System.Data.Common;
 using CivicLens.Application.Analysis;
 using CivicLens.Application.Review;
 using CivicLens.Application.Statements;
+using CivicLens.Core.Briefs;
 using CivicLens.Core.Documents;
 using CivicLens.Core.Review;
 using CivicLens.Core.Statements;
+using CivicLens.Infrastructure.Briefs;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Documents;
+using CivicLens.Infrastructure.Publication;
 using CivicLens.Infrastructure.Statements;
+using CivicLens.Publication.Contracts;
 using CivicLens.Tests.Application.Analysis;
 using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
@@ -178,6 +182,89 @@ public sealed class PostgresStatementReviewStoreTests(PostgresCollection postgre
 
         await Save.ExecuteAsync(Owner, await SaveRequestAsync(candidate, 3, "save-3"));
         await AssertStoredStatusMatchesPolicyAsync(candidate, ReviewStatus.AwaitingReviewWithConcerns);
+    }
+
+    [Fact]
+    public async Task WithdrawingAnApprovalRequeuesTheBriefOfTheWeekAndTheRedraftLeavesTheRecordOut()
+    {
+        var (candidate, briefs) = await PublishedApprovedAsync();
+
+        await Decide.ExecuteAsync(Owner, new(candidate, 2, 1, ReviewDecisionKind.WithdrawApproval, "Wrong date.", [], "withdraw"));
+
+        Assert.Equal("Pending:0", await briefs.BriefQueueStatusAsync(BriefFixtures.Week));
+        Assert.Equal((0, 1), await BriefSelectionAsync());
+    }
+
+    [Fact]
+    public async Task ApprovingTheSameRevisionAgainAfterAWithdrawalRequeuesTheBriefAndTheRecordReturns()
+    {
+        var (candidate, briefs) = await PublishedApprovedAsync();
+        var withdrawal = await Decide.ExecuteAsync(Owner, new(candidate, 2, 1, ReviewDecisionKind.WithdrawApproval, "Wrong date.", [], "withdraw"));
+        await briefs.ExecuteAsync("UPDATE brief_analysis SET status = 'Succeeded', attempts = 3");
+
+        await Decide.ExecuteAsync(Owner, new(candidate, 2, 2, ReviewDecisionKind.Approve, "Fixed.", [withdrawal.DecisionId], "approve-again"));
+
+        Assert.Equal("Pending:0", await briefs.BriefQueueStatusAsync(BriefFixtures.Week));
+        Assert.Equal((1, 0), await BriefSelectionAsync());
+    }
+
+    [Fact]
+    public async Task RequestingChangesAfterAnApprovalOfThePublishedRevisionRequeuesTheBriefAndTheRecordLeavesIt()
+    {
+        var (candidate, briefs) = await PublishedApprovedAsync();
+
+        await Decide.ExecuteAsync(Owner, new(candidate, 2, 1, ReviewDecisionKind.RequestChanges, "Name the bill.", [], "changes"));
+
+        Assert.Equal("Pending:0", await briefs.BriefQueueStatusAsync(BriefFixtures.Week));
+        Assert.Equal((0, 1), await BriefSelectionAsync());
+    }
+
+    [Fact]
+    public async Task AnEditAfterAWithdrawalStillLeavesThePublishedRevisionOutBecauseTheNewRevisionIsNotApproved()
+    {
+        var (candidate, _) = await PublishedApprovedAsync();
+        await Decide.ExecuteAsync(Owner, new(candidate, 2, 1, ReviewDecisionKind.WithdrawApproval, "Wrong date.", [], "withdraw"));
+
+        await Save.ExecuteAsync(Owner, await SaveRequestAsync(candidate, 2, "save-after-withdrawal"));
+
+        Assert.Equal((0, 1), await BriefSelectionAsync());
+    }
+
+    [Fact]
+    public async Task ARecordWithdrawnApprovedAgainAndPublishedAtANewRevisionReturnsToTheBrief()
+    {
+        var (candidate, briefs) = await PublishedApprovedAsync();
+        var withdrawal = await Decide.ExecuteAsync(Owner, new(candidate, 2, 1, ReviewDecisionKind.WithdrawApproval, "Wrong date.", [], "withdraw"));
+        await Save.ExecuteAsync(Owner, await SaveRequestAsync(candidate, 2, "save-after-withdrawal"));
+        await Decide.ExecuteAsync(Owner, new(candidate, 3, 2, ReviewDecisionKind.Approve, "Fixed.", [withdrawal.DecisionId], "approve-new"));
+        await briefs.ExecuteAsync("UPDATE brief_analysis SET status = 'Succeeded', attempts = 3");
+
+        await new PostgresPublicationStore(factory).CommitAsync(Owner.Subject, new(2, 1, $"000002-{Guid.NewGuid():N}",
+            [new(PublishedRecordKind.Statement, candidate, 3)], []), "publish", new string('a', 64), default);
+
+        Assert.Equal("Pending:0", await briefs.BriefQueueStatusAsync(BriefFixtures.Week));
+        Assert.Equal((1, 0), await BriefSelectionAsync());
+    }
+
+    [Fact]
+    public async Task ADecisionOnARevisionThatTheActiveReleaseDoesNotServeLeavesTheBriefAlone()
+    {
+        var (candidate, briefs) = await PublishedApprovedAsync();
+        await Save.ExecuteAsync(Owner, await SaveRequestAsync(candidate, 2, "save-newer"));
+
+        await Decide.ExecuteAsync(Owner, new(candidate, 3, 1, ReviewDecisionKind.RequestChanges, "Name the bill.", [], "changes-newer"));
+
+        Assert.Equal("Succeeded:3", await briefs.BriefQueueStatusAsync(BriefFixtures.Week));
+    }
+
+    [Fact]
+    public async Task ADecisionLeavesAnApprovedBriefAloneBecauseAReviewerAlreadyOwnsIt()
+    {
+        var (candidate, briefs) = await PublishedApprovedAsync(briefApproved: true);
+
+        await Decide.ExecuteAsync(Owner, new(candidate, 2, 1, ReviewDecisionKind.WithdrawApproval, "Wrong date.", [], "withdraw"));
+
+        Assert.Equal("Succeeded:3", await briefs.BriefQueueStatusAsync(BriefFixtures.Week));
     }
 
     [Fact]
@@ -421,6 +508,23 @@ public sealed class PostgresStatementReviewStoreTests(PostgresCollection postgre
         var candidate = await CandidateAsync();
         await Create.ExecuteAsync(Owner, new(candidate, "create-" + candidate[..8]));
         return candidate;
+    }
+
+    private async Task<(string Candidate, BriefWorldSeeder Briefs)> PublishedApprovedAsync(bool briefApproved = false)
+    {
+        var candidate = await ApprovableAsync();
+        await Decide.ExecuteAsync(Owner, new(candidate, 2, 0, ReviewDecisionKind.Approve, null, [], "approve"));
+        var briefs = new BriefWorldSeeder(connectionString);
+        await briefs.ReleaseWithoutApprovalsAsync(1, BriefFixtures.InWeek, active: true, BriefWorldSeeder.Binding(PublishedRecordKind.Statement, candidate, 2));
+        if (briefApproved) await briefs.BriefAsync(BriefFixtures.Week, reviewStatus: "Approved");
+        else await briefs.FinishedWeekAsync(BriefFixtures.Week);
+        return (candidate, briefs);
+    }
+
+    private async Task<(int Selected, int LeftOut)> BriefSelectionAsync()
+    {
+        var evidence = (await new PostgresBriefDraftStore(factory).ReadEvidenceAsync(BriefWeek.RecordIdOf(BriefFixtures.Week), default))!;
+        return (evidence.Records.Length, evidence.LeftOut);
     }
 
     private async Task<string> ApprovableAsync()

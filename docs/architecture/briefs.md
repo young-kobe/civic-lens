@@ -1,0 +1,244 @@
+# Briefs
+
+## Purpose
+
+The briefs feature drafts one weekly brief from the records that Civic Lens published during one week. A brief is short text with cited records: statements, document changes, and action records. A person will review and approve each brief. A model prediction is never a human decision.
+
+This slice stores, queues, selects, and drafts briefs. Review pages, approval, and publication of briefs are planned. See [Limits and planned work](#limits-and-planned-work).
+
+## Decisions
+
+- A week runs from Monday 00:00 to the next Monday 00:00 in the `America/New_York` time zone. Postgres computes the bounds from its own clock, so a clock change is exact. A week lasts 167, 168, or 169 hours.
+- One brief covers one week. The record ID is the SHA-256 of `brief|{week start}`, for example `brief|2026-10-05`.
+- Only a closed week is drafted. The first run with briefs enabled stores its Monday as the first brief week. Every closed week from then on is queued. Earlier weeks are never queued by the worker, but the owner can redraft any week.
+- A brief cites records that were already published. It does not wait for the approval of those records. Each citation names the exact revision that the release holds.
+- A record is new in a week when the cutoff release has it and its first release was published in the week. The cutoff release is the newest release published before the week ends. The match uses the kind and the record ID.
+- A new revision of a record that was published before the week is not new. A record that an earlier release dropped and a later release lists again stays in the week of its first release. The brief does not repeat it.
+- The set of new records is fixed by the two releases. The text of each record comes from its revision in the active release at the time of the read. A requeued brief therefore sees a revision that a later release published.
+- A record that the active release no longer holds is left out. A record is left out too when the latest review decision on its revision in the active release is not an approval. A later draft revision does not change that. The coverage counts every left-out record as considered and not sent.
+- Actions on the same bill form one group. Every other record is its own group.
+- Groups rank by the number of records, then the number of distinct officials, then the bill movement. Bill movement is the number of sponsorship entries of the group. A group of another kind scores 0. The group key in ascending order breaks a tie.
+- The prompt takes whole groups in rank order up to the byte cap and up to `BriefRevision.MaximumCitations` records. Filling stops at the first group that does not fit either limit. Code assigns the IDs `R1`, `R2`, and so on after the cut, in order.
+- The model need not cite every record that it receives. Code builds the citation list from the IDs that the paragraphs cite. Each paragraph cites at least one ID.
+- Coverage records how many records were considered, sent to the model, and cited. Omitted records are the considered records minus the sent records.
+- The model text names only officials of the records that it received. `AnalysisAnswerRules.CheckNamesOutsideFacts` owns that check, and the action resolver calls it too.
+- A week with no new records makes no model call and no revision. The queue entry settles as `noNewRecords`.
+- A week whose new records are all left out makes no model call and no revision. The queue entry settles as Blocked with `noCitableRecords`.
+- The fingerprint covers the cutoff release and the sorted kind, record, and revision of each sent record. The same fingerprint settles as `unchanged`. A new revision of a record, a dropped record, or a withdrawn approval changes the fingerprint.
+- The week of a record is the brief week of the first release that lists the record. The first release has the lowest release number. Three events requeue the brief of the week of each record that they touch. The events are a publication commit, an activation of another release, and a review decision. The decision must be on the revision that the active release holds. A brief that is approved is never requeued. A Succeeded entry, a Running entry, and a Blocked `noCitableRecords` entry move back to Pending. A Running worker then loses its lease and cannot save its draft.
+- The stored release time is the database time of the commit. The selection read takes the brief lock, so it waits for a commit in flight and never misses a release of the week.
+- Only a week that has ended can be redrafted. The database clock decides.
+- Briefs have their own review lock key, `civic-lens-brief-review`, last in the lock order.
+- The worker enqueues closed weeks at the start of each pass. A timed wakeup at the next Monday boundary starts a pass when no other work is due.
+- The model text carries `textOrigin` and an optional `suggestion` like an action record. A suggestion holds its own citations, because citation IDs are only valid inside one selection.
+
+## Invariants
+
+Each line gives the rule, what enforces it, and the test that protects it. Cross-feature invariants are in [architecture](../architecture.md#invariants).
+
+- One brief exists for each week. The record ID names the week. Enforced by `BriefWeek.RecordIdOf`, `BriefRevision.ValidateShape`, the key of `brief_drafts`, and `ux_brief_drafts_week`. Tests: `BriefWeekTests.TheRecordIdIsTheSha256OfTheWeekSoEveryRunFindsTheSameBrief`, `BriefRevisionTests.TheRecordIdMustNameTheWeekSoNoTwoBriefsCoverTheSameWeek`, and `PostgresBriefDraftStoreTests.OneWeekHasOneBriefAndOneQueueRowBecauseTheWeekIsUnique`.
+- A week starts on a Monday. Enforced by `BriefWeek.RequireMonday` and the checks `ck_brief_drafts_week` and `ck_brief_analysis_week`. Tests: `BriefWeekTests.AWeekMustStartOnAMondayBecauseTheBriefPeriodIsMondayToMonday` and `PostgresBriefDraftStoreTests.TheBriefTableRefusesAWeekThatDoesNotStartOnAMondayOrAStatusThatThePolicyNeverStores`.
+- The week bounds are Monday midnight to Monday midnight in New York, with the clock change exact. Enforced by `BriefWeekSql`. Tests: `PostgresBriefDraftStoreTests.TheWeekRunsFromMondayMidnightToTheNextMondayMidnightInNewYorkWithTheClockChangeExact` and `BriefRevisionTests.AWeekLastsOnlyAsLongAsAClockChangeAllows`.
+- Only closed weeks from the first brief week are queued, and a second enqueue changes nothing. Enforced by `BriefWeek.ClosedWeeks` and `PostgresBriefDraftStore.EnqueueClosedWeeksAsync`. Tests: `PostgresBriefDraftStoreTests.TheFirstEnqueueStoresThisMondayAsTheFirstWeekAndQueuesNothingBecauseThisWeekIsStillOpen`, `PostgresBriefDraftStoreTests.EnqueueAddsEveryClosedWeekFromTheFirstWeekAndNeverEarlierOnes`, and `PostgresBriefDraftStoreTests.EnqueueIsIdempotentAndLeavesAFinishedWeekAlone`.
+- A record is new only when the cutoff release has it and its first release was published in the week. Enforced by `PostgresBriefDraftStore.ReadNewRecordsAsync` and `BriefFirstRelease`, which `BriefStaleness` shares. Tests: `PostgresBriefDraftStoreTests.ARecordIsNewWhenTheCutoffReleaseHasItAndTheReleaseBeforeTheWeekDoesNot`, `PostgresBriefDraftStoreTests.ARecordBelongsOnlyToTheWeekOfItsFirstReleaseEvenWhenAnEarlierReleaseDroppedItAndALaterOneListsItAgain`, `PostgresBriefDraftStoreTests.ANewRevisionOfARecordThatWasPublishedBeforeTheWeekIsNotNewSoTheBriefNeverRepeatsIt`, and `PostgresBriefDraftStoreTests.AReleaseAfterTheWeekEndsNeverEntersTheWeek`.
+- An old release entry without a kind is a document change. Enforced by `ReviewQueries.ReadReleaseRecordsAsync`. Test: `PostgresBriefDraftStoreTests.AnOldReleaseEntryWithoutAKindIsADocumentChangeSoOldReleasesStillCount`.
+- The brief reads each record at its revision in the active release, and a missing revision fails the step. Enforced by `PostgresBriefDraftStore.AtActiveRevisionsAsync` and `BriefRecordReader`. Tests: `PostgresBriefDraftStoreTests.TheBriefReadsTheExactRevisionTheReleaseNamesAndTheOfficialsOfEachRecord` and `PostgresBriefDraftStoreTests.AReleaseThatNamesARevisionThatIsNotStoredFailsLoudInsteadOfDroppingTheRecord`.
+- A record is left out and counted as considered when the active release dropped it. It is also left out when the latest decision on its published revision is not an approval. Enforced by `PostgresBriefDraftStore.AtActiveRevisionsAsync`, `BriefRecordReader.ReadNotApprovedAsync`, and `BriefDraftContext.Create`. Tests: `PostgresBriefDraftStoreTests.ARecordTheActiveReleaseNoLongerHoldsIsLeftOutAndCounted`, `PostgresBriefDraftStoreTests.ARecordWhoseLatestDecisionOnThePublishedRevisionIsNotAnApprovalIsLeftOutAndCounted`, `PostgresBriefDraftStoreTests.ARecordApprovedAgainAfterAWithdrawalOfThePublishedRevisionIsInTheSelectionAgain`, `PostgresBriefDraftStoreTests.ADraftOnANewerRevisionDoesNotWithdrawThePublishedRevisionBecauseTheActiveReleaseStillServesIt`, `PostgresBriefDraftStoreTests.ARequeueAfterAnApprovalIsWithdrawnAppendsARevisionThatLeavesTheRecordOut`, `PostgresStatementReviewStoreTests.AnEditAfterAWithdrawalStillLeavesThePublishedRevisionOutBecauseTheNewRevisionIsNotApproved`, and `BriefDraftResolverTests.RecordsLeftOutBeforeTheSelectionStillCountAsConsideredSoTheCoverageShowsThem`.
+- A requeue reads the revision that the active release holds now, so a later revision gives a new brief revision. Enforced by `PostgresBriefDraftStore.AtActiveRevisionsAsync`. Tests: `PostgresBriefDraftStoreTests.ARequeueReadsEachRecordAtItsRevisionInTheActiveReleaseAndKeepsTheWeekSetFixed` and `PostgresBriefDraftStoreTests.ARequeueAfterANewRevisionIsPublishedAppendsARevisionThatReadsTheNewRevision`.
+- The selection read waits for a commit in flight. Enforced by `PostgresBriefDraftStore.ReadEvidenceAsync` under the `PostgresAdvisoryLock.BriefReview` key. Test: `PostgresBriefDraftStoreTests.TheSelectionReadWaitsForACommitInFlightBecauseItTakesTheBriefLock`.
+- The prompt keeps `BriefDraftTask.RetryReasonReserveBytes` free, so a retry with rejection reasons still fits the byte cap. Enforced by `BriefDraftStep.FitsWithRetryReserve`. Test: `BriefDraftStepTests.TheSelectionKeepsRoomForRetryReasonsSoARejectedAnswerStillGetsItsSecondCall`.
+- Groups rank by size, officials, movement, and key. A group enters whole or not at all. IDs have no gap. The prompt never offers more records than a brief can cite. Enforced by `BriefSelection`. Tests: `BriefSelectionTests.FillingStopsAtTheCitationLimitAndTheRestCountAsConsidered`, `BriefDraftStepTests.AWeekOfMoreRecordsThanABriefCanCiteOffersOnlyTheLimitSoAnAnswerCitingThemAllGetsTheCorrectiveRetry`, `BriefSelectionTests.GroupsRankByRecordCountThenDistinctOfficialsThenBillMovementThenKey`, `BriefSelectionTests.AGroupEntersWholeOrNotAtAllAndFillingStopsAtTheFirstGroupThatDoesNotFit`, and `BriefSelectionTests.CitationIdsAreAssignedAfterTheCutInOrderSoTheyNeverHaveAGap`.
+- A paragraph cites at least one listed ID, once. An unknown ID is rejected. Enforced by `BriefDraftResolver` and `BriefRevision.ValidateShape`. Tests: `BriefDraftResolverTests.AnIdThatWasNeverListedIsRejectedAsACitationError`, `BriefDraftResolverTests.AnIdRepeatedInOneParagraphIsRejected`, `BriefDraftResolverTests.AParagraphWithoutAnIdIsRejected`, and `BriefRevisionTests.AParagraphCannotCiteTheSameIdTwiceOrAnIdTheBriefDoesNotList`.
+- The model need not cite every record that it received. Enforced by `BriefDraftResolver`. Test: `BriefDraftResolverTests.TheModelNeedNotCiteEveryRecordSentToIt`.
+- The coverage counts the listed citations, and omitted records are considered minus sent. Enforced by `BriefRevision.ValidateShape` and `BriefCoverage`. Tests: `BriefDraftResolverTests.ConsideredCountsRecordsTheByteCapLeftOutSoTheCoverageShowsWhatTheBriefOmits` and `BriefRevisionTests.CoverageMustCountTheListedCitationsAndCannotSendMoreThanItConsidered`.
+- The text names no configured person who is not an official in the records sent. Enforced by `AnalysisAnswerRules.CheckNamesOutsideFacts`. Tests: `BriefDraftResolverTests.ATextThatNamesAConfiguredPersonWhoIsNotAnOfficialInTheSentRecordsIsRejected` and `BriefDraftResolverTests.ARecordLeftOutByTheCutDoesNotCountAsAnOfficialInTheFacts`.
+- The prompt lists only the officials of the records sent. Enforced by `BriefDraftPrompt`. Test: `BriefDraftStepTests.ThePromptListsOnlyTheOfficialsOfTheRecordsSentAndNoOtherConfiguredPerson`.
+- A week with no new records makes no call and no revision. Enforced by `BriefDraftStep`. Tests: `BriefDraftStepTests.AWeekWithNoNewRecordsMakesNoModelCallAndNoRevisionAndSettlesWithABypassedRun` and `PostgresBriefDraftStoreTests.AWeekWithNoNewRecordsSettlesWithNoBriefAndABypassedRun`.
+- A week whose new records are all left out is Blocked as `noCitableRecords`, not Succeeded. Enforced by `BriefDraftStep`. Test: `BriefDraftStepTests.AWeekWhoseConsideredRecordsAreAllLeftOutBlocksInsteadOfClaimingThatNothingWasPublished`.
+- The same fingerprint settles without a call. A new record or a new revision of a record makes a new revision. Enforced by `BriefDraftStep` and `BriefFingerprint`. Tests: `BriefDraftStepTests.TheSameRecordsAndCutoffSettleUnchangedWithoutACallBecauseTheFingerprintMatches`, `BriefDraftStepTests.ANewRecordOrANewRevisionOfARecordAppendsRevisionTwoWithANewFingerprint`, and `BriefSelectionTests.TheFingerprintIgnoresInputOrderAndChangesWithTheRevisionOrTheCutoff`.
+- A group that alone exceeds the byte cap blocks the week as `overByteCap`. Enforced by `BriefDraftStep`. Test: `BriefDraftStepTests.AGroupThatAloneExceedsTheByteCapBlocksTheWeekWithoutACall`.
+- Model confidence never reaches a revision. Enforced by `BriefDraftStep`. Test: `BriefDraftStepTests.ConfidenceStaysInTheRunOutputAndNeverReachesTheRevision`.
+- An append needs the expected current revision. Enforced by `BriefDraftRows` under the `PostgresAdvisoryLock.BriefReview` key. Test: `PostgresBriefDraftStoreTests.ARevisionThatFindsADifferentCurrentRevisionIsDiscardedAndRetriedSoTwoDraftersNeverShareARevisionNumber`.
+- The text of a person stays, and model text becomes a suggestion with its own citations. Enforced by `BriefRevision.ValidateAsAnalysisRevision`. Tests: `BriefRevisionTests.AnAnalysisRevisionNeverOverwritesTheTextOfAPersonAndOffersItsOwnAsASuggestion` and `BriefDraftResolverTests.WhenAPersonWroteTheCurrentTextTheModelTextOnlyBecomesASuggestionWithItsOwnCitations`.
+- A publication commit requeues the brief of the week of each record that it changes, drops, or adds again. Enforced by `BriefStaleness.RequeueAfterPublicationAsync` in the `PostgresPublicationStore` commit transaction, through `PostgresAnalysisQueue.RequeueInAsync`. Tests: `BriefStalenessTests.APublishThatChangesARevisionRequeuesOnlyTheBriefOfTheWeekThatFirstPublishedTheRecord`, `BriefStalenessTests.APublishThatChangesARecordOfAnEarlierWeekLeavesTheBriefOfThisWeekAlone`, `BriefStalenessTests.APublishThatDropsARecordRequeuesTheBriefOfItsWeekForEachKind`, `BriefStalenessTests.APublishThatOnlyAddsARecordLeavesTheFinishedBriefAloneBecauseTheNewRecordBelongsToTheOpenWeek`, `BriefStalenessTests.ARecordPublishedAgainAfterItWasDroppedRequeuesTheWeekThatFirstPublishedIt`, `BriefStalenessTests.AChangedRecordRequeuesABlockedWeekOnlyWhenItHadNoRecordToCite`, `BriefStalenessTests.APendingBriefStaysAsItIsBecauseItReadsTheSelectionWhenItRunsAnyway`, `BriefStalenessTests.ARunningBriefIsRequeuedAndItsLateSettlementIsRefusedSoItCannotSaveAStaleRevision`, and `PostgresBriefDraftStoreTests.AStaleSignalWhileTheBriefIsRunningLeadsToANewDraftAndNeverASavedStaleRevision`.
+- An activation of another release requeues the brief of the week of each record that differs between the old and the new active release. A record differs in its revision or in its presence. Enforced by `BriefStaleness.RequeueAfterActivationAsync` in `PostgresPublicationStore.ActivateAsync`. Tests: `BriefStalenessTests.ARollbackRequeuesTheBriefOfTheAffectedWeekAndTheRedraftReadsTheOlderRevision` and `BriefStalenessTests.ARollbackToAReleaseWithoutTheRecordsRequeuesTheBriefAndTheRedraftLeavesThemOut`.
+- A review decision on the revision that the active release holds requeues the brief of the week of the record, in the same transaction. A decision on any other revision does not. Enforced by `BriefStaleness.AfterDecision`, which each review store passes to `ReviewRecords.DecideAsync`. Tests: `PostgresStatementReviewStoreTests.WithdrawingAnApprovalRequeuesTheBriefOfTheWeekAndTheRedraftLeavesTheRecordOut`, `PostgresStatementReviewStoreTests.ApprovingTheSameRevisionAgainAfterAWithdrawalRequeuesTheBriefAndTheRecordReturns`, `PostgresStatementReviewStoreTests.RequestingChangesAfterAnApprovalOfThePublishedRevisionRequeuesTheBriefAndTheRecordLeavesIt`, `PostgresStatementReviewStoreTests.ARecordWithdrawnApprovedAgainAndPublishedAtANewRevisionReturnsToTheBrief`, `PostgresStatementReviewStoreTests.ADecisionOnARevisionThatTheActiveReleaseDoesNotServeLeavesTheBriefAlone`, `PostgresDocumentChangeReviewStoreTests.ADecisionOnTheRevisionThatTheActiveReleaseServesRequeuesTheBriefOfItsWeek`, and `PostgresBillStreamTests.ADecisionOnTheRevisionThatTheActiveReleaseServesRequeuesTheBriefOfItsWeek`.
+- A brief that is approved is never requeued by any of the three events. Enforced by the review status filter of `BriefStaleness`. Tests: `BriefStalenessTests.ABriefThatIsApprovedIsNeverRequeuedByAPublishOrARollbackBecauseAReviewerHasAlreadyTakenResponsibilityForIt` and `PostgresStatementReviewStoreTests.ADecisionLeavesAnApprovedBriefAloneBecauseAReviewerAlreadyOwnsIt`.
+- The brief lock is last in the lock order, and a brief queue row lock comes before it. Enforced by `PostgresAdvisoryLock.ReviewKeysBeforeBriefs` and `BriefStaleness.TakeLocksAsync`. Tests: `BriefStalenessTests.ThePublishWaitsForTheBriefLockLastInTheOrderBecauseAnAppendOfABriefMustNotSlipInDuringIt` and `BriefStalenessTests.ThePublishDoesNotHoldTheBriefLockWhileItWaitsForAnEarlierLockSoTheBriefLockStaysLastInTheOrder`.
+- An owner redraft moves only finished weeks back to Pending. Only the owner may run it. Only a week that has ended can be redrafted. Enforced by `PostgresBriefDraftStore.RedraftAsync` and `RedraftBrief`. Tests: `PostgresBriefDraftStoreTests.RedraftRefusesAWeekThatHasNotEndedBecauseItsRecordsCanStillChange`, `PostgresBriefDraftStoreTests.RedraftPutsAFinishedWeekBackToPendingWithItsAttemptsCleared`, `PostgresBriefDraftStoreTests.RedraftLeavesARunningWeekAloneSoItNeverStealsALeaseFromAWorker`, and `RedraftBriefTests.OnlyTheOwnerMayRedraftAWeek`.
+- The worker queues closed weeks before every pass. Enforced by the `beforeEachPass` hook of `AnalysisWorker`. Test: `BriefDraftStepTests.TheWorkerQueuesClosedWeeksBeforeEveryPassSoAWeekThatJustEndedIsNotMissed`.
+- The wakeup fires at the next Monday 00:00 in New York time. Enforced by `BriefWeekSql.NextBoundaryTicks` in the deadline query of `PostgresAnalysisWakeup`. Test: `PostgresBriefDraftStoreTests.TheBriefWakeupFiresAtTheNextMondayMidnightInNewYorkEvenWithNoQueuedWork`.
+- The prompt, the schema, and one input hash are pinned. Enforced by `BriefDraftTask` versions. Test: `BriefDraftPromptGoldenTests.ThePromptAndSchemaMatchTheirPinnedVersions`.
+
+## Behavior
+
+### Ownership
+
+The step runs on the shared analysis owners: `AnalysisWorker<TRun>`, `AnalysisValidationLoop`, `PostgresAnalysisQueue`, `AnalysisAnswerRules`, `AnalysisSchema`, `AnthropicStructuredCall`, and `AnalysisRunRows`. See [analysis](analysis.md#behavior) for the queue lifecycle, budgets, retries, and pauses.
+
+`IBriefDraftStore` extends `IAnalysisQueue`. It adds the evidence read, the run read, the weekly enqueue, and the owner redraft. It has no list or count views yet.
+
+`ReviewRecords` is the shared append core for the review stores. The brief store uses it for the append and the status computation. The review pages and decisions for briefs come later.
+
+### Weeks
+
+`BriefWeek` holds the pure rules: the record ID, the Monday check, and the list of closed weeks. `BriefWeekSql` holds the time zone arithmetic. It builds the current Monday, the start and end ticks of a week, and the next Monday boundary from the database clock.
+
+### Queue
+
+`brief_analysis` has one entry for each week, with the task `brief-draft`. The key is the record ID, because every run must belong to a 64-character hex subject. The entry has a unique `week_start`.
+
+At the start of each pass, `AnalysisWorker` calls the hook `beforeEachPass`. The brief composition passes `PostgresBriefDraftStore.EnqueueClosedWeeksAsync`. The method does these steps:
+
+1. It stores the current Monday in `brief_schedule` when no row exists. This is the first brief week.
+2. It reads the first week and the current Monday from the database clock.
+3. It inserts one Pending entry for each closed week with `INSERT ... ON CONFLICT DO NOTHING`. The statement stamps the creation time from the database clock. The method skips this step when no week is closed.
+
+The wakeup adds the next Monday boundary to its deadline query. The boundary is the next Monday 00:00 in New York time, taken from the database clock. The worker then starts a pass at the boundary and queues the week that just closed. The notify trigger on the queue table only wakes the worker. The budget is `brief_analysis_budget`.
+
+### Step
+
+The step does these checks in order:
+
+1. No queue entry for the record: Blocked as `evidenceUnavailable`.
+2. No record is left to cite, because the selection left out every new record: Blocked as `noCitableRecords`.
+3. No new records: Succeeded as `noNewRecords`. The step writes a Bypassed run and no revision.
+4. The selection holds no group, because the first group alone exceeds the byte cap: Blocked as `overByteCap`.
+5. The current revision has the same fingerprint: Succeeded as `unchanged`, with a Bypassed run.
+6. Otherwise the step calls the model with the validation loop and appends a revision.
+
+The `noNewRecords` and `unchanged` outcomes write a Bypassed run with the reason as its code and the context of the selection. The queue refuses either code without its run.
+
+### Selection
+
+`PostgresBriefDraftStore.ReadEvidenceAsync` reads the queue row, the window, and the records. It runs in one transaction that first takes the brief lock. A commit in flight holds the lock until it ends, so the read sees every release of the week.
+
+1. One query reads the week bounds and the cutoff and previous release numbers. A release counts when its `published_at_utc_ticks` is before the end or the start of the week.
+2. One read lists the records of the cutoff release. One query then keeps the records whose first release was published in the week, by kind and record ID. This set does not change after the week ends.
+3. One read lists the records of the active release. Each new record takes the revision that the active release holds. A record that the active release lacks is left out.
+4. `BriefRecordReader` drops each record whose latest review decision on the published revision is not an approval. One query for each kind reads the latest decision by `review_state_version`, the rule of `ReviewPolicy.GetCurrentStatus`. The reader then reads the exact revisions in one query for each kind and maps them with `BriefRecord.From`.
+5. The current brief revision comes from `BriefDraftRows.ReadCurrentAsync`.
+
+The left-out count is the size of the set of new records minus the records that were read. `BriefDraftContext.Create` adds it to the considered count of the selection, so the coverage shows the left-out records as omitted.
+
+A week whose new records are all left out settles as Blocked with `noCitableRecords`. A brief that already exists keeps its text and citations in that case. When a record of that week changes again, staleness requeues the Blocked entry. Staleness leaves other Blocked entries alone.
+
+`BriefSelection` groups and ranks the records and fills the prompt. `BriefDraftContext` adds the fingerprint and the names of the officials in the records sent.
+
+The first release number of the window is the previous release plus one. The cutoff release number is the cutoff release. A revision needs the first number to be at most the cutoff number.
+
+### Fingerprint
+
+`BriefFingerprint` is the SHA-256 of `brief-fingerprint-v1`, the cutoff release number, and one line for each sent record in ordinal order. The line is `kind|record ID|revision number`.
+
+### Prompt and output
+
+The request uses model `claude-sonnet-5-5`, effort `medium`, and at most 8,000 output tokens. The user message holds the week dates and the records sent. Each record has its ID, its kind, its headline, its summary, an optional date, an optional bill, and the names of its officials. The system prompt tells the model to write plain neutral language and to cite only listed IDs. It must name only listed officials and never state the status of a bill.
+
+Structured outputs fix a `headline`, a list of `paragraphs`, and a `confidence`. Each paragraph has a `text` and its `citationIds`. The schema allows only the IDs that were sent. The confidence stays in the run output and is never in the revision.
+
+The byte cap is the smaller of 100,000 UTF-8 bytes and the run token limit minus the output allowance. Filling the prompt keeps `BriefDraftTask.RetryReasonReserveBytes` (4,096 bytes) free for the rejection reasons of a retry. A first group that does not fit within the cap minus the reserve blocks the week as `overByteCap`.
+
+### Checks
+
+Code rejects the whole answer on any of these:
+
+- A text is empty, over its bound (256 characters for the headline, 4,000 for a paragraph), or has a NUL.
+- The paragraph count is not from 1 to 12.
+- The confidence is not finite or is outside 0 to 1.
+- A paragraph cites no ID, cites an ID that was not sent, or cites an ID twice.
+- The paragraphs cite more distinct IDs than `BriefRevision.MaximumCitations`.
+- The headline or a paragraph contains the full name of a configured person who is not an official in the records sent, compared without case. A name that is part of a listed name does not count.
+
+A citation error gives the run the outcome `CitationRejected`. Any other error gives `OutputRejected`. The [validation loop](analysis.md#validation-loop) gives one more call with the reasons. After a second rejection, the entry fails with the rejection code.
+
+### Revision and append
+
+The worker appends a new revision to the brief of the week, written by `civic-lens:analysis` with its run ID. `BriefDraftResolver` builds the revision. The citation list holds the sent records that a paragraph cites, in ID order. If the current revision has the origin `Person`, the new revision keeps that text and its citations and stores the model text as the suggestion.
+
+The settlement takes the queue row lock and then `civic-lens-brief-review`. `BriefDraftRows.AppendAnalysisRevisionAsync` returns a refusal code or appends through `ReviewRecords.AppendRevision`. If the current revision number is not one less than the new one, the run is kept as `DraftDiscarded`. The entry moves to RetryWaiting with the code `revisionConflict`.
+
+### Staleness
+
+`BriefStaleness` finds the brief queue entries to requeue. A queue entry qualifies when its week holds the first release of a touched record and its brief is not approved. The first release of a record is the lowest release number whose `records_json` lists the kind and the record ID. `BriefFirstRelease` owns that query, and the selection read uses it too. `ReviewQueries.ReleaseRecordColumns` reads the entries, and `BriefWeekSql` gives the week bounds. One query answers for the whole set of touched records.
+
+The entries move from Succeeded, Running, or Blocked `noCitableRecords` back to Pending through `PostgresAnalysisQueue.RequeueInAsync`. The queue owner checks the lifecycle, clears the lease, the attempts, and the retry link, and closes an open reservation as an Interrupted run. Entries in any other state stay as they are, because a Pending, RetryWaiting, or WaitingForBudget entry reads the selection when it runs. A Blocked entry with another code waits for an owner redraft, because a record change does not remove its cause.
+
+A Running worker that read the old input loses its lease when its entry moves. Its settlement then fails the lifecycle check before the revision append, so the worker saves no stale revision. The entry runs again and reads the new input.
+
+- `PostgresPublicationStore.CommitAsync` touches each record that differs between the previous active release and the new release. A record differs when its revision changes or when the new release drops or adds it. A new record has no earlier release, so it belongs to the open week and nothing is requeued for it. A record that returns after a drop belongs to the week of its first release.
+- `PostgresPublicationStore.ActivateAsync` touches each record whose revision or presence differs between the old active release and the target release.
+- `ReviewRecords.DecideAsync` calls `afterDecision` for every decision. The callback acts only when the decided revision is the revision that the active release holds. The stores of document changes, statements, and actions pass `BriefStaleness.AfterDecision`.
+
+Each of these paths takes the earlier review keys, then locks every brief queue row in key order, and then takes the brief key. The review decision path takes its own review key first and locks the rows only when it must requeue. The queue rows come before the brief key because the worker settlement locks its row and then takes the brief key. The reverse order could deadlock.
+
+The stores of the three review kinds and the publication store receive the brief queue through their constructors. Each public constructor builds the queue from its context factory, like the draft stores.
+
+A requeued brief reads the selection again. The record set of a closed week is fixed, but each record is read in the active release. A new revision, a dropped record, or a changed decision changes the fingerprint, and the step appends a new brief revision.
+
+### Outcomes
+
+| State | Code | Meaning |
+|---|---|---|
+| Succeeded | none | A revision was appended |
+| Succeeded | `noNewRecords` | The week has no new records, so no brief exists |
+| Succeeded | `unchanged` | The fingerprint matches the current revision |
+| RetryWaiting | `revisionConflict` | Another writer appended first |
+| Blocked | `evidenceUnavailable`, `overByteCap`, `noCitableRecords` | The input cannot be drafted |
+| Failed | `outputRejected`, `citationRejected`, a stop code, or `attemptsExhausted` | Owner redraft needed |
+
+### Executor
+
+The executor is `AnalysisWorker<BriefDraftRun>` with `BriefDraftStep`. It runs beside the other analysis loops in the `worker` process, with its own wakeup, status row, daily limit, and run limit. It uses `CIVIC_LENS_ANALYSIS_CONCURRENCY`.
+
+Its required variables are in [operations](../operations.md#brief-drafting). A daily limit without the key is a configuration error. The status row is in `document_change_analysis_status` under the task `brief-draft`. The names of the officials come from the collection configuration of the worker.
+
+### Commands
+
+| Command | Effect |
+|---|---|
+| `brief redraft --week <yyyy-MM-dd>` | Queues the week if it has no entry. Moves a Succeeded, Blocked, or Failed entry back to Pending. The date must be a Monday, and the week must have ended |
+
+This is an owner command. It prints the count of entries that it queued or moved. A week before the first brief week is allowed. A week that has not ended is invalid input, because its records can still change. The database clock decides.
+
+## Storage and contracts
+
+- The generated [briefs schema](schema/briefs.md) lists every table, column, key, check, index, and trigger.
+- The migration `WeeklyBriefs` adds seven tables: `brief_analysis`, `brief_analysis_runs`, `brief_analysis_budget`, `brief_schedule`, `brief_drafts`, `brief_revisions`, and `brief_review_decisions`.
+- `brief_review_decisions` is empty until review of briefs exists. The shared `ReviewRecords` generics need it.
+- The citations of a brief stay in `revision_json`. No table indexes them.
+- A Bypassed run records its reason in `brief_analysis_runs`. The reasons are `unchanged` and `noNewRecords`.
+- `brief_schedule` holds the first brief week for the task.
+- `BriefRevision` holds the record ID, the revision number, the author, the creation time, the window, and the fingerprint. It also holds the headline, `textOrigin`, an optional `suggestion`, the paragraphs, the citations, and the coverage.
+- The window holds the week start, the start and end ticks in UTC, the first release number, and the cutoff release number.
+- A paragraph holds its text and its citation IDs. A citation holds its ID, its kind (`DocumentChange`, `Statement`, or `Action`), its record ID, and its revision number.
+- Brief drafting has its own budget, separate from the other budgets.
+- Version constants are listed in [Behavior versions](../architecture.md#behavior-versions).
+
+## Code map
+
+| Concern | Files |
+|---|---|
+| Revision, window, and week | `src/CivicLens.Core/Briefs/BriefRevision.cs`, `src/CivicLens.Core/Briefs/BriefWindow.cs`, `src/CivicLens.Core/Briefs/BriefWeek.cs`, `src/CivicLens.Core/Briefs/BriefParagraph.cs`, `src/CivicLens.Core/Briefs/BriefCitation.cs`, `src/CivicLens.Core/Briefs/BriefCitationKind.cs`, `src/CivicLens.Core/Briefs/BriefCoverage.cs`, `src/CivicLens.Core/Briefs/BriefTextSuggestion.cs`, `src/CivicLens.Core/Review/ReviewTextOrigin.cs` |
+| Step and evidence | `src/CivicLens.Application/Briefs/BriefDraftStep.cs`, `src/CivicLens.Application/Briefs/BriefDraftEvidence.cs`, `src/CivicLens.Application/Briefs/BriefDraftContext.cs`, `src/CivicLens.Application/Briefs/BriefRecord.cs` |
+| Selection and fingerprint | `src/CivicLens.Application/Briefs/BriefSelection.cs`, `src/CivicLens.Application/Briefs/BriefSelectedRecord.cs`, `src/CivicLens.Application/Briefs/BriefFingerprint.cs` |
+| Prompt, resolver, lifecycle, settings | `src/CivicLens.Application/Briefs/BriefDraftPrompt.cs`, `src/CivicLens.Application/Briefs/BriefDraftResolver.cs`, `src/CivicLens.Application/Briefs/BriefDraftLifecycle.cs`, `src/CivicLens.Application/Briefs/BriefDraftSettings.cs`, `src/CivicLens.Application/Briefs/BriefDraftTask.cs`, `src/CivicLens.Application/Briefs/BriefDraftErrorCodes.cs` |
+| Store and model ports | `src/CivicLens.Application/Briefs/IBriefDraftStore.cs`, `src/CivicLens.Application/Briefs/IBriefDraftModel.cs` |
+| Owner redraft | `src/CivicLens.Application/Briefs/RedraftBrief.cs` |
+| Store, queue mapping, model | `src/CivicLens.Infrastructure/Briefs/PostgresBriefDraftStore.cs`, `src/CivicLens.Infrastructure/Briefs/BriefDraftQueueMapping.cs`, `src/CivicLens.Infrastructure/Briefs/BriefDraftRows.cs`, `src/CivicLens.Infrastructure/Briefs/AnthropicBriefDraftModel.cs` |
+| Week SQL and record read | `src/CivicLens.Infrastructure/Briefs/BriefWeekSql.cs`, `src/CivicLens.Infrastructure/Briefs/BriefRecordReader.cs`, `src/CivicLens.Infrastructure/Review/ReviewQueries.cs` |
+| Staleness | `src/CivicLens.Infrastructure/Briefs/BriefStaleness.cs`, `src/CivicLens.Infrastructure/Review/ReviewRecords.cs`, `src/CivicLens.Infrastructure/Publication/PostgresPublicationStore.cs` |
+| Tables | `src/CivicLens.Infrastructure/Briefs/Persistence/`, `src/CivicLens.Infrastructure/Collection/Migrations/20261026120000_WeeklyBriefs.cs` |
+| CLI and composition | `src/CivicLens.Host/Briefs/BriefCommand.cs`, `src/CivicLens.Host/Briefs/BriefDraftComposition.cs`, `src/CivicLens.Host/Briefs/BriefDraftConfiguration.cs` |
+
+## Limits and planned work
+
+- A Blocked `noCitableRecords` week has no brief text for the new records. The publication slice for briefs must not publish a brief whose queue entry is Blocked.
+- The manifest times of a release come from the build, not from the commit. See [publication](publication.md#invariants).
+- Records that changed after the week started are not new, so a brief never shows a later revision of an older record.
+- The bill movement counts the sponsorship entries of a new action record, because a new record has no earlier revision to compare against.
+- Filling stops at the first group that does not fit. A smaller group later in the order never takes its place.
+- The text of a person survives later model runs by rule, but no page lets a person edit a brief yet.
+- Review of briefs is the next slice: the review pages, the editor, approval bound to the revision, and bulk views. Publication of briefs follows, with the verified citation links, the explicit sample, and the cutoff on each page.
+- A brief cites records that are already published. The review slice must decide how a reviewer sees the cited records, and what happens to an approved brief when a cited record changes.
+- News coverage in briefs is deferred; see [roadmap](../roadmap.md#deferred).

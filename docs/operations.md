@@ -567,6 +567,29 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- ac
 
 The [live test](#verification) for action drafting sends one paid request.
 
+## Brief drafting
+
+The `worker` command drafts one weekly brief for each closed week. [Briefs](architecture/briefs.md) holds the rules. A week runs from Monday 00:00 to the next Monday 00:00 in New York time. The brief covers the records that releases published in that week. Brief drafting runs when both required variables below are set in the worker's protected environment. A limit without `ANTHROPIC_API_KEY` stops the worker with exit code 2. The names of the officials come from the collection configuration of the worker.
+
+| Variable | Meaning |
+|---|---|
+| `ANTHROPIC_API_KEY` | Claude API key, shared with the other stages |
+| `CIVIC_LENS_BRIEF_DRAFTING_DAILY_TOKENS` | Daily token limit for brief drafting calls, per UTC day. It is separate from the other limits. |
+| `CIVIC_LENS_BRIEF_DRAFTING_RUN_TOKENS` | Optional limit for one call's reservation (default 120,000 or the daily limit, whichever is smaller). It also sets the prompt byte cap. |
+| `CIVIC_LENS_ANALYSIS_CONCURRENCY` | Optional number of calls at the same time, shared with the other stages (default 2, 1 to 4) |
+
+Drafting uses Claude Sonnet 5.5. The first run with the limit set stores its Monday as the first brief week. The worker queues each closed week from then on, and a wakeup at each Monday boundary queues the week that just closed. The worker never queues a week before the first brief week. A week with no new records makes no call and no brief.
+
+The command below needs `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`.
+
+```sh
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- brief redraft --week 2026-10-05
+```
+
+`redraft` queues the week if it has no entry. It moves a Succeeded, Blocked, or Failed entry back to Pending. It also works for a week before the first brief week. The date must be a Monday, and the week must have ended. The command prints `{"requeued":1}` when it queued or moved the entry, and `{"requeued":0}` when the entry is already Pending, Running, or waiting. The step settles as `unchanged` when the records of the week and their revisions in the active release have not changed since the last brief; see [staleness](architecture/briefs.md#staleness). A paused or waiting stage follows the same table as document-change drafting: fix the key or the credit and restart the worker, or wait for the next UTC day.
+
+The [live test](#verification) for brief drafting sends one paid request.
+
 ## Publish a static release
 
 The owner can publish from the Review home page. Select records in the Publish section and choose Review selection. The list shows each record as a document change, a statement, or an action. The summary lists each headline with its kind, as new or a replacement, and shows the release number. Choose Publish to confirm. The page lists recent releases read-only. Rollback stays in the CLI.

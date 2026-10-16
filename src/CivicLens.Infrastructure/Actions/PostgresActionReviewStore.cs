@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using System.Data;
 using CivicLens.Application.Actions;
+using CivicLens.Application.Briefs;
 using CivicLens.Application.Paging;
 using CivicLens.Application.Publication;
 using CivicLens.Application.Review;
@@ -8,17 +9,21 @@ using CivicLens.Core.Actions;
 using CivicLens.Core.Documents;
 using CivicLens.Core.Review;
 using CivicLens.Infrastructure.Actions.Persistence;
+using CivicLens.Infrastructure.Analysis;
+using CivicLens.Infrastructure.Briefs;
+using CivicLens.Infrastructure.Briefs.Persistence;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Collection.BillStream;
 using CivicLens.Infrastructure.Collection.Jobs;
 using CivicLens.Infrastructure.Documents;
 using CivicLens.Infrastructure.Review;
+using CivicLens.Publication.Contracts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 
 namespace CivicLens.Infrastructure.Actions;
 
-public sealed class PostgresActionReviewStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory) : IActionReviewStore
+public sealed class PostgresActionReviewStore : IActionReviewStore
 {
     internal static readonly ReviewRecords<ActionDraftRow, ActionRevisionRow, ActionReviewDecisionRow, ActionDraftRevision> Records =
         new(PostgresAdvisoryLock.ActionReview, "Action", nameof(ActionDraftRow.RecordId),
@@ -26,6 +31,19 @@ public sealed class PostgresActionReviewStore(IDbContextFactory<CollectionAttemp
 
     private const string SaveOperation = "action-save";
     private const string DecideOperation = "action-decide";
+
+    private readonly IDbContextFactory<CollectionAttemptDbContext> contextFactory;
+    private readonly PostgresAnalysisQueue<BriefAnalysisRow, BriefAnalysisBudgetRow, BriefDraftRun> briefQueue;
+
+    public PostgresActionReviewStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory)
+        : this(contextFactory, new(contextFactory, new BriefDraftQueueMapping())) { }
+
+    private PostgresActionReviewStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory,
+        PostgresAnalysisQueue<BriefAnalysisRow, BriefAnalysisBudgetRow, BriefDraftRun> briefQueue)
+    {
+        this.contextFactory = contextFactory;
+        this.briefQueue = briefQueue;
+    }
 
     public static PostgresActionReviewStore FromConnectionString(string connectionString)
     {
@@ -61,7 +79,7 @@ public sealed class PostgresActionReviewStore(IDbContextFactory<CollectionAttemp
                 var current = history.CurrentRevision!;
                 current.ValidateForApproval();
                 current.ValidateAgainst(await ReadExtractionsAsync(db, [current], cancellationToken));
-            }, NewDecisionRow, cancellationToken);
+            }, NewDecisionRow, BriefStaleness.AfterDecision(briefQueue, PublishedRecordKind.Action), cancellationToken);
 
     public async Task<ActionReviewRead?> GetAsync(string recordId, CancellationToken cancellationToken)
     {

@@ -12,12 +12,15 @@ internal static class PostgresAdvisoryLock
     internal const string DocumentChangeReview = "civic-lens-document-change-review";
     internal const string StatementReview = "civic-lens-statement-review";
     internal const string ActionReview = "civic-lens-action-review";
+    internal const string BriefReview = "civic-lens-brief-review";
     // No transaction holds this with another key.
     internal const string CollectionImport = "civic-lens-collection-import";
 
     private const string AcquireSql = "SELECT pg_advisory_xact_lock(hashtextextended(@key, 0))";
 
-    internal static readonly IReadOnlyList<string> ReviewKeysInOrder = [DocumentChangeReview, StatementReview, ActionReview];
+    internal static readonly IReadOnlyList<string> ReviewKeysBeforeBriefs = [DocumentChangeReview, StatementReview, ActionReview];
+
+    internal static readonly IReadOnlyList<string> ReviewKeysInOrder = [.. ReviewKeysBeforeBriefs, BriefReview];
 
     internal static Task AcquireAsync(DbContext db, string key, CancellationToken cancellationToken) =>
         db.Database.ExecuteSqlRawAsync(AcquireSql, [new NpgsqlParameter("key", key)], cancellationToken);

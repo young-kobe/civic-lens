@@ -4,6 +4,7 @@ using CivicLens.Core.Actions;
 using CivicLens.Core.Review;
 using CivicLens.Infrastructure.Actions;
 using CivicLens.Infrastructure.Collection;
+using CivicLens.Publication.Contracts;
 using CivicLens.Tests.Application.Actions;
 using CivicLens.Tests.Fixtures;
 using Microsoft.EntityFrameworkCore;
@@ -31,6 +32,19 @@ public sealed partial class PostgresBillStreamTests
         var needsAction = await new ListActionReviews(ActionReviews()).ExecuteAsync(Reviewer, null, filter: DraftStatusFilter.NeedsAction);
         var item = Assert.Single(needsAction.Items);
         Assert.Equal((2, 1), (item.CurrentRevision.RevisionNumber, item.LastApprovedRevision!.RevisionNumber));
+    }
+
+    [Fact]
+    public async Task ADecisionOnTheRevisionThatTheActiveReleaseServesRequeuesTheBriefOfItsWeek()
+    {
+        await DraftAsync(UpdatedAt, DraftableOutput);
+        var briefs = new BriefWorldSeeder(connectionString);
+        await briefs.ReleaseWithoutApprovalsAsync(1, BriefFixtures.InWeek, active: true, BriefWorldSeeder.Binding(PublishedRecordKind.Action, RecordId, 1));
+        await briefs.BriefAsync(BriefFixtures.Week);
+
+        await DecideAsync(1, 0, ReviewDecisionKind.Approve);
+
+        Assert.Equal("Pending:0", await briefs.BriefQueueStatusAsync(BriefFixtures.Week));
     }
 
     [Fact]
@@ -156,7 +170,7 @@ public sealed partial class PostgresBillStreamTests
         await SaveAsync(1, keepSuggestion: true, "save-2");
         await DraftAsync(UpdatedAt.AddDays(1), DraftableOutput, title: "A renamed bill");
         var withSuggestion = (await ActionReviews().GetRevisionAsync(RecordId, 3, default))!;
-        Assert.Equal(("Person headline", ActionTextOrigin.Person), (withSuggestion.Headline, withSuggestion.TextOrigin));
+        Assert.Equal(("Person headline", ReviewTextOrigin.Person), (withSuggestion.Headline, withSuggestion.TextOrigin));
         Assert.NotNull(withSuggestion.Suggestion);
 
         var kept = await SaveAsync(3, keepSuggestion: true, "save-4");

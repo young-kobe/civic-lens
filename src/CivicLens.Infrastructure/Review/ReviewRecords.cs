@@ -68,7 +68,8 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
     public async Task<ReviewDecision> DecideAsync(IDbContextFactory<CollectionAttemptDbContext> contextFactory, string actorSubject,
         ReviewDecision decision, int expectedRevisionNumber, int expectedReviewStateVersion, string operation, string idempotencyKey,
         string payloadHash, Func<CollectionAttemptDbContext, TDraftRow, ReviewHistory<TRevision>, Task> validateDecision,
-        Func<ReviewDecision, TDecisionRow> toRow, CancellationToken cancellationToken)
+        Func<ReviewDecision, TDecisionRow> toRow, Func<CollectionAttemptDbContext, string, int, CancellationToken, Task> afterDecision,
+        CancellationToken cancellationToken)
     {
         ReviewIdempotency.ValidateRequest(actorSubject, idempotencyKey, payloadHash);
         ReviewWriteRules.RequireDecisionActor(decision, actorSubject);
@@ -82,6 +83,7 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
             ReviewPolicy.ValidateDecision(draft.RecordId, draft.CurrentRevisionNumber, draft.ReviewStateVersion, history.Decisions, decision);
             await validateDecision(db, draft, history);
             db.Add(toRow(decision));
+            await afterDecision(db, draft.RecordId, decision.RevisionNumber, cancellationToken);
             draft.ReviewStateVersion = decision.ReviewStateVersion;
             draft.ReviewStatus = ReviewPolicy.GetCurrentStatus(draft.CurrentRevisionNumber, history.Decisions.Add(decision));
             return decision;

@@ -141,9 +141,22 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
 
         Assert.Equal([3, 2], (await publications.ListAsync(2, default)).Select(release => release.ReleaseNumber));
         var second = (await publications.ListAsync(2, default))[1];
-        Assert.Equal(PublishedAt, second.PublishedAtUtc);
         Assert.Equal(1, second.RecordCount);
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => publications.ListAsync(0, default));
+    }
+
+    [Fact]
+    public async Task TheReleaseTimeIsTheDatabaseTimeOfTheCommitSoABriefWeekNeverMissesARelease()
+    {
+        var draft = await CreateDraftAsync();
+        var before = await DatabaseTicksAsync();
+
+        var committed = await publications.CommitAsync(Owner.Subject, Commit(1, draft, 1, 0), "key", Hash(1), default);
+
+        var after = await DatabaseTicksAsync();
+        Assert.InRange(committed.PublishedAtUtc.UtcTicks, before, after);
+        Assert.Equal(committed.PublishedAtUtc, (await publications.ListAsync(1, default)).Single().PublishedAtUtc);
+        Assert.InRange(await StoredPublishedTicksAsync(), before, after);
     }
 
     [Fact]
@@ -244,7 +257,7 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
         var draft = await CreateApprovedDraftAsync("a");
 
         await Assert.ThrowsAsync<PublicationConflictException>(() => publications.CommitAsync(Owner.Subject,
-            new(1, null, $"000001-{Guid.NewGuid():N}", PublishedAt, [new(PublishedRecordKind.Statement, draft.DraftId, 2)],
+            new(1, null, $"000001-{Guid.NewGuid():N}", [new(PublishedRecordKind.Statement, draft.DraftId, 2)],
                 [new(PublishedRecordKind.Statement, draft.DraftId, 2, 1)]), "wrong-kind", Hash(1), default));
     }
 
@@ -254,7 +267,7 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
         var statement = await CreateApprovedStatementAsync();
 
         await Assert.ThrowsAsync<PublicationConflictException>(() => publications.CommitAsync(Owner.Subject,
-            new(1, null, $"000001-{Guid.NewGuid():N}", PublishedAt, [new(PublishedRecordKind.Action, statement, 2)],
+            new(1, null, $"000001-{Guid.NewGuid():N}", [new(PublishedRecordKind.Action, statement, 2)],
                 [new(PublishedRecordKind.Action, statement, 2, 1)]), "wrong-kind", Hash(1), default));
         Assert.Equal(1, (await publications.CommitAsync(Owner.Subject, StatementCommit(1, statement, reviewStateVersion: 1), "right-kind",
             Hash(2), default)).ReleaseNumber);
@@ -280,7 +293,7 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
         await using var holder = await HeldAdvisoryLock.AcquireAsync(connectionString, "civic-lens-action-review");
 
         var committing = publications.CommitAsync(Owner.Subject,
-            new(1, null, $"000001-{Guid.NewGuid():N}", PublishedAt, [], []), "key", Hash(1), default);
+            new(1, null, $"000001-{Guid.NewGuid():N}", [], []), "key", Hash(1), default);
         await Task.Delay(400);
         Assert.False(committing.IsCompleted);
         await holder.DisposeAsync();
@@ -341,7 +354,7 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
     {
         var draft = await CreateApprovedDraftAsync("a");
         var statement = await CreateApprovedStatementAsync();
-        await publications.CommitAsync(Owner.Subject, new(1, null, $"000001-{Guid.NewGuid():N}", PublishedAt,
+        await publications.CommitAsync(Owner.Subject, new(1, null, $"000001-{Guid.NewGuid():N}",
             [new(PublishedRecordKind.DocumentChange, draft.DraftId, draft.RevisionNumber), new(PublishedRecordKind.Statement, statement, 2)],
             [new(PublishedRecordKind.DocumentChange, draft.DraftId, draft.RevisionNumber, 1),
              new(PublishedRecordKind.Statement, statement, 2, 1)]), "key", Hash(1), default);
@@ -395,7 +408,7 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
     }
 
     private static PublicationCommit StatementCommit(int number, string candidateId, int reviewStateVersion, int revision = 2) =>
-        new(number, number == 1 ? null : number - 1, $"{number:D6}-{Guid.NewGuid():N}", PublishedAt,
+        new(number, number == 1 ? null : number - 1, $"{number:D6}-{Guid.NewGuid():N}",
             [new(PublishedRecordKind.Statement, candidateId, revision)],
             [new(PublishedRecordKind.Statement, candidateId, revision, reviewStateVersion)]);
 
@@ -416,6 +429,19 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
         return candidate;
     }
 
+    private async Task<long> DatabaseTicksAsync() => await ScalarTicksAsync(
+        "SELECT (EXTRACT(EPOCH FROM clock_timestamp())::numeric * 10000000 + 621355968000000000)::bigint");
+
+    private async Task<long> StoredPublishedTicksAsync() => await ScalarTicksAsync("SELECT published_at_utc_ticks FROM publication_releases");
+
+    private async Task<long> ScalarTicksAsync(string sql)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(sql, connection);
+        return (long)(await command.ExecuteScalarAsync())!;
+    }
+
     private async Task InsertActiveReleaseAsync(string recordsJson)
     {
         await using var connection = new NpgsqlConnection(connectionString);
@@ -434,7 +460,7 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
         Commit(number, number == 1 ? null : number - 1, draftId, revision, reviewStateVersion);
 
     private static PublicationCommit Commit(int number, int? baseNumber, string draftId, int revision,
-        int reviewStateVersion) => new(number, baseNumber, $"{number:D6}-{Guid.NewGuid():N}", PublishedAt,
+        int reviewStateVersion) => new(number, baseNumber, $"{number:D6}-{Guid.NewGuid():N}",
         [new(PublishedRecordKind.DocumentChange, draftId, revision)],
         [new(PublishedRecordKind.DocumentChange, draftId, revision, reviewStateVersion)]);
 
@@ -477,7 +503,7 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
     {
         var records = drafts.Select(draft => new PublishedRevisionBinding(PublishedRecordKind.DocumentChange, draft.DraftId, draft.RevisionNumber)).ToImmutableArray();
         var expectations = drafts.Select(draft => new ReviewStateExpectation(PublishedRecordKind.DocumentChange, draft.DraftId, draft.RevisionNumber, 1)).ToImmutableArray();
-        await publications.CommitAsync(Owner.Subject, new(number, baseNumber, $"{number:D6}-{Guid.NewGuid():N}", PublishedAt,
+        await publications.CommitAsync(Owner.Subject, new(number, baseNumber, $"{number:D6}-{Guid.NewGuid():N}",
             records, expectations), $"commit-{number}", Hash(number), default);
     }
 

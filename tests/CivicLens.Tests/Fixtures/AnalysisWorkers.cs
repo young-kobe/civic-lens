@@ -1,6 +1,7 @@
 using CivicLens.Application;
 using CivicLens.Application.Actions;
 using CivicLens.Application.Analysis;
+using CivicLens.Application.Briefs;
 using CivicLens.Application.Issues;
 using CivicLens.Application.Statements;
 using CivicLens.Core.Analysis;
@@ -25,4 +26,8 @@ internal static class AnalysisWorkers
     public static AnalysisWorker<ActionDraftRun> ActionDrafting(IActionDraftStore store, IAnalysisStatusStore status, ActionBillReader reader,
         IActionDraftModel model, ActionDraftSettings settings, IssueConfigurationRevision issues, TimeProvider clock) =>
         new(new ActionDraftStep(store, reader, model, settings, issues), status, clock);
+
+    public static AnalysisWorker<BriefDraftRun> BriefDrafting(IBriefDraftStore store, IAnalysisStatusStore status, IBriefDraftModel model,
+        BriefDraftSettings settings, IReadOnlyDictionary<string, string> officialNames, TimeProvider clock) =>
+        new(new BriefDraftStep(store, model, settings, officialNames), status, clock, null, store.EnqueueClosedWeeksAsync);
 }
