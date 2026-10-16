@@ -1,0 +1,113 @@
+using CivicLens.Application.Collection;
+using CivicLens.Application.Collection.Discovery;
+using CivicLens.Application.Collection.HouseVotes;
+using CivicLens.Infrastructure.Collection.HouseVotes;
+using Microsoft.EntityFrameworkCore;
+
+namespace CivicLens.Infrastructure.Collection.Jobs;
+
+public sealed partial class PostgresCollectionJobStore : IHouseVoteAdmissionStore
+{
+    public Task<DiscoveryAdmissionResult> AdmitListPageAsync(ConfiguredCollectionSource source, string listJobId,
+        HouseVoteListPage page, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(page);
+        ArgumentException.ThrowIfNullOrWhiteSpace(listJobId);
+        return TransactionAsync(async (db, now) =>
+        {
+            var batch = source.CreateHouseVoteListBatch(listJobId, page, Today(now));
+            var (result, _) = await AdmitApiJobsAsync(db, batch, ApiJobSaveBatchSize, now, cancellationToken);
+            if (result.DeferredCount > 0)
+                throw new InvalidDataException($"Source '{source.SourceId}' admission policy cannot hold a full House vote list page.");
+            return result;
+        }, cancellationToken);
+    }
+
+    public Task<DiscoveryAdmissionResult> AdmitDetailAsync(ConfiguredCollectionSource source, string detailJobId,
+        HouseVote vote, string extractionId, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(vote);
+        ArgumentException.ThrowIfNullOrWhiteSpace(detailJobId);
+        return TransactionAsync(async (db, now) =>
+        {
+            if (await FindHouseVoteAsync(db, source.SourceId, vote, cancellationToken) is not null)
+                return NoAdmission with { DuplicateCount = 1 };
+            await EnsureExtractionIsOfJobAsync(db, detailJobId, extractionId, cancellationToken);
+            db.Add(NewHouseVoteRow(source.SourceId, detailJobId, vote, extractionId));
+            var membersJob = source.CreateHouseVoteMembersJob(vote, Today(now));
+            var batch = source.CreateApiBatch([membersJob], Today(now));
+            var (result, _) = await AdmitApiJobsAsync(db, batch, int.MaxValue, now, cancellationToken);
+            if (result.DeferredCount > 0)
+                throw new InvalidDataException($"Source '{source.SourceId}' admission policy cannot hold the members job of a House vote.");
+            return result;
+        }, cancellationToken);
+    }
+
+    public Task<DiscoveryAdmissionResult> AdmitMembersAsync(ConfiguredCollectionSource source, string membersJobId,
+        HouseVote vote, string extractionId, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(vote);
+        ArgumentException.ThrowIfNullOrWhiteSpace(membersJobId);
+        return TransactionAsync(async (db, now) =>
+        {
+            var row = await FindHouseVoteAsync(db, source.SourceId, vote, cancellationToken)
+                ?? throw new InvalidDataException("The members belong to a House vote version that has no recorded detail.");
+            if (await db.Set<HouseVoteCandidateRow>().AnyAsync(candidate => candidate.DetailJobId == row.DetailJobId, cancellationToken))
+                return NoAdmission with { DuplicateCount = 1 };
+            await EnsureExtractionIsOfJobAsync(db, membersJobId, extractionId, cancellationToken);
+            db.Add(NewHouseVoteCandidate(source, row, membersJobId, extractionId, now));
+            return NoAdmission;
+        }, cancellationToken);
+    }
+
+    private static string HashHouseVoteCandidate(string sourceId, int congress, int sessionNumber, int rollCallNumber,
+        long updateDateUtcTicks) =>
+        HashIdentity($"house-vote:{sourceId.Length}:{sourceId}{congress}:{sessionNumber}:{rollCallNumber}:{updateDateUtcTicks}");
+
+    private static Task<HouseVoteRow?> FindHouseVoteAsync(CollectionAttemptDbContext db, string sourceId, HouseVote vote,
+        CancellationToken cancellationToken)
+    {
+        var session = vote.Roll.Session;
+        var updateTicks = vote.UpdateDate.UtcTicks;
+        return db.Set<HouseVoteRow>().SingleOrDefaultAsync(row => row.SourceId == sourceId && row.Congress == session.Congress &&
+            row.SessionNumber == session.Number && row.RollCallNumber == vote.Roll.Number && row.UpdateDateUtcTicks == updateTicks,
+            cancellationToken);
+    }
+
+    private static HouseVoteRow NewHouseVoteRow(string sourceId, string detailJobId, HouseVote vote,
+        string extractionId) => new()
+        {
+            DetailJobId = detailJobId,
+            SourceId = sourceId,
+            Congress = vote.Roll.Session.Congress,
+            SessionNumber = vote.Roll.Session.Number,
+            RollCallNumber = vote.Roll.Number,
+            UpdateDateUtcTicks = vote.UpdateDate.UtcTicks,
+            BillType = vote.BillType,
+            BillNumber = vote.BillNumber,
+            ExtractionId = extractionId
+        };
+
+    private static HouseVoteCandidateRow NewHouseVoteCandidate(ConfiguredCollectionSource source, HouseVoteRow vote,
+        string membersJobId, string membersExtractionId, DateTimeOffset now) => new()
+        {
+            CandidateId = HashHouseVoteCandidate(vote.SourceId, vote.Congress, vote.SessionNumber, vote.RollCallNumber,
+                vote.UpdateDateUtcTicks),
+            SourceId = vote.SourceId,
+            Congress = vote.Congress,
+            SessionNumber = vote.SessionNumber,
+            RollCallNumber = vote.RollCallNumber,
+            UpdateDateUtcTicks = vote.UpdateDateUtcTicks,
+            BillType = vote.BillType,
+            BillNumber = vote.BillNumber,
+            DetailJobId = vote.DetailJobId,
+            MembersJobId = membersJobId,
+            DetailExtractionId = vote.ExtractionId,
+            MembersExtractionId = membersExtractionId,
+            ConfigurationRevisionId = source.Revision.Id,
+            CreatedAtUtcTicks = Ticks(now)
+        };
+}

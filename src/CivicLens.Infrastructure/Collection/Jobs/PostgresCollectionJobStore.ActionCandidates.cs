@@ -47,7 +47,7 @@ public sealed partial class PostgresCollectionJobStore
         var belongs = await db.Set<JobAttemptRow>().AnyAsync(attempt => attempt.JobId == jobId &&
             db.Set<DocumentExtractionRow>().Any(extraction => extraction.ExtractionId == extractionId &&
                 extraction.AttemptId == attempt.AttemptId), cancellationToken);
-        if (!belongs) throw new InvalidDataException("The extraction does not belong to an attempt of the bill page job.");
+        if (!belongs) throw new InvalidDataException("The extraction does not belong to an attempt of the job.");
     }
 
     private static async Task RecordActionCandidateAsync(CollectionAttemptDbContext db, ConfiguredCollectionSource source,

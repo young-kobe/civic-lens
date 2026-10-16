@@ -76,14 +76,14 @@ public sealed record CollectionConfiguration
             if (!sourceUrls.Add(url))
                 throw new ArgumentException("A source URL may be configured only once; add people to its membership list.");
 
-            if (source.ApiParser != ApiParser.CongressBillList)
+            if (source.ApiParser is null)
                 ValidateDatedCoverage(source, peopleById);
 
             var request = CollectionJobDefinition.FromSource(source).CreateRequest("validation-job", "collection-artifacts");
             request.Validate();
             source.JobPolicy?.Validate(request);
             source.AdmissionPolicy?.Validate();
-            if (source.ApiParser == ApiParser.CongressBillList)
+            if (source.ApiParser is not null)
                 ValidateListAdmissionCapacity(source);
             if (source.CheckIntervalSeconds is { } interval && interval is
                 < WatchedSourceConfiguration.MinimumCheckIntervalSeconds or
@@ -116,7 +116,7 @@ public sealed record CollectionConfiguration
     {
         IEnumerable<string> ids = source.ApiParser switch
         {
-            ApiParser.CongressBillList => asOf < source.BackfillFrom ? [] : BioguidePersonIds(),
+            ApiParser.CongressBillList or ApiParser.CongressHouseVoteList => asOf < source.BackfillFrom ? [] : BioguidePersonIds(),
             null => source.Coverage!.Where(coverage => new DateRange(coverage.StartsOn, coverage.EndsBefore).Contains(asOf))
                 .Select(coverage => coverage.PersonId),
             _ => throw new ArgumentOutOfRangeException(nameof(source))
@@ -156,6 +156,7 @@ public sealed record CollectionConfiguration
         switch (source.ApiParser)
         {
             case ApiParser.CongressBillList:
+            case ApiParser.CongressHouseVoteList:
                 ValidateCongressApiSource(source);
                 break;
             default:
@@ -175,7 +176,7 @@ public sealed record CollectionConfiguration
     {
         var policy = source.AdmissionPolicy ?? new DiscoveryAdmissionPolicy();
         if (!policy.CanReserve(CollectionJobDefinition.FromSource(source), ApiPageQuery.PageLimit + 1))
-            throw new ArgumentException($"Source '{source.Id}' admission policy must hold a full bill list page and its next-page job.");
+            throw new ArgumentException($"Source '{source.Id}' admission policy must hold a full list page and its next-page job.");
     }
 
     private static void ValidateCoverageShape(WatchedSourceConfiguration source)

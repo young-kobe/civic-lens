@@ -37,13 +37,13 @@ Version 2 is the only supported collection configuration version. Each source ha
 
 A person has a stable `id` and a current display `name`. Optional dated `names` use the same date fields. A person can also carry a `bioguideId`, the Congress.gov member identifier: one uppercase letter and six digits. Two people cannot share one. Snapshots leave out an absent `bioguideId`, so revision IDs without it do not change.
 
-`config/federal-coverage.json` lists all 539 current members of Congress, delegates included, each with a bioguide ID. It has 1,392 member sources and the `congress-bills` source. Persistent pages are checked every 6 hours, and feeds and listings every hour.
+`config/federal-coverage.json` lists all 539 current members of Congress, delegates included, each with a bioguide ID. It has 1,392 member sources and the `congress-bills` and `congress-house-votes` sources. Persistent pages are checked every 6 hours, and feeds and listings every hour.
 
 - McConnell has no web sources, because the robots.txt of his site disallows all paths.
 - Britt and Kim have no press source, because their press listings refuse our requests.
 - The House Drupal `rss.xml` feeds stay unused. A sample showed site-wide content, at most 10 items, and no overlap with the press-release listings.
 
-One source type, the Congress.gov bill list, has no coverage list; see [bills](bills.md#source-configuration).
+Two source types, the Congress.gov bill list and the Congress.gov House vote list, have no coverage list; see [bills](bills.md#source-configuration) and [votes](votes.md#source-configuration).
 
 ### Dates and intervals
 

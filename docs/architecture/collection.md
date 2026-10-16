@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Collection fetches configured sources through a separate, bounded collector process. The application verifies and imports each observation, then runs one durable pipeline from a due source check to the private review queue. The Congress.gov bill stream runs on this pipeline; see [bills](bills.md). People, sources, and coverage are in [configuration](configuration.md).
+Collection fetches configured sources through a separate, bounded collector process. The application verifies and imports each observation, then runs one durable pipeline from a due source check to the private review queue. The Congress.gov bill stream and House vote stream run on this pipeline; see [bills](bills.md) and [votes](votes.md). People, sources, and coverage are in [configuration](configuration.md).
 
 ## Decisions
 
@@ -26,7 +26,7 @@ Collection fetches configured sources through a separate, bounded collector proc
 - Pacing groups bound the total load on shared infrastructure, such as all `*.house.gov` origins.
 - A new source gets a deterministic first-check offset, so a fresh database does not send every check at once.
 - Each job row keeps its source ID and root status in plain columns. `JobRowWriter` writes them from the definition, so scheduling and source health read indexed columns and never parse the job JSON.
-- A root job is a check of its source. `CollectionJobDefinition.IsRoot` owns the rule. A job is a root when its URL is the configured URL of its source in its own revision. A [bill list](bills.md#admission) job is also a root. Discovery articles, bill details, and bill follow-on pages are not roots.
+- A root job is a check of its source. `CollectionJobDefinition.IsRoot` owns the rule. A job is a root when its URL is the configured URL of its source in its own revision. A [bill list](bills.md#admission) job and a [House vote list](votes.md#daily-sweep) job are also roots. Discovery articles, bill details, bill follow-on pages, and vote jobs other than list pages are not roots.
 - `JobRowWriter` fixes the root status when it writes the job. After the configured URL of a source changes, an active root job at the earlier URL still holds the due slot until it ends.
 - Each configuration revision is stored once and referenced by ID. Otherwise each job and schedule would copy the whole snapshot. A [bill list page](bills.md#admission) of 251 jobs would then write hundreds of megabytes inside the job lock.
 - `PostgresCollectionJobStore.SettleAttemptAsync` is the only path that sets a job to Succeeded. It adds the preparation row in the same transaction, so no recurring or startup registration scan is needed.
@@ -363,7 +363,7 @@ An active root job of the same source suppresses the scheduled admission and use
 
 ### Preparation
 
-`JobPreparation` in `Application/Collection/Processing` owns the preparation stage. It reads a succeeded job and its attempts. It admits article batches or bill stream pages and returns a `JobPreparationResult`. `EvidenceProcessingWorker` checkpoints that result and does not know the preparation rules. `ApiResponseReader` reads the saved capture of an API job. Bill stream preparation is in [bills](bills.md).
+`JobPreparation` in `Application/Collection/Processing` owns the preparation stage. It reads a succeeded job and its attempts. It admits article batches, bill stream pages, or House vote pages and returns a `JobPreparationResult`. `EvidenceProcessingWorker` checkpoints that result and does not know the preparation rules. `ApiResponseReader` reads the saved capture of an API job. Bill stream preparation is in [bills](bills.md). House vote preparation is in [votes](votes.md).
 
 Each successful configured discovery check admits one idempotent article batch, with its retained configuration and coverage date. New candidates and rechecks share the configured batch limits. A replay of a parent check cannot create another batch. Later passes do not drain every deferred candidate. A preparation failure shows as such, not as a collection failure.
 
@@ -417,7 +417,7 @@ A claim changes only the lease, never the state. Job leases last 3 to 600 second
 
 The review workspace has an owner-only Sources page when `CIVIC_LENS_COLLECTION_CONFIG` names an absolute configuration path. The owner can enqueue a source check (Check now), cancel a job (Stop), and start a draft from a found change.
 
-- The page lists configured sources with the health of their latest root job, and the recent checks. The latest bill list job is the latest check of a bill source.
+- The page lists configured sources with the health of their latest root job, and the recent checks. The latest list job is the latest check of a bill or vote source.
 - Check details open in a side panel. It shows each attempt, the retry timing, Check again for a tracked page URL, and a link to all saved versions.
 - The page refreshes every 5 seconds while a check is active and every 30 seconds otherwise. A connection failure shows a reconnect notice.
 - It accepts configured sources and retained article URLs only. It holds no demonstration records and does not claim worker liveness.

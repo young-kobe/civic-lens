@@ -4,7 +4,7 @@ Political transparency through officials' statements and actions, document chang
 
 The approved product direction serves regular citizens seeking transparency in U.S. national politics. Public readers start with reviewed accounts and can inspect the supporting evidence; authorized reviewers assess the proposed public record beside its sources. State and local coverage are possible future extensions. The [editorial experience](docs/architecture/publication.md#public-reader-experience) defines the agreed flow. A restrained monochrome identity is selected for both surfaces.
 
-**Current state:** A durable worker collects configured official sources and the Congress.gov bill list. A separate bounded collector fetches them. The worker stores immutable captures, extracts text, and compares versions in Postgres. Checked-in EF migrations apply schema changes.
+**Current state:** A durable worker collects configured official sources, the Congress.gov bill list, and the Congress.gov House vote list. A separate bounded collector fetches them. The worker stores immutable captures, extracts text, and compares versions in Postgres. Checked-in EF migrations apply schema changes.
 
 Claude drafts document-change accounts and statement records inside daily token limits. A person edits, approves, and publishes each draft in an authenticated review workspace. Approved records publish as immutable static releases.
 

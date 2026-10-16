@@ -1,4 +1,5 @@
 using CivicLens.Application.Collection.Bills;
+using CivicLens.Application.Collection.HouseVotes;
 using CivicLens.Collection.Contracts;
 using System.Text.Json.Serialization;
 
@@ -33,7 +34,7 @@ public sealed record CollectionJobDefinition
         ConfigurationRevision?.Configuration.PacingGroupOf(AllowedOrigin);
 
     public bool IsRoot() =>
-        ApiResource == Collection.ApiResource.BillList ||
+        ApiResource is Collection.ApiResource.BillList or Collection.ApiResource.HouseVoteList ||
         ConfigurationRevision?.Configuration.Sources.FirstOrDefault(source => source.Id == SourceId)?.Url == Url;
 
     public static CollectionJobDefinition FromConfiguration(CollectionConfiguration configuration, string sourceId,
@@ -104,13 +105,30 @@ public sealed record CollectionJobDefinition
     }
 
     private static bool MatchesResource(ApiResource resource, WatchedSourceConfiguration source, string url) =>
-        source.ApiParser == ApiParser.CongressBillList && resource switch
+        source.ApiParser switch
         {
-            Collection.ApiResource.BillList => BillStreamWindow.IsRequestUrl(source.Url, url),
-            Collection.ApiResource.Bill => CongressBillListItem.IsDetailUrl(source.Url, url),
+            ApiParser.CongressBillList => MatchesBillResource(resource, source.Url, url),
+            ApiParser.CongressHouseVoteList => MatchesHouseVoteResource(resource, source.Url, url),
+            _ => false
+        };
+
+    private static bool MatchesBillResource(ApiResource resource, string sourceUrl, string url) =>
+        resource switch
+        {
+            Collection.ApiResource.BillList => BillStreamWindow.IsRequestUrl(sourceUrl, url),
+            Collection.ApiResource.Bill => CongressBillListItem.IsDetailUrl(sourceUrl, url),
             Collection.ApiResource.BillCosponsors or Collection.ApiResource.BillActions or
             Collection.ApiResource.BillSummaries =>
-                BillPageUrl.TryRead(source.Url, resource, url) is not null,
+                BillPageUrl.TryRead(sourceUrl, resource, url) is not null,
+            _ => false
+        };
+
+    private static bool MatchesHouseVoteResource(ApiResource resource, string sourceUrl, string url) =>
+        resource switch
+        {
+            Collection.ApiResource.HouseVoteList => HouseVoteListUrl.TryRead(sourceUrl, url) is not null,
+            Collection.ApiResource.HouseVoteDetail => HouseVoteRollUrl.TryReadDetail(sourceUrl, url) is not null,
+            Collection.ApiResource.HouseVoteMembers => HouseVoteRollUrl.TryReadMembers(sourceUrl, url) is not null,
             _ => false
         };
 
